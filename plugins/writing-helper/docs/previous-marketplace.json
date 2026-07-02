@@ -1,0 +1,26 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "omp-writing-helper",
+  "owner": {
+    "name": "marapapman"
+  },
+  "metadata": {
+    "description": "OMP plugins published by marapapman for writing workflow support, including writing-helper logic, style, citation tools, writer/checker agents, and bundled writing skills.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "writing-helper",
+      "description": "Standalone OMP writing helper plugin with writing logic checks, writing quality checks, local-first citation verification, writer/checker agents, and bundled writing skills.",
+      "version": "0.2.1",
+      "category": "writing",
+      "homepage": "https://github.com/marapapman/omp-writing-helper",
+      "repository": "https://github.com/marapapman/omp-writing-helper",
+      "source": {
+        "source": "github",
+        "repo": "marapapman/omp-writing-helper",
+        "ref": "v0.2.1"
+      }
+    }
+  ]
+}
