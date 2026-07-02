@@ -1,7 +1,8 @@
-import { readFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { releaseTagForVersion, syncMarketplaceCatalogRelease } from '../../../src/marketplace/marketplaceRelease.js'
+import { releaseTagForVersion, syncMarketplaceCatalogRelease, syncMarketplaceRelease } from '../../../src/marketplace/marketplaceRelease.js'
 import type { ExtensionToolContext } from '../../../src/ompApi.js'
 import createMarketplaceTools from '../../../tools/testing-tools.js'
 
@@ -72,7 +73,7 @@ describe('marketplace catalog', () => {
     const packageJson = await readJson<PackageJson>(join(process.cwd(), 'package.json'))
 
     expect(packageJson.omp.extensions).toEqual(['./src/extension.ts'])
-    expect(packageJson.files).toEqual(expect.arrayContaining(['src', '.omp-plugin', 'package.json', 'README.md', 'tools', 'commands']))
+    expect(packageJson.files).toEqual(expect.arrayContaining(['src', 'package.json', 'README.md', 'tools', 'commands']))
   })
 
   it('exposes marketplace tools through the custom tool wrapper', async () => {
@@ -150,6 +151,67 @@ describe('marketplace catalog', () => {
     expect(catalog.plugins[0]?.source.ref).toBe('v0.1.1')
   })
 
+  it('syncs the root monorepo marketplace catalog from the plugin workspace', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-marketplace-'))
+    const pluginDir = join(root, 'plugins', 'omp-test-enhancer')
+
+    try {
+      await mkdir(pluginDir, { recursive: true })
+      await mkdir(join(root, '.omp-plugin'))
+      await writeFile(
+        join(pluginDir, 'package.json'),
+        `${JSON.stringify({ name: 'omp-testing-enhancer', version: '0.2.0' }, null, 2)}\n`
+      )
+      await writeFile(
+        join(root, '.omp-plugin', 'marketplace.json'),
+        `${JSON.stringify({
+          name: 'omp-enhancer',
+          owner: { name: 'marapapman' },
+          metadata: { pluginRoot: 'plugins' },
+          plugins: [
+            {
+              name: 'other-plugin',
+              version: '9.9.9',
+              source: './other-plugin',
+              ref: 'v9.9.9'
+            },
+            {
+              name: 'omp-testing-enhancer',
+              version: '0.1.3',
+              category: 'development',
+              source: './omp-test-enhancer',
+              ref: 'v0.1.3'
+            }
+          ]
+        }, null, 2)}\n`
+      )
+
+      const result = await syncMarketplaceRelease(pluginDir)
+      const synced = await readJson<MarketplaceCatalog>(join(root, '.omp-plugin', 'marketplace.json'))
+
+      expect(result).toEqual({
+        version: '0.2.0',
+        ref: 'v0.2.0',
+        catalogPath: join(root, '.omp-plugin', 'marketplace.json')
+      })
+      expect(synced.plugins[0]).toEqual({
+        name: 'other-plugin',
+        version: '9.9.9',
+        source: './other-plugin',
+        ref: 'v9.9.9'
+      })
+      expect(synced.plugins[1]).toMatchObject({
+        name: 'omp-testing-enhancer',
+        version: '0.2.0',
+        source: './omp-test-enhancer',
+        ref: 'v0.2.0'
+      })
+      await expect(access(join(pluginDir, '.omp-plugin', 'marketplace.json'))).rejects.toThrow()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('documents marketplace install flow, marketplace tools, and local-only /test commands', async () => {
     const root = process.cwd()
     const readme = await readFile(join(root, 'README.md'), 'utf8')
@@ -159,11 +221,11 @@ describe('marketplace catalog', () => {
     const marketplaceWorkflowSection = readme.slice(readme.indexOf('## Marketplace 常用流程'), readme.indexOf('## 本地开发安装'))
     const localWorkflowSection = readme.slice(readme.indexOf('## 本地开发安装'), readme.indexOf('## 门禁规则'))
 
-    expect(readme).toContain('omp plugin marketplace add marapapman/omp-test-enhancer')
-    expect(readme).toContain('omp plugin install omp-testing-enhancer@omp-test-enhancer')
-    expect(installSection).toContain(`github:marapapman/omp-test-enhancer#v${packageJson.version}`)
-    expect(readme).toContain('omp plugin marketplace update omp-test-enhancer')
-    expect(readme).toContain('omp plugin upgrade omp-testing-enhancer@omp-test-enhancer')
+    expect(readme).toContain('omp plugin marketplace add marapapman/omp-enhancer')
+    expect(readme).toContain('omp plugin install omp-testing-enhancer@omp-enhancer')
+    expect(installSection).not.toContain('github:marapapman/omp-test-enhancer')
+    expect(readme).toContain('omp plugin marketplace update omp-enhancer')
+    expect(readme).toContain('omp plugin upgrade omp-testing-enhancer@omp-enhancer')
     expect(readme).toContain('/omp-testing-enhancer:test')
     expect(readme).toContain('browserPlan')
     expect(readme).toContain('浏览器证据')

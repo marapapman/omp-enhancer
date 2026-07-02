@@ -36,7 +36,8 @@
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
       "repository": "https://github.com/marapapman/omp-enhancer",
-      "source": "./omp-test-enhancer"
+      "source": "./omp-test-enhancer",
+      "ref": "v0.1.3"
     }
   ]
 }

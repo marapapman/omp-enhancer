@@ -12,7 +12,6 @@
     "src",
     "tools",
     "commands",
-    ".omp-plugin",
     "package.json",
     "README.md"
   ],

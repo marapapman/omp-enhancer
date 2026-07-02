@@ -26,22 +26,16 @@ omp_test_report
 
 推荐通过 OMP marketplace 安装。这样后续可以直接使用 `omp plugin upgrade` 升级。
 
-先添加这个仓库作为 marketplace。
+先添加 monorepo 根目录的 `omp-enhancer` 作为 marketplace。
 
 ```bash
-omp plugin marketplace add marapapman/omp-test-enhancer
+omp plugin marketplace add marapapman/omp-enhancer
 ```
 
-然后安装插件。marketplace catalog 已指向当前新版 release。
+然后通过共享 marketplace 名称安装插件。
 
 ```bash
-omp plugin install "github:marapapman/omp-test-enhancer#v0.1.3"
-```
-
-如果你要通过 marketplace 名称安装，也可以继续使用：
-
-```bash
-omp plugin install omp-testing-enhancer@omp-test-enhancer
+omp plugin install omp-testing-enhancer@omp-enhancer
 ```
 
 安装后检查插件列表。
@@ -53,7 +47,7 @@ omp plugin list
 如果插件被禁用，可以重新启用。
 
 ```bash
-omp plugin enable omp-testing-enhancer@omp-test-enhancer
+omp plugin enable omp-testing-enhancer@omp-enhancer
 ```
 
 然后重启 OMP 会话。marketplace 安装会提供七个工具，其中 `omp_test_browser_check` 只用于前端浏览器检查：`omp_test_analyze`、`omp_test_context`、`omp_test_browser_check`、`omp_test_coverage_analyze`、`omp_test_mutation_context`、`omp_test_gate`、`omp_test_report`，以及带命名空间的命令 `/omp-testing-enhancer:test`。
@@ -67,16 +61,16 @@ omp plugin enable omp-testing-enhancer@omp-test-enhancer
 如果能看到这份流程说明，说明 marketplace 内容已经加载成功。
 ## 升级
 
-先更新 marketplace catalog。
+先更新共享 marketplace catalog。
 
 ```bash
-omp plugin marketplace update omp-test-enhancer
+omp plugin marketplace update omp-enhancer
 ```
 
 然后升级插件。
 
 ```bash
-omp plugin upgrade omp-testing-enhancer@omp-test-enhancer
+omp plugin upgrade omp-testing-enhancer@omp-enhancer
 ```
 
 如果你是本地开发安装，继续使用 `omp plugin link .`，不用走 marketplace 升级流程。

@@ -1,12 +1,12 @@
-import { readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { access, readFile, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
 
 export interface PackageMetadata {
   name: string
   version: string
 }
 
-export interface MarketplaceSource {
+export interface MarketplaceSourceObject {
   source: string
   repo: string
   ref: string
@@ -15,7 +15,8 @@ export interface MarketplaceSource {
 export interface MarketplacePlugin {
   name: string
   version: string
-  source: MarketplaceSource
+  source: string | MarketplaceSourceObject
+  ref?: string
   [key: string]: unknown
 }
 
@@ -27,9 +28,28 @@ export interface MarketplaceCatalog {
 }
 
 export function releaseTagForVersion(version: string): string {
-  const normalized = version.trim()
+  const normalized = String(version ?? '').trim()
   if (!normalized) throw new Error('package version is empty')
   return normalized.startsWith('v') ? normalized : `v${normalized}`
+}
+
+async function findMarketplaceCatalogPath(cwd: string): Promise<string> {
+  let current = resolve(cwd)
+  while (true) {
+    const catalogPath = join(current, '.omp-plugin', 'marketplace.json')
+    try {
+      await access(catalogPath)
+      return catalogPath
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+
+    const parent = dirname(current)
+    if (parent === current) {
+      throw new Error(`marketplace catalog .omp-plugin/marketplace.json was not found from ${cwd}`)
+    }
+    current = parent
+  }
 }
 
 export function syncMarketplaceCatalogRelease(
@@ -41,13 +61,22 @@ export function syncMarketplaceCatalogRelease(
   const plugins = catalog.plugins.map(plugin => {
     if (plugin.name !== packageJson.name) return plugin
     found = true
-    return {
+    const syncedPlugin = {
       ...plugin,
-      version: packageJson.version,
-      source: {
-        ...plugin.source,
-        ref
+      version: packageJson.version
+    }
+    if (plugin.source && typeof plugin.source === 'object' && !Array.isArray(plugin.source)) {
+      return {
+        ...syncedPlugin,
+        source: {
+          ...plugin.source,
+          ref
+        }
       }
+    }
+    return {
+      ...syncedPlugin,
+      ref
     }
   })
 
@@ -55,12 +84,12 @@ export function syncMarketplaceCatalogRelease(
   return { ...catalog, plugins }
 }
 
-export async function syncMarketplaceRelease(cwd = process.cwd()): Promise<{ version: string; ref: string }> {
+export async function syncMarketplaceRelease(cwd = process.cwd()): Promise<{ version: string; ref: string; catalogPath: string }> {
   const packagePath = join(cwd, 'package.json')
-  const catalogPath = join(cwd, '.omp-plugin', 'marketplace.json')
+  const catalogPath = await findMarketplaceCatalogPath(cwd)
   const packageJson = JSON.parse(await readFile(packagePath, 'utf8')) as PackageMetadata
   const catalog = JSON.parse(await readFile(catalogPath, 'utf8')) as MarketplaceCatalog
   const synced = syncMarketplaceCatalogRelease(catalog, packageJson)
   await writeFile(catalogPath, `${JSON.stringify(synced, null, 2)}\n`)
-  return { version: packageJson.version, ref: releaseTagForVersion(packageJson.version) }
+  return { version: packageJson.version, ref: releaseTagForVersion(packageJson.version), catalogPath }
 }
