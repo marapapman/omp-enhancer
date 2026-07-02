@@ -1,12 +1,12 @@
 # omp-enhancer
 
-Monorepo marketplace for OMP enhancement plugins.
+This repository is an OMP marketplace monorepo containing three independent plugins.
 
 ## Plugins
 
-- `omp-config`: OMP configuration assets, agents, skills, hooks, model override templates, and config diagnostics.
-- `writing-helper`: OMP writing helper with logic checks, quality checks, citation verification, writer/checker agents, and writing skills.
-- `omp-testing-enhancer`: Test workflow support for OMP agents.
+- `omp-config`
+- `writing-helper`
+- `omp-testing-enhancer`
 
 ## Workspace
 
@@ -20,14 +20,36 @@ This repository uses npm workspaces for plugin packages under `plugins/`:
 
 The marketplace catalog lives at `.omp-plugin/marketplace.json` and uses `metadata.pluginRoot: "plugins"`.
 
-Install all plugins from the marketplace with:
+## Install
 
-```sh
+Add the marketplace once:
+
+```bash
+omp plugin marketplace add marapapman/omp-enhancer
+```
+
+Install all three plugins with one OMP command:
+
+```bash
 omp plugin install omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer
 ```
 
+Upgrade installed plugins:
+
+```bash
+omp plugin upgrade
+```
+
+Upgrade only these three plugins:
+
+```bash
+omp plugin upgrade omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer
+```
+
+## Validation
+
 Check the marketplace catalog with:
 
-```sh
+```bash
 npm run check:marketplace
 ```
