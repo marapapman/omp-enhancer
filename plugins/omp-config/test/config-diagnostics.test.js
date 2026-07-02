@@ -64,22 +64,33 @@ function createRegistrationHarness() {
   return { pi, tools, commands };
 }
 
-test('listAssets lists packaged agents and skills from plugin root', async () => {
+test('listAssets lists packaged agents, skills, hooks, and templates from plugin root', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'omp-config-assets-'));
   await writePluginPackage(root);
   await mkdir(path.join(root, 'agents'));
   await mkdir(path.join(root, 'skills'));
+  await mkdir(path.join(root, 'hooks', 'pre'), { recursive: true });
+  await mkdir(path.join(root, 'hooks', 'post'), { recursive: true });
   await mkdir(path.join(root, 'assets'));
   await writeFile(path.join(root, 'assets', 'config.yml'), 'packaged template\n');
+  await writeFile(path.join(root, 'assets', '.secret'), 'hidden template\n');
   await writeFile(path.join(root, 'agents', 'task.md'), '# Task');
   await writeFile(path.join(root, 'agents', '.hidden.md'), '# Hidden');
   await mkdir(path.join(root, 'skills', 'tdd'));
+  await writeFile(path.join(root, 'hooks', 'pre', 'guard-destructive.ts'), 'export default {};\n');
+  await writeFile(path.join(root, 'hooks', 'pre', '.hidden.ts'), 'export default {};\n');
+  await writeFile(path.join(root, 'hooks', 'post', 'truncate-output.ts'), 'export default {};\n');
 
   const assets = await listAssets(root);
 
   assert.deepEqual(assets, {
     agents: ['task.md'],
     skills: ['tdd'],
+    hooks: {
+      pre: ['guard-destructive.ts'],
+      post: ['truncate-output.ts'],
+    },
+    templates: ['config.yml'],
   });
 });
 
@@ -167,6 +178,9 @@ test('registered defaults resolve bundled package assets from a normal project c
   const assetsResult = await assets.execute('call-2', {}, undefined, undefined, { cwd: projectRoot });
   assert.ok(assetsResult.details.agents.includes('task.md'));
   assert.ok(assetsResult.details.skills.includes('tdd'));
+  assert.ok(assetsResult.details.hooks.pre.includes('guard-destructive.ts'));
+  assert.ok(assetsResult.details.hooks.post.includes('truncate-output.ts'));
+  assert.ok(assetsResult.details.templates.includes('config.yml'));
 
   const plan = tools.find((tool) => tool.name === 'omp_config_plan');
   const planResult = await plan.execute('call-3', {}, undefined, undefined, { cwd: projectRoot });
@@ -182,6 +196,9 @@ test('registered defaults resolve bundled package assets from a normal project c
     const commandAssets = await commands.get('config-assets').handler('');
     assert.ok(commandAssets.agents.includes('task.md'));
     assert.ok(commandAssets.skills.includes('tdd'));
+    assert.ok(commandAssets.hooks.pre.includes('guard-destructive.ts'));
+    assert.ok(commandAssets.hooks.post.includes('truncate-output.ts'));
+    assert.ok(commandAssets.templates.includes('config.yml'));
 
     const directPlan = await runConfigPlan();
     assert.equal(directPlan.plan[0], `Review packaged templates under ${bundledRoot}/assets.`);
@@ -234,7 +251,12 @@ test('index registers doctor assets and plan tools safely', async () => {
 
   const assets = registered.find((tool) => tool.name === 'omp_config_assets');
   const assetsResult = await assets.execute('call-2', { root }, undefined, undefined, { cwd: process.cwd() });
-  assert.deepEqual(assetsResult.details, { agents: ['task.md'], skills: ['tdd'] });
+  assert.deepEqual(assetsResult.details, {
+    agents: ['task.md'],
+    skills: ['tdd'],
+    hooks: { pre: [], post: [] },
+    templates: ['config.yml'],
+  });
 
   const plan = registered.find((tool) => tool.name === 'omp_config_plan');
   const planResult = await plan.execute('call-3', { root }, undefined, undefined, { cwd: process.cwd() });

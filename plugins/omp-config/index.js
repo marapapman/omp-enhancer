@@ -75,7 +75,7 @@ export default function registerOmpConfig(pi) {
   pi.registerTool({
     name: 'omp_config_assets',
     label: 'OMP Config Assets',
-    description: 'List packaged OMP config agents and skills.',
+    description: 'List packaged OMP config agents, skills, hooks, and templates.',
     parameters,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const result = await listAssets(pluginRootFromParams(params, ctx));
