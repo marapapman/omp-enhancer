@@ -1,0 +1,7 @@
+node_modules/
+.vite/
+dist/*.map
+*.tgz
+.env
+.DS_Store
+.worktrees/

@@ -1,0 +1,46 @@
+{
+  "name": "omp-testing-enhancer",
+  "version": "0.1.3",
+  "description": "OMP plugin for test generation guidance, quality gates, and reports.",
+  "type": "module",
+  "main": "./dist/extension.js",
+  "exports": {
+    ".": "./dist/extension.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "tools",
+    "commands",
+    ".omp-plugin",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bunx tsc -p tsconfig.json",
+    "typecheck": "bunx tsc --noEmit -p tsconfig.json",
+    "test": "bunx vitest run",
+    "prepack": "bun run build",
+    "sync:marketplace": "bun scripts/sync-marketplace-release.ts"
+  },
+  "dependencies": {
+    "pixelmatch": "latest",
+    "playwright": "latest",
+    "pngjs": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/pngjs": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  },
+  "omp": {
+    "extensions": [
+      "./src/extension.ts"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/marapapman/omp-test-enhancer.git"
+  }
+}
