@@ -1,0 +1,15 @@
+{
+  "name": "omp-enhancer-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "plugins/omp-config",
+    "plugins/writing-helper",
+    "plugins/omp-test-enhancer"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "pack:all": "node scripts/pack-all.js",
+    "check:marketplace": "node scripts/check-marketplace.js"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "omp-enhancer",
+  "owner": {
+    "name": "marapapman"
+  },
+  "metadata": {
+    "description": "OMP enhancement plugins for config assets, writing support, and test workflow support.",
+    "version": "1.0.0",
+    "pluginRoot": "plugins"
+  },
+  "plugins": [
+    {
+      "name": "omp-config",
+      "description": "Pluginized OMP configuration assets, agents, skills, hooks, model override templates, and config diagnostics.",
+      "version": "0.1.0",
+      "category": "development",
+      "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
+      "repository": "https://github.com/marapapman/omp-enhancer",
+      "source": "./omp-config"
+    },
+    {
+      "name": "writing-helper",
+      "description": "Standalone OMP writing helper with logic checks, quality checks, citation verification, writer/checker agents, and writing skills.",
+      "version": "0.2.1",
+      "category": "writing",
+      "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
+      "repository": "https://github.com/marapapman/omp-enhancer",
+      "source": "./writing-helper"
+    },
+    {
+      "name": "omp-testing-enhancer",
+      "description": "Help OMP agents write and check tests with target analysis, public API context, browser evidence, coverage and mutation analyzers, quality gates, and reports.",
+      "version": "0.1.3",
+      "category": "development",
+      "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
+      "repository": "https://github.com/marapapman/omp-enhancer",
+      "source": "./omp-test-enhancer"
+    }
+  ]
+}
