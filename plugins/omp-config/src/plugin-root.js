@@ -1,9 +1,16 @@
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-export async function resolvePluginRoot(root = process.cwd()) {
+const bundledPluginRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+export async function resolvePluginRoot(root = bundledPluginRoot) {
   if (await isOmpConfigPluginRoot(root)) return root;
-  return path.join(root, 'plugins', 'omp-config');
+
+  const workspacePluginRoot = path.join(root, 'plugins', 'omp-config');
+  if (await isOmpConfigPluginRoot(workspacePluginRoot)) return workspacePluginRoot;
+
+  return bundledPluginRoot;
 }
 
 async function isOmpConfigPluginRoot(root) {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { findPathRisks } from '../src/path-policy.js';
 import { listAssets } from '../src/asset-index.js';
 import { runConfigDoctor } from '../src/doctor.js';
@@ -31,6 +32,36 @@ test('findPathRisks reports hardcoded Claude root home paths', () => {
 
 async function writePluginPackage(root) {
   await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'omp-config' }));
+}
+
+function packageRoot() {
+  return path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+}
+
+function createRegistrationHarness() {
+  const tools = [];
+  const commands = new Map();
+  const pi = {
+    zod: {
+      z: {
+        string: () => ({ optional: () => ({ type: 'optional-string' }) }),
+        optional: (schema) => ({ type: 'optional', schema }),
+        object: (shape) => ({ type: 'object', shape }),
+      },
+    },
+    setLabel(label) {
+      this.label = label;
+    },
+    registerTool(tool) {
+      tools.push(tool);
+    },
+    registerCommand(name, command) {
+      commands.set(name, command);
+    },
+  };
+
+  registerOmpConfig(pi);
+  return { pi, tools, commands };
 }
 
 test('listAssets lists packaged agents and skills from plugin root', async () => {
@@ -118,6 +149,45 @@ test('runConfigPlan resolves packaged assets from a workspace root', async () =>
   const result = await runConfigPlan({ root });
 
   assert.equal(result.plan[0], `Review packaged templates under ${pluginRoot}/assets.`);
+});
+
+test('registered defaults resolve bundled package assets from a normal project cwd', async () => {
+  const projectRoot = await mkdtemp(path.join(tmpdir(), 'omp-config-normal-project-'));
+  await writeFile(path.join(projectRoot, 'package.json'), JSON.stringify({ name: 'normal-project' }));
+  const bundledRoot = packageRoot();
+  const { tools, commands } = createRegistrationHarness();
+
+  const doctor = tools.find((tool) => tool.name === 'omp_config_doctor');
+  const doctorResult = await doctor.execute('call-1', {}, undefined, undefined, { cwd: projectRoot });
+  assert.equal(doctorResult.isError, false);
+  assert.equal(doctorResult.details.summary, '1 config risk(s) found.');
+  assert.equal(doctorResult.details.findings[0].path, 'assets/config.yml');
+
+  const assets = tools.find((tool) => tool.name === 'omp_config_assets');
+  const assetsResult = await assets.execute('call-2', {}, undefined, undefined, { cwd: projectRoot });
+  assert.ok(assetsResult.details.agents.includes('task.md'));
+  assert.ok(assetsResult.details.skills.includes('tdd'));
+
+  const plan = tools.find((tool) => tool.name === 'omp_config_plan');
+  const planResult = await plan.execute('call-3', {}, undefined, undefined, { cwd: projectRoot });
+  assert.equal(planResult.isError, false);
+  assert.equal(planResult.details.plan[0], `Review packaged templates under ${bundledRoot}/assets.`);
+
+  const originalCwd = process.cwd();
+  try {
+    process.chdir(projectRoot);
+    const commandDoctor = await commands.get('config-doctor').handler('');
+    assert.equal(commandDoctor.summary, '1 config risk(s) found.');
+
+    const commandAssets = await commands.get('config-assets').handler('');
+    assert.ok(commandAssets.agents.includes('task.md'));
+    assert.ok(commandAssets.skills.includes('tdd'));
+
+    const directPlan = await runConfigPlan();
+    assert.equal(directPlan.plan[0], `Review packaged templates under ${bundledRoot}/assets.`);
+  } finally {
+    process.chdir(originalCwd);
+  }
 });
 
 test('index registers doctor assets and plan tools safely', async () => {

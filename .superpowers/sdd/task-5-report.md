@@ -41,3 +41,24 @@ Implemented:
 
 Concerns:
 - Existing untracked files from other tasks remain in the worktree and were not included in this fix commit.
+
+## Task 5 package-root review fix
+
+Status: complete
+
+RED evidence:
+- `npm test -w plugins/omp-config -- --test-name-pattern "registered defaults resolve bundled package assets"` failed before implementation with `ENOENT: no such file or directory, open '/tmp/omp-config-normal-project-*/plugins/omp-config/assets/config.yml'`, proving default registered tool usage resolved assets relative to a normal caller project instead of the bundled package.
+
+GREEN evidence:
+- `npm test -w plugins/omp-config -- --test-name-pattern "registered defaults resolve bundled package assets"` passed with 9 tests, 0 failures.
+- `node --test test/config-diagnostics.test.js` passed with 9 tests, 0 failures from `plugins/omp-config`.
+- `npm test -w plugins/omp-config` passed with 9 tests, 0 failures.
+
+Implemented:
+- Added regression coverage for a normal project cwd with no `plugins/omp-config`, using registered default doctor, assets, and plan tools plus default command handlers and direct plan execution.
+- Anchored fallback resolution to the installed `omp-config` package root derived from `import.meta.url`.
+- Preserved explicit plugin root behavior and monorepo workspace fallback by still accepting a valid root and a valid `<root>/plugins/omp-config` before falling back to bundled assets.
+- Kept behavior read-only; the tests create only temporary project directories and read bundled package assets.
+
+Concerns:
+- Existing untracked files from other tasks remain in the worktree and were not included except for this task report update.
