@@ -34,16 +34,18 @@ Install all three plugins with one OMP command:
 omp plugin install omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer
 ```
 
-Upgrade installed plugins:
+Upgrade all installed marketplace plugins with the validated command:
 
 ```bash
 omp plugin upgrade
 ```
 
-Upgrade only these three plugins:
+For targeted control, upgrade each plugin individually:
 
 ```bash
-omp plugin upgrade omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer
+omp plugin upgrade omp-config@omp-enhancer
+omp plugin upgrade writing-helper@omp-enhancer
+omp plugin upgrade omp-testing-enhancer@omp-enhancer
 ```
 
 ## Validation
