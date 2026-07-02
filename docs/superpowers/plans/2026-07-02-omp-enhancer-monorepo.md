@@ -13,7 +13,7 @@
 - Root repository must not register an OMP extension.
 - Root marketplace must define `metadata.pluginRoot: "plugins"`.
 - One install command must install all three plugins: `omp plugin install omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer`.
-- Marketplace upgrade must support `omp plugin upgrade` and `omp plugin upgrade omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer`.
+- Marketplace upgrade must support bare `omp plugin upgrade` for all installed marketplace plugins and individual targeted commands such as `omp plugin upgrade omp-config@omp-enhancer`, `omp plugin upgrade writing-helper@omp-enhancer`, and `omp plugin upgrade omp-testing-enhancer@omp-enhancer` for targeted control.
 - `plugins/omp-config` must not import `plugins/writing-helper` or `plugins/omp-test-enhancer`.
 - `plugins/writing-helper` must not import `plugins/omp-config` or `plugins/omp-test-enhancer`.
 - `plugins/omp-test-enhancer` must not import `plugins/omp-config` or `plugins/writing-helper`.
@@ -686,10 +686,12 @@ Upgrade installed plugins:
 omp plugin upgrade
 ```
 
-Upgrade only these three plugins:
+Upgrade one plugin when targeted control is needed:
 
 ```bash
-omp plugin upgrade omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer
+omp plugin upgrade omp-config@omp-enhancer
+omp plugin upgrade writing-helper@omp-enhancer
+omp plugin upgrade omp-testing-enhancer@omp-enhancer
 ```
 ````
 
@@ -733,15 +735,18 @@ omp plugin list
 
 Expected: list output includes all three installed plugin identifiers.
 
-- [ ] **Step 5: Validate upgrade command**
+- [ ] **Step 5: Validate upgrade commands**
 
 Run:
 
 ```bash
-omp plugin upgrade omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer
+omp plugin upgrade
+omp plugin upgrade omp-config@omp-enhancer
+omp plugin upgrade writing-helper@omp-enhancer
+omp plugin upgrade omp-testing-enhancer@omp-enhancer
 ```
 
-Expected: command exits with status 0. If there are no newer versions, output reports no upgrade or already current.
+Expected: each command exits with status 0. If there are no newer versions, output reports no upgrade or already current.
 
 - [ ] **Step 6: Commit**
 
