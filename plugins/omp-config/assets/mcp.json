@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "gitnexus": {
+      "command": "gitnexus",
+      "args": ["mcp"],
+      "timeout": 120000
+    }
+  }
+}

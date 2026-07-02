@@ -1,0 +1,37 @@
+{
+  "name": "omp-config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pluginized OMP config assets, hooks, agents, skills, and diagnostics.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "commands",
+    "agents",
+    "skills",
+    "hooks",
+    "assets",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "pack:dry": "npm pack --dry-run"
+  },
+  "omp": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "license": "UNLICENSED"
+}

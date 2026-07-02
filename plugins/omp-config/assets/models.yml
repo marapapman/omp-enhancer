@@ -1,0 +1,189 @@
+# DeepSeek V4 Model Override Config
+#
+# OpenCode Go API (opencode.ai/zen/go/v1) dynamically discovers model metadata,
+# but doesn't expose reasoning/compat flags. This causes the omp runtime to treat
+# DeepSeek models as non-reasoning, breaking:
+#   - reasoningEffortMap (xhigh not mapped to max)
+#   - requiresReasoningContentForToolCalls (false -> reasoning_content not persisted)
+#   - Thinking mode configuration
+#
+# Fix: Hardcode model overrides that apply AFTER dynamic discovery.
+#
+# References:
+#   https://api-docs.deepseek.com/zh-cn/quick_start/agent_integrations/oh_my_pi
+
+providers:
+  # ====== OpenCode Go Proxy (default route) ======
+  opencode-go:
+    modelOverrides:
+      "deepseek-v4-flash":
+        reasoning: true
+        compat:
+          # DeepSeek V4 uses "reasoning_content" field in streaming delta
+          reasoningContentField: "reasoning_content"
+
+          # MUST round-trip reasoning_content on tool-call assistant messages
+          requiresReasoningContentForToolCalls: true
+
+          # DeepSeek V4 with reasoning enabled rejects tool_choice
+          supportsToolChoice: false
+
+          # Enable reasoning_effort parameter
+          supportsReasoningEffort: true
+
+          # Map internal effort levels to DeepSeek API values
+          reasoningEffortMap:
+            minimal: "low"
+            low: "low"
+            medium: "medium"
+            high: "high"
+            xhigh: "max"
+
+          # DeepSeek uses max_tokens (not OpenAI's max_completion_tokens)
+          maxTokensField: "max_tokens"
+
+          # DeepSeek doesn't support store parameter
+          supportsStore: false
+
+          # Assistant message with tool_calls needs non-null content for DeepSeek
+          requiresAssistantContentForToolCalls: true
+
+          # DeepSeek does not accept developer role; use system
+          supportsDeveloperRole: false
+
+          # Thinking format: OpenAI-compatible reasoning_effort
+          thinkingFormat: "openai"
+
+          # Explicitly enable DeepSeek V4 thinking mode
+          extraBody:
+            thinking:
+              type: enabled
+
+        thinking:
+          mode: "effort"
+          minLevel: "high"
+          maxLevel: "xhigh"
+
+      "deepseek-v4-pro":
+        reasoning: true
+        compat:
+          reasoningContentField: "reasoning_content"
+          requiresReasoningContentForToolCalls: true
+          supportsToolChoice: false
+          supportsReasoningEffort: true
+          reasoningEffortMap:
+            minimal: "low"
+            low: "low"
+            medium: "medium"
+            high: "high"
+            xhigh: "max"
+          maxTokensField: "max_tokens"
+          supportsStore: false
+          requiresAssistantContentForToolCalls: true
+          supportsDeveloperRole: false
+          thinkingFormat: "openai"
+          extraBody:
+            thinking:
+              type: enabled
+
+        thinking:
+          mode: "effort"
+          minLevel: "high"
+          maxLevel: "xhigh"
+
+  # ====== Direct DeepSeek API (fallback) ======
+  deepseek:
+    modelOverrides:
+      "deepseek-v4-flash":
+        reasoning: true
+        compat:
+          reasoningContentField: "reasoning_content"
+          requiresReasoningContentForToolCalls: true
+          supportsReasoningEffort: true
+          reasoningEffortMap:
+            minimal: "low"
+            low: "low"
+            medium: "medium"
+            high: "high"
+            xhigh: "max"
+          maxTokensField: "max_tokens"
+          supportsToolChoice: false
+          supportsStore: false
+          requiresAssistantContentForToolCalls: true
+          supportsDeveloperRole: false
+          thinkingFormat: "openai"
+          extraBody:
+            thinking:
+              type: enabled
+
+        thinking:
+          mode: "effort"
+          minLevel: "high"
+          maxLevel: "xhigh"
+
+      "deepseek-v4-pro":
+        reasoning: true
+        compat:
+          reasoningContentField: "reasoning_content"
+          requiresReasoningContentForToolCalls: true
+          supportsReasoningEffort: true
+          reasoningEffortMap:
+            minimal: "low"
+            low: "low"
+            medium: "medium"
+            high: "high"
+            xhigh: "max"
+          maxTokensField: "max_tokens"
+          supportsToolChoice: false
+          supportsStore: false
+          requiresAssistantContentForToolCalls: true
+          supportsDeveloperRole: false
+          thinkingFormat: "openai"
+          extraBody:
+            thinking:
+              type: enabled
+
+        thinking:
+          mode: "effort"
+          minLevel: "high"
+          maxLevel: "xhigh"
+
+  # ── DeepSeek Anthropic 格式（直连 API）──
+  # 使用 Anthropic Messages API 格式访问 DeepSeek 模型
+  # 参考: https://api-docs.deepseek.com/zh-cn/guides/anthropic_api
+  deepseek-anthropic:
+    baseUrl: https://api.deepseek.com/anthropic
+    api: anthropic-messages
+    apiKey: DEEPSEEK_API_KEY
+    authHeader: true
+    models:
+      - id: deepseek-v4-pro
+        name: DeepSeek V4 Pro (Anthropic)
+        reasoning: true
+        thinking:
+          mode: anthropic-adaptive
+          minLevel: high
+          maxLevel: xhigh
+        input: [text]
+        contextWindow: 1000000
+        maxTokens: 384000
+        cost:
+          input: 0.42
+          output: 0.84
+          cacheRead: 0.0035
+          cacheWrite: 0.42
+      - id: deepseek-v4-flash
+        name: DeepSeek V4 Flash (Anthropic)
+        reasoning: true
+        thinking:
+          mode: anthropic-adaptive
+          minLevel: high
+          maxLevel: xhigh
+        input: [text]
+        contextWindow: 1000000
+        maxTokens: 384000
+        cost:
+          input: 0.14
+          output: 0.28
+          cacheRead: 0.003
+          cacheWrite: 0.14

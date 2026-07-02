@@ -1,0 +1,46 @@
+secrets: 
+  enabled: true
+skills: 
+  enabled: true
+  customDirectories: 
+    - /root/.omp/skills
+    - /root/.omp/skills/ecc
+    - /root/.claude/skills
+modelRoles: 
+  default: opencode-go/deepseek-v4-flash:xhigh
+  plan: opencode-go/deepseek-v4-pro:xhigh
+  slow: opencode-go/deepseek-v4-pro:xhigh
+  designer: opencode-go/deepseek-v4-flash:xhigh
+  smol: opencode-go/deepseek-v4-flash:xhigh
+  vision: opencode-go/qwen3.5-plus:high
+memory: 
+  backend: local
+compaction: 
+  enabled: true
+  reserveTokens: 32768
+  keepRecentTokens: 20000
+  autoContinue: true
+debug: 
+  enabled: true
+steeringMode: one-at-a-time
+followUpMode: one-at-a-time
+interruptMode: immediate
+lastChangelogVersion: 15.3.2
+providers: 
+  webSearch: tavily
+symbolPreset: ascii
+theme: 
+  dark: titanium
+setupVersion: 1
+disabledProviders: 
+  - deepseek
+enabledModels: 
+  - opencode-go/*
+display: 
+  shimmer: disabled
+statusLine: 
+  preset: minimal
+  separator: ascii
+tui: 
+  hyperlinks: "off"
+showHardwareCursor: false
