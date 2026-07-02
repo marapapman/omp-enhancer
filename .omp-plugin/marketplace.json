@@ -26,7 +26,8 @@
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",
-      "source": "./writing-helper"
+      "source": "./writing-helper",
+      "ref": "v0.2.1"
     },
     {
       "name": "omp-testing-enhancer",

@@ -129,39 +129,57 @@ describe('marketplace install metadata', () => {
     );
   });
 
-  it('syncs marketplace catalog files from package metadata', async () => {
+  it('syncs the root monorepo marketplace catalog from the plugin workspace', async () => {
     const root = await mkdtemp(join(tmpdir(), 'writing-helper-marketplace-'));
+    const pluginDir = join(root, 'plugins', 'writing-helper');
     try {
+      await mkdir(pluginDir, { recursive: true });
       await mkdir(join(root, '.omp-plugin'));
       await writeFile(
-        join(root, 'package.json'),
+        join(pluginDir, 'package.json'),
         `${JSON.stringify({ name: 'writing-helper', version: '0.3.0' }, null, 2)}\n`,
       );
       await writeFile(
         join(root, '.omp-plugin', 'marketplace.json'),
         `${JSON.stringify({
-          name: 'omp-writing-helper',
+          name: 'omp-enhancer',
           owner: { name: 'marapapman' },
+          metadata: { pluginRoot: 'plugins' },
           plugins: [
+            {
+              name: 'other-plugin',
+              version: '9.9.9',
+              source: './other-plugin',
+              ref: 'v9.9.9',
+            },
             {
               name: 'writing-helper',
               version: '0.2.0',
-              source: {
-                source: 'github',
-                repo: 'marapapman/omp-writing-helper',
-                ref: 'v0.2.0',
-              },
+              category: 'writing',
+              source: './writing-helper',
+              ref: 'v0.2.0',
             },
           ],
         }, null, 2)}\n`,
       );
 
-      const result = await syncMarketplaceRelease(root);
+      const result = await syncMarketplaceRelease(pluginDir);
       const synced = await readJson(join(root, '.omp-plugin', 'marketplace.json'));
 
-      assert.deepEqual(result, { version: '0.3.0', ref: 'v0.3.0' });
-      assert.equal(synced.plugins[0].version, '0.3.0');
-      assert.equal(synced.plugins[0].source.ref, 'v0.3.0');
+      assert.deepEqual(result, {
+        version: '0.3.0',
+        ref: 'v0.3.0',
+        catalogPath: join(root, '.omp-plugin', 'marketplace.json'),
+      });
+      assert.deepEqual(synced.plugins[0], {
+        name: 'other-plugin',
+        version: '9.9.9',
+        source: './other-plugin',
+        ref: 'v9.9.9',
+      });
+      assert.equal(synced.plugins[1].version, '0.3.0');
+      assert.equal(synced.plugins[1].source, './writing-helper');
+      assert.equal(synced.plugins[1].ref, 'v0.3.0');
     } finally {
       await rm(root, { recursive: true, force: true });
     }
