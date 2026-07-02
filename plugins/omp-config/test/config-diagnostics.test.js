@@ -7,7 +7,8 @@ import { findPathRisks } from '../src/path-policy.js';
 import { listAssets } from '../src/asset-index.js';
 import { runConfigDoctor } from '../src/doctor.js';
 import { formatDoctorReport } from '../src/report.js';
-import registerOmpConfig from '../index.js';
+import registerOmpConfig, { runConfigPlan } from '../index.js';
+import { resolvePluginRoot } from '../src/plugin-root.js';
 
 test('findPathRisks reports hardcoded root home paths', () => {
   const findings = findPathRisks('customDirectories:\n  - /root/.omp/skills\n', 'config.yml');
@@ -28,10 +29,17 @@ test('findPathRisks reports hardcoded Claude root home paths', () => {
   assert.match(findings[0].evidence, /\/root\/\.claude\/CLAUDE\.md/);
 });
 
+async function writePluginPackage(root) {
+  await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'omp-config' }));
+}
+
 test('listAssets lists packaged agents and skills from plugin root', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'omp-config-assets-'));
+  await writePluginPackage(root);
   await mkdir(path.join(root, 'agents'));
   await mkdir(path.join(root, 'skills'));
+  await mkdir(path.join(root, 'assets'));
+  await writeFile(path.join(root, 'assets', 'config.yml'), 'packaged template\n');
   await writeFile(path.join(root, 'agents', 'task.md'), '# Task');
   await writeFile(path.join(root, 'agents', '.hidden.md'), '# Hidden');
   await mkdir(path.join(root, 'skills', 'tdd'));
@@ -47,6 +55,7 @@ test('listAssets lists packaged agents and skills from plugin root', async () =>
 test('runConfigDoctor reads packaged config assets and reports path risks', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'omp-config-doctor-'));
   await mkdir(path.join(root, 'assets'));
+  await writePluginPackage(root);
   await writeFile(path.join(root, 'assets', 'config.yml'), 'customDirectories:\n  - /root/.omp/skills\n');
 
   const result = await runConfigDoctor(root);
@@ -75,6 +84,40 @@ test('formatDoctorReport renders summary and findings', () => {
   assert.match(report, /1 config risk\(s\) found\./);
   assert.match(report, /## hardcoded-root-home/);
   assert.match(report, /Severity: warning/);
+});
+
+test('resolvePluginRoot falls back from a workspace root with top-level OMP directories to the packaged plugin root', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'omp-config-workspace-'));
+  await mkdir(path.join(root, 'agents'));
+  await mkdir(path.join(root, 'skills'));
+  await mkdir(path.join(root, 'assets'));
+  await writeFile(path.join(root, 'assets', 'config.yml'), 'workspace template\n');
+
+  const pluginRoot = path.join(root, 'plugins', 'omp-config');
+  await mkdir(path.join(pluginRoot, 'assets'), { recursive: true });
+  await mkdir(path.join(pluginRoot, 'agents'));
+  await mkdir(path.join(pluginRoot, 'skills'));
+  await writeFile(path.join(pluginRoot, 'assets', 'config.yml'), 'packaged template\n');
+  await writePluginPackage(pluginRoot);
+
+  assert.equal(await resolvePluginRoot(root), pluginRoot);
+});
+
+test('runConfigPlan resolves packaged assets from a workspace root', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'omp-config-plan-workspace-'));
+  await mkdir(path.join(root, 'agents'));
+  await mkdir(path.join(root, 'skills'));
+  await mkdir(path.join(root, 'assets'));
+  await writeFile(path.join(root, 'assets', 'config.yml'), 'workspace template\n');
+
+  const pluginRoot = path.join(root, 'plugins', 'omp-config');
+  await mkdir(path.join(pluginRoot, 'assets'), { recursive: true });
+  await writeFile(path.join(pluginRoot, 'assets', 'config.yml'), 'packaged template\n');
+  await writePluginPackage(pluginRoot);
+
+  const result = await runConfigPlan({ root });
+
+  assert.equal(result.plan[0], `Review packaged templates under ${pluginRoot}/assets.`);
 });
 
 test('index registers doctor assets and plan tools safely', async () => {
@@ -112,6 +155,7 @@ test('index registers doctor assets and plan tools safely', async () => {
   await writeFile(path.join(root, 'agents', 'task.md'), '# Task');
   await mkdir(path.join(root, 'skills', 'tdd'));
 
+  await writePluginPackage(root);
   const doctor = registered.find((tool) => tool.name === 'omp_config_doctor');
   const doctorResult = await doctor.execute('call-1', { root }, undefined, undefined, { cwd: process.cwd() });
   assert.equal(doctorResult.isError, false);

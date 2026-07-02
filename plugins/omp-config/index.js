@@ -1,6 +1,7 @@
 import { runConfigDoctor } from './src/doctor.js';
 import { listAssets } from './src/asset-index.js';
 import { formatDoctorReport, formatPlanReport } from './src/report.js';
+import { resolvePluginRoot } from './src/plugin-root.js';
 
 function textContent(text) {
   return { type: 'text', text };
@@ -21,10 +22,11 @@ function pluginRootFromParams(params, ctx) {
 export { runConfigDoctor } from './src/doctor.js';
 export { listAssets } from './src/asset-index.js';
 
-export function runConfigPlan(input = {}) {
+export async function runConfigPlan(input = {}) {
   const root = typeof input.root === 'string' && input.root.trim() !== '' ? input.root : process.cwd();
+  const pluginRoot = await resolvePluginRoot(root);
   const plan = [
-    `Review packaged templates under ${root}/assets.`,
+    `Review packaged templates under ${pluginRoot}/assets.`,
     'Compare assets/config.yml, assets/models.yml, and assets/mcp.json with the target OMP home.',
     'Compare bundled agents and skills with the target installation.',
     'Prepare a patch for explicit user review before copying or overwriting any live config files.',
@@ -91,7 +93,7 @@ export default function registerOmpConfig(pi) {
     description: 'Create a safe manual review plan before applying packaged OMP config templates to a target config directory.',
     parameters,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const result = runConfigPlan({ root: pluginRootFromParams(params, ctx) });
+      const result = await runConfigPlan({ root: pluginRootFromParams(params, ctx) });
       return {
         content: [textContent(formatPlanReport(result))],
         details: result,
