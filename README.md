@@ -73,6 +73,7 @@ omp plugin install omp-enhancer-core@omp-enhancer omp-testing-enhancer@omp-enhan
 After installing `omp-enhancer-core`, describe the task naturally. The core plugin injects routing guidance and completion gates through runtime hooks.
 
 - The default runtime model is MiMo v2.5, the advisor is DeepSeek V4 Flash, and task subagents plus all other roles follow the user's active OMP config.
+- Ambiguous routing can use `modelRoles.classifier`, which the packaged `omp-config` template defaults to `ollama-cloud/deepseek-v4-flash:medium`. Change that config role to try another classifier model.
 - Coding tasks use lightweight TDD guidance, fork plan/task/reviewer subagents, pass role-specific skill lists to each subagent, and require testing evidence.
 - Security review tasks fork ecc-security-reviewer plus reviewer.
 - Writing tasks route to writer/checker or zh-writer/zh-checker subagents, require writing skills, and require writing QA evidence.
@@ -81,6 +82,22 @@ After installing `omp-enhancer-core`, describe the task naturally. The core plug
 - Config tasks use `omp_config_doctor`, `omp_config_assets`, and `omp_config_plan`, with librarian/reviewer subagent evidence before completion.
 
 Slash commands remain compatibility helpers for older workflows. The new workflow does not require `/test`, `/writing-quality`, or any other command prefix.
+
+### Classifier model configuration
+
+The first classifier iteration is intentionally schema-first. `omp-enhancer-core` exposes:
+
+- `omp_core_classifier_prompt`: builds the strict JSON prompt and schema for the model configured as `modelRoles.classifier`.
+- `omp_core_resolve_classification`: validates classifier JSON, maps it through the route whitelist, and then sets the normal routed workflow state.
+
+Configure the model in OMP config:
+
+```yaml
+modelRoles:
+  classifier: ollama-cloud/deepseek-v4-flash:medium
+```
+
+The classifier may choose only an intent and risk flags. It cannot invent skills, tools, subagents, or gate formats; those still come from the core route catalog.
 
 Upgrade all installed marketplace plugins with the validated command:
 

@@ -13,7 +13,7 @@
     {
       "name": "omp-config",
       "description": "Pluginized OMP configuration assets, agents, skills, hooks, model override templates, and config diagnostics.",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -350,7 +350,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "Unified OMP enhancer runtime router for coding, writing, testing, and config tasks.",
-      "version": "0.1.9",
+      "version": "0.1.10",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",

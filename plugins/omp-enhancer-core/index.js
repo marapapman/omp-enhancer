@@ -2,6 +2,7 @@ import { buildGovernancePromptFragment, buildMissingGateContext, buildSubagentPr
 import { routeNaturalLanguageTask } from './src/router.js';
 import { validateSkillUsage } from './src/skill-usage.js';
 import { collectSubagentTaskRecords, validateSubagentUsage } from './src/subagent-usage.js';
+import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
@@ -18,6 +19,35 @@ export default function registerCoreEnhancer(pi) {
       const route = routeNaturalLanguageTask({ prompt: params.prompt });
       setRouteState(state, route);
       return okResult(formatRoute(route), { route });
+    },
+  });
+
+  pi.registerTool({
+    name: 'omp_core_classifier_prompt',
+    label: 'Build OMP classifier prompt',
+    description: 'Build the strict JSON classifier prompt and schema for the configured classifier model role.',
+    parameters: z?.object ? z.object({
+      prompt: z.string(),
+      modelRole: z.string().optional(),
+      model: z.string().optional(),
+      fallbackModelRole: z.string().optional(),
+      fallbackModel: z.string().optional(),
+    }) : undefined,
+    execute: async (_callId, params = {}) => {
+      const classifier = buildClassifierPrompt(params);
+      return okResult(classifier.prompt, { classifier });
+    },
+  });
+
+  pi.registerTool({
+    name: 'omp_core_resolve_classification',
+    label: 'Resolve OMP classifier output',
+    description: 'Validate classifier JSON, map it through the route whitelist, and set the routed workflow state.',
+    parameters: z?.object ? z.object({ prompt: z.string(), output: z.string() }) : undefined,
+    execute: async (_callId, params = {}) => {
+      const result = resolveClassificationRoute({ prompt: params.prompt, output: params.output });
+      setRouteState(state, result.route);
+      return okResult(formatRoute(result.route), result);
     },
   });
 

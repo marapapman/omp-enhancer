@@ -39,6 +39,8 @@ test('registers core tools and hooks without slash commands', () => {
   assert.deepEqual(pi.labels, ['OMP Enhancer Core']);
   assert.deepEqual([...pi.tools.keys()], [
     'omp_core_route_task',
+    'omp_core_classifier_prompt',
+    'omp_core_resolve_classification',
     'omp_core_validate_skill_usage',
     'omp_core_validate_subagent_usage',
     'omp_core_governance_prompt',
@@ -52,6 +54,61 @@ test('registers core tools and hooks without slash commands', () => {
     'session_stop',
   ]);
   assert.deepEqual([...pi.commands.keys()], []);
+});
+
+test('classifier tools expose model role configuration and resolve route state', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  const promptResult = await tool(pi, 'omp_core_classifier_prompt').execute(
+    'call-classifier-prompt',
+    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.match(promptResult.content[0].text, /modelRoles\.classifier/);
+  assert.equal(promptResult.details.classifier.modelRole, 'classifier');
+  assert.equal(promptResult.details.classifier.model, 'ollama-cloud/deepseek-v4-flash:medium');
+
+  const routeResult = await tool(pi, 'omp_core_resolve_classification').execute(
+    'call-classifier-resolve',
+    {
+      prompt: 'Draft an English related work paragraph and check the logic.',
+      output: JSON.stringify({
+        intent: 'writing.en',
+        secondaryIntents: [],
+        language: 'en',
+        confidence: 0.92,
+        riskFlags: ['needs-writing-qa', 'needs-review'],
+        domainHints: ['paper'],
+        reason: 'English writing request.',
+      }),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(routeResult.details.route.intent, 'writing.en');
+  assert.equal(routeResult.details.route.source, 'llm-classifier');
+  assert.deepEqual(routeResult.details.route.requiredSubagents.map(({ agent }) => agent), ['writer', 'checker']);
+
+  const governance = await tool(pi, 'omp_core_governance_prompt').execute(
+    'call-classifier-governance',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(governance.details.route.intent, 'writing.en');
+  assert.match(governance.details.fragment, /writer/);
+  assert.match(governance.details.fragment, /checker/);
+  assert.match(governance.details.fragment, /modelRoles\.classifier/);
 });
 
 test('before_agent_start injects governance context and routes natural-language prompts', async () => {

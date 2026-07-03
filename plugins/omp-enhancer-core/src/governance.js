@@ -38,6 +38,8 @@ export function buildGovernancePromptFragment({ route } = {}) {
     '',
     'Runtime model policy: the main/default agent uses MiMo v2.5; the advisor uses DeepSeek V4 Flash. Keep task subagents and all other model roles on the active OMP configuration unless the user explicitly overrides them.',
     '',
+    'Classifier model policy: ambiguous routing may use the configured `modelRoles.classifier` role. The packaged config defaults it to `ollama-cloud/deepseek-v4-flash:medium`. Classifier output is advisory only; resolve it through the OMP route whitelist before assigning skills, tools, or subagents.',
+    '',
     'Use a subagent-driven workflow for routed work. Before doing non-trivial implementation, testing, writing, security, or config work yourself, fork the listed roles with the task tool. Call task once per distinct agent role; if several items share one agent, use the batch task shape.',
     '',
     'When calling task, set each task item `role` or `agent` to the exact required subagent name, such as `writer`, `checker`, `zh-writer`, or `zh-checker`. Do not use generic `task` as the only role for required subagents.',

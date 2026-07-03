@@ -29,6 +29,16 @@ const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', '
 const configTerms = ['omp-config', 'config assets', 'assets', 'hooks', 'marketplace', '配置资产'];
 const securityTerms = ['security', 'vulnerability', 'xss', 'ssrf', 'injection', 'auth', 'owasp', '安全', '漏洞', '注入', '鉴权', '认证', '权限', '密钥', 'secret'];
 
+export const routedIntents = [
+  'config-assets',
+  'security-review',
+  'implementation-with-tests',
+  'testing',
+  'writing.zh',
+  'writing.en',
+  'unknown',
+];
+
 const subagentPlans = {
   configAssets: [
     subagent('librarian', 'inventory packaged assets, agents, skills, hooks, and config templates before edits'),
@@ -64,13 +74,7 @@ export function routeNaturalLanguageTask(input = {}) {
   if (!normalized.trim()) return unknownRoute();
 
   if (includesAny(normalized, configTerms) && includesAny(normalized, ['config', 'assets', 'hooks', 'omp-config', 'marketplace', '配置'])) {
-    return route({
-      intent: 'config-assets',
-      agent: 'config-assets',
-      requiredSkills: [],
-      requiredTools: ['omp_config_doctor', 'omp_config_assets', 'omp_config_plan'],
-      requiredSubagents: subagentPlans.configAssets,
-    });
+    return routeByIntent('config-assets');
   }
 
   const hasTesting = includesAny(normalized, testingTerms);
@@ -80,76 +84,110 @@ export function routeNaturalLanguageTask(input = {}) {
   const asksToWriteTests = /write\s+tests?/.test(normalized) || normalized.includes('写高信号单元测试') || normalized.includes('写测试') || normalized.includes('补测试');
 
   if (hasSecurity && (hasCoding || normalized.includes('代码') || normalized.includes('审查') || normalized.includes('review'))) {
-    return route({
-      intent: 'security-review',
-      agent: 'ecc-security-reviewer',
-      requiredSkills: ['ecc/security-review', 'ecc/security-scan'],
-      requiredTools: [],
-      requiredSubagents: subagentPlans.security,
-    });
+    return routeByIntent('security-review');
   }
 
   if (hasCoding && hasTesting) {
-    return route({
-      intent: 'implementation-with-tests',
-      agent: 'implementer',
-      requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
-      requiredSubagents: subagentPlans.implementation,
-    });
+    return routeByIntent('implementation-with-tests');
   }
 
   if (asksToWriteTests || (hasTesting && !hasWriting)) {
-    return route({
-      intent: 'testing',
-      agent: 'tester',
-      requiredSkills: ['test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
-      requiredSubagents: subagentPlans.testing,
-    });
+    return routeByIntent('testing');
   }
 
   if (isChineseWriting(normalized, prompt)) {
-    return route({
-      intent: 'writing.zh',
-      agent: 'writing-helper.zh-writer',
-      requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
-      requiredTools: ['writing_logic_check', 'writing_quality_check'],
-      requiredSubagents: subagentPlans.writingZh,
-    });
+    return routeByIntent('writing.zh');
   }
 
   if (hasCoding) {
-    return route({
-      intent: 'implementation-with-tests',
-      agent: 'implementer',
-      requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
-      requiredSubagents: subagentPlans.implementation,
-    });
+    return routeByIntent('implementation-with-tests');
   }
 
   if (hasWriting) {
-    return route({
-      intent: 'writing.en',
-      agent: 'writing-helper.writer',
-      requiredSkills: ['writing-markdown-helper', 'writing-checkers'],
-      requiredTools: ['writing_logic_check', 'writing_quality_check'],
-      requiredSubagents: subagentPlans.writingEn,
-    });
+    return routeByIntent('writing.en');
   }
 
   return unknownRoute();
 }
 
-function route({ intent, agent, requiredSkills = [], requiredTools = [], requiredSubagents = [] }) {
+export function routeByIntent(intent, { source = 'natural-language' } = {}) {
+  if (intent === 'config-assets') {
+    return route({
+      intent,
+      agent: 'config-assets',
+      requiredSkills: [],
+      requiredTools: ['omp_config_doctor', 'omp_config_assets', 'omp_config_plan'],
+      requiredSubagents: subagentPlans.configAssets,
+      source,
+    });
+  }
+
+  if (intent === 'security-review') {
+    return route({
+      intent,
+      agent: 'ecc-security-reviewer',
+      requiredSkills: ['ecc/security-review', 'ecc/security-scan'],
+      requiredTools: [],
+      requiredSubagents: subagentPlans.security,
+      source,
+    });
+  }
+
+  if (intent === 'implementation-with-tests') {
+    return route({
+      intent,
+      agent: 'implementer',
+      requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+      requiredSubagents: subagentPlans.implementation,
+      source,
+    });
+  }
+
+  if (intent === 'testing') {
+    return route({
+      intent,
+      agent: 'tester',
+      requiredSkills: ['test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+      requiredSubagents: subagentPlans.testing,
+      source,
+    });
+  }
+
+  if (intent === 'writing.zh') {
+    return route({
+      intent,
+      agent: 'writing-helper.zh-writer',
+      requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
+      requiredTools: ['writing_logic_check', 'writing_quality_check'],
+      requiredSubagents: subagentPlans.writingZh,
+      source,
+    });
+  }
+
+  if (intent === 'writing.en') {
+    return route({
+      intent,
+      agent: 'writing-helper.writer',
+      requiredSkills: ['writing-markdown-helper', 'writing-checkers'],
+      requiredTools: ['writing_logic_check', 'writing_quality_check'],
+      requiredSubagents: subagentPlans.writingEn,
+      source,
+    });
+  }
+
+  return unknownRoute(source);
+}
+
+function route({ intent, agent, requiredSkills = [], requiredTools = [], requiredSubagents = [], source = 'natural-language' }) {
   return {
     intent,
     agent,
     requiredSkills,
     requiredTools,
     requiredSubagents,
-    source: 'natural-language',
+    source,
   };
 }
 
@@ -168,13 +206,13 @@ function includesAny(text, terms) {
   return terms.some((term) => text.includes(term));
 }
 
-function unknownRoute() {
+function unknownRoute(source = 'natural-language') {
   return {
     intent: 'unknown',
     agent: null,
     requiredSkills: [],
     requiredTools: [],
     requiredSubagents: [],
-    source: 'natural-language',
+    source,
   };
 }

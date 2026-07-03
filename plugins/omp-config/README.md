@@ -6,6 +6,7 @@
 
 - `assets/CLAUDE.md` and root or agent config templates.
 - `assets/config.yml`, `assets/models.yml`, and `assets/mcp.json` as templates only.
+- `assets/config.yml` includes `modelRoles.classifier`, the model role used by `omp-enhancer-core` for schema-first route classification when the deterministic router is ambiguous.
 - `agents/`, `skills/`, and `hooks/` copied from the config source.
 - Slash command content for `/omp-config:config`, `/omp-config:config-doctor`, and `/omp-config:config-assets`.
 - Runtime tools for extension loading: `omp_config_doctor`, `omp_config_assets`, and `omp_config_plan`.
@@ -13,6 +14,13 @@
 ## Safety
 
 This package does not automatically overwrite `~/.omp`. Treat the packaged files as templates and review any patch plan before applying changes to a live OMP home.
+
+To try a different LLM classifier, copy the template setting into your live OMP config and change only this role:
+
+```yaml
+modelRoles:
+  classifier: ollama-cloud/deepseek-v4-flash:medium
+```
 
 ## Commands
 
