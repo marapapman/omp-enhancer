@@ -38,7 +38,7 @@ export function buildGovernancePromptFragment({ route } = {}) {
     '',
     'Runtime model policy: the main/default agent uses MiMo v2.5; the advisor uses DeepSeek V4 Flash. Keep task subagents and all other model roles on the active OMP configuration unless the user explicitly overrides them.',
     '',
-    'Classifier model policy: ambiguous routing may use the configured `modelRoles.classifier` role. The packaged config defaults it to `ollama-cloud/deepseek-v4-flash:medium`. Classifier output is advisory only; resolve it through the OMP route whitelist before assigning skills, tools, or subagents.',
+    'Classifier model policy: ambiguous routing may use the configured `modelRoles.classifier` role. The packaged config defaults it to `opencode-go/deepseek-v4-flash:medium`. Classifier output is advisory only; resolve it through the OMP route whitelist before assigning skills, tools, or subagents.',
     '',
     'Use a subagent-driven workflow for routed work. Before doing non-trivial implementation, testing, writing, security, or config work yourself, fork the listed roles with the task tool. Call task once per distinct agent role; if several items share one agent, use the batch task shape.',
     '',
@@ -152,6 +152,8 @@ function workflowFor(intent) {
   if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> task -> reviewer -> lightweight TDD -> omp_test_gate -> omp_test_report.';
   if (intent === 'security-review') return 'Security workflow: ecc-security-reviewer -> reviewer -> fix or report only after risk evidence is checked.';
   if (intent === 'config-assets') return 'Config workflow: use omp_config_doctor, omp_config_assets, or omp_config_plan as needed.';
+  if (intent === 'diagnosis') return 'Diagnosis workflow: inspect the reported failure and explain root cause first; do not modify files unless the user asks for a fix.';
+  if (intent === 'release') return 'Release workflow: verify repository status, run the relevant packaging or marketplace checks, then execute the requested push, publish, upgrade, or release step.';
   return 'Workflow: use the selected agent and tools.';
 }
 

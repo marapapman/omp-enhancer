@@ -2,12 +2,14 @@ import { routeByIntent, routedIntents, routeNaturalLanguageTask } from './router
 
 export const classifierDefaults = {
   modelRole: 'classifier',
-  model: 'ollama-cloud/deepseek-v4-flash:medium',
+  model: 'opencode-go/deepseek-v4-flash:medium',
   fallbackModelRole: 'default',
   fallbackModel: 'xiaomi/mimo-v2.5:high',
   retryLimit: 1,
   temperature: 0,
   maxOutputTokens: 500,
+  minResolvedConfidence: 0.55,
+  minUnknownOverrideConfidence: 0.7,
 };
 
 export const classifierIntents = [
@@ -76,6 +78,8 @@ export function buildClassifierPrompt({
     retryLimit: classifierDefaults.retryLimit,
     temperature: classifierDefaults.temperature,
     maxOutputTokens: classifierDefaults.maxOutputTokens,
+    minResolvedConfidence: classifierDefaults.minResolvedConfidence,
+    minUnknownOverrideConfidence: classifierDefaults.minUnknownOverrideConfidence,
   };
 
   return {
@@ -103,6 +107,8 @@ export function buildClassifierPrompt({
       '- Prefer implementation-with-tests for code/plugin changes, even when the task mentions config or marketplace.',
       '- Prefer writing.zh for Chinese prose editing or drafting; prefer writing.en for English prose editing or drafting.',
       '- Put related concerns such as config-assets or release into secondaryIntents and riskFlags when they are not the main task.',
+      `- Use confidence below ${config.minResolvedConfidence} only when uncertain; low-confidence non-unknown classifications may fall back to the deterministic route.`,
+      `- Use high-confidence unknown only when no OMP plugin workflow should run; confidence >= ${config.minUnknownOverrideConfidence} can suppress an over-eager deterministic fallback.`,
       '',
       'JSON Schema:',
       JSON.stringify(classifierSchema, null, 2),
@@ -199,7 +205,19 @@ function normalizeClassifierValue(value) {
 }
 
 function routeIntentForClassification(classification, fallbackRoute) {
-  if (routedIntents.includes(classification.intent) && classification.intent !== 'unknown') return classification.intent;
+  if (classification.intent === 'unknown') {
+    if (classification.confidence >= classifierDefaults.minUnknownOverrideConfidence) return 'unknown';
+    if (fallbackRoute.intent !== 'unknown') return fallbackRoute.intent;
+    return 'unknown';
+  }
+  if (!routedIntents.includes(classification.intent)) {
+    if (fallbackRoute.intent !== 'unknown') return fallbackRoute.intent;
+    return 'unknown';
+  }
+  if (classification.confidence < classifierDefaults.minResolvedConfidence && fallbackRoute.intent !== 'unknown') {
+    return fallbackRoute.intent;
+  }
+  if (routedIntents.includes(classification.intent)) return classification.intent;
   if (fallbackRoute.intent !== 'unknown') return fallbackRoute.intent;
   return 'unknown';
 }

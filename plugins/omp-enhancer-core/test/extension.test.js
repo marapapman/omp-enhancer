@@ -4,11 +4,12 @@ import assert from 'node:assert/strict';
 import registerCoreEnhancer from '../index.js';
 
 class FakePi {
-  constructor() {
+  constructor(entries = []) {
     this.labels = [];
     this.tools = new Map();
     this.commands = new Map();
     this.eventHandlers = [];
+    this.entries = entries;
     const z = fakeZod();
     this.z = z;
     this.zod = { z };
@@ -28,6 +29,10 @@ class FakePi {
 
   on(event, handler) {
     this.eventHandlers.push({ event, handler });
+  }
+
+  appendEntry(customType, data) {
+    this.entries.push({ type: 'custom', customType, data });
   }
 }
 
@@ -99,7 +104,7 @@ test('classifier tools expose model role configuration and resolve route state',
 
   assert.match(promptResult.content[0].text, /modelRoles\.classifier/);
   assert.equal(promptResult.details.classifier.modelRole, 'classifier');
-  assert.equal(promptResult.details.classifier.model, 'ollama-cloud/deepseek-v4-flash:medium');
+  assert.equal(promptResult.details.classifier.model, 'opencode-go/deepseek-v4-flash:medium');
 
   const routeResult = await tool(pi, 'omp_core_resolve_classification').execute(
     'call-classifier-resolve',
@@ -719,6 +724,122 @@ test('validate subagent usage accepts explicit final SUBAGENT_USAGE evidence', a
   assert.match(result.additionalContext, /writing QA/);
 });
 
+test('validator evidence persists through session entries across isolated plugin instances', async () => {
+  const entries = [];
+  const validatorPi = new FakePi(entries);
+  registerCoreEnhancer(validatorPi);
+  const validatorCtx = extensionContext(entries);
+
+  await event(validatorPi, 'session_start')({}, validatorCtx);
+  await event(validatorPi, 'before_agent_start')(
+    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    validatorCtx,
+  );
+  await event(validatorPi, 'tool_result')({ name: 'writing_quality_check' }, validatorCtx);
+  await tool(validatorPi, 'omp_core_validate_subagent_usage').execute(
+    'call-cross-instance-subagent-usage',
+    {
+      output: [
+        'SUBAGENT_USAGE:',
+        '- writer: writing-markdown-helper',
+        '- checker: writing-checkers',
+      ].join('\n'),
+    },
+    undefined,
+    undefined,
+    validatorCtx,
+  );
+  await tool(validatorPi, 'omp_core_validate_skill_usage').execute(
+    'call-cross-instance-skill-usage',
+    {
+      output: [
+        'SKILL_USAGE',
+        'Required:',
+        '- writing-markdown-helper',
+        '- writing-checkers',
+        'Loaded:',
+        '- writing-markdown-helper',
+        '- writing-checkers',
+      ].join('\n'),
+    },
+    undefined,
+    undefined,
+    validatorCtx,
+  );
+
+  const stopPi = new FakePi(entries);
+  registerCoreEnhancer(stopPi);
+  const stopCtx = extensionContext(entries);
+  const result = await event(stopPi, 'session_stop')({}, stopCtx);
+
+  assert.equal(result, undefined);
+  assert.equal(entries.some((entry) => entry.customType === 'omp-enhancer-core.state'), true);
+});
+
+test('session_stop accepts final usage blocks when validator tool state is unavailable', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    ctx,
+  );
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+
+  const result = await event(pi, 'session_stop')(
+    {
+      output: [
+        'Done.',
+        '',
+        'SUBAGENT_USAGE:',
+        '- writer: writing-markdown-helper',
+        '- checker: writing-checkers',
+        '',
+        'SKILL_USAGE',
+        'Required:',
+        '- writing-markdown-helper',
+        '- writing-checkers',
+        'Loaded:',
+        '- writing-markdown-helper',
+        '- writing-checkers',
+      ].join('\n'),
+    },
+    ctx,
+  );
+
+  assert.equal(result, undefined);
+});
+
+test('session_stop rejects completion notes that only blame validator session state', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    ctx,
+  );
+  await forkSubagents(pi, ctx, ['writer', 'checker']);
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+
+  const result = await event(pi, 'session_stop')(
+    {
+      output: [
+        'All work complete. All verification evidence provided.',
+        'The omp_core_validate_* tools have a known session-state bug that prevents formal validation.',
+      ].join(' '),
+    },
+    ctx,
+  );
+
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /SKILL_USAGE/);
+  assert.match(result.additionalContext, /No successful SKILL_USAGE validation/);
+});
+
 function tool(pi, name) {
   const found = pi.tools.get(name);
   if (!found) throw new Error(`Missing tool ${name}`);
@@ -791,10 +912,10 @@ function governanceText(result, eventPayload) {
     .join('\n');
 }
 
-function extensionContext() {
+function extensionContext(entries = []) {
   return {
     cwd: process.cwd(),
-    sessionManager: { getBranch: () => [] },
+    sessionManager: { getBranch: () => entries },
     ui: { notify: () => undefined },
     hasUI: false,
   };

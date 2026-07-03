@@ -19,7 +19,7 @@ To try a different LLM classifier, use `/classifier set <provider/model:effort>`
 
 ```yaml
 modelRoles:
-  classifier: ollama-cloud/deepseek-v4-flash:medium
+  classifier: opencode-go/deepseek-v4-flash:medium
 modelTags:
   classifier:
     name: Classifier

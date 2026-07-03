@@ -8,7 +8,7 @@ skills:
     - /root/.claude/skills
 modelRoles: 
   advisor: deepseek/deepseek-v4-flash:xhigh
-  classifier: ollama-cloud/deepseek-v4-flash:medium
+  classifier: opencode-go/deepseek-v4-flash:medium
   commit: ollama-cloud/gemma3:4b
   default: xiaomi/mimo-v2.5:high
   designer: ollama-cloud/glm-5.2:xhigh

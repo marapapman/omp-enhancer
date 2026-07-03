@@ -165,7 +165,7 @@ test('packaged config template keeps MiMo as default and DeepSeek Flash as advis
   const template = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
 
   assert.match(template, /advisor:\s*deepseek\/deepseek-v4-flash:xhigh/);
-  assert.match(template, /classifier:\s*ollama-cloud\/deepseek-v4-flash:medium/);
+  assert.match(template, /classifier:\s*opencode-go\/deepseek-v4-flash:medium/);
   assert.match(template, /modelTags:\s*\n\s*classifier:\s*\n\s*name:\s*Classifier/);
   assert.match(template, /default:\s*xiaomi\/mimo-v2\.5:high/);
   assert.match(template, /plan:\s*ollama-cloud\/deepseek-v4-pro:high/);
@@ -173,7 +173,8 @@ test('packaged config template keeps MiMo as default and DeepSeek Flash as advis
   assert.match(template, /webSearch:\s*codex/);
   assert.match(template, /backend:\s*mnemopi/);
   assert.doesNotMatch(template, /disabledProviders:\s*\n\s*-\s*deepseek/);
-  assert.doesNotMatch(template, /opencode-go\/deepseek/);
+  assert.doesNotMatch(template, /advisor:\s*opencode-go\/deepseek/);
+  assert.doesNotMatch(template, /task:\s*opencode-go\/deepseek/);
 });
 
 test('ships every omp-config skill from the plugin skills directory', async () => {

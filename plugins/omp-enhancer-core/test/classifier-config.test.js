@@ -16,9 +16,9 @@ test('parseClassifierCommand treats a bare model as set shorthand', () => {
     action: 'set',
     model: 'openai/gpt-5-nano',
   });
-  assert.deepEqual(parseClassifierCommand('ollama-cloud/deepseek-v4-flash:medium'), {
+  assert.deepEqual(parseClassifierCommand('opencode-go/deepseek-v4-flash:medium'), {
     action: 'set',
-    model: 'ollama-cloud/deepseek-v4-flash:medium',
+    model: 'opencode-go/deepseek-v4-flash:medium',
   });
   assert.deepEqual(parseClassifierCommand(''), { action: 'status' });
 });
@@ -33,8 +33,8 @@ test('upsertYamlModelRole inserts classifier near existing model roles', () => {
     '',
   ].join('\n'));
 
-  assert.match(output, /advisor: deepseek\/deepseek-v4-flash:xhigh\n  classifier: ollama-cloud\/deepseek-v4-flash:medium\n  default:/);
-  assert.deepEqual(parseModelRolesFromYaml(output).classifier, 'ollama-cloud/deepseek-v4-flash:medium');
+  assert.match(output, /advisor: deepseek\/deepseek-v4-flash:xhigh\n  classifier: opencode-go\/deepseek-v4-flash:medium\n  default:/);
+  assert.deepEqual(parseModelRolesFromYaml(output).classifier, 'opencode-go/deepseek-v4-flash:medium');
 });
 
 test('upsertYamlModelRole updates an existing classifier role', () => {

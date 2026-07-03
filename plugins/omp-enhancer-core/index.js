@@ -5,6 +5,8 @@ import { collectSubagentTaskRecords, validateSubagentUsage } from './src/subagen
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
 import { runClassifierCommand } from './src/classifier-config.js';
 
+const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
+
 export default function registerCoreEnhancer(pi) {
   const state = createState();
   const z = pi.zod?.z ?? pi.z;
@@ -25,9 +27,11 @@ export default function registerCoreEnhancer(pi) {
     label: 'Route OMP task',
     description: 'Classify a natural-language task and return the required OMP enhancer route, skills, tools, and agent.',
     parameters: z?.object ? z.object({ prompt: z.string() }) : undefined,
-    execute: async (_callId, params = {}) => {
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
       const route = routeNaturalLanguageTask({ prompt: params.prompt });
       setRouteState(state, route);
+      await persistState(pi, state);
       return okResult(formatRoute(route), { route });
     },
   });
@@ -54,9 +58,11 @@ export default function registerCoreEnhancer(pi) {
     label: 'Resolve OMP classifier output',
     description: 'Validate classifier JSON, map it through the route whitelist, and set the routed workflow state.',
     parameters: z?.object ? z.object({ prompt: z.string(), output: z.string() }) : undefined,
-    execute: async (_callId, params = {}) => {
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
       const result = resolveClassificationRoute({ prompt: params.prompt, output: params.output });
       setRouteState(state, result.route);
+      await persistState(pi, state);
       return okResult(formatRoute(result.route), result);
     },
   });
@@ -66,10 +72,12 @@ export default function registerCoreEnhancer(pi) {
     label: 'Validate routed skill usage',
     description: 'Validate that a routed agent output includes SKILL_USAGE with all required skills loaded.',
     parameters: z?.object ? z.object({ output: z.string(), requiredSkills: z.array(z.string()).optional() }) : undefined,
-    execute: async (_callId, params = {}) => {
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
       const requiredSkills = params.requiredSkills ?? state.lastRoute?.requiredSkills ?? [];
       const validation = validateSkillUsage({ requiredSkills, output: params.output ?? '' });
       state.lastSkillUsage = validation;
+      await persistState(pi, state);
       return okResult(validation.message, { validation });
     },
   });
@@ -79,10 +87,12 @@ export default function registerCoreEnhancer(pi) {
     label: 'Validate routed subagent usage',
     description: 'Validate that a routed agent output includes SUBAGENT_USAGE with all required subagents forked.',
     parameters: z?.object ? z.object({ output: z.string(), requiredSubagents: z.array(z.string()).optional() }) : undefined,
-    execute: async (_callId, params = {}) => {
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
       const requiredSubagents = params.requiredSubagents ?? state.lastRoute?.requiredSubagents ?? [];
       const validation = validateSubagentUsage({ requiredSubagents, output: params.output ?? '' });
       state.lastSubagentUsage = validation;
+      await persistState(pi, state);
       return okResult(validation.message, { validation });
     },
   });
@@ -92,23 +102,26 @@ export default function registerCoreEnhancer(pi) {
     label: 'Build governance prompt',
     description: 'Build the governance prompt fragment for a natural-language OMP enhancer route.',
     parameters: z?.object ? z.object({ prompt: z.string().optional() }) : undefined,
-    execute: async (_callId, params = {}) => {
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
       const route = params.prompt ? routeNaturalLanguageTask({ prompt: params.prompt }) : state.lastRoute;
       const fragment = buildGovernancePromptFragment({ route });
-      if (params.prompt && route) setRouteState(state, route);
+      if (params.prompt && route) {
+        setRouteState(state, route);
+        await persistState(pi, state);
+      }
       return okResult(fragment, { route, fragment });
     },
   });
 
-  pi.on?.('session_start', async () => {
-    state.lastRoute = null;
-    state.lastSkillUsage = null;
-    state.lastSubagentUsage = null;
-    state.evidence = emptyEvidence();
+  pi.on?.('session_start', async (_event = {}, ctx = {}) => {
+    const restored = restoreStateFromContext(state, ctx);
+    if (!restored) resetState(state);
     return undefined;
   });
 
-  pi.on?.('before_agent_start', async (event = {}) => {
+  pi.on?.('before_agent_start', async (event = {}, ctx = {}) => {
+    restoreStateFromContext(state, ctx);
     const prompt = extractPrompt(event);
     if (isInternalCoreContinuation(prompt)) return undefined;
     if (isSubagentLaunchPrompt(prompt)) {
@@ -119,29 +132,36 @@ export default function registerCoreEnhancer(pi) {
     }
     const route = routeNaturalLanguageTask({ prompt });
     setRouteState(state, route);
+    await persistState(pi, state);
     const fragment = buildGovernancePromptFragment({ route });
     if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${fragment}`;
     else event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
     return { additionalContext: fragment, route };
   });
 
-  pi.on?.('tool_call', async (event = {}) => {
+  pi.on?.('tool_call', async (event = {}, ctx = {}) => {
+    restoreStateFromContext(state, ctx);
     const name = event.name ?? event.toolName;
     if (name === 'task') recordSubagentEvidence(state, event);
+    await persistState(pi, state);
     return undefined;
   });
 
-  pi.on?.('tool_result', async (event = {}) => {
+  pi.on?.('tool_result', async (event = {}, ctx = {}) => {
+    restoreStateFromContext(state, ctx);
     const name = event.name ?? event.toolName;
     if (name === 'writing_quality_check' || name === 'writing_logic_check') state.evidence.writingQuality = true;
     if (name === 'omp_test_gate') state.evidence.testingGate = true;
     if (name === 'omp_test_report') state.evidence.testingReport = true;
     if (name === 'task') recordSubagentEvidence(state, event);
+    await persistState(pi, state);
     return undefined;
   });
 
-  pi.on?.('session_stop', async (event = {}) => {
+  pi.on?.('session_stop', async (event = {}, ctx = {}) => {
+    restoreStateFromContext(state, ctx);
     recordFinalOutputEvidence(state, event);
+    await persistState(pi, state);
 
     const missingSubagentContext = buildMissingSubagentUsageContext(state);
     if (missingSubagentContext) return { continue: true, additionalContext: missingSubagentContext };
@@ -208,6 +228,117 @@ function setRouteState(state, route) {
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
   state.evidence = emptyEvidence();
+}
+
+function resetState(state) {
+  state.lastRoute = null;
+  state.lastSkillUsage = null;
+  state.lastSubagentUsage = null;
+  state.evidence = emptyEvidence();
+}
+
+async function persistState(pi, state) {
+  if (typeof pi.appendEntry !== 'function') return;
+  try {
+    await pi.appendEntry(CORE_STATE_ENTRY, serializeState(state));
+  } catch {
+    // State persistence is a recovery path for isolated tool/hook runtimes; never
+    // let it turn an otherwise valid tool result into a host-level tool failure.
+  }
+}
+
+function restoreStateFromContext(state, ctx = {}) {
+  const entries = ctx.sessionManager?.getBranch?.();
+  if (!Array.isArray(entries)) return false;
+  const restored = restoreStateFromEntries(entries);
+  if (!restored) return false;
+  replaceState(state, restored);
+  return true;
+}
+
+function restoreStateFromEntries(entries) {
+  let restored = null;
+  for (const entry of entries) {
+    if (!isCoreStateEntry(entry)) continue;
+    const snapshot = readStateSnapshot(entry.data);
+    if (snapshot) restored = snapshot;
+  }
+  return restored;
+}
+
+function isCoreStateEntry(entry) {
+  return entry?.customType === CORE_STATE_ENTRY
+    && (entry.type === undefined || entry.type === 'custom');
+}
+
+function replaceState(target, source) {
+  target.lastRoute = source.lastRoute;
+  target.lastSkillUsage = source.lastSkillUsage;
+  target.lastSubagentUsage = source.lastSubagentUsage;
+  target.evidence = source.evidence;
+}
+
+function serializeState(state) {
+  return {
+    lastRoute: state.lastRoute,
+    lastSkillUsage: state.lastSkillUsage,
+    lastSubagentUsage: state.lastSubagentUsage,
+    evidence: {
+      writingQuality: state.evidence.writingQuality,
+      writingLogic: state.evidence.writingLogic,
+      testingGate: state.evidence.testingGate,
+      testingReport: state.evidence.testingReport,
+      taskToolCalls: state.evidence.taskToolCalls,
+      forkedSubagents: [...state.evidence.forkedSubagents],
+      subagentSkills: [...state.evidence.subagentSkills.entries()].map(([agent, skills]) => ({
+        agent,
+        skills: [...skills],
+      })),
+    },
+  };
+}
+
+function readStateSnapshot(value) {
+  if (!isRecord(value)) return null;
+  const evidence = readEvidenceSnapshot(value.evidence);
+  if (!evidence) return null;
+  return {
+    lastRoute: isRecord(value.lastRoute) ? value.lastRoute : null,
+    lastSkillUsage: isRecord(value.lastSkillUsage) ? value.lastSkillUsage : null,
+    lastSubagentUsage: isRecord(value.lastSubagentUsage) ? value.lastSubagentUsage : null,
+    evidence,
+  };
+}
+
+function readEvidenceSnapshot(value) {
+  if (!isRecord(value)) return null;
+  return {
+    writingQuality: value.writingQuality === true,
+    writingLogic: value.writingLogic === true,
+    testingGate: value.testingGate === true,
+    testingReport: value.testingReport === true,
+    taskToolCalls: Number.isInteger(value.taskToolCalls) ? value.taskToolCalls : 0,
+    forkedSubagents: new Set(Array.isArray(value.forkedSubagents) ? value.forkedSubagents.filter(isString) : []),
+    subagentSkills: readSubagentSkills(value.subagentSkills),
+  };
+}
+
+function readSubagentSkills(value) {
+  const skills = new Map();
+  if (!Array.isArray(value)) return skills;
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.agent !== 'string') continue;
+    skills.set(item.agent, new Set(Array.isArray(item.skills) ? item.skills.filter(isString) : []));
+  }
+  return skills;
+}
+
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isString(value) {
+  return typeof value === 'string';
 }
 
 function extractPrompt(event) {

@@ -18,12 +18,16 @@ test('buildClassifierPrompt exposes the configurable classifier model role and s
   assert.equal(result.model, classifierDefaults.model);
   assert.equal(result.temperature, 0);
   assert.equal(result.maxOutputTokens, 500);
+  assert.equal(result.minResolvedConfidence, classifierDefaults.minResolvedConfidence);
+  assert.equal(result.minUnknownOverrideConfidence, classifierDefaults.minUnknownOverrideConfidence);
   assert.equal(result.schema, classifierSchema);
-  assert.equal(result.fallbackRoute.intent, 'unknown');
+  assert.equal(result.fallbackRoute.intent, 'diagnosis');
   assert.match(result.prompt, /modelRoles\.classifier/);
-  assert.match(result.prompt, /ollama-cloud\/deepseek-v4-flash:medium/);
+  assert.match(result.prompt, /opencode-go\/deepseek-v4-flash:medium/);
   assert.match(result.prompt, /Return only JSON/);
   assert.match(result.prompt, /Do not invent skill names/);
+  assert.match(result.prompt, /low-confidence non-unknown classifications may fall back/);
+  assert.match(result.prompt, /high-confidence unknown/);
 });
 
 test('buildClassifierPrompt accepts explicit classifier model overrides', () => {
@@ -69,6 +73,46 @@ test('resolveClassificationRoute maps valid classifier JSON through the route wh
   assert.equal(result.route.classifier.status, 'resolved');
   assert.deepEqual(result.route.requiredSkills, ['writing-markdown-helper', 'writing-checkers']);
   assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), ['writer', 'checker']);
+});
+
+test('resolveClassificationRoute lets high-confidence unknown suppress an over-eager fallback route', () => {
+  const result = resolveClassificationRoute({
+    prompt: 'Explain what coverage means in plain English.',
+    output: JSON.stringify({
+      intent: 'unknown',
+      secondaryIntents: [],
+      language: 'en',
+      confidence: 0.92,
+      riskFlags: ['ambiguous'],
+      domainHints: ['terminology'],
+      reason: 'The user asks for a general explanation, not a testing workflow.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.fallbackRoute.intent, 'testing');
+  assert.equal(result.route.intent, 'unknown');
+  assert.equal(result.route.classifier.classification.intent, 'unknown');
+});
+
+test('resolveClassificationRoute falls back from low-confidence wrong intents to avoid missing required workflow', () => {
+  const result = resolveClassificationRoute({
+    prompt: '修复这个插件 bug，并补充高信号单元测试。',
+    output: JSON.stringify({
+      intent: 'release',
+      secondaryIntents: [],
+      language: 'zh',
+      confidence: 0.21,
+      riskFlags: ['release-or-push'],
+      domainHints: ['plugin'],
+      reason: 'Uncertain guess based on plugin wording.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.fallbackRoute.intent, 'implementation-with-tests');
+  assert.equal(result.route.intent, 'implementation-with-tests');
+  assert.equal(result.route.classifier.classification.intent, 'release');
 });
 
 test('resolveClassificationRoute falls back when classifier invents unsupported fields', () => {

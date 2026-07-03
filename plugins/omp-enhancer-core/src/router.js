@@ -24,13 +24,19 @@ const strongZhWritingTerms = [
   '改得',
 ];
 const enWritingTerms = ['draft', 'write', 'revise', 'polish', 'paper', 'report', 'manuscript', 'abstract', 'related work', 'paragraph', 'logic'];
-const testingTerms = ['test', 'tests', 'testing', 'unit test', 'coverage', 'mutation', 'browser', 'e2e', 'playwright', 'regression', '测试', '覆盖', '门禁'];
+const testingTerms = ['tests', 'testing', 'unit test', 'coverage', 'mutation', 'browser', 'e2e', 'playwright', 'regression', 'flaky', 'flakiness', 'test flakiness', '测试', '覆盖', '门禁'];
 const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', 'code', 'api', 'component', '实现', '重构', '修复', '报错', '功能', '代码', '接口'];
 const configTerms = ['omp-config', 'config assets', 'assets', 'hooks', 'marketplace', '配置资产'];
 const securityTerms = ['security', 'vulnerability', 'xss', 'ssrf', 'injection', 'auth', 'owasp', '安全', '漏洞', '注入', '鉴权', '认证', '权限', '密钥', 'secret'];
+const noCodeChangeTerms = ['不要改代码', '不要修改代码', '先不要修', '不要修复', '不要修改', '只诊断', '只分析', '只检查', '只列清单', 'do not change', 'do not modify', 'do not fix', 'diagnosis only', 'read-only'];
+const diagnosisTerms = ['why', 'root cause', '原因', '为什么', '诊断', '定位', '排查', '是什么导致', '是什么原因', 'warning:', 'failed', 'failure'];
+const releaseTerms = ['push', 'publish', 'upgrade', '推送', '发布', '升级', '刷新'];
+const noReleaseTerms = ['without publishing', 'without publish', 'do not publish', 'do not push', 'do not release', 'not publish', 'not push', 'not release', '不要发布', '不要推送', '不要刷新', '不发布', '不推送'];
 
 export const routedIntents = [
   'config-assets',
+  'diagnosis',
+  'release',
   'security-review',
   'implementation-with-tests',
   'testing',
@@ -73,34 +79,48 @@ export function routeNaturalLanguageTask(input = {}) {
 
   if (!normalized.trim()) return unknownRoute();
 
-  if (includesAny(normalized, configTerms) && includesAny(normalized, ['config', 'assets', 'hooks', 'omp-config', 'marketplace', '配置'])) {
-    return routeByIntent('config-assets');
-  }
-
-  const hasTesting = includesAny(normalized, testingTerms);
-  const hasCoding = includesAny(normalized, codingTerms);
+  const asksNoCodeChange = includesAny(normalized, noCodeChangeTerms);
+  const hasTesting = isTestingRequest(normalized);
+  const hasDirectTestAuthoring = isDirectTestAuthoring(normalized);
+  const hasTestAnalysis = isTestAnalysisRequest(normalized);
+  const hasCoding = !asksNoCodeChange && (includesAny(normalized, codingTerms) || isCodeChangeRequest(normalized));
   const hasWriting = includesAny(normalized, zhWritingTerms) || includesAny(normalized, enWritingTerms);
   const hasSecurity = includesAny(normalized, securityTerms);
-  const asksToWriteTests = /write\s+tests?/.test(normalized) || normalized.includes('写高信号单元测试') || normalized.includes('写测试') || normalized.includes('补测试');
+  const hasRelease = isReleaseRequest(normalized);
+  const hasConfigAssets = isConfigAssetRequest(normalized);
+  const hasDiagnosisOnly = isDiagnosisOnlyRequest(normalized, asksNoCodeChange);
+  const hasChineseWriting = isChineseWriting(normalized, prompt);
 
-  if (hasSecurity && (hasCoding || normalized.includes('代码') || normalized.includes('审查') || normalized.includes('review'))) {
+  if (hasSecurity && !hasWriting) {
     return routeByIntent('security-review');
+  }
+
+  if (hasChineseWriting) {
+    return routeByIntent('writing.zh');
   }
 
   if (hasCoding && hasTesting) {
     return routeByIntent('implementation-with-tests');
   }
 
-  if (asksToWriteTests || (hasTesting && !hasWriting)) {
-    return routeByIntent('testing');
-  }
-
-  if (isChineseWriting(normalized, prompt)) {
-    return routeByIntent('writing.zh');
-  }
-
   if (hasCoding) {
     return routeByIntent('implementation-with-tests');
+  }
+
+  if (hasRelease && !hasDiagnosisOnly) {
+    return routeByIntent('release');
+  }
+
+  if (hasConfigAssets) {
+    return routeByIntent('config-assets');
+  }
+
+  if (hasDiagnosisOnly) {
+    return routeByIntent('diagnosis');
+  }
+
+  if (hasDirectTestAuthoring || hasTestAnalysis || (hasTesting && !hasWriting)) {
+    return routeByIntent('testing');
   }
 
   if (hasWriting) {
@@ -111,6 +131,28 @@ export function routeNaturalLanguageTask(input = {}) {
 }
 
 export function routeByIntent(intent, { source = 'natural-language' } = {}) {
+  if (intent === 'diagnosis') {
+    return route({
+      intent,
+      agent: null,
+      requiredSkills: [],
+      requiredTools: [],
+      requiredSubagents: [],
+      source,
+    });
+  }
+
+  if (intent === 'release') {
+    return route({
+      intent,
+      agent: null,
+      requiredSkills: [],
+      requiredTools: [],
+      requiredSubagents: [],
+      source,
+    });
+  }
+
   if (intent === 'config-assets') {
     return route({
       intent,
@@ -197,9 +239,56 @@ function subagent(agent, duty, requiredSkills = []) {
 
 function isChineseWriting(normalized, original) {
   if (!/[\u4e00-\u9fff]/.test(original)) return false;
+  if (isDirectTestAuthoring(normalized)) return false;
   if (includesAny(normalized, strongZhWritingTerms)) return true;
   if (!normalized.includes('写')) return false;
   return !includesAny(normalized, ['函数', '代码', '接口', '实现', 'api', 'component']);
+}
+
+function isTestingRequest(text) {
+  return includesAny(text, testingTerms)
+    || /(?:write|add|create|run|execute|fix|update|check)\s+tests?\b/.test(text)
+    || /\btest\s+(?:this|the|my|our|it|function|code|plugin|workflow|route|logic)\b/.test(text)
+    || text.includes('写高信号单元测试')
+    || text.includes('写测试')
+    || text.includes('补测试');
+}
+
+function isDirectTestAuthoring(text) {
+  return /(?:write|add|create)\s+tests?\b/.test(text)
+    || text.includes('写高信号单元测试')
+    || text.includes('写测试')
+    || text.includes('补测试');
+}
+
+function isTestAnalysisRequest(text) {
+  return includesAny(text, ['flaky', 'flakiness', 'test flakiness'])
+    || /(?:review|check|analyze|analyse|audit|investigate|inspect)\s+.*(?:tests?|testing|coverage|flaky|flakiness|browser|e2e|playwright)/.test(text)
+    || /(?:run|execute|rerun)\s+.*(?:tests?|testing|browser|e2e|playwright)/.test(text)
+    || /(?:检查|分析|审查|排查|运行|执行).*(?:测试|覆盖|门禁|浏览器|e2e|回归)/.test(text);
+}
+
+function isCodeChangeRequest(text) {
+  return /(?:修改|修复|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流)/.test(text)
+    || /(?:fix|implement|modify|refactor|build|update)\s+(?:the\s+)?(?:plugin|config|configuration|logic|code|api|hook|hooks|marketplace|workflow)/.test(text);
+}
+
+function isReleaseRequest(text) {
+  if (includesAny(text, noReleaseTerms)) return false;
+  return (includesAny(text, releaseTerms) && includesAny(text, ['github', 'marketplace', '插件', '版本', 'plugin', 'release']))
+    || /(?:create|cut|prepare|ship)\s+(?:a\s+)?release/.test(text)
+    || /\brelease\s+(?:the\s+)?(?:current|plugin|version)/.test(text)
+    || /(?:plugin|marketplace)\s+upgrade/.test(text);
+}
+
+function isConfigAssetRequest(text) {
+  return includesAny(text, configTerms)
+    && includesAny(text, ['config', 'assets', 'asset', 'hooks', 'hook', 'skills', 'skill', 'omp-config', 'marketplace', '配置', '打包', '模板', '清单']);
+}
+
+function isDiagnosisOnlyRequest(text, asksNoCodeChange) {
+  return includesAny(text, diagnosisTerms)
+    && (asksNoCodeChange || includesAny(text, ['原因', '为什么', 'root cause', 'what caused', '是什么导致', '是什么原因']));
 }
 
 function includesAny(text, terms) {

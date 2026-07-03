@@ -73,7 +73,7 @@ omp plugin install omp-enhancer-core@omp-enhancer omp-testing-enhancer@omp-enhan
 After installing `omp-enhancer-core`, describe the task naturally. The core plugin injects routing guidance and completion gates through runtime hooks.
 
 - The default runtime model is MiMo v2.5, the advisor is DeepSeek V4 Flash, and task subagents plus all other roles follow the user's active OMP config.
-- Ambiguous routing can use `modelRoles.classifier`, which the packaged `omp-config` template defaults to `ollama-cloud/deepseek-v4-flash:medium`. Use `/classifier set <provider/model:effort>` or change that config role to try another classifier model.
+- Ambiguous routing can use `modelRoles.classifier`, which the packaged `omp-config` template defaults to `opencode-go/deepseek-v4-flash:medium`. Use `/classifier set <provider/model:effort>` or change that config role to try another classifier model.
 - Coding tasks use lightweight TDD guidance, fork plan/task/reviewer subagents, pass role-specific skill lists to each subagent, and require testing evidence.
 - Security review tasks fork ecc-security-reviewer plus reviewer.
 - Writing tasks route to writer/checker or zh-writer/zh-checker subagents, require writing skills, and require writing QA evidence.
@@ -94,7 +94,7 @@ Configure the model in OMP config:
 
 ```yaml
 modelRoles:
-  classifier: ollama-cloud/deepseek-v4-flash:medium
+  classifier: opencode-go/deepseek-v4-flash:medium
 modelTags:
   classifier:
     name: Classifier
@@ -105,7 +105,7 @@ Or use the slash command:
 
 ```text
 /classifier
-/classifier set ollama-cloud/deepseek-v4-flash:medium
+/classifier set opencode-go/deepseek-v4-flash:medium
 ```
 
 `/model` changes the active session model. `modelRoles.classifier` controls the classifier role used by OMP Enhancer routing; `modelTags.classifier` gives that custom role a visible name in OMP builds that list configured roles.
