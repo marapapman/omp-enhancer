@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -34,6 +34,7 @@ describe('marketplace install metadata', () => {
     assert.equal(plugin.homepage, 'https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper');
     assert.equal(plugin.repository, 'https://github.com/marapapman/omp-enhancer');
     assert.equal(plugin.source, './writing-helper');
+    assert.deepEqual(plugin.skills, await bundledSkillPaths(root));
     assert.equal(previousCatalog.name, 'omp-writing-helper');
   });
 
@@ -185,3 +186,11 @@ describe('marketplace install metadata', () => {
     }
   });
 });
+
+async function bundledSkillPaths(root) {
+  const entries = await readdir(join(root, 'skills'), { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map((entry) => `./skills/${entry.name}`)
+    .sort();
+}

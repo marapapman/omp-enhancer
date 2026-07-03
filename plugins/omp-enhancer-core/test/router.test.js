@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { routeNaturalLanguageTask } from '../src/router.js';
 
@@ -63,6 +66,22 @@ test('routes natural language tasks to required skill profiles without slash com
     assert.deepEqual(route.requiredSkills, item.requiredSkills, item.name);
     assert.deepEqual(route.requiredTools, item.requiredTools, item.name);
     assert.equal(route.source, 'natural-language', item.name);
+  }
+});
+
+test('required route skills are registered in the root marketplace catalog', async () => {
+  const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const catalog = JSON.parse(await readFile(path.join(repoRoot, '.omp-plugin', 'marketplace.json'), 'utf8'));
+  const registeredSkills = new Set(
+    catalog.plugins.flatMap((plugin) =>
+      (plugin.skills ?? []).map((skillPath) => skillPath.replace(/^\.\//, '').replace(/^skills\//, '')),
+    ),
+  );
+
+  for (const item of routingCases) {
+    for (const skill of item.requiredSkills) {
+      assert.equal(registeredSkills.has(skill), true, `${item.name} requires unregistered skill ${skill}`);
+    }
   }
 });
 

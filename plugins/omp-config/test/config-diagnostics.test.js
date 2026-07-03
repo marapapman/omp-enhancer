@@ -39,6 +39,7 @@ function packageRoot() {
 }
 
 const expectedBundledSkills = [
+  'brainstorming',
   'caveman',
   'conventional-commits',
   'deepseek-tool-calling',
@@ -50,6 +51,9 @@ const expectedBundledSkills = [
   'improve-codebase-architecture',
   'prototype',
   'tdd',
+  'test-driven-development',
+  'verification-before-completion',
+  'writing-plans',
   'zoom-out',
 ];
 

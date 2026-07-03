@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const catalogPath = path.join(process.cwd(), '.omp-plugin', 'marketplace.json')
@@ -10,23 +10,6 @@ const expected = [
   ['omp-testing-enhancer', './omp-test-enhancer'],
   ['omp-enhancer-core', './omp-enhancer-core']
 ]
-
-const expectedSkillsByPlugin = new Map([
-  ['omp-config', [
-    './skills/caveman',
-    './skills/conventional-commits',
-    './skills/deepseek-tool-calling',
-    './skills/diagnose',
-    './skills/docker-compose',
-    './skills/go-testing',
-    './skills/grill-with-docs',
-    './skills/handoff',
-    './skills/improve-codebase-architecture',
-    './skills/prototype',
-    './skills/tdd',
-    './skills/zoom-out'
-  ]]
-])
 
 if (catalog.name !== 'omp-enhancer') {
   throw new Error(`Expected marketplace name omp-enhancer, got ${catalog.name}`)
@@ -46,13 +29,23 @@ for (const [name, source] of expected) {
     throw new Error(`Plugin ${name} is pinned to ${plugin.ref}; remove ref so marketplace upgrade tracks main`)
   }
 
-  const expectedSkills = expectedSkillsByPlugin.get(name)
-  if (expectedSkills) {
-    const actualSkills = plugin.skills ?? []
-    if (JSON.stringify(actualSkills) !== JSON.stringify(expectedSkills)) {
-      throw new Error(`Plugin ${name} skills mismatch: expected ${expectedSkills.join(', ')}, got ${actualSkills.join(', ')}`)
-    }
+  const expectedSkills = await expectedSkillPathsForPlugin(source)
+  const actualSkills = plugin.skills ?? []
+  if (JSON.stringify(actualSkills) !== JSON.stringify(expectedSkills)) {
+    throw new Error(`Plugin ${name} skills mismatch: expected ${expectedSkills.join(', ')}, got ${actualSkills.join(', ')}`)
   }
 }
 
 console.log('marketplace catalog ok')
+
+async function expectedSkillPathsForPlugin(source) {
+  const pluginRoot = path.join(process.cwd(), 'plugins', source.replace(/^\.\//, ''))
+  const packageJson = JSON.parse(await readFile(path.join(pluginRoot, 'package.json'), 'utf8'))
+  if (!packageJson.pi?.skills?.includes('./skills')) return []
+
+  const entries = await readdir(path.join(pluginRoot, 'skills'), { withFileTypes: true })
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map((entry) => `./skills/${entry.name}`)
+    .sort()
+}

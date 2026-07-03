@@ -26,6 +26,7 @@ The plugin ships `skills/` as plugin content, declares it through `pi.skills`,
 and lists these paths in the root marketplace catalog.
 Installed marketplace packages include these skill names:
 
+- `brainstorming`
 - `caveman`
 - `conventional-commits`
 - `deepseek-tool-calling`
@@ -37,6 +38,9 @@ Installed marketplace packages include these skill names:
 - `improve-codebase-architecture`
 - `prototype`
 - `tdd`
+- `test-driven-development`
+- `verification-before-completion`
+- `writing-plans`
 - `zoom-out`
 
 ## Runtime tools
