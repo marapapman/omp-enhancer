@@ -21,6 +21,8 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /SKILL_USAGE/);
   assert.match(fragment, /Required/);
   assert.match(fragment, /Loaded/);
+  assert.match(fragment, /Use this exact plain-text block shape/);
+  assert.match(fragment, /- skill-name/);
 });
 
 test('names the selected agent route and toolchain in the governance fragment', () => {

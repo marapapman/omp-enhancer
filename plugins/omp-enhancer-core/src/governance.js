@@ -44,6 +44,14 @@ export function buildGovernancePromptFragment({ route } = {}) {
     '- every required skill from this fragment',
     'Loaded:',
     '- every required skill actually loaded before acting',
+    '',
+    'Use this exact plain-text block shape, replacing only the skill names:',
+    '',
+    'SKILL_USAGE',
+    'Required:',
+    '- skill-name',
+    'Loaded:',
+    '- skill-name',
   ].join('\n');
 }
 
