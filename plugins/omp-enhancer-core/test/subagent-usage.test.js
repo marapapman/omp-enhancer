@@ -135,7 +135,7 @@ test('collectSubagentNames reads task role fields from tool_call input', () => {
     },
   });
 
-  assert.deepEqual(agents, ['task', 'writer', 'checker']);
+  assert.deepEqual(agents, ['writer', 'checker']);
 });
 
 test('collectSubagentTaskRecords includes prompt text for skill evidence', () => {

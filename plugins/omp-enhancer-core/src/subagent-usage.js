@@ -117,7 +117,7 @@ function collectRecords(value, records) {
   if (!value || typeof value !== 'object') return;
 
   const agent = findAgentValue(value);
-  if (agent) records.push({ agent, text: collectText(value) });
+  if (agent && !isGenericTaskDispatcher(value, agent)) records.push({ agent, text: collectText(value) });
 
   for (const [key, nested] of Object.entries(value)) {
     if (isAgentKey(key)) continue;
@@ -136,6 +136,10 @@ function findAgentValue(value) {
     if (agent) return agent;
   }
   return '';
+}
+
+function isGenericTaskDispatcher(value, agent) {
+  return agent === 'task' && Array.isArray(value.tasks);
 }
 
 function collectText(value) {

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildGovernancePromptFragment } from '../src/governance.js';
+import { buildGovernancePromptFragment, buildSubagentPromptFragment } from '../src/governance.js';
 
 test('builds a Mandatory Skill Workflow fragment with required and loaded skill accounting', () => {
   const fragment = buildGovernancePromptFragment({
@@ -30,13 +30,40 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /zh-writer:\s*draft Chinese text; skills: plain-chinese-writing, zh-writing-polish/);
   assert.match(fragment, /zh-checker:\s*review Chinese text; skills: plain-chinese-writing, zh-writing-checkers/);
   assert.match(fragment, /include that subagent-specific skill list/i);
+  assert.match(fragment, /Pre-fork Subagent Contract/);
+  assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
+  assert.match(fragment, /role:\s*zh-writer/);
+  assert.match(fragment, /Do not fork another OMP Enhancer Core role gate/);
+  assert.match(fragment, /SUBAGENT_RESULT/);
   assert.match(fragment, /SUBAGENT_USAGE/);
+  assert.match(fragment, /SUBAGENT_USAGE:\n- zh-writer: plain-chinese-writing, zh-writing-polish\n- zh-checker: plain-chinese-writing, zh-writing-checkers/);
   assert.match(fragment, /agent-name: every skill required by that subagent/);
   assert.match(fragment, /SKILL_USAGE/);
   assert.match(fragment, /Required/);
   assert.match(fragment, /Loaded/);
   assert.match(fragment, /Use this exact plain-text block shape/);
   assert.match(fragment, /- skill-name/);
+});
+
+test('builds a lightweight subagent contract without root workflow gates', () => {
+  const fragment = buildSubagentPromptFragment({
+    prompt: [
+      'OMP_REQUIRED_SUBAGENT: writer',
+      'Required skills for this subagent:',
+      '- writing-markdown-helper',
+      '',
+      'Assignment: revise the section.',
+    ].join('\n'),
+  });
+
+  assert.match(fragment, /OMP Enhancer Core Subagent Contract/);
+  assert.match(fragment, /Subagent:\s*writer/);
+  assert.match(fragment, /writing-markdown-helper/);
+  assert.match(fragment, /not a root routed workflow/);
+  assert.match(fragment, /Do not start another OMP Enhancer Core role-gate cycle/);
+  assert.match(fragment, /SUBAGENT_RESULT/);
+  assert.doesNotMatch(fragment, /Mandatory Subagent Workflow/);
+  assert.doesNotMatch(fragment, /Required subagents:/);
 });
 
 test('names the selected agent route and toolchain in the governance fragment', () => {

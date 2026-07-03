@@ -279,6 +279,72 @@ test('before_agent_start treats subagent gate continuations as internal prompts'
   assert.match(result.details.fragment, /zh-checker/);
 });
 
+test('before_agent_start gives spawned subagents a lightweight contract without opening root gates', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  const agentEvent = {
+    prompt: [
+      'OMP_REQUIRED_SUBAGENT: writer',
+      'Required skills for this subagent:',
+      '- writing-markdown-helper',
+      '',
+      'Assignment: revise the related work paragraph.',
+    ].join('\n'),
+  };
+
+  const result = await event(pi, 'before_agent_start')(agentEvent, ctx);
+  const fragment = governanceText(result, agentEvent);
+
+  assert.match(fragment, /OMP Enhancer Core Subagent Contract/);
+  assert.match(fragment, /Subagent:\s*writer/);
+  assert.match(fragment, /writing-markdown-helper/);
+  assert.doesNotMatch(fragment, /Mandatory Subagent Workflow/);
+
+  const stopResult = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(stopResult, undefined);
+});
+
+test('before_agent_start preserves parent route when a spawned subagent starts', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    ctx,
+  );
+  await event(pi, 'before_agent_start')(
+    {
+      prompt: [
+        'OMP_REQUIRED_SUBAGENT: zh-writer',
+        'Required skills for this subagent:',
+        '- plain-chinese-writing',
+        '- zh-writing-polish',
+        '',
+        'Assignment: rewrite the paragraph.',
+      ].join('\n'),
+    },
+    ctx,
+  );
+
+  const result = await tool(pi, 'omp_core_governance_prompt').execute(
+    'call-current-governance-after-subagent',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(result.details.route.intent, 'writing.zh');
+  assert.match(result.details.fragment, /zh-writer/);
+  assert.match(result.details.fragment, /zh-checker/);
+});
+
 test('session_stop continues when an implementation-with-tests task has not run omp_test_gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);

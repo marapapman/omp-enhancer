@@ -1,4 +1,4 @@
-import { buildGovernancePromptFragment, buildMissingGateContext } from './src/governance.js';
+import { buildGovernancePromptFragment, buildMissingGateContext, buildSubagentPromptFragment } from './src/governance.js';
 import { routeNaturalLanguageTask } from './src/router.js';
 import { validateSkillUsage } from './src/skill-usage.js';
 import { collectSubagentTaskRecords, validateSubagentUsage } from './src/subagent-usage.js';
@@ -71,6 +71,12 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('before_agent_start', async (event = {}) => {
     const prompt = extractPrompt(event);
     if (isInternalCoreContinuation(prompt)) return undefined;
+    if (isSubagentLaunchPrompt(prompt)) {
+      const fragment = buildSubagentPromptFragment({ prompt });
+      if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${fragment}`;
+      else event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
+      return { additionalContext: fragment, route: { intent: 'subagent', agent: null, requiredSkills: [], requiredTools: [], requiredSubagents: [] } };
+    }
     const route = routeNaturalLanguageTask({ prompt });
     setRouteState(state, route);
     const fragment = buildGovernancePromptFragment({ route });
@@ -169,6 +175,11 @@ function extractPrompt(event) {
 function isInternalCoreContinuation(prompt) {
   return prompt.includes('OMP Enhancer Core')
     && prompt.includes('gate is still open');
+}
+
+function isSubagentLaunchPrompt(prompt) {
+  return /OMP_REQUIRED_SUBAGENT:/i.test(prompt)
+    || /Required skills for this subagent:/i.test(prompt);
 }
 
 function buildMissingSkillUsageContext(state) {
