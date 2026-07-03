@@ -193,6 +193,8 @@ test('session_stop requires successful SKILL_USAGE validation even after writing
 
   assert.equal(blocked?.continue, true);
   assert.match(blocked.additionalContext, /SKILL_USAGE/);
+  assert.match(blocked.additionalContext, /omp_core_validate_skill_usage/);
+  assert.match(blocked.additionalContext, /Do not only say the evidence was already provided/);
 
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-valid-skill-usage',
@@ -537,6 +539,42 @@ test('session_stop accepts task tool_call role evidence with subagent skill assi
   );
 
   const result = await event(pi, 'session_stop')({}, ctx);
+
+  assert.notEqual(result?.continue, true);
+});
+
+test('session_stop accepts SKILL_USAGE from the final output event without a separate validator call', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-final-output-skill-route',
+    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await forkSubagents(pi, ctx, ['writer', 'checker']);
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+
+  const result = await event(pi, 'session_stop')(
+    {
+      output: [
+        'Done.',
+        '',
+        'SKILL_USAGE',
+        'Required:',
+        '- writing-markdown-helper',
+        '- writing-checkers',
+        'Loaded:',
+        '- writing-markdown-helper',
+        '- writing-checkers',
+      ].join('\n'),
+    },
+    ctx,
+  );
 
   assert.notEqual(result?.continue, true);
 });

@@ -130,7 +130,9 @@ export default function registerCoreEnhancer(pi) {
     return undefined;
   });
 
-  pi.on?.('session_stop', async () => {
+  pi.on?.('session_stop', async (event = {}) => {
+    recordFinalOutputEvidence(state, event);
+
     const missingSubagentContext = buildMissingSubagentUsageContext(state);
     if (missingSubagentContext) return { continue: true, additionalContext: missingSubagentContext };
 
@@ -220,8 +222,69 @@ function buildMissingSkillUsageContext(state) {
   return [
     'OMP Enhancer Core skill gate is still open.',
     `Validate SKILL_USAGE before finishing. Required skills: ${requiredSkills.join(', ')}.`,
+    'If your previous final response already included SKILL_USAGE, call omp_core_validate_skill_usage with output set to that full response text. Do not only say the evidence was already provided.',
     state.lastSkillUsage?.message ? `Last validation: ${state.lastSkillUsage.message}` : 'No successful SKILL_USAGE validation has been recorded.',
   ].join('\n');
+}
+
+function recordFinalOutputEvidence(state, event = {}) {
+  const output = extractFinalOutputText(event);
+  if (!output) return;
+
+  const requiredSkills = state.lastRoute?.requiredSkills ?? [];
+  if (requiredSkills.length && !state.lastSkillUsage?.ok && /\bSKILL_USAGE\b/i.test(output)) {
+    state.lastSkillUsage = validateSkillUsage({ requiredSkills, output });
+  }
+
+  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  if (requiredSubagents.length && !state.lastSubagentUsage?.ok && /\bSUBAGENT_USAGE\b/i.test(output)) {
+    state.lastSubagentUsage = validateSubagentUsage({ requiredSubagents, output });
+  }
+}
+
+function extractFinalOutputText(event = {}) {
+  const candidates = [
+    event.output,
+    event.response,
+    event.text,
+    event.message,
+    event.assistantMessage,
+    event.assistantResponse,
+    event.finalMessage,
+    event.finalResponse,
+    event.finalOutput,
+    event.content,
+    event.result,
+    event.details?.output,
+    event.details?.response,
+    event.details?.text,
+    event.details?.message,
+    event.details?.content,
+  ];
+
+  return candidates
+    .flatMap((candidate) => collectTextCandidates(candidate))
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function collectTextCandidates(value, seen = new Set()) {
+  if (typeof value === 'string') return [value];
+  if (!value) return [];
+  if (Array.isArray(value)) return value.flatMap((item) => collectTextCandidates(item, seen));
+  if (typeof value !== 'object') return [];
+  if (seen.has(value)) return [];
+  seen.add(value);
+
+  const texts = [];
+  if (typeof value.text === 'string') texts.push(value.text);
+  if (typeof value.output_text === 'string') texts.push(value.output_text);
+  if (typeof value.value === 'string') texts.push(value.value);
+  for (const key of ['content', 'message', 'output', 'response', 'result']) {
+    texts.push(...collectTextCandidates(value[key], seen));
+  }
+  return texts;
 }
 
 function buildMissingSubagentUsageContext(state) {
