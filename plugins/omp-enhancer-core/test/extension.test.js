@@ -199,6 +199,40 @@ test('session_stop ignores prior route SKILL_USAGE and tool evidence after routi
   assert.match(result.additionalContext, /plain-chinese-writing|zh-writing-polish|zh-writing-checkers/);
 });
 
+test('before_agent_start preserves route when core continuation prompts start a follow-up turn', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    {
+      prompt: '把下面这句话改成朴素、直接、少形容词的中文：鉴于当前系统存在较为显著的功能复杂性，我们需要进一步推动配置层面的优化与能力沉淀。',
+    },
+    ctx,
+  );
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+
+  await event(pi, 'before_agent_start')(
+    {
+      prompt: [
+        'OMP Enhancer Core skill gate is still open.',
+        'Validate SKILL_USAGE before finishing. Required skills: plain-chinese-writing, zh-writing-polish, zh-writing-checkers.',
+        'No successful SKILL_USAGE validation has been recorded.',
+      ].join('\n'),
+    },
+    ctx,
+  );
+
+  const result = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /plain-chinese-writing/);
+  assert.match(result.additionalContext, /zh-writing-polish/);
+  assert.match(result.additionalContext, /zh-writing-checkers/);
+  assert.doesNotMatch(result.additionalContext, /writing-plans/);
+});
+
 test('session_stop continues when an implementation-with-tests task has not run omp_test_gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);

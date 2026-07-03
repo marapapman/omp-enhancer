@@ -55,6 +55,7 @@ export default function registerCoreEnhancer(pi) {
 
   pi.on?.('before_agent_start', async (event = {}) => {
     const prompt = extractPrompt(event);
+    if (isInternalCoreContinuation(prompt)) return undefined;
     const route = routeNaturalLanguageTask({ prompt });
     setRouteState(state, route);
     const fragment = buildGovernancePromptFragment({ route });
@@ -124,6 +125,11 @@ function setRouteState(state, route) {
 
 function extractPrompt(event) {
   return String(event.prompt ?? event.userPrompt ?? event.message ?? event.task ?? '');
+}
+
+function isInternalCoreContinuation(prompt) {
+  return prompt.includes('OMP Enhancer Core gate is still open')
+    || prompt.includes('OMP Enhancer Core skill gate is still open');
 }
 
 function buildMissingSkillUsageContext(state) {
