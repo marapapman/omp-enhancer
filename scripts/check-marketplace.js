@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { access, readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const catalogPath = path.join(process.cwd(), '.omp-plugin', 'marketplace.json')
@@ -41,11 +41,43 @@ console.log('marketplace catalog ok')
 async function expectedSkillPathsForPlugin(source) {
   const pluginRoot = path.join(process.cwd(), 'plugins', source.replace(/^\.\//, ''))
   const packageJson = JSON.parse(await readFile(path.join(pluginRoot, 'package.json'), 'utf8'))
-  if (!packageJson.pi?.skills?.includes('./skills')) return []
+  const skillRoots = packageJson.pi?.skills ?? []
+  if (!skillRoots.length) return []
 
-  const entries = await readdir(path.join(pluginRoot, 'skills'), { withFileTypes: true })
-  return entries
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-    .map((entry) => `./skills/${entry.name}`)
+  const skillDirs = []
+  for (const skillRoot of skillRoots) {
+    const rootDir = path.join(pluginRoot, skillRoot)
+    for (const skillDir of await findSkillDirs(rootDir)) {
+      const relative = path.relative(pluginRoot, skillDir).split(path.sep).join('/')
+      skillDirs.push(`./${relative}`)
+    }
+  }
+
+  return skillDirs
     .sort()
+}
+
+async function findSkillDirs(rootDir) {
+  const result = []
+  await walk(rootDir)
+  return result
+
+  async function walk(dir) {
+    if (await hasSkillDoc(dir)) result.push(dir)
+
+    const entries = await readdir(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+      await walk(path.join(dir, entry.name))
+    }
+  }
+}
+
+async function hasSkillDoc(dir) {
+  try {
+    await access(path.join(dir, 'SKILL.md'))
+    return true
+  } catch {
+    return false
+  }
 }

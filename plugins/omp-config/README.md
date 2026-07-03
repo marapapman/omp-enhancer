@@ -24,24 +24,13 @@ This package does not automatically overwrite `~/.omp`. Treat the packaged files
 
 The plugin ships `skills/` as plugin content, declares it through `pi.skills`,
 and lists these paths in the root marketplace catalog.
-Installed marketplace packages include these skill names:
+Installed marketplace packages include:
 
-- `brainstorming`
-- `caveman`
-- `conventional-commits`
-- `deepseek-tool-calling`
-- `diagnose`
-- `docker-compose`
-- `go-testing`
-- `grill-with-docs`
-- `handoff`
-- `improve-codebase-architecture`
-- `prototype`
-- `tdd`
-- `test-driven-development`
-- `verification-before-completion`
-- `writing-plans`
-- `zoom-out`
+- All 12 source `agent/skills` entries from `sakuradairong/omp-config`.
+- All 17 top-level source workflow skills under `skills/`.
+- All 249 source ECC skills under `skills/ecc/`.
+
+The marketplace catalog registers every directory containing a `SKILL.md`, including nested paths such as `./skills/ecc/accessibility`.
 
 ## Runtime tools
 

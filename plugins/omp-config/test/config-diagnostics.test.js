@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,21 +39,34 @@ function packageRoot() {
 }
 
 const expectedBundledSkills = [
+  'astrbot-plugin-development',
   'brainstorming',
   'caveman',
   'conventional-commits',
   'deepseek-tool-calling',
   'diagnose',
+  'dispatching-parallel-agents',
   'docker-compose',
+  'executing-plans',
+  'finishing-a-development-branch',
   'go-testing',
   'grill-with-docs',
   'handoff',
   'improve-codebase-architecture',
+  'plan-execute-review-commit',
   'prototype',
+  'receiving-code-review',
+  'requesting-code-review',
+  'spike',
+  'subagent-driven-development',
+  'systematic-debugging',
   'tdd',
   'test-driven-development',
+  'using-git-worktrees',
+  'using-superpowers',
   'verification-before-completion',
   'writing-plans',
+  'writing-skills',
   'zoom-out',
 ];
 
@@ -83,6 +96,31 @@ function createRegistrationHarness() {
   return { pi, tools, commands };
 }
 
+async function findSkillDirs(rootDir) {
+  const result = [];
+  await walk(rootDir);
+  return result;
+
+  async function walk(dir) {
+    if (await hasSkillDoc(dir)) result.push(dir);
+
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      await walk(path.join(dir, entry.name));
+    }
+  }
+}
+
+async function hasSkillDoc(dir) {
+  try {
+    await access(path.join(dir, 'SKILL.md'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 test('listAssets lists packaged agents, skills, hooks, and templates from plugin root', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'omp-config-assets-'));
   await writePluginPackage(root);
@@ -96,6 +134,7 @@ test('listAssets lists packaged agents, skills, hooks, and templates from plugin
   await writeFile(path.join(root, 'agents', 'task.md'), '# Task');
   await writeFile(path.join(root, 'agents', '.hidden.md'), '# Hidden');
   await mkdir(path.join(root, 'skills', 'tdd'));
+  await writeFile(path.join(root, 'skills', 'tdd', 'SKILL.md'), '# TDD');
   await writeFile(path.join(root, 'hooks', 'pre', 'guard-destructive.ts'), 'export default {};\n');
   await writeFile(path.join(root, 'hooks', 'pre', '.hidden.ts'), 'export default {};\n');
   await writeFile(path.join(root, 'hooks', 'post', 'truncate-output.ts'), 'export default {};\n');
@@ -124,19 +163,21 @@ test('package manifest declares bundled skills as plugin content', async () => {
 
 test('ships every omp-config skill from the plugin skills directory', async () => {
   const skillsRoot = path.join(packageRoot(), 'skills');
-  const entries = await readdir(skillsRoot, { withFileTypes: true });
-  const actualSkills = entries
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-    .map((entry) => entry.name)
+  const actualSkills = (await findSkillDirs(skillsRoot))
+    .map((skillPath) => path.relative(skillsRoot, skillPath).split(path.sep).join('/'))
     .sort();
 
-  assert.deepEqual(actualSkills, expectedBundledSkills);
-
   for (const skill of expectedBundledSkills) {
+    assert.ok(actualSkills.includes(skill), `${skill} should be bundled`);
     const skillPath = path.join(skillsRoot, skill, 'SKILL.md');
     const skillDoc = await readFile(skillPath, 'utf8');
     assert.match(skillDoc, /\S/, `${skill} should ship a non-empty SKILL.md`);
   }
+
+  assert.equal(actualSkills.length, 278);
+  assert.ok(actualSkills.includes('ecc/accessibility'));
+  assert.ok(actualSkills.includes('ecc/tdd-workflow'));
+  assert.ok(actualSkills.includes('ecc/workspace-surface-audit'));
 });
 
 test('runConfigDoctor reads packaged config assets and reports path risks', async () => {
@@ -286,6 +327,7 @@ test('index registers doctor assets and plan tools safely', async () => {
   await writeFile(path.join(root, 'assets', 'config.yml'), 'customDirectories:\n  - /root/.omp/skills\n');
   await writeFile(path.join(root, 'agents', 'task.md'), '# Task');
   await mkdir(path.join(root, 'skills', 'tdd'));
+  await writeFile(path.join(root, 'skills', 'tdd', 'SKILL.md'), '# TDD');
 
   await writePluginPackage(root);
   const doctor = registered.find((tool) => tool.name === 'omp_config_doctor');
