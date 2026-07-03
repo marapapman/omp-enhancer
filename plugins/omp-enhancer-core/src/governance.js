@@ -25,7 +25,7 @@ export function buildGovernancePromptFragment({ route } = {}) {
     '',
     '### Mandatory Skill Workflow',
     '',
-    'Before doing the routed work, load each required skill listed here. If a required skill is unavailable, state that explicitly and do not pretend it was loaded.',
+    'Before doing the routed work, call the read tool once for each required skill using the exact URI `skill://<skill-name>`. Wait for those reads to finish before acting. If a required skill is unavailable, state that explicitly and do not pretend it was loaded.',
     '',
     'Required skills:',
     formatList(resolved.requiredSkills),

@@ -16,7 +16,8 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /Mandatory Skill Workflow/);
   assert.match(fragment, /plain-chinese-writing/);
   assert.match(fragment, /zh-writing-polish/);
-  assert.match(fragment, /load each required skill/i);
+  assert.match(fragment, /read tool once for each required skill/i);
+  assert.match(fragment, /skill:\/\/<skill-name>/);
   assert.match(fragment, /SKILL_USAGE/);
   assert.match(fragment, /Required/);
   assert.match(fragment, /Loaded/);

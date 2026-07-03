@@ -40,6 +40,14 @@ const routingCases = [
     requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
   },
   {
+    name: 'Chinese sentence rewrite with coding words still routes to writing',
+    prompt: '把下面这句话改成朴素、直接、少形容词的中文：鉴于当前系统存在较为显著的功能复杂性，我们需要进一步推动配置层面的优化与能力沉淀。',
+    expectedIntent: 'writing.zh',
+    expectedAgent: 'writing-helper.zh-writer',
+    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
+    requiredTools: ['writing_logic_check', 'writing_quality_check'],
+  },
+  {
     name: 'Chinese coding request routes to implementation with tests instead of writing',
     prompt: '请写一个函数实现排序功能',
     expectedIntent: 'implementation-with-tests',

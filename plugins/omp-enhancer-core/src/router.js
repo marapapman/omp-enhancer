@@ -1,4 +1,28 @@
 const zhWritingTerms = ['中文', '论文', '摘要', '润色', '改写', '翻译腔', 'ai 味', '博士', '段落', '写作', '写', '报告', '文档', '起草', '引言', '相关工作', '审稿'];
+const strongZhWritingTerms = [
+  '中文',
+  '论文',
+  '摘要',
+  '润色',
+  '改写',
+  '翻译腔',
+  'ai 味',
+  '博士',
+  '段落',
+  '写作',
+  '报告',
+  '文档',
+  '起草',
+  '引言',
+  '相关工作',
+  '审稿',
+  '这句话',
+  '这段话',
+  '文字',
+  '文本',
+  '改成',
+  '改得',
+];
 const enWritingTerms = ['draft', 'write', 'revise', 'polish', 'paper', 'report', 'manuscript', 'abstract', 'related work', 'paragraph', 'logic'];
 const testingTerms = ['test', 'tests', 'testing', 'unit test', 'coverage', 'mutation', 'browser', 'e2e', 'playwright', 'regression', '测试', '覆盖', '门禁'];
 const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', 'code', 'api', 'component', '实现', '重构', '修复', '报错', '功能', '代码', '接口'];
@@ -45,22 +69,22 @@ export function routeNaturalLanguageTask(input = {}) {
     };
   }
 
-  if (hasCoding) {
-    return {
-      intent: 'implementation-with-tests',
-      agent: 'implementer',
-      requiredSkills: ['brainstorming', 'test-driven-development', 'verification-before-completion'],
-      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
-      source: 'natural-language',
-    };
-  }
-
   if (isChineseWriting(normalized, prompt)) {
     return {
       intent: 'writing.zh',
       agent: 'writing-helper.zh-writer',
       requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
       requiredTools: ['writing_logic_check', 'writing_quality_check'],
+      source: 'natural-language',
+    };
+  }
+
+  if (hasCoding) {
+    return {
+      intent: 'implementation-with-tests',
+      agent: 'implementer',
+      requiredSkills: ['brainstorming', 'test-driven-development', 'verification-before-completion'],
+      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
       source: 'natural-language',
     };
   }
@@ -80,7 +104,10 @@ export function routeNaturalLanguageTask(input = {}) {
 }
 
 function isChineseWriting(normalized, original) {
-  return /[\u4e00-\u9fff]/.test(original) && includesAny(normalized, zhWritingTerms);
+  if (!/[\u4e00-\u9fff]/.test(original)) return false;
+  if (includesAny(normalized, strongZhWritingTerms)) return true;
+  if (!normalized.includes('写')) return false;
+  return !includesAny(normalized, ['函数', '代码', '接口', '实现', 'api', 'component']);
 }
 
 function includesAny(text, terms) {
