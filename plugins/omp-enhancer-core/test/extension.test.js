@@ -47,6 +47,7 @@ test('registers core tools and hooks without slash commands', () => {
   assert.deepEqual(pi.eventHandlers.map((handler) => handler.event), [
     'session_start',
     'before_agent_start',
+    'tool_call',
     'tool_result',
     'session_stop',
   ]);
@@ -243,6 +244,41 @@ test('before_agent_start preserves route when core continuation prompts start a 
   assert.doesNotMatch(result.additionalContext, /writing-plans/);
 });
 
+test('before_agent_start treats subagent gate continuations as internal prompts', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    ctx,
+  );
+
+  await event(pi, 'before_agent_start')(
+    {
+      prompt: [
+        'OMP Enhancer Core subagent gate is still open.',
+        'Fork the required roles with the task tool before doing or finishing routed work.',
+        'Required subagents: zh-writer, zh-checker.',
+      ].join('\n'),
+    },
+    ctx,
+  );
+
+  const result = await tool(pi, 'omp_core_governance_prompt').execute(
+    'call-current-governance',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(result.details.route.intent, 'writing.zh');
+  assert.match(result.details.fragment, /zh-writer/);
+  assert.match(result.details.fragment, /zh-checker/);
+});
+
 test('session_stop continues when an implementation-with-tests task has not run omp_test_gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -318,6 +354,70 @@ test('session_stop continues when forked subagents lack required skill assignmen
   assert.match(blocked.additionalContext, /task \[test-driven-development, verification-before-completion\]/);
 });
 
+test('session_stop accepts task tool_call role evidence with subagent skill assignments', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-english-writing-route',
+    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        agent: 'task',
+        tasks: [
+          {
+            id: 'WriterGateFinal',
+            role: 'writer',
+            assignment: [
+              'Required skills for this subagent:',
+              '- writing-markdown-helper',
+            ].join('\n'),
+          },
+          {
+            id: 'CheckerGateFinal',
+            role: 'checker',
+            assignment: [
+              'Required skills for this subagent:',
+              '- writing-checkers',
+            ].join('\n'),
+          },
+        ],
+      },
+    },
+    ctx,
+  );
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-valid-english-skill-usage',
+    {
+      output: [
+        'SKILL_USAGE',
+        'Required:',
+        '- writing-markdown-helper',
+        '- writing-checkers',
+        'Loaded:',
+        '- writing-markdown-helper',
+        '- writing-checkers',
+      ].join('\n'),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const result = await event(pi, 'session_stop')({}, ctx);
+
+  assert.notEqual(result?.continue, true);
+});
+
 test('validate subagent usage accepts explicit final SUBAGENT_USAGE evidence', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -335,11 +435,7 @@ test('validate subagent usage accepts explicit final SUBAGENT_USAGE evidence', a
     'call-valid-subagent-usage',
     {
       output: [
-        'SUBAGENT_USAGE',
-        'Required:',
-        '- zh-writer: plain-chinese-writing, zh-writing-polish',
-        '- zh-checker: plain-chinese-writing, zh-writing-checkers',
-        'Forked:',
+        'SUBAGENT_USAGE:',
         '- zh-writer: plain-chinese-writing, zh-writing-polish',
         '- zh-checker: plain-chinese-writing, zh-writing-checkers',
       ].join('\n'),

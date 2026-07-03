@@ -57,16 +57,17 @@ export function parseSubagentUsage(output = '') {
 
 export function parseSubagentUsageDetails(output = '') {
   const lines = String(output).split(/\r?\n/);
-  const blockIndex = lines.findIndex((line) => line.trim().toUpperCase() === 'SUBAGENT_USAGE');
+  const blockIndex = lines.findIndex((line) => isSubagentUsageHeader(line));
   if (blockIndex === -1) return [];
 
-  let section = null;
+  let section = 'forked';
   const forked = [];
 
   for (const rawLine of lines.slice(blockIndex + 1)) {
     const line = rawLine.trim();
     if (!line) continue;
-    if (/^[A-Z_]+$/.test(line) && line !== 'SUBAGENT_USAGE') break;
+    if (isSubagentUsageHeader(line)) continue;
+    if (isNextBlockHeader(line)) break;
     if (/^Required:/i.test(line)) {
       section = 'required';
       continue;
@@ -125,7 +126,7 @@ function collectRecords(value, records) {
 }
 
 function isAgentKey(key) {
-  return ['agent', 'subagent', 'subagent_type', 'subagentType'].includes(key);
+  return ['agent', 'role', 'subagent', 'subagent_type', 'subagentType'].includes(key);
 }
 
 function findAgentValue(value) {
@@ -161,6 +162,23 @@ function normalizeAgent(value) {
   if (typeof value === 'string') return value.trim().replace(/[:(].*$/, '').trim();
   if (value?.agent) return normalizeAgent(value.agent);
   return '';
+}
+
+function isSubagentUsageHeader(line) {
+  return String(line)
+    .trim()
+    .replace(/^#+\s*/, '')
+    .replace(/:$/, '')
+    .trim()
+    .toUpperCase() === 'SUBAGENT_USAGE';
+}
+
+function isNextBlockHeader(line) {
+  const normalized = String(line).trim().replace(/^#+\s*/, '').replace(/:$/, '').trim();
+  if (!normalized) return false;
+  if (normalized.toUpperCase() === 'SKILL_USAGE') return true;
+  if (/^[A-Z][A-Z_ ]+$/.test(normalized) && normalized.toUpperCase() !== 'SUBAGENT_USAGE') return true;
+  return /^#{1,6}\s+\S/.test(String(line).trim()) && normalized.toUpperCase() !== 'SUBAGENT_USAGE';
 }
 
 function parseSubagentLine(value) {

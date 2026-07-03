@@ -40,7 +40,7 @@ export default function registerCoreEnhancer(pi) {
     description: 'Validate that a routed agent output includes SUBAGENT_USAGE with all required subagents forked.',
     parameters: z?.object ? z.object({ output: z.string(), requiredSubagents: z.array(z.string()).optional() }) : undefined,
     execute: async (_callId, params = {}) => {
-      const requiredSubagents = params.requiredSubagents ?? subagentNames(state.lastRoute?.requiredSubagents);
+      const requiredSubagents = params.requiredSubagents ?? state.lastRoute?.requiredSubagents ?? [];
       const validation = validateSubagentUsage({ requiredSubagents, output: params.output ?? '' });
       state.lastSubagentUsage = validation;
       return okResult(validation.message, { validation });
@@ -77,6 +77,12 @@ export default function registerCoreEnhancer(pi) {
     if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${fragment}`;
     else event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
     return { additionalContext: fragment, route };
+  });
+
+  pi.on?.('tool_call', async (event = {}) => {
+    const name = event.name ?? event.toolName;
+    if (name === 'task') recordSubagentEvidence(state, event);
+    return undefined;
   });
 
   pi.on?.('tool_result', async (event = {}) => {
@@ -161,8 +167,8 @@ function extractPrompt(event) {
 }
 
 function isInternalCoreContinuation(prompt) {
-  return prompt.includes('OMP Enhancer Core gate is still open')
-    || prompt.includes('OMP Enhancer Core skill gate is still open');
+  return prompt.includes('OMP Enhancer Core')
+    && prompt.includes('gate is still open');
 }
 
 function buildMissingSkillUsageContext(state) {

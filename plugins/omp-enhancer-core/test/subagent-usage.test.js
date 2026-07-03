@@ -36,6 +36,40 @@ test('parses forked subagents from SUBAGENT_USAGE block', () => {
   ].join('\n')), [{ agent: 'plan', skills: ['brainstorming', 'subagent-driven-development'] }]);
 });
 
+test('accepts common SUBAGENT_USAGE shorthand with colon heading', () => {
+  const validation = validateSubagentUsage({
+    requiredSubagents: ['writer', 'checker'],
+    output: [
+      'SUBAGENT_USAGE:',
+      '- writer: WriterFinal3 (status: completed)',
+      '- checker: CheckerFinal3 (status: completed)',
+      '',
+      'Work summary: completed.',
+    ].join('\n'),
+  });
+
+  assert.equal(validation.ok, true);
+  assert.deepEqual(validation.forked, ['writer', 'checker']);
+});
+
+test('accepts markdown SUBAGENT_USAGE headings without required and forked sections', () => {
+  const validation = validateSubagentUsage({
+    requiredSubagents: ['zh-writer', 'zh-checker'],
+    output: [
+      '## SUBAGENT_USAGE',
+      '',
+      '- zh-writer: RewriteTask1',
+      '- zh-checker: CheckerGate',
+      '',
+      '## Work Summary',
+      'Done.',
+    ].join('\n'),
+  });
+
+  assert.equal(validation.ok, true);
+  assert.deepEqual(validation.forked, ['zh-writer', 'zh-checker']);
+});
+
 test('validateSubagentUsage reports missing routed roles', () => {
   const validation = validateSubagentUsage({
     requiredSubagents: ['zh-writer', 'zh-checker'],
@@ -87,6 +121,21 @@ test('collectSubagentNames reads common task tool argument shapes', () => {
   });
 
   assert.deepEqual(agents, ['plan', 'reviewer', 'ecc-pr-test-analyzer']);
+});
+
+test('collectSubagentNames reads task role fields from tool_call input', () => {
+  const agents = collectSubagentNames({
+    toolName: 'task',
+    input: {
+      agent: 'task',
+      tasks: [
+        { id: 'WriterGateFinal', role: 'writer', assignment: 'Required skills for this subagent:\n- writing-markdown-helper' },
+        { id: 'CheckerGateFinal', role: 'checker', assignment: 'Required skills for this subagent:\n- writing-checkers' },
+      ],
+    },
+  });
+
+  assert.deepEqual(agents, ['task', 'writer', 'checker']);
 });
 
 test('collectSubagentTaskRecords includes prompt text for skill evidence', () => {
