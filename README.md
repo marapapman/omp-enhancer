@@ -18,23 +18,55 @@ This repository uses npm workspaces for plugin packages under `plugins/`:
 - `plugins/writing-helper`
 - `plugins/omp-test-enhancer`
 
-## Marketplace
+## Marketplace install
 
-The marketplace catalog lives at `.omp-plugin/marketplace.json` and uses `metadata.pluginRoot: "plugins"`.
+The marketplace catalog lives at `.omp-plugin/marketplace.json` and uses `metadata.pluginRoot: "plugins"`. After this repository is pushed to GitHub, OMP can use the repository itself as the marketplace.
 
-## Install
+### Option 1: install from the GitHub marketplace
 
-Add the marketplace once:
+Add the GitHub marketplace once:
 
 ```bash
 omp plugin marketplace add marapapman/omp-enhancer
 ```
 
-Install all four plugins with one OMP command:
+Install the full enhancer stack with one command:
 
 ```bash
 omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer
 ```
+
+This installs:
+
+- `omp-enhancer-core`: natural-language routing, governance hooks, skill gates, and task gates.
+- `omp-config`: config assets, agents, skills, hooks, templates, and safe diagnostics.
+- `writing-helper`: writing QA tools, writer/checker agents, and writing skills.
+- `omp-testing-enhancer`: test analysis, browser evidence, coverage, mutation, gates, and reports.
+
+### Option 2: install from a local checkout
+
+For local testing before publishing, add the repository path as a marketplace:
+
+```bash
+omp plugin marketplace add /path/to/omp-enhancer
+```
+
+Then run the same install command:
+
+```bash
+omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer
+```
+
+### Install selected plugins
+
+If you only need part of the stack, install a subset:
+
+```bash
+omp plugin install omp-enhancer-core@omp-enhancer writing-helper@omp-enhancer
+omp plugin install omp-enhancer-core@omp-enhancer omp-testing-enhancer@omp-enhancer
+```
+
+`omp-enhancer-core` is recommended whenever you want automatic natural-language routing. Without it, the other plugins still expose their tools and compatibility commands, but the core runtime gates are not active.
 
 ## Automatic routing
 
