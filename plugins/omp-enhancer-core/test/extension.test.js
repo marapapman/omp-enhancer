@@ -395,7 +395,7 @@ function subagentSkills(agent) {
     'ecc-pr-test-analyzer': ['verification-before-completion'],
     'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
     'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
-    writer: ['writing-plans', 'writing-markdown-helper'],
+    writer: ['writing-markdown-helper'],
     checker: ['writing-checkers'],
     librarian: [],
   }[agent] ?? [];

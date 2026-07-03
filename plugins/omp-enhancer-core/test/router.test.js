@@ -25,11 +25,11 @@ const routingCases = [
     prompt: 'Draft an English related work paragraph for a systems paper and check the logic.',
     expectedIntent: 'writing.en',
     expectedAgent: 'writing-helper.writer',
-    requiredSkills: ['writing-plans', 'writing-markdown-helper', 'writing-checkers'],
+    requiredSkills: ['writing-markdown-helper', 'writing-checkers'],
     requiredTools: ['writing_logic_check', 'writing_quality_check'],
     requiredSubagents: ['writer', 'checker'],
     requiredSubagentSkills: {
-      writer: ['writing-plans', 'writing-markdown-helper'],
+      writer: ['writing-markdown-helper'],
       checker: ['writing-checkers'],
     },
   },
@@ -197,6 +197,28 @@ test('routes common Chinese document and report requests to Chinese writing firs
     assert.equal(route.intent, 'writing.zh', prompt);
     assert.equal(route.requiredSkills[0], 'plain-chinese-writing', prompt);
   }
+});
+
+test('routes English writing to English writing skills instead of development planning', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Draft an English related work paragraph for a systems paper and check the logic.',
+  });
+
+  assert.equal(route.intent, 'writing.en');
+  assert.deepEqual(route.requiredSkills, ['writing-markdown-helper', 'writing-checkers']);
+  assert.deepEqual(route.requiredSubagents, [
+    {
+      agent: 'writer',
+      duty: 'draft or revise English writing after required writing skills are loaded',
+      requiredSkills: ['writing-markdown-helper'],
+    },
+    {
+      agent: 'checker',
+      duty: 'review English logic, style, formatting, and citation quality before final output',
+      requiredSkills: ['writing-checkers'],
+    },
+  ]);
+  assert.equal(route.requiredSkills.includes('writing-plans'), false);
 });
 
 test('leaves unrelated prompts unclaimed instead of inventing a plugin workflow', () => {

@@ -52,7 +52,7 @@ const subagentPlans = {
     subagent('zh-checker', 'review Chinese logic, style, and plain-writing compliance before final output', ['plain-chinese-writing', 'zh-writing-checkers']),
   ],
   writingEn: [
-    subagent('writer', 'draft or revise English writing after required writing skills are loaded', ['writing-plans', 'writing-markdown-helper']),
+    subagent('writer', 'draft or revise English writing after required writing skills are loaded', ['writing-markdown-helper']),
     subagent('checker', 'review English logic, style, formatting, and citation quality before final output', ['writing-checkers']),
   ],
 };
@@ -133,7 +133,7 @@ export function routeNaturalLanguageTask(input = {}) {
     return route({
       intent: 'writing.en',
       agent: 'writing-helper.writer',
-      requiredSkills: ['writing-plans', 'writing-markdown-helper', 'writing-checkers'],
+      requiredSkills: ['writing-markdown-helper', 'writing-checkers'],
       requiredTools: ['writing_logic_check', 'writing_quality_check'],
       requiredSubagents: subagentPlans.writingEn,
     });
