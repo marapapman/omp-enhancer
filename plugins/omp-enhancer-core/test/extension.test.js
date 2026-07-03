@@ -484,6 +484,86 @@ test('session_stop accepts task tool_call role evidence with subagent skill assi
   assert.notEqual(result?.continue, true);
 });
 
+test('skill validation tool accepts common model-formatted evidence and releases the gate', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-model-formatted-skill-route',
+    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await forkSubagents(pi, ctx, ['writer', 'checker']);
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+  const validation = await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-model-formatted-skill-usage',
+    {
+      output: [
+        'Final evidence:',
+        '',
+        '### SKILL_USAGE:',
+        '**Required Skills:** `skill://writing-markdown-helper`, `skill://writing-checkers`',
+        '**Loaded Skills:** `skill://writing-markdown-helper`, `skill://writing-checkers`',
+      ].join('\n'),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(validation.details.validation.ok, true);
+
+  const result = await event(pi, 'session_stop')({}, ctx);
+
+  assert.notEqual(result?.continue, true);
+});
+
+test('skill validation tool accepts a fenced final evidence block when no plain block exists', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-fenced-skill-route',
+    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await forkSubagents(pi, ctx, ['writer', 'checker']);
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+  const validation = await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-fenced-skill-usage',
+    {
+      output: [
+        '```text',
+        'SKILL_USAGE:',
+        'Required:',
+        '- writing-markdown-helper',
+        '- writing-checkers',
+        'Loaded:',
+        '- writing-markdown-helper',
+        '- writing-checkers',
+        '```',
+      ].join('\n'),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(validation.details.validation.ok, true);
+
+  const result = await event(pi, 'session_stop')({}, ctx);
+
+  assert.notEqual(result?.continue, true);
+});
+
 test('validate subagent usage accepts explicit final SUBAGENT_USAGE evidence', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);

@@ -108,3 +108,59 @@ test('ignores fenced code blocks when finding the authoritative SKILL_USAGE bloc
   assert.deepEqual(result.loaded, ['plain-chinese-writing']);
   assert.deepEqual(result.invalid, []);
 });
+
+test('accepts common model formatting variants for SKILL_USAGE evidence', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+    output: [
+      '最终校验如下：',
+      '',
+      '### SKILL_USAGE:',
+      '**Required Skills:** `skill://plain-chinese-writing`, `skill://zh-writing-polish`',
+      '**Loaded Skills:** `skill://plain-chinese-writing`, `skill://zh-writing-polish`',
+    ].join('\n'),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['plain-chinese-writing', 'zh-writing-polish']);
+  assert.deepEqual(result.missing, []);
+});
+
+test('falls back to a fenced final SKILL_USAGE block when no plain-text block exists', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['writing-markdown-helper', 'writing-checkers'],
+    output: [
+      'Final evidence:',
+      '```text',
+      'SKILL_USAGE:',
+      'Required:',
+      '- writing-markdown-helper',
+      '- writing-checkers',
+      'Loaded:',
+      '- writing-markdown-helper',
+      '- writing-checkers',
+      '```',
+    ].join('\n'),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['writing-markdown-helper', 'writing-checkers']);
+});
+
+test('accepts unbulleted skill lines after section labels', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['test-driven-development', 'verification-before-completion'],
+    output: [
+      'SKILL_USAGE:',
+      'Required:',
+      'test-driven-development',
+      'verification-before-completion',
+      'Loaded:',
+      'test-driven-development',
+      'verification-before-completion',
+    ].join('\n'),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['test-driven-development', 'verification-before-completion']);
+});

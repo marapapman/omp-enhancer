@@ -19,13 +19,15 @@ export function validateSkillUsage({ requiredSkills = [], output = '' } = {}) {
   const parsed = parseSkillUsageBlock(authoritative);
   const invalid = parsed.loaded.filter((entry) => isPlaceholder(entry));
   const effectiveLoaded = parsed.loaded.filter((entry) => !isPlaceholder(entry));
-  const missing = requiredSkills.filter((skill) => !effectiveLoaded.includes(skill));
+  const loaded = uniqueValues(effectiveLoaded.map((entry) => normalizeSkillName(entry)).filter(Boolean));
+  const loadedSet = new Set(loaded);
+  const missing = requiredSkills.filter((skill) => !loadedSet.has(normalizeSkillName(skill)));
   const ok = missing.length === 0 && invalid.length === 0 && denied.length === 0;
 
   return {
     ok,
     required: requiredSkills,
-    loaded: effectiveLoaded,
+    loaded,
     missing,
     invalid,
     denied,
@@ -41,15 +43,22 @@ export function parseSkillUsage(output = '') {
 function findAuthoritativeSkillUsage(output) {
   const lines = output.split(/\r?\n/);
   let inFence = false;
-  const starts = [];
+  const plainStarts = [];
+  const fencedStarts = [];
 
   lines.forEach((line, index) => {
-    if (/^\s*```/.test(line)) inFence = !inFence;
-    if (!inFence && line.trim() === 'SKILL_USAGE') starts.push(index);
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+      return;
+    }
+    if (!isSkillUsageHeader(line)) return;
+    if (inFence) fencedStarts.push(index);
+    else plainStarts.push(index);
   });
 
-  if (!starts.length) return null;
-  return lines.slice(starts[starts.length - 1]).join('\n');
+  if (plainStarts.length) return sliceUsageBlock(lines, plainStarts[plainStarts.length - 1]);
+  if (fencedStarts.length) return sliceUsageBlock(lines, fencedStarts[fencedStarts.length - 1]);
+  return null;
 }
 
 function parseSkillUsageBlock(block) {
@@ -58,24 +67,31 @@ function parseSkillUsageBlock(block) {
   let section = null;
 
   for (const raw of block.split(/\r?\n/).slice(1)) {
-    const line = raw.trim();
+    const line = cleanMarkdownLine(raw);
     if (!line) continue;
-    if (/^required:?$/i.test(line)) {
+    if (/^\s*```/.test(raw)) break;
+    if (isSkillUsageHeader(line)) continue;
+    if (isNextBlockHeader(line)) break;
+
+    const requiredMatch = line.match(/^required(?:\s+skills?)?\s*:\s*(.*)$/i);
+    if (requiredMatch) {
       section = 'required';
+      required.push(...extractSkillEntries(requiredMatch[1]));
       continue;
     }
-    if (/^loaded:?$/i.test(line)) {
+    const loadedMatch = line.match(/^loaded(?:\s+skills?)?\s*:\s*(.*)$/i);
+    if (loadedMatch) {
       section = 'loaded';
+      loaded.push(...extractSkillEntries(loadedMatch[1]));
       continue;
     }
     if (!section) continue;
-    const entry = line.replace(/^[-*]\s*/, '').trim();
-    if (!entry) continue;
-    if (section === 'required') required.push(entry);
-    if (section === 'loaded') loaded.push(entry);
+    const entries = extractSkillEntries(line);
+    if (section === 'required') required.push(...entries);
+    if (section === 'loaded') loaded.push(...entries);
   }
 
-  return { required, loaded };
+  return { required: uniqueValues(required), loaded: uniqueValues(loaded) };
 }
 
 function findDeniedSkills(output, requiredSkills) {
@@ -87,7 +103,7 @@ function findDeniedSkills(output, requiredSkills) {
 }
 
 function isPlaceholder(entry) {
-  const normalized = entry.trim().toLowerCase();
+  const normalized = normalizeSkillName(entry);
   return placeholderValues.has(normalized) || normalized.includes('todo') || normalized.includes('required skill');
 }
 
@@ -101,4 +117,74 @@ function buildMessage({ missing, invalid, denied }) {
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function sliceUsageBlock(lines, start) {
+  const block = [];
+  for (const line of lines.slice(start)) {
+    if (/^\s*```/.test(line)) break;
+    block.push(line);
+  }
+  return block.join('\n');
+}
+
+function isSkillUsageHeader(line) {
+  return normalizeHeader(line) === 'SKILL_USAGE';
+}
+
+function isNextBlockHeader(line) {
+  const cleaned = cleanMarkdownLine(line).replace(/:$/, '').trim();
+  const header = cleaned.replace(/[\s-]+/g, '_').toUpperCase();
+  if (!header || header === 'SKILL_USAGE' || header === 'REQUIRED' || header === 'LOADED') return false;
+  if (['SUBAGENT_USAGE', 'SUBAGENT_RESULT', 'BLOCKERS', 'EVIDENCE', 'VERIFICATION', 'RESULT', 'SUMMARY'].includes(header)) return true;
+  return /^[A-Z][A-Z_ ]+$/.test(cleaned.replace(/[\s-]+/g, '_'));
+}
+
+function normalizeHeader(line) {
+  return cleanMarkdownLine(line)
+    .replace(/:$/, '')
+    .trim()
+    .replace(/[\s-]+/g, '_')
+    .toUpperCase();
+}
+
+function cleanMarkdownLine(line) {
+  return String(line)
+    .trim()
+    .replace(/^#{1,6}\s*/, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim();
+}
+
+function extractSkillEntries(value) {
+  const cleaned = cleanSkillEntry(value);
+  if (!cleaned) return [];
+  return cleaned
+    .split(/\s*(?:[,，;；]|\band\b)\s*/i)
+    .map((entry) => cleanSkillEntry(entry))
+    .filter(Boolean);
+}
+
+function cleanSkillEntry(value) {
+  return cleanMarkdownLine(value)
+    .replace(/^[-*+]\s*/, '')
+    .replace(/^\d+[.)]\s*/, '')
+    .replace(/skill:\/\//gi, '')
+    .replace(/\s+\((?:loaded|read|required)\)$/i, '')
+    .replace(/[.。；;，,]+$/, '')
+    .trim();
+}
+
+function normalizeSkillName(value) {
+  return cleanSkillEntry(value)
+    .replace(/^[<["'({]+/, '')
+    .replace(/[>\]"')}]+$/, '')
+    .trim()
+    .toLowerCase();
+}
+
+function uniqueValues(values) {
+  return [...new Set(values)];
 }
