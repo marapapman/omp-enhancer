@@ -5,7 +5,8 @@
   "workspaces": [
     "plugins/omp-config",
     "plugins/writing-helper",
-    "plugins/omp-test-enhancer"
+    "plugins/omp-test-enhancer",
+    "plugins/omp-enhancer-core"
   ],
   "scripts": {
     "test": "npm test --workspaces --if-present",

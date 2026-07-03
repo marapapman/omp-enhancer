@@ -6,7 +6,8 @@ const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const workspaces = [
   'plugins/omp-config',
   'plugins/writing-helper',
-  'plugins/omp-test-enhancer'
+  'plugins/omp-test-enhancer',
+  'plugins/omp-enhancer-core'
 ]
 
 for (const workspace of workspaces) {

@@ -7,7 +7,8 @@ const catalog = JSON.parse(await readFile(catalogPath, 'utf8'))
 const expected = [
   ['omp-config', './omp-config'],
   ['writing-helper', './writing-helper'],
-  ['omp-testing-enhancer', './omp-test-enhancer']
+  ['omp-testing-enhancer', './omp-test-enhancer'],
+  ['omp-enhancer-core', './omp-enhancer-core']
 ]
 
 if (catalog.name !== 'omp-enhancer') {

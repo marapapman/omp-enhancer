@@ -1,0 +1,274 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import registerCoreEnhancer from '../index.js';
+
+class FakePi {
+  constructor() {
+    this.labels = [];
+    this.tools = new Map();
+    this.commands = new Map();
+    this.eventHandlers = [];
+    const z = fakeZod();
+    this.z = z;
+    this.zod = { z };
+  }
+
+  setLabel(label) {
+    this.labels.push(label);
+  }
+
+  registerTool(tool) {
+    this.tools.set(tool.name, tool);
+  }
+
+  registerCommand(name, command) {
+    this.commands.set(name, command);
+  }
+
+  on(event, handler) {
+    this.eventHandlers.push({ event, handler });
+  }
+}
+
+test('registers core tools and hooks without slash commands', () => {
+  const pi = new FakePi();
+
+  registerCoreEnhancer(pi);
+
+  assert.deepEqual(pi.labels, ['OMP Enhancer Core']);
+  assert.deepEqual([...pi.tools.keys()], [
+    'omp_core_route_task',
+    'omp_core_validate_skill_usage',
+    'omp_core_governance_prompt',
+  ]);
+  assert.equal([...pi.tools.values()].every((tool) => typeof tool.execute === 'function'), true);
+  assert.deepEqual(pi.eventHandlers.map((handler) => handler.event), [
+    'session_start',
+    'before_agent_start',
+    'tool_result',
+    'session_stop',
+  ]);
+  assert.deepEqual([...pi.commands.keys()], []);
+});
+
+test('before_agent_start injects governance context and routes natural-language prompts', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  const agentEvent = { prompt: '请写一份项目报告' };
+
+  const result = await event(pi, 'before_agent_start')(agentEvent, ctx);
+  const fragment = governanceText(result, agentEvent);
+
+  assert.match(fragment, /Mandatory Skill Workflow/);
+  assert.match(fragment, /plain-chinese-writing/);
+
+  const stopResult = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(stopResult?.continue, true);
+  assert.match(stopResult.additionalContext, /writing|plain-chinese-writing|SKILL_USAGE/);
+});
+
+test('session_stop continues when a routed writing task has not run writing QA', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-1',
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const result = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /writing QA|writing_quality_check|writing_logic_check/);
+  assert.match(result.additionalContext, /plain-chinese-writing|SKILL_USAGE/);
+});
+
+test('session_stop requires successful SKILL_USAGE validation even after writing QA', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-writing-route',
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-invalid-skill-usage',
+    {
+      output: [
+        'SKILL_USAGE',
+        'Required:',
+        '- plain-chinese-writing',
+        '- zh-writing-polish',
+        '- zh-writing-checkers',
+        'Loaded:',
+        '- plain-chinese-writing',
+      ].join('\n'),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const blocked = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /SKILL_USAGE/);
+
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-valid-skill-usage',
+    {
+      output: [
+        'SKILL_USAGE',
+        'Required:',
+        '- plain-chinese-writing',
+        '- zh-writing-polish',
+        '- zh-writing-checkers',
+        'Loaded:',
+        '- plain-chinese-writing',
+        '- zh-writing-polish',
+        '- zh-writing-checkers',
+      ].join('\n'),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const released = await event(pi, 'session_stop')({}, ctx);
+
+  assert.notEqual(released?.continue, true);
+});
+
+test('session_stop ignores prior route SKILL_USAGE and tool evidence after routing a new Chinese writing task', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-testing-route',
+    { prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-testing-skill-usage',
+    {
+      output: [
+        'SKILL_USAGE',
+        'Required:',
+        '- test-driven-development',
+        '- verification-before-completion',
+        'Loaded:',
+        '- test-driven-development',
+        '- verification-before-completion',
+      ].join('\n'),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const agentEvent = { prompt: '请写一份中文文档' };
+  await event(pi, 'before_agent_start')(agentEvent, ctx);
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+
+  const result = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /SKILL_USAGE/);
+  assert.match(result.additionalContext, /plain-chinese-writing|zh-writing-polish|zh-writing-checkers/);
+});
+
+test('session_stop continues when an implementation-with-tests task has not run omp_test_gate', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-2',
+    { prompt: '实现自然语言路由并补测试，测试写完后要过门禁。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const result = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /omp_test_gate/);
+  assert.match(result.additionalContext, /test-driven-development|SKILL_USAGE/);
+});
+
+function tool(pi, name) {
+  const found = pi.tools.get(name);
+  if (!found) throw new Error(`Missing tool ${name}`);
+  return found;
+}
+
+function event(pi, name) {
+  const found = pi.eventHandlers.find((handler) => handler.event === name);
+  if (!found) throw new Error(`Missing event ${name}`);
+  return found.handler;
+}
+
+function governanceText(result, eventPayload) {
+  const content = result?.content
+    ?.filter((item) => item?.type === 'text')
+    .map((item) => item.text)
+    .join('\n');
+  return [
+    result?.additionalContext,
+    result?.systemPrompt,
+    result?.prompt,
+    result?.context,
+    content,
+    eventPayload.additionalContext,
+    eventPayload.systemPrompt,
+    eventPayload.prompt,
+    eventPayload.context,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function extensionContext() {
+  return {
+    cwd: process.cwd(),
+    sessionManager: { getBranch: () => [] },
+    ui: { notify: () => undefined },
+    hasUI: false,
+  };
+}
+
+function fakeZod() {
+  const withOptional = (schema) => ({ ...schema, optional: () => ({ type: 'optional', schema }) });
+  return {
+    object: (shape) => withOptional({ type: 'object', shape }),
+    string: () => withOptional({ type: 'string' }),
+    boolean: () => withOptional({ type: 'boolean' }),
+    array: (schema) => withOptional({ type: 'array', schema }),
+    enum: (values) => withOptional({ type: 'enum', values }),
+    optional: (schema) => ({ type: 'optional', schema }),
+  };
+}
