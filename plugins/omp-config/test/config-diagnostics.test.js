@@ -161,6 +161,18 @@ test('package manifest declares bundled skills as plugin content', async () => {
   assert.ok(packageJson.keywords.includes('omp-plugin'));
 });
 
+test('packaged config template keeps MiMo as default and DeepSeek Flash as advisor', async () => {
+  const template = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
+
+  assert.match(template, /advisor:\s*deepseek\/deepseek-v4-flash:xhigh/);
+  assert.match(template, /default:\s*xiaomi\/mimo-v2\.5:high/);
+  assert.match(template, /task:\s*ollama-cloud\/deepseek-v4-flash:high/);
+  assert.match(template, /webSearch:\s*codex/);
+  assert.match(template, /backend:\s*mnemopi/);
+  assert.doesNotMatch(template, /disabledProviders:\s*\n\s*-\s*deepseek/);
+  assert.doesNotMatch(template, /opencode-go\/deepseek/);
+});
+
 test('ships every omp-config skill from the plugin skills directory', async () => {
   const skillsRoot = path.join(packageRoot(), 'skills');
   const actualSkills = (await findSkillDirs(skillsRoot))

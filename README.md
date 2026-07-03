@@ -4,7 +4,7 @@ This repository is an OMP marketplace monorepo containing four plugins. `omp-enh
 
 ## Plugins
 
-- `omp-enhancer-core`: routes natural-language coding, writing, testing, and config tasks without slash commands.
+- `omp-enhancer-core`: routes natural-language coding, writing, testing, security, and config tasks without slash commands, then gates skill and subagent evidence.
 - `omp-config`: packages OMP config assets, agents, skills, hooks, templates, and safe diagnostics.
 - `writing-helper`: provides writing QA tools, writer/checker agents, and writing skills.
 - `omp-testing-enhancer`: provides test analysis, browser evidence, coverage, mutation, gates, and reports.
@@ -38,7 +38,7 @@ omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writin
 
 This installs:
 
-- `omp-enhancer-core`: natural-language routing, governance hooks, skill gates, and task gates.
+- `omp-enhancer-core`: natural-language routing, governance hooks, skill gates, subagent gates, and task gates.
 - `omp-config`: config assets, agents, skills, hooks, templates, and safe diagnostics.
 - `writing-helper`: writing QA tools, writer/checker agents, and writing skills.
 - `omp-testing-enhancer`: test analysis, browser evidence, coverage, mutation, gates, and reports.
@@ -72,11 +72,13 @@ omp plugin install omp-enhancer-core@omp-enhancer omp-testing-enhancer@omp-enhan
 
 After installing `omp-enhancer-core`, describe the task naturally. The core plugin injects routing guidance and completion gates through runtime hooks.
 
-- Coding tasks use lightweight TDD guidance, reviewer routing, and testing evidence.
-- Writing tasks route to writer/checker or zh-writer/zh-checker, require writing skills, and require writing QA evidence.
+- The default runtime model is MiMo v2.5, the advisor is DeepSeek V4 Flash, and task subagents plus all other roles follow the user's active OMP config.
+- Coding tasks use lightweight TDD guidance, fork plan/task/reviewer subagents, and require testing evidence.
+- Security review tasks fork ecc-security-reviewer plus reviewer.
+- Writing tasks route to writer/checker or zh-writer/zh-checker subagents, require writing skills, and require writing QA evidence.
 - Chinese writing requires `plain-chinese-writing`.
 - Testing tasks route through `omp_test_analyze`, `omp_test_context`, `omp_test_gate`, and `omp_test_report`. Browser, coverage, and mutation tools are used when the target context provides them.
-- Config tasks use `omp_config_doctor`, `omp_config_assets`, and `omp_config_plan`.
+- Config tasks use `omp_config_doctor`, `omp_config_assets`, and `omp_config_plan`, with librarian/reviewer subagent evidence before completion.
 
 Slash commands remain compatibility helpers for older workflows. The new workflow does not require `/test`, `/writing-quality`, or any other command prefix.
 

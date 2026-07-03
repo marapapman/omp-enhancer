@@ -4,6 +4,7 @@ export function buildGovernancePromptFragment({ route } = {}) {
     agent: null,
     requiredSkills: [],
     requiredTools: [],
+    requiredSubagents: [],
   };
 
   if (resolved.intent === 'unknown') {
@@ -11,7 +12,7 @@ export function buildGovernancePromptFragment({ route } = {}) {
       '## OMP Enhancer Core Routing',
       '',
       'Intent: unknown',
-      'Use natural language context. Do not force a plugin workflow unless the user asks for coding, writing, testing, or config work.',
+      'Use natural language context. Do not force a plugin workflow unless the user asks for coding, writing, testing, security, or config work.',
     ].join('\n');
   }
 
@@ -33,7 +34,26 @@ export function buildGovernancePromptFragment({ route } = {}) {
     'Toolchain:',
     formatList(resolved.requiredTools),
     '',
+    '### Mandatory Subagent Workflow',
+    '',
+    'Runtime model policy: the main/default agent uses MiMo v2.5; the advisor uses DeepSeek V4 Flash. Keep task subagents and all other model roles on the active OMP configuration unless the user explicitly overrides them.',
+    '',
+    'Use a subagent-driven workflow for routed work. Before doing non-trivial implementation, testing, writing, security, or config work yourself, fork the listed roles with the task tool. Call task once per distinct agent role; if several items share one agent, use the batch task shape.',
+    '',
+    'Required subagents:',
+    formatSubagents(resolved.requiredSubagents),
+    '',
     workflowFor(resolved.intent),
+    '',
+    '### SUBAGENT_USAGE contract',
+    '',
+    'Final routed outputs that list required subagents must include:',
+    '',
+    'SUBAGENT_USAGE',
+    'Required:',
+    '- every required subagent from this fragment',
+    'Forked:',
+    '- every required subagent actually forked with the task tool',
     '',
     '### SKILL_USAGE contract',
     '',
@@ -78,8 +98,9 @@ export function buildMissingGateContext({ route, state } = {}) {
 function workflowFor(intent) {
   if (intent === 'writing.zh') return 'Writing workflow: zh-writer -> zh-checker -> writing_quality_check.';
   if (intent === 'writing.en') return 'Writing workflow: writer -> checker -> writing_quality_check.';
-  if (intent === 'testing') return 'Testing workflow: omp_test_analyze -> omp_test_context -> omp_test_gate -> omp_test_report.';
-  if (intent === 'implementation-with-tests') return 'Coding workflow: lightweight TDD -> implementer -> reviewer -> omp_test_gate -> omp_test_report.';
+  if (intent === 'testing') return 'Testing workflow: ecc-tdd-guide -> ecc-pr-test-analyzer -> omp_test_analyze -> omp_test_context -> omp_test_gate -> omp_test_report.';
+  if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> task -> reviewer -> lightweight TDD -> omp_test_gate -> omp_test_report.';
+  if (intent === 'security-review') return 'Security workflow: ecc-security-reviewer -> reviewer -> fix or report only after risk evidence is checked.';
   if (intent === 'config-assets') return 'Config workflow: use omp_config_doctor, omp_config_assets, or omp_config_plan as needed.';
   return 'Workflow: use the selected agent and tools.';
 }
@@ -87,6 +108,14 @@ function workflowFor(intent) {
 function formatList(values = []) {
   if (!values.length) return '- none';
   return values.map((value) => `- ${value}`).join('\n');
+}
+
+function formatSubagents(values = []) {
+  if (!values.length) return '- none';
+  return values.map((value) => {
+    if (typeof value === 'string') return `- ${value}`;
+    return `- ${value.agent}: ${value.duty}`;
+  }).join('\n');
 }
 
 function isWriting(route) {

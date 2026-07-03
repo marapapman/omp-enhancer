@@ -14,6 +14,7 @@ const routingCases = [
     expectedAgent: 'writing-helper.zh-writer',
     requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
     requiredTools: ['writing_logic_check', 'writing_quality_check'],
+    requiredSubagents: ['zh-writer', 'zh-checker'],
   },
   {
     name: 'English writing request routes to English writing profile',
@@ -22,22 +23,25 @@ const routingCases = [
     expectedAgent: 'writing-helper.writer',
     requiredSkills: ['writing-plans', 'writing-markdown-helper', 'writing-checkers'],
     requiredTools: ['writing_logic_check', 'writing_quality_check'],
+    requiredSubagents: ['writer', 'checker'],
   },
   {
     name: 'test-writing request routes to testing profile',
     prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。',
     expectedIntent: 'testing',
     expectedAgent: 'tester',
-    requiredSkills: ['test-driven-development', 'verification-before-completion'],
+    requiredSkills: ['test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+    requiredSubagents: ['ecc-tdd-guide', 'ecc-pr-test-analyzer'],
   },
   {
     name: 'implementation with tests request routes to coding plus testing profile',
     prompt: '实现这个路由功能并补测试，先写失败用例，再完成实现。',
     expectedIntent: 'implementation-with-tests',
     expectedAgent: 'implementer',
-    requiredSkills: ['brainstorming', 'test-driven-development', 'verification-before-completion'],
+    requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+    requiredSubagents: ['plan', 'task', 'reviewer'],
   },
   {
     name: 'Chinese sentence rewrite with coding words still routes to writing',
@@ -46,14 +50,25 @@ const routingCases = [
     expectedAgent: 'writing-helper.zh-writer',
     requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
     requiredTools: ['writing_logic_check', 'writing_quality_check'],
+    requiredSubagents: ['zh-writer', 'zh-checker'],
   },
   {
     name: 'Chinese coding request routes to implementation with tests instead of writing',
     prompt: '请写一个函数实现排序功能',
     expectedIntent: 'implementation-with-tests',
     expectedAgent: 'implementer',
-    requiredSkills: ['brainstorming', 'test-driven-development', 'verification-before-completion'],
+    requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+    requiredSubagents: ['plan', 'task', 'reviewer'],
+  },
+  {
+    name: 'security review request routes to security reviewer',
+    prompt: "审查这段 Express 代码的安全风险：app.get('/file', (req, res) => res.sendFile(req.query.path));",
+    expectedIntent: 'security-review',
+    expectedAgent: 'ecc-security-reviewer',
+    requiredSkills: ['ecc/security-review', 'ecc/security-scan'],
+    requiredTools: [],
+    requiredSubagents: ['ecc-security-reviewer', 'reviewer'],
   },
   {
     name: 'config asset request routes to config asset profile',
@@ -62,6 +77,7 @@ const routingCases = [
     expectedAgent: 'config-assets',
     requiredSkills: [],
     requiredTools: ['omp_config_doctor', 'omp_config_assets', 'omp_config_plan'],
+    requiredSubagents: ['librarian', 'reviewer'],
   },
 ];
 
@@ -73,6 +89,7 @@ test('routes natural language tasks to required skill profiles without slash com
     assert.equal(route.agent, item.expectedAgent, item.name);
     assert.deepEqual(route.requiredSkills, item.requiredSkills, item.name);
     assert.deepEqual(route.requiredTools, item.requiredTools, item.name);
+    assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), item.requiredSubagents, item.name);
     assert.equal(route.source, 'natural-language', item.name);
   }
 });
@@ -89,6 +106,31 @@ test('required route skills are registered in the root marketplace catalog', asy
   for (const item of routingCases) {
     for (const skill of item.requiredSkills) {
       assert.equal(registeredSkills.has(skill), true, `${item.name} requires unregistered skill ${skill}`);
+    }
+  }
+});
+
+test('required route subagents are packaged by omp-config or writing-helper', async () => {
+  const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const roots = [
+    path.join(repoRoot, 'plugins', 'omp-config', 'agents'),
+    path.join(repoRoot, 'plugins', 'writing-helper', 'agents'),
+  ];
+
+  for (const item of routingCases) {
+    for (const agent of item.requiredSubagents) {
+      const found = await Promise.all(
+        roots.map(async (root) => {
+          try {
+            await readFile(path.join(root, `${agent}.md`), 'utf8');
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      );
+
+      assert.equal(found.some(Boolean), true, `${item.name} requires unpackaged subagent ${agent}`);
     }
   }
 });
@@ -122,6 +164,7 @@ test('leaves unrelated prompts unclaimed instead of inventing a plugin workflow'
     agent: null,
     requiredSkills: [],
     requiredTools: [],
+    requiredSubagents: [],
     source: 'natural-language',
   });
 });

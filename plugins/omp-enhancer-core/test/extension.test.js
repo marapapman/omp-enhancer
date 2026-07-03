@@ -40,6 +40,7 @@ test('registers core tools and hooks without slash commands', () => {
   assert.deepEqual([...pi.tools.keys()], [
     'omp_core_route_task',
     'omp_core_validate_skill_usage',
+    'omp_core_validate_subagent_usage',
     'omp_core_governance_prompt',
   ]);
   assert.equal([...pi.tools.values()].every((tool) => typeof tool.execute === 'function'), true);
@@ -64,12 +65,14 @@ test('before_agent_start injects governance context and routes natural-language 
   const fragment = governanceText(result, agentEvent);
 
   assert.match(fragment, /Mandatory Skill Workflow/);
+  assert.match(fragment, /Mandatory Subagent Workflow/);
   assert.match(fragment, /plain-chinese-writing/);
+  assert.match(fragment, /zh-writer/);
 
   const stopResult = await event(pi, 'session_stop')({}, ctx);
 
   assert.equal(stopResult?.continue, true);
-  assert.match(stopResult.additionalContext, /writing|plain-chinese-writing|SKILL_USAGE/);
+  assert.match(stopResult.additionalContext, /subagent|zh-writer|zh-checker/);
 });
 
 test('session_stop continues when a routed writing task has not run writing QA', async () => {
@@ -85,6 +88,7 @@ test('session_stop continues when a routed writing task has not run writing QA',
     undefined,
     ctx,
   );
+  await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
 
   const result = await event(pi, 'session_stop')({}, ctx);
 
@@ -107,6 +111,7 @@ test('session_stop requires successful SKILL_USAGE validation even after writing
     ctx,
   );
   await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+  await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
 
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-invalid-skill-usage',
@@ -169,6 +174,7 @@ test('session_stop ignores prior route SKILL_USAGE and tool evidence after routi
     undefined,
     ctx,
   );
+  await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-pr-test-analyzer']);
   await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-testing-skill-usage',
@@ -177,9 +183,11 @@ test('session_stop ignores prior route SKILL_USAGE and tool evidence after routi
         'SKILL_USAGE',
         'Required:',
         '- test-driven-development',
+        '- subagent-driven-development',
         '- verification-before-completion',
         'Loaded:',
         '- test-driven-development',
+        '- subagent-driven-development',
         '- verification-before-completion',
       ].join('\n'),
     },
@@ -190,6 +198,7 @@ test('session_stop ignores prior route SKILL_USAGE and tool evidence after routi
 
   const agentEvent = { prompt: '请写一份中文文档' };
   await event(pi, 'before_agent_start')(agentEvent, ctx);
+  await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
   await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
 
   const result = await event(pi, 'session_stop')({}, ctx);
@@ -211,6 +220,7 @@ test('before_agent_start preserves route when core continuation prompts start a 
     },
     ctx,
   );
+  await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
   await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
 
   await event(pi, 'before_agent_start')(
@@ -246,12 +256,78 @@ test('session_stop continues when an implementation-with-tests task has not run 
     undefined,
     ctx,
   );
+  await forkSubagents(pi, ctx, ['plan', 'task', 'reviewer']);
 
   const result = await event(pi, 'session_stop')({}, ctx);
 
   assert.equal(result?.continue, true);
   assert.match(result.additionalContext, /omp_test_gate/);
   assert.match(result.additionalContext, /test-driven-development|SKILL_USAGE/);
+});
+
+test('session_stop continues when a routed task has not forked required subagents', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-subagents',
+    { prompt: '实现自然语言路由并补测试。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const blocked = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /subagent gate/i);
+  assert.match(blocked.additionalContext, /plan, task, reviewer/);
+
+  await forkSubagents(pi, ctx, ['plan', 'task', 'reviewer']);
+
+  const next = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(next?.continue, true);
+  assert.match(next.additionalContext, /omp_test_gate/);
+});
+
+test('validate subagent usage accepts explicit final SUBAGENT_USAGE evidence', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-subagent-usage',
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await tool(pi, 'omp_core_validate_subagent_usage').execute(
+    'call-valid-subagent-usage',
+    {
+      output: [
+        'SUBAGENT_USAGE',
+        'Required:',
+        '- zh-writer',
+        '- zh-checker',
+        'Forked:',
+        '- zh-writer',
+        '- zh-checker',
+      ].join('\n'),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const result = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /writing QA/);
 });
 
 function tool(pi, name) {
@@ -264,6 +340,12 @@ function event(pi, name) {
   const found = pi.eventHandlers.find((handler) => handler.event === name);
   if (!found) throw new Error(`Missing event ${name}`);
   return found.handler;
+}
+
+async function forkSubagents(pi, ctx, agents) {
+  for (const agent of agents) {
+    await event(pi, 'tool_result')({ name: 'task', params: { agent } }, ctx);
+  }
 }
 
 function governanceText(result, eventPayload) {
