@@ -20,6 +20,25 @@ This package does not automatically overwrite `~/.omp`. Treat the packaged files
 - `/omp-config:config-doctor` asks the runtime tool to inspect packaged config risks.
 - `/omp-config:config-assets` asks the runtime tool to list packaged content.
 
+## Bundled Skills
+
+The plugin ships `skills/` as plugin content, declares it through `pi.skills`,
+and lists these paths in the root marketplace catalog.
+Installed marketplace packages include these skill names:
+
+- `caveman`
+- `conventional-commits`
+- `deepseek-tool-calling`
+- `diagnose`
+- `docker-compose`
+- `go-testing`
+- `grill-with-docs`
+- `handoff`
+- `improve-codebase-architecture`
+- `prototype`
+- `tdd`
+- `zoom-out`
+
 ## Runtime tools
 
 When the extension entrypoint is loaded, the plugin registers:

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +37,21 @@ async function writePluginPackage(root) {
 function packageRoot() {
   return path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 }
+
+const expectedBundledSkills = [
+  'caveman',
+  'conventional-commits',
+  'deepseek-tool-calling',
+  'diagnose',
+  'docker-compose',
+  'go-testing',
+  'grill-with-docs',
+  'handoff',
+  'improve-codebase-architecture',
+  'prototype',
+  'tdd',
+  'zoom-out',
+];
 
 function createRegistrationHarness() {
   const tools = [];
@@ -92,6 +107,32 @@ test('listAssets lists packaged agents, skills, hooks, and templates from plugin
     },
     templates: ['config.yml'],
   });
+});
+
+test('package manifest declares bundled skills as plugin content', async () => {
+  const packageJson = JSON.parse(await readFile(path.join(packageRoot(), 'package.json'), 'utf8'));
+
+  assert.ok(packageJson.files.includes('skills'));
+  assert.deepEqual(packageJson.pi?.skills, ['./skills']);
+  assert.ok(packageJson.keywords.includes('skills'));
+  assert.ok(packageJson.keywords.includes('omp-plugin'));
+});
+
+test('ships every omp-config skill from the plugin skills directory', async () => {
+  const skillsRoot = path.join(packageRoot(), 'skills');
+  const entries = await readdir(skillsRoot, { withFileTypes: true });
+  const actualSkills = entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map((entry) => entry.name)
+    .sort();
+
+  assert.deepEqual(actualSkills, expectedBundledSkills);
+
+  for (const skill of expectedBundledSkills) {
+    const skillPath = path.join(skillsRoot, skill, 'SKILL.md');
+    const skillDoc = await readFile(skillPath, 'utf8');
+    assert.match(skillDoc, /\S/, `${skill} should ship a non-empty SKILL.md`);
+  }
 });
 
 test('runConfigDoctor reads packaged config assets and reports path risks', async () => {
