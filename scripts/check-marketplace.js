@@ -25,6 +25,9 @@ for (const [name, source] of expected) {
   if (plugin.source !== source) {
     throw new Error(`Plugin ${name} source mismatch: expected ${source}, got ${plugin.source}`)
   }
+  if (Object.hasOwn(plugin, 'ref')) {
+    throw new Error(`Plugin ${name} is pinned to ${plugin.ref}; remove ref so marketplace upgrade tracks main`)
+  }
 }
 
 console.log('marketplace catalog ok')

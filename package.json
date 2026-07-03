@@ -9,8 +9,9 @@
     "plugins/omp-enhancer-core"
   ],
   "scripts": {
-    "test": "npm test --workspaces --if-present",
+    "test": "node --test scripts/*.test.js && npm test --workspaces --if-present",
     "pack:all": "node scripts/pack-all.js",
-    "check:marketplace": "node scripts/check-marketplace.js"
+    "check:marketplace": "node scripts/check-marketplace.js",
+    "release": "node scripts/release.js"
   }
 }

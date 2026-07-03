@@ -95,6 +95,56 @@ omp plugin upgrade writing-helper@omp-enhancer
 omp plugin upgrade omp-testing-enhancer@omp-enhancer
 ```
 
+## Release workflow
+
+The active marketplace catalog tracks GitHub `main`. Plugin entries in `.omp-plugin/marketplace.json` do not use `ref` by default. This lets `omp plugin upgrade` fetch the newest catalog and install newer plugin versions after you push a release commit.
+
+Release one plugin by setting an explicit version:
+
+```bash
+npm run release -- --plugin writing-helper --version 0.3.0 --apply
+```
+
+Release every plugin with a semantic bump:
+
+```bash
+npm run release -- --plugin all --bump patch --apply
+```
+
+Preview a release without changing files:
+
+```bash
+npm run release -- --plugin omp-enhancer-core --bump minor --dry-run
+```
+
+The default release mode is `track-main`. It updates the selected plugin package version, updates the marketplace catalog version, and removes any plugin `ref` field so marketplace upgrades follow the latest pushed catalog.
+
+Use `--pin-ref` only when you intentionally want an immutable archival release:
+
+```bash
+npm run release -- --plugin writing-helper --version 0.3.0 --pin-ref --apply
+```
+
+For normal marketplace upgrades, do not use `--pin-ref`.
+
+Suggested release steps:
+
+```bash
+npm run release -- --plugin all --bump patch --apply
+npm test
+npm run check:marketplace
+npm run pack:all
+git add package.json package-lock.json .omp-plugin/marketplace.json plugins/*/package.json README.md scripts/release.js scripts/release.test.js scripts/check-marketplace.js
+git commit -m "chore: release plugins"
+git push origin main
+```
+
+After the push, users can upgrade with:
+
+```bash
+omp plugin upgrade
+```
+
 ## Validation
 
 Check the marketplace catalog with:
