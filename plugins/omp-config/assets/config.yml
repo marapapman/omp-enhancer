@@ -11,7 +11,7 @@ modelRoles:
   commit: ollama-cloud/gemma3:4b
   default: xiaomi/mimo-v2.5:high
   designer: ollama-cloud/glm-5.2:xhigh
-  plan: ollama-cloud/glm-5.2:xhigh
+  plan: ollama-cloud/deepseek-v4-pro:high
   slow: ollama-cloud/glm-5.2:xhigh
   smol: ollama-cloud/deepseek-v4-flash:medium
   task: ollama-cloud/deepseek-v4-flash:high

@@ -166,6 +166,7 @@ test('packaged config template keeps MiMo as default and DeepSeek Flash as advis
 
   assert.match(template, /advisor:\s*deepseek\/deepseek-v4-flash:xhigh/);
   assert.match(template, /default:\s*xiaomi\/mimo-v2\.5:high/);
+  assert.match(template, /plan:\s*ollama-cloud\/deepseek-v4-pro:high/);
   assert.match(template, /task:\s*ollama-cloud\/deepseek-v4-flash:high/);
   assert.match(template, /webSearch:\s*codex/);
   assert.match(template, /backend:\s*mnemopi/);
