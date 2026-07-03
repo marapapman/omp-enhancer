@@ -11,8 +11,8 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
       requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
       requiredTools: ['writing_logic_check', 'writing_quality_check'],
       requiredSubagents: [
-        { agent: 'zh-writer', duty: 'draft Chinese text' },
-        { agent: 'zh-checker', duty: 'review Chinese text' },
+        { agent: 'zh-writer', duty: 'draft Chinese text', requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'] },
+        { agent: 'zh-checker', duty: 'review Chinese text', requiredSkills: ['plain-chinese-writing', 'zh-writing-checkers'] },
       ],
     },
   });
@@ -27,9 +27,11 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /DeepSeek V4 Flash/);
   assert.match(fragment, /active OMP configuration/);
   assert.match(fragment, /task tool/i);
-  assert.match(fragment, /zh-writer:\s*draft Chinese text/);
-  assert.match(fragment, /zh-checker:\s*review Chinese text/);
+  assert.match(fragment, /zh-writer:\s*draft Chinese text; skills: plain-chinese-writing, zh-writing-polish/);
+  assert.match(fragment, /zh-checker:\s*review Chinese text; skills: plain-chinese-writing, zh-writing-checkers/);
+  assert.match(fragment, /include that subagent-specific skill list/i);
   assert.match(fragment, /SUBAGENT_USAGE/);
+  assert.match(fragment, /agent-name: every skill required by that subagent/);
   assert.match(fragment, /SKILL_USAGE/);
   assert.match(fragment, /Required/);
   assert.match(fragment, /Loaded/);
@@ -45,9 +47,9 @@ test('names the selected agent route and toolchain in the governance fragment', 
       requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
       requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
       requiredSubagents: [
-        { agent: 'plan', duty: 'decompose the task' },
-        { agent: 'task', duty: 'implement the task' },
-        { agent: 'reviewer', duty: 'review the diff' },
+        { agent: 'plan', duty: 'decompose the task', requiredSkills: ['brainstorming', 'subagent-driven-development'] },
+        { agent: 'task', duty: 'implement the task', requiredSkills: ['test-driven-development', 'verification-before-completion'] },
+        { agent: 'reviewer', duty: 'review the diff', requiredSkills: ['verification-before-completion'] },
       ],
     },
   });
@@ -60,9 +62,9 @@ test('names the selected agent route and toolchain in the governance fragment', 
   assert.match(fragment, /omp_test_gate/);
   assert.match(fragment, /omp_test_report/);
   assert.match(fragment, /subagent-driven-development/);
-  assert.match(fragment, /plan:\s*decompose the task/);
-  assert.match(fragment, /task:\s*implement the task/);
-  assert.match(fragment, /reviewer:\s*review the diff/);
+  assert.match(fragment, /plan:\s*decompose the task; skills: brainstorming, subagent-driven-development/);
+  assert.match(fragment, /task:\s*implement the task; skills: test-driven-development, verification-before-completion/);
+  assert.match(fragment, /reviewer:\s*review the diff; skills: verification-before-completion/);
 });
 
 test('keeps routing governance independent from slash commands', () => {
@@ -72,7 +74,7 @@ test('keeps routing governance independent from slash commands', () => {
       agent: 'tester',
       requiredSkills: ['test-driven-development'],
       requiredTools: ['omp_test_gate'],
-      requiredSubagents: [{ agent: 'ecc-tdd-guide', duty: 'drive TDD' }],
+      requiredSubagents: [{ agent: 'ecc-tdd-guide', duty: 'drive TDD', requiredSkills: ['test-driven-development'] }],
     },
   });
 

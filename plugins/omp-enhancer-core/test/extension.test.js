@@ -293,6 +293,31 @@ test('session_stop continues when a routed task has not forked required subagent
   assert.match(next.additionalContext, /omp_test_gate/);
 });
 
+test('session_stop continues when forked subagents lack required skill assignments', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-subagent-skills',
+    { prompt: '实现自然语言路由并补测试。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  for (const agent of ['plan', 'task', 'reviewer']) {
+    await event(pi, 'tool_result')({ name: 'task', params: { agent, prompt: 'Do the assigned work.' } }, ctx);
+  }
+
+  const blocked = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /Missing subagent skill assignments/);
+  assert.match(blocked.additionalContext, /plan \[brainstorming, subagent-driven-development\]/);
+  assert.match(blocked.additionalContext, /task \[test-driven-development, verification-before-completion\]/);
+});
+
 test('validate subagent usage accepts explicit final SUBAGENT_USAGE evidence', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -312,11 +337,11 @@ test('validate subagent usage accepts explicit final SUBAGENT_USAGE evidence', a
       output: [
         'SUBAGENT_USAGE',
         'Required:',
-        '- zh-writer',
-        '- zh-checker',
+        '- zh-writer: plain-chinese-writing, zh-writing-polish',
+        '- zh-checker: plain-chinese-writing, zh-writing-checkers',
         'Forked:',
-        '- zh-writer',
-        '- zh-checker',
+        '- zh-writer: plain-chinese-writing, zh-writing-polish',
+        '- zh-checker: plain-chinese-writing, zh-writing-checkers',
       ].join('\n'),
     },
     undefined,
@@ -344,8 +369,36 @@ function event(pi, name) {
 
 async function forkSubagents(pi, ctx, agents) {
   for (const agent of agents) {
-    await event(pi, 'tool_result')({ name: 'task', params: { agent } }, ctx);
+    await event(pi, 'tool_result')(
+      {
+        name: 'task',
+        params: {
+          agent,
+          prompt: [
+            'Required skills for this subagent:',
+            ...subagentSkills(agent).map((skill) => `- ${skill}`),
+          ].join('\n'),
+        },
+      },
+      ctx,
+    );
   }
+}
+
+function subagentSkills(agent) {
+  return {
+    plan: ['brainstorming', 'subagent-driven-development'],
+    task: ['test-driven-development', 'verification-before-completion'],
+    reviewer: ['verification-before-completion'],
+    'ecc-security-reviewer': ['ecc/security-review', 'ecc/security-scan'],
+    'ecc-tdd-guide': ['test-driven-development'],
+    'ecc-pr-test-analyzer': ['verification-before-completion'],
+    'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
+    'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
+    writer: ['writing-plans', 'writing-markdown-helper'],
+    checker: ['writing-checkers'],
+    librarian: [],
+  }[agent] ?? [];
 }
 
 function governanceText(result, eventPayload) {

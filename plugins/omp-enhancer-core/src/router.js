@@ -35,25 +35,25 @@ const subagentPlans = {
     subagent('reviewer', 'review the final config or marketplace diff before release'),
   ],
   implementation: [
-    subagent('plan', 'decompose non-trivial or multi-file changes into an executable plan'),
-    subagent('task', 'implement the planned code and test changes in the smallest coherent batch'),
-    subagent('reviewer', 'review the resulting diff before final claims, commit, or push'),
+    subagent('plan', 'decompose non-trivial or multi-file changes into an executable plan', ['brainstorming', 'subagent-driven-development']),
+    subagent('task', 'implement the planned code and test changes in the smallest coherent batch', ['test-driven-development', 'verification-before-completion']),
+    subagent('reviewer', 'review the resulting diff before final claims, commit, or push', ['verification-before-completion']),
   ],
   security: [
-    subagent('ecc-security-reviewer', 'audit user-input, auth, file, network, secrets, and dependency risks'),
-    subagent('reviewer', 'check the remediation diff for behavior regressions'),
+    subagent('ecc-security-reviewer', 'audit user-input, auth, file, network, secrets, and dependency risks', ['ecc/security-review', 'ecc/security-scan']),
+    subagent('reviewer', 'check the remediation diff for behavior regressions', ['ecc/security-review']),
   ],
   testing: [
-    subagent('ecc-tdd-guide', 'drive the red-green-refactor test-first workflow'),
-    subagent('ecc-pr-test-analyzer', 'review whether the tests cover the changed behavior before completion'),
+    subagent('ecc-tdd-guide', 'drive the red-green-refactor test-first workflow', ['test-driven-development']),
+    subagent('ecc-pr-test-analyzer', 'review whether the tests cover the changed behavior before completion', ['verification-before-completion']),
   ],
   writingZh: [
-    subagent('zh-writer', 'draft or rewrite Chinese text after required writing skills are loaded'),
-    subagent('zh-checker', 'review Chinese logic, style, and plain-writing compliance before final output'),
+    subagent('zh-writer', 'draft or rewrite Chinese text after required writing skills are loaded', ['plain-chinese-writing', 'zh-writing-polish']),
+    subagent('zh-checker', 'review Chinese logic, style, and plain-writing compliance before final output', ['plain-chinese-writing', 'zh-writing-checkers']),
   ],
   writingEn: [
-    subagent('writer', 'draft or revise English writing after required writing skills are loaded'),
-    subagent('checker', 'review English logic, style, formatting, and citation quality before final output'),
+    subagent('writer', 'draft or revise English writing after required writing skills are loaded', ['writing-plans', 'writing-markdown-helper']),
+    subagent('checker', 'review English logic, style, formatting, and citation quality before final output', ['writing-checkers']),
   ],
 };
 
@@ -153,8 +153,8 @@ function route({ intent, agent, requiredSkills = [], requiredTools = [], require
   };
 }
 
-function subagent(agent, duty) {
-  return { agent, duty };
+function subagent(agent, duty, requiredSkills = []) {
+  return { agent, duty, requiredSkills };
 }
 
 function isChineseWriting(normalized, original) {

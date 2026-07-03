@@ -1,7 +1,7 @@
 import { buildGovernancePromptFragment, buildMissingGateContext } from './src/governance.js';
 import { routeNaturalLanguageTask } from './src/router.js';
 import { validateSkillUsage } from './src/skill-usage.js';
-import { collectSubagentNames, validateSubagentUsage } from './src/subagent-usage.js';
+import { collectSubagentTaskRecords, validateSubagentUsage } from './src/subagent-usage.js';
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
@@ -119,6 +119,7 @@ function emptyEvidence() {
     testingReport: false,
     taskToolCalls: 0,
     forkedSubagents: new Set(),
+    subagentSkills: new Map(),
   };
 }
 
@@ -142,7 +143,10 @@ function formatRoute(route) {
 
 function formatSubagents(subagents = []) {
   if (!subagents.length) return 'none';
-  return subagents.map(({ agent, duty }) => `${agent} (${duty})`).join(', ');
+  return subagents.map(({ agent, duty, requiredSkills = [] }) => {
+    const skills = requiredSkills.length ? `; skills: ${requiredSkills.join(', ')}` : '';
+    return `${agent} (${duty}${skills})`;
+  }).join(', ');
 }
 
 function setRouteState(state, route) {
@@ -174,32 +178,67 @@ function buildMissingSkillUsageContext(state) {
 }
 
 function buildMissingSubagentUsageContext(state) {
-  const requiredSubagents = subagentNames(state.lastRoute?.requiredSubagents);
+  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
   if (!requiredSubagents.length) return null;
   if (state.lastSubagentUsage?.ok) return null;
 
   const forked = state.evidence.forkedSubagents;
-  const missing = requiredSubagents.filter((agent) => !forked.has(agent));
-  if (!missing.length) return null;
+  const missing = requiredSubagents.map(({ agent }) => agent).filter((agent) => !forked.has(agent));
+  const missingSkillAssignments = requiredSubagents.flatMap(({ agent, requiredSkills }) => {
+    const recorded = state.evidence.subagentSkills.get(agent) ?? new Set();
+    const missingSkills = requiredSkills.filter((skill) => !recorded.has(skill));
+    return missingSkills.length ? [{ agent, skills: missingSkills }] : [];
+  });
+
+  if (!missing.length && !missingSkillAssignments.length) return null;
 
   return [
     'OMP Enhancer Core subagent gate is still open.',
-    'Fork the required roles with the task tool before doing or finishing routed work.',
-    `Required subagents: ${requiredSubagents.join(', ')}.`,
-    `Missing subagents: ${missing.join(', ')}.`,
+    'Fork the required roles with the task tool before doing or finishing routed work, and include each role-specific skill list in the task prompt.',
+    `Required subagents: ${formatRequiredSubagents(requiredSubagents)}.`,
+    missing.length ? `Missing subagents: ${missing.join(', ')}.` : null,
+    missingSkillAssignments.length ? `Missing subagent skill assignments: ${formatMissingSkillAssignments(missingSkillAssignments)}.` : null,
     state.lastSubagentUsage?.message
       ? `Last validation: ${state.lastSubagentUsage.message}`
       : 'No successful SUBAGENT_USAGE validation or task-tool role evidence has been recorded.',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 function recordSubagentEvidence(state, event) {
   state.evidence.taskToolCalls += 1;
-  for (const agent of collectSubagentNames(event)) {
+  const requiredByAgent = new Map(subagentRequirements(state.lastRoute?.requiredSubagents).map((item) => [item.agent, item.requiredSkills]));
+
+  for (const { agent, text } of collectSubagentTaskRecords(event)) {
     state.evidence.forkedSubagents.add(agent);
+    const requiredSkills = requiredByAgent.get(agent) ?? [];
+    if (!requiredSkills.length) continue;
+
+    const recorded = state.evidence.subagentSkills.get(agent) ?? new Set();
+    for (const skill of requiredSkills) {
+      if (text.includes(skill)) recorded.add(skill);
+    }
+    state.evidence.subagentSkills.set(agent, recorded);
   }
 }
 
 function subagentNames(subagents = []) {
   return subagents.map((value) => (typeof value === 'string' ? value : value?.agent)).filter(Boolean);
+}
+
+function subagentRequirements(subagents = []) {
+  return subagents.map((value) => {
+    if (typeof value === 'string') return { agent: value, requiredSkills: [] };
+    return {
+      agent: value?.agent,
+      requiredSkills: Array.isArray(value?.requiredSkills) ? value.requiredSkills : [],
+    };
+  }).filter(({ agent }) => agent);
+}
+
+function formatRequiredSubagents(subagents) {
+  return subagents.map(({ agent, requiredSkills }) => `${agent} [${requiredSkills.join(', ') || 'none'}]`).join('; ');
+}
+
+function formatMissingSkillAssignments(assignments) {
+  return assignments.map(({ agent, skills }) => `${agent} [${skills.join(', ')}]`).join('; ');
 }

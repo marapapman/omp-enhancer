@@ -38,7 +38,7 @@ omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writin
 
 This installs:
 
-- `omp-enhancer-core`: natural-language routing, governance hooks, skill gates, subagent gates, and task gates.
+- `omp-enhancer-core`: natural-language routing, governance hooks, skill gates, per-subagent skill gates, and task gates.
 - `omp-config`: config assets, agents, skills, hooks, templates, and safe diagnostics.
 - `writing-helper`: writing QA tools, writer/checker agents, and writing skills.
 - `omp-testing-enhancer`: test analysis, browser evidence, coverage, mutation, gates, and reports.
@@ -73,7 +73,7 @@ omp plugin install omp-enhancer-core@omp-enhancer omp-testing-enhancer@omp-enhan
 After installing `omp-enhancer-core`, describe the task naturally. The core plugin injects routing guidance and completion gates through runtime hooks.
 
 - The default runtime model is MiMo v2.5, the advisor is DeepSeek V4 Flash, and task subagents plus all other roles follow the user's active OMP config.
-- Coding tasks use lightweight TDD guidance, fork plan/task/reviewer subagents, and require testing evidence.
+- Coding tasks use lightweight TDD guidance, fork plan/task/reviewer subagents, pass role-specific skill lists to each subagent, and require testing evidence.
 - Security review tasks fork ecc-security-reviewer plus reviewer.
 - Writing tasks route to writer/checker or zh-writer/zh-checker subagents, require writing skills, and require writing QA evidence.
 - Chinese writing requires `plain-chinese-writing`.

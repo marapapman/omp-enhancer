@@ -40,6 +40,8 @@ export function buildGovernancePromptFragment({ route } = {}) {
     '',
     'Use a subagent-driven workflow for routed work. Before doing non-trivial implementation, testing, writing, security, or config work yourself, fork the listed roles with the task tool. Call task once per distinct agent role; if several items share one agent, use the batch task shape.',
     '',
+    'When forking each subagent, include that subagent-specific skill list in the task prompt. Tell the subagent to read each required skill with `skill://<skill-name>` before acting and to report which skills it loaded.',
+    '',
     'Required subagents:',
     formatSubagents(resolved.requiredSubagents),
     '',
@@ -51,9 +53,9 @@ export function buildGovernancePromptFragment({ route } = {}) {
     '',
     'SUBAGENT_USAGE',
     'Required:',
-    '- every required subagent from this fragment',
+    '- agent-name: every skill required by that subagent, or none',
     'Forked:',
-    '- every required subagent actually forked with the task tool',
+    '- agent-name: every skill included in that subagent task prompt, or none',
     '',
     '### SKILL_USAGE contract',
     '',
@@ -114,7 +116,8 @@ function formatSubagents(values = []) {
   if (!values.length) return '- none';
   return values.map((value) => {
     if (typeof value === 'string') return `- ${value}`;
-    return `- ${value.agent}: ${value.duty}`;
+    const skills = value.requiredSkills?.length ? value.requiredSkills.join(', ') : 'none';
+    return `- ${value.agent}: ${value.duty}; skills: ${skills}`;
   }).join('\n');
 }
 

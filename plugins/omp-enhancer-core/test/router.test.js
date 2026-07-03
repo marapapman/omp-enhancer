@@ -15,6 +15,10 @@ const routingCases = [
     requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
     requiredTools: ['writing_logic_check', 'writing_quality_check'],
     requiredSubagents: ['zh-writer', 'zh-checker'],
+    requiredSubagentSkills: {
+      'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
+      'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
+    },
   },
   {
     name: 'English writing request routes to English writing profile',
@@ -24,6 +28,10 @@ const routingCases = [
     requiredSkills: ['writing-plans', 'writing-markdown-helper', 'writing-checkers'],
     requiredTools: ['writing_logic_check', 'writing_quality_check'],
     requiredSubagents: ['writer', 'checker'],
+    requiredSubagentSkills: {
+      writer: ['writing-plans', 'writing-markdown-helper'],
+      checker: ['writing-checkers'],
+    },
   },
   {
     name: 'test-writing request routes to testing profile',
@@ -33,6 +41,10 @@ const routingCases = [
     requiredSkills: ['test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
     requiredSubagents: ['ecc-tdd-guide', 'ecc-pr-test-analyzer'],
+    requiredSubagentSkills: {
+      'ecc-tdd-guide': ['test-driven-development'],
+      'ecc-pr-test-analyzer': ['verification-before-completion'],
+    },
   },
   {
     name: 'implementation with tests request routes to coding plus testing profile',
@@ -42,6 +54,11 @@ const routingCases = [
     requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
     requiredSubagents: ['plan', 'task', 'reviewer'],
+    requiredSubagentSkills: {
+      plan: ['brainstorming', 'subagent-driven-development'],
+      task: ['test-driven-development', 'verification-before-completion'],
+      reviewer: ['verification-before-completion'],
+    },
   },
   {
     name: 'Chinese sentence rewrite with coding words still routes to writing',
@@ -51,6 +68,10 @@ const routingCases = [
     requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
     requiredTools: ['writing_logic_check', 'writing_quality_check'],
     requiredSubagents: ['zh-writer', 'zh-checker'],
+    requiredSubagentSkills: {
+      'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
+      'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
+    },
   },
   {
     name: 'Chinese coding request routes to implementation with tests instead of writing',
@@ -60,6 +81,11 @@ const routingCases = [
     requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
     requiredSubagents: ['plan', 'task', 'reviewer'],
+    requiredSubagentSkills: {
+      plan: ['brainstorming', 'subagent-driven-development'],
+      task: ['test-driven-development', 'verification-before-completion'],
+      reviewer: ['verification-before-completion'],
+    },
   },
   {
     name: 'security review request routes to security reviewer',
@@ -69,6 +95,10 @@ const routingCases = [
     requiredSkills: ['ecc/security-review', 'ecc/security-scan'],
     requiredTools: [],
     requiredSubagents: ['ecc-security-reviewer', 'reviewer'],
+    requiredSubagentSkills: {
+      'ecc-security-reviewer': ['ecc/security-review', 'ecc/security-scan'],
+      reviewer: ['ecc/security-review'],
+    },
   },
   {
     name: 'config asset request routes to config asset profile',
@@ -78,6 +108,10 @@ const routingCases = [
     requiredSkills: [],
     requiredTools: ['omp_config_doctor', 'omp_config_assets', 'omp_config_plan'],
     requiredSubagents: ['librarian', 'reviewer'],
+    requiredSubagentSkills: {
+      librarian: [],
+      reviewer: [],
+    },
   },
 ];
 
@@ -90,6 +124,11 @@ test('routes natural language tasks to required skill profiles without slash com
     assert.deepEqual(route.requiredSkills, item.requiredSkills, item.name);
     assert.deepEqual(route.requiredTools, item.requiredTools, item.name);
     assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), item.requiredSubagents, item.name);
+    assert.deepEqual(
+      Object.fromEntries(route.requiredSubagents.map(({ agent, requiredSkills }) => [agent, requiredSkills])),
+      item.requiredSubagentSkills,
+      item.name,
+    );
     assert.equal(route.source, 'natural-language', item.name);
   }
 });
@@ -104,7 +143,13 @@ test('required route skills are registered in the root marketplace catalog', asy
   );
 
   for (const item of routingCases) {
-    for (const skill of item.requiredSkills) {
+    const route = routeNaturalLanguageTask({ prompt: item.prompt });
+    const requiredSkills = new Set([
+      ...route.requiredSkills,
+      ...route.requiredSubagents.flatMap(({ requiredSkills: subagentSkills = [] }) => subagentSkills),
+    ]);
+
+    for (const skill of requiredSkills) {
       assert.equal(registeredSkills.has(skill), true, `${item.name} requires unregistered skill ${skill}`);
     }
   }
