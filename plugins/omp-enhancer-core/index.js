@@ -3,12 +3,22 @@ import { routeNaturalLanguageTask } from './src/router.js';
 import { validateSkillUsage } from './src/skill-usage.js';
 import { collectSubagentTaskRecords, validateSubagentUsage } from './src/subagent-usage.js';
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
+import { runClassifierCommand } from './src/classifier-config.js';
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
   const z = pi.zod?.z ?? pi.z;
 
   pi.setLabel?.('OMP Enhancer Core');
+
+  pi.registerCommand?.('classifier', {
+    description: 'Show or update modelRoles.classifier for OMP Enhancer routing.',
+    async handler(args = '', ctx = {}) {
+      const result = await runClassifierCommand({ args, ctx });
+      await ctx.ui?.notify?.(result.text, result.ok ? 'info' : 'warn');
+      return result;
+    },
+  });
 
   pi.registerTool({
     name: 'omp_core_route_task',

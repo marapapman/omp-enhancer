@@ -18,6 +18,10 @@ modelRoles:
   task: ollama-cloud/deepseek-v4-flash:high
   tiny: ollama-cloud/gemma4:31b:high
   vision: ollama-cloud/kimi-k2.6:medium
+modelTags:
+  classifier:
+    name: Classifier
+    color: accent
 memory: 
   backend: mnemopi
 compaction: 

@@ -31,7 +31,7 @@ class FakePi {
   }
 }
 
-test('registers core tools and hooks without slash commands', () => {
+test('registers core tools, classifier command, and hooks', () => {
   const pi = new FakePi();
 
   registerCoreEnhancer(pi);
@@ -53,7 +53,34 @@ test('registers core tools and hooks without slash commands', () => {
     'tool_result',
     'session_stop',
   ]);
-  assert.deepEqual([...pi.commands.keys()], []);
+  assert.deepEqual([...pi.commands.keys()], ['classifier']);
+  assert.equal(typeof pi.commands.get('classifier').handler, 'function');
+});
+
+test('classifier slash command can update the configured classifier model role', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const notifications = [];
+  const roles = {};
+
+  const result = await command(pi, 'classifier').handler(
+    'set openai/gpt-5-nano',
+    {
+      settings: {
+        setModelRole: (role, model) => { roles[role] = model; },
+        getModelRole: (role) => roles[role],
+        flush: async () => {},
+      },
+      ui: { notify: (text, level) => notifications.push({ text, level }) },
+    },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.model, 'openai/gpt-5-nano');
+  assert.equal(roles.classifier, 'openai/gpt-5-nano');
+  assert.match(result.text, /modelRoles\.classifier/);
+  assert.match(result.text, /\/classifier set openai\/gpt-5-nano/);
+  assert.deepEqual(notifications.map(({ level }) => level), ['info']);
 });
 
 test('classifier tools expose model role configuration and resolve route state', async () => {
@@ -695,6 +722,12 @@ test('validate subagent usage accepts explicit final SUBAGENT_USAGE evidence', a
 function tool(pi, name) {
   const found = pi.tools.get(name);
   if (!found) throw new Error(`Missing tool ${name}`);
+  return found;
+}
+
+function command(pi, name) {
+  const found = pi.commands.get(name);
+  if (!found) throw new Error(`Missing command ${name}`);
   return found;
 }
 

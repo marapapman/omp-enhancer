@@ -4,7 +4,7 @@ This repository is an OMP marketplace monorepo containing four plugins. `omp-enh
 
 ## Plugins
 
-- `omp-enhancer-core`: routes natural-language coding, writing, testing, security, and config tasks without slash commands, then gates skill and subagent evidence.
+- `omp-enhancer-core`: routes natural-language coding, writing, testing, security, and config tasks, provides `/classifier` for classifier model configuration, then gates skill and subagent evidence.
 - `omp-config`: packages OMP config assets, agents, skills, hooks, templates, and safe diagnostics.
 - `writing-helper`: provides writing QA tools, writer/checker agents, and writing skills.
 - `omp-testing-enhancer`: provides test analysis, browser evidence, coverage, mutation, gates, and reports.
@@ -73,7 +73,7 @@ omp plugin install omp-enhancer-core@omp-enhancer omp-testing-enhancer@omp-enhan
 After installing `omp-enhancer-core`, describe the task naturally. The core plugin injects routing guidance and completion gates through runtime hooks.
 
 - The default runtime model is MiMo v2.5, the advisor is DeepSeek V4 Flash, and task subagents plus all other roles follow the user's active OMP config.
-- Ambiguous routing can use `modelRoles.classifier`, which the packaged `omp-config` template defaults to `ollama-cloud/deepseek-v4-flash:medium`. Change that config role to try another classifier model.
+- Ambiguous routing can use `modelRoles.classifier`, which the packaged `omp-config` template defaults to `ollama-cloud/deepseek-v4-flash:medium`. Use `/classifier set <provider/model:effort>` or change that config role to try another classifier model.
 - Coding tasks use lightweight TDD guidance, fork plan/task/reviewer subagents, pass role-specific skill lists to each subagent, and require testing evidence.
 - Security review tasks fork ecc-security-reviewer plus reviewer.
 - Writing tasks route to writer/checker or zh-writer/zh-checker subagents, require writing skills, and require writing QA evidence.
@@ -81,7 +81,7 @@ After installing `omp-enhancer-core`, describe the task naturally. The core plug
 - Testing tasks route through `omp_test_analyze`, `omp_test_context`, `omp_test_gate`, and `omp_test_report`. Browser, coverage, and mutation tools are used when the target context provides them.
 - Config tasks use `omp_config_doctor`, `omp_config_assets`, and `omp_config_plan`, with librarian/reviewer subagent evidence before completion.
 
-Slash commands remain compatibility helpers for older workflows. The new workflow does not require `/test`, `/writing-quality`, or any other command prefix.
+Slash commands remain compatibility helpers for older workflows. The new workflow does not require `/test` or `/writing-quality`. `/classifier` is intentionally limited to classifier model configuration and diagnostics.
 
 ### Classifier model configuration
 
@@ -95,7 +95,20 @@ Configure the model in OMP config:
 ```yaml
 modelRoles:
   classifier: ollama-cloud/deepseek-v4-flash:medium
+modelTags:
+  classifier:
+    name: Classifier
+    color: accent
 ```
+
+Or use the slash command:
+
+```text
+/classifier
+/classifier set ollama-cloud/deepseek-v4-flash:medium
+```
+
+`/model` changes the active session model. `modelRoles.classifier` controls the classifier role used by OMP Enhancer routing; `modelTags.classifier` gives that custom role a visible name in OMP builds that list configured roles.
 
 The classifier may choose only an intent and risk flags. It cannot invent skills, tools, subagents, or gate formats; those still come from the core route catalog.
 
