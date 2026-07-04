@@ -115,6 +115,29 @@ test('resolveClassificationRoute falls back from low-confidence wrong intents to
   assert.equal(result.route.classifier.classification.intent, 'release');
 });
 
+test('resolveClassificationRoute preserves Chinese writing when classifier over-routes safety wording to security', () => {
+  const result = resolveClassificationRoute({
+    prompt: '请帮我润色这段中文风险提示，写得安全、克制、直接。',
+    output: JSON.stringify({
+      intent: 'security-review',
+      secondaryIntents: ['writing.zh'],
+      language: 'zh',
+      confidence: 0.96,
+      riskFlags: ['needs-security-review', 'needs-writing-qa', 'needs-subagents'],
+      domainHints: ['risk wording', 'Chinese prose'],
+      reason: 'The task mentions safety and risk, but it is prose editing.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.fallbackRoute.intent, 'writing.zh');
+  assert.equal(result.route.intent, 'writing.zh');
+  assert.equal(result.route.agent, 'writing-helper.zh-writer');
+  assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), ['zh-writer', 'zh-checker']);
+  assert.equal(result.route.requiredSubagents.some(({ agent }) => agent === 'ecc-security-reviewer'), false);
+  assert.equal(result.route.classifier.classification.intent, 'security-review');
+});
+
 test('resolveClassificationRoute falls back when classifier invents unsupported fields', () => {
   const result = resolveClassificationRoute({
     prompt: 'Draft an English related work paragraph and check the logic.',

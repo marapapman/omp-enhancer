@@ -92,12 +92,12 @@ const routingCases = [
     prompt: "审查这段 Express 代码的安全风险：app.get('/file', (req, res) => res.sendFile(req.query.path));",
     expectedIntent: 'security-review',
     expectedAgent: 'ecc-security-reviewer',
-    requiredSkills: ['ecc/security-review', 'ecc/security-scan'],
+    requiredSkills: ['security-review', 'security-scan'],
     requiredTools: [],
     requiredSubagents: ['ecc-security-reviewer', 'reviewer'],
     requiredSubagentSkills: {
-      'ecc-security-reviewer': ['ecc/security-review', 'ecc/security-scan'],
-      reviewer: ['ecc/security-review'],
+      'ecc-security-reviewer': ['security-review', 'security-scan'],
+      reviewer: ['security-review'],
     },
   },
   {
@@ -136,11 +136,7 @@ test('routes natural language tasks to required skill profiles without slash com
 test('required route skills are registered in the root marketplace catalog', async () => {
   const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const catalog = JSON.parse(await readFile(path.join(repoRoot, '.omp-plugin', 'marketplace.json'), 'utf8'));
-  const registeredSkills = new Set(
-    catalog.plugins.flatMap((plugin) =>
-      (plugin.skills ?? []).map((skillPath) => skillPath.replace(/^\.\//, '').replace(/^skills\//, '')),
-    ),
-  );
+  const registeredSkills = await registrySkillNames(repoRoot, catalog);
 
   for (const item of routingCases) {
     const route = routeNaturalLanguageTask({ prompt: item.prompt });
@@ -191,11 +187,17 @@ test('forces plain-chinese-writing before any other Chinese writing skill', () =
 });
 
 test('routes common Chinese document and report requests to Chinese writing first', () => {
-  for (const prompt of ['请写一份项目报告', '帮我起草中文文档']) {
+  for (const prompt of [
+    '请写一份项目报告',
+    '帮我起草中文文档',
+    '请帮我润色这段中文风险提示，写得安全、克制、直接。',
+    '请审查这段中文安全说明的逻辑表达，不要做代码安全审计。',
+  ]) {
     const route = routeNaturalLanguageTask({ prompt });
 
     assert.equal(route.intent, 'writing.zh', prompt);
     assert.equal(route.requiredSkills[0], 'plain-chinese-writing', prompt);
+    assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), ['zh-writer', 'zh-checker'], prompt);
   }
 });
 
@@ -238,3 +240,24 @@ test('leaves unrelated prompts unclaimed instead of inventing a plugin workflow'
     }, prompt);
   }
 });
+
+async function registrySkillNames(repoRoot, catalog) {
+  const names = new Set();
+  const pluginRoot = catalog.metadata?.pluginRoot ?? '';
+  for (const plugin of catalog.plugins ?? []) {
+    const source = String(plugin.source ?? plugin.name ?? '').replace(/^\.\//, '');
+    for (const skillPath of plugin.skills ?? []) {
+      const skillDir = String(skillPath).replace(/^\.\//, '');
+      const skillFile = path.join(repoRoot, pluginRoot, source, skillDir, 'SKILL.md');
+      const text = await readFile(skillFile, 'utf8');
+      const name = skillFrontmatterName(text);
+      if (name) names.add(name);
+    }
+  }
+  return names;
+}
+
+function skillFrontmatterName(text) {
+  const match = String(text).match(/^name:\s*['"]?([^'"\r\n]+)['"]?\s*$/m);
+  return match?.[1]?.trim() ?? '';
+}

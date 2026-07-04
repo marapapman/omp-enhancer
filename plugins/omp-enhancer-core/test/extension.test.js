@@ -9,6 +9,7 @@ class FakePi {
     this.tools = new Map();
     this.commands = new Map();
     this.eventHandlers = [];
+    this.events = new FakeEventBus();
     this.entries = entries;
     const z = fakeZod();
     this.z = z;
@@ -36,6 +37,27 @@ class FakePi {
   }
 }
 
+class FakeEventBus {
+  constructor() {
+    this.handlers = new Map();
+  }
+
+  on(channel, handler) {
+    const handlers = this.handlers.get(channel) ?? [];
+    handlers.push(handler);
+    this.handlers.set(channel, handlers);
+    return () => {
+      this.handlers.set(channel, (this.handlers.get(channel) ?? []).filter((candidate) => candidate !== handler));
+    };
+  }
+
+  async emit(channel, payload) {
+    for (const handler of this.handlers.get(channel) ?? []) {
+      await handler(payload);
+    }
+  }
+}
+
 test('registers core tools, classifier command, and hooks', () => {
   const pi = new FakePi();
 
@@ -56,6 +78,7 @@ test('registers core tools, classifier command, and hooks', () => {
     'session_start',
     'before_agent_start',
     'tool_call',
+    'tool_execution_update',
     'tool_result',
     'session_stop',
   ]);
@@ -264,6 +287,7 @@ test('session_stop requires successful SKILL_USAGE validation even after writing
   assert.equal(blocked?.continue, true);
   assert.match(blocked.additionalContext, /SKILL_USAGE/);
   assert.match(blocked.additionalContext, /omp_core_validate_skill_usage/);
+  assert.match(blocked.additionalContext, /Recovery order: in this same continuation/);
   assert.match(blocked.additionalContext, /Do not only say the evidence was already provided/);
 
   await tool(pi, 'omp_core_validate_skill_usage').execute(
@@ -849,6 +873,326 @@ test('subagent status tool reports pending and completed roles', async () => {
   assert.deepEqual(status.details.status.pending, []);
 });
 
+test('task tool_execution_update records live subagent progress and completion', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const notifications = [];
+  const ctx = extensionContext(pi.entries);
+  ctx.ui = { notify: async (text, level) => notifications.push({ text, level }) };
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-live-progress-route',
+    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const assignment = [
+    'OMP_REQUIRED_SUBAGENT: writer',
+    'Required skills for this subagent:',
+    '- writing-markdown-helper',
+  ].join('\n');
+  await event(pi, 'tool_execution_update')(
+    {
+      toolName: 'task',
+      toolCallId: 'task-live-progress',
+      partialResult: {
+        details: {
+          progress: [
+            {
+              id: 'WriterLive',
+              index: 0,
+              agent: 'task',
+              status: 'running',
+              description: 'draft related work',
+              currentTool: 'read',
+              requests: 1,
+              durationMs: 2400,
+              assignment,
+            },
+          ],
+        },
+      },
+    },
+    ctx,
+  );
+
+  let status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-live-progress-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.match(status.content[0].text, /Progress:\n- writer: running; draft related work; tool read; 1 requests; 2s/);
+  assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['writer']);
+  assert.deepEqual(status.details.status.pending[0].skills, ['writing-markdown-helper']);
+  assert.equal(notifications[0].level, 'info');
+  assert.match(notifications[0].text, /OMP subagent progress: writer running; tool read; draft related work\. Route: writing\.en\./);
+
+  await event(pi, 'tool_execution_update')(
+    {
+      toolName: 'task',
+      toolCallId: 'task-live-progress',
+      partialResult: {
+        details: {
+          progress: [
+            {
+              id: 'WriterLive',
+              index: 0,
+              agent: 'task',
+              status: 'completed',
+              description: 'draft related work',
+              requests: 2,
+              durationMs: 5100,
+              assignment,
+            },
+          ],
+        },
+      },
+    },
+    ctx,
+  );
+
+  status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-live-progress-completed-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.deepEqual(status.details.status.completed, ['writer']);
+  assert.deepEqual(status.details.status.pending, []);
+  assert.match(status.content[0].text, /Progress:\n- writer: completed; draft related work; 2 requests; 5s/);
+});
+
+test('task EventBus progress and lifecycle update subagent status before final task result', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(pi.entries);
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-eventbus-progress-route',
+    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const assignment = [
+    'OMP_REQUIRED_SUBAGENT: writer',
+    'Required skills for this subagent:',
+    '- writing-markdown-helper',
+  ].join('\n');
+  await pi.events.emit('task:subagent:progress', {
+    index: 0,
+    agent: 'task',
+    assignment,
+    parentToolCallId: 'task-eventbus-progress',
+    progress: {
+      id: 'WriterBus',
+      index: 0,
+      agent: 'task',
+      status: 'running',
+      currentTool: 'read',
+      assignment,
+    },
+  });
+
+  let status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-eventbus-progress-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['writer']);
+  assert.equal(status.details.status.progress[0].agent, 'writer');
+  assert.equal(status.details.status.progress[0].status, 'running');
+
+  await pi.events.emit('task:subagent:lifecycle', {
+    id: 'WriterBus',
+    agent: 'writer',
+    status: 'completed',
+    parentToolCallId: 'task-eventbus-progress',
+    description: 'draft finished',
+    index: 0,
+  });
+
+  status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-eventbus-completed-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.deepEqual(status.details.status.completed, ['writer']);
+  assert.deepEqual(status.details.status.pending, []);
+  assert.match(status.content[0].text, /writer: completed; draft finished/);
+});
+
+test('completing one of two pending task calls keeps the other subagent running', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const notifications = [];
+  const ctx = extensionContext();
+  ctx.ui = { notify: async (text, level) => notifications.push({ text, level }) };
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-two-independent-subagents-route',
+    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [
+          { role: 'writer', assignment: 'Required skills for this subagent:\n- writing-markdown-helper' },
+        ],
+      },
+    },
+    ctx,
+  );
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [
+          { role: 'checker', assignment: 'Required skills for this subagent:\n- writing-checkers' },
+        ],
+      },
+    },
+    ctx,
+  );
+
+  await event(pi, 'tool_result')({ name: 'task' }, ctx);
+
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-subagent-status-one-still-running',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.match(status.content[0].text, /Completed:\n- writer/);
+  assert.match(status.content[0].text, /Pending:\n- checker: pending/);
+  assert.deepEqual(status.details.status.completed, ['writer']);
+  assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['checker']);
+  assert.match(notifications.at(-1).text, /OMP subagents completed: writer \[writing-markdown-helper\]/);
+
+  await event(pi, 'tool_result')({ name: 'task' }, ctx);
+  const completed = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-subagent-status-both-complete',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.deepEqual(completed.details.status.completed, ['writer', 'checker']);
+  assert.deepEqual(completed.details.status.pending, []);
+});
+
+test('task tool_call announces running subagents in TUI notifications', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const notifications = [];
+  const ctx = extensionContext();
+  ctx.ui = { notify: async (text, level) => notifications.push({ text, level }) };
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-running-notification-route',
+    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [
+          { role: 'writer', assignment: 'Required skills for this subagent:\n- writing-markdown-helper' },
+          { role: 'checker', assignment: 'Required skills for this subagent:\n- writing-checkers' },
+        ],
+      },
+    },
+    ctx,
+  );
+
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0].level, 'info');
+  assert.match(notifications[0].text, /OMP subagents running: writer \[writing-markdown-helper\], checker \[writing-checkers\]\. Route: writing\.en\./);
+});
+
+test('task tool_result announces completed and failed subagents in TUI notifications', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const notifications = [];
+  const ctx = extensionContext();
+  ctx.ui = { notify: async (text, level) => notifications.push({ text, level }) };
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-completed-notification-route',
+    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [
+          { role: 'writer', assignment: 'Required skills for this subagent:\n- writing-markdown-helper' },
+        ],
+      },
+    },
+    ctx,
+  );
+  await event(pi, 'tool_result')({ name: 'task' }, ctx);
+
+  assert.equal(notifications[1].level, 'info');
+  assert.match(notifications[1].text, /OMP subagents completed: writer \[writing-markdown-helper\]\. Route: writing\.en\./);
+
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-failed-notification-route',
+    { prompt: 'Implement an API change and add tests.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [
+          { role: 'plan', assignment: 'Required skills for this subagent:\n- brainstorming\n- subagent-driven-development' },
+        ],
+      },
+    },
+    ctx,
+  );
+  await event(pi, 'tool_result')({ name: 'task', isError: true, message: 'plan subagent timed out' }, ctx);
+
+  assert.equal(notifications.at(-1).level, 'warn');
+  assert.match(notifications.at(-1).text, /OMP subagents failed: plan \[brainstorming, subagent-driven-development\]\. Route: implementation-with-tests\. plan subagent timed out/);
+});
+
 test('session_stop accepts SKILL_USAGE from the final output event without a separate validator call', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -1100,6 +1444,52 @@ test('read skill evidence persists through session entries across isolated plugi
   const result = await event(stopPi, 'session_stop')({ output: 'Done.' }, stopCtx);
 
   assert.equal(result, undefined);
+});
+
+test('skill validator reconstructs read evidence from raw branch entries after stale validation state', async () => {
+  const entries = [];
+  const routePi = new FakePi(entries);
+  registerCoreEnhancer(routePi);
+  const routeCtx = extensionContext(entries);
+
+  await event(routePi, 'session_start')({}, routeCtx);
+  await event(routePi, 'before_agent_start')(
+    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    routeCtx,
+  );
+
+  const routeState = entries.find((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.ok(routeState);
+  entries.push(
+    {
+      type: 'tool_result',
+      name: 'read',
+      params: { uri: 'skill://writing-markdown-helper' },
+      timestamp: routeState.routeStartedAt + 1,
+    },
+    {
+      type: 'tool_result',
+      data: {
+        toolName: 'read',
+        input: { uri: 'skill://writing-checkers' },
+        timestamp: routeState.routeStartedAt + 2,
+      },
+    },
+    staleSkillValidationState(routeState),
+  );
+
+  const validatorPi = new FakePi(entries);
+  registerCoreEnhancer(validatorPi);
+  const validation = await tool(validatorPi, 'omp_core_validate_skill_usage').execute(
+    'call-raw-read-evidence-skill-usage',
+    { output: '' },
+    undefined,
+    undefined,
+    extensionContext(entries),
+  );
+
+  assert.equal(validation.details.validation.ok, true);
+  assert.deepEqual(validation.details.validation.loaded, ['writing-markdown-helper', 'writing-checkers']);
 });
 
 test('validate subagent usage accepts explicit final SUBAGENT_USAGE evidence', async () => {
@@ -1431,7 +1821,7 @@ function subagentSkills(agent) {
     plan: ['brainstorming', 'subagent-driven-development'],
     task: ['test-driven-development', 'verification-before-completion'],
     reviewer: ['verification-before-completion'],
-    'ecc-security-reviewer': ['ecc/security-review', 'ecc/security-scan'],
+    'ecc-security-reviewer': ['security-review', 'security-scan'],
     'ecc-tdd-guide': ['test-driven-development'],
     'ecc-pr-test-analyzer': ['verification-before-completion'],
     'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
@@ -1488,6 +1878,32 @@ function skillUsageBlock(skills) {
     'Loaded:',
     ...skills.map((skill) => `- ${skill}`),
   ].join('\n');
+}
+
+function staleSkillValidationState(routeState) {
+  return {
+    type: 'custom',
+    customType: 'omp-enhancer-core.state',
+    data: {
+      lastRoute: routeState.lastRoute,
+      routeStartedAt: routeState.routeStartedAt,
+      lastSkillUsage: { ok: false, message: 'Missing SKILL_USAGE for writing-checkers' },
+      lastSubagentUsage: null,
+      evidence: {
+        writingQuality: false,
+        writingLogic: false,
+        testingGate: false,
+        testingReport: false,
+        taskToolCalls: 0,
+        loadedSkills: [],
+        toolFailures: [],
+        forkedSubagents: [],
+        pendingSubagents: [],
+        subagentSkills: [],
+        unexpectedSubagentSkills: [],
+      },
+    },
+  };
 }
 
 function extensionContext(entries = []) {

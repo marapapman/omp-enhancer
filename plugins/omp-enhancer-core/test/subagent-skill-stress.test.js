@@ -37,10 +37,10 @@ const expectedByIntent = {
     },
   },
   'security-review': {
-    requiredSkills: ['ecc/security-review', 'ecc/security-scan'],
+    requiredSkills: ['security-review', 'security-scan'],
     subagents: {
-      'ecc-security-reviewer': ['ecc/security-review', 'ecc/security-scan'],
-      reviewer: ['ecc/security-review'],
+      'ecc-security-reviewer': ['security-review', 'security-scan'],
+      reviewer: ['security-review'],
     },
   },
   'config-assets': {
@@ -244,8 +244,8 @@ const allProfileSkills = [
   'test-driven-development',
   'subagent-driven-development',
   'verification-before-completion',
-  'ecc/security-review',
-  'ecc/security-scan',
+  'security-review',
+  'security-scan',
 ];
 
 test('subagent skill routing stress matrix covers at least 100 workloads with exact role skills', () => {

@@ -23,6 +23,8 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /zh-writing-polish/);
   assert.match(fragment, /read tool once for each required skill/i);
   assert.match(fragment, /skill:\/\/<skill-name>/);
+  assert.match(fragment, /same assistant continuation/i);
+  assert.match(fragment, /omp_core_validate_skill_usage/);
   assert.match(fragment, /MiMo v2\.5/);
   assert.match(fragment, /DeepSeek V4 Flash/);
   assert.match(fragment, /modelRoles\.classifier/);

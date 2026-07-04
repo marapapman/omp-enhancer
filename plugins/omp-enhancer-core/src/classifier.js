@@ -106,6 +106,7 @@ export function buildClassifierPrompt({
       '- Use release only when the user mainly asks to publish, push, upgrade, or release without asking for implementation.',
       '- Prefer implementation-with-tests for code/plugin changes, even when the task mentions config or marketplace.',
       '- Prefer writing.zh for Chinese prose editing or drafting; prefer writing.en for English prose editing or drafting.',
+      '- Do not classify prose drafting, editing, or polishing as security-review only because the text mentions safety, risk, review, or security. Use security-review only for code, config, auth, secrets, vulnerability, or infrastructure security work.',
       '- Put related concerns such as config-assets or release into secondaryIntents and riskFlags when they are not the main task.',
       `- Use confidence below ${config.minResolvedConfidence} only when uncertain; low-confidence non-unknown classifications may fall back to the deterministic route.`,
       `- Use high-confidence unknown only when no OMP plugin workflow should run; confidence >= ${config.minUnknownOverrideConfidence} can suppress an over-eager deterministic fallback.`,
@@ -217,9 +218,16 @@ function routeIntentForClassification(classification, fallbackRoute) {
   if (classification.confidence < classifierDefaults.minResolvedConfidence && fallbackRoute.intent !== 'unknown') {
     return fallbackRoute.intent;
   }
+  if (isWritingIntent(fallbackRoute.intent) && classification.intent === 'security-review') {
+    return fallbackRoute.intent;
+  }
   if (routedIntents.includes(classification.intent)) return classification.intent;
   if (fallbackRoute.intent !== 'unknown') return fallbackRoute.intent;
   return 'unknown';
+}
+
+function isWritingIntent(intent) {
+  return intent === 'writing.zh' || intent === 'writing.en';
 }
 
 function withClassifierDetails(route, classifier) {

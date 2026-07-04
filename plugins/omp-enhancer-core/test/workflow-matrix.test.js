@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access } from 'node:fs/promises';
+import { access, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,11 +48,11 @@ const expectedByIntent = {
   },
   'security-review': {
     agent: 'ecc-security-reviewer',
-    requiredSkills: ['ecc/security-review', 'ecc/security-scan'],
+    requiredSkills: ['security-review', 'security-scan'],
     requiredTools: [],
     subagents: {
-      'ecc-security-reviewer': ['ecc/security-review', 'ecc/security-scan'],
-      reviewer: ['ecc/security-review'],
+      'ecc-security-reviewer': ['security-review', 'security-scan'],
+      reviewer: ['security-review'],
     },
   },
   'config-assets': {
@@ -236,13 +236,14 @@ test('all workflow matrix subagents and skills are packaged by installed plugin 
     path.join(repoRoot, 'plugins', 'omp-config', 'skills'),
     path.join(repoRoot, 'plugins', 'writing-helper', 'skills'),
   ];
+  const skillNames = await skillNamesInRoots(skillRoots);
 
   for (const { agent } of uniqueSubagentsFromMatrix()) {
     assert.equal(await existsInRoots(agentRoots, `${agent}.md`), true, `missing packaged subagent ${agent}`);
   }
 
   for (const skill of uniqueSkillsFromMatrix()) {
-    assert.equal(await existsInRoots(skillRoots, path.join(skill, 'SKILL.md')), true, `missing packaged skill ${skill}`);
+    assert.equal(skillNames.has(skill), true, `missing packaged skill ${skill}`);
   }
 });
 
@@ -290,6 +291,37 @@ async function existsInRoots(roots, relativePath) {
     }
   }
   return false;
+}
+
+async function skillNamesInRoots(roots) {
+  const names = new Set();
+  for (const root of roots) await collectSkillNames(root, names);
+  return names;
+}
+
+async function collectSkillNames(dir, names) {
+  let entries = [];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await collectSkillNames(entryPath, names);
+      continue;
+    }
+    if (entry.name !== 'SKILL.md') continue;
+    const name = skillFrontmatterName(await readFile(entryPath, 'utf8'));
+    if (name) names.add(name);
+  }
+}
+
+function skillFrontmatterName(text) {
+  const match = String(text).match(/^name:\s*['"]?([^'"\r\n]+)['"]?\s*$/m);
+  return match?.[1]?.trim() ?? '';
 }
 
 function escapeRegExp(value) {

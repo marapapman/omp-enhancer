@@ -111,10 +111,10 @@ const profiles = {
       'Analyze authentication and authorization risks in this middleware.',
     ],
     subagents: {
-      'ecc-security-reviewer': ['ecc/security-review', 'ecc/security-scan'],
-      reviewer: ['ecc/security-review'],
+      'ecc-security-reviewer': ['security-review', 'security-scan'],
+      reviewer: ['security-review'],
     },
-    skills: ['ecc/security-review', 'ecc/security-scan'],
+    skills: ['security-review', 'security-scan'],
   },
   config: {
     prompts: [

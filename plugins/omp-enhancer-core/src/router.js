@@ -57,8 +57,8 @@ const subagentPlans = {
     subagent('reviewer', 'review the resulting diff before final claims, commit, or push', ['verification-before-completion']),
   ],
   security: [
-    subagent('ecc-security-reviewer', 'audit user-input, auth, file, network, secrets, and dependency risks', ['ecc/security-review', 'ecc/security-scan']),
-    subagent('reviewer', 'check the remediation diff for behavior regressions', ['ecc/security-review']),
+    subagent('ecc-security-reviewer', 'audit user-input, auth, file, network, secrets, and dependency risks', ['security-review', 'security-scan']),
+    subagent('reviewer', 'check the remediation diff for behavior regressions', ['security-review']),
   ],
   testing: [
     subagent('ecc-tdd-guide', 'drive the red-green-refactor test-first workflow', ['test-driven-development']),
@@ -176,7 +176,7 @@ export function routeByIntent(intent, { source = 'natural-language' } = {}) {
     return route({
       intent,
       agent: 'ecc-security-reviewer',
-      requiredSkills: ['ecc/security-review', 'ecc/security-scan'],
+      requiredSkills: ['security-review', 'security-scan'],
       requiredTools: [],
       requiredSubagents: subagentPlans.security,
       source,
