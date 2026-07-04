@@ -48,6 +48,7 @@ test('registers core tools, classifier command, and hooks', () => {
     'omp_core_resolve_classification',
     'omp_core_validate_skill_usage',
     'omp_core_validate_subagent_usage',
+    'omp_core_subagent_status',
     'omp_core_governance_prompt',
   ]);
   assert.equal([...pi.tools.values()].every((tool) => typeof tool.execute === 'function'), true);
@@ -691,7 +692,7 @@ test('session_stop continues when forked subagents lack required skill assignmen
   assert.match(blocked.additionalContext, /task \[test-driven-development, verification-before-completion\]/);
 });
 
-test('session_stop accepts task tool_call role evidence with subagent skill assignments', async () => {
+test('pending task tool_call evidence blocks completion until task result returns', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -750,9 +751,102 @@ test('session_stop accepts task tool_call role evidence with subagent skill assi
     ctx,
   );
 
+  const pending = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(pending?.continue, true);
+  assert.match(pending.additionalContext, /Pending subagent task results/);
+  assert.match(pending.additionalContext, /writer/);
+  assert.match(pending.additionalContext, /checker/);
+
+  await event(pi, 'tool_result')({ name: 'task' }, ctx);
+
   const result = await event(pi, 'session_stop')({}, ctx);
 
   assert.notEqual(result?.continue, true);
+});
+
+test('stale pending task calls are reported as potentially stuck', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-stale-task-route',
+    { prompt: '实现自然语言路由并补测试。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      timestamp: Date.now() - (11 * 60 * 1000),
+      input: {
+        tasks: [
+          { role: 'plan', assignment: 'Required skills for this subagent:\n- brainstorming\n- subagent-driven-development' },
+        ],
+      },
+    },
+    ctx,
+  );
+
+  const blocked = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /Potentially stuck subagent tasks/);
+  assert.match(blocked.additionalContext, /plan/);
+  assert.match(blocked.additionalContext, /retry those task calls with smaller assignments|report BLOCKERS/);
+});
+
+test('subagent status tool reports pending and completed roles', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-status-route',
+    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [
+          { role: 'writer', assignment: 'Required skills for this subagent:\n- writing-markdown-helper' },
+        ],
+      },
+    },
+    ctx,
+  );
+
+  let status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-subagent-status-pending',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.match(status.content[0].text, /Route: writing\.en/);
+  assert.match(status.content[0].text, /writer: pending/);
+  assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['writer']);
+
+  await event(pi, 'tool_result')({ name: 'task' }, ctx);
+  status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-subagent-status-complete',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.match(status.content[0].text, /Completed:\n- writer/);
+  assert.deepEqual(status.details.status.pending, []);
 });
 
 test('session_stop accepts SKILL_USAGE from the final output event without a separate validator call', async () => {

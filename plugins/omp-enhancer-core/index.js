@@ -1,11 +1,12 @@
 import { buildGovernancePromptFragment, buildMissingGateContext, buildSubagentPromptFragment } from './src/governance.js';
 import { routeNaturalLanguageTask } from './src/router.js';
 import { validateSkillUsage } from './src/skill-usage.js';
-import { collectSubagentTaskRecords, validateSubagentUsage } from './src/subagent-usage.js';
+import { collectSubagentTaskRecords, parseSubagentUsageDetails, validateSubagentUsage } from './src/subagent-usage.js';
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
 import { runClassifierCommand } from './src/classifier-config.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
+const SUBAGENT_STUCK_AFTER_MS = 10 * 60 * 1000;
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
@@ -96,8 +97,20 @@ export default function registerCoreEnhancer(pi) {
       const requiredSubagents = params.requiredSubagents ?? state.lastRoute?.requiredSubagents ?? [];
       const validation = validateSubagentUsage({ requiredSubagents, output: params.output ?? '' });
       state.lastSubagentUsage = validation;
+      if (validation.ok) recordSubagentFinalUsage(state, params.output ?? '');
       await persistState(pi, state);
       return okResult(validation.message, { validation });
+    },
+  });
+
+  pi.registerTool({
+    name: 'omp_core_subagent_status',
+    label: 'Show routed subagent status',
+    description: 'Report required, completed, pending, and potentially stuck subagents for the current routed workflow.',
+    parameters: z?.object ? z.object({}) : undefined,
+    execute: async (_callId, _params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
+      return okResult(formatSubagentStatus(state), { status: buildSubagentStatus(state) });
     },
   });
 
@@ -146,7 +159,7 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
-    if (name === 'task') recordSubagentEvidence(state, event);
+    if (name === 'task') recordSubagentDispatchStarted(state, event);
     await persistState(pi, state);
     return undefined;
   });
@@ -160,7 +173,7 @@ export default function registerCoreEnhancer(pi) {
     if ((name === 'writing_quality_check' || name === 'writing_logic_check') && successful) state.evidence.writingQuality = true;
     if (name === 'omp_test_gate' && successful) state.evidence.testingGate = true;
     if (name === 'omp_test_report' && successful) state.evidence.testingReport = true;
-    if (name === 'task' && successful) recordSubagentEvidence(state, event);
+    if (name === 'task') recordSubagentDispatchFinished(state, event, { successful });
     if (name === 'read' && successful) recordReadSkillEvidence(state, event);
     await persistState(pi, state);
     return undefined;
@@ -204,6 +217,7 @@ function emptyEvidence() {
     loadedSkills: new Set(),
     toolFailures: [],
     forkedSubagents: new Set(),
+    pendingSubagents: new Map(),
     subagentSkills: new Map(),
     unexpectedSubagentSkills: new Map(),
   };
@@ -304,6 +318,13 @@ function serializeState(state) {
       loadedSkills: [...state.evidence.loadedSkills],
       toolFailures: state.evidence.toolFailures,
       forkedSubagents: [...state.evidence.forkedSubagents],
+      pendingSubagents: [...state.evidence.pendingSubagents.entries()].map(([agent, pending]) => ({
+        agent,
+        startedAt: pending.startedAt,
+        lastSeenAt: pending.lastSeenAt,
+        attempts: pending.attempts,
+        skills: [...pending.skills],
+      })),
       subagentSkills: [...state.evidence.subagentSkills.entries()].map(([agent, skills]) => ({
         agent,
         skills: [...skills],
@@ -339,9 +360,25 @@ function readEvidenceSnapshot(value) {
     loadedSkills: new Set(Array.isArray(value.loadedSkills) ? value.loadedSkills.filter(isString) : []),
     toolFailures: readToolFailures(value.toolFailures),
     forkedSubagents: new Set(Array.isArray(value.forkedSubagents) ? value.forkedSubagents.filter(isString) : []),
+    pendingSubagents: readPendingSubagents(value.pendingSubagents),
     subagentSkills: readSubagentSkills(value.subagentSkills),
     unexpectedSubagentSkills: readSubagentSkills(value.unexpectedSubagentSkills),
   };
+}
+
+function readPendingSubagents(value) {
+  const pending = new Map();
+  if (!Array.isArray(value)) return pending;
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.agent !== 'string') continue;
+    pending.set(item.agent, {
+      startedAt: Number.isFinite(item.startedAt) ? item.startedAt : 0,
+      lastSeenAt: Number.isFinite(item.lastSeenAt) ? item.lastSeenAt : 0,
+      attempts: Number.isInteger(item.attempts) ? item.attempts : 1,
+      skills: new Set(Array.isArray(item.skills) ? item.skills.filter(isString) : []),
+    });
+  }
+  return pending;
 }
 
 function readSubagentSkills(value) {
@@ -423,6 +460,7 @@ function recordFinalOutputEvidence(state, event = {}) {
   const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
   if (requiredSubagents.length && !state.lastSubagentUsage?.ok && /\bSUBAGENT_USAGE\b/i.test(output)) {
     state.lastSubagentUsage = validateSubagentUsage({ requiredSubagents, output });
+    if (state.lastSubagentUsage.ok) recordSubagentFinalUsage(state, output);
   }
 }
 
@@ -487,7 +525,10 @@ function buildMissingSubagentUsageContext(state) {
   if (state.lastSubagentUsage?.ok) return null;
 
   const forked = state.evidence.forkedSubagents;
-  const missing = requiredSubagents.map(({ agent }) => agent).filter((agent) => !forked.has(agent));
+  const pending = pendingRequiredSubagents(state, requiredSubagents);
+  const stuck = stuckRequiredSubagents(state, requiredSubagents);
+  const pendingAgents = new Set(pending.map(({ agent }) => agent));
+  const missing = requiredSubagents.map(({ agent }) => agent).filter((agent) => !forked.has(agent) && !pendingAgents.has(agent));
   const missingSkillAssignments = requiredSubagents.flatMap(({ agent, requiredSkills }) => {
     const recorded = state.evidence.subagentSkills.get(agent) ?? new Set();
     const missingSkills = requiredSkills.filter((skill) => !recorded.has(skill));
@@ -499,12 +540,14 @@ function buildMissingSubagentUsageContext(state) {
   });
 
   const failureContext = formatRecentToolFailures(state, ['task']);
-  if (!missing.length && !missingSkillAssignments.length && !unexpectedSkillAssignments.length && !failureContext) return null;
+  if (!missing.length && !missingSkillAssignments.length && !unexpectedSkillAssignments.length && !pending.length && !stuck.length && !failureContext) return null;
 
   return [
     'OMP Enhancer Core subagent gate is still open.',
     'Fork the required roles with the task tool before doing or finishing routed work, and include each role-specific skill list in the task prompt.',
     `Required subagents: ${formatRequiredSubagents(requiredSubagents)}.`,
+    pending.length ? `Pending subagent task results: ${formatPendingSubagents(pending)}.` : null,
+    stuck.length ? `Potentially stuck subagent tasks: ${formatPendingSubagents(stuck)}. Do not wait indefinitely; retry those task calls with smaller assignments or report BLOCKERS if they keep failing.` : null,
     missing.length ? `Missing subagents: ${missing.join(', ')}.` : null,
     missingSkillAssignments.length ? `Missing subagent skill assignments: ${formatMissingSkillAssignments(missingSkillAssignments)}.` : null,
     unexpectedSkillAssignments.length ? `Unexpected subagent skill assignments: ${formatMissingSkillAssignments(unexpectedSkillAssignments)}.` : null,
@@ -515,27 +558,177 @@ function buildMissingSubagentUsageContext(state) {
   ].filter(Boolean).join('\n');
 }
 
-function recordSubagentEvidence(state, event) {
+function recordSubagentDispatchStarted(state, event) {
   state.evidence.taskToolCalls += 1;
-  const requiredByAgent = new Map(subagentRequirements(state.lastRoute?.requiredSubagents).map((item) => [item.agent, item.requiredSkills]));
-
-  for (const { agent, text, skills = [] } of collectSubagentTaskRecords(event)) {
-    state.evidence.forkedSubagents.add(agent);
-    const requiredSkills = requiredByAgent.get(agent) ?? [];
-    const unexpectedSkills = skills.filter((skill) => !requiredSkills.includes(skill));
-    if (unexpectedSkills.length) {
-      const recordedUnexpected = state.evidence.unexpectedSubagentSkills.get(agent) ?? new Set();
-      for (const skill of unexpectedSkills) recordedUnexpected.add(skill);
-      state.evidence.unexpectedSubagentSkills.set(agent, recordedUnexpected);
-    }
-    if (!requiredSkills.length) continue;
-
-    const recorded = state.evidence.subagentSkills.get(agent) ?? new Set();
-    for (const skill of requiredSkills) {
-      if (text.includes(skill)) recorded.add(skill);
-    }
-    state.evidence.subagentSkills.set(agent, recorded);
+  const startedAt = eventTimestamp(event);
+  for (const record of collectSubagentTaskRecords(event)) {
+    recordPendingSubagent(state, record, startedAt);
   }
+}
+
+function recordSubagentDispatchFinished(state, event, { successful }) {
+  if (!successful) {
+    clearPendingSubagentsForEvent(state, event);
+    return;
+  }
+
+  const records = collectSubagentTaskRecords(event);
+  const completed = records.length ? records : pendingRecords(state);
+  for (const record of completed) recordCompletedSubagent(state, record);
+}
+
+function recordPendingSubagent(state, { agent, skills = [] }, startedAt) {
+  const current = state.evidence.pendingSubagents.get(agent);
+  const nextSkills = new Set(current?.skills ?? []);
+  for (const skill of skills) nextSkills.add(skill);
+  state.evidence.pendingSubagents.set(agent, {
+    startedAt: current?.startedAt ?? startedAt,
+    lastSeenAt: startedAt,
+    attempts: (current?.attempts ?? 0) + 1,
+    skills: nextSkills,
+  });
+}
+
+function recordCompletedSubagent(state, { agent, text = '', skills = [] }) {
+  const pending = state.evidence.pendingSubagents.get(agent);
+  const mergedSkills = new Set(pending?.skills ?? []);
+  for (const skill of skills) mergedSkills.add(skill);
+
+  state.evidence.pendingSubagents.delete(agent);
+  state.evidence.forkedSubagents.add(agent);
+  recordSubagentSkillEvidence(state, { agent, text, skills: [...mergedSkills] });
+}
+
+function recordSubagentFinalUsage(state, output) {
+  for (const { agent, skills = [] } of parseSubagentUsageDetails(output)) {
+    state.evidence.pendingSubagents.delete(agent);
+    state.evidence.forkedSubagents.add(agent);
+    recordSubagentSkillEvidence(state, { agent, skills });
+  }
+}
+
+function recordSubagentSkillEvidence(state, { agent, text = '', skills = [] }) {
+  const requiredByAgent = new Map(subagentRequirements(state.lastRoute?.requiredSubagents).map((item) => [item.agent, item.requiredSkills]));
+  const requiredSkills = requiredByAgent.get(agent) ?? [];
+  const unexpectedSkills = skills.filter((skill) => !requiredSkills.includes(skill));
+  if (unexpectedSkills.length) {
+    const recordedUnexpected = state.evidence.unexpectedSubagentSkills.get(agent) ?? new Set();
+    for (const skill of unexpectedSkills) recordedUnexpected.add(skill);
+    state.evidence.unexpectedSubagentSkills.set(agent, recordedUnexpected);
+  }
+  if (!requiredSkills.length) return;
+
+  const recorded = state.evidence.subagentSkills.get(agent) ?? new Set();
+  for (const skill of requiredSkills) {
+    if (text.includes(skill) || skills.includes(skill)) recorded.add(skill);
+  }
+  state.evidence.subagentSkills.set(agent, recorded);
+}
+
+function clearPendingSubagentsForEvent(state, event) {
+  const records = collectSubagentTaskRecords(event);
+  const agents = records.length ? records.map(({ agent }) => agent) : [...state.evidence.pendingSubagents.keys()];
+  for (const agent of agents) state.evidence.pendingSubagents.delete(agent);
+}
+
+function pendingRecords(state) {
+  return [...state.evidence.pendingSubagents.entries()].map(([agent, pending]) => ({
+    agent,
+    skills: [...pending.skills],
+  }));
+}
+
+function pendingRequiredSubagents(state, requiredSubagents) {
+  const required = new Set(requiredSubagents.map(({ agent }) => agent));
+  return [...state.evidence.pendingSubagents.entries()]
+    .filter(([agent]) => required.has(agent))
+    .map(([agent, pending]) => ({ agent, ...pending }));
+}
+
+function stuckRequiredSubagents(state, requiredSubagents) {
+  const now = Date.now();
+  return pendingRequiredSubagents(state, requiredSubagents)
+    .filter((pending) => pending.startedAt && now - pending.startedAt >= SUBAGENT_STUCK_AFTER_MS);
+}
+
+function formatPendingSubagents(values) {
+  const now = Date.now();
+  return values.map(({ agent, startedAt, attempts }) => {
+    const ageSeconds = startedAt ? Math.max(0, Math.round((now - startedAt) / 1000)) : null;
+    const age = ageSeconds === null ? 'unknown age' : `${ageSeconds}s`;
+    return `${agent} (${age}, attempts ${attempts ?? 1})`;
+  }).join(', ');
+}
+
+function buildSubagentStatus(state) {
+  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  return {
+    route: state.lastRoute?.intent ?? 'none',
+    required: requiredSubagents,
+    completed: [...state.evidence.forkedSubagents],
+    pending: pendingRequiredSubagents(state, requiredSubagents).map(({ agent, startedAt, lastSeenAt, attempts, skills }) => ({
+      agent,
+      startedAt,
+      lastSeenAt,
+      attempts,
+      skills: [...skills],
+      stuck: Boolean(startedAt && Date.now() - startedAt >= SUBAGENT_STUCK_AFTER_MS),
+    })),
+    failures: state.evidence.toolFailures.filter((failure) => failure.tool === 'task'),
+  };
+}
+
+function formatSubagentStatus(state) {
+  const status = buildSubagentStatus(state);
+  const required = status.required.length
+    ? status.required.map(({ agent, requiredSkills }) => `- ${agent}: ${requiredSkills.join(', ') || 'none'}`).join('\n')
+    : '- none';
+  const completed = status.completed.length ? status.completed.map((agent) => `- ${agent}`).join('\n') : '- none';
+  const pending = status.pending.length
+    ? status.pending.map(({ agent, attempts, stuck, skills }) => `- ${agent}: ${stuck ? 'stuck' : 'pending'}; attempts ${attempts}; skills ${skills.join(', ') || 'none'}`).join('\n')
+    : '- none';
+  const failures = status.failures.length
+    ? status.failures.map((failure) => `- ${failure.message ?? failure.summary ?? 'task failed'}`).join('\n')
+    : '- none';
+
+  return [
+    `Route: ${status.route}`,
+    'Required:',
+    required,
+    'Completed:',
+    completed,
+    'Pending:',
+    pending,
+    'Failures:',
+    failures,
+  ].join('\n');
+}
+
+function eventTimestamp(event = {}) {
+  const candidates = [
+    event.timestamp,
+    event.time,
+    event.startedAt,
+    event.createdAt,
+    event.details?.timestamp,
+    event.details?.time,
+    event.details?.startedAt,
+    event.details?.createdAt,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseTimestamp(candidate);
+    if (parsed) return parsed;
+  }
+  return Date.now();
+}
+
+function parseTimestamp(value) {
+  if (Number.isFinite(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return 0;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function recordReadSkillEvidence(state, event = {}) {
