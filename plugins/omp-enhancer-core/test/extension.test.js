@@ -211,6 +211,30 @@ test('session_stop continues when a routed writing task has not run writing QA',
   assert.match(result.additionalContext, /plain-chinese-writing|SKILL_USAGE/);
 });
 
+test('writing reports about tests do not require omp_test_gate', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  const agentEvent = { prompt: '请写测试报告，重点说明当前验证风险，不要生成测试代码。' };
+  const startResult = await event(pi, 'before_agent_start')(agentEvent, ctx);
+  const fragment = governanceText(startResult, agentEvent);
+
+  assert.match(fragment, /Intent:\s*writing\.zh/);
+  assert.match(fragment, /this is a writing workflow/i);
+  assert.match(fragment, /Do not call omp_test_analyze, omp_test_context, omp_test_gate, or omp_test_report/);
+  assert.doesNotMatch(fragment, /Toolchain:\n(?:- .+\n)*- omp_test_gate/);
+
+  await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
+  await readSkills(pi, ctx, ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers']);
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+
+  const released = await event(pi, 'session_stop')({ output: '任务完成。' }, ctx);
+
+  assert.equal(released, undefined);
+});
+
 test('failed writing QA tool results do not release the writing gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);

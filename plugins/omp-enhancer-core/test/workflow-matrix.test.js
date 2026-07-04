@@ -87,10 +87,13 @@ const expectedByIntent = {
 const workloadMatrix = [
   ['zh thesis polish', '请帮我润色这段中文论文摘要，要求语气自然，不要有翻译腔。', 'writing.zh'],
   ['zh reviewer response', '帮我起草中文审稿回复，要求语气克制、逻辑清楚。', 'writing.zh'],
+  ['zh test report writing', '请写测试报告，重点说明当前验证风险，不要生成测试代码。', 'writing.zh'],
+  ['zh coverage report writing', '请写一份测试覆盖率报告，说明当前风险。', 'writing.zh'],
   ['zh sentence rewrite with config terms', '把下面这句话改成朴素直接的中文：我们需要进一步推动配置层面的优化与能力沉淀。', 'writing.zh'],
   ['en related work', 'Draft an English related work paragraph for a systems paper and check the logic.', 'writing.en'],
   ['en abstract revision', 'Revise this abstract for clarity and citation-aware wording.', 'writing.en'],
   ['en release notes writing', 'Draft release notes for the plugin changelog without publishing anything.', 'writing.en'],
+  ['en coverage report writing', 'Write a test coverage report for the release notes; do not run tests.', 'writing.en'],
   ['feature implementation', 'Implement the classifier routing fallback and add regression tests.', 'implementation-with-tests'],
   ['plugin config implementation', '帮我修改插件配置逻辑并补测试。', 'implementation-with-tests'],
   ['marketplace implementation', '修改 marketplace 发布逻辑，修复版本同步 bug，并补测试。', 'implementation-with-tests'],

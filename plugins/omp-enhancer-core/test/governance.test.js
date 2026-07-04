@@ -48,6 +48,9 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /Loaded/);
   assert.match(fragment, /Use this exact plain-text block shape/);
   assert.match(fragment, /- skill-name/);
+  assert.match(fragment, /this is a writing workflow/i);
+  assert.match(fragment, /Do not call omp_test_analyze, omp_test_context, omp_test_gate, or omp_test_report/);
+  assert.doesNotMatch(fragment, /Toolchain:\n(?:- .+\n)*- omp_test_gate/);
 });
 
 test('builds a lightweight subagent contract without root workflow gates', () => {
@@ -93,6 +96,7 @@ test('names the selected agent route and toolchain in the governance fragment', 
   assert.match(fragment, /omp_test_context/);
   assert.match(fragment, /omp_test_gate/);
   assert.match(fragment, /omp_test_report/);
+  assert.match(fragment, /this is a code\/testing workflow/i);
   assert.match(fragment, /subagent-driven-development/);
   assert.match(fragment, /plan:\s*decompose the task; skills: brainstorming, subagent-driven-development/);
   assert.match(fragment, /task:\s*implement the task; skills: test-driven-development, verification-before-completion/);

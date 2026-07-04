@@ -138,6 +138,31 @@ test('resolveClassificationRoute preserves Chinese writing when classifier over-
   assert.equal(result.route.classifier.classification.intent, 'security-review');
 });
 
+test('resolveClassificationRoute preserves writing reports when classifier over-routes test wording to testing gates', () => {
+  for (const [prompt, classifierIntent, expectedIntent] of [
+    ['请写测试报告，重点说明当前验证风险，不要生成测试代码。', 'testing', 'writing.zh'],
+    ['Write a test coverage report for the release notes; do not run tests.', 'implementation-with-tests', 'writing.en'],
+  ]) {
+    const result = resolveClassificationRoute({
+      prompt,
+      output: JSON.stringify({
+        intent: classifierIntent,
+        secondaryIntents: [expectedIntent],
+        language: expectedIntent === 'writing.zh' ? 'zh' : 'en',
+        confidence: 0.96,
+        riskFlags: ['needs-tests', 'needs-subagents'],
+        domainHints: ['coverage report'],
+        reason: 'The task mentions tests or coverage.',
+      }),
+    });
+
+    assert.equal(result.ok, true, prompt);
+    assert.equal(result.fallbackRoute.intent, expectedIntent, prompt);
+    assert.equal(result.route.intent, expectedIntent, prompt);
+    assert.equal(result.route.requiredTools.some((tool) => tool.startsWith('omp_test_')), false, prompt);
+  }
+});
+
 test('resolveClassificationRoute falls back when classifier invents unsupported fields', () => {
   const result = resolveClassificationRoute({
     prompt: 'Draft an English related work paragraph and check the logic.',

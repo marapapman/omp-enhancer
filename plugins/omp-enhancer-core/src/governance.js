@@ -23,6 +23,7 @@ export function buildGovernancePromptFragment({ route } = {}) {
     `Agent route: ${resolved.agent ?? 'none'}`,
     '',
     'Use this natural language route. Do not require a command prefix.',
+    routeBoundaryFor(resolved.intent),
     '',
     '### Mandatory Skill Workflow',
     '',
@@ -175,6 +176,16 @@ function workflowFor(intent) {
   if (intent === 'diagnosis') return 'Diagnosis workflow: inspect the reported failure and explain root cause first; do not modify files unless the user asks for a fix.';
   if (intent === 'release') return 'Release workflow: verify repository status, run the relevant packaging or marketplace checks, then execute the requested push, publish, upgrade, or release step.';
   return 'Workflow: use the selected agent and tools.';
+}
+
+function routeBoundaryFor(intent) {
+  if (intent === 'writing.zh' || intent === 'writing.en') {
+    return 'Route boundary: this is a writing workflow. Do not call omp_test_analyze, omp_test_context, omp_test_gate, or omp_test_report unless a separate routed code/testing task is created later.';
+  }
+  if (intent === 'testing' || intent === 'implementation-with-tests') {
+    return 'Route boundary: this is a code/testing workflow. Use the OMP testing tools only after routed test or implementation work has actually been performed.';
+  }
+  return 'Route boundary: use only the tools listed for this route unless the user explicitly changes the task.';
 }
 
 function formatList(values = []) {

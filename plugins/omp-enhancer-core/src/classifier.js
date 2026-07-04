@@ -106,6 +106,7 @@ export function buildClassifierPrompt({
       '- Use release only when the user mainly asks to publish, push, upgrade, or release without asking for implementation.',
       '- Prefer implementation-with-tests for code/plugin changes, even when the task mentions config or marketplace.',
       '- Prefer writing.zh for Chinese prose editing or drafting; prefer writing.en for English prose editing or drafting.',
+      '- A request to draft, revise, polish, or write a report/summary/document about tests, coverage, gates, or release status is a writing task, not a testing workflow. Use testing only when the user asks to run, add, repair, or analyze tests as executable verification work.',
       '- Do not classify prose drafting, editing, or polishing as security-review only because the text mentions safety, risk, review, or security. Use security-review only for code, config, auth, secrets, vulnerability, or infrastructure security work.',
       '- Put related concerns such as config-assets or release into secondaryIntents and riskFlags when they are not the main task.',
       `- Use confidence below ${config.minResolvedConfidence} only when uncertain; low-confidence non-unknown classifications may fall back to the deterministic route.`,
@@ -218,7 +219,7 @@ function routeIntentForClassification(classification, fallbackRoute) {
   if (classification.confidence < classifierDefaults.minResolvedConfidence && fallbackRoute.intent !== 'unknown') {
     return fallbackRoute.intent;
   }
-  if (isWritingIntent(fallbackRoute.intent) && classification.intent === 'security-review') {
+  if (isWritingIntent(fallbackRoute.intent) && isNonWritingWorkflowIntent(classification.intent)) {
     return fallbackRoute.intent;
   }
   if (routedIntents.includes(classification.intent)) return classification.intent;
@@ -228,6 +229,14 @@ function routeIntentForClassification(classification, fallbackRoute) {
 
 function isWritingIntent(intent) {
   return intent === 'writing.zh' || intent === 'writing.en';
+}
+
+function isNonWritingWorkflowIntent(intent) {
+  return intent === 'security-review'
+    || intent === 'testing'
+    || intent === 'implementation-with-tests'
+    || intent === 'config-assets'
+    || intent === 'release';
 }
 
 function withClassifierDetails(route, classifier) {

@@ -85,7 +85,9 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasTesting = isTestingRequest(normalized);
   const hasDirectTestAuthoring = isDirectTestAuthoring(normalized);
   const hasTestAnalysis = isTestAnalysisRequest(normalized);
+  const hasTestReportWriting = isTestReportWritingRequest(normalized);
   const hasCoding = !asksNoCodeChange && (includesAny(normalized, codingTerms) || hasWholeWord(normalized, 'api') || isCodeChangeRequest(normalized));
+  const hasCodeChange = hasCoding && !hasTestReportWriting;
   const hasChineseWriting = isChineseWriting(normalized, prompt);
   const hasWriting = hasChineseWriting || isEnglishWriting(normalized);
   const hasSecurity = includesAny(normalized, securityTerms);
@@ -99,11 +101,15 @@ export function routeNaturalLanguageTask(input = {}) {
     return routeByIntent('security-review');
   }
 
-  if (hasCoding && hasTesting) {
+  if (hasCodeChange && hasTesting) {
     return routeByIntent('implementation-with-tests');
   }
 
-  if (hasDirectTestAuthoring || hasTestAnalysis) {
+  if (hasDirectTestAuthoring) {
+    return routeByIntent('testing');
+  }
+
+  if (hasTestAnalysis && !hasTestReportWriting) {
     return routeByIntent('testing');
   }
 
@@ -115,7 +121,7 @@ export function routeNaturalLanguageTask(input = {}) {
     return routeByIntent('writing.en');
   }
 
-  if (hasCoding) {
+  if (hasCodeChange) {
     return routeByIntent('implementation-with-tests');
   }
 
@@ -269,10 +275,17 @@ function isTestingRequest(text) {
 }
 
 function isDirectTestAuthoring(text) {
+  if (isTestReportWritingRequest(text)) return false;
   return /(?:write|add|create)\s+tests?\b/.test(text)
     || text.includes('写高信号单元测试')
     || text.includes('写测试')
     || text.includes('补测试');
+}
+
+function isTestReportWritingRequest(text) {
+  return /(?:写|起草|撰写|润色|改写|整理)(?:一份|一个|这份|这段|当前)?(?:测试|覆盖率|门禁|回归|e2e|playwright)?(?:报告|总结|说明|文档|记录|复盘|计划)/.test(text)
+    || /(?:draft|write|revise|polish|edit|improve)\s+.*(?:test|testing|coverage|gate|regression|e2e|playwright).*(?:report|summary|notes|document|doc|writeup|postmortem)/.test(text)
+    || /(?:draft|write|revise|polish|edit|improve)\s+.*(?:report|summary|notes|document|doc|writeup|postmortem).*(?:test|testing|coverage|gate|regression|e2e|playwright)/.test(text);
 }
 
 function isTestAnalysisRequest(text) {

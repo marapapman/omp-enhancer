@@ -189,6 +189,8 @@ test('forces plain-chinese-writing before any other Chinese writing skill', () =
 test('routes common Chinese document and report requests to Chinese writing first', () => {
   for (const prompt of [
     '请写一份项目报告',
+    '请写测试报告，重点说明当前验证风险，不要生成测试代码。',
+    '请写一份测试覆盖率报告，说明当前风险。',
     '帮我起草中文文档',
     '请帮我润色这段中文风险提示，写得安全、克制、直接。',
     '请审查这段中文安全说明的逻辑表达，不要做代码安全审计。',
@@ -197,30 +199,35 @@ test('routes common Chinese document and report requests to Chinese writing firs
 
     assert.equal(route.intent, 'writing.zh', prompt);
     assert.equal(route.requiredSkills[0], 'plain-chinese-writing', prompt);
+    assert.equal(route.requiredTools.some((tool) => tool.startsWith('omp_test_')), false, prompt);
     assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), ['zh-writer', 'zh-checker'], prompt);
   }
 });
 
 test('routes English writing to English writing skills instead of development planning', () => {
-  const route = routeNaturalLanguageTask({
-    prompt: 'Draft an English related work paragraph for a systems paper and check the logic.',
-  });
+  for (const prompt of [
+    'Draft an English related work paragraph for a systems paper and check the logic.',
+    'Write a test coverage report for the release notes; do not run tests.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
 
-  assert.equal(route.intent, 'writing.en');
-  assert.deepEqual(route.requiredSkills, ['writing-markdown-helper', 'writing-checkers']);
-  assert.deepEqual(route.requiredSubagents, [
-    {
-      agent: 'writer',
-      duty: 'draft or revise English writing after required writing skills are loaded',
-      requiredSkills: ['writing-markdown-helper'],
-    },
-    {
-      agent: 'checker',
-      duty: 'review English logic, style, formatting, and citation quality before final output',
-      requiredSkills: ['writing-checkers'],
-    },
-  ]);
-  assert.equal(route.requiredSkills.includes('writing-plans'), false);
+    assert.equal(route.intent, 'writing.en', prompt);
+    assert.deepEqual(route.requiredSkills, ['writing-markdown-helper', 'writing-checkers'], prompt);
+    assert.deepEqual(route.requiredSubagents, [
+      {
+        agent: 'writer',
+        duty: 'draft or revise English writing after required writing skills are loaded',
+        requiredSkills: ['writing-markdown-helper'],
+      },
+      {
+        agent: 'checker',
+        duty: 'review English logic, style, formatting, and citation quality before final output',
+        requiredSkills: ['writing-checkers'],
+      },
+    ], prompt);
+    assert.equal(route.requiredTools.some((tool) => tool.startsWith('omp_test_')), false, prompt);
+    assert.equal(route.requiredSkills.includes('writing-plans'), false, prompt);
+  }
 });
 
 test('leaves unrelated prompts unclaimed instead of inventing a plugin workflow', () => {
