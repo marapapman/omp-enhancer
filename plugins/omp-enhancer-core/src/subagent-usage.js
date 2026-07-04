@@ -1,6 +1,6 @@
 export function validateSubagentUsage({ requiredSubagents = [], output = '' } = {}) {
   const required = normalizeSubagents(requiredSubagents);
-  if (!required.length) return { ok: true, missing: [], forked: [], message: 'No routed subagents are required.' };
+  if (!required.length) return { ok: true, missing: [], missingSkills: [], unexpectedSkills: [], forked: [], message: 'No routed subagents are required.' };
 
   const forked = parseSubagentUsageDetails(output);
   const forkedByAgent = new Map(forked.map((item) => [item.agent, item]));
@@ -11,6 +11,7 @@ export function validateSubagentUsage({ requiredSubagents = [], output = '' } = 
       ok: false,
       missing,
       missingSkills: [],
+      unexpectedSkills: [],
       forked: [],
       message: `Missing SUBAGENT_USAGE block. Required subagents: ${required.map(({ agent }) => agent).join(', ')}.`,
     };
@@ -21,6 +22,7 @@ export function validateSubagentUsage({ requiredSubagents = [], output = '' } = 
       ok: false,
       missing,
       missingSkills: [],
+      unexpectedSkills: [],
       forked: forked.map(({ agent }) => agent),
       message: `SUBAGENT_USAGE is incomplete. Missing forked subagents: ${missing.join(', ')}.`,
     };
@@ -37,8 +39,27 @@ export function validateSubagentUsage({ requiredSubagents = [], output = '' } = 
       ok: false,
       missing: [],
       missingSkills,
+      unexpectedSkills: [],
       forked: forked.map(({ agent }) => agent),
       message: `SUBAGENT_USAGE is incomplete. Missing subagent skill assignments: ${formatMissingSkills(missingSkills)}.`,
+    };
+  }
+
+  const unexpectedSkills = required.flatMap(({ agent, requiredSkills, enforceSkills }) => {
+    if (!enforceSkills) return [];
+    const allowed = new Set(requiredSkills);
+    const unexpected = (forkedByAgent.get(agent)?.skills ?? []).filter((skill) => !allowed.has(skill));
+    return unexpected.length ? [{ agent, skills: unexpected }] : [];
+  });
+
+  if (unexpectedSkills.length) {
+    return {
+      ok: false,
+      missing: [],
+      missingSkills: [],
+      unexpectedSkills,
+      forked: forked.map(({ agent }) => agent),
+      message: `SUBAGENT_USAGE includes unexpected subagent skill assignments: ${formatMissingSkills(unexpectedSkills)}.`,
     };
   }
 
@@ -46,6 +67,7 @@ export function validateSubagentUsage({ requiredSubagents = [], output = '' } = 
     ok: true,
     missing: [],
     missingSkills: [],
+    unexpectedSkills: [],
     forked: forked.map(({ agent }) => agent),
     message: `SUBAGENT_USAGE is complete for ${required.length} required subagent(s).`,
   };
@@ -117,7 +139,10 @@ function collectRecords(value, records) {
   if (!value || typeof value !== 'object') return;
 
   const agent = findAgentValue(value);
-  if (agent && !isGenericTaskDispatcher(value, agent)) records.push({ agent, text: collectText(value) });
+  if (agent && !isGenericTaskDispatcher(value, agent)) {
+    const text = collectText(value);
+    records.push({ agent, text, skills: parseRequiredSkillList(text) });
+  }
 
   for (const [key, nested] of Object.entries(value)) {
     if (isAgentKey(key)) continue;
@@ -154,10 +179,11 @@ function collectText(value) {
 
 function normalizeSubagents(values = []) {
   return values.map((value) => {
-    if (typeof value === 'string') return { agent: normalizeAgent(value), requiredSkills: [] };
+    if (typeof value === 'string') return { agent: normalizeAgent(value), requiredSkills: [], enforceSkills: false };
     return {
       agent: normalizeAgent(value?.agent),
       requiredSkills: normalizeSkills(value?.requiredSkills ?? value?.skills ?? []),
+      enforceSkills: true,
     };
   }).filter(({ agent }) => agent);
 }
@@ -198,6 +224,30 @@ function normalizeSkills(values = []) {
   return raw
     .map((value) => String(value).trim().replace(/^skills?\s*[:=]\s*/i, ''))
     .filter((value) => value && value.toLowerCase() !== 'none');
+}
+
+function parseRequiredSkillList(text = '') {
+  const lines = String(text).split(/\r?\n/);
+  const start = lines.findIndex((line) => /^Required skills for this subagent:/i.test(line.trim()));
+  if (start === -1) return [];
+
+  const skills = [];
+  for (const rawLine of lines.slice(start + 1)) {
+    const line = rawLine.trim();
+    if (!line) {
+      if (skills.length) break;
+      continue;
+    }
+    if (/^(Before acting|Final subagent output|SUBAGENT_RESULT|SKILL_USAGE|BLOCKERS|Assignment|Evidence)/i.test(line)) break;
+    const match = line.match(/^[-*]\s*(.+)$/);
+    if (!match) {
+      if (skills.length) break;
+      continue;
+    }
+    const skill = match[1].trim();
+    if (skill && skill.toLowerCase() !== 'none') skills.push(skill);
+  }
+  return skills;
 }
 
 function uniqueSubagentUsage(values) {

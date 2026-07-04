@@ -194,6 +194,7 @@ function emptyEvidence() {
     taskToolCalls: 0,
     forkedSubagents: new Set(),
     subagentSkills: new Map(),
+    unexpectedSubagentSkills: new Map(),
   };
 }
 
@@ -294,6 +295,10 @@ function serializeState(state) {
         agent,
         skills: [...skills],
       })),
+      unexpectedSubagentSkills: [...state.evidence.unexpectedSubagentSkills.entries()].map(([agent, skills]) => ({
+        agent,
+        skills: [...skills],
+      })),
     },
   };
 }
@@ -320,6 +325,7 @@ function readEvidenceSnapshot(value) {
     taskToolCalls: Number.isInteger(value.taskToolCalls) ? value.taskToolCalls : 0,
     forkedSubagents: new Set(Array.isArray(value.forkedSubagents) ? value.forkedSubagents.filter(isString) : []),
     subagentSkills: readSubagentSkills(value.subagentSkills),
+    unexpectedSubagentSkills: readSubagentSkills(value.unexpectedSubagentSkills),
   };
 }
 
@@ -440,8 +446,12 @@ function buildMissingSubagentUsageContext(state) {
     const missingSkills = requiredSkills.filter((skill) => !recorded.has(skill));
     return missingSkills.length ? [{ agent, skills: missingSkills }] : [];
   });
+  const unexpectedSkillAssignments = requiredSubagents.flatMap(({ agent }) => {
+    const unexpected = [...(state.evidence.unexpectedSubagentSkills.get(agent) ?? new Set())];
+    return unexpected.length ? [{ agent, skills: unexpected }] : [];
+  });
 
-  if (!missing.length && !missingSkillAssignments.length) return null;
+  if (!missing.length && !missingSkillAssignments.length && !unexpectedSkillAssignments.length) return null;
 
   return [
     'OMP Enhancer Core subagent gate is still open.',
@@ -449,6 +459,7 @@ function buildMissingSubagentUsageContext(state) {
     `Required subagents: ${formatRequiredSubagents(requiredSubagents)}.`,
     missing.length ? `Missing subagents: ${missing.join(', ')}.` : null,
     missingSkillAssignments.length ? `Missing subagent skill assignments: ${formatMissingSkillAssignments(missingSkillAssignments)}.` : null,
+    unexpectedSkillAssignments.length ? `Unexpected subagent skill assignments: ${formatMissingSkillAssignments(unexpectedSkillAssignments)}.` : null,
     state.lastSubagentUsage?.message
       ? `Last validation: ${state.lastSubagentUsage.message}`
       : 'No successful SUBAGENT_USAGE validation or task-tool role evidence has been recorded.',
@@ -459,9 +470,15 @@ function recordSubagentEvidence(state, event) {
   state.evidence.taskToolCalls += 1;
   const requiredByAgent = new Map(subagentRequirements(state.lastRoute?.requiredSubagents).map((item) => [item.agent, item.requiredSkills]));
 
-  for (const { agent, text } of collectSubagentTaskRecords(event)) {
+  for (const { agent, text, skills = [] } of collectSubagentTaskRecords(event)) {
     state.evidence.forkedSubagents.add(agent);
     const requiredSkills = requiredByAgent.get(agent) ?? [];
+    const unexpectedSkills = skills.filter((skill) => !requiredSkills.includes(skill));
+    if (unexpectedSkills.length) {
+      const recordedUnexpected = state.evidence.unexpectedSubagentSkills.get(agent) ?? new Set();
+      for (const skill of unexpectedSkills) recordedUnexpected.add(skill);
+      state.evidence.unexpectedSubagentSkills.set(agent, recordedUnexpected);
+    }
     if (!requiredSkills.length) continue;
 
     const recorded = state.evidence.subagentSkills.get(agent) ?? new Set();

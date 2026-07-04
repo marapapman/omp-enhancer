@@ -108,6 +108,27 @@ test('validateSubagentUsage reports missing per-subagent skills', () => {
   assert.deepEqual(validation.missingSkills, [{ agent: 'zh-writer', skills: ['zh-writing-polish'] }]);
 });
 
+test('validateSubagentUsage reports unexpected per-subagent skills', () => {
+  const validation = validateSubagentUsage({
+    requiredSubagents: [
+      { agent: 'writer', requiredSkills: ['writing-markdown-helper'] },
+      { agent: 'checker', requiredSkills: ['writing-checkers'] },
+    ],
+    output: [
+      'SUBAGENT_USAGE',
+      'Required:',
+      '- writer: writing-markdown-helper',
+      '- checker: writing-checkers',
+      'Forked:',
+      '- writer: writing-markdown-helper, writing-plans',
+      '- checker: writing-checkers',
+    ].join('\n'),
+  });
+
+  assert.equal(validation.ok, false);
+  assert.deepEqual(validation.unexpectedSkills, [{ agent: 'writer', skills: ['writing-plans'] }]);
+});
+
 test('collectSubagentNames reads common task tool argument shapes', () => {
   const agents = collectSubagentNames({
     name: 'task',
@@ -163,6 +184,7 @@ test('collectSubagentTaskRecords includes prompt text for skill evidence', () =>
         '- test-driven-development',
         '- verification-before-completion',
       ].join('\n'),
+      skills: ['test-driven-development', 'verification-before-completion'],
     },
   ]);
 });

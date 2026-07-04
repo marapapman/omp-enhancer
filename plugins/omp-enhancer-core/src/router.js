@@ -28,7 +28,7 @@ const enWritingObjectTerms = ['paper', 'report', 'manuscript', 'abstract', 'rela
 const testingTerms = ['tests', 'testing', 'unit test', 'coverage', 'mutation', 'e2e', 'playwright', 'regression', 'flaky', 'flakiness', 'test flakiness', '测试', '覆盖率', '门禁'];
 const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', 'code', 'component', '实现', '重构', '修复', '报错', '功能', '代码', '接口'];
 const configTerms = ['omp-config', 'config asset', 'config assets', 'asset paths', 'config templates', 'assets', 'hooks', 'templates', 'modelroles', 'model roles', 'agents', 'skills', '配置资产', '配置模板', '技能清单'];
-const securityTerms = ['security', 'vulnerability', 'vulnerabilities', 'path traversal', 'command injection', 'auth bypass', 'xss', 'ssrf', 'injection', 'auth', 'authentication', 'authorization', 'oauth', 'owasp', '安全', '漏洞', '注入', '鉴权', '认证', '权限', '密钥', 'secret', 'secrets', '路径穿越'];
+const securityTerms = ['security', 'vulnerability', 'vulnerabilities', 'path traversal', 'path expansion', 'unsafe path', 'command injection', 'command execution', 'auth bypass', 'xss', 'ssrf', 'injection', 'auth', 'authentication', 'authorization', 'oauth', 'owasp', '安全', '漏洞', '注入', '鉴权', '认证', '权限', '密钥', 'secret', 'secrets', '路径穿越'];
 const noCodeChangeTerms = ['不要改代码', '不要改', '不要修改代码', '先不要修', '不要修复', '不要修改', '只诊断', '只分析', '只检查', '只列清单', 'do not change', 'do not modify', 'do not fix', 'diagnosis only', 'read-only'];
 const diagnosisTerms = ['why', 'diagnose', 'diagnosis', 'investigate', 'root cause', '原因', '为什么', '诊断', '定位', '排查', '是什么导致', '是什么原因', 'warning:', 'failed', 'failure'];
 const releaseTerms = ['push', 'publish', 'upgrade', '推送', '发布', '升级', '刷新'];
@@ -283,8 +283,8 @@ function isTestAnalysisRequest(text) {
 }
 
 function isCodeChangeRequest(text) {
-  return /(?:修改|修复|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流)/.test(text)
-    || /(?:fix|implement|modify|refactor|build|update)\s+(?:the\s+)?(?:plugin|config|configuration|logic|code|api|hook|hooks|marketplace|workflow)/.test(text);
+  return /(?:修改|修复|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|路由|提示词)/.test(text)
+    || /(?:fix|implement|modify|refactor|build|update)\s+(?:the\s+)?(?:plugin|config|configuration|logic|code|api|hook|hooks|marketplace|workflow|governance|prompt|router|route|validator|gate)/.test(text);
 }
 
 function isReleaseRequest(text) {
