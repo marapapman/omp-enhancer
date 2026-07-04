@@ -28,6 +28,7 @@ export function buildGovernancePromptFragment({ route } = {}) {
     '### Mandatory Skill Workflow',
     '',
     'Before doing the routed work, call the read tool once for each required skill using the exact URI `skill://<skill-name>`. Wait for those reads to finish before acting. If a required skill is unavailable, state that explicitly and do not pretend it was loaded.',
+    'The runtime enforces this as a pre-work skill gate: work tools such as task, edit, write, bash, route-specific QA, and test gates may be blocked until every required skill has successful read evidence.',
     'When validating loaded skills, prefer this order in the same assistant continuation: read every missing `skill://<skill-name>` first, wait for those read results, then call `omp_core_validate_skill_usage` with the full SKILL_USAGE output. This avoids stale branch snapshots hiding just-loaded skills.',
     '',
     'Required skills:',

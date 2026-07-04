@@ -166,6 +166,11 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
+    const preworkBlock = buildPreworkSkillGateBlock(state, name);
+    if (preworkBlock) {
+      await persistState(pi, state);
+      return preworkBlock;
+    }
     if (name === 'task') {
       const records = recordSubagentDispatchStarted(state, event);
       await notifySubagentDispatch(ctx, 'running', records, state);
@@ -566,6 +571,69 @@ function buildMissingSkillUsageContext(state) {
     failureContext,
     state.lastSkillUsage?.message ? `Last validation: ${state.lastSkillUsage.message}` : 'No successful SKILL_USAGE validation has been recorded.',
   ].filter(Boolean).join('\n');
+}
+
+function buildPreworkSkillGateBlock(state, toolName) {
+  if (!isPreworkSkillGateTool(toolName, state.lastRoute)) return null;
+  const missing = missingReadSkills(state);
+  if (!missing.length) return null;
+
+  return {
+    block: true,
+    reason: [
+      `OMP Enhancer Core pre-work skill gate blocked ${toolName}.`,
+      `Read all required skills before using work tools. Missing skills: ${missing.join(', ')}.`,
+      'Required recovery order:',
+      ...missing.map((skill) => `- read skill://${skill}`),
+      `After those read results return, retry ${toolName}. Do not wait until session_stop to repair missing skill evidence.`,
+    ].join('\n'),
+  };
+}
+
+function isPreworkSkillGateTool(toolName, route) {
+  if (!toolName || !route || route.intent === 'unknown') return false;
+  if (!(route.requiredSkills ?? []).length) return false;
+  if (isSkillGateExemptTool(toolName)) return false;
+  if ((route.requiredTools ?? []).includes(toolName)) return true;
+  return genericWorkToolsRequiringSkills().has(toolName);
+}
+
+function isSkillGateExemptTool(toolName) {
+  return toolName === 'read'
+    || toolName.startsWith('omp_core_')
+    || toolName === 'search'
+    || toolName === 'glob'
+    || toolName === 'grep'
+    || toolName === 'rg'
+    || toolName === 'list'
+    || toolName === 'ls';
+}
+
+function genericWorkToolsRequiringSkills() {
+  return new Set([
+    'task',
+    'edit',
+    'write',
+    'patch',
+    'apply_patch',
+    'bash',
+    'shell',
+    'terminal',
+    'run',
+    'run_command',
+    'python',
+    'node',
+  ]);
+}
+
+function missingReadSkills(state) {
+  const loaded = new Set([...state.evidence.loadedSkills].map(normalizeEvidenceSkillName));
+  return (state.lastRoute?.requiredSkills ?? [])
+    .filter((skill) => !loaded.has(normalizeEvidenceSkillName(skill)));
+}
+
+function normalizeEvidenceSkillName(value) {
+  return String(value ?? '').trim().toLowerCase();
 }
 
 function recordFinalOutputEvidence(state, event = {}) {

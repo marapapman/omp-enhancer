@@ -22,6 +22,8 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /plain-chinese-writing/);
   assert.match(fragment, /zh-writing-polish/);
   assert.match(fragment, /read tool once for each required skill/i);
+  assert.match(fragment, /pre-work skill gate/i);
+  assert.match(fragment, /blocked until every required skill has successful read evidence/i);
   assert.match(fragment, /skill:\/\/<skill-name>/);
   assert.match(fragment, /same assistant continuation/i);
   assert.match(fragment, /omp_core_validate_skill_usage/);

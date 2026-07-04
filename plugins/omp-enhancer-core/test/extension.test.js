@@ -258,6 +258,122 @@ test('simple writing edits are handled by the main agent without writer checker 
   assert.equal(released, undefined);
 });
 
+test('tool_call blocks routed work before required skills are read', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    ctx,
+  );
+
+  const blocked = await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [{ role: 'zh-writer', assignment: 'Draft the Chinese revision.' }],
+      },
+    },
+    ctx,
+  );
+
+  assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /pre-work skill gate/);
+  assert.match(blocked.reason, /blocked task/);
+  assert.match(blocked.reason, /plain-chinese-writing/);
+  assert.match(blocked.reason, /zh-writing-polish/);
+  assert.match(blocked.reason, /zh-writing-checkers/);
+  assert.match(blocked.reason, /read skill:\/\/plain-chinese-writing/);
+
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-status-after-blocked-task',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.match(status.content[0].text, /Pending:\n- none/);
+});
+
+test('pre-work skill gate allows read and core validation before blocking remaining work tools', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    ctx,
+  );
+
+  const readCall = await event(pi, 'tool_call')(
+    { toolName: 'read', input: { uri: 'skill://plain-chinese-writing' } },
+    ctx,
+  );
+  const validationCall = await event(pi, 'tool_call')(
+    { toolName: 'omp_core_validate_skill_usage', input: { output: '' } },
+    ctx,
+  );
+
+  assert.equal(readCall, undefined);
+  assert.equal(validationCall, undefined);
+
+  await readSkills(pi, ctx, ['plain-chinese-writing']);
+
+  const partiallyBlocked = await event(pi, 'tool_call')(
+    { toolName: 'writing_quality_check', input: { text: 'draft' } },
+    ctx,
+  );
+
+  assert.equal(partiallyBlocked?.block, true);
+  assert.doesNotMatch(partiallyBlocked.reason, /Missing skills: plain-chinese-writing/);
+  assert.match(partiallyBlocked.reason, /zh-writing-polish/);
+  assert.match(partiallyBlocked.reason, /zh-writing-checkers/);
+
+  await readSkills(pi, ctx, ['zh-writing-polish', 'zh-writing-checkers']);
+
+  const allowed = await event(pi, 'tool_call')(
+    { toolName: 'writing_quality_check', input: { text: 'draft' } },
+    ctx,
+  );
+
+  assert.equal(allowed, undefined);
+});
+
+test('pre-work skill gate blocks simple writing edits until writing skills are read', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '把这句话改成朴素直接的中文：我们需要进一步推动配置层面的优化与能力沉淀。' },
+    ctx,
+  );
+
+  const blocked = await event(pi, 'tool_call')(
+    { toolName: 'edit', input: { file: 'draft.md', old: 'x', new: 'y' } },
+    ctx,
+  );
+
+  assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /blocked edit/);
+  assert.match(blocked.reason, /plain-chinese-writing/);
+  assert.match(blocked.reason, /zh-writing-polish/);
+
+  await readSkills(pi, ctx, ['plain-chinese-writing', 'zh-writing-polish']);
+
+  const allowed = await event(pi, 'tool_call')(
+    { toolName: 'edit', input: { file: 'draft.md', old: 'x', new: 'y' } },
+    ctx,
+  );
+
+  assert.equal(allowed, undefined);
+});
+
 test('failed writing QA tool results do not release the writing gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -774,6 +890,7 @@ test('pending task tool_call evidence blocks completion until task result return
     undefined,
     ctx,
   );
+  await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
   await event(pi, 'tool_call')(
     {
       toolName: 'task',
@@ -847,6 +964,12 @@ test('stale pending task calls are reported as potentially stuck', async () => {
     undefined,
     ctx,
   );
+  await readSkills(pi, ctx, [
+    'brainstorming',
+    'test-driven-development',
+    'subagent-driven-development',
+    'verification-before-completion',
+  ]);
   await event(pi, 'tool_call')(
     {
       toolName: 'task',
@@ -881,6 +1004,7 @@ test('subagent status tool reports pending and completed roles', async () => {
     undefined,
     ctx,
   );
+  await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
   await event(pi, 'tool_call')(
     {
       toolName: 'task',
@@ -1098,6 +1222,7 @@ test('completing one of two pending task calls keeps the other subagent running'
     undefined,
     ctx,
   );
+  await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
   await event(pi, 'tool_call')(
     {
       toolName: 'task',
@@ -1165,6 +1290,7 @@ test('task tool_call announces running subagents in TUI notifications', async ()
     undefined,
     ctx,
   );
+  await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
   await event(pi, 'tool_call')(
     {
       toolName: 'task',
@@ -1198,6 +1324,7 @@ test('task tool_result announces completed and failed subagents in TUI notificat
     undefined,
     ctx,
   );
+  await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
   await event(pi, 'tool_call')(
     {
       toolName: 'task',
@@ -1221,6 +1348,12 @@ test('task tool_result announces completed and failed subagents in TUI notificat
     undefined,
     ctx,
   );
+  await readSkills(pi, ctx, [
+    'brainstorming',
+    'test-driven-development',
+    'subagent-driven-development',
+    'verification-before-completion',
+  ]);
   await event(pi, 'tool_call')(
     {
       toolName: 'task',
