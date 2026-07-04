@@ -65,13 +65,10 @@ const routingCases = [
     prompt: '把下面这句话改成朴素、直接、少形容词的中文：鉴于当前系统存在较为显著的功能复杂性，我们需要进一步推动配置层面的优化与能力沉淀。',
     expectedIntent: 'writing.zh',
     expectedAgent: 'writing-helper.zh-writer',
-    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
-    requiredTools: ['writing_logic_check', 'writing_quality_check'],
-    requiredSubagents: ['zh-writer', 'zh-checker'],
-    requiredSubagentSkills: {
-      'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
-      'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
-    },
+    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+    requiredTools: [],
+    requiredSubagents: [],
+    requiredSubagentSkills: {},
   },
   {
     name: 'Chinese coding request routes to implementation with tests instead of writing',
@@ -228,6 +225,18 @@ test('routes English writing to English writing skills instead of development pl
     assert.equal(route.requiredTools.some((tool) => tool.startsWith('omp_test_')), false, prompt);
     assert.equal(route.requiredSkills.includes('writing-plans'), false, prompt);
   }
+});
+
+test('routes simple English writing edits without writer checker subagents', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Polish this sentence for clarity and keep it concise.',
+  });
+
+  assert.equal(route.intent, 'writing.en');
+  assert.equal(route.writingComplexity, 'simple');
+  assert.deepEqual(route.requiredSkills, ['writing-markdown-helper']);
+  assert.deepEqual(route.requiredTools, []);
+  assert.deepEqual(route.requiredSubagents, []);
 });
 
 test('leaves unrelated prompts unclaimed instead of inventing a plugin workflow', () => {

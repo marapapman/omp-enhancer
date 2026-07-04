@@ -235,6 +235,29 @@ test('writing reports about tests do not require omp_test_gate', async () => {
   assert.equal(released, undefined);
 });
 
+test('simple writing edits are handled by the main agent without writer checker subagents', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  const agentEvent = { prompt: '把这句话改成朴素直接的中文：我们需要进一步推动配置层面的优化与能力沉淀。' };
+  const startResult = await event(pi, 'before_agent_start')(agentEvent, ctx);
+  const fragment = governanceText(startResult, agentEvent);
+
+  assert.match(fragment, /Intent:\s*writing\.zh/);
+  assert.match(fragment, /lightweight writing workflow/i);
+  assert.match(fragment, /main agent should do the work directly/i);
+  assert.match(fragment, /Required subagents:\n- none/);
+  assert.doesNotMatch(fragment, /OMP_REQUIRED_SUBAGENT:/);
+  assert.doesNotMatch(fragment, /writing_quality_check/);
+
+  await readSkills(pi, ctx, ['plain-chinese-writing', 'zh-writing-polish']);
+  const released = await event(pi, 'session_stop')({ output: '任务完成。' }, ctx);
+
+  assert.equal(released, undefined);
+});
+
 test('failed writing QA tool results do not release the writing gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -398,8 +421,6 @@ test('before_agent_start preserves route when core continuation prompts start a 
     },
     ctx,
   );
-  await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
-  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
 
   await event(pi, 'before_agent_start')(
     {
@@ -417,7 +438,7 @@ test('before_agent_start preserves route when core continuation prompts start a 
   assert.equal(result?.continue, true);
   assert.match(result.additionalContext, /plain-chinese-writing/);
   assert.match(result.additionalContext, /zh-writing-polish/);
-  assert.match(result.additionalContext, /zh-writing-checkers/);
+  assert.doesNotMatch(result.additionalContext, /zh-writing-checkers/);
   assert.doesNotMatch(result.additionalContext, /writing-plans/);
 });
 

@@ -42,7 +42,6 @@ const profiles = {
       'Draft an English related work paragraph for a systems paper.',
       'Write a concise project report in English.',
       'Revise this manuscript abstract for clarity.',
-      'Polish the paragraph and check the wording.',
       'Edit the proposal summary for a technical audience.',
     ],
     subagents: {
@@ -53,12 +52,20 @@ const profiles = {
     gateTool: 'writing_quality_check',
     missingGate: /writing QA/,
   },
+  writingEnSimple: {
+    prompts: [
+      'Polish the paragraph and check the wording.',
+      'Polish this sentence for clarity and keep it concise.',
+      'Edit this wording so it sounds natural.',
+    ],
+    subagents: {},
+    skills: ['writing-markdown-helper'],
+  },
   writingZh: {
     prompts: [
       '请把这段中文论文摘要改得更平实。',
       '帮我润色博士论文引言，去掉翻译腔。',
       '请起草一份中文项目报告。',
-      '把这句话改成朴素直接的中文。',
       '请检查这段中文相关工作的逻辑表达。',
     ],
     subagents: {
@@ -68,6 +75,15 @@ const profiles = {
     skills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
     gateTool: 'writing_quality_check',
     missingGate: /writing QA/,
+  },
+  writingZhSimple: {
+    prompts: [
+      '把这句话改成朴素直接的中文。',
+      '把这段话改得少一点 AI 味。',
+      '请把下面说明改成自然中文，不要改代码。',
+    ],
+    subagents: {},
+    skills: ['plain-chinese-writing', 'zh-writing-polish'],
   },
   testing: {
     prompts: [
@@ -208,7 +224,7 @@ function missingSubagentCases() {
     const blocked = await event(pi, 'session_stop')({}, ctx);
     assert.equal(blocked?.continue, true);
     assert.match(blocked.additionalContext, /subagent gate/i);
-  });
+  }, (profile) => Object.keys(profile.subagents).length > 0);
 }
 
 function missingWorkflowGateCases() {

@@ -84,6 +84,21 @@ const expectedByIntent = {
   },
 };
 
+const simpleWritingExpectedByIntent = {
+  'writing.zh': {
+    agent: 'writing-helper.zh-writer',
+    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+    requiredTools: [],
+    subagents: {},
+  },
+  'writing.en': {
+    agent: 'writing-helper.writer',
+    requiredSkills: ['writing-markdown-helper'],
+    requiredTools: [],
+    subagents: {},
+  },
+};
+
 const workloadMatrix = [
   ['zh thesis polish', '请帮我润色这段中文论文摘要，要求语气自然，不要有翻译腔。', 'writing.zh'],
   ['zh reviewer response', '帮我起草中文审稿回复，要求语气克制、逻辑清楚。', 'writing.zh'],
@@ -94,6 +109,7 @@ const workloadMatrix = [
   ['en abstract revision', 'Revise this abstract for clarity and citation-aware wording.', 'writing.en'],
   ['en release notes writing', 'Draft release notes for the plugin changelog without publishing anything.', 'writing.en'],
   ['en coverage report writing', 'Write a test coverage report for the release notes; do not run tests.', 'writing.en'],
+  ['en sentence polish', 'Polish this sentence for clarity and keep it concise.', 'writing.en'],
   ['feature implementation', 'Implement the classifier routing fallback and add regression tests.', 'implementation-with-tests'],
   ['plugin config implementation', '帮我修改插件配置逻辑并补测试。', 'implementation-with-tests'],
   ['marketplace implementation', '修改 marketplace 发布逻辑，修复版本同步 bug，并补测试。', 'implementation-with-tests'],
@@ -125,7 +141,7 @@ const workloadMatrix = [
 test('workload matrix routes to the expected agent, tools, skills, and subagents', () => {
   for (const [name, prompt, expectedIntent] of workloadMatrix) {
     const route = routeNaturalLanguageTask({ prompt });
-    const expected = expectedByIntent[expectedIntent];
+    const expected = expectedForRoute(expectedIntent, route);
 
     assert.equal(route.intent, expectedIntent, name);
     assert.equal(route.agent, expected.agent, name);
@@ -138,6 +154,11 @@ test('workload matrix routes to the expected agent, tools, skills, and subagents
     );
   }
 });
+
+function expectedForRoute(expectedIntent, route) {
+  if (route.writingComplexity === 'simple') return simpleWritingExpectedByIntent[expectedIntent];
+  return expectedByIntent[expectedIntent];
+}
 
 test('governance fragments include exact pre-fork contracts and final evidence blocks for routed subagents', () => {
   const uniqueRoutes = routesFromMatrix().filter((route) => route.intent !== 'unknown');

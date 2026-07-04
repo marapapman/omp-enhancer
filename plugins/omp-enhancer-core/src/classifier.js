@@ -142,7 +142,7 @@ export function resolveClassificationRoute({ prompt = '', output = '', classific
 
   const normalized = normalizeClassifierValue(parsed);
   const routeIntent = routeIntentForClassification(normalized, fallbackRoute);
-  const route = withClassifierDetails(routeByIntent(routeIntent, { source: 'llm-classifier' }), {
+  const route = withClassifierDetails(classifiedRoute(routeIntent, fallbackRoute), {
     status: 'resolved',
     modelRole: classifierDefaults.modelRole,
     classification: normalized,
@@ -237,6 +237,16 @@ function isNonWritingWorkflowIntent(intent) {
     || intent === 'implementation-with-tests'
     || intent === 'config-assets'
     || intent === 'release';
+}
+
+function classifiedRoute(routeIntent, fallbackRoute) {
+  if (isWritingIntent(routeIntent) && fallbackRoute.intent === routeIntent) {
+    return {
+      ...fallbackRoute,
+      source: 'llm-classifier',
+    };
+  }
+  return routeByIntent(routeIntent, { source: 'llm-classifier' });
 }
 
 function withClassifierDetails(route, classifier) {

@@ -24,7 +24,7 @@ const strongZhWritingTerms = [
   '改得',
 ];
 const enWritingActionTerms = ['draft', 'write', 'revise', 'polish', 'edit', 'improve'];
-const enWritingObjectTerms = ['paper', 'report', 'manuscript', 'abstract', 'related work', 'paragraph', 'release notes', 'changelog', 'letter', 'email', 'proposal', 'summary'];
+const enWritingObjectTerms = ['paper', 'report', 'manuscript', 'abstract', 'related work', 'paragraph', 'sentence', 'wording', 'release notes', 'changelog', 'letter', 'email', 'proposal', 'summary'];
 const testingTerms = ['tests', 'testing', 'unit test', 'coverage', 'mutation', 'e2e', 'playwright', 'regression', 'flaky', 'flakiness', 'test flakiness', '测试', '覆盖率', '门禁'];
 const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', 'code', 'component', '实现', '重构', '修复', '报错', '功能', '代码', '接口'];
 const configTerms = ['omp-config', 'config asset', 'config assets', 'asset paths', 'config templates', 'assets', 'hooks', 'templates', 'modelroles', 'model roles', 'agents', 'skills', '配置资产', '配置模板', '技能清单'];
@@ -114,11 +114,11 @@ export function routeNaturalLanguageTask(input = {}) {
   }
 
   if (hasChineseWriting) {
-    return routeByIntent('writing.zh');
+    return routeByIntent('writing.zh', { writingComplexity: writingComplexityFor(normalized) });
   }
 
   if (hasWriting) {
-    return routeByIntent('writing.en');
+    return routeByIntent('writing.en', { writingComplexity: writingComplexityFor(normalized) });
   }
 
   if (hasCodeChange) {
@@ -144,7 +144,7 @@ export function routeNaturalLanguageTask(input = {}) {
   return unknownRoute();
 }
 
-export function routeByIntent(intent, { source = 'natural-language' } = {}) {
+export function routeByIntent(intent, { source = 'natural-language', writingComplexity = 'complex' } = {}) {
   if (intent === 'diagnosis') {
     return route({
       intent,
@@ -212,23 +212,29 @@ export function routeByIntent(intent, { source = 'natural-language' } = {}) {
   }
 
   if (intent === 'writing.zh') {
+    const complex = writingComplexity !== 'simple';
     return route({
       intent,
       agent: 'writing-helper.zh-writer',
-      requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
-      requiredTools: ['writing_logic_check', 'writing_quality_check'],
-      requiredSubagents: subagentPlans.writingZh,
+      requiredSkills: complex
+        ? ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers']
+        : ['plain-chinese-writing', 'zh-writing-polish'],
+      requiredTools: complex ? ['writing_logic_check', 'writing_quality_check'] : [],
+      requiredSubagents: complex ? subagentPlans.writingZh : [],
+      writingComplexity: complex ? 'complex' : 'simple',
       source,
     });
   }
 
   if (intent === 'writing.en') {
+    const complex = writingComplexity !== 'simple';
     return route({
       intent,
       agent: 'writing-helper.writer',
-      requiredSkills: ['writing-markdown-helper', 'writing-checkers'],
-      requiredTools: ['writing_logic_check', 'writing_quality_check'],
-      requiredSubagents: subagentPlans.writingEn,
+      requiredSkills: complex ? ['writing-markdown-helper', 'writing-checkers'] : ['writing-markdown-helper'],
+      requiredTools: complex ? ['writing_logic_check', 'writing_quality_check'] : [],
+      requiredSubagents: complex ? subagentPlans.writingEn : [],
+      writingComplexity: complex ? 'complex' : 'simple',
       source,
     });
   }
@@ -236,8 +242,16 @@ export function routeByIntent(intent, { source = 'natural-language' } = {}) {
   return unknownRoute(source);
 }
 
-function route({ intent, agent, requiredSkills = [], requiredTools = [], requiredSubagents = [], source = 'natural-language' }) {
-  return {
+function route({
+  intent,
+  agent,
+  requiredSkills = [],
+  requiredTools = [],
+  requiredSubagents = [],
+  writingComplexity = null,
+  source = 'natural-language',
+}) {
+  const routed = {
     intent,
     agent,
     requiredSkills,
@@ -245,6 +259,8 @@ function route({ intent, agent, requiredSkills = [], requiredTools = [], require
     requiredSubagents,
     source,
   };
+  if (writingComplexity) routed.writingComplexity = writingComplexity;
+  return routed;
 }
 
 function subagent(agent, duty, requiredSkills = []) {
@@ -263,6 +279,21 @@ function isChineseWriting(normalized, original) {
 function isEnglishWriting(text) {
   if (includesAny(text, enWritingActionTerms) && includesAny(text, enWritingObjectTerms)) return true;
   return /(?:check|review|improve|edit)\s+.*(?:logic|style|wording|paragraph|abstract|paper|manuscript|report|release notes|changelog|letter|email|proposal|summary)/.test(text);
+}
+
+function writingComplexityFor(text) {
+  return isSimpleWritingRequest(text) ? 'simple' : 'complex';
+}
+
+function isSimpleWritingRequest(text) {
+  if (isComplexWritingRequest(text)) return false;
+  return /(?:这句话|一句话|这个句子|短句|这段话|下面这段话|下面文字|下面说明|这段说明|这段文字)/.test(text)
+    || /(?:sentence|one sentence|short phrase|this paragraph|the paragraph|this wording)\b/.test(text);
+}
+
+function isComplexWritingRequest(text) {
+  return /(?:一份|完整|大量|长文|整篇|章节|小节|报告|文档|审稿回复|相关工作|引言|申请材料|研究计划|实验报告|项目报告)/.test(text)
+    || /\b(?:report|document|docs?|proposal|release notes|changelog|letter|email|summary|related work|section|chapter|manuscript|paper|abstract|writeup|postmortem)\b/.test(text);
 }
 
 function isTestingRequest(text) {

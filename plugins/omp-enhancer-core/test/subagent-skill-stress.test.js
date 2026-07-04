@@ -64,6 +64,17 @@ const expectedByIntent = {
   },
 };
 
+const simpleWritingExpectedByIntent = {
+  'writing.zh': {
+    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+    subagents: {},
+  },
+  'writing.en': {
+    requiredSkills: ['writing-markdown-helper'],
+    subagents: {},
+  },
+};
+
 const workloadSuites = {
   'writing.zh': [
     '请把这段中文论文摘要改得更平实。',
@@ -255,7 +266,7 @@ test('subagent skill routing stress matrix covers at least 100 workloads with ex
   for (const { name, prompt, intent } of workloadCases) {
     try {
       const route = routeNaturalLanguageTask({ prompt });
-      const expected = expectedByIntent[intent];
+      const expected = expectedForRoute(intent, route);
 
       assert.equal(route.intent, intent, name);
       assert.deepEqual(route.requiredSkills, expected.requiredSkills, `${name} root skills`);
@@ -270,6 +281,11 @@ test('subagent skill routing stress matrix covers at least 100 workloads with ex
 
   assert.deepEqual(failures, []);
 });
+
+function expectedForRoute(intent, route) {
+  if (route.writingComplexity === 'simple') return simpleWritingExpectedByIntent[intent];
+  return expectedByIntent[intent];
+}
 
 test('runtime subagent gate blocks task prompts with unexpected skill assignments', async () => {
   const representatives = Object.entries(workloadSuites)

@@ -186,8 +186,10 @@ test('router stress matrix covers at least 100 natural-language cases without wr
       assert.deepEqual(route.requiredSkills, [], name);
       assert.deepEqual(route.requiredTools, [], name);
       assert.deepEqual(route.requiredSubagents, [], name);
-    } else {
+    } else if (route.writingComplexity !== 'simple') {
       assert.equal(route.requiredSubagents.length > 0, true, name);
+    } else {
+      assert.deepEqual(route.requiredSubagents, [], name);
     }
   }
 

@@ -23,7 +23,7 @@ export function buildGovernancePromptFragment({ route } = {}) {
     `Agent route: ${resolved.agent ?? 'none'}`,
     '',
     'Use this natural language route. Do not require a command prefix.',
-    routeBoundaryFor(resolved.intent),
+    routeBoundaryFor(resolved),
     '',
     '### Mandatory Skill Workflow',
     '',
@@ -36,32 +36,9 @@ export function buildGovernancePromptFragment({ route } = {}) {
     'Toolchain:',
     formatList(resolved.requiredTools),
     '',
-    '### Mandatory Subagent Workflow',
+    ...subagentWorkflowLines(resolved),
     '',
-    'Runtime model policy: the main/default agent uses MiMo v2.5; the advisor uses DeepSeek V4 Flash. Keep task subagents and all other model roles on the active OMP configuration unless the user explicitly overrides them.',
-    '',
-    'Classifier model policy: ambiguous routing may use the configured `modelRoles.classifier` role. The packaged config defaults it to `opencode-go/deepseek-v4-flash:medium`. Classifier output is advisory only; resolve it through the OMP route whitelist before assigning skills, tools, or subagents.',
-    '',
-    'Use a subagent-driven workflow for routed work. Before doing non-trivial implementation, testing, writing, security, or config work yourself, fork the listed roles with the task tool. Call task once per distinct agent role; if several items share one agent, use the batch task shape.',
-    '',
-    'When calling task, set each task item `role` or `agent` to the exact required subagent name, such as `writer`, `checker`, `zh-writer`, or `zh-checker`. Do not use generic `task` as the only role for required subagents.',
-    '',
-    'When forking each subagent, include that subagent-specific skill list in the task prompt. Tell the subagent to read each required skill with `skill://<skill-name>` before acting and to report which skills it loaded.',
-    '',
-    'Required subagents:',
-    formatSubagents(resolved.requiredSubagents),
-    '',
-    '### Pre-fork Subagent Contract',
-    '',
-    'Before calling task, prepare each subagent assignment with the matching contract below. Copy the required role, required skills, and final output block into the task assignment before forking so the subagent does not need to infer the gate format.',
-    '',
-    formatPreforkSubagentContracts(resolved.requiredSubagents),
-    '',
-    'After the task call returns, the main agent must include this exact subagent evidence block in the routed final output:',
-    '',
-    formatSubagentUsageBlock(resolved.requiredSubagents),
-    '',
-    workflowFor(resolved.intent),
+    workflowFor(resolved),
     '',
     '### SUBAGENT_USAGE contract',
     '',
@@ -130,7 +107,7 @@ export function buildSubagentPromptFragment({ prompt = '' } = {}) {
 export function buildMissingGateContext({ route, state } = {}) {
   if (!route || route.intent === 'unknown') return null;
 
-  if (isWriting(route) && !state?.evidence?.writingQuality) {
+  if (needsWritingQuality(route) && !state?.evidence?.writingQuality) {
     return [
       'OMP Enhancer Core gate is still open for this writing task.',
       'Run writing QA before finishing. Use writing_quality_check or writing_logic_check, and make sure SKILL_USAGE lists the required writing skills such as plain-chinese-writing when required.',
@@ -166,9 +143,13 @@ function formatRecentToolFailures(state, toolNames = []) {
   ].join('\n');
 }
 
-function workflowFor(intent) {
-  if (intent === 'writing.zh') return 'Writing workflow: zh-writer -> zh-checker -> writing_quality_check.';
-  if (intent === 'writing.en') return 'Writing workflow: writer -> checker -> writing_quality_check.';
+function workflowFor(route) {
+  const intent = route.intent;
+  if ((intent === 'writing.zh' || intent === 'writing.en') && !(route.requiredSubagents ?? []).length) {
+    return 'Writing workflow: lightweight edit handled directly by the main agent after required skills are loaded.';
+  }
+  if (intent === 'writing.zh') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, zh-writer -> zh-checker -> writing_quality_check.';
+  if (intent === 'writing.en') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, writer -> checker -> writing_quality_check.';
   if (intent === 'testing') return 'Testing workflow: ecc-tdd-guide -> ecc-pr-test-analyzer -> omp_test_analyze -> omp_test_context -> omp_test_gate -> omp_test_report.';
   if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> task -> reviewer -> lightweight TDD -> omp_test_gate -> omp_test_report.';
   if (intent === 'security-review') return 'Security workflow: ecc-security-reviewer -> reviewer -> fix or report only after risk evidence is checked.';
@@ -178,7 +159,11 @@ function workflowFor(intent) {
   return 'Workflow: use the selected agent and tools.';
 }
 
-function routeBoundaryFor(intent) {
+function routeBoundaryFor(route) {
+  const intent = route.intent;
+  if ((intent === 'writing.zh' || intent === 'writing.en') && !(route.requiredSubagents ?? []).length) {
+    return 'Route boundary: this is a lightweight writing workflow. The main agent must load the required writing skill(s), edit directly, and must not fork writer/checker subagents.';
+  }
   if (intent === 'writing.zh' || intent === 'writing.en') {
     return 'Route boundary: this is a writing workflow. Do not call omp_test_analyze, omp_test_context, omp_test_gate, or omp_test_report unless a separate routed code/testing task is created later.';
   }
@@ -186,6 +171,57 @@ function routeBoundaryFor(intent) {
     return 'Route boundary: this is a code/testing workflow. Use the OMP testing tools only after routed test or implementation work has actually been performed.';
   }
   return 'Route boundary: use only the tools listed for this route unless the user explicitly changes the task.';
+}
+
+function subagentWorkflowLines(route) {
+  const requiredSubagents = route.requiredSubagents ?? [];
+  const common = [
+    '### Mandatory Subagent Workflow',
+    '',
+    'Runtime model policy: the main/default agent uses MiMo v2.5; the advisor uses DeepSeek V4 Flash. Keep task subagents and all other model roles on the active OMP configuration unless the user explicitly overrides them.',
+    '',
+    'Classifier model policy: ambiguous routing may use the configured `modelRoles.classifier` role. The packaged config defaults it to `opencode-go/deepseek-v4-flash:medium`. Classifier output is advisory only; resolve it through the OMP route whitelist before assigning skills, tools, or subagents.',
+    '',
+  ];
+
+  if (!requiredSubagents.length) {
+    return [
+      ...common,
+      'No routed subagents are required for this route. The main agent should do the work directly after loading required skills.',
+      'Do not fork writer, checker, zh-writer, or zh-checker for lightweight writing edits unless the user explicitly expands the task into a larger writing job.',
+      '',
+      'Required subagents:',
+      '- none',
+      '',
+      '### Pre-fork Subagent Contract',
+      '',
+      'No routed subagents are required.',
+      '',
+      'SUBAGENT_USAGE is not required for this route.',
+    ];
+  }
+
+  return [
+    ...common,
+    'Use a subagent-driven workflow for routed work. Before doing non-trivial implementation, testing, writing, security, or config work yourself, fork the listed roles with the task tool. Call task once per distinct agent role; if several items share one agent, use the batch task shape.',
+    '',
+    'When calling task, set each task item `role` or `agent` to the exact required subagent name, such as `writer`, `checker`, `zh-writer`, or `zh-checker`. Do not use generic `task` as the only role for required subagents.',
+    '',
+    'When forking each subagent, include that subagent-specific skill list in the task prompt. Tell the subagent to read each required skill with `skill://<skill-name>` before acting and to report which skills it loaded.',
+    '',
+    'Required subagents:',
+    formatSubagents(requiredSubagents),
+    '',
+    '### Pre-fork Subagent Contract',
+    '',
+    'Before calling task, prepare each subagent assignment with the matching contract below. Copy the required role, required skills, and final output block into the task assignment before forking so the subagent does not need to infer the gate format.',
+    '',
+    formatPreforkSubagentContracts(requiredSubagents),
+    '',
+    'After the task call returns, the main agent must include this exact subagent evidence block in the routed final output:',
+    '',
+    formatSubagentUsageBlock(requiredSubagents),
+  ];
 }
 
 function formatList(values = []) {
@@ -286,8 +322,9 @@ function parseRequiredSubagentSkills(prompt = '') {
   return skills;
 }
 
-function isWriting(route) {
-  return route.intent === 'writing.zh' || route.intent === 'writing.en';
+function needsWritingQuality(route) {
+  return (route.intent === 'writing.zh' || route.intent === 'writing.en')
+    && (route.requiredTools ?? []).some((tool) => tool === 'writing_quality_check' || tool === 'writing_logic_check');
 }
 
 function needsTesting(route) {
