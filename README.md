@@ -73,6 +73,7 @@ omp plugin install omp-enhancer-core@omp-enhancer omp-testing-enhancer@omp-enhan
 After installing `omp-enhancer-core`, describe the task naturally. The core plugin injects routing guidance and completion gates through runtime hooks.
 
 - The default runtime model is MiMo v2.5, the advisor is DeepSeek V4 Flash, and task subagents plus all other roles follow the user's active OMP config.
+- The core runtime includes a main-agent loop guard for MiMo v2.5: repeated sentence or phrase generation is stopped when the host exposes assistant output events, with a one-shot recovery context as a fallback at `session_stop`.
 - Ambiguous routing can use `modelRoles.classifier`, which the packaged `omp-config` template defaults to `opencode-go/deepseek-v4-flash:medium`. Use `/classifier set <provider/model:effort>` or change that config role to try another classifier model.
 - Coding tasks use lightweight TDD guidance, fork plan/task/reviewer subagents, pass role-specific skill lists to each subagent, and require testing evidence.
 - Security review tasks fork ecc-security-reviewer plus reviewer.
@@ -111,6 +112,23 @@ Or use the slash command:
 `/model` changes the active session model. `modelRoles.classifier` controls the classifier role used by OMP Enhancer routing; `modelTags.classifier` gives that custom role a visible name in OMP builds that list configured roles.
 
 The classifier may choose only an intent and risk flags. It cannot invent skills, tools, subagents, or gate formats; those still come from the core route catalog.
+
+### Main-agent loop guard
+
+The packaged config enables a bounded repetition guard for the MiMo default model:
+
+```yaml
+loopGuard:
+  enabled: true
+  mainAgent:
+    modelPattern: xiaomi/mimo-v2.5
+    maxRepeatedSentence: 3
+    maxRepeatedPhrase: 2
+    maxRecoveryAttempts: 1
+    fallbackRole: advisor
+```
+
+The guard ignores fenced code blocks, SKILL_USAGE/SUBAGENT_USAGE evidence blocks, and markdown tables so normal outputs are not treated as loops.
 
 Upgrade all installed marketplace plugins with the validated command:
 

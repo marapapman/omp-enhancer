@@ -76,6 +76,11 @@ test('registers core tools, classifier command, and hooks', () => {
   assert.equal([...pi.tools.values()].every((tool) => typeof tool.execute === 'function'), true);
   assert.deepEqual(pi.eventHandlers.map((handler) => handler.event), [
     'session_start',
+    'assistant_delta',
+    'assistant_message',
+    'assistant_output',
+    'response_delta',
+    'response_output_delta',
     'before_agent_start',
     'tool_call',
     'tool_execution_update',
@@ -187,6 +192,124 @@ test('before_agent_start injects governance context and routes natural-language 
 
   assert.equal(stopResult?.continue, true);
   assert.match(stopResult.additionalContext, /subagent|zh-writer|zh-checker/);
+});
+
+test('before_agent_start bypasses OMP built-in slash commands without injecting or resetting route state', async () => {
+  const builtInSlashCommands = [
+    '/usage',
+    '/model xiaomi/mimo-v2.5',
+    '/models',
+    '/help',
+    '/clear',
+    '/compact focus next on routing',
+    '/join 01JZEXAMPLE',
+    '/agents',
+    '/config',
+    '/plugin list',
+    '/stats',
+    '/update',
+    '/worktree',
+    '/shell npm test',
+    '/read skill://plain-chinese-writing',
+    '/search classifier model',
+    '/setup',
+    '/token openai',
+    '/auth-broker',
+  ];
+
+  for (const slashCommand of builtInSlashCommands) {
+    await assertSlashCommandBypassed(slashCommand, 'host command context');
+  }
+});
+
+test('before_agent_start bypasses plugin slash commands so command handlers own them', async () => {
+  const pluginSlashCommands = [
+    '/classifier',
+    '/classifier set opencode-go/deepseek-v4-flash:medium',
+    '/test',
+    '/test changed',
+    '/writing-logic paper.md',
+    '/writing-quality paper.md',
+    '/config',
+    '/config-doctor',
+    '/config-assets',
+    '/omp-config:config',
+    '/omp-config:config-doctor',
+    '/omp-config:config-assets',
+    '/omp-testing-enhancer:test',
+    '/writing-helper:writing-logic paper.md',
+    '/writing-helper:writing-quality paper.md',
+  ];
+
+  for (const slashCommand of pluginSlashCommands) {
+    await assertSlashCommandBypassed(slashCommand, 'plugin command context');
+  }
+});
+
+test('before_agent_start still routes prompts that begin with absolute paths', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  const agentEvent = { prompt: '/home/dingli/omp-enhancer 这个路径下的插件是什么？' };
+  const result = await event(pi, 'before_agent_start')(agentEvent, ctx);
+  const fragment = governanceText(result, agentEvent);
+
+  assert.match(fragment, /OMP Enhancer Core Routing/);
+  assert.match(fragment, /Intent:\s*unknown/);
+});
+
+test('assistant output loop guard aborts repeated main-agent generation and prepares recovery context', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt: 'Implement classifier fallback handling and add tests.' }, ctx);
+
+  const repeated = [
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+  ].join('\n');
+  const blocked = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
+
+  assert.equal(blocked.abort, true);
+  assert.match(blocked.reason, /loop guard/i);
+  assert.match(blocked.additionalContext, /main-agent loop guard stopped/);
+  assert.match(blocked.additionalContext, /Do not repeat the stopped sentence/);
+
+  const recovery = await event(pi, 'before_agent_start')({ prompt: 'Continue.' }, ctx);
+
+  assert.match(recovery.additionalContext, /choose exactly one next action/);
+  assert.equal(recovery.route.intent, 'implementation-with-tests');
+});
+
+test('session_stop loop guard gives one bounded recovery for repeated final output', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({
+    prompt: '诊断为什么当前插件会重复输出同一句话，不要修改文件。',
+  }, ctx);
+
+  const repeated = [
+    '我需要继续检查这个问题。',
+    '我需要继续检查这个问题。',
+    '我需要继续检查这个问题。',
+  ].join('\n');
+
+  const first = await event(pi, 'session_stop')({ output: repeated }, ctx);
+
+  assert.equal(first?.continue, true);
+  assert.match(first.additionalContext, /main-agent loop guard stopped/);
+
+  const second = await event(pi, 'session_stop')({ output: repeated }, ctx);
+
+  assert.equal(second, undefined);
 });
 
 test('session_stop continues when a routed writing task has not run writing QA', async () => {
@@ -1961,6 +2084,34 @@ function event(pi, name) {
   const found = pi.eventHandlers.find((handler) => handler.event === name);
   if (!found) throw new Error(`Missing event ${name}`);
   return found.handler;
+}
+
+async function assertSlashCommandBypassed(slashCommand, contextText) {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: 'Implement classifier fallback handling and add tests.' },
+    ctx,
+  );
+
+  const slashEvent = { prompt: slashCommand, additionalContext: contextText };
+  const slashResult = await event(pi, 'before_agent_start')(slashEvent, ctx);
+
+  assert.equal(slashResult, undefined, slashCommand);
+  assert.equal(slashEvent.additionalContext, contextText, slashCommand);
+
+  const governance = await tool(pi, 'omp_core_governance_prompt').execute(
+    `call-governance-after-slash-bypass-${slashCommand.replace(/[^A-Za-z0-9]+/g, '-')}`,
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(governance.details.route.intent, 'implementation-with-tests', slashCommand);
 }
 
 async function forkSubagents(pi, ctx, agents) {

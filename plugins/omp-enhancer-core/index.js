@@ -4,11 +4,28 @@ import { validateSkillUsage } from './src/skill-usage.js';
 import { collectSubagentTaskRecords, parseSubagentUsageDetails, validateSubagentUsage } from './src/subagent-usage.js';
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
 import { runClassifierCommand } from './src/classifier-config.js';
+import {
+  createLoopGuardState,
+  readLoopGuardSnapshot,
+  recordGeneratedText,
+  recordLoopGuardProgress,
+  serializeLoopGuardState,
+  startLoopGuardRun,
+  takeLoopRecoveryContext,
+  buildLoopRecoveryContext,
+} from './src/loop-guard.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
 const TASK_SUBAGENT_EVENT_CHANNEL = 'task:subagent:event';
 const TASK_SUBAGENT_PROGRESS_CHANNEL = 'task:subagent:progress';
 const TASK_SUBAGENT_LIFECYCLE_CHANNEL = 'task:subagent:lifecycle';
+const ASSISTANT_OUTPUT_EVENTS = [
+  'assistant_delta',
+  'assistant_message',
+  'assistant_output',
+  'response_delta',
+  'response_output_delta',
+];
 const SUBAGENT_STUCK_AFTER_MS = 10 * 60 * 1000;
 const SUBAGENT_ACTIVE_STATUSES = new Set(['pending', 'running', 'started', 'in_progress', 'in-progress']);
 const SUBAGENT_COMPLETED_STATUSES = new Set(['completed', 'complete', 'success', 'succeeded']);
@@ -144,9 +161,40 @@ export default function registerCoreEnhancer(pi) {
     return undefined;
   });
 
+  for (const eventName of ASSISTANT_OUTPUT_EVENTS) {
+    pi.on?.(eventName, async (event = {}, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
+      if (state.loopGuard.streamTriggered) return undefined;
+      const text = extractGeneratedOutputText(event);
+      if (!text) return undefined;
+      const detection = recordGeneratedText(state.loopGuard, text);
+      if (!detection.repeated) return undefined;
+
+      await persistState(pi, state);
+      const additionalContext = buildLoopRecoveryContext(state.loopGuard);
+      await ctx.ui?.notify?.('OMP Enhancer Core stopped a repeated main-agent generation.', 'warn');
+      return {
+        abort: true,
+        reason: `OMP Enhancer Core loop guard: ${detection.reason}`,
+        additionalContext,
+        details: { loopGuard: detection },
+      };
+    });
+  }
+
   pi.on?.('before_agent_start', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const prompt = extractPrompt(event);
+    // Slash commands are owned by OMP or by the registering plugin command handler.
+    // Core routing only handles natural-language tasks.
+    if (isSlashCommandPrompt(prompt)) return undefined;
+    const recoveryContext = takeLoopRecoveryContext(state.loopGuard);
+    if (recoveryContext) {
+      if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${recoveryContext}`;
+      else event.additionalContext = [event.additionalContext, recoveryContext].filter(Boolean).join('\n\n');
+      await persistState(pi, state);
+      return { additionalContext: recoveryContext, route: state.lastRoute };
+    }
     if (isInternalCoreContinuation(prompt)) return undefined;
     if (isSubagentLaunchPrompt(prompt)) {
       const fragment = buildSubagentPromptFragment({ prompt });
@@ -156,6 +204,7 @@ export default function registerCoreEnhancer(pi) {
     }
     const route = routeNaturalLanguageTask({ prompt });
     setRouteState(state, route);
+    startLoopGuardRun(state.loopGuard, `${route.intent}:${state.routeStartedAt}`);
     await persistState(pi, state);
     const fragment = buildGovernancePromptFragment({ route });
     if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${fragment}`;
@@ -166,6 +215,7 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
+    if (name) recordLoopGuardProgress(state.loopGuard, `tool_call:${name}`);
     const preworkBlock = buildPreworkSkillGateBlock(state, name);
     if (preworkBlock) {
       await persistState(pi, state);
@@ -191,6 +241,7 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('tool_result', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
+    if (name) recordLoopGuardProgress(state.loopGuard, `tool_result:${name}`);
     const successful = isSuccessfulToolEvent(event);
     if (name && successful && name !== 'read') clearToolFailures(state, name);
     if (name && !successful) recordToolFailure(state, name, event);
@@ -210,6 +261,13 @@ export default function registerCoreEnhancer(pi) {
     restoreStateFromContext(state, ctx);
     recordFinalOutputEvidence(state, event);
     reconcileSkillUsageFromReadEvidence(state);
+
+    const loopRecoveryContext = buildLoopRecoveryStopContext(state, event);
+    if (loopRecoveryContext) {
+      await persistState(pi, state);
+      return { continue: true, additionalContext: loopRecoveryContext };
+    }
+
     await persistState(pi, state);
 
     const missingSubagentContext = buildMissingSubagentUsageContext(state);
@@ -232,6 +290,7 @@ export function createState() {
     lastSkillUsage: null,
     lastSubagentUsage: null,
     evidence: emptyEvidence(),
+    loopGuard: createLoopGuardState(),
   };
 }
 
@@ -285,6 +344,7 @@ function setRouteState(state, route) {
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
   state.evidence = emptyEvidence();
+  state.loopGuard = createLoopGuardState();
 }
 
 function resetState(state) {
@@ -293,6 +353,7 @@ function resetState(state) {
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
   state.evidence = emptyEvidence();
+  state.loopGuard = createLoopGuardState();
 }
 
 async function persistState(pi, state) {
@@ -355,6 +416,7 @@ function replaceState(target, source) {
   target.lastSkillUsage = source.lastSkillUsage;
   target.lastSubagentUsage = source.lastSubagentUsage;
   target.evidence = source.evidence;
+  target.loopGuard = source.loopGuard ?? createLoopGuardState();
 }
 
 function serializeState(state) {
@@ -363,6 +425,7 @@ function serializeState(state) {
     routeStartedAt: state.routeStartedAt,
     lastSkillUsage: state.lastSkillUsage,
     lastSubagentUsage: state.lastSubagentUsage,
+    loopGuard: serializeLoopGuardState(state.loopGuard),
     evidence: {
       writingQuality: state.evidence.writingQuality,
       writingLogic: state.evidence.writingLogic,
@@ -409,6 +472,7 @@ function readStateSnapshot(value) {
     routeStartedAt: Number.isFinite(value.routeStartedAt) ? value.routeStartedAt : 0,
     lastSkillUsage: isRecord(value.lastSkillUsage) ? value.lastSkillUsage : null,
     lastSubagentUsage: isRecord(value.lastSubagentUsage) ? value.lastSubagentUsage : null,
+    loopGuard: readLoopGuardSnapshot(value.loopGuard),
     evidence,
   };
 }
@@ -552,6 +616,10 @@ function isInternalCoreContinuation(prompt) {
     && prompt.includes('gate is still open');
 }
 
+function isSlashCommandPrompt(prompt) {
+  return /^\/[A-Za-z][A-Za-z0-9:_-]*(?:\s|$)/.test(String(prompt ?? '').trim());
+}
+
 function isSubagentLaunchPrompt(prompt) {
   return /OMP_REQUIRED_SUBAGENT:/i.test(prompt)
     || /Required skills for this subagent:/i.test(prompt);
@@ -656,6 +724,15 @@ function recordFinalOutputEvidence(state, event = {}) {
   }
 }
 
+function buildLoopRecoveryStopContext(state, event = {}) {
+  if (state.loopGuard.recoveryPending) return takeLoopRecoveryContext(state.loopGuard);
+  const output = extractFinalOutputText(event);
+  if (!output) return null;
+  const detection = recordGeneratedText(state.loopGuard, output);
+  if (!detection.repeated) return null;
+  return takeLoopRecoveryContext(state.loopGuard);
+}
+
 function reconcileSkillUsageFromReadEvidence(state) {
   const requiredSkills = state.lastRoute?.requiredSkills ?? [];
   if (!requiredSkills.length || state.lastSkillUsage?.ok || !state.evidence.loadedSkills.size) return;
@@ -664,6 +741,37 @@ function reconcileSkillUsageFromReadEvidence(state) {
     output: '',
     loadedSkills: state.evidence.loadedSkills,
   });
+}
+
+function extractGeneratedOutputText(event = {}) {
+  const candidates = [
+    event.delta,
+    event.chunk,
+    event.token,
+    event.text,
+    event.outputText,
+    event.message,
+    event.content,
+    event.output,
+    event.response,
+    event.result,
+    event.details?.delta,
+    event.details?.chunk,
+    event.details?.token,
+    event.details?.text,
+    event.details?.outputText,
+    event.details?.message,
+    event.details?.content,
+    event.details?.output,
+    event.details?.response,
+    event.details?.result,
+  ];
+
+  return candidates
+    .flatMap((candidate) => collectTextCandidates(candidate))
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .join('\n');
 }
 
 function extractFinalOutputText(event = {}) {

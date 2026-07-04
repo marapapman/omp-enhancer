@@ -1,3 +1,5 @@
+import { loopGuardPromptSection } from './loop-guard.js';
+
 export function buildGovernancePromptFragment({ route } = {}) {
   const resolved = route ?? {
     intent: 'unknown',
@@ -13,6 +15,8 @@ export function buildGovernancePromptFragment({ route } = {}) {
       '',
       'Intent: unknown',
       'Use natural language context. Do not force a plugin workflow unless the user asks for coding, writing, testing, security, or config work.',
+      '',
+      loopGuardPromptSection(),
     ].join('\n');
   }
 
@@ -24,6 +28,8 @@ export function buildGovernancePromptFragment({ route } = {}) {
     '',
     'Use this natural language route. Do not require a command prefix.',
     routeBoundaryFor(resolved),
+    '',
+    loopGuardPromptSection(),
     '',
     '### Mandatory Skill Workflow',
     '',

@@ -1,0 +1,137 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  buildLoopRecoveryContext,
+  createLoopGuardState,
+  inspectGeneratedText,
+  recordGeneratedText,
+  recordLoopGuardProgress,
+  stripExemptBlocks,
+  takeLoopRecoveryContext,
+} from '../src/loop-guard.js';
+
+test('detects repeated Chinese sentences', () => {
+  const text = [
+    '我需要先验证技能使用情况。',
+    '我需要先验证技能使用情况。',
+    '我需要先验证技能使用情况。',
+  ].join('\n');
+
+  const result = inspectGeneratedText(text);
+
+  assert.equal(result.repeated, true);
+  assert.equal(result.kind, 'sentence');
+  assert.match(result.repeatedText, /我需要先验证技能使用情况/);
+});
+
+test('detects repeated English self-loop sentences', () => {
+  const text = [
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+  ].join('\n');
+
+  const result = inspectGeneratedText(text);
+
+  assert.equal(result.repeated, true);
+  assert.equal(result.kind, 'sentence');
+  assert.match(result.repeatedText, /the system is asking me/);
+});
+
+test('detects repeated long phrase lines before a third full sentence is needed', () => {
+  const line = 'I am still waiting for the validator to accept the same evidence before I can finish this task';
+  const result = inspectGeneratedText(`${line}\n${line}`);
+
+  assert.equal(result.repeated, true);
+  assert.equal(result.kind, 'phrase');
+});
+
+test('detects repeated ngrams in a single stream buffer', () => {
+  const phrase = 'the system is asking me to validate skill usage again ';
+  const result = inspectGeneratedText(phrase.repeat(4));
+
+  assert.equal(result.repeated, true);
+  assert.equal(result.kind, 'ngram');
+});
+
+test('ignores repetition inside code fences, usage blocks, and markdown tables', () => {
+  const text = [
+    '```js',
+    'console.log("retry");',
+    'console.log("retry");',
+    'console.log("retry");',
+    '```',
+    '',
+    'SKILL_USAGE',
+    'Required:',
+    '- plain-chinese-writing',
+    '- plain-chinese-writing',
+    '- plain-chinese-writing',
+    'Loaded:',
+    '- plain-chinese-writing',
+    '- plain-chinese-writing',
+    '- plain-chinese-writing',
+    '',
+    '| Tool | Status |',
+    '| --- | --- |',
+    '| read | ok |',
+    '| read | ok |',
+    '| read | ok |',
+  ].join('\n');
+
+  assert.equal(inspectGeneratedText(text).repeated, false);
+  assert.equal(stripExemptBlocks(text).includes('console.log'), false);
+  assert.equal(stripExemptBlocks(text).includes('plain-chinese-writing'), false);
+});
+
+test('records loop guard state and returns one recovery context', () => {
+  const state = createLoopGuardState();
+  const repeated = [
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+  ].join('\n');
+
+  const detection = recordGeneratedText(state, repeated);
+
+  assert.equal(detection.repeated, true);
+  assert.equal(state.recoveryPending, true);
+  assert.equal(state.repeatedGenerationCount, 1);
+
+  const context = takeLoopRecoveryContext(state);
+
+  assert.match(context, /main-agent loop guard stopped/);
+  assert.match(context, /choose exactly one next action/);
+  assert.equal(state.recoveryAttempts, 1);
+  assert.equal(state.recoveryPending, false);
+  assert.equal(takeLoopRecoveryContext(state), null);
+});
+
+test('clears pending recovery when a tool call makes progress after a repeated stream', () => {
+  const state = createLoopGuardState();
+  const repeated = [
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+  ].join('\n');
+
+  recordGeneratedText(state, repeated);
+  recordLoopGuardProgress(state, 'tool_call:read');
+
+  assert.equal(state.recoveryPending, false);
+  assert.equal(state.streamTriggered, false);
+  assert.equal(takeLoopRecoveryContext(state), null);
+});
+
+test('formats recovery context with the stopped repeated text', () => {
+  const state = createLoopGuardState();
+  state.lastAbortReason = 'Repeated sentence 3 times.';
+  state.lastRepeatedText = 'I am repeating the same validation request.';
+
+  const context = buildLoopRecoveryContext(state);
+
+  assert.match(context, /Repeated sentence 3 times/);
+  assert.match(context, /I am repeating the same validation request/i);
+  assert.match(context, /Do not repeat the stopped sentence/);
+});
