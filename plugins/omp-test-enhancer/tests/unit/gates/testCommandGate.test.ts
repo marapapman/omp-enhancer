@@ -31,4 +31,14 @@ describe('evaluateTestCommandGate', () => {
       evidence: { command: 'bunx vitest run', exitCode: 1 }
     }])
   })
+
+  it('blocks timeout-style negative exit codes', () => {
+    expect(evaluateTestCommandGate({ command: 'npm test', exitCode: -1, stdout: '', stderr: 'timed out' })).toEqual([{
+      gate: 'test-command',
+      passed: false,
+      severity: 'blocker',
+      summary: 'Configured test command failed.',
+      evidence: { command: 'npm test', exitCode: -1 }
+    }])
+  })
 })

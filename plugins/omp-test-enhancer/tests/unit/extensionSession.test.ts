@@ -49,6 +49,44 @@ describe('extension session state', () => {
 
     expect(await event(pi, 'session_stop')({}, ctx)).toBeUndefined()
   })
+
+  it('keeps the session gate open after a failed omp_test_gate result until a passing rerun', async () => {
+    const pi = new FakePi()
+    registerTestingEnhancer(pi)
+    const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
+
+    await event(pi, 'session_start')({}, ctx)
+    const analyze = pi.tools.get('omp_test_analyze')
+    if (!analyze) throw new Error('Missing analyze')
+    await analyze.execute('call', {
+      changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
+    }, undefined, undefined, ctx)
+
+    const gate = pi.tools.get('omp_test_gate')
+    if (!gate) throw new Error('Missing gate')
+    await gate.execute('call', {
+      targets: [{ id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }],
+      candidate: { id: 'candidate', targetId: 'src/user/UserService.ts#UserService', files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: "import { helper } from '../internal/helper'\nexpect(helper()).toBe(true)" }] }
+    }, undefined, undefined, ctx)
+
+    expect(await event(pi, 'session_stop')({}, ctx)).toMatchObject({
+      continue: true,
+      additionalContext: expect.stringContaining('omp_test_gate failed')
+    })
+    const failedStop = await event(pi, 'session_stop')({}, ctx)
+    expect(failedStop).toMatchObject({
+      continue: true,
+      additionalContext: expect.stringContaining('Test imports private or internal implementation details.')
+    })
+    expect(failedStop?.additionalContext).toContain('Repair:')
+
+    await gate.execute('call', {
+      targets: [{ id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }],
+      candidate: { id: 'candidate', targetId: 'src/user/UserService.ts#UserService', files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: 'expect(result).toBe(true)' }] }
+    }, undefined, undefined, ctx)
+
+    expect(await event(pi, 'session_stop')({}, ctx)).toBeUndefined()
+  })
 })
 
 function event(pi: FakePi, name: string): ExtensionEventHandler {

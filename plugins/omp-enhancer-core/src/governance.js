@@ -132,17 +132,36 @@ export function buildMissingGateContext({ route, state } = {}) {
     return [
       'OMP Enhancer Core gate is still open for this writing task.',
       'Run writing QA before finishing. Use writing_quality_check or writing_logic_check, and make sure SKILL_USAGE lists the required writing skills such as plain-chinese-writing when required.',
-    ].join('\n');
+      formatRecentToolFailures(state, ['writing_quality_check', 'writing_logic_check']),
+    ].filter(Boolean).join('\n');
   }
 
   if (needsTesting(route) && !state?.evidence?.testingGate) {
     return [
       'OMP Enhancer Core gate is still open for this implementation or testing task.',
       'Run the testing workflow and finish with omp_test_gate. Keep test-driven-development and SKILL_USAGE evidence in the final response.',
-    ].join('\n');
+      formatRecentToolFailures(state, ['omp_test_gate']),
+    ].filter(Boolean).join('\n');
   }
 
   return null;
+}
+
+function formatRecentToolFailures(state, toolNames = []) {
+  const failures = state?.evidence?.toolFailures;
+  if (!Array.isArray(failures)) return null;
+  const allowed = new Set(toolNames);
+  const relevant = failures.filter((failure) => allowed.has(failure.tool));
+  if (!relevant.length) return null;
+  return [
+    'Recent failed tool results:',
+    ...relevant.map((failure) => {
+      const details = [failure.summary, failure.message, failure.repairHint ? `Repair: ${failure.repairHint}` : null]
+        .filter(Boolean)
+        .join(' ');
+      return `- ${failure.tool}: ${details || 'tool returned a failed result'}`;
+    }),
+  ].join('\n');
 }
 
 function workflowFor(intent) {

@@ -8,6 +8,17 @@ export interface EvaluateIndirectTestGateInput {
 export function evaluateIndirectTestGate(input: EvaluateIndirectTestGateInput): GateResult[] {
   const results: GateResult[] = []
 
+  if (input.targets.length === 0) {
+    return [{
+      gate: 'indirect-test',
+      passed: false,
+      severity: 'blocker',
+      summary: 'No changed targets supplied for indirect-test gate.',
+      evidence: { candidateId: input.candidate.id },
+      repairHint: 'Run omp_test_analyze and pass the changed targets into omp_test_gate before accepting the tests.'
+    }]
+  }
+
   for (const file of input.candidate.files) {
     for (const target of input.targets) {
       if (target.kind === 'pure-function' || target.kind === 'validator' || target.kind === 'parser' || target.kind === 'formatter') continue
@@ -77,9 +88,11 @@ export function evaluateIndirectTestGate(input: EvaluateIndirectTestGateInput): 
 
 
 function findPrivateImport(content: string): string | undefined {
-  const importPaths = [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)]
-    .map(match => match[1])
-    .filter((value): value is string => Boolean(value))
+  const importPaths = [
+    ...[...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map(match => match[1]),
+    ...[...content.matchAll(/require\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map(match => match[1]),
+    ...[...content.matchAll(/import\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map(match => match[1])
+  ].filter((value): value is string => Boolean(value))
 
   return importPaths.find(path =>
     path.includes('/internal/') ||
@@ -95,14 +108,20 @@ function findPrivateAccess(content: string): string | undefined {
 }
 
 function hasOnlyMockCallAssertions(content: string): boolean {
-  const assertions = content.match(/expect\s*\([^)]*\)\s*\.\s*([A-Za-z0-9_]+)/g) ?? []
+  const assertionMethods = [...content.matchAll(/expect\s*\((?:[^()]|\([^()]*\))*\)\s*\.\s*([A-Za-z0-9_]+)/g)]
+    .map(match => match[1])
+    .filter((value): value is string => Boolean(value))
 
-  if (assertions.length === 0) return false
+  if (assertionMethods.length === 0) return false
 
-  return assertions.every(assertion =>
-    assertion.includes('toHaveBeenCalled') ||
-    assertion.includes('toHaveBeenCalledWith') ||
-    assertion.includes('toHaveBeenTimes')
+  return assertionMethods.every(method =>
+    method === 'toHaveBeenCalled' ||
+    method === 'toHaveBeenCalledWith' ||
+    method === 'toHaveBeenCalledOnce' ||
+    method === 'toHaveBeenCalledTimes' ||
+    method === 'toHaveBeenLastCalledWith' ||
+    method === 'toHaveBeenNthCalledWith' ||
+    method === 'toHaveBeenTimes'
   )
 }
 

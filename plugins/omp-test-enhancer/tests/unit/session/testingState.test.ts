@@ -65,14 +65,18 @@ describe('testingState', () => {
     ])).toEqual(createInitialTestingState())
   })
 
-  it('transitions from pending to finished and records report markdown', () => {
+  it('keeps pending after failed blocker gates and clears pending after passing gates', () => {
     const pending = markGatePending(createInitialTestingState(), [target])
     expect(pending.pendingGate).toBe(true)
     expect(pending.lastTargets).toEqual([target])
 
-    const finished = markGateFinished(pending, [passedGate, browserGate])
+    const failed = markGateFinished(pending, [passedGate, browserGate])
+    expect(failed.pendingGate).toBe(true)
+    expect(failed.lastGateResults).toEqual([passedGate, browserGate])
+
+    const finished = markGateFinished(failed, [passedGate])
     expect(finished.pendingGate).toBe(false)
-    expect(finished.lastGateResults).toEqual([passedGate, browserGate])
+    expect(finished.lastGateResults).toEqual([passedGate])
 
     expect(markReportGenerated(finished, '# report')).toMatchObject({
       lastReportMarkdown: '# report'

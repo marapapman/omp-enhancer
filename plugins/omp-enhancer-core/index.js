@@ -75,7 +75,11 @@ export default function registerCoreEnhancer(pi) {
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const requiredSkills = params.requiredSkills ?? state.lastRoute?.requiredSkills ?? [];
-      const validation = validateSkillUsage({ requiredSkills, output: params.output ?? '' });
+      const validation = validateSkillUsage({
+        requiredSkills,
+        output: params.output ?? '',
+        loadedSkills: state.evidence.loadedSkills,
+      });
       state.lastSkillUsage = validation;
       await persistState(pi, state);
       return okResult(validation.message, { validation });
@@ -141,7 +145,7 @@ export default function registerCoreEnhancer(pi) {
 
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
-    const name = event.name ?? event.toolName;
+    const name = toolEventName(event);
     if (name === 'task') recordSubagentEvidence(state, event);
     await persistState(pi, state);
     return undefined;
@@ -149,11 +153,15 @@ export default function registerCoreEnhancer(pi) {
 
   pi.on?.('tool_result', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
-    const name = event.name ?? event.toolName;
-    if (name === 'writing_quality_check' || name === 'writing_logic_check') state.evidence.writingQuality = true;
-    if (name === 'omp_test_gate') state.evidence.testingGate = true;
-    if (name === 'omp_test_report') state.evidence.testingReport = true;
-    if (name === 'task') recordSubagentEvidence(state, event);
+    const name = toolEventName(event);
+    const successful = isSuccessfulToolEvent(event);
+    if (name && successful && name !== 'read') clearToolFailures(state, name);
+    if (name && !successful) recordToolFailure(state, name, event);
+    if ((name === 'writing_quality_check' || name === 'writing_logic_check') && successful) state.evidence.writingQuality = true;
+    if (name === 'omp_test_gate' && successful) state.evidence.testingGate = true;
+    if (name === 'omp_test_report' && successful) state.evidence.testingReport = true;
+    if (name === 'task' && successful) recordSubagentEvidence(state, event);
+    if (name === 'read' && successful) recordReadSkillEvidence(state, event);
     await persistState(pi, state);
     return undefined;
   });
@@ -161,6 +169,7 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('session_stop', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     recordFinalOutputEvidence(state, event);
+    reconcileSkillUsageFromReadEvidence(state);
     await persistState(pi, state);
 
     const missingSubagentContext = buildMissingSubagentUsageContext(state);
@@ -192,6 +201,8 @@ function emptyEvidence() {
     testingGate: false,
     testingReport: false,
     taskToolCalls: 0,
+    loadedSkills: new Set(),
+    toolFailures: [],
     forkedSubagents: new Set(),
     subagentSkills: new Map(),
     unexpectedSubagentSkills: new Map(),
@@ -290,6 +301,8 @@ function serializeState(state) {
       testingGate: state.evidence.testingGate,
       testingReport: state.evidence.testingReport,
       taskToolCalls: state.evidence.taskToolCalls,
+      loadedSkills: [...state.evidence.loadedSkills],
+      toolFailures: state.evidence.toolFailures,
       forkedSubagents: [...state.evidence.forkedSubagents],
       subagentSkills: [...state.evidence.subagentSkills.entries()].map(([agent, skills]) => ({
         agent,
@@ -323,6 +336,8 @@ function readEvidenceSnapshot(value) {
     testingGate: value.testingGate === true,
     testingReport: value.testingReport === true,
     taskToolCalls: Number.isInteger(value.taskToolCalls) ? value.taskToolCalls : 0,
+    loadedSkills: new Set(Array.isArray(value.loadedSkills) ? value.loadedSkills.filter(isString) : []),
+    toolFailures: readToolFailures(value.toolFailures),
     forkedSubagents: new Set(Array.isArray(value.forkedSubagents) ? value.forkedSubagents.filter(isString) : []),
     subagentSkills: readSubagentSkills(value.subagentSkills),
     unexpectedSubagentSkills: readSubagentSkills(value.unexpectedSubagentSkills),
@@ -339,6 +354,18 @@ function readSubagentSkills(value) {
   return skills;
 }
 
+function readToolFailures(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isRecord).flatMap((item) => {
+    if (typeof item.tool !== 'string') return [];
+    const failure = { tool: item.tool };
+    if (typeof item.message === 'string') failure.message = item.message;
+    if (typeof item.summary === 'string') failure.summary = item.summary;
+    if (typeof item.repairHint === 'string') failure.repairHint = item.repairHint;
+    return [failure];
+  });
+}
+
 function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -349,6 +376,10 @@ function isString(value) {
 
 function extractPrompt(event) {
   return String(event.prompt ?? event.userPrompt ?? event.message ?? event.task ?? '');
+}
+
+function toolEventName(event = {}) {
+  return event.name ?? event.toolName ?? event.details?.toolName ?? event.tool?.name ?? event.tool?.toolName;
 }
 
 function isInternalCoreContinuation(prompt) {
@@ -365,13 +396,15 @@ function buildMissingSkillUsageContext(state) {
   const requiredSkills = state.lastRoute?.requiredSkills ?? [];
   if (!requiredSkills.length) return null;
   if (state.lastSkillUsage?.ok) return null;
+  const failureContext = formatRecentToolFailures(state, ['read', 'omp_core_validate_skill_usage']);
 
   return [
     'OMP Enhancer Core skill gate is still open.',
     `Validate SKILL_USAGE before finishing. Required skills: ${requiredSkills.join(', ')}.`,
     'If your previous final response already included SKILL_USAGE, call omp_core_validate_skill_usage with output set to that full response text. Do not only say the evidence was already provided.',
+    failureContext,
     state.lastSkillUsage?.message ? `Last validation: ${state.lastSkillUsage.message}` : 'No successful SKILL_USAGE validation has been recorded.',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 function recordFinalOutputEvidence(state, event = {}) {
@@ -380,13 +413,27 @@ function recordFinalOutputEvidence(state, event = {}) {
 
   const requiredSkills = state.lastRoute?.requiredSkills ?? [];
   if (requiredSkills.length && !state.lastSkillUsage?.ok && /\bSKILL_USAGE\b/i.test(output)) {
-    state.lastSkillUsage = validateSkillUsage({ requiredSkills, output });
+    state.lastSkillUsage = validateSkillUsage({
+      requiredSkills,
+      output,
+      loadedSkills: state.evidence.loadedSkills,
+    });
   }
 
   const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
   if (requiredSubagents.length && !state.lastSubagentUsage?.ok && /\bSUBAGENT_USAGE\b/i.test(output)) {
     state.lastSubagentUsage = validateSubagentUsage({ requiredSubagents, output });
   }
+}
+
+function reconcileSkillUsageFromReadEvidence(state) {
+  const requiredSkills = state.lastRoute?.requiredSkills ?? [];
+  if (!requiredSkills.length || state.lastSkillUsage?.ok || !state.evidence.loadedSkills.size) return;
+  state.lastSkillUsage = validateSkillUsage({
+    requiredSkills,
+    output: '',
+    loadedSkills: state.evidence.loadedSkills,
+  });
 }
 
 function extractFinalOutputText(event = {}) {
@@ -451,7 +498,8 @@ function buildMissingSubagentUsageContext(state) {
     return unexpected.length ? [{ agent, skills: unexpected }] : [];
   });
 
-  if (!missing.length && !missingSkillAssignments.length && !unexpectedSkillAssignments.length) return null;
+  const failureContext = formatRecentToolFailures(state, ['task']);
+  if (!missing.length && !missingSkillAssignments.length && !unexpectedSkillAssignments.length && !failureContext) return null;
 
   return [
     'OMP Enhancer Core subagent gate is still open.',
@@ -460,6 +508,7 @@ function buildMissingSubagentUsageContext(state) {
     missing.length ? `Missing subagents: ${missing.join(', ')}.` : null,
     missingSkillAssignments.length ? `Missing subagent skill assignments: ${formatMissingSkillAssignments(missingSkillAssignments)}.` : null,
     unexpectedSkillAssignments.length ? `Unexpected subagent skill assignments: ${formatMissingSkillAssignments(unexpectedSkillAssignments)}.` : null,
+    failureContext,
     state.lastSubagentUsage?.message
       ? `Last validation: ${state.lastSubagentUsage.message}`
       : 'No successful SUBAGENT_USAGE validation or task-tool role evidence has been recorded.',
@@ -489,6 +538,179 @@ function recordSubagentEvidence(state, event) {
   }
 }
 
+function recordReadSkillEvidence(state, event = {}) {
+  if (isFailedToolEvent(event)) return;
+  for (const skill of extractReadSkillNames(event)) {
+    state.evidence.loadedSkills.add(skill);
+  }
+}
+
+function recordToolFailure(state, name, event = {}) {
+  const previous = state.evidence.toolFailures.find((item) => item.tool === name);
+  const failure = mergeToolFailure(previous, buildToolFailure(name, event));
+  state.evidence.toolFailures = [
+    ...state.evidence.toolFailures.filter((item) => item.tool !== name),
+    failure,
+  ].slice(-8);
+}
+
+function clearToolFailures(state, name) {
+  state.evidence.toolFailures = state.evidence.toolFailures.filter((item) => item.tool !== name);
+}
+
+function buildToolFailure(name, event = {}) {
+  const failure = { tool: name };
+  const message = extractFailureMessage(event);
+  const summary = extractFailureSummary(event);
+  const repairHint = extractRepairHint(event);
+  if (message) failure.message = message;
+  if (summary) failure.summary = summary;
+  if (repairHint) failure.repairHint = repairHint;
+  return failure;
+}
+
+function mergeToolFailure(previous, current) {
+  if (!previous) return current;
+  return {
+    tool: current.tool,
+    message: current.message ?? previous.message,
+    summary: current.summary ?? previous.summary,
+    repairHint: current.repairHint ?? previous.repairHint,
+  };
+}
+
+function extractFailureMessage(event = {}) {
+  const candidates = [
+    event.message,
+    event.error,
+    event.details?.message,
+    event.details?.error,
+    event.details?.stderr,
+    event.content,
+  ];
+  return candidates
+    .flatMap((candidate) => collectTextCandidates(candidate))
+    .map((text) => text.trim())
+    .filter(Boolean)[0];
+}
+
+function extractFailureSummary(event = {}) {
+  const candidates = [
+    event.summary,
+    event.details?.summary,
+    ...(Array.isArray(event.details?.results) ? event.details.results.map((result) => result?.summary) : []),
+  ];
+  return candidates.find((value) => typeof value === 'string' && value.trim())?.trim();
+}
+
+function extractRepairHint(event = {}) {
+  const candidates = [
+    event.repairHint,
+    event.details?.repairHint,
+    ...(Array.isArray(event.details?.results) ? event.details.results.map((result) => result?.repairHint) : []),
+  ];
+  return candidates.find((value) => typeof value === 'string' && value.trim())?.trim();
+}
+
+function formatRecentToolFailures(state, toolNames = []) {
+  const allowed = new Set(toolNames);
+  const failures = state.evidence.toolFailures.filter((failure) => allowed.has(failure.tool));
+  if (!failures.length) return null;
+  return [
+    'Recent failed tool results:',
+    ...failures.map((failure) => {
+      const details = [failure.summary, failure.message, failure.repairHint ? `Repair: ${failure.repairHint}` : null]
+        .filter(Boolean)
+        .join(' ');
+      return `- ${failure.tool}: ${details || 'tool returned a failed result'}`;
+    }),
+  ].join('\n');
+}
+
+function isSuccessfulToolEvent(event = {}) {
+  return !isFailedToolEvent(event);
+}
+
+function isFailedToolEvent(event = {}) {
+  return event.isError === true
+    || event.error === true
+    || event.ok === false
+    || event.passed === false
+    || event.status === 'error'
+    || event.details?.isError === true
+    || event.details?.error === true
+    || event.details?.ok === false
+    || event.details?.passed === false;
+}
+
+function extractReadSkillNames(event = {}) {
+  return uniqueValues([
+    event.uri,
+    event.path,
+    event.resource,
+    event.resourceUri,
+    event.params,
+    event.input,
+    event.args,
+    event.arguments,
+    event.call,
+    event.request,
+    event.toolCall,
+    event.tool_call,
+    event.details?.uri,
+    event.details?.path,
+    event.details?.resource,
+    event.details?.resourceUri,
+    event.details?.params,
+    event.details?.input,
+    event.details?.args,
+    event.details?.arguments,
+    event.details?.call,
+    event.details?.request,
+    event.details?.toolCall,
+    event.details?.tool_call,
+  ].flatMap((value) => collectReadSkillNames(value)));
+}
+
+function collectReadSkillNames(value, seen = new Set()) {
+  if (typeof value === 'string') return parseSkillUris(value);
+  if (!value) return [];
+  if (Array.isArray(value)) return value.flatMap((item) => collectReadSkillNames(item, seen));
+  if (typeof value !== 'object') return [];
+  if (seen.has(value)) return [];
+  seen.add(value);
+
+  const skills = [];
+  for (const [key, child] of Object.entries(value)) {
+    if (isToolResultTextKey(key)) continue;
+    skills.push(...collectReadSkillNames(child, seen));
+  }
+  return skills;
+}
+
+function isToolResultTextKey(key) {
+  return ['content', 'output', 'result', 'response', 'message', 'text', 'stdout', 'stderr'].includes(String(key));
+}
+
+function parseSkillUris(value) {
+  const skills = [];
+  const pattern = /skill:\/\/([A-Za-z0-9_.\/-]+)/g;
+  let match;
+  while ((match = pattern.exec(value)) !== null) {
+    const skill = cleanReadSkillName(match[1]);
+    if (skill) skills.push(skill);
+  }
+  return skills;
+}
+
+function cleanReadSkillName(value) {
+  return String(value)
+    .replace(/[.。；;，,]+$/, '')
+    .replace(/[)\]}>]+$/, '')
+    .trim()
+    .toLowerCase();
+}
+
 function subagentNames(subagents = []) {
   return subagents.map((value) => (typeof value === 'string' ? value : value?.agent)).filter(Boolean);
 }
@@ -509,4 +731,8 @@ function formatRequiredSubagents(subagents) {
 
 function formatMissingSkillAssignments(assignments) {
   return assignments.map(({ agent, skills }) => `${agent} [${skills.join(', ')}]`).join('; ');
+}
+
+function uniqueValues(values) {
+  return [...new Set(values)];
 }

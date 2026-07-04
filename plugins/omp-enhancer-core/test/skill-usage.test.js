@@ -83,6 +83,51 @@ test('rejects explicit denial of required skill loading', () => {
   assert.match(result.message, /denied/i);
 });
 
+test('accepts read skill evidence when no SKILL_USAGE block is present', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+    output: '任务完成。',
+    loadedSkills: ['skill://plain-chinese-writing', 'zh-writing-polish'],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['plain-chinese-writing', 'zh-writing-polish']);
+  assert.deepEqual(result.missing, []);
+  assert.match(result.message, /read skill evidence/);
+});
+
+test('does not let read skill evidence override explicit denial', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['plain-chinese-writing'],
+    output: 'I did not load plain-chinese-writing.',
+    loadedSkills: ['plain-chinese-writing'],
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.missing, []);
+  assert.deepEqual(result.denied, ['plain-chinese-writing']);
+});
+
+test('merges SKILL_USAGE block entries with read skill evidence', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
+    output: [
+      'SKILL_USAGE',
+      'Required:',
+      '- plain-chinese-writing',
+      '- zh-writing-polish',
+      '- zh-writing-checkers',
+      'Loaded:',
+      '- plain-chinese-writing',
+    ].join('\n'),
+    loadedSkills: ['zh-writing-polish', 'skill://zh-writing-checkers'],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers']);
+  assert.deepEqual(result.missing, []);
+});
+
 test('ignores fenced code blocks when finding the authoritative SKILL_USAGE block', () => {
   const result = validateSkillUsage({
     requiredSkills: ['plain-chinese-writing'],

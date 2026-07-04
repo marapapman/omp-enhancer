@@ -28,9 +28,10 @@ export function markGatePending(state, targets) {
     };
 }
 export function markGateFinished(state, gateResults) {
+    const hasFailedBlocker = gateResults.some(result => !result.passed && result.severity === 'blocker');
     return {
         ...state,
-        pendingGate: false,
+        pendingGate: hasFailedBlocker,
         lastGateResults: gateResults
     };
 }

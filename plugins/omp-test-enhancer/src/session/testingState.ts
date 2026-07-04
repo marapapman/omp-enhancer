@@ -42,9 +42,10 @@ export function markGatePending(state: TestingEnhancerState, targets: ChangedTar
 }
 
 export function markGateFinished(state: TestingEnhancerState, gateResults: GateResult[]): TestingEnhancerState {
+  const hasFailedBlocker = gateResults.some(result => !result.passed && result.severity === 'blocker')
   return {
     ...state,
-    pendingGate: false,
+    pendingGate: hasFailedBlocker,
     lastGateResults: gateResults
   }
 }

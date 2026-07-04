@@ -103,6 +103,22 @@ async function recordTestingToolResult(event: unknown, _ctx: ExtensionToolContex
 function enforcePendingTestGate(): { continue: true; additionalContext: string } | undefined {
   if (!currentState.pendingGate) return undefined
 
+  const failedBlockers = currentState.lastGateResults.filter(result => !result.passed && result.severity === 'blocker')
+  if (failedBlockers.length > 0) {
+    return {
+      continue: true,
+      additionalContext: [
+        'OMP Testing Enhancer: omp_test_gate failed and the test gate is still open.',
+        `Failed gates: ${failedBlockers.map(result => result.gate).join(', ')}.`,
+        ...failedBlockers.map(result => {
+          const repair = result.repairHint ? ` Repair: ${result.repairHint}` : ''
+          return `- ${result.gate}: ${result.summary}.${repair}`
+        }),
+        'Fix the reported repairHint items, then rerun omp_test_gate before ending the turn.'
+      ].join('\n')
+    }
+  }
+
   return {
     continue: true,
     additionalContext: 'OMP Testing Enhancer: tests were requested but omp_test_gate has not run yet. Run omp_test_gate before ending the turn.'

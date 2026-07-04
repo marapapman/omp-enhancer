@@ -27,6 +27,22 @@ function candidate(content: string): CandidateTest {
 }
 
 describe('evaluateIndirectTestGate', () => {
+  it('blocks when no changed targets are supplied', () => {
+    const result = evaluateIndirectTestGate({
+      targets: [],
+      candidate: candidate("expect(result).toBe('ok')")
+    })
+
+    expect(result).toEqual([{
+      gate: 'indirect-test',
+      passed: false,
+      severity: 'blocker',
+      summary: 'No changed targets supplied for indirect-test gate.',
+      evidence: { candidateId: 'candidate-1' },
+      repairHint: 'Run omp_test_analyze and pass the changed targets into omp_test_gate before accepting the tests.'
+    }])
+  })
+
   it('allows direct tests for public pure functions', () => {
     const result = evaluateIndirectTestGate({
       targets: [target('pure-function')],
@@ -36,6 +52,19 @@ describe('evaluateIndirectTestGate', () => {
     expect(result).toEqual([
       expect.objectContaining({ gate: 'indirect-test', passed: true })
     ])
+  })
+
+  it('allows direct tests for parser validator and formatter targets', () => {
+    for (const kind of ['parser', 'validator', 'formatter'] as const) {
+      const result = evaluateIndirectTestGate({
+        targets: [target(kind)],
+        candidate: candidate("import { parseRaw } from '../internal/parseRaw'\nexpect(parseRaw()).toBe('ok')")
+      })
+
+      expect(result).toEqual([
+        expect.objectContaining({ gate: 'indirect-test', passed: true })
+      ])
+    }
   })
 
   it('rejects service tests importing internal implementation files', () => {
@@ -51,6 +80,24 @@ describe('evaluateIndirectTestGate', () => {
     }))
   })
 
+  it('rejects CommonJS and dynamic internal imports for indirect targets', () => {
+    for (const content of [
+      "const helper = require('../internal/helper')\nexpect(helper()).toBe('ok')",
+      "const helper = await import('../private/helper')\nexpect(helper.default()).toBe('ok')"
+    ]) {
+      const result = evaluateIndirectTestGate({
+        targets: [target('service')],
+        candidate: candidate(content)
+      })
+
+      expect(result[0]).toEqual(expect.objectContaining({
+        gate: 'indirect-test',
+        passed: false,
+        summary: 'Test imports private or internal implementation details.'
+      }))
+    }
+  })
+
   it('rejects tests that only assert internal mock calls', () => {
     const result = evaluateIndirectTestGate({
       targets: [target('service')],
@@ -62,6 +109,17 @@ describe('evaluateIndirectTestGate', () => {
       passed: false,
       repairHint: expect.stringContaining('public behavior')
     }))
+  })
+
+  it('allows mock call assertions when paired with public behavior assertions', () => {
+    const result = evaluateIndirectTestGate({
+      targets: [target('service')],
+      candidate: candidate("expect(fetchUser).toHaveBeenCalledWith('u1')\nexpect(screen.getByText('Ada')).toBeVisible()")
+    })
+
+    expect(result).toEqual([
+      expect.objectContaining({ gate: 'indirect-test', passed: true })
+    ])
   })
 
   it('rejects component tests that inspect component state', () => {

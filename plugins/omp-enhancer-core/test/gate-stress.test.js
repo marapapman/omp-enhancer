@@ -155,6 +155,7 @@ const gateCases = [
   ...crossInstanceCases(),
   ...missingSubagentCases(),
   ...missingWorkflowGateCases(),
+  ...failedWorkflowGateCases(),
   ...missingSkillCases(),
   ...recoveryCases(),
   ...nonGatedCases(),
@@ -215,6 +216,27 @@ function missingWorkflowGateCases() {
     const { pi, ctx } = await startRuntime(prompt);
     await forkSubagents(pi, ctx, profile);
     const blocked = await event(pi, 'session_stop')({}, ctx);
+    assert.equal(blocked?.continue, true);
+    assert.match(blocked.additionalContext, profile.missingGate);
+  }, (profile) => Boolean(profile.gateTool));
+}
+
+function failedWorkflowGateCases() {
+  return profilePromptCases('failed workflow gate', async (profile, prompt) => {
+    const { pi, ctx } = await startRuntime(prompt);
+    await forkSubagents(pi, ctx, profile);
+    await validateSkillUsage(pi, ctx, profile.skills);
+    await event(pi, 'tool_result')(
+      {
+        name: profile.gateTool,
+        isError: profile.gateTool === 'writing_quality_check',
+        details: profile.gateTool === 'omp_test_gate'
+          ? { passed: false, results: [{ gate: 'indirect-test', passed: false, severity: 'blocker' }] }
+          : { error: 'QA tool failed.' },
+      },
+      ctx,
+    );
+    const blocked = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
     assert.equal(blocked?.continue, true);
     assert.match(blocked.additionalContext, profile.missingGate);
   }, (profile) => Boolean(profile.gateTool));

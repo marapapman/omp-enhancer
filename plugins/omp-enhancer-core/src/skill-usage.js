@@ -1,25 +1,35 @@
 const placeholderValues = new Set(['todo', 'tbd', '<required skill>', '<skill>', '[skill]', 'required skill']);
 
-export function validateSkillUsage({ requiredSkills = [], output = '' } = {}) {
+export function validateSkillUsage({ requiredSkills = [], output = '', loadedSkills = [] } = {}) {
   const authoritative = findAuthoritativeSkillUsage(String(output));
   const denied = findDeniedSkills(String(output), requiredSkills);
+  const externallyLoaded = normalizeLoadedSkills(loadedSkills);
 
   if (!authoritative) {
+    const loadedSet = new Set(externallyLoaded);
+    const missing = requiredSkills.filter((skill) => !loadedSet.has(normalizeSkillName(skill)));
+    const ok = missing.length === 0 && denied.length === 0;
+
     return {
-      ok: requiredSkills.length === 0 && denied.length === 0,
+      ok,
       required: requiredSkills,
-      loaded: [],
-      missing: [...requiredSkills],
+      loaded: externallyLoaded,
+      missing,
       invalid: [],
       denied,
-      message: requiredSkills.length ? `Missing SKILL_USAGE for ${requiredSkills.join(', ')}` : 'No required skills.',
+      message: ok
+        ? (requiredSkills.length ? 'SKILL_USAGE ok from read skill evidence.' : 'No required skills.')
+        : (missing.length ? `Missing SKILL_USAGE for ${missing.join(', ')}` : buildMessage({ missing, invalid: [], denied })),
     };
   }
 
   const parsed = parseSkillUsageBlock(authoritative);
   const invalid = parsed.loaded.filter((entry) => isPlaceholder(entry));
   const effectiveLoaded = parsed.loaded.filter((entry) => !isPlaceholder(entry));
-  const loaded = uniqueValues(effectiveLoaded.map((entry) => normalizeSkillName(entry)).filter(Boolean));
+  const loaded = uniqueValues([
+    ...effectiveLoaded.map((entry) => normalizeSkillName(entry)).filter(Boolean),
+    ...externallyLoaded,
+  ]);
   const loadedSet = new Set(loaded);
   const missing = requiredSkills.filter((skill) => !loadedSet.has(normalizeSkillName(skill)));
   const ok = missing.length === 0 && invalid.length === 0 && denied.length === 0;
@@ -183,6 +193,11 @@ function normalizeSkillName(value) {
     .replace(/[>\]"')}]+$/, '')
     .trim()
     .toLowerCase();
+}
+
+function normalizeLoadedSkills(skills) {
+  const values = Array.isArray(skills) || skills instanceof Set ? [...skills] : [];
+  return uniqueValues(values.map((entry) => normalizeSkillName(entry)).filter(Boolean));
 }
 
 function uniqueValues(values) {

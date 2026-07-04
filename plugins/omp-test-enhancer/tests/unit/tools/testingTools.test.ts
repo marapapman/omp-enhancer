@@ -261,6 +261,46 @@ describe('pure testing tools', () => {
     })
   })
 
+  it('blocks gate execution when candidate files are empty', () => {
+    const target: ChangedTarget = {
+      id: 'src/user/UserService.ts#UserService',
+      sourceFile: 'src/user/UserService.ts',
+      symbolName: 'UserService',
+      kind: 'service',
+      risk: 'high'
+    }
+
+    expect(runTestGate({
+      targets: [target],
+      candidate: {
+        id: 'candidate',
+        targetId: target.id,
+        files: []
+      }
+    })).toMatchObject({
+      passed: false,
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'test-file-scope', passed: false, summary: 'Candidate includes no test files.' })
+      ])
+    })
+  })
+
+  it('blocks gate execution when changed targets are missing', () => {
+    expect(runTestGate({
+      targets: [],
+      candidate: {
+        id: 'candidate',
+        targetId: 'missing',
+        files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: 'expect(result).toBe(true)' }]
+      }
+    })).toMatchObject({
+      passed: false,
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'indirect-test', passed: false, summary: 'No changed targets supplied for indirect-test gate.' })
+      ])
+    })
+  })
+
   it('adds browser gate results from structured browser evidence', () => {
     const target: ChangedTarget = {
       id: 'src/ui/LoginForm.tsx#LoginForm',

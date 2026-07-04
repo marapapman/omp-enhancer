@@ -1,5 +1,15 @@
 export function evaluateTestFileScopeGate(input) {
     const blockers = [];
+    if (input.candidate.files.length === 0) {
+        return [{
+                gate: 'test-file-scope',
+                passed: false,
+                severity: 'blocker',
+                summary: 'Candidate includes no test files.',
+                evidence: { candidateId: input.candidate.id },
+                repairHint: 'Provide the test files changed by this workflow before running the gate.'
+            }];
+    }
     for (const file of input.candidate.files) {
         if (isTestFilePath(file.path))
             continue;
@@ -23,5 +33,5 @@ export function evaluateTestFileScopeGate(input) {
         }];
 }
 function isTestFilePath(path) {
-    return /\.(test|spec)\.[cm]?[tj]sx?$/.test(path) || /(^|\/)__tests__\//.test(path) || /(^|\/)tests\//.test(path);
+    return /\.(test|spec|cy)\.[cm]?[tj]sx?$/.test(path) || /(^|\/)__tests__\//.test(path) || /(^|\/)tests\//.test(path);
 }
