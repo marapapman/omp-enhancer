@@ -840,6 +840,132 @@ test('session_stop rejects completion notes that only blame validator session st
   assert.match(result.additionalContext, /No successful SKILL_USAGE validation/);
 });
 
+test('writing gate releases after complete evidence and does not reblock repeated session_stop calls', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    ctx,
+  );
+
+  const missingSubagents = await event(pi, 'session_stop')({}, ctx);
+  assert.equal(missingSubagents?.continue, true);
+  assert.match(missingSubagents.additionalContext, /subagent gate/i);
+
+  await forkSubagents(pi, ctx, ['writer', 'checker']);
+  const missingQa = await event(pi, 'session_stop')({}, ctx);
+  assert.equal(missingQa?.continue, true);
+  assert.match(missingQa.additionalContext, /writing QA/);
+
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+  const finalOutput = usageEvidence({
+    subagents: {
+      writer: ['writing-markdown-helper'],
+      checker: ['writing-checkers'],
+    },
+    skills: ['writing-markdown-helper', 'writing-checkers'],
+  });
+
+  await assertReleasedStops(pi, ctx, [
+    { output: finalOutput },
+    {},
+    { content: [{ type: 'text', text: 'No new evidence; prior gate evidence remains valid.' }] },
+  ]);
+
+  const restoredPi = new FakePi(entries);
+  registerCoreEnhancer(restoredPi);
+  await assertReleasedStops(restoredPi, extensionContext(entries), [{}, {}]);
+});
+
+test('testing gate releases after test gate and skill evidence without requiring another stop loop', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。' },
+    ctx,
+  );
+  await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-pr-test-analyzer']);
+
+  const blocked = await event(pi, 'session_stop')({}, ctx);
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /omp_test_gate/);
+
+  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-complete-testing-skill-usage',
+    {
+      output: skillUsageBlock([
+        'test-driven-development',
+        'subagent-driven-development',
+        'verification-before-completion',
+      ]),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  await assertReleasedStops(pi, ctx, [{}, {}, { output: 'Final summary only.' }]);
+});
+
+test('failed skill validation can be corrected by final evidence without repeated blocking', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    ctx,
+  );
+  await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-incomplete-zh-skill-usage',
+    {
+      output: skillUsageBlock(['plain-chinese-writing']),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const correctedOutput = usageEvidence({
+    subagents: {
+      'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
+      'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
+    },
+    skills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
+  });
+
+  await assertReleasedStops(pi, ctx, [{ output: correctedOutput }, {}, {}]);
+});
+
+test('non-gated diagnosis release and unknown routes do not create repeated gate continuations', async () => {
+  const workloads = [
+    '为什么这个插件一直提示 SKILL_USAGE validation 失败？先诊断原因，不要改代码。',
+    'Push the current release commit and upgrade marketplace plugins.',
+    'What is the capital of France?',
+  ];
+
+  for (const prompt of workloads) {
+    const pi = new FakePi();
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext();
+
+    await event(pi, 'session_start')({}, ctx);
+    await event(pi, 'before_agent_start')({ prompt }, ctx);
+    await assertReleasedStops(pi, ctx, [{}, {}, { output: 'Done.' }]);
+  }
+});
+
 function tool(pi, name) {
   const found = pi.tools.get(name);
   if (!found) throw new Error(`Missing tool ${name}`);
@@ -910,6 +1036,34 @@ function governanceText(result, eventPayload) {
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+async function assertReleasedStops(pi, ctx, stopEvents) {
+  for (const stopEvent of stopEvents) {
+    const result = await event(pi, 'session_stop')(stopEvent, ctx);
+    assert.equal(result, undefined);
+  }
+}
+
+function usageEvidence({ subagents = {}, skills = [] } = {}) {
+  return [
+    'Done.',
+    '',
+    'SUBAGENT_USAGE:',
+    ...Object.entries(subagents).map(([agent, agentSkills]) => `- ${agent}: ${agentSkills.join(', ') || 'none'}`),
+    '',
+    skillUsageBlock(skills),
+  ].join('\n');
+}
+
+function skillUsageBlock(skills) {
+  return [
+    'SKILL_USAGE',
+    'Required:',
+    ...skills.map((skill) => `- ${skill}`),
+    'Loaded:',
+    ...skills.map((skill) => `- ${skill}`),
+  ].join('\n');
 }
 
 function extensionContext(entries = []) {

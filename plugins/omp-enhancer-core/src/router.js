@@ -23,13 +23,14 @@ const strongZhWritingTerms = [
   '改成',
   '改得',
 ];
-const enWritingTerms = ['draft', 'write', 'revise', 'polish', 'paper', 'report', 'manuscript', 'abstract', 'related work', 'paragraph', 'logic'];
-const testingTerms = ['tests', 'testing', 'unit test', 'coverage', 'mutation', 'browser', 'e2e', 'playwright', 'regression', 'flaky', 'flakiness', 'test flakiness', '测试', '覆盖', '门禁'];
-const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', 'code', 'api', 'component', '实现', '重构', '修复', '报错', '功能', '代码', '接口'];
-const configTerms = ['omp-config', 'config assets', 'assets', 'hooks', 'marketplace', '配置资产'];
-const securityTerms = ['security', 'vulnerability', 'xss', 'ssrf', 'injection', 'auth', 'owasp', '安全', '漏洞', '注入', '鉴权', '认证', '权限', '密钥', 'secret'];
-const noCodeChangeTerms = ['不要改代码', '不要修改代码', '先不要修', '不要修复', '不要修改', '只诊断', '只分析', '只检查', '只列清单', 'do not change', 'do not modify', 'do not fix', 'diagnosis only', 'read-only'];
-const diagnosisTerms = ['why', 'root cause', '原因', '为什么', '诊断', '定位', '排查', '是什么导致', '是什么原因', 'warning:', 'failed', 'failure'];
+const enWritingActionTerms = ['draft', 'write', 'revise', 'polish', 'edit', 'improve'];
+const enWritingObjectTerms = ['paper', 'report', 'manuscript', 'abstract', 'related work', 'paragraph', 'release notes', 'changelog', 'letter', 'email', 'proposal', 'summary'];
+const testingTerms = ['tests', 'testing', 'unit test', 'coverage', 'mutation', 'e2e', 'playwright', 'regression', 'flaky', 'flakiness', 'test flakiness', '测试', '覆盖率', '门禁'];
+const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', 'code', 'component', '实现', '重构', '修复', '报错', '功能', '代码', '接口'];
+const configTerms = ['omp-config', 'config asset', 'config assets', 'asset paths', 'config templates', 'assets', 'hooks', 'templates', 'modelroles', 'model roles', 'agents', 'skills', '配置资产', '配置模板', '技能清单'];
+const securityTerms = ['security', 'vulnerability', 'vulnerabilities', 'path traversal', 'command injection', 'auth bypass', 'xss', 'ssrf', 'injection', 'auth', 'authentication', 'authorization', 'oauth', 'owasp', '安全', '漏洞', '注入', '鉴权', '认证', '权限', '密钥', 'secret', 'secrets', '路径穿越'];
+const noCodeChangeTerms = ['不要改代码', '不要改', '不要修改代码', '先不要修', '不要修复', '不要修改', '只诊断', '只分析', '只检查', '只列清单', 'do not change', 'do not modify', 'do not fix', 'diagnosis only', 'read-only'];
+const diagnosisTerms = ['why', 'diagnose', 'diagnosis', 'investigate', 'root cause', '原因', '为什么', '诊断', '定位', '排查', '是什么导致', '是什么原因', 'warning:', 'failed', 'failure'];
 const releaseTerms = ['push', 'publish', 'upgrade', '推送', '发布', '升级', '刷新'];
 const noReleaseTerms = ['without publishing', 'without publish', 'do not publish', 'do not push', 'do not release', 'not publish', 'not push', 'not release', '不要发布', '不要推送', '不要刷新', '不发布', '不推送'];
 
@@ -79,28 +80,39 @@ export function routeNaturalLanguageTask(input = {}) {
 
   if (!normalized.trim()) return unknownRoute();
 
+  const conceptOnly = isConceptOnlyQuestion(normalized);
   const asksNoCodeChange = includesAny(normalized, noCodeChangeTerms);
   const hasTesting = isTestingRequest(normalized);
   const hasDirectTestAuthoring = isDirectTestAuthoring(normalized);
   const hasTestAnalysis = isTestAnalysisRequest(normalized);
-  const hasCoding = !asksNoCodeChange && (includesAny(normalized, codingTerms) || isCodeChangeRequest(normalized));
-  const hasWriting = includesAny(normalized, zhWritingTerms) || includesAny(normalized, enWritingTerms);
+  const hasCoding = !asksNoCodeChange && (includesAny(normalized, codingTerms) || hasWholeWord(normalized, 'api') || isCodeChangeRequest(normalized));
+  const hasChineseWriting = isChineseWriting(normalized, prompt);
+  const hasWriting = hasChineseWriting || isEnglishWriting(normalized);
   const hasSecurity = includesAny(normalized, securityTerms);
   const hasRelease = isReleaseRequest(normalized);
   const hasConfigAssets = isConfigAssetRequest(normalized);
   const hasDiagnosisOnly = isDiagnosisOnlyRequest(normalized, asksNoCodeChange);
-  const hasChineseWriting = isChineseWriting(normalized, prompt);
+
+  if (conceptOnly && !isSecurityConceptQuestion(normalized)) return unknownRoute();
 
   if (hasSecurity && !hasWriting) {
     return routeByIntent('security-review');
+  }
+
+  if (hasCoding && hasTesting) {
+    return routeByIntent('implementation-with-tests');
+  }
+
+  if (hasDirectTestAuthoring || hasTestAnalysis) {
+    return routeByIntent('testing');
   }
 
   if (hasChineseWriting) {
     return routeByIntent('writing.zh');
   }
 
-  if (hasCoding && hasTesting) {
-    return routeByIntent('implementation-with-tests');
+  if (hasWriting) {
+    return routeByIntent('writing.en');
   }
 
   if (hasCoding) {
@@ -119,12 +131,8 @@ export function routeNaturalLanguageTask(input = {}) {
     return routeByIntent('diagnosis');
   }
 
-  if (hasDirectTestAuthoring || hasTestAnalysis || (hasTesting && !hasWriting)) {
+  if (hasTesting && !hasWriting) {
     return routeByIntent('testing');
-  }
-
-  if (hasWriting) {
-    return routeByIntent('writing.en');
   }
 
   return unknownRoute();
@@ -239,10 +247,16 @@ function subagent(agent, duty, requiredSkills = []) {
 
 function isChineseWriting(normalized, original) {
   if (!/[\u4e00-\u9fff]/.test(original)) return false;
+  if (isConceptOnlyQuestion(normalized)) return false;
   if (isDirectTestAuthoring(normalized)) return false;
   if (includesAny(normalized, strongZhWritingTerms)) return true;
   if (!normalized.includes('写')) return false;
   return !includesAny(normalized, ['函数', '代码', '接口', '实现', 'api', 'component']);
+}
+
+function isEnglishWriting(text) {
+  if (includesAny(text, enWritingActionTerms) && includesAny(text, enWritingObjectTerms)) return true;
+  return /(?:check|review|improve|edit)\s+.*(?:logic|style|wording|paragraph|abstract|paper|manuscript|report|release notes|changelog|letter|email|proposal|summary)/.test(text);
 }
 
 function isTestingRequest(text) {
@@ -265,7 +279,7 @@ function isTestAnalysisRequest(text) {
   return includesAny(text, ['flaky', 'flakiness', 'test flakiness'])
     || /(?:review|check|analyze|analyse|audit|investigate|inspect)\s+.*(?:tests?|testing|coverage|flaky|flakiness|browser|e2e|playwright)/.test(text)
     || /(?:run|execute|rerun)\s+.*(?:tests?|testing|browser|e2e|playwright)/.test(text)
-    || /(?:检查|分析|审查|排查|运行|执行).*(?:测试|覆盖|门禁|浏览器|e2e|回归)/.test(text);
+    || /(?:检查|分析|审查|排查|运行|执行).*(?:测试|覆盖率|门禁|浏览器|e2e|回归)/.test(text);
 }
 
 function isCodeChangeRequest(text) {
@@ -277,22 +291,68 @@ function isReleaseRequest(text) {
   if (includesAny(text, noReleaseTerms)) return false;
   return (includesAny(text, releaseTerms) && includesAny(text, ['github', 'marketplace', '插件', '版本', 'plugin', 'release']))
     || /(?:create|cut|prepare|ship)\s+(?:a\s+)?release/.test(text)
+    || /\bship\s+(?:the\s+)?(?:plugin\s+)?release/.test(text)
+    || /\bupgrade\s+\S+@\S+/.test(text)
     || /\brelease\s+(?:the\s+)?(?:current|plugin|version)/.test(text)
     || /(?:plugin|marketplace)\s+upgrade/.test(text);
 }
 
 function isConfigAssetRequest(text) {
   return includesAny(text, configTerms)
-    && includesAny(text, ['config', 'assets', 'asset', 'hooks', 'hook', 'skills', 'skill', 'omp-config', 'marketplace', '配置', '打包', '模板', '清单']);
+    && includesAny(text, ['config', 'assets', 'asset', 'hooks', 'hook', 'skills', 'skill', 'agents', 'templates', 'omp-config', 'marketplace', '配置', '打包', '模板', '清单', '技能']);
 }
 
 function isDiagnosisOnlyRequest(text, asksNoCodeChange) {
-  return includesAny(text, diagnosisTerms)
-    && (asksNoCodeChange || includesAny(text, ['原因', '为什么', 'root cause', 'what caused', '是什么导致', '是什么原因']));
+  if (!includesAny(text, diagnosisTerms)) return false;
+  return asksNoCodeChange
+    || includesAny(text, ['原因', '为什么', 'why', 'root cause', 'what caused', '是什么导致', '是什么原因'])
+    || /\b(?:diagnose|investigate)\b.*\b(?:failure|failing|failed|error|warning|root cause|cause)\b/.test(text);
 }
 
 function includesAny(text, terms) {
-  return terms.some((term) => text.includes(term));
+  return terms.some((term) => hasTerm(text, term));
+}
+
+function hasTerm(text, term) {
+  if (hasNonAscii(term)) return text.includes(term);
+  if (/^[a-z0-9][a-z0-9\s_-]*[a-z0-9]$/i.test(term)) return hasWholeWord(text, term);
+  return text.includes(term);
+}
+
+function hasWholeWord(text, term) {
+  const pattern = escapeRegExp(term).replace(/[\s_-]+/g, '[\\s_-]+');
+  return new RegExp(`(^|[^a-z0-9_])${pattern}([^a-z0-9_]|$)`).test(text);
+}
+
+function hasNonAscii(value) {
+  return /[^\x00-\x7F]/.test(value);
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isConceptOnlyQuestion(text) {
+  if (!/^(?:what\s+(?:is|are|does|do)\b|who\s+(?:is|was)\b|where\s+(?:is|are)\b|when\s+(?:is|was)\b|define\b|什么是|.*是什么[。？?]?$|.*是什么意思[。？?]?$)/.test(text)) {
+    return false;
+  }
+  return !/(?:fix|implement|modify|refactor|build|update|write|draft|revise|polish|review|check|run|execute|publish|push|upgrade|diagnos|debug|investigate|analy[sz]e|修复|实现|修改|检查|分析|排查|运行|执行|发布|推送|升级|写|润色|改写|审查)/.test(text);
+}
+
+function isSecurityConceptQuestion(text) {
+  return includesAny(text, [
+    'xss',
+    'ssrf',
+    'owasp',
+    'path traversal',
+    'command injection',
+    'auth bypass',
+    'vulnerability',
+    'vulnerabilities',
+    '漏洞',
+    '注入',
+    '路径穿越',
+  ]);
 }
 
 function unknownRoute(source = 'natural-language') {

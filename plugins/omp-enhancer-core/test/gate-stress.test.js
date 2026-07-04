@@ -1,0 +1,364 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import registerCoreEnhancer from '../index.js';
+
+class FakePi {
+  constructor(entries = []) {
+    this.labels = [];
+    this.tools = new Map();
+    this.commands = new Map();
+    this.eventHandlers = [];
+    this.entries = entries;
+    const z = fakeZod();
+    this.z = z;
+    this.zod = { z };
+  }
+
+  setLabel(label) {
+    this.labels.push(label);
+  }
+
+  registerTool(tool) {
+    this.tools.set(tool.name, tool);
+  }
+
+  registerCommand(name, command) {
+    this.commands.set(name, command);
+  }
+
+  on(event, handler) {
+    this.eventHandlers.push({ event, handler });
+  }
+
+  appendEntry(customType, data) {
+    this.entries.push({ type: 'custom', customType, data });
+  }
+}
+
+const profiles = {
+  writingEn: {
+    prompts: [
+      'Draft an English related work paragraph for a systems paper.',
+      'Write a concise project report in English.',
+      'Revise this manuscript abstract for clarity.',
+      'Polish the paragraph and check the wording.',
+      'Edit the proposal summary for a technical audience.',
+    ],
+    subagents: {
+      writer: ['writing-markdown-helper'],
+      checker: ['writing-checkers'],
+    },
+    skills: ['writing-markdown-helper', 'writing-checkers'],
+    gateTool: 'writing_quality_check',
+    missingGate: /writing QA/,
+  },
+  writingZh: {
+    prompts: [
+      '请把这段中文论文摘要改得更平实。',
+      '帮我润色博士论文引言，去掉翻译腔。',
+      '请起草一份中文项目报告。',
+      '把这句话改成朴素直接的中文。',
+      '请检查这段中文相关工作的逻辑表达。',
+    ],
+    subagents: {
+      'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
+      'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
+    },
+    skills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
+    gateTool: 'writing_quality_check',
+    missingGate: /writing QA/,
+  },
+  testing: {
+    prompts: [
+      'Write tests for src/router.js around fallback behavior.',
+      'Add tests for classifier routing confidence thresholds.',
+      'Create regression tests for the skill gate parser.',
+      'Run unit tests for the marketplace release script.',
+      'Review test flakiness around the browser smoke suite.',
+    ],
+    subagents: {
+      'ecc-tdd-guide': ['test-driven-development'],
+      'ecc-pr-test-analyzer': ['verification-before-completion'],
+    },
+    skills: ['test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+    gateTool: 'omp_test_gate',
+    missingGate: /omp_test_gate/,
+  },
+  implementation: {
+    prompts: [
+      'Implement classifier fallback handling and add tests.',
+      'Fix the plugin gate bug and add regression tests.',
+      'Modify the marketplace release logic and test it.',
+      'Refactor the router code with focused unit tests.',
+      'Build the config workflow and cover error paths.',
+    ],
+    subagents: {
+      plan: ['brainstorming', 'subagent-driven-development'],
+      task: ['test-driven-development', 'verification-before-completion'],
+      reviewer: ['verification-before-completion'],
+    },
+    skills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+    gateTool: 'omp_test_gate',
+    missingGate: /omp_test_gate/,
+  },
+  security: {
+    prompts: [
+      'Review this API handler for auth bypass and injection risks.',
+      'Audit the file download route for path traversal.',
+      'Check this Express code for SSRF vulnerabilities.',
+      'Review token handling for secret leakage.',
+      'Analyze authentication and authorization risks in this middleware.',
+    ],
+    subagents: {
+      'ecc-security-reviewer': ['ecc/security-review', 'ecc/security-scan'],
+      reviewer: ['ecc/security-review'],
+    },
+    skills: ['ecc/security-review', 'ecc/security-scan'],
+  },
+  config: {
+    prompts: [
+      'List packaged omp-config assets and hooks.',
+      'Inspect config assets shipped by the plugin.',
+      'Check the omp-config skill asset inventory.',
+      'Show marketplace config asset paths.',
+      'Review bundled hooks and templates in omp-config.',
+    ],
+    subagents: {
+      librarian: [],
+      reviewer: [],
+    },
+    skills: [],
+  },
+};
+
+const nonGatedPrompts = [
+  '为什么 SKILL_USAGE validation 一直失败？先诊断原因，不要改代码。',
+  '只诊断这个 Warning 是什么导致的。',
+  'Why does the validator keep failing? Diagnosis only.',
+  'Push the current release commit and upgrade marketplace plugins.',
+  'Publish the plugin update to GitHub marketplace.',
+  'Upgrade omp-enhancer-core@omp-enhancer after pushing main.',
+  'What is the capital of France?',
+  'Who is the author of Hamlet?',
+  'What is an API?',
+  'What does bug mean in English?',
+  'What is a unit test?',
+  'What is a browser?',
+  'What is a report?',
+  'GitHub release 是什么？简单解释一下。',
+  '今天下午三点提醒我给妈妈打电话。',
+];
+
+const gateCases = [
+  ...completeCases(),
+  ...crossInstanceCases(),
+  ...missingSubagentCases(),
+  ...missingWorkflowGateCases(),
+  ...missingSkillCases(),
+  ...recoveryCases(),
+  ...nonGatedCases(),
+];
+
+test('gate stress matrix covers at least 100 session_stop cases without repeated false blocks', async () => {
+  assert.equal(gateCases.length >= 100, true, `expected at least 100 gate cases, got ${gateCases.length}`);
+
+  await Promise.all(gateCases.map(async ({ name, run }) => {
+    try {
+      await run();
+    } catch (error) {
+      error.message = `${name}: ${error.message}`;
+      throw error;
+    }
+  }));
+});
+
+function completeCases() {
+  return profilePromptCases('complete', async (profile, prompt) => {
+    const { pi, ctx } = await startRuntime(prompt);
+    await forkSubagents(pi, ctx, profile);
+    await runWorkflowGate(pi, ctx, profile);
+    await assertReleasedStops(pi, ctx, [
+      { output: finalEvidence(profile) },
+      {},
+      { content: [{ type: 'text', text: 'No new gate evidence; prior evidence remains valid.' }] },
+    ]);
+  });
+}
+
+function crossInstanceCases() {
+  return profilePromptCases('cross-instance complete', async (profile, prompt) => {
+    const entries = [];
+    const { pi, ctx } = await startRuntime(prompt, entries);
+    await forkSubagents(pi, ctx, profile);
+    await runWorkflowGate(pi, ctx, profile);
+    if (profile.skills.length) await validateSkillUsage(pi, ctx, profile.skills);
+    await event(pi, 'session_stop')({ output: finalEvidence(profile) }, ctx);
+
+    const restoredPi = new FakePi(entries);
+    registerCoreEnhancer(restoredPi);
+    await assertReleasedStops(restoredPi, extensionContext(entries), [{}, {}]);
+  });
+}
+
+function missingSubagentCases() {
+  return profilePromptCases('missing subagents', async (_profile, prompt) => {
+    const { pi, ctx } = await startRuntime(prompt);
+    const blocked = await event(pi, 'session_stop')({}, ctx);
+    assert.equal(blocked?.continue, true);
+    assert.match(blocked.additionalContext, /subagent gate/i);
+  });
+}
+
+function missingWorkflowGateCases() {
+  return profilePromptCases('missing workflow gate', async (profile, prompt) => {
+    const { pi, ctx } = await startRuntime(prompt);
+    await forkSubagents(pi, ctx, profile);
+    const blocked = await event(pi, 'session_stop')({}, ctx);
+    assert.equal(blocked?.continue, true);
+    assert.match(blocked.additionalContext, profile.missingGate);
+  }, (profile) => Boolean(profile.gateTool));
+}
+
+function missingSkillCases() {
+  return profilePromptCases('missing skill usage', async (profile, prompt) => {
+    const { pi, ctx } = await startRuntime(prompt);
+    await forkSubagents(pi, ctx, profile);
+    await runWorkflowGate(pi, ctx, profile);
+    const blocked = await event(pi, 'session_stop')({}, ctx);
+    assert.equal(blocked?.continue, true);
+    assert.match(blocked.additionalContext, /SKILL_USAGE/);
+  }, (profile) => profile.skills.length > 0);
+}
+
+function recoveryCases() {
+  return profilePromptCases('recovery', async (profile, prompt) => {
+    const { pi, ctx } = await startRuntime(prompt);
+    await forkSubagents(pi, ctx, profile, { includeSkills: false });
+    const blocked = await event(pi, 'session_stop')({}, ctx);
+    assert.equal(blocked?.continue, true);
+
+    await forkSubagents(pi, ctx, profile);
+    await runWorkflowGate(pi, ctx, profile);
+    await assertReleasedStops(pi, ctx, [{ output: finalEvidence(profile) }, {}, {}]);
+  }, (profile) => Object.values(profile.subagents).some((skills) => skills.length > 0));
+}
+
+function nonGatedCases() {
+  return nonGatedPrompts.map((prompt, index) => ({
+    name: `non-gated ${index + 1}`,
+    async run() {
+      const { pi, ctx } = await startRuntime(prompt);
+      await assertReleasedStops(pi, ctx, [{}, {}, { output: 'Done.' }]);
+    },
+  }));
+}
+
+function profilePromptCases(prefix, runCase, profileFilter = () => true) {
+  return Object.entries(profiles).filter(([, profile]) => profileFilter(profile)).flatMap(([profileName, profile]) =>
+    profile.prompts.map((prompt, index) => ({
+      name: `${prefix} ${profileName} ${index + 1}`,
+      run: () => runCase(profile, prompt),
+    })),
+  );
+}
+
+async function startRuntime(prompt, entries = []) {
+  const pi = new FakePi(entries);
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  return { pi, ctx, entries };
+}
+
+async function forkSubagents(pi, ctx, profile, { includeSkills = true } = {}) {
+  for (const [agent, skills] of Object.entries(profile.subagents)) {
+    await event(pi, 'tool_result')(
+      {
+        name: 'task',
+        params: {
+          agent,
+          prompt: includeSkills
+            ? ['Required skills for this subagent:', ...skills.map((skill) => `- ${skill}`)].join('\n')
+            : 'Do the assigned work.',
+        },
+      },
+      ctx,
+    );
+  }
+}
+
+async function runWorkflowGate(pi, ctx, profile) {
+  if (profile.gateTool) await event(pi, 'tool_result')({ name: profile.gateTool }, ctx);
+}
+
+async function validateSkillUsage(pi, ctx, skills) {
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'gate-stress-skill-usage',
+    { output: skillUsageBlock(skills) },
+    undefined,
+    undefined,
+    ctx,
+  );
+}
+
+async function assertReleasedStops(pi, ctx, stopEvents) {
+  for (const stopEvent of stopEvents) {
+    const result = await event(pi, 'session_stop')(stopEvent, ctx);
+    assert.equal(result, undefined);
+  }
+}
+
+function finalEvidence(profile) {
+  return [
+    'Done.',
+    '',
+    'SUBAGENT_USAGE:',
+    ...Object.entries(profile.subagents).map(([agent, skills]) => `- ${agent}: ${skills.join(', ') || 'none'}`),
+    profile.skills.length ? ['', skillUsageBlock(profile.skills)].join('\n') : '',
+  ].filter(Boolean).join('\n');
+}
+
+function skillUsageBlock(skills) {
+  return [
+    'SKILL_USAGE',
+    'Required:',
+    ...skills.map((skill) => `- ${skill}`),
+    'Loaded:',
+    ...skills.map((skill) => `- ${skill}`),
+  ].join('\n');
+}
+
+function tool(pi, name) {
+  const found = pi.tools.get(name);
+  if (!found) throw new Error(`Missing tool ${name}`);
+  return found;
+}
+
+function event(pi, name) {
+  const found = pi.eventHandlers.find((handler) => handler.event === name);
+  if (!found) throw new Error(`Missing event ${name}`);
+  return found.handler;
+}
+
+function extensionContext(entries = []) {
+  return {
+    cwd: process.cwd(),
+    sessionManager: { getBranch: () => entries },
+    ui: { notify: () => undefined },
+    hasUI: false,
+  };
+}
+
+function fakeZod() {
+  const withOptional = (schema) => ({ ...schema, optional: () => ({ type: 'optional', schema }) });
+  return {
+    object: (shape) => withOptional({ type: 'object', shape }),
+    string: () => withOptional({ type: 'string' }),
+    boolean: () => withOptional({ type: 'boolean' }),
+    array: (schema) => withOptional({ type: 'array', schema }),
+    enum: (values) => withOptional({ type: 'enum', values }),
+    optional: (schema) => ({ type: 'optional', schema }),
+  };
+}

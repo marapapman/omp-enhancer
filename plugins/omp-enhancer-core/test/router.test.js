@@ -222,16 +222,19 @@ test('routes English writing to English writing skills instead of development pl
 });
 
 test('leaves unrelated prompts unclaimed instead of inventing a plugin workflow', () => {
-  const route = routeNaturalLanguageTask({
-    prompt: '今天下午三点提醒我给妈妈打电话。',
-  });
+  for (const prompt of [
+    '今天下午三点提醒我给妈妈打电话。',
+    'What is the capital of France?',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
 
-  assert.deepEqual(route, {
-    intent: 'unknown',
-    agent: null,
-    requiredSkills: [],
-    requiredTools: [],
-    requiredSubagents: [],
-    source: 'natural-language',
-  });
+    assert.deepEqual(route, {
+      intent: 'unknown',
+      agent: null,
+      requiredSkills: [],
+      requiredTools: [],
+      requiredSubagents: [],
+      source: 'natural-language',
+    }, prompt);
+  }
 });
