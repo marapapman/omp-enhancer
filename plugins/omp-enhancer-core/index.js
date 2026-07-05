@@ -16,6 +16,7 @@ import {
 } from './src/loop-guard.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
+const SUBAGENT_DASHBOARD_ENTRY = 'omp-enhancer-core.subagent-dashboard';
 const TASK_SUBAGENT_EVENT_CHANNEL = 'task:subagent:event';
 const TASK_SUBAGENT_PROGRESS_CHANNEL = 'task:subagent:progress';
 const TASK_SUBAGENT_LIFECYCLE_CHANNEL = 'task:subagent:lifecycle';
@@ -123,6 +124,7 @@ export default function registerCoreEnhancer(pi) {
       state.lastSubagentUsage = validation;
       if (validation.ok) recordSubagentFinalUsage(state, params.output ?? '');
       await persistState(pi, state);
+      await publishSubagentDashboard(pi, state, validation.ok ? 'validation-completed' : 'validation-incomplete');
       return okResult(validation.message, { validation });
     },
   });
@@ -215,6 +217,7 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
+    let subagentDashboardReason = '';
     if (name) recordLoopGuardProgress(state.loopGuard, `tool_call:${name}`);
     const preworkBlock = buildPreworkSkillGateBlock(state, name);
     if (preworkBlock) {
@@ -224,8 +227,10 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'task') {
       const records = recordSubagentDispatchStarted(state, event);
       await notifySubagentDispatch(ctx, 'running', records, state);
+      if (records.length) subagentDashboardReason = 'started';
     }
     await persistState(pi, state);
+    if (subagentDashboardReason) await publishSubagentDashboard(pi, state, subagentDashboardReason);
     return undefined;
   });
 
@@ -235,12 +240,14 @@ export default function registerCoreEnhancer(pi) {
     const updates = recordTaskExecutionUpdate(state, event);
     await notifySubagentProgress(ctx, updates, state);
     if (updates.some((update) => update.persist)) await persistState(pi, state);
+    if (updates.some((update) => update.notify)) await publishSubagentDashboard(pi, state, dashboardReasonForUpdates(updates));
     return undefined;
   });
 
   pi.on?.('tool_result', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
+    let subagentDashboardReason = '';
     if (name) recordLoopGuardProgress(state.loopGuard, `tool_result:${name}`);
     const successful = isSuccessfulToolEvent(event);
     if (name && successful && name !== 'read') clearToolFailures(state, name);
@@ -251,9 +258,11 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'task') {
       const records = recordSubagentDispatchFinished(state, event, { successful });
       await notifySubagentDispatch(ctx, successful ? 'completed' : 'failed', records, state, event);
+      if (records.length || !successful) subagentDashboardReason = successful ? 'completed' : 'failed';
     }
     if (name === 'read' && successful) recordReadSkillEvidence(state, event);
     await persistState(pi, state);
+    if (subagentDashboardReason) await publishSubagentDashboard(pi, state, subagentDashboardReason);
     return undefined;
   });
 
@@ -868,6 +877,7 @@ function registerSubagentEventBusHandlers(pi, state) {
         try {
           const updates = handler(payload);
           if (updates.some((update) => update.persist)) await persistState(pi, state);
+          if (updates.some((update) => update.notify)) await publishSubagentDashboard(pi, state, dashboardReasonForUpdates(updates));
         } catch {
           // EventBus updates are best-effort observability. They must not break
           // task execution or the stricter final gate checks.
@@ -1047,7 +1057,7 @@ function recordSubagentProgress(state, rawProgress = {}, { parentToolCallId = ''
   return {
     previous,
     current,
-    persist: statusChanged || lifecycle || isTerminalSubagentStatus(current.status),
+    persist: statusChanged || toolChanged || lifecycle || isTerminalSubagentStatus(current.status),
     notify: statusChanged || (!previous && Boolean(current.agent)) || (isActiveSubagentStatus(current.status) && toolChanged),
   };
 }
@@ -1482,6 +1492,166 @@ function formatSubagentStatus(state) {
     'Failures:',
     failures,
   ].join('\n');
+}
+
+async function publishSubagentDashboard(pi, state, reason = 'updated') {
+  const entry = buildSubagentDashboardEntry(state, reason);
+  if (!entry) return;
+
+  if (typeof pi.appendEntry === 'function') {
+    try {
+      await pi.appendEntry(SUBAGENT_DASHBOARD_ENTRY, entry);
+    } catch {
+      // Dashboard persistence is observational only.
+    }
+  }
+
+  if (typeof pi.sendMessage === 'function') {
+    try {
+      await pi.sendMessage({
+        customType: SUBAGENT_DASHBOARD_ENTRY,
+        content: entry.markdown,
+        display: true,
+        details: entry,
+        attribution: 'agent',
+      });
+    } catch {
+      // Visible dashboard updates must not break task execution.
+    }
+  }
+}
+
+function buildSubagentDashboardEntry(state, reason = 'updated') {
+  const status = buildSubagentStatus(state);
+  if (!shouldPublishSubagentDashboard(status)) return null;
+  const summary = formatSubagentDashboardSummary(status);
+  const markdown = formatSubagentDashboardMarkdown(status, { reason, summary });
+
+  return {
+    kind: 'subagent-dashboard',
+    reason,
+    route: status.route,
+    summary,
+    markdown,
+    status,
+    updatedAt: Date.now(),
+  };
+}
+
+function shouldPublishSubagentDashboard(status) {
+  return status.route !== 'none'
+    || status.required.length > 0
+    || status.completed.length > 0
+    || status.pending.length > 0
+    || status.progress.length > 0
+    || status.failures.length > 0;
+}
+
+function formatSubagentDashboardMarkdown(status, { reason = 'updated', summary = formatSubagentDashboardSummary(status) } = {}) {
+  const requiredLines = status.required.length
+    ? status.required.map((item) => formatRequiredSubagentDashboardLine(status, item)).join('\n')
+    : '- none';
+  const progressLines = status.progress.length
+    ? latestProgressByAgent(status.progress).map(formatSubagentProgressLine).join('\n')
+    : '- none';
+  const failureLines = status.failures.length
+    ? status.failures.map((failure) => `- ${failure.message ?? failure.summary ?? 'task failed'}`).join('\n')
+    : '- none';
+
+  return [
+    '### OMP Subagent Status',
+    '',
+    `Route: ${status.route}`,
+    `Update: ${reason}`,
+    `Summary: ${summary}`,
+    '',
+    'Required roles:',
+    requiredLines,
+    '',
+    'Recent progress:',
+    progressLines,
+    '',
+    'Failures:',
+    failureLines,
+  ].join('\n');
+}
+
+function formatSubagentDashboardSummary(status) {
+  const required = status.required.map(({ agent }) => agent);
+  const completed = required.filter((agent) => status.completed.includes(agent)).length;
+  const pending = status.pending.filter(({ stuck }) => !stuck).length;
+  const stuck = status.pending.filter(({ stuck }) => stuck).length;
+  const failed = new Set(status.progress.filter(({ status: progressStatus }) => isFailedSubagentStatus(progressStatus)).map(({ agent }) => agent)).size;
+  const total = required.length;
+  if (!total) {
+    const active = status.progress.filter(({ status: progressStatus }) => isActiveSubagentStatus(progressStatus)).length;
+    return `${active} active, ${status.progress.length} tracked`;
+  }
+  const waiting = Math.max(0, total - completed - pending - stuck - failed);
+  return `${completed}/${total} completed, ${pending} running, ${waiting} waiting, ${stuck} stuck, ${failed} failed`;
+}
+
+function formatRequiredSubagentDashboardLine(status, { agent, requiredSkills = [] }) {
+  const state = subagentDashboardState(status, agent);
+  const details = subagentDashboardDetails(status, agent, requiredSkills);
+  return `- ${agent} [${state}]${details ? `: ${details}` : ''}`;
+}
+
+function subagentDashboardState(status, agent) {
+  if (status.completed.includes(agent)) return 'completed';
+  const pending = status.pending.find((item) => item.agent === agent);
+  if (pending?.stuck) return 'stuck';
+  if (pending) return 'running';
+  const progress = latestProgressForAgent(status.progress, agent);
+  if (progress && isFailedSubagentStatus(progress.status)) return 'failed';
+  if (progress && isActiveSubagentStatus(progress.status)) return 'running';
+  return 'waiting';
+}
+
+function subagentDashboardDetails(status, agent, requiredSkills = []) {
+  const pending = status.pending.find((item) => item.agent === agent);
+  const progress = latestProgressForAgent(status.progress, agent);
+  const skills = pending?.skills?.length ? pending.skills : requiredSkills;
+  return [
+    skills.length ? `skills ${skills.join(', ')}` : 'skills none',
+    progress?.currentTool ? `tool ${progress.currentTool}` : null,
+    progress?.description ? progress.description : null,
+    progress?.requests ? `${progress.requests} requests` : null,
+    progress?.durationMs ? `${Math.round(progress.durationMs / 1000)}s` : null,
+    pending?.startedAt ? `age ${formatElapsedMs(Date.now() - pending.startedAt)}` : null,
+  ].filter(Boolean).join('; ');
+}
+
+function latestProgressByAgent(progressItems = []) {
+  const byAgent = new Map();
+  for (const progress of progressItems) {
+    const current = byAgent.get(progress.agent);
+    if (!current || (progress.updatedAt ?? 0) >= (current.updatedAt ?? 0)) byAgent.set(progress.agent, progress);
+  }
+  return [...byAgent.values()].sort((left, right) => (left.index ?? 0) - (right.index ?? 0) || left.agent.localeCompare(right.agent));
+}
+
+function latestProgressForAgent(progressItems = [], agent) {
+  return progressItems
+    .filter((progress) => progress.agent === agent)
+    .sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0))[0];
+}
+
+function dashboardReasonForUpdates(updates = []) {
+  const statuses = updates.map((update) => update.current?.status).filter(Boolean);
+  if (statuses.some(isFailedSubagentStatus)) return 'failed';
+  if (statuses.some(isCompletedSubagentStatus)) return 'completed';
+  if (statuses.some(isActiveSubagentStatus)) return 'progress';
+  return 'updated';
+}
+
+function formatElapsedMs(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return 'unknown';
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}m${remainder ? ` ${remainder}s` : ''}`;
 }
 
 function formatSubagentProgressLine(progress) {

@@ -11,6 +11,7 @@ class FakePi {
     this.eventHandlers = [];
     this.events = new FakeEventBus();
     this.entries = entries;
+    this.messages = [];
     const z = fakeZod();
     this.z = z;
     this.zod = { z };
@@ -34,6 +35,10 @@ class FakePi {
 
   appendEntry(customType, data) {
     this.entries.push({ type: 'custom', customType, data });
+  }
+
+  sendMessage(message, options) {
+    this.messages.push({ message, options });
   }
 }
 
@@ -1224,6 +1229,11 @@ test('task tool_execution_update records live subagent progress and completion',
   assert.deepEqual(status.details.status.pending[0].skills, ['writing-markdown-helper']);
   assert.equal(notifications[0].level, 'info');
   assert.match(notifications[0].text, /OMP subagent progress: writer running; tool read; draft related work\. Route: writing\.en\./);
+  assert.equal(pi.messages.at(-1).message.customType, 'omp-enhancer-core.subagent-dashboard');
+  assert.equal(pi.messages.at(-1).message.display, true);
+  assert.match(pi.messages.at(-1).message.content, /### OMP Subagent Status/);
+  assert.match(pi.messages.at(-1).message.content, /Summary: 0\/2 completed, 1 running, 1 waiting, 0 stuck, 0 failed/);
+  assert.match(pi.messages.at(-1).message.content, /- writer \[running\]: skills writing-markdown-helper; tool read; draft related work; 1 requests; 2s/);
 
   await event(pi, 'tool_execution_update')(
     {
@@ -1260,6 +1270,8 @@ test('task tool_execution_update records live subagent progress and completion',
   assert.deepEqual(status.details.status.completed, ['writer']);
   assert.deepEqual(status.details.status.pending, []);
   assert.match(status.content[0].text, /Progress:\n- writer: completed; draft related work; 2 requests; 5s/);
+  assert.match(pi.messages.at(-1).message.content, /Summary: 1\/2 completed, 0 running, 1 waiting, 0 stuck, 0 failed/);
+  assert.match(pi.messages.at(-1).message.content, /- writer \[completed\]: skills writing-markdown-helper; draft related work; 2 requests; 5s/);
 });
 
 test('task EventBus progress and lifecycle update subagent status before final task result', async () => {
@@ -1307,6 +1319,7 @@ test('task EventBus progress and lifecycle update subagent status before final t
   assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['writer']);
   assert.equal(status.details.status.progress[0].agent, 'writer');
   assert.equal(status.details.status.progress[0].status, 'running');
+  assert.match(pi.messages.at(-1).message.content, /- writer \[running\]: skills writing-markdown-helper; tool read/);
 
   await pi.events.emit('task:subagent:lifecycle', {
     id: 'WriterBus',
@@ -1328,6 +1341,8 @@ test('task EventBus progress and lifecycle update subagent status before final t
   assert.deepEqual(status.details.status.completed, ['writer']);
   assert.deepEqual(status.details.status.pending, []);
   assert.match(status.content[0].text, /writer: completed; draft finished/);
+  assert.match(pi.messages.at(-1).message.content, /Update: completed/);
+  assert.match(pi.messages.at(-1).message.content, /- writer \[completed\]: skills writing-markdown-helper; draft finished/);
 });
 
 test('completing one of two pending task calls keeps the other subagent running', async () => {
@@ -1430,6 +1445,11 @@ test('task tool_call announces running subagents in TUI notifications', async ()
   assert.equal(notifications.length, 1);
   assert.equal(notifications[0].level, 'info');
   assert.match(notifications[0].text, /OMP subagents running: writer \[writing-markdown-helper\], checker \[writing-checkers\]\. Route: writing\.en\./);
+  assert.equal(pi.messages.length, 1);
+  assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.subagent-dashboard');
+  assert.match(pi.messages[0].message.content, /Summary: 0\/2 completed, 2 running, 0 waiting, 0 stuck, 0 failed/);
+  assert.match(pi.messages[0].message.content, /- writer \[running\]: skills writing-markdown-helper/);
+  assert.match(pi.messages[0].message.content, /- checker \[running\]: skills writing-checkers/);
 });
 
 test('task tool_result announces completed and failed subagents in TUI notifications', async () => {

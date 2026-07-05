@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const pluginDirectoryByName = new Map([
   ['omp-config', 'omp-config'],
@@ -192,6 +193,6 @@ function printHelp() {
   console.log(`Usage: node scripts/release.js --plugin <name|all> (--version <x.y.z>|--bump patch|minor|major) [--apply] [--pin-ref] [--allow-downgrade]\n\nDefault mode is track-main: catalog refs are removed so marketplace upgrade tracks the latest GitHub marketplace catalog.`)
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   await main()
 }
