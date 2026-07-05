@@ -39,7 +39,7 @@ If you are developing locally, use a local marketplace or plugin link flow inste
 - `/opencode_go_pool_key rename <label|id|hash> <new-label>`
   Rename an extra key.
 - `/opencode_go_pool_status`
-  Show key health, cooldowns, in-flight counts, recent errors, and plugin-observed usage for 5h, weekly, and monthly windows.
+  Show key health, cooldowns, in-flight counts, recent errors, and plugin-observed 5h, weekly, and monthly usage bars.
 
 Do not paste raw API keys into slash-command arguments. Run `/opencode_go_pool_key` without key text and enter the key in the prompt.
 
@@ -63,7 +63,7 @@ The vault is written with owner-only file permissions where the platform support
 ~/.omp/agent/state/opencode-go-pool-usage.jsonl
 ```
 
-It reports plugin-observed attempts by key label/hash. It does not claim to be the OpenCode Go dashboard bill, and it does not replace OMP native `/usage`.
+It reports plugin-observed attempts by key label/hash. The 5h, weekly, and monthly bars use the same fixed OpenCode Go windows that OMP's native usage view uses for observed spend: $12, $30, and $60. It does not claim to be the OpenCode Go dashboard bill, and it does not replace OMP native `/usage`.
 
 The slash command displays its report through OMP's extension notification UI. If the command appears to do nothing after an upgrade, start a new OMP session so the process reloads the upgraded plugin code.
 

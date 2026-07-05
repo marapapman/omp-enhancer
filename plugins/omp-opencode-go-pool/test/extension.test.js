@@ -117,3 +117,29 @@ test('key command notifies validation failures without exposing pasted key text'
   assert.doesNotMatch(result.text, new RegExp(pastedKey));
   assert.deepEqual(notifications, [{ text: result.text, type: 'error' }]);
 });
+
+test('status command tolerates primary key resolver certificate failures', async () => {
+  const commands = new Map();
+  const notifications = [];
+  registerOpenCodeGoPool({
+    setLabel: () => {},
+    registerCommand: (name, config) => commands.set(name, config),
+    registerTool: () => {},
+    registerProvider: () => {},
+    zod: { z: { object: () => ({}) } },
+  });
+
+  const result = await commands.get('opencode_go_pool_status').handler('', {
+    modelRegistry: {
+      getApiKeyForProvider: async () => {
+        throw new Error('unknown certificate verification error');
+      },
+    },
+    ui: {
+      notify: async (text, type) => notifications.push({ text, type }),
+    },
+  });
+
+  assert.match(result.text, /OpenCode Go key pool status/);
+  assert.deepEqual(notifications, [{ text: result.text, type: 'info' }]);
+});

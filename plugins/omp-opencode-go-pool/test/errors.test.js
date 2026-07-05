@@ -28,3 +28,10 @@ test('does not retry unknown errors by default', () => {
   assert.equal(result.kind, 'unknown');
   assert.equal(result.retryableBeforeOutput, false);
 });
+
+test('classifies certificate verification errors as retryable network failures', () => {
+  const result = classifyProviderError(new Error('unknown certificate verification error'));
+  assert.equal(result.kind, 'network');
+  assert.equal(result.disable, false);
+  assert.equal(result.retryableBeforeOutput, true);
+});

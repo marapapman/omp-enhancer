@@ -11,7 +11,7 @@ import { UsageLedger } from './src/usage.js';
 
 export default function registerOpenCodeGoPool(pi) {
   const paths = resolveStatePaths();
-  void debugLog(paths, { event: 'init', version: '0.1.1' });
+  void debugLog(paths, { event: 'init', version: '0.1.2' });
   const keyVault = new KeyVault({ path: paths.vaultPath });
   const usageLedger = new UsageLedger({ path: paths.usagePath });
   const keyPool = new KeyPool({ vault: keyVault, path: paths.healthPath });

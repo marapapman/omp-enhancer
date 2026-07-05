@@ -5,7 +5,7 @@ const DEFAULT_NETWORK_COOLDOWN_MS = 60 * 1000;
 
 const RATE_LIMIT_RE = /\b(rate.?limit|quota|usage.?limit|too many requests|exhausted|insufficient_quota)\b/i;
 const AUTH_RE = /\b(unauthorized|invalid api key|invalid_api_key|forbidden|permission denied)\b/i;
-const NETWORK_RE = /\b(ECONNRESET|ETIMEDOUT|ENOTFOUND|fetch failed|network|socket|timeout)\b/i;
+const NETWORK_RE = /\b(ECONNRESET|ETIMEDOUT|ENOTFOUND|fetch failed|network|socket|timeout|certificate|cert|tls|ssl|UNABLE_TO_VERIFY_LEAF_SIGNATURE|SELF_SIGNED_CERT)\b/i;
 
 export function classifyProviderError(error) {
   const status = extractStatus(error);

@@ -16,12 +16,24 @@ test('formats status with health and plugin-owned usage', async () => {
   await vault.addKey({ label: 'extra', key: rawKey });
   const pool = new KeyPool({ vault, path: path.join(dir, 'state.json') });
   const ledger = new UsageLedger({ path: path.join(dir, 'usage.jsonl') });
-  await ledger.appendAttempt({ key: { label: 'extra', hash: 'hash1', source: 'vault' }, success: true, usage: { totalTokens: 12 } });
+  await ledger.appendAttempt({
+    key: { label: 'extra', hash: 'hash1', source: 'vault' },
+    success: true,
+    usage: { totalTokens: 12, costTotal: 6 },
+  });
+  await ledger.appendAttempt({
+    key: { label: 'extra', hash: 'hash1', source: 'vault' },
+    success: false,
+    usage: { totalTokens: 3 },
+  });
 
   const report = await buildStatusReport({ keyPool: pool, keyVault: vault, usageLedger: ledger });
   const text = formatStatusReport(report);
 
   assert.match(text, /OpenCode Go key pool status/);
   assert.match(text, /Plugin-observed usage/);
+  assert.match(text, /5 Hour limit · \$12\.00/);
+  assert.match(text, /extra \[vault\]\s+████████████░░░░░░░░░░░░/);
+  assert.match(text, /\$6\.000000 \/ \$12\.00 known · 50\.0% used · 2 req · 1 ok · 1 failed · 15 tok · 1 unknown-cost req/);
   assert.doesNotMatch(text, new RegExp(rawKey));
 });
