@@ -112,6 +112,10 @@ test('registers core tools, classifier command, and hooks', () => {
     'omp_core_validate_subagent_usage',
     'omp_core_subagent_status',
     'omp_core_governance_prompt',
+    'omp_test_analyze',
+    'omp_test_context',
+    'omp_test_gate',
+    'omp_test_report',
   ]);
   assert.equal([...pi.tools.values()].every((tool) => typeof tool.execute === 'function'), true);
   assert.deepEqual(pi.eventHandlers.map((handler) => handler.event), [
@@ -899,6 +903,107 @@ test('failed omp_test_gate results do not release implementation and testing gat
   }
 });
 
+test('registered omp_test tools close the testing gate only with passing evidence', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(pi.entries);
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。' }, ctx);
+  await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-pr-test-analyzer']);
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-test-tools-skill-usage',
+    { output: skillUsageBlock(['test-driven-development', 'subagent-driven-development', 'verification-before-completion']) },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const analysis = await tool(pi, 'omp_test_analyze').execute(
+    'call-omp-test-analyze',
+    { target: 'src/router.js', strategy: 'cover fallback behavior and confidence thresholds' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  assert.equal(analysis.isError, false);
+
+  const context = await tool(pi, 'omp_test_context').execute(
+    'call-omp-test-context',
+    { command: 'npm test --workspace plugins/omp-enhancer-core', summary: 'focused router tests selected' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  assert.equal(context.isError, false);
+
+  const gate = await tool(pi, 'omp_test_gate').execute(
+    'call-omp-test-gate-pass',
+    {
+      passed: true,
+      command: 'npm test --workspace plugins/omp-enhancer-core',
+      summary: '120 tests passed',
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+  assert.equal(gate.isError, false);
+  assert.match(gate.content[0].text, /OMP test gate passed/);
+
+  const report = await tool(pi, 'omp_test_report').execute(
+    'call-omp-test-report',
+    { summary: 'Router regression tests passed after fixes.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  assert.equal(report.isError, false);
+
+  const released = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
+
+  assert.notEqual(released?.continue, true);
+});
+
+test('registered omp_test_gate keeps RED test evidence blocking', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(pi.entries);
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt: '实现自然语言路由并补测试，测试写完后要过门禁。' }, ctx);
+  await forkSubagents(pi, ctx, ['plan', 'task', 'reviewer']);
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-red-test-gate-skill-usage',
+    { output: skillUsageBlock(['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion']) },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const gate = await tool(pi, 'omp_test_gate').execute(
+    'call-omp-test-gate-red',
+    {
+      passed: false,
+      command: 'npm test --workspace plugins/omp-enhancer-core',
+      summary: '118 tests, 96 pass, 22 fail (bugs confirmed RED).',
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(gate.isError, true);
+  assert.match(gate.content[0].text, /OMP test gate failed/);
+
+  const blocked = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
+
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /omp_test_gate/);
+  assert.match(blocked.additionalContext, /Recent failed tool results/);
+  assert.match(blocked.additionalContext, /bugs confirmed RED|Gate input marked passed=false/);
+});
+
 test('session_stop continues when a routed task has not forked required subagents', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -1267,8 +1372,9 @@ test('task tool_execution_update records live subagent progress and completion',
   assert.equal(pi.messages.at(-1).message.customType, 'omp-enhancer-core.subagent-dashboard');
   assert.equal(pi.messages.at(-1).message.display, true);
   assert.match(pi.messages.at(-1).message.content, /### OMP Subagent Status/);
+  assert.match(pi.messages.at(-1).message.content, /Activity: \| running: writer/);
   assert.match(pi.messages.at(-1).message.content, /Summary: 0\/2 completed, 1 running, 1 waiting, 0 stuck, 0 failed/);
-  assert.match(pi.messages.at(-1).message.content, /- writer \[running\]: skills writing-markdown-helper; tool read; draft related work; 1 requests; 2s/);
+  assert.match(pi.messages.at(-1).message.content, /- \[\| running\] writer: skills writing-markdown-helper; tool read; draft related work; 1 requests; 2s/);
 
   await event(pi, 'tool_execution_update')(
     {
@@ -1306,7 +1412,7 @@ test('task tool_execution_update records live subagent progress and completion',
   assert.deepEqual(status.details.status.pending, []);
   assert.match(status.content[0].text, /Progress:\n- writer: completed; draft related work; 2 requests; 5s/);
   assert.match(pi.messages.at(-1).message.content, /Summary: 1\/2 completed, 0 running, 1 waiting, 0 stuck, 0 failed/);
-  assert.match(pi.messages.at(-1).message.content, /- writer \[completed\]: skills writing-markdown-helper; draft related work; 2 requests; 5s/);
+  assert.match(pi.messages.at(-1).message.content, /- \[done\] writer: skills writing-markdown-helper; draft related work; 2 requests; 5s/);
 });
 
 test('task EventBus progress and lifecycle update subagent status before final task result', async () => {
@@ -1354,7 +1460,7 @@ test('task EventBus progress and lifecycle update subagent status before final t
   assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['writer']);
   assert.equal(status.details.status.progress[0].agent, 'writer');
   assert.equal(status.details.status.progress[0].status, 'running');
-  assert.match(pi.messages.at(-1).message.content, /- writer \[running\]: skills writing-markdown-helper; tool read/);
+  assert.match(pi.messages.at(-1).message.content, /- \[\| running\] writer: skills writing-markdown-helper; tool read/);
 
   await pi.events.emit('task:subagent:lifecycle', {
     id: 'WriterBus',
@@ -1377,14 +1483,20 @@ test('task EventBus progress and lifecycle update subagent status before final t
   assert.deepEqual(status.details.status.pending, []);
   assert.match(status.content[0].text, /writer: completed; draft finished/);
   assert.match(pi.messages.at(-1).message.content, /Update: completed/);
-  assert.match(pi.messages.at(-1).message.content, /- writer \[completed\]: skills writing-markdown-helper; draft finished/);
+  assert.match(pi.messages.at(-1).message.content, /- \[done\] writer: skills writing-markdown-helper; draft finished/);
 });
 
 test('subagent dashboard keeps refreshing after user-yield session_stop', async () => {
   const timers = new FakeTimers();
   const pi = new FakePi([], { timers, subagentDashboardIntervalMs: 1 });
   registerCoreEnhancer(pi);
-  const ctx = extensionContext(pi.entries);
+  const statusLines = new Map();
+  const ctx = extensionContext(pi.entries, {
+    setStatus: (key, text) => {
+      if (text === undefined) statusLines.delete(key);
+      else statusLines.set(key, text);
+    },
+  });
 
   await event(pi, 'session_start')({}, ctx);
   await tool(pi, 'omp_core_route_task').execute(
@@ -1418,13 +1530,16 @@ test('subagent dashboard keeps refreshing after user-yield session_stop', async 
   assert.match(stopped.additionalContext, /Pending subagent task results/);
   assert.equal(timers.activeCount(), 1);
   assert.match(pi.messages.at(-1).message.content, /Update: waiting-for-user/);
+  assert.match(pi.messages.at(-1).message.content, /Activity: \/ running: checker, writer/);
   assert.match(pi.messages.at(-1).message.content, /Summary: 0\/2 completed, 2 running, 0 waiting, 0 stuck, 0 failed/);
+  assert.match(statusLines.get('omp-enhancer-core.subagents'), /OMP subagents \/ 0\/2 completed, 2 running, 0 waiting, 0 stuck, 0 failed \| checker, writer/);
 
   await timers.tick();
 
   assert.equal(timers.activeCount(), 1);
   assert.match(pi.messages.at(-1).message.content, /Update: watching/);
-  assert.match(pi.messages.at(-1).message.content, /- writer \[running\]: skills writing-markdown-helper/);
+  assert.match(pi.messages.at(-1).message.content, /- \[- running\] writer: skills writing-markdown-helper/);
+  assert.match(statusLines.get('omp-enhancer-core.subagents'), /OMP subagents - 0\/2 completed, 2 running, 0 waiting, 0 stuck, 0 failed \| checker, writer/);
 
   await pi.events.emit('task:subagent:progress', {
     id: 'YieldWriter',
@@ -1437,7 +1552,7 @@ test('subagent dashboard keeps refreshing after user-yield session_stop', async 
   });
 
   assert.equal(timers.activeCount(), 1);
-  assert.match(pi.messages.at(-1).message.content, /- writer \[running\]: skills writing-markdown-helper; tool read; reading sources/);
+  assert.match(pi.messages.at(-1).message.content, /- \[\\ running\] writer: skills writing-markdown-helper; tool read; reading sources/);
 
   await pi.events.emit('task:subagent:lifecycle', {
     id: 'YieldWriter',
@@ -1456,6 +1571,7 @@ test('subagent dashboard keeps refreshing after user-yield session_stop', async 
 
   assert.equal(timers.activeCount(), 0);
   assert.match(pi.messages.at(-1).message.content, /Summary: 2\/2 completed, 0 running, 0 waiting, 0 stuck, 0 failed/);
+  assert.equal(statusLines.has('omp-enhancer-core.subagents'), false);
   const messageCount = pi.messages.length;
 
   await timers.tick();
@@ -1566,8 +1682,8 @@ test('task tool_call announces running subagents in TUI notifications', async ()
   assert.equal(pi.messages.length, 1);
   assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.subagent-dashboard');
   assert.match(pi.messages[0].message.content, /Summary: 0\/2 completed, 2 running, 0 waiting, 0 stuck, 0 failed/);
-  assert.match(pi.messages[0].message.content, /- writer \[running\]: skills writing-markdown-helper/);
-  assert.match(pi.messages[0].message.content, /- checker \[running\]: skills writing-checkers/);
+  assert.match(pi.messages[0].message.content, /- \[\| running\] writer: skills writing-markdown-helper/);
+  assert.match(pi.messages[0].message.content, /- \[\| running\] checker: skills writing-checkers/);
 });
 
 test('task tool_result announces completed and failed subagents in TUI notifications', async () => {
@@ -2373,11 +2489,11 @@ function staleSkillValidationState(routeState) {
   };
 }
 
-function extensionContext(entries = []) {
+function extensionContext(entries = [], ui = {}) {
   return {
     cwd: process.cwd(),
     sessionManager: { getBranch: () => entries },
-    ui: { notify: () => undefined },
+    ui: { notify: () => undefined, ...ui },
     hasUI: false,
   };
 }

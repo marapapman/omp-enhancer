@@ -17,6 +17,7 @@ import {
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
 const SUBAGENT_DASHBOARD_ENTRY = 'omp-enhancer-core.subagent-dashboard';
+const SUBAGENT_DASHBOARD_STATUS_KEY = 'omp-enhancer-core.subagents';
 const TASK_SUBAGENT_EVENT_CHANNEL = 'task:subagent:event';
 const TASK_SUBAGENT_PROGRESS_CHANNEL = 'task:subagent:progress';
 const TASK_SUBAGENT_LIFECYCLE_CHANNEL = 'task:subagent:lifecycle';
@@ -30,6 +31,7 @@ const ASSISTANT_OUTPUT_EVENTS = [
 const SUBAGENT_STUCK_AFTER_MS = 10 * 60 * 1000;
 const SUBAGENT_DASHBOARD_WATCH_INTERVAL_MS = 5000;
 const SUBAGENT_DASHBOARD_WATCH_MAX_MS = 60 * 60 * 1000;
+const SUBAGENT_DASHBOARD_FRAMES = ['|', '/', '-', '\\'];
 const SUBAGENT_ACTIVE_STATUSES = new Set(['pending', 'running', 'started', 'in_progress', 'in-progress']);
 const SUBAGENT_COMPLETED_STATUSES = new Set(['completed', 'complete', 'success', 'succeeded']);
 const SUBAGENT_FAILED_STATUSES = new Set(['failed', 'failure', 'error', 'aborted', 'cancelled', 'canceled']);
@@ -163,6 +165,7 @@ export default function registerCoreEnhancer(pi) {
       return okResult(fragment, { route, fragment });
     },
   });
+  registerTestWorkflowTools(pi, state, z);
 
   pi.on?.('session_start', async (_event = {}, ctx = {}) => {
     const restored = restoreStateFromContext(state, ctx);
@@ -320,6 +323,8 @@ export function createState() {
     lastSubagentUsage: null,
     evidence: emptyEvidence(),
     loopGuard: createLoopGuardState(),
+    subagentDashboardUi: null,
+    subagentDashboardFrame: 0,
   };
 }
 
@@ -338,6 +343,10 @@ function emptyEvidence() {
     subagentSkills: new Map(),
     unexpectedSubagentSkills: new Map(),
     subagentProgress: new Map(),
+    testAnalysis: null,
+    testContext: null,
+    testGate: null,
+    testReport: null,
   };
 }
 
@@ -347,6 +356,216 @@ function okResult(text, details = {}) {
     details,
     isError: false,
   };
+}
+
+function errorResult(text, details = {}) {
+  return {
+    content: [{ type: 'text', text }],
+    details,
+    isError: true,
+  };
+}
+
+function registerTestWorkflowTools(pi, state, z) {
+  const parameters = testWorkflowParameters(z);
+
+  pi.registerTool({
+    name: 'omp_test_analyze',
+    label: 'Analyze OMP test scope',
+    description: 'Record the test target, risk focus, and test strategy before running a routed testing workflow.',
+    parameters,
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
+      const evidence = normalizeTestEvidence(params);
+      state.evidence.testAnalysis = evidence;
+      await persistState(pi, state);
+      return okResult(formatTestToolResult('OMP test analysis recorded.', evidence), { testAnalysis: evidence });
+    },
+  });
+
+  pi.registerTool({
+    name: 'omp_test_context',
+    label: 'Record OMP test context',
+    description: 'Record the files, commands, existing failures, and constraints that define the routed test context.',
+    parameters,
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
+      const evidence = normalizeTestEvidence(params);
+      state.evidence.testContext = evidence;
+      await persistState(pi, state);
+      return okResult(formatTestToolResult('OMP test context recorded.', evidence), { testContext: evidence });
+    },
+  });
+
+  pi.registerTool({
+    name: 'omp_test_gate',
+    label: 'Close OMP test gate',
+    description: 'Validate routed test evidence. Pass only after relevant tests or explicit verification pass; RED or missing evidence keeps the gate open.',
+    parameters,
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
+      const gate = evaluateTestGate(params);
+      state.evidence.testGate = gate;
+      state.evidence.testingGate = gate.passed;
+
+      if (gate.passed) {
+        clearToolFailures(state, 'omp_test_gate');
+        await persistState(pi, state);
+        return okResult(formatTestGateResult(gate), { testGate: gate });
+      }
+
+      recordToolFailure(state, 'omp_test_gate', {
+        isError: true,
+        summary: gate.summary,
+        message: gate.message,
+        repairHint: gate.repairHint,
+        details: {
+          passed: false,
+          results: gate.failures.map((failure) => ({ summary: failure })),
+        },
+      });
+      await persistState(pi, state);
+      return errorResult(formatTestGateResult(gate), { testGate: gate });
+    },
+  });
+
+  pi.registerTool({
+    name: 'omp_test_report',
+    label: 'Record OMP test report',
+    description: 'Record the final routed testing report, including commands, coverage notes, failures fixed, and residual risk.',
+    parameters,
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
+      const evidence = normalizeTestEvidence(params);
+      state.evidence.testReport = evidence;
+      state.evidence.testingReport = true;
+      await persistState(pi, state);
+      return okResult(formatTestToolResult('OMP test report recorded.', evidence), { testReport: evidence });
+    },
+  });
+}
+
+function testWorkflowParameters(z) {
+  if (!z?.object || !z.string) return undefined;
+  const stringArray = z.array && z.string ? z.array(z.string()) : undefined;
+  const shape = {
+    summary: z.string().optional(),
+    target: z.string().optional(),
+    strategy: z.string().optional(),
+    command: z.string().optional(),
+    evidence: z.string().optional(),
+    testOutput: z.string().optional(),
+  };
+  if (stringArray?.optional) {
+    shape.commands = stringArray.optional();
+    shape.failures = stringArray.optional();
+    shape.blockers = stringArray.optional();
+    shape.nextSteps = stringArray.optional();
+  }
+  if (z.boolean) shape.passed = z.boolean().optional();
+  return z.object(shape);
+}
+
+function normalizeTestEvidence(params = {}) {
+  return {
+    summary: cleanText(params.summary),
+    target: cleanText(params.target),
+    strategy: cleanText(params.strategy),
+    command: cleanText(params.command),
+    commands: cleanStringArray(params.commands),
+    evidence: cleanText(params.evidence),
+    testOutput: cleanText(params.testOutput),
+    passed: typeof params.passed === 'boolean' ? params.passed : undefined,
+    failures: cleanStringArray(params.failures),
+    blockers: cleanStringArray(params.blockers),
+    nextSteps: cleanStringArray(params.nextSteps),
+    recordedAt: Date.now(),
+  };
+}
+
+function evaluateTestGate(params = {}) {
+  const evidence = normalizeTestEvidence(params);
+  const failures = testGateFailures(evidence);
+  const hasEvidence = hasTestGateEvidence(evidence);
+  const insufficient = !hasEvidence ? ['No test evidence was provided to omp_test_gate.'] : [];
+  const passed = evidence.passed === true && failures.length === 0 && insufficient.length === 0;
+  const allFailures = [...insufficient, ...failures];
+  const summary = evidence.summary || (passed ? 'Test gate passed.' : 'Test gate failed.');
+  const repairHint = passed
+    ? ''
+    : 'Fix the failing tests or provide passing verification evidence, then rerun omp_test_gate.';
+  return {
+    ...evidence,
+    passed,
+    failures: allFailures,
+    summary,
+    message: passed ? 'OMP test gate closed.' : allFailures.join(' '),
+    repairHint,
+  };
+}
+
+function hasTestGateEvidence(evidence) {
+  return Boolean(
+    evidence.summary
+      || evidence.target
+      || evidence.strategy
+      || evidence.command
+      || evidence.commands.length
+      || evidence.evidence
+      || evidence.testOutput
+      || evidence.failures.length
+      || evidence.blockers.length
+      || typeof evidence.passed === 'boolean',
+  );
+}
+
+function testGateFailures(evidence) {
+  const explicit = [...evidence.failures, ...evidence.blockers];
+  const text = [
+    evidence.summary,
+    evidence.evidence,
+    evidence.testOutput,
+    ...evidence.commands,
+  ].filter(Boolean).join('\n');
+  const detected = [];
+  if (evidence.passed === false) detected.push('Gate input marked passed=false.');
+  if (/\b(red|failing|failed|failure|failures|bugs? confirmed)\b/i.test(text)) {
+    detected.push('Gate evidence reports failing tests or confirmed bugs.');
+  }
+  if (/\b[1-9]\d*\s+(?:tests?\s+)?(?:fail|fails|failed|failing|failures)\b/i.test(text)) {
+    detected.push('Gate evidence reports one or more failing tests.');
+  }
+  return uniqueValues([...explicit, ...detected]);
+}
+
+function formatTestGateResult(gate) {
+  return [
+    gate.passed ? 'OMP test gate passed.' : 'OMP test gate failed.',
+    gate.summary ? `Summary: ${gate.summary}` : null,
+    gate.command ? `Command: ${gate.command}` : null,
+    gate.commands.length ? `Commands: ${gate.commands.join(', ')}` : null,
+    gate.failures.length ? `Failures: ${gate.failures.join('; ')}` : null,
+    gate.repairHint ? `Repair: ${gate.repairHint}` : null,
+  ].filter(Boolean).join('\n');
+}
+
+function formatTestToolResult(prefix, evidence) {
+  return [
+    prefix,
+    evidence.summary ? `Summary: ${evidence.summary}` : null,
+    evidence.target ? `Target: ${evidence.target}` : null,
+    evidence.strategy ? `Strategy: ${evidence.strategy}` : null,
+    evidence.command ? `Command: ${evidence.command}` : null,
+    evidence.commands.length ? `Commands: ${evidence.commands.join(', ')}` : null,
+    evidence.failures.length ? `Failures: ${evidence.failures.join('; ')}` : null,
+    evidence.nextSteps.length ? `Next: ${evidence.nextSteps.join('; ')}` : null,
+  ].filter(Boolean).join('\n');
+}
+
+function cleanStringArray(values) {
+  return Array.isArray(values)
+    ? uniqueValues(values.map((value) => cleanText(value)).filter(Boolean))
+    : [];
 }
 
 function formatRoute(route) {
@@ -396,6 +615,7 @@ async function persistState(pi, state) {
 }
 
 function restoreStateFromContext(state, ctx = {}) {
+  rememberSubagentDashboardUi(state, ctx);
   const entries = ctx.sessionManager?.getBranch?.();
   if (!Array.isArray(entries)) return false;
   const restored = restoreStateFromEntries(entries);
@@ -403,6 +623,11 @@ function restoreStateFromContext(state, ctx = {}) {
   replaceState(state, restored.snapshot);
   recordReadSkillEvidenceFromEntries(state, entries, restored.routeStartIndex);
   return true;
+}
+
+function rememberSubagentDashboardUi(state, ctx = {}) {
+  const ui = ctx.ui;
+  if (ui && typeof ui.setStatus === 'function') state.subagentDashboardUi = ui;
 }
 
 function restoreStateFromEntries(entries) {
@@ -488,6 +713,10 @@ function serializeState(state) {
         ...progress,
         skills: [...(progress.skills ?? [])],
       })),
+      testAnalysis: state.evidence.testAnalysis,
+      testContext: state.evidence.testContext,
+      testGate: state.evidence.testGate,
+      testReport: state.evidence.testReport,
     },
   };
 }
@@ -522,6 +751,10 @@ function readEvidenceSnapshot(value) {
     subagentSkills: readSubagentSkills(value.subagentSkills),
     unexpectedSubagentSkills: readSubagentSkills(value.unexpectedSubagentSkills),
     subagentProgress: readSubagentProgress(value.subagentProgress),
+    testAnalysis: isRecord(value.testAnalysis) ? value.testAnalysis : null,
+    testContext: isRecord(value.testContext) ? value.testContext : null,
+    testGate: isRecord(value.testGate) ? value.testGate : null,
+    testReport: isRecord(value.testReport) ? value.testReport : null,
   };
 }
 
@@ -1524,6 +1757,7 @@ function createSubagentDashboardWatcher(pi, state) {
   let refreshing = false;
 
   const stop = () => {
+    clearSubagentDashboardStatusLine(state);
     if (!timer) return;
     timers.clearInterval(timer);
     timer = null;
@@ -1596,7 +1830,14 @@ function hasActiveSubagentDashboardWork(status) {
 
 async function publishSubagentDashboard(pi, state, reason = 'updated') {
   const entry = buildSubagentDashboardEntry(state, reason);
-  if (!entry) return;
+  if (!entry) {
+    clearSubagentDashboardStatusLine(state);
+    return;
+  }
+
+  syncSubagentDashboardStatusLine(state, entry.status, {
+    frame: entry.activityFrame,
+  });
 
   if (typeof pi.appendEntry === 'function') {
     try {
@@ -1625,13 +1866,15 @@ function buildSubagentDashboardEntry(state, reason = 'updated') {
   const status = buildSubagentStatus(state);
   if (!shouldPublishSubagentDashboard(status)) return null;
   const summary = formatSubagentDashboardSummary(status);
-  const markdown = formatSubagentDashboardMarkdown(status, { reason, summary });
+  const activityFrame = nextSubagentDashboardFrame(state, status);
+  const markdown = formatSubagentDashboardMarkdown(status, { reason, summary, activityFrame });
 
   return {
     kind: 'subagent-dashboard',
     reason,
     route: status.route,
     summary,
+    activityFrame,
     markdown,
     status,
     updatedAt: Date.now(),
@@ -1647,12 +1890,12 @@ function shouldPublishSubagentDashboard(status) {
     || status.failures.length > 0;
 }
 
-function formatSubagentDashboardMarkdown(status, { reason = 'updated', summary = formatSubagentDashboardSummary(status) } = {}) {
+function formatSubagentDashboardMarkdown(status, { reason = 'updated', summary = formatSubagentDashboardSummary(status), activityFrame = '' } = {}) {
   const requiredLines = status.required.length
-    ? status.required.map((item) => formatRequiredSubagentDashboardLine(status, item)).join('\n')
+    ? status.required.map((item) => formatRequiredSubagentDashboardLine(status, item, activityFrame)).join('\n')
     : '- none';
   const progressLines = status.progress.length
-    ? latestProgressByAgent(status.progress).map(formatSubagentProgressLine).join('\n')
+    ? latestProgressByAgent(status.progress).map((progress) => formatSubagentDashboardProgressLine(progress, activityFrame)).join('\n')
     : '- none';
   const failureLines = status.failures.length
     ? status.failures.map((failure) => `- ${failure.message ?? failure.summary ?? 'task failed'}`).join('\n')
@@ -1663,6 +1906,7 @@ function formatSubagentDashboardMarkdown(status, { reason = 'updated', summary =
     '',
     `Route: ${status.route}`,
     `Update: ${reason}`,
+    `Activity: ${formatSubagentDashboardActivity(status, activityFrame)}`,
     `Summary: ${summary}`,
     '',
     'Required roles:',
@@ -1674,6 +1918,72 @@ function formatSubagentDashboardMarkdown(status, { reason = 'updated', summary =
     'Failures:',
     failureLines,
   ].join('\n');
+}
+
+function nextSubagentDashboardFrame(state, status) {
+  if (!hasActiveSubagentDashboardWork(status)) return '';
+  const frame = currentSubagentDashboardFrame(state);
+  state.subagentDashboardFrame = (state.subagentDashboardFrame + 1) % SUBAGENT_DASHBOARD_FRAMES.length;
+  return frame;
+}
+
+function currentSubagentDashboardFrame(state) {
+  return SUBAGENT_DASHBOARD_FRAMES[state.subagentDashboardFrame % SUBAGENT_DASHBOARD_FRAMES.length] ?? '|';
+}
+
+function syncSubagentDashboardStatusLine(state, status, { frame = currentSubagentDashboardFrame(state) } = {}) {
+  const ui = state.subagentDashboardUi;
+  if (!ui || typeof ui.setStatus !== 'function') return;
+  if (!hasActiveSubagentDashboardWork(status)) {
+    clearSubagentDashboardStatusLine(state);
+    return;
+  }
+  try {
+    ui.setStatus(SUBAGENT_DASHBOARD_STATUS_KEY, formatSubagentDashboardStatusLine(status, frame));
+  } catch {
+    // Status-line updates are observational only.
+  }
+}
+
+function clearSubagentDashboardStatusLine(state) {
+  const ui = state.subagentDashboardUi;
+  if (!ui || typeof ui.setStatus !== 'function') return;
+  try {
+    ui.setStatus(SUBAGENT_DASHBOARD_STATUS_KEY, undefined);
+  } catch {
+    // Status-line updates are observational only.
+  }
+}
+
+function formatSubagentDashboardStatusLine(status, frame = '') {
+  const agents = activeSubagentDashboardAgents(status);
+  const preview = agents.length
+    ? ` | ${agents.slice(0, 3).join(', ')}${agents.length > 3 ? `, +${agents.length - 3}` : ''}`
+    : '';
+  return `OMP subagents ${frame || ' '} ${formatSubagentDashboardSummary(status)}${preview}`;
+}
+
+function formatSubagentDashboardActivity(status, frame = '') {
+  const agents = activeSubagentDashboardAgents(status);
+  if (agents.length) return `${frame || '|'} running: ${agents.join(', ')}`;
+  const failed = status.progress
+    .filter(({ status: progressStatus }) => isFailedSubagentStatus(progressStatus))
+    .map(({ agent }) => agent)
+    .filter(Boolean);
+  if (failed.length) return `failed: ${uniqueValues(failed).join(', ')}`;
+  if (status.completed.length) return `completed: ${status.completed.join(', ')}`;
+  return 'idle';
+}
+
+function activeSubagentDashboardAgents(status) {
+  const agents = new Set();
+  for (const pending of status.pending) {
+    if (!pending.stuck && pending.agent) agents.add(pending.agent);
+  }
+  for (const progress of status.progress) {
+    if (isActiveSubagentStatus(progress.status) && progress.agent) agents.add(progress.agent);
+  }
+  return [...agents].sort();
 }
 
 function formatSubagentDashboardSummary(status) {
@@ -1691,10 +2001,10 @@ function formatSubagentDashboardSummary(status) {
   return `${completed}/${total} completed, ${pending} running, ${waiting} waiting, ${stuck} stuck, ${failed} failed`;
 }
 
-function formatRequiredSubagentDashboardLine(status, { agent, requiredSkills = [] }) {
+function formatRequiredSubagentDashboardLine(status, { agent, requiredSkills = [] }, activityFrame = '') {
   const state = subagentDashboardState(status, agent);
   const details = subagentDashboardDetails(status, agent, requiredSkills);
-  return `- ${agent} [${state}]${details ? `: ${details}` : ''}`;
+  return `- [${subagentDashboardStateLabel(state, activityFrame)}] ${agent}${details ? `: ${details}` : ''}`;
 }
 
 function subagentDashboardState(status, agent) {
@@ -1718,8 +2028,15 @@ function subagentDashboardDetails(status, agent, requiredSkills = []) {
     progress?.description ? progress.description : null,
     progress?.requests ? `${progress.requests} requests` : null,
     progress?.durationMs ? `${Math.round(progress.durationMs / 1000)}s` : null,
+    progress?.updatedAt ? `seen ${formatElapsedMs(Date.now() - progress.updatedAt)} ago` : null,
     pending?.startedAt ? `age ${formatElapsedMs(Date.now() - pending.startedAt)}` : null,
   ].filter(Boolean).join('; ');
+}
+
+function subagentDashboardStateLabel(state, activityFrame = '') {
+  if (state === 'running') return `${activityFrame || '|'} running`;
+  if (state === 'completed') return 'done';
+  return state;
 }
 
 function latestProgressByAgent(progressItems = []) {
@@ -1763,6 +2080,25 @@ function formatSubagentProgressLine(progress) {
     progress.durationMs ? `${Math.round(progress.durationMs / 1000)}s` : null,
   ].filter(Boolean).join('; ');
   return `- ${progress.agent}: ${progress.status}${details ? `; ${details}` : ''}`;
+}
+
+function formatSubagentDashboardProgressLine(progress, activityFrame = '') {
+  const details = [
+    progress.description,
+    progress.currentTool ? `tool ${progress.currentTool}` : null,
+    progress.lastIntent && progress.lastIntent !== progress.currentTool ? progress.lastIntent : null,
+    progress.requests ? `${progress.requests} requests` : null,
+    progress.durationMs ? `${Math.round(progress.durationMs / 1000)}s` : null,
+    progress.updatedAt ? `seen ${formatElapsedMs(Date.now() - progress.updatedAt)} ago` : null,
+  ].filter(Boolean).join('; ');
+  return `- [${subagentDashboardProgressLabel(progress.status, activityFrame)}] ${progress.agent}${details ? `: ${details}` : ''}`;
+}
+
+function subagentDashboardProgressLabel(status, activityFrame = '') {
+  if (isActiveSubagentStatus(status)) return `${activityFrame || '|'} ${status}`;
+  if (isCompletedSubagentStatus(status)) return 'done';
+  if (isFailedSubagentStatus(status)) return 'failed';
+  return status || 'unknown';
 }
 
 async function notifySubagentDispatch(ctx = {}, status, records = [], state, event = {}) {
