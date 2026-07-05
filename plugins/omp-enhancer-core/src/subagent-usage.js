@@ -1,5 +1,7 @@
 import { skillNamesEquivalent } from './skill-usage.js';
 
+const chatMessageRoles = new Set(['assistant', 'developer', 'system', 'tool', 'user']);
+
 export function validateSubagentUsage({ requiredSubagents = [], output = '' } = {}) {
   const required = normalizeSubagents(requiredSubagents);
   if (!required.length) return { ok: true, missing: [], missingSkills: [], unexpectedSkills: [], forked: [], message: 'No routed subagents are required.' };
@@ -157,16 +159,68 @@ function isAgentKey(key) {
 }
 
 function findAgentValue(value) {
-  for (const [key, nested] of Object.entries(value)) {
-    if (!isAgentKey(key) || typeof nested !== 'string') continue;
+  const explicitAgent = findExplicitAgentValue(value);
+  if (explicitAgent && isGenericTaskDispatcher(value, explicitAgent)) return explicitAgent;
+
+  const markerAgent = parseRequiredSubagentMarker(collectOwnText(value));
+  if (markerAgent) return markerAgent;
+
+  if (explicitAgent) return explicitAgent;
+
+  const roleAgent = findRoleAgentValue(value);
+  if (roleAgent) return roleAgent;
+
+  return '';
+}
+
+function findExplicitAgentValue(value) {
+  for (const key of ['agent', 'subagent', 'subagent_type', 'subagentType']) {
+    const nested = value[key];
+    if (typeof nested !== 'string') continue;
     const agent = normalizeAgent(nested);
-    if (agent) return agent;
+    if (isUsableAgentName(agent)) return agent;
   }
   return '';
 }
 
 function isGenericTaskDispatcher(value, agent) {
   return agent === 'task' && Array.isArray(value.tasks);
+}
+
+function findRoleAgentValue(value) {
+  if (typeof value.role !== 'string') return '';
+  const agent = normalizeAgent(value.role);
+  return isPlausibleRoleAgent(agent) ? agent : '';
+}
+
+function isPlausibleRoleAgent(agent) {
+  return isUsableAgentName(agent) && /^[a-z][a-z0-9_.-]*$/i.test(agent);
+}
+
+function isUsableAgentName(agent) {
+  return Boolean(agent) && !chatMessageRoles.has(agent.toLowerCase());
+}
+
+function parseRequiredSubagentMarker(text = '') {
+  const match = String(text).match(/(?:^|\n)\s*OMP_REQUIRED_SUBAGENT:\s*([^\r\n]+)/i);
+  return match ? normalizeAgent(match[1]) : '';
+}
+
+function collectOwnText(value) {
+  return Object.entries(value)
+    .filter(([key]) => !isAgentKey(key) && key !== 'tasks')
+    .map(([, nested]) => collectShallowText(nested))
+    .join('\n');
+}
+
+function collectShallowText(value) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => typeof item === 'string')
+      .join('\n');
+  }
+  return '';
 }
 
 function collectText(value) {

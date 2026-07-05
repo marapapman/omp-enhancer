@@ -181,6 +181,85 @@ test('collectSubagentNames reads task role fields from tool_call input', () => {
   assert.deepEqual(agents, ['writer', 'checker']);
 });
 
+test('collectSubagentTaskRecords prefers OMP_REQUIRED_SUBAGENT over descriptive role text', () => {
+  const records = collectSubagentTaskRecords({
+    toolName: 'task',
+    input: {
+      agent: 'task',
+      tasks: [
+        {
+          id: 'BugAuditTests',
+          role: 'generate a deduplicated multi-channel test matrix',
+          assignment: [
+            'OMP_REQUIRED_SUBAGENT: ecc-tdd-guide',
+            'Required skills for this subagent:',
+            '- test-driven-development',
+            '- search-first',
+            '- ai-regression-testing',
+          ].join('\n'),
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(records, [
+    {
+      agent: 'ecc-tdd-guide',
+      text: [
+        'BugAuditTests',
+        [
+          'OMP_REQUIRED_SUBAGENT: ecc-tdd-guide',
+          'Required skills for this subagent:',
+          '- test-driven-development',
+          '- search-first',
+          '- ai-regression-testing',
+        ].join('\n'),
+      ].join('\n'),
+      skills: ['test-driven-development', 'search-first', 'ai-regression-testing'],
+    },
+  ]);
+});
+
+test('collectSubagentTaskRecords reads marker-only task items without role or agent fields', () => {
+  const records = collectSubagentTaskRecords({
+    toolName: 'task',
+    input: {
+      agent: 'task',
+      tasks: [
+        {
+          assignment: [
+            'OMP_REQUIRED_SUBAGENT: ecc-code-reviewer',
+            'Required skills for this subagent:',
+            '- verification-before-completion',
+          ].join('\n'),
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(records.map(({ agent, skills }) => ({ agent, skills })), [
+    { agent: 'ecc-code-reviewer', skills: ['verification-before-completion'] },
+  ]);
+});
+
+test('collectSubagentTaskRecords ignores prose role values and chat message roles', () => {
+  const records = collectSubagentTaskRecords({
+    name: 'task',
+    details: {
+      role: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Running task.' }] },
+      tasks: [
+        {
+          role: 'review generated tests and duplicate removal',
+          assignment: 'Required skills for this subagent:\n- verification-before-completion',
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(records, []);
+});
+
 test('collectSubagentTaskRecords includes prompt text for skill evidence', () => {
   const records = collectSubagentTaskRecords({
     name: 'task',

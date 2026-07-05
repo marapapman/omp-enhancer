@@ -603,6 +603,110 @@ test('task tool_call with subagent skill contracts does not require main-agent s
   assert.match(status.content[0].text, /Pending:\n- zh-writer: pending/);
 });
 
+test('task tool_call accepts marker-only bug-audit assignments and descriptive role text', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '帮我测试整个 subagent fork 逻辑，检查是 LLM 的错误还是门禁的错误。' },
+    ctx,
+  );
+
+  const allowed = await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        agent: 'task',
+        tasks: [
+          {
+            role: 'generate a deduplicated multi-channel test matrix',
+            assignment: [
+              'OMP_REQUIRED_SUBAGENT: ecc-tdd-guide',
+              'Required skills for this subagent:',
+              '- test-driven-development',
+              '- search-first',
+              '- ai-regression-testing',
+            ].join('\n'),
+          },
+          {
+            assignment: [
+              'OMP_REQUIRED_SUBAGENT: ecc-code-reviewer',
+              'Required skills for this subagent:',
+              '- verification-before-completion',
+            ].join('\n'),
+          },
+          {
+            assignment: [
+              'OMP_REQUIRED_SUBAGENT: ecc-silent-failure-hunter',
+              'Required skills for this subagent:',
+              '- diagnose',
+            ].join('\n'),
+          },
+          {
+            assignment: [
+              'OMP_REQUIRED_SUBAGENT: ecc-pr-test-analyzer',
+              'Required skills for this subagent:',
+              '- verification-before-completion',
+            ].join('\n'),
+          },
+        ],
+      },
+    },
+    ctx,
+  );
+
+  assert.equal(allowed, undefined);
+
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-status-after-marker-only-bug-audit-task',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), [
+    'ecc-tdd-guide',
+    'ecc-code-reviewer',
+    'ecc-silent-failure-hunter',
+    'ecc-pr-test-analyzer',
+  ]);
+});
+
+test('task tool_call does not report prose role text as an unexpected subagent', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    ctx,
+  );
+
+  const blocked = await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [
+          {
+            role: 'draft the Chinese revision with plain writing checks',
+            assignment: 'Required skills for this subagent:\n- plain-chinese-writing\n- zh-writing-polish',
+          },
+        ],
+      },
+    },
+    ctx,
+  );
+
+  assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /must fork named subagents/);
+  assert.doesNotMatch(blocked.reason, /Unexpected task subagents/);
+  assert.doesNotMatch(blocked.reason, /draft the Chinese revision/);
+});
+
 test('governance prompt separates task subagent skills from direct main-agent reads', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
