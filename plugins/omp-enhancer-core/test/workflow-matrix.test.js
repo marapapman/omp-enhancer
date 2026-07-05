@@ -46,6 +46,16 @@ const expectedByIntent = {
       'ecc-pr-test-analyzer': ['verification-before-completion'],
     },
   },
+  'bug-audit': {
+    agent: 'tester',
+    requiredSkills: ['diagnose', 'subagent-driven-development', 'verification-before-completion'],
+    requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+    subagents: {
+      'ecc-code-reviewer': ['verification-before-completion'],
+      'ecc-silent-failure-hunter': ['diagnose'],
+      'ecc-pr-test-analyzer': ['verification-before-completion'],
+    },
+  },
   'security-review': {
     agent: 'ecc-security-reviewer',
     requiredSkills: ['security-review', 'security-scan'],
@@ -116,6 +126,8 @@ const workloadMatrix = [
   ['hook workflow implementation', 'Update the plugin hook workflow and add regression tests.', 'implementation-with-tests'],
   ['unit test authoring', '为 classifier 写高信号单元测试，覆盖 fallback 和边界。', 'testing'],
   ['coverage audit read-only', '检查当前测试覆盖率，并指出缺口，不要改代码。', 'testing'],
+  ['bug audit read-only', '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。', 'bug-audit'],
+  ['bug audit english', 'Run tests and audit for bugs; write a bug report without fixing code.', 'bug-audit'],
   ['test flakiness', 'Review test flakiness around the browser smoke suite and report the likely cause.', 'testing'],
   ['browser e2e verification', 'Run browser e2e verification for the changed workflow and report failures.', 'testing'],
   ['express path traversal', "审查这段 Express 代码的安全风险：app.get('/file', (req, res) => res.sendFile(req.query.path));", 'security-review'],

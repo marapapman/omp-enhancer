@@ -101,6 +101,23 @@ const profiles = {
     gateTool: 'omp_test_gate',
     missingGate: /omp_test_gate/,
   },
+  bugAudit: {
+    prompts: [
+      '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
+      '测试整个项目并检查 bug，输出已验证的问题清单。',
+      'Run tests and audit for bugs; write a bug report without fixing code.',
+      'Find bugs in the project and report verified findings only.',
+      'Inspect the plugin for defects and summarize concrete file-line findings.',
+    ],
+    subagents: {
+      'ecc-code-reviewer': ['verification-before-completion'],
+      'ecc-silent-failure-hunter': ['diagnose'],
+      'ecc-pr-test-analyzer': ['verification-before-completion'],
+    },
+    skills: ['diagnose', 'subagent-driven-development', 'verification-before-completion'],
+    gateTool: 'omp_test_gate',
+    missingGate: /omp_test_gate/,
+  },
   implementation: {
     prompts: [
       'Implement classifier fallback handling and add tests.',
@@ -318,7 +335,7 @@ async function forkSubagents(pi, ctx, profile, { includeSkills = true } = {}) {
         params: {
           agent,
           prompt: includeSkills
-            ? ['Required skills for this subagent:', ...skills.map((skill) => `- ${skill}`)].join('\n')
+            ? ['OMP_PARENT_TASK: gate stress routed task', 'Required skills for this subagent:', ...skills.map((skill) => `- ${skill}`)].join('\n')
             : 'Do the assigned work.',
         },
       },

@@ -56,7 +56,7 @@ export default function registerCoreEnhancer(pi) {
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const route = routeNaturalLanguageTask({ prompt: params.prompt });
-      setRouteState(state, route);
+      setRouteState(state, route, params.prompt);
       await persistState(pi, state);
       return okResult(formatRoute(route), { route });
     },
@@ -87,7 +87,7 @@ export default function registerCoreEnhancer(pi) {
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const result = resolveClassificationRoute({ prompt: params.prompt, output: params.output });
-      setRouteState(state, result.route);
+      setRouteState(state, result.route, params.prompt);
       await persistState(pi, state);
       return okResult(formatRoute(result.route), result);
     },
@@ -147,9 +147,9 @@ export default function registerCoreEnhancer(pi) {
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const route = params.prompt ? routeNaturalLanguageTask({ prompt: params.prompt }) : state.lastRoute;
-      const fragment = buildGovernancePromptFragment({ route });
+      const fragment = buildGovernancePromptFragment({ route, parentTask: params.prompt ?? state.lastPrompt });
       if (params.prompt && route) {
-        setRouteState(state, route);
+        setRouteState(state, route, params.prompt);
         await persistState(pi, state);
       }
       return okResult(fragment, { route, fragment });
@@ -192,10 +192,10 @@ export default function registerCoreEnhancer(pi) {
       return { additionalContext: fragment, route: { intent: 'subagent', agent: null, requiredSkills: [], requiredTools: [], requiredSubagents: [] } };
     }
     const route = routeNaturalLanguageTask({ prompt });
-    setRouteState(state, route);
+    setRouteState(state, route, prompt);
     startLoopGuardRun(state.loopGuard, `${route.intent}:${state.routeStartedAt}`);
     await persistState(pi, state);
-    const fragment = buildGovernancePromptFragment({ route });
+    const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
     if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${fragment}`;
     else event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
     return { additionalContext: fragment, route };
@@ -277,6 +277,7 @@ export default function registerCoreEnhancer(pi) {
 export function createState() {
   return {
     lastRoute: null,
+    lastPrompt: '',
     routeStartedAt: 0,
     lastSkillUsage: null,
     lastSubagentUsage: null,
@@ -300,6 +301,7 @@ function emptyEvidence() {
     pendingSubagentCalls: new Map(),
     subagentSkills: new Map(),
     unexpectedSubagentSkills: new Map(),
+    subagentAssignments: new Map(),
     subagentProgress: new Map(),
     testAnalysis: null,
     testContext: null,
@@ -544,8 +546,9 @@ function formatSubagents(subagents = []) {
   }).join(', ');
 }
 
-function setRouteState(state, route) {
+function setRouteState(state, route, prompt = '') {
   state.lastRoute = route;
+  state.lastPrompt = String(prompt ?? '');
   state.routeStartedAt = Date.now();
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
@@ -555,6 +558,7 @@ function setRouteState(state, route) {
 
 function resetState(state) {
   state.lastRoute = null;
+  state.lastPrompt = '';
   state.routeStartedAt = 0;
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
@@ -619,6 +623,7 @@ function routeStartIndexFor(entries, routeStartedAt, fallbackIndex) {
 function replaceState(target, source) {
   const liveLoopGuard = target.loopGuard;
   target.lastRoute = source.lastRoute;
+  target.lastPrompt = source.lastPrompt ?? '';
   target.routeStartedAt = source.routeStartedAt;
   target.lastSkillUsage = source.lastSkillUsage;
   target.lastSubagentUsage = source.lastSubagentUsage;
@@ -648,6 +653,7 @@ function mergeLiveLoopGuardState(live, restored) {
 function serializeState(state) {
   return {
     lastRoute: state.lastRoute,
+    lastPrompt: state.lastPrompt ?? '',
     routeStartedAt: state.routeStartedAt,
     lastSkillUsage: state.lastSkillUsage,
     lastSubagentUsage: state.lastSubagentUsage,
@@ -668,6 +674,7 @@ function serializeState(state) {
         lastSeenAt: pending.lastSeenAt,
         attempts: pending.attempts,
         skills: [...pending.skills],
+        texts: [...(pending.texts ?? [])],
       })),
       pendingSubagentCalls: [...state.evidence.pendingSubagentCalls.entries()].map(([id, agents]) => ({
         id,
@@ -680,6 +687,10 @@ function serializeState(state) {
       unexpectedSubagentSkills: [...state.evidence.unexpectedSubagentSkills.entries()].map(([agent, skills]) => ({
         agent,
         skills: [...skills],
+      })),
+      subagentAssignments: [...state.evidence.subagentAssignments.entries()].map(([agent, texts]) => ({
+        agent,
+        texts: [...texts],
       })),
       subagentProgress: [...state.evidence.subagentProgress.entries()].map(([key, progress]) => ({
         key,
@@ -700,6 +711,7 @@ function readStateSnapshot(value) {
   if (!evidence) return null;
   return {
     lastRoute: isRecord(value.lastRoute) ? value.lastRoute : null,
+    lastPrompt: isString(value.lastPrompt) ? value.lastPrompt : '',
     routeStartedAt: Number.isFinite(value.routeStartedAt) ? value.routeStartedAt : 0,
     lastSkillUsage: isRecord(value.lastSkillUsage) ? value.lastSkillUsage : null,
     lastSubagentUsage: isRecord(value.lastSubagentUsage) ? value.lastSubagentUsage : null,
@@ -724,6 +736,7 @@ function readEvidenceSnapshot(value) {
     pendingSubagentCalls: readPendingSubagentCalls(value.pendingSubagentCalls),
     subagentSkills: readSubagentSkills(value.subagentSkills),
     unexpectedSubagentSkills: readSubagentSkills(value.unexpectedSubagentSkills),
+    subagentAssignments: readSubagentAssignments(value.subagentAssignments),
     subagentProgress: readSubagentProgress(value.subagentProgress),
     testAnalysis: isRecord(value.testAnalysis) ? value.testAnalysis : null,
     testContext: isRecord(value.testContext) ? value.testContext : null,
@@ -742,6 +755,7 @@ function readPendingSubagents(value) {
       lastSeenAt: Number.isFinite(item.lastSeenAt) ? item.lastSeenAt : 0,
       attempts: Number.isInteger(item.attempts) ? item.attempts : 1,
       skills: new Set(Array.isArray(item.skills) ? item.skills.filter(isString) : []),
+      texts: new Set(Array.isArray(item.texts) ? item.texts.filter(isString) : []),
     });
   }
   return pending;
@@ -765,6 +779,16 @@ function readSubagentSkills(value) {
     skills.set(item.agent, new Set(Array.isArray(item.skills) ? item.skills.filter(isString) : []));
   }
   return skills;
+}
+
+function readSubagentAssignments(value) {
+  const assignments = new Map();
+  if (!Array.isArray(value)) return assignments;
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.agent !== 'string') continue;
+    assignments.set(item.agent, new Set(Array.isArray(item.texts) ? item.texts.filter(isString) : []));
+  }
+  return assignments;
 }
 
 function readSubagentProgress(value) {
@@ -1129,13 +1153,14 @@ function buildMissingSubagentUsageContext(state) {
     const missingSkills = requiredSkills.filter((skill) => !recorded.has(skill));
     return missingSkills.length ? [{ agent, skills: missingSkills }] : [];
   });
+  const missingAssignmentContext = missingSubagentAssignmentContext(state, requiredSubagents);
   const unexpectedSkillAssignments = requiredSubagents.flatMap(({ agent }) => {
     const unexpected = [...(state.evidence.unexpectedSubagentSkills.get(agent) ?? new Set())];
     return unexpected.length ? [{ agent, skills: unexpected }] : [];
   });
 
   const failureContext = formatRecentToolFailures(state, ['task']);
-  if (!missing.length && !missingSkillAssignments.length && !unexpectedSkillAssignments.length && !pending.length && !stuck.length && !failureContext) return null;
+  if (!missing.length && !missingSkillAssignments.length && !missingAssignmentContext.length && !unexpectedSkillAssignments.length && !pending.length && !stuck.length && !failureContext) return null;
 
   return [
     'OMP Enhancer Core subagent gate is still open.',
@@ -1145,12 +1170,30 @@ function buildMissingSubagentUsageContext(state) {
     stuck.length ? `Potentially stuck subagent tasks: ${formatPendingSubagents(stuck)}. Do not wait indefinitely; retry those task calls with smaller assignments or report BLOCKERS if they keep failing.` : null,
     missing.length ? `Missing task-launched subagents: ${missing.join(', ')}.` : null,
     missingSkillAssignments.length ? `Missing subagent skill assignments: ${formatMissingSkillAssignments(missingSkillAssignments)}.` : null,
+    missingAssignmentContext.length ? `Missing bug-audit assignment context: ${missingAssignmentContext.join(', ')}. Re-run those task calls with OMP_PARENT_TASK and a concrete bug-audit assignment inherited from the user request.` : null,
     unexpectedSkillAssignments.length ? `Unexpected subagent skill assignments: ${formatMissingSkillAssignments(unexpectedSkillAssignments)}.` : null,
     failureContext,
     state.lastSubagentUsage?.message
       ? `Last validation: ${state.lastSubagentUsage.message}`
       : 'No successful SUBAGENT_USAGE validation has been recorded. SUBAGENT_USAGE is final evidence only; task-tool role evidence is still required for native TUI status.',
   ].filter(Boolean).join('\n');
+}
+
+function missingSubagentAssignmentContext(state, requiredSubagents) {
+  if (state.lastRoute?.intent !== 'bug-audit') return [];
+  return requiredSubagents
+    .map(({ agent }) => agent)
+    .filter((agent) => !subagentAssignmentTexts(state, agent).some(hasParentTaskMarker));
+}
+
+function subagentAssignmentTexts(state, agent) {
+  const completed = [...(state.evidence.subagentAssignments.get(agent) ?? new Set())];
+  const pending = [...(state.evidence.pendingSubagents.get(agent)?.texts ?? new Set())];
+  return [...completed, ...pending].filter(Boolean);
+}
+
+function hasParentTaskMarker(text = '') {
+  return /OMP_PARENT_TASK:\s*\S/i.test(String(text));
 }
 
 function registerSubagentEventBusHandlers(pi, state) {
@@ -1519,15 +1562,18 @@ function isTerminalSubagentStatus(status) {
   return isCompletedSubagentStatus(status) || isFailedSubagentStatus(status);
 }
 
-function touchPendingSubagent(state, { agent, skills = [] }, startedAt, lastSeenAt = startedAt) {
+function touchPendingSubagent(state, { agent, skills = [], text = '' }, startedAt, lastSeenAt = startedAt) {
   const current = state.evidence.pendingSubagents.get(agent);
   const nextSkills = new Set(current?.skills ?? []);
   for (const skill of skills) nextSkills.add(skill);
+  const nextTexts = new Set(current?.texts ?? []);
+  if (text) nextTexts.add(text);
   state.evidence.pendingSubagents.set(agent, {
     startedAt: current?.startedAt ?? startedAt,
     lastSeenAt,
     attempts: current?.attempts ?? 1,
     skills: nextSkills,
+    texts: nextTexts,
   });
 }
 
@@ -1555,15 +1601,18 @@ function recordSubagentDispatchFinished(state, event, { successful }) {
   return records;
 }
 
-function recordPendingSubagent(state, { agent, skills = [] }, startedAt) {
+function recordPendingSubagent(state, { agent, skills = [], text = '' }, startedAt) {
   const current = state.evidence.pendingSubagents.get(agent);
   const nextSkills = new Set(current?.skills ?? []);
   for (const skill of skills) nextSkills.add(skill);
+  const nextTexts = new Set(current?.texts ?? []);
+  if (text) nextTexts.add(text);
   state.evidence.pendingSubagents.set(agent, {
     startedAt: current?.startedAt ?? startedAt,
     lastSeenAt: startedAt,
     attempts: (current?.attempts ?? 0) + 1,
     skills: nextSkills,
+    texts: nextTexts,
   });
 }
 
@@ -1578,10 +1627,13 @@ function recordCompletedSubagent(state, { agent, text = '', skills = [] }) {
   const pending = state.evidence.pendingSubagents.get(agent);
   const mergedSkills = new Set(pending?.skills ?? []);
   for (const skill of skills) mergedSkills.add(skill);
+  const mergedTexts = new Set(pending?.texts ?? []);
+  if (text) mergedTexts.add(text);
 
   state.evidence.pendingSubagents.delete(agent);
   state.evidence.forkedSubagents.add(agent);
   state.evidence.taskSubagents.add(agent);
+  recordSubagentAssignmentEvidence(state, { agent, texts: [...mergedTexts] });
   recordSubagentSkillEvidence(state, { agent, text, skills: [...mergedSkills] });
 }
 
@@ -1591,6 +1643,15 @@ function recordSubagentFinalUsage(state, output) {
     state.evidence.forkedSubagents.add(agent);
     recordSubagentSkillEvidence(state, { agent, skills });
   }
+}
+
+function recordSubagentAssignmentEvidence(state, { agent, texts = [] }) {
+  const recorded = state.evidence.subagentAssignments.get(agent) ?? new Set();
+  for (const text of texts) {
+    const cleaned = cleanText(text);
+    if (cleaned) recorded.add(cleaned);
+  }
+  state.evidence.subagentAssignments.set(agent, recorded);
 }
 
 function recordSubagentSkillEvidence(state, { agent, text = '', skills = [] }) {

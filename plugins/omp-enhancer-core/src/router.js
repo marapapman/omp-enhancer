@@ -36,6 +36,7 @@ const noReleaseTerms = ['without publishing', 'without publish', 'do not publish
 
 export const routedIntents = [
   'config-assets',
+  'bug-audit',
   'diagnosis',
   'release',
   'security-review',
@@ -64,6 +65,11 @@ const subagentPlans = {
     subagent('ecc-tdd-guide', 'drive the red-green-refactor test-first workflow', ['test-driven-development']),
     subagent('ecc-pr-test-analyzer', 'review whether the tests cover the changed behavior before completion', ['verification-before-completion']),
   ],
+  bugAudit: [
+    subagent('ecc-code-reviewer', 'audit code paths for concrete bugs with file and line evidence', ['verification-before-completion']),
+    subagent('ecc-silent-failure-hunter', 'hunt swallowed errors, bad fallbacks, and missing error propagation', ['diagnose']),
+    subagent('ecc-pr-test-analyzer', 'review test results and coverage gaps that affect bug confidence', ['verification-before-completion']),
+  ],
   writingZh: [
     subagent('zh-writer', 'draft or rewrite Chinese text after required writing skills are loaded', ['plain-chinese-writing', 'zh-writing-polish']),
     subagent('zh-checker', 'review Chinese logic, style, and plain-writing compliance before final output', ['plain-chinese-writing', 'zh-writing-checkers']),
@@ -86,7 +92,8 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasDirectTestAuthoring = isDirectTestAuthoring(normalized);
   const hasTestAnalysis = isTestAnalysisRequest(normalized);
   const hasTestReportWriting = isTestReportWritingRequest(normalized);
-  const hasCoding = !asksNoCodeChange && (includesAny(normalized, codingTerms) || hasWholeWord(normalized, 'api') || isCodeChangeRequest(normalized));
+  const hasBugAudit = isBugAuditRequest(normalized);
+  const hasCoding = !asksNoCodeChange && !hasBugAudit && (includesAny(normalized, codingTerms) || hasWholeWord(normalized, 'api') || isCodeChangeRequest(normalized));
   const hasCodeChange = hasCoding && !hasTestReportWriting;
   const hasChineseWriting = isChineseWriting(normalized, prompt);
   const hasWriting = hasChineseWriting || isEnglishWriting(normalized);
@@ -99,6 +106,10 @@ export function routeNaturalLanguageTask(input = {}) {
 
   if (hasSecurity && !hasWriting) {
     return routeByIntent('security-review');
+  }
+
+  if (hasBugAudit) {
+    return routeByIntent('bug-audit');
   }
 
   if (hasCodeChange && hasTesting) {
@@ -185,6 +196,17 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       requiredSkills: ['security-review', 'security-scan'],
       requiredTools: [],
       requiredSubagents: subagentPlans.security,
+      source,
+    });
+  }
+
+  if (intent === 'bug-audit') {
+    return route({
+      intent,
+      agent: 'tester',
+      requiredSkills: ['diagnose', 'subagent-driven-development', 'verification-before-completion'],
+      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+      requiredSubagents: subagentPlans.bugAudit,
       source,
     });
   }
@@ -324,6 +346,19 @@ function isTestAnalysisRequest(text) {
     || /(?:review|check|analyze|analyse|audit|investigate|inspect)\s+.*(?:tests?|testing|coverage|flaky|flakiness|browser|e2e|playwright)/.test(text)
     || /(?:run|execute|rerun)\s+.*(?:tests?|testing|browser|e2e|playwright)/.test(text)
     || /(?:检查|分析|审查|排查|运行|执行).*(?:测试|覆盖率|门禁|浏览器|e2e|回归)/.test(text);
+}
+
+function isBugAuditRequest(text) {
+  const negatesFix = /(?:without|do not|don't|not)\s+(?:fixing|fix|modifying|modify|changing|change)/.test(text)
+    || /(?:不要|不|先不要)(?:修复|修改|改代码|改)/.test(text);
+  const asksForChange = /(?:\b(?:fix|repair|resolve|implement|modify|refactor|update)\b|修复|修改|实现|重构|开发|补测试|写测试|add tests?|write tests?)/.test(text);
+  if (asksForChange && !negatesFix) {
+    return false;
+  }
+  return /(?:check|find|audit|hunt|scan|test|run tests?|inspect|investigate)\s+.*(?:bugs?|defects?)/.test(text)
+    || /(?:bugs?|defects?)\s+.*(?:audit|hunt|report|find|check|list)/.test(text)
+    || /(?:测试|检查|排查|审查|扫描|查找|找|发现).*(?:bug|bugs|缺陷|问题)/.test(text)
+    || /(?:bug|bugs|缺陷|问题).*(?:审计|检查|报告|清单|定位)/.test(text);
 }
 
 function isCodeChangeRequest(text) {

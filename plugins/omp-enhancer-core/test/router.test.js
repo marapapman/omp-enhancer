@@ -47,6 +47,20 @@ const routingCases = [
     },
   },
   {
+    name: 'bug audit request routes to bug audit profile',
+    prompt: '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
+    expectedIntent: 'bug-audit',
+    expectedAgent: 'tester',
+    requiredSkills: ['diagnose', 'subagent-driven-development', 'verification-before-completion'],
+    requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+    requiredSubagents: ['ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'],
+    requiredSubagentSkills: {
+      'ecc-code-reviewer': ['verification-before-completion'],
+      'ecc-silent-failure-hunter': ['diagnose'],
+      'ecc-pr-test-analyzer': ['verification-before-completion'],
+    },
+  },
+  {
     name: 'implementation with tests request routes to coding plus testing profile',
     prompt: '实现这个路由功能并补测试，先写失败用例，再完成实现。',
     expectedIntent: 'implementation-with-tests',

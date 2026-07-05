@@ -2354,6 +2354,51 @@ test('testing route requires native task evidence for required subagents', async
   await assertReleasedStops(pi, ctx, [{}, { output: 'Final summary only.' }]);
 });
 
+test('bug audit route requires audit subagents with parent task context', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。';
+  const agents = ['ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'];
+
+  await event(pi, 'session_start')({}, ctx);
+  const routeResult = await event(pi, 'before_agent_start')({ prompt }, ctx);
+
+  assert.equal(routeResult.route.intent, 'bug-audit');
+  assert.deepEqual(routeResult.route.requiredSubagents.map(({ agent }) => agent), agents);
+  assert.match(routeResult.additionalContext, /Bug audit workflow/);
+  assert.match(routeResult.additionalContext, /OMP_PARENT_TASK: 帮我测试项目并检查 bug/);
+
+  for (const agent of agents) {
+    await event(pi, 'tool_result')(
+      {
+        name: 'task',
+        params: {
+          agent,
+          prompt: [
+            'Required skills for this subagent:',
+            ...subagentSkills(agent).map((skill) => `- ${skill}`),
+          ].join('\n'),
+        },
+      },
+      ctx,
+    );
+  }
+  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
+
+  const finalOutput = usageEvidence({
+    subagents: Object.fromEntries(agents.map((agent) => [agent, subagentSkills(agent)])),
+    skills: ['diagnose', 'subagent-driven-development', 'verification-before-completion'],
+  });
+  const blocked = await event(pi, 'session_stop')({ output: finalOutput }, ctx);
+
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /Missing bug-audit assignment context: ecc-code-reviewer, ecc-silent-failure-hunter, ecc-pr-test-analyzer/);
+
+  await forkSubagents(pi, ctx, agents);
+  await assertReleasedStops(pi, ctx, [{ output: finalOutput }, {}, {}]);
+});
+
 test('failed skill validation can be corrected by final evidence without repeated blocking', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -2459,6 +2504,7 @@ async function forkSubagents(pi, ctx, agents) {
         params: {
           agent,
           prompt: [
+            'OMP_PARENT_TASK: extension test routed task',
             'Required skills for this subagent:',
             ...subagentSkills(agent).map((skill) => `- ${skill}`),
           ].join('\n'),
@@ -2487,6 +2533,8 @@ function subagentSkills(agent) {
     plan: ['brainstorming', 'subagent-driven-development'],
     task: ['test-driven-development', 'verification-before-completion'],
     reviewer: ['verification-before-completion'],
+    'ecc-code-reviewer': ['verification-before-completion'],
+    'ecc-silent-failure-hunter': ['diagnose'],
     'ecc-security-reviewer': ['security-review', 'security-scan'],
     'ecc-tdd-guide': ['test-driven-development'],
     'ecc-pr-test-analyzer': ['verification-before-completion'],
@@ -2568,6 +2616,7 @@ function staleSkillValidationState(routeState) {
         pendingSubagents: [],
         subagentSkills: [],
         unexpectedSubagentSkills: [],
+        subagentAssignments: [],
       },
     },
   };

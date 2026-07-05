@@ -1,6 +1,6 @@
 import { loopGuardPromptSection } from './loop-guard.js';
 
-export function buildGovernancePromptFragment({ route } = {}) {
+export function buildGovernancePromptFragment({ route, parentTask = '' } = {}) {
   const resolved = route ?? {
     intent: 'unknown',
     agent: null,
@@ -43,7 +43,7 @@ export function buildGovernancePromptFragment({ route } = {}) {
     'Toolchain:',
     formatList(resolved.requiredTools),
     '',
-    ...subagentWorkflowLines(resolved),
+    ...subagentWorkflowLines(resolved, { parentTask }),
     '',
     workflowFor(resolved),
     '',
@@ -157,6 +157,7 @@ function workflowFor(route) {
   }
   if (intent === 'writing.zh') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, zh-writer -> zh-checker -> writing_quality_check.';
   if (intent === 'writing.en') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, writer -> checker -> writing_quality_check.';
+  if (intent === 'bug-audit') return 'Bug audit workflow: ecc-code-reviewer -> ecc-silent-failure-hunter -> ecc-pr-test-analyzer -> omp_test_gate -> BUG-AUDIT-REPORT or final bug report.';
   if (intent === 'testing') return 'Testing workflow: ecc-tdd-guide -> ecc-pr-test-analyzer -> omp_test_analyze -> omp_test_context -> omp_test_gate -> omp_test_report.';
   if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> task -> reviewer -> lightweight TDD -> omp_test_gate -> omp_test_report.';
   if (intent === 'security-review') return 'Security workflow: ecc-security-reviewer -> reviewer -> fix or report only after risk evidence is checked.';
@@ -177,10 +178,13 @@ function routeBoundaryFor(route) {
   if (intent === 'testing' || intent === 'implementation-with-tests') {
     return 'Route boundary: this is a code/testing workflow. Use the OMP testing tools only after routed test or implementation work has actually been performed.';
   }
+  if (intent === 'bug-audit') {
+    return 'Route boundary: this is a read-only bug audit workflow unless the user explicitly asks for fixes. Do not turn audit findings into code edits without a separate fix request.';
+  }
   return 'Route boundary: use only the tools listed for this route unless the user explicitly changes the task.';
 }
 
-function subagentWorkflowLines(route) {
+function subagentWorkflowLines(route, { parentTask = '' } = {}) {
   const requiredSubagents = route.requiredSubagents ?? [];
   const common = [
     '### Mandatory Subagent Workflow',
@@ -225,7 +229,7 @@ function subagentWorkflowLines(route) {
     '',
     'Before calling task, prepare each subagent assignment with the matching contract below. Copy the required role, required skills, and final output block into the task assignment before forking so the subagent does not need to infer the gate format.',
     '',
-    formatPreforkSubagentContracts(requiredSubagents),
+    formatPreforkSubagentContracts(requiredSubagents, { parentTask }),
     '',
     'After the task call returns, the main agent must include this exact subagent evidence block in the routed final output:',
     '',
@@ -247,9 +251,10 @@ function formatSubagents(values = []) {
   }).join('\n');
 }
 
-function formatPreforkSubagentContracts(values = []) {
+function formatPreforkSubagentContracts(values = [], { parentTask = '' } = {}) {
   const subagents = normalizeSubagentValues(values);
   if (!subagents.length) return 'No routed subagents are required.';
+  const parentTaskLine = formatParentTaskLine(parentTask);
 
   return subagents.map(({ agent, requiredSkills }) => [
     `Subagent: ${agent}`,
@@ -259,6 +264,7 @@ function formatPreforkSubagentContracts(values = []) {
     '- description: short duty text for OMP native subagent status',
     'Assignment must start with:',
     `OMP_REQUIRED_SUBAGENT: ${agent}`,
+    parentTaskLine,
     'Required skills for this subagent:',
     formatList(requiredSkills),
     'Before acting:',
@@ -274,6 +280,11 @@ function formatPreforkSubagentContracts(values = []) {
     `Agent: ${agent}`,
     'Status: complete|blocked',
   ].join('\n')).join('\n\n');
+}
+
+function formatParentTaskLine(parentTask = '') {
+  const cleaned = String(parentTask).replace(/\s+/g, ' ').trim();
+  return `OMP_PARENT_TASK: ${cleaned ? cleaned.slice(0, 300) : '<copy the original user task here>'}`;
 }
 
 function formatSubagentUsageBlock(values = []) {
@@ -338,5 +349,5 @@ function needsWritingQuality(route) {
 }
 
 function needsTesting(route) {
-  return route.intent === 'testing' || route.intent === 'implementation-with-tests';
+  return route.intent === 'testing' || route.intent === 'implementation-with-tests' || route.intent === 'bug-audit';
 }

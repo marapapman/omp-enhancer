@@ -75,6 +75,30 @@ test('resolveClassificationRoute maps valid classifier JSON through the route wh
   assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), ['writer', 'checker']);
 });
 
+test('resolveClassificationRoute maps bug audit classifier output to audit subagents', () => {
+  const result = resolveClassificationRoute({
+    prompt: '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
+    output: JSON.stringify({
+      intent: 'bug-audit',
+      secondaryIntents: ['testing'],
+      language: 'zh',
+      confidence: 0.91,
+      riskFlags: ['needs-tests', 'needs-review', 'needs-subagents'],
+      domainHints: ['bug audit'],
+      reason: 'The user asks to test and report bugs without fixing code.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.route.intent, 'bug-audit');
+  assert.equal(result.route.source, 'llm-classifier');
+  assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), [
+    'ecc-code-reviewer',
+    'ecc-silent-failure-hunter',
+    'ecc-pr-test-analyzer',
+  ]);
+});
+
 test('resolveClassificationRoute lets high-confidence unknown suppress an over-eager fallback route', () => {
   const result = resolveClassificationRoute({
     prompt: 'Explain what coverage means in plain English.',

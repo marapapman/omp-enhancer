@@ -28,6 +28,14 @@ const expectedByIntent = {
       'ecc-pr-test-analyzer': ['verification-before-completion'],
     },
   },
+  'bug-audit': {
+    requiredSkills: ['diagnose', 'subagent-driven-development', 'verification-before-completion'],
+    subagents: {
+      'ecc-code-reviewer': ['verification-before-completion'],
+      'ecc-silent-failure-hunter': ['diagnose'],
+      'ecc-pr-test-analyzer': ['verification-before-completion'],
+    },
+  },
   'implementation-with-tests': {
     requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     subagents: {
@@ -135,6 +143,13 @@ const workloadSuites = {
     'Review the mutation test report and list weak assertions.',
     'Execute unit tests for the core plugin and summarize failures.',
     'Check whether the new tests cover subagent evidence parsing.',
+  ],
+  'bug-audit': [
+    '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
+    '测试整个项目并检查 bug，输出已验证的问题清单。',
+    'Run tests and audit for bugs; write a bug report without fixing code.',
+    'Find bugs in the project and report verified findings only.',
+    'Inspect the plugin for defects and summarize concrete file-line findings.',
   ],
   'implementation-with-tests': [
     'Implement classifier fallback handling and add tests.',

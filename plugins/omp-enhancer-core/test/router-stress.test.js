@@ -58,6 +58,13 @@ const routeSuites = {
     '分析覆盖率缺口，不要改实现。',
     '审查测试是否覆盖 marketplace upgrade。',
   ],
+  'bug-audit': [
+    '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
+    '测试整个项目并检查 bug，输出已验证的问题清单。',
+    'Run tests and audit for bugs; write a bug report without fixing code.',
+    'Find bugs in the project and report verified findings only.',
+    'Inspect the plugin for defects and summarize concrete file-line findings.',
+  ],
   'implementation-with-tests': [
     'Implement classifier fallback handling and add tests.',
     'Fix the plugin gate bug and add regression tests.',

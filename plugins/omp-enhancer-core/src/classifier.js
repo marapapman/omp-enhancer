@@ -15,6 +15,7 @@ export const classifierDefaults = {
 export const classifierIntents = [
   'writing.zh',
   'writing.en',
+  'bug-audit',
   'implementation-with-tests',
   'testing',
   'security-review',
@@ -105,6 +106,7 @@ export function buildClassifierPrompt({
       '- Use diagnosis only when the user mainly asks why something failed and does not ask for a code/config change.',
       '- Use release only when the user mainly asks to publish, push, upgrade, or release without asking for implementation.',
       '- Prefer implementation-with-tests for code/plugin changes, even when the task mentions config or marketplace.',
+      '- Use bug-audit when the user asks to test, inspect, find, or report bugs without asking to fix or modify code.',
       '- Prefer writing.zh for Chinese prose editing or drafting; prefer writing.en for English prose editing or drafting.',
       '- A request to draft, revise, polish, or write a report/summary/document about tests, coverage, gates, or release status is a writing task, not a testing workflow. Use testing only when the user asks to run, add, repair, or analyze tests as executable verification work.',
       '- Do not classify prose drafting, editing, or polishing as security-review only because the text mentions safety, risk, review, or security. Use security-review only for code, config, auth, secrets, vulnerability, or infrastructure security work.',
@@ -233,6 +235,7 @@ function isWritingIntent(intent) {
 
 function isNonWritingWorkflowIntent(intent) {
   return intent === 'security-review'
+    || intent === 'bug-audit'
     || intent === 'testing'
     || intent === 'implementation-with-tests'
     || intent === 'config-assets'
