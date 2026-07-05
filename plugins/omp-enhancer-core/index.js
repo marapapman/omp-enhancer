@@ -16,9 +16,6 @@ import {
 } from './src/loop-guard.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
-const TASK_SUBAGENT_EVENT_CHANNEL = 'task:subagent:event';
-const TASK_SUBAGENT_PROGRESS_CHANNEL = 'task:subagent:progress';
-const TASK_SUBAGENT_LIFECYCLE_CHANNEL = 'task:subagent:lifecycle';
 const ASSISTANT_OUTPUT_EVENTS = [
   'assistant_delta',
   'assistant_message',
@@ -37,7 +34,6 @@ export default function registerCoreEnhancer(pi) {
   const z = pi.zod?.z ?? pi.z;
 
   pi.setLabel?.('OMP Enhancer Core');
-  registerSubagentEventBusHandlers(pi, state);
 
   pi.registerCommand?.('classifier', {
     description: 'Show or update modelRoles.classifier for OMP Enhancer routing.',
@@ -130,8 +126,8 @@ export default function registerCoreEnhancer(pi) {
 
   pi.registerTool({
     name: 'omp_core_subagent_status',
-    label: 'Show routed subagent status',
-    description: 'Report required, completed, pending, and potentially stuck subagents for the current routed workflow.',
+    label: 'Show routed task status',
+    description: 'Report routed subagent gate state plus task-block progress captured from task tool calls and results.',
     parameters: z?.object ? z.object({}) : undefined,
     execute: async (_callId, _params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
@@ -221,7 +217,7 @@ export default function registerCoreEnhancer(pi) {
     restoreStateFromContext(state, ctx);
     if (toolEventName(event) !== 'task') return undefined;
     const updates = recordTaskExecutionUpdate(state, event);
-    await notifySubagentProgress(ctx, updates, state);
+    await notifyTaskProgress(ctx, updates, state);
     if (updates.some((update) => update.persist)) await persistState(pi, state);
     return undefined;
   });
@@ -237,6 +233,7 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'omp_test_gate' && successful) state.evidence.testingGate = true;
     if (name === 'omp_test_report' && successful) state.evidence.testingReport = true;
     if (name === 'task') {
+      recordTaskResult(state, event, { successful });
       const records = recordSubagentDispatchFinished(state, event, { successful });
       await notifySubagentDispatch(ctx, successful ? 'completed' : 'failed', records, state, event);
     }
@@ -301,7 +298,7 @@ function emptyEvidence() {
     subagentSkills: new Map(),
     unexpectedSubagentSkills: new Map(),
     subagentAssignments: new Map(),
-    subagentProgress: new Map(),
+    taskProgress: new Map(),
     testAnalysis: null,
     testContext: null,
     testGate: null,
@@ -481,10 +478,9 @@ function serializeState(state) {
         agent,
         texts: [...texts],
       })),
-      subagentProgress: [...state.evidence.subagentProgress.entries()].map(([key, progress]) => ({
+      taskProgress: [...state.evidence.taskProgress.entries()].map(([key, progress]) => ({
         key,
         ...progress,
-        skills: [...(progress.skills ?? [])],
       })),
       testAnalysis: state.evidence.testAnalysis,
       testContext: state.evidence.testContext,
@@ -526,7 +522,7 @@ function readEvidenceSnapshot(value) {
     subagentSkills: readSubagentSkills(value.subagentSkills),
     unexpectedSubagentSkills: readSubagentSkills(value.unexpectedSubagentSkills),
     subagentAssignments: readSubagentAssignments(value.subagentAssignments),
-    subagentProgress: readSubagentProgress(value.subagentProgress),
+    taskProgress: readTaskProgress(value.taskProgress),
     testAnalysis: isRecord(value.testAnalysis) ? value.testAnalysis : null,
     testContext: isRecord(value.testContext) ? value.testContext : null,
     testGate: isRecord(value.testGate) ? value.testGate : null,
@@ -580,24 +576,21 @@ function readSubagentAssignments(value) {
   return assignments;
 }
 
-function readSubagentProgress(value) {
+function readTaskProgress(value) {
   const progress = new Map();
   if (!Array.isArray(value)) return progress;
   for (const item of value) {
     if (!isRecord(item) || typeof item.key !== 'string') continue;
-    const agent = cleanAgentName(item.agent);
-    if (!agent) continue;
+    const id = isString(item.id) ? item.id : item.key;
     progress.set(item.key, {
-      id: isString(item.id) ? item.id : item.key,
-      agent,
+      id,
       status: normalizeSubagentStatus(item.status),
-      parentToolCallId: isString(item.parentToolCallId) ? item.parentToolCallId : '',
-      index: Number.isInteger(item.index) ? item.index : null,
-      description: isString(item.description) ? item.description : '',
-      currentTool: isString(item.currentTool) ? item.currentTool : '',
-      lastTool: isString(item.lastTool) ? item.lastTool : '',
-      toolDetail: isString(item.toolDetail) ? item.toolDetail : '',
-      lastIntent: isString(item.lastIntent) ? item.lastIntent : '',
+      text: isString(item.text) ? item.text : '',
+      summary: isString(item.summary) ? item.summary : '',
+      subagentCount: Number.isFinite(item.subagentCount) ? item.subagentCount : 0,
+      runningCount: Number.isFinite(item.runningCount) ? item.runningCount : 0,
+      completedCount: Number.isFinite(item.completedCount) ? item.completedCount : 0,
+      failedCount: Number.isFinite(item.failedCount) ? item.failedCount : 0,
       toolCount: Number.isFinite(item.toolCount) ? item.toolCount : 0,
       requests: Number.isFinite(item.requests) ? item.requests : 0,
       tokens: Number.isFinite(item.tokens) ? item.tokens : 0,
@@ -605,12 +598,12 @@ function readSubagentProgress(value) {
       contextWindow: Number.isFinite(item.contextWindow) ? item.contextWindow : 0,
       cost: Number.isFinite(item.cost) ? item.cost : 0,
       durationMs: Number.isFinite(item.durationMs) ? item.durationMs : 0,
-      resolvedModel: isString(item.resolvedModel) ? item.resolvedModel : '',
+      models: Array.isArray(item.models) ? item.models.filter(isString) : [],
+      currentTool: isString(item.currentTool) ? item.currentTool : '',
+      lastTool: isString(item.lastTool) ? item.lastTool : '',
+      toolDetail: isString(item.toolDetail) ? item.toolDetail : '',
       startedAt: Number.isFinite(item.startedAt) ? item.startedAt : 0,
       updatedAt: Number.isFinite(item.updatedAt) ? item.updatedAt : 0,
-      assignment: isString(item.assignment) ? item.assignment : '',
-      task: isString(item.task) ? item.task : '',
-      skills: new Set(Array.isArray(item.skills) ? item.skills.filter(isString) : []),
     });
   }
   return progress;
@@ -994,258 +987,227 @@ function hasParentTaskMarker(text = '') {
   return /OMP_PARENT_TASK:\s*\S/i.test(String(text));
 }
 
-function registerSubagentEventBusHandlers(pi, state) {
-  const eventBus = pi.events;
-  if (!eventBus || typeof eventBus.on !== 'function') return;
-
-  const subscribe = (channel, handler) => {
-    try {
-      eventBus.on(channel, async (payload = {}) => {
-        try {
-          const updates = handler(payload);
-          if (updates.some((update) => update.persist)) await persistState(pi, state);
-        } catch {
-          // EventBus updates are best-effort observability. They must not break
-          // task execution or the stricter final gate checks.
-        }
-      });
-    } catch {
-      // Older hosts may expose a partial EventBus; extension startup should
-      // remain compatible with those versions.
-    }
-  };
-
-  subscribe(TASK_SUBAGENT_PROGRESS_CHANNEL, (payload) => recordSubagentEventBusProgress(state, payload));
-  subscribe(TASK_SUBAGENT_LIFECYCLE_CHANNEL, (payload) => recordSubagentEventBusLifecycle(state, payload));
-  subscribe(TASK_SUBAGENT_EVENT_CHANNEL, (payload) => recordSubagentEventBusRawEvent(state, payload));
-}
-
 function recordTaskExecutionUpdate(state, event = {}) {
-  const parentToolCallId = toolEventCallId(event);
-  return extractTaskProgressRecords(event).flatMap((progress) => {
-    const update = recordSubagentProgress(state, progress, { parentToolCallId, source: 'tool_execution_update' });
-    return update ? [update] : [];
-  });
-}
-
-function recordSubagentEventBusProgress(state, payload = {}) {
-  const raw = isRecord(payload.progress)
-    ? {
-        ...payload.progress,
-        assignment: payload.progress.assignment ?? payload.assignment,
-        task: payload.progress.task ?? payload.task,
-        agent: payload.progress.agent ?? payload.agent,
-        agentSource: payload.progress.agentSource ?? payload.agentSource,
-        parentToolCallId: payload.progress.parentToolCallId ?? payload.parentToolCallId,
-        detached: payload.progress.detached ?? payload.detached,
-        sessionFile: payload.progress.sessionFile ?? payload.sessionFile,
-      }
-    : payload;
-  const update = recordSubagentProgress(state, raw, {
-    parentToolCallId: payload.parentToolCallId,
-    source: TASK_SUBAGENT_PROGRESS_CHANNEL,
-  });
+  const update = recordTaskProgress(state, event, { status: 'running', source: 'tool_execution_update' });
   return update ? [update] : [];
 }
 
-function recordSubagentEventBusLifecycle(state, payload = {}) {
-  const update = recordSubagentProgress(state, payload, {
-    parentToolCallId: payload.parentToolCallId,
-    source: TASK_SUBAGENT_LIFECYCLE_CHANNEL,
-    lifecycle: true,
+function recordTaskResult(state, event = {}, { successful } = {}) {
+  return recordTaskProgress(state, event, {
+    status: successful ? 'completed' : 'failed',
+    source: 'tool_result',
   });
-  return update ? [update] : [];
 }
 
-function recordSubagentEventBusRawEvent(state, payload = {}) {
-  if (!isRecord(payload) || !isRecord(payload.event)) return [];
-  const key = subagentProgressKey({
-    id: payload.id,
-    parentToolCallId: payload.event.parentToolCallId,
-    index: payload.event.index,
-  });
-  const existing = state.evidence.subagentProgress.get(key) ?? findSubagentProgressById(state, payload.id);
-  if (!existing) return [];
-
-  const event = payload.event;
-  const name = toolEventName(event);
-  if (!name) return [];
-  const raw = {
-    ...existing,
-    id: existing.id,
-    agent: existing.agent,
-    parentToolCallId: existing.parentToolCallId,
+function recordTaskDispatchStarted(state, event = {}, { dispatchId = '', records = [], startedAt = Date.now() } = {}) {
+  const id = cleanToolCallId(dispatchId) || cleanProgressId(event.id) || `task-call-${state.evidence.taskToolCalls}`;
+  const previous = state.evidence.taskProgress.get(id);
+  const text = summarizeTaskCallInput(event, records);
+  state.evidence.taskProgress.set(id, {
+    ...previous,
+    key: id,
+    id,
     status: 'running',
-    currentTool: event.type === 'tool_call' ? name : '',
-    lastTool: name || existing.lastTool,
-    lastIntent: event.intent ?? existing.lastIntent,
-  };
-  const update = recordSubagentProgress(state, raw, { source: TASK_SUBAGENT_EVENT_CHANNEL });
-  return update ? [update] : [];
+    text,
+    summary: text || `${records.length || 1} task item${records.length === 1 ? '' : 's'} dispatched`,
+    subagentCount: records.length,
+    runningCount: records.length,
+    completedCount: 0,
+    failedCount: 0,
+    toolCount: previous?.toolCount ?? 0,
+    requests: previous?.requests ?? 0,
+    tokens: previous?.tokens ?? 0,
+    contextTokens: previous?.contextTokens ?? 0,
+    contextWindow: previous?.contextWindow ?? 0,
+    cost: previous?.cost ?? 0,
+    durationMs: previous?.durationMs ?? 0,
+    models: previous?.models ?? [],
+    currentTool: previous?.currentTool ?? '',
+    lastTool: previous?.lastTool ?? '',
+    toolDetail: previous?.toolDetail ?? '',
+    startedAt: previous?.startedAt ?? startedAt,
+    updatedAt: startedAt,
+    source: 'tool_call',
+  });
 }
 
-function findSubagentProgressById(state, id) {
-  const cleanId = cleanProgressId(id);
-  if (!cleanId) return null;
-  for (const progress of state.evidence.subagentProgress.values()) {
-    if (progress.id === cleanId) return progress;
-  }
-  return null;
-}
+function recordTaskProgress(state, event = {}, { status = '', source = '' } = {}) {
+  const normalized = normalizeTaskProgress(event, { status, source });
+  if (!normalized.id) return null;
 
-function extractTaskProgressRecords(event = {}) {
-  const records = [];
-  const seen = new Set();
-  const roots = [
-    event.partialResult,
-    event.partialResult?.details,
-    event.partialResult?.result,
-    event.details,
-    event.result,
-    event,
-  ].filter(Boolean);
-
-  for (const root of roots) collectTaskProgressRecords(root, records, seen);
-  return uniqueProgressRecords(records);
-}
-
-function collectTaskProgressRecords(value, records, seen) {
-  if (!value) return;
-  if (typeof value === 'object') {
-    if (seen.has(value)) return;
-    seen.add(value);
-  }
-
-  if (Array.isArray(value)) {
-    if (value.some(isSubagentProgressRecord)) {
-      for (const item of value) {
-        if (isSubagentProgressRecord(item)) records.push(item);
-      }
-      return;
-    }
-    for (const item of value) collectTaskProgressRecords(item, records, seen);
-    return;
-  }
-
-  if (!isRecord(value)) return;
-  if (isSubagentProgressRecord(value)) records.push(value);
-  for (const key of ['progress', 'details', 'result', 'partialResult', 'payload']) {
-    collectTaskProgressRecords(value[key], records, seen);
-  }
-}
-
-function isSubagentProgressRecord(value) {
-  if (!isRecord(value)) return false;
-  const hasIdentity = ['id', 'agent', 'role', 'subagent', 'subagent_type', 'subagentType', 'assignment', 'task', 'description']
-    .some((key) => typeof value[key] === 'string' && value[key].trim());
-  return hasIdentity && typeof value.status === 'string';
-}
-
-function uniqueProgressRecords(records) {
-  const byKey = new Map();
-  for (const record of records) {
-    const key = subagentProgressKey(record);
-    if (!byKey.has(key)) byKey.set(key, record);
-  }
-  return [...byKey.values()];
-}
-
-function recordSubagentProgress(state, rawProgress = {}, { parentToolCallId = '', source = '', lifecycle = false } = {}) {
-  const normalized = normalizeSubagentProgress(state, rawProgress, { parentToolCallId, source, lifecycle });
-  if (!normalized.agent) return null;
-
-  const previous = state.evidence.subagentProgress.get(normalized.key);
-  const mergedSkills = new Set(previous?.skills ?? []);
-  for (const skill of normalized.skills) mergedSkills.add(skill);
+  const previous = state.evidence.taskProgress.get(normalized.key);
   const current = {
     ...previous,
     ...normalized,
     startedAt: previous?.startedAt ?? normalized.startedAt,
-    skills: mergedSkills,
   };
-  state.evidence.subagentProgress.set(normalized.key, current);
-
-  const record = { agent: current.agent, text: current.text, skills: [...mergedSkills] };
-  if (isActiveSubagentStatus(current.status)) {
-    touchPendingSubagent(state, record, current.startedAt, current.updatedAt);
-    if (current.parentToolCallId) recordPendingSubagentCall(state, current.parentToolCallId, [record]);
-  } else if (isCompletedSubagentStatus(current.status)) {
-    recordCompletedSubagent(state, record);
-    removePendingSubagentCallAgents(state, current.parentToolCallId, [current.agent]);
-    clearSubagentTaskFailure(state, current.agent);
-  } else if (isFailedSubagentStatus(current.status)) {
-    state.evidence.pendingSubagents.delete(current.agent);
-    removePendingSubagentCallAgents(state, current.parentToolCallId, [current.agent]);
-    recordSubagentProgressFailure(state, current);
-  }
+  state.evidence.taskProgress.set(normalized.key, current);
 
   const statusChanged = !previous || previous.status !== current.status;
-  const toolChanged = previous?.currentTool !== current.currentTool;
+  const toolChanged = previous?.currentTool !== current.currentTool || previous?.lastTool !== current.lastTool;
   const statsChanged = previous
-    ? previous.lastTool !== current.lastTool
+    ? previous.summary !== current.summary
+      || previous.text !== current.text
+      || previous.subagentCount !== current.subagentCount
+      || previous.runningCount !== current.runningCount
+      || previous.completedCount !== current.completedCount
+      || previous.failedCount !== current.failedCount
       || previous.toolCount !== current.toolCount
       || previous.requests !== current.requests
       || previous.tokens !== current.tokens
       || previous.contextTokens !== current.contextTokens
       || previous.contextWindow !== current.contextWindow
       || previous.cost !== current.cost
-      || previous.resolvedModel !== current.resolvedModel
+      || previous.durationMs !== current.durationMs
+      || previous.models.join('\n') !== current.models.join('\n')
       || previous.toolDetail !== current.toolDetail
     : true;
   return {
     previous,
     current,
-    persist: statusChanged || toolChanged || statsChanged || lifecycle || isTerminalSubagentStatus(current.status),
-    notify: statusChanged || (!previous && Boolean(current.agent)) || (isActiveSubagentStatus(current.status) && toolChanged),
+    persist: statusChanged || toolChanged || statsChanged,
+    notify: statusChanged || toolChanged || (!previous && Boolean(current.id)),
   };
 }
 
-function normalizeSubagentProgress(state, rawProgress = {}, { parentToolCallId = '', source = '', lifecycle = false } = {}) {
-  const progress = isRecord(rawProgress.progress) ? { ...rawProgress, ...rawProgress.progress } : rawProgress;
-  const text = progressText(progress);
-  const agent = resolveProgressAgent(state, progress, text);
-  const status = normalizeSubagentStatus(progress.status ?? (lifecycle ? 'running' : ''));
-  const updatedAt = eventTimestamp(progress);
-  const id = cleanProgressId(progress.id ?? progress.agentId ?? progress.jobId ?? agent);
-  const currentTool = cleanText(progress.currentTool);
-  const lastTool = resolveLastProgressTool(progress, currentTool);
-  const toolDetail = resolveProgressToolDetail(progress);
-  const key = subagentProgressKey({
-    id,
-    agent,
-    parentToolCallId: progress.parentToolCallId ?? parentToolCallId,
-    index: progress.index,
-  });
-  const skills = subagentSkillsFromProgress(agent, progress, text);
+function normalizeTaskProgress(event = {}, { status = '', source = '' } = {}) {
+  const id = cleanToolCallId(toolEventCallId(event)) || cleanProgressId(event.id ?? event.toolCallId ?? event.callId);
+  const details = extractTaskDetails(event);
+  const progressItems = Array.isArray(details.progress) ? details.progress.filter(isRecord) : [];
+  const resultItems = Array.isArray(details.results) ? details.results.filter(isRecord) : [];
+  const items = progressItems.length ? progressItems : resultItems;
+  const statuses = items.map(taskItemStatus).filter(Boolean);
+  const resolvedStatus = normalizeTaskStatus(details.async?.state || status, statuses, resultItems);
+  const text = extractTaskBlockText(event);
+  const models = uniqueStrings(items.map(resolveProgressModel).filter(Boolean));
+  const tool = resolveTaskTool(items);
+  const updatedAt = eventTimestamp(event);
 
   return {
-    key,
+    key: id,
     id,
-    agent,
-    status,
-    parentToolCallId: cleanToolCallId(progress.parentToolCallId ?? parentToolCallId),
-    index: Number.isInteger(progress.index) ? progress.index : null,
-    description: cleanText(progress.description),
-    currentTool,
-    lastTool,
-    toolDetail,
-    lastIntent: cleanText(progress.lastIntent),
-    toolCount: finiteMetric(progress.toolCount),
-    requests: Number.isFinite(progress.requests) ? progress.requests : 0,
-    tokens: Number.isFinite(progress.tokens) ? progress.tokens : 0,
-    contextTokens: finiteMetric(progress.contextTokens),
-    contextWindow: finiteMetric(progress.contextWindow),
-    cost: finiteCost(progress.cost ?? progress.usage?.cost?.total),
-    durationMs: Number.isFinite(progress.durationMs) ? progress.durationMs : 0,
-    resolvedModel: resolveProgressModel(progress),
-    startedAt: Number.isFinite(progress.startedAt) ? progress.startedAt : updatedAt,
-    updatedAt,
-    assignment: cleanText(progress.assignment),
-    task: cleanText(progress.task),
-    source,
+    status: resolvedStatus,
     text,
-    skills,
+    summary: summarizeTaskBlock({ text, details, items, status: resolvedStatus }),
+    subagentCount: items.length,
+    runningCount: statuses.filter(isActiveSubagentStatus).length,
+    completedCount: statuses.filter(isCompletedSubagentStatus).length,
+    failedCount: statuses.filter(isFailedSubagentStatus).length,
+    toolCount: sumMetric(items, 'toolCount'),
+    requests: sumMetric(items, 'requests'),
+    tokens: sumMetric(items, 'tokens'),
+    contextTokens: maxMetric(items, 'contextTokens'),
+    contextWindow: maxMetric(items, 'contextWindow'),
+    cost: taskCost(details, items),
+    durationMs: Number.isFinite(details.totalDurationMs) ? details.totalDurationMs : maxMetric(items, 'durationMs'),
+    models,
+    currentTool: tool.currentTool,
+    lastTool: tool.lastTool,
+    toolDetail: tool.toolDetail,
+    startedAt: updatedAt,
+    updatedAt,
+    source,
   };
+}
+
+function extractTaskDetails(event = {}) {
+  const candidates = [
+    event.partialResult?.details,
+    event.result?.details,
+    event.details,
+    event.partialResult,
+    event.result,
+  ];
+  return candidates.find(isRecord) ?? {};
+}
+
+function extractTaskBlockText(event = {}) {
+  const candidates = [
+    event.partialResult?.content,
+    event.result?.content,
+    event.content,
+    event.partialResult?.text,
+    event.result?.text,
+    event.text,
+  ];
+  return candidates
+    .flatMap((candidate) => collectTextCandidates(candidate))
+    .map((text) => cleanText(text))
+    .filter(Boolean)
+    .join('\n');
+}
+
+function taskItemStatus(item = {}) {
+  if (typeof item.status === 'string') return normalizeSubagentStatus(item.status);
+  if (item.aborted === true) return 'aborted';
+  if (Number.isFinite(item.exitCode)) return item.exitCode === 0 ? 'completed' : 'failed';
+  return '';
+}
+
+function normalizeTaskStatus(value = '', itemStatuses = [], results = []) {
+  const direct = typeof value === 'string' && value.trim() ? normalizeSubagentStatus(value) : '';
+  if (['running', 'completed', 'failed', 'aborted'].includes(direct)) return direct;
+  if (itemStatuses.some(isFailedSubagentStatus)) return 'failed';
+  if (itemStatuses.some(isActiveSubagentStatus)) return 'running';
+  if (itemStatuses.length && itemStatuses.every(isCompletedSubagentStatus)) return 'completed';
+  if (results.length) return results.every((item) => taskItemStatus(item) === 'completed') ? 'completed' : 'failed';
+  return 'running';
+}
+
+function summarizeTaskBlock({ text = '', details = {}, items = [], status = '' } = {}) {
+  const line = text.split(/\r?\n/).map((value) => value.trim()).find(Boolean);
+  if (line) return truncateText(line, 120);
+  if (details.async?.jobId) return `async ${details.async.state ?? status} ${details.async.jobId}`;
+  if (items.length) return `${items.length} task item${items.length === 1 ? '' : 's'} ${status}`;
+  return status || 'task update';
+}
+
+function resolveTaskTool(items = []) {
+  const current = items.find((item) => cleanText(item.currentTool));
+  if (current) {
+    return {
+      currentTool: cleanText(current.currentTool),
+      lastTool: '',
+      toolDetail: resolveProgressToolDetail(current),
+    };
+  }
+  for (const item of items) {
+    const lastTool = resolveLastProgressTool(item, '');
+    if (lastTool) {
+      return {
+        currentTool: '',
+        lastTool,
+        toolDetail: resolveProgressToolDetail(item),
+      };
+    }
+  }
+  return { currentTool: '', lastTool: '', toolDetail: '' };
+}
+
+function sumMetric(items = [], key) {
+  return items.reduce((total, item) => total + finiteMetric(item[key]), 0);
+}
+
+function maxMetric(items = [], key) {
+  return items.reduce((max, item) => Math.max(max, finiteMetric(item[key])), 0);
+}
+
+function taskCost(details = {}, items = []) {
+  const direct = finiteCost(details.usage?.cost?.total ?? details.cost);
+  if (direct) return direct;
+  return items.reduce((total, item) => total + finiteCost(item.cost ?? item.usage?.cost?.total), 0);
+}
+
+function uniqueStrings(values = []) {
+  return [...new Set(values.map((value) => cleanText(value)).filter(Boolean))];
+}
+
+function summarizeTaskCallInput(event = {}, records = []) {
+  const names = records.map(({ agent }) => agent).filter(Boolean);
+  if (names.length) return `dispatch ${names.join(', ')}`;
+  const input = event.input ?? event.args ?? event.parameters ?? {};
+  const text = collectTextCandidates(input).map((value) => cleanText(value)).find(Boolean);
+  return text ? truncateText(text, 120) : 'dispatch task';
 }
 
 function finiteMetric(value) {
@@ -1292,93 +1254,6 @@ function resolveProgressModel(progress = {}) {
   return cleanText(value);
 }
 
-function resolveProgressAgent(state, progress = {}, text = '') {
-  const required = subagentRequirements(state.lastRoute?.requiredSubagents);
-  const requiredNames = new Set(required.map(({ agent }) => agent));
-  const explicitRole = cleanAgentName(progress.role ?? progress.subagent ?? progress.subagent_type ?? progress.subagentType);
-  if (requiredNames.has(explicitRole)) return explicitRole;
-
-  const markerAgent = requiredAgentFromText(text, requiredNames);
-  if (markerAgent) return markerAgent;
-
-  const agent = cleanAgentName(progress.agent);
-  if (requiredNames.has(agent)) return agent;
-
-  const mentionedRequiredAgent = required.find(({ agent: name }) => textMentionsAgent(text, name))?.agent;
-  if (mentionedRequiredAgent) return mentionedRequiredAgent;
-
-  if (explicitRole) return explicitRole;
-  if (agent && agent !== 'task') return agent;
-  if (required.length === 1) return required[0].agent;
-  return agent === 'task' ? '' : agent;
-}
-
-function requiredAgentFromText(text = '', requiredNames = new Set()) {
-  const patterns = [
-    /OMP_REQUIRED_SUBAGENT:\s*([^\r\n]+)/i,
-    /^Subagent:\s*([^\r\n]+)/im,
-    /^Agent:\s*([^\r\n]+)/im,
-    /^Role:\s*([^\r\n]+)/im,
-  ];
-  for (const pattern of patterns) {
-    const match = String(text).match(pattern);
-    const agent = cleanAgentName(match?.[1]);
-    if (agent && (!requiredNames.size || requiredNames.has(agent))) return agent;
-  }
-  return '';
-}
-
-function textMentionsAgent(text = '', agent = '') {
-  if (!agent) return false;
-  const escaped = agent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|[^A-Za-z0-9_-])${escaped}([^A-Za-z0-9_-]|$)`).test(String(text));
-}
-
-function subagentSkillsFromProgress(agent, progress = {}, text = '') {
-  const values = [];
-  if (Array.isArray(progress.skills)) values.push(...progress.skills.filter(isString));
-  if (Array.isArray(progress.requiredSkills)) values.push(...progress.requiredSkills.filter(isString));
-  const records = collectSubagentTaskRecords({
-    role: agent,
-    assignment: [
-      progress.assignment,
-      progress.task,
-      progress.description,
-      text,
-    ].filter(Boolean).join('\n'),
-  });
-  for (const record of records) values.push(...record.skills);
-  return uniqueValues(values);
-}
-
-function progressText(progress = {}) {
-  const values = [
-    progress.assignment,
-    progress.task,
-    progress.description,
-    progress.lastIntent,
-    progress.currentToolArgs,
-    progress.summary,
-    progress.message,
-    progress.output,
-    progress.result,
-    progress.content,
-    progress.recentOutput,
-  ];
-  return values
-    .flatMap((value) => collectTextCandidates(value))
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .join('\n');
-}
-
-function subagentProgressKey({ id = '', agent = '', parentToolCallId = '', index = null } = {}) {
-  const idPart = cleanProgressId(id);
-  const parent = cleanToolCallId(parentToolCallId);
-  const indexPart = Number.isInteger(index) ? `index:${index}` : '';
-  return [parent, idPart, indexPart, cleanAgentName(agent)].filter(Boolean).join(':') || 'subagent-progress';
-}
-
 function cleanProgressId(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
@@ -1396,6 +1271,12 @@ function cleanAgentName(value) {
 
 function cleanText(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function truncateText(value = '', max = 120) {
+  const text = cleanText(value).replace(/\s+/g, ' ');
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 3)).trimEnd()}...`;
 }
 
 function normalizeSubagentStatus(value) {
@@ -1422,10 +1303,6 @@ function isFailedSubagentStatus(status) {
   return SUBAGENT_FAILED_STATUSES.has(status);
 }
 
-function isTerminalSubagentStatus(status) {
-  return isCompletedSubagentStatus(status) || isFailedSubagentStatus(status);
-}
-
 function touchPendingSubagent(state, { agent, skills = [], text = '' }, startedAt, lastSeenAt = startedAt) {
   const current = state.evidence.pendingSubagents.get(agent);
   const nextSkills = new Set(current?.skills ?? []);
@@ -1446,6 +1323,7 @@ function recordSubagentDispatchStarted(state, event) {
   const startedAt = eventTimestamp(event);
   const records = collectSubagentTaskRecords(event);
   const dispatchId = toolEventCallId(event) || `task-call-${state.evidence.taskToolCalls}`;
+  recordTaskDispatchStarted(state, event, { dispatchId, records, startedAt });
   for (const record of records) {
     recordPendingSubagent(state, record, startedAt);
   }
@@ -1593,34 +1471,6 @@ function clearPendingSubagentCallRecords(state, { records = [], dispatchId = nul
   }
 }
 
-function removePendingSubagentCallAgents(state, dispatchId, agents = []) {
-  if (!dispatchId || !agents.length) return;
-  const pending = state.evidence.pendingSubagentCalls.get(dispatchId);
-  if (!pending) return;
-  for (const agent of agents) pending.delete(agent);
-  if (!pending.size) state.evidence.pendingSubagentCalls.delete(dispatchId);
-}
-
-function recordSubagentProgressFailure(state, progress) {
-  const message = [
-    progress.agent,
-    progress.status,
-    progress.lastIntent || progress.currentTool || progress.description,
-  ].filter(Boolean).join(' ');
-  recordToolFailure(state, 'task', {
-    message: message || `${progress.agent} subagent ${progress.status}`,
-    summary: `Subagent ${progress.agent} ${progress.status}`,
-  });
-}
-
-function clearSubagentTaskFailure(state, agent) {
-  state.evidence.toolFailures = state.evidence.toolFailures.filter((failure) => {
-    if (failure.tool !== 'task') return true;
-    const text = [failure.message, failure.summary].filter(Boolean).join('\n');
-    return !text.includes(agent);
-  });
-}
-
 function pendingRecords(state) {
   return [...state.evidence.pendingSubagents.entries()].map(([agent, pending]) => ({
     agent,
@@ -1664,28 +1514,28 @@ function buildSubagentStatus(state) {
       skills: [...skills],
       stuck: Boolean(startedAt && Date.now() - startedAt >= SUBAGENT_STUCK_AFTER_MS),
     })),
-    progress: [...state.evidence.subagentProgress.values()].map((progress) => ({
-      id: progress.id,
-      agent: progress.agent,
-      status: progress.status,
-      parentToolCallId: progress.parentToolCallId,
-      index: progress.index,
-      description: progress.description,
-      currentTool: progress.currentTool,
-      lastTool: progress.lastTool,
-      toolDetail: progress.toolDetail,
-      lastIntent: progress.lastIntent,
-      toolCount: progress.toolCount,
-      requests: progress.requests,
-      tokens: progress.tokens,
-      contextTokens: progress.contextTokens,
-      contextWindow: progress.contextWindow,
-      cost: progress.cost,
-      durationMs: progress.durationMs,
-      resolvedModel: progress.resolvedModel,
-      startedAt: progress.startedAt,
-      updatedAt: progress.updatedAt,
-      skills: [...(progress.skills ?? [])],
+    tasks: [...state.evidence.taskProgress.values()].map((task) => ({
+      id: task.id,
+      status: task.status,
+      text: task.text,
+      summary: task.summary,
+      subagentCount: task.subagentCount,
+      runningCount: task.runningCount,
+      completedCount: task.completedCount,
+      failedCount: task.failedCount,
+      toolCount: task.toolCount,
+      requests: task.requests,
+      tokens: task.tokens,
+      contextTokens: task.contextTokens,
+      contextWindow: task.contextWindow,
+      cost: task.cost,
+      durationMs: task.durationMs,
+      models: task.models,
+      currentTool: task.currentTool,
+      lastTool: task.lastTool,
+      toolDetail: task.toolDetail,
+      startedAt: task.startedAt,
+      updatedAt: task.updatedAt,
     })),
     failures: state.evidence.toolFailures.filter((failure) => failure.tool === 'task'),
   };
@@ -1700,8 +1550,8 @@ function formatSubagentStatus(state) {
   const pending = status.pending.length
     ? status.pending.map(({ agent, attempts, stuck, skills }) => `- ${agent}: ${stuck ? 'stuck' : 'pending'}; attempts ${attempts}; skills ${skills.join(', ') || 'none'}`).join('\n')
     : '- none';
-  const progress = status.progress.length
-    ? status.progress.map(formatSubagentProgressLine).join('\n')
+  const tasks = status.tasks.length
+    ? status.tasks.map(formatTaskProgressLine).join('\n')
     : '- none';
   const failures = status.failures.length
     ? status.failures.map((failure) => `- ${failure.message ?? failure.summary ?? 'task failed'}`).join('\n')
@@ -1715,17 +1565,18 @@ function formatSubagentStatus(state) {
     completed,
     'Pending:',
     pending,
-    'Progress:',
-    progress,
+    'Tasks:',
+    tasks,
     'Failures:',
     failures,
   ].join('\n');
 }
 
-function formatSubagentProgressLine(progress) {
-  const title = progress.id && progress.id !== progress.agent ? `${progress.agent} (${progress.id})` : progress.agent;
+function formatTaskProgressLine(progress) {
+  const title = progress.id ? `task ${progress.id}` : 'task';
   const stats = [
-    progress.resolvedModel ? `model ${progress.resolvedModel}` : null,
+    progress.models?.length ? `models ${progress.models.join(', ')}` : null,
+    progress.subagentCount ? formatTaskItemCounts(progress) : null,
     progress.toolCount ? `${formatMetricCount(progress.toolCount)} tools` : null,
     progress.requests ? `${progress.requests} req` : null,
     progress.tokens ? `${formatCompactMetric(progress.tokens)} tokens` : null,
@@ -1733,10 +1584,20 @@ function formatSubagentProgressLine(progress) {
     progress.cost ? formatCost(progress.cost) : null,
     progress.durationMs ? `${Math.round(progress.durationMs / 1000)}s` : null,
   ].filter(Boolean).join(' | ');
-  const description = progress.description ? ` # ${progress.description}` : '';
+  const description = progress.summary ? ` # ${progress.summary}` : '';
   const head = `- ${title}: ${progress.status}${description}${stats ? ` | ${stats}` : ''}`;
   const toolLine = formatProgressToolLine(progress);
   return toolLine ? `${head}\n  ${toolLine}` : head;
+}
+
+function formatTaskItemCounts(progress) {
+  const parts = [
+    progress.subagentCount ? `${progress.subagentCount} items` : null,
+    progress.runningCount ? `${progress.runningCount} running` : null,
+    progress.completedCount ? `${progress.completedCount} done` : null,
+    progress.failedCount ? `${progress.failedCount} failed` : null,
+  ].filter(Boolean);
+  return parts.join(', ');
 }
 
 function formatMetricCount(value) {
@@ -1793,13 +1654,13 @@ async function notifySubagentDispatch(ctx = {}, status, records = [], state, eve
   }
 }
 
-async function notifySubagentProgress(ctx = {}, updates = [], state) {
+async function notifyTaskProgress(ctx = {}, updates = [], state) {
   const notify = ctx.ui?.notify;
   if (typeof notify !== 'function') return;
   for (const update of updates) {
     if (!update.notify) continue;
-    const message = formatSubagentProgressNotification(update.current, state);
-    const level = isFailedSubagentStatus(update.current.status) ? 'warn' : 'info';
+    const message = formatTaskProgressNotification(update.current, state);
+    const level = update.current.status === 'failed' || update.current.status === 'aborted' ? 'warn' : 'info';
     try {
       await notify(message, level);
     } catch {
@@ -1817,15 +1678,21 @@ function formatSubagentNotification({ status, agents, state, event }) {
   return `OMP subagents failed: ${agents}.${route}${suffix}`;
 }
 
-function formatSubagentProgressNotification(progress, state) {
+function formatTaskProgressNotification(progress, state) {
   const route = state.lastRoute?.intent ? ` Route: ${state.lastRoute.intent}.` : '';
   const details = [
     progress.currentTool ? `tool ${progress.currentTool}` : null,
     !progress.currentTool && progress.lastTool ? `last tool ${progress.lastTool}` : null,
-    progress.lastIntent && progress.lastIntent !== progress.currentTool ? progress.lastIntent : null,
-    progress.description,
+    progress.toolDetail,
+    progress.summary,
   ].filter(Boolean).join('; ');
-  return `OMP subagent progress: ${progress.agent} ${progress.status}${details ? `; ${details}` : ''}.${route}`;
+  return formatNotificationSentence(`OMP task progress: ${progress.id} ${progress.status}${details ? `; ${details}` : ''}`, route);
+}
+
+function formatNotificationSentence(text, suffix = '') {
+  const normalized = String(text).trim();
+  const punctuation = /[.!?]$/.test(normalized) ? '' : '.';
+  return `${normalized}${punctuation}${suffix}`;
 }
 
 function formatSubagentNotificationAgents(records = []) {

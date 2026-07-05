@@ -1434,7 +1434,7 @@ test('subagent status tool reports pending and completed roles', async () => {
   assert.deepEqual(status.details.status.pending, []);
 });
 
-test('task tool_execution_update records live subagent progress and completion', async () => {
+test('task tool_execution_update records live task progress and completion', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const notifications = [];
@@ -1449,17 +1449,35 @@ test('task tool_execution_update records live subagent progress and completion',
     undefined,
     ctx,
   );
+  await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
 
   const assignment = [
     'OMP_REQUIRED_SUBAGENT: writer',
     'Required skills for this subagent:',
     '- writing-markdown-helper',
   ].join('\n');
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      toolCallId: 'task-live-progress',
+      input: {
+        tasks: [
+          {
+            id: 'WriterLive',
+            role: 'writer',
+            assignment,
+          },
+        ],
+      },
+    },
+    ctx,
+  );
   await event(pi, 'tool_execution_update')(
     {
       toolName: 'task',
       toolCallId: 'task-live-progress',
       partialResult: {
+        content: [{ type: 'text', text: 'Running agent WriterLive...' }],
         details: {
           progress: [
             {
@@ -1488,33 +1506,32 @@ test('task tool_execution_update records live subagent progress and completion',
     ctx,
   );
 
-  assert.match(status.content[0].text, /Progress:\n- writer \(WriterLive\): running # draft related work \| 1 req \| 2s\n  current tool: read/);
+  assert.match(status.content[0].text, /Tasks:\n- task task-live-progress: running # Running agent WriterLive\.\.\. \| 1 items, 1 running \| 1 req \| 2s\n  current tool: read/);
   assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['writer']);
   assert.deepEqual(status.details.status.pending[0].skills, ['writing-markdown-helper']);
-  assert.equal(notifications[0].level, 'info');
-  assert.match(notifications[0].text, /OMP subagent progress: writer running; tool read; draft related work\. Route: writing\.en\./);
+  const taskProgressNotification = notifications.find(({ text }) => text.startsWith('OMP task progress:'));
+  assert.equal(taskProgressNotification?.level, 'info');
+  assert.match(taskProgressNotification?.text, /OMP task progress: task-live-progress running; tool read; Running agent WriterLive\.\.\. Route: writing\.en\./);
   assert.equal(pi.messages.length, 0);
 
-  await event(pi, 'tool_execution_update')(
+  await event(pi, 'tool_result')(
     {
-      toolName: 'task',
+      name: 'task',
       toolCallId: 'task-live-progress',
-      partialResult: {
-        details: {
-          progress: [
-            {
-              id: 'WriterLive',
-              index: 0,
-              agent: 'task',
-              status: 'completed',
-              description: 'draft related work',
-              requests: 2,
-              durationMs: 5100,
-              assignment,
-            },
-          ],
-        },
+      content: [{ type: 'text', text: 'Task complete' }],
+      details: {
+        results: [
+          {
+            id: 'WriterLive',
+            exitCode: 0,
+            requests: 2,
+            tokens: 1200,
+            durationMs: 5100,
+          },
+        ],
+        totalDurationMs: 5100,
       },
+      isError: false,
     },
     ctx,
   );
@@ -1529,11 +1546,11 @@ test('task tool_execution_update records live subagent progress and completion',
 
   assert.deepEqual(status.details.status.completed, ['writer']);
   assert.deepEqual(status.details.status.pending, []);
-  assert.match(status.content[0].text, /Progress:\n- writer \(WriterLive\): completed # draft related work \| 2 req \| 5s/);
+  assert.match(status.content[0].text, /Tasks:\n- task task-live-progress: completed # Task complete \| 1 items, 1 done \| 2 req \| 1\.2k tokens \| 5s/);
   assert.equal(pi.messages.length, 0);
 });
 
-test('task EventBus progress and lifecycle update subagent status before final task result', async () => {
+test('subagent EventBus progress does not drive task-level progress display', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext(pi.entries);
@@ -1567,7 +1584,7 @@ test('task EventBus progress and lifecycle update subagent status before final t
     },
   });
 
-  let status = await tool(pi, 'omp_core_subagent_status').execute(
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
     'call-eventbus-progress-status',
     {},
     undefined,
@@ -1575,35 +1592,13 @@ test('task EventBus progress and lifecycle update subagent status before final t
     ctx,
   );
 
-  assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['writer']);
-  assert.equal(status.details.status.progress[0].agent, 'writer');
-  assert.equal(status.details.status.progress[0].status, 'running');
-  assert.equal(pi.messages.length, 0);
-
-  await pi.events.emit('task:subagent:lifecycle', {
-    id: 'WriterBus',
-    agent: 'writer',
-    status: 'completed',
-    parentToolCallId: 'task-eventbus-progress',
-    description: 'draft finished',
-    index: 0,
-  });
-
-  status = await tool(pi, 'omp_core_subagent_status').execute(
-    'call-eventbus-completed-status',
-    {},
-    undefined,
-    undefined,
-    ctx,
-  );
-
-  assert.deepEqual(status.details.status.completed, ['writer']);
   assert.deepEqual(status.details.status.pending, []);
-  assert.match(status.content[0].text, /writer \(WriterBus\): completed # draft finished/);
+  assert.deepEqual(status.details.status.tasks, []);
+  assert.match(status.content[0].text, /Tasks:\n- none/);
   assert.equal(pi.messages.length, 0);
 });
 
-test('subagent status preserves rich progress telemetry inside the plugin', async () => {
+test('task status preserves rich task-block telemetry inside the plugin', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext(pi.entries);
@@ -1627,6 +1622,7 @@ test('subagent status preserves rich progress telemetry inside the plugin', asyn
       toolName: 'task',
       toolCallId: 'task-rich-progress',
       partialResult: {
+        content: [{ type: 'text', text: 'Running writer rich task' }],
         details: {
           progress: [
             {
@@ -1663,19 +1659,17 @@ test('subagent status preserves rich progress telemetry inside the plugin', asyn
 
   assert.match(
     status.content[0].text,
-    /writer \(WriterRich\): running # inspect files \| model opencode-go\/deepseek-v4-flash \| 4 tools \| 2 req \| 3\.5k tokens \| ctx 12k\/128k \(9\.4%\) \| \$0\.07 \| 10s\n  last tool: grep - TODO/,
+    /task task-rich-progress: running # Running writer rich task \| models opencode-go\/deepseek-v4-flash \| 1 items, 1 running \| 4 tools \| 2 req \| 3\.5k tokens \| ctx 12k\/128k \(9\.4%\) \| \$0\.07 \| 10s\n  last tool: grep - TODO/,
   );
-  assert.deepEqual(status.details.status.progress[0], {
-    id: 'WriterRich',
-    agent: 'writer',
+  assert.deepEqual(status.details.status.tasks[0], {
+    id: 'task-rich-progress',
     status: 'running',
-    parentToolCallId: 'task-rich-progress',
-    index: 0,
-    description: 'inspect files',
-    currentTool: '',
-    lastTool: 'grep',
-    toolDetail: 'TODO',
-    lastIntent: '',
+    text: 'Running writer rich task',
+    summary: 'Running writer rich task',
+    subagentCount: 1,
+    runningCount: 1,
+    completedCount: 0,
+    failedCount: 0,
     toolCount: 4,
     requests: 2,
     tokens: 3456,
@@ -1683,10 +1677,12 @@ test('subagent status preserves rich progress telemetry inside the plugin', asyn
     contextWindow: 128000,
     cost: 0.07,
     durationMs: 10000,
-    resolvedModel: 'opencode-go/deepseek-v4-flash',
-    startedAt: status.details.status.progress[0].startedAt,
-    updatedAt: status.details.status.progress[0].updatedAt,
-    skills: ['writing-markdown-helper'],
+    models: ['opencode-go/deepseek-v4-flash'],
+    currentTool: '',
+    lastTool: 'grep',
+    toolDetail: 'TODO',
+    startedAt: status.details.status.tasks[0].startedAt,
+    updatedAt: status.details.status.tasks[0].updatedAt,
   });
 });
 
