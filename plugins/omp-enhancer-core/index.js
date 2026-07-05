@@ -28,16 +28,19 @@ const ASSISTANT_OUTPUT_EVENTS = [
   'response_output_delta',
 ];
 const SUBAGENT_STUCK_AFTER_MS = 10 * 60 * 1000;
+const SUBAGENT_DASHBOARD_WATCH_INTERVAL_MS = 5000;
+const SUBAGENT_DASHBOARD_WATCH_MAX_MS = 60 * 60 * 1000;
 const SUBAGENT_ACTIVE_STATUSES = new Set(['pending', 'running', 'started', 'in_progress', 'in-progress']);
 const SUBAGENT_COMPLETED_STATUSES = new Set(['completed', 'complete', 'success', 'succeeded']);
 const SUBAGENT_FAILED_STATUSES = new Set(['failed', 'failure', 'error', 'aborted', 'cancelled', 'canceled']);
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
+  const subagentDashboardWatcher = createSubagentDashboardWatcher(pi, state);
   const z = pi.zod?.z ?? pi.z;
 
   pi.setLabel?.('OMP Enhancer Core');
-  registerSubagentEventBusHandlers(pi, state);
+  registerSubagentEventBusHandlers(pi, state, subagentDashboardWatcher);
 
   pi.registerCommand?.('classifier', {
     description: 'Show or update modelRoles.classifier for OMP Enhancer routing.',
@@ -56,6 +59,7 @@ export default function registerCoreEnhancer(pi) {
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const route = routeNaturalLanguageTask({ prompt: params.prompt });
+      subagentDashboardWatcher.stop();
       setRouteState(state, route);
       await persistState(pi, state);
       return okResult(formatRoute(route), { route });
@@ -87,6 +91,7 @@ export default function registerCoreEnhancer(pi) {
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const result = resolveClassificationRoute({ prompt: params.prompt, output: params.output });
+      subagentDashboardWatcher.stop();
       setRouteState(state, result.route);
       await persistState(pi, state);
       return okResult(formatRoute(result.route), result);
@@ -125,6 +130,7 @@ export default function registerCoreEnhancer(pi) {
       if (validation.ok) recordSubagentFinalUsage(state, params.output ?? '');
       await persistState(pi, state);
       await publishSubagentDashboard(pi, state, validation.ok ? 'validation-completed' : 'validation-incomplete');
+      subagentDashboardWatcher.sync(validation.ok ? 'validation-completed' : 'validation-incomplete');
       return okResult(validation.message, { validation });
     },
   });
@@ -150,6 +156,7 @@ export default function registerCoreEnhancer(pi) {
       const route = params.prompt ? routeNaturalLanguageTask({ prompt: params.prompt }) : state.lastRoute;
       const fragment = buildGovernancePromptFragment({ route });
       if (params.prompt && route) {
+        subagentDashboardWatcher.stop();
         setRouteState(state, route);
         await persistState(pi, state);
       }
@@ -159,7 +166,12 @@ export default function registerCoreEnhancer(pi) {
 
   pi.on?.('session_start', async (_event = {}, ctx = {}) => {
     const restored = restoreStateFromContext(state, ctx);
-    if (!restored) resetState(state);
+    if (!restored) {
+      subagentDashboardWatcher.stop();
+      resetState(state);
+    } else {
+      subagentDashboardWatcher.sync('session-start');
+    }
     return undefined;
   });
 
@@ -205,6 +217,7 @@ export default function registerCoreEnhancer(pi) {
       return { additionalContext: fragment, route: { intent: 'subagent', agent: null, requiredSkills: [], requiredTools: [], requiredSubagents: [] } };
     }
     const route = routeNaturalLanguageTask({ prompt });
+    subagentDashboardWatcher.stop();
     setRouteState(state, route);
     startLoopGuardRun(state.loopGuard, `${route.intent}:${state.routeStartedAt}`);
     await persistState(pi, state);
@@ -231,6 +244,7 @@ export default function registerCoreEnhancer(pi) {
     }
     await persistState(pi, state);
     if (subagentDashboardReason) await publishSubagentDashboard(pi, state, subagentDashboardReason);
+    subagentDashboardWatcher.sync(subagentDashboardReason || `tool-call:${name || 'unknown'}`);
     return undefined;
   });
 
@@ -241,6 +255,7 @@ export default function registerCoreEnhancer(pi) {
     await notifySubagentProgress(ctx, updates, state);
     if (updates.some((update) => update.persist)) await persistState(pi, state);
     if (updates.some((update) => update.notify)) await publishSubagentDashboard(pi, state, dashboardReasonForUpdates(updates));
+    subagentDashboardWatcher.sync(dashboardReasonForUpdates(updates));
     return undefined;
   });
 
@@ -263,6 +278,7 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'read' && successful) recordReadSkillEvidence(state, event);
     await persistState(pi, state);
     if (subagentDashboardReason) await publishSubagentDashboard(pi, state, subagentDashboardReason);
+    subagentDashboardWatcher.sync(subagentDashboardReason || `tool-result:${name || 'unknown'}`);
     return undefined;
   });
 
@@ -280,7 +296,11 @@ export default function registerCoreEnhancer(pi) {
     await persistState(pi, state);
 
     const missingSubagentContext = buildMissingSubagentUsageContext(state);
-    if (missingSubagentContext) return { continue: true, additionalContext: missingSubagentContext };
+    if (missingSubagentContext) {
+      await publishSubagentDashboard(pi, state, 'waiting-for-user');
+      subagentDashboardWatcher.sync('waiting-for-user');
+      return { continue: true, additionalContext: missingSubagentContext };
+    }
 
     const missingGateContext = buildMissingGateContext({ route: state.lastRoute, state });
     if (missingGateContext) return { continue: true, additionalContext: missingGateContext };
@@ -867,7 +887,7 @@ function buildMissingSubagentUsageContext(state) {
   ].filter(Boolean).join('\n');
 }
 
-function registerSubagentEventBusHandlers(pi, state) {
+function registerSubagentEventBusHandlers(pi, state, subagentDashboardWatcher = null) {
   const eventBus = pi.events;
   if (!eventBus || typeof eventBus.on !== 'function') return;
 
@@ -878,6 +898,7 @@ function registerSubagentEventBusHandlers(pi, state) {
           const updates = handler(payload);
           if (updates.some((update) => update.persist)) await persistState(pi, state);
           if (updates.some((update) => update.notify)) await publishSubagentDashboard(pi, state, dashboardReasonForUpdates(updates));
+          subagentDashboardWatcher?.sync(dashboardReasonForUpdates(updates));
         } catch {
           // EventBus updates are best-effort observability. They must not break
           // task execution or the stricter final gate checks.
@@ -1492,6 +1513,85 @@ function formatSubagentStatus(state) {
     'Failures:',
     failures,
   ].join('\n');
+}
+
+function createSubagentDashboardWatcher(pi, state) {
+  const timers = timerApi(pi);
+  const intervalMs = positiveNumber(pi?.subagentDashboardIntervalMs, SUBAGENT_DASHBOARD_WATCH_INTERVAL_MS);
+  const maxMs = positiveNumber(pi?.subagentDashboardWatchMaxMs, SUBAGENT_DASHBOARD_WATCH_MAX_MS);
+  let timer = null;
+  let startedAt = 0;
+  let refreshing = false;
+
+  const stop = () => {
+    if (!timer) return;
+    timers.clearInterval(timer);
+    timer = null;
+    startedAt = 0;
+  };
+
+  const tick = async (reason = 'watching') => {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      const status = buildSubagentStatus(state);
+      if (!hasActiveSubagentDashboardWork(status)) {
+        stop();
+        return;
+      }
+      if (startedAt && Date.now() - startedAt > maxMs) {
+        await publishSubagentDashboard(pi, state, 'watch-timeout');
+        stop();
+        return;
+      }
+      await publishSubagentDashboard(pi, state, reason);
+    } finally {
+      refreshing = false;
+    }
+  };
+
+  const ensure = () => {
+    const status = buildSubagentStatus(state);
+    if (!hasActiveSubagentDashboardWork(status)) {
+      stop();
+      return;
+    }
+    if (timer) return;
+    startedAt = Date.now();
+    timer = timers.setInterval(() => tick('watching'), intervalMs);
+    timer?.unref?.();
+  };
+
+  return {
+    stop,
+    sync(_reason = 'updated') {
+      const status = buildSubagentStatus(state);
+      if (!hasActiveSubagentDashboardWork(status)) {
+        stop();
+        return;
+      }
+      ensure();
+    },
+  };
+}
+
+function timerApi(pi) {
+  const source = isRecord(pi?.timers) ? pi.timers : globalThis;
+  const setIntervalFn = typeof source.setInterval === 'function' ? source.setInterval.bind(source) : globalThis.setInterval.bind(globalThis);
+  const clearIntervalFn = typeof source.clearInterval === 'function' ? source.clearInterval.bind(source) : globalThis.clearInterval.bind(globalThis);
+  return {
+    setInterval: setIntervalFn,
+    clearInterval: clearIntervalFn,
+  };
+}
+
+function positiveNumber(value, fallback) {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function hasActiveSubagentDashboardWork(status) {
+  return status.pending.length > 0
+    || status.progress.some((progress) => isActiveSubagentStatus(progress.status));
 }
 
 async function publishSubagentDashboard(pi, state, reason = 'updated') {
