@@ -1,4 +1,5 @@
 import { loopGuardPromptSection } from './loop-guard.js';
+import { skillReadNameCandidates } from './skill-usage.js';
 
 export function buildGovernancePromptFragment({ route, parentTask = '' } = {}) {
   const resolved = route ?? {
@@ -91,7 +92,9 @@ export function buildSubagentPromptFragment({ prompt = '' } = {}) {
     'Required skills for this subagent:',
     formatList(requiredSkills),
     '',
-    'Before acting, read each listed skill with the exact URI `skill://<skill-name>`. If a required skill is unavailable, stop and report it in BLOCKERS.',
+    'Before acting, read the required skills using these URIs. If a required skill is unavailable, stop and report it in BLOCKERS.',
+    formatSubagentSkillReadSteps(requiredSkills),
+    'Use canonical names in Required. In Loaded, list the exact skill names successfully read; aliases equivalent to the Required entries are accepted.',
     '',
     'Final subagent output must end with:',
     '',
@@ -220,7 +223,7 @@ function subagentWorkflowLines(route, { parentTask = '' } = {}) {
     '',
     'Give every task item a short `description` or first assignment line that names the subagent duty; this is the text OMP can show after the subagent name in its native status display. Keep it specific and under 100 characters.',
     '',
-    'When forking each subagent, include that subagent-specific skill list in the task prompt. Tell the subagent to read each required skill with `skill://<skill-name>` before acting and to report which skills it loaded.',
+    'When forking each subagent, include that subagent-specific skill list in the task prompt. Tell the subagent to read the listed skill URI for each required skill before acting and to report which skills it loaded.',
     '',
     'Required subagents:',
     formatSubagents(requiredSubagents),
@@ -268,7 +271,8 @@ function formatPreforkSubagentContracts(values = [], { parentTask = '' } = {}) {
     'Required skills for this subagent:',
     formatList(requiredSkills),
     'Before acting:',
-    '- Read each required skill with `skill://<skill-name>`.',
+    formatSubagentSkillReadSteps(requiredSkills),
+    '- In SKILL_USAGE Required, keep the canonical names above. In Loaded, list the exact skill names successfully read; accepted aliases are valid evidence.',
     '- Do not fork another OMP Enhancer Core role gate unless explicitly asked.',
     'Final subagent output must end with:',
     'SKILL_USAGE',
@@ -285,6 +289,20 @@ function formatPreforkSubagentContracts(values = [], { parentTask = '' } = {}) {
 function formatParentTaskLine(parentTask = '') {
   const cleaned = String(parentTask).replace(/\s+/g, ' ').trim();
   return `OMP_PARENT_TASK: ${cleaned ? cleaned.slice(0, 300) : '<copy the original user task here>'}`;
+}
+
+function formatSubagentSkillReadSteps(requiredSkills = []) {
+  if (!requiredSkills.length) return '- No skill reads are required for this subagent.';
+  return requiredSkills.map((skill) => {
+    const candidates = skillReadNameCandidates(skill, { limit: 3 });
+    const preferred = candidates[0] ?? skill;
+    const aliasNote = preferred !== skill ? ` (accepted alias for ${skill})` : '';
+    const fallbackUris = preferred !== skill
+      ? candidates.slice(1).filter((candidate) => candidate && candidate !== preferred).map((candidate) => `skill://${candidate}`)
+      : [];
+    const fallbackNote = fallbackUris.length ? ` Fallbacks accepted: ${fallbackUris.join(', ')}.` : '';
+    return `- Read \`skill://${preferred}\`${aliasNote}.${fallbackNote}`;
+  }).join('\n');
 }
 
 function formatSubagentUsageBlock(values = []) {

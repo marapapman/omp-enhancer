@@ -76,6 +76,45 @@ test('builds a lightweight subagent contract without root workflow gates', () =>
   assert.doesNotMatch(fragment, /Required subagents:/);
 });
 
+test('prefers installed skill aliases in subagent read instructions', () => {
+  const fragment = buildGovernancePromptFragment({
+    route: {
+      intent: 'security-review',
+      agent: 'ecc-security-reviewer',
+      requiredSkills: ['security-review', 'security-scan'],
+      requiredTools: [],
+      requiredSubagents: [
+        {
+          agent: 'ecc-security-reviewer',
+          duty: 'audit security risks',
+          requiredSkills: ['security-review', 'security-scan'],
+        },
+      ],
+    },
+  });
+
+  assert.match(fragment, /Required skills for this subagent:\n- security-review\n- security-scan/);
+  assert.match(fragment, /Read `skill:\/\/ecc-security-review` \(accepted alias for security-review\)/);
+  assert.match(fragment, /Read `skill:\/\/ecc-security-scan` \(accepted alias for security-scan\)/);
+  assert.match(fragment, /SUBAGENT_USAGE:\n- ecc-security-reviewer: security-review, security-scan/);
+});
+
+test('subagent contracts accept installed aliases while preserving canonical Required names', () => {
+  const fragment = buildSubagentPromptFragment({
+    prompt: [
+      'OMP_REQUIRED_SUBAGENT: ecc-security-reviewer',
+      'Required skills for this subagent:',
+      '- security-review',
+      '- security-scan',
+    ].join('\n'),
+  });
+
+  assert.match(fragment, /Required:\n- security-review\n- security-scan/);
+  assert.match(fragment, /Read `skill:\/\/ecc-security-review` \(accepted alias for security-review\)/);
+  assert.match(fragment, /Read `skill:\/\/ecc-security-scan` \(accepted alias for security-scan\)/);
+  assert.match(fragment, /aliases equivalent to the Required entries are accepted/);
+});
+
 test('names the selected agent route and toolchain in the governance fragment', () => {
   const fragment = buildGovernancePromptFragment({
     route: {
@@ -122,7 +161,7 @@ test('keeps routing governance independent from slash commands', () => {
     },
   });
 
-  assert.doesNotMatch(fragment, /\/test\b/);
+  assert.doesNotMatch(fragment, /(^|\s)\/test(\s|$)/);
   assert.doesNotMatch(fragment, /slash command/i);
   assert.match(fragment, /natural language/i);
 });

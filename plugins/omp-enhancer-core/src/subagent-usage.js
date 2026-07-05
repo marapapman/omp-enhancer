@@ -1,3 +1,5 @@
+import { skillNamesEquivalent } from './skill-usage.js';
+
 export function validateSubagentUsage({ requiredSubagents = [], output = '' } = {}) {
   const required = normalizeSubagents(requiredSubagents);
   if (!required.length) return { ok: true, missing: [], missingSkills: [], unexpectedSkills: [], forked: [], message: 'No routed subagents are required.' };
@@ -29,8 +31,8 @@ export function validateSubagentUsage({ requiredSubagents = [], output = '' } = 
   }
 
   const missingSkills = required.flatMap(({ agent, requiredSkills }) => {
-    const loaded = new Set(forkedByAgent.get(agent)?.skills ?? []);
-    const skills = requiredSkills.filter((skill) => !loaded.has(skill));
+    const loaded = forkedByAgent.get(agent)?.skills ?? [];
+    const skills = requiredSkills.filter((skill) => !hasEquivalentSkill(loaded, skill));
     return skills.length ? [{ agent, skills }] : [];
   });
 
@@ -47,8 +49,8 @@ export function validateSubagentUsage({ requiredSubagents = [], output = '' } = 
 
   const unexpectedSkills = required.flatMap(({ agent, requiredSkills, enforceSkills }) => {
     if (!enforceSkills) return [];
-    const allowed = new Set(requiredSkills);
-    const unexpected = (forkedByAgent.get(agent)?.skills ?? []).filter((skill) => !allowed.has(skill));
+    const unexpected = (forkedByAgent.get(agent)?.skills ?? [])
+      .filter((skill) => !hasEquivalentRequiredSkill(requiredSkills, skill));
     return unexpected.length ? [{ agent, skills: unexpected }] : [];
   });
 
@@ -224,6 +226,14 @@ function normalizeSkills(values = []) {
   return raw
     .map((value) => String(value).trim().replace(/^skills?\s*[:=]\s*/i, ''))
     .filter((value) => value && value.toLowerCase() !== 'none');
+}
+
+function hasEquivalentSkill(loadedSkills = [], requiredSkill = '') {
+  return loadedSkills.some((loadedSkill) => skillNamesEquivalent(requiredSkill, loadedSkill));
+}
+
+function hasEquivalentRequiredSkill(requiredSkills = [], loadedSkill = '') {
+  return requiredSkills.some((requiredSkill) => skillNamesEquivalent(requiredSkill, loadedSkill));
 }
 
 function parseRequiredSkillList(text = '') {

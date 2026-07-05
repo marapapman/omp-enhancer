@@ -1448,7 +1448,7 @@ function recordSubagentAssignmentEvidence(state, { agent, texts = [] }) {
 function recordSubagentSkillEvidence(state, { agent, text = '', skills = [] }) {
   const requiredByAgent = new Map(subagentRequirements(state.lastRoute?.requiredSubagents).map((item) => [item.agent, item.requiredSkills]));
   const requiredSkills = requiredByAgent.get(agent) ?? [];
-  const unexpectedSkills = skills.filter((skill) => !requiredSkills.includes(skill));
+  const unexpectedSkills = skills.filter((skill) => !requiredSkills.some((requiredSkill) => skillNamesEquivalent(requiredSkill, skill)));
   if (unexpectedSkills.length) {
     const recordedUnexpected = state.evidence.unexpectedSubagentSkills.get(agent) ?? new Set();
     for (const skill of unexpectedSkills) recordedUnexpected.add(skill);
@@ -1458,9 +1458,19 @@ function recordSubagentSkillEvidence(state, { agent, text = '', skills = [] }) {
 
   const recorded = state.evidence.subagentSkills.get(agent) ?? new Set();
   for (const skill of requiredSkills) {
-    if (text.includes(skill) || skills.includes(skill)) recorded.add(skill);
+    if (skills.some((loadedSkill) => skillNamesEquivalent(skill, loadedSkill)) || textMentionsEquivalentSkill(text, skill)) {
+      recorded.add(skill);
+    }
   }
   state.evidence.subagentSkills.set(agent, recorded);
+}
+
+function textMentionsEquivalentSkill(text = '', requiredSkill = '') {
+  const lower = String(text).toLowerCase();
+  if (!lower) return false;
+  return [requiredSkill, ...skillReadNameCandidates(requiredSkill, { limit: 8 })]
+    .filter(Boolean)
+    .some((candidate) => lower.includes(String(candidate).toLowerCase()));
 }
 
 function subagentRecordsForToolResult(state, event) {

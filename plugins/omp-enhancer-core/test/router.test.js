@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -190,6 +190,32 @@ test('required route subagents are packaged by omp-config or writing-helper', as
   }
 });
 
+test('subagent providers match the configured workflow ownership', async () => {
+  const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const ownerAgents = {
+    'omp-config': await agentNames(path.join(repoRoot, 'plugins', 'omp-config', 'agents')),
+    'writing-helper': await agentNames(path.join(repoRoot, 'plugins', 'writing-helper', 'agents')),
+  };
+  const testingEnhancerAgents = await agentNames(path.join(repoRoot, 'plugins', 'omp-test-enhancer', 'agents'));
+
+  assert.deepEqual([...testingEnhancerAgents], [], 'omp-testing-enhancer is tool-only; testing subagents are routed through omp-config');
+
+  for (const item of routingCases) {
+    const owner = expectedSubagentOwner(item.expectedIntent);
+    if (!owner) {
+      assert.deepEqual(item.requiredSubagents, [], `${item.name} should not require subagents`);
+      continue;
+    }
+
+    for (const agent of item.requiredSubagents) {
+      assert.equal(ownerAgents[owner].has(agent), true, `${item.name} should use ${owner} subagent ${agent}`);
+      for (const [otherOwner, names] of Object.entries(ownerAgents)) {
+        if (otherOwner !== owner) assert.equal(names.has(agent), false, `${item.name} should not resolve ${agent} from ${otherOwner}`);
+      }
+    }
+  }
+});
+
 test('forces plain-chinese-writing before any other Chinese writing skill', () => {
   const route = routeNaturalLanguageTask({
     prompt: '把下面中文博士论文段落改得更平直，去掉 AI 味。',
@@ -288,6 +314,21 @@ async function registrySkillNames(repoRoot, catalog) {
     }
   }
   return names;
+}
+
+async function agentNames(root) {
+  try {
+    const entries = await readdir(root);
+    return new Set(entries.filter((entry) => entry.endsWith('.md')).map((entry) => entry.replace(/\.md$/, '')));
+  } catch {
+    return new Set();
+  }
+}
+
+function expectedSubagentOwner(intent) {
+  if (intent === 'writing.zh' || intent === 'writing.en') return 'writing-helper';
+  if (['bug-audit', 'implementation-with-tests', 'security-review', 'config-assets'].includes(intent)) return 'omp-config';
+  return null;
 }
 
 function skillFrontmatterName(text) {

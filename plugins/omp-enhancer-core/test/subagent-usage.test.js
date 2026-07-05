@@ -108,6 +108,28 @@ test('validateSubagentUsage reports missing per-subagent skills', () => {
   assert.deepEqual(validation.missingSkills, [{ agent: 'zh-writer', skills: ['zh-writing-polish'] }]);
 });
 
+test('validateSubagentUsage accepts equivalent installed skill aliases', () => {
+  const validation = validateSubagentUsage({
+    requiredSubagents: [
+      { agent: 'ecc-security-reviewer', requiredSkills: ['security-review', 'security-scan'] },
+      { agent: 'reviewer', requiredSkills: ['security-review'] },
+    ],
+    output: [
+      'SUBAGENT_USAGE',
+      'Required:',
+      '- ecc-security-reviewer: security-review, security-scan',
+      '- reviewer: security-review',
+      'Forked:',
+      '- ecc-security-reviewer: ecc-security-review, ecc-security-scan',
+      '- reviewer: ecc/security-review',
+    ].join('\n'),
+  });
+
+  assert.equal(validation.ok, true);
+  assert.deepEqual(validation.missingSkills, []);
+  assert.deepEqual(validation.unexpectedSkills, []);
+});
+
 test('validateSubagentUsage reports unexpected per-subagent skills', () => {
   const validation = validateSubagentUsage({
     requiredSubagents: [
