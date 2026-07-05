@@ -11,7 +11,7 @@ import { UsageLedger } from './src/usage.js';
 
 export default function registerOpenCodeGoPool(pi) {
   const paths = resolveStatePaths();
-  void debugLog(paths, { event: 'init', version: '0.1.0' });
+  void debugLog(paths, { event: 'init', version: '0.1.1' });
   const keyVault = new KeyVault({ path: paths.vaultPath });
   const usageLedger = new UsageLedger({ path: paths.usagePath });
   const keyPool = new KeyPool({ vault: keyVault, path: paths.healthPath });
@@ -37,7 +37,9 @@ export default function registerOpenCodeGoPool(pi) {
   pi.registerCommand?.('opencode_go_pool_key', {
     description: 'Add, remove, or rename extra OpenCode Go API keys for the local key pool.',
     async handler(args = '', ctx = {}) {
-      return runKeyCommand({ args, ctx, keyVault });
+      const result = await runKeyCommand({ args, ctx, keyVault });
+      await notifyCommand(ctx, result.text, result.ok ? 'info' : 'error');
+      return result;
     },
   });
 
@@ -50,7 +52,9 @@ export default function registerOpenCodeGoPool(pi) {
   pi.registerCommand?.('opencode_go_pool_status', {
     description: 'Show OpenCode Go key pool health, cooldowns, and plugin-observed per-key usage.',
     async handler(_args = '', ctx = {}) {
-      return statusRunner(ctx);
+      const result = await statusRunner(ctx);
+      await notifyCommand(ctx, result.text, 'info');
+      return result;
     },
   });
 
@@ -72,6 +76,11 @@ async function debugLog(paths, event) {
   const logPath = path.join(paths.stateDir, 'opencode-go-pool-debug.jsonl');
   await mkdir(path.dirname(logPath), { recursive: true, mode: 0o700 });
   await appendFile(logPath, `${JSON.stringify({ timestamp: new Date().toISOString(), ...event })}\n`, { mode: 0o600 }).catch(() => {});
+}
+
+async function notifyCommand(ctx, text, type) {
+  if (!text || typeof ctx?.ui?.notify !== 'function') return;
+  await ctx.ui.notify(String(text), type);
 }
 
 async function ensureBalancedOpenCodeGoModel(pi, ctx, paths) {

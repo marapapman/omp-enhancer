@@ -71,6 +71,7 @@ test('before_agent_start overlays the selected OpenCode Go model without changin
 
 test('status command includes primary key metadata without leaking the key', async () => {
   const commands = new Map();
+  const notifications = [];
   const rawPrimary = 'sk-primary-secret-value-1234567890';
   registerOpenCodeGoPool({
     setLabel: () => {},
@@ -84,8 +85,35 @@ test('status command includes primary key metadata without leaking the key', asy
     modelRegistry: {
       getApiKeyForProvider: async provider => (provider === 'opencode-go' ? rawPrimary : undefined),
     },
+    ui: {
+      notify: async (text, type) => notifications.push({ text, type }),
+    },
   });
 
   assert.match(result.text, /primary/);
   assert.doesNotMatch(result.text, new RegExp(rawPrimary));
+  assert.deepEqual(notifications, [{ text: result.text, type: 'info' }]);
+});
+
+test('key command notifies validation failures without exposing pasted key text', async () => {
+  const commands = new Map();
+  const notifications = [];
+  const pastedKey = 'sk-extra-secret-value-1234567890';
+  registerOpenCodeGoPool({
+    setLabel: () => {},
+    registerCommand: (name, config) => commands.set(name, config),
+    registerTool: () => {},
+    registerProvider: () => {},
+    zod: { z: { object: () => ({}) } },
+  });
+
+  const result = await commands.get('opencode_go_pool_key').handler(pastedKey, {
+    ui: {
+      notify: async (text, type) => notifications.push({ text, type }),
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.doesNotMatch(result.text, new RegExp(pastedKey));
+  assert.deepEqual(notifications, [{ text: result.text, type: 'error' }]);
 });

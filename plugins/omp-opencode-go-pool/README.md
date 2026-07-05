@@ -65,6 +65,8 @@ The vault is written with owner-only file permissions where the platform support
 
 It reports plugin-observed attempts by key label/hash. It does not claim to be the OpenCode Go dashboard bill, and it does not replace OMP native `/usage`.
 
+The slash command displays its report through OMP's extension notification UI. If the command appears to do nothing after an upgrade, start a new OMP session so the process reloads the upgraded plugin code.
+
 ## Routing
 
 The plugin registers the same provider name, `opencode-go`, with an internal custom API id, `opencode-go-balanced`. It does not register replacement models. At session start, it copies the already-selected OpenCode Go model and changes only the runtime API field for that session, so `/model` remains backed by OMP's native OpenCode Go catalog.
