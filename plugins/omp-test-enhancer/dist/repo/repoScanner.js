@@ -1,7 +1,7 @@
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 export async function readRepoFiles(cwd, files) {
-    const safeCwd = resolve(cwd);
+    const safeCwd = await safeRealpath(cwd);
     const results = [];
     for (const file of files) {
         if (!file || file.startsWith('/') || file.includes('\\'))
@@ -10,7 +10,10 @@ export async function readRepoFiles(cwd, files) {
         if (!isInsideDirectory(safeCwd, absolutePath))
             continue;
         try {
-            results.push({ path: file, content: await readFile(absolutePath, 'utf8') });
+            const realPath = await realpath(absolutePath);
+            if (!isInsideDirectory(safeCwd, realPath))
+                continue;
+            results.push({ path: file, content: await readFile(realPath, 'utf8') });
         }
         catch (error) {
             if (!isMissing(error))
@@ -157,6 +160,16 @@ async function exists(path) {
     catch (error) {
         if (isMissing(error))
             return false;
+        throw error;
+    }
+}
+async function safeRealpath(path) {
+    try {
+        return await realpath(resolve(path));
+    }
+    catch (error) {
+        if (isMissing(error))
+            return resolve(path);
         throw error;
     }
 }

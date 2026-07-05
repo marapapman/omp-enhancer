@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, realpath, stat } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 
 export interface RepoFile {
@@ -7,7 +7,7 @@ export interface RepoFile {
 }
 
 export async function readRepoFiles(cwd: string, files: string[]): Promise<RepoFile[]> {
-  const safeCwd = resolve(cwd)
+  const safeCwd = await safeRealpath(cwd)
   const results: RepoFile[] = []
 
   for (const file of files) {
@@ -16,7 +16,9 @@ export async function readRepoFiles(cwd: string, files: string[]): Promise<RepoF
     if (!isInsideDirectory(safeCwd, absolutePath)) continue
 
     try {
-      results.push({ path: file, content: await readFile(absolutePath, 'utf8') })
+      const realPath = await realpath(absolutePath)
+      if (!isInsideDirectory(safeCwd, realPath)) continue
+      results.push({ path: file, content: await readFile(realPath, 'utf8') })
     } catch (error: unknown) {
       if (!isMissing(error)) throw error
     }
@@ -164,6 +166,15 @@ async function exists(path: string): Promise<boolean> {
     return true
   } catch (error: unknown) {
     if (isMissing(error)) return false
+    throw error
+  }
+}
+
+async function safeRealpath(path: string): Promise<string> {
+  try {
+    return await realpath(resolve(path))
+  } catch (error: unknown) {
+    if (isMissing(error)) return resolve(path)
     throw error
   }
 }

@@ -3,16 +3,18 @@ import type { CandidateTest, ChangedTarget, GateResult } from '../types.js'
 export interface EvaluateIndirectTestGateInput {
   candidate: CandidateTest
   targets: ChangedTarget[]
+  severity?: GateResult['severity']
 }
 
 export function evaluateIndirectTestGate(input: EvaluateIndirectTestGateInput): GateResult[] {
   const results: GateResult[] = []
+  const severity = input.severity ?? 'blocker'
 
   if (input.targets.length === 0) {
     return [{
       gate: 'indirect-test',
       passed: false,
-      severity: 'blocker',
+      severity,
       summary: 'No changed targets supplied for indirect-test gate.',
       evidence: { candidateId: input.candidate.id },
       repairHint: 'Run omp_test_analyze and pass the changed targets into omp_test_gate before accepting the tests.'
@@ -28,7 +30,7 @@ export function evaluateIndirectTestGate(input: EvaluateIndirectTestGateInput): 
         results.push({
           gate: 'indirect-test',
           passed: false,
-          severity: 'blocker',
+          severity,
           summary: 'Test imports private or internal implementation details.',
           evidence: { file: file.path, importPath: privateImport },
           repairHint: 'Test through public behavior, such as a service method, route, UI output, or returned result.'
@@ -40,7 +42,7 @@ export function evaluateIndirectTestGate(input: EvaluateIndirectTestGateInput): 
         results.push({
           gate: 'indirect-test',
           passed: false,
-          severity: 'blocker',
+          severity,
           summary: 'Test accesses implementation details.',
           evidence: { file: file.path, pattern: privateAccess },
           repairHint: 'Avoid private fields, bracket access to internals, and component instance state. Assert public behavior instead.'
@@ -51,7 +53,7 @@ export function evaluateIndirectTestGate(input: EvaluateIndirectTestGateInput): 
         results.push({
           gate: 'indirect-test',
           passed: false,
-          severity: 'blocker',
+          severity,
           summary: 'Test only asserts internal mock calls.',
           evidence: { file: file.path },
           repairHint: 'Add assertions on public behavior, returned values, thrown errors, DOM output, HTTP responses, or persisted state.'
@@ -66,7 +68,7 @@ export function evaluateIndirectTestGate(input: EvaluateIndirectTestGateInput): 
         results.push({
           gate: 'indirect-test',
           passed: false,
-          severity: 'blocker',
+          severity,
           summary: 'Component test inspects implementation state.',
           evidence: { file: file.path, pattern: stateAccess },
           repairHint: 'Use user interactions and visible output instead of component internals.'
@@ -80,7 +82,7 @@ export function evaluateIndirectTestGate(input: EvaluateIndirectTestGateInput): 
   return [{
     gate: 'indirect-test',
     passed: true,
-    severity: 'blocker',
+    severity,
     summary: 'Tests do not rely on blocked implementation details.',
     evidence: {}
   }]

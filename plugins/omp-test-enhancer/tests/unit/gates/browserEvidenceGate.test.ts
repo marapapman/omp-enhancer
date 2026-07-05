@@ -15,6 +15,28 @@ describe('evaluateBrowserEvidenceGate', () => {
     expect(evaluateBrowserEvidenceGate(undefined)).toEqual([])
   })
 
+  it('blocks missing browser evidence when frontend evidence is required', () => {
+    expect(evaluateBrowserEvidenceGate(undefined, { required: true, severity: 'blocker', targetIds: ['src/ui/LoginForm.tsx#LoginForm'] })).toEqual([{
+      gate: 'browser-interaction',
+      passed: false,
+      severity: 'blocker',
+      summary: 'Browser evidence is required for frontend targets.',
+      evidence: { targetIds: ['src/ui/LoginForm.tsx#LoginForm'] },
+      repairHint: 'Run omp_test_browser_check and pass its browserEvidence into omp_test_gate for frontend targets.'
+    }])
+  })
+
+  it('marks required missing browser evidence as passed when the configured severity is warning', () => {
+    expect(evaluateBrowserEvidenceGate(undefined, { required: true, severity: 'warning', targetIds: ['src/ui/LoginForm.tsx#LoginForm'] })).toEqual([{
+      gate: 'browser-interaction',
+      passed: true,
+      severity: 'warning',
+      summary: 'Browser evidence is required for frontend targets.',
+      evidence: { targetIds: ['src/ui/LoginForm.tsx#LoginForm'] },
+      repairHint: 'Run omp_test_browser_check and pass its browserEvidence into omp_test_gate for frontend targets.'
+    }])
+  })
+
   it('passes interaction and visual gates for clean browser evidence', () => {
     expect(evaluateBrowserEvidenceGate(passedEvidence)).toEqual([
       {
@@ -44,6 +66,22 @@ describe('evaluateBrowserEvidenceGate', () => {
       gate: 'browser-interaction',
       passed: true,
       severity: 'warning',
+      summary: 'Browser check was skipped.',
+      evidence: skipped,
+      repairHint: 'Run browser evidence collection for frontend targets when browser behavior changed.'
+    }])
+  })
+
+  it('blocks skipped browser evidence when frontend evidence is required as blocker', () => {
+    const skipped: BrowserEvidence = {
+      ...passedEvidence,
+      status: 'skipped'
+    }
+
+    expect(evaluateBrowserEvidenceGate(skipped, { required: true, severity: 'blocker' })).toEqual([{
+      gate: 'browser-interaction',
+      passed: false,
+      severity: 'blocker',
       summary: 'Browser check was skipped.',
       evidence: skipped,
       repairHint: 'Run browser evidence collection for frontend targets when browser behavior changed.'

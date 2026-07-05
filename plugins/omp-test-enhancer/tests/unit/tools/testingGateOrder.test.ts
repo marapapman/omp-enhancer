@@ -10,13 +10,13 @@ function tool(tools: ToolDefinition[], name: string): ToolDefinition {
 
 describe('omp_test_gate execution order', () => {
   it('does not run the test command when static blocker gates already fail', async () => {
-    let execCalls = 0
+    let testCommandCalls = 0
     const ctx: ExtensionToolContext = {
       cwd: process.cwd(),
       hasUI: false,
       ui: { notify: () => undefined },
-      exec: async () => {
-        execCalls += 1
+      exec: async (program, args) => {
+        if (program !== 'git') testCommandCalls += 1
         return { exitCode: 0, stdout: '', stderr: '' }
       }
     }
@@ -27,12 +27,12 @@ describe('omp_test_gate execution order', () => {
       candidate: { id: 'candidate', targetId: 'src/user/UserService.ts#UserService', files: [{ path: 'src/user/UserService.ts', action: 'modify', content: 'export class UserService {}' }] }
     }, undefined, undefined, ctx)
 
-    expect(execCalls).toBe(0)
+    expect(testCommandCalls).toBe(0)
     expect(result.details).toMatchObject({
       passed: false,
       results: expect.arrayContaining([
         expect.objectContaining({ gate: 'test-file-scope', passed: false }),
-        expect.objectContaining({ gate: 'test-command', severity: 'warning', summary: 'No test command configured.' })
+        expect.objectContaining({ gate: 'test-command', severity: 'warning', summary: 'Test command skipped because static blocker gates failed.' })
       ])
     })
   })

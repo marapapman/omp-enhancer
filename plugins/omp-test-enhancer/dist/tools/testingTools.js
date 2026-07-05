@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
 import { evaluateBrowserEvidenceGate } from '../gates/browserEvidenceGate.js';
 import { evaluateIndirectTestGate } from '../gates/indirectTestGate.js';
 import { evaluateTestCommandGate } from '../gates/testCommandGate.js';
@@ -7,6 +6,13 @@ import { evaluateTestFileScopeGate } from '../gates/testFileScopeGate.js';
 import { readTestingEnhancerConfig } from '../config/testingConfig.js';
 import { findPublicEntryHints, findRelatedTests, readRepoFiles } from '../repo/repoScanner.js';
 import { executeBrowserCheck } from './browserCheck.js';
+const PROPERTY_TARGET_KINDS = ['pure-function', 'validator', 'parser', 'formatter'];
+const PROPERTY_EXPERIENCE_PATHS = [
+    '.omp/testing-enhancer/property-examples.json',
+    '.omp/testing-enhancer-properties.json',
+    '.omp/testing-properties.json'
+];
+const PROPERTY_GREP_PATTERN = 'fast-check|fc\\.property|fc\\.assert|property\\(|round[ -]?trip|idempotent|invariant|Object\\.freeze|toThrow|malformed|invalid|boundary|edge case';
 export function createTestingEnhancerTools(z, callbacks = {}) {
     const changedFileSchema = z.object({ path: z.string(), content: z.string() });
     const targetSchema = z.unknown();
@@ -143,14 +149,23 @@ export function analyzeMutationReport(input) {
         return { status: 'missing-report', survivedMutants: [] };
     return { status: 'available', survivedMutants: collectMutationSurvivors(params.mutationReport), ...(params.reportPath ? { reportPath: params.reportPath } : {}) };
 }
-export function runTestGate(input, testCommandResult) {
+export function runTestGate(input, testCommandResult, options = {}) {
     const candidate = readCandidate(input);
     const targets = readTargets(input);
+    const severities = normalizeGateSeverities(options.gateSeverities);
+    const browserTargets = targets.filter(requiresBrowserEvidence);
     const results = [
-        ...evaluateTestFileScopeGate({ candidate }),
-        ...evaluateIndirectTestGate({ candidate, targets }),
-        ...evaluateBrowserEvidenceGate(readBrowserEvidence(input)),
-        ...evaluateTestCommandGate(testCommandResult)
+        ...evaluateTestFileScopeGate({ candidate, severity: severities.productionEdits }),
+        ...evaluateIndirectTestGate({ candidate, targets, severity: severities.indirectTest }),
+        ...evaluateBrowserEvidenceGate(readBrowserEvidence(input), {
+            required: browserTargets.length > 0,
+            severity: severities.browserEvidence,
+            targetIds: browserTargets.map(target => target.id)
+        }),
+        ...evaluateTestCommandGate(testCommandResult, {
+            severity: options.gateSeverities?.testCommand ?? (testCommandResult ? 'blocker' : 'warning'),
+            skippedDueToStaticBlocker: Boolean(options.commandSkippedDueToStaticBlocker)
+        })
     ];
     return {
         passed: results.every(result => result.passed || result.severity === 'warning'),
@@ -232,7 +247,8 @@ async function executeContext(params, ctx) {
     const target = readTarget(isRecord(params.target) ? params.target : {});
     const existingTests = target.relatedTests ?? await findRelatedTests(ctx.cwd, target.sourceFile);
     const publicEntryHints = target.publicEntryHints ?? await findPublicEntryHints(ctx.cwd, target.sourceFile, target.symbolName);
-    return buildContextForTarget(target, existingTests, publicEntryHints);
+    const propertyContext = await collectPropertyRetrievalContext(ctx, target, existingTests);
+    return buildContextForTarget(target, existingTests, publicEntryHints, propertyContext);
 }
 async function executeCoverageAnalyze(params, ctx) {
     const report = params.coverageReport ?? await readJsonReport(ctx.cwd, params.reportPath);
@@ -246,28 +262,101 @@ async function readJsonReport(cwd, reportPath) {
     if (!reportPath)
         return undefined;
     try {
-        return JSON.parse(await readFile(new URL(reportPath, `file://${cwd.endsWith('/') ? cwd : `${cwd}/`}`), 'utf8'));
+        const [file] = await readRepoFiles(cwd, [reportPath]);
+        if (!file)
+            return undefined;
+        return JSON.parse(file.content);
     }
     catch {
         return undefined;
     }
 }
 async function executeGate(params, ctx) {
-    const candidate = readCandidate(params);
+    const config = await readTestingEnhancerConfig(ctx.cwd);
+    const severities = gateSeveritiesFromConfig(config);
+    const candidate = await readCandidateForGate(params, ctx);
     const targets = readTargets(params);
+    const browserTargets = targets.filter(requiresBrowserEvidence);
     const staticResults = [
-        ...evaluateTestFileScopeGate({ candidate }),
-        ...evaluateIndirectTestGate({ candidate, targets })
+        ...evaluateTestFileScopeGate({ candidate, severity: severities.productionEdits }),
+        ...evaluateIndirectTestGate({ candidate, targets, severity: severities.indirectTest })
     ];
-    const browserResults = evaluateBrowserEvidenceGate(readBrowserEvidence(params));
+    const browserResults = evaluateBrowserEvidenceGate(readBrowserEvidence(params), {
+        required: browserTargets.length > 0,
+        severity: severities.browserEvidence,
+        targetIds: browserTargets.map(target => target.id)
+    });
     const hasStaticBlocker = staticResults.some(result => !result.passed && result.severity === 'blocker');
-    const command = hasStaticBlocker ? undefined : params.testCommand ?? (await readTestingEnhancerConfig(ctx.cwd))?.test.command;
-    const commandResult = command ? await runConfiguredCommand(command, ctx) : undefined;
-    const results = [...staticResults, ...browserResults, ...evaluateTestCommandGate(commandResult)];
+    const command = params.testCommand ?? config?.test.command;
+    const commandResult = command && !hasStaticBlocker ? await runConfiguredCommand(command, ctx) : undefined;
+    const commandSeverity = command || config ? severities.testCommand : 'warning';
+    const results = [
+        ...staticResults,
+        ...browserResults,
+        ...evaluateTestCommandGate(commandResult, {
+            severity: commandSeverity,
+            skippedDueToStaticBlocker: Boolean(command && hasStaticBlocker)
+        })
+    ];
     return {
         passed: results.every(result => result.passed || result.severity === 'warning'),
         results
     };
+}
+async function readCandidateForGate(params, ctx) {
+    const candidate = readCandidate(params);
+    if (!ctx.exec)
+        return candidate;
+    const changedTestPaths = (await readGitChangedPaths(ctx)).filter(isTestFilePath);
+    const candidatePaths = candidate.files.map(file => file.path);
+    const paths = uniqueStrings([...candidatePaths, ...changedTestPaths]);
+    if (paths.length === 0)
+        return candidate;
+    const workspaceFiles = await readRepoFiles(ctx.cwd, paths);
+    const workspaceByPath = new Map(workspaceFiles.map(file => [file.path, file.content]));
+    const fallbackByPath = new Map(candidate.files.map(file => [file.path, file]));
+    return {
+        ...candidate,
+        files: paths.map(path => {
+            const fallback = fallbackByPath.get(path);
+            const content = workspaceByPath.get(path);
+            if (content === undefined) {
+                return {
+                    path,
+                    action: fallback?.action ?? 'modify',
+                    content: fallback?.content ?? '',
+                    missingFromWorkspace: true
+                };
+            }
+            return {
+                path,
+                action: fallback?.action ?? 'modify',
+                content
+            };
+        })
+    };
+}
+function gateSeveritiesFromConfig(config) {
+    if (!config) {
+        return normalizeGateSeverities({ testCommand: 'warning' });
+    }
+    return normalizeGateSeverities({
+        indirectTest: toGateSeverity(config.gates.indirectTest),
+        productionEdits: toGateSeverity(config.gates.productionEdits),
+        testCommand: toGateSeverity(config.gates.testCommand),
+        browserEvidence: toGateSeverity(config.gates.browserEvidence)
+    });
+}
+function normalizeGateSeverities(config = {}) {
+    return {
+        indirectTest: config.indirectTest ?? 'blocker',
+        productionEdits: config.productionEdits ?? 'blocker',
+        testCommand: config.testCommand ?? 'blocker',
+        browserEvidence: config.browserEvidence ?? 'blocker'
+    };
+}
+function toGateSeverity(value) {
+    return value === 'warn' ? 'warning' : 'blocker';
 }
 async function enrichTargets(cwd, targets) {
     const enriched = [];
@@ -283,8 +372,16 @@ async function enrichTargets(cwd, targets) {
 async function readGitChangedPaths(ctx) {
     if (!ctx.exec)
         return [];
+    return uniqueStrings([
+        ...await readGitPathList(ctx, ['diff', '--name-only', 'HEAD']),
+        ...await readGitPathList(ctx, ['ls-files', '--others', '--exclude-standard'])
+    ]);
+}
+async function readGitPathList(ctx, args) {
+    if (!ctx.exec)
+        return [];
     try {
-        const result = await ctx.exec('git', ['diff', '--name-only', 'HEAD'], { cwd: ctx.cwd, timeout: 10000 });
+        const result = await ctx.exec('git', args, { cwd: ctx.cwd, timeout: 10000 });
         if (result.exitCode !== 0)
             return [];
         return result.stdout.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
@@ -362,11 +459,11 @@ function splitCommand(command) {
         tokens.push(current);
     return tokens;
 }
-function buildContextForTarget(target, existingTests, publicEntryHints) {
+function buildContextForTarget(target, existingTests, publicEntryHints, propertyContext) {
     const indirectKinds = ['api-client', 'api-provider', 'service', 'repository', 'react-component', 'cli', 'unknown'];
     const testingStyle = indirectKinds.includes(target.kind) ? 'indirect' : 'direct';
     const browserPlan = buildBrowserPlanForTarget(target, existingTests);
-    const propertyPlan = buildPropertyPlanForTarget(target);
+    const propertyPlan = buildPropertyPlanForTarget(target, propertyContext);
     const apiPlan = buildApiPlanForTarget(target, publicEntryHints);
     if (testingStyle === 'direct') {
         const output = {
@@ -408,8 +505,8 @@ function buildContextForTarget(target, existingTests, publicEntryHints) {
     }
     return output;
 }
-function buildPropertyPlanForTarget(target) {
-    if (!['pure-function', 'validator', 'parser', 'formatter'].includes(target.kind))
+function buildPropertyPlanForTarget(target, propertyContext) {
+    if (!PROPERTY_TARGET_KINDS.includes(target.kind))
         return undefined;
     const properties = [
         {
@@ -439,7 +536,295 @@ function buildPropertyPlanForTarget(target) {
             repairHint: 'Generate missing fields, wrong types, empty strings, and boundary values; assert the public validation result.'
         });
     }
-    return { frameworkSuggestion: 'fast-check', properties };
+    if (propertyContext) {
+        properties.push(...deriveRetrievedProperties(target, propertyContext));
+    }
+    const plan = {
+        frameworkSuggestion: 'fast-check',
+        properties: dedupePropertyItems(properties)
+    };
+    if (propertyContext) {
+        plan.retrieval = {
+            strategy: 'local-similar-code-and-tests',
+            sources: summarizePropertySources(propertyContext.sources, propertyContext.experienceEntries),
+            webSearchQueries: buildPropertyWebSearchQueries(target)
+        };
+    }
+    return plan;
+}
+async function collectPropertyRetrievalContext(ctx, target, existingTests) {
+    if (!PROPERTY_TARGET_KINDS.includes(target.kind))
+        return undefined;
+    const directPaths = uniqueStrings([target.sourceFile, ...existingTests, ...PROPERTY_EXPERIENCE_PATHS]);
+    const directPathSet = new Set(directPaths);
+    const similarPaths = await findLocalPropertySearchPaths(ctx, target, directPathSet);
+    const files = await readRepoFiles(ctx.cwd, uniqueStrings([...directPaths, ...similarPaths]));
+    const experiencePathSet = new Set(PROPERTY_EXPERIENCE_PATHS);
+    const experienceEntries = files.flatMap(file => experiencePathSet.has(file.path) ? parsePropertyExperienceEntries(file) : []);
+    const similarPathSet = new Set(similarPaths);
+    const sources = files
+        .filter(file => !experiencePathSet.has(file.path))
+        .map(file => ({
+        path: file.path,
+        content: file.content,
+        reason: propertySourceReason(target, existingTests, similarPathSet, file.path)
+    }));
+    return { sources, experienceEntries };
+}
+async function findLocalPropertySearchPaths(ctx, target, directPathSet) {
+    if (!ctx.exec)
+        return [];
+    const grepPaths = await readGitPropertyGrepPaths(ctx);
+    const trackedPaths = await readGitPathList(ctx, ['ls-files']);
+    const scoredPaths = scoreSimilarPropertyPaths(trackedPaths, target);
+    return uniqueStrings([...grepPaths, ...scoredPaths])
+        .filter(path => !directPathSet.has(path))
+        .filter(isPropertyReadablePath)
+        .slice(0, 16);
+}
+async function readGitPropertyGrepPaths(ctx) {
+    if (!ctx.exec)
+        return [];
+    try {
+        const result = await ctx.exec('git', [
+            'grep',
+            '-l',
+            '-E',
+            PROPERTY_GREP_PATTERN,
+            '--',
+            '*.ts',
+            '*.tsx',
+            '*.js',
+            '*.jsx',
+            '*.mjs',
+            '*.cjs'
+        ], { cwd: ctx.cwd, timeout: 10000 });
+        if (result.exitCode !== 0)
+            return [];
+        return result.stdout.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    }
+    catch {
+        return [];
+    }
+}
+function scoreSimilarPropertyPaths(paths, target) {
+    const tokens = propertyTokenCandidates(target);
+    const kindTerms = propertyKindTerms(target.kind);
+    return paths
+        .map(path => ({ path, score: scoreSimilarPropertyPath(path, tokens, kindTerms) }))
+        .filter(item => item.score > 0)
+        .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
+        .map(item => item.path);
+}
+function scoreSimilarPropertyPath(path, tokens, kindTerms) {
+    if (!isPropertyReadablePath(path))
+        return 0;
+    const lowerPath = path.toLowerCase();
+    let score = 0;
+    if (isTestFilePath(path))
+        score += 2;
+    if (/property|fast-check|invariant|fuzz/i.test(path))
+        score += 3;
+    for (const token of tokens) {
+        if (lowerPath.includes(token))
+            score += 2;
+    }
+    for (const term of kindTerms) {
+        if (lowerPath.includes(term))
+            score += 1;
+    }
+    return score;
+}
+function propertyTokenCandidates(target) {
+    const fileName = target.sourceFile.split('/').at(-1)?.replace(/\.[^.]+$/, '') ?? '';
+    return uniqueStrings([
+        ...splitIdentifier(target.symbolName),
+        ...splitIdentifier(fileName),
+        ...target.sourceFile.split(/[/.\\_-]+/).map(part => part.toLowerCase())
+    ]).filter(token => token.length > 2);
+}
+function splitIdentifier(value) {
+    return value
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .split(/[^A-Za-z0-9]+/)
+        .map(part => part.toLowerCase())
+        .filter(Boolean);
+}
+function propertyKindTerms(kind) {
+    if (kind === 'parser')
+        return ['parse', 'parser', 'roundtrip', 'round-trip'];
+    if (kind === 'formatter')
+        return ['format', 'formatter', 'roundtrip', 'round-trip'];
+    if (kind === 'validator')
+        return ['validate', 'validator', 'schema', 'invalid'];
+    if (kind === 'pure-function')
+        return ['property', 'invariant', 'boundary', 'range'];
+    return [];
+}
+function isPropertyReadablePath(path) {
+    if (!/\.[cm]?[tj]sx?$/.test(path))
+        return false;
+    return !/(^|\/)(dist|build|coverage|node_modules|vendor|\.git)\//.test(path);
+}
+function propertySourceReason(target, existingTests, similarPathSet, path) {
+    if (path === target.sourceFile)
+        return 'target source for invariant signals';
+    if (existingTests.includes(path))
+        return 'existing related test';
+    if (similarPathSet.has(path) && isTestFilePath(path))
+        return 'local similar test with property signals';
+    if (similarPathSet.has(path))
+        return 'local similar implementation';
+    if (isTestFilePath(path))
+        return 'local test context';
+    return 'local code context';
+}
+function parsePropertyExperienceEntries(file) {
+    try {
+        const parsed = JSON.parse(file.content);
+        const values = Array.isArray(parsed) ? parsed : isRecord(parsed) && Array.isArray(parsed.properties) ? parsed.properties : [];
+        return values.map(value => readPropertyExperienceEntry(value, file.path)).filter((value) => Boolean(value));
+    }
+    catch {
+        return [];
+    }
+}
+function readPropertyExperienceEntry(value, sourcePath) {
+    if (!isRecord(value))
+        return undefined;
+    if (typeof value.name !== 'string')
+        return undefined;
+    if (typeof value.assertion !== 'string')
+        return undefined;
+    if (typeof value.repairHint !== 'string')
+        return undefined;
+    const match = readStringList(value.match);
+    const entry = {
+        name: value.name,
+        assertion: value.assertion,
+        repairHint: value.repairHint,
+        match,
+        sourcePath
+    };
+    if (typeof value.kind === 'string') {
+        const kind = readTargetKind(value.kind);
+        if (kind !== 'unknown' || value.kind === 'unknown')
+            entry.kind = kind;
+    }
+    return entry;
+}
+function readStringList(value) {
+    if (typeof value === 'string')
+        return [value];
+    if (!Array.isArray(value))
+        return [];
+    return value.filter((item) => typeof item === 'string');
+}
+function deriveRetrievedProperties(target, propertyContext) {
+    const properties = [];
+    const haystack = propertyRetrievalHaystack(target, propertyContext);
+    for (const entry of propertyContext.experienceEntries) {
+        if (!matchesPropertyExperienceEntry(target, haystack, entry))
+            continue;
+        properties.push(propertyItem(entry.name, entry.assertion, entry.repairHint, [entry.sourcePath]));
+    }
+    addPatternProperty(properties, propertyContext.sources, /fast-check|fc\.property|fc\.assert|fc\.anything|fc\.record|fc\.array/i, {
+        name: 'retrieved generator model',
+        assertion: 'Generated inputs should reuse the closest existing generator or model pattern from local property tests.',
+        repairHint: 'Adapt the retrieved fast-check arbitraries first, then specialize them for the changed public behavior.'
+    });
+    addPatternProperty(properties, propertyContext.sources, /round[ -]?trip|parse\w*\s*\([^)]*format|format\w*\s*\([^)]*parse/i, {
+        name: 'retrieved round trip',
+        assertion: 'Generated values should survive the same encode/decode or parse/format cycle used by similar code.',
+        repairHint: 'Generate valid public values, pass them through both directions, and assert semantic equality instead of string identity when formatting is lossy.'
+    });
+    addPatternProperty(properties, propertyContext.sources, /idempot|normalize\w*\s*\([^)]*normalize|format\w*\s*\([^)]*format|sanitize\w*\s*\([^)]*sanitize/i, {
+        name: 'retrieved idempotence',
+        assertion: 'Applying the public operation twice should not change the result after the first application.',
+        repairHint: 'Generate already-normalized and messy inputs; assert f(f(input)) equals f(input) through the public API.'
+    });
+    addPatternProperty(properties, propertyContext.sources, /toThrow|rejects\.toThrow|invalid|malformed|null|undefined|wrong type|missing field/i, {
+        name: 'retrieved invalid input rejection',
+        assertion: 'Generated malformed inputs should be rejected through the documented public result or error.',
+        repairHint: 'Generate missing, nullish, wrong-type, empty, and malformed values; assert the public rejection behavior only.'
+    });
+    addPatternProperty(properties, propertyContext.sources, /Object\.freeze|does not mutate|not\.toBe|immutab|mutate/i, {
+        name: 'retrieved input immutability',
+        assertion: 'Generated inputs should not be mutated by the public operation.',
+        repairHint: 'Freeze or clone generated objects before calling the target; assert the original input remains structurally equal afterward.'
+    });
+    addPatternProperty(properties, propertyContext.sources, /boundary|edge case|min|max|clamp|range|lower bound|upper bound|overflow|underflow/i, {
+        name: 'retrieved boundary stability',
+        assertion: 'Generated boundary values should preserve the same bounds and edge-case behavior as similar tests.',
+        repairHint: 'Bias generators around min, max, empty, overflow, and just-outside-boundary values, then assert the public boundary contract.'
+    });
+    return properties;
+}
+function propertyRetrievalHaystack(target, propertyContext) {
+    return [
+        target.symbolName,
+        target.sourceFile,
+        target.kind,
+        ...propertyContext.sources.map(source => `${source.path}\n${source.content.slice(0, 4000)}`)
+    ].join('\n').toLowerCase();
+}
+function matchesPropertyExperienceEntry(target, haystack, entry) {
+    if (entry.kind && entry.kind !== target.kind)
+        return false;
+    if (entry.match.length === 0)
+        return true;
+    return entry.match.some(term => haystack.includes(term.toLowerCase()));
+}
+function addPatternProperty(properties, sources, pattern, template) {
+    const matchingSources = matchingPropertySourcePaths(sources, pattern);
+    if (matchingSources.length === 0)
+        return;
+    properties.push(propertyItem(template.name, template.assertion, template.repairHint, matchingSources));
+}
+function matchingPropertySourcePaths(sources, pattern) {
+    return uniqueStrings(sources.filter(source => pattern.test(`${source.path}\n${source.content}`)).map(source => source.path));
+}
+function propertyItem(name, assertion, repairHint, sources) {
+    const item = { name, assertion, repairHint };
+    const uniqueSources = uniqueStrings(sources);
+    if (uniqueSources.length > 0)
+        item.sources = uniqueSources;
+    return item;
+}
+function dedupePropertyItems(properties) {
+    const byName = new Map();
+    for (const property of properties) {
+        const key = property.name.toLowerCase();
+        const existing = byName.get(key);
+        if (!existing) {
+            byName.set(key, property);
+            continue;
+        }
+        if (property.sources && property.sources.length > 0) {
+            existing.sources = uniqueStrings([...(existing.sources ?? []), ...property.sources]);
+        }
+    }
+    return [...byName.values()];
+}
+function summarizePropertySources(sources, experienceEntries) {
+    const byPath = new Map();
+    for (const source of sources) {
+        byPath.set(source.path, source.reason);
+    }
+    for (const entry of experienceEntries) {
+        if (!byPath.has(entry.sourcePath))
+            byPath.set(entry.sourcePath, 'local property experience base');
+    }
+    return [...byPath.entries()].map(([path, reason]) => ({ path, reason }));
+}
+function buildPropertyWebSearchQueries(target) {
+    const symbol = target.symbolName === 'unknown' ? target.sourceFile.split('/').at(-1)?.replace(/\.[^.]+$/, '') ?? 'target' : target.symbolName;
+    const kindTerms = propertyKindTerms(target.kind).slice(0, 2).join(' ');
+    return [
+        `${symbol} ${target.kind} property based testing invariant fast-check`,
+        `${symbol} similar implementation property test`,
+        `${target.kind} ${kindTerms} property based test examples`
+    ].filter(query => query.trim().length > 0);
 }
 function buildApiPlanForTarget(target, publicEntryHints) {
     if (target.kind !== 'api-client' && target.kind !== 'api-provider')
@@ -511,6 +896,17 @@ function isFrontendEntryFile(path) {
 }
 function isBrowserTestPath(path) {
     return /\.(browser|e2e)\.(test|spec)\.[cm]?[tj]sx?$/.test(path) || /(^|\/)(playwright|e2e|browser)(\/|$)/i.test(path);
+}
+function requiresBrowserEvidence(target) {
+    return target.kind === 'react-component' ||
+        isFrontendEntryFile(target.sourceFile) ||
+        (target.relatedTests ?? []).some(isBrowserTestPath);
+}
+function isTestFilePath(path) {
+    return /\.(test|spec|cy)\.[cm]?[tj]sx?$/.test(path) || /(^|\/)__tests__\//.test(path) || /(^|\/)tests\//.test(path);
+}
+function uniqueStrings(values) {
+    return [...new Set(values)];
 }
 function classifyChangedFiles(changedFiles) {
     return changedFiles

@@ -341,6 +341,35 @@ describe('pure testing tools', () => {
     })
   })
 
+  it('blocks frontend targets when browser evidence is missing', () => {
+    const target: ChangedTarget = {
+      id: 'src/ui/LoginForm.tsx#LoginForm',
+      sourceFile: 'src/ui/LoginForm.tsx',
+      symbolName: 'LoginForm',
+      kind: 'react-component',
+      risk: 'medium'
+    }
+
+    expect(runTestGate({
+      targets: [target],
+      candidate: {
+        id: 'candidate',
+        targetId: target.id,
+        files: [{ path: 'src/ui/LoginForm.test.tsx', action: 'create', content: 'test()' }]
+      }
+    })).toMatchObject({
+      passed: false,
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          gate: 'browser-interaction',
+          passed: false,
+          severity: 'blocker',
+          summary: 'Browser evidence is required for frontend targets.'
+        })
+      ])
+    })
+  })
+
   it('ignores malformed browser evidence findings', () => {
     const target: ChangedTarget = {
       id: 'src/ui/LoginForm.tsx#LoginForm',
@@ -365,6 +394,9 @@ describe('pure testing tools', () => {
 
     expect(output.results.map(result => result.gate)).not.toContain(undefined)
     expect(output.results).not.toEqual(expect.arrayContaining([expect.objectContaining({ gate: 'browser-visual' })]))
+    expect(output.results).toEqual(expect.arrayContaining([
+      expect.objectContaining({ gate: 'browser-interaction', summary: 'Browser evidence is required for frontend targets.' })
+    ]))
   })
 
   it('runs browser check through an injected callback', async () => {
@@ -409,6 +441,106 @@ describe('createTestingEnhancerTools execute layer', () => {
     })
   })
 
+  it('derives property guidance from local related code and tests', async () => {
+    const cwd = await tempRepo()
+    await mkdir(join(cwd, 'src', 'format'), { recursive: true })
+    await writeFile(join(cwd, 'src', 'format', 'normalizeName.ts'), 'export function normalizeName(value: string) { return value.trim().toLowerCase() }')
+    await writeFile(join(cwd, 'src', 'format', 'normalizeName.test.ts'), [
+      "import fc from 'fast-check'",
+      "import { normalizeName } from './normalizeName'",
+      "test('property behavior', () => {",
+      '  fc.assert(fc.property(fc.string(), value => {',
+      '    expect(normalizeName(normalizeName(value))).toEqual(normalizeName(value))',
+      '    expect(() => normalizeName(undefined as never)).toThrow()',
+      '  }))',
+      '})',
+      ''
+    ].join('\n'))
+
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_context').execute(
+      'call',
+      {
+        target: {
+          id: 'src/format/normalizeName.ts#normalizeName',
+          sourceFile: 'src/format/normalizeName.ts',
+          symbolName: 'normalizeName',
+          kind: 'formatter',
+          risk: 'low',
+          relatedTests: ['src/format/normalizeName.test.ts']
+        }
+      },
+      undefined,
+      undefined,
+      context(cwd)
+    )
+
+    expect(result.content[0]?.text).toBe('Testing style: direct.')
+    expect(result.details).toMatchObject({
+      propertyPlan: {
+        retrieval: {
+          strategy: 'local-similar-code-and-tests',
+          sources: expect.arrayContaining([
+            { path: 'src/format/normalizeName.ts', reason: 'target source for invariant signals' },
+            { path: 'src/format/normalizeName.test.ts', reason: 'existing related test' }
+          ]),
+          webSearchQueries: expect.arrayContaining([expect.stringContaining('normalizeName')])
+        },
+        properties: expect.arrayContaining([
+          expect.objectContaining({ name: 'retrieved generator model', sources: ['src/format/normalizeName.test.ts'] }),
+          expect.objectContaining({ name: 'retrieved idempotence', sources: ['src/format/normalizeName.test.ts'] }),
+          expect.objectContaining({ name: 'retrieved invalid input rejection', sources: ['src/format/normalizeName.test.ts'] })
+        ])
+      }
+    })
+  })
+
+  it('uses local property experience files when they match the target', async () => {
+    const cwd = await tempRepo()
+    await mkdir(join(cwd, '.omp', 'testing-enhancer'), { recursive: true })
+    await writeFile(join(cwd, 'src', 'user', 'slugify.ts'), 'export function slugify(value: string) { return value.toLowerCase().replace(/\\s+/g, "-") }')
+    await writeFile(join(cwd, '.omp', 'testing-enhancer', 'property-examples.json'), JSON.stringify({
+      properties: [{
+        kind: 'pure-function',
+        match: ['slugify'],
+        name: 'slug alphabet',
+        assertion: 'Generated strings produce slugs containing only lowercase letters, digits, and dashes.',
+        repairHint: 'Generate unicode, whitespace, repeated separator, and punctuation cases; assert the public slug contract.'
+      }]
+    }))
+
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_context').execute(
+      'call',
+      {
+        target: {
+          id: 'src/user/slugify.ts#slugify',
+          sourceFile: 'src/user/slugify.ts',
+          symbolName: 'slugify',
+          kind: 'pure-function',
+          risk: 'low'
+        }
+      },
+      undefined,
+      undefined,
+      context(cwd)
+    )
+
+    expect(result.details).toMatchObject({
+      propertyPlan: {
+        retrieval: {
+          sources: expect.arrayContaining([
+            { path: '.omp/testing-enhancer/property-examples.json', reason: 'local property experience base' }
+          ])
+        },
+        properties: expect.arrayContaining([
+          expect.objectContaining({
+            name: 'slug alphabet',
+            sources: ['.omp/testing-enhancer/property-examples.json']
+          })
+        ])
+      }
+    })
+  })
+
   it('blocks internal imports through omp_test_gate execute', async () => {
     const target: ChangedTarget = {
       id: 'src/user/UserService.ts#UserService',
@@ -437,6 +569,129 @@ describe('createTestingEnhancerTools execute layer', () => {
     expect(result.details).toMatchObject({
       passed: false,
       results: expect.arrayContaining([expect.objectContaining({ gate: 'indirect-test', severity: 'blocker' })])
+    })
+  })
+
+  it('applies gate severity settings from .omp/testing-enhancer.yml', async () => {
+    const cwd = await tempRepo()
+    await mkdir(join(cwd, '.omp'), { recursive: true })
+    await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), [
+      'version: 1',
+      'test:',
+      '  command:',
+      'coverage:',
+      '  command:',
+      'browser:',
+      '  headless: true',
+      '  trace: retain-on-failure',
+      '  screenshot: only-on-failure',
+      '  serviceWorkers: block',
+      'gates:',
+      '  indirectTest: warn',
+      '  productionEdits: warn',
+      '  testCommand: warn',
+      '  browserEvidence: warn',
+      ''
+    ].join('\n'))
+
+    const target: ChangedTarget = {
+      id: 'src/ui/LoginForm.tsx#LoginForm',
+      sourceFile: 'src/ui/LoginForm.tsx',
+      symbolName: 'LoginForm',
+      kind: 'react-component',
+      risk: 'medium'
+    }
+
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_gate').execute(
+      'call',
+      {
+        targets: [target],
+        candidate: {
+          id: 'candidate',
+          targetId: target.id,
+          files: [{ path: 'src/ui/LoginForm.tsx', action: 'modify', content: 'wrapper.find("button")' }]
+        }
+      },
+      undefined,
+      undefined,
+      context(cwd)
+    )
+
+    expect(result.details).toMatchObject({
+      passed: true,
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'test-file-scope', passed: false, severity: 'warning' }),
+        expect.objectContaining({ gate: 'indirect-test', passed: false, severity: 'warning' }),
+        expect.objectContaining({ gate: 'browser-interaction', passed: true, severity: 'warning' }),
+        expect.objectContaining({ gate: 'test-command', passed: true, severity: 'warning' })
+      ])
+    })
+  })
+
+  it('checks candidate test content from the workspace when ctx.exec is available', async () => {
+    const cwd = await tempRepo()
+    await writeFile(join(cwd, 'src', 'user', 'UserService.test.ts'), "import { helper } from '../internal/helper'\nexpect(helper()).toBe(true)")
+    const target: ChangedTarget = {
+      id: 'src/user/UserService.ts#UserService',
+      sourceFile: 'src/user/UserService.ts',
+      symbolName: 'UserService',
+      kind: 'service',
+      risk: 'high'
+    }
+    const ctx: ExtensionToolContext = {
+      ...context(cwd),
+      exec: async () => ({ exitCode: 0, stdout: '', stderr: '' })
+    }
+
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_gate').execute(
+      'call',
+      {
+        targets: [target],
+        candidate: {
+          id: 'candidate',
+          targetId: target.id,
+          files: [{ path: 'src/user/UserService.test.ts', action: 'modify', content: 'expect(result).toBe(true)' }]
+        }
+      },
+      undefined,
+      undefined,
+      ctx
+    )
+
+    expect(result.details).toMatchObject({
+      passed: false,
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          gate: 'indirect-test',
+          passed: false,
+          evidence: { file: 'src/user/UserService.test.ts', importPath: '../internal/helper' }
+        })
+      ])
+    })
+  })
+
+  it('includes untracked source files when analyzing git changes', async () => {
+    const cwd = await tempRepo()
+    await writeFile(join(cwd, 'src', 'user', 'NewService.ts'), 'export class NewService {}')
+    const ctx: ExtensionToolContext = {
+      ...context(cwd),
+      exec: async (_program, args) => ({
+        exitCode: 0,
+        stdout: args[0] === 'ls-files' ? 'src/user/NewService.ts\n' : '',
+        stderr: ''
+      })
+    }
+
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_analyze').execute(
+      'call',
+      {},
+      undefined,
+      undefined,
+      ctx
+    )
+
+    expect(result.details).toMatchObject({
+      targets: [expect.objectContaining({ sourceFile: 'src/user/NewService.ts', symbolName: 'NewService' })]
     })
   })
 

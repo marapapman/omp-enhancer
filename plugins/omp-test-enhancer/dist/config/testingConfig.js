@@ -24,7 +24,8 @@ export function defaultTestingEnhancerConfig(packageManager) {
         gates: {
             indirectTest: 'block',
             productionEdits: 'block',
-            testCommand: 'block'
+            testCommand: 'block',
+            browserEvidence: 'block'
         }
     };
 }
@@ -46,6 +47,7 @@ export function renderTestingEnhancerConfig(config) {
         `  indirectTest: ${config.gates.indirectTest}`,
         `  productionEdits: ${config.gates.productionEdits}`,
         `  testCommand: ${config.gates.testCommand}`,
+        `  browserEvidence: ${config.gates.browserEvidence}`,
         ''
     ].join('\n');
 }
@@ -108,7 +110,7 @@ export function parseTestingEnhancerConfig(text) {
                 config.browser.serviceWorkers = value;
         }
         if (section === 'gates') {
-            if ((key === 'indirectTest' || key === 'productionEdits' || key === 'testCommand') && (value === 'block' || value === 'warn')) {
+            if ((key === 'indirectTest' || key === 'productionEdits' || key === 'testCommand' || key === 'browserEvidence') && (value === 'block' || value === 'warn')) {
                 config.gates[key] = value;
             }
         }

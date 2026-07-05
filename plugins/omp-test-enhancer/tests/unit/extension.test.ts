@@ -104,7 +104,7 @@ describe('registerTestingEnhancer', () => {
     expect(pi.notifications).toHaveLength(0)
   })
 
-  it('turns /test into an agent instruction that uses all testing tools', async () => {
+  it('turns /test into an agent instruction with required and optional testing tools', async () => {
     const pi = new FakePi()
     registerTestingEnhancer(pi)
 

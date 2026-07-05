@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
@@ -75,5 +75,18 @@ describe('repoScanner', () => {
       { path: 'src/user/UserService.ts', content: 'export class UserService {}' }
     ])
     expect(await detectPackageManager(cwd)).toBe('bun')
+  })
+
+  it('does not follow repository symlinks that escape the workspace', async () => {
+    const cwd = await tempRepo()
+    const outside = await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-repo-outside-'))
+    await mkdir(join(cwd, 'links'), { recursive: true })
+    await writeFile(join(outside, 'secret.ts'), 'export const secret = true')
+    await symlink(join(outside, 'secret.ts'), join(cwd, 'links', 'secret.ts'))
+    await symlink(join(cwd, 'src', 'user', 'UserService.ts'), join(cwd, 'links', 'UserService.ts'))
+
+    expect(await readRepoFiles(cwd, ['links/secret.ts', 'links/UserService.ts'])).toEqual([
+      { path: 'links/UserService.ts', content: 'export class UserService {}' }
+    ])
   })
 })

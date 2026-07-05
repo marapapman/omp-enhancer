@@ -26,6 +26,7 @@ describe('testingConfig', () => {
     expect(rendered).toContain('  trace: retain-on-failure')
     expect(rendered).toContain('  screenshot: only-on-failure')
     expect(rendered).toContain('  serviceWorkers: block')
+    expect(rendered).toContain('  browserEvidence: block')
     expect(parseTestingEnhancerConfig(rendered)).toEqual({
       ...config,
       browser: {
@@ -55,6 +56,7 @@ describe('testingConfig', () => {
       '  indirectTest: block',
       '  productionEdits: block',
       '  testCommand: block',
+      '  browserEvidence: warn',
       ''
     ].join('\n')
 
@@ -67,6 +69,50 @@ describe('testingConfig', () => {
         trace: 'off',
         screenshot: 'off',
         serviceWorkers: 'allow'
+      },
+      gates: expect.objectContaining({ browserEvidence: 'warn' })
+    })
+  })
+
+  it('ignores malformed values and keeps safe defaults', () => {
+    const parsed = parseTestingEnhancerConfig([
+      'version: 999',
+      'test:',
+      '  command:',
+      'coverage:',
+      '  command:',
+      'browser:',
+      '  baseUrl:',
+      '  timeoutMs: -5',
+      '  headless: maybe',
+      '  trace: always',
+      '  screenshot: yes',
+      '  serviceWorkers: proxy',
+      'gates:',
+      '  indirectTest: ignore',
+      '  productionEdits: warn',
+      '  testCommand: ignore',
+      '  browserEvidence: warn',
+      'unknown:',
+      '  key: value',
+      ''
+    ].join('\n'))
+
+    expect(parsed).toEqual({
+      version: 1,
+      test: {},
+      coverage: {},
+      browser: {
+        headless: true,
+        trace: 'retain-on-failure',
+        screenshot: 'only-on-failure',
+        serviceWorkers: 'block'
+      },
+      gates: {
+        indirectTest: 'block',
+        productionEdits: 'warn',
+        testCommand: 'block',
+        browserEvidence: 'warn'
       }
     })
   })

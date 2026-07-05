@@ -27,6 +27,7 @@ export interface CandidateFileChange {
   path: string
   action: 'create' | 'modify'
   content: string
+  missingFromWorkspace?: boolean
 }
 
 export interface CandidateTest {
@@ -130,10 +131,19 @@ export interface BrowserEvidence {
 
 export interface PropertyPlan {
   frameworkSuggestion: 'fast-check'
+  retrieval?: {
+    strategy: 'local-similar-code-and-tests'
+    sources: Array<{
+      path: string
+      reason: string
+    }>
+    webSearchQueries: string[]
+  }
   properties: Array<{
     name: string
     assertion: string
     repairHint: string
+    sources?: string[]
   }>
 }
 

@@ -341,7 +341,7 @@
     {
       "name": "omp-testing-enhancer",
       "description": "Help OMP agents write and check tests with target analysis, public API context, browser evidence, coverage and mutation analyzers, quality gates, and reports.",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
       "repository": "https://github.com/marapapman/omp-enhancer",

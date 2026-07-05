@@ -1,7 +1,25 @@
 import type { BrowserEvidence, BrowserFinding, GateResult } from '../types.js'
 
-export function evaluateBrowserEvidenceGate(evidence: BrowserEvidence | undefined): GateResult[] {
-  if (!evidence) return []
+export interface EvaluateBrowserEvidenceGateOptions {
+  required?: boolean
+  severity?: GateResult['severity']
+  targetIds?: string[]
+}
+
+export function evaluateBrowserEvidenceGate(evidence: BrowserEvidence | undefined, options: EvaluateBrowserEvidenceGateOptions = {}): GateResult[] {
+  const severity = options.severity ?? 'blocker'
+
+  if (!evidence) {
+    if (!options.required) return []
+    return [{
+      gate: 'browser-interaction',
+      passed: severity === 'warning',
+      severity,
+      summary: 'Browser evidence is required for frontend targets.',
+      evidence: { targetIds: options.targetIds ?? [] },
+      repairHint: 'Run omp_test_browser_check and pass its browserEvidence into omp_test_gate for frontend targets.'
+    }]
+  }
 
   if (evidence.findings.length > 0) {
     return evidence.findings.map(findingToGateResult)
@@ -15,10 +33,11 @@ export function evaluateBrowserEvidenceGate(evidence: BrowserEvidence | undefine
   }
 
   if (evidence.status === 'skipped') {
+    const skippedSeverity = options.required ? severity : 'warning'
     return [{
       gate: 'browser-interaction',
-      passed: true,
-      severity: 'warning',
+      passed: skippedSeverity === 'warning',
+      severity: skippedSeverity,
       summary: 'Browser check was skipped.',
       evidence,
       repairHint: 'Run browser evidence collection for frontend targets when browser behavior changed.'

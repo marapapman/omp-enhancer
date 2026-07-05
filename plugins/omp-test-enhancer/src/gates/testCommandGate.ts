@@ -7,12 +7,29 @@ export interface TestCommandResult {
   stderr: string
 }
 
-export function evaluateTestCommandGate(result: TestCommandResult | undefined): GateResult[] {
-  if (!result) {
+export interface EvaluateTestCommandGateOptions {
+  severity?: GateResult['severity']
+  skippedDueToStaticBlocker?: boolean
+}
+
+export function evaluateTestCommandGate(result: TestCommandResult | undefined, options: EvaluateTestCommandGateOptions = {}): GateResult[] {
+  if (options.skippedDueToStaticBlocker) {
     return [{
       gate: 'test-command',
       passed: true,
       severity: 'warning',
+      summary: 'Test command skipped because static blocker gates failed.',
+      evidence: {}
+    }]
+  }
+
+  const severity = options.severity ?? (result ? 'blocker' : 'warning')
+
+  if (!result) {
+    return [{
+      gate: 'test-command',
+      passed: severity === 'warning',
+      severity,
       summary: 'No test command configured.',
       evidence: {}
     }]
@@ -22,7 +39,7 @@ export function evaluateTestCommandGate(result: TestCommandResult | undefined): 
     return [{
       gate: 'test-command',
       passed: true,
-      severity: 'blocker',
+      severity,
       summary: 'Configured test command passed.',
       evidence: { command: result.command, exitCode: result.exitCode }
     }]
@@ -31,7 +48,7 @@ export function evaluateTestCommandGate(result: TestCommandResult | undefined): 
   return [{
     gate: 'test-command',
     passed: false,
-    severity: 'blocker',
+    severity,
     summary: 'Configured test command failed.',
     evidence: { command: result.command, exitCode: result.exitCode }
   }]

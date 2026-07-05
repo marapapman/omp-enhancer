@@ -36,6 +36,23 @@ describe('evaluateTestFileScopeGate', () => {
     }])
   })
 
+  it('blocks candidate test paths that were not written to the workspace', () => {
+    expect(evaluateTestFileScopeGate({
+      candidate: {
+        id: 'candidate',
+        targetId: 'target',
+        files: [{ path: 'src/user/UserService.test.ts', action: 'modify', content: '', missingFromWorkspace: true }]
+      }
+    })).toEqual([{
+      gate: 'test-file-scope',
+      passed: false,
+      severity: 'blocker',
+      summary: 'Candidate file is missing from the workspace.',
+      evidence: { file: 'src/user/UserService.test.ts' },
+      repairHint: 'Write the candidate test file to disk before running the gate.'
+    }])
+  })
+
   it('passes test files and tests directories', () => {
     expect(evaluateTestFileScopeGate({
       candidate: {

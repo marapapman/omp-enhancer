@@ -20,6 +20,17 @@ describe('parseTestCommandMode', () => {
     expect(parseTestCommandMode('init')).toEqual({ kind: 'init' })
   })
 
+  it('normalizes unusual whitespace and keeps unknown words as target files', () => {
+    expect(parseTestCommandMode(' \n src/a.ts\t src/b.ts  ')).toEqual({
+      kind: 'run',
+      files: ['src/a.ts', 'src/b.ts']
+    })
+    expect(parseTestCommandMode('unknown src/a.ts')).toEqual({
+      kind: 'run',
+      files: ['unknown', 'src/a.ts']
+    })
+  })
+
   it('rejects dashed flags and suggests the natural subcommand', () => {
     expect(parseTestCommandMode('--check')).toEqual({
       kind: 'invalid',

@@ -176,7 +176,7 @@ function buildAgentInstruction(mode: Exclude<TestCommandMode, { kind: 'help' } |
     '只修改必要的测试文件，优先验证公开行为。',
     '写完测试并采集可用证据后调用 omp_test_gate，检查 indirect-test、test-file-scope、browser-interaction、browser-visual 和 test-command 门禁。',
     '门禁通过后调用 omp_test_report 生成简短报告。',
-    '必须使用这些工具：omp_test_analyze、omp_test_context、omp_test_browser_check、omp_test_coverage_analyze、omp_test_mutation_context、omp_test_gate、omp_test_report。'
+    '必须使用这些工具：omp_test_analyze、omp_test_context、omp_test_gate、omp_test_report。按需使用 omp_test_browser_check、omp_test_coverage_analyze、omp_test_mutation_context。'
   ].join('\n')
 }
 
