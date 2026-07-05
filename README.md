@@ -1,6 +1,6 @@
 # omp-enhancer
 
-This repository is an OMP marketplace monorepo containing four plugins. `omp-enhancer-core` is the runtime router. The other plugins provide config assets, writing tools, and testing tools.
+This repository is an OMP marketplace monorepo containing five plugins. `omp-enhancer-core` is the runtime router. The other plugins provide config assets, writing tools, testing tools, and OpenCode Go key pooling.
 
 ## Plugins
 
@@ -8,6 +8,7 @@ This repository is an OMP marketplace monorepo containing four plugins. `omp-enh
 - `omp-config`: packages OMP config assets, agents, skills, hooks, templates, and safe diagnostics.
 - `writing-helper`: provides writing QA tools, writer/checker agents, and writing skills.
 - `omp-testing-enhancer`: provides test analysis, browser evidence, coverage, mutation, gates, and reports.
+- `omp-opencode-go-pool`: transparently balances OpenCode Go requests across the primary key and extra slash-command-managed keys, with plugin-owned per-key usage status.
 
 ## Workspace
 
@@ -17,6 +18,7 @@ This repository uses npm workspaces for plugin packages under `plugins/`:
 - `plugins/omp-config`
 - `plugins/writing-helper`
 - `plugins/omp-test-enhancer`
+- `plugins/omp-opencode-go-pool`
 
 ## Marketplace install
 
@@ -33,7 +35,7 @@ omp plugin marketplace add marapapman/omp-enhancer
 Install the full enhancer stack with one command:
 
 ```bash
-omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer
+omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-opencode-go-pool@omp-enhancer
 ```
 
 This installs:
@@ -42,6 +44,7 @@ This installs:
 - `omp-config`: config assets, agents, skills, hooks, templates, and safe diagnostics.
 - `writing-helper`: writing QA tools, writer/checker agents, and writing skills.
 - `omp-testing-enhancer`: test analysis, browser evidence, coverage, mutation, gates, and reports.
+- `omp-opencode-go-pool`: transparent OpenCode Go key pooling, cooldown avoidance, and `/opencode_go_pool_status`.
 
 ### Option 2: install from a local checkout
 
@@ -54,7 +57,7 @@ omp plugin marketplace add /path/to/omp-enhancer
 Then run the same install command:
 
 ```bash
-omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer
+omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-opencode-go-pool@omp-enhancer
 ```
 
 ### Install selected plugins
@@ -64,6 +67,7 @@ If you only need part of the stack, install a subset:
 ```bash
 omp plugin install omp-enhancer-core@omp-enhancer writing-helper@omp-enhancer
 omp plugin install omp-enhancer-core@omp-enhancer omp-testing-enhancer@omp-enhancer
+omp plugin install omp-opencode-go-pool@omp-enhancer
 ```
 
 `omp-enhancer-core` is recommended whenever you want automatic natural-language routing. Without it, the other plugins still expose their tools and compatibility commands, but the core runtime gates are not active.
@@ -143,6 +147,7 @@ omp plugin upgrade omp-enhancer-core@omp-enhancer
 omp plugin upgrade omp-config@omp-enhancer
 omp plugin upgrade writing-helper@omp-enhancer
 omp plugin upgrade omp-testing-enhancer@omp-enhancer
+omp plugin upgrade omp-opencode-go-pool@omp-enhancer
 ```
 
 ## Release workflow

@@ -355,6 +355,15 @@
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",
       "source": "./omp-enhancer-core"
+    },
+    {
+      "name": "omp-opencode-go-pool",
+      "description": "Transparent OpenCode Go API key pool with cooldown-aware load balancing and plugin-observed per-key usage status.",
+      "version": "0.1.0",
+      "category": "development",
+      "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-opencode-go-pool",
+      "repository": "https://github.com/marapapman/omp-enhancer",
+      "source": "./omp-opencode-go-pool"
     }
   ]
 }

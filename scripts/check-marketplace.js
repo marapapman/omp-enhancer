@@ -8,7 +8,8 @@ const expected = [
   ['omp-config', './omp-config'],
   ['writing-helper', './writing-helper'],
   ['omp-testing-enhancer', './omp-test-enhancer'],
-  ['omp-enhancer-core', './omp-enhancer-core']
+  ['omp-enhancer-core', './omp-enhancer-core'],
+  ['omp-opencode-go-pool', './omp-opencode-go-pool']
 ]
 
 if (catalog.name !== 'omp-enhancer') {
