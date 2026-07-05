@@ -77,10 +77,6 @@ test('registers core tools, classifier command, and hooks', () => {
     'omp_core_validate_subagent_usage',
     'omp_core_subagent_status',
     'omp_core_governance_prompt',
-    'omp_test_analyze',
-    'omp_test_context',
-    'omp_test_gate',
-    'omp_test_report',
   ]);
   assert.equal([...pi.tools.values()].every((tool) => typeof tool.execute === 'function'), true);
   assert.deepEqual(pi.eventHandlers.map((handler) => handler.event), [
@@ -475,7 +471,7 @@ test('writing reports about tests do not require omp_test_gate', async () => {
 
   assert.match(fragment, /Intent:\s*writing\.zh/);
   assert.match(fragment, /this is a writing workflow/i);
-  assert.match(fragment, /Do not call omp_test_analyze, omp_test_context, omp_test_gate, or omp_test_report/);
+  assert.match(fragment, /Do not call omp_test_\* tools/);
   assert.doesNotMatch(fragment, /Toolchain:\n(?:- .+\n)*- omp_test_gate/);
 
   await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
@@ -743,7 +739,7 @@ test('session_stop ignores prior route SKILL_USAGE and tool evidence after routi
     undefined,
     ctx,
   );
-  await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-pr-test-analyzer']);
+  await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer']);
   await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-testing-skill-usage',
@@ -751,10 +747,12 @@ test('session_stop ignores prior route SKILL_USAGE and tool evidence after routi
       output: [
         'SKILL_USAGE',
         'Required:',
+        '- diagnose',
         '- test-driven-development',
         '- subagent-driven-development',
         '- verification-before-completion',
         'Loaded:',
+        '- diagnose',
         '- test-driven-development',
         '- subagent-driven-development',
         '- verification-before-completion',
@@ -937,8 +935,8 @@ test('failed omp_test_gate results do not release implementation and testing gat
   const cases = [
     {
       prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。',
-      agents: ['ecc-tdd-guide', 'ecc-pr-test-analyzer'],
-      skills: ['test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+      agents: ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'],
+      skills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     },
     {
       prompt: '实现自然语言路由并补测试，测试写完后要过门禁。',
@@ -988,69 +986,66 @@ test('failed omp_test_gate results do not release implementation and testing gat
   }
 });
 
-test('registered omp_test tools close the testing gate only with passing evidence', async () => {
+test('external testing-enhancer tool results close the testing gate only with passing evidence', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext(pi.entries);
 
+  assert.equal(pi.tools.has('omp_test_analyze'), false);
+  assert.equal(pi.tools.has('omp_test_context'), false);
+  assert.equal(pi.tools.has('omp_test_gate'), false);
+  assert.equal(pi.tools.has('omp_test_report'), false);
+
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')({ prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。' }, ctx);
-  await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-pr-test-analyzer']);
+  await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer']);
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-test-tools-skill-usage',
-    { output: skillUsageBlock(['test-driven-development', 'subagent-driven-development', 'verification-before-completion']) },
+    { output: skillUsageBlock(['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion']) },
     undefined,
     undefined,
     ctx,
   );
 
-  const analysis = await tool(pi, 'omp_test_analyze').execute(
-    'call-omp-test-analyze',
-    { target: 'src/router.js', strategy: 'cover fallback behavior and confidence thresholds' },
-    undefined,
-    undefined,
-    ctx,
-  );
-  assert.equal(analysis.isError, false);
-
-  const context = await tool(pi, 'omp_test_context').execute(
-    'call-omp-test-context',
-    { command: 'npm test --workspace plugins/omp-enhancer-core', summary: 'focused router tests selected' },
-    undefined,
-    undefined,
-    ctx,
-  );
-  assert.equal(context.isError, false);
-
-  const gate = await tool(pi, 'omp_test_gate').execute(
-    'call-omp-test-gate-pass',
+  await event(pi, 'tool_result')(
     {
-      passed: true,
-      command: 'npm test --workspace plugins/omp-enhancer-core',
-      summary: '120 tests passed',
+      name: 'omp_test_analyze',
+      details: { target: 'src/router.js', strategy: 'cover fallback behavior and confidence thresholds' },
     },
-    undefined,
-    undefined,
     ctx,
   );
-  assert.equal(gate.isError, false);
-  assert.match(gate.content[0].text, /OMP test gate passed/);
-
-  const report = await tool(pi, 'omp_test_report').execute(
-    'call-omp-test-report',
-    { summary: 'Router regression tests passed after fixes.' },
-    undefined,
-    undefined,
+  await event(pi, 'tool_result')(
+    {
+      name: 'omp_test_context',
+      details: { command: 'npm test --workspace plugins/omp-enhancer-core', summary: 'focused router tests selected' },
+    },
     ctx,
   );
-  assert.equal(report.isError, false);
+  await event(pi, 'tool_result')(
+    {
+      name: 'omp_test_gate',
+      details: {
+        passed: true,
+        command: 'npm test --workspace plugins/omp-enhancer-core',
+        summary: '120 tests passed',
+      },
+    },
+    ctx,
+  );
+  await event(pi, 'tool_result')(
+    {
+      name: 'omp_test_report',
+      details: { summary: 'Router regression tests passed after fixes.' },
+    },
+    ctx,
+  );
 
   const released = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
 
   assert.notEqual(released?.continue, true);
 });
 
-test('registered omp_test_gate keeps RED test evidence blocking', async () => {
+test('external failed omp_test_gate keeps RED test evidence blocking', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext(pi.entries);
@@ -1066,20 +1061,17 @@ test('registered omp_test_gate keeps RED test evidence blocking', async () => {
     ctx,
   );
 
-  const gate = await tool(pi, 'omp_test_gate').execute(
-    'call-omp-test-gate-red',
+  await event(pi, 'tool_result')(
     {
-      passed: false,
-      command: 'npm test --workspace plugins/omp-enhancer-core',
-      summary: '118 tests, 96 pass, 22 fail (bugs confirmed RED).',
+      name: 'omp_test_gate',
+      details: {
+        passed: false,
+        command: 'npm test --workspace plugins/omp-enhancer-core',
+        summary: '118 tests, 96 pass, 22 fail (bugs confirmed RED).',
+      },
     },
-    undefined,
-    undefined,
     ctx,
   );
-
-  assert.equal(gate.isError, true);
-  assert.match(gate.content[0].text, /OMP test gate failed/);
 
   const blocked = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
 
@@ -2271,17 +2263,19 @@ test('writing gate releases after complete evidence and does not reblock repeate
   await assertReleasedStops(restoredPi, extensionContext(entries), [{}, {}]);
 });
 
-test('testing gate releases after test gate and skill evidence without requiring another stop loop', async () => {
+test('bug-audit testing gate releases after test gate and skill evidence without requiring another stop loop', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
+  const agents = ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'];
+  const skills = ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'];
 
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')(
     { prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。' },
     ctx,
   );
-  await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-pr-test-analyzer']);
+  await forkSubagents(pi, ctx, agents);
 
   const blocked = await event(pi, 'session_stop')({}, ctx);
   assert.equal(blocked?.continue, true);
@@ -2291,11 +2285,7 @@ test('testing gate releases after test gate and skill evidence without requiring
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-complete-testing-skill-usage',
     {
-      output: skillUsageBlock([
-        'test-driven-development',
-        'subagent-driven-development',
-        'verification-before-completion',
-      ]),
+      output: skillUsageBlock(skills),
     },
     undefined,
     undefined,
@@ -2305,10 +2295,12 @@ test('testing gate releases after test gate and skill evidence without requiring
   await assertReleasedStops(pi, ctx, [{}, {}, { output: 'Final summary only.' }]);
 });
 
-test('testing route requires native task evidence for required subagents', async () => {
+test('bug-audit route requires native task evidence for required testing and audit subagents', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
+  const agents = ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'];
+  const skills = ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'];
 
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')(
@@ -2319,11 +2311,7 @@ test('testing route requires native task evidence for required subagents', async
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-testing-skill-usage-without-task',
     {
-      output: skillUsageBlock([
-        'test-driven-development',
-        'subagent-driven-development',
-        'verification-before-completion',
-      ]),
+      output: skillUsageBlock(skills),
     },
     undefined,
     undefined,
@@ -2335,22 +2323,20 @@ test('testing route requires native task evidence for required subagents', async
       output: usageEvidence({
         subagents: {
           'ecc-tdd-guide': ['test-driven-development'],
+          'ecc-code-reviewer': ['verification-before-completion'],
+          'ecc-silent-failure-hunter': ['diagnose'],
           'ecc-pr-test-analyzer': ['verification-before-completion'],
         },
-        skills: [
-          'test-driven-development',
-          'subagent-driven-development',
-          'verification-before-completion',
-        ],
+        skills,
       }),
     },
     ctx,
   );
 
   assert.equal(finalOnly?.continue, true);
-  assert.match(finalOnly.additionalContext, /Missing task-launched subagents: ecc-tdd-guide, ecc-pr-test-analyzer/);
+  assert.match(finalOnly.additionalContext, /Missing task-launched subagents: ecc-tdd-guide, ecc-code-reviewer, ecc-silent-failure-hunter, ecc-pr-test-analyzer/);
 
-  await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-pr-test-analyzer']);
+  await forkSubagents(pi, ctx, agents);
   await assertReleasedStops(pi, ctx, [{}, { output: 'Final summary only.' }]);
 });
 
@@ -2359,7 +2345,7 @@ test('bug audit route requires audit subagents with parent task context', async 
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
   const prompt = '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。';
-  const agents = ['ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'];
+  const agents = ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'];
 
   await event(pi, 'session_start')({}, ctx);
   const routeResult = await event(pi, 'before_agent_start')({ prompt }, ctx);
@@ -2388,12 +2374,12 @@ test('bug audit route requires audit subagents with parent task context', async 
 
   const finalOutput = usageEvidence({
     subagents: Object.fromEntries(agents.map((agent) => [agent, subagentSkills(agent)])),
-    skills: ['diagnose', 'subagent-driven-development', 'verification-before-completion'],
+    skills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
   });
   const blocked = await event(pi, 'session_stop')({ output: finalOutput }, ctx);
 
   assert.equal(blocked?.continue, true);
-  assert.match(blocked.additionalContext, /Missing bug-audit assignment context: ecc-code-reviewer, ecc-silent-failure-hunter, ecc-pr-test-analyzer/);
+  assert.match(blocked.additionalContext, /Missing bug-audit assignment context: ecc-tdd-guide, ecc-code-reviewer, ecc-silent-failure-hunter, ecc-pr-test-analyzer/);
 
   await forkSubagents(pi, ctx, agents);
   await assertReleasedStops(pi, ctx, [{ output: finalOutput }, {}, {}]);

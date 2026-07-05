@@ -33,6 +33,15 @@ const noCodeChangeTerms = ['不要改代码', '不要改', '不要修改代码',
 const diagnosisTerms = ['why', 'diagnose', 'diagnosis', 'investigate', 'root cause', '原因', '为什么', '诊断', '定位', '排查', '是什么导致', '是什么原因', 'warning:', 'failed', 'failure'];
 const releaseTerms = ['push', 'publish', 'upgrade', '推送', '发布', '升级', '刷新'];
 const noReleaseTerms = ['without publishing', 'without publish', 'do not publish', 'do not push', 'do not release', 'not publish', 'not push', 'not release', '不要发布', '不要推送', '不要刷新', '不发布', '不推送'];
+const testingEnhancerTools = [
+  'omp_test_analyze',
+  'omp_test_context',
+  'omp_test_browser_check',
+  'omp_test_coverage_analyze',
+  'omp_test_mutation_context',
+  'omp_test_gate',
+  'omp_test_report',
+];
 
 export const routedIntents = [
   'config-assets',
@@ -41,7 +50,6 @@ export const routedIntents = [
   'release',
   'security-review',
   'implementation-with-tests',
-  'testing',
   'writing.zh',
   'writing.en',
   'unknown',
@@ -61,11 +69,8 @@ const subagentPlans = {
     subagent('ecc-security-reviewer', 'audit user-input, auth, file, network, secrets, and dependency risks', ['security-review', 'security-scan']),
     subagent('reviewer', 'check the remediation diff for behavior regressions', ['security-review']),
   ],
-  testing: [
-    subagent('ecc-tdd-guide', 'drive the red-green-refactor test-first workflow', ['test-driven-development']),
-    subagent('ecc-pr-test-analyzer', 'review whether the tests cover the changed behavior before completion', ['verification-before-completion']),
-  ],
   bugAudit: [
+    subagent('ecc-tdd-guide', 'drive the red-green-refactor test-first workflow for audit verification', ['test-driven-development']),
     subagent('ecc-code-reviewer', 'audit code paths for concrete bugs with file and line evidence', ['verification-before-completion']),
     subagent('ecc-silent-failure-hunter', 'hunt swallowed errors, bad fallbacks, and missing error propagation', ['diagnose']),
     subagent('ecc-pr-test-analyzer', 'review test results and coverage gaps that affect bug confidence', ['verification-before-completion']),
@@ -117,11 +122,11 @@ export function routeNaturalLanguageTask(input = {}) {
   }
 
   if (hasDirectTestAuthoring) {
-    return routeByIntent('testing');
+    return routeByIntent('bug-audit');
   }
 
   if (hasTestAnalysis && !hasTestReportWriting) {
-    return routeByIntent('testing');
+    return routeByIntent('bug-audit');
   }
 
   if (hasChineseWriting) {
@@ -149,13 +154,17 @@ export function routeNaturalLanguageTask(input = {}) {
   }
 
   if (hasTesting && !hasWriting) {
-    return routeByIntent('testing');
+    return routeByIntent('bug-audit');
   }
 
   return unknownRoute();
 }
 
 export function routeByIntent(intent, { source = 'natural-language', writingComplexity = 'complex' } = {}) {
+  if (intent === 'testing') {
+    return routeByIntent('bug-audit', { source, writingComplexity });
+  }
+
   if (intent === 'diagnosis') {
     return route({
       intent,
@@ -204,8 +213,8 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
     return route({
       intent,
       agent: 'tester',
-      requiredSkills: ['diagnose', 'subagent-driven-development', 'verification-before-completion'],
-      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+      requiredSkills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+      requiredTools: testingEnhancerTools,
       requiredSubagents: subagentPlans.bugAudit,
       source,
     });
@@ -216,19 +225,8 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       intent,
       agent: 'implementer',
       requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+      requiredTools: testingEnhancerTools,
       requiredSubagents: subagentPlans.implementation,
-      source,
-    });
-  }
-
-  if (intent === 'testing') {
-    return route({
-      intent,
-      agent: 'tester',
-      requiredSkills: ['test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
-      requiredSubagents: subagentPlans.testing,
       source,
     });
   }
@@ -412,7 +410,7 @@ function escapeRegExp(value) {
 }
 
 function isConceptOnlyQuestion(text) {
-  if (!/^(?:what\s+(?:is|are|does|do)\b|who\s+(?:is|was)\b|where\s+(?:is|are)\b|when\s+(?:is|was)\b|define\b|什么是|.*是什么[。？?]?$|.*是什么意思[。？?]?$)/.test(text)) {
+  if (!/^(?:what\s+(?:is|are|does|do)\b|who\s+(?:is|was)\b|where\s+(?:is|are)\b|when\s+(?:is|was)\b|define\b|explain\b.*\b(?:means?|is|are)\b|什么是|.*是什么[。？?]?$|.*是什么意思[。？?]?$)/.test(text)) {
     return false;
   }
   return !/(?:fix|implement|modify|refactor|build|update|write|draft|revise|polish|review|check|run|execute|publish|push|upgrade|diagnos|debug|investigate|analy[sz]e|修复|实现|修改|检查|分析|排查|运行|执行|发布|推送|升级|写|润色|改写|审查)/.test(text);

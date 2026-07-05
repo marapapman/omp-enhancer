@@ -124,8 +124,8 @@ export function buildMissingGateContext({ route, state } = {}) {
 
   if (needsTesting(route) && !state?.evidence?.testingGate) {
     return [
-      'OMP Enhancer Core gate is still open for this implementation or testing task.',
-      'Run the testing workflow and finish with omp_test_gate. Keep test-driven-development and SKILL_USAGE evidence in the final response.',
+      'OMP Enhancer Core gate is still open for this bug-audit or implementation testing task.',
+      'Run the testing-enhancer workflow and finish with omp_test_gate. Use omp_test_analyze and omp_test_context first; call omp_test_browser_check only when browserPlan exists, omp_test_coverage_analyze only when a coverage report exists, and omp_test_mutation_context only when a mutation report exists. Keep SKILL_USAGE evidence in the final response.',
       formatRecentToolFailures(state, ['omp_test_gate']),
     ].filter(Boolean).join('\n');
   }
@@ -157,9 +157,9 @@ function workflowFor(route) {
   }
   if (intent === 'writing.zh') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, zh-writer -> zh-checker -> writing_quality_check.';
   if (intent === 'writing.en') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, writer -> checker -> writing_quality_check.';
-  if (intent === 'bug-audit') return 'Bug audit workflow: ecc-code-reviewer -> ecc-silent-failure-hunter -> ecc-pr-test-analyzer -> omp_test_gate -> BUG-AUDIT-REPORT or final bug report.';
-  if (intent === 'testing') return 'Testing workflow: ecc-tdd-guide -> ecc-pr-test-analyzer -> omp_test_analyze -> omp_test_context -> omp_test_gate -> omp_test_report.';
-  if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> task -> reviewer -> lightweight TDD -> omp_test_gate -> omp_test_report.';
+  if (intent === 'bug-audit') return 'Bug audit workflow: ecc-tdd-guide -> ecc-code-reviewer -> ecc-silent-failure-hunter -> ecc-pr-test-analyzer -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> BUG-AUDIT-REPORT or final bug report.';
+  if (intent === 'testing') return 'Legacy testing intent: use the merged bug-audit workflow and testing-enhancer toolchain.';
+  if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> task -> reviewer -> lightweight TDD -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report.';
   if (intent === 'security-review') return 'Security workflow: ecc-security-reviewer -> reviewer -> fix or report only after risk evidence is checked.';
   if (intent === 'config-assets') return 'Config workflow: use omp_config_doctor, omp_config_assets, or omp_config_plan as needed.';
   if (intent === 'diagnosis') return 'Diagnosis workflow: inspect the reported failure and explain root cause first; do not modify files unless the user asks for a fix.';
@@ -173,13 +173,13 @@ function routeBoundaryFor(route) {
     return 'Route boundary: this is a lightweight writing workflow. The main agent must load the required writing skill(s), edit directly, and must not fork writer/checker subagents.';
   }
   if (intent === 'writing.zh' || intent === 'writing.en') {
-    return 'Route boundary: this is a writing workflow. Do not call omp_test_analyze, omp_test_context, omp_test_gate, or omp_test_report unless a separate routed code/testing task is created later.';
-  }
-  if (intent === 'testing' || intent === 'implementation-with-tests') {
-    return 'Route boundary: this is a code/testing workflow. Use the OMP testing tools only after routed test or implementation work has actually been performed.';
+    return 'Route boundary: this is a writing workflow. Do not call omp_test_* tools unless a separate routed code/testing task is created later.';
   }
   if (intent === 'bug-audit') {
-    return 'Route boundary: this is a read-only bug audit workflow unless the user explicitly asks for fixes. Do not turn audit findings into code edits without a separate fix request.';
+    return 'Route boundary: this is a read-only bug audit workflow unless the user explicitly asks for fixes. Do not turn audit findings into code edits without a separate fix request. The omp_test_* tools are owned by omp-testing-enhancer; core only routes to them and listens for their results.';
+  }
+  if (intent === 'testing' || intent === 'implementation-with-tests') {
+    return 'Route boundary: this is a code/testing workflow. Use the omp-testing-enhancer tools only after routed test or implementation work has actually been performed.';
   }
   return 'Route boundary: use only the tools listed for this route unless the user explicitly changes the task.';
 }

@@ -51,7 +51,7 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /Use this exact plain-text block shape/);
   assert.match(fragment, /- skill-name/);
   assert.match(fragment, /this is a writing workflow/i);
-  assert.match(fragment, /Do not call omp_test_analyze, omp_test_context, omp_test_gate, or omp_test_report/);
+  assert.match(fragment, /Do not call omp_test_\* tools/);
   assert.doesNotMatch(fragment, /Toolchain:\n(?:- .+\n)*- omp_test_gate/);
 });
 
@@ -82,7 +82,7 @@ test('names the selected agent route and toolchain in the governance fragment', 
       intent: 'implementation-with-tests',
       agent: 'implementer',
       requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report'],
       requiredSubagents: [
         { agent: 'plan', duty: 'decompose the task', requiredSkills: ['brainstorming', 'subagent-driven-development'] },
         { agent: 'task', duty: 'implement the task', requiredSkills: ['test-driven-development', 'verification-before-completion'] },
@@ -96,6 +96,9 @@ test('names the selected agent route and toolchain in the governance fragment', 
   assert.match(fragment, /Toolchain/);
   assert.match(fragment, /omp_test_analyze/);
   assert.match(fragment, /omp_test_context/);
+  assert.match(fragment, /omp_test_browser_check/);
+  assert.match(fragment, /omp_test_coverage_analyze/);
+  assert.match(fragment, /omp_test_mutation_context/);
   assert.match(fragment, /omp_test_gate/);
   assert.match(fragment, /omp_test_report/);
   assert.match(fragment, /this is a code\/testing workflow/i);
@@ -108,11 +111,14 @@ test('names the selected agent route and toolchain in the governance fragment', 
 test('keeps routing governance independent from slash commands', () => {
   const fragment = buildGovernancePromptFragment({
     route: {
-      intent: 'testing',
+      intent: 'bug-audit',
       agent: 'tester',
-      requiredSkills: ['test-driven-development'],
-      requiredTools: ['omp_test_gate'],
-      requiredSubagents: [{ agent: 'ecc-tdd-guide', duty: 'drive TDD', requiredSkills: ['test-driven-development'] }],
+      requiredSkills: ['diagnose', 'test-driven-development'],
+      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate'],
+      requiredSubagents: [
+        { agent: 'ecc-tdd-guide', duty: 'drive TDD', requiredSkills: ['test-driven-development'] },
+        { agent: 'ecc-code-reviewer', duty: 'review bugs', requiredSkills: ['verification-before-completion'] },
+      ],
     },
   });
 

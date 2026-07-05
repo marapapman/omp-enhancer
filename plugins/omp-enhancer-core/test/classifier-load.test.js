@@ -36,13 +36,14 @@ const validRouteCases = [
     expectedSubagents: ['plan', 'task', 'reviewer'],
   }),
   caseFor({
-    name: 'testing',
+    name: 'legacy testing classifier',
     prompt: '为 classifier 写高信号单元测试，覆盖 fallback 和边界。',
     intent: 'testing',
+    expectedRouteIntent: 'bug-audit',
     language: 'zh',
     riskFlags: ['needs-tests', 'needs-subagents'],
     expectedAgent: 'tester',
-    expectedSubagents: ['ecc-tdd-guide', 'ecc-pr-test-analyzer'],
+    expectedSubagents: ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'],
   }),
   caseFor({
     name: 'bug audit',
@@ -51,7 +52,7 @@ const validRouteCases = [
     language: 'zh',
     riskFlags: ['needs-tests', 'needs-review', 'needs-subagents'],
     expectedAgent: 'tester',
-    expectedSubagents: ['ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'],
+    expectedSubagents: ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'],
   }),
   caseFor({
     name: 'security',
@@ -147,7 +148,7 @@ const deterministicAuditCases = [
   ['en draft', 'Draft an English related work paragraph for a systems paper.', 'writing.en'],
   ['en revise', 'Revise this abstract and check the logic.', 'writing.en'],
   ['en write coverage report', 'Write a test coverage report for the release notes; do not run tests.', 'writing.en'],
-  ['en write tests', 'Write tests for src/router.js around fallback behavior.', 'testing'],
+  ['en write tests', 'Write tests for src/router.js around fallback behavior.', 'bug-audit'],
   ['bug audit zh', '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。', 'bug-audit'],
   ['bug audit en', 'Run tests and audit for bugs; write a bug report without fixing code.', 'bug-audit'],
   ['implementation bug tests', '修复这个插件 bug，并补充高信号单元测试。', 'implementation-with-tests'],
@@ -167,8 +168,8 @@ const deterministicAuditCases = [
   ['security code', "审查这段 Express 代码的安全风险：app.get('/file', (req, res) => res.sendFile(req.query.path));", 'security-review'],
   ['security config secret', '检查这个配置文件有没有 secret 泄漏和权限风险。', 'security-review'],
   ['security explain', '解释一下 XSS 是什么。', 'security-review'],
-  ['testing only', '为 classifier 写高信号单元测试，覆盖 fallback 和边界。', 'testing'],
-  ['coverage only', '检查当前测试覆盖率，并指出缺口，不要改代码。', 'testing'],
+  ['testing only', '为 classifier 写高信号单元测试，覆盖 fallback 和边界。', 'bug-audit'],
+  ['coverage only', '检查当前测试覆盖率，并指出缺口，不要改代码。', 'bug-audit'],
   ['test word', 'What does the word test mean in English?', 'unknown'],
   ['unknown reminder', '今天下午三点提醒我给妈妈打电话。', 'unknown'],
   ['unknown smalltalk', '谢谢，辛苦了。', 'unknown'],
@@ -229,8 +230,9 @@ test('classifier resolver maps mixed valid outputs through the route whitelist u
 
     assert.equal(results.length, validRouteCases.length * profile.multiplier, profile.name);
     for (const { item, result } of results) {
+      const expectedRouteIntent = item.expectedRouteIntent ?? item.intent;
       assert.equal(result.ok, true, item.name);
-      assert.equal(result.route.intent, item.intent, item.name);
+      assert.equal(result.route.intent, expectedRouteIntent, item.name);
       assert.equal(result.route.source, 'llm-classifier', item.name);
       assert.equal(result.route.agent, item.expectedAgent, item.name);
       assert.equal(result.route.classifier.status, 'resolved', item.name);
@@ -268,11 +270,13 @@ function caseFor({
   riskFlags,
   expectedAgent,
   expectedSubagents,
+  expectedRouteIntent,
 }) {
   return {
     name,
     prompt,
     intent,
+    expectedRouteIntent,
     expectedAgent,
     expectedSubagents,
     classification: {

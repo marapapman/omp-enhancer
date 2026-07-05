@@ -85,24 +85,13 @@ const profiles = {
     subagents: {},
     skills: ['plain-chinese-writing', 'zh-writing-polish'],
   },
-  testing: {
+  bugAudit: {
     prompts: [
       'Write tests for src/router.js around fallback behavior.',
       'Add tests for classifier routing confidence thresholds.',
       'Create regression tests for the skill gate parser.',
       'Run unit tests for the marketplace release script.',
       'Review test flakiness around the browser smoke suite.',
-    ],
-    subagents: {
-      'ecc-tdd-guide': ['test-driven-development'],
-      'ecc-pr-test-analyzer': ['verification-before-completion'],
-    },
-    skills: ['test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-    gateTool: 'omp_test_gate',
-    missingGate: /omp_test_gate/,
-  },
-  bugAudit: {
-    prompts: [
       '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
       '测试整个项目并检查 bug，输出已验证的问题清单。',
       'Run tests and audit for bugs; write a bug report without fixing code.',
@@ -110,11 +99,12 @@ const profiles = {
       'Inspect the plugin for defects and summarize concrete file-line findings.',
     ],
     subagents: {
+      'ecc-tdd-guide': ['test-driven-development'],
       'ecc-code-reviewer': ['verification-before-completion'],
       'ecc-silent-failure-hunter': ['diagnose'],
       'ecc-pr-test-analyzer': ['verification-before-completion'],
     },
-    skills: ['diagnose', 'subagent-driven-development', 'verification-before-completion'],
+    skills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     gateTool: 'omp_test_gate',
     missingGate: /omp_test_gate/,
   },

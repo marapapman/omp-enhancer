@@ -21,16 +21,10 @@ const expectedByIntent = {
       checker: ['writing-checkers'],
     },
   },
-  testing: {
-    requiredSkills: ['test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+  'bug-audit': {
+    requiredSkills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     subagents: {
       'ecc-tdd-guide': ['test-driven-development'],
-      'ecc-pr-test-analyzer': ['verification-before-completion'],
-    },
-  },
-  'bug-audit': {
-    requiredSkills: ['diagnose', 'subagent-driven-development', 'verification-before-completion'],
-    subagents: {
       'ecc-code-reviewer': ['verification-before-completion'],
       'ecc-silent-failure-hunter': ['diagnose'],
       'ecc-pr-test-analyzer': ['verification-before-completion'],
@@ -124,7 +118,7 @@ const workloadSuites = {
     'Improve this email about marketplace upgrade status.',
     'Edit the manuscript paragraph that mentions API stability.',
   ],
-  testing: [
+  'bug-audit': [
     'Write tests for src/router.js around fallback behavior.',
     'Add tests for classifier routing confidence thresholds.',
     'Create regression tests for the skill gate parser.',
@@ -143,8 +137,6 @@ const workloadSuites = {
     'Review the mutation test report and list weak assertions.',
     'Execute unit tests for the core plugin and summarize failures.',
     'Check whether the new tests cover subagent evidence parsing.',
-  ],
-  'bug-audit': [
     '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
     '测试整个项目并检查 bug，输出已验证的问题清单。',
     'Run tests and audit for bugs; write a bug report without fixing code.',

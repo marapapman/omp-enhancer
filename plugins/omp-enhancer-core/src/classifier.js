@@ -17,6 +17,7 @@ export const classifierIntents = [
   'writing.en',
   'bug-audit',
   'implementation-with-tests',
+  // Legacy classifier value. The router resolves it through the bug-audit workflow.
   'testing',
   'security-review',
   'config-assets',
@@ -107,8 +108,9 @@ export function buildClassifierPrompt({
       '- Use release only when the user mainly asks to publish, push, upgrade, or release without asking for implementation.',
       '- Prefer implementation-with-tests for code/plugin changes, even when the task mentions config or marketplace.',
       '- Use bug-audit when the user asks to test, inspect, find, or report bugs without asking to fix or modify code.',
+      '- Use bug-audit for executable test analysis, coverage review, browser verification, flaky test review, and read-only testing workflows. The legacy testing intent resolves to bug-audit and should not be preferred for new outputs.',
       '- Prefer writing.zh for Chinese prose editing or drafting; prefer writing.en for English prose editing or drafting.',
-      '- A request to draft, revise, polish, or write a report/summary/document about tests, coverage, gates, or release status is a writing task, not a testing workflow. Use testing only when the user asks to run, add, repair, or analyze tests as executable verification work.',
+      '- A request to draft, revise, polish, or write a report/summary/document about tests, coverage, gates, or release status is a writing task, not a testing workflow. Use bug-audit only when the user asks to run, add, repair, or analyze tests as executable verification work.',
       '- Do not classify prose drafting, editing, or polishing as security-review only because the text mentions safety, risk, review, or security. Use security-review only for code, config, auth, secrets, vulnerability, or infrastructure security work.',
       '- Put related concerns such as config-assets or release into secondaryIntents and riskFlags when they are not the main task.',
       `- Use confidence below ${config.minResolvedConfidence} only when uncertain; low-confidence non-unknown classifications may fall back to the deterministic route.`,

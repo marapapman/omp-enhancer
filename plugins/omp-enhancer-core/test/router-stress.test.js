@@ -41,7 +41,7 @@ const routeSuites = {
     'Write a short proposal summary.',
     'Draft release notes for the plugin changelog without publishing anything.',
   ],
-  testing: [
+  'bug-audit': [
     'Write tests for src/router.js around fallback behavior.',
     'Add tests for classifier routing confidence thresholds.',
     'Create regression tests for the skill gate parser.',
@@ -57,8 +57,6 @@ const routeSuites = {
     '运行测试门禁并报告结果。',
     '分析覆盖率缺口，不要改实现。',
     '审查测试是否覆盖 marketplace upgrade。',
-  ],
-  'bug-audit': [
     '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
     '测试整个项目并检查 bug，输出已验证的问题清单。',
     'Run tests and audit for bugs; write a bug report without fixing code.',

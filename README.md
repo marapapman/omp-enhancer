@@ -81,7 +81,7 @@ After installing `omp-enhancer-core`, describe the task naturally. The core plug
 - Security review tasks fork ecc-security-reviewer plus reviewer.
 - Writing tasks route to writer/checker or zh-writer/zh-checker subagents, require writing skills, and require writing QA evidence.
 - Chinese writing requires `plain-chinese-writing`.
-- Testing tasks route through `omp_test_analyze`, `omp_test_context`, `omp_test_gate`, and `omp_test_report`. Browser, coverage, and mutation tools are used when the target context provides them.
+- Test authoring, coverage review, flaky-test analysis, browser verification, and read-only bug checks are routed into the merged bug-audit workflow. `omp-enhancer-core` only declares and listens for the `omp_test_*` toolchain; `omp-testing-enhancer` owns the tool implementations, including browser, coverage, and mutation tools when the target context provides them.
 - Config tasks use `omp_config_doctor`, `omp_config_assets`, and `omp_config_plan`, with librarian/reviewer subagent evidence before completion.
 
 Slash commands remain compatibility helpers for older workflows. The new workflow does not require `/test` or `/writing-quality`. `/classifier` is intentionally limited to classifier model configuration and diagnostics.

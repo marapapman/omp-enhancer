@@ -93,13 +93,34 @@ test('resolveClassificationRoute maps bug audit classifier output to audit subag
   assert.equal(result.route.intent, 'bug-audit');
   assert.equal(result.route.source, 'llm-classifier');
   assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), [
+    'ecc-tdd-guide',
     'ecc-code-reviewer',
     'ecc-silent-failure-hunter',
     'ecc-pr-test-analyzer',
   ]);
 });
 
-test('resolveClassificationRoute lets high-confidence unknown suppress an over-eager fallback route', () => {
+test('resolveClassificationRoute aliases legacy testing classifier output to bug audit', () => {
+  const result = resolveClassificationRoute({
+    prompt: '为 classifier 写高信号单元测试，覆盖 fallback 和边界。',
+    output: JSON.stringify({
+      intent: 'testing',
+      secondaryIntents: [],
+      language: 'zh',
+      confidence: 0.91,
+      riskFlags: ['needs-tests', 'needs-subagents'],
+      domainHints: ['legacy testing'],
+      reason: 'Legacy testing classifier output.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.route.intent, 'bug-audit');
+  assert.equal(result.route.source, 'llm-classifier');
+  assert.equal(result.route.classifier.classification.intent, 'testing');
+});
+
+test('resolveClassificationRoute keeps high-confidence unknown on concept-only prompts', () => {
   const result = resolveClassificationRoute({
     prompt: 'Explain what coverage means in plain English.',
     output: JSON.stringify({
@@ -114,7 +135,7 @@ test('resolveClassificationRoute lets high-confidence unknown suppress an over-e
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.fallbackRoute.intent, 'testing');
+  assert.equal(result.fallbackRoute.intent, 'unknown');
   assert.equal(result.route.intent, 'unknown');
   assert.equal(result.route.classifier.classification.intent, 'unknown');
 });
