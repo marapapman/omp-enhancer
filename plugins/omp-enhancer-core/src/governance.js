@@ -44,6 +44,8 @@ export function buildGovernancePromptFragment({ route, parentTask = '' } = {}) {
     '',
     ...subagentWorkflowLines(resolved, { parentTask }),
     '',
+    ...bugAuditTestGenerationLines(resolved),
+    '',
     workflowFor(resolved),
     '',
     '### SUBAGENT_USAGE contract',
@@ -144,7 +146,7 @@ export function buildMissingGateContext({ route, state } = {}) {
   if (needsTesting(route) && !state?.evidence?.testingGate) {
     return [
       'OMP Enhancer Core gate is still open for this bug-audit or implementation testing task.',
-      'Run the testing-enhancer workflow and finish with omp_test_gate. Use omp_test_analyze and omp_test_context first; call omp_test_browser_check only when browserPlan exists, omp_test_coverage_analyze only when a coverage report exists, and omp_test_mutation_context only when a mutation report exists. Keep SKILL_USAGE evidence in the final response.',
+      'Run the testing-enhancer workflow and finish with omp_test_gate. Use omp_test_analyze and omp_test_context first; for bug-audit, build and execute a deduplicated test matrix instead of relying on static analysis alone. Call omp_test_browser_check only when browserPlan exists, omp_test_coverage_analyze only when a coverage report exists, and omp_test_mutation_context only when a mutation report exists. Keep SKILL_USAGE evidence in the final response.',
       formatRecentToolFailures(state, ['omp_test_gate']),
     ].filter(Boolean).join('\n');
   }
@@ -176,7 +178,7 @@ function workflowFor(route) {
   }
   if (intent === 'writing.zh') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, zh-writer -> zh-checker -> writing_quality_check.';
   if (intent === 'writing.en') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, writer -> checker -> writing_quality_check.';
-  if (intent === 'bug-audit') return 'Bug audit workflow: ecc-tdd-guide -> ecc-code-reviewer -> ecc-silent-failure-hunter -> ecc-pr-test-analyzer -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> BUG-AUDIT-REPORT or final bug report.';
+  if (intent === 'bug-audit') return 'Bug audit workflow: ecc-tdd-guide generates a deduplicated multi-channel executable test matrix -> ecc-code-reviewer static audit -> ecc-silent-failure-hunter failure-path audit -> ecc-pr-test-analyzer checks generated tests, duplicate removal, execution results, and coverage gaps -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> BUG-AUDIT-REPORT or final bug report.';
   if (intent === 'testing') return 'Legacy testing intent: use the merged bug-audit workflow and testing-enhancer toolchain.';
   if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> task -> reviewer -> lightweight TDD -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report.';
   if (intent === 'security-review') return 'Security workflow: ecc-security-reviewer -> reviewer -> fix or report only after risk evidence is checked.';
@@ -195,12 +197,37 @@ function routeBoundaryFor(route) {
     return 'Route boundary: this is a writing workflow. Do not call omp_test_* tools unless a separate routed code/testing task is created later.';
   }
   if (intent === 'bug-audit') {
-    return 'Route boundary: this is a read-only bug audit workflow unless the user explicitly asks for fixes. Do not turn audit findings into code edits without a separate fix request. The omp_test_* tools are owned by omp-testing-enhancer; core only routes to them and listens for their results.';
+    return 'Route boundary: this is a bug audit workflow. Test-case files, disposable harnesses, and command invocations are allowed when needed for audit verification, but production-code fixes require a separate user request. Do not turn audit findings into production code edits without a fix request. The omp_test_* tools are owned by omp-testing-enhancer; core only routes to them and listens for their results.';
   }
   if (intent === 'testing' || intent === 'implementation-with-tests') {
     return 'Route boundary: this is a code/testing workflow. Use the omp-testing-enhancer tools only after routed test or implementation work has actually been performed.';
   }
   return 'Route boundary: use only the tools listed for this route unless the user explicitly changes the task.';
+}
+
+function bugAuditTestGenerationLines(route) {
+  if (route.intent !== 'bug-audit') return [];
+
+  return [
+    '### Bug Audit Test Generation Contract',
+    '',
+    'Static analysis alone is not sufficient for bug-audit. Before final claims, generate and run as many high-signal, non-duplicate test cases as the target and budget allow.',
+    '',
+    'Required generation channels:',
+    '- Local code summary: summarize the target block, public contracts, invariants, branches, state transitions, and existing tests before generating cases.',
+    '- Local evidence: mine existing tests, coverage, failures, logs, fixtures, issue text in the checkout, and similar modules for missing behaviors.',
+    '- External or knowledge evidence: when search or web_search is available, look up comparable implementations, framework docs, public test examples, and common failure patterns; when unavailable, state the skipped channel and use packaged skills plus model knowledge without pretending web evidence was checked.',
+    '- Model-derived adversarial cases: generate negative, malformed, property-style, concurrency, and regression cases from the summarized behavior.',
+    '',
+    'Required coverage dimensions:',
+    '- Boundary values, empty/null/undefined inputs, malformed types, unicode/special characters, invalid config, missing dependencies, and error propagation.',
+    '- Different loads and operating conditions: large inputs, repeated calls, concurrency/races, timeout/retry behavior, feature flags, environment/config modes, browser/device modes when UI is in scope, and degraded dependency behavior.',
+    '',
+    'Deduplication contract:',
+    '- Deduplicate by behavior signature: target path, invariant, input class, operating condition, and expected outcome.',
+    '- Merge overlapping cases before writing or running tests; keep the strongest assertion and remove no-op or assertion-light duplicates.',
+    '- Report generated, executed, skipped, and duplicate-removed case counts in BUG-AUDIT-REPORT or the final bug report.',
+  ];
 }
 
 function subagentWorkflowLines(route, { parentTask = '' } = {}) {

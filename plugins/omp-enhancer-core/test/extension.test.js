@@ -1065,7 +1065,7 @@ test('failed omp_test_gate results do not release implementation and testing gat
     {
       prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。',
       agents: ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'],
-      skills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+      skills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
     },
     {
       prompt: '实现自然语言路由并补测试，测试写完后要过门禁。',
@@ -1130,7 +1130,7 @@ test('external testing-enhancer tool results close the testing gate only with pa
   await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer']);
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-test-tools-skill-usage',
-    { output: skillUsageBlock(['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion']) },
+    { output: skillUsageBlock(['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing']) },
     undefined,
     undefined,
     ctx,
@@ -2514,7 +2514,7 @@ test('bug-audit testing gate releases after test gate and skill evidence without
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
   const agents = ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'];
-  const skills = ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'];
+  const skills = ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'];
 
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')(
@@ -2546,7 +2546,7 @@ test('bug-audit route requires native task evidence for required testing and aud
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
   const agents = ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'];
-  const skills = ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'];
+  const skills = ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'];
 
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')(
@@ -2568,7 +2568,7 @@ test('bug-audit route requires native task evidence for required testing and aud
     {
       output: usageEvidence({
         subagents: {
-          'ecc-tdd-guide': ['test-driven-development'],
+          'ecc-tdd-guide': ['test-driven-development', 'search-first', 'ai-regression-testing'],
           'ecc-code-reviewer': ['verification-before-completion'],
           'ecc-silent-failure-hunter': ['diagnose'],
           'ecc-pr-test-analyzer': ['verification-before-completion'],
@@ -2620,7 +2620,7 @@ test('bug audit route requires audit subagents with parent task context', async 
 
   const finalOutput = usageEvidence({
     subagents: Object.fromEntries(agents.map((agent) => [agent, subagentSkills(agent)])),
-    skills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+    skills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
   });
   const blocked = await event(pi, 'session_stop')({ output: finalOutput }, ctx);
 
@@ -2768,7 +2768,7 @@ function subagentSkills(agent) {
     'ecc-code-reviewer': ['verification-before-completion'],
     'ecc-silent-failure-hunter': ['diagnose'],
     'ecc-security-reviewer': ['security-review', 'security-scan'],
-    'ecc-tdd-guide': ['test-driven-development'],
+    'ecc-tdd-guide': ['test-driven-development', 'search-first', 'ai-regression-testing'],
     'ecc-pr-test-analyzer': ['verification-before-completion'],
     'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
     'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],

@@ -70,10 +70,14 @@ const subagentPlans = {
     subagent('reviewer', 'check the remediation diff for behavior regressions', ['security-review']),
   ],
   bugAudit: [
-    subagent('ecc-tdd-guide', 'drive the red-green-refactor test-first workflow for audit verification', ['test-driven-development']),
+    subagent(
+      'ecc-tdd-guide',
+      'generate a deduplicated multi-channel boundary, load, mode, and input test matrix before audit verification',
+      ['test-driven-development', 'search-first', 'ai-regression-testing'],
+    ),
     subagent('ecc-code-reviewer', 'audit code paths for concrete bugs with file and line evidence', ['verification-before-completion']),
     subagent('ecc-silent-failure-hunter', 'hunt swallowed errors, bad fallbacks, and missing error propagation', ['diagnose']),
-    subagent('ecc-pr-test-analyzer', 'review test results and coverage gaps that affect bug confidence', ['verification-before-completion']),
+    subagent('ecc-pr-test-analyzer', 'review generated test execution, duplicate removal, and coverage gaps that affect bug confidence', ['verification-before-completion']),
   ],
   writingZh: [
     subagent('zh-writer', 'draft or rewrite Chinese text after required writing skills are loaded', ['plain-chinese-writing', 'zh-writing-polish']),
@@ -213,7 +217,7 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
     return route({
       intent,
       agent: 'tester',
-      requiredSkills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+      requiredSkills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
       requiredTools: testingEnhancerTools,
       requiredSubagents: subagentPlans.bugAudit,
       source,

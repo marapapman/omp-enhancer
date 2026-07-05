@@ -152,7 +152,11 @@ test('keeps routing governance independent from slash commands', () => {
       requiredSkills: ['diagnose', 'test-driven-development'],
       requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate'],
       requiredSubagents: [
-        { agent: 'ecc-tdd-guide', duty: 'drive TDD', requiredSkills: ['test-driven-development'] },
+        {
+          agent: 'ecc-tdd-guide',
+          duty: 'generate audit tests',
+          requiredSkills: ['test-driven-development', 'search-first', 'ai-regression-testing'],
+        },
         { agent: 'ecc-code-reviewer', duty: 'review bugs', requiredSkills: ['verification-before-completion'] },
       ],
     },
@@ -161,4 +165,13 @@ test('keeps routing governance independent from slash commands', () => {
   assert.doesNotMatch(fragment, /(^|\s)\/test(\s|$)/);
   assert.doesNotMatch(fragment, /slash command/i);
   assert.match(fragment, /natural language/i);
+  assert.match(fragment, /Bug Audit Test Generation Contract/);
+  assert.match(fragment, /Static analysis alone is not sufficient/);
+  assert.match(fragment, /Local code summary/);
+  assert.match(fragment, /External or knowledge evidence/);
+  assert.match(fragment, /Model-derived adversarial cases/);
+  assert.match(fragment, /Deduplicate by behavior signature/);
+  assert.match(fragment, /generated, executed, skipped, and duplicate-removed/);
+  assert.match(fragment, /search-first/);
+  assert.match(fragment, /ai-regression-testing/);
 });

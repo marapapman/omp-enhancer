@@ -22,9 +22,9 @@ const expectedByIntent = {
     },
   },
   'bug-audit': {
-    requiredSkills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+    requiredSkills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
     subagents: {
-      'ecc-tdd-guide': ['test-driven-development'],
+      'ecc-tdd-guide': ['test-driven-development', 'search-first', 'ai-regression-testing'],
       'ecc-code-reviewer': ['verification-before-completion'],
       'ecc-silent-failure-hunter': ['diagnose'],
       'ecc-pr-test-analyzer': ['verification-before-completion'],
@@ -262,6 +262,8 @@ const allProfileSkills = [
   'test-driven-development',
   'subagent-driven-development',
   'verification-before-completion',
+  'search-first',
+  'ai-regression-testing',
   'security-review',
   'security-scan',
 ];

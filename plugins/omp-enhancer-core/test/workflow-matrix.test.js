@@ -39,10 +39,10 @@ const expectedByIntent = {
   },
   'bug-audit': {
     agent: 'tester',
-    requiredSkills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
+    requiredSkills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
     requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report'],
     subagents: {
-      'ecc-tdd-guide': ['test-driven-development'],
+      'ecc-tdd-guide': ['test-driven-development', 'search-first', 'ai-regression-testing'],
       'ecc-code-reviewer': ['verification-before-completion'],
       'ecc-silent-failure-hunter': ['diagnose'],
       'ecc-pr-test-analyzer': ['verification-before-completion'],

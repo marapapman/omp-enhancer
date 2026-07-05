@@ -33,19 +33,34 @@ You review whether a PR's tests actually cover the changed behavior.
 - locate corresponding tests
 - identify new untested code paths
 
-### 2. Behavioral Coverage
+### 2. Generated Test Matrix Audit
+
+- require evidence that test cases came from multiple channels: local code
+  summary, existing tests or coverage, external/public examples when available,
+  packaged knowledge, and model-derived adversarial cases
+- verify the matrix includes boundary inputs, malformed inputs, load, repeated
+  calls, concurrency or race-prone state, alternate config/runtime modes, and
+  degraded dependency behavior where relevant
+- check that generated tests were actually executed or that each skipped group
+  has a concrete blocker
+- reject static-analysis-only bug-audit reports unless execution was impossible
+  and the blocker is documented
+
+### 3. Behavioral Coverage
 
 - check that each feature has tests
 - verify edge cases and error paths
 - ensure important integrations are covered
 
-### 3. Test Quality
+### 4. Test Quality
 
 - prefer meaningful assertions over no-throw checks
 - flag flaky patterns
 - check isolation and clarity of test names
+- flag duplicate tests that share the same behavior signature: target path,
+  invariant, input class, operating condition, and expected outcome
 
-### 4. Coverage Gaps
+### 5. Coverage Gaps
 
 Rate gaps by impact:
 
@@ -57,5 +72,6 @@ Rate gaps by impact:
 
 1. coverage summary
 2. critical gaps
-3. improvement suggestions
-4. positive observations
+3. generated/executed/skipped/duplicate-removed test counts
+4. improvement suggestions
+5. positive observations
