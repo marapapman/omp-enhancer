@@ -7,8 +7,7 @@ const workspaces = [
   'plugins/omp-config',
   'plugins/writing-helper',
   'plugins/omp-test-enhancer',
-  'plugins/omp-enhancer-core',
-  'plugins/omp-opencode-go-pool'
+  'plugins/omp-enhancer-core'
 ]
 
 for (const workspace of workspaces) {
