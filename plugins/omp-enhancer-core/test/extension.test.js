@@ -189,6 +189,9 @@ test('before_agent_start injects governance context and routes natural-language 
   const result = await event(pi, 'before_agent_start')(agentEvent, ctx);
   const fragment = governanceText(result, agentEvent);
 
+  assert.match(fragment, /pre-work skill bootstrap/);
+  assert.match(fragment, /read skill:\/\/plain-chinese-writing/);
+  assert.ok(fragment.indexOf('pre-work skill bootstrap') < fragment.indexOf('Mandatory Skill Workflow'));
   assert.match(fragment, /Mandatory Skill Workflow/);
   assert.match(fragment, /Mandatory Subagent Workflow/);
   assert.match(fragment, /plain-chinese-writing/);
@@ -512,10 +515,17 @@ test('tool_call blocks routed work before required skills are read', async () =>
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')(
+  const startResult = await event(pi, 'before_agent_start')(
     { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
     ctx,
   );
+  const startFragment = governanceText(startResult, {});
+
+  assert.match(startFragment, /pre-work skill bootstrap/);
+  assert.match(startFragment, /read skill:\/\/plain-chinese-writing/);
+  assert.match(startFragment, /read skill:\/\/zh-writing-polish/);
+  assert.match(startFragment, /read skill:\/\/zh-writing-checkers/);
+  assert.ok(startFragment.indexOf('pre-work skill bootstrap') < startFragment.indexOf('Mandatory Subagent Workflow'));
 
   const blocked = await event(pi, 'tool_call')(
     {
@@ -544,6 +554,33 @@ test('tool_call blocks routed work before required skills are read', async () =>
   );
 
   assert.match(status.content[0].text, /Pending:\n- none/);
+});
+
+test('governance prompt only inserts read steps for still-missing root skills', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    ctx,
+  );
+  await readSkills(pi, ctx, ['plain-chinese-writing']);
+
+  const governance = await tool(pi, 'omp_core_governance_prompt').execute(
+    'call-missing-skill-bootstrap',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.match(governance.details.fragment, /pre-work skill bootstrap/);
+  assert.doesNotMatch(governance.details.fragment, /read skill:\/\/plain-chinese-writing/);
+  assert.match(governance.details.fragment, /read skill:\/\/zh-writing-polish/);
+  assert.match(governance.details.fragment, /read skill:\/\/zh-writing-checkers/);
+  assert.match(governance.details.fragment, /Required skills:\n- plain-chinese-writing\n- zh-writing-polish\n- zh-writing-checkers/);
 });
 
 test('pre-work skill gate allows read and core validation before blocking remaining work tools', async () => {

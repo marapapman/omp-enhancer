@@ -143,11 +143,14 @@ export default function registerCoreEnhancer(pi) {
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const route = params.prompt ? routeNaturalLanguageTask({ prompt: params.prompt }) : state.lastRoute;
-      const fragment = buildGovernancePromptFragment({ route, parentTask: params.prompt ?? state.lastPrompt });
       if (params.prompt && route) {
         setRouteState(state, route, params.prompt);
         await persistState(pi, state);
       }
+      const fragment = buildRoutedGovernanceContext(state, {
+        route,
+        parentTask: params.prompt ?? state.lastPrompt,
+      });
       return okResult(fragment, { route, fragment });
     },
   });
@@ -190,7 +193,7 @@ export default function registerCoreEnhancer(pi) {
     setRouteState(state, route, prompt);
     startLoopGuardRun(state.loopGuard, `${route.intent}:${state.routeStartedAt}`);
     await persistState(pi, state);
-    const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
+    const fragment = buildRoutedGovernanceContext(state, { route, parentTask: prompt });
     if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${fragment}`;
     else event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
     return { additionalContext: fragment, route };
@@ -685,6 +688,27 @@ function buildMissingSkillUsageContext(state) {
     failureContext,
     state.lastSkillUsage?.message ? `Last validation: ${state.lastSkillUsage.message}` : 'No successful SKILL_USAGE validation has been recorded.',
   ].filter(Boolean).join('\n');
+}
+
+function buildRoutedGovernanceContext(state, { route, parentTask = '' } = {}) {
+  return [
+    buildPreworkSkillBootstrapBlock(state),
+    buildGovernancePromptFragment({ route, parentTask }),
+  ].filter(Boolean).join('\n\n');
+}
+
+function buildPreworkSkillBootstrapBlock(state) {
+  const missing = missingReadSkills(state);
+  if (!missing.length) return null;
+
+  return [
+    '### OMP Enhancer Core pre-work skill bootstrap',
+    'Before calling any work tool, including task, load the required root skills for this routed task.',
+    'Call the read tool once for each missing skill now, using these exact URIs:',
+    ...missing.map(formatMissingSkillReadStep),
+    'Wait for those read results to return before calling task, edit, write, bash, QA, or test gates.',
+    'If any required skill cannot be read, report that blocker instead of continuing with the work.',
+  ].join('\n');
 }
 
 function buildPreworkSkillGateBlock(state, toolName) {
