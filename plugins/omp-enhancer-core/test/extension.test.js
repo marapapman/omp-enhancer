@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import registerCoreEnhancer from '../index.js';
 
 class FakePi {
-  constructor(entries = [], options = {}) {
+  constructor(entries = []) {
     this.labels = [];
     this.tools = new Map();
     this.commands = new Map();
@@ -12,8 +12,6 @@ class FakePi {
     this.events = new FakeEventBus();
     this.entries = entries;
     this.messages = [];
-    this.timers = options.timers ?? new FakeTimers();
-    if (options.subagentDashboardIntervalMs) this.subagentDashboardIntervalMs = options.subagentDashboardIntervalMs;
     const z = fakeZod();
     this.z = z;
     this.zod = { z };
@@ -61,39 +59,6 @@ class FakeEventBus {
   async emit(channel, payload) {
     for (const handler of this.handlers.get(channel) ?? []) {
       await handler(payload);
-    }
-  }
-}
-
-class FakeTimers {
-  constructor() {
-    this.intervals = [];
-  }
-
-  setInterval(callback, ms) {
-    const handle = {
-      active: true,
-      callback,
-      ms,
-      unref() {
-        handle.unrefed = true;
-      },
-    };
-    this.intervals.push(handle);
-    return handle;
-  }
-
-  clearInterval(handle) {
-    if (handle) handle.active = false;
-  }
-
-  activeCount() {
-    return this.intervals.filter((handle) => handle.active).length;
-  }
-
-  async tick() {
-    for (const handle of this.intervals.filter((candidate) => candidate.active)) {
-      await handle.callback();
     }
   }
 }
@@ -1369,12 +1334,7 @@ test('task tool_execution_update records live subagent progress and completion',
   assert.deepEqual(status.details.status.pending[0].skills, ['writing-markdown-helper']);
   assert.equal(notifications[0].level, 'info');
   assert.match(notifications[0].text, /OMP subagent progress: writer running; tool read; draft related work\. Route: writing\.en\./);
-  assert.equal(pi.messages.at(-1).message.customType, 'omp-enhancer-core.subagent-dashboard');
-  assert.equal(pi.messages.at(-1).message.display, true);
-  assert.match(pi.messages.at(-1).message.content, /### OMP Subagent Status/);
-  assert.match(pi.messages.at(-1).message.content, /Activity: \| running: writer/);
-  assert.match(pi.messages.at(-1).message.content, /Summary: 0\/2 completed, 1 running, 1 waiting, 0 stuck, 0 failed/);
-  assert.match(pi.messages.at(-1).message.content, /- \[\| running\] writer: skills writing-markdown-helper; tool read; draft related work; 1 requests; 2s/);
+  assert.equal(pi.messages.length, 0);
 
   await event(pi, 'tool_execution_update')(
     {
@@ -1411,8 +1371,7 @@ test('task tool_execution_update records live subagent progress and completion',
   assert.deepEqual(status.details.status.completed, ['writer']);
   assert.deepEqual(status.details.status.pending, []);
   assert.match(status.content[0].text, /Progress:\n- writer: completed; draft related work; 2 requests; 5s/);
-  assert.match(pi.messages.at(-1).message.content, /Summary: 1\/2 completed, 0 running, 1 waiting, 0 stuck, 0 failed/);
-  assert.match(pi.messages.at(-1).message.content, /- \[done\] writer: skills writing-markdown-helper; draft related work; 2 requests; 5s/);
+  assert.equal(pi.messages.length, 0);
 });
 
 test('task EventBus progress and lifecycle update subagent status before final task result', async () => {
@@ -1460,7 +1419,7 @@ test('task EventBus progress and lifecycle update subagent status before final t
   assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['writer']);
   assert.equal(status.details.status.progress[0].agent, 'writer');
   assert.equal(status.details.status.progress[0].status, 'running');
-  assert.match(pi.messages.at(-1).message.content, /- \[\| running\] writer: skills writing-markdown-helper; tool read/);
+  assert.equal(pi.messages.length, 0);
 
   await pi.events.emit('task:subagent:lifecycle', {
     id: 'WriterBus',
@@ -1482,101 +1441,7 @@ test('task EventBus progress and lifecycle update subagent status before final t
   assert.deepEqual(status.details.status.completed, ['writer']);
   assert.deepEqual(status.details.status.pending, []);
   assert.match(status.content[0].text, /writer: completed; draft finished/);
-  assert.match(pi.messages.at(-1).message.content, /Update: completed/);
-  assert.match(pi.messages.at(-1).message.content, /- \[done\] writer: skills writing-markdown-helper; draft finished/);
-});
-
-test('subagent dashboard keeps refreshing after user-yield session_stop', async () => {
-  const timers = new FakeTimers();
-  const pi = new FakePi([], { timers, subagentDashboardIntervalMs: 1 });
-  registerCoreEnhancer(pi);
-  const statusLines = new Map();
-  const ctx = extensionContext(pi.entries, {
-    setStatus: (key, text) => {
-      if (text === undefined) statusLines.delete(key);
-      else statusLines.set(key, text);
-    },
-  });
-
-  await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-yield-watch-route',
-    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
-  await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
-
-  await event(pi, 'tool_call')(
-    {
-      toolName: 'task',
-      toolCallId: 'task-yield-watch',
-      input: {
-        tasks: [
-          { role: 'writer', assignment: 'Required skills for this subagent:\n- writing-markdown-helper' },
-          { role: 'checker', assignment: 'Required skills for this subagent:\n- writing-checkers' },
-        ],
-      },
-    },
-    ctx,
-  );
-
-  assert.equal(timers.activeCount(), 1);
-
-  const stopped = await event(pi, 'session_stop')({ output: 'Yield and wait for the user.' }, ctx);
-
-  assert.equal(stopped?.continue, true);
-  assert.match(stopped.additionalContext, /Pending subagent task results/);
-  assert.equal(timers.activeCount(), 1);
-  assert.match(pi.messages.at(-1).message.content, /Update: waiting-for-user/);
-  assert.match(pi.messages.at(-1).message.content, /Activity: \/ running: checker, writer/);
-  assert.match(pi.messages.at(-1).message.content, /Summary: 0\/2 completed, 2 running, 0 waiting, 0 stuck, 0 failed/);
-  assert.match(statusLines.get('omp-enhancer-core.subagents'), /OMP subagents \/ 0\/2 completed, 2 running, 0 waiting, 0 stuck, 0 failed \| checker, writer/);
-
-  await timers.tick();
-
-  assert.equal(timers.activeCount(), 1);
-  assert.match(pi.messages.at(-1).message.content, /Update: watching/);
-  assert.match(pi.messages.at(-1).message.content, /- \[- running\] writer: skills writing-markdown-helper/);
-  assert.match(statusLines.get('omp-enhancer-core.subagents'), /OMP subagents - 0\/2 completed, 2 running, 0 waiting, 0 stuck, 0 failed \| checker, writer/);
-
-  await pi.events.emit('task:subagent:progress', {
-    id: 'YieldWriter',
-    agent: 'writer',
-    status: 'running',
-    currentTool: 'read',
-    description: 'reading sources',
-    parentToolCallId: 'task-yield-watch',
-    index: 0,
-  });
-
-  assert.equal(timers.activeCount(), 1);
-  assert.match(pi.messages.at(-1).message.content, /- \[\\ running\] writer: skills writing-markdown-helper; tool read; reading sources/);
-
-  await pi.events.emit('task:subagent:lifecycle', {
-    id: 'YieldWriter',
-    agent: 'writer',
-    status: 'completed',
-    parentToolCallId: 'task-yield-watch',
-    index: 0,
-  });
-  await pi.events.emit('task:subagent:lifecycle', {
-    id: 'YieldChecker',
-    agent: 'checker',
-    status: 'completed',
-    parentToolCallId: 'task-yield-watch',
-    index: 1,
-  });
-
-  assert.equal(timers.activeCount(), 0);
-  assert.match(pi.messages.at(-1).message.content, /Summary: 2\/2 completed, 0 running, 0 waiting, 0 stuck, 0 failed/);
-  assert.equal(statusLines.has('omp-enhancer-core.subagents'), false);
-  const messageCount = pi.messages.length;
-
-  await timers.tick();
-
-  assert.equal(pi.messages.length, messageCount);
+  assert.equal(pi.messages.length, 0);
 });
 
 test('completing one of two pending task calls keeps the other subagent running', async () => {
@@ -1679,11 +1544,7 @@ test('task tool_call announces running subagents in TUI notifications', async ()
   assert.equal(notifications.length, 1);
   assert.equal(notifications[0].level, 'info');
   assert.match(notifications[0].text, /OMP subagents running: writer \[writing-markdown-helper\], checker \[writing-checkers\]\. Route: writing\.en\./);
-  assert.equal(pi.messages.length, 1);
-  assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.subagent-dashboard');
-  assert.match(pi.messages[0].message.content, /Summary: 0\/2 completed, 2 running, 0 waiting, 0 stuck, 0 failed/);
-  assert.match(pi.messages[0].message.content, /- \[\| running\] writer: skills writing-markdown-helper/);
-  assert.match(pi.messages[0].message.content, /- \[\| running\] checker: skills writing-checkers/);
+  assert.equal(pi.messages.length, 0);
 });
 
 test('task tool_result announces completed and failed subagents in TUI notifications', async () => {

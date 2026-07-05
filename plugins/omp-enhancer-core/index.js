@@ -16,8 +16,6 @@ import {
 } from './src/loop-guard.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
-const SUBAGENT_DASHBOARD_ENTRY = 'omp-enhancer-core.subagent-dashboard';
-const SUBAGENT_DASHBOARD_STATUS_KEY = 'omp-enhancer-core.subagents';
 const TASK_SUBAGENT_EVENT_CHANNEL = 'task:subagent:event';
 const TASK_SUBAGENT_PROGRESS_CHANNEL = 'task:subagent:progress';
 const TASK_SUBAGENT_LIFECYCLE_CHANNEL = 'task:subagent:lifecycle';
@@ -29,20 +27,16 @@ const ASSISTANT_OUTPUT_EVENTS = [
   'response_output_delta',
 ];
 const SUBAGENT_STUCK_AFTER_MS = 10 * 60 * 1000;
-const SUBAGENT_DASHBOARD_WATCH_INTERVAL_MS = 5000;
-const SUBAGENT_DASHBOARD_WATCH_MAX_MS = 60 * 60 * 1000;
-const SUBAGENT_DASHBOARD_FRAMES = ['|', '/', '-', '\\'];
 const SUBAGENT_ACTIVE_STATUSES = new Set(['pending', 'running', 'started', 'in_progress', 'in-progress']);
 const SUBAGENT_COMPLETED_STATUSES = new Set(['completed', 'complete', 'success', 'succeeded']);
 const SUBAGENT_FAILED_STATUSES = new Set(['failed', 'failure', 'error', 'aborted', 'cancelled', 'canceled']);
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
-  const subagentDashboardWatcher = createSubagentDashboardWatcher(pi, state);
   const z = pi.zod?.z ?? pi.z;
 
   pi.setLabel?.('OMP Enhancer Core');
-  registerSubagentEventBusHandlers(pi, state, subagentDashboardWatcher);
+  registerSubagentEventBusHandlers(pi, state);
 
   pi.registerCommand?.('classifier', {
     description: 'Show or update modelRoles.classifier for OMP Enhancer routing.',
@@ -61,7 +55,6 @@ export default function registerCoreEnhancer(pi) {
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const route = routeNaturalLanguageTask({ prompt: params.prompt });
-      subagentDashboardWatcher.stop();
       setRouteState(state, route);
       await persistState(pi, state);
       return okResult(formatRoute(route), { route });
@@ -93,7 +86,6 @@ export default function registerCoreEnhancer(pi) {
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const result = resolveClassificationRoute({ prompt: params.prompt, output: params.output });
-      subagentDashboardWatcher.stop();
       setRouteState(state, result.route);
       await persistState(pi, state);
       return okResult(formatRoute(result.route), result);
@@ -131,8 +123,6 @@ export default function registerCoreEnhancer(pi) {
       state.lastSubagentUsage = validation;
       if (validation.ok) recordSubagentFinalUsage(state, params.output ?? '');
       await persistState(pi, state);
-      await publishSubagentDashboard(pi, state, validation.ok ? 'validation-completed' : 'validation-incomplete');
-      subagentDashboardWatcher.sync(validation.ok ? 'validation-completed' : 'validation-incomplete');
       return okResult(validation.message, { validation });
     },
   });
@@ -158,7 +148,6 @@ export default function registerCoreEnhancer(pi) {
       const route = params.prompt ? routeNaturalLanguageTask({ prompt: params.prompt }) : state.lastRoute;
       const fragment = buildGovernancePromptFragment({ route });
       if (params.prompt && route) {
-        subagentDashboardWatcher.stop();
         setRouteState(state, route);
         await persistState(pi, state);
       }
@@ -169,12 +158,7 @@ export default function registerCoreEnhancer(pi) {
 
   pi.on?.('session_start', async (_event = {}, ctx = {}) => {
     const restored = restoreStateFromContext(state, ctx);
-    if (!restored) {
-      subagentDashboardWatcher.stop();
-      resetState(state);
-    } else {
-      subagentDashboardWatcher.sync('session-start');
-    }
+    if (!restored) resetState(state);
     return undefined;
   });
 
@@ -220,7 +204,6 @@ export default function registerCoreEnhancer(pi) {
       return { additionalContext: fragment, route: { intent: 'subagent', agent: null, requiredSkills: [], requiredTools: [], requiredSubagents: [] } };
     }
     const route = routeNaturalLanguageTask({ prompt });
-    subagentDashboardWatcher.stop();
     setRouteState(state, route);
     startLoopGuardRun(state.loopGuard, `${route.intent}:${state.routeStartedAt}`);
     await persistState(pi, state);
@@ -233,7 +216,6 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
-    let subagentDashboardReason = '';
     if (name) recordLoopGuardProgress(state.loopGuard, `tool_call:${name}`);
     const preworkBlock = buildPreworkSkillGateBlock(state, name);
     if (preworkBlock) {
@@ -243,11 +225,8 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'task') {
       const records = recordSubagentDispatchStarted(state, event);
       await notifySubagentDispatch(ctx, 'running', records, state);
-      if (records.length) subagentDashboardReason = 'started';
     }
     await persistState(pi, state);
-    if (subagentDashboardReason) await publishSubagentDashboard(pi, state, subagentDashboardReason);
-    subagentDashboardWatcher.sync(subagentDashboardReason || `tool-call:${name || 'unknown'}`);
     return undefined;
   });
 
@@ -257,15 +236,12 @@ export default function registerCoreEnhancer(pi) {
     const updates = recordTaskExecutionUpdate(state, event);
     await notifySubagentProgress(ctx, updates, state);
     if (updates.some((update) => update.persist)) await persistState(pi, state);
-    if (updates.some((update) => update.notify)) await publishSubagentDashboard(pi, state, dashboardReasonForUpdates(updates));
-    subagentDashboardWatcher.sync(dashboardReasonForUpdates(updates));
     return undefined;
   });
 
   pi.on?.('tool_result', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
-    let subagentDashboardReason = '';
     if (name) recordLoopGuardProgress(state.loopGuard, `tool_result:${name}`);
     const successful = isSuccessfulToolEvent(event);
     if (name && successful && name !== 'read') clearToolFailures(state, name);
@@ -276,12 +252,9 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'task') {
       const records = recordSubagentDispatchFinished(state, event, { successful });
       await notifySubagentDispatch(ctx, successful ? 'completed' : 'failed', records, state, event);
-      if (records.length || !successful) subagentDashboardReason = successful ? 'completed' : 'failed';
     }
     if (name === 'read' && successful) recordReadSkillEvidence(state, event);
     await persistState(pi, state);
-    if (subagentDashboardReason) await publishSubagentDashboard(pi, state, subagentDashboardReason);
-    subagentDashboardWatcher.sync(subagentDashboardReason || `tool-result:${name || 'unknown'}`);
     return undefined;
   });
 
@@ -300,8 +273,6 @@ export default function registerCoreEnhancer(pi) {
 
     const missingSubagentContext = buildMissingSubagentUsageContext(state);
     if (missingSubagentContext) {
-      await publishSubagentDashboard(pi, state, 'waiting-for-user');
-      subagentDashboardWatcher.sync('waiting-for-user');
       return { continue: true, additionalContext: missingSubagentContext };
     }
 
@@ -323,8 +294,6 @@ export function createState() {
     lastSubagentUsage: null,
     evidence: emptyEvidence(),
     loopGuard: createLoopGuardState(),
-    subagentDashboardUi: null,
-    subagentDashboardFrame: 0,
   };
 }
 
@@ -615,7 +584,6 @@ async function persistState(pi, state) {
 }
 
 function restoreStateFromContext(state, ctx = {}) {
-  rememberSubagentDashboardUi(state, ctx);
   const entries = ctx.sessionManager?.getBranch?.();
   if (!Array.isArray(entries)) return false;
   const restored = restoreStateFromEntries(entries);
@@ -623,11 +591,6 @@ function restoreStateFromContext(state, ctx = {}) {
   replaceState(state, restored.snapshot);
   recordReadSkillEvidenceFromEntries(state, entries, restored.routeStartIndex);
   return true;
-}
-
-function rememberSubagentDashboardUi(state, ctx = {}) {
-  const ui = ctx.ui;
-  if (ui && typeof ui.setStatus === 'function') state.subagentDashboardUi = ui;
 }
 
 function restoreStateFromEntries(entries) {
@@ -1120,7 +1083,7 @@ function buildMissingSubagentUsageContext(state) {
   ].filter(Boolean).join('\n');
 }
 
-function registerSubagentEventBusHandlers(pi, state, subagentDashboardWatcher = null) {
+function registerSubagentEventBusHandlers(pi, state) {
   const eventBus = pi.events;
   if (!eventBus || typeof eventBus.on !== 'function') return;
 
@@ -1130,8 +1093,6 @@ function registerSubagentEventBusHandlers(pi, state, subagentDashboardWatcher = 
         try {
           const updates = handler(payload);
           if (updates.some((update) => update.persist)) await persistState(pi, state);
-          if (updates.some((update) => update.notify)) await publishSubagentDashboard(pi, state, dashboardReasonForUpdates(updates));
-          subagentDashboardWatcher?.sync(dashboardReasonForUpdates(updates));
         } catch {
           // EventBus updates are best-effort observability. They must not break
           // task execution or the stricter final gate checks.
@@ -1748,329 +1709,6 @@ function formatSubagentStatus(state) {
   ].join('\n');
 }
 
-function createSubagentDashboardWatcher(pi, state) {
-  const timers = timerApi(pi);
-  const intervalMs = positiveNumber(pi?.subagentDashboardIntervalMs, SUBAGENT_DASHBOARD_WATCH_INTERVAL_MS);
-  const maxMs = positiveNumber(pi?.subagentDashboardWatchMaxMs, SUBAGENT_DASHBOARD_WATCH_MAX_MS);
-  let timer = null;
-  let startedAt = 0;
-  let refreshing = false;
-
-  const stop = () => {
-    clearSubagentDashboardStatusLine(state);
-    if (!timer) return;
-    timers.clearInterval(timer);
-    timer = null;
-    startedAt = 0;
-  };
-
-  const tick = async (reason = 'watching') => {
-    if (refreshing) return;
-    refreshing = true;
-    try {
-      const status = buildSubagentStatus(state);
-      if (!hasActiveSubagentDashboardWork(status)) {
-        stop();
-        return;
-      }
-      if (startedAt && Date.now() - startedAt > maxMs) {
-        await publishSubagentDashboard(pi, state, 'watch-timeout');
-        stop();
-        return;
-      }
-      await publishSubagentDashboard(pi, state, reason);
-    } finally {
-      refreshing = false;
-    }
-  };
-
-  const ensure = () => {
-    const status = buildSubagentStatus(state);
-    if (!hasActiveSubagentDashboardWork(status)) {
-      stop();
-      return;
-    }
-    if (timer) return;
-    startedAt = Date.now();
-    timer = timers.setInterval(() => tick('watching'), intervalMs);
-    timer?.unref?.();
-  };
-
-  return {
-    stop,
-    sync(_reason = 'updated') {
-      const status = buildSubagentStatus(state);
-      if (!hasActiveSubagentDashboardWork(status)) {
-        stop();
-        return;
-      }
-      ensure();
-    },
-  };
-}
-
-function timerApi(pi) {
-  const source = isRecord(pi?.timers) ? pi.timers : globalThis;
-  const setIntervalFn = typeof source.setInterval === 'function' ? source.setInterval.bind(source) : globalThis.setInterval.bind(globalThis);
-  const clearIntervalFn = typeof source.clearInterval === 'function' ? source.clearInterval.bind(source) : globalThis.clearInterval.bind(globalThis);
-  return {
-    setInterval: setIntervalFn,
-    clearInterval: clearIntervalFn,
-  };
-}
-
-function positiveNumber(value, fallback) {
-  return Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
-function hasActiveSubagentDashboardWork(status) {
-  return status.pending.length > 0
-    || status.progress.some((progress) => isActiveSubagentStatus(progress.status));
-}
-
-async function publishSubagentDashboard(pi, state, reason = 'updated') {
-  const entry = buildSubagentDashboardEntry(state, reason);
-  if (!entry) {
-    clearSubagentDashboardStatusLine(state);
-    return;
-  }
-
-  syncSubagentDashboardStatusLine(state, entry.status, {
-    frame: entry.activityFrame,
-  });
-
-  if (typeof pi.appendEntry === 'function') {
-    try {
-      await pi.appendEntry(SUBAGENT_DASHBOARD_ENTRY, entry);
-    } catch {
-      // Dashboard persistence is observational only.
-    }
-  }
-
-  if (typeof pi.sendMessage === 'function') {
-    try {
-      await pi.sendMessage({
-        customType: SUBAGENT_DASHBOARD_ENTRY,
-        content: entry.markdown,
-        display: true,
-        details: entry,
-        attribution: 'agent',
-      });
-    } catch {
-      // Visible dashboard updates must not break task execution.
-    }
-  }
-}
-
-function buildSubagentDashboardEntry(state, reason = 'updated') {
-  const status = buildSubagentStatus(state);
-  if (!shouldPublishSubagentDashboard(status)) return null;
-  const summary = formatSubagentDashboardSummary(status);
-  const activityFrame = nextSubagentDashboardFrame(state, status);
-  const markdown = formatSubagentDashboardMarkdown(status, { reason, summary, activityFrame });
-
-  return {
-    kind: 'subagent-dashboard',
-    reason,
-    route: status.route,
-    summary,
-    activityFrame,
-    markdown,
-    status,
-    updatedAt: Date.now(),
-  };
-}
-
-function shouldPublishSubagentDashboard(status) {
-  return status.route !== 'none'
-    || status.required.length > 0
-    || status.completed.length > 0
-    || status.pending.length > 0
-    || status.progress.length > 0
-    || status.failures.length > 0;
-}
-
-function formatSubagentDashboardMarkdown(status, { reason = 'updated', summary = formatSubagentDashboardSummary(status), activityFrame = '' } = {}) {
-  const requiredLines = status.required.length
-    ? status.required.map((item) => formatRequiredSubagentDashboardLine(status, item, activityFrame)).join('\n')
-    : '- none';
-  const progressLines = status.progress.length
-    ? latestProgressByAgent(status.progress).map((progress) => formatSubagentDashboardProgressLine(progress, activityFrame)).join('\n')
-    : '- none';
-  const failureLines = status.failures.length
-    ? status.failures.map((failure) => `- ${failure.message ?? failure.summary ?? 'task failed'}`).join('\n')
-    : '- none';
-
-  return [
-    '### OMP Subagent Status',
-    '',
-    `Route: ${status.route}`,
-    `Update: ${reason}`,
-    `Activity: ${formatSubagentDashboardActivity(status, activityFrame)}`,
-    `Summary: ${summary}`,
-    '',
-    'Required roles:',
-    requiredLines,
-    '',
-    'Recent progress:',
-    progressLines,
-    '',
-    'Failures:',
-    failureLines,
-  ].join('\n');
-}
-
-function nextSubagentDashboardFrame(state, status) {
-  if (!hasActiveSubagentDashboardWork(status)) return '';
-  const frame = currentSubagentDashboardFrame(state);
-  state.subagentDashboardFrame = (state.subagentDashboardFrame + 1) % SUBAGENT_DASHBOARD_FRAMES.length;
-  return frame;
-}
-
-function currentSubagentDashboardFrame(state) {
-  return SUBAGENT_DASHBOARD_FRAMES[state.subagentDashboardFrame % SUBAGENT_DASHBOARD_FRAMES.length] ?? '|';
-}
-
-function syncSubagentDashboardStatusLine(state, status, { frame = currentSubagentDashboardFrame(state) } = {}) {
-  const ui = state.subagentDashboardUi;
-  if (!ui || typeof ui.setStatus !== 'function') return;
-  if (!hasActiveSubagentDashboardWork(status)) {
-    clearSubagentDashboardStatusLine(state);
-    return;
-  }
-  try {
-    ui.setStatus(SUBAGENT_DASHBOARD_STATUS_KEY, formatSubagentDashboardStatusLine(status, frame));
-  } catch {
-    // Status-line updates are observational only.
-  }
-}
-
-function clearSubagentDashboardStatusLine(state) {
-  const ui = state.subagentDashboardUi;
-  if (!ui || typeof ui.setStatus !== 'function') return;
-  try {
-    ui.setStatus(SUBAGENT_DASHBOARD_STATUS_KEY, undefined);
-  } catch {
-    // Status-line updates are observational only.
-  }
-}
-
-function formatSubagentDashboardStatusLine(status, frame = '') {
-  const agents = activeSubagentDashboardAgents(status);
-  const preview = agents.length
-    ? ` | ${agents.slice(0, 3).join(', ')}${agents.length > 3 ? `, +${agents.length - 3}` : ''}`
-    : '';
-  return `OMP subagents ${frame || ' '} ${formatSubagentDashboardSummary(status)}${preview}`;
-}
-
-function formatSubagentDashboardActivity(status, frame = '') {
-  const agents = activeSubagentDashboardAgents(status);
-  if (agents.length) return `${frame || '|'} running: ${agents.join(', ')}`;
-  const failed = status.progress
-    .filter(({ status: progressStatus }) => isFailedSubagentStatus(progressStatus))
-    .map(({ agent }) => agent)
-    .filter(Boolean);
-  if (failed.length) return `failed: ${uniqueValues(failed).join(', ')}`;
-  if (status.completed.length) return `completed: ${status.completed.join(', ')}`;
-  return 'idle';
-}
-
-function activeSubagentDashboardAgents(status) {
-  const agents = new Set();
-  for (const pending of status.pending) {
-    if (!pending.stuck && pending.agent) agents.add(pending.agent);
-  }
-  for (const progress of status.progress) {
-    if (isActiveSubagentStatus(progress.status) && progress.agent) agents.add(progress.agent);
-  }
-  return [...agents].sort();
-}
-
-function formatSubagentDashboardSummary(status) {
-  const required = status.required.map(({ agent }) => agent);
-  const completed = required.filter((agent) => status.completed.includes(agent)).length;
-  const pending = status.pending.filter(({ stuck }) => !stuck).length;
-  const stuck = status.pending.filter(({ stuck }) => stuck).length;
-  const failed = new Set(status.progress.filter(({ status: progressStatus }) => isFailedSubagentStatus(progressStatus)).map(({ agent }) => agent)).size;
-  const total = required.length;
-  if (!total) {
-    const active = status.progress.filter(({ status: progressStatus }) => isActiveSubagentStatus(progressStatus)).length;
-    return `${active} active, ${status.progress.length} tracked`;
-  }
-  const waiting = Math.max(0, total - completed - pending - stuck - failed);
-  return `${completed}/${total} completed, ${pending} running, ${waiting} waiting, ${stuck} stuck, ${failed} failed`;
-}
-
-function formatRequiredSubagentDashboardLine(status, { agent, requiredSkills = [] }, activityFrame = '') {
-  const state = subagentDashboardState(status, agent);
-  const details = subagentDashboardDetails(status, agent, requiredSkills);
-  return `- [${subagentDashboardStateLabel(state, activityFrame)}] ${agent}${details ? `: ${details}` : ''}`;
-}
-
-function subagentDashboardState(status, agent) {
-  if (status.completed.includes(agent)) return 'completed';
-  const pending = status.pending.find((item) => item.agent === agent);
-  if (pending?.stuck) return 'stuck';
-  if (pending) return 'running';
-  const progress = latestProgressForAgent(status.progress, agent);
-  if (progress && isFailedSubagentStatus(progress.status)) return 'failed';
-  if (progress && isActiveSubagentStatus(progress.status)) return 'running';
-  return 'waiting';
-}
-
-function subagentDashboardDetails(status, agent, requiredSkills = []) {
-  const pending = status.pending.find((item) => item.agent === agent);
-  const progress = latestProgressForAgent(status.progress, agent);
-  const skills = pending?.skills?.length ? pending.skills : requiredSkills;
-  return [
-    skills.length ? `skills ${skills.join(', ')}` : 'skills none',
-    progress?.currentTool ? `tool ${progress.currentTool}` : null,
-    progress?.description ? progress.description : null,
-    progress?.requests ? `${progress.requests} requests` : null,
-    progress?.durationMs ? `${Math.round(progress.durationMs / 1000)}s` : null,
-    progress?.updatedAt ? `seen ${formatElapsedMs(Date.now() - progress.updatedAt)} ago` : null,
-    pending?.startedAt ? `age ${formatElapsedMs(Date.now() - pending.startedAt)}` : null,
-  ].filter(Boolean).join('; ');
-}
-
-function subagentDashboardStateLabel(state, activityFrame = '') {
-  if (state === 'running') return `${activityFrame || '|'} running`;
-  if (state === 'completed') return 'done';
-  return state;
-}
-
-function latestProgressByAgent(progressItems = []) {
-  const byAgent = new Map();
-  for (const progress of progressItems) {
-    const current = byAgent.get(progress.agent);
-    if (!current || (progress.updatedAt ?? 0) >= (current.updatedAt ?? 0)) byAgent.set(progress.agent, progress);
-  }
-  return [...byAgent.values()].sort((left, right) => (left.index ?? 0) - (right.index ?? 0) || left.agent.localeCompare(right.agent));
-}
-
-function latestProgressForAgent(progressItems = [], agent) {
-  return progressItems
-    .filter((progress) => progress.agent === agent)
-    .sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0))[0];
-}
-
-function dashboardReasonForUpdates(updates = []) {
-  const statuses = updates.map((update) => update.current?.status).filter(Boolean);
-  if (statuses.some(isFailedSubagentStatus)) return 'failed';
-  if (statuses.some(isCompletedSubagentStatus)) return 'completed';
-  if (statuses.some(isActiveSubagentStatus)) return 'progress';
-  return 'updated';
-}
-
-function formatElapsedMs(ms) {
-  if (!Number.isFinite(ms) || ms < 0) return 'unknown';
-  const seconds = Math.round(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return `${minutes}m${remainder ? ` ${remainder}s` : ''}`;
-}
-
 function formatSubagentProgressLine(progress) {
   const details = [
     progress.description,
@@ -2080,25 +1718,6 @@ function formatSubagentProgressLine(progress) {
     progress.durationMs ? `${Math.round(progress.durationMs / 1000)}s` : null,
   ].filter(Boolean).join('; ');
   return `- ${progress.agent}: ${progress.status}${details ? `; ${details}` : ''}`;
-}
-
-function formatSubagentDashboardProgressLine(progress, activityFrame = '') {
-  const details = [
-    progress.description,
-    progress.currentTool ? `tool ${progress.currentTool}` : null,
-    progress.lastIntent && progress.lastIntent !== progress.currentTool ? progress.lastIntent : null,
-    progress.requests ? `${progress.requests} requests` : null,
-    progress.durationMs ? `${Math.round(progress.durationMs / 1000)}s` : null,
-    progress.updatedAt ? `seen ${formatElapsedMs(Date.now() - progress.updatedAt)} ago` : null,
-  ].filter(Boolean).join('; ');
-  return `- [${subagentDashboardProgressLabel(progress.status, activityFrame)}] ${progress.agent}${details ? `: ${details}` : ''}`;
-}
-
-function subagentDashboardProgressLabel(status, activityFrame = '') {
-  if (isActiveSubagentStatus(status)) return `${activityFrame || '|'} ${status}`;
-  if (isCompletedSubagentStatus(status)) return 'done';
-  if (isFailedSubagentStatus(status)) return 'failed';
-  return status || 'unknown';
 }
 
 async function notifySubagentDispatch(ctx = {}, status, records = [], state, event = {}) {
