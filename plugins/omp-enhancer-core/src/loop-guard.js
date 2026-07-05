@@ -1,8 +1,13 @@
 export const defaultLoopGuardConfig = {
   maxRepeatedSentence: 3,
   maxRepeatedPhrase: 2,
+  maxRepeatedBlock: 2,
   maxRepeatedNgram: 4,
   minRepeatedChars: 30,
+  minRepeatedBlockLines: 3,
+  maxRepeatedBlockLines: 8,
+  minRepeatedBlockChars: 120,
+  maxRepeatedBlockFingerprints: 2048,
   englishNgramSize: 8,
   cjkNgramSize: 16,
   maxBufferChars: 6000,
@@ -25,6 +30,9 @@ export function createLoopGuardState() {
     startedAt: 0,
     lastProgressAt: 0,
     streamBuffer: '',
+    streamLineCarry: '',
+    recentBlockLines: [],
+    recentBlockFingerprints: [],
   };
 }
 
@@ -49,6 +57,13 @@ export function readLoopGuardSnapshot(value) {
   state.startedAt = Number.isFinite(value.startedAt) ? value.startedAt : 0;
   state.lastProgressAt = Number.isFinite(value.lastProgressAt) ? value.lastProgressAt : 0;
   state.streamBuffer = isString(value.streamBuffer) ? value.streamBuffer.slice(-defaultLoopGuardConfig.maxBufferChars) : '';
+  state.streamLineCarry = isString(value.streamLineCarry) ? value.streamLineCarry.slice(-1000) : '';
+  state.recentBlockLines = Array.isArray(value.recentBlockLines)
+    ? value.recentBlockLines.map(readRepeatedBlockLine).filter(Boolean).slice(-defaultLoopGuardConfig.maxRepeatedBlockLines)
+    : [];
+  state.recentBlockFingerprints = Array.isArray(value.recentBlockFingerprints)
+    ? value.recentBlockFingerprints.filter(isString).slice(-defaultLoopGuardConfig.maxRepeatedBlockFingerprints)
+    : [];
   return state;
 }
 
@@ -70,6 +85,13 @@ export function serializeLoopGuardState(state = createLoopGuardState()) {
     streamBuffer: typeof state.streamBuffer === 'string'
       ? state.streamBuffer.slice(-defaultLoopGuardConfig.maxBufferChars)
       : '',
+    streamLineCarry: typeof state.streamLineCarry === 'string' ? state.streamLineCarry.slice(-1000) : '',
+    recentBlockLines: Array.isArray(state.recentBlockLines)
+      ? state.recentBlockLines.map(readRepeatedBlockLine).filter(Boolean).slice(-defaultLoopGuardConfig.maxRepeatedBlockLines)
+      : [],
+    recentBlockFingerprints: Array.isArray(state.recentBlockFingerprints)
+      ? state.recentBlockFingerprints.filter(isString).slice(-defaultLoopGuardConfig.maxRepeatedBlockFingerprints)
+      : [],
   };
 }
 
@@ -78,14 +100,14 @@ export function startLoopGuardRun(state = createLoopGuardState(), runId = '') {
   state.streamTriggered = false;
   state.lastAbortReason = '';
   state.lastRepeatedText = '';
-  state.streamBuffer = '';
+  resetLoopGuardStreamState(state);
   state.startedAt = Date.now();
   state.lastProgressAt = state.startedAt;
 }
 
 export function recordLoopGuardProgress(state = createLoopGuardState(), fingerprint = '') {
   state.lastProgressAt = Date.now();
-  state.streamBuffer = '';
+  resetLoopGuardStreamState(state);
   state.recoveryPending = false;
   state.streamTriggered = false;
   if (fingerprint) {
@@ -122,6 +144,17 @@ export function inspectGeneratedText(text = '', config = {}) {
     };
   }
 
+  const block = detectRepeatedBlock(stripped, options);
+  if (block) {
+    return {
+      repeated: true,
+      reason: `Repeated ${block.lines}-line block ${block.count} times.`,
+      repeatedText: block.text,
+      fingerprint: fingerprintGeneratedText(normalized),
+      kind: 'block',
+    };
+  }
+
   const ngram = detectRepeatedNgram(normalized, options);
   if (ngram) {
     return {
@@ -148,7 +181,19 @@ export function recordGeneratedText(state = createLoopGuardState(), text = '', c
   if (!chunk.trim()) return { repeated: false, reason: '', repeatedText: '' };
 
   state.streamBuffer = `${state.streamBuffer || ''}${chunk}`.slice(-options.maxBufferChars);
-  const detection = inspectGeneratedText(state.streamBuffer, options);
+  let detection = inspectGeneratedText(state.streamBuffer, options);
+  if (!detection.repeated) {
+    const block = recordRepeatedBlockHistory(state, chunk, options);
+    if (block) {
+      detection = {
+        repeated: true,
+        reason: `Repeated ${block.lines}-line block ${block.count} times.`,
+        repeatedText: block.text,
+        fingerprint: fingerprintGeneratedText(state.streamBuffer),
+        kind: 'block',
+      };
+    }
+  }
   if (!detection.repeated) {
     state.lastNonRepeatedSummary = summarizeNonRepeatedText(state.streamBuffer);
     if (detection.fingerprint) {
@@ -169,6 +214,87 @@ export function recordGeneratedText(state = createLoopGuardState(), text = '', c
     state.recentOutputFingerprints = state.recentOutputFingerprints.slice(-8);
   }
   return detection;
+}
+
+function resetLoopGuardStreamState(state) {
+  state.streamBuffer = '';
+  state.streamLineCarry = '';
+  state.recentBlockLines = [];
+  state.recentBlockFingerprints = [];
+}
+
+function recordRepeatedBlockHistory(state, chunk, options) {
+  ensureRepeatedBlockHistory(state, options);
+  const lines = takeCompletedStreamLines(state, chunk, options);
+  if (!lines.length) return null;
+
+  for (const original of lines) {
+    const fingerprint = repeatedBlockLineFingerprint(original);
+    if (!isRepeatedBlockCandidate(fingerprint, options)) continue;
+
+    state.recentBlockLines.push({ original, fingerprint });
+    state.recentBlockLines = state.recentBlockLines.slice(-options.maxRepeatedBlockLines);
+
+    const block = detectCurrentBlockRepeat(state, options);
+    if (block) return block;
+  }
+
+  return null;
+}
+
+function ensureRepeatedBlockHistory(state, options) {
+  if (!isString(state.streamLineCarry)) state.streamLineCarry = '';
+  state.recentBlockLines = Array.isArray(state.recentBlockLines)
+    ? state.recentBlockLines.map(readRepeatedBlockLine).filter(Boolean).slice(-options.maxRepeatedBlockLines)
+    : [];
+  state.recentBlockFingerprints = Array.isArray(state.recentBlockFingerprints)
+    ? state.recentBlockFingerprints.filter(isString).slice(-options.maxRepeatedBlockFingerprints)
+    : [];
+}
+
+function takeCompletedStreamLines(state, chunk, options) {
+  const combined = `${state.streamLineCarry || ''}${chunk}`;
+  const parts = combined.split(/\r?\n/u);
+  if (/[\r\n]$/u.test(combined)) {
+    state.streamLineCarry = '';
+    if (parts.at(-1) === '') parts.pop();
+    return parts;
+  }
+  if (options.flushIncompleteLine) {
+    state.streamLineCarry = '';
+    return parts;
+  }
+
+  state.streamLineCarry = parts.pop() ?? '';
+  return parts;
+}
+
+function detectCurrentBlockRepeat(state, options) {
+  const minLines = Math.max(2, options.minRepeatedBlockLines);
+  const maxLines = Math.max(minLines, options.maxRepeatedBlockLines);
+  const repeatedCount = Math.max(2, options.maxRepeatedBlock);
+
+  for (let size = Math.min(maxLines, state.recentBlockLines.length); size >= minLines; size -= 1) {
+    const block = state.recentBlockLines.slice(-size);
+    const charCount = block.reduce((total, line) => total + line.fingerprint.length, 0);
+    if (charCount < options.minRepeatedBlockChars) continue;
+
+    const key = block.map((line) => line.fingerprint).join('\n');
+    const digest = digestRepeatedBlockKey(key);
+    const previousCount = state.recentBlockFingerprints.includes(digest) ? repeatedCount - 1 : 0;
+    if (previousCount + 1 >= repeatedCount) {
+      return {
+        text: block.map((line) => line.original.trim()).join('\n'),
+        count: previousCount + 1,
+        lines: size,
+      };
+    }
+
+    state.recentBlockFingerprints.push(digest);
+    state.recentBlockFingerprints = state.recentBlockFingerprints.slice(-options.maxRepeatedBlockFingerprints);
+  }
+
+  return null;
 }
 
 export function takeLoopRecoveryContext(state = createLoopGuardState(), config = {}) {
@@ -289,6 +415,86 @@ function detectRepeatedPhrase(text, options) {
     if (count >= options.maxRepeatedPhrase) return { text: phrase, count };
   }
   return null;
+}
+
+function detectRepeatedBlock(text, options) {
+  const lines = repeatedBlockLines(text, options);
+  const minLines = Math.max(2, options.minRepeatedBlockLines);
+  const maxLines = Math.max(minLines, options.maxRepeatedBlockLines);
+  const repeatedCount = Math.max(2, options.maxRepeatedBlock);
+
+  for (let size = Math.min(maxLines, lines.length); size >= minLines; size -= 1) {
+    const seen = new Map();
+    for (let start = 0; start <= lines.length - size; start += 1) {
+      const block = lines.slice(start, start + size);
+      const charCount = block.reduce((total, line) => total + line.fingerprint.length, 0);
+      if (charCount < options.minRepeatedBlockChars) continue;
+
+      const key = block.map((line) => line.fingerprint).join('\n');
+      const prior = seen.get(key);
+      const count = (prior?.count ?? 0) + 1;
+      if (count >= repeatedCount) {
+        return {
+          text: block.map((line) => line.original.trim()).join('\n'),
+          count,
+          lines: size,
+        };
+      }
+      seen.set(key, { count });
+    }
+  }
+
+  return null;
+}
+
+function repeatedBlockLines(text, options) {
+  return String(text ?? '')
+    .split(/\r?\n/u)
+    .map((line) => ({
+      original: line,
+      fingerprint: repeatedBlockLineFingerprint(line),
+    }))
+    .filter((line) => {
+      if (!line.fingerprint) return false;
+      if (line.fingerprint.length >= options.minRepeatedChars) return true;
+      return isMeaningfulSentence(line.fingerprint);
+    });
+}
+
+function repeatedBlockLineFingerprint(line) {
+  return normalizeGeneratedText(line)
+    .replace(/^[\s>*-]*(?:\d+[\s.)-]+|[-*]\s+)/u, '')
+    .replace(/[^\p{L}\p{N}\u4E00-\u9FFF]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+function isRepeatedBlockCandidate(fingerprint, options) {
+  if (!fingerprint) return false;
+  if (fingerprint.length >= options.minRepeatedChars) return true;
+  return isMeaningfulSentence(fingerprint);
+}
+
+function digestRepeatedBlockKey(key) {
+  let first = 2166136261;
+  let second = 5381;
+  for (let index = 0; index < key.length; index += 1) {
+    const code = key.charCodeAt(index);
+    first ^= code;
+    first = Math.imul(first, 16777619) >>> 0;
+    second = ((second << 5) + second + code) >>> 0;
+  }
+  return `${key.length}:${first.toString(36)}:${second.toString(36)}`;
+}
+
+function readRepeatedBlockLine(value) {
+  if (!isRecord(value)) return null;
+  if (!isString(value.original) || !isString(value.fingerprint)) return null;
+  if (!value.fingerprint) return null;
+  return {
+    original: value.original.slice(-1000),
+    fingerprint: value.fingerprint.slice(-1000),
+  };
 }
 
 function detectRepeatedNgram(text, options) {

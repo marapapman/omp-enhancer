@@ -339,6 +339,49 @@ test('message_update loop guard aborts real OMP text delta streams', async () =>
   assert.match(recovery.additionalContext, /choose exactly one next action/);
 });
 
+test('message_update loop guard detects repeated planning blocks across streamed deltas', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
+  let abortCount = 0;
+  ctx.abort = () => { abortCount += 1; };
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt: 'Implement classifier fallback handling and add tests.' }, ctx);
+
+  const repeatedBlock = [
+    '1. Inspect the request router state transition and capture the exact event payload shape.',
+    '2. Validate the plugin hook registration path and record which callback handled the stream.',
+    '3. Add focused regression tests that replay the real payload before changing release metadata.',
+  ].join('\n');
+  const text = [
+    'Plan:',
+    repeatedBlock,
+    '',
+    'I will check the implementation details before editing files.',
+    '',
+    'Plan:',
+    repeatedBlock,
+    '',
+  ].join('\n');
+
+  let blocked;
+  for (let index = 0; index < text.length; index += 75) {
+    blocked = await event(pi, 'message_update')(
+      {
+        assistantMessageEvent: { type: 'text_delta', delta: text.slice(index, index + 75), contentIndex: 0 },
+      },
+      ctx,
+    );
+    if (blocked?.abort) break;
+  }
+
+  assert.equal(abortCount, 1);
+  assert.equal(blocked.abort, true);
+  assert.match(blocked.reason, /Repeated \d-line block 2 times/);
+});
+
 test('session_stop loop guard gives one bounded recovery for repeated final output', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);

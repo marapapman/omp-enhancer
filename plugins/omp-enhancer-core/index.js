@@ -616,12 +616,32 @@ function routeStartIndexFor(entries, routeStartedAt, fallbackIndex) {
 }
 
 function replaceState(target, source) {
+  const liveLoopGuard = target.loopGuard;
   target.lastRoute = source.lastRoute;
   target.routeStartedAt = source.routeStartedAt;
   target.lastSkillUsage = source.lastSkillUsage;
   target.lastSubagentUsage = source.lastSubagentUsage;
   target.evidence = source.evidence;
-  target.loopGuard = source.loopGuard ?? createLoopGuardState();
+  target.loopGuard = mergeLiveLoopGuardState(liveLoopGuard, source.loopGuard ?? createLoopGuardState());
+}
+
+function mergeLiveLoopGuardState(live, restored) {
+  if (!live || !restored) return restored ?? createLoopGuardState();
+  if (!live.currentRunId || live.currentRunId !== restored.currentRunId) return restored;
+  if (restored.streamTriggered || restored.recoveryPending) return restored;
+
+  return {
+    ...restored,
+    streamBuffer: live.streamBuffer || restored.streamBuffer || '',
+    streamLineCarry: live.streamLineCarry || restored.streamLineCarry || '',
+    recentBlockLines: Array.isArray(live.recentBlockLines) && live.recentBlockLines.length
+      ? live.recentBlockLines
+      : restored.recentBlockLines,
+    recentBlockFingerprints: Array.isArray(live.recentBlockFingerprints) && live.recentBlockFingerprints.length
+      ? live.recentBlockFingerprints
+      : restored.recentBlockFingerprints,
+    lastNonRepeatedSummary: live.lastNonRepeatedSummary || restored.lastNonRepeatedSummary || '',
+  };
 }
 
 function serializeState(state) {
@@ -941,7 +961,7 @@ function buildLoopRecoveryStopContext(state, event = {}) {
   if (state.loopGuard.recoveryPending) return takeLoopRecoveryContext(state.loopGuard);
   const output = extractFinalOutputText(event);
   if (!output) return null;
-  const detection = recordGeneratedText(state.loopGuard, output);
+  const detection = recordGeneratedText(state.loopGuard, output, { flushIncompleteLine: true });
   if (!detection.repeated) return null;
   return takeLoopRecoveryContext(state.loopGuard);
 }
@@ -981,7 +1001,7 @@ function reconcileSkillUsageFromReadEvidence(state) {
 
 function extractGeneratedOutputText(event = {}) {
   const assistantDelta = extractAssistantMessageDelta(event);
-  if (assistantDelta) return assistantDelta.trim();
+  if (assistantDelta) return assistantDelta;
   if (event.assistantMessageEvent || event.details?.assistantMessageEvent) return '';
 
   const candidates = [
