@@ -14,6 +14,7 @@ const pluginFixtures = [
   { directory: 'writing-helper', name: 'writing-helper', version: '0.2.1', ref: 'v0.2.1' },
   { directory: 'omp-test-enhancer', name: 'omp-testing-enhancer', version: '0.1.3', ref: 'v0.1.3' },
   { directory: 'omp-enhancer-core', name: 'omp-enhancer-core', version: '0.1.0' },
+  { directory: 'omp-opencode-go-pool', name: 'omp-opencode-go-pool', version: '0.1.2' },
 ];
 
 async function readJson(path) {
@@ -182,6 +183,7 @@ test('--plugin all --bump patch bumps every plugin package, every catalog entry,
       ['writing-helper', { directory: 'writing-helper', version: '0.2.2' }],
       ['omp-testing-enhancer', { directory: 'omp-test-enhancer', version: '0.1.4' }],
       ['omp-enhancer-core', { directory: 'omp-enhancer-core', version: '0.1.1' }],
+      ['omp-opencode-go-pool', { directory: 'omp-opencode-go-pool', version: '0.1.3' }],
     ]);
 
     assert.equal(catalog.metadata.version, '1.0.1');
@@ -233,6 +235,29 @@ test('--dry-run reports planned changes without writing release files', async ()
     assert.match(result.stdout, /package\.json/);
     assert.match(result.stdout, /marketplace\.json/);
     assert.deepEqual(await snapshotReleaseFiles(root), before);
+  });
+});
+
+test('--plugin omp-opencode-go-pool --bump patch syncs package and catalog versions', async () => {
+  await withReleaseFixture(async (root) => {
+    const result = await runRelease(root, [
+      '--plugin',
+      'omp-opencode-go-pool',
+      '--bump',
+      'patch',
+      '--apply',
+    ]);
+
+    assertReleaseSucceeded(result);
+
+    const packageJson = await readPluginPackage(root, 'omp-opencode-go-pool');
+    const catalog = await readCatalog(root);
+    const plugin = catalog.plugins.find((entry) => entry.name === 'omp-opencode-go-pool');
+
+    assert.equal(packageJson.version, '0.1.3');
+    assert.equal(plugin.version, '0.1.3');
+    assert.equal(Object.hasOwn(plugin, 'ref'), false);
+    assert.equal(catalog.metadata.version, '1.0.0');
   });
 });
 

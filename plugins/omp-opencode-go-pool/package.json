@@ -1,6 +1,6 @@
 {
   "name": "omp-opencode-go-pool",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "Transparent OpenCode Go API key pool and per-key usage status for OMP.",

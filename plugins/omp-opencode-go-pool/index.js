@@ -6,6 +6,7 @@ import { buildStatusReport, formatStatusReport } from './src/diagnostics.js';
 import { KeyVault } from './src/key-vault.js';
 import { KeyPool } from './src/key-pool.js';
 import { runKeyCommand } from './src/key-command.js';
+import { fetchOpenCodeGoLiveStatuses } from './src/opencode-go-live-status.js';
 import { buildBalancedModelOverlay, registerOpenCodeGoPoolProvider } from './src/provider-registration.js';
 import { UsageLedger } from './src/usage.js';
 
@@ -45,7 +46,16 @@ export default function registerOpenCodeGoPool(pi) {
 
   const statusRunner = async (ctx = {}) => {
     const primaryApiKey = await resolvePrimaryApiKeyFromContext(ctx);
-    const report = await buildStatusReport({ keyPool, keyVault, usageLedger, primaryApiKey });
+    const fetchLiveStatuses = typeof pi.fetchOpenCodeGoLiveStatuses === 'function'
+      ? pi.fetchOpenCodeGoLiveStatuses
+      : fetchOpenCodeGoLiveStatuses;
+    const report = await buildStatusReport({
+      keyPool,
+      keyVault,
+      usageLedger,
+      primaryApiKey,
+      fetchLiveStatuses,
+    });
     return { report, text: formatStatusReport(report) };
   };
 
@@ -116,6 +126,7 @@ export {
   formatStatusReport,
   KeyPool,
   KeyVault,
+  fetchOpenCodeGoLiveStatuses,
   registerOpenCodeGoPoolProvider,
   runKeyCommand,
   UsageLedger,

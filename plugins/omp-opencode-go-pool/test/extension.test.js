@@ -78,6 +78,20 @@ test('status command includes primary key metadata without leaking the key', asy
     registerCommand: (name, config) => commands.set(name, config),
     registerTool: () => {},
     registerProvider: () => {},
+    fetchOpenCodeGoLiveStatuses: async keys => ({
+      checked: true,
+      endpoint: 'test://opencode-go-live-status',
+      checkedAt: '2026-07-05T00:00:00.000Z',
+      keys: keys.map(key => ({
+        id: key.id,
+        label: key.label,
+        hash: key.hash,
+        source: key.source,
+        status: 'ok',
+        httpStatus: 400,
+        reason: 'test live status',
+      })),
+    }),
     zod: { z: { object: () => ({}) } },
   });
 
@@ -104,6 +118,12 @@ test('key command notifies validation failures without exposing pasted key text'
     registerCommand: (name, config) => commands.set(name, config),
     registerTool: () => {},
     registerProvider: () => {},
+    fetchOpenCodeGoLiveStatuses: async () => ({
+      checked: true,
+      endpoint: 'test://opencode-go-live-status',
+      checkedAt: '2026-07-05T00:00:00.000Z',
+      keys: [],
+    }),
     zod: { z: { object: () => ({}) } },
   });
 

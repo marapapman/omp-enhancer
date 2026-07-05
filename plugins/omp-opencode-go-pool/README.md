@@ -39,7 +39,7 @@ If you are developing locally, use a local marketplace or plugin link flow inste
 - `/opencode_go_pool_key rename <label|id|hash> <new-label>`
   Rename an extra key.
 - `/opencode_go_pool_status`
-  Show key health, cooldowns, in-flight counts, recent errors, and plugin-observed 5h, weekly, and monthly usage bars.
+  Show key health, cooldowns, in-flight counts, recent errors, a live OpenCode Go auth/quota check, and plugin-observed 5h, weekly, and monthly usage bars.
 
 Do not paste raw API keys into slash-command arguments. Run `/opencode_go_pool_key` without key text and enter the key in the prompt.
 
@@ -57,13 +57,21 @@ The vault is written with owner-only file permissions where the platform support
 
 ## Usage Accounting
 
-`/opencode_go_pool_status` reads the plugin-owned JSONL ledger:
+`/opencode_go_pool_status` first probes the live OpenCode Go API for each visible key through:
+
+```text
+https://opencode.ai/zen/go/v1/chat/completions
+```
+
+OpenCode Go currently does not expose exact per-API-key usage percentages through a documented Go API endpoint. The live probe validates the same auth/quota gate used by real model requests and can show whether a key is accepted, rejected, or blocked by the 5h, weekly, or monthly Go limit. It intentionally sends a malformed non-streaming request so OpenCode validates the key and Go quota before the upstream provider rejects the request body without returning usage.
+
+The usage bars below that section are still the plugin-owned JSONL ledger:
 
 ```text
 ~/.omp/agent/state/opencode-go-pool-usage.jsonl
 ```
 
-It reports plugin-observed attempts by key label/hash. The 5h, weekly, and monthly bars use the same fixed OpenCode Go windows that OMP's native usage view uses for observed spend: $12, $30, and $60. It does not claim to be the OpenCode Go dashboard bill, and it does not replace OMP native `/usage`.
+They report plugin-observed attempts by key label/hash. The 5h, weekly, and monthly bars use the same fixed OpenCode Go windows and ASCII bar style that OMP's native usage view uses for observed spend: $12, $30, and $60. They are `opencode_go_pool_usage`, not the OpenCode Go dashboard bill, and they do not replace OMP native `/usage`.
 
 The slash command displays its report through OMP's extension notification UI. If the command appears to do nothing after an upgrade, start a new OMP session so the process reloads the upgraded plugin code.
 
