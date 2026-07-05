@@ -1,6 +1,6 @@
 import { buildGovernancePromptFragment, buildMissingGateContext, buildSubagentPromptFragment } from './src/governance.js';
 import { routeNaturalLanguageTask } from './src/router.js';
-import { validateSkillUsage } from './src/skill-usage.js';
+import { normalizeSkillName, validateSkillUsage } from './src/skill-usage.js';
 import { collectSubagentTaskRecords, parseSubagentUsageDetails, validateSubagentUsage } from './src/subagent-usage.js';
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
 import { runClassifierCommand } from './src/classifier-config.js';
@@ -750,7 +750,7 @@ function missingReadSkills(state) {
 }
 
 function normalizeEvidenceSkillName(value) {
-  return String(value ?? '').trim().toLowerCase();
+  return normalizeSkillName(value);
 }
 
 function recordFinalOutputEvidence(state, event = {}) {
@@ -1922,11 +1922,10 @@ function parseSkillUris(value) {
 }
 
 function cleanReadSkillName(value) {
-  return String(value)
+  return normalizeSkillName(String(value)
     .replace(/[.。；;，,]+$/, '')
     .replace(/[)\]}>]+$/, '')
-    .trim()
-    .toLowerCase();
+    .trim());
 }
 
 function subagentNames(subagents = []) {

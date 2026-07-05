@@ -1,4 +1,10 @@
 const placeholderValues = new Set(['todo', 'tbd', '<required skill>', '<skill>', '[skill]', 'required skill']);
+const skillAliases = new Map([
+  ['ecc-security-review', 'security-review'],
+  ['ecc/security-review', 'security-review'],
+  ['ecc-security-scan', 'security-scan'],
+  ['ecc/security-scan', 'security-scan'],
+]);
 
 export function validateSkillUsage({ requiredSkills = [], output = '', loadedSkills = [] } = {}) {
   const authoritative = findAuthoritativeSkillUsage(String(output));
@@ -107,8 +113,10 @@ function parseSkillUsageBlock(block) {
 function findDeniedSkills(output, requiredSkills) {
   const lower = output.toLowerCase();
   return requiredSkills.filter((skill) => {
-    const escaped = escapeRegExp(skill.toLowerCase());
-    return new RegExp(`did not load\\s+${escaped}|without loading\\s+${escaped}|未加载\\s*${escaped}|没有加载\\s*${escaped}`).test(lower);
+    return skillNameVariants(skill).some((variant) => {
+      const escaped = escapeRegExp(variant);
+      return new RegExp(`did not load\\s+${escaped}|without loading\\s+${escaped}|未加载\\s*${escaped}|没有加载\\s*${escaped}`).test(lower);
+    });
   });
 }
 
@@ -187,17 +195,28 @@ function cleanSkillEntry(value) {
     .trim();
 }
 
-function normalizeSkillName(value) {
-  return cleanSkillEntry(value)
+export function normalizeSkillName(value) {
+  const normalized = cleanSkillEntry(value)
     .replace(/^[<["'({]+/, '')
     .replace(/[>\]"')}]+$/, '')
     .trim()
     .toLowerCase();
+  return skillAliases.get(normalized) ?? normalized;
 }
 
 function normalizeLoadedSkills(skills) {
   const values = Array.isArray(skills) || skills instanceof Set ? [...skills] : [];
   return uniqueValues(values.map((entry) => normalizeSkillName(entry)).filter(Boolean));
+}
+
+function skillNameVariants(skill) {
+  const canonical = normalizeSkillName(skill);
+  return uniqueValues([
+    canonical,
+    ...[...skillAliases.entries()]
+      .filter(([, value]) => value === canonical)
+      .map(([alias]) => alias),
+  ]);
 }
 
 function uniqueValues(values) {

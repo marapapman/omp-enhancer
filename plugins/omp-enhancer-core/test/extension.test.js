@@ -622,6 +622,51 @@ test('pre-work skill gate blocks simple writing edits until writing skills are r
   assert.equal(allowed, undefined);
 });
 
+test('pre-work skill gate accepts legacy ECC security skill aliases', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: 'Review this API handler for auth bypass and injection risks.' },
+    ctx,
+  );
+
+  const blocked = await event(pi, 'tool_call')(
+    { toolName: 'task', input: { agent: 'ecc-security-reviewer' } },
+    ctx,
+  );
+
+  assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /security-review/);
+  assert.match(blocked.reason, /security-scan/);
+
+  await event(pi, 'tool_result')(
+    {
+      name: 'read',
+      params: { uri: 'skill://ecc-security-review' },
+      content: [{ type: 'text', text: 'Loaded legacy alias.' }],
+    },
+    ctx,
+  );
+  await event(pi, 'tool_result')(
+    {
+      name: 'read',
+      params: { uri: 'skill://ecc-security-scan' },
+      content: [{ type: 'text', text: 'Loaded legacy alias.' }],
+    },
+    ctx,
+  );
+
+  const allowed = await event(pi, 'tool_call')(
+    { toolName: 'task', input: { agent: 'ecc-security-reviewer' } },
+    ctx,
+  );
+
+  assert.equal(allowed, undefined);
+});
+
 test('failed writing QA tool results do not release the writing gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);

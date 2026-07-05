@@ -128,6 +128,37 @@ test('merges SKILL_USAGE block entries with read skill evidence', () => {
   assert.deepEqual(result.missing, []);
 });
 
+test('accepts legacy ECC security skill aliases from read evidence', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['security-review', 'security-scan'],
+    output: 'Security review complete.',
+    loadedSkills: ['skill://ecc-security-review', 'skill://ecc-security-scan'],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['security-review', 'security-scan']);
+  assert.deepEqual(result.missing, []);
+});
+
+test('accepts legacy ECC security skill aliases in SKILL_USAGE blocks', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['security-review', 'security-scan'],
+    output: [
+      'SKILL_USAGE',
+      'Required:',
+      '- security-review',
+      '- security-scan',
+      'Loaded:',
+      '- ecc-security-review',
+      '- ecc-security-scan',
+    ].join('\n'),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['security-review', 'security-scan']);
+  assert.deepEqual(result.missing, []);
+});
+
 test('ignores fenced code blocks when finding the authoritative SKILL_USAGE block', () => {
   const result = validateSkillUsage({
     requiredSkills: ['plain-chinese-writing'],
