@@ -206,8 +206,7 @@ export default function registerCoreEnhancer(pi) {
       return preworkBlock;
     }
     if (name === 'task') {
-      const records = recordSubagentDispatchStarted(state, event);
-      await notifySubagentDispatch(ctx, 'running', records, state);
+      recordSubagentDispatchStarted(state, event);
     }
     await persistState(pi, state);
     return undefined;
@@ -217,7 +216,6 @@ export default function registerCoreEnhancer(pi) {
     restoreStateFromContext(state, ctx);
     if (toolEventName(event) !== 'task') return undefined;
     const updates = recordTaskExecutionUpdate(state, event);
-    await notifyTaskProgress(ctx, updates, state);
     if (updates.some((update) => update.persist)) await persistState(pi, state);
     return undefined;
   });
@@ -234,8 +232,7 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'omp_test_report' && successful) state.evidence.testingReport = true;
     if (name === 'task') {
       recordTaskResult(state, event, { successful });
-      const records = recordSubagentDispatchFinished(state, event, { successful });
-      await notifySubagentDispatch(ctx, successful ? 'completed' : 'failed', records, state, event);
+      recordSubagentDispatchFinished(state, event, { successful });
     }
     if (name === 'read' && successful) recordReadSkillEvidence(state, event);
     await persistState(pi, state);
@@ -1637,77 +1634,6 @@ function formatProgressToolLine(progress) {
   const detailText = progress.toolDetail || progress.lastIntent;
   const detail = detailText && detailText !== tool ? ` - ${detailText}` : '';
   return `${label}: ${tool}${detail}`;
-}
-
-async function notifySubagentDispatch(ctx = {}, status, records = [], state, event = {}) {
-  const notify = ctx.ui?.notify;
-  if (typeof notify !== 'function') return;
-  const agents = formatSubagentNotificationAgents(records);
-  if (!agents) return;
-
-  const message = formatSubagentNotification({ status, agents, state, event });
-  const level = status === 'failed' ? 'warn' : 'info';
-  try {
-    await notify(message, level);
-  } catch {
-    // TUI notifications are best-effort; routing and gates must keep working.
-  }
-}
-
-async function notifyTaskProgress(ctx = {}, updates = [], state) {
-  const notify = ctx.ui?.notify;
-  if (typeof notify !== 'function') return;
-  for (const update of updates) {
-    if (!update.notify) continue;
-    const message = formatTaskProgressNotification(update.current, state);
-    const level = update.current.status === 'failed' || update.current.status === 'aborted' ? 'warn' : 'info';
-    try {
-      await notify(message, level);
-    } catch {
-      // Progress notifications are informational only.
-    }
-  }
-}
-
-function formatSubagentNotification({ status, agents, state, event }) {
-  const route = state.lastRoute?.intent ? ` Route: ${state.lastRoute.intent}.` : '';
-  if (status === 'running') return `OMP subagents running: ${agents}.${route}`;
-  if (status === 'completed') return `OMP subagents completed: ${agents}.${route}`;
-  const message = extractFailureMessage(event);
-  const suffix = message ? ` ${message}` : '';
-  return `OMP subagents failed: ${agents}.${route}${suffix}`;
-}
-
-function formatTaskProgressNotification(progress, state) {
-  const route = state.lastRoute?.intent ? ` Route: ${state.lastRoute.intent}.` : '';
-  const details = [
-    progress.currentTool ? `tool ${progress.currentTool}` : null,
-    !progress.currentTool && progress.lastTool ? `last tool ${progress.lastTool}` : null,
-    progress.toolDetail,
-    progress.summary,
-  ].filter(Boolean).join('; ');
-  return formatNotificationSentence(`OMP task progress: ${progress.id} ${progress.status}${details ? `; ${details}` : ''}`, route);
-}
-
-function formatNotificationSentence(text, suffix = '') {
-  const normalized = String(text).trim();
-  const punctuation = /[.!?]$/.test(normalized) ? '' : '.';
-  return `${normalized}${punctuation}${suffix}`;
-}
-
-function formatSubagentNotificationAgents(records = []) {
-  const byAgent = new Map();
-  for (const { agent, skills = [] } of records) {
-    if (!agent) continue;
-    const current = byAgent.get(agent) ?? new Set();
-    for (const skill of skills) current.add(skill);
-    byAgent.set(agent, current);
-  }
-
-  return [...byAgent.entries()].map(([agent, skills]) => {
-    const list = [...skills];
-    return list.length ? `${agent} [${list.join(', ')}]` : agent;
-  }).join(', ');
 }
 
 function eventTimestamp(event = {}) {

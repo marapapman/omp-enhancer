@@ -1509,9 +1509,7 @@ test('task tool_execution_update records live task progress and completion', asy
   assert.match(status.content[0].text, /Tasks:\n- task task-live-progress: running # Running agent WriterLive\.\.\. \| 1 items, 1 running \| 1 req \| 2s\n  current tool: read/);
   assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['writer']);
   assert.deepEqual(status.details.status.pending[0].skills, ['writing-markdown-helper']);
-  const taskProgressNotification = notifications.find(({ text }) => text.startsWith('OMP task progress:'));
-  assert.equal(taskProgressNotification?.level, 'info');
-  assert.match(taskProgressNotification?.text, /OMP task progress: task-live-progress running; tool read; Running agent WriterLive\.\.\. Route: writing\.en\./);
+  assert.deepEqual(notifications, []);
   assert.equal(pi.messages.length, 0);
 
   await event(pi, 'tool_result')(
@@ -1547,6 +1545,7 @@ test('task tool_execution_update records live task progress and completion', asy
   assert.deepEqual(status.details.status.completed, ['writer']);
   assert.deepEqual(status.details.status.pending, []);
   assert.match(status.content[0].text, /Tasks:\n- task task-live-progress: completed # Task complete \| 1 items, 1 done \| 2 req \| 1\.2k tokens \| 5s/);
+  assert.deepEqual(notifications, []);
   assert.equal(pi.messages.length, 0);
 });
 
@@ -1739,7 +1738,7 @@ test('completing one of two pending task calls keeps the other subagent running'
   assert.match(status.content[0].text, /Pending:\n- checker: pending/);
   assert.deepEqual(status.details.status.completed, ['writer']);
   assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['checker']);
-  assert.match(notifications.at(-1).text, /OMP subagents completed: writer \[writing-markdown-helper\]/);
+  assert.deepEqual(notifications, []);
 
   await event(pi, 'tool_result')({ name: 'task' }, ctx);
   const completed = await tool(pi, 'omp_core_subagent_status').execute(
@@ -1752,9 +1751,10 @@ test('completing one of two pending task calls keeps the other subagent running'
 
   assert.deepEqual(completed.details.status.completed, ['writer', 'checker']);
   assert.deepEqual(completed.details.status.pending, []);
+  assert.deepEqual(notifications, []);
 });
 
-test('task tool_call announces running subagents in TUI notifications', async () => {
+test('task tool_call leaves running subagents to native OMP TUI', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const notifications = [];
@@ -1783,13 +1783,11 @@ test('task tool_call announces running subagents in TUI notifications', async ()
     ctx,
   );
 
-  assert.equal(notifications.length, 1);
-  assert.equal(notifications[0].level, 'info');
-  assert.match(notifications[0].text, /OMP subagents running: writer \[writing-markdown-helper\], checker \[writing-checkers\]\. Route: writing\.en\./);
+  assert.deepEqual(notifications, []);
   assert.equal(pi.messages.length, 0);
 });
 
-test('task tool_result announces completed and failed subagents in TUI notifications', async () => {
+test('task tool_result leaves completed and failed subagents to native OMP TUI', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const notifications = [];
@@ -1818,8 +1816,7 @@ test('task tool_result announces completed and failed subagents in TUI notificat
   );
   await event(pi, 'tool_result')({ name: 'task' }, ctx);
 
-  assert.equal(notifications[1].level, 'info');
-  assert.match(notifications[1].text, /OMP subagents completed: writer \[writing-markdown-helper\]\. Route: writing\.en\./);
+  assert.deepEqual(notifications, []);
 
   await tool(pi, 'omp_core_route_task').execute(
     'call-failed-notification-route',
@@ -1847,8 +1844,7 @@ test('task tool_result announces completed and failed subagents in TUI notificat
   );
   await event(pi, 'tool_result')({ name: 'task', isError: true, message: 'plan subagent timed out' }, ctx);
 
-  assert.equal(notifications.at(-1).level, 'warn');
-  assert.match(notifications.at(-1).text, /OMP subagents failed: plan \[brainstorming, subagent-driven-development\]\. Route: implementation-with-tests\. plan subagent timed out/);
+  assert.deepEqual(notifications, []);
 });
 
 test('session_stop accepts SKILL_USAGE from the final output event without a separate validator call', async () => {
