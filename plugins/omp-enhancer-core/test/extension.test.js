@@ -90,6 +90,7 @@ test('registers core tools, classifier command, and hooks', () => {
     'assistant_output',
     'response_delta',
     'response_output_delta',
+    'message_update',
     'before_agent_start',
     'tool_call',
     'tool_execution_update',
@@ -295,6 +296,49 @@ test('assistant output loop guard aborts repeated main-agent generation and prep
   assert.equal(recovery.route.intent, 'implementation-with-tests');
 });
 
+test('message_update loop guard aborts real OMP text delta streams', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  let abortCount = 0;
+  ctx.abort = () => { abortCount += 1; };
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt: 'Implement classifier fallback handling and add tests.' }, ctx);
+
+  const repeated = [
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+  ].join('\n');
+  const ignoredToolDelta = await event(pi, 'message_update')(
+    {
+      message: { role: 'assistant', content: [{ type: 'text', text: repeated }] },
+      assistantMessageEvent: { type: 'toolcall_delta', delta: repeated, contentIndex: 0 },
+    },
+    ctx,
+  );
+
+  assert.equal(ignoredToolDelta, undefined);
+  assert.equal(abortCount, 0);
+
+  const blocked = await event(pi, 'message_update')(
+    {
+      message: { role: 'assistant', content: [{ type: 'text', text: repeated }] },
+      assistantMessageEvent: { type: 'text_delta', delta: repeated, contentIndex: 0 },
+    },
+    ctx,
+  );
+
+  assert.equal(abortCount, 1);
+  assert.equal(blocked.abort, true);
+  assert.match(blocked.reason, /loop guard/i);
+
+  const recovery = await event(pi, 'before_agent_start')({ prompt: 'Continue.' }, ctx);
+
+  assert.match(recovery.additionalContext, /choose exactly one next action/);
+});
+
 test('session_stop loop guard gives one bounded recovery for repeated final output', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -317,6 +361,39 @@ test('session_stop loop guard gives one bounded recovery for repeated final outp
   assert.match(first.additionalContext, /main-agent loop guard stopped/);
 
   const second = await event(pi, 'session_stop')({ output: repeated }, ctx);
+
+  assert.equal(second, undefined);
+});
+
+test('session_stop loop guard reads real OMP last assistant message payloads', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({
+    prompt: '诊断为什么当前插件会重复输出同一句话，不要修改文件。',
+  }, ctx);
+
+  const repeated = [
+    '我需要继续检查这个问题。',
+    '我需要继续检查这个问题。',
+    '我需要继续检查这个问题。',
+  ].join('\n');
+  const stopEvent = {
+    messages: [
+      { role: 'user', content: [{ type: 'text', text: '请诊断重复输出。' }] },
+      { role: 'assistant', content: [{ type: 'text', text: repeated }] },
+    ],
+    last_assistant_message: { role: 'assistant', content: [{ type: 'text', text: repeated }] },
+  };
+
+  const first = await event(pi, 'session_stop')(stopEvent, ctx);
+
+  assert.equal(first?.continue, true);
+  assert.match(first.additionalContext, /main-agent loop guard stopped/);
+
+  const second = await event(pi, 'session_stop')(stopEvent, ctx);
 
   assert.equal(second, undefined);
 });
@@ -1638,6 +1715,47 @@ test('session_stop accepts SKILL_USAGE from the final output event without a sep
         '- writing-markdown-helper',
         '- writing-checkers',
       ].join('\n'),
+    },
+    ctx,
+  );
+
+  assert.notEqual(result?.continue, true);
+});
+
+test('session_stop accepts SKILL_USAGE from real OMP last assistant message payloads', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-final-last-assistant-skill-route',
+    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await forkSubagents(pi, ctx, ['writer', 'checker']);
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+
+  const finalOutput = [
+    'Done.',
+    '',
+    'SKILL_USAGE',
+    'Required:',
+    '- writing-markdown-helper',
+    '- writing-checkers',
+    'Loaded:',
+    '- writing-markdown-helper',
+    '- writing-checkers',
+  ].join('\n');
+  const result = await event(pi, 'session_stop')(
+    {
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'Draft and check the paragraph.' }] },
+        { role: 'assistant', content: [{ type: 'text', text: finalOutput }] },
+      ],
+      last_assistant_message: { role: 'assistant', content: [{ type: 'text', text: finalOutput }] },
     },
     ctx,
   );

@@ -25,6 +25,7 @@ const ASSISTANT_OUTPUT_EVENTS = [
   'assistant_output',
   'response_delta',
   'response_output_delta',
+  'message_update',
 ];
 const SUBAGENT_STUCK_AFTER_MS = 10 * 60 * 1000;
 const SUBAGENT_ACTIVE_STATUSES = new Set(['pending', 'running', 'started', 'in_progress', 'in-progress']);
@@ -165,21 +166,8 @@ export default function registerCoreEnhancer(pi) {
   for (const eventName of ASSISTANT_OUTPUT_EVENTS) {
     pi.on?.(eventName, async (event = {}, ctx = {}) => {
       restoreStateFromContext(state, ctx);
-      if (state.loopGuard.streamTriggered) return undefined;
       const text = extractGeneratedOutputText(event);
-      if (!text) return undefined;
-      const detection = recordGeneratedText(state.loopGuard, text);
-      if (!detection.repeated) return undefined;
-
-      await persistState(pi, state);
-      const additionalContext = buildLoopRecoveryContext(state.loopGuard);
-      await ctx.ui?.notify?.('OMP Enhancer Core stopped a repeated main-agent generation.', 'warn');
-      return {
-        abort: true,
-        reason: `OMP Enhancer Core loop guard: ${detection.reason}`,
-        additionalContext,
-        details: { loopGuard: detection },
-      };
+      return await handleLoopGuardGeneratedOutput(pi, state, ctx, text);
     });
   }
 
@@ -958,6 +946,29 @@ function buildLoopRecoveryStopContext(state, event = {}) {
   return takeLoopRecoveryContext(state.loopGuard);
 }
 
+async function handleLoopGuardGeneratedOutput(pi, state, ctx = {}, text = '') {
+  if (state.loopGuard.streamTriggered) return undefined;
+  if (!text) return undefined;
+  const detection = recordGeneratedText(state.loopGuard, text);
+  if (!detection.repeated) return undefined;
+
+  await persistState(pi, state);
+  const additionalContext = buildLoopRecoveryContext(state.loopGuard);
+  await ctx.ui?.notify?.('OMP Enhancer Core stopped a repeated main-agent generation.', 'warn');
+  try {
+    ctx.abort?.();
+  } catch {
+    // Stream abort is best-effort; return the structured result for hosts that
+    // honor handler return values.
+  }
+  return {
+    abort: true,
+    reason: `OMP Enhancer Core loop guard: ${detection.reason}`,
+    additionalContext,
+    details: { loopGuard: detection },
+  };
+}
+
 function reconcileSkillUsageFromReadEvidence(state) {
   const requiredSkills = state.lastRoute?.requiredSkills ?? [];
   if (!requiredSkills.length || state.lastSkillUsage?.ok || !state.evidence.loadedSkills.size) return;
@@ -969,6 +980,10 @@ function reconcileSkillUsageFromReadEvidence(state) {
 }
 
 function extractGeneratedOutputText(event = {}) {
+  const assistantDelta = extractAssistantMessageDelta(event);
+  if (assistantDelta) return assistantDelta.trim();
+  if (event.assistantMessageEvent || event.details?.assistantMessageEvent) return '';
+
   const candidates = [
     event.delta,
     event.chunk,
@@ -1000,13 +1015,12 @@ function extractGeneratedOutputText(event = {}) {
 }
 
 function extractFinalOutputText(event = {}) {
+  const finalAssistantMessage = extractFinalAssistantMessage(event);
   const candidates = [
     event.output,
     event.response,
     event.text,
-    event.message,
-    event.assistantMessage,
-    event.assistantResponse,
+    finalAssistantMessage ?? event.message,
     event.finalMessage,
     event.finalResponse,
     event.finalOutput,
@@ -1024,6 +1038,40 @@ function extractFinalOutputText(event = {}) {
     .map((text) => text.trim())
     .filter(Boolean)
     .join('\n\n');
+}
+
+function extractAssistantMessageDelta(event = {}) {
+  const assistantEvent = event.assistantMessageEvent ?? event.details?.assistantMessageEvent;
+  if (!isRecord(assistantEvent)) return '';
+  if (assistantEvent.type && assistantEvent.type !== 'text_delta' && assistantEvent.type !== 'thinking_delta') return '';
+  return typeof assistantEvent.delta === 'string' ? assistantEvent.delta : '';
+}
+
+function extractFinalAssistantMessage(event = {}) {
+  const direct = [
+    event.last_assistant_message,
+    event.lastAssistantMessage,
+    event.assistant_message,
+    event.assistantMessage,
+    event.assistantResponse,
+    event.details?.last_assistant_message,
+    event.details?.lastAssistantMessage,
+    event.details?.assistant_message,
+    event.details?.assistantMessage,
+    event.details?.assistantResponse,
+  ].find(Boolean);
+  if (direct) return direct;
+
+  const messages = Array.isArray(event.messages)
+    ? event.messages
+    : Array.isArray(event.details?.messages)
+      ? event.details.messages
+      : [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === 'assistant') return message;
+  }
+  return null;
 }
 
 function collectTextCandidates(value, seen = new Set()) {
