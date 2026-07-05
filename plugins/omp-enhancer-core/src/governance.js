@@ -210,9 +210,11 @@ function subagentWorkflowLines(route) {
 
   return [
     ...common,
-    'Use a subagent-driven workflow for routed work. Before doing non-trivial implementation, testing, writing, security, or config work yourself, fork the listed roles with the task tool. Call task once per distinct agent role; if several items share one agent, use the batch task shape.',
+    'Use a subagent-driven workflow for routed work. Before doing non-trivial implementation, testing, writing, security, or config work yourself, fork the listed roles with the OMP task tool so OMP can render native subagent TUI status lines. Call task once per distinct agent role; if several items share one agent, use the batch task shape.',
     '',
     'When calling task, set each task item `role` or `agent` to the exact required subagent name, such as `writer`, `checker`, `zh-writer`, or `zh-checker`. Do not use generic `task` as the only role for required subagents.',
+    '',
+    'Give every task item a short `description` or first assignment line that names the subagent duty; this is the text OMP can show after the subagent name in its native status display. Keep it specific and under 100 characters.',
     '',
     'When forking each subagent, include that subagent-specific skill list in the task prompt. Tell the subagent to read each required skill with `skill://<skill-name>` before acting and to report which skills it loaded.',
     '',
@@ -254,6 +256,7 @@ function formatPreforkSubagentContracts(values = []) {
     'Task item fields:',
     `- role: ${agent}`,
     `- agent: ${agent}`,
+    '- description: short duty text for OMP native subagent status',
     'Assignment must start with:',
     `OMP_REQUIRED_SUBAGENT: ${agent}`,
     'Required skills for this subagent:',

@@ -1153,7 +1153,7 @@ test('failed task tool results do not count as forked subagents', async () => {
   assert.match(blocked.additionalContext, /subagent gate/i);
   assert.match(blocked.additionalContext, /Recent failed tool results/);
   assert.match(blocked.additionalContext, /task: Task subagent failed to start/);
-  assert.match(blocked.additionalContext, /Missing subagents: plan, task, reviewer|Missing subagents: task, reviewer/);
+  assert.match(blocked.additionalContext, /Missing task-launched subagents: plan, task, reviewer|Missing task-launched subagents: task, reviewer/);
 });
 
 test('failed task results keep subagent gate blocked even after prior task tool_call evidence', async () => {
@@ -2069,7 +2069,7 @@ test('skill validator reconstructs read evidence from raw branch entries after s
   assert.deepEqual(validation.details.validation.loaded, ['writing-markdown-helper', 'writing-checkers']);
 });
 
-test('validate subagent usage accepts explicit final SUBAGENT_USAGE evidence', async () => {
+test('validate subagent usage does not replace native task subagent evidence', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -2095,11 +2095,21 @@ test('validate subagent usage accepts explicit final SUBAGENT_USAGE evidence', a
     undefined,
     ctx,
   );
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-final-only-subagent-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.deepEqual(status.details.status.completed, []);
 
   const result = await event(pi, 'session_stop')({}, ctx);
 
   assert.equal(result?.continue, true);
-  assert.match(result.additionalContext, /writing QA/);
+  assert.match(result.additionalContext, /subagent gate/i);
+  assert.match(result.additionalContext, /Missing task-launched subagents: zh-writer, zh-checker/);
 });
 
 test('validator evidence persists through session entries across isolated plugin instances', async () => {
@@ -2113,6 +2123,7 @@ test('validator evidence persists through session entries across isolated plugin
     { prompt: 'Draft an English related work paragraph and check the logic.' },
     validatorCtx,
   );
+  await forkSubagents(validatorPi, validatorCtx, ['writer', 'checker']);
   await event(validatorPi, 'tool_result')({ name: 'writing_quality_check' }, validatorCtx);
   await tool(validatorPi, 'omp_core_validate_subagent_usage').execute(
     'call-cross-instance-subagent-usage',
@@ -2164,6 +2175,7 @@ test('session_stop accepts final usage blocks when validator tool state is unava
     { prompt: 'Draft an English related work paragraph and check the logic.' },
     ctx,
   );
+  await forkSubagents(pi, ctx, ['writer', 'checker']);
   await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
 
   const result = await event(pi, 'session_stop')(
@@ -2291,6 +2303,55 @@ test('testing gate releases after test gate and skill evidence without requiring
   );
 
   await assertReleasedStops(pi, ctx, [{}, {}, { output: 'Final summary only.' }]);
+});
+
+test('testing route requires native task evidence for required subagents', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。' },
+    ctx,
+  );
+  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-testing-skill-usage-without-task',
+    {
+      output: skillUsageBlock([
+        'test-driven-development',
+        'subagent-driven-development',
+        'verification-before-completion',
+      ]),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const finalOnly = await event(pi, 'session_stop')(
+    {
+      output: usageEvidence({
+        subagents: {
+          'ecc-tdd-guide': ['test-driven-development'],
+          'ecc-pr-test-analyzer': ['verification-before-completion'],
+        },
+        skills: [
+          'test-driven-development',
+          'subagent-driven-development',
+          'verification-before-completion',
+        ],
+      }),
+    },
+    ctx,
+  );
+
+  assert.equal(finalOnly?.continue, true);
+  assert.match(finalOnly.additionalContext, /Missing task-launched subagents: ecc-tdd-guide, ecc-pr-test-analyzer/);
+
+  await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-pr-test-analyzer']);
+  await assertReleasedStops(pi, ctx, [{}, { output: 'Final summary only.' }]);
 });
 
 test('failed skill validation can be corrected by final evidence without repeated blocking', async () => {
@@ -2503,6 +2564,7 @@ function staleSkillValidationState(routeState) {
         loadedSkills: [],
         toolFailures: [],
         forkedSubagents: [],
+        taskSubagents: [],
         pendingSubagents: [],
         subagentSkills: [],
         unexpectedSubagentSkills: [],

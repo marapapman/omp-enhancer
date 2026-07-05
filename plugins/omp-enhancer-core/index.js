@@ -295,6 +295,7 @@ function emptyEvidence() {
     loadedSkills: new Set(),
     toolFailures: [],
     forkedSubagents: new Set(),
+    taskSubagents: new Set(),
     pendingSubagents: new Map(),
     pendingSubagentCalls: new Map(),
     subagentSkills: new Map(),
@@ -660,6 +661,7 @@ function serializeState(state) {
       loadedSkills: [...state.evidence.loadedSkills],
       toolFailures: state.evidence.toolFailures,
       forkedSubagents: [...state.evidence.forkedSubagents],
+      taskSubagents: [...state.evidence.taskSubagents],
       pendingSubagents: [...state.evidence.pendingSubagents.entries()].map(([agent, pending]) => ({
         agent,
         startedAt: pending.startedAt,
@@ -717,6 +719,7 @@ function readEvidenceSnapshot(value) {
     loadedSkills: new Set(Array.isArray(value.loadedSkills) ? value.loadedSkills.filter(isString) : []),
     toolFailures: readToolFailures(value.toolFailures),
     forkedSubagents: new Set(Array.isArray(value.forkedSubagents) ? value.forkedSubagents.filter(isString) : []),
+    taskSubagents: new Set(Array.isArray(value.taskSubagents) ? value.taskSubagents.filter(isString) : []),
     pendingSubagents: readPendingSubagents(value.pendingSubagents),
     pendingSubagentCalls: readPendingSubagentCalls(value.pendingSubagentCalls),
     subagentSkills: readSubagentSkills(value.subagentSkills),
@@ -1115,13 +1118,12 @@ function collectTextCandidates(value, seen = new Set()) {
 function buildMissingSubagentUsageContext(state) {
   const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
   if (!requiredSubagents.length) return null;
-  if (state.lastSubagentUsage?.ok) return null;
 
-  const forked = state.evidence.forkedSubagents;
+  const taskForked = state.evidence.taskSubagents ?? new Set();
   const pending = pendingRequiredSubagents(state, requiredSubagents);
   const stuck = stuckRequiredSubagents(state, requiredSubagents);
   const pendingAgents = new Set(pending.map(({ agent }) => agent));
-  const missing = requiredSubagents.map(({ agent }) => agent).filter((agent) => !forked.has(agent) && !pendingAgents.has(agent));
+  const missing = requiredSubagents.map(({ agent }) => agent).filter((agent) => !taskForked.has(agent) && !pendingAgents.has(agent));
   const missingSkillAssignments = requiredSubagents.flatMap(({ agent, requiredSkills }) => {
     const recorded = state.evidence.subagentSkills.get(agent) ?? new Set();
     const missingSkills = requiredSkills.filter((skill) => !recorded.has(skill));
@@ -1137,17 +1139,17 @@ function buildMissingSubagentUsageContext(state) {
 
   return [
     'OMP Enhancer Core subagent gate is still open.',
-    'Fork the required roles with the task tool before doing or finishing routed work, and include each role-specific skill list in the task prompt.',
+    'Fork the required roles with the OMP task tool before doing or finishing routed work so OMP can render native subagent status lines, and include each role-specific skill list in the task prompt.',
     `Required subagents: ${formatRequiredSubagents(requiredSubagents)}.`,
     pending.length ? `Pending subagent task results: ${formatPendingSubagents(pending)}.` : null,
     stuck.length ? `Potentially stuck subagent tasks: ${formatPendingSubagents(stuck)}. Do not wait indefinitely; retry those task calls with smaller assignments or report BLOCKERS if they keep failing.` : null,
-    missing.length ? `Missing subagents: ${missing.join(', ')}.` : null,
+    missing.length ? `Missing task-launched subagents: ${missing.join(', ')}.` : null,
     missingSkillAssignments.length ? `Missing subagent skill assignments: ${formatMissingSkillAssignments(missingSkillAssignments)}.` : null,
     unexpectedSkillAssignments.length ? `Unexpected subagent skill assignments: ${formatMissingSkillAssignments(unexpectedSkillAssignments)}.` : null,
     failureContext,
     state.lastSubagentUsage?.message
       ? `Last validation: ${state.lastSubagentUsage.message}`
-      : 'No successful SUBAGENT_USAGE validation or task-tool role evidence has been recorded.',
+      : 'No successful SUBAGENT_USAGE validation has been recorded. SUBAGENT_USAGE is final evidence only; task-tool role evidence is still required for native TUI status.',
   ].filter(Boolean).join('\n');
 }
 
@@ -1579,6 +1581,7 @@ function recordCompletedSubagent(state, { agent, text = '', skills = [] }) {
 
   state.evidence.pendingSubagents.delete(agent);
   state.evidence.forkedSubagents.add(agent);
+  state.evidence.taskSubagents.add(agent);
   recordSubagentSkillEvidence(state, { agent, text, skills: [...mergedSkills] });
 }
 
@@ -1717,7 +1720,7 @@ function buildSubagentStatus(state) {
   return {
     route: state.lastRoute?.intent ?? 'none',
     required: requiredSubagents,
-    completed: [...state.evidence.forkedSubagents],
+    completed: [...(state.evidence.taskSubagents ?? new Set())],
     pending: pendingRequiredSubagents(state, requiredSubagents).map(({ agent, startedAt, lastSeenAt, attempts, skills }) => ({
       agent,
       startedAt,
