@@ -1,6 +1,6 @@
 import { buildGovernancePromptFragment, buildMissingGateContext, buildSubagentPromptFragment } from './src/governance.js';
 import { routeNaturalLanguageTask } from './src/router.js';
-import { normalizeSkillName, validateSkillUsage } from './src/skill-usage.js';
+import { normalizeSkillName, skillNamesEquivalent, validateSkillUsage } from './src/skill-usage.js';
 import { collectSubagentTaskRecords, parseSubagentUsageDetails, validateSubagentUsage } from './src/subagent-usage.js';
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
 import { runClassifierCommand } from './src/classifier-config.js';
@@ -744,13 +744,9 @@ function genericWorkToolsRequiringSkills() {
 }
 
 function missingReadSkills(state) {
-  const loaded = new Set([...state.evidence.loadedSkills].map(normalizeEvidenceSkillName));
+  const loaded = [...state.evidence.loadedSkills];
   return (state.lastRoute?.requiredSkills ?? [])
-    .filter((skill) => !loaded.has(normalizeEvidenceSkillName(skill)));
-}
-
-function normalizeEvidenceSkillName(value) {
-  return normalizeSkillName(value);
+    .filter((skill) => !loaded.some((loadedSkill) => skillNamesEquivalent(skill, loadedSkill)));
 }
 
 function recordFinalOutputEvidence(state, event = {}) {

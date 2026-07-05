@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { validateSkillUsage } from '../src/skill-usage.js';
+import { buildSkillAliasMapFromRoots, skillNamesEquivalent, validateSkillUsage } from '../src/skill-usage.js';
 
 const requiredWritingSkills = ['plain-chinese-writing', 'zh-writing-polish'];
 
@@ -159,6 +162,83 @@ test('accepts legacy ECC security skill aliases in SKILL_USAGE blocks', () => {
   assert.deepEqual(result.missing, []);
 });
 
+test('accepts generic namespaced aliases without per-skill hardcoding', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['security-review', 'verification-before-completion'],
+    output: 'Done.',
+    loadedSkills: ['skill://vendor-security-review', 'skill://vendor/verification-before-completion'],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['security-review', 'verification-before-completion']);
+  assert.deepEqual(result.missing, []);
+});
+
+test('rejects explicit denial written with a namespaced skill alias', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['security-review'],
+    output: [
+      'I did not load vendor-security-review because I already know the checklist.',
+      '',
+      'SKILL_USAGE',
+      'Required:',
+      '- security-review',
+      'Loaded:',
+      '- security-review',
+    ].join('\n'),
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.denied, ['security-review']);
+  assert.match(result.message, /denied/i);
+});
+
+test('accepts marketplace skill path aliases discovered from frontmatter', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['gget', 'literature-review', 'pubmed-database'],
+    output: 'Done.',
+    loadedSkills: [
+      'skill://ecc/scientific-pkg-gget',
+      'skill://ecc-scientific-thinking-literature-review',
+      'skill://ecc/scientific-db-pubmed-database',
+    ],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['gget', 'literature-review', 'pubmed-database']);
+  assert.deepEqual(result.missing, []);
+});
+
+test('builds unambiguous aliases from every marketplace skill path', async () => {
+  const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const catalog = JSON.parse(await readFile(path.join(repoRoot, '.omp-plugin', 'marketplace.json'), 'utf8'));
+  const pluginRoot = catalog.metadata?.pluginRoot ?? '';
+  const roots = (catalog.plugins ?? [])
+    .filter((plugin) => Array.isArray(plugin.skills) && plugin.skills.length)
+    .map((plugin) => path.join(repoRoot, pluginRoot, String(plugin.source ?? plugin.name ?? '').replace(/^\.\//, ''), 'skills'));
+
+  const aliases = buildSkillAliasMapFromRoots(roots);
+  const checked = [];
+
+  for (const plugin of catalog.plugins ?? []) {
+    const source = String(plugin.source ?? plugin.name ?? '').replace(/^\.\//, '');
+    for (const skillPath of plugin.skills ?? []) {
+      const skillDir = String(skillPath).replace(/^\.\//, '').replace(/^skills\//, '');
+      const skillFile = path.join(repoRoot, pluginRoot, source, 'skills', skillDir, 'SKILL.md');
+      const name = skillFrontmatterName(await readFile(skillFile, 'utf8'));
+      if (!name) continue;
+
+      checked.push(name);
+      assert.equal(skillNamesEquivalent(name, skillDir), true, `${name} should accept ${skillDir}`);
+      assert.equal(skillNamesEquivalent(name, skillDir.replace(/\//g, '-')), true, `${name} should accept ${skillDir.replace(/\//g, '-')}`);
+      assert.equal(aliases.get(skillDir), name, `${skillDir} should map to ${name}`);
+      assert.equal(aliases.get(skillDir.replace(/\//g, '-')), name, `${skillDir.replace(/\//g, '-')} should map to ${name}`);
+    }
+  }
+
+  assert.ok(checked.length > 250, 'marketplace skill alias coverage should include omp-config and writing-helper skills');
+});
+
 test('ignores fenced code blocks when finding the authoritative SKILL_USAGE block', () => {
   const result = validateSkillUsage({
     requiredSkills: ['plain-chinese-writing'],
@@ -184,6 +264,11 @@ test('ignores fenced code blocks when finding the authoritative SKILL_USAGE bloc
   assert.deepEqual(result.loaded, ['plain-chinese-writing']);
   assert.deepEqual(result.invalid, []);
 });
+
+function skillFrontmatterName(text) {
+  const match = String(text).match(/^name:\s*['"]?([^'"\r\n]+)['"]?\s*$/m);
+  return match?.[1]?.trim() ?? '';
+}
 
 test('accepts common model formatting variants for SKILL_USAGE evidence', () => {
   const result = validateSkillUsage({

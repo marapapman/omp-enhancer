@@ -1,19 +1,18 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 const placeholderValues = new Set(['todo', 'tbd', '<required skill>', '<skill>', '[skill]', 'required skill']);
-const skillAliases = new Map([
-  ['ecc-security-review', 'security-review'],
-  ['ecc/security-review', 'security-review'],
-  ['ecc-security-scan', 'security-scan'],
-  ['ecc/security-scan', 'security-scan'],
-]);
+let runtimeSkillAliases;
 
 export function validateSkillUsage({ requiredSkills = [], output = '', loadedSkills = [] } = {}) {
   const authoritative = findAuthoritativeSkillUsage(String(output));
   const denied = findDeniedSkills(String(output), requiredSkills);
-  const externallyLoaded = normalizeLoadedSkills(loadedSkills);
+  const externallyLoaded = normalizeLoadedSkills(loadedSkills, requiredSkills);
 
   if (!authoritative) {
-    const loadedSet = new Set(externallyLoaded);
-    const missing = requiredSkills.filter((skill) => !loadedSet.has(normalizeSkillName(skill)));
+    const missing = findMissingSkills(requiredSkills, externallyLoaded);
     const ok = missing.length === 0 && denied.length === 0;
 
     return {
@@ -33,11 +32,10 @@ export function validateSkillUsage({ requiredSkills = [], output = '', loadedSki
   const invalid = parsed.loaded.filter((entry) => isPlaceholder(entry));
   const effectiveLoaded = parsed.loaded.filter((entry) => !isPlaceholder(entry));
   const loaded = uniqueValues([
-    ...effectiveLoaded.map((entry) => normalizeSkillName(entry)).filter(Boolean),
+    ...effectiveLoaded.map((entry) => canonicalizeSkillName(entry, requiredSkills)).filter(Boolean),
     ...externallyLoaded,
   ]);
-  const loadedSet = new Set(loaded);
-  const missing = requiredSkills.filter((skill) => !loadedSet.has(normalizeSkillName(skill)));
+  const missing = findMissingSkills(requiredSkills, loaded);
   const ok = missing.length === 0 && invalid.length === 0 && denied.length === 0;
 
   return {
@@ -116,12 +114,12 @@ function findDeniedSkills(output, requiredSkills) {
     return skillNameVariants(skill).some((variant) => {
       const escaped = escapeRegExp(variant);
       return new RegExp(`did not load\\s+${escaped}|without loading\\s+${escaped}|未加载\\s*${escaped}|没有加载\\s*${escaped}`).test(lower);
-    });
+    }) || hasNamespacedDenial(lower, skill);
   });
 }
 
 function isPlaceholder(entry) {
-  const normalized = normalizeSkillName(entry);
+  const normalized = normalizeSkillToken(entry);
   return placeholderValues.has(normalized) || normalized.includes('todo') || normalized.includes('required skill');
 }
 
@@ -196,27 +194,179 @@ function cleanSkillEntry(value) {
 }
 
 export function normalizeSkillName(value) {
-  const normalized = cleanSkillEntry(value)
+  const normalized = normalizeSkillToken(value);
+  return lookupSkillAlias(normalized) || normalized;
+}
+
+export function skillNamesEquivalent(requiredSkill, loadedSkill) {
+  const required = normalizeSkillName(requiredSkill);
+  const loaded = normalizeSkillName(loadedSkill);
+  if (!required || !loaded) return false;
+  if (required === loaded) return true;
+
+  const rawRequired = normalizeSkillToken(requiredSkill);
+  const rawLoaded = normalizeSkillToken(loadedSkill);
+  if (rawRequired && rawLoaded && rawRequired === rawLoaded) return true;
+  if (rawLoaded && hasNamespacedSuffix(rawLoaded, required)) return true;
+  if (rawLoaded && skillNameVariants(required).includes(rawLoaded)) return true;
+  return false;
+}
+
+export function buildSkillAliasMapFromRoots(roots = []) {
+  const aliases = new Map();
+  for (const root of roots) {
+    if (!root || !existsSync(root)) continue;
+    collectSkillAliases(root, root, aliases);
+  }
+
+  const unambiguous = new Map();
+  for (const [alias, canonicalNames] of aliases.entries()) {
+    if (canonicalNames.size === 1) unambiguous.set(alias, [...canonicalNames][0]);
+  }
+  return unambiguous;
+}
+
+function normalizeSkillToken(value) {
+  return cleanSkillEntry(value)
     .replace(/^[<["'({]+/, '')
     .replace(/[>\]"')}]+$/, '')
     .trim()
     .toLowerCase();
-  return skillAliases.get(normalized) ?? normalized;
 }
 
-function normalizeLoadedSkills(skills) {
+function canonicalizeSkillName(value, requiredSkills = []) {
+  const normalized = normalizeSkillToken(value);
+  if (!normalized) return '';
+  const aliased = lookupSkillAlias(normalized);
+  if (aliased) return aliased;
+  const requiredMatch = requiredSkills.find((skill) => skillNamesEquivalent(skill, normalized));
+  return requiredMatch ? normalizeSkillName(requiredMatch) : normalized;
+}
+
+function normalizeLoadedSkills(skills, requiredSkills = []) {
   const values = Array.isArray(skills) || skills instanceof Set ? [...skills] : [];
-  return uniqueValues(values.map((entry) => normalizeSkillName(entry)).filter(Boolean));
+  return uniqueValues(values.map((entry) => canonicalizeSkillName(entry, requiredSkills)).filter(Boolean));
+}
+
+function findMissingSkills(requiredSkills, loadedSkills) {
+  return requiredSkills.filter((skill) => !loadedSkills.some((loaded) => skillNamesEquivalent(skill, loaded)));
 }
 
 function skillNameVariants(skill) {
   const canonical = normalizeSkillName(skill);
   return uniqueValues([
     canonical,
-    ...[...skillAliases.entries()]
+    normalizeSkillToken(skill),
+    ...[...runtimeAliasMap().entries()]
       .filter(([, value]) => value === canonical)
       .map(([alias]) => alias),
-  ]);
+  ].filter(Boolean));
+}
+
+function lookupSkillAlias(value) {
+  if (!value) return '';
+  return runtimeAliasMap().get(value) ?? '';
+}
+
+function hasNamespacedSuffix(value, suffix) {
+  return suffix.includes('-') && (value.endsWith(`-${suffix}`) || value.endsWith(`/${suffix}`));
+}
+
+function hasNamespacedDenial(output, skill) {
+  const canonical = normalizeSkillName(skill);
+  if (!canonical.includes('-')) return false;
+  const namespaced = `(?:[a-z0-9_]+[-/])*${escapeRegExp(canonical)}`;
+  return new RegExp(`did not load\\s+${namespaced}|without loading\\s+${namespaced}|未加载\\s*${namespaced}|没有加载\\s*${namespaced}`).test(output);
+}
+
+function runtimeAliasMap() {
+  if (!runtimeSkillAliases) runtimeSkillAliases = buildSkillAliasMapFromRoots(defaultSkillAliasRoots());
+  return runtimeSkillAliases;
+}
+
+function defaultSkillAliasRoots() {
+  const roots = [];
+  if (process.env.OMP_ENHANCER_SKILL_ROOTS) {
+    roots.push(...process.env.OMP_ENHANCER_SKILL_ROOTS.split(path.delimiter));
+  }
+
+  const moduleFile = fileURLToPath(import.meta.url);
+  const pluginRoot = path.dirname(path.dirname(moduleFile));
+  const pluginParent = path.dirname(pluginRoot);
+  const repoRoot = path.dirname(pluginParent);
+
+  roots.push(
+    path.join(repoRoot, 'plugins', 'omp-config', 'skills'),
+    path.join(repoRoot, 'plugins', 'writing-helper', 'skills'),
+    ...skillRootsUnder(pluginParent),
+    path.join(os.homedir(), '.omp', 'agent', 'managed-skills'),
+    path.join(os.homedir(), '.omp', 'agent', 'skills'),
+  );
+
+  return uniqueValues(roots).filter((root) => root && existsSync(root));
+}
+
+function skillRootsUnder(parent) {
+  try {
+    return readdirSync(parent, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(parent, entry.name, 'skills'))
+      .filter((root) => existsSync(root));
+  } catch {
+    return [];
+  }
+}
+
+function collectSkillAliases(root, current, aliases) {
+  let entries;
+  try {
+    entries = readdirSync(current, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  const skillFile = path.join(current, 'SKILL.md');
+  if (existsSync(skillFile)) {
+    addSkillFileAliases(root, current, skillFile, aliases);
+    return;
+  }
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) collectSkillAliases(root, path.join(current, entry.name), aliases);
+  }
+}
+
+function addSkillFileAliases(root, skillDir, skillFile, aliases) {
+  let text = '';
+  try {
+    text = readFileSync(skillFile, 'utf8');
+  } catch {
+    return;
+  }
+
+  const relativePath = path.relative(root, skillDir).split(path.sep).join('/');
+  if (!relativePath || relativePath.startsWith('..')) return;
+
+  const leafName = relativePath.split('/').pop();
+  const canonical = normalizeSkillToken(skillFrontmatterName(text) || leafName);
+  for (const alias of [canonical, leafName, relativePath, relativePath.replace(/\//g, '-')]) {
+    addAlias(aliases, alias, canonical);
+  }
+}
+
+function addAlias(aliases, alias, canonical) {
+  const normalizedAlias = normalizeSkillToken(alias);
+  const normalizedCanonical = normalizeSkillToken(canonical);
+  if (!normalizedAlias || !normalizedCanonical) return;
+  if (!aliases.has(normalizedAlias)) aliases.set(normalizedAlias, new Set());
+  aliases.get(normalizedAlias).add(normalizedCanonical);
+}
+
+function skillFrontmatterName(text) {
+  const frontmatter = String(text).match(/^---\s*\n([\s\S]*?)\n---/);
+  const source = frontmatter?.[1] ?? String(text);
+  const match = source.match(/^name:\s*['"]?([^'"\r\n]+)['"]?\s*$/m);
+  return match?.[1]?.trim() ?? '';
 }
 
 function uniqueValues(values) {
