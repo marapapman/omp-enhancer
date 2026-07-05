@@ -21,12 +21,9 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /Mandatory Subagent Workflow/);
   assert.match(fragment, /plain-chinese-writing/);
   assert.match(fragment, /zh-writing-polish/);
-  assert.match(fragment, /read tool once for each required skill/i);
-  assert.match(fragment, /pre-work skill gate/i);
-  assert.match(fragment, /blocked until every required skill has successful read evidence/i);
-  assert.match(fragment, /skill:\/\/<skill-name>/);
-  assert.match(fragment, /same assistant continuation/i);
-  assert.match(fragment, /omp_core_validate_skill_usage/);
+  assert.match(fragment, /delegates required skill loading to the task subagents/i);
+  assert.match(fragment, /Do not read root route skills in the main agent just to unlock task/i);
+  assert.match(fragment, /subagent task evidence and SUBAGENT_USAGE/i);
   assert.match(fragment, /MiMo v2\.5/);
   assert.match(fragment, /DeepSeek V4 Flash/);
   assert.match(fragment, /modelRoles\.classifier/);

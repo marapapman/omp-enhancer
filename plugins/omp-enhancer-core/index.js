@@ -1,6 +1,6 @@
 import { buildGovernancePromptFragment, buildMissingGateContext, buildSubagentPromptFragment } from './src/governance.js';
 import { routeNaturalLanguageTask } from './src/router.js';
-import { normalizeSkillName, skillNamesEquivalent, skillReadNameCandidates, validateSkillUsage } from './src/skill-usage.js';
+import { normalizeSkillName, parseSkillUsage, skillNamesEquivalent, skillReadNameCandidates, validateSkillUsage } from './src/skill-usage.js';
 import { collectSubagentTaskRecords, parseSubagentUsageDetails, validateSubagentUsage } from './src/subagent-usage.js';
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
 import { runClassifierCommand } from './src/classifier-config.js';
@@ -100,7 +100,7 @@ export default function registerCoreEnhancer(pi) {
       const validation = validateSkillUsage({
         requiredSkills,
         output: params.output ?? '',
-        loadedSkills: state.evidence.loadedSkills,
+        loadedSkills: effectiveLoadedSkillsForValidation(state),
       });
       state.lastSkillUsage = validation;
       await persistState(pi, state);
@@ -203,13 +203,19 @@ export default function registerCoreEnhancer(pi) {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
     if (name) recordLoopGuardProgress(state.loopGuard, `tool_call:${name}`);
-    const preworkBlock = buildPreworkSkillGateBlock(state, name);
-    if (preworkBlock) {
-      await persistState(pi, state);
-      return preworkBlock;
-    }
     if (name === 'task') {
+      const taskSkillBlock = buildTaskSubagentSkillGateBlock(state, event);
+      if (taskSkillBlock) {
+        await persistState(pi, state);
+        return taskSkillBlock;
+      }
       recordSubagentDispatchStarted(state, event);
+    } else {
+      const preworkBlock = buildPreworkSkillGateBlock(state, name);
+      if (preworkBlock) {
+        await persistState(pi, state);
+        return preworkBlock;
+      }
     }
     await persistState(pi, state);
     return undefined;
@@ -296,6 +302,7 @@ function emptyEvidence() {
     pendingSubagents: new Map(),
     pendingSubagentCalls: new Map(),
     subagentSkills: new Map(),
+    subagentLoadedSkills: new Map(),
     unexpectedSubagentSkills: new Map(),
     subagentAssignments: new Map(),
     taskProgress: new Map(),
@@ -470,6 +477,10 @@ function serializeState(state) {
         agent,
         skills: [...skills],
       })),
+      subagentLoadedSkills: [...state.evidence.subagentLoadedSkills.entries()].map(([agent, skills]) => ({
+        agent,
+        skills: [...skills],
+      })),
       unexpectedSubagentSkills: [...state.evidence.unexpectedSubagentSkills.entries()].map(([agent, skills]) => ({
         agent,
         skills: [...skills],
@@ -520,6 +531,7 @@ function readEvidenceSnapshot(value) {
     pendingSubagents: readPendingSubagents(value.pendingSubagents),
     pendingSubagentCalls: readPendingSubagentCalls(value.pendingSubagentCalls),
     subagentSkills: readSubagentSkills(value.subagentSkills),
+    subagentLoadedSkills: readSubagentSkills(value.subagentLoadedSkills),
     unexpectedSubagentSkills: readSubagentSkills(value.unexpectedSubagentSkills),
     subagentAssignments: readSubagentAssignments(value.subagentAssignments),
     taskProgress: readTaskProgress(value.taskProgress),
@@ -679,6 +691,18 @@ function buildMissingSkillUsageContext(state) {
   if (!requiredSkills.length) return null;
   if (state.lastSkillUsage?.ok) return null;
   const failureContext = formatRecentToolFailures(state, ['read', 'omp_core_validate_skill_usage']);
+  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+
+  if (requiredSubagents.length) {
+    return [
+      'OMP Enhancer Core skill gate is still open.',
+      `Validate SKILL_USAGE before finishing. Required skills: ${requiredSkills.join(', ')}.`,
+      'Delegated recovery order: make the task subagents use their required skills and report SKILL_USAGE Loaded evidence, or rerun the missing task subagents with the required skill contracts attached. Then call omp_core_validate_skill_usage with output set to the combined final evidence.',
+      'Do not repair delegated task skill gaps by repeatedly reading those skills in the main agent. The main agent should read skills only for direct main-agent work tools it uses itself.',
+      failureContext,
+      state.lastSkillUsage?.message ? `Last validation: ${state.lastSkillUsage.message}` : 'No successful SKILL_USAGE validation has been recorded.',
+    ].filter(Boolean).join('\n');
+  }
 
   return [
     'OMP Enhancer Core skill gate is still open.',
@@ -698,15 +722,28 @@ function buildRoutedGovernanceContext(state, { route, parentTask = '' } = {}) {
 }
 
 function buildPreworkSkillBootstrapBlock(state) {
+  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
   const missing = missingReadSkills(state);
-  if (!missing.length) return null;
+  if (!requiredSubagents.length && !missing.length) return null;
+
+  if (requiredSubagents.length) {
+    return [
+      '### OMP Enhancer Core pre-work skill bootstrap',
+      'Actor-specific skill rule: task subagents load subagent skills; the main agent loads skills only for direct main-agent work.',
+      'Before calling task, put the matching subagent skill contract into each task assignment. Do not read root route skills in the main agent just to unlock task.',
+      'Required task assignment contracts:',
+      ...requiredSubagents.flatMap(formatSubagentSkillAssignmentStep),
+      missing.length ? 'For direct main-agent work tools only, read missing root skills before using edit, write, bash, QA, or test gates:' : null,
+      ...(missing.length ? missing.map(formatMissingSkillReadStep) : []),
+    ].filter(Boolean).join('\n');
+  }
 
   return [
     '### OMP Enhancer Core pre-work skill bootstrap',
-    'Before calling any work tool, including task, load the required root skills for this routed task.',
+    'Before calling direct main-agent work tools, load the required root skills for this routed task.',
     'Call the read tool once for each missing skill now, using these exact URIs:',
     ...missing.map(formatMissingSkillReadStep),
-    'Wait for those read results to return before calling task, edit, write, bash, QA, or test gates.',
+    'Wait for those read results to return before calling edit, write, bash, QA, or test gates.',
     'If any required skill cannot be read, report that blocker instead of continuing with the work.',
   ].join('\n');
 }
@@ -719,13 +756,74 @@ function buildPreworkSkillGateBlock(state, toolName) {
   return {
     block: true,
     reason: [
-      `OMP Enhancer Core pre-work skill gate blocked ${toolName}.`,
-      `Read all required skills before using work tools. Missing skills: ${missing.join(', ')}.`,
+      `OMP Enhancer Core pre-work main-agent skill gate blocked ${toolName}.`,
+      `Read all required skills before using this direct main-agent work tool. Missing skills: ${missing.join(', ')}.`,
       'Required recovery order:',
       ...missing.map(formatMissingSkillReadStep),
-      `After those read results return, retry ${toolName}. Do not wait until session_stop to repair missing skill evidence.`,
+      `After those read results return, retry ${toolName}. If you are forking task subagents instead, put the skills into the task assignments rather than reading them in the main agent.`,
     ].join('\n'),
   };
+}
+
+function buildTaskSubagentSkillGateBlock(state, event = {}) {
+  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  if (!requiredSubagents.length) return null;
+
+  const requiredByAgent = new Map(requiredSubagents.map((item) => [item.agent, item.requiredSkills]));
+  const records = collectSubagentTaskRecords(event);
+  if (!records.length) {
+    return taskSubagentSkillBlock([
+      'OMP Enhancer Core task subagent skill gate blocked task.',
+      'This routed task must fork named subagents and attach their skill contracts in the task assignment.',
+      `Required subagents: ${formatRequiredSubagents(requiredSubagents)}.`,
+      'Add one of these contracts to each task item before retrying:',
+      ...requiredSubagents.flatMap(formatSubagentSkillAssignmentStep),
+    ]);
+  }
+
+  const unexpectedAgents = records
+    .map(({ agent }) => agent)
+    .filter((agent) => !requiredByAgent.has(agent));
+  const missingSkillAssignments = records.flatMap(({ agent, skills = [] }) => {
+    const requiredSkills = requiredByAgent.get(agent);
+    if (!requiredSkills) return [];
+    const missing = requiredSkills.filter((skill) => !skills.some((loadedSkill) => skillNamesEquivalent(skill, loadedSkill)));
+    return missing.length ? [{ agent, skills: missing }] : [];
+  });
+  const unexpectedSkillAssignments = records.flatMap(({ agent, skills = [] }) => {
+    const requiredSkills = requiredByAgent.get(agent);
+    if (!requiredSkills) return [];
+    const unexpected = skills.filter((skill) => !requiredSkills.some((requiredSkill) => skillNamesEquivalent(requiredSkill, skill)));
+    return unexpected.length ? [{ agent, skills: unexpected }] : [];
+  });
+
+  if (!unexpectedAgents.length && !missingSkillAssignments.length && !unexpectedSkillAssignments.length) return null;
+
+  return taskSubagentSkillBlock([
+    'OMP Enhancer Core task subagent skill gate blocked task.',
+    'Repair the task assignment, not the main-agent read state. Each task subagent must carry its own required skills before fork.',
+    unexpectedAgents.length ? `Unexpected task subagents: ${uniqueValues(unexpectedAgents).join(', ')}.` : null,
+    missingSkillAssignments.length ? `Missing subagent skill assignments: ${formatMissingSkillAssignments(missingSkillAssignments)}.` : null,
+    unexpectedSkillAssignments.length ? `Unexpected subagent skill assignments: ${formatMissingSkillAssignments(unexpectedSkillAssignments)}.` : null,
+    'Required task assignment contracts:',
+    ...requiredSubagents.flatMap(formatSubagentSkillAssignmentStep),
+  ]);
+}
+
+function taskSubagentSkillBlock(lines) {
+  return {
+    block: true,
+    reason: lines.filter(Boolean).join('\n'),
+  };
+}
+
+function formatSubagentSkillAssignmentStep({ agent, requiredSkills = [] }) {
+  return [
+    `- ${agent}:`,
+    `  OMP_REQUIRED_SUBAGENT: ${agent}`,
+    '  Required skills for this subagent:',
+    ...(requiredSkills.length ? requiredSkills.map((skill) => `  - ${skill}`) : ['  - none']),
+  ];
 }
 
 function formatMissingSkillReadStep(skill) {
@@ -736,6 +834,7 @@ function formatMissingSkillReadStep(skill) {
 
 function isPreworkSkillGateTool(toolName, route) {
   if (!toolName || !route || route.intent === 'unknown') return false;
+  if (toolName === 'task') return false;
   if (!(route.requiredSkills ?? []).length) return false;
   if (isSkillGateExemptTool(toolName)) return false;
   if ((route.requiredTools ?? []).includes(toolName)) return true;
@@ -755,7 +854,6 @@ function isSkillGateExemptTool(toolName) {
 
 function genericWorkToolsRequiringSkills() {
   return new Set([
-    'task',
     'edit',
     'write',
     'patch',
@@ -785,7 +883,7 @@ function recordFinalOutputEvidence(state, event = {}) {
     state.lastSkillUsage = validateSkillUsage({
       requiredSkills,
       output,
-      loadedSkills: state.evidence.loadedSkills,
+      loadedSkills: effectiveLoadedSkillsForValidation(state),
     });
   }
 
@@ -830,12 +928,32 @@ async function handleLoopGuardGeneratedOutput(pi, state, ctx = {}, text = '') {
 
 function reconcileSkillUsageFromReadEvidence(state) {
   const requiredSkills = state.lastRoute?.requiredSkills ?? [];
-  if (!requiredSkills.length || state.lastSkillUsage?.ok || !state.evidence.loadedSkills.size) return;
+  const loadedSkills = effectiveLoadedSkillsForValidation(state);
+  if (!requiredSkills.length || state.lastSkillUsage?.ok || !loadedSkills.length) return;
   state.lastSkillUsage = validateSkillUsage({
     requiredSkills,
     output: '',
-    loadedSkills: state.evidence.loadedSkills,
+    loadedSkills,
   });
+}
+
+function effectiveLoadedSkillsForValidation(state) {
+  return uniqueValues([
+    ...state.evidence.loadedSkills,
+    ...delegatedLoadedSkills(state),
+  ]);
+}
+
+function delegatedLoadedSkills(state) {
+  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  const loaded = [];
+  for (const { agent, requiredSkills } of requiredSubagents) {
+    const recorded = [...(state.evidence.subagentLoadedSkills.get(agent) ?? new Set())];
+    for (const skill of requiredSkills) {
+      if (recorded.some((loadedSkill) => skillNamesEquivalent(skill, loadedSkill))) loaded.push(skill);
+    }
+  }
+  return loaded;
 }
 
 function extractGeneratedOutputText(event = {}) {
@@ -1398,6 +1516,7 @@ function recordCompletedSubagent(state, { agent, text = '', skills = [] }) {
   state.evidence.taskSubagents.add(agent);
   recordSubagentAssignmentEvidence(state, { agent, texts: [...mergedTexts] });
   recordSubagentSkillEvidence(state, { agent, text, skills: [...mergedSkills] });
+  recordSubagentLoadedSkillEvidence(state, { agent, texts: [...mergedTexts] });
 }
 
 function recordSubagentFinalUsage(state, output) {
@@ -1435,6 +1554,21 @@ function recordSubagentSkillEvidence(state, { agent, text = '', skills = [] }) {
     }
   }
   state.evidence.subagentSkills.set(agent, recorded);
+}
+
+function recordSubagentLoadedSkillEvidence(state, { agent, texts = [] }) {
+  const requiredByAgent = new Map(subagentRequirements(state.lastRoute?.requiredSubagents).map((item) => [item.agent, item.requiredSkills]));
+  const requiredSkills = requiredByAgent.get(agent) ?? [];
+  if (!requiredSkills.length) return;
+
+  const loadedEntries = texts.flatMap((text) => parseSkillUsage(text).loaded);
+  if (!loadedEntries.length) return;
+
+  const recorded = state.evidence.subagentLoadedSkills.get(agent) ?? new Set();
+  for (const skill of requiredSkills) {
+    if (loadedEntries.some((loadedSkill) => skillNamesEquivalent(skill, loadedSkill))) recorded.add(skill);
+  }
+  state.evidence.subagentLoadedSkills.set(agent, recorded);
 }
 
 function textMentionsEquivalentSkill(text = '', requiredSkill = '') {

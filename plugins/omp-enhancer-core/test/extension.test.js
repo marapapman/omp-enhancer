@@ -190,7 +190,9 @@ test('before_agent_start injects governance context and routes natural-language 
   const fragment = governanceText(result, agentEvent);
 
   assert.match(fragment, /pre-work skill bootstrap/);
-  assert.match(fragment, /read skill:\/\/plain-chinese-writing/);
+  assert.match(fragment, /task subagents load subagent skills/);
+  assert.match(fragment, /Do not read root route skills in the main agent just to unlock task/);
+  assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
   assert.ok(fragment.indexOf('pre-work skill bootstrap') < fragment.indexOf('Mandatory Skill Workflow'));
   assert.match(fragment, /Mandatory Skill Workflow/);
   assert.match(fragment, /Mandatory Subagent Workflow/);
@@ -509,7 +511,7 @@ test('simple writing edits are handled by the main agent without writer checker 
   assert.equal(released, undefined);
 });
 
-test('tool_call blocks routed work before required skills are read', async () => {
+test('task tool_call blocks routed subagents before assignment skills are attached', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -522,9 +524,10 @@ test('tool_call blocks routed work before required skills are read', async () =>
   const startFragment = governanceText(startResult, {});
 
   assert.match(startFragment, /pre-work skill bootstrap/);
-  assert.match(startFragment, /read skill:\/\/plain-chinese-writing/);
-  assert.match(startFragment, /read skill:\/\/zh-writing-polish/);
-  assert.match(startFragment, /read skill:\/\/zh-writing-checkers/);
+  assert.match(startFragment, /task subagents load subagent skills/);
+  assert.match(startFragment, /Required task assignment contracts/);
+  assert.match(startFragment, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
+  assert.match(startFragment, /For direct main-agent work tools only/);
   assert.ok(startFragment.indexOf('pre-work skill bootstrap') < startFragment.indexOf('Mandatory Subagent Workflow'));
 
   const blocked = await event(pi, 'tool_call')(
@@ -538,12 +541,11 @@ test('tool_call blocks routed work before required skills are read', async () =>
   );
 
   assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /pre-work skill gate/);
-  assert.match(blocked.reason, /blocked task/);
+  assert.match(blocked.reason, /task subagent skill gate/);
   assert.match(blocked.reason, /plain-chinese-writing/);
   assert.match(blocked.reason, /zh-writing-polish/);
-  assert.match(blocked.reason, /zh-writing-checkers/);
-  assert.match(blocked.reason, /read skill:\/\/plain-chinese-writing/);
+  assert.match(blocked.reason, /Missing subagent skill assignments: zh-writer \[plain-chinese-writing, zh-writing-polish\]/);
+  assert.match(blocked.reason, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
 
   const status = await tool(pi, 'omp_core_subagent_status').execute(
     'call-status-after-blocked-task',
@@ -556,7 +558,52 @@ test('tool_call blocks routed work before required skills are read', async () =>
   assert.match(status.content[0].text, /Pending:\n- none/);
 });
 
-test('governance prompt only inserts read steps for still-missing root skills', async () => {
+test('task tool_call with subagent skill contracts does not require main-agent skill reads', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    ctx,
+  );
+
+  const allowed = await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [
+          {
+            role: 'zh-writer',
+            assignment: [
+              'OMP_REQUIRED_SUBAGENT: zh-writer',
+              'Required skills for this subagent:',
+              '- plain-chinese-writing',
+              '- zh-writing-polish',
+              '',
+              'Assignment: Draft the Chinese revision.',
+            ].join('\n'),
+          },
+        ],
+      },
+    },
+    ctx,
+  );
+
+  assert.equal(allowed, undefined);
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-status-after-allowed-task',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.match(status.content[0].text, /Pending:\n- zh-writer: pending/);
+});
+
+test('governance prompt separates task subagent skills from direct main-agent reads', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -578,6 +625,10 @@ test('governance prompt only inserts read steps for still-missing root skills', 
 
   assert.match(governance.details.fragment, /pre-work skill bootstrap/);
   assert.doesNotMatch(governance.details.fragment, /read skill:\/\/plain-chinese-writing/);
+  assert.match(governance.details.fragment, /Do not read root route skills in the main agent just to unlock task/);
+  assert.match(governance.details.fragment, /Required task assignment contracts/);
+  assert.match(governance.details.fragment, /OMP_REQUIRED_SUBAGENT:\s*zh-checker/);
+  assert.match(governance.details.fragment, /For direct main-agent work tools only/);
   assert.match(governance.details.fragment, /read skill:\/\/zh-writing-polish/);
   assert.match(governance.details.fragment, /read skill:\/\/zh-writing-checkers/);
   assert.match(governance.details.fragment, /Required skills:\n- plain-chinese-writing\n- zh-writing-polish\n- zh-writing-checkers/);
@@ -676,30 +727,24 @@ test('pre-work skill gate accepts legacy ECC security skill aliases', async () =
   );
 
   assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /task subagent skill gate/);
+  assert.match(blocked.reason, /Missing subagent skill assignments/);
   assert.match(blocked.reason, /security-review/);
   assert.match(blocked.reason, /security-scan/);
-  assert.match(blocked.reason, /read skill:\/\/ecc-security-review \(accepted for security-review\)/);
-  assert.match(blocked.reason, /read skill:\/\/ecc-security-scan \(accepted for security-scan\)/);
-
-  await event(pi, 'tool_result')(
-    {
-      name: 'read',
-      params: { uri: 'skill://ecc-security-review' },
-      content: [{ type: 'text', text: 'Loaded legacy alias.' }],
-    },
-    ctx,
-  );
-  await event(pi, 'tool_result')(
-    {
-      name: 'read',
-      params: { uri: 'skill://ecc-security-scan' },
-      content: [{ type: 'text', text: 'Loaded legacy alias.' }],
-    },
-    ctx,
-  );
 
   const allowed = await event(pi, 'tool_call')(
-    { toolName: 'task', input: { agent: 'ecc-security-reviewer' } },
+    {
+      toolName: 'task',
+      input: {
+        agent: 'ecc-security-reviewer',
+        prompt: [
+          'OMP_REQUIRED_SUBAGENT: ecc-security-reviewer',
+          'Required skills for this subagent:',
+          '- ecc-security-review',
+          '- ecc-security-scan',
+        ].join('\n'),
+      },
+    },
     ctx,
   );
 
@@ -782,8 +827,8 @@ test('session_stop requires successful SKILL_USAGE validation even after writing
   assert.equal(blocked?.continue, true);
   assert.match(blocked.additionalContext, /SKILL_USAGE/);
   assert.match(blocked.additionalContext, /omp_core_validate_skill_usage/);
-  assert.match(blocked.additionalContext, /Recovery order: in this same continuation/);
-  assert.match(blocked.additionalContext, /Do not only say the evidence was already provided/);
+  assert.match(blocked.additionalContext, /Delegated recovery order/);
+  assert.match(blocked.additionalContext, /Do not repair delegated task skill gaps by repeatedly reading/);
 
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-valid-skill-usage',
@@ -1918,6 +1963,44 @@ test('session_stop accepts SKILL_USAGE from the final output event without a sep
   );
 
   assert.notEqual(result?.continue, true);
+});
+
+test('session_stop accepts delegated subagent skill evidence without main-agent read skills', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    ctx,
+  );
+  for (const [agent, skills] of Object.entries({ writer: ['writing-markdown-helper'], checker: ['writing-checkers'] })) {
+    await event(pi, 'tool_result')(
+      {
+        name: 'task',
+        params: {
+          agent,
+          prompt: [
+            'Required skills for this subagent:',
+            ...skills.map((skill) => `- ${skill}`),
+            '',
+            'SKILL_USAGE',
+            'Required:',
+            ...skills.map((skill) => `- ${skill}`),
+            'Loaded:',
+            ...skills.map((skill) => `- ${skill}`),
+          ].join('\n'),
+        },
+      },
+      ctx,
+    );
+  }
+  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
+
+  const result = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
+
+  assert.equal(result, undefined);
 });
 
 test('session_stop accepts SKILL_USAGE from real OMP last assistant message payloads', async () => {

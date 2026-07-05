@@ -34,9 +34,7 @@ export function buildGovernancePromptFragment({ route, parentTask = '' } = {}) {
     '',
     '### Mandatory Skill Workflow',
     '',
-    'Before doing the routed work, call the read tool once for each required skill using the exact URI `skill://<skill-name>`. Wait for those reads to finish before acting. If a required skill is unavailable, state that explicitly and do not pretend it was loaded.',
-    'The runtime enforces this as a pre-work skill gate: work tools such as task, edit, write, bash, route-specific QA, and test gates may be blocked until every required skill has successful read evidence.',
-    'When validating loaded skills, prefer this order in the same assistant continuation: read every missing `skill://<skill-name>` first, wait for those read results, then call `omp_core_validate_skill_usage` with the full SKILL_USAGE output. This avoids stale branch snapshots hiding just-loaded skills.',
+    ...skillWorkflowLines(resolved),
     '',
     'Required skills:',
     formatList(resolved.requiredSkills),
@@ -76,6 +74,24 @@ export function buildGovernancePromptFragment({ route, parentTask = '' } = {}) {
     'Loaded:',
     '- skill-name',
   ].join('\n');
+}
+
+function skillWorkflowLines(route) {
+  const hasSubagents = (route.requiredSubagents ?? []).length > 0;
+  if (hasSubagents) {
+    return [
+      'This route delegates required skill loading to the task subagents. Do not read root route skills in the main agent just to unlock task.',
+      'Before forking, put each subagent-specific skill list into that subagent task assignment. The subagent must read those skill URIs before acting and report which skills it loaded.',
+      'If the main agent later does direct work itself with edit, write, bash, route-specific QA, or test gates, load only the skills needed for that direct main-agent action.',
+      'When validating loaded skills, prefer subagent task evidence and SUBAGENT_USAGE for delegated skills. Use SKILL_USAGE to summarize the skills loaded by the acting agent or subagents; do not repair delegated skill gaps by repeatedly reading them in the main agent.',
+    ];
+  }
+
+  return [
+    'Before doing the routed work, call the read tool once for each required skill using the exact URI `skill://<skill-name>`. Wait for those reads to finish before acting. If a required skill is unavailable, state that explicitly and do not pretend it was loaded.',
+    'The runtime enforces this as a pre-work skill gate: direct work tools such as edit, write, bash, route-specific QA, and test gates may be blocked until every required skill has successful read evidence.',
+    'When validating loaded skills, prefer this order in the same assistant continuation: read every missing `skill://<skill-name>` first, wait for those read results, then call `omp_core_validate_skill_usage` with the full SKILL_USAGE output. This avoids stale branch snapshots hiding just-loaded skills.',
+  ];
 }
 
 export function buildSubagentPromptFragment({ prompt = '' } = {}) {
