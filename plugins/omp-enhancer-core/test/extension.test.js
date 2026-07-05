@@ -1488,7 +1488,7 @@ test('task tool_execution_update records live subagent progress and completion',
     ctx,
   );
 
-  assert.match(status.content[0].text, /Progress:\n- writer: running; draft related work; tool read; 1 requests; 2s/);
+  assert.match(status.content[0].text, /Progress:\n- writer \(WriterLive\): running # draft related work \| 1 req \| 2s\n  current tool: read/);
   assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), ['writer']);
   assert.deepEqual(status.details.status.pending[0].skills, ['writing-markdown-helper']);
   assert.equal(notifications[0].level, 'info');
@@ -1529,7 +1529,7 @@ test('task tool_execution_update records live subagent progress and completion',
 
   assert.deepEqual(status.details.status.completed, ['writer']);
   assert.deepEqual(status.details.status.pending, []);
-  assert.match(status.content[0].text, /Progress:\n- writer: completed; draft related work; 2 requests; 5s/);
+  assert.match(status.content[0].text, /Progress:\n- writer \(WriterLive\): completed # draft related work \| 2 req \| 5s/);
   assert.equal(pi.messages.length, 0);
 });
 
@@ -1599,8 +1599,95 @@ test('task EventBus progress and lifecycle update subagent status before final t
 
   assert.deepEqual(status.details.status.completed, ['writer']);
   assert.deepEqual(status.details.status.pending, []);
-  assert.match(status.content[0].text, /writer: completed; draft finished/);
+  assert.match(status.content[0].text, /writer \(WriterBus\): completed # draft finished/);
   assert.equal(pi.messages.length, 0);
+});
+
+test('subagent status preserves rich progress telemetry inside the plugin', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(pi.entries);
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-rich-progress-route',
+    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const assignment = [
+    'OMP_REQUIRED_SUBAGENT: writer',
+    'Required skills for this subagent:',
+    '- writing-markdown-helper',
+  ].join('\n');
+  await event(pi, 'tool_execution_update')(
+    {
+      toolName: 'task',
+      toolCallId: 'task-rich-progress',
+      partialResult: {
+        details: {
+          progress: [
+            {
+              id: 'WriterRich',
+              index: 0,
+              agent: 'task',
+              status: 'running',
+              description: 'inspect files',
+              recentTools: [{ tool: 'grep', args: 'TODO', endMs: 1000 }],
+              toolCount: 4,
+              requests: 2,
+              tokens: 3456,
+              contextTokens: 12000,
+              contextWindow: 128000,
+              cost: 0.07,
+              resolvedModel: 'opencode-go/deepseek-v4-flash',
+              durationMs: 10000,
+              assignment,
+            },
+          ],
+        },
+      },
+    },
+    ctx,
+  );
+
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-rich-progress-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.match(
+    status.content[0].text,
+    /writer \(WriterRich\): running # inspect files \| model opencode-go\/deepseek-v4-flash \| 4 tools \| 2 req \| 3\.5k tokens \| ctx 12k\/128k \(9\.4%\) \| \$0\.07 \| 10s\n  last tool: grep - TODO/,
+  );
+  assert.deepEqual(status.details.status.progress[0], {
+    id: 'WriterRich',
+    agent: 'writer',
+    status: 'running',
+    parentToolCallId: 'task-rich-progress',
+    index: 0,
+    description: 'inspect files',
+    currentTool: '',
+    lastTool: 'grep',
+    toolDetail: 'TODO',
+    lastIntent: '',
+    toolCount: 4,
+    requests: 2,
+    tokens: 3456,
+    contextTokens: 12000,
+    contextWindow: 128000,
+    cost: 0.07,
+    durationMs: 10000,
+    resolvedModel: 'opencode-go/deepseek-v4-flash',
+    startedAt: status.details.status.progress[0].startedAt,
+    updatedAt: status.details.status.progress[0].updatedAt,
+    skills: ['writing-markdown-helper'],
+  });
 });
 
 test('completing one of two pending task calls keeps the other subagent running', async () => {

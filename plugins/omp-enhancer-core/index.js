@@ -595,10 +595,17 @@ function readSubagentProgress(value) {
       index: Number.isInteger(item.index) ? item.index : null,
       description: isString(item.description) ? item.description : '',
       currentTool: isString(item.currentTool) ? item.currentTool : '',
+      lastTool: isString(item.lastTool) ? item.lastTool : '',
+      toolDetail: isString(item.toolDetail) ? item.toolDetail : '',
       lastIntent: isString(item.lastIntent) ? item.lastIntent : '',
+      toolCount: Number.isFinite(item.toolCount) ? item.toolCount : 0,
       requests: Number.isFinite(item.requests) ? item.requests : 0,
       tokens: Number.isFinite(item.tokens) ? item.tokens : 0,
+      contextTokens: Number.isFinite(item.contextTokens) ? item.contextTokens : 0,
+      contextWindow: Number.isFinite(item.contextWindow) ? item.contextWindow : 0,
+      cost: Number.isFinite(item.cost) ? item.cost : 0,
       durationMs: Number.isFinite(item.durationMs) ? item.durationMs : 0,
+      resolvedModel: isString(item.resolvedModel) ? item.resolvedModel : '',
       startedAt: Number.isFinite(item.startedAt) ? item.startedAt : 0,
       updatedAt: Number.isFinite(item.updatedAt) ? item.updatedAt : 0,
       assignment: isString(item.assignment) ? item.assignment : '',
@@ -1070,6 +1077,7 @@ function recordSubagentEventBusRawEvent(state, payload = {}) {
     parentToolCallId: existing.parentToolCallId,
     status: 'running',
     currentTool: event.type === 'tool_call' ? name : '',
+    lastTool: name || existing.lastTool,
     lastIntent: event.intent ?? existing.lastIntent,
   };
   const update = recordSubagentProgress(state, raw, { source: TASK_SUBAGENT_EVENT_CHANNEL });
@@ -1173,10 +1181,21 @@ function recordSubagentProgress(state, rawProgress = {}, { parentToolCallId = ''
 
   const statusChanged = !previous || previous.status !== current.status;
   const toolChanged = previous?.currentTool !== current.currentTool;
+  const statsChanged = previous
+    ? previous.lastTool !== current.lastTool
+      || previous.toolCount !== current.toolCount
+      || previous.requests !== current.requests
+      || previous.tokens !== current.tokens
+      || previous.contextTokens !== current.contextTokens
+      || previous.contextWindow !== current.contextWindow
+      || previous.cost !== current.cost
+      || previous.resolvedModel !== current.resolvedModel
+      || previous.toolDetail !== current.toolDetail
+    : true;
   return {
     previous,
     current,
-    persist: statusChanged || toolChanged || lifecycle || isTerminalSubagentStatus(current.status),
+    persist: statusChanged || toolChanged || statsChanged || lifecycle || isTerminalSubagentStatus(current.status),
     notify: statusChanged || (!previous && Boolean(current.agent)) || (isActiveSubagentStatus(current.status) && toolChanged),
   };
 }
@@ -1188,6 +1207,9 @@ function normalizeSubagentProgress(state, rawProgress = {}, { parentToolCallId =
   const status = normalizeSubagentStatus(progress.status ?? (lifecycle ? 'running' : ''));
   const updatedAt = eventTimestamp(progress);
   const id = cleanProgressId(progress.id ?? progress.agentId ?? progress.jobId ?? agent);
+  const currentTool = cleanText(progress.currentTool);
+  const lastTool = resolveLastProgressTool(progress, currentTool);
+  const toolDetail = resolveProgressToolDetail(progress);
   const key = subagentProgressKey({
     id,
     agent,
@@ -1204,11 +1226,18 @@ function normalizeSubagentProgress(state, rawProgress = {}, { parentToolCallId =
     parentToolCallId: cleanToolCallId(progress.parentToolCallId ?? parentToolCallId),
     index: Number.isInteger(progress.index) ? progress.index : null,
     description: cleanText(progress.description),
-    currentTool: cleanText(progress.currentTool),
+    currentTool,
+    lastTool,
+    toolDetail,
     lastIntent: cleanText(progress.lastIntent),
+    toolCount: finiteMetric(progress.toolCount),
     requests: Number.isFinite(progress.requests) ? progress.requests : 0,
     tokens: Number.isFinite(progress.tokens) ? progress.tokens : 0,
+    contextTokens: finiteMetric(progress.contextTokens),
+    contextWindow: finiteMetric(progress.contextWindow),
+    cost: finiteCost(progress.cost ?? progress.usage?.cost?.total),
     durationMs: Number.isFinite(progress.durationMs) ? progress.durationMs : 0,
+    resolvedModel: resolveProgressModel(progress),
     startedAt: Number.isFinite(progress.startedAt) ? progress.startedAt : updatedAt,
     updatedAt,
     assignment: cleanText(progress.assignment),
@@ -1217,6 +1246,50 @@ function normalizeSubagentProgress(state, rawProgress = {}, { parentToolCallId =
     text,
     skills,
   };
+}
+
+function finiteMetric(value) {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function finiteCost(value) {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function resolveLastProgressTool(progress = {}, currentTool = '') {
+  const direct = cleanText(progress.lastTool ?? progress.last_tool);
+  if (direct) return direct;
+  const recent = Array.isArray(progress.recentTools) ? progress.recentTools : [];
+  for (const item of recent) {
+    const tool = cleanText(isRecord(item) ? item.tool ?? item.name : item);
+    if (tool) return tool;
+  }
+  return currentTool;
+}
+
+function resolveProgressToolDetail(progress = {}) {
+  const direct = cleanText(progress.toolDetail ?? progress.tool_detail ?? progress.lastIntent);
+  if (direct) return direct;
+  const currentArgs = cleanText(progress.currentToolArgs ?? progress.current_tool_args);
+  if (currentArgs) return currentArgs;
+  const recent = Array.isArray(progress.recentTools) ? progress.recentTools : [];
+  for (const item of recent) {
+    const args = cleanText(isRecord(item) ? item.args ?? item.detail : '');
+    if (args) return args;
+  }
+  return '';
+}
+
+function resolveProgressModel(progress = {}) {
+  const value = progress.resolvedModel ?? progress.model ?? progress.modelOverride;
+  if (Array.isArray(value)) return value.filter(isString).map((item) => item.trim()).filter(Boolean).join(', ');
+  if (isRecord(value)) {
+    const provider = cleanText(value.provider);
+    const id = cleanText(value.id ?? value.model ?? value.modelID ?? value.modelId);
+    if (provider && id) return `${provider}/${id}`;
+    return id || cleanText(value.name);
+  }
+  return cleanText(value);
 }
 
 function resolveProgressAgent(state, progress = {}, text = '') {
@@ -1599,10 +1672,17 @@ function buildSubagentStatus(state) {
       index: progress.index,
       description: progress.description,
       currentTool: progress.currentTool,
+      lastTool: progress.lastTool,
+      toolDetail: progress.toolDetail,
       lastIntent: progress.lastIntent,
+      toolCount: progress.toolCount,
       requests: progress.requests,
       tokens: progress.tokens,
+      contextTokens: progress.contextTokens,
+      contextWindow: progress.contextWindow,
+      cost: progress.cost,
       durationMs: progress.durationMs,
+      resolvedModel: progress.resolvedModel,
       startedAt: progress.startedAt,
       updatedAt: progress.updatedAt,
       skills: [...(progress.skills ?? [])],
@@ -1643,14 +1723,59 @@ function formatSubagentStatus(state) {
 }
 
 function formatSubagentProgressLine(progress) {
-  const details = [
-    progress.description,
-    progress.currentTool ? `tool ${progress.currentTool}` : null,
-    progress.lastIntent && progress.lastIntent !== progress.currentTool ? progress.lastIntent : null,
-    progress.requests ? `${progress.requests} requests` : null,
+  const title = progress.id && progress.id !== progress.agent ? `${progress.agent} (${progress.id})` : progress.agent;
+  const stats = [
+    progress.resolvedModel ? `model ${progress.resolvedModel}` : null,
+    progress.toolCount ? `${formatMetricCount(progress.toolCount)} tools` : null,
+    progress.requests ? `${progress.requests} req` : null,
+    progress.tokens ? `${formatCompactMetric(progress.tokens)} tokens` : null,
+    formatContextMetric(progress),
+    progress.cost ? formatCost(progress.cost) : null,
     progress.durationMs ? `${Math.round(progress.durationMs / 1000)}s` : null,
-  ].filter(Boolean).join('; ');
-  return `- ${progress.agent}: ${progress.status}${details ? `; ${details}` : ''}`;
+  ].filter(Boolean).join(' | ');
+  const description = progress.description ? ` # ${progress.description}` : '';
+  const head = `- ${title}: ${progress.status}${description}${stats ? ` | ${stats}` : ''}`;
+  const toolLine = formatProgressToolLine(progress);
+  return toolLine ? `${head}\n  ${toolLine}` : head;
+}
+
+function formatMetricCount(value) {
+  return Number.isFinite(value) ? String(Math.round(value)) : '0';
+}
+
+function formatCompactMetric(value) {
+  if (!Number.isFinite(value)) return '0';
+  const rounded = Math.round(value);
+  if (Math.abs(rounded) >= 1000000) return `${trimMetric(rounded / 1000000)}M`;
+  if (Math.abs(rounded) >= 1000) return `${trimMetric(rounded / 1000)}k`;
+  return String(rounded);
+}
+
+function trimMetric(value) {
+  return value.toFixed(value >= 10 ? 0 : 1).replace(/\.0$/, '');
+}
+
+function formatContextMetric(progress) {
+  if (!progress.contextTokens) return null;
+  const tokens = formatCompactMetric(progress.contextTokens);
+  if (!progress.contextWindow) return `ctx ${tokens}`;
+  const window = formatCompactMetric(progress.contextWindow);
+  const percent = (progress.contextTokens / progress.contextWindow) * 100;
+  const pct = Number.isFinite(percent) ? ` (${trimMetric(percent)}%)` : '';
+  return `ctx ${tokens}/${window}${pct}`;
+}
+
+function formatCost(value) {
+  return `$${value.toFixed(2)}`;
+}
+
+function formatProgressToolLine(progress) {
+  const tool = progress.currentTool || progress.lastTool;
+  if (!tool) return '';
+  const label = progress.currentTool ? 'current tool' : 'last tool';
+  const detailText = progress.toolDetail || progress.lastIntent;
+  const detail = detailText && detailText !== tool ? ` - ${detailText}` : '';
+  return `${label}: ${tool}${detail}`;
 }
 
 async function notifySubagentDispatch(ctx = {}, status, records = [], state, event = {}) {
@@ -1696,6 +1821,7 @@ function formatSubagentProgressNotification(progress, state) {
   const route = state.lastRoute?.intent ? ` Route: ${state.lastRoute.intent}.` : '';
   const details = [
     progress.currentTool ? `tool ${progress.currentTool}` : null,
+    !progress.currentTool && progress.lastTool ? `last tool ${progress.lastTool}` : null,
     progress.lastIntent && progress.lastIntent !== progress.currentTool ? progress.lastIntent : null,
     progress.description,
   ].filter(Boolean).join('; ');
