@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildSkillAliasMapFromRoots, skillNamesEquivalent, validateSkillUsage } from '../src/skill-usage.js';
+import { buildSkillAliasMapFromRoots, skillNamesEquivalent, skillReadNameCandidates, validateSkillUsage } from '../src/skill-usage.js';
 
 const requiredWritingSkills = ['plain-chinese-writing', 'zh-writing-polish'];
 
@@ -172,6 +172,21 @@ test('accepts generic namespaced aliases without per-skill hardcoding', () => {
   assert.equal(result.ok, true);
   assert.deepEqual(result.loaded, ['security-review', 'verification-before-completion']);
   assert.deepEqual(result.missing, []);
+});
+
+test('matches canonical and namespaced skills symmetrically', () => {
+  assert.equal(skillNamesEquivalent('security-review', 'ecc-security-review'), true);
+  assert.equal(skillNamesEquivalent('ecc-security-review', 'security-review'), true);
+});
+
+test('suggests installed namespaced read aliases for canonical required skills', () => {
+  const reviewCandidates = skillReadNameCandidates('security-review');
+  const scanCandidates = skillReadNameCandidates('security-scan');
+
+  assert.equal(reviewCandidates[0], 'ecc-security-review');
+  assert.equal(scanCandidates[0], 'ecc-security-scan');
+  assert.ok(reviewCandidates.includes('security-review'));
+  assert.ok(scanCandidates.includes('security-scan'));
 });
 
 test('rejects explicit denial written with a namespaced skill alias', () => {

@@ -641,6 +641,8 @@ test('pre-work skill gate accepts legacy ECC security skill aliases', async () =
   assert.equal(blocked?.block, true);
   assert.match(blocked.reason, /security-review/);
   assert.match(blocked.reason, /security-scan/);
+  assert.match(blocked.reason, /read skill:\/\/ecc-security-review \(accepted for security-review\)/);
+  assert.match(blocked.reason, /read skill:\/\/ecc-security-scan \(accepted for security-scan\)/);
 
   await event(pi, 'tool_result')(
     {

@@ -208,8 +208,22 @@ export function skillNamesEquivalent(requiredSkill, loadedSkill) {
   const rawLoaded = normalizeSkillToken(loadedSkill);
   if (rawRequired && rawLoaded && rawRequired === rawLoaded) return true;
   if (rawLoaded && hasNamespacedSuffix(rawLoaded, required)) return true;
+  if (rawRequired && hasNamespacedSuffix(rawRequired, loaded)) return true;
   if (rawLoaded && skillNameVariants(required).includes(rawLoaded)) return true;
   return false;
+}
+
+export function skillReadNameCandidates(skill, { limit = 3 } = {}) {
+  const normalized = normalizeSkillToken(skill);
+  if (!normalized) return [];
+
+  const candidates = collectSkillAliasCandidates(defaultSkillAliasRoots())
+    .filter((candidate) => skillNamesEquivalent(skill, candidate.name) || skillNamesEquivalent(skill, candidate.canonical))
+    .sort((left, right) => skillCandidateScore(skill, left) - skillCandidateScore(skill, right))
+    .map((candidate) => candidate.name);
+
+  const fallback = normalizeSkillName(skill) || normalized;
+  return uniqueValues([...candidates, fallback]).slice(0, limit);
 }
 
 export function buildSkillAliasMapFromRoots(roots = []) {
@@ -315,6 +329,65 @@ function skillRootsUnder(parent) {
   } catch {
     return [];
   }
+}
+
+function collectSkillAliasCandidates(roots = []) {
+  const candidates = [];
+  for (const root of roots) {
+    if (!root || !existsSync(root)) continue;
+    collectSkillAliasCandidateRecords(root, root, rootKind(root), candidates);
+  }
+  return candidates;
+}
+
+function collectSkillAliasCandidateRecords(root, current, kind, candidates) {
+  let entries;
+  try {
+    entries = readdirSync(current, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  const skillFile = path.join(current, 'SKILL.md');
+  if (existsSync(skillFile)) {
+    addSkillFileAliasCandidates(root, current, skillFile, kind, candidates);
+    return;
+  }
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) collectSkillAliasCandidateRecords(root, path.join(current, entry.name), kind, candidates);
+  }
+}
+
+function addSkillFileAliasCandidates(root, skillDir, skillFile, kind, candidates) {
+  let text = '';
+  try {
+    text = readFileSync(skillFile, 'utf8');
+  } catch {
+    return;
+  }
+
+  const relativePath = path.relative(root, skillDir).split(path.sep).join('/');
+  if (!relativePath || relativePath.startsWith('..')) return;
+
+  const leafName = relativePath.split('/').pop();
+  const canonical = normalizeSkillToken(skillFrontmatterName(text) || leafName);
+  for (const name of [canonical, leafName, relativePath, relativePath.replace(/\//g, '-')]) {
+    const normalizedName = normalizeSkillToken(name);
+    if (normalizedName) candidates.push({ name: normalizedName, canonical, kind });
+  }
+}
+
+function rootKind(root) {
+  return String(root).includes(path.join('.omp', 'agent')) ? 'managed' : 'packaged';
+}
+
+function skillCandidateScore(skill, candidate) {
+  const requested = normalizeSkillToken(skill);
+  if (candidate.kind === 'managed') return 0;
+  if (candidate.name === requested) return 1;
+  if (candidate.name.includes('/')) return 3;
+  return 2;
 }
 
 function collectSkillAliases(root, current, aliases) {

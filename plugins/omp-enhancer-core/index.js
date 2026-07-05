@@ -1,6 +1,6 @@
 import { buildGovernancePromptFragment, buildMissingGateContext, buildSubagentPromptFragment } from './src/governance.js';
 import { routeNaturalLanguageTask } from './src/router.js';
-import { normalizeSkillName, skillNamesEquivalent, validateSkillUsage } from './src/skill-usage.js';
+import { normalizeSkillName, skillNamesEquivalent, skillReadNameCandidates, validateSkillUsage } from './src/skill-usage.js';
 import { collectSubagentTaskRecords, parseSubagentUsageDetails, validateSubagentUsage } from './src/subagent-usage.js';
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
 import { runClassifierCommand } from './src/classifier-config.js';
@@ -701,10 +701,16 @@ function buildPreworkSkillGateBlock(state, toolName) {
       `OMP Enhancer Core pre-work skill gate blocked ${toolName}.`,
       `Read all required skills before using work tools. Missing skills: ${missing.join(', ')}.`,
       'Required recovery order:',
-      ...missing.map((skill) => `- read skill://${skill}`),
+      ...missing.map(formatMissingSkillReadStep),
       `After those read results return, retry ${toolName}. Do not wait until session_stop to repair missing skill evidence.`,
     ].join('\n'),
   };
+}
+
+function formatMissingSkillReadStep(skill) {
+  const [primary] = skillReadNameCandidates(skill);
+  if (!primary || primary === skill) return `- read skill://${skill}`;
+  return `- read skill://${primary} (accepted for ${skill})`;
 }
 
 function isPreworkSkillGateTool(toolName, route) {
