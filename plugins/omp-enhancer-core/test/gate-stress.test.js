@@ -43,6 +43,7 @@ const profiles = {
       'Write a concise project report in English.',
       'Revise this manuscript abstract for clarity.',
       'Edit the proposal summary for a technical audience.',
+      'Draft a full English research proposal with background, methods, risks, and timeline.',
     ],
     subagents: {
       writer: ['writing-markdown-helper'],
@@ -57,6 +58,7 @@ const profiles = {
       'Polish the paragraph and check the wording.',
       'Polish this sentence for clarity and keep it concise.',
       'Edit this wording so it sounds natural.',
+      'Polish this sentence for clarity: The workflow blocks unexpectedly.',
     ],
     subagents: {},
     skills: ['writing-markdown-helper'],
@@ -67,6 +69,8 @@ const profiles = {
       '帮我润色博士论文引言，去掉翻译腔。',
       '请起草一份中文项目报告。',
       '请检查这段中文相关工作的逻辑表达。',
+      '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。',
+      '请写一份中文科研调研报告，分析最近论文里的方法路线。',
     ],
     subagents: {
       'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
@@ -81,6 +85,7 @@ const profiles = {
       '把这句话改成朴素直接的中文。',
       '把这段话改得少一点 AI 味。',
       '请把下面说明改成自然中文，不要改代码。',
+      '把这句话改成朴素直接的中文：我们需要进一步推动能力沉淀。',
     ],
     subagents: {},
     skills: ['plain-chinese-writing', 'zh-writing-polish'],
@@ -97,6 +102,8 @@ const profiles = {
       'Run tests and audit for bugs; write a bug report without fixing code.',
       'Find bugs in the project and report verified findings only.',
       'Inspect the plugin for defects and summarize concrete file-line findings.',
+      '帮我在代码里找 bug，只报告问题，不要修复。',
+      '帮我为 subagent fork 逻辑生成测试并运行门禁，不要改实现。',
     ],
     subagents: {
       'ecc-tdd-guide': ['test-driven-development', 'search-first', 'ai-regression-testing'],
@@ -115,6 +122,9 @@ const profiles = {
       'Modify the marketplace release logic and test it.',
       'Refactor the router code with focused unit tests.',
       'Build the config workflow and cover error paths.',
+      '请大规模重构这个插件的 subagent fork 逻辑，修改多个文件并补完整测试。',
+      '只修改 plugins/omp-enhancer-core/src/router.js 里 routeNaturalLanguageTask 的一个判断，保持范围最小。',
+      'Agentically update the codebase to improve gate handling and add regression tests.',
     ],
     subagents: {
       plan: ['brainstorming', 'subagent-driven-development'],
@@ -171,6 +181,10 @@ const nonGatedPrompts = [
   'What is a report?',
   'GitHub release 是什么？简单解释一下。',
   '今天下午三点提醒我给妈妈打电话。',
+  '帮我调研一下 agentic coding workflow 的最佳实践，列出要点。',
+  '帮我做科研选题调研，分析最近论文里的方法路线。',
+  '帮我下载这些论文 PDF 并整理到 papers 目录，不要写代码。',
+  '帮我整理今天的会议纪要和待办事项。',
 ];
 
 const gateCases = [

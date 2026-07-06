@@ -22,17 +22,20 @@ const strongZhWritingTerms = [
   '文本',
   '改成',
   '改得',
+  '翻译',
 ];
-const enWritingActionTerms = ['draft', 'write', 'revise', 'polish', 'edit', 'improve'];
-const enWritingObjectTerms = ['paper', 'report', 'manuscript', 'abstract', 'related work', 'paragraph', 'sentence', 'wording', 'release notes', 'changelog', 'letter', 'email', 'proposal', 'summary'];
-const testingTerms = ['tests', 'testing', 'unit test', 'coverage', 'mutation', 'e2e', 'playwright', 'regression', 'flaky', 'flakiness', 'test flakiness', '测试', '覆盖率', '门禁'];
-const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', 'code', 'component', '实现', '重构', '修复', '报错', '功能', '代码', '接口'];
-const configTerms = ['omp-config', 'config asset', 'config assets', 'asset paths', 'config templates', 'assets', 'hooks', 'templates', 'modelroles', 'model roles', 'agents', 'skills', '配置资产', '配置模板', '技能清单'];
-const securityTerms = ['security', 'vulnerability', 'vulnerabilities', 'path traversal', 'path expansion', 'unsafe path', 'command injection', 'command execution', 'auth bypass', 'xss', 'ssrf', 'injection', 'auth', 'authentication', 'authorization', 'oauth', 'owasp', '安全', '漏洞', '注入', '鉴权', '认证', '权限', '密钥', 'secret', 'secrets', '路径穿越'];
-const noCodeChangeTerms = ['不要改代码', '不要改', '不要修改代码', '先不要修', '不要修复', '不要修改', '只诊断', '只分析', '只检查', '只列清单', 'do not change', 'do not modify', 'do not fix', 'diagnosis only', 'read-only'];
+const enWritingActionTerms = ['draft', 'write', 'revise', 'polish', 'edit', 'improve', 'proofread', 'copyedit'];
+const enWritingObjectTerms = ['paper', 'report', 'manuscript', 'abstract', 'related work', 'paragraph', 'sentence', 'wording', 'grammar', 'release notes', 'changelog', 'commit message', 'letter', 'email', 'proposal', 'summary', 'guide', 'manual', 'section', 'policy', 'memo', 'announcement', 'troubleshooting guide'];
+const testingTerms = ['tests', 'testing', 'unit test', 'coverage', 'mutation', 'e2e', 'playwright', 'regression', 'flaky', 'flakiness', 'test flakiness', 'lint', 'eslint', 'prettier', 'benchmark', 'smoke', 'screenshot', '测试', '测试用例', '覆盖率', '门禁', '浏览器', '截图'];
+const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', 'code', 'component', 'migrate', 'migration', 'dependency', 'dependencies', '实现', '重构', '修复', '报错', '功能', '代码', '接口', '迁移', '依赖'];
+const configTerms = ['omp-config', 'config asset', 'config assets', 'asset paths', 'config templates', 'config doctor', 'assets', 'hooks', 'templates', 'modelroles', 'model roles', 'agents', 'skills', 'subagent', 'subagents', '配置资产', '配置模板', '技能清单'];
+const securityTerms = ['security', 'vulnerability', 'vulnerabilities', 'path traversal', 'path expansion', 'unsafe path', 'dangerous command', 'dangerous commands', 'command injection', 'command execution', 'auth bypass', 'xss', 'ssrf', 'injection', 'auth', 'authentication', 'authorization', 'permissions', 'privilege', 'oauth', 'owasp', 'license', 'compliance', 'privacy', 'high severity', '安全', '漏洞', '注入', '鉴权', '认证', '权限', '越权', '密钥', 'secret', 'secrets', '路径穿越', '危险命令', '合规', '隐私', '许可证'];
+const noCodeChangeTerms = ['不要改代码', '不改代码', '不要写代码', '不写代码', '不要写入文件', '不要写入项目', '不写入文件', '不写入项目', '不写文件', '不写脚本', '不要改实现', '不改实现', '不修实现', '不要修代码', '不修代码', '不要实现', '先不要实现', '不实现', '不要改', '不要修改代码', '不要修改文件', '不修改文件', '先不要修', '不要修复', '不要修改', '只诊断', '只分析', '只检查', '只列清单', 'do not change', 'do not modify', 'do not fix', 'do not implement', 'do not write code', 'without writing code', 'diagnosis only', 'read-only'];
 const diagnosisTerms = ['why', 'diagnose', 'diagnosis', 'investigate', 'root cause', '原因', '为什么', '诊断', '定位', '排查', '是什么导致', '是什么原因', 'warning:', 'failed', 'failure'];
 const releaseTerms = ['push', 'publish', 'upgrade', '推送', '发布', '升级', '刷新'];
 const noReleaseTerms = ['without publishing', 'without publish', 'do not publish', 'do not push', 'do not release', 'not publish', 'not push', 'not release', '不要发布', '不要推送', '不要刷新', '不发布', '不推送'];
+const knowledgeWorkTerms = ['调研', '科研', '研究', '文献', '论文', '资料', '清单', '正文', '官方文档', '文档', '链接', '用法', '示例', '片段', '命令', '表达式', '竞品', 'one-liner', 'command', 'cron', 'pg_dump', 'roadmap', 'sql', '查询', 'bash', 'readme', 'paper', 'papers', 'literature', 'arxiv', 'doi', 'pdf', 'scholar', 'pubmed', 'documentation', 'docs', 'links', 'usage', 'examples', '会议纪要', '待办事项', '日程', 'agenda', 'meeting minutes', 'todo', 'todos'];
+const knowledgeWorkActionTerms = ['调研', '检索', '查找', '搜索', '收集', '下载', '整理', '列出', '列', '总结', '分析', '查询', '查', '检查', '核对', '给出', '给', '统计', '演示', '解释', 'research', 'lookup', 'look up', 'search', 'find', 'download', 'collect', 'summarize', 'summarise', 'analyze', 'analyse', 'check', 'list', 'explain'];
 const testingEnhancerTools = [
   'omp_test_analyze',
   'omp_test_context',
@@ -101,11 +104,14 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasDirectTestAuthoring = isDirectTestAuthoring(normalized);
   const hasTestAnalysis = isTestAnalysisRequest(normalized);
   const hasTestReportWriting = isTestReportWritingRequest(normalized);
-  const hasBugAudit = isBugAuditRequest(normalized);
-  const hasCoding = !asksNoCodeChange && !hasBugAudit && (includesAny(normalized, codingTerms) || hasWholeWord(normalized, 'api') || isCodeChangeRequest(normalized));
+  const hasBugReportWriting = isBugReportWritingRequest(normalized);
+  const hasBugAudit = !hasBugReportWriting && isBugAuditRequest(normalized);
+  const hasKnowledgeOnly = isKnowledgeWorkWithoutWritingArtifact(normalized);
+  const hasCoding = !asksNoCodeChange && !hasBugAudit && !hasKnowledgeOnly && isCodeChangeRequest(normalized);
   const hasCodeChange = hasCoding && !hasTestReportWriting;
-  const hasChineseWriting = isChineseWriting(normalized, prompt);
-  const hasWriting = hasChineseWriting || isEnglishWriting(normalized);
+  const hasEnglishWriting = isEnglishWriting(normalized) || isChinesePromptForEnglishWriting(normalized);
+  const hasChineseWriting = !hasEnglishWriting && isChineseWriting(normalized, prompt);
+  const hasWriting = hasChineseWriting || hasEnglishWriting;
   const hasSecurity = includesAny(normalized, securityTerms);
   const hasRelease = isReleaseRequest(normalized);
   const hasConfigAssets = isConfigAssetRequest(normalized);
@@ -113,12 +119,16 @@ export function routeNaturalLanguageTask(input = {}) {
 
   if (conceptOnly && !isSecurityConceptQuestion(normalized)) return unknownRoute();
 
-  if (hasSecurity && !hasWriting) {
+  if (hasSecurity && (!hasWriting || isSecurityAuditOrFixRequest(normalized)) && (!hasKnowledgeOnly || isSecurityAuditOrFixRequest(normalized))) {
     return routeByIntent('security-review');
   }
 
   if (hasBugAudit) {
     return routeByIntent('bug-audit');
+  }
+
+  if (hasTestReportWriting) {
+    return routeByIntent(hasEnglishWriting ? 'writing.en' : 'writing.zh', { writingComplexity: writingComplexityFor(normalized) });
   }
 
   if (hasCodeChange && hasTesting) {
@@ -133,16 +143,16 @@ export function routeNaturalLanguageTask(input = {}) {
     return routeByIntent('bug-audit');
   }
 
+  if (hasCodeChange) {
+    return routeByIntent('implementation-with-tests');
+  }
+
   if (hasChineseWriting) {
     return routeByIntent('writing.zh', { writingComplexity: writingComplexityFor(normalized) });
   }
 
-  if (hasWriting) {
+  if (hasEnglishWriting) {
     return routeByIntent('writing.en', { writingComplexity: writingComplexityFor(normalized) });
-  }
-
-  if (hasCodeChange) {
-    return routeByIntent('implementation-with-tests');
   }
 
   if (hasRelease && !hasDiagnosisOnly) {
@@ -151,6 +161,10 @@ export function routeNaturalLanguageTask(input = {}) {
 
   if (hasConfigAssets) {
     return routeByIntent('config-assets');
+  }
+
+  if (hasKnowledgeOnly) {
+    return unknownRoute();
   }
 
   if (hasDiagnosisOnly) {
@@ -294,7 +308,14 @@ function subagent(agent, duty, requiredSkills = []) {
 function isChineseWriting(normalized, original) {
   if (!/[\u4e00-\u9fff]/.test(original)) return false;
   if (isConceptOnlyQuestion(normalized)) return false;
+  if (isKnowledgeWorkWithoutWritingArtifact(normalized)) return false;
+  if (isStandaloneCommandOrSnippetRequest(normalized)) return false;
+  if (isReportOnlyAudit(normalized)) return false;
   if (isDirectTestAuthoring(normalized)) return false;
+  if (/(?:写|起草|撰写|润色|改写|翻译).*(?:说明|文档|报告|草稿|公告|ticket|法务|memo|changelog|release notes)/.test(normalized)) return true;
+  if (/(?:检查|审查|核对).*(?:文案).*(?:清楚|准确|自然|语气|表达)/.test(normalized)) return true;
+  if (/整理成\s*(?:markdown\s*)?表格/.test(normalized)) return true;
+  if (/(?:修复|修改|润色|改写).*(?:表述|措辞|语气|风格|表达|说明)/.test(normalized)) return true;
   if (includesAny(normalized, strongZhWritingTerms)) return true;
   if (!normalized.includes('写')) return false;
   return !includesAny(normalized, ['函数', '代码', '接口', '实现', 'api', 'component']);
@@ -302,7 +323,7 @@ function isChineseWriting(normalized, original) {
 
 function isEnglishWriting(text) {
   if (includesAny(text, enWritingActionTerms) && includesAny(text, enWritingObjectTerms)) return true;
-  return /(?:check|review|improve|edit)\s+.*(?:logic|style|wording|paragraph|abstract|paper|manuscript|report|release notes|changelog|letter|email|proposal|summary)/.test(text);
+  return /(?:check|review|improve|edit|fix|proofread|copyedit)\s+.*(?:logic|style|grammar|typos?|wording|paragraph|abstract|paper|manuscript|report|release notes|changelog|letter|email|proposal|summary)/.test(text);
 }
 
 function writingComplexityFor(text) {
@@ -310,9 +331,11 @@ function writingComplexityFor(text) {
 }
 
 function isSimpleWritingRequest(text) {
+  const explicitSnippet = /(?:这句话|一句话|这个句子|短句|这段话|下面这段|下面文字|下面说明|这段说明|这段文字)/.test(text)
+    || /(?:sentence|one sentence|short phrase|this(?:\s+\w+){0,3}\s+paragraph|the paragraph|this wording)\b/.test(text);
+  if (explicitSnippet) return true;
   if (isComplexWritingRequest(text)) return false;
-  return /(?:这句话|一句话|这个句子|短句|这段话|下面这段话|下面文字|下面说明|这段说明|这段文字)/.test(text)
-    || /(?:sentence|one sentence|short phrase|this paragraph|the paragraph|this wording)\b/.test(text);
+  return false;
 }
 
 function isComplexWritingRequest(text) {
@@ -324,6 +347,7 @@ function isTestingRequest(text) {
   return includesAny(text, testingTerms)
     || /(?:write|add|create|run|execute|fix|update|check)\s+tests?\b/.test(text)
     || /\btest\s+(?:this|the|my|our|it|function|code|plugin|workflow|route|logic)\b/.test(text)
+    || /(?:测试用例).*(?:测试文件|运行|执行)/.test(text)
     || text.includes('写高信号单元测试')
     || text.includes('写测试')
     || text.includes('补测试');
@@ -332,45 +356,140 @@ function isTestingRequest(text) {
 function isDirectTestAuthoring(text) {
   if (isTestReportWritingRequest(text)) return false;
   return /(?:write|add|create)\s+tests?\b/.test(text)
+    || /(?:生成|创建|编写|补充).*(?:测试用例|测试矩阵|边界测试|压力测试)/.test(text)
+    || /(?:测试用例).*(?:写成|生成|加入|保存到).*(?:测试文件|test|tests)/.test(text)
     || text.includes('写高信号单元测试')
     || text.includes('写测试')
     || text.includes('补测试');
 }
 
 function isTestReportWritingRequest(text) {
+  if (asksToRunTestVerification(text)) return false;
+  if (isReportOnlyAudit(text) && !/(?:写|起草|撰写|润色|改写|整理|draft|write|revise|polish|edit|improve)/.test(text)) return false;
   return /(?:写|起草|撰写|润色|改写|整理)(?:一份|一个|这份|这段|当前)?(?:测试|覆盖率|门禁|回归|e2e|playwright)?(?:报告|总结|说明|文档|记录|复盘|计划)/.test(text)
+    || /(?:写|起草|撰写|整理).*(?:测试|覆盖率|门禁|回归|e2e|playwright).*(?:计划|报告|总结|说明|文档|记录|复盘)/.test(text)
+    || /(?:检查|审查|核对|修复|修改).*(?:测试|覆盖率|门禁|回归|e2e|playwright).*(?:报告|章节|结论|措辞|表述|计划)/.test(text)
+    || /(?:检查|审查|核对|修复|修改).*(?:报告|章节|结论|措辞|表述|计划).*(?:测试|覆盖率|门禁|回归|e2e|playwright)/.test(text)
     || /(?:draft|write|revise|polish|edit|improve)\s+.*(?:test|testing|coverage|gate|regression|e2e|playwright).*(?:report|summary|notes|document|doc|writeup|postmortem)/.test(text)
     || /(?:draft|write|revise|polish|edit|improve)\s+.*(?:report|summary|notes|document|doc|writeup|postmortem).*(?:test|testing|coverage|gate|regression|e2e|playwright)/.test(text);
 }
 
 function isTestAnalysisRequest(text) {
+  if (isBugReportWritingRequest(text)) return false;
   return includesAny(text, ['flaky', 'flakiness', 'test flakiness'])
     || /(?:review|check|analyze|analyse|audit|investigate|inspect)\s+.*(?:tests?|testing|coverage|flaky|flakiness|browser|e2e|playwright)/.test(text)
-    || /(?:run|execute|rerun)\s+.*(?:tests?|testing|browser|e2e|playwright)/.test(text)
-    || /(?:检查|分析|审查|排查|运行|执行).*(?:测试|覆盖率|门禁|浏览器|e2e|回归)/.test(text);
+    || /(?:review|check|analyze|analyse|audit|investigate|inspect|run|execute|rerun)\s+.*(?:lint|eslint|prettier|benchmark|mutation|terraform plan|drift|browser|smoke|screenshot|migration|rollback|plugin list|\bci\b|\bjob\b|\blogs?\b|\bwarnings?\b)/.test(text)
+    || /(?:run|execute|rerun)\s+.*(?:tests?|testing|mutation|terraform plan|browser|e2e|playwright|lint|eslint|prettier|benchmark|plugin list|\bci\b|\bjob\b)/.test(text)
+    || /(?:检查|分析|审查|排查|运行|执行|重跑|重新运行).*(?:测试|覆盖率|门禁|浏览器|截图|e2e|回归|mutation|terraform plan|drift|lint|eslint|prettier|benchmark|migration|迁移|回滚|ci|job|plugin list)/.test(text)
+    || /(?:编译).*(?:latex|warnings?|warning|编译)/.test(text)
+    || /(?:检查|审查|测试|排查).*(?:门禁|gate|路由|workflow|工作流|代码|实现|逻辑).*(?:误挡|异常|错误|失败|风险|bug|问题)/.test(text)
+    || /(?:发布前|pre[-\s]?release).*(?:check|检查|pack|test|plugin list|marketplace)/.test(text);
+}
+
+function asksToRunTestVerification(text) {
+  if (/(?:不|不要|无需|不用)\s*(?:运行|执行|重跑).*(?:测试|e2e|playwright)/.test(text)) return false;
+  if (/(?:do not|don't|without|no need to)\s+(?:run|execute|rerun).*(?:tests?|e2e|playwright)/.test(text)) return false;
+  return /(?:运行|执行|重跑|重新运行).*(?:测试|e2e|playwright)/.test(text)
+    || /(?:run|execute|rerun)\s+.*(?:tests?|e2e|playwright)/.test(text);
 }
 
 function isBugAuditRequest(text) {
+  if (/(?:不要|不|别)\s*(?:找|查找|检查).*(?:bug|缺陷)/.test(text) || /(?:do not|don't|not)\s+(?:find|look for|check for).*(?:bugs?|defects?)/.test(text)) {
+    return false;
+  }
   const negatesFix = /(?:without|do not|don't|not)\s+(?:fixing|fix|modifying|modify|changing|change)/.test(text)
-    || /(?:不要|不|先不要)(?:修复|修改|改代码|改)/.test(text);
-  const asksForChange = /(?:\b(?:fix|repair|resolve|implement|modify|refactor|update)\b|修复|修改|实现|重构|开发|补测试|写测试|add tests?|write tests?)/.test(text);
-  if (asksForChange && !negatesFix) {
+    || /(?:不要|先不要)(?:修复|修改|改代码|改)|不(?:修复|修改|改代码|改实现)/.test(text);
+  const asksForChange = /(?:\b(?:fix|repair|resolve|implement|modify|refactor|update)\b|修复|修改|修正|更新|实现|重构|开发|补测试|写测试|add tests?|write tests?)/.test(text);
+  if (asksForChange && !negatesFix && !isReportOnlyAudit(text)) {
     return false;
   }
   return /(?:check|find|audit|hunt|scan|test|run tests?|inspect|investigate)\s+.*(?:bugs?|defects?)/.test(text)
     || /(?:bugs?|defects?)\s+.*(?:audit|hunt|report|find|check|list)/.test(text)
-    || /(?:测试|检查|排查|审查|扫描|查找|找|发现).*(?:bug|bugs|缺陷|问题)/.test(text)
-    || /(?:bug|bugs|缺陷|问题).*(?:审计|检查|报告|清单|定位)/.test(text);
+    || /(?:测试|检查|排查|审查|扫描|查找|找|发现).*(?:bug|bugs|缺陷)/.test(text)
+    || /(?:测试|检查|排查|审查|扫描|查找|找|发现).*(?:代码|项目|插件|实现|接口|workflow|工作流|门禁).*(?:问题)/.test(text)
+    || /(?:测试|检查|排查|审查|扫描|查找|找|发现).*(?:问题).*(?:代码|项目|插件|实现|接口|workflow|工作流|门禁)/.test(text)
+    || /(?:检查|审查|核对).*(?:fixtures?|fixture|api contract|contract|schema|字段).*(?:只报告|缺|一致|问题|风险)/.test(text)
+    || /(?:检查|审查|核对).*(?:api contract|contract|schema).*(?:实现|implementation).*(?:一致|match|matches|matched)/.test(text)
+    || /(?:检查|审查|核对).*(?:openapi|openapi spec|schema\.graphql|schema|resolver).*(?:实现|resolver|一致|match|缺|问题|风险)/.test(text)
+    || /(?:检查|审查|核对).*(?:docker-compose|docker compose|helm values|k8s|kubernetes|manifest|配置文件|yml|yaml).*(?:只报告|缺|一致|问题|风险|端口|volume|required)/.test(text)
+    || /(?:检查|审查|核对).*(?:classifier|router|route|prompt|提示词).*(?:误路由|错误路由|错误|诱导|问题|风险)/.test(text)
+    || /(?:bug|bugs|缺陷).*(?:审计|检查|报告|清单|定位)/.test(text);
+}
+
+function isBugReportWritingRequest(text) {
+  const writesBugReport = /(?:写|起草|撰写).*(?:bug\s*report|bug.*报告|问题报告|缺陷报告)/.test(text)
+    || /(?:draft|write|revise|polish|edit|improve)\s+.*(?:bug report|defect report)/.test(text);
+  if (!writesBugReport) return false;
+  const cleaned = text
+    .replace(/(?:不|不要|无需|不用)\s*(?:运行|执行|跑).*(?:测试|test|tests)/g, '')
+    .replace(/(?:do not|don't|without|no need to)\s+(?:run|execute).*(?:tests?|testing)/g, '');
+  return !/(?:测试|检查|排查|审查|扫描|查找|找|发现|test|run|check|find|audit|hunt|scan|inspect|investigate)/.test(cleaned);
 }
 
 function isCodeChangeRequest(text) {
-  return /(?:修改|修复|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|路由|提示词)/.test(text)
-    || /(?:fix|implement|modify|refactor|build|update)\s+(?:the\s+)?(?:plugin|config|configuration|logic|code|api|hook|hooks|marketplace|workflow|governance|prompt|router|route|validator|gate)/.test(text);
+  const withoutNegatedCodeWriting = text
+    .replace(/(?:不要|别|不|无需|不用)\s*(?:写|编写|生成)\s*代码/g, '')
+    .replace(/(?:不要|别|不|无需|不用)\s*(?:再)?(?:修改|改动|改|修复|修)\s*(?:文件|代码|实现)?/g, '')
+    .replace(/(?:不要|别|不|无需|不用)\s*(?:审|审查|检查|看)\s*代码/g, '')
+    .replace(/(?:不要|别|不|无需|不用)\s*写入\s*(?:文件|项目|代码库|仓库)?/g, '')
+    .replace(/(?:do not|don't|without|no need to)\s+(?:write|generate)\s+code/g, '');
+  if (/(?:api reference|api.*文档|api.*document|api.*docs?)/.test(text) && isExplicitWritingAction(text)) return false;
+  return /(?:修改|修复|修正|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|gate|路由|提示词|页面|ui)/.test(withoutNegatedCodeWriting)
+    || /(?:重构|优化|修改|修复|修正).*(?:逻辑|代码|模块|函数|router|route|workflow|工作流|门禁|gate|路由|fork|subagent|误判|运行失败|启动失败|warning|dev server)/.test(withoutNegatedCodeWriting)
+    || /(?:只改|只修改|改动|修改).*(?:一行|一处|少量|代码|文件)/.test(withoutNegatedCodeWriting)
+    || /写.*(?:函数|代码|接口|api|component|组件)/.test(withoutNegatedCodeWriting)
+    || /(?:写|新增|添加|创建|生成).*(?:python|bash|node(?:\.js)?|shell|脚本).*(?:加入项目|写入项目|保存到|文件|仓库|代码库)/.test(withoutNegatedCodeWriting)
+    || /(?:实现|开发|创建|生成).*(?:函数|方法|接口|功能|api|component|组件|ui|页面|page|slides|html|路由|hook|流程)/.test(withoutNegatedCodeWriting)
+    || /(?:implement|build|develop|add|create)\s+.*(?:feature|fallback|handling|workflow|route|router|hook|logic)/.test(withoutNegatedCodeWriting)
+    || /(?:fix|implement|update|modify|build)\s+.*(?:skill assignment|skill validation|governance prompt|prompt generation|task prompts?|final evidence|subagent skill)/.test(withoutNegatedCodeWriting)
+    || /(?:fix|repair|resolve|update|modify)\s+.*(?:tool|workflow|gate|check|validator).*(?:failure|bug|error|regression)/.test(withoutNegatedCodeWriting)
+    || /(?:新增|添加|创建|生成|更新|修改).*(?:mcp tool|tool 定义|makefile|target|schema\.graphql|graphql schema|openapi|terraform|module|resolver|subagent 模板).*(?:测试|验证|运行|接口|字段|定义|限制)?/.test(withoutNegatedCodeWriting)
+    || /(?:fix|implement|modify|refactor|build|update)\s+(?:the\s+)?(?:plugin|config|configuration|logic|code|api|hook|hooks|marketplace|workflow|governance|prompt|router|route|validator|gate)/.test(withoutNegatedCodeWriting)
+    || /(?:更新|修改|修复).*(?:classifier|router|route|prompt|提示词|模型白名单|白名单).*(?:代码|测试|路由|bug-audit|任务|规则|默认|优先)/.test(withoutNegatedCodeWriting)
+    || /(?:修复|修改|更新).*(?:modelroles|model roles|配置|config|默认模型|模型|白名单|whitelist|classifier).*(?:错误|问题|bug|不同步|默认值|默认模型|代码|测试)/.test(withoutNegatedCodeWriting)
+    || /(?:修复|修改|更新).*(?:config assets?|assets?|配置资产).*(?:打包|遗漏|缺失|错误|问题)/.test(withoutNegatedCodeWriting)
+    || /(?:修复|解决).*(?:typescript|ts|编译|构建|build|compile|dockerfile|docker|镜像|image).*(?:错误|失败|问题)/.test(withoutNegatedCodeWriting)
+    || /(?:修复|修改|更新|调整).*(?:docker-compose|docker compose|k8s|kubernetes|deployment|manifest|helm|端口映射|资源限制|env\.example|\.env\.example)/.test(withoutNegatedCodeWriting)
+    || /(?:修复|解决|调整).*(?:移动端|前端|frontend|布局|按钮|文字溢出|溢出|css|样式)/.test(withoutNegatedCodeWriting)
+    || /(?:解决|修复).*(?:merge conflict|冲突|合并冲突)/.test(withoutNegatedCodeWriting)
+    || /(?:新增|添加|创建|生成).*(?:数据库|db|sql|migration|迁移).*(?:migration|迁移|脚本|文件|表|索引)/.test(withoutNegatedCodeWriting)
+    || /(?:修改|更新|调整).*(?:sql|\\.sql|migration|迁移).*(?:索引|字段|表|语句|脚本|文件)/.test(withoutNegatedCodeWriting)
+    || /(?:更新|修改|新增|添加).*(?:api contract|contract fixture|fixtures?|fixture|schema).*(?:测试|集成测试|字段|结构)/.test(withoutNegatedCodeWriting)
+    || /(?:增加|新增|添加).*(?:环境变量|开关|配置项|选项|option|flag|environment variable|env var)/.test(withoutNegatedCodeWriting)
+    || /(?:package\.json|npm script|npm scripts|scripts? 字段).*(?:增加|新增|添加|修改|更新|add|update|modify)/.test(withoutNegatedCodeWriting)
+    || /(?:增加|新增|添加|修改|更新).*(?:package\.json|npm script|npm scripts|scripts? 字段)/.test(withoutNegatedCodeWriting)
+    || /(?:格式化|format).*(?:模块|代码|文件|src|lib|plugins|router|component)/.test(withoutNegatedCodeWriting)
+    || /(?:升级|更新).*(?:npm|依赖|dependency|dependencies|package|packages|breaking changes)/.test(withoutNegatedCodeWriting)
+    || /(?:migrate|migration|迁移).*(?:typescript|ts|js|javascript|模块|代码|项目|文件)/.test(withoutNegatedCodeWriting)
+    || /(?:新增|添加|创建|生成).*(?:插件|命令|agent|skill|模板|脚手架|plugin|command|template|scaffold)/.test(withoutNegatedCodeWriting)
+    || /(?:删除|移除|清理).*(?:旧|废弃|legacy|classifier|fallback|逻辑|代码|功能|测试|文档|临时文件|生成的临时文件|生成文件|\.gitignore)/.test(withoutNegatedCodeWriting)
+    || /(?:修改|修复|更新|优化|改).*(?:错误提示|提示文案|error message|报错文案)/.test(withoutNegatedCodeWriting)
+    || /(?:错误提示|提示文案|error message|报错文案).*(?:改|修改|更新|优化|清楚|准确)/.test(withoutNegatedCodeWriting)
+    || /(?:优化|降低|减少).*(?:advisor|调用频率|成本|cost|benchmark|热点函数)/.test(withoutNegatedCodeWriting)
+    || isScopedCodeEditRequest(withoutNegatedCodeWriting);
+}
+
+function isScopedCodeEditRequest(text) {
+  const hasEditAction = /(?:修改|修复|改动|调整|替换|更新|新增|添加|创建|生成|翻译|润色|补全|只改|只修改|change|edit|modify|update|replace|add|create|generate|translate|polish)\b/.test(text)
+    || /(?:修改|修复|改动|调整|替换|更新|新增|添加|创建|生成|翻译|润色|补全|只改|只修改)/.test(text);
+  if (!hasEditAction) return false;
+
+  return /(?:^|[\s"'`(])(?:src|lib|app|packages|plugins|extensions|test|tests)\/[^\s"'`)]+/.test(text)
+    || /\b[\w.-]+\.(?:js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h|hpp|rb|php|sh|sql|yml|yaml|json|toml|md|tex|bib|ipynb)\b/.test(text)
+    || /(?:^|[\s"'`(])(?:notebooks|scripts|migrations|locales|fixtures)\/[^\s"'`)]+/.test(text)
+    || /(?:^|[\s"'`(])\.env\.example\b/.test(text)
+    || /(?:第\s*)?\d+\s*(?:行|line)|line\s+\d+/.test(text)
+    || includesAny(text, ['函数', '方法', '变量', '类', '模块', '代码块', 'function', 'method', 'variable', 'class', 'module']);
 }
 
 function isReleaseRequest(text) {
+  if (/(?:dry[-\s]?run|试运行).*(?:发布|release|publish)|(?:发布|release|publish).*(?:dry[-\s]?run|试运行)/.test(text)) return true;
   if (includesAny(text, noReleaseTerms)) return false;
   return (includesAny(text, releaseTerms) && includesAny(text, ['github', 'marketplace', '插件', '版本', 'plugin', 'release']))
+    || /(?:^|[，。；;]\s*)(?:只)?(?:推送|提交)(?:当前提交|当前改动|这些改动|本次改动|改动)/.test(text)
+    || /(?:push|commit)\s+(?:the\s+)?(?:current\s+)?(?:commit|changes?)/.test(text)
+    || /(?:push).*(?:branch|github).*(?:create|open).*(?:pr|pull request)/.test(text)
+    || /(?:create|open).*(?:pr|pull request).*(?:branch|github|push)/.test(text)
     || /(?:create|cut|prepare|ship)\s+(?:a\s+)?release/.test(text)
     || /\bship\s+(?:the\s+)?(?:plugin\s+)?release/.test(text)
     || /\bupgrade\s+\S+@\S+/.test(text)
@@ -379,8 +498,25 @@ function isReleaseRequest(text) {
 }
 
 function isConfigAssetRequest(text) {
-  return includesAny(text, configTerms)
-    && includesAny(text, ['config', 'assets', 'asset', 'hooks', 'hook', 'skills', 'skill', 'agents', 'templates', 'omp-config', 'marketplace', '配置', '打包', '模板', '清单', '技能']);
+  return (includesAny(text, configTerms)
+    && includesAny(text, ['config', 'assets', 'asset', 'hooks', 'hook', 'skills', 'skill', 'agents', 'templates', 'omp-config', 'marketplace', '配置', '打包', '模板', '清单', '技能']))
+    || /(?:运行|执行|检查|排查).*(?:config doctor|doctor).*(?:hooks?|assets?|配置|资产|齐全|完整)/.test(text)
+    || /(?:列出|查看|检查|核对).*(?:subagent|subagents|agent|agents|技能|skills?).*(?:清单|可用|当前|齐全|完整|packaged)/.test(text)
+    || /(?:检查|核对|列出|查看|排查).*(?:marketplace catalog|marketplace|catalog).*(?:版本|version|插件|plugin|一致|同步)/.test(text);
+}
+
+function isSecurityAuditOrFixRequest(text) {
+  if (/(?:不要|不|别).*(?:安全审计|代码安全审计|审代码|审查代码)/.test(text)) return false;
+  if (/(?:do not|don't|without|no need to)\s+(?:audit|review|scan|inspect).*(?:code|dependencies|dependency|security)?/.test(text)) return false;
+  if (isSecurityWritingArtifact(text)) return false;
+  if (isKnowledgeWorkWithoutWritingArtifact(text) && /(?:文档|docs?|documentation|链接|官方文档|lookup|look up)/.test(text)) return false;
+  return /(?:审查|检查|扫描|修复|收紧|audit|scan|fix|harden|漏洞|越权|权限|permissions|auth bypass|high severity|危险命令|dangerous command|security risk|安全风险)/.test(text);
+}
+
+function isSecurityWritingArtifact(text) {
+  return /(?:写|起草|撰写).*(?:安全公告|隐私政策|license.*说明|合规说明|法务|memo|policy|announcement)/.test(text)
+    || /(?:draft|write|revise|polish|edit|improve).*(?:security announcement|privacy policy|license compliance memo|license memo|compliance memo|policy draft|policy|memo|announcement)/.test(text)
+    || /(?:安全说明|隐私政策|安全公告).*(?:表达|逻辑|措辞|润色|改写)/.test(text);
 }
 
 function isDiagnosisOnlyRequest(text, asksNoCodeChange) {
@@ -388,6 +524,42 @@ function isDiagnosisOnlyRequest(text, asksNoCodeChange) {
   return asksNoCodeChange
     || includesAny(text, ['原因', '为什么', 'why', 'root cause', 'what caused', '是什么导致', '是什么原因'])
     || /\b(?:diagnose|investigate)\b.*\b(?:failure|failing|failed|error|warning|root cause|cause)\b/.test(text);
+}
+
+function isKnowledgeWorkWithoutWritingArtifact(text) {
+  if (!includesAny(text, knowledgeWorkTerms)) return false;
+  if (/(?:失败|失败原因|没有通过|未通过|failed|failure|failing|error|warning)/.test(text)) return false;
+  if (isExplicitWritingAction(text)) return false;
+  if (isCodeChangeRequest(text) || isTestingRequest(text)) return false;
+  return includesAny(text, knowledgeWorkActionTerms);
+}
+
+function isExplicitWritingAction(text) {
+  const cleaned = text
+    .replace(/写法/g, '')
+    .replace(/(?:不要|别|不|无需|不用)\s*(?:写|编写|生成)\s*代码/g, '')
+    .replace(/(?:不要|别|不|无需|不用)\s*写\s*(?:文件|脚本|项目|代码库|仓库)?/g, '')
+    .replace(/(?:不要|别|不|无需|不用)\s*写入\s*(?:文件|项目|代码库|仓库)?/g, '')
+    .replace(/(?:不要|别|不|无需|不用)\s*(?:写|撰写|生成)\s*正文/g, '')
+    .replace(/(?:不要|别|不|无需|不用)\s*(?:写|撰写|生成).*(?:正文|综述)/g, '')
+    .replace(/(?:do not|don't|without|no need to)\s+(?:write|generate)\s+code/g, '');
+  return /(?:写|起草|撰写|润色|改写|修订|修饰|改得|改成|翻译|draft|write|revise|polish|edit|improve)\b/.test(cleaned)
+    || /(?:写|起草|撰写|润色|改写|修订|修饰|改得|改成|翻译|翻译腔|ai 味|表达|风格|表述|措辞)/.test(cleaned);
+}
+
+function isStandaloneCommandOrSnippetRequest(text) {
+  if (!/(?:不写|不写入|不要写|不要写入|不改|不修改|不写文件|不写脚本)/.test(text)) return false;
+  return /(?:one-liner|cron|pg_dump|命令|表达式|脚本片段|代码片段|sql 查询|sql query)/.test(text);
+}
+
+function isReportOnlyAudit(text) {
+  return /(?:只|仅)(?:报告|输出|列出|列)\b/.test(text)
+    || /(?:只|仅).*(?:报告|清单|结果|问题)/.test(text);
+}
+
+function isChinesePromptForEnglishWriting(text) {
+  return /(?:改成|写成|整理成).*(?:英文|英语|english).*(?:简历|resume|bullet|邮件|email|摘要|abstract|段落|paragraph|commit message|changelog|release notes|bug report|defect report|post)/.test(text)
+    || /(?:英文|英语|english).*(?:简历|resume|bullet|邮件|email|摘要|abstract|段落|paragraph|commit message|conventional commit|changelog|release notes|bug report|defect report|linkedin post|post)/.test(text);
 }
 
 function includesAny(text, terms) {

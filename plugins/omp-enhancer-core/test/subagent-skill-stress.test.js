@@ -97,6 +97,8 @@ const workloadSuites = {
     '请写一份测试覆盖率报告，说明当前风险。',
     '帮我把这段中文 release note 写得更直接。',
     '请把下面说明改成自然中文，不要改代码。',
+    '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。',
+    '请写一份中文科研调研报告，分析最近论文里的方法路线。',
   ],
   'writing.en': [
     'Draft an English related work paragraph for a systems paper.',
@@ -117,6 +119,8 @@ const workloadSuites = {
     'Revise the report section about browser evidence.',
     'Improve this email about marketplace upgrade status.',
     'Edit the manuscript paragraph that mentions API stability.',
+    'Draft a full English research proposal with background, methods, risks, and timeline.',
+    'Polish this sentence for clarity: The workflow blocks unexpectedly.',
   ],
   'bug-audit': [
     'Write tests for src/router.js around fallback behavior.',
@@ -142,6 +146,8 @@ const workloadSuites = {
     'Run tests and audit for bugs; write a bug report without fixing code.',
     'Find bugs in the project and report verified findings only.',
     'Inspect the plugin for defects and summarize concrete file-line findings.',
+    '帮我在代码里找 bug，只报告问题，不要修复。',
+    '帮我为 subagent fork 逻辑生成测试并运行门禁，不要改实现。',
   ],
   'implementation-with-tests': [
     'Implement classifier fallback handling and add tests.',
@@ -162,6 +168,9 @@ const workloadSuites = {
     'Fix subagent skill assignment handling and add coverage.',
     'Implement exact skill validation for task prompts.',
     'Update governance prompt generation and test all roles.',
+    '请大规模重构这个插件的 subagent fork 逻辑，修改多个文件并补完整测试。',
+    '只修改 plugins/omp-enhancer-core/src/router.js 里 routeNaturalLanguageTask 的一个判断，保持范围最小。',
+    'Agentically update the codebase to improve gate handling and add regression tests.',
   ],
   'security-review': [
     'Review this API handler for auth bypass and injection risks.',
@@ -244,6 +253,10 @@ const workloadSuites = {
     'The browser history was deleted yesterday.',
     'GitHub release 是什么？简单解释一下。',
     '今天下午三点提醒我给妈妈打电话。',
+    '帮我调研一下 agentic coding workflow 的最佳实践，列出要点。',
+    '帮我做科研选题调研，分析最近论文里的方法路线。',
+    '帮我下载这些论文 PDF 并整理到 papers 目录，不要写代码。',
+    '帮我整理今天的会议纪要和待办事项。',
   ],
 };
 
