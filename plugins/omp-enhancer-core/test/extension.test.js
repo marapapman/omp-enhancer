@@ -219,6 +219,9 @@ test('before_agent_start injects governance context and routes natural-language 
   const fragment = governanceText(result, agentEvent);
 
   assert.match(fragment, /pre-work skill bootstrap/);
+  assert.match(fragment, /model routing checkpoint/);
+  assert.match(fragment, /deterministic route is a fallback, not a lock/);
+  assert.ok(fragment.indexOf('model routing checkpoint') < fragment.indexOf('pre-work skill bootstrap'));
   assert.match(fragment, /task subagents load subagent skills/);
   assert.match(fragment, /Do not read root route skills in the main agent just to unlock task/);
   assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);

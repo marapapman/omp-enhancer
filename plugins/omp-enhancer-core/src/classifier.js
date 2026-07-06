@@ -9,6 +9,7 @@ export const classifierDefaults = {
   temperature: 0,
   maxOutputTokens: 500,
   minResolvedConfidence: 0.55,
+  minRouteOverrideConfidence: 0.72,
   minUnknownOverrideConfidence: 0.7,
 };
 
@@ -81,6 +82,7 @@ export function buildClassifierPrompt({
     temperature: classifierDefaults.temperature,
     maxOutputTokens: classifierDefaults.maxOutputTokens,
     minResolvedConfidence: classifierDefaults.minResolvedConfidence,
+    minRouteOverrideConfidence: classifierDefaults.minRouteOverrideConfidence,
     minUnknownOverrideConfidence: classifierDefaults.minUnknownOverrideConfidence,
   };
 
@@ -104,9 +106,11 @@ export function buildClassifierPrompt({
       '',
       'Rules:',
       '- Do not invent skill names, agent names, tools, commands, or gates.',
+      `- Deterministic rule route is only a fallback baseline: ${ruleRoute.intent}. You may override it when the task intent clearly fits another allowed workflow.`,
       '- Use diagnosis only when the user mainly asks why something failed and does not ask for a code/config change.',
       '- Use release only when the user mainly asks to publish, push, upgrade, or release without asking for implementation.',
       '- Prefer implementation-with-tests for code/plugin changes, even when the task mentions config or marketplace.',
+      '- Chinese requests like "写一个登录功能", "写个页面", "写用户模块", or other product/code construction are implementation-with-tests, not prose writing.',
       '- File-path, line-number, function, module, or scoped source edits are still implementation-with-tests even when the user asks for a small precise change.',
       '- Dependency upgrades, code migrations, scaffolding new plugin commands/agents/skills, and deleting legacy code are implementation-with-tests.',
       '- Use bug-audit when the user asks to test, inspect, find, or report bugs without asking to fix or modify code.',
@@ -119,8 +123,10 @@ export function buildClassifierPrompt({
       '- Read-only module explanation, API usage lookup, official-doc lookup, source lists, and implementation-plan research are unknown unless the user asks to edit code, run tests, or draft a prose artifact.',
       '- A request to draft, revise, polish, or write a report/summary/document about tests, coverage, gates, or release status is a writing task, not a testing workflow. Use bug-audit only when the user asks to run, add, repair, or analyze tests as executable verification work.',
       '- Do not classify prose drafting, editing, or polishing as security-review only because the text mentions safety, risk, review, or security. Use security-review only for code, config, auth, secrets, vulnerability, or infrastructure security work.',
+      '- Never override a deterministic writing route into security-review for safety, risk, privacy, license, or security wording unless the original task asks to audit or fix code/config/dependencies/secrets/auth/infrastructure.',
       '- Put related concerns such as config-assets or release into secondaryIntents and riskFlags when they are not the main task.',
       `- Use confidence below ${config.minResolvedConfidence} only when uncertain; low-confidence non-unknown classifications may fall back to the deterministic route.`,
+      `- To override a non-unknown deterministic route with a different routed workflow, use confidence >= ${config.minRouteOverrideConfidence} and explain the intent mismatch in reason.`,
       `- Use high-confidence unknown only when no OMP plugin workflow should run; confidence >= ${config.minUnknownOverrideConfidence} can suppress an over-eager deterministic fallback.`,
       '',
       'JSON Schema:',
@@ -158,6 +164,10 @@ export function resolveClassificationRoute({ prompt = '', output = '', classific
     modelRole: classifierDefaults.modelRole,
     classification: normalized,
     fallbackIntent: fallbackRoute.intent,
+    acceptedIntent: routeIntent,
+    authority: routeIntent === normalized.intent || (normalized.intent === 'testing' && routeIntent === 'bug-audit')
+      ? 'classifier'
+      : 'fallback',
   });
 
   return {
@@ -230,9 +240,11 @@ function routeIntentForClassification(classification, fallbackRoute) {
   if (classification.confidence < classifierDefaults.minResolvedConfidence && fallbackRoute.intent !== 'unknown') {
     return fallbackRoute.intent;
   }
-  if (isWritingIntent(fallbackRoute.intent) && isNonWritingWorkflowIntent(classification.intent)) {
+  if (classification.intent === fallbackRoute.intent) return classification.intent;
+  if (shouldPreserveWritingFallback(classification, fallbackRoute)) {
     return fallbackRoute.intent;
   }
+  if (fallbackRoute.intent !== 'unknown' && classification.confidence < classifierDefaults.minRouteOverrideConfidence) return fallbackRoute.intent;
   if (routedIntents.includes(classification.intent)) return classification.intent;
   if (fallbackRoute.intent !== 'unknown') return fallbackRoute.intent;
   return 'unknown';
@@ -249,6 +261,20 @@ function isNonWritingWorkflowIntent(intent) {
     || intent === 'implementation-with-tests'
     || intent === 'config-assets'
     || intent === 'release';
+}
+
+function shouldPreserveWritingFallback(classification, fallbackRoute) {
+  if (!isWritingIntent(fallbackRoute.intent) || !isNonWritingWorkflowIntent(classification.intent)) return false;
+  if (classification.intent === 'security-review') return true;
+  return classification.secondaryIntents.includes(fallbackRoute.intent) && classifierMentionsWritingArtifact(classification);
+}
+
+function classifierMentionsWritingArtifact(classification) {
+  const text = [
+    classification.reason,
+    ...classification.domainHints,
+  ].join(' ').toLowerCase();
+  return /(?:prose|writing|wording|draft|report|policy|memo|announcement|document|docs?|summary|release notes|changelog|文案|文字|文本|表述|措辞|润色|改写|草稿|报告|文档|公告|政策|总结)/.test(text);
 }
 
 function classifiedRoute(routeIntent, fallbackRoute) {

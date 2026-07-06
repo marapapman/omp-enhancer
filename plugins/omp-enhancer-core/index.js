@@ -738,9 +738,22 @@ function buildMissingSkillUsageContext(state) {
 
 function buildRoutedGovernanceContext(state, { route, parentTask = '' } = {}) {
   return [
+    buildModelRoutingCheckpointBlock({ route, parentTask }),
     buildPreworkSkillBootstrapBlock(state),
     buildGovernancePromptFragment({ route, parentTask }),
   ].filter(Boolean).join('\n\n');
+}
+
+function buildModelRoutingCheckpointBlock({ route, parentTask = '' } = {}) {
+  if (!route || route.intent === 'subagent') return null;
+  return [
+    '### OMP Enhancer Core model routing checkpoint',
+    `Initial deterministic route: ${route.intent}.`,
+    'The deterministic route is a fallback, not a lock. Before loading skills, using QA tools, or forking task subagents, check whether the user task clearly fits a different OMP workflow.',
+    'If the route looks wrong or ambiguous, produce classifier JSON with the allowed classifier schema and call `omp_core_resolve_classification` using the original user task. The resolved classifier route supersedes this initial route for skills, tools, gates, and subagents.',
+    'Do not continue under a route that would obviously trigger the wrong workflow gate.',
+    parentTask ? `Original user task: ${String(parentTask).slice(0, 500)}` : null,
+  ].filter(Boolean).join('\n');
 }
 
 function buildPreworkSkillBootstrapBlock(state) {

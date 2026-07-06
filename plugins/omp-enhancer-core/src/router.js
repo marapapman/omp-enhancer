@@ -341,7 +341,7 @@ function isChineseWriting(normalized, original) {
   if (/(?:修复|修改|润色|改写).*(?:表述|措辞|语气|风格|表达|说明)/.test(normalized)) return true;
   if (includesAny(normalized, strongZhWritingTerms)) return true;
   if (!normalized.includes('写')) return false;
-  return !includesAny(normalized, ['函数', '代码', '接口', '实现', 'api', 'component']);
+  return !includesAny(normalized, ['函数', '代码', '接口', '实现', 'api', 'component', '组件', '登录', '注册', '弹窗', '路由', 'hook', 'hooks']);
 }
 
 function isEnglishWriting(text) {
@@ -468,7 +468,7 @@ function isCodeChangeRequest(text) {
   return /(?:修改|修复|修正|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|gate|路由|提示词|页面|ui)/.test(withoutNegatedCodeWriting)
     || /(?:重构|优化|修改|修复|修正).*(?:逻辑|代码|模块|函数|router|route|workflow|工作流|门禁|gate|路由|fork|subagent|误判|运行失败|启动失败|warning|dev server)/.test(withoutNegatedCodeWriting)
     || /(?:只改|只修改|改动|修改).*(?:一行|一处|少量|代码|文件)/.test(withoutNegatedCodeWriting)
-    || /写.*(?:函数|代码|接口|api|component|组件)/.test(withoutNegatedCodeWriting)
+    || /写.*(?:函数|代码|接口|功能|页面|模块|api|component|组件)/.test(withoutNegatedCodeWriting)
     || /(?:写|新增|添加|创建|生成).*(?:python|bash|node(?:\.js)?|shell|脚本).*(?:加入项目|写入项目|保存到|文件|仓库|代码库)/.test(withoutNegatedCodeWriting)
     || /(?:实现|开发|创建|生成).*(?:函数|方法|接口|功能|api|component|组件|ui|页面|page|slides|html|路由|hook|流程)/.test(withoutNegatedCodeWriting)
     || /(?:implement|build|develop|add|create)\s+.*(?:feature|fallback|handling|workflow|route|router|hook|logic)/.test(withoutNegatedCodeWriting)

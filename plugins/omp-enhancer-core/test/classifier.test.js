@@ -19,6 +19,7 @@ test('buildClassifierPrompt exposes the configurable classifier model role and s
   assert.equal(result.temperature, 0);
   assert.equal(result.maxOutputTokens, 500);
   assert.equal(result.minResolvedConfidence, classifierDefaults.minResolvedConfidence);
+  assert.equal(result.minRouteOverrideConfidence, classifierDefaults.minRouteOverrideConfidence);
   assert.equal(result.minUnknownOverrideConfidence, classifierDefaults.minUnknownOverrideConfidence);
   assert.equal(result.schema, classifierSchema);
   assert.equal(result.fallbackRoute.intent, 'diagnosis');
@@ -26,7 +27,9 @@ test('buildClassifierPrompt exposes the configurable classifier model role and s
   assert.match(result.prompt, /opencode-go\/deepseek-v4-flash:medium/);
   assert.match(result.prompt, /Return only JSON/);
   assert.match(result.prompt, /Do not invent skill names/);
+  assert.match(result.prompt, /Deterministic rule route is only a fallback baseline/);
   assert.match(result.prompt, /low-confidence non-unknown classifications may fall back/);
+  assert.match(result.prompt, /override a non-unknown deterministic route/);
   assert.match(result.prompt, /high-confidence unknown/);
 });
 
@@ -183,7 +186,51 @@ test('resolveClassificationRoute falls back from low-confidence wrong intents to
   assert.equal(result.route.classifier.classification.intent, 'release');
 });
 
-test('resolveClassificationRoute preserves Chinese writing when classifier over-routes safety wording to security', () => {
+test('resolveClassificationRoute lets high-confidence classifier override rigid writing fallback', () => {
+  const result = resolveClassificationRoute({
+    prompt: '请写一个用户看板，包含统计数字和最近活动。',
+    output: JSON.stringify({
+      intent: 'implementation-with-tests',
+      secondaryIntents: [],
+      language: 'zh',
+      confidence: 0.94,
+      riskFlags: ['needs-tests', 'needs-review', 'needs-subagents'],
+      domainHints: ['dashboard', 'frontend feature'],
+      reason: 'The user asks to build a product UI feature, not draft prose.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.fallbackRoute.intent, 'writing.zh');
+  assert.equal(result.route.intent, 'implementation-with-tests');
+  assert.equal(result.route.agent, 'implementer');
+  assert.equal(result.route.source, 'llm-classifier');
+  assert.equal(result.route.classifier.authority, 'classifier');
+  assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), ['plan', 'implementation-task', 'reviewer']);
+});
+
+test('resolveClassificationRoute keeps deterministic route when override confidence is not high enough', () => {
+  const result = resolveClassificationRoute({
+    prompt: '请写一个用户看板，包含统计数字和最近活动。',
+    output: JSON.stringify({
+      intent: 'implementation-with-tests',
+      secondaryIntents: [],
+      language: 'zh',
+      confidence: classifierDefaults.minRouteOverrideConfidence - 0.01,
+      riskFlags: ['needs-tests', 'needs-review', 'needs-subagents'],
+      domainHints: ['dashboard'],
+      reason: 'Plausible product feature, but confidence is below override threshold.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.fallbackRoute.intent, 'writing.zh');
+  assert.equal(result.route.intent, 'writing.zh');
+  assert.equal(result.route.source, 'llm-classifier');
+  assert.equal(result.route.classifier.authority, 'fallback');
+});
+
+test('resolveClassificationRoute preserves Chinese writing when classifier self-identifies prose safety wording', () => {
   const result = resolveClassificationRoute({
     prompt: '请帮我润色这段中文风险提示，写得安全、克制、直接。',
     output: JSON.stringify({
@@ -204,9 +251,36 @@ test('resolveClassificationRoute preserves Chinese writing when classifier over-
   assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), ['zh-writer', 'zh-checker']);
   assert.equal(result.route.requiredSubagents.some(({ agent }) => agent === 'ecc-security-reviewer'), false);
   assert.equal(result.route.classifier.classification.intent, 'security-review');
+  assert.equal(result.route.classifier.authority, 'fallback');
 });
 
-test('resolveClassificationRoute preserves writing reports when classifier over-routes test wording to testing gates', () => {
+test('resolveClassificationRoute blocks security-review override for writing fallback even without secondary intent', () => {
+  for (const [prompt, expectedIntent] of [
+    ['请帮我润色这段中文风险提示，写得安全、克制、直接。', 'writing.zh'],
+    ['Polish this paragraph about authentication risk for a product memo.', 'writing.en'],
+  ]) {
+    const result = resolveClassificationRoute({
+      prompt,
+      output: JSON.stringify({
+        intent: 'security-review',
+        secondaryIntents: [],
+        language: expectedIntent === 'writing.zh' ? 'zh' : 'en',
+        confidence: 0.96,
+        riskFlags: ['needs-security-review'],
+        domainHints: ['risk wording'],
+        reason: 'The task mentions safety, risk, or authentication.',
+      }),
+    });
+
+    assert.equal(result.ok, true, prompt);
+    assert.equal(result.fallbackRoute.intent, expectedIntent, prompt);
+    assert.equal(result.route.intent, expectedIntent, prompt);
+    assert.equal(result.route.requiredSubagents.some(({ agent }) => agent === 'ecc-security-reviewer'), false, prompt);
+    assert.equal(result.route.classifier.authority, 'fallback', prompt);
+  }
+});
+
+test('resolveClassificationRoute preserves writing reports when classifier self-identifies report writing', () => {
   for (const [prompt, classifierIntent, expectedIntent] of [
     ['请写测试报告，重点说明当前验证风险，不要生成测试代码。', 'testing', 'writing.zh'],
     ['Write a test coverage report for the release notes; do not run tests.', 'implementation-with-tests', 'writing.en'],

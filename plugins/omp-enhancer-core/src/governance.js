@@ -393,7 +393,7 @@ function subagentWorkflowLines(route, { parentTask = '' } = {}) {
     '',
     'Runtime model policy: the main/default agent uses MiMo v2.5; the advisor uses DeepSeek V4 Flash. Keep task subagents and all other model roles on the active OMP configuration unless the user explicitly overrides them.',
     '',
-    'Classifier model policy: ambiguous routing may use the configured `modelRoles.classifier` role. The packaged config defaults it to `opencode-go/deepseek-v4-flash:medium`. Classifier output is advisory only; resolve it through the OMP route whitelist before assigning skills, tools, or subagents.',
+    'Classifier model policy: ambiguous routing may use the configured `modelRoles.classifier` role. The packaged config defaults it to `opencode-go/deepseek-v4-flash:medium`. A valid, high-confidence classifier route that resolves through the OMP route whitelist supersedes the deterministic rule route before assigning skills, tools, or subagents.',
     '',
   ];
 
