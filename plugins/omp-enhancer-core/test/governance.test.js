@@ -29,8 +29,8 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /subagent task evidence and SUBAGENT_USAGE/i);
   assert.match(fragment, /MiMo v2\.5/);
   assert.match(fragment, /DeepSeek V4 Flash/);
-  assert.match(fragment, /modelRoles\.classifier/);
-  assert.match(fragment, /opencode-go\/deepseek-v4-flash:medium/);
+  assert.match(fragment, /modelRoles\.tiny/);
+  assert.match(fragment, /separate classifier role/);
   assert.match(fragment, /route whitelist/);
   assert.match(fragment, /active OMP configuration/);
   assert.match(fragment, /task tool/i);

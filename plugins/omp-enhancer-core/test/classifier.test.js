@@ -9,12 +9,12 @@ import {
   resolveClassificationRoute,
 } from '../src/classifier.js';
 
-test('buildClassifierPrompt exposes the configurable classifier model role and strict schema', () => {
+test('buildClassifierPrompt uses OMP Tiny and the strict schema', () => {
   const result = buildClassifierPrompt({
     prompt: '帮我看看这个插件 workflow 为什么不对。',
   });
 
-  assert.equal(result.modelRole, 'classifier');
+  assert.equal(result.modelRole, 'tiny');
   assert.equal(result.model, classifierDefaults.model);
   assert.equal(result.temperature, 0);
   assert.equal(result.maxOutputTokens, 500);
@@ -23,7 +23,7 @@ test('buildClassifierPrompt exposes the configurable classifier model role and s
   assert.equal(result.minUnknownOverrideConfidence, classifierDefaults.minUnknownOverrideConfidence);
   assert.equal(result.schema, classifierSchema);
   assert.equal(result.fallbackRoute.intent, 'diagnosis');
-  assert.match(result.prompt, /modelRoles\.classifier/);
+  assert.match(result.prompt, /modelRoles\.tiny/);
   assert.match(result.prompt, /opencode-go\/deepseek-v4-flash:medium/);
   assert.match(result.prompt, /Return only JSON/);
   assert.match(result.prompt, /Do not invent skill names/);
@@ -31,18 +31,6 @@ test('buildClassifierPrompt exposes the configurable classifier model role and s
   assert.match(result.prompt, /low-confidence non-unknown classifications may fall back/);
   assert.match(result.prompt, /override a non-unknown deterministic route/);
   assert.match(result.prompt, /high-confidence unknown/);
-});
-
-test('buildClassifierPrompt accepts explicit classifier model overrides', () => {
-  const result = buildClassifierPrompt({
-    prompt: 'Draft a paragraph.',
-    modelRole: 'customClassifier',
-    model: 'openai/gpt-5-nano',
-  });
-
-  assert.equal(result.modelRole, 'customClassifier');
-  assert.equal(result.model, 'openai/gpt-5-nano');
-  assert.match(result.prompt, /modelRoles\.customClassifier/);
 });
 
 test('parseClassifierOutput accepts fenced JSON output', () => {

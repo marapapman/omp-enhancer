@@ -6,7 +6,7 @@
 
 - `assets/CLAUDE.md` and root or agent config templates.
 - `assets/config.yml`, `assets/models.yml`, and `assets/mcp.json` as templates only.
-- `assets/config.yml` includes `modelRoles.classifier` plus `modelTags.classifier`, the model role and display label used by `omp-enhancer-core` for schema-first route classification when the deterministic router is ambiguous.
+- `assets/config.yml` includes `modelRoles.tiny`, the OMP Tiny role reused by `omp-enhancer-core` for schema-first route classification when the deterministic router is ambiguous.
 - `agents/`, `skills/`, and `hooks/` copied from the config source.
 - Slash command content for `/omp-config:config`, `/omp-config:config-doctor`, and `/omp-config:config-assets`.
 - Runtime tools for extension loading: `omp_config_doctor`, `omp_config_assets`, and `omp_config_plan`.
@@ -15,18 +15,14 @@
 
 This package does not automatically overwrite `~/.omp`. Treat the packaged files as templates and review any patch plan before applying changes to a live OMP home.
 
-To try a different LLM classifier, use `/classifier set <provider/model:effort>` from `omp-enhancer-core`, or copy the template setting into your live OMP config and change only this role:
+The LLM classifier does not use a separate classifier role. It reuses OMP Tiny:
 
 ```yaml
 modelRoles:
-  classifier: opencode-go/deepseek-v4-flash:medium
-modelTags:
-  classifier:
-    name: Classifier
-    color: accent
+  tiny: opencode-go/deepseek-v4-flash:medium
 ```
 
-`/model` changes the active session model. The persistent classifier role is `modelRoles.classifier`; `modelTags.classifier` gives that role a visible name in OMP builds that list configured roles.
+`/model` changes the active session model. Classifier preflight should dispatch through `modelRoles.tiny`; do not create or maintain a classifier-specific model role.
 
 ## Commands
 

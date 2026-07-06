@@ -63,7 +63,7 @@ class FakeEventBus {
   }
 }
 
-test('registers core tools, classifier command, and hooks', () => {
+test('registers core tools and hooks without a separate classifier command', () => {
   const pi = new FakePi();
 
   registerCoreEnhancer(pi);
@@ -93,43 +93,10 @@ test('registers core tools, classifier command, and hooks', () => {
     'tool_result',
     'session_stop',
   ]);
-  assert.deepEqual([...pi.commands.keys()], ['classifier']);
-  assert.equal(typeof pi.commands.get('classifier').handler, 'function');
+  assert.deepEqual([...pi.commands.keys()], []);
 });
 
-test('classifier slash command can update the configured classifier model role', async () => {
-  const pi = new FakePi();
-  registerCoreEnhancer(pi);
-  const notifications = [];
-  const roles = {};
-  let tags = {};
-
-  const result = await command(pi, 'classifier').handler(
-    'set openai/gpt-5-nano',
-    {
-      settings: {
-        get: (key) => (key === 'modelTags' ? tags : undefined),
-        set: (key, value) => {
-          if (key === 'modelTags') tags = value;
-        },
-        setModelRole: (role, model) => { roles[role] = model; },
-        getModelRole: (role) => roles[role],
-        flush: async () => {},
-      },
-      ui: { notify: (text, level) => notifications.push({ text, level }) },
-    },
-  );
-
-  assert.equal(result.ok, true);
-  assert.equal(result.model, 'openai/gpt-5-nano');
-  assert.equal(roles.classifier, 'openai/gpt-5-nano');
-  assert.deepEqual(tags.classifier, { name: 'Classifier', color: 'accent', hidden: false });
-  assert.match(result.text, /modelRoles\.classifier/);
-  assert.match(result.text, /\/classifier set openai\/gpt-5-nano/);
-  assert.deepEqual(notifications.map(({ level }) => level), ['info']);
-});
-
-test('session_start registers classifier as a visible settings-backed model role', async () => {
+test('session_start does not create a classifier-specific model role', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const roles = {};
@@ -148,8 +115,8 @@ test('session_start registers classifier as a visible settings-backed model role
 
   await event(pi, 'session_start')({}, extensionContext([], {}, { settings }));
 
-  assert.equal(roles.classifier, 'opencode-go/deepseek-v4-flash:medium');
-  assert.deepEqual(tags.classifier, { name: 'Classifier', color: 'accent', hidden: false });
+  assert.equal(roles.classifier, undefined);
+  assert.deepEqual(tags.classifier, undefined);
 });
 
 test('classifier tools expose model role configuration and resolve route state', async () => {
@@ -166,8 +133,8 @@ test('classifier tools expose model role configuration and resolve route state',
     ctx,
   );
 
-  assert.match(promptResult.content[0].text, /modelRoles\.classifier/);
-  assert.equal(promptResult.details.classifier.modelRole, 'classifier');
+  assert.match(promptResult.content[0].text, /modelRoles\.tiny/);
+  assert.equal(promptResult.details.classifier.modelRole, 'tiny');
   assert.equal(promptResult.details.classifier.model, 'opencode-go/deepseek-v4-flash:medium');
 
   const routeResult = await tool(pi, 'omp_core_resolve_classification').execute(
@@ -204,7 +171,7 @@ test('classifier tools expose model role configuration and resolve route state',
   assert.equal(governance.details.route.intent, 'writing.en');
   assert.match(governance.details.fragment, /writer/);
   assert.match(governance.details.fragment, /checker/);
-  assert.match(governance.details.fragment, /modelRoles\.classifier/);
+  assert.match(governance.details.fragment, /modelRoles\.tiny/);
 });
 
 test('before_agent_start injects governance context and routes natural-language prompts', async () => {
@@ -335,10 +302,10 @@ test('before_agent_start bypasses OMP built-in slash commands without injecting 
   }
 });
 
-test('before_agent_start bypasses plugin slash commands so command handlers own them', async () => {
+test('before_agent_start bypasses plugin and unknown slash commands so command handlers own them', async () => {
   const pluginSlashCommands = [
     '/classifier',
-    '/classifier set opencode-go/deepseek-v4-flash:medium',
+    '/unknown-plugin-command set ignored-after-tiny-role-migration',
     '/test',
     '/test changed',
     '/writing-logic paper.md',
@@ -3281,12 +3248,6 @@ test('non-gated diagnosis release and unknown routes do not create repeated gate
 function tool(pi, name) {
   const found = pi.tools.get(name);
   if (!found) throw new Error(`Missing tool ${name}`);
-  return found;
-}
-
-function command(pi, name) {
-  const found = pi.commands.get(name);
-  if (!found) throw new Error(`Missing command ${name}`);
   return found;
 }
 

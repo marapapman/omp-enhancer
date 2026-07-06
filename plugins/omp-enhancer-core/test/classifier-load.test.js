@@ -210,7 +210,7 @@ test('classifier prompt builder remains stable under parallel load profiles', as
 
     assert.equal(prompts.length, validRouteCases.length * profile.multiplier, profile.name);
     for (const built of prompts) {
-      assert.equal(built.modelRole, 'classifier');
+      assert.equal(built.modelRole, 'tiny');
       assert.equal(built.model, classifierDefaults.model);
       assert.equal(built.temperature, 0);
       assert.equal(built.maxOutputTokens, 500);

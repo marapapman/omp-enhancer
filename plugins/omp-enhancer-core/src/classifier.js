@@ -1,7 +1,7 @@
 import { routeByIntent, routedIntents, routeNaturalLanguageTask } from './router.js';
 
 export const classifierDefaults = {
-  modelRole: 'classifier',
+  modelRole: 'tiny',
   model: 'opencode-go/deepseek-v4-flash:medium',
   fallbackModelRole: 'default',
   fallbackModel: 'xiaomi/mimo-v2.5:high',
@@ -65,19 +65,13 @@ export const classifierSchema = {
   },
 };
 
-export function buildClassifierPrompt({
-  prompt = '',
-  modelRole = classifierDefaults.modelRole,
-  model = classifierDefaults.model,
-  fallbackModelRole = classifierDefaults.fallbackModelRole,
-  fallbackModel = classifierDefaults.fallbackModel,
-} = {}) {
+export function buildClassifierPrompt({ prompt = '' } = {}) {
   const ruleRoute = routeNaturalLanguageTask({ prompt });
   const config = {
-    modelRole: cleanConfigValue(modelRole, classifierDefaults.modelRole),
-    model: cleanConfigValue(model, classifierDefaults.model),
-    fallbackModelRole: cleanConfigValue(fallbackModelRole, classifierDefaults.fallbackModelRole),
-    fallbackModel: cleanConfigValue(fallbackModel, classifierDefaults.fallbackModel),
+    modelRole: classifierDefaults.modelRole,
+    model: classifierDefaults.model,
+    fallbackModelRole: classifierDefaults.fallbackModelRole,
+    fallbackModel: classifierDefaults.fallbackModel,
     retryLimit: classifierDefaults.retryLimit,
     temperature: classifierDefaults.temperature,
     maxOutputTokens: classifierDefaults.maxOutputTokens,
@@ -93,7 +87,7 @@ export function buildClassifierPrompt({
     prompt: [
       '## OMP Enhancer Core Classifier',
       '',
-      `Use the model configured as modelRoles.${config.modelRole}. Default model: ${config.model}.`,
+      `Use OMP's Tiny model role, modelRoles.${config.modelRole}. Packaged Tiny default: ${config.model}.`,
       `If classifier output is invalid after ${config.retryLimit + 1} attempt(s), fall back to modelRoles.${config.fallbackModelRole} or the deterministic rule route.`,
       '',
       'You classify OMP enhancer user tasks. Return only JSON. Do not solve the task.',
@@ -299,11 +293,6 @@ function stripJsonFence(text) {
   if (fenceMatch) return fenceMatch[1].trim();
   const objectMatch = text.match(/\{[\s\S]*\}/);
   return objectMatch ? objectMatch[0] : text;
-}
-
-function cleanConfigValue(value, fallback) {
-  const text = String(value ?? '').trim();
-  return text || fallback;
 }
 
 function formatList(values) {

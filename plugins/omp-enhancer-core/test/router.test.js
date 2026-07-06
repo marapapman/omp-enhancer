@@ -420,7 +420,7 @@ test('routes operational edge workloads without workflow confusion', () => {
     ['config doctor run', '运行 config doctor，检查 hooks 和 assets 是否齐全。', 'config-assets'],
     ['agent inventory', '列出当前可用 subagent 和技能清单。', 'config-assets'],
     ['agent design doc', '起草 subagent fork 设计文档。', 'writing.zh'],
-    ['model policy change', '修改 modelRoles.classifier 的默认模型，并更新测试。', 'implementation-with-tests'],
+    ['model policy change', '修改 modelRoles.tiny 的默认模型，并更新测试。', 'implementation-with-tests'],
     ['model policy comparison', '比较 DeepSeek Flash 和 MiMo 在路由上的适用场景，不改代码。', 'unknown'],
     ['cost audit report only', '分析当前 agent 调用成本，只输出报告。', 'unknown'],
     ['cost optimization implementation', '优化 advisor 调用频率，降低成本并补测试。', 'implementation-with-tests'],

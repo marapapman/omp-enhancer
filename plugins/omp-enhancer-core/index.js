@@ -14,7 +14,6 @@ import {
 } from './src/skill-usage.js';
 import { collectSubagentTaskRecords, parseSubagentUsageDetails, validateSubagentUsage } from './src/subagent-usage.js';
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
-import { ensureClassifierModelConfig, runClassifierCommand } from './src/classifier-config.js';
 import {
   createLoopGuardState,
   readLoopGuardSnapshot,
@@ -66,15 +65,6 @@ export default function registerCoreEnhancer(pi) {
 
   pi.setLabel?.('OMP Enhancer Core');
 
-  pi.registerCommand?.('classifier', {
-    description: 'Show or update modelRoles.classifier for OMP Enhancer routing.',
-    async handler(args = '', ctx = {}) {
-      const result = await runClassifierCommand({ args, ctx });
-      await ctx.ui?.notify?.(result.text, result.ok ? 'info' : 'warn');
-      return result;
-    },
-  });
-
   pi.registerTool({
     name: 'omp_core_route_task',
     label: 'Route OMP task',
@@ -92,13 +82,9 @@ export default function registerCoreEnhancer(pi) {
   pi.registerTool({
     name: 'omp_core_classifier_prompt',
     label: 'Build OMP classifier prompt',
-    description: 'Build the strict JSON classifier prompt and schema for the configured classifier model role.',
+    description: 'Build the strict JSON classifier prompt and schema for OMP Tiny model routing.',
     parameters: z?.object ? z.object({
       prompt: z.string(),
-      modelRole: z.string().optional(),
-      model: z.string().optional(),
-      fallbackModelRole: z.string().optional(),
-      fallbackModel: z.string().optional(),
     }) : undefined,
     execute: async (_callId, params = {}) => {
       const classifier = buildClassifierPrompt(params);
@@ -187,7 +173,6 @@ export default function registerCoreEnhancer(pi) {
   });
 
   pi.on?.('session_start', async (_event = {}, ctx = {}) => {
-    await ensureClassifierModelConfig({ ctx });
     const restored = restoreStateFromContext(state, ctx);
     if (!restored) resetState(state);
     return undefined;
@@ -203,7 +188,6 @@ export default function registerCoreEnhancer(pi) {
 
   pi.on?.('before_agent_start', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
-    await ensureClassifierModelConfig({ ctx });
     const prompt = extractPrompt(event);
     // Slash commands are owned by OMP or by the registering plugin command handler.
     // Core routing only handles natural-language tasks.
@@ -868,7 +852,7 @@ function classifierPreflightInstructions(state, { heading }) {
     'Before loading route skills, calling QA/gate tools, forking task subagents, editing files, or finishing, resolve the route through the configured LLM classifier.',
     'Required classifier sequence:',
     '1. Call omp_core_classifier_prompt with the original user task to get the strict JSON schema and classifier prompt.',
-    '2. Use modelRoles.classifier (visible as Classifier in /model) to produce only the classifier JSON. If the host cannot directly dispatch that role, produce the same strict JSON from the classifier prompt.',
+    '2. Use OMP Tiny (`modelRoles.tiny`) to produce only the classifier JSON. Do not configure a separate classifier role.',
     '3. Call omp_core_resolve_classification with prompt set to the original user task and output set to the classifier JSON.',
     '4. Continue only under the resolved route, skills, tools, gates, and subagents.',
     prompt ? `Original user task: ${prompt.slice(0, 500)}` : null,
@@ -940,7 +924,7 @@ function buildModelRoutingCheckpointBlock({ route, parentTask = '', preflight = 
       'Classifier preflight: required before route skills, QA/gate tools, task subagents, file edits, or final output.',
       `Initial deterministic route: ${route.intent}.`,
       preflight.reasons?.length ? `Trigger reasons: ${preflight.reasons.join('; ')}.` : null,
-      'Required sequence: call `omp_core_classifier_prompt`, use `modelRoles.classifier` to produce strict classifier JSON, then call `omp_core_resolve_classification` with the original user task and JSON output.',
+      'Required sequence: call `omp_core_classifier_prompt`, use OMP Tiny (`modelRoles.tiny`) to produce strict classifier JSON, then call `omp_core_resolve_classification` with the original user task and JSON output.',
       'The resolved classifier route supersedes this initial route for skills, tools, gates, and subagents.',
       parentTask ? `Original user task: ${String(parentTask).slice(0, 500)}` : null,
     ].filter(Boolean).join('\n');
