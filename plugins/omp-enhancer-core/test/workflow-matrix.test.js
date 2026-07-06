@@ -4,7 +4,11 @@ import { access, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildGovernancePromptFragment, buildSubagentPromptFragment } from '../src/governance.js';
+import {
+  buildGovernancePromptFragment,
+  buildSubagentPromptFragment,
+  formatWorkflowGateBriefingForAssignment,
+} from '../src/governance.js';
 import { routeNaturalLanguageTask } from '../src/router.js';
 import { validateSubagentUsage } from '../src/subagent-usage.js';
 
@@ -196,6 +200,9 @@ test('governance fragments include exact pre-fork contracts and final evidence b
 
     assert.match(fragment, new RegExp(`Intent: ${escapeRegExp(route.intent)}`), route.intent);
     assert.match(fragment, /Use this natural language route/, route.intent);
+    assert.match(fragment, /Workflow and Gate Briefing/, route.intent);
+    assert.match(fragment, new RegExp(`Routed intent: ${escapeRegExp(route.intent)}`), route.intent);
+    assert.match(fragment, /Completion gates before final answer/, route.intent);
     assert.match(fragment, /SUBAGENT_USAGE contract/, route.intent);
     assert.match(fragment, /SKILL_USAGE contract/, route.intent);
 
@@ -211,6 +218,9 @@ test('governance fragments include exact pre-fork contracts and final evidence b
       assert.match(fragment, new RegExp(`Subagent: ${escapeRegExp(agent)}`), `${route.intent} ${agent}`);
       assert.match(fragment, new RegExp(`role: ${escapeRegExp(agent)}`), `${route.intent} ${agent}`);
       assert.match(fragment, new RegExp(`OMP_REQUIRED_SUBAGENT: ${escapeRegExp(agent)}`), `${route.intent} ${agent}`);
+      assert.match(fragment, /Workflow and gate briefing:/, `${route.intent} ${agent}`);
+      assert.match(fragment, new RegExp(`Parent intent: ${escapeRegExp(route.intent)}`), `${route.intent} ${agent}`);
+      assert.match(fragment, /Subagent scope: read this before acting/, `${route.intent} ${agent}`);
       assert.match(fragment, new RegExp(`- ${escapeRegExp(agent)}: ${escapeRegExp(requiredSkills.join(', ') || 'none')}`), `${route.intent} evidence ${agent}`);
       for (const skill of requiredSkills) {
         assert.match(fragment, new RegExp(`- ${escapeRegExp(skill)}`), `${route.intent} ${agent} skill ${skill}`);
@@ -274,6 +284,36 @@ test('subagent launch fragments remain child-only contracts for every routed rol
     assert.doesNotMatch(fragment, /Required subagents:/, agent);
     for (const skill of requiredSkills) {
       assert.match(fragment, new RegExp(`- ${escapeRegExp(skill)}`), `${agent} ${skill}`);
+    }
+  }
+});
+
+test('subagent launch fragments surface parent workflow and gate briefing', () => {
+  const routes = routesFromMatrix().filter((route) => route.requiredSubagents.length);
+
+  for (const route of routes) {
+    const workflowBriefing = formatWorkflowGateBriefingForAssignment(route);
+    assert.match(workflowBriefing, new RegExp(`Parent intent: ${escapeRegExp(route.intent)}`), route.intent);
+
+    for (const { agent, requiredSkills } of route.requiredSubagents) {
+      const fragment = buildSubagentPromptFragment({
+        prompt: [
+          `OMP_REQUIRED_SUBAGENT: ${agent}`,
+          workflowBriefing,
+          'Required skills for this subagent:',
+          ...requiredSkills.map((skill) => `- ${skill}`),
+          '',
+          'Assignment: complete the bounded specialist task and report evidence.',
+        ].join('\n'),
+      });
+
+      assert.match(fragment, new RegExp(`Subagent:\\s*${escapeRegExp(agent)}`), `${route.intent} ${agent}`);
+      assert.match(fragment, /Parent workflow and gates:/, `${route.intent} ${agent}`);
+      assert.match(fragment, new RegExp(`Parent intent: ${escapeRegExp(route.intent)}`), `${route.intent} ${agent}`);
+      assert.match(fragment, /Parent completion gates before final answer:/, `${route.intent} ${agent}`);
+      assert.match(fragment, /Do not claim the parent workflow is complete/, `${route.intent} ${agent}`);
+      assert.match(fragment, /Read this briefing before acting/, `${route.intent} ${agent}`);
+      assert.doesNotMatch(fragment, /Mandatory Subagent Workflow/, `${route.intent} ${agent}`);
     }
   }
 });

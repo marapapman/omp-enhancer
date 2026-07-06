@@ -289,3 +289,73 @@ test('collectSubagentTaskRecords includes prompt text for skill evidence', () =>
     },
   ]);
 });
+
+test('collectSubagentTaskRecords reads array assignments and keeps parent task evidence', () => {
+  const records = collectSubagentTaskRecords({
+    toolName: 'task',
+    input: {
+      tasks: [
+        {
+          role: 'implementation-task',
+          assignment: [
+            'OMP_REQUIRED_SUBAGENT: implementation-task',
+            'OMP_PARENT_TASK: Fix workflow gate retries.',
+            'Required skills for this subagent:',
+            '- test-driven-development',
+            '- verification-before-completion',
+            '',
+            'Assignment:',
+            'Patch the runtime and add tests.',
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(records, [
+    {
+      agent: 'implementation-task',
+      text: [
+        'OMP_REQUIRED_SUBAGENT: implementation-task',
+        'OMP_PARENT_TASK: Fix workflow gate retries.',
+        'Required skills for this subagent:',
+        '- test-driven-development',
+        '- verification-before-completion',
+        '',
+        'Assignment:',
+        'Patch the runtime and add tests.',
+      ].join('\n'),
+      skills: ['test-driven-development', 'verification-before-completion'],
+    },
+  ]);
+});
+
+test('collectSubagentTaskRecords parses prompt contracts without duplicating mirrored task roots', () => {
+  const input = {
+    tasks: [
+      {
+        agent: 'reviewer',
+        prompt: [
+          'OMP_REQUIRED_SUBAGENT: reviewer',
+          'Required skills for this subagent:',
+          '- verification-before-completion',
+          '',
+          'Final subagent output must end with:',
+          'SKILL_USAGE',
+          'Loaded:',
+          '- verification-before-completion',
+        ].join('\n'),
+      },
+    ],
+  };
+
+  const records = collectSubagentTaskRecords({
+    name: 'task',
+    params: input,
+    input,
+  });
+
+  assert.deepEqual(records.map(({ agent, skills }) => ({ agent, skills })), [
+    { agent: 'reviewer', skills: ['verification-before-completion'] },
+  ]);
+});

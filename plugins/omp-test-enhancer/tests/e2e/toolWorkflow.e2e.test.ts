@@ -221,6 +221,78 @@ describe('omp-test-enhancer e2e workflow', () => {
     expect(report.details.markdown).toContain('test-file-scope: warning')
     expect(report.details.markdown).toContain('test-command: warning')
   })
+
+  it('updates the report after a failed gate is repaired by a passing test command', async () => {
+    const cwd = await tempRepo()
+    await mkdir(join(cwd, '.omp'), { recursive: true })
+    await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), [
+      'version: 1',
+      'test:',
+      '  command:',
+      'coverage:',
+      '  command:',
+      'gates:',
+      '  indirectTest: block',
+      '  productionEdits: block',
+      '  testCommand: block',
+      '  browserEvidence: block',
+      ''
+    ].join('\n'))
+    const pi = createRegisteredPlugin()
+    const ctx = context(cwd)
+
+    const analyze = await executeTool<AnalyzeOutput>(pi, 'omp_test_analyze', { files: ['src/math/clamp.ts'] }, ctx)
+    const target = analyze.details.targets[0]
+    if (!target) throw new Error('Expected analyze target')
+    await executeTool<ContextOutput>(pi, 'omp_test_context', { target }, ctx)
+
+    const candidate = {
+      id: 'candidate',
+      targetId: target.id,
+      files: [{
+        path: 'tests/src/math/clamp.test.ts',
+        action: 'create',
+        content: [
+          "import { clamp } from '../../../src/math/clamp'",
+          'test("clamps public result", () => {',
+          '  expect(clamp(10, 0, 5)).toBe(5)',
+          '})'
+        ].join('\n')
+      }]
+    }
+
+    const failedGate = await executeTool<GateOutput>(pi, 'omp_test_gate', {
+      targets: [target],
+      candidate,
+      testCommand: `${process.execPath} -e "process.exit(2)"`
+    }, ctx)
+
+    expect(failedGate.details).toMatchObject({
+      passed: false,
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'test-command', passed: false, severity: 'blocker' })
+      ])
+    })
+    const failedReport = await executeTool<ReportOutput>(pi, 'omp_test_report', {}, ctx)
+    expect(failedReport.details.markdown).toContain('Result: failed')
+    expect(failedReport.details.markdown).toContain('test-command: failed')
+
+    const repairedGate = await executeTool<GateOutput>(pi, 'omp_test_gate', {
+      targets: [target],
+      candidate,
+      testCommand: `${process.execPath} -e "process.exit(0)"`
+    }, ctx)
+
+    expect(repairedGate.details).toMatchObject({
+      passed: true,
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'test-command', passed: true })
+      ])
+    })
+    const repairedReport = await executeTool<ReportOutput>(pi, 'omp_test_report', {}, ctx)
+    expect(repairedReport.details.markdown).toContain('Result: passed')
+    expect(repairedReport.details.markdown).toContain('test-command: passed')
+  })
 })
 
 function fakeZod() {

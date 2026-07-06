@@ -1,4 +1,9 @@
-import { buildGovernancePromptFragment, buildMissingGateContext, buildSubagentPromptFragment } from './src/governance.js';
+import {
+  buildGovernancePromptFragment,
+  buildMissingGateContext,
+  buildSubagentPromptFragment,
+  formatWorkflowGateBriefingForAssignment,
+} from './src/governance.js';
 import { routeNaturalLanguageTask } from './src/router.js';
 import {
   normalizeSkillName,
@@ -748,7 +753,7 @@ function buildPreworkSkillBootstrapBlock(state) {
       'Actor-specific skill rule: task subagents load subagent skills; the main agent loads skills only for direct main-agent work.',
       'Before calling task, put the matching subagent skill contract into each task assignment. Do not read root route skills in the main agent just to unlock task.',
       'Required task assignment contracts:',
-      ...requiredSubagents.flatMap((subagent) => formatSubagentSkillAssignmentStep(subagent, { parentTask })),
+      ...requiredSubagents.flatMap((subagent) => formatSubagentSkillAssignmentStep(subagent, { parentTask, route: state.lastRoute })),
       missing.length ? 'For direct main-agent work tools only, read missing root skills before using edit, write, bash, QA, or test gates:' : null,
       ...(missing.length ? missing.map(formatMissingSkillReadStep) : []),
     ].filter(Boolean).join('\n');
@@ -808,7 +813,7 @@ function buildTaskSubagentSkillGateBlock(state, event = {}) {
       'This routed task must fork named subagents and attach their skill contracts in the task assignment.',
       `Required subagents: ${formatRequiredSubagents(requiredSubagents)}.`,
       'Add one of these contracts to each task item before retrying:',
-      ...requiredSubagents.flatMap((subagent) => formatSubagentSkillAssignmentStep(subagent, { parentTask: state.lastPrompt })),
+      ...requiredSubagents.flatMap((subagent) => formatSubagentSkillAssignmentStep(subagent, { parentTask: state.lastPrompt, route: state.lastRoute })),
     ]);
   }
 
@@ -847,7 +852,7 @@ function buildTaskSubagentSkillGateBlock(state, event = {}) {
     missingParentTaskAssignments.length ? `Missing bug-audit parent task context: ${uniqueValues(missingParentTaskAssignments).join(', ')}.` : null,
     unexpectedSkillAssignments.length ? `Unexpected subagent skill assignments: ${formatMissingSkillAssignments(unexpectedSkillAssignments)}.` : null,
     'Required task assignment contracts:',
-    ...requiredSubagents.flatMap((subagent) => formatSubagentSkillAssignmentStep(subagent, { parentTask: state.lastPrompt })),
+    ...requiredSubagents.flatMap((subagent) => formatSubagentSkillAssignmentStep(subagent, { parentTask: state.lastPrompt, route: state.lastRoute })),
   ]);
 }
 
@@ -879,6 +884,7 @@ function repairTaskSubagentAssignmentContracts(state, event, requiredSubagents, 
       agent,
       requiredSkills,
       parentTask: state.lastPrompt,
+      route: state.lastRoute,
       currentText,
     }));
     repaired = true;
@@ -950,11 +956,13 @@ function setTaskAssignmentText(item, text) {
   else item.prompt = text;
 }
 
-function prependSubagentAssignmentContract({ agent, requiredSkills = [], parentTask = '', currentText = '' }) {
+function prependSubagentAssignmentContract({ agent, requiredSkills = [], parentTask = '', route = null, currentText = '' }) {
   const cleaned = cleanText(currentText);
+  const workflowBriefing = formatWorkflowGateBriefingForAssignment(route);
   return [
     `OMP_REQUIRED_SUBAGENT: ${agent}`,
     `OMP_PARENT_TASK: ${formatParentTaskForAssignment(parentTask)}`,
+    workflowBriefing || null,
     'Required skills for this subagent:',
     ...(requiredSkills.length ? requiredSkills.map((skill) => `- ${skill}`) : ['- none']),
     '',
@@ -984,14 +992,20 @@ function taskSubagentSkillBlock(lines) {
   };
 }
 
-function formatSubagentSkillAssignmentStep({ agent, requiredSkills = [] }, { parentTask = '' } = {}) {
+function formatSubagentSkillAssignmentStep({ agent, requiredSkills = [] }, { parentTask = '', route = null } = {}) {
+  const workflowBriefing = formatWorkflowGateBriefingForAssignment(route);
   return [
     `- ${agent}:`,
     `  OMP_REQUIRED_SUBAGENT: ${agent}`,
     `  OMP_PARENT_TASK: ${formatParentTaskForAssignment(parentTask)}`,
+    ...(workflowBriefing ? indentLines(workflowBriefing, '  ') : []),
     '  Required skills for this subagent:',
     ...(requiredSkills.length ? requiredSkills.map((skill) => `  - ${skill}`) : ['  - none']),
   ];
+}
+
+function indentLines(text = '', prefix = '') {
+  return String(text).split(/\r?\n/).map((line) => `${prefix}${line}`);
 }
 
 function formatParentTaskForAssignment(parentTask = '') {

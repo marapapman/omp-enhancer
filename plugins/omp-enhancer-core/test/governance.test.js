@@ -18,6 +18,9 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   });
 
   assert.match(fragment, /Mandatory Skill Workflow/);
+  assert.match(fragment, /Workflow and Gate Briefing/);
+  assert.match(fragment, /Routed intent:\s*writing\.zh/);
+  assert.match(fragment, /Writing QA gate/);
   assert.match(fragment, /Mandatory Subagent Workflow/);
   assert.match(fragment, /plain-chinese-writing/);
   assert.match(fragment, /zh-writing-polish/);
@@ -36,6 +39,8 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /include that subagent-specific skill list/i);
   assert.match(fragment, /Pre-fork Subagent Contract/);
   assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
+  assert.match(fragment, /Workflow and gate briefing:/);
+  assert.match(fragment, /Parent intent:\s*writing\.zh/);
   assert.match(fragment, /role:\s*zh-writer/);
   assert.match(fragment, /Do not fork another OMP Enhancer Core role gate/);
   assert.match(fragment, /SUBAGENT_RESULT/);
@@ -153,6 +158,8 @@ test('names the selected agent route and toolchain in the governance fragment', 
   assert.match(fragment, /Agent route:\s*implementer/);
   assert.match(fragment, /Intent:\s*implementation-with-tests/);
   assert.match(fragment, /Toolchain/);
+  assert.match(fragment, /Workflow and Gate Briefing/);
+  assert.match(fragment, /Completion gates before final answer/);
   assert.match(fragment, /omp_test_analyze/);
   assert.match(fragment, /omp_test_context/);
   assert.match(fragment, /omp_test_browser_check/);
@@ -161,6 +168,10 @@ test('names the selected agent route and toolchain in the governance fragment', 
   assert.match(fragment, /omp_test_gate/);
   assert.match(fragment, /omp_test_report/);
   assert.match(fragment, /this is a code\/testing workflow/i);
+  assert.match(fragment, /Review-to-Testing Handoff/);
+  assert.match(fragment, /semantic review first, deterministic testing second/);
+  assert.match(fragment, /Reviewer approval does not close the testing gate/);
+  assert.match(fragment, /plan -> implementation-task -> reviewer -> post-review testing checkpoint/);
   assert.match(fragment, /subagent-driven-development/);
   assert.match(fragment, /plan:\s*decompose the task; skills: brainstorming, subagent-driven-development/);
   assert.match(fragment, /implementation-task:\s*implement the task; skills: test-driven-development, verification-before-completion/);

@@ -37,6 +37,21 @@ BEFORE claiming any status or expressing satisfaction:
 Skip any step = lying, not verifying
 ```
 
+## Review-To-Testing Handoff
+
+Code review and deterministic testing are separate gates.
+
+For implementation workflows that require a testing gate:
+
+1. Complete semantic review first.
+2. Resolve reviewer blockers or report BLOCKERS.
+3. Then switch to deterministic testing.
+4. Run the relevant local test/build/lint commands.
+5. Run the configured testing-enhancer gate when present, such as `omp_test_gate`.
+6. Only after passing test evidence may you claim completion.
+
+Reviewer approval is not test evidence. A reviewer can confirm the diff looks correct, but it cannot close a required testing gate.
+
 ## Common Failures
 
 | Claim | Requires | Not Sufficient |

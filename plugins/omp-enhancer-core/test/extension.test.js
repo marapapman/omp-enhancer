@@ -566,6 +566,10 @@ test('task tool_call auto-attaches routed subagent contracts for exact roles', a
   assert.equal(allowed, undefined);
   assert.match(taskEvent.input.tasks[0].assignment, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
   assert.match(taskEvent.input.tasks[0].assignment, /OMP_PARENT_TASK:\s*请润色这段中文论文摘要/);
+  assert.match(taskEvent.input.tasks[0].assignment, /Workflow and gate briefing:/);
+  assert.match(taskEvent.input.tasks[0].assignment, /Parent intent:\s*writing\.zh/);
+  assert.match(taskEvent.input.tasks[0].assignment, /Writing QA gate/);
+  assert.match(taskEvent.input.tasks[0].assignment, /Subagent scope: read this before acting/);
   assert.match(taskEvent.input.tasks[0].assignment, /Required skills for this subagent:\n- plain-chinese-writing\n- zh-writing-polish/);
   assert.match(taskEvent.input.tasks[0].assignment, /Assignment:\nDraft the Chinese revision\./);
 
@@ -941,6 +945,9 @@ test('pre-work skill gate accepts legacy ECC security skill aliases', async () =
   assert.equal(blocked?.block, true);
   assert.match(blocked.reason, /task subagent skill gate/);
   assert.match(blocked.reason, /Missing subagent skill assignments/);
+  assert.match(blocked.reason, /Workflow and gate briefing:/);
+  assert.match(blocked.reason, /Parent intent:\s*security-review/);
+  assert.match(blocked.reason, /Security gate/);
   assert.match(blocked.reason, /security-review/);
   assert.match(blocked.reason, /security-scan/);
 
@@ -1270,6 +1277,9 @@ test('session_stop continues when an implementation-with-tests task has not run 
   assert.equal(result?.continue, true);
   assert.match(result.additionalContext, /omp_test_gate/);
   assert.match(result.additionalContext, /test-driven-development|SKILL_USAGE/);
+  assert.match(result.additionalContext, /Review is not the terminal phase/);
+  assert.match(result.additionalContext, /post-review testing checkpoint/);
+  assert.match(result.additionalContext, /Do not finish with only reviewer approval/);
 });
 
 test('failed omp_test_gate results do not release implementation and testing gates', async () => {

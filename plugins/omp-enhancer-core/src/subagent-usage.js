@@ -302,7 +302,7 @@ function parseRequiredSkillList(text = '') {
       if (skills.length) break;
       continue;
     }
-    if (/^(Before acting|Final subagent output|SUBAGENT_RESULT|SKILL_USAGE|BLOCKERS|Assignment|Evidence)/i.test(line)) break;
+    if (/^(Workflow and gate briefing|Before acting|Final subagent output|SUBAGENT_RESULT|SKILL_USAGE|BLOCKERS|Assignment|Evidence)/i.test(line)) break;
     const match = line.match(/^[-*]\s*(.+)$/);
     if (!match) {
       if (skills.length) break;

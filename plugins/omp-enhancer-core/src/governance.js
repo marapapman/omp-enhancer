@@ -30,6 +30,8 @@ export function buildGovernancePromptFragment({ route, parentTask = '' } = {}) {
     'Use this natural language route. Do not require a command prefix.',
     routeBoundaryFor(resolved),
     '',
+    ...workflowGateBriefingLines(resolved),
+    '',
     loopGuardPromptSection(),
     '',
     '### Mandatory Skill Workflow',
@@ -43,6 +45,8 @@ export function buildGovernancePromptFragment({ route, parentTask = '' } = {}) {
     formatList(resolved.requiredTools),
     '',
     ...subagentWorkflowLines(resolved, { parentTask }),
+    '',
+    ...reviewToTestingHandoffLines(resolved),
     '',
     ...bugAuditTestGenerationLines(resolved),
     '',
@@ -108,6 +112,7 @@ function skillWorkflowLines(route) {
 export function buildSubagentPromptFragment({ prompt = '' } = {}) {
   const { agent, requiredSkills } = parseSubagentLaunchContract(prompt);
   const resolvedAgent = agent || 'subagent';
+  const workflowBriefing = parseWorkflowGateBriefing(prompt);
 
   return [
     '## OMP Enhancer Core Subagent Contract',
@@ -116,6 +121,12 @@ export function buildSubagentPromptFragment({ prompt = '' } = {}) {
     '',
     'This is a spawned subagent assignment, not a root routed workflow. Do not start another OMP Enhancer Core role-gate cycle and do not fork extra subagents unless the assignment explicitly asks for nested delegation.',
     '',
+    ...(workflowBriefing.length ? [
+      'Parent workflow and gates:',
+      ...workflowBriefing,
+      'Read this briefing before acting. Your output completes only your assigned checkpoint; the main agent owns parent workflow completion gates unless the assignment explicitly says otherwise.',
+      '',
+    ] : []),
     'Required skills for this subagent:',
     formatList(requiredSkills),
     '',
@@ -153,6 +164,16 @@ export function buildMissingGateContext({ route, state } = {}) {
   }
 
   if (needsTesting(route) && !state?.evidence?.testingGate) {
+    if (route.intent === 'implementation-with-tests') {
+      return [
+        'OMP Enhancer Core gate is still open for this implementation testing task.',
+        'Review is not the terminal phase. After plan, implementation-task, and reviewer have returned, switch to the post-review testing checkpoint before finishing.',
+        'Post-review testing checkpoint: resolve reviewer blockers or report BLOCKERS, load any root skills needed for direct testing tools, run the relevant local test commands, then run omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report.',
+        'Do not finish with only reviewer approval. The testing gate closes only after a successful omp_test_gate result, with SKILL_USAGE evidence in the final response.',
+        formatRecentToolFailures(state, ['omp_test_gate']),
+      ].filter(Boolean).join('\n');
+    }
+
     return [
       'OMP Enhancer Core gate is still open for this bug-audit or implementation testing task.',
       'Run the testing-enhancer workflow and finish with omp_test_gate. Use omp_test_analyze and omp_test_context first; for bug-audit, build and execute a deduplicated test matrix instead of relying on static analysis alone. Call omp_test_browser_check only when browserPlan exists, omp_test_coverage_analyze only when a coverage report exists, and omp_test_mutation_context only when a mutation report exists. Keep SKILL_USAGE evidence in the final response.',
@@ -161,6 +182,112 @@ export function buildMissingGateContext({ route, state } = {}) {
   }
 
   return null;
+}
+
+function workflowGateBriefingLines(route) {
+  return [
+    '### Workflow and Gate Briefing',
+    '',
+    `Routed intent: ${route.intent}`,
+    `Routed workflow: ${workflowFor(route)}`,
+    `Routed boundary: ${stripRouteBoundaryLabel(routeBoundaryFor(route))}`,
+    '',
+    'Completion gates before final answer:',
+    ...completionGateChecklist(route).map((gate) => `- ${gate}`),
+    '',
+    workflowBriefingScopeLine(route),
+  ];
+}
+
+export function formatWorkflowGateBriefingForAssignment(route) {
+  if (!route || route.intent === 'unknown') return '';
+  return [
+    'Workflow and gate briefing:',
+    `Parent intent: ${route.intent}`,
+    `Parent workflow: ${workflowFor(route)}`,
+    `Parent boundary: ${stripRouteBoundaryLabel(routeBoundaryFor(route))}`,
+    'Parent completion gates before final answer:',
+    ...completionGateChecklist(route).map((gate) => `- ${gate}`),
+    'Subagent scope: read this before acting, complete only this assigned checkpoint, and return evidence or BLOCKERS. Do not claim the parent workflow is complete.',
+  ].join('\n');
+}
+
+function completionGateChecklist(route) {
+  const gates = [];
+  const requiredSubagents = route.requiredSubagents ?? [];
+
+  if (requiredSubagents.length) {
+    gates.push(`Native subagent gate: fork ${requiredSubagents.map(({ agent }) => agent).join(', ')} with their role skill contracts and finish with SUBAGENT_USAGE.`);
+  }
+
+  if (route.intent === 'implementation-with-tests') {
+    gates.push('Review-to-testing gate: reviewer approval is followed by the post-review testing checkpoint; reviewer approval alone is not enough.');
+  }
+
+  if (needsTesting(route)) {
+    gates.push('Testing gate: run relevant local test/build/lint commands, then omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report before final claims.');
+  }
+
+  if (needsWritingQuality(route)) {
+    gates.push('Writing QA gate: run writing_logic_check or writing_quality_check before final writing claims.');
+  }
+
+  if (route.intent === 'bug-audit') {
+    gates.push(isFocusedBugAuditRoute(route)
+      ? 'Focused audit gate: generate and run a compact bounded test matrix before the focused BUG-AUDIT-REPORT.'
+      : 'Bug-audit gate: generate, deduplicate, execute, and report high-signal test cases before BUG-AUDIT-REPORT claims.');
+  }
+
+  if (route.intent === 'security-review') {
+    gates.push('Security gate: complete security risk analysis first; remediation or final risk claims must be checked by the reviewer role when changes are in scope.');
+  }
+
+  if (route.intent === 'config-assets') {
+    gates.push('Config gate: use the config doctor/assets/plan tools as relevant, then have config-librarian and reviewer evidence before config or marketplace claims.');
+  }
+
+  if (route.intent === 'diagnosis') {
+    gates.push('Diagnosis gate: inspect the concrete failure path and explain root cause before proposing or making fixes.');
+  }
+
+  if (route.intent === 'release') {
+    gates.push('Release gate: verify repository state and the requested packaging, push, marketplace, or upgrade checks before release claims.');
+  }
+
+  if (!gates.length) {
+    gates.push('No additional plugin-specific tool gate beyond the route boundary and final evidence requirements.');
+  }
+
+  gates.push('Final evidence gate: final routed output includes SKILL_USAGE, and includes SUBAGENT_USAGE when routed subagents are required.');
+  return gates;
+}
+
+function workflowBriefingScopeLine(route) {
+  return (route.requiredSubagents ?? []).length
+    ? 'Every task subagent must read this briefing before acting, complete only its assigned checkpoint, and return evidence instead of claiming the parent workflow is complete.'
+    : 'No task subagent is required for this route; the main agent owns the workflow gates directly.';
+}
+
+function stripRouteBoundaryLabel(value = '') {
+  return String(value).replace(/^Route boundary:\s*/i, '').trim();
+}
+
+function reviewToTestingHandoffLines(route) {
+  if (route.intent !== 'implementation-with-tests') return [];
+  return [
+    '### Review-to-Testing Handoff',
+    '',
+    'Implementation routes have two separate quality checkpoints: semantic review first, deterministic testing second.',
+    '',
+    'Required order:',
+    '- plan produces or confirms the implementation plan.',
+    '- implementation-task applies the code and test changes.',
+    '- reviewer checks the resulting diff for semantic regressions and blockers.',
+    '- main agent resolves reviewer blockers or reports BLOCKERS.',
+    '- main agent then switches to testing: run the relevant local test command(s), omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report.',
+    '',
+    'Reviewer approval does not close the testing gate. Do not produce a final answer until the post-review testing checkpoint has run and omp_test_gate has passed.',
+  ];
 }
 
 function formatRecentToolFailures(state, toolNames = []) {
@@ -190,7 +317,7 @@ function workflowFor(route) {
   if (intent === 'bug-audit' && isFocusedBugAuditRoute(route)) return 'Focused bug audit workflow: preload focused audit skills -> inspect the bounded failure path directly -> generate and run the smallest high-signal local test matrix -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> focused BUG-AUDIT-REPORT.';
   if (intent === 'bug-audit') return 'Bug audit workflow: ecc-tdd-guide generates a deduplicated multi-channel executable test matrix -> ecc-code-reviewer static audit -> ecc-silent-failure-hunter failure-path audit -> ecc-pr-test-analyzer checks generated tests, duplicate removal, execution results, and coverage gaps -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> BUG-AUDIT-REPORT or final bug report.';
   if (intent === 'testing') return 'Legacy testing intent: use the merged bug-audit workflow and testing-enhancer toolchain.';
-  if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> task -> reviewer -> lightweight TDD -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report.';
+  if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> implementation-task -> reviewer -> post-review testing checkpoint -> local test commands -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report.';
   if (intent === 'security-review') return 'Security workflow: ecc-security-reviewer -> reviewer -> fix or report only after risk evidence is checked.';
   if (intent === 'config-assets') return 'Config workflow: use omp_config_doctor, omp_config_assets, or omp_config_plan as needed.';
   if (intent === 'diagnosis') return 'Diagnosis workflow: inspect the reported failure and explain root cause first; do not modify files unless the user asks for a fix.';
@@ -303,7 +430,7 @@ function subagentWorkflowLines(route, { parentTask = '' } = {}) {
     '',
     'Before calling task, prepare each subagent assignment with the matching contract below. Copy the required role, required skills, and final output block into the task assignment before forking so the subagent does not need to infer the gate format.',
     '',
-    formatPreforkSubagentContracts(requiredSubagents, { parentTask }),
+    formatPreforkSubagentContracts(requiredSubagents, { parentTask, route }),
     '',
     'After the task call returns, the main agent must include this exact subagent evidence block in the routed final output:',
     '',
@@ -329,10 +456,11 @@ function formatSubagents(values = []) {
   }).join('\n');
 }
 
-function formatPreforkSubagentContracts(values = [], { parentTask = '' } = {}) {
+function formatPreforkSubagentContracts(values = [], { parentTask = '', route = null } = {}) {
   const subagents = normalizeSubagentValues(values);
   if (!subagents.length) return 'No routed subagents are required.';
   const parentTaskLine = formatParentTaskLine(parentTask);
+  const workflowBriefing = formatWorkflowGateBriefingForAssignment(route);
 
   return subagents.map(({ agent, requiredSkills }) => [
     `Subagent: ${agent}`,
@@ -343,6 +471,7 @@ function formatPreforkSubagentContracts(values = [], { parentTask = '' } = {}) {
     'Assignment must start with:',
     `OMP_REQUIRED_SUBAGENT: ${agent}`,
     parentTaskLine,
+    ...(workflowBriefing ? [workflowBriefing] : []),
     'Required skills for this subagent:',
     formatList(requiredSkills),
     'Before acting:',
@@ -424,7 +553,7 @@ function parseRequiredSubagentSkills(prompt = '') {
       if (skills.length) break;
       continue;
     }
-    if (/^(Before acting|Final subagent output|SUBAGENT_RESULT|SKILL_USAGE|BLOCKERS|Assignment)/i.test(line)) break;
+    if (/^(Workflow and gate briefing|Before acting|Final subagent output|SUBAGENT_RESULT|SKILL_USAGE|BLOCKERS|Assignment)/i.test(line)) break;
     const match = line.match(/^[-*]\s*(.+)$/);
     if (!match) {
       if (skills.length) break;
@@ -434,6 +563,21 @@ function parseRequiredSubagentSkills(prompt = '') {
     if (skill && skill.toLowerCase() !== 'none') skills.push(skill);
   }
   return skills;
+}
+
+function parseWorkflowGateBriefing(prompt = '') {
+  const lines = String(prompt).split(/\r?\n/);
+  const start = lines.findIndex((line) => /^Workflow and gate briefing:/i.test(line.trim()));
+  if (start === -1) return [];
+
+  const collected = [];
+  for (const rawLine of lines.slice(start)) {
+    const line = rawLine.trimEnd();
+    if (collected.length && /^(Required skills for this subagent:|Before acting:|Final subagent output|SUBAGENT_RESULT|SKILL_USAGE|BLOCKERS:|Assignment:)/i.test(line.trim())) break;
+    collected.push(line);
+  }
+
+  return collected.map((line) => line.trim()).filter(Boolean);
 }
 
 function needsWritingQuality(route) {
