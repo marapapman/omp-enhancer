@@ -35,6 +35,8 @@ test('buildSmartGatePrompt uses OMP Tiny and embeds the blocking rule gate', () 
   assert.match(result.prompt, /OMP Enhancer Core Smart Gate/);
   assert.match(result.prompt, /writing\.zh:writing-qa/);
   assert.match(result.prompt, /ZhCheckerFinal PASS/);
+  assert.match(result.prompt, /Use verdict "blocked" only for real external blockers/);
+  assert.match(result.prompt, /Do not use verdict "blocked" merely because the assistant asked whether to proceed/);
 });
 
 test('resolveSmartGateDecision accepts fenced high-confidence pass output', () => {
@@ -90,6 +92,48 @@ test('resolveSmartGateDecision does not accept needs-work or low-confidence pass
   assert.equal(needsWork.accepted, false);
   assert.equal(lowConfidencePass.ok, true);
   assert.equal(lowConfidencePass.accepted, false);
+});
+
+test('resolveSmartGateDecision demotes confirmation-wait blocked verdicts to needs-work', () => {
+  const result = resolveSmartGateDecision({
+    gateKey: 'diagnosis:workflow',
+    output: JSON.stringify({
+      gate: 'diagnosis:workflow',
+      verdict: 'blocked',
+      confidence: 0.89,
+      satisfied: false,
+      missing: ['user confirmation'],
+      actions: ['ask whether to change code: 要我直接改吗'],
+      reason: 'The assistant is waiting for the user confirmation before summarizing the factual errors.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.accepted, false);
+  assert.equal(result.decision.verdict, 'needs-work');
+  assert.equal(result.decision.satisfied, false);
+  assert.match(result.decision.reason, /not a real external blocker/);
+  assert.match(result.decision.actions.join('\n'), /deliver the focused answer directly/);
+});
+
+test('resolveSmartGateDecision preserves real external blocked verdicts', () => {
+  const result = resolveSmartGateDecision({
+    gateKey: 'release:push',
+    output: JSON.stringify({
+      gate: 'release:push',
+      verdict: 'blocked',
+      confidence: 0.93,
+      satisfied: false,
+      missing: ['GitHub API token'],
+      actions: ['ask the user to provide a user-provided credential'],
+      reason: 'Push verification cannot continue because the required API key is unavailable.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.accepted, false);
+  assert.equal(result.decision.verdict, 'blocked');
+  assert.deepEqual(result.decision.missing, ['GitHub API token']);
 });
 
 test('resolveSmartGateDecision rejects mismatched gate and unsupported fields', () => {

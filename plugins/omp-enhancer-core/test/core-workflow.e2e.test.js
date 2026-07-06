@@ -192,38 +192,14 @@ test('e2e broad bug audit task call gets parent context repair but still require
 
 test('e2e diagnosis and unknown prompts do not leave workflow gates open', async () => {
   const prompts = [
-    { prompt: '解释为什么 task tool_call 需要 OMP_REQUIRED_SUBAGENT，不要改代码。', classifier: false },
-    { prompt: 'What is a unit test?', classifier: true },
+    '解释为什么 task tool_call 需要 OMP_REQUIRED_SUBAGENT，不要改代码。',
+    'What is a unit test?',
   ];
 
-  for (const { prompt, classifier } of prompts) {
+  for (const prompt of prompts) {
     const { pi, ctx } = registeredCore();
     await event(pi, 'session_start')({}, ctx);
     await event(pi, 'before_agent_start')({ prompt }, ctx);
-
-    if (classifier) {
-      const blocked = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
-      assert.equal(blocked?.continue, true, prompt);
-      assert.match(blocked.additionalContext, /classifier preflight is still required/);
-      await tool(pi, 'omp_core_resolve_classification').execute(
-        `call-e2e-unknown-classifier-resolve-${prompt.replace(/[^A-Za-z0-9]+/g, '-')}`,
-        {
-          prompt,
-          output: JSON.stringify({
-            intent: 'unknown',
-            secondaryIntents: [],
-            language: 'en',
-            confidence: 0.91,
-            riskFlags: [],
-            domainHints: ['concept explanation'],
-            reason: 'No OMP plugin workflow should run.',
-          }),
-        },
-        undefined,
-        undefined,
-        ctx,
-      );
-    }
 
     const stopped = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
     assert.equal(stopped, undefined, prompt);

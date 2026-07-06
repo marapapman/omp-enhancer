@@ -32,6 +32,63 @@ export const smartGateSchema = {
   },
 };
 
+const deliveryControlBlockerPattern = new RegExp([
+  String.raw`should\s+i\b`,
+  String.raw`shall\s+i\b`,
+  String.raw`whether\s+to\s+(?:proceed|continue|fix|change)`,
+  String.raw`confirm(?:ation)?\s+(?:to\s+)?(?:proceed|continue|fix|change)`,
+  String.raw`waiting\s+for\s+(?:the\s+)?user(?:'s)?\s+(?:reply|confirmation|approval)`,
+  String.raw`awaiting\s+(?:the\s+)?user(?:'s)?\s+(?:reply|confirmation|approval)`,
+  String.raw`ask(?:ing)?\s+(?:the\s+)?user\s+(?:whether|if)`,
+  String.raw`\u8981\u6211.*(?:\u6539|\u505a|\u4fee)`,
+  String.raw`\u76f4\u63a5\u6539\u5417`,
+  String.raw`\u662f\u5426.*(?:\u7ee7\u7eed|\u76f4\u63a5|\u4fee\u6539|\u4fee\u590d)`,
+  String.raw`\u7b49\u5f85.*\u7528\u6237.*(?:\u786e\u8ba4|\u56de\u590d|\u7b54\u590d)`,
+  String.raw`\u9700\u8981.*\u7528\u6237.*\u786e\u8ba4`,
+].join('|'), 'i');
+
+const realExternalBlockerPattern = new RegExp([
+  String.raw`credential`,
+  String.raw`api[-\s]?key`,
+  String.raw`token`,
+  String.raw`secret`,
+  String.raw`password`,
+  String.raw`permission\s+denied`,
+  String.raw`access\s+denied`,
+  String.raw`sandbox\s+approval`,
+  String.raw`approval\s+(?:to\s+)?(?:access|run|write|use)`,
+  String.raw`outside\s+sandbox`,
+  String.raw`network`,
+  String.raw`dns`,
+  String.raw`host\s+resolution`,
+  String.raw`offline`,
+  String.raw`service\s+unavailable`,
+  String.raw`rate\s+limit`,
+  String.raw`quota`,
+  String.raw`missing\s+file`,
+  String.raw`file\s+not\s+found`,
+  String.raw`no\s+such\s+file`,
+  String.raw`cannot\s+access`,
+  String.raw`read\s+access`,
+  String.raw`write\s+access`,
+  String.raw`external\s+state`,
+  String.raw`user-provided`,
+  String.raw`must\s+provide`,
+  String.raw`requires?\s+user\s+input\s+that\s+cannot\s+be\s+inferred`,
+  String.raw`need(?:s)?\s+a\s+specific\s+user-provided`,
+  String.raw`\u51ed\u8bc1`,
+  String.raw`\u5bc6\u94a5`,
+  String.raw`\u6743\u9650`,
+  String.raw`\u65e0\u6cd5\u8bbf\u95ee`,
+  String.raw`\u7f51\u7edc`,
+  String.raw`\u670d\u52a1\u4e0d\u53ef\u7528`,
+  String.raw`\u9700\u8981\u7528\u6237\u63d0\u4f9b`,
+  String.raw`\u7528\u6237\u5fc5\u987b\u63d0\u4f9b`,
+  String.raw`\u6c99\u7bb1`,
+  String.raw`\u5ba1\u6279`,
+  String.raw`\u6388\u6743`,
+].join('|'), 'i');
+
 export function buildSmartGatePrompt({
   prompt = '',
   route = null,
@@ -78,7 +135,8 @@ export function buildSmartGatePrompt({
       '- For implementation or bug-audit testing gates, require relevant local test/build/lint evidence or a clear blocker. Reviewer approval alone is not enough.',
       '- For writing gates, accept checker/writer evidence only when it clearly reviews logic or quality for the requested writing task.',
       '- For security and release gates, do not pass unless the exact high-risk claim has concrete verification evidence.',
-      '- Use verdict "blocked" when external state or missing user input prevents completion.',
+      '- Use verdict "blocked" only for real external blockers: missing credentials, unavailable files/services, permission/access limits, network failures, or user-provided input that is necessary and cannot be inferred.',
+      '- Do not use verdict "blocked" merely because the assistant asked whether to proceed, waited for confirmation, or deferred with "should I continue" / "要我直接改吗". For focused factual questions or proposed-fix requests, use needs-work with an action to deliver the concise answer unless the final output already does so.',
       '',
       'JSON Schema:',
       JSON.stringify(smartGateSchema, null, 2),
@@ -162,7 +220,7 @@ function validateSmartGateValue(value, gateKey = '') {
 }
 
 function normalizeSmartGateValue(value) {
-  return {
+  const normalized = {
     gate: value.gate.trim(),
     verdict: value.verdict,
     confidence: clamp(Number(value.confidence), 0, 1),
@@ -171,6 +229,46 @@ function normalizeSmartGateValue(value) {
     actions: unique((value.actions ?? []).map((item) => String(item).trim()).filter(Boolean)).slice(0, 12),
     reason: value.reason.trim(),
   };
+  return normalizeBlockedSmartGateDecision(normalized);
+}
+
+function normalizeBlockedSmartGateDecision(decision) {
+  if (decision.verdict !== 'blocked') return decision;
+
+  const text = smartGateDecisionText(decision);
+  if (isDeliveryControlBlocker(text) || !hasRealExternalBlocker(text)) {
+    const action = isDeliveryControlBlocker(text)
+      ? 'deliver the focused answer directly instead of asking whether to proceed'
+      : 'perform the listed workflow actions; report BLOCKERS only for a real external blocker';
+    return {
+      ...decision,
+      verdict: 'needs-work',
+      satisfied: false,
+      missing: unique([...decision.missing, 'focused answer or concrete workflow evidence']).slice(0, 12),
+      actions: unique([...decision.actions, action]).slice(0, 12),
+      reason: decision.reason
+        ? `${decision.reason} This is local follow-up work, not a real external blocker.`
+        : 'The blocked verdict describes local follow-up work, not a real external blocker.',
+    };
+  }
+
+  return decision;
+}
+
+function smartGateDecisionText(decision) {
+  return [
+    decision.reason,
+    ...(decision.missing ?? []),
+    ...(decision.actions ?? []),
+  ].join('\n').toLowerCase();
+}
+
+function isDeliveryControlBlocker(text) {
+  return deliveryControlBlockerPattern.test(text);
+}
+
+function hasRealExternalBlocker(text) {
+  return realExternalBlockerPattern.test(text);
 }
 
 function stripJsonFence(text) {

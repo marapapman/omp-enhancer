@@ -33,6 +33,20 @@ test('buildClassifierPrompt uses OMP Tiny and the strict schema', () => {
   assert.match(result.prompt, /high-confidence unknown/);
 });
 
+test('buildClassifierPrompt includes observed uncertain context when provided', () => {
+  const result = buildClassifierPrompt({
+    prompt: '先不用动代码，只解释可能的方向。',
+    context: [
+      '帮我看看这个东西。',
+      '先不用动代码，只解释可能的方向。',
+    ],
+  });
+
+  assert.match(result.prompt, /Observed uncertain context:/);
+  assert.match(result.prompt, /1\. 帮我看看这个东西。/);
+  assert.match(result.prompt, /2\. 先不用动代码，只解释可能的方向。/);
+});
+
 test('parseClassifierOutput accepts fenced JSON output', () => {
   const parsed = parseClassifierOutput([
     '```json',

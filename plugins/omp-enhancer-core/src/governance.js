@@ -1,7 +1,11 @@
 import { loopGuardPromptSection } from './loop-guard.js';
 import { skillReadNameCandidates } from './skill-usage.js';
 
-export function buildGovernancePromptFragment({ route, parentTask = '' } = {}) {
+export function buildGovernancePromptFragment({
+  route,
+  parentTask = '',
+  includeModelWorkflowHints = true,
+} = {}) {
   const resolved = route ?? {
     intent: 'unknown',
     agent: null,
@@ -44,7 +48,7 @@ export function buildGovernancePromptFragment({ route, parentTask = '' } = {}) {
     'Toolchain:',
     formatList(resolved.requiredTools),
     '',
-    ...subagentWorkflowLines(resolved, { parentTask }),
+    ...subagentWorkflowLines(resolved, { parentTask, includeModelWorkflowHints }),
     '',
     ...reviewToTestingHandoffLines(resolved),
     '',
@@ -387,17 +391,19 @@ function bugAuditTestGenerationLines(route) {
   ];
 }
 
-function subagentWorkflowLines(route, { parentTask = '' } = {}) {
+function subagentWorkflowLines(route, { parentTask = '', includeModelWorkflowHints = true } = {}) {
   const requiredSubagents = route.requiredSubagents ?? [];
   const common = [
     '### Mandatory Subagent Workflow',
     '',
-    'Runtime model policy: the main/default agent uses MiMo v2.5; the advisor uses DeepSeek V4 Flash. Keep task subagents and all other model roles on the active OMP configuration unless the user explicitly overrides them.',
-    '',
-    'Classifier model policy: ambiguous routing uses OMP Tiny (`modelRoles.tiny`) instead of a separate classifier role. A valid, high-confidence classifier route that resolves through the OMP route whitelist supersedes the deterministic rule route before assigning skills, tools, or subagents.',
-    '',
-    'Smart gate policy: workflow gates are rule-first but Tiny-reviewed when a rule gate remains open. If a deterministic gate blocks a tool call or final answer despite concrete evidence, call `omp_core_smart_gate_prompt`, use OMP Tiny (`modelRoles.tiny`) for strict JSON, then call `omp_core_resolve_smart_gate`; only a validated pass may release the blocked gate.',
-    '',
+    ...(includeModelWorkflowHints ? [
+      'Runtime model policy: the main/default agent uses MiMo v2.5; the advisor uses DeepSeek V4 Flash. Keep task subagents and all other model roles on the active OMP configuration unless the user explicitly overrides them.',
+      '',
+      'Classifier model policy: ambiguous routing uses OMP Tiny (`modelRoles.tiny`) instead of a separate classifier role. A valid, high-confidence classifier route that resolves through the OMP route whitelist supersedes the deterministic rule route before assigning skills, tools, or subagents.',
+      '',
+      'Smart gate policy: workflow gates are rule-first but Tiny-reviewed when a rule gate remains open. If a deterministic gate blocks a tool call or final answer despite concrete evidence, call `omp_core_smart_gate_prompt`, use OMP Tiny (`modelRoles.tiny`) for strict JSON, then call `omp_core_resolve_smart_gate`; only a validated pass may release the blocked gate. Treat needs-work as local follow-up, not BLOCKERS; report BLOCKERS only for real external blockers such as missing credentials, inaccessible files/services, permission limits, or required user-provided input.',
+      '',
+    ] : []),
   ];
 
   if (!requiredSubagents.length) {

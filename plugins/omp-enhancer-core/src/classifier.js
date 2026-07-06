@@ -65,8 +65,11 @@ export const classifierSchema = {
   },
 };
 
-export function buildClassifierPrompt({ prompt = '' } = {}) {
+export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
   const ruleRoute = routeNaturalLanguageTask({ prompt });
+  const observedContext = Array.isArray(context)
+    ? context.map((item) => String(item).trim()).filter(Boolean).slice(-4)
+    : [];
   const config = {
     modelRole: classifierDefaults.modelRole,
     model: classifierDefaults.model,
@@ -128,6 +131,11 @@ export function buildClassifierPrompt({ prompt = '' } = {}) {
       '',
       'User task:',
       String(prompt),
+      observedContext.length ? [
+        '',
+        'Observed uncertain context:',
+        ...observedContext.map((item, index) => `${index + 1}. ${item}`),
+      ].join('\n') : null,
     ].join('\n'),
   };
 }

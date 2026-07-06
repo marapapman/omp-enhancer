@@ -89,8 +89,12 @@ export default function registerCoreEnhancer(pi) {
     parameters: z?.object ? z.object({
       prompt: z.string(),
     }) : undefined,
-    execute: async (_callId, params = {}) => {
-      const classifier = buildClassifierPrompt(params);
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
+      const classifier = buildClassifierPrompt({
+        prompt: params.prompt,
+        context: classifierPromptContext(state, params.prompt),
+      });
       return okResult(classifier.prompt, { classifier });
     },
   });
@@ -248,6 +252,7 @@ export default function registerCoreEnhancer(pi) {
       const fragment = buildRoutedGovernanceContext(state, {
         route,
         parentTask: params.prompt ?? state.lastPrompt,
+        visibility: 'explicit',
       });
       return okResult(fragment, { route, fragment });
     },
@@ -291,7 +296,8 @@ export default function registerCoreEnhancer(pi) {
     setRouteState(state, route, prompt);
     startLoopGuardRun(state.loopGuard, `${route.intent}:${state.routeStartedAt}`);
     await persistState(pi, state);
-    const fragment = buildRoutedGovernanceContext(state, { route, parentTask: prompt });
+    const fragment = buildRoutedGovernanceContext(state, { route, parentTask: prompt, visibility: 'automatic' });
+    if (!fragment) return { route };
     if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${fragment}`;
     else event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
     return { additionalContext: fragment, route };
@@ -471,12 +477,13 @@ function formatSubagents(subagents = []) {
 }
 
 function setRouteState(state, route, prompt = '', { classifierResolved = false } = {}) {
+  const previousPreflight = state.classifierPreflight;
   state.lastRoute = route;
   state.lastPrompt = String(prompt ?? '');
   state.routeStartedAt = Date.now();
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
-  state.classifierPreflight = classifierResolved ? null : buildClassifierPreflight(route, prompt);
+  state.classifierPreflight = classifierResolved ? null : buildClassifierPreflight(route, prompt, [], { previousPreflight });
   state.pendingSmartGate = null;
   state.smartGate = null;
   state.smartGateCompletionBypasses = [];
@@ -669,12 +676,15 @@ function readStateSnapshot(value) {
 }
 
 function readClassifierPreflight(value) {
-  if (!isRecord(value) || value.required !== true) return null;
+  if (!isRecord(value) || (value.required !== true && value.mode !== 'observe')) return null;
+  const mode = value.mode === 'observe' ? 'observe' : 'required';
   return {
-    required: true,
+    required: mode === 'required',
+    mode,
     prompt: isString(value.prompt) ? value.prompt : '',
     fallbackIntent: isString(value.fallbackIntent) ? value.fallbackIntent : 'unknown',
     reasons: Array.isArray(value.reasons) ? value.reasons.filter(isString) : [],
+    observations: Array.isArray(value.observations) ? value.observations.filter(isString).slice(-4) : [],
   };
 }
 
@@ -897,18 +907,40 @@ function isSubagentLaunchPrompt(prompt) {
     || /Required skills for this subagent:/i.test(prompt);
 }
 
-function buildClassifierPreflight(route, prompt = '', extraReasons = []) {
+function buildClassifierPreflight(route, prompt = '', extraReasons = [], { previousPreflight = null } = {}) {
   const reasons = uniqueValues([
     ...classifierPreflightReasons(route, prompt),
     ...extraReasons,
   ]);
   if (!reasons.length) return null;
+  const mode = classifierPreflightMode(route, reasons, extraReasons);
   return {
-    required: true,
+    required: mode === 'required',
+    mode,
     prompt: String(prompt ?? ''),
     fallbackIntent: route?.intent ?? 'unknown',
     reasons,
+    observations: classifierPreflightObservations(previousPreflight, prompt, mode),
   };
+}
+
+function classifierPreflightMode(route, reasons = [], extraReasons = []) {
+  if (extraReasons.length) return 'required';
+  if (route?.intent !== 'unknown') return 'required';
+  const blockingReasons = reasons.filter((reason) => reason !== 'deterministic route is unknown');
+  return blockingReasons.length ? 'required' : 'observe';
+}
+
+function classifierPreflightObservations(previousPreflight, prompt = '', mode = 'required') {
+  const previous = previousPreflight?.mode === 'observe'
+    ? previousPreflight.observations ?? []
+    : [];
+  const current = cleanText(prompt);
+  const observations = uniqueValues([
+    ...previous,
+    ...(current ? [current] : []),
+  ]).slice(-4);
+  return mode === 'observe' || observations.length > 1 ? observations : [];
 }
 
 function classifierPreflightReasons(route, prompt = '') {
@@ -1209,7 +1241,7 @@ function smartGateWrappedToolBlock(state, block) {
       'Tiny smart-gate override:',
       `Rule gate key: ${ruleGate.gateKey}.`,
       `Use OMP Tiny (\`modelRoles.${smartGateDefaults.modelRole}\`, packaged default ${smartGateDefaults.model}) only if this rule gate is a false positive or equivalent evidence already satisfies the required workflow.`,
-      `Required sequence: call omp_core_smart_gate_prompt with gateKey "${ruleGate.gateKey}", use Tiny to produce strict JSON, then call omp_core_resolve_smart_gate. Retry the blocked tool only if the smart gate returns verdict pass.`,
+      `Required sequence: call omp_core_smart_gate_prompt with gateKey "${ruleGate.gateKey}", use Tiny to produce strict JSON, then call omp_core_resolve_smart_gate. Retry the blocked tool only if the smart gate returns verdict pass; if it returns needs-work, do the listed local follow-up instead of reporting BLOCKERS unless there is a real external blocker.`,
       state.smartGate?.gateKey === ruleGate.gateKey ? formatPreviousSmartGateDecision(state.smartGate) : null,
     ].filter(Boolean).join('\n'),
   };
@@ -1227,7 +1259,7 @@ function buildSmartGateRequiredContext(state, ruleGate) {
     '1. Call omp_core_smart_gate_prompt with finalOutput set to the final answer text you want judged.',
     '2. Use OMP Tiny (`modelRoles.tiny`) to produce only the strict smart-gate JSON.',
     '3. Call omp_core_resolve_smart_gate with output set to that JSON.',
-    '4. Continue only if the resolved smart gate returns verdict pass; otherwise perform the listed actions or report BLOCKERS.',
+    '4. Continue only if the resolved smart gate returns verdict pass; if it returns needs-work, perform the listed local actions and deliver the focused answer when possible. Report BLOCKERS only for real external blockers such as missing credentials, inaccessible files/services, permission limits, or required user-provided input.',
     previous ? formatPreviousSmartGateDecision(previous) : null,
     '',
     'Deterministic rule gate context:',
@@ -1323,15 +1355,32 @@ function buildMissingSkillUsageContext(state) {
   ].filter(Boolean).join('\n');
 }
 
-function buildRoutedGovernanceContext(state, { route, parentTask = '' } = {}) {
+function buildRoutedGovernanceContext(state, { route, parentTask = '', visibility = 'automatic' } = {}) {
+  const automatic = visibility !== 'explicit';
+  if (automatic && route?.intent === 'unknown' && !state.classifierPreflight?.required) return null;
+
   return [
-    buildModelRoutingCheckpointBlock({ route, parentTask, preflight: state.classifierPreflight }),
+    buildModelRoutingCheckpointBlock({
+      route,
+      parentTask,
+      preflight: state.classifierPreflight,
+      includePassiveGuidance: !automatic,
+    }),
     buildPreworkSkillBootstrapBlock(state),
-    buildGovernancePromptFragment({ route, parentTask }),
+    buildGovernancePromptFragment({
+      route,
+      parentTask,
+      includeModelWorkflowHints: !automatic,
+    }),
   ].filter(Boolean).join('\n\n');
 }
 
-function buildModelRoutingCheckpointBlock({ route, parentTask = '', preflight = null } = {}) {
+function buildModelRoutingCheckpointBlock({
+  route,
+  parentTask = '',
+  preflight = null,
+  includePassiveGuidance = false,
+} = {}) {
   if (!route || route.intent === 'subagent') return null;
   if (preflight?.required) {
     return [
@@ -1339,9 +1388,23 @@ function buildModelRoutingCheckpointBlock({ route, parentTask = '', preflight = 
       'Classifier preflight: required before route skills, QA/gate tools, task subagents, file edits, or final output.',
       `Initial deterministic route: ${route.intent}.`,
       preflight.reasons?.length ? `Trigger reasons: ${preflight.reasons.join('; ')}.` : null,
+      preflight.observations?.length > 1 ? formatClassifierObservationBlock(preflight.observations) : null,
       'Required sequence: call `omp_core_classifier_prompt`, use OMP Tiny (`modelRoles.tiny`) to produce strict classifier JSON, then call `omp_core_resolve_classification` with the original user task and JSON output.',
       'The resolved classifier route supersedes this initial route for skills, tools, gates, and subagents.',
       parentTask ? `Original user task: ${String(parentTask).slice(0, 500)}` : null,
+    ].filter(Boolean).join('\n');
+  }
+  if (!includePassiveGuidance) return null;
+  if (preflight?.mode === 'observe') {
+    return [
+      '### OMP Enhancer Core model routing checkpoint',
+      'Classifier observation: non-blocking.',
+      `Initial deterministic route: ${route.intent}.`,
+      preflight.reasons?.length ? `Observation reasons: ${preflight.reasons.join('; ')}.` : null,
+      'Do not block tools or final output only because this route is unknown. Allow ordinary work to proceed while accumulating context.',
+      'If a later user turn or tool result clarifies the task as coding, writing, testing, security, config, diagnosis, or release work, call `omp_core_classifier_prompt` with the accumulated context and then `omp_core_resolve_classification`.',
+      preflight.observations?.length ? formatClassifierObservationBlock(preflight.observations) : null,
+      parentTask ? `Current user task: ${String(parentTask).slice(0, 500)}` : null,
     ].filter(Boolean).join('\n');
   }
   return [
@@ -1352,6 +1415,23 @@ function buildModelRoutingCheckpointBlock({ route, parentTask = '', preflight = 
     'Do not continue under a route that would obviously trigger the wrong workflow gate.',
     parentTask ? `Original user task: ${String(parentTask).slice(0, 500)}` : null,
   ].filter(Boolean).join('\n');
+}
+
+function formatClassifierObservationBlock(observations = []) {
+  if (!observations.length) return null;
+  return [
+    'Observed uncertain context:',
+    ...observations.map((item, index) => `${index + 1}. ${String(item).slice(0, 240)}`),
+  ].join('\n');
+}
+
+function classifierPromptContext(state, prompt = '') {
+  const observations = state.classifierPreflight?.observations ?? [];
+  const current = cleanText(prompt);
+  return uniqueValues([
+    ...observations,
+    ...(current ? [current] : []),
+  ]).slice(-4);
 }
 
 function buildPreworkSkillBootstrapBlock(state) {

@@ -175,6 +175,7 @@ test('classifier tools expose model role configuration and resolve route state',
   assert.match(governance.details.fragment, /checker/);
   assert.match(governance.details.fragment, /modelRoles\.tiny/);
   assert.match(governance.details.fragment, /Smart gate policy/);
+  assert.match(governance.details.fragment, /Treat needs-work as local follow-up, not BLOCKERS/);
 });
 
 test('before_agent_start injects governance context and routes natural-language prompts', async () => {
@@ -189,9 +190,10 @@ test('before_agent_start injects governance context and routes natural-language 
   const fragment = governanceText(result, agentEvent);
 
   assert.match(fragment, /pre-work skill bootstrap/);
-  assert.match(fragment, /model routing checkpoint/);
-  assert.match(fragment, /deterministic route is a fallback, not a lock/);
-  assert.ok(fragment.indexOf('model routing checkpoint') < fragment.indexOf('pre-work skill bootstrap'));
+  assert.doesNotMatch(fragment, /model routing checkpoint/);
+  assert.doesNotMatch(fragment, /deterministic route is a fallback, not a lock/);
+  assert.doesNotMatch(fragment, /Smart gate policy/);
+  assert.doesNotMatch(fragment, /Classifier model policy/);
   assert.match(fragment, /task subagents load subagent skills/);
   assert.match(fragment, /Do not read root route skills in the main agent just to unlock task/);
   assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
@@ -339,8 +341,10 @@ test('before_agent_start still routes prompts that begin with absolute paths', a
   const result = await event(pi, 'before_agent_start')(agentEvent, ctx);
   const fragment = governanceText(result, agentEvent);
 
-  assert.match(fragment, /OMP Enhancer Core Routing/);
-  assert.match(fragment, /Intent:\s*unknown/);
+  assert.equal(result.route.intent, 'unknown');
+  assert.equal(result.additionalContext, undefined);
+  assert.doesNotMatch(fragment, /OMP Enhancer Core Routing/);
+  assert.doesNotMatch(fragment, /Classifier observation/);
 });
 
 test('before_agent_start treats gate validator status reports as diagnosis without config subagents', async () => {
@@ -3558,43 +3562,73 @@ test('failed skill validation can be corrected by final evidence without repeate
   await assertReleasedStops(pi, ctx, [{ output: correctedOutput }, {}, {}]);
 });
 
+test('unknown routes observe classifier context without blocking tools or final output', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'What is the capital of France?';
+
+  await event(pi, 'session_start')({}, ctx);
+  const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
+
+  assert.equal(start.route.intent, 'unknown');
+  assert.equal(start.additionalContext, undefined);
+
+  const toolResult = await event(pi, 'tool_call')({ toolName: 'bash', input: { command: 'date' } }, ctx);
+  assert.equal(toolResult, undefined);
+
+  await assertReleasedStops(pi, ctx, [{ output: 'Paris.' }, {}, { output: 'Done.' }]);
+});
+
+test('unknown route classifier observations accumulate across follow-up prompts', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt: '帮我看看这个东西。' }, ctx);
+  const followUp = await event(pi, 'before_agent_start')({ prompt: '先不用动代码，只解释可能的方向。' }, ctx);
+
+  assert.equal(followUp.route.intent, 'unknown');
+  assert.equal(followUp.additionalContext, undefined);
+
+  const routeState = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(routeState.classifierPreflight.mode, 'observe');
+  assert.equal(routeState.classifierPreflight.required, false);
+  assert.deepEqual(routeState.classifierPreflight.observations, [
+    '帮我看看这个东西。',
+    '先不用动代码，只解释可能的方向。',
+  ]);
+
+  const classifierPrompt = await tool(pi, 'omp_core_classifier_prompt').execute(
+    'call-observed-context-classifier-prompt',
+    { prompt: '现在看起来是插件路由问题，帮我判断工作流。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.match(classifierPrompt.content[0].text, /Observed uncertain context:/);
+  assert.match(classifierPrompt.content[0].text, /帮我看看这个东西。/);
+  assert.match(classifierPrompt.content[0].text, /先不用动代码，只解释可能的方向。/);
+  assert.match(classifierPrompt.content[0].text, /现在看起来是插件路由问题/);
+});
+
 test('non-gated diagnosis release and unknown routes do not create repeated gate continuations', async () => {
   const workloads = [
     { prompt: '为什么这个插件一直提示 SKILL_USAGE validation 失败？先诊断原因，不要改代码。', classifier: false },
     { prompt: 'Push the current release commit and upgrade marketplace plugins.', classifier: false },
-    { prompt: 'What is the capital of France?', classifier: true },
+    { prompt: 'What is the capital of France?', classifier: false },
   ];
 
-  for (const { prompt, classifier } of workloads) {
+  for (const { prompt } of workloads) {
     const pi = new FakePi();
     registerCoreEnhancer(pi);
     const ctx = extensionContext();
 
     await event(pi, 'session_start')({}, ctx);
     await event(pi, 'before_agent_start')({ prompt }, ctx);
-    if (classifier) {
-      const blocked = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
-      assert.equal(blocked?.continue, true, prompt);
-      assert.match(blocked.additionalContext, /classifier preflight is still required/);
-      await tool(pi, 'omp_core_resolve_classification').execute(
-        `call-unknown-classifier-resolve-${prompt.replace(/[^A-Za-z0-9]+/g, '-')}`,
-        {
-          prompt,
-          output: JSON.stringify({
-            intent: 'unknown',
-            secondaryIntents: [],
-            language: 'en',
-            confidence: 0.92,
-            riskFlags: [],
-            domainHints: ['general knowledge'],
-            reason: 'No OMP plugin workflow should run.',
-          }),
-        },
-        undefined,
-        undefined,
-        ctx,
-      );
-    }
     await assertReleasedStops(pi, ctx, [{}, {}, { output: 'Done.' }]);
   }
 });
