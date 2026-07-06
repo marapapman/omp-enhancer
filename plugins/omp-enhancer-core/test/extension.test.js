@@ -624,6 +624,7 @@ test('task tool_call accepts marker-only bug-audit assignments and descriptive r
             role: 'generate a deduplicated multi-channel test matrix',
             assignment: [
               'OMP_REQUIRED_SUBAGENT: ecc-tdd-guide',
+              'OMP_PARENT_TASK: test subagent fork logic',
               'Required skills for this subagent:',
               '- test-driven-development',
               '- search-first',
@@ -633,6 +634,7 @@ test('task tool_call accepts marker-only bug-audit assignments and descriptive r
           {
             assignment: [
               'OMP_REQUIRED_SUBAGENT: ecc-code-reviewer',
+              'OMP_PARENT_TASK: test subagent fork logic',
               'Required skills for this subagent:',
               '- verification-before-completion',
             ].join('\n'),
@@ -640,6 +642,7 @@ test('task tool_call accepts marker-only bug-audit assignments and descriptive r
           {
             assignment: [
               'OMP_REQUIRED_SUBAGENT: ecc-silent-failure-hunter',
+              'OMP_PARENT_TASK: test subagent fork logic',
               'Required skills for this subagent:',
               '- diagnose',
             ].join('\n'),
@@ -647,6 +650,7 @@ test('task tool_call accepts marker-only bug-audit assignments and descriptive r
           {
             assignment: [
               'OMP_REQUIRED_SUBAGENT: ecc-pr-test-analyzer',
+              'OMP_PARENT_TASK: test subagent fork logic',
               'Required skills for this subagent:',
               '- verification-before-completion',
             ].join('\n'),
@@ -673,6 +677,43 @@ test('task tool_call accepts marker-only bug-audit assignments and descriptive r
     'ecc-silent-failure-hunter',
     'ecc-pr-test-analyzer',
   ]);
+});
+
+test('bug-audit task tool_call blocks before fork when parent task context is missing', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '帮我测试整个 subagent fork 逻辑，检查是 LLM 的错误还是门禁的错误。' },
+    ctx,
+  );
+
+  const blocked = await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [
+          {
+            role: 'ecc-tdd-guide',
+            assignment: [
+              'OMP_REQUIRED_SUBAGENT: ecc-tdd-guide',
+              'Required skills for this subagent:',
+              '- test-driven-development',
+              '- search-first',
+              '- ai-regression-testing',
+            ].join('\n'),
+          },
+        ],
+      },
+    },
+    ctx,
+  );
+
+  assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /Missing bug-audit parent task context: ecc-tdd-guide/);
+  assert.match(blocked.reason, /OMP_PARENT_TASK: 帮我测试整个 subagent fork 逻辑/);
 });
 
 test('task tool_call does not report prose role text as an unexpected subagent', async () => {
@@ -812,6 +853,52 @@ test('pre-work skill gate blocks simple writing edits until writing skills are r
   );
 
   assert.equal(allowed, undefined);
+});
+
+test('focused bug audit preloads main-agent skills instead of blocking on subagent delegation', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  const startResult = await event(pi, 'before_agent_start')(
+    { prompt: 'Do the bug investigation directly as a focused audit; report verified findings only.' },
+    ctx,
+  );
+  const startFragment = governanceText(startResult, {});
+
+  assert.match(startFragment, /focused audit skill preflight/i);
+  assert.match(startFragment, /Do not fork the heavy bug-audit subagent set/i);
+  assert.match(startFragment, /read skill:\/\/diagnose/);
+  assert.match(startFragment, /read skill:\/\/test-driven-development/);
+  assert.match(startFragment, /read skill:\/\/verification-before-completion/);
+  assert.match(startFragment, /read skill:\/\/search-first/);
+  assert.match(startFragment, /Focused Bug Audit Test Generation Contract/);
+  assert.doesNotMatch(startFragment, /OMP_REQUIRED_SUBAGENT:\s*ecc-tdd-guide/);
+
+  const noSubagentBlock = await event(pi, 'session_stop')({}, ctx);
+  assert.equal(noSubagentBlock?.continue, true);
+  assert.doesNotMatch(noSubagentBlock.additionalContext, /subagent gate/i);
+  assert.match(noSubagentBlock.additionalContext, /omp_test_gate/);
+
+  const blockedTool = await event(pi, 'tool_call')(
+    { toolName: 'omp_test_gate', input: { passed: true } },
+    ctx,
+  );
+
+  assert.equal(blockedTool?.block, true);
+  assert.match(blockedTool.reason, /pre-work main-agent skill gate/);
+  assert.match(blockedTool.reason, /diagnose/);
+  assert.match(blockedTool.reason, /search-first/);
+
+  await readSkills(pi, ctx, ['diagnose', 'test-driven-development', 'verification-before-completion', 'search-first']);
+
+  const allowedTool = await event(pi, 'tool_call')(
+    { toolName: 'omp_test_gate', input: { passed: true } },
+    ctx,
+  );
+
+  assert.equal(allowedTool, undefined);
 });
 
 test('pre-work skill gate accepts legacy ECC security skill aliases', async () => {
@@ -2507,6 +2594,80 @@ test('validator evidence persists through session entries across isolated plugin
   assert.equal(entries.some((entry) => entry.customType === 'omp-enhancer-core.state'), true);
 });
 
+test('skill validator accepts delegated subagent loaded evidence from task result text', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: 'Review this API handler for auth bypass and injection risks.' },
+    ctx,
+  );
+
+  const taskCall = await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      toolCallId: 'security-review-task',
+      input: {
+        tasks: [
+          {
+            role: 'ecc-security-reviewer',
+            assignment: [
+              'OMP_REQUIRED_SUBAGENT: ecc-security-reviewer',
+              'OMP_PARENT_TASK: Review this API handler for auth bypass and injection risks.',
+              'Required skills for this subagent:',
+              '- security-review',
+              '- security-scan',
+            ].join('\n'),
+          },
+          {
+            role: 'reviewer',
+            assignment: [
+              'OMP_REQUIRED_SUBAGENT: reviewer',
+              'OMP_PARENT_TASK: Review this API handler for auth bypass and injection risks.',
+              'Required skills for this subagent:',
+              '- security-review',
+            ].join('\n'),
+          },
+        ],
+      },
+    },
+    ctx,
+  );
+
+  assert.equal(taskCall, undefined);
+
+  await event(pi, 'tool_result')(
+    {
+      name: 'task',
+      toolCallId: 'security-review-task',
+      content: [
+        {
+          type: 'text',
+          text: [
+            'GATE COMPLETE: ecc-security-reviewer skills [security-review, security-scan] loaded and applied.',
+            'GATE COMPLETE: reviewer skills [security-review] loaded and applied.',
+          ].join('\n'),
+        },
+      ],
+    },
+    ctx,
+  );
+
+  const validation = await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-delegated-gate-complete-skill-usage',
+    { output: '' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(validation.details.validation.ok, true);
+  assert.deepEqual(validation.details.validation.loaded, ['security-review', 'security-scan']);
+  assert.deepEqual(validation.details.validation.missing, []);
+});
+
 test('session_stop accepts final usage blocks when validator tool state is unavailable', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -2688,6 +2849,53 @@ test('bug-audit route requires native task evidence for required testing and aud
 
   await forkSubagents(pi, ctx, agents);
   await assertReleasedStops(pi, ctx, [{}, { output: 'Final summary only.' }]);
+});
+
+test('bug-audit delivered report stops internal validation loops after confirmed findings', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: 'Find bugs in the project and report verified findings only.' },
+    ctx,
+  );
+
+  const placeholder = await event(pi, 'session_stop')(
+    {
+      output: [
+        'BUG-AUDIT-REPORT',
+        'Status: draft',
+        'Findings:',
+        '- none yet',
+      ].join('\n'),
+    },
+    ctx,
+  );
+
+  assert.equal(placeholder?.continue, true);
+  assert.match(placeholder.additionalContext, /subagent gate|omp_test_gate|SKILL_USAGE/);
+
+  const delivered = await event(pi, 'session_stop')(
+    {
+      output: [
+        'BUG-AUDIT-REPORT',
+        'Summary: 4 RED-confirmed bugs, 12 total live findings.',
+        'Findings:',
+        '- RED-confirmed bug: router accepts stale task evidence after reroute.',
+        '- RED-confirmed bug: task gate prompt omitted required parent context.',
+      ].join('\n'),
+    },
+    ctx,
+  );
+
+  assert.equal(delivered, undefined);
+
+  const restoredPi = new FakePi(entries);
+  registerCoreEnhancer(restoredPi);
+  await assertReleasedStops(restoredPi, extensionContext(entries), [{}, { output: 'No new validation evidence.' }]);
 });
 
 test('bug audit route requires audit subagents with parent task context', async () => {

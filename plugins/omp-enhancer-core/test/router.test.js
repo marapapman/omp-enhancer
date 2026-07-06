@@ -64,6 +64,17 @@ const routingCases = [
     },
   },
   {
+    name: 'focused direct bug audit routes to direct audit profile',
+    prompt: 'Do the bug investigation directly as a focused audit; report verified findings only.',
+    expectedIntent: 'bug-audit',
+    expectedAgent: 'tester',
+    requiredSkills: ['diagnose', 'test-driven-development', 'verification-before-completion', 'search-first'],
+    requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report'],
+    requiredSubagents: [],
+    requiredSubagentSkills: {},
+    auditMode: 'focused',
+  },
+  {
     name: 'implementation with tests request routes to coding plus testing profile',
     prompt: '实现这个路由功能并补测试，先写失败用例，再完成实现。',
     expectedIntent: 'implementation-with-tests',
@@ -143,6 +154,7 @@ test('routes natural language tasks to required skill profiles without slash com
       item.requiredSubagentSkills,
       item.name,
     );
+    assert.equal(route.auditMode ?? null, item.auditMode ?? null, item.name);
     assert.equal(route.source, 'natural-language', item.name);
   }
 });
@@ -150,9 +162,11 @@ test('routes natural language tasks to required skill profiles without slash com
 test('routes mixed real-world workloads without false workflow gates', () => {
   const cases = [
     ['large agentic code writing', '请大规模重构这个插件的 subagent fork 逻辑，修改多个文件并补完整测试。', 'implementation-with-tests', ['plan', 'task', 'reviewer']],
+    ['direct audit context followed by workflow optimization', 'The OMP gate is blocking delegation. Let me do the bug investigation directly as a focused audit. 帮我优化插件的工作流，再事前准备好skills。', 'implementation-with-tests', ['plan', 'task', 'reviewer']],
     ['precise scoped code edit', '只修改 plugins/omp-enhancer-core/src/router.js 里 routeNaturalLanguageTask 的一个判断，保持范围最小。', 'implementation-with-tests', ['plan', 'task', 'reviewer']],
     ['agentic code modification', 'Agentically update the codebase to improve gate handling and add regression tests.', 'implementation-with-tests', ['plan', 'task', 'reviewer']],
     ['read-only code bug finding', '帮我在代码里找 bug，只报告问题，不要修复。', 'bug-audit', ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer']],
+    ['focused direct bug audit', '直接做 focused bug audit，只报告验证过的问题。', 'bug-audit', []],
     ['code testing workload', '帮我为 subagent fork 逻辑生成测试并运行门禁，不要改实现。', 'bug-audit', ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer']],
     ['large Chinese writing', '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。', 'writing.zh', ['zh-writer', 'zh-checker']],
     ['small Chinese text revision', '把这句话改成朴素直接的中文：我们需要进一步推动能力沉淀。', 'writing.zh', []],

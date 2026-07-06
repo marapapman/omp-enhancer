@@ -86,6 +86,13 @@ const expectedByIntent = {
   },
 };
 
+const focusedBugAuditExpected = {
+  agent: 'tester',
+  requiredSkills: ['diagnose', 'test-driven-development', 'verification-before-completion', 'search-first'],
+  requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report'],
+  subagents: {},
+};
+
 const simpleWritingExpectedByIntent = {
   'writing.zh': {
     agent: 'writing-helper.zh-writer',
@@ -122,12 +129,14 @@ const workloadMatrix = [
   ['marketplace implementation', '修改 marketplace 发布逻辑，修复版本同步 bug，并补测试。', 'implementation-with-tests'],
   ['hook workflow implementation', 'Update the plugin hook workflow and add regression tests.', 'implementation-with-tests'],
   ['large agentic code writing workload', '请大规模重构这个插件的 subagent fork 逻辑，修改多个文件并补完整测试。', 'implementation-with-tests'],
+  ['direct audit context plus workflow optimization', 'The OMP gate is blocking delegation. Let me do the bug investigation directly as a focused audit. 帮我优化插件的工作流，再事前准备好skills。', 'implementation-with-tests'],
   ['precise scoped code edit workload', '只修改 plugins/omp-enhancer-core/src/router.js 里 routeNaturalLanguageTask 的一个判断，保持范围最小。', 'implementation-with-tests'],
   ['agentic code modification workload', 'Agentically update the codebase to improve gate handling and add regression tests.', 'implementation-with-tests'],
   ['unit test authoring', '为 classifier 写高信号单元测试，覆盖 fallback 和边界。', 'bug-audit'],
   ['coverage audit read-only', '检查当前测试覆盖率，并指出缺口，不要改代码。', 'bug-audit'],
   ['bug audit read-only', '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。', 'bug-audit'],
   ['bug audit english', 'Run tests and audit for bugs; write a bug report without fixing code.', 'bug-audit'],
+  ['focused direct bug audit', 'Do the bug investigation directly as a focused audit; report verified findings only.', 'bug-audit'],
   ['test flakiness', 'Review test flakiness around the browser smoke suite and report the likely cause.', 'bug-audit'],
   ['browser e2e verification', 'Run browser e2e verification for the changed workflow and report failures.', 'bug-audit'],
   ['read-only code bug finding workload', '帮我在代码里找 bug，只报告问题，不要修复。', 'bug-audit'],
@@ -174,6 +183,7 @@ test('workload matrix routes to the expected agent, tools, skills, and subagents
 });
 
 function expectedForRoute(expectedIntent, route) {
+  if (expectedIntent === 'bug-audit' && route.auditMode === 'focused') return focusedBugAuditExpected;
   if (route.writingComplexity === 'simple') return simpleWritingExpectedByIntent[expectedIntent];
   return expectedByIntent[expectedIntent];
 }

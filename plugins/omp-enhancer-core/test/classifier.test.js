@@ -100,6 +100,29 @@ test('resolveClassificationRoute maps bug audit classifier output to audit subag
   ]);
 });
 
+test('resolveClassificationRoute preserves focused audit mode from the deterministic route', () => {
+  const result = resolveClassificationRoute({
+    prompt: 'Do the bug investigation directly as a focused audit; report verified findings only.',
+    output: JSON.stringify({
+      intent: 'bug-audit',
+      secondaryIntents: [],
+      language: 'en',
+      confidence: 0.91,
+      riskFlags: ['needs-tests', 'needs-review'],
+      domainHints: ['focused audit'],
+      reason: 'The user asks for direct bug investigation without fixing code.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.fallbackRoute.intent, 'bug-audit');
+  assert.equal(result.fallbackRoute.auditMode, 'focused');
+  assert.equal(result.route.intent, 'bug-audit');
+  assert.equal(result.route.auditMode, 'focused');
+  assert.deepEqual(result.route.requiredSubagents, []);
+  assert.deepEqual(result.route.requiredSkills, ['diagnose', 'test-driven-development', 'verification-before-completion', 'search-first']);
+});
+
 test('resolveClassificationRoute aliases legacy testing classifier output to bug audit', () => {
   const result = resolveClassificationRoute({
     prompt: '为 classifier 写高信号单元测试，覆盖 fallback 和边界。',

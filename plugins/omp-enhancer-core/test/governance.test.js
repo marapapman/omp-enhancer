@@ -96,6 +96,29 @@ test('prefers installed skill aliases in subagent read instructions', () => {
   assert.match(fragment, /SUBAGENT_USAGE:\n- ecc-security-reviewer: security-review, security-scan/);
 });
 
+test('focused bug audit governance preloads skills without heavy subagent delegation', () => {
+  const fragment = buildGovernancePromptFragment({
+    route: {
+      intent: 'bug-audit',
+      agent: 'tester',
+      auditMode: 'focused',
+      requiredSkills: ['diagnose', 'test-driven-development', 'verification-before-completion', 'search-first'],
+      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate', 'omp_test_report'],
+      requiredSubagents: [],
+    },
+  });
+
+  assert.match(fragment, /focused direct bug-audit route/i);
+  assert.match(fragment, /preload the focused audit skills/i);
+  assert.match(fragment, /Focused Bug Audit Test Generation Contract/);
+  assert.match(fragment, /No routed subagents are required/);
+  assert.match(fragment, /Required subagents:\n- none/);
+  assert.match(fragment, /omp_test_gate/);
+  assert.match(fragment, /diagnose/);
+  assert.doesNotMatch(fragment, /ecc-tdd-guide generates/);
+  assert.doesNotMatch(fragment, /OMP_REQUIRED_SUBAGENT:/);
+});
+
 test('subagent contracts accept installed aliases while preserving canonical Required names', () => {
   const fragment = buildSubagentPromptFragment({
     prompt: [

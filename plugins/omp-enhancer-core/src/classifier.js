@@ -110,6 +110,7 @@ export function buildClassifierPrompt({
       '- File-path, line-number, function, module, or scoped source edits are still implementation-with-tests even when the user asks for a small precise change.',
       '- Dependency upgrades, code migrations, scaffolding new plugin commands/agents/skills, and deleting legacy code are implementation-with-tests.',
       '- Use bug-audit when the user asks to test, inspect, find, or report bugs without asking to fix or modify code.',
+      '- Focused or direct bug investigations are still bug-audit; the deterministic route may attach a focused direct-audit mode.',
       '- Use bug-audit for executable test analysis, coverage review, browser verification, flaky test review, and read-only testing workflows. The legacy testing intent resolves to bug-audit and should not be preferred for new outputs.',
       '- Prefer writing.zh for Chinese prose editing or drafting; prefer writing.en for English prose editing or drafting.',
       '- Pure bug-report drafting is writing; testing, finding, auditing, or verifying bugs is bug-audit.',
@@ -251,7 +252,7 @@ function isNonWritingWorkflowIntent(intent) {
 }
 
 function classifiedRoute(routeIntent, fallbackRoute) {
-  if (isWritingIntent(routeIntent) && fallbackRoute.intent === routeIntent) {
+  if (fallbackRoute.intent === routeIntent) {
     return {
       ...fallbackRoute,
       source: 'llm-classifier',

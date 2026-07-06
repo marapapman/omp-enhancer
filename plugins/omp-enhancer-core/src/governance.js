@@ -80,6 +80,15 @@ export function buildGovernancePromptFragment({ route, parentTask = '' } = {}) {
 
 function skillWorkflowLines(route) {
   const hasSubagents = (route.requiredSubagents ?? []).length > 0;
+  if (isFocusedBugAuditRoute(route)) {
+    return [
+      'This is a focused direct bug-audit route. The main agent does the bounded audit directly instead of forking the heavy audit subagent set.',
+      'Before using edit, write, bash, route-specific QA, or omp_test_* gates, preload the focused audit skills with read calls and wait for the results.',
+      'Use the skills to build a compact local test matrix, inspect the concrete failure path, run the relevant checks, and finish with omp_test_gate plus SKILL_USAGE evidence.',
+      'Do not fork bug-audit subagents unless the user expands the task into a broad audit or asks for parallel delegation.',
+    ];
+  }
+
   if (hasSubagents) {
     return [
       'This route delegates required skill loading to the task subagents. Do not read root route skills in the main agent just to unlock task.',
@@ -178,6 +187,7 @@ function workflowFor(route) {
   }
   if (intent === 'writing.zh') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, zh-writer -> zh-checker -> writing_quality_check.';
   if (intent === 'writing.en') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, writer -> checker -> writing_quality_check.';
+  if (intent === 'bug-audit' && isFocusedBugAuditRoute(route)) return 'Focused bug audit workflow: preload focused audit skills -> inspect the bounded failure path directly -> generate and run the smallest high-signal local test matrix -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> focused BUG-AUDIT-REPORT.';
   if (intent === 'bug-audit') return 'Bug audit workflow: ecc-tdd-guide generates a deduplicated multi-channel executable test matrix -> ecc-code-reviewer static audit -> ecc-silent-failure-hunter failure-path audit -> ecc-pr-test-analyzer checks generated tests, duplicate removal, execution results, and coverage gaps -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> BUG-AUDIT-REPORT or final bug report.';
   if (intent === 'testing') return 'Legacy testing intent: use the merged bug-audit workflow and testing-enhancer toolchain.';
   if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> task -> reviewer -> lightweight TDD -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report.';
@@ -207,6 +217,24 @@ function routeBoundaryFor(route) {
 
 function bugAuditTestGenerationLines(route) {
   if (route.intent !== 'bug-audit') return [];
+
+  if (isFocusedBugAuditRoute(route)) {
+    return [
+      '### Focused Bug Audit Test Generation Contract',
+      '',
+      'Static analysis alone is not sufficient. Generate and run a compact, high-signal test matrix for the bounded failure path before final claims.',
+      '',
+      'Required focused channels:',
+      '- Local code summary: summarize the target block, public contracts, invariants, branches, state transitions, and existing tests before generating cases.',
+      '- Local evidence: mine existing tests, failures, logs, fixtures, issue text in the checkout, and similar modules for missing behaviors.',
+      '- Model-derived adversarial cases: generate negative, malformed, boundary, regression, and error-propagation cases from the summarized behavior.',
+      '',
+      'Scope control:',
+      '- Do not launch the full bug-audit subagent workflow unless the user broadens the task.',
+      '- Deduplicate by behavior signature and run the smallest set that can confirm or falsify the suspected bug.',
+      '- Report generated, executed, skipped, and duplicate-removed case counts in the focused BUG-AUDIT-REPORT.',
+    ];
+  }
 
   return [
     '### Bug Audit Test Generation Contract',
@@ -281,6 +309,10 @@ function subagentWorkflowLines(route, { parentTask = '' } = {}) {
     '',
     formatSubagentUsageBlock(requiredSubagents),
   ];
+}
+
+function isFocusedBugAuditRoute(route) {
+  return route?.intent === 'bug-audit' && route.auditMode === 'focused';
 }
 
 function formatList(values = []) {

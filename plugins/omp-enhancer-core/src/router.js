@@ -106,6 +106,7 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasTestReportWriting = isTestReportWritingRequest(normalized);
   const hasBugReportWriting = isBugReportWritingRequest(normalized);
   const hasBugAudit = !hasBugReportWriting && isBugAuditRequest(normalized);
+  const hasFocusedBugAudit = hasBugAudit && isFocusedDirectAuditRequest(normalized);
   const hasKnowledgeOnly = isKnowledgeWorkWithoutWritingArtifact(normalized);
   const hasCoding = !asksNoCodeChange && !hasBugAudit && !hasKnowledgeOnly && isCodeChangeRequest(normalized);
   const hasCodeChange = hasCoding && !hasTestReportWriting;
@@ -124,7 +125,7 @@ export function routeNaturalLanguageTask(input = {}) {
   }
 
   if (hasBugAudit) {
-    return routeByIntent('bug-audit');
+    return routeByIntent('bug-audit', { auditMode: hasFocusedBugAudit ? 'focused' : null });
   }
 
   if (hasTestReportWriting) {
@@ -178,7 +179,7 @@ export function routeNaturalLanguageTask(input = {}) {
   return unknownRoute();
 }
 
-export function routeByIntent(intent, { source = 'natural-language', writingComplexity = 'complex' } = {}) {
+export function routeByIntent(intent, { source = 'natural-language', writingComplexity = 'complex', auditMode = null } = {}) {
   if (intent === 'testing') {
     return routeByIntent('bug-audit', { source, writingComplexity });
   }
@@ -228,6 +229,18 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
   }
 
   if (intent === 'bug-audit') {
+    if (auditMode === 'focused') {
+      return route({
+        intent,
+        agent: 'tester',
+        requiredSkills: ['diagnose', 'test-driven-development', 'verification-before-completion', 'search-first'],
+        requiredTools: testingEnhancerTools,
+        requiredSubagents: [],
+        auditMode,
+        source,
+      });
+    }
+
     return route({
       intent,
       agent: 'tester',
@@ -287,6 +300,7 @@ function route({
   requiredTools = [],
   requiredSubagents = [],
   writingComplexity = null,
+  auditMode = null,
   source = 'natural-language',
 }) {
   const routed = {
@@ -298,6 +312,7 @@ function route({
     source,
   };
   if (writingComplexity) routed.writingComplexity = writingComplexity;
+  if (auditMode) routed.auditMode = auditMode;
   return routed;
 }
 
@@ -399,11 +414,12 @@ function isBugAuditRequest(text) {
   }
   const negatesFix = /(?:without|do not|don't|not)\s+(?:fixing|fix|modifying|modify|changing|change)/.test(text)
     || /(?:不要|先不要)(?:修复|修改|改代码|改)|不(?:修复|修改|改代码|改实现)/.test(text);
-  const asksForChange = /(?:\b(?:fix|repair|resolve|implement|modify|refactor|update)\b|修复|修改|修正|更新|实现|重构|开发|补测试|写测试|add tests?|write tests?)/.test(text);
+  const asksForChange = /(?:\b(?:fix|repair|resolve|implement|modify|refactor|update|optimize|improve|adjust)\b|修复|修改|修正|更新|实现|重构|开发|优化|改进|调整|补测试|写测试|add tests?|write tests?)/.test(text);
   if (asksForChange && !negatesFix && !isReportOnlyAudit(text)) {
     return false;
   }
   return /(?:check|find|audit|hunt|scan|test|run tests?|inspect|investigate)\s+.*(?:bugs?|defects?)/.test(text)
+    || /\b(?:bugs?|defects?)\s+(?:audit|investigation|inspection|hunt|scan)\b/.test(text)
     || /(?:bugs?|defects?)\s+.*(?:audit|hunt|report|find|check|list)/.test(text)
     || /(?:测试|检查|排查|审查|扫描|查找|找|发现).*(?:bug|bugs|缺陷)/.test(text)
     || /(?:测试|检查|排查|审查|扫描|查找|找|发现).*(?:代码|项目|插件|实现|接口|workflow|工作流|门禁).*(?:问题)/.test(text)
@@ -414,6 +430,13 @@ function isBugAuditRequest(text) {
     || /(?:检查|审查|核对).*(?:docker-compose|docker compose|helm values|k8s|kubernetes|manifest|配置文件|yml|yaml).*(?:只报告|缺|一致|问题|风险|端口|volume|required)/.test(text)
     || /(?:检查|审查|核对).*(?:classifier|router|route|prompt|提示词).*(?:误路由|错误路由|错误|诱导|问题|风险)/.test(text)
     || /(?:bug|bugs|缺陷).*(?:审计|检查|报告|清单|定位)/.test(text);
+}
+
+function isFocusedDirectAuditRequest(text) {
+  return /\b(?:focused|direct|single-agent|single agent|main-agent|main agent)\s+(?:bug\s+)?(?:audit|investigation|debugging|inspection)\b/.test(text)
+    || /\b(?:do|run|handle|perform)\s+(?:the\s+)?(?:bug\s+)?(?:audit|investigation|inspection)\s+directly\b/.test(text)
+    || /(?:直接|自己|主\s*agent|main\s*agent).*(?:审计|检查|排查|调查|找\s*bug|查\s*bug|bug\s*investigation)/.test(text)
+    || /(?:聚焦|小范围|定向|局部|focused).*(?:审计|检查|排查|调查|bug|问题)/.test(text);
 }
 
 function isBugReportWritingRequest(text) {

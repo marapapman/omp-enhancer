@@ -7,23 +7,29 @@ const placeholderValues = new Set(['todo', 'tbd', '<required skill>', '<skill>',
 let runtimeSkillAliases;
 
 export function validateSkillUsage({ requiredSkills = [], output = '', loadedSkills = [] } = {}) {
-  const authoritative = findAuthoritativeSkillUsage(String(output));
-  const denied = findDeniedSkills(String(output), requiredSkills);
+  const text = String(output);
+  const authoritative = findAuthoritativeSkillUsage(text);
+  const denied = findDeniedSkills(text, requiredSkills);
   const externallyLoaded = normalizeLoadedSkills(loadedSkills, requiredSkills);
+  const outputLoaded = normalizeLoadedSkills(parseLoadedSkillEvidence(text), requiredSkills);
+  const loadedEvidence = uniqueValues([
+    ...outputLoaded,
+    ...externallyLoaded,
+  ]);
 
   if (!authoritative) {
-    const missing = findMissingSkills(requiredSkills, externallyLoaded);
+    const missing = findMissingSkills(requiredSkills, loadedEvidence);
     const ok = missing.length === 0 && denied.length === 0;
 
     return {
       ok,
       required: requiredSkills,
-      loaded: externallyLoaded,
+      loaded: loadedEvidence,
       missing,
       invalid: [],
       denied,
       message: ok
-        ? (requiredSkills.length ? 'SKILL_USAGE ok from read skill evidence.' : 'No required skills.')
+        ? (requiredSkills.length ? skillEvidenceMessage({ outputLoaded, externallyLoaded }) : 'No required skills.')
         : (missing.length ? `Missing SKILL_USAGE for ${missing.join(', ')}` : buildMessage({ missing, invalid: [], denied })),
     };
   }
@@ -33,6 +39,7 @@ export function validateSkillUsage({ requiredSkills = [], output = '', loadedSki
   const effectiveLoaded = parsed.loaded.filter((entry) => !isPlaceholder(entry));
   const loaded = uniqueValues([
     ...effectiveLoaded.map((entry) => canonicalizeSkillName(entry, requiredSkills)).filter(Boolean),
+    ...outputLoaded,
     ...externallyLoaded,
   ]);
   const missing = findMissingSkills(requiredSkills, loaded);
@@ -52,6 +59,14 @@ export function validateSkillUsage({ requiredSkills = [], output = '', loadedSki
 export function parseSkillUsage(output = '') {
   const block = findAuthoritativeSkillUsage(String(output));
   return block ? parseSkillUsageBlock(block) : { required: [], loaded: [] };
+}
+
+export function parseLoadedSkillEvidence(output = '') {
+  const text = String(output);
+  return uniqueValues([
+    ...parseSkillUsage(text).loaded,
+    ...parseLooseLoadedSkillEvidence(text),
+  ].map((entry) => cleanSkillEntry(entry)).filter((entry) => entry && !isPlaceholder(entry)));
 }
 
 function findAuthoritativeSkillUsage(output) {
@@ -116,6 +131,87 @@ function findDeniedSkills(output, requiredSkills) {
       return new RegExp(`did not load\\s+${escaped}|without loading\\s+${escaped}|未加载\\s*${escaped}|没有加载\\s*${escaped}`).test(lower);
     }) || hasNamespacedDenial(lower, skill);
   });
+}
+
+function skillEvidenceMessage({ outputLoaded = [], externallyLoaded = [] } = {}) {
+  if (outputLoaded.length && externallyLoaded.length) return 'SKILL_USAGE ok from loaded and read skill evidence.';
+  if (outputLoaded.length) return 'SKILL_USAGE ok from loaded skill evidence.';
+  return 'SKILL_USAGE ok from read skill evidence.';
+}
+
+function parseLooseLoadedSkillEvidence(output) {
+  const entries = [];
+  const lines = output.split(/\r?\n/);
+
+  lines.forEach((raw, index) => {
+    const line = cleanMarkdownLine(raw);
+    if (!line) return;
+
+    const gateComplete = line.match(/\bGATE\s+COMPLETE\b.*?\bskills?\s*\[([^\]]+)\]\s*loaded\b/i);
+    if (gateComplete) entries.push(...extractSkillEntries(gateComplete[1]));
+
+    const inlineLoaded = line.match(/^["'`]?skills[_\s-]*loaded["'`]?\s*[:=]\s*(.*)$/i)
+      || line.match(/^["'`]?loaded[_\s-]*skills["'`]?\s*[:=]\s*(.*)$/i)
+      || line.match(/^skills\s+loaded\s*[:=]\s*(.*)$/i);
+    if (!inlineLoaded) return;
+
+    const value = inlineLoaded[1].trim();
+    if (value) {
+      entries.push(...extractSkillEntries(value));
+      return;
+    }
+
+    entries.push(...extractFollowingSkillEntries(lines, index + 1));
+  });
+
+  return entries;
+}
+
+function extractFollowingSkillEntries(lines, start) {
+  const entries = [];
+  for (const raw of lines.slice(start)) {
+    const line = cleanMarkdownLine(raw);
+    if (!line) {
+      if (entries.length) break;
+      continue;
+    }
+    if (/^\s*```/.test(raw)) {
+      if (entries.length) break;
+      continue;
+    }
+    if (isSkillEvidenceBoundary(line)) break;
+
+    const bullet = line.match(/^[-*+]\s*(.+)$/);
+    if (bullet) {
+      entries.push(...extractSkillEntries(bullet[1]));
+      continue;
+    }
+
+    const quoted = line.match(/^["']([^"']+)["']\s*,?$/);
+    if (quoted) {
+      entries.push(...extractSkillEntries(quoted[1]));
+      continue;
+    }
+
+    if (isSkillTokenListLine(line)) {
+      entries.push(...extractSkillEntries(line));
+      continue;
+    }
+
+    break;
+  }
+  return entries;
+}
+
+function isSkillEvidenceBoundary(line) {
+  if (isNextBlockHeader(line)) return true;
+  if (/^[}\]]\s*,?$/.test(line)) return true;
+  if (/^[A-Za-z0-9_ -]+\s*:\s*\S/.test(line)) return true;
+  return false;
+}
+
+function isSkillTokenListLine(line) {
+  return /^[\[\]"'`A-Za-z0-9_.\/-][\[\]"'`A-Za-z0-9_.\/,\s-]*\]?,?$/.test(line);
 }
 
 function isPlaceholder(entry) {

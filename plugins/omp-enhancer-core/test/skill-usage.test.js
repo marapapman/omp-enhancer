@@ -4,7 +4,13 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildSkillAliasMapFromRoots, skillNamesEquivalent, skillReadNameCandidates, validateSkillUsage } from '../src/skill-usage.js';
+import {
+  buildSkillAliasMapFromRoots,
+  parseLoadedSkillEvidence,
+  skillNamesEquivalent,
+  skillReadNameCandidates,
+  validateSkillUsage,
+} from '../src/skill-usage.js';
 
 const requiredWritingSkills = ['plain-chinese-writing', 'zh-writing-polish'];
 
@@ -160,6 +166,74 @@ test('accepts legacy ECC security skill aliases in SKILL_USAGE blocks', () => {
   assert.equal(result.ok, true);
   assert.deepEqual(result.loaded, ['security-review', 'security-scan']);
   assert.deepEqual(result.missing, []);
+});
+
+test('accepts subagent skills_loaded evidence without a SKILL_USAGE block', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['security-review', 'security-scan'],
+    output: [
+      '## SUBAGENT_USAGE',
+      '```json',
+      '{',
+      '  "subagent_id": "GateSecurity",',
+      '  "skills_loaded": ["ecc-security-review", "ecc-security-scan"],',
+      '  "verdict": "complete"',
+      '}',
+      '```',
+    ].join('\n'),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['security-review', 'security-scan']);
+  assert.deepEqual(result.missing, []);
+});
+
+test('accepts YAML skills_loaded and GATE COMPLETE loaded evidence', () => {
+  const text = [
+    'SUBAGENT_USAGE:',
+    '  agent: ecc-security-reviewer',
+    '  status: complete',
+    '  skills_loaded:',
+    '    - ecc-security-review',
+    '    - ecc-security-scan',
+    'GATE COMPLETE: reviewer skills [security-review] loaded and applied.',
+  ].join('\n');
+
+  assert.deepEqual(parseLoadedSkillEvidence(text), ['ecc-security-review', 'ecc-security-scan', 'security-review']);
+
+  const result = validateSkillUsage({
+    requiredSkills: ['security-review', 'security-scan'],
+    output: text,
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['security-review', 'security-scan']);
+  assert.deepEqual(result.missing, []);
+});
+
+test('does not treat missing loaded skills diagnostics as loaded evidence', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['security-review'],
+    output: 'Missing loaded skills: security-review',
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.loaded, []);
+  assert.deepEqual(result.missing, ['security-review']);
+});
+
+test('does not let loose loaded evidence override explicit denial', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['security-review'],
+    output: [
+      'I did not load security-review.',
+      'GATE COMPLETE: reviewer skills [security-review] loaded and applied.',
+    ].join('\n'),
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.loaded, ['security-review']);
+  assert.deepEqual(result.denied, ['security-review']);
 });
 
 test('accepts generic namespaced aliases without per-skill hardcoding', () => {

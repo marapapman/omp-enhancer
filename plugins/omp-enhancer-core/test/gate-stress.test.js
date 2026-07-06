@@ -115,6 +115,17 @@ const profiles = {
     gateTool: 'omp_test_gate',
     missingGate: /omp_test_gate/,
   },
+  focusedBugAudit: {
+    prompts: [
+      'Do the bug investigation directly as a focused audit; report verified findings only.',
+      '直接做 focused bug audit，只报告验证过的问题。',
+      'Run a direct focused bug investigation for this plugin without fixing code.',
+    ],
+    subagents: {},
+    skills: ['diagnose', 'test-driven-development', 'verification-before-completion', 'search-first'],
+    gateTool: 'omp_test_gate',
+    missingGate: /omp_test_gate/,
+  },
   implementation: {
     prompts: [
       'Implement classifier fallback handling and add tests.',
