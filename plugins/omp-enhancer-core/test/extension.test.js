@@ -73,6 +73,8 @@ test('registers core tools and hooks without a separate classifier command', () 
     'omp_core_route_task',
     'omp_core_classifier_prompt',
     'omp_core_resolve_classification',
+    'omp_core_smart_gate_prompt',
+    'omp_core_resolve_smart_gate',
     'omp_core_validate_skill_usage',
     'omp_core_validate_subagent_usage',
     'omp_core_subagent_status',
@@ -172,6 +174,7 @@ test('classifier tools expose model role configuration and resolve route state',
   assert.match(governance.details.fragment, /writer/);
   assert.match(governance.details.fragment, /checker/);
   assert.match(governance.details.fragment, /modelRoles\.tiny/);
+  assert.match(governance.details.fragment, /Smart gate policy/);
 });
 
 test('before_agent_start injects governance context and routes natural-language prompts', async () => {
@@ -949,6 +952,150 @@ test('pre-work skill gate blocks simple writing edits until writing skills are r
   assert.equal(allowed, undefined);
 });
 
+test('pre-work tool gates can be released by accepted Tiny smart gate review', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '把这句话改成朴素直接的中文：我们需要进一步推动配置层面的优化与能力沉淀。' },
+    ctx,
+  );
+
+  const blocked = await event(pi, 'tool_call')(
+    { toolName: 'edit', input: { file: 'draft.md', old: 'x', new: 'y' } },
+    ctx,
+  );
+
+  assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /Tiny smart-gate override/);
+  assert.match(blocked.reason, /Rule gate key: writing\.zh:prework:edit/);
+
+  const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
+    'call-prework-smart-gate-prompt',
+    { gateKey: 'writing.zh:prework:edit' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(smartPrompt.details.smartGate.gateKey, 'writing.zh:prework:edit');
+  assert.match(smartPrompt.content[0].text, /pre-work main-agent skill gate blocked edit/);
+  assert.match(smartPrompt.content[0].text, /modelRoles\.tiny/);
+
+  const pass = await tool(pi, 'omp_core_resolve_smart_gate').execute(
+    'call-prework-smart-gate-pass',
+    {
+      gateKey: 'writing.zh:prework:edit',
+      output: JSON.stringify({
+        gate: 'writing.zh:prework:edit',
+        verdict: 'pass',
+        confidence: 0.86,
+        satisfied: true,
+        missing: [],
+        actions: [],
+        reason: 'Tiny reviewed this as a false-positive pre-work block for a minimal edit.',
+      }),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(pass.details.accepted, true);
+
+  const allowed = await event(pi, 'tool_call')(
+    { toolName: 'edit', input: { file: 'draft.md', old: 'x', new: 'y' } },
+    ctx,
+  );
+
+  assert.equal(allowed, undefined);
+
+  const nextEdit = await event(pi, 'tool_call')(
+    { toolName: 'edit', input: { file: 'other.md', old: 'a', new: 'b' } },
+    ctx,
+  );
+
+  assert.equal(nextEdit?.block, true);
+  assert.match(nextEdit.reason, /Rule gate key: writing\.zh:prework:edit/);
+});
+
+test('smart gate prompt rejects mismatched requested gate keys instead of falling back', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '把这句话改成朴素直接的中文：我们需要进一步推动配置层面的优化与能力沉淀。' },
+    ctx,
+  );
+
+  const blocked = await event(pi, 'tool_call')(
+    { toolName: 'edit', input: { file: 'draft.md', old: 'x', new: 'y' } },
+    ctx,
+  );
+
+  assert.equal(blocked?.block, true);
+
+  const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
+    'call-prework-smart-gate-wrong-key',
+    { gateKey: 'wrong:key' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(smartPrompt.details.smartGate.required, true);
+  assert.equal(smartPrompt.details.smartGate.error, 'gate-key-mismatch');
+  assert.equal(smartPrompt.details.smartGate.requestedGateKey, 'wrong:key');
+  assert.ok(smartPrompt.details.smartGate.openGateKeys.includes('writing.zh:prework:edit'));
+  assert.doesNotMatch(smartPrompt.content[0].text, /OMP Enhancer Core Smart Gate/);
+});
+
+test('smart gate resolve requires a current pending gate before releasing tool gates', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '把这句话改成朴素直接的中文：我们需要进一步推动配置层面的优化与能力沉淀。' },
+    ctx,
+  );
+
+  const pass = await tool(pi, 'omp_core_resolve_smart_gate').execute(
+    'call-prework-smart-gate-without-pending',
+    {
+      gateKey: 'writing.zh:prework:edit',
+      output: JSON.stringify({
+        gate: 'writing.zh:prework:edit',
+        verdict: 'pass',
+        confidence: 0.9,
+        satisfied: true,
+        missing: [],
+        actions: [],
+        reason: 'This should not pre-authorize future work.',
+      }),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(pass.details.accepted, false);
+  assert.match(pass.content[0].text, /No current pending smart gate/);
+
+  const blocked = await event(pi, 'tool_call')(
+    { toolName: 'edit', input: { file: 'draft.md', old: 'x', new: 'y' } },
+    ctx,
+  );
+
+  assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /Rule gate key: writing\.zh:prework:edit/);
+});
+
 test('focused bug audit preloads main-agent skills instead of blocking on subagent delegation', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -1074,6 +1221,213 @@ test('failed writing QA tool results do not release the writing gate', async () 
   const released = await event(pi, 'session_stop')({ output: '任务完成。' }, ctx);
 
   assert.equal(released, undefined);
+});
+
+test('repeated failed writing QA tools require Tiny smart gate before releasing equivalent subagent QA evidence', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-repeated-failed-writing-qa-route',
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_result')(
+    {
+      name: 'task',
+      params: {
+        agent: 'zh-writer',
+        prompt: [
+          'OMP_PARENT_TASK: extension test routed task',
+          'Required skills for this subagent:',
+          '- plain-chinese-writing',
+          '- zh-writing-polish',
+        ].join('\n'),
+      },
+      content: [{ type: 'text', text: 'ZhWriterFinal PASS 16/16. SKILL_USAGE Loaded: plain-chinese-writing, zh-writing-polish.' }],
+    },
+    ctx,
+  );
+  await event(pi, 'tool_result')(
+    {
+      name: 'task',
+      params: {
+        agent: 'zh-checker',
+        prompt: [
+          'OMP_PARENT_TASK: extension test routed task',
+          'Required skills for this subagent:',
+          '- plain-chinese-writing',
+          '- zh-writing-checkers',
+        ].join('\n'),
+      },
+      content: [{ type: 'text', text: 'ZhChecker3 READY. ZhCheckerFinal PASS 15/15, no CRITICAL or IMPORTANT issues.' }],
+    },
+    ctx,
+  );
+  await event(pi, 'tool_result')(
+    { name: 'writing_quality_check', isError: true, details: { error: 'Tool unavailable.' } },
+    ctx,
+  );
+  await event(pi, 'tool_result')(
+    { name: 'writing_logic_check', isError: true, details: { error: 'Tool unavailable.' } },
+    ctx,
+  );
+  await event(pi, 'tool_result')(
+    { name: 'writing_quality_check', isError: true, details: { error: 'Tool unavailable.' } },
+    ctx,
+  );
+
+  const finalOutput = [
+    '写作 QA 已完成，证据充分。',
+    '- ZhWriterFinal PASS 16/16',
+    '- ZhChecker3 READY',
+    '- ZhCheckerFinal PASS 15/15',
+    usageEvidence({
+      subagents: {
+        'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
+        'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
+      },
+      skills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
+    }),
+  ].join('\n');
+
+  const blocked = await event(pi, 'session_stop')({ output: finalOutput }, ctx);
+
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /smart gate is required/);
+  assert.match(blocked.additionalContext, /modelRoles\.tiny/);
+  assert.match(blocked.additionalContext, /writing_quality_check \(2 attempts\)/);
+
+  const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
+    'call-writing-smart-gate-prompt',
+    { finalOutput },
+    undefined,
+    undefined,
+    ctx,
+  );
+  const gateKey = smartPrompt.details.smartGate.gateKey;
+
+  assert.equal(gateKey, 'writing.zh:writing-qa');
+  assert.equal(smartPrompt.details.smartGate.modelRole, 'tiny');
+  assert.match(smartPrompt.content[0].text, /OMP Enhancer Core Smart Gate/);
+  assert.match(smartPrompt.content[0].text, /modelRoles\.tiny/);
+  assert.match(smartPrompt.content[0].text, /ZhCheckerFinal PASS/);
+
+  const needsWork = await tool(pi, 'omp_core_resolve_smart_gate').execute(
+    'call-writing-smart-gate-needs-work',
+    {
+      gateKey,
+      output: JSON.stringify({
+        gate: gateKey,
+        verdict: 'needs-work',
+        confidence: 0.83,
+        satisfied: false,
+        missing: ['clear checker evidence'],
+        actions: ['include checker verdict evidence'],
+        reason: 'The checker result needs to be explicit.',
+      }),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(needsWork.details.accepted, false);
+  const stillBlocked = await event(pi, 'session_stop')({
+    output: 'Smart gate returned needs-work. Keeping the writing QA gate open until checker evidence is explicit.',
+  }, ctx);
+
+  assert.equal(stillBlocked?.continue, true);
+  assert.match(stillBlocked.additionalContext, /Previous smart-gate decision: needs-work/);
+  assert.match(stillBlocked.additionalContext, /include checker verdict evidence/);
+
+  const pass = await tool(pi, 'omp_core_resolve_smart_gate').execute(
+    'call-writing-smart-gate-pass',
+    {
+      gateKey,
+      output: JSON.stringify({
+        gate: gateKey,
+        verdict: 'pass',
+        confidence: 0.91,
+        satisfied: true,
+        missing: [],
+        actions: [],
+        reason: 'Final output includes explicit writer and checker QA evidence plus complete skill usage.',
+      }),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(pass.details.accepted, true);
+  const released = await event(pi, 'session_stop')({
+    output: 'Final delivery after accepted smart gate. ZhWriterFinal and ZhCheckerFinal evidence was reviewed.',
+  }, ctx);
+
+  assert.equal(released, undefined);
+});
+
+test('completion smart gate pass releases only the matching final gate before rechecking remaining gates', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。' },
+    ctx,
+  );
+
+  const firstBlocked = await event(pi, 'session_stop')({
+    output: 'Final answer without delegated writing agents, writing QA, or SKILL_USAGE.',
+  }, ctx);
+
+  assert.equal(firstBlocked?.continue, true);
+  assert.match(firstBlocked.additionalContext, /Rule gate still open: writing\.zh:subagent/);
+
+  const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
+    'call-subagent-smart-gate-prompt',
+    { gateKey: 'writing.zh:subagent' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(smartPrompt.details.smartGate.gateKey, 'writing.zh:subagent');
+
+  const pass = await tool(pi, 'omp_core_resolve_smart_gate').execute(
+    'call-subagent-smart-gate-pass',
+    {
+      gateKey: 'writing.zh:subagent',
+      output: JSON.stringify({
+        gate: 'writing.zh:subagent',
+        verdict: 'pass',
+        confidence: 0.91,
+        satisfied: true,
+        missing: [],
+        actions: [],
+        reason: 'Tiny accepted equivalent subagent evidence for only the subagent gate.',
+      }),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(pass.details.accepted, true);
+
+  const stillBlocked = await event(pi, 'session_stop')({
+    output: 'Still missing writing QA and SKILL_USAGE after the subagent smart gate pass.',
+  }, ctx);
+
+  assert.equal(stillBlocked?.continue, true);
+  assert.match(stillBlocked.additionalContext, /Rule gate still open: writing\.zh:writing-qa/);
+  assert.doesNotMatch(stillBlocked.additionalContext, /Rule gate still open: writing\.zh:subagent/);
 });
 
 test('session_stop requires successful SKILL_USAGE validation even after writing QA', async () => {
@@ -2527,7 +2881,7 @@ test('failed read skill results do not release the skill gate', async () => {
   assert.match(blocked.additionalContext, /SKILL_USAGE/);
   assert.match(blocked.additionalContext, /writing-markdown-helper|writing-checkers/);
   assert.match(blocked.additionalContext, /Recent failed tool results/);
-  assert.match(blocked.additionalContext, /read: missing skill/);
+  assert.match(blocked.additionalContext, /read \(2 attempts\): missing skill/);
 });
 
 test('read skill evidence persists through session entries across isolated plugin instances', async () => {

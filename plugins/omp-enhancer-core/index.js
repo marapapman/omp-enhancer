@@ -14,6 +14,7 @@ import {
 } from './src/skill-usage.js';
 import { collectSubagentTaskRecords, parseSubagentUsageDetails, validateSubagentUsage } from './src/subagent-usage.js';
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
+import { buildSmartGatePrompt, resolveSmartGateDecision, smartGateDefaults } from './src/smart-gate.js';
 import {
   createLoopGuardState,
   readLoopGuardSnapshot,
@@ -41,6 +42,8 @@ const SUBAGENT_FAILED_STATUSES = new Set(['failed', 'failure', 'error', 'aborted
 const CLASSIFIER_PREFLIGHT_EXEMPT_TOOLS = new Set([
   'omp_core_classifier_prompt',
   'omp_core_resolve_classification',
+  'omp_core_smart_gate_prompt',
+  'omp_core_resolve_smart_gate',
   'omp_core_route_task',
   'omp_core_governance_prompt',
   'omp_core_subagent_status',
@@ -103,6 +106,84 @@ export default function registerCoreEnhancer(pi) {
       setRouteState(state, result.route, params.prompt, { classifierResolved: true });
       await persistState(pi, state);
       return okResult(formatRoute(result.route), result);
+    },
+  });
+
+  pi.registerTool({
+    name: 'omp_core_smart_gate_prompt',
+    label: 'Build OMP smart gate prompt',
+    description: 'Build the strict JSON smart-gate prompt and schema for OMP Tiny model gate review.',
+    parameters: z?.object ? z.object({
+      finalOutput: z.string().optional(),
+      gateKey: z.string().optional(),
+    }) : undefined,
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
+      const ruleGate = resolveSmartGatePromptRuleGate(state, params.gateKey);
+      if (!ruleGate) {
+        const openGateKeys = openSmartGateRuleGates(state).map((gate) => gate.gateKey);
+        const requestedGateKey = String(params.gateKey ?? '').trim();
+        const mismatch = Boolean(requestedGateKey && openGateKeys.length);
+        return okResult(
+          mismatch
+            ? `Requested smart gate key "${requestedGateKey}" is not open. Open gate keys: ${openGateKeys.join(', ')}.`
+            : 'No open OMP Enhancer Core rule gate requires smart-gate review.',
+          {
+            smartGate: {
+              required: openGateKeys.length > 0,
+              error: mismatch ? 'gate-key-mismatch' : null,
+              requestedGateKey: requestedGateKey || null,
+              openGateKeys,
+            },
+          },
+        );
+      }
+      const pending = createPendingSmartGate(state, ruleGate, params.finalOutput ?? '');
+      state.pendingSmartGate = pending;
+      await persistState(pi, state);
+      const promptRuleGate = { ...ruleGate, gateInstanceId: pending.gateInstanceId };
+      const smartGate = buildSmartGatePrompt({
+        prompt: state.lastPrompt,
+        route: state.lastRoute,
+        ruleGate: promptRuleGate,
+        evidence: summarizeSmartGateEvidence(state),
+        finalOutput: pending.finalOutput,
+      });
+      return okResult(smartGate.prompt, {
+        smartGate: {
+          ...smartGate,
+          gateInstanceId: pending.gateInstanceId,
+        },
+      });
+    },
+  });
+
+  pi.registerTool({
+    name: 'omp_core_resolve_smart_gate',
+    label: 'Resolve OMP smart gate output',
+    description: 'Validate Tiny smart-gate JSON and record whether it can release the current rule gate.',
+    parameters: z?.object ? z.object({ gateKey: z.string().optional(), output: z.string() }) : undefined,
+    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
+      const pending = pendingSmartGateForResolve(state, params.gateKey);
+      const gateKey = pending?.gateKey ?? String(params.gateKey ?? '').trim();
+      const result = pending
+        ? resolveSmartGateDecision({ gateKey, output: params.output })
+        : rejectedSmartGateResult(
+          `No current pending smart gate matches "${gateKey || 'unknown'}". Call omp_core_smart_gate_prompt for an open gate before resolving.`,
+        );
+      state.smartGate = {
+        gateInstanceId: pending?.gateInstanceId ?? null,
+        routeStartedAt: state.routeStartedAt,
+        gateKey,
+        accepted: result.accepted,
+        ok: result.ok,
+        decision: result.decision,
+        validation: result.validation,
+        resolvedAt: Date.now(),
+      };
+      await persistState(pi, state);
+      return okResult(formatSmartGateResult(result), result);
     },
   });
 
@@ -228,15 +309,17 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'task') {
       const taskSkillBlock = buildTaskSubagentSkillGateBlock(state, event);
       if (taskSkillBlock) {
+        state.pendingSmartGate = createPendingSmartGate(state, taskSkillBlock.ruleGate, '');
         await persistState(pi, state);
-        return taskSkillBlock;
+        return smartGateWrappedToolBlock(state, taskSkillBlock);
       }
       recordSubagentDispatchStarted(state, event);
     } else {
       const preworkBlock = buildPreworkSkillGateBlock(state, name);
       if (preworkBlock) {
+        state.pendingSmartGate = createPendingSmartGate(state, preworkBlock.ruleGate, '');
         await persistState(pi, state);
-        return preworkBlock;
+        return smartGateWrappedToolBlock(state, preworkBlock);
       }
     }
     await persistState(pi, state);
@@ -296,16 +379,23 @@ export default function registerCoreEnhancer(pi) {
       return { continue: true, additionalContext: missingClassifierPreflightContext };
     }
 
-    const missingSubagentContext = buildMissingSubagentUsageContext(state);
-    if (missingSubagentContext) {
-      return { continue: true, additionalContext: missingSubagentContext };
+    const ruleGate = buildCompletionRuleGateBlock(state);
+    if (ruleGate) {
+      const finalOutput = extractFinalOutputText(event);
+      if (consumeSmartGateCompletionAllowance(state, ruleGate)) {
+        const nextRuleGate = buildCompletionRuleGateBlock(state);
+        if (!nextRuleGate) {
+          await persistState(pi, state);
+          return undefined;
+        }
+        state.pendingSmartGate = createPendingSmartGate(state, nextRuleGate, finalOutput);
+        await persistState(pi, state);
+        return { continue: true, additionalContext: buildSmartGateRequiredContext(state, nextRuleGate) };
+      }
+      state.pendingSmartGate = createPendingSmartGate(state, ruleGate, finalOutput);
+      await persistState(pi, state);
+      return { continue: true, additionalContext: buildSmartGateRequiredContext(state, ruleGate) };
     }
-
-    const missingGateContext = buildMissingGateContext({ route: state.lastRoute, state });
-    if (missingGateContext) return { continue: true, additionalContext: missingGateContext };
-
-    const missingSkillContext = buildMissingSkillUsageContext(state);
-    if (missingSkillContext) return { continue: true, additionalContext: missingSkillContext };
 
     return undefined;
   });
@@ -319,6 +409,9 @@ export function createState() {
     lastSkillUsage: null,
     lastSubagentUsage: null,
     classifierPreflight: null,
+    pendingSmartGate: null,
+    smartGate: null,
+    smartGateCompletionBypasses: [],
     evidence: emptyEvidence(),
     loopGuard: createLoopGuardState(),
   };
@@ -384,6 +477,9 @@ function setRouteState(state, route, prompt = '', { classifierResolved = false }
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
   state.classifierPreflight = classifierResolved ? null : buildClassifierPreflight(route, prompt);
+  state.pendingSmartGate = null;
+  state.smartGate = null;
+  state.smartGateCompletionBypasses = [];
   state.evidence = emptyEvidence();
   state.loopGuard = createLoopGuardState();
 }
@@ -395,6 +491,9 @@ function resetState(state) {
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
   state.classifierPreflight = null;
+  state.pendingSmartGate = null;
+  state.smartGate = null;
+  state.smartGateCompletionBypasses = [];
   state.evidence = emptyEvidence();
   state.loopGuard = createLoopGuardState();
 }
@@ -461,6 +560,9 @@ function replaceState(target, source) {
   target.lastSkillUsage = source.lastSkillUsage;
   target.lastSubagentUsage = source.lastSubagentUsage;
   target.classifierPreflight = source.classifierPreflight ?? null;
+  target.pendingSmartGate = source.pendingSmartGate ?? null;
+  target.smartGate = source.smartGate ?? null;
+  target.smartGateCompletionBypasses = source.smartGateCompletionBypasses ?? [];
   target.evidence = source.evidence;
   target.loopGuard = mergeLiveLoopGuardState(liveLoopGuard, source.loopGuard ?? createLoopGuardState());
 }
@@ -492,6 +594,9 @@ function serializeState(state) {
     lastSkillUsage: state.lastSkillUsage,
     lastSubagentUsage: state.lastSubagentUsage,
     classifierPreflight: state.classifierPreflight,
+    pendingSmartGate: state.pendingSmartGate,
+    smartGate: state.smartGate,
+    smartGateCompletionBypasses: state.smartGateCompletionBypasses,
     loopGuard: serializeLoopGuardState(state.loopGuard),
     evidence: {
       writingQuality: state.evidence.writingQuality,
@@ -555,6 +660,9 @@ function readStateSnapshot(value) {
     lastSkillUsage: isRecord(value.lastSkillUsage) ? value.lastSkillUsage : null,
     lastSubagentUsage: isRecord(value.lastSubagentUsage) ? value.lastSubagentUsage : null,
     classifierPreflight: readClassifierPreflight(value.classifierPreflight),
+    pendingSmartGate: readPendingSmartGate(value.pendingSmartGate),
+    smartGate: readSmartGateState(value.smartGate),
+    smartGateCompletionBypasses: readSmartGateCompletionBypasses(value.smartGateCompletionBypasses),
     loopGuard: readLoopGuardSnapshot(value.loopGuard),
     evidence,
   };
@@ -568,6 +676,53 @@ function readClassifierPreflight(value) {
     fallbackIntent: isString(value.fallbackIntent) ? value.fallbackIntent : 'unknown',
     reasons: Array.isArray(value.reasons) ? value.reasons.filter(isString) : [],
   };
+}
+
+function readPendingSmartGate(value) {
+  if (!isRecord(value) || typeof value.gateKey !== 'string') return null;
+  return {
+    gateInstanceId: isString(value.gateInstanceId) ? value.gateInstanceId : legacySmartGateInstanceId(value),
+    gateKey: value.gateKey,
+    kind: isString(value.kind) ? value.kind : 'unknown',
+    routeStartedAt: Number.isFinite(value.routeStartedAt) ? value.routeStartedAt : 0,
+    routeIntent: isString(value.routeIntent) ? value.routeIntent : 'unknown',
+    context: isString(value.context) ? value.context : '',
+    finalOutput: isString(value.finalOutput) ? value.finalOutput : '',
+    createdAt: Number.isFinite(value.createdAt) ? value.createdAt : 0,
+  };
+}
+
+function readSmartGateState(value) {
+  if (!isRecord(value) || typeof value.gateKey !== 'string') return null;
+  return {
+    gateInstanceId: isString(value.gateInstanceId) ? value.gateInstanceId : legacySmartGateInstanceId(value),
+    routeStartedAt: Number.isFinite(value.routeStartedAt) ? value.routeStartedAt : 0,
+    gateKey: value.gateKey,
+    accepted: value.accepted === true,
+    ok: value.ok === true,
+    decision: isRecord(value.decision) ? value.decision : null,
+    validation: isRecord(value.validation) ? value.validation : null,
+    resolvedAt: Number.isFinite(value.resolvedAt) ? value.resolvedAt : 0,
+  };
+}
+
+function readSmartGateCompletionBypasses(value) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item) || !isString(item.gateKey)) return [];
+    return [{
+      routeStartedAt: Number.isFinite(item.routeStartedAt) ? item.routeStartedAt : 0,
+      gateKey: item.gateKey,
+      kind: isString(item.kind) ? item.kind : 'unknown',
+      acceptedAt: Number.isFinite(item.acceptedAt) ? item.acceptedAt : 0,
+    }];
+  });
+}
+
+function legacySmartGateInstanceId(value) {
+  const routeStartedAt = Number.isFinite(value?.routeStartedAt) ? value.routeStartedAt : 0;
+  const gateKey = isString(value?.gateKey) ? value.gateKey : 'unknown';
+  return `${routeStartedAt}:${gateKey}:legacy`;
 }
 
 function readEvidenceSnapshot(value) {
@@ -684,6 +839,7 @@ function readToolFailures(value) {
     if (typeof item.message === 'string') failure.message = item.message;
     if (typeof item.summary === 'string') failure.summary = item.summary;
     if (typeof item.repairHint === 'string') failure.repairHint = item.repairHint;
+    if (Number.isInteger(item.attempts) && item.attempts > 0) failure.attempts = item.attempts;
     return [failure];
   });
 }
@@ -880,6 +1036,265 @@ function toolFailureSuggestsRouteMismatch(event = {}) {
   return /(?:route mismatch|wrong route|mis[- ]?route|classifier|classification|workflow route|unexpected route|路由误判|误路由|路由不对|分类错误|工作流路由)/.test(text);
 }
 
+function buildCompletionRuleGateBlock(state) {
+  return buildCompletionRuleGateBlocks(state)
+    .find((ruleGate) => !completionSmartGateBypassAllows(state, ruleGate)) ?? null;
+}
+
+function buildCompletionRuleGateBlocks(state) {
+  const blocks = [];
+  const missingSubagentContext = buildMissingSubagentUsageContext(state);
+  if (missingSubagentContext) blocks.push(completionRuleGateBlock(state, 'subagent', missingSubagentContext));
+
+  const missingGateContext = buildMissingGateContext({ route: state.lastRoute, state });
+  if (missingGateContext) blocks.push(completionRuleGateBlock(state, 'workflow', missingGateContext));
+
+  const missingSkillContext = buildMissingSkillUsageContext(state);
+  if (missingSkillContext) blocks.push(completionRuleGateBlock(state, 'skill', missingSkillContext));
+
+  return blocks;
+}
+
+function resolveSmartGatePromptRuleGate(state, requestedGateKey = '') {
+  const gates = openSmartGateRuleGates(state);
+  const requested = String(requestedGateKey ?? '').trim();
+  if (requested) return gates.find((gate) => gate.gateKey === requested) ?? null;
+  return gates[0] ?? null;
+}
+
+function openSmartGateRuleGates(state) {
+  const gates = [];
+  const pending = pendingSmartGateRuleGate(state);
+  if (pending) gates.push(pending);
+  for (const gate of buildCompletionRuleGateBlocks(state)) {
+    if (!completionSmartGateBypassAllows(state, gate)
+      && !gates.some((candidate) => candidate.gateKey === gate.gateKey)) {
+      gates.push(gate);
+    }
+  }
+  return gates;
+}
+
+function pendingSmartGateRuleGate(state) {
+  const pending = state.pendingSmartGate;
+  if (!pending || pending.routeStartedAt !== state.routeStartedAt) return null;
+  return {
+    gateInstanceId: pending.gateInstanceId,
+    kind: pending.kind,
+    gateKey: pending.gateKey,
+    routeIntent: pending.routeIntent,
+    context: pending.context,
+  };
+}
+
+function completionRuleGateBlock(state, kind, context) {
+  const routeIntent = state.lastRoute?.intent ?? 'unknown';
+  return {
+    kind,
+    gateKey: `${routeIntent}:${specificGateKind(kind, context)}`,
+    routeIntent,
+    context,
+  };
+}
+
+function toolRuleGateBlock(state, kind, context) {
+  const routeIntent = state.lastRoute?.intent ?? 'unknown';
+  return {
+    kind,
+    gateKey: `${routeIntent}:${kind}`,
+    routeIntent,
+    context,
+  };
+}
+
+function specificGateKind(kind, context = '') {
+  const text = String(context).toLowerCase();
+  if (kind === 'workflow' && /writing qa|writing task|writing_quality_check|writing_logic_check/.test(text)) return 'writing-qa';
+  if (kind === 'workflow' && /omp_test_gate|testing task|bug-audit|test gate|testing gate/.test(text)) return 'testing';
+  return kind;
+}
+
+function createPendingSmartGate(state, ruleGate, finalOutput = '') {
+  const createdAt = Date.now();
+  return {
+    gateInstanceId: ruleGate.gateInstanceId ?? createSmartGateInstanceId(state, ruleGate, createdAt),
+    gateKey: ruleGate.gateKey,
+    kind: ruleGate.kind,
+    routeStartedAt: state.routeStartedAt,
+    routeIntent: state.lastRoute?.intent ?? 'unknown',
+    context: ruleGate.context,
+    finalOutput: String(finalOutput ?? '').slice(0, 4000),
+    createdAt,
+  };
+}
+
+function createSmartGateInstanceId(state, ruleGate, createdAt = Date.now()) {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return `${state.routeStartedAt}:${ruleGate.gateKey}:${createdAt}:${suffix}`;
+}
+
+function pendingSmartGateForResolve(state, requestedGateKey = '') {
+  const pending = pendingSmartGateRuleGate(state);
+  if (!pending) return null;
+  const requested = String(requestedGateKey ?? '').trim();
+  if (requested && pending.gateKey !== requested) return null;
+  return pending;
+}
+
+function rejectedSmartGateResult(message) {
+  return {
+    ok: false,
+    accepted: false,
+    decision: null,
+    validation: { ok: false, errors: [message] },
+  };
+}
+
+function consumeSmartGateToolAllowance(state, ruleGate) {
+  if (!smartGateMatchesPendingRule(state, ruleGate)) return false;
+  state.smartGate = null;
+  state.pendingSmartGate = null;
+  return true;
+}
+
+function consumeSmartGateCompletionAllowance(state, ruleGate) {
+  if (!isCompletionRuleGateKind(ruleGate.kind)) return false;
+  if (!smartGateMatchesPendingRule(state, ruleGate)) return false;
+  recordCompletionSmartGateBypass(state, ruleGate);
+  state.smartGate = null;
+  state.pendingSmartGate = null;
+  return true;
+}
+
+function smartGateMatchesPendingRule(state, ruleGate) {
+  const pending = pendingSmartGateRuleGate(state);
+  return state.smartGate?.accepted === true
+    && state.smartGate.routeStartedAt === state.routeStartedAt
+    && state.smartGate.gateKey === ruleGate.gateKey
+    && pending?.gateKey === ruleGate.gateKey
+    && pending.gateInstanceId === state.smartGate.gateInstanceId;
+}
+
+function isCompletionRuleGateKind(kind = '') {
+  return kind === 'subagent' || kind === 'workflow' || kind === 'skill';
+}
+
+function completionSmartGateBypassAllows(state, ruleGate) {
+  return (state.smartGateCompletionBypasses ?? []).some((item) => (
+    item.routeStartedAt === state.routeStartedAt
+    && item.gateKey === ruleGate.gateKey
+  ));
+}
+
+function recordCompletionSmartGateBypass(state, ruleGate) {
+  const bypasses = state.smartGateCompletionBypasses ?? [];
+  if (!bypasses.some((item) => item.routeStartedAt === state.routeStartedAt && item.gateKey === ruleGate.gateKey)) {
+    bypasses.push({
+      routeStartedAt: state.routeStartedAt,
+      gateKey: ruleGate.gateKey,
+      kind: ruleGate.kind,
+      acceptedAt: Date.now(),
+    });
+  }
+  state.smartGateCompletionBypasses = bypasses;
+}
+
+function smartGateWrappedToolBlock(state, block) {
+  const ruleGate = block.ruleGate;
+  return {
+    block: true,
+    reason: [
+      block.reason,
+      '',
+      'Tiny smart-gate override:',
+      `Rule gate key: ${ruleGate.gateKey}.`,
+      `Use OMP Tiny (\`modelRoles.${smartGateDefaults.modelRole}\`, packaged default ${smartGateDefaults.model}) only if this rule gate is a false positive or equivalent evidence already satisfies the required workflow.`,
+      `Required sequence: call omp_core_smart_gate_prompt with gateKey "${ruleGate.gateKey}", use Tiny to produce strict JSON, then call omp_core_resolve_smart_gate. Retry the blocked tool only if the smart gate returns verdict pass.`,
+      state.smartGate?.gateKey === ruleGate.gateKey ? formatPreviousSmartGateDecision(state.smartGate) : null,
+    ].filter(Boolean).join('\n'),
+  };
+}
+
+function buildSmartGateRequiredContext(state, ruleGate) {
+  const previous = state.smartGate?.routeStartedAt === state.routeStartedAt && state.smartGate.gateKey === ruleGate.gateKey
+    ? state.smartGate
+    : null;
+  return [
+    'OMP Enhancer Core smart gate is required.',
+    `Rule gate still open: ${ruleGate.gateKey}.`,
+    `Tiny model policy: use OMP Tiny (\`modelRoles.${smartGateDefaults.modelRole}\`, packaged default ${smartGateDefaults.model}).`,
+    'Required smart-gate sequence:',
+    '1. Call omp_core_smart_gate_prompt with finalOutput set to the final answer text you want judged.',
+    '2. Use OMP Tiny (`modelRoles.tiny`) to produce only the strict smart-gate JSON.',
+    '3. Call omp_core_resolve_smart_gate with output set to that JSON.',
+    '4. Continue only if the resolved smart gate returns verdict pass; otherwise perform the listed actions or report BLOCKERS.',
+    previous ? formatPreviousSmartGateDecision(previous) : null,
+    '',
+    'Deterministic rule gate context:',
+    ruleGate.context,
+  ].filter(Boolean).join('\n');
+}
+
+function formatPreviousSmartGateDecision(previous) {
+  if (previous.accepted) return 'Previous smart-gate decision: pass.';
+  const validationErrors = previous.validation?.errors?.length
+    ? `Validation errors: ${previous.validation.errors.join('; ')}.`
+    : null;
+  const decision = previous.decision;
+  if (!decision) return ['Previous smart-gate decision did not validate.', validationErrors].filter(Boolean).join(' ');
+  return [
+    `Previous smart-gate decision: ${decision.verdict} (${Math.round(decision.confidence * 100)}% confidence).`,
+    decision.reason ? `Reason: ${decision.reason}` : null,
+    decision.missing?.length ? `Missing: ${decision.missing.join(', ')}` : null,
+    decision.actions?.length ? `Actions: ${decision.actions.join('; ')}` : null,
+    validationErrors,
+  ].filter(Boolean).join(' ');
+}
+
+function formatSmartGateResult(result) {
+  if (!result.ok) return `Smart gate rejected: ${result.validation.errors.join('; ')}`;
+  const decision = result.decision;
+  return [
+    `Smart gate verdict: ${decision.verdict}`,
+    `Gate: ${decision.gate}`,
+    `Accepted: ${result.accepted ? 'yes' : 'no'}`,
+    `Confidence: ${Math.round(decision.confidence * 100)}%`,
+    decision.reason ? `Reason: ${decision.reason}` : null,
+    decision.missing.length ? `Missing: ${decision.missing.join(', ')}` : null,
+    decision.actions.length ? `Actions: ${decision.actions.join('; ')}` : null,
+  ].filter(Boolean).join('\n');
+}
+
+function summarizeSmartGateEvidence(state) {
+  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  const pending = [...state.evidence.pendingSubagents.entries()]
+    .map(([agent, item]) => `${agent}:${item.attempts ?? 1}:${[...item.skills].join(',') || 'no-skills'}`);
+  const completed = [...completedSubagentsForGate(state)];
+  const loadedSkills = [...state.evidence.loadedSkills];
+  const delegatedSkills = [...state.evidence.subagentLoadedSkills.entries()]
+    .map(([agent, skills]) => `${agent}: ${[...skills].join(', ') || 'none'}`);
+  const failures = state.evidence.toolFailures.map((failure) => {
+    const attempts = Number.isInteger(failure.attempts) && failure.attempts > 1 ? ` x${failure.attempts}` : '';
+    const detail = [failure.summary, failure.message, failure.repairHint].filter(Boolean).join(' ');
+    return `${failure.tool}${attempts}${detail ? `: ${detail}` : ''}`;
+  });
+  return [
+    `Route intent: ${state.lastRoute?.intent ?? 'unknown'}`,
+    `Required skills: ${(state.lastRoute?.requiredSkills ?? []).join(', ') || 'none'}`,
+    `Loaded main-agent skills: ${loadedSkills.join(', ') || 'none'}`,
+    `Required subagents: ${requiredSubagents.map(({ agent }) => agent).join(', ') || 'none'}`,
+    `Completed subagents: ${completed.join(', ') || 'none'}`,
+    `Pending subagents: ${pending.join('; ') || 'none'}`,
+    `Delegated loaded skills: ${delegatedSkills.join('; ') || 'none'}`,
+    `Skill validator: ${state.lastSkillUsage?.ok ? 'ok' : state.lastSkillUsage?.message ?? 'not recorded'}`,
+    `Subagent validator: ${state.lastSubagentUsage?.ok ? 'ok' : state.lastSubagentUsage?.message ?? 'not recorded'}`,
+    `Writing QA evidence: ${state.evidence.writingQuality ? 'ok' : 'not recorded'}`,
+    `Testing gate evidence: ${state.evidence.testingGate ? 'ok' : 'not recorded'}`,
+    `Testing report evidence: ${state.evidence.testingReport ? 'ok' : 'not recorded'}`,
+    `Tool failures: ${failures.join('; ') || 'none'}`,
+  ].join('\n');
+}
+
 function buildMissingSkillUsageContext(state) {
   const requiredSkills = state.lastRoute?.requiredSkills ?? [];
   if (!requiredSkills.length) return null;
@@ -986,16 +1401,19 @@ function buildPreworkSkillGateBlock(state, toolName) {
   if (!isPreworkSkillGateTool(toolName, state.lastRoute)) return null;
   const missing = missingReadSkills(state);
   if (!missing.length) return null;
+  const ruleGate = toolRuleGateBlock(state, `prework:${toolName}`, [
+    `OMP Enhancer Core pre-work main-agent skill gate blocked ${toolName}.`,
+    `Read all required skills before using this direct main-agent work tool. Missing skills: ${missing.join(', ')}.`,
+    'Required recovery order:',
+    ...missing.map(formatMissingSkillReadStep),
+    `After those read results return, retry ${toolName}. If you are forking task subagents instead, put the skills into the task assignments rather than reading them in the main agent.`,
+  ].join('\n'));
+  if (consumeSmartGateToolAllowance(state, ruleGate)) return null;
 
   return {
     block: true,
-    reason: [
-      `OMP Enhancer Core pre-work main-agent skill gate blocked ${toolName}.`,
-      `Read all required skills before using this direct main-agent work tool. Missing skills: ${missing.join(', ')}.`,
-      'Required recovery order:',
-      ...missing.map(formatMissingSkillReadStep),
-      `After those read results return, retry ${toolName}. If you are forking task subagents instead, put the skills into the task assignments rather than reading them in the main agent.`,
-    ].join('\n'),
+    reason: ruleGate.context,
+    ruleGate,
   };
 }
 
@@ -1006,7 +1424,7 @@ function buildTaskSubagentSkillGateBlock(state, event = {}) {
   const requiredByAgent = new Map(requiredSubagents.map((item) => [item.agent, item.requiredSkills]));
   let records = collectSubagentTaskRecords(event);
   if (!records.length) {
-    return taskSubagentSkillBlock([
+    return taskSubagentSkillBlock(state, 'task-subagent-contract', [
       'OMP Enhancer Core task subagent skill gate blocked task.',
       'This routed task must fork named subagents and attach their skill contracts in the task assignment.',
       `Required subagents: ${formatRequiredSubagents(requiredSubagents)}.`,
@@ -1042,7 +1460,7 @@ function buildTaskSubagentSkillGateBlock(state, event = {}) {
 
   if (!unexpectedAgents.length && !missingSkillAssignments.length && !missingParentTaskAssignments.length && !unexpectedSkillAssignments.length) return null;
 
-  return taskSubagentSkillBlock([
+  return taskSubagentSkillBlock(state, 'task-subagent-contract', [
     'OMP Enhancer Core task subagent skill gate blocked task.',
     'Repair the task assignment, not the main-agent read state. Each task subagent must carry its own required skills before fork.',
     unexpectedAgents.length ? `Unexpected task subagents: ${uniqueValues(unexpectedAgents).join(', ')}.` : null,
@@ -1183,10 +1601,13 @@ function normalizeTaskAgent(value) {
   return value.trim().replace(/[:(].*$/, '').trim();
 }
 
-function taskSubagentSkillBlock(lines) {
+function taskSubagentSkillBlock(state, kind, lines) {
+  const ruleGate = toolRuleGateBlock(state, kind, lines.filter(Boolean).join('\n'));
+  if (consumeSmartGateToolAllowance(state, ruleGate)) return null;
   return {
     block: true,
-    reason: lines.filter(Boolean).join('\n'),
+    reason: ruleGate.context,
+    ruleGate,
   };
 }
 
@@ -2315,7 +2736,7 @@ function clearToolFailures(state, name) {
 }
 
 function buildToolFailure(name, event = {}) {
-  const failure = { tool: name };
+  const failure = { tool: name, attempts: 1 };
   const message = extractFailureMessage(event);
   const summary = extractFailureSummary(event);
   const repairHint = extractRepairHint(event);
@@ -2329,6 +2750,7 @@ function mergeToolFailure(previous, current) {
   if (!previous) return current;
   return {
     tool: current.tool,
+    attempts: (Number.isInteger(previous.attempts) ? previous.attempts : 1) + (Number.isInteger(current.attempts) ? current.attempts : 1),
     message: current.message ?? previous.message,
     summary: current.summary ?? previous.summary,
     repairHint: current.repairHint ?? previous.repairHint,
@@ -2378,7 +2800,8 @@ function formatRecentToolFailures(state, toolNames = []) {
       const details = [failure.summary, failure.message, failure.repairHint ? `Repair: ${failure.repairHint}` : null]
         .filter(Boolean)
         .join(' ');
-      return `- ${failure.tool}: ${details || 'tool returned a failed result'}`;
+      const attempts = Number.isInteger(failure.attempts) && failure.attempts > 1 ? ` (${failure.attempts} attempts)` : '';
+      return `- ${failure.tool}${attempts}: ${details || 'tool returned a failed result'}`;
     }),
   ].join('\n');
 }
