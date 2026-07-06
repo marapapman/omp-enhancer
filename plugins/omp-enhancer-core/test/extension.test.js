@@ -271,6 +271,31 @@ test('before_agent_start still routes prompts that begin with absolute paths', a
   assert.match(fragment, /Intent:\s*unknown/);
 });
 
+test('before_agent_start treats gate validator status reports as diagnosis without config subagents', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const report = [
+    'Gate validator 状态追踪问题说明',
+    '所有 subagent 输出文件都包含完整的 skill 加载证据：',
+    'GATE COMPLETE: ecc-security-reviewer skills [security-review, security-scan] loaded and applied.',
+    '结论：Gate validator 有已知 bug，验证工具无法识别这些状态，报告已交付，无更多工作。',
+  ].join('\n');
+
+  await event(pi, 'session_start')({}, ctx);
+  const result = await event(pi, 'before_agent_start')({ prompt: report }, ctx);
+  const fragment = governanceText(result, {});
+
+  assert.equal(result.route.intent, 'diagnosis');
+  assert.match(fragment, /Intent: diagnosis/);
+  assert.doesNotMatch(fragment, /librarian/);
+  assert.doesNotMatch(fragment, /Required subagents:\n- librarian/);
+
+  const stop = await event(pi, 'session_stop')({ output: report }, ctx);
+
+  assert.equal(stop, undefined);
+});
+
 test('assistant output loop guard aborts repeated main-agent generation and prepares recovery context', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);

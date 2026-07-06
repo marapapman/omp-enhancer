@@ -105,7 +105,8 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasTestAnalysis = isTestAnalysisRequest(normalized);
   const hasTestReportWriting = isTestReportWritingRequest(normalized);
   const hasBugReportWriting = isBugReportWritingRequest(normalized);
-  const hasBugAudit = !hasBugReportWriting && isBugAuditRequest(normalized);
+  const hasGateValidatorStatusReport = isGateValidatorStatusReport(normalized);
+  const hasBugAudit = !hasGateValidatorStatusReport && !hasBugReportWriting && isBugAuditRequest(normalized);
   const hasFocusedBugAudit = hasBugAudit && isFocusedDirectAuditRequest(normalized);
   const hasKnowledgeOnly = isKnowledgeWorkWithoutWritingArtifact(normalized);
   const hasCoding = !asksNoCodeChange && !hasBugAudit && !hasKnowledgeOnly && isCodeChangeRequest(normalized);
@@ -115,10 +116,14 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasWriting = hasChineseWriting || hasEnglishWriting;
   const hasSecurity = includesAny(normalized, securityTerms);
   const hasRelease = isReleaseRequest(normalized);
-  const hasConfigAssets = isConfigAssetRequest(normalized);
-  const hasDiagnosisOnly = isDiagnosisOnlyRequest(normalized, asksNoCodeChange);
+  const hasConfigAssets = !hasGateValidatorStatusReport && isConfigAssetRequest(normalized);
+  const hasDiagnosisOnly = hasGateValidatorStatusReport || isDiagnosisOnlyRequest(normalized, asksNoCodeChange);
 
   if (conceptOnly && !isSecurityConceptQuestion(normalized)) return unknownRoute();
+
+  if (hasGateValidatorStatusReport && !hasCodeChange) {
+    return routeByIntent('diagnosis');
+  }
 
   if (hasSecurity && (!hasWriting || isSecurityAuditOrFixRequest(normalized)) && (!hasKnowledgeOnly || isSecurityAuditOrFixRequest(normalized))) {
     return routeByIntent('security-review');
@@ -526,6 +531,20 @@ function isConfigAssetRequest(text) {
     || /(?:运行|执行|检查|排查).*(?:config doctor|doctor).*(?:hooks?|assets?|配置|资产|齐全|完整)/.test(text)
     || /(?:列出|查看|检查|核对).*(?:subagent|subagents|agent|agents|技能|skills?).*(?:清单|可用|当前|齐全|完整|packaged)/.test(text)
     || /(?:检查|核对|列出|查看|排查).*(?:marketplace catalog|marketplace|catalog).*(?:版本|version|插件|plugin|一致|同步)/.test(text);
+}
+
+function isGateValidatorStatusReport(text) {
+  const mentionsGateValidator = /(?:gate|门禁).*(?:validator|validation|验证器|验证工具|状态追踪|state tracking)/.test(text)
+    || /(?:validator|validation|验证器|验证工具|状态追踪|state tracking).*(?:gate|门禁)/.test(text);
+  const mentionsSkillEvidence = /(?:skills?_loaded|loaded skills|skills?\s+loaded|missing loaded skills|gate complete|subagent_usage|skill\s*加载|技能加载)/.test(text)
+    || /(?:subagent|子代理).*(?:skills?|技能)/.test(text)
+    || /(?:skills?|技能).*(?:subagent|子代理)/.test(text);
+  const reportMarker = /(?:问题说明|问题描述|事件经过|证据|结论|已知.*bug|known.*bug|报告已交付|审计完成|无更多工作|所有.*subagent.*完成|验证工具无法识别|继续尝试.*无意义|gate.*open|显示为.*open|state tracking bug)/.test(text);
+
+  return mentionsGateValidator && reportMarker && (
+    mentionsSkillEvidence
+    || /(?:审计完成|报告已交付|无更多工作|所有.*subagent.*完成|已知.*bug|known.*bug|gate.*open|显示为.*open)/.test(text)
+  );
 }
 
 function isSecurityAuditOrFixRequest(text) {

@@ -374,6 +374,9 @@ test('routes operational edge workloads without workflow confusion', () => {
     ['runtime warning fix', '修复 warning 导致的启动失败，并验证。', 'implementation-with-tests'],
     ['gate preflight audit', '检查门禁事前检查逻辑是否误挡，只报告不修。', 'bug-audit'],
     ['gate preflight fix', '修正门禁事前检查逻辑，并补压力测试。', 'implementation-with-tests'],
+    ['gate validator state report', 'Gate validator 状态追踪问题说明：所有 subagent 输出文件都包含完整的 skill 加载证据 skills_loaded，但验证工具无法识别。', 'diagnosis'],
+    ['delivered gate validator report', '审计完成。Gate validator 有已知 bug。所有 subagent 已成功完成。报告已交付。无更多工作。', 'diagnosis'],
+    ['gate complete evidence report', '证据：GATE COMPLETE: reviewer skills [security-review] loaded and applied. 结论：Gate validator 有已知状态追踪 bug，gate 显示为 open。', 'diagnosis'],
   ];
 
   for (const [name, prompt, expectedIntent] of cases) {
