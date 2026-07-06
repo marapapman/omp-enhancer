@@ -60,12 +60,12 @@ export const routedIntents = [
 
 const subagentPlans = {
   configAssets: [
-    subagent('librarian', 'inventory packaged assets, agents, skills, hooks, and config templates before edits'),
+    subagent('config-librarian', 'inventory packaged assets, agents, skills, hooks, and config templates before edits'),
     subagent('reviewer', 'review the final config or marketplace diff before release'),
   ],
   implementation: [
     subagent('plan', 'decompose non-trivial or multi-file changes into an executable plan', ['brainstorming', 'subagent-driven-development']),
-    subagent('task', 'implement the planned code and test changes in the smallest coherent batch', ['test-driven-development', 'verification-before-completion']),
+    subagent('implementation-task', 'implement the planned code and test changes in the smallest coherent batch', ['test-driven-development', 'verification-before-completion']),
     subagent('reviewer', 'review the resulting diff before final claims, commit, or push', ['verification-before-completion']),
   ],
   security: [

@@ -14,11 +14,11 @@ test('parses forked subagents from SUBAGENT_USAGE block', () => {
     'SUBAGENT_USAGE',
     'Required:',
     '- plan: brainstorming, subagent-driven-development',
-    '- task: test-driven-development, verification-before-completion',
+    '- implementation-task: test-driven-development, verification-before-completion',
     '- reviewer: verification-before-completion',
     'Forked:',
     '- plan: brainstorming, subagent-driven-development',
-    '- task: test-driven-development, verification-before-completion',
+    '- implementation-task: test-driven-development, verification-before-completion',
     '- reviewer: verification-before-completion',
     '',
     'SKILL_USAGE',
@@ -26,7 +26,7 @@ test('parses forked subagents from SUBAGENT_USAGE block', () => {
     '- brainstorming',
   ].join('\n'));
 
-  assert.deepEqual(forked, ['plan', 'task', 'reviewer']);
+  assert.deepEqual(forked, ['plan', 'implementation-task', 'reviewer']);
   assert.deepEqual(parseSubagentUsageDetails([
     'SUBAGENT_USAGE',
     'Required:',

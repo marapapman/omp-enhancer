@@ -33,7 +33,7 @@ const expectedByIntent = {
     requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report'],
     subagents: {
       plan: ['brainstorming', 'subagent-driven-development'],
-      task: ['test-driven-development', 'verification-before-completion'],
+      'implementation-task': ['test-driven-development', 'verification-before-completion'],
       reviewer: ['verification-before-completion'],
     },
   },
@@ -62,7 +62,7 @@ const expectedByIntent = {
     requiredSkills: [],
     requiredTools: ['omp_config_doctor', 'omp_config_assets', 'omp_config_plan'],
     subagents: {
-      librarian: [],
+      'config-librarian': [],
       reviewer: [],
     },
   },
@@ -299,6 +299,21 @@ test('all workflow matrix subagents and skills are packaged by installed plugin 
   }
 });
 
+test('core workflow gate subagents run as blocking task agents', async () => {
+  const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const agentRoots = [
+    path.join(repoRoot, 'plugins', 'omp-config', 'agents'),
+  ];
+  const blockingIntents = new Set(['implementation-with-tests', 'bug-audit', 'security-review', 'config-assets']);
+
+  for (const route of routesFromMatrix().filter((item) => blockingIntents.has(item.intent))) {
+    for (const { agent } of route.requiredSubagents) {
+      const frontmatter = await agentFrontmatterInRoots(agentRoots, agent);
+      assert.match(frontmatter, /^blocking:\s*true\s*$/m, `${route.intent} subagent ${agent} should be blocking`);
+    }
+  }
+});
+
 function routesFromMatrix() {
   const byIntent = new Map();
   for (const [, prompt] of workloadMatrix) {
@@ -343,6 +358,18 @@ async function existsInRoots(roots, relativePath) {
     }
   }
   return false;
+}
+
+async function agentFrontmatterInRoots(roots, agent) {
+  for (const root of roots) {
+    try {
+      const text = await readFile(path.join(root, `${agent}.md`), 'utf8');
+      return String(text).match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '';
+    } catch {
+      // Try the next packaged plugin root.
+    }
+  }
+  return '';
 }
 
 async function skillNamesInRoots(roots) {

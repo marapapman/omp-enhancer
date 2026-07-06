@@ -33,7 +33,7 @@ const validRouteCases = [
     language: 'zh',
     riskFlags: ['needs-tests', 'needs-review', 'needs-subagents'],
     expectedAgent: 'implementer',
-    expectedSubagents: ['plan', 'task', 'reviewer'],
+    expectedSubagents: ['plan', 'implementation-task', 'reviewer'],
   }),
   caseFor({
     name: 'legacy testing classifier',
@@ -79,7 +79,7 @@ const validRouteCases = [
     language: 'zh',
     riskFlags: ['needs-marketplace-check', 'needs-subagents'],
     expectedAgent: 'config-assets',
-    expectedSubagents: ['librarian', 'reviewer'],
+    expectedSubagents: ['config-librarian', 'reviewer'],
   }),
   caseFor({
     name: 'diagnosis only',

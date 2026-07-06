@@ -34,7 +34,7 @@ const expectedByIntent = {
     requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     subagents: {
       plan: ['brainstorming', 'subagent-driven-development'],
-      task: ['test-driven-development', 'verification-before-completion'],
+      'implementation-task': ['test-driven-development', 'verification-before-completion'],
       reviewer: ['verification-before-completion'],
     },
   },
@@ -48,7 +48,7 @@ const expectedByIntent = {
   'config-assets': {
     requiredSkills: [],
     subagents: {
-      librarian: [],
+      'config-librarian': [],
       reviewer: [],
     },
   },

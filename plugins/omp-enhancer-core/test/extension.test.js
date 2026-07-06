@@ -1267,7 +1267,7 @@ test('session_stop continues when an implementation-with-tests task has not run 
     undefined,
     ctx,
   );
-  await forkSubagents(pi, ctx, ['plan', 'task', 'reviewer']);
+  await forkSubagents(pi, ctx, ['plan', 'implementation-task', 'reviewer']);
 
   const result = await event(pi, 'session_stop')({}, ctx);
 
@@ -1285,7 +1285,7 @@ test('failed omp_test_gate results do not release implementation and testing gat
     },
     {
       prompt: '实现自然语言路由并补测试，测试写完后要过门禁。',
-      agents: ['plan', 'task', 'reviewer'],
+      agents: ['plan', 'implementation-task', 'reviewer'],
       skills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
     },
   ];
@@ -1397,7 +1397,7 @@ test('external failed omp_test_gate keeps RED test evidence blocking', async () 
 
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')({ prompt: '实现自然语言路由并补测试，测试写完后要过门禁。' }, ctx);
-  await forkSubagents(pi, ctx, ['plan', 'task', 'reviewer']);
+  await forkSubagents(pi, ctx, ['plan', 'implementation-task', 'reviewer']);
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-red-test-gate-skill-usage',
     { output: skillUsageBlock(['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion']) },
@@ -1444,9 +1444,9 @@ test('session_stop continues when a routed task has not forked required subagent
 
   assert.equal(blocked?.continue, true);
   assert.match(blocked.additionalContext, /subagent gate/i);
-  assert.match(blocked.additionalContext, /plan, task, reviewer/);
+  assert.match(blocked.additionalContext, /plan, implementation-task, reviewer/);
 
-  await forkSubagents(pi, ctx, ['plan', 'task', 'reviewer']);
+  await forkSubagents(pi, ctx, ['plan', 'implementation-task', 'reviewer']);
 
   const next = await event(pi, 'session_stop')({}, ctx);
 
@@ -1490,7 +1490,7 @@ test('failed task tool results do not count as forked subagents', async () => {
   assert.match(blocked.additionalContext, /subagent gate/i);
   assert.match(blocked.additionalContext, /Recent failed tool results/);
   assert.match(blocked.additionalContext, /task: Task subagent failed to start/);
-  assert.match(blocked.additionalContext, /Missing task-launched subagents: plan, task, reviewer|Missing task-launched subagents: task, reviewer/);
+  assert.match(blocked.additionalContext, /Missing task-launched subagents: plan, implementation-task, reviewer|Missing task-launched subagents: implementation-task, reviewer/);
 });
 
 test('failed task results keep subagent gate blocked even after prior task tool_call evidence', async () => {
@@ -1512,7 +1512,7 @@ test('failed task results keep subagent gate blocked even after prior task tool_
       input: {
         tasks: [
           { role: 'plan', assignment: 'Required skills for this subagent:\n- brainstorming\n- subagent-driven-development' },
-          { role: 'task', assignment: 'Required skills for this subagent:\n- test-driven-development\n- verification-before-completion' },
+          { role: 'implementation-task', assignment: 'Required skills for this subagent:\n- test-driven-development\n- verification-before-completion' },
           { role: 'reviewer', assignment: 'Required skills for this subagent:\n- verification-before-completion' },
         ],
       },
@@ -1534,7 +1534,7 @@ test('failed task results keep subagent gate blocked even after prior task tool_
   assert.match(blocked.additionalContext, /subagent gate/i);
   assert.match(blocked.additionalContext, /Task worker crashed before returning/);
 
-  await forkSubagents(pi, ctx, ['plan', 'task', 'reviewer']);
+  await forkSubagents(pi, ctx, ['plan', 'implementation-task', 'reviewer']);
   const next = await event(pi, 'session_stop')({}, ctx);
 
   assert.equal(next?.continue, true);
@@ -1555,7 +1555,7 @@ test('session_stop continues when forked subagents lack required skill assignmen
     undefined,
     ctx,
   );
-  for (const agent of ['plan', 'task', 'reviewer']) {
+  for (const agent of ['plan', 'implementation-task', 'reviewer']) {
     await event(pi, 'tool_result')({ name: 'task', params: { agent, prompt: 'Do the assigned work.' } }, ctx);
   }
 
@@ -1564,7 +1564,7 @@ test('session_stop continues when forked subagents lack required skill assignmen
   assert.equal(blocked?.continue, true);
   assert.match(blocked.additionalContext, /Missing subagent skill assignments/);
   assert.match(blocked.additionalContext, /plan \[brainstorming, subagent-driven-development\]/);
-  assert.match(blocked.additionalContext, /task \[test-driven-development, verification-before-completion\]/);
+  assert.match(blocked.additionalContext, /implementation-task \[test-driven-development, verification-before-completion\]/);
 });
 
 test('pending task tool_call evidence blocks completion until task result returns', async () => {
@@ -3100,7 +3100,7 @@ async function readSkills(pi, ctx, skills) {
 function subagentSkills(agent) {
   return {
     plan: ['brainstorming', 'subagent-driven-development'],
-    task: ['test-driven-development', 'verification-before-completion'],
+    'implementation-task': ['test-driven-development', 'verification-before-completion'],
     reviewer: ['verification-before-completion'],
     'ecc-code-reviewer': ['verification-before-completion'],
     'ecc-silent-failure-hunter': ['diagnose'],
@@ -3111,7 +3111,7 @@ function subagentSkills(agent) {
     'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
     writer: ['writing-markdown-helper'],
     checker: ['writing-checkers'],
-    librarian: [],
+    'config-librarian': [],
   }[agent] ?? [];
 }
 

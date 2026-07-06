@@ -17,6 +17,7 @@ spawns: []
 model:
 - pi/plan
 thinkingLevel: high
+blocking: true
 ---
 ## Prompt Defense Baseline
 

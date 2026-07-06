@@ -16,6 +16,7 @@ model:
   - pi/plan
   - pi/slow
 thinkingLevel: high
+blocking: true
 ---
 
 Analyze the codebase and the user's request. Produce a detailed implementation plan.

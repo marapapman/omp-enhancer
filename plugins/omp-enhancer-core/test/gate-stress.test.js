@@ -139,7 +139,7 @@ const profiles = {
     ],
     subagents: {
       plan: ['brainstorming', 'subagent-driven-development'],
-      task: ['test-driven-development', 'verification-before-completion'],
+      'implementation-task': ['test-driven-development', 'verification-before-completion'],
       reviewer: ['verification-before-completion'],
     },
     skills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
@@ -169,7 +169,7 @@ const profiles = {
       'Review bundled hooks and templates in omp-config.',
     ],
     subagents: {
-      librarian: [],
+      'config-librarian': [],
       reviewer: [],
     },
     skills: [],

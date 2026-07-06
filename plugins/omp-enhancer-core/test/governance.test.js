@@ -144,7 +144,7 @@ test('names the selected agent route and toolchain in the governance fragment', 
       requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report'],
       requiredSubagents: [
         { agent: 'plan', duty: 'decompose the task', requiredSkills: ['brainstorming', 'subagent-driven-development'] },
-        { agent: 'task', duty: 'implement the task', requiredSkills: ['test-driven-development', 'verification-before-completion'] },
+        { agent: 'implementation-task', duty: 'implement the task', requiredSkills: ['test-driven-development', 'verification-before-completion'] },
         { agent: 'reviewer', duty: 'review the diff', requiredSkills: ['verification-before-completion'] },
       ],
     },
@@ -163,7 +163,7 @@ test('names the selected agent route and toolchain in the governance fragment', 
   assert.match(fragment, /this is a code\/testing workflow/i);
   assert.match(fragment, /subagent-driven-development/);
   assert.match(fragment, /plan:\s*decompose the task; skills: brainstorming, subagent-driven-development/);
-  assert.match(fragment, /task:\s*implement the task; skills: test-driven-development, verification-before-completion/);
+  assert.match(fragment, /implementation-task:\s*implement the task; skills: test-driven-development, verification-before-completion/);
   assert.match(fragment, /reviewer:\s*review the diff; skills: verification-before-completion/);
 });
 
