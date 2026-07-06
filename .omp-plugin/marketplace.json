@@ -350,7 +350,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "Unified OMP enhancer runtime router for coding, writing, testing, and config tasks.",
-      "version": "0.1.53",
+      "version": "0.1.54",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",

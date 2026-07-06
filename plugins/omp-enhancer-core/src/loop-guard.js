@@ -116,6 +116,12 @@ export function recordLoopGuardProgress(state = createLoopGuardState(), fingerpr
   }
 }
 
+export function prepareLoopGuardContinuation(state = createLoopGuardState()) {
+  state.streamTriggered = false;
+  state.lastProgressAt = Date.now();
+  resetLoopGuardStreamState(state);
+}
+
 export function inspectGeneratedText(text = '', config = {}) {
   const options = { ...defaultLoopGuardConfig, ...config };
   const stripped = stripExemptBlocks(text);

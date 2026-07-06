@@ -20,13 +20,16 @@ import {
   readLoopGuardSnapshot,
   recordGeneratedText,
   recordLoopGuardProgress,
+  prepareLoopGuardContinuation,
   serializeLoopGuardState,
   startLoopGuardRun,
   takeLoopRecoveryContext,
   buildLoopRecoveryContext,
+  defaultLoopGuardConfig,
 } from './src/loop-guard.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
+const LOOP_GUARD_RECOVERY_MESSAGE = 'omp-enhancer-core.loop-guard-recovery';
 const ASSISTANT_OUTPUT_EVENTS = [
   'assistant_delta',
   'assistant_message',
@@ -272,6 +275,16 @@ export default function registerCoreEnhancer(pi) {
     });
   }
 
+  for (const eventName of ['turn_start', 'agent_start']) {
+    pi.on?.(eventName, async (_event = {}, ctx = {}) => {
+      restoreStateFromContext(state, ctx);
+      if (!state.loopGuard.streamTriggered || state.loopGuard.recoveryPending) return undefined;
+      prepareLoopGuardContinuation(state.loopGuard);
+      await persistState(pi, state);
+      return undefined;
+    });
+  }
+
   pi.on?.('before_agent_start', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const prompt = extractPrompt(event);
@@ -285,7 +298,13 @@ export default function registerCoreEnhancer(pi) {
       await persistState(pi, state);
       return { additionalContext: recoveryContext, route: state.lastRoute };
     }
-    if (isInternalCoreContinuation(prompt)) return undefined;
+    if (isInternalCoreContinuation(prompt)) {
+      if (isLoopGuardRecoveryContinuation(prompt) && state.loopGuard.streamTriggered && !state.loopGuard.recoveryPending) {
+        prepareLoopGuardContinuation(state.loopGuard);
+        await persistState(pi, state);
+      }
+      return undefined;
+    }
     if (isSubagentLaunchPrompt(prompt)) {
       const fragment = buildSubagentPromptFragment({ prompt });
       if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${fragment}`;
@@ -380,6 +399,12 @@ export default function registerCoreEnhancer(pi) {
 
     await persistState(pi, state);
 
+    const finalOutput = extractFinalOutputText(event);
+    if (state.classifierPreflight?.required && isClassifierInfrastructureChurnDelivery(finalOutput)) {
+      state.classifierPreflight = null;
+      await persistState(pi, state);
+    }
+
     const missingClassifierPreflightContext = buildMissingClassifierPreflightContext(state);
     if (missingClassifierPreflightContext) {
       return { continue: true, additionalContext: missingClassifierPreflightContext };
@@ -387,7 +412,6 @@ export default function registerCoreEnhancer(pi) {
 
     const ruleGate = buildCompletionRuleGateBlock(state);
     if (ruleGate) {
-      const finalOutput = extractFinalOutputText(event);
       if (consumeSmartGateCompletionAllowance(state, ruleGate)) {
         const nextRuleGate = buildCompletionRuleGateBlock(state);
         if (!nextRuleGate) {
@@ -894,8 +918,15 @@ function cleanToolCallId(value) {
 }
 
 function isInternalCoreContinuation(prompt) {
-  return prompt.includes('OMP Enhancer Core')
-    && prompt.includes('gate is still open');
+  return String(prompt ?? '').includes('OMP Enhancer Core')
+    && (
+      String(prompt ?? '').includes('gate is still open')
+      || isLoopGuardRecoveryContinuation(prompt)
+    );
+}
+
+function isLoopGuardRecoveryContinuation(prompt) {
+  return String(prompt ?? '').includes('OMP Enhancer Core main-agent loop guard stopped the previous generation');
 }
 
 function isSlashCommandPrompt(prompt) {
@@ -954,7 +985,7 @@ function classifierPreflightReasons(route, prompt = '') {
   if (route.intent === 'diagnosis') {
     return reasons;
   }
-  if (!isWritingIntent(route.intent) && mentionsRoutingAnomaly(text)) {
+  if (!isWritingIntent(route.intent) && mentionsRoutingAnomaly(text) && !isClassifierInfrastructureRepairRequest(text)) {
     reasons.push('user mentions routing, workflow, gate, or classifier confusion');
   }
   if (isMixedWorkflowBoundary(text)) {
@@ -973,11 +1004,34 @@ function isWritingIntent(intent) {
 
 function mentionsRoutingAnomaly(text = '') {
   if (isCompletedGateStatusReport(text)) return false;
+  if (isClassifierInfrastructureRepairRequest(text)) return false;
   const classifierOrRoute = /(?:classifier|classifer|router|route|routing|路由|分类|分发)/.test(stripRouteFileNames(text));
   const governance = /(?:workflow|gate|subagent|fork|validator|governance|工作流|门禁|验证器|子代理|治理)/.test(text);
   const routeProblem = /(?:wrong|mis[- ]?route|confus|fail|failed|failure|bug|issue|problem|错误|误判|误路由|异常|问题|失败|不顺|不对)/.test(text);
   const governanceProblem = /(?:blocked|block|loop|stuck|\bmissing\s+skills?\b|\bmissing\s+subagent\b|\brequires?\b.{0,20}\bsubagent\b|gate.{0,20}(?:open|block|fail)|workflow.{0,30}(?:wrong|confus|stuck|fail|not smooth)|validator.{0,30}(?:wrong|fail|missing)|挡住|拦住|循环|卡住|缺少.{0,12}(?:skill|技能|subagent|子代理)|仍然.{0,20}要求|重复.{0,20}检查|没有意识到|无法|不能|不顺|触发.{0,20}securityreview)/.test(text);
   return (classifierOrRoute && routeProblem) || (governance && governanceProblem);
+}
+
+function isClassifierInfrastructureRepairRequest(text = '') {
+  const value = String(text ?? '').toLowerCase();
+  const mentionsInfra = /(?:classifier|classifer|router|route|routing|workflow|gate|validator|governance|preflight|smart gate|分类器|分类|路由|工作流|门禁|验证器|治理|预检|智能门禁)/.test(value);
+  const mentionsChurn = /(?:loop|churn|spin|stuck|block|blocked|blocking|repeat|repeated|unrelated|irrelevant|打转|循环|卡住|阻止|挡住|拦住|反复|重复|无关|不相关|无意义)/.test(value);
+  const asksRepair = /(?:fix|repair|resolve|optimi[sz]e|improve|reduce|avoid|prevent|stop|suppress|adjust|change|update|patch|修复|解决|优化|改进|减少|避免|防止|停止|抑制|调整|修改|更新|处理)/.test(value);
+  return mentionsInfra && asksRepair && mentionsChurn;
+}
+
+function isClassifierInfrastructureChurnDelivery(output = '') {
+  const text = String(output ?? '').toLowerCase();
+  if (!text.trim()) return false;
+  const mentionsInfra = /(?:classifier|classifer|router|route|routing|workflow|gate|validator|governance|preflight|smart gate|分类器|分类|路由|工作流|门禁|验证器|治理|预检|智能门禁)/.test(text);
+  const mentionsChurn = /(?:loop|churn|spin|stuck|blocker|blocked|blocking|repeat|repeated|unrelated|irrelevant|wasted|打转|循环|卡住|阻止|挡住|拦住|反复|重复|无关|不相关|无意义|消耗)/.test(text);
+  const saysDeliveryDone = /(?:task|user request|delivery|deliverable|work|用户.*任务|请求|交付|工作).{0,40}(?:complete|completed|done|delivered|finished|已完成|完成|已交付|交付|结束)/.test(text)
+    || /(?:complete|completed|done|delivered|finished|已完成|完成|已交付|交付).{0,40}(?:task|user request|delivery|deliverable|work|用户.*任务|请求|工作)/.test(text)
+    || /(?:写入|修改).{0,20}(?:第\s*)?\d+\s*(?:[-~至到]\s*\d+\s*)?(?:行|line)/.test(text)
+    || /(?:结构|验证|tests?|coverage|检查).{0,20}(?:clean|pass|passed|通过|干净|无误)/.test(text);
+  const saysStopInfraWork = /(?:stop|go silent|do not|don't|dont|直接|确认交付|停止|不要|别).{0,50}(?:classifier|classifer|route|routing|workflow|gate|validator|分类器|路由|工作流|门禁|验证器|打转|循环|消耗)/.test(text)
+    || /(?:classifier|classifer|route|routing|workflow|gate|validator|分类器|路由|工作流|门禁|验证器).{0,50}(?:stop|go silent|do not|don't|dont|停止|不要|别|消耗|无关|不相关)/.test(text);
+  return mentionsInfra && mentionsChurn && saysDeliveryDone && saysStopInfraWork;
 }
 
 function stripRouteFileNames(text = '') {
@@ -1823,8 +1877,9 @@ async function handleLoopGuardGeneratedOutput(pi, state, ctx = {}, text = '') {
   const detection = recordGeneratedText(state.loopGuard, text);
   if (!detection.repeated) return undefined;
 
-  await persistState(pi, state);
   const additionalContext = buildLoopRecoveryContext(state.loopGuard);
+  const autoContinuation = await queueLoopGuardRecoveryContinuation(pi, state, additionalContext, detection);
+  await persistState(pi, state);
   await ctx.ui?.notify?.('OMP Enhancer Core stopped a repeated main-agent generation.', 'warn');
   try {
     ctx.abort?.();
@@ -1836,8 +1891,46 @@ async function handleLoopGuardGeneratedOutput(pi, state, ctx = {}, text = '') {
     abort: true,
     reason: `OMP Enhancer Core loop guard: ${detection.reason}`,
     additionalContext,
-    details: { loopGuard: detection },
+    autoContinue: autoContinuation.queued,
+    details: { loopGuard: detection, autoContinuation },
   };
+}
+
+async function queueLoopGuardRecoveryContinuation(pi, state, fallbackContext, detection) {
+  if (typeof pi?.sendMessage !== 'function') {
+    return { queued: false, reason: 'sendMessage unavailable' };
+  }
+  if (!state.loopGuard.recoveryPending) {
+    return { queued: false, reason: 'recovery context unavailable' };
+  }
+  if (state.loopGuard.recoveryAttempts >= defaultLoopGuardConfig.maxRecoveryAttempts) {
+    return { queued: false, reason: 'recovery attempt limit reached' };
+  }
+  const content = fallbackContext;
+  if (!content) return { queued: false, reason: 'recovery context unavailable' };
+
+  try {
+    await pi.sendMessage({
+      customType: LOOP_GUARD_RECOVERY_MESSAGE,
+      content,
+      display: false,
+      attribution: 'agent',
+      details: {
+        reason: detection.reason,
+        repeatedText: detection.repeatedText,
+      },
+    }, {
+      deliverAs: 'followUp',
+      triggerTurn: true,
+    });
+    takeLoopRecoveryContext(state.loopGuard);
+    return { queued: true, customType: LOOP_GUARD_RECOVERY_MESSAGE };
+  } catch (error) {
+    return {
+      queued: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function reconcileSkillUsageFromReadEvidence(state) {

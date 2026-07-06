@@ -89,6 +89,8 @@ test('registers core tools and hooks without a separate classifier command', () 
     'response_delta',
     'response_output_delta',
     'message_update',
+    'turn_start',
+    'agent_start',
     'before_agent_start',
     'tool_call',
     'tool_execution_update',
@@ -279,6 +281,28 @@ test('classifier preflight blocks ambiguous route work until classifier resolves
   assert.equal(allowed, undefined);
 });
 
+test('classifier infrastructure repair requests do not require classifier preflight', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
+  const prompt = [
+    '⟦blocker⟧ 你在跟 OMP 分类器系统基础设施打转，这跟用户的任务无关。',
+    '用户要的第一章修订已经完成了（写入第88-98行，结构已验证干净）。',
+    '直接向用户确认交付，然后停止。别在分类器死循环里消耗更多时间。',
+    '帮我修复这类分类器打转的情况',
+  ].join('\n');
+
+  await event(pi, 'session_start')({}, ctx);
+  const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
+
+  assert.equal(start.route.intent, 'implementation-with-tests');
+  assert.doesNotMatch(start.additionalContext, /Classifier preflight: required/);
+
+  const routeState = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(routeState.classifierPreflight, null);
+});
+
 test('before_agent_start bypasses OMP built-in slash commands without injecting or resetting route state', async () => {
   const builtInSlashCommands = [
     '/usage',
@@ -388,14 +412,51 @@ test('assistant output loop guard aborts repeated main-agent generation and prep
   const blocked = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
 
   assert.equal(blocked.abort, true);
+  assert.equal(blocked.autoContinue, true);
   assert.match(blocked.reason, /loop guard/i);
   assert.match(blocked.additionalContext, /main-agent loop guard stopped/);
   assert.match(blocked.additionalContext, /Do not repeat the stopped sentence/);
+  assert.equal(pi.messages.length, 1);
+  assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.loop-guard-recovery');
+  assert.equal(pi.messages[0].message.display, false);
+  assert.equal(pi.messages[0].message.attribution, 'agent');
+  assert.match(pi.messages[0].message.content, /choose exactly one next action/);
+  assert.deepEqual(pi.messages[0].options, { deliverAs: 'followUp', triggerTurn: true });
+});
 
-  const recovery = await event(pi, 'before_agent_start')({ prompt: 'Continue.' }, ctx);
+test('before_agent_start treats loop guard auto-continuations as internal prompts', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
 
-  assert.match(recovery.additionalContext, /choose exactly one next action/);
-  assert.equal(recovery.route.intent, 'implementation-with-tests');
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt: 'Implement classifier fallback handling and add tests.' }, ctx);
+
+  const repeated = [
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+    'The system is asking me to validate SKILL_USAGE again.',
+  ].join('\n');
+  const blocked = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
+
+  assert.equal(blocked.abort, true);
+  assert.equal(blocked.autoContinue, true);
+  assert.equal(pi.messages.length, 1);
+
+  const continuationStart = await event(pi, 'before_agent_start')({ prompt: pi.messages[0].message.content }, ctx);
+
+  assert.equal(continuationStart, undefined);
+
+  const repeatedAgain = [
+    'I will now run the focused regression test.',
+    'I will now run the focused regression test.',
+    'I will now run the focused regression test.',
+  ].join('\n');
+  const blockedAgain = await event(pi, 'assistant_delta')({ delta: repeatedAgain }, ctx);
+
+  assert.equal(blockedAgain.abort, true);
+  assert.equal(blockedAgain.autoContinue, false);
+  assert.match(blockedAgain.details.autoContinuation.reason, /limit/i);
 });
 
 test('message_update loop guard aborts real OMP text delta streams', async () => {
@@ -434,11 +495,23 @@ test('message_update loop guard aborts real OMP text delta streams', async () =>
 
   assert.equal(abortCount, 1);
   assert.equal(blocked.abort, true);
+  assert.equal(blocked.autoContinue, true);
   assert.match(blocked.reason, /loop guard/i);
+  assert.equal(pi.messages.length, 1);
+  assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.loop-guard-recovery');
+  assert.match(pi.messages[0].message.content, /choose exactly one next action/);
+  assert.deepEqual(pi.messages[0].options, { deliverAs: 'followUp', triggerTurn: true });
 
-  const recovery = await event(pi, 'before_agent_start')({ prompt: 'Continue.' }, ctx);
+  await event(pi, 'turn_start')({}, ctx);
+  const nonRepeatedAfterRecoveryStart = await event(pi, 'message_update')(
+    {
+      message: { role: 'assistant', content: [{ type: 'text', text: 'I will inspect the next required file and then run the focused test.' }] },
+      assistantMessageEvent: { type: 'text_delta', delta: 'I will inspect the next required file and then run the focused test.', contentIndex: 0 },
+    },
+    ctx,
+  );
 
-  assert.match(recovery.additionalContext, /choose exactly one next action/);
+  assert.equal(nonRepeatedAfterRecoveryStart, undefined);
 });
 
 test('message_update loop guard detects repeated planning blocks across streamed deltas', async () => {
@@ -482,6 +555,10 @@ test('message_update loop guard detects repeated planning blocks across streamed
   assert.equal(abortCount, 1);
   assert.equal(blocked.abort, true);
   assert.match(blocked.reason, /Repeated \d-line block 2 times/);
+  assert.equal(blocked.autoContinue, true);
+  assert.equal(pi.messages.length, 1);
+  assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.loop-guard-recovery');
+  assert.match(pi.messages[0].message.content, /continue from the last non-repeated state/);
 });
 
 test('session_stop loop guard gives one bounded recovery for repeated final output', async () => {
@@ -3613,6 +3690,39 @@ test('unknown route classifier observations accumulate across follow-up prompts'
   assert.match(classifierPrompt.content[0].text, /帮我看看这个东西。/);
   assert.match(classifierPrompt.content[0].text, /先不用动代码，只解释可能的方向。/);
   assert.match(classifierPrompt.content[0].text, /现在看起来是插件路由问题/);
+});
+
+test('session_stop releases classifier preflight when final output proves classifier churn is unrelated', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = '写个页面';
+  const skills = ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'];
+  const agents = ['plan', 'implementation-task', 'reviewer'];
+
+  await event(pi, 'session_start')({}, ctx);
+  const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
+
+  assert.match(start.additionalContext, /Classifier preflight: required/);
+
+  await readSkills(pi, ctx, skills);
+  await forkSubagents(pi, ctx, agents);
+  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
+
+  const finalOutput = [
+    usageEvidence({
+      subagents: Object.fromEntries(agents.map((agent) => [agent, subagentSkills(agent)])),
+      skills,
+    }),
+    '',
+    '⟦blocker⟧ 你在跟 OMP 分类器系统基础设施打转，这跟用户的任务无关。',
+    '用户要的第一章修订已经完成了（写入第88-98行，结构已验证干净）。',
+    '直接向用户确认交付，然后停止。别在分类器死循环里消耗更多时间。',
+  ].join('\n');
+
+  const released = await event(pi, 'session_stop')({ output: finalOutput }, ctx);
+
+  assert.equal(released, undefined);
 });
 
 test('non-gated diagnosis release and unknown routes do not create repeated gate continuations', async () => {
