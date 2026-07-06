@@ -1,6 +1,6 @@
 {
   "name": "omp-enhancer-core",
-  "version": "0.1.49",
+  "version": "0.1.50",
   "private": true,
   "type": "module",
   "description": "Core OMP Enhancer routing, governance, and session gates.",

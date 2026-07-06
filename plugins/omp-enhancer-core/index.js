@@ -39,6 +39,26 @@ const SUBAGENT_STUCK_AFTER_MS = 10 * 60 * 1000;
 const SUBAGENT_ACTIVE_STATUSES = new Set(['pending', 'running', 'started', 'in_progress', 'in-progress']);
 const SUBAGENT_COMPLETED_STATUSES = new Set(['completed', 'complete', 'success', 'succeeded']);
 const SUBAGENT_FAILED_STATUSES = new Set(['failed', 'failure', 'error', 'aborted', 'cancelled', 'canceled']);
+const CLASSIFIER_PREFLIGHT_EXEMPT_TOOLS = new Set([
+  'omp_core_classifier_prompt',
+  'omp_core_resolve_classification',
+  'omp_core_route_task',
+  'omp_core_governance_prompt',
+  'omp_core_subagent_status',
+  'read',
+]);
+const CLASSIFIER_PREFLIGHT_FAILURE_TOOLS = new Set([
+  'task',
+  'omp_test_gate',
+  'omp_test_report',
+  'writing_quality_check',
+  'writing_logic_check',
+  'omp_core_validate_skill_usage',
+  'omp_core_validate_subagent_usage',
+  'omp_config_doctor',
+  'omp_config_assets',
+  'omp_config_plan',
+]);
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
@@ -94,7 +114,7 @@ export default function registerCoreEnhancer(pi) {
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const result = resolveClassificationRoute({ prompt: params.prompt, output: params.output });
-      setRouteState(state, result.route, params.prompt);
+      setRouteState(state, result.route, params.prompt, { classifierResolved: true });
       await persistState(pi, state);
       return okResult(formatRoute(result.route), result);
     },
@@ -216,6 +236,11 @@ export default function registerCoreEnhancer(pi) {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
     if (name) recordLoopGuardProgress(state.loopGuard, `tool_call:${name}`);
+    const classifierBlock = buildClassifierPreflightGateBlock(state, name);
+    if (classifierBlock) {
+      await persistState(pi, state);
+      return classifierBlock;
+    }
     if (name === 'task') {
       const taskSkillBlock = buildTaskSubagentSkillGateBlock(state, event);
       if (taskSkillBlock) {
@@ -248,7 +273,10 @@ export default function registerCoreEnhancer(pi) {
     if (name) recordLoopGuardProgress(state.loopGuard, `tool_result:${name}`);
     const successful = isSuccessfulToolEvent(event);
     if (name && successful && name !== 'read') clearToolFailures(state, name);
-    if (name && !successful) recordToolFailure(state, name, event);
+    if (name && !successful) {
+      recordToolFailure(state, name, event);
+      maybeRequireClassifierAfterToolFailure(state, name, event);
+    }
     if ((name === 'writing_quality_check' || name === 'writing_logic_check') && successful) state.evidence.writingQuality = true;
     if (name === 'omp_test_gate' && successful) state.evidence.testingGate = true;
     if (name === 'omp_test_report' && successful) state.evidence.testingReport = true;
@@ -279,6 +307,11 @@ export default function registerCoreEnhancer(pi) {
 
     await persistState(pi, state);
 
+    const missingClassifierPreflightContext = buildMissingClassifierPreflightContext(state);
+    if (missingClassifierPreflightContext) {
+      return { continue: true, additionalContext: missingClassifierPreflightContext };
+    }
+
     const missingSubagentContext = buildMissingSubagentUsageContext(state);
     if (missingSubagentContext) {
       return { continue: true, additionalContext: missingSubagentContext };
@@ -301,6 +334,7 @@ export function createState() {
     routeStartedAt: 0,
     lastSkillUsage: null,
     lastSubagentUsage: null,
+    classifierPreflight: null,
     evidence: emptyEvidence(),
     loopGuard: createLoopGuardState(),
   };
@@ -359,12 +393,13 @@ function formatSubagents(subagents = []) {
   }).join(', ');
 }
 
-function setRouteState(state, route, prompt = '') {
+function setRouteState(state, route, prompt = '', { classifierResolved = false } = {}) {
   state.lastRoute = route;
   state.lastPrompt = String(prompt ?? '');
   state.routeStartedAt = Date.now();
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
+  state.classifierPreflight = classifierResolved ? null : buildClassifierPreflight(route, prompt);
   state.evidence = emptyEvidence();
   state.loopGuard = createLoopGuardState();
 }
@@ -375,6 +410,7 @@ function resetState(state) {
   state.routeStartedAt = 0;
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
+  state.classifierPreflight = null;
   state.evidence = emptyEvidence();
   state.loopGuard = createLoopGuardState();
 }
@@ -440,6 +476,7 @@ function replaceState(target, source) {
   target.routeStartedAt = source.routeStartedAt;
   target.lastSkillUsage = source.lastSkillUsage;
   target.lastSubagentUsage = source.lastSubagentUsage;
+  target.classifierPreflight = source.classifierPreflight ?? null;
   target.evidence = source.evidence;
   target.loopGuard = mergeLiveLoopGuardState(liveLoopGuard, source.loopGuard ?? createLoopGuardState());
 }
@@ -470,6 +507,7 @@ function serializeState(state) {
     routeStartedAt: state.routeStartedAt,
     lastSkillUsage: state.lastSkillUsage,
     lastSubagentUsage: state.lastSubagentUsage,
+    classifierPreflight: state.classifierPreflight,
     loopGuard: serializeLoopGuardState(state.loopGuard),
     evidence: {
       writingQuality: state.evidence.writingQuality,
@@ -532,8 +570,19 @@ function readStateSnapshot(value) {
     routeStartedAt: Number.isFinite(value.routeStartedAt) ? value.routeStartedAt : 0,
     lastSkillUsage: isRecord(value.lastSkillUsage) ? value.lastSkillUsage : null,
     lastSubagentUsage: isRecord(value.lastSubagentUsage) ? value.lastSubagentUsage : null,
+    classifierPreflight: readClassifierPreflight(value.classifierPreflight),
     loopGuard: readLoopGuardSnapshot(value.loopGuard),
     evidence,
+  };
+}
+
+function readClassifierPreflight(value) {
+  if (!isRecord(value) || value.required !== true) return null;
+  return {
+    required: true,
+    prompt: isString(value.prompt) ? value.prompt : '',
+    fallbackIntent: isString(value.fallbackIntent) ? value.fallbackIntent : 'unknown',
+    reasons: Array.isArray(value.reasons) ? value.reasons.filter(isString) : [],
   };
 }
 
@@ -708,6 +757,145 @@ function isSubagentLaunchPrompt(prompt) {
     || /Required skills for this subagent:/i.test(prompt);
 }
 
+function buildClassifierPreflight(route, prompt = '', extraReasons = []) {
+  const reasons = uniqueValues([
+    ...classifierPreflightReasons(route, prompt),
+    ...extraReasons,
+  ]);
+  if (!reasons.length) return null;
+  return {
+    required: true,
+    prompt: String(prompt ?? ''),
+    fallbackIntent: route?.intent ?? 'unknown',
+    reasons,
+  };
+}
+
+function classifierPreflightReasons(route, prompt = '') {
+  const text = String(prompt ?? '').toLowerCase();
+  const reasons = [];
+  if (!text.trim() || !route) return reasons;
+
+  if (route.intent === 'unknown') {
+    reasons.push('deterministic route is unknown');
+  }
+  if (route.intent === 'diagnosis') {
+    return reasons;
+  }
+  if (!isWritingIntent(route.intent) && mentionsRoutingAnomaly(text)) {
+    reasons.push('user mentions routing, workflow, gate, or classifier confusion');
+  }
+  if (isMixedWorkflowBoundary(text)) {
+    reasons.push('task mixes writing, implementation, testing, or security workflow signals');
+  }
+  if (isShortConstructionPrompt(text, prompt)) {
+    reasons.push('short construction prompt is a low-confidence rule hit');
+  }
+
+  return reasons;
+}
+
+function isWritingIntent(intent) {
+  return typeof intent === 'string' && intent.startsWith('writing.');
+}
+
+function mentionsRoutingAnomaly(text = '') {
+  if (isCompletedGateStatusReport(text)) return false;
+  const classifierOrRoute = /(?:classifier|classifer|router|route|routing|路由|分类|分发)/.test(stripRouteFileNames(text));
+  const governance = /(?:workflow|gate|subagent|fork|validator|governance|工作流|门禁|验证器|子代理|治理)/.test(text);
+  const routeProblem = /(?:wrong|mis[- ]?route|confus|fail|failed|failure|bug|issue|problem|错误|误判|误路由|异常|问题|失败|不顺|不对)/.test(text);
+  const governanceProblem = /(?:blocked|block|loop|stuck|\bmissing\s+skills?\b|\bmissing\s+subagent\b|\brequires?\b.{0,20}\bsubagent\b|gate.{0,20}(?:open|block|fail)|workflow.{0,30}(?:wrong|confus|stuck|fail|not smooth)|validator.{0,30}(?:wrong|fail|missing)|挡住|拦住|循环|卡住|缺少.{0,12}(?:skill|技能|subagent|子代理)|仍然.{0,20}要求|重复.{0,20}检查|没有意识到|无法|不能|不顺|触发.{0,20}securityreview)/.test(text);
+  return (classifierOrRoute && routeProblem) || (governance && governanceProblem);
+}
+
+function stripRouteFileNames(text = '') {
+  return String(text).replace(/(?:^|[\s"'`(,[{/\\])(?:[\w.-]+[\\/])*[\w.-]*(?:router|route)[\w.-]*\.(?:c?m?js|tsx?|jsx?|py|go|rs|java|kt|swift|rb|php)\b/g, ' ');
+}
+
+function isCompletedGateStatusReport(text = '') {
+  return /(?:gate validator|validator|门禁|验证器)/.test(text)
+    && /(?:报告已交付|无更多工作|审计完成|已知 bug|已知bug|所有.{0,20}完成|gate complete|final verification summary|no more work)/.test(text);
+}
+
+function isMixedWorkflowBoundary(text = '') {
+  const directTestAuthoring = /(?:(?:写|编写|生成|创建|补充).{0,20}(?:测试用例|单元测试|测试文件|测试)|(?:write|add|create).{0,20}\btests?\b)/.test(text)
+    && !/(?:报告|总结|说明|文档|report|summary|document|notes)/.test(text);
+  const reportOnlyAudit = /(?:(?:只|仅).{0,12}(?:报告|列出|指出)|only.{0,12}(?:report|list|flag)|without.{0,20}(?:fixing|changing|modifying).{0,12}code|(?:do not|don't|dont|no).{0,20}(?:fix|change|modify).{0,12}code)/.test(text)
+    && /(?:bug|issue|问题|审计|audit|检查|测试|test)/.test(text)
+    && /(?:报告|清单|report|findings?|issues?)/.test(text);
+  const reportAboutTests = /(?:测试报告|test report|report.{0,20}(?:test|coverage|verification)|(?:测试|覆盖率|验证).{0,12}报告)/.test(text);
+  if (reportOnlyAudit || reportAboutTests) return false;
+  const actionText = text.replace(/(?:不要|不用|无需|别|不需要|do not|don't|dont|without|no)\s*.{0,12}(?:修复|修改|实现|变更|edit|fix|modify|implement|change)/g, '');
+  const writing = !directTestAuthoring
+    && /(?:起草|撰写|润色|改写|文案|文字|文本|报告|文档|公告|政策|总结|draft|write|revise|polish|edit|wording|prose|report|document|policy|memo|announcement|summary)/.test(text);
+  const implementation = /(?:实现|开发|修复|修改|重构|编码|功能|页面|模块|接口|组件|hook|implement|build|fix|modify|refactor|code|feature|page|module|component|api)/.test(actionText);
+  const security = /(?:安全|漏洞|隐私|权限|认证|鉴权|密钥|security|vulnerability|privacy|permission|auth|secret|license|compliance)/.test(text);
+  return writing && (implementation || security);
+}
+
+function isShortConstructionPrompt(text = '', original = '') {
+  if (!/[\u4e00-\u9fff]/.test(String(original))) return false;
+  const compact = text.replace(/\s+/g, '');
+  if (compact.length > 10) return false;
+  return /(?:写|做|建|实现|开发).*(?:功能|页面|模块|组件|接口|api|hook|路由|插件)/.test(compact);
+}
+
+function buildClassifierPreflightGateBlock(state, toolName) {
+  const preflight = state.classifierPreflight;
+  if (!preflight?.required || !toolName || CLASSIFIER_PREFLIGHT_EXEMPT_TOOLS.has(toolName)) return null;
+  return {
+    block: true,
+    reason: classifierPreflightInstructions(state, {
+      heading: `OMP Enhancer Core classifier preflight blocked ${toolName}.`,
+    }),
+  };
+}
+
+function buildMissingClassifierPreflightContext(state) {
+  if (!state.classifierPreflight?.required) return null;
+  return classifierPreflightInstructions(state, {
+    heading: 'OMP Enhancer Core classifier preflight is still required.',
+  });
+}
+
+function classifierPreflightInstructions(state, { heading }) {
+  const preflight = state.classifierPreflight;
+  const prompt = preflight?.prompt || state.lastPrompt || '';
+  return [
+    heading,
+    `Initial deterministic route: ${preflight?.fallbackIntent ?? state.lastRoute?.intent ?? 'unknown'}.`,
+    preflight?.reasons?.length ? `Why classifier is required: ${preflight.reasons.join('; ')}.` : null,
+    'Before loading route skills, calling QA/gate tools, forking task subagents, editing files, or finishing, resolve the route through the configured LLM classifier.',
+    'Required classifier sequence:',
+    '1. Call omp_core_classifier_prompt with the original user task to get the strict JSON schema and classifier prompt.',
+    '2. Use modelRoles.classifier (visible as Classifier in /model) to produce only the classifier JSON. If the host cannot directly dispatch that role, produce the same strict JSON from the classifier prompt.',
+    '3. Call omp_core_resolve_classification with prompt set to the original user task and output set to the classifier JSON.',
+    '4. Continue only under the resolved route, skills, tools, gates, and subagents.',
+    prompt ? `Original user task: ${prompt.slice(0, 500)}` : null,
+  ].filter(Boolean).join('\n');
+}
+
+function maybeRequireClassifierAfterToolFailure(state, toolName, event = {}) {
+  if (!CLASSIFIER_PREFLIGHT_FAILURE_TOOLS.has(toolName)) return;
+  if (!state.lastRoute || state.lastRoute.intent === 'subagent') return;
+  if (!toolFailureSuggestsRouteMismatch(event)) return;
+  state.classifierPreflight = buildClassifierPreflight(
+    state.lastRoute,
+    state.lastPrompt,
+    [`${toolName} failed after routing; re-check whether the workflow route is correct`],
+  );
+}
+
+function toolFailureSuggestsRouteMismatch(event = {}) {
+  const text = [
+    extractFailureMessage(event),
+    extractFailureSummary(event),
+    extractRepairHint(event),
+  ].filter(Boolean).join('\n').toLowerCase();
+  if (!text.trim()) return false;
+  return /(?:route mismatch|wrong route|mis[- ]?route|classifier|classification|workflow route|unexpected route|路由误判|误路由|路由不对|分类错误|工作流路由)/.test(text);
+}
+
 function buildMissingSkillUsageContext(state) {
   const requiredSkills = state.lastRoute?.requiredSkills ?? [];
   if (!requiredSkills.length) return null;
@@ -738,14 +926,25 @@ function buildMissingSkillUsageContext(state) {
 
 function buildRoutedGovernanceContext(state, { route, parentTask = '' } = {}) {
   return [
-    buildModelRoutingCheckpointBlock({ route, parentTask }),
+    buildModelRoutingCheckpointBlock({ route, parentTask, preflight: state.classifierPreflight }),
     buildPreworkSkillBootstrapBlock(state),
     buildGovernancePromptFragment({ route, parentTask }),
   ].filter(Boolean).join('\n\n');
 }
 
-function buildModelRoutingCheckpointBlock({ route, parentTask = '' } = {}) {
+function buildModelRoutingCheckpointBlock({ route, parentTask = '', preflight = null } = {}) {
   if (!route || route.intent === 'subagent') return null;
+  if (preflight?.required) {
+    return [
+      '### OMP Enhancer Core model routing checkpoint',
+      'Classifier preflight: required before route skills, QA/gate tools, task subagents, file edits, or final output.',
+      `Initial deterministic route: ${route.intent}.`,
+      preflight.reasons?.length ? `Trigger reasons: ${preflight.reasons.join('; ')}.` : null,
+      'Required sequence: call `omp_core_classifier_prompt`, use `modelRoles.classifier` to produce strict classifier JSON, then call `omp_core_resolve_classification` with the original user task and JSON output.',
+      'The resolved classifier route supersedes this initial route for skills, tools, gates, and subagents.',
+      parentTask ? `Original user task: ${String(parentTask).slice(0, 500)}` : null,
+    ].filter(Boolean).join('\n');
+  }
   return [
     '### OMP Enhancer Core model routing checkpoint',
     `Initial deterministic route: ${route.intent}.`,
@@ -1303,17 +1502,21 @@ function buildMissingSubagentUsageContext(state) {
   const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
   if (!requiredSubagents.length) return null;
 
-  const taskForked = state.evidence.taskSubagents ?? new Set();
+  const completedSubagents = completedSubagentsForGate(state);
   const pending = pendingRequiredSubagents(state, requiredSubagents);
   const stuck = stuckRequiredSubagents(state, requiredSubagents);
   const pendingAgents = new Set(pending.map(({ agent }) => agent));
-  const missing = requiredSubagents.map(({ agent }) => agent).filter((agent) => !taskForked.has(agent) && !pendingAgents.has(agent));
+  const missing = requiredSubagents.map(({ agent }) => agent).filter((agent) => !completedSubagents.has(agent) && !pendingAgents.has(agent));
   const missingSkillAssignments = requiredSubagents.flatMap(({ agent, requiredSkills }) => {
     const recorded = state.evidence.subagentSkills.get(agent) ?? new Set();
     const missingSkills = requiredSkills.filter((skill) => !recorded.has(skill));
     return missingSkills.length ? [{ agent, skills: missingSkills }] : [];
   });
-  const missingAssignmentContext = missingSubagentAssignmentContext(state, requiredSubagents);
+  const hasCompleteFinalEvidence = hasCompleteFinalSubagentEvidence(state, requiredSubagents);
+  const hasNativeCompletionEvidence = hasNativeSubagentCompletionEvidence(state, requiredSubagents);
+  const missingAssignmentContext = hasCompleteFinalEvidence && !hasNativeCompletionEvidence
+    ? []
+    : missingSubagentAssignmentContext(state, requiredSubagents);
   const unexpectedSkillAssignments = requiredSubagents.flatMap(({ agent }) => {
     const unexpected = [...(state.evidence.unexpectedSubagentSkills.get(agent) ?? new Set())];
     return unexpected.length ? [{ agent, skills: unexpected }] : [];
@@ -1328,16 +1531,36 @@ function buildMissingSubagentUsageContext(state) {
     `Required subagents: ${formatRequiredSubagents(requiredSubagents)}.`,
     pending.length ? `Pending subagent task results: ${formatPendingSubagents(pending)}.` : null,
     stuck.length ? `Potentially stuck subagent tasks: ${formatPendingSubagents(stuck)}. Do not wait indefinitely; retry those task calls with smaller assignments or report BLOCKERS if they keep failing.` : null,
-    missing.length ? `Missing task-launched subagents: ${missing.join(', ')}.` : null,
+    missing.length ? `Missing subagent completion evidence: ${missing.join(', ')}.` : null,
     missingSkillAssignments.length ? `Missing subagent skill assignments: ${formatMissingSkillAssignments(missingSkillAssignments)}.` : null,
     missingAssignmentContext.length ? `Missing bug-audit assignment context: ${missingAssignmentContext.join(', ')}. Re-run those task calls with OMP_PARENT_TASK and a concrete bug-audit assignment inherited from the user request.` : null,
     unexpectedSkillAssignments.length ? `Unexpected subagent skill assignments: ${formatMissingSkillAssignments(unexpectedSkillAssignments)}.` : null,
     failureContext,
-    'Final-answer contract: close with the actual SUBAGENT_USAGE block in assistant output; do not send it only as omp_core_validate_subagent_usage output.',
+    'Final-answer contract: close with the actual SUBAGENT_USAGE block in assistant output. Native task-tool evidence is preferred for TUI status, but a validated complete SUBAGENT_USAGE block can close the subagent gate when task telemetry is unavailable.',
     state.lastSubagentUsage?.message
       ? `Last validation: ${state.lastSubagentUsage.message}`
-      : 'No successful SUBAGENT_USAGE validation has been recorded. SUBAGENT_USAGE is final evidence only; task-tool role evidence is still required for native TUI status.',
+      : 'No successful SUBAGENT_USAGE validation has been recorded.',
   ].filter(Boolean).join('\n');
+}
+
+function completedSubagentsForGate(state) {
+  const completed = new Set(state.evidence.taskSubagents ?? []);
+  if (state.lastSubagentUsage?.ok) {
+    for (const agent of state.lastSubagentUsage.forked ?? []) completed.add(agent);
+    for (const agent of state.evidence.forkedSubagents ?? []) completed.add(agent);
+  }
+  return completed;
+}
+
+function hasCompleteFinalSubagentEvidence(state, requiredSubagents) {
+  if (!state.lastSubagentUsage?.ok) return false;
+  const completed = completedSubagentsForGate(state);
+  return requiredSubagents.every(({ agent }) => completed.has(agent));
+}
+
+function hasNativeSubagentCompletionEvidence(state, requiredSubagents) {
+  const taskSubagents = state.evidence.taskSubagents ?? new Set();
+  return requiredSubagents.some(({ agent }) => taskSubagents.has(agent));
 }
 
 function missingSubagentAssignmentContext(state, requiredSubagents) {
@@ -1902,7 +2125,7 @@ function buildSubagentStatus(state) {
   return {
     route: state.lastRoute?.intent ?? 'none',
     required: requiredSubagents,
-    completed: [...(state.evidence.taskSubagents ?? new Set())],
+    completed: [...completedSubagentsForGate(state)],
     pending: pendingRequiredSubagents(state, requiredSubagents).map(({ agent, startedAt, lastSeenAt, attempts, skills }) => ({
       agent,
       startedAt,

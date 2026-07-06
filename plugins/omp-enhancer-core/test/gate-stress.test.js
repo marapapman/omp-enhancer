@@ -318,7 +318,8 @@ function nonGatedCases() {
   return nonGatedPrompts.map((prompt, index) => ({
     name: `non-gated ${index + 1}`,
     async run() {
-      const { pi, ctx } = await startRuntime(prompt);
+      const { pi, ctx, start } = await startRuntime(prompt);
+      await resolveClassifierPreflightIfRequired(pi, ctx, prompt, start);
       await assertReleasedStops(pi, ctx, [{}, {}, { output: 'Done.' }]);
     },
   }));
@@ -338,8 +339,31 @@ async function startRuntime(prompt, entries = []) {
   registerCoreEnhancer(pi);
   const ctx = extensionContext(entries);
   await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')({ prompt }, ctx);
-  return { pi, ctx, entries };
+  const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
+  return { pi, ctx, entries, start };
+}
+
+async function resolveClassifierPreflightIfRequired(pi, ctx, prompt, start) {
+  if (!/Classifier preflight: required/.test(String(start?.additionalContext ?? ''))) return;
+  const intent = start?.route?.intent ?? 'unknown';
+  await tool(pi, 'omp_core_resolve_classification').execute(
+    'gate-stress-classifier-resolve',
+    {
+      prompt,
+      output: JSON.stringify({
+        intent,
+        secondaryIntents: [],
+        language: /[\u4e00-\u9fff]/.test(prompt) ? 'zh' : 'en',
+        confidence: 0.95,
+        riskFlags: [],
+        domainHints: ['gate-stress'],
+        reason: 'Stress test resolves classifier preflight before checking non-gated release.',
+      }),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
 }
 
 async function forkSubagents(pi, ctx, profile, { includeSkills = true } = {}) {

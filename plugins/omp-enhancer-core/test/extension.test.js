@@ -237,6 +237,76 @@ test('before_agent_start injects governance context and routes natural-language 
   assert.match(stopResult.additionalContext, /subagent|zh-writer|zh-checker/);
 });
 
+test('classifier preflight blocks ambiguous route work until classifier resolves route', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = '写个页面';
+
+  await event(pi, 'session_start')({}, ctx);
+  const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
+  assert.equal(start.route.intent, 'implementation-with-tests');
+  assert.match(start.additionalContext, /Classifier preflight: required/);
+  assert.match(start.additionalContext, /short construction prompt/);
+
+  const blocked = await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [
+          { role: 'plan', assignment: 'Required skills for this subagent:\n- brainstorming\n- subagent-driven-development' },
+        ],
+      },
+    },
+    ctx,
+  );
+  assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /classifier preflight blocked task/);
+  assert.match(blocked.reason, /omp_core_classifier_prompt/);
+  assert.match(blocked.reason, /omp_core_resolve_classification/);
+
+  const promptResult = await tool(pi, 'omp_core_classifier_prompt').execute(
+    'call-ambiguous-classifier-prompt',
+    { prompt },
+    undefined,
+    undefined,
+    ctx,
+  );
+  assert.match(promptResult.content[0].text, /OMP Enhancer Core Classifier/);
+
+  await tool(pi, 'omp_core_resolve_classification').execute(
+    'call-ambiguous-classifier-resolve',
+    {
+      prompt,
+      output: JSON.stringify({
+        intent: 'implementation-with-tests',
+        secondaryIntents: [],
+        language: 'zh',
+        confidence: 0.94,
+        riskFlags: ['needs-tests', 'needs-review', 'needs-subagents'],
+        domainHints: ['frontend page'],
+        reason: 'The user asks to build a product page, not draft prose.',
+      }),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const allowed = await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      input: {
+        tasks: [
+          { role: 'plan', assignment: 'Required skills for this subagent:\n- brainstorming\n- subagent-driven-development' },
+        ],
+      },
+    },
+    ctx,
+  );
+  assert.equal(allowed, undefined);
+});
+
 test('before_agent_start bypasses OMP built-in slash commands without injecting or resetting route state', async () => {
   const builtInSlashCommands = [
     '/usage',
@@ -1366,6 +1436,7 @@ test('failed omp_test_gate results do not release implementation and testing gat
     assert.match(result.additionalContext, /omp_test_gate/);
     assert.match(result.additionalContext, /Recent failed tool results/);
     assert.match(result.additionalContext, /Test imports private implementation details/);
+    assert.match(result.additionalContext, /Repair: Test through public behavior/);
   }
 });
 
@@ -1528,7 +1599,7 @@ test('failed task tool results do not count as forked subagents', async () => {
   assert.match(blocked.additionalContext, /subagent gate/i);
   assert.match(blocked.additionalContext, /Recent failed tool results/);
   assert.match(blocked.additionalContext, /task: Task subagent failed to start/);
-  assert.match(blocked.additionalContext, /Missing task-launched subagents: plan, implementation-task, reviewer|Missing task-launched subagents: implementation-task, reviewer/);
+  assert.match(blocked.additionalContext, /Missing subagent completion evidence: plan, implementation-task, reviewer|Missing subagent completion evidence: implementation-task, reviewer/);
 });
 
 test('failed task results keep subagent gate blocked even after prior task tool_call evidence', async () => {
@@ -2561,7 +2632,7 @@ test('skill validator reconstructs read evidence from raw branch entries after s
   assert.deepEqual(validation.details.validation.loaded, ['writing-markdown-helper', 'writing-checkers']);
 });
 
-test('validate subagent usage does not replace native task subagent evidence', async () => {
+test('validated SUBAGENT_USAGE can close subagent gate when native task telemetry is unavailable', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -2595,15 +2666,47 @@ test('validate subagent usage does not replace native task subagent evidence', a
     ctx,
   );
 
-  assert.deepEqual(status.details.status.completed, []);
+  assert.deepEqual(status.details.status.completed, ['zh-writer', 'zh-checker']);
+
+  const result = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /writing QA/);
+  assert.doesNotMatch(result.additionalContext, /Missing subagent completion evidence/);
+});
+
+test('incomplete validated SUBAGENT_USAGE still blocks missing routed subagents', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-incomplete-subagent-usage',
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await tool(pi, 'omp_core_validate_subagent_usage').execute(
+    'call-incomplete-subagent-usage-validation',
+    {
+      output: [
+        'SUBAGENT_USAGE:',
+        '- zh-writer: plain-chinese-writing, zh-writing-polish',
+      ].join('\n'),
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
 
   const result = await event(pi, 'session_stop')({}, ctx);
 
   assert.equal(result?.continue, true);
   assert.match(result.additionalContext, /subagent gate/i);
-  assert.match(result.additionalContext, /Missing task-launched subagents: zh-writer, zh-checker/);
-  assert.match(result.additionalContext, /Final-answer contract/);
-  assert.match(result.additionalContext, /do not send it only as omp_core_validate_subagent_usage output/);
+  assert.match(result.additionalContext, /Missing subagent completion evidence: zh-writer, zh-checker/);
+  assert.match(result.additionalContext, /SUBAGENT_USAGE is incomplete/);
 });
 
 test('validator evidence persists through session entries across isolated plugin instances', async () => {
@@ -2967,7 +3070,7 @@ test('bug-audit testing gate releases after test gate and skill evidence without
   await assertReleasedStops(pi, ctx, [{}, {}, { output: 'Final summary only.' }]);
 });
 
-test('bug-audit route requires native task evidence for required testing and audit subagents', async () => {
+test('bug-audit route accepts complete final subagent evidence when task telemetry is unavailable', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -3005,10 +3108,7 @@ test('bug-audit route requires native task evidence for required testing and aud
     ctx,
   );
 
-  assert.equal(finalOnly?.continue, true);
-  assert.match(finalOnly.additionalContext, /Missing task-launched subagents: ecc-tdd-guide, ecc-code-reviewer, ecc-silent-failure-hunter, ecc-pr-test-analyzer/);
-
-  await forkSubagents(pi, ctx, agents);
+  assert.equal(finalOnly, undefined);
   await assertReleasedStops(pi, ctx, [{}, { output: 'Final summary only.' }]);
 });
 
@@ -3139,18 +3239,41 @@ test('failed skill validation can be corrected by final evidence without repeate
 
 test('non-gated diagnosis release and unknown routes do not create repeated gate continuations', async () => {
   const workloads = [
-    '为什么这个插件一直提示 SKILL_USAGE validation 失败？先诊断原因，不要改代码。',
-    'Push the current release commit and upgrade marketplace plugins.',
-    'What is the capital of France?',
+    { prompt: '为什么这个插件一直提示 SKILL_USAGE validation 失败？先诊断原因，不要改代码。', classifier: false },
+    { prompt: 'Push the current release commit and upgrade marketplace plugins.', classifier: false },
+    { prompt: 'What is the capital of France?', classifier: true },
   ];
 
-  for (const prompt of workloads) {
+  for (const { prompt, classifier } of workloads) {
     const pi = new FakePi();
     registerCoreEnhancer(pi);
     const ctx = extensionContext();
 
     await event(pi, 'session_start')({}, ctx);
     await event(pi, 'before_agent_start')({ prompt }, ctx);
+    if (classifier) {
+      const blocked = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
+      assert.equal(blocked?.continue, true, prompt);
+      assert.match(blocked.additionalContext, /classifier preflight is still required/);
+      await tool(pi, 'omp_core_resolve_classification').execute(
+        `call-unknown-classifier-resolve-${prompt.replace(/[^A-Za-z0-9]+/g, '-')}`,
+        {
+          prompt,
+          output: JSON.stringify({
+            intent: 'unknown',
+            secondaryIntents: [],
+            language: 'en',
+            confidence: 0.92,
+            riskFlags: [],
+            domainHints: ['general knowledge'],
+            reason: 'No OMP plugin workflow should run.',
+          }),
+        },
+        undefined,
+        undefined,
+        ctx,
+      );
+    }
     await assertReleasedStops(pi, ctx, [{}, {}, { output: 'Done.' }]);
   }
 });
