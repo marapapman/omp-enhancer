@@ -5,6 +5,11 @@ import path from 'node:path';
 import { classifierDefaults } from './classifier.js';
 
 const roleName = 'classifier';
+export const classifierModelTag = {
+  name: 'Classifier',
+  color: 'accent',
+  hidden: false,
+};
 
 export function parseClassifierCommand(args = '') {
   const tokens = tokenizeArgs(args);
@@ -90,6 +95,7 @@ export async function writeClassifierModel({ ctx = {}, configPath, model } = {})
   const settings = findSettingsFacade(ctx);
   if (settings?.setModelRole) {
     settings.setModelRole(roleName, cleaned);
+    ensureSettingsModelTag(settings);
     await settings.flush?.();
     return { source: 'settings', configPath: configPath ?? resolveConfigPath(ctx) };
   }
@@ -102,10 +108,48 @@ export async function writeClassifierModel({ ctx = {}, configPath, model } = {})
     if (error?.code !== 'ENOENT') throw error;
   }
 
-  const next = upsertYamlModelRole(text, roleName, cleaned);
+  const next = upsertYamlClassifierConfig(text, cleaned);
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   await fs.writeFile(targetPath, next);
   return { source: 'config', configPath: targetPath };
+}
+
+export async function ensureClassifierModelConfig({ ctx = {}, configPath, model = classifierDefaults.model } = {}) {
+  const cleaned = cleanModelValue(model) || classifierDefaults.model;
+  const settings = findSettingsFacade(ctx);
+  if (settings) {
+    let changed = false;
+    const currentRole = settings.getModelRole?.(roleName) ?? settings.getModelRoles?.()?.[roleName];
+    if (!(typeof currentRole === 'string' && currentRole.trim())) {
+      if (settings.setModelRole) {
+        settings.setModelRole(roleName, cleaned);
+        changed = true;
+      } else if (typeof settings.get === 'function' && typeof settings.set === 'function') {
+        const roles = plainRecord(settings.get('modelRoles'));
+        settings.set('modelRoles', { ...roles, [roleName]: cleaned });
+        changed = true;
+      }
+    }
+    changed = ensureSettingsModelTag(settings) || changed;
+    if (changed) await settings.flush?.();
+    return { ok: true, source: 'settings', changed };
+  }
+
+  if (!configPath) return { ok: false, source: 'unavailable', changed: false };
+
+  const targetPath = resolveConfigPath({ ...ctx, configPath });
+  let text = '';
+  try {
+    text = await fs.readFile(targetPath, 'utf8');
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+
+  const next = upsertYamlClassifierConfig(text, cleaned);
+  if (next === text) return { ok: true, source: 'config', configPath: targetPath, changed: false };
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.writeFile(targetPath, next);
+  return { ok: true, source: 'config', configPath: targetPath, changed: true };
 }
 
 export function resolveConfigPath(ctx = {}) {
@@ -175,6 +219,60 @@ export function upsertYamlModelRole(text = '', role = roleName, model = classifi
   return `${lines.join(newline)}${hasTerminalNewline ? newline : ''}`;
 }
 
+export function upsertYamlClassifierConfig(text = '', model = classifierDefaults.model) {
+  return upsertYamlModelTag(upsertYamlModelRole(text, roleName, model), roleName, classifierModelTag);
+}
+
+export function upsertYamlModelTag(text = '', role = roleName, tag = classifierModelTag) {
+  const source = String(text);
+  const newline = source.includes('\r\n') ? '\r\n' : '\n';
+  const hasTerminalNewline = source === '' || /\r?\n$/.test(source);
+  const lines = source ? source.split(/\r?\n/) : [];
+  if (lines.length && lines.at(-1) === '') lines.pop();
+
+  const start = lines.findIndex((line) => /^modelTags\s*:\s*(?:#.*)?$/.test(line.trimEnd()));
+  if (start === -1) {
+    if (lines.length && lines.at(-1).trim()) lines.push('');
+    lines.push('modelTags:', ...modelTagLines(role, tag));
+    return `${lines.join(newline)}${newline}`;
+  }
+
+  let end = start + 1;
+  while (end < lines.length && !(/^\S/.test(lines[end]) && lines[end].trim())) end += 1;
+
+  let roleStart = -1;
+  for (let index = start + 1; index < end; index += 1) {
+    if (new RegExp(`^\\s{2}${escapeRegExp(role)}\\s*:`).test(lines[index])) {
+      roleStart = index;
+      break;
+    }
+  }
+
+  if (roleStart === -1) {
+    lines.splice(end, 0, ...modelTagLines(role, tag));
+    return `${lines.join(newline)}${hasTerminalNewline ? newline : ''}`;
+  }
+
+  const roleEnd = findIndentedBlockEnd(lines, roleStart + 1, end, 4);
+  if (!/^\s{2}[A-Za-z0-9_-]+\s*:\s*(?:#.*)?$/.test(lines[roleStart].trimEnd())) {
+    lines.splice(roleStart, roleEnd - roleStart, ...modelTagLines(role, tag));
+    return `${lines.join(newline)}${hasTerminalNewline ? newline : ''}`;
+  }
+
+  const existingFields = new Set();
+  for (let index = roleStart + 1; index < roleEnd; index += 1) {
+    const match = lines[index].match(/^\s{4}([A-Za-z0-9_-]+)\s*:/);
+    if (match) existingFields.add(match[1]);
+  }
+
+  const additions = modelTagFieldLines(tag).filter((line) => {
+    const match = line.match(/^\s{4}([A-Za-z0-9_-]+)\s*:/);
+    return match && !existingFields.has(match[1]);
+  });
+  if (additions.length > 0) lines.splice(roleEnd, 0, ...additions);
+  return `${lines.join(newline)}${hasTerminalNewline ? newline : ''}`;
+}
+
 function classifierCommandResult({ ok, action, model, source, configPath, message }) {
   const current = model || classifierDefaults.model;
   const text = [
@@ -214,7 +312,58 @@ function preferredInsertIndex(lines, start, end) {
 
 function findSettingsFacade(ctx = {}) {
   return [ctx.settings, ctx.config, ctx.settingsManager]
-    .find((value) => value && typeof value === 'object' && (value.setModelRole || value.getModelRole || value.getModelRoles));
+    .find((value) => value && typeof value === 'object' && (
+      value.setModelRole
+      || value.getModelRole
+      || value.getModelRoles
+      || (typeof value.get === 'function' && typeof value.set === 'function')
+    ));
+}
+
+function ensureSettingsModelTag(settings) {
+  if (typeof settings.get !== 'function' || typeof settings.set !== 'function') return false;
+  const tags = plainRecord(settings.get('modelTags'));
+  const current = plainRecord(tags[roleName]);
+  const next = {
+    ...classifierModelTag,
+    ...current,
+    name: typeof current.name === 'string' && current.name.trim() ? current.name : classifierModelTag.name,
+    color: typeof current.color === 'string' && current.color.trim() ? current.color : classifierModelTag.color,
+  };
+  if (recordsEqual(current, next) && tags[roleName] && typeof tags[roleName] === 'object') return false;
+  settings.set('modelTags', { ...tags, [roleName]: next });
+  return true;
+}
+
+function plainRecord(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return { ...value };
+}
+
+function recordsEqual(left, right) {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && rightKeys.every((key) => left[key] === right[key]);
+}
+
+function modelTagLines(role, tag) {
+  return [`  ${role}:`, ...modelTagFieldLines(tag)];
+}
+
+function modelTagFieldLines(tag) {
+  const lines = [
+    `    name: ${formatYamlScalar(tag.name ?? classifierModelTag.name)}`,
+    `    color: ${formatYamlScalar(tag.color ?? classifierModelTag.color)}`,
+  ];
+  if (typeof tag.hidden === 'boolean') lines.push(`    hidden: ${tag.hidden ? 'true' : 'false'}`);
+  return lines;
+}
+
+function findIndentedBlockEnd(lines, start, maxEnd, indent) {
+  let end = start;
+  const pattern = new RegExp(`^\\s{${indent},}\\S`);
+  while (end < maxEnd && (!lines[end].trim() || pattern.test(lines[end]))) end += 1;
+  return end;
 }
 
 function cleanModelValue(value) {

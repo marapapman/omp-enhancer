@@ -126,6 +126,32 @@ const routingCases = [
     },
   },
   {
+    name: 'Chinese security prose polish routes to writing instead of security review',
+    prompt: '帮我润色这份安全公告的表述，让语气更自然，不要触发代码安全审查。',
+    expectedIntent: 'writing.zh',
+    expectedAgent: 'writing-helper.zh-writer',
+    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
+    requiredTools: ['writing_logic_check', 'writing_quality_check'],
+    requiredSubagents: ['zh-writer', 'zh-checker'],
+    requiredSubagentSkills: {
+      'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
+      'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
+    },
+  },
+  {
+    name: 'English security policy edit routes to writing instead of security review',
+    prompt: 'Review the wording of this security policy draft for clarity and tone.',
+    expectedIntent: 'writing.en',
+    expectedAgent: 'writing-helper.writer',
+    requiredSkills: ['writing-markdown-helper', 'writing-checkers'],
+    requiredTools: ['writing_logic_check', 'writing_quality_check'],
+    requiredSubagents: ['writer', 'checker'],
+    requiredSubagentSkills: {
+      writer: ['writing-markdown-helper'],
+      checker: ['writing-checkers'],
+    },
+  },
+  {
     name: 'config asset request routes to config asset profile',
     prompt: '检查 omp marketplace 插件打包出来的 config assets 和 hooks 是否齐全。',
     expectedIntent: 'config-assets',

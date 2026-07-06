@@ -14,7 +14,7 @@ import {
 } from './src/skill-usage.js';
 import { collectSubagentTaskRecords, parseSubagentUsageDetails, validateSubagentUsage } from './src/subagent-usage.js';
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
-import { runClassifierCommand } from './src/classifier-config.js';
+import { ensureClassifierModelConfig, runClassifierCommand } from './src/classifier-config.js';
 import {
   createLoopGuardState,
   readLoopGuardSnapshot,
@@ -167,6 +167,7 @@ export default function registerCoreEnhancer(pi) {
   });
 
   pi.on?.('session_start', async (_event = {}, ctx = {}) => {
+    await ensureClassifierModelConfig({ ctx });
     const restored = restoreStateFromContext(state, ctx);
     if (!restored) resetState(state);
     return undefined;
@@ -182,6 +183,7 @@ export default function registerCoreEnhancer(pi) {
 
   pi.on?.('before_agent_start', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
+    await ensureClassifierModelConfig({ ctx });
     const prompt = extractPrompt(event);
     // Slash commands are owned by OMP or by the registering plugin command handler.
     // Core routing only handles natural-language tasks.

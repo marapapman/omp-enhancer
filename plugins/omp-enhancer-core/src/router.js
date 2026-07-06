@@ -111,8 +111,11 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasKnowledgeOnly = isKnowledgeWorkWithoutWritingArtifact(normalized);
   const hasCoding = !asksNoCodeChange && !hasBugAudit && !hasKnowledgeOnly && isCodeChangeRequest(normalized);
   const hasCodeChange = hasCoding && !hasTestReportWriting;
-  const hasEnglishWriting = isEnglishWriting(normalized) || isChinesePromptForEnglishWriting(normalized);
-  const hasChineseWriting = !hasEnglishWriting && isChineseWriting(normalized, prompt);
+  const hasSecurityWritingArtifact = isSecurityWritingArtifact(normalized);
+  const hasEnglishWriting = isEnglishWriting(normalized)
+    || isChinesePromptForEnglishWriting(normalized)
+    || (hasSecurityWritingArtifact && !/[\u4e00-\u9fff]/.test(prompt));
+  const hasChineseWriting = !hasEnglishWriting && (isChineseWriting(normalized, prompt) || hasSecurityWritingArtifact);
   const hasWriting = hasChineseWriting || hasEnglishWriting;
   const hasSecurity = includesAny(normalized, securityTerms);
   const hasRelease = isReleaseRequest(normalized);
@@ -558,7 +561,11 @@ function isSecurityAuditOrFixRequest(text) {
 function isSecurityWritingArtifact(text) {
   return /(?:写|起草|撰写).*(?:安全公告|隐私政策|license.*说明|合规说明|法务|memo|policy|announcement)/.test(text)
     || /(?:draft|write|revise|polish|edit|improve).*(?:security announcement|privacy policy|license compliance memo|license memo|compliance memo|policy draft|policy|memo|announcement)/.test(text)
-    || /(?:安全说明|隐私政策|安全公告).*(?:表达|逻辑|措辞|润色|改写)/.test(text);
+    || /(?:安全说明|隐私政策|安全公告|安全审查报告|安全报告|合规说明|合规报告|许可证说明|license.*说明).*(?:表达|逻辑|措辞|润色|改写|修订|文案|语气|自然|清楚|准确)/.test(text)
+    || /(?:润色|改写|修订|修改|检查|审查|核对).*(?:安全说明|隐私政策|安全公告|安全审查报告|安全报告|合规说明|合规报告|许可证说明|license.*说明|安全.*文案|隐私.*文案|合规.*文案)/.test(text)
+    || /(?:检查|审查|核对).*(?:安全|隐私|合规|license|许可证).*(?:文案|公告|说明|政策|memo|报告|段落|句子|表述|措辞|语气|表达|文本|文字|内容|材料).*(?:清楚|准确|自然|语气|表达|措辞|逻辑)/.test(text)
+    || /(?:review|check|proofread|copyedit|revise|polish|edit|improve).*(?:security|privacy|compliance|license|safety).*(?:announcement|policy|memo|report|paragraph|sentence|wording|copy|text|draft|document).*(?:wording|tone|style|grammar|clarity|clear|accurate|natural|logic)/.test(text)
+    || /(?:review|check|proofread|copyedit|revise|polish|edit|improve).*(?:announcement|policy|memo|report|paragraph|sentence|wording|copy|text|draft|document).*(?:security|privacy|compliance|license|safety)/.test(text);
 }
 
 function isDiagnosisOnlyRequest(text, asksNoCodeChange) {

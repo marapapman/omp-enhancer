@@ -5,9 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  ensureClassifierModelConfig,
   parseClassifierCommand,
   parseModelRolesFromYaml,
   runClassifierCommand,
+  upsertYamlClassifierConfig,
   upsertYamlModelRole,
 } from '../src/classifier-config.js';
 
@@ -62,4 +64,58 @@ test('runClassifierCommand writes modelRoles.classifier to a config file', async
   assert.equal(result.model, 'openai/gpt-5-nano');
   assert.match(result.text, /\/classifier set openai\/gpt-5-nano/);
   assert.deepEqual(parseModelRolesFromYaml(text), { classifier: 'openai/gpt-5-nano' });
+  assert.match(text, /modelTags:\n  classifier:\n    name: Classifier\n    color: accent\n    hidden: false/);
+});
+
+test('ensureClassifierModelConfig makes classifier visible in settings-backed model UI', async () => {
+  const roles = {};
+  let tags = {};
+  let flushCount = 0;
+  const settings = {
+    get: (key) => (key === 'modelTags' ? tags : key === 'modelRoles' ? roles : undefined),
+    set: (key, value) => {
+      if (key === 'modelTags') tags = value;
+      if (key === 'modelRoles') Object.assign(roles, value);
+    },
+    setModelRole: (role, model) => { roles[role] = model; },
+    getModelRole: (role) => roles[role],
+    getModelRoles: () => roles,
+    flush: async () => { flushCount += 1; },
+  };
+
+  const result = await ensureClassifierModelConfig({ ctx: { settings } });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.source, 'settings');
+  assert.equal(result.changed, true);
+  assert.equal(roles.classifier, 'opencode-go/deepseek-v4-flash:medium');
+  assert.deepEqual(tags.classifier, { name: 'Classifier', color: 'accent', hidden: false });
+  assert.equal(flushCount, 1);
+});
+
+test('ensureClassifierModelConfig preserves an existing classifier model while adding missing visible tag', async () => {
+  const roles = { classifier: 'openai/gpt-5-nano' };
+  let tags = {};
+  const settings = {
+    get: (key) => (key === 'modelTags' ? tags : key === 'modelRoles' ? roles : undefined),
+    set: (key, value) => {
+      if (key === 'modelTags') tags = value;
+    },
+    setModelRole: (role, model) => { roles[role] = model; },
+    getModelRole: (role) => roles[role],
+    getModelRoles: () => roles,
+    flush: async () => {},
+  };
+
+  await ensureClassifierModelConfig({ ctx: { settings } });
+
+  assert.equal(roles.classifier, 'openai/gpt-5-nano');
+  assert.deepEqual(tags.classifier, { name: 'Classifier', color: 'accent', hidden: false });
+});
+
+test('upsertYamlClassifierConfig adds both classifier role and visible model tag', () => {
+  const output = upsertYamlClassifierConfig('providers:\n  webSearch: codex\n');
+
+  assert.match(output, /modelRoles:\n  classifier: opencode-go\/deepseek-v4-flash:medium/);
+  assert.match(output, /modelTags:\n  classifier:\n    name: Classifier\n    color: accent\n    hidden: false/);
 });

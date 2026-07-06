@@ -102,11 +102,16 @@ test('classifier slash command can update the configured classifier model role',
   registerCoreEnhancer(pi);
   const notifications = [];
   const roles = {};
+  let tags = {};
 
   const result = await command(pi, 'classifier').handler(
     'set openai/gpt-5-nano',
     {
       settings: {
+        get: (key) => (key === 'modelTags' ? tags : undefined),
+        set: (key, value) => {
+          if (key === 'modelTags') tags = value;
+        },
         setModelRole: (role, model) => { roles[role] = model; },
         getModelRole: (role) => roles[role],
         flush: async () => {},
@@ -118,9 +123,33 @@ test('classifier slash command can update the configured classifier model role',
   assert.equal(result.ok, true);
   assert.equal(result.model, 'openai/gpt-5-nano');
   assert.equal(roles.classifier, 'openai/gpt-5-nano');
+  assert.deepEqual(tags.classifier, { name: 'Classifier', color: 'accent', hidden: false });
   assert.match(result.text, /modelRoles\.classifier/);
   assert.match(result.text, /\/classifier set openai\/gpt-5-nano/);
   assert.deepEqual(notifications.map(({ level }) => level), ['info']);
+});
+
+test('session_start registers classifier as a visible settings-backed model role', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const roles = {};
+  let tags = {};
+  const settings = {
+    get: (key) => (key === 'modelTags' ? tags : key === 'modelRoles' ? roles : undefined),
+    set: (key, value) => {
+      if (key === 'modelTags') tags = value;
+      if (key === 'modelRoles') Object.assign(roles, value);
+    },
+    setModelRole: (role, model) => { roles[role] = model; },
+    getModelRole: (role) => roles[role],
+    getModelRoles: () => roles,
+    flush: async () => {},
+  };
+
+  await event(pi, 'session_start')({}, extensionContext([], {}, { settings }));
+
+  assert.equal(roles.classifier, 'opencode-go/deepseek-v4-flash:medium');
+  assert.deepEqual(tags.classifier, { name: 'Classifier', color: 'accent', hidden: false });
 });
 
 test('classifier tools expose model role configuration and resolve route state', async () => {
@@ -3295,12 +3324,13 @@ function staleSkillValidationState(routeState) {
   };
 }
 
-function extensionContext(entries = [], ui = {}) {
+function extensionContext(entries = [], ui = {}, extra = {}) {
   return {
     cwd: process.cwd(),
     sessionManager: { getBranch: () => entries },
     ui: { notify: () => undefined, ...ui },
     hasUI: false,
+    ...extra,
   };
 }
 
