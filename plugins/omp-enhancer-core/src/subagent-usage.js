@@ -82,6 +82,14 @@ export function parseSubagentUsage(output = '') {
 }
 
 export function parseSubagentUsageDetails(output = '') {
+  const forked = [];
+  for (const text of subagentUsageTextCandidates(output)) {
+    forked.push(...parsePlainSubagentUsageDetails(text));
+  }
+  return uniqueSubagentUsage(forked);
+}
+
+function parsePlainSubagentUsageDetails(output = '') {
   const lines = String(output).split(/\r?\n/);
   const blockIndex = lines.findIndex((line) => isSubagentUsageHeader(line));
   if (blockIndex === -1) return [];
@@ -111,6 +119,125 @@ export function parseSubagentUsageDetails(output = '') {
   }
 
   return uniqueSubagentUsage(forked);
+}
+
+function subagentUsageTextCandidates(output = '') {
+  const text = String(output);
+  return uniqueStrings([
+    text,
+    ...jsonEnvelopeOutputTexts(text),
+  ]);
+}
+
+function jsonEnvelopeOutputTexts(output = '') {
+  const texts = [];
+  for (const candidate of jsonEnvelopeCandidates(output)) {
+    try {
+      collectJsonEnvelopeOutputTexts(JSON.parse(candidate), texts);
+    } catch {
+      // Ignore non-JSON fragments; task results are often plain text.
+    }
+  }
+  return texts;
+}
+
+function collectJsonEnvelopeOutputTexts(value, texts, key = '') {
+  if (typeof value === 'string') {
+    if (isJsonTextEvidenceKey(key) && /\bSUBAGENT_USAGE\b/i.test(value)) texts.push(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectJsonEnvelopeOutputTexts(item, texts, key));
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+
+  for (const [fieldKey, fieldValue] of Object.entries(value)) {
+    collectJsonEnvelopeOutputTexts(fieldValue, texts, normalizeJsonKey(fieldKey));
+  }
+}
+
+function jsonEnvelopeCandidates(output = '') {
+  const text = String(output);
+  const candidates = new Set();
+  const trimmed = text.trim();
+  if (/^[\[{]/.test(trimmed)) candidates.add(trimmed);
+
+  const fencePattern = /```(?:json|JSON)?\s*([\s\S]*?)```/g;
+  for (const match of text.matchAll(fencePattern)) {
+    const candidate = match[1]?.trim();
+    if (candidate) candidates.add(candidate);
+  }
+
+  for (const candidate of balancedJsonFragments(text)) {
+    candidates.add(candidate);
+  }
+
+  return [...candidates].filter((candidate) => candidate.length <= 100000);
+}
+
+function balancedJsonFragments(text) {
+  const fragments = [];
+  for (let index = 0; index < text.length && fragments.length < 20; index += 1) {
+    if (!isLikelyJsonStart(text, index)) continue;
+    const end = findJsonFragmentEnd(text, index);
+    if (end > index) fragments.push(text.slice(index, end));
+  }
+  return fragments;
+}
+
+function isLikelyJsonStart(text, index) {
+  const char = text[index];
+  if (char !== '{' && char !== '[') return false;
+  const next = nextNonWhitespace(text, index + 1);
+  if (char === '{') return next === '"' || next === '}';
+  return next === '"' || next === '{' || next === '[' || next === ']';
+}
+
+function nextNonWhitespace(text, start) {
+  for (let index = start; index < text.length; index += 1) {
+    if (!/\s/.test(text[index])) return text[index];
+  }
+  return '';
+}
+
+function findJsonFragmentEnd(text, start) {
+  const stack = [text[start] === '{' ? '}' : ']'];
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start + 1; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === '{') {
+      stack.push('}');
+      continue;
+    }
+    if (char === '[') {
+      stack.push(']');
+      continue;
+    }
+    if (char !== '}' && char !== ']') continue;
+    if (stack.at(-1) !== char) return -1;
+    stack.pop();
+    if (!stack.length) return index + 1;
+  }
+
+  return -1;
 }
 
 export function collectSubagentNames(event = {}) {
@@ -282,6 +409,14 @@ function normalizeSkills(values = []) {
     .filter((value) => value && value.toLowerCase() !== 'none');
 }
 
+function isJsonTextEvidenceKey(key) {
+  return ['content', 'message', 'output', 'outputtext', 'response', 'result', 'results', 'text', 'value', 'finalmessage', 'finaloutput', 'finalresponse', 'subagentoutput', 'stdout'].includes(key);
+}
+
+function normalizeJsonKey(key) {
+  return String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 function hasEquivalentSkill(loadedSkills = [], requiredSkill = '') {
   return loadedSkills.some((loadedSkill) => skillNamesEquivalent(requiredSkill, loadedSkill));
 }
@@ -331,6 +466,10 @@ function uniqueRecords(records) {
     byKey.set(key, record);
   }
   return [...byKey.values()];
+}
+
+function uniqueStrings(values) {
+  return [...new Set(values.map((value) => String(value)).filter(Boolean))];
 }
 
 function formatMissingSkills(values) {

@@ -30,7 +30,7 @@ export function validateSkillUsage({ requiredSkills = [], output = '', loadedSki
       denied,
       message: ok
         ? (requiredSkills.length ? skillEvidenceMessage({ outputLoaded, externallyLoaded }) : 'No required skills.')
-        : (missing.length ? `Missing SKILL_USAGE for ${missing.join(', ')}` : buildMessage({ missing, invalid: [], denied })),
+        : (missing.length ? missingSkillUsageMessage({ missing, output: text, hasLoadedEvidence: loadedEvidence.length > 0 }) : buildMessage({ missing, invalid: [], denied })),
     };
   }
 
@@ -66,6 +66,7 @@ export function parseLoadedSkillEvidence(output = '') {
   return uniqueValues([
     ...parseSkillUsage(text).loaded,
     ...parseLooseLoadedSkillEvidence(text),
+    ...parseJsonLoadedSkillEvidence(text),
   ].map((entry) => cleanSkillEntry(entry)).filter((entry) => entry && !isPlaceholder(entry)));
 }
 
@@ -139,6 +140,12 @@ function skillEvidenceMessage({ outputLoaded = [], externallyLoaded = [] } = {})
   return 'SKILL_USAGE ok from read skill evidence.';
 }
 
+function missingSkillUsageMessage({ missing, output, hasLoadedEvidence = false }) {
+  const base = `Missing SKILL_USAGE for ${missing.join(', ')}`;
+  if (hasLoadedEvidence || !looksLikeAssignmentMetadataOutput(output)) return base;
+  return `${base}. Validator input looks like task assignment JSON; pass the subagent final response or combined SKILL_USAGE/SUBAGENT_USAGE evidence, not the dispatch assignment.`;
+}
+
 function parseLooseLoadedSkillEvidence(output) {
   const entries = [];
   const lines = output.split(/\r?\n/);
@@ -165,6 +172,169 @@ function parseLooseLoadedSkillEvidence(output) {
   });
 
   return entries;
+}
+
+function parseJsonLoadedSkillEvidence(output) {
+  const entries = [];
+  for (const value of parseJsonEvidenceValues(output)) {
+    collectJsonLoadedEvidence(value, entries);
+  }
+  return entries;
+}
+
+function collectJsonLoadedEvidence(value, entries, key = '') {
+  if (typeof value === 'string') {
+    if (isJsonTextEvidenceKey(key)) entries.push(...skillTextEvidenceEntries(value));
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectJsonLoadedEvidence(item, entries, key));
+    return;
+  }
+  if (!isRecord(value)) return;
+
+  for (const [key, field] of Object.entries(value)) {
+    const normalized = normalizeJsonEvidenceKey(key);
+    if (normalized === 'skillusage') {
+      entries.push(...skillUsageValueToEntries(field));
+      continue;
+    }
+    if (isGlobalLoadedSkillEvidenceKey(normalized)) {
+      entries.push(...jsonSkillValueToEntries(field));
+      continue;
+    }
+    collectJsonLoadedEvidence(field, entries, normalized);
+  }
+}
+
+function skillUsageValueToEntries(value) {
+  if (typeof value === 'string') {
+    const block = findAuthoritativeSkillUsage(value);
+    return block ? parseSkillUsageBlock(block).loaded : extractSkillEntries(value);
+  }
+  if (Array.isArray(value)) return value.flatMap((item) => jsonSkillValueToEntries(item));
+  if (!isRecord(value)) return [];
+
+  const entries = [];
+  for (const [key, field] of Object.entries(value)) {
+    if (isSkillUsageLoadedKey(normalizeJsonEvidenceKey(key))) {
+      entries.push(...jsonSkillValueToEntries(field));
+    }
+  }
+  return entries;
+}
+
+function jsonSkillValueToEntries(value) {
+  if (typeof value === 'string') return extractSkillEntries(value);
+  if (Array.isArray(value)) return value.flatMap((item) => jsonSkillValueToEntries(item));
+  if (isRecord(value)) {
+    const direct = value.skill ?? value.skillName ?? value.name ?? value.id;
+    if (typeof direct === 'string') return extractSkillEntries(direct);
+    return skillUsageValueToEntries(value);
+  }
+  return [];
+}
+
+function skillTextEvidenceEntries(text) {
+  return [
+    ...parseSkillUsage(text).loaded,
+    ...parseLooseLoadedSkillEvidence(text),
+  ];
+}
+
+function parseJsonEvidenceValues(output) {
+  const values = [];
+  for (const candidate of jsonEvidenceCandidates(output)) {
+    try {
+      values.push(JSON.parse(candidate));
+    } catch {
+      // Ignore non-JSON fragments; this is a compatibility fallback for model output.
+    }
+  }
+  return values;
+}
+
+function jsonEvidenceCandidates(output) {
+  const text = String(output);
+  const candidates = new Set();
+  const trimmed = text.trim();
+  if (/^[\[{]/.test(trimmed)) candidates.add(trimmed);
+
+  const fencePattern = /```(?:json|JSON)?\s*([\s\S]*?)```/g;
+  for (const match of text.matchAll(fencePattern)) {
+    const candidate = match[1]?.trim();
+    if (candidate) candidates.add(candidate);
+  }
+
+  for (const candidate of balancedJsonFragments(text)) {
+    candidates.add(candidate);
+  }
+
+  return [...candidates].filter((candidate) => candidate.length <= 100000);
+}
+
+function balancedJsonFragments(text) {
+  const fragments = [];
+  for (let index = 0; index < text.length && fragments.length < 20; index += 1) {
+    if (!isLikelyJsonStart(text, index)) continue;
+    const end = findJsonFragmentEnd(text, index);
+    if (end > index) fragments.push(text.slice(index, end));
+  }
+  return fragments;
+}
+
+function isLikelyJsonStart(text, index) {
+  const char = text[index];
+  if (char !== '{' && char !== '[') return false;
+  const next = nextNonWhitespace(text, index + 1);
+  if (char === '{') return next === '"' || next === '}';
+  return next === '"' || next === '{' || next === '[' || next === ']';
+}
+
+function nextNonWhitespace(text, start) {
+  for (let index = start; index < text.length; index += 1) {
+    if (!/\s/.test(text[index])) return text[index];
+  }
+  return '';
+}
+
+function findJsonFragmentEnd(text, start) {
+  const stack = [text[start] === '{' ? '}' : ']'];
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start + 1; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === '{') {
+      stack.push('}');
+      continue;
+    }
+    if (char === '[') {
+      stack.push(']');
+      continue;
+    }
+    if (char !== '}' && char !== ']') continue;
+    if (stack.at(-1) !== char) return -1;
+    stack.pop();
+    if (!stack.length) return index + 1;
+  }
+
+  return -1;
 }
 
 function extractFollowingSkillEntries(lines, start) {
@@ -212,6 +382,42 @@ function isSkillEvidenceBoundary(line) {
 
 function isSkillTokenListLine(line) {
   return /^[\[\]"'`A-Za-z0-9_.\/-][\[\]"'`A-Za-z0-9_.\/,\s-]*\]?,?$/.test(line);
+}
+
+function looksLikeAssignmentMetadataOutput(output) {
+  return parseJsonEvidenceValues(output).some((value) => hasAssignmentMetadata(value));
+}
+
+function hasAssignmentMetadata(value) {
+  if (Array.isArray(value)) return value.some((item) => hasAssignmentMetadata(item));
+  if (!isRecord(value)) return false;
+
+  const keys = new Set(Object.keys(value).map((key) => normalizeJsonEvidenceKey(key)));
+  if (keys.has('assignment') && (keys.has('requiredskills') || keys.has('agent') || keys.has('role') || keys.has('task'))) {
+    return true;
+  }
+
+  return Object.values(value).some((item) => hasAssignmentMetadata(item));
+}
+
+function isGlobalLoadedSkillEvidenceKey(key) {
+  return key === 'skillsloaded' || key === 'loadedskills';
+}
+
+function isSkillUsageLoadedKey(key) {
+  return key === 'loaded' || key === 'skills' || isGlobalLoadedSkillEvidenceKey(key);
+}
+
+function isJsonTextEvidenceKey(key) {
+  return ['content', 'message', 'output', 'outputtext', 'response', 'result', 'results', 'text', 'value', 'finalmessage', 'finaloutput', 'finalresponse', 'subagentoutput', 'stdout'].includes(key);
+}
+
+function normalizeJsonEvidenceKey(key) {
+  return String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function isRecord(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function isPlaceholder(entry) {

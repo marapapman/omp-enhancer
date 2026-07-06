@@ -122,7 +122,7 @@ export default function registerCoreEnhancer(pi) {
   pi.registerTool({
     name: 'omp_core_validate_subagent_usage',
     label: 'Validate routed subagent usage',
-    description: 'Validate that a routed agent output includes SUBAGENT_USAGE with all required subagents forked.',
+    description: 'Preflight-check that routed output includes SUBAGENT_USAGE with all required subagents forked; final answers must still include the SUBAGENT_USAGE block in assistant text.',
     parameters: z?.object ? z.object({ output: z.string(), requiredSubagents: z.array(z.string()).optional() }) : undefined,
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
@@ -1318,6 +1318,7 @@ function buildMissingSubagentUsageContext(state) {
     missingAssignmentContext.length ? `Missing bug-audit assignment context: ${missingAssignmentContext.join(', ')}. Re-run those task calls with OMP_PARENT_TASK and a concrete bug-audit assignment inherited from the user request.` : null,
     unexpectedSkillAssignments.length ? `Unexpected subagent skill assignments: ${formatMissingSkillAssignments(unexpectedSkillAssignments)}.` : null,
     failureContext,
+    'Final-answer contract: close with the actual SUBAGENT_USAGE block in assistant output; do not send it only as omp_core_validate_subagent_usage output.',
     state.lastSubagentUsage?.message
       ? `Last validation: ${state.lastSubagentUsage.message}`
       : 'No successful SUBAGENT_USAGE validation has been recorded. SUBAGENT_USAGE is final evidence only; task-tool role evidence is still required for native TUI status.',

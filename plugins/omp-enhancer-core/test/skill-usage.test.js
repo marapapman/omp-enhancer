@@ -414,3 +414,108 @@ test('accepts unbulleted skill lines after section labels', () => {
   assert.equal(result.ok, true);
   assert.deepEqual(result.loaded, ['test-driven-development', 'verification-before-completion']);
 });
+
+test('accepts single-line JSON SKILL_USAGE string evidence from plugin agents', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['diagnose'],
+    output: JSON.stringify({
+      SKILL_USAGE: 'diagnose',
+      SUBAGENT_USAGE: 'ecc-silent-failure-hunter',
+      assignment: 'Audit silent failure paths.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['diagnose']);
+  assert.deepEqual(result.missing, []);
+});
+
+test('accepts JSON SKILL_USAGE arrays and loaded objects from plugin agents', () => {
+  const arrayResult = validateSkillUsage({
+    requiredSkills: ['test-driven-development', 'search-first', 'ai-regression-testing'],
+    output: JSON.stringify({
+      agent: 'ecc-tdd-guide',
+      role: 'TDD Audit',
+      SKILL_USAGE: ['test-driven-development', 'search-first', 'ai-regression-testing'],
+    }),
+  });
+
+  assert.equal(arrayResult.ok, true);
+  assert.deepEqual(arrayResult.loaded, ['test-driven-development', 'search-first', 'ai-regression-testing']);
+
+  const objectResult = validateSkillUsage({
+    requiredSkills: ['verification-before-completion'],
+    output: JSON.stringify({
+      review: 'Bug audit code review',
+      SKILL_USAGE: {
+        Required: ['verification-before-completion'],
+        Loaded: ['verification-before-completion'],
+      },
+    }),
+  });
+
+  assert.equal(objectResult.ok, true);
+  assert.deepEqual(objectResult.loaded, ['verification-before-completion']);
+});
+
+test('does not treat dispatch assignment requiredSkills metadata as loaded evidence', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['test-driven-development', 'search-first', 'ai-regression-testing'],
+    output: JSON.stringify({
+      agent: 'ecc-tdd-guide',
+      role: 'TDD Audit',
+      assignment: 'Bug audit test coverage guidance.',
+      requiredSkills: ['test-driven-development', 'search-first', 'ai-regression-testing'],
+    }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.loaded, []);
+  assert.deepEqual(result.missing, ['test-driven-development', 'search-first', 'ai-regression-testing']);
+  assert.match(result.message, /task assignment JSON/);
+});
+
+test('accepts SKILL_USAGE blocks nested inside JSON string output envelopes', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['verification-before-completion'],
+    output: JSON.stringify({
+      agent: 'ecc-code-reviewer',
+      result: {
+        output: [
+          'Review complete.',
+          '',
+          'SKILL_USAGE',
+          'Required:',
+          '- verification-before-completion',
+          'Loaded:',
+          '- verification-before-completion',
+        ].join('\n'),
+      },
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.loaded, ['verification-before-completion']);
+  assert.deepEqual(result.missing, []);
+});
+
+test('does not accept SKILL_USAGE examples nested only in assignment JSON fields', () => {
+  const result = validateSkillUsage({
+    requiredSkills: ['verification-before-completion'],
+    output: JSON.stringify({
+      agent: 'ecc-code-reviewer',
+      assignment: [
+        'Final output must include:',
+        'SKILL_USAGE',
+        'Required:',
+        '- verification-before-completion',
+        'Loaded:',
+        '- verification-before-completion',
+      ].join('\n'),
+    }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.loaded, []);
+  assert.deepEqual(result.missing, ['verification-before-completion']);
+});

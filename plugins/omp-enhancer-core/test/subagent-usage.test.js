@@ -70,6 +70,49 @@ test('accepts markdown SUBAGENT_USAGE headings without required and forked secti
   assert.deepEqual(validation.forked, ['zh-writer', 'zh-checker']);
 });
 
+test('accepts SUBAGENT_USAGE blocks nested inside JSON string output envelopes', () => {
+  const validation = validateSubagentUsage({
+    requiredSubagents: [
+      { agent: 'writer', requiredSkills: ['writing-markdown-helper'] },
+      { agent: 'checker', requiredSkills: ['writing-checkers'] },
+    ],
+    output: JSON.stringify({
+      status: 'complete',
+      result: {
+        output: [
+          'Done.',
+          '',
+          'SUBAGENT_USAGE:',
+          '- writer: writing-markdown-helper',
+          '- checker: writing-checkers',
+        ].join('\n'),
+      },
+    }),
+  });
+
+  assert.equal(validation.ok, true);
+  assert.deepEqual(validation.forked, ['writer', 'checker']);
+});
+
+test('does not accept SUBAGENT_USAGE examples nested only in assignment JSON fields', () => {
+  const validation = validateSubagentUsage({
+    requiredSubagents: [
+      { agent: 'writer', requiredSkills: ['writing-markdown-helper'] },
+    ],
+    output: JSON.stringify({
+      assignment: [
+        'Final output must include:',
+        'SUBAGENT_USAGE:',
+        '- writer: writing-markdown-helper',
+      ].join('\n'),
+    }),
+  });
+
+  assert.equal(validation.ok, false);
+  assert.deepEqual(validation.forked, []);
+  assert.deepEqual(validation.missing, ['writer']);
+});
+
 test('validateSubagentUsage reports missing routed roles', () => {
   const validation = validateSubagentUsage({
     requiredSubagents: ['zh-writer', 'zh-checker'],

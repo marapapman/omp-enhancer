@@ -55,6 +55,7 @@ export function buildGovernancePromptFragment({ route, parentTask = '' } = {}) {
     '### SUBAGENT_USAGE contract',
     '',
     'Final routed outputs that list required subagents must include:',
+    'Put this block in the final assistant answer text. A successful omp_core_validate_subagent_usage tool call is only a preflight and does not replace the closing SUBAGENT_USAGE block.',
     '',
     'SUBAGENT_USAGE',
     'Required:',
@@ -258,7 +259,7 @@ function completionGateChecklist(route) {
     gates.push('No additional plugin-specific tool gate beyond the route boundary and final evidence requirements.');
   }
 
-  gates.push('Final evidence gate: final routed output includes SKILL_USAGE, and includes SUBAGENT_USAGE when routed subagents are required.');
+  gates.push('Final evidence gate: final assistant answer text includes SKILL_USAGE, and includes SUBAGENT_USAGE when routed subagents are required; validator tool calls are preflight only and do not replace the final blocks.');
   return gates;
 }
 

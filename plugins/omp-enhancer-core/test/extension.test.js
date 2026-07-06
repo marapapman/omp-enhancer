@@ -2570,6 +2570,8 @@ test('validate subagent usage does not replace native task subagent evidence', a
   assert.equal(result?.continue, true);
   assert.match(result.additionalContext, /subagent gate/i);
   assert.match(result.additionalContext, /Missing task-launched subagents: zh-writer, zh-checker/);
+  assert.match(result.additionalContext, /Final-answer contract/);
+  assert.match(result.additionalContext, /do not send it only as omp_core_validate_subagent_usage output/);
 });
 
 test('validator evidence persists through session entries across isolated plugin instances', async () => {
@@ -2688,6 +2690,102 @@ test('skill validator accepts delegated subagent loaded evidence from task resul
 
   const validation = await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-delegated-gate-complete-skill-usage',
+    { output: '' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(validation.details.validation.ok, true);
+  assert.deepEqual(validation.details.validation.loaded, ['security-review', 'security-scan']);
+  assert.deepEqual(validation.details.validation.missing, []);
+});
+
+test('skill validator accepts delegated subagent evidence wrapped in task JSON text envelopes', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: 'Review this API handler for auth bypass and injection risks.' },
+    ctx,
+  );
+
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      toolCallId: 'security-review-json-task',
+      input: {
+        tasks: [
+          {
+            role: 'ecc-security-reviewer',
+            assignment: [
+              'OMP_REQUIRED_SUBAGENT: ecc-security-reviewer',
+              'OMP_PARENT_TASK: Review this API handler for auth bypass and injection risks.',
+              'Required skills for this subagent:',
+              '- security-review',
+              '- security-scan',
+            ].join('\n'),
+          },
+          {
+            role: 'reviewer',
+            assignment: [
+              'OMP_REQUIRED_SUBAGENT: reviewer',
+              'OMP_PARENT_TASK: Review this API handler for auth bypass and injection risks.',
+              'Required skills for this subagent:',
+              '- security-review',
+            ].join('\n'),
+          },
+        ],
+      },
+    },
+    ctx,
+  );
+
+  await event(pi, 'tool_result')(
+    {
+      name: 'task',
+      toolCallId: 'security-review-json-task',
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            results: [
+              {
+                agent: 'ecc-security-reviewer',
+                output: [
+                  'Security review complete.',
+                  'SKILL_USAGE',
+                  'Required:',
+                  '- security-review',
+                  '- security-scan',
+                  'Loaded:',
+                  '- security-review',
+                  '- security-scan',
+                ].join('\n'),
+              },
+              {
+                agent: 'reviewer',
+                output: [
+                  'Review complete.',
+                  'SKILL_USAGE',
+                  'Required:',
+                  '- security-review',
+                  'Loaded:',
+                  '- security-review',
+                ].join('\n'),
+              },
+            ],
+          }),
+        },
+      ],
+    },
+    ctx,
+  );
+
+  const validation = await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-delegated-json-envelope-skill-usage',
     { output: '' },
     undefined,
     undefined,
