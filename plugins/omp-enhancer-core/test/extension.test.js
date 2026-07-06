@@ -536,7 +536,7 @@ test('simple writing edits are handled by the main agent without writer checker 
   assert.equal(released, undefined);
 });
 
-test('task tool_call blocks routed subagents before assignment skills are attached', async () => {
+test('task tool_call auto-attaches routed subagent contracts for exact roles', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -555,32 +555,29 @@ test('task tool_call blocks routed subagents before assignment skills are attach
   assert.match(startFragment, /For direct main-agent work tools only/);
   assert.ok(startFragment.indexOf('pre-work skill bootstrap') < startFragment.indexOf('Mandatory Subagent Workflow'));
 
-  const blocked = await event(pi, 'tool_call')(
-    {
-      toolName: 'task',
-      input: {
-        tasks: [{ role: 'zh-writer', assignment: 'Draft the Chinese revision.' }],
-      },
+  const taskEvent = {
+    toolName: 'task',
+    input: {
+      tasks: [{ role: 'zh-writer', assignment: 'Draft the Chinese revision.' }],
     },
-    ctx,
-  );
+  };
+  const allowed = await event(pi, 'tool_call')(taskEvent, ctx);
 
-  assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /task subagent skill gate/);
-  assert.match(blocked.reason, /plain-chinese-writing/);
-  assert.match(blocked.reason, /zh-writing-polish/);
-  assert.match(blocked.reason, /Missing subagent skill assignments: zh-writer \[plain-chinese-writing, zh-writing-polish\]/);
-  assert.match(blocked.reason, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
+  assert.equal(allowed, undefined);
+  assert.match(taskEvent.input.tasks[0].assignment, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
+  assert.match(taskEvent.input.tasks[0].assignment, /OMP_PARENT_TASK:\s*请润色这段中文论文摘要/);
+  assert.match(taskEvent.input.tasks[0].assignment, /Required skills for this subagent:\n- plain-chinese-writing\n- zh-writing-polish/);
+  assert.match(taskEvent.input.tasks[0].assignment, /Assignment:\nDraft the Chinese revision\./);
 
   const status = await tool(pi, 'omp_core_subagent_status').execute(
-    'call-status-after-blocked-task',
+    'call-status-after-auto-repaired-task',
     {},
     undefined,
     undefined,
     ctx,
   );
 
-  assert.match(status.content[0].text, /Pending:\n- none/);
+  assert.match(status.content[0].text, /Pending:\n- zh-writer: pending/);
 });
 
 test('task tool_call with subagent skill contracts does not require main-agent skill reads', async () => {
@@ -704,7 +701,7 @@ test('task tool_call accepts marker-only bug-audit assignments and descriptive r
   ]);
 });
 
-test('bug-audit task tool_call blocks before fork when parent task context is missing', async () => {
+test('bug-audit task tool_call auto-attaches missing parent task context for exact roles', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -715,30 +712,29 @@ test('bug-audit task tool_call blocks before fork when parent task context is mi
     ctx,
   );
 
-  const blocked = await event(pi, 'tool_call')(
-    {
-      toolName: 'task',
-      input: {
-        tasks: [
-          {
-            role: 'ecc-tdd-guide',
-            assignment: [
-              'OMP_REQUIRED_SUBAGENT: ecc-tdd-guide',
-              'Required skills for this subagent:',
-              '- test-driven-development',
-              '- search-first',
-              '- ai-regression-testing',
-            ].join('\n'),
-          },
-        ],
-      },
+  const taskEvent = {
+    toolName: 'task',
+    input: {
+      tasks: [
+        {
+          role: 'ecc-tdd-guide',
+          assignment: [
+            'OMP_REQUIRED_SUBAGENT: ecc-tdd-guide',
+            'Required skills for this subagent:',
+            '- test-driven-development',
+            '- search-first',
+            '- ai-regression-testing',
+          ].join('\n'),
+        },
+      ],
     },
-    ctx,
-  );
+  };
+  const allowed = await event(pi, 'tool_call')(taskEvent, ctx);
 
-  assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /Missing bug-audit parent task context: ecc-tdd-guide/);
-  assert.match(blocked.reason, /OMP_PARENT_TASK: 帮我测试整个 subagent fork 逻辑/);
+  assert.equal(allowed, undefined);
+  assert.match(taskEvent.input.tasks[0].assignment, /OMP_REQUIRED_SUBAGENT:\s*ecc-tdd-guide/);
+  assert.match(taskEvent.input.tasks[0].assignment, /OMP_PARENT_TASK:\s*帮我测试整个 subagent fork 逻辑/);
+  assert.match(taskEvent.input.tasks[0].assignment, /Required skills for this subagent:\n- test-driven-development\n- search-first\n- ai-regression-testing/);
 });
 
 test('task tool_call does not report prose role text as an unexpected subagent', async () => {

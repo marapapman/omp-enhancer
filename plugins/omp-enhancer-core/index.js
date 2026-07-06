@@ -801,7 +801,7 @@ function buildTaskSubagentSkillGateBlock(state, event = {}) {
   if (!requiredSubagents.length) return null;
 
   const requiredByAgent = new Map(requiredSubagents.map((item) => [item.agent, item.requiredSkills]));
-  const records = collectSubagentTaskRecords(event);
+  let records = collectSubagentTaskRecords(event);
   if (!records.length) {
     return taskSubagentSkillBlock([
       'OMP Enhancer Core task subagent skill gate blocked task.',
@@ -810,6 +810,10 @@ function buildTaskSubagentSkillGateBlock(state, event = {}) {
       'Add one of these contracts to each task item before retrying:',
       ...requiredSubagents.flatMap((subagent) => formatSubagentSkillAssignmentStep(subagent, { parentTask: state.lastPrompt })),
     ]);
+  }
+
+  if (repairTaskSubagentAssignmentContracts(state, event, requiredSubagents, records)) {
+    records = collectSubagentTaskRecords(event);
   }
 
   const unexpectedAgents = records
@@ -845,6 +849,132 @@ function buildTaskSubagentSkillGateBlock(state, event = {}) {
     'Required task assignment contracts:',
     ...requiredSubagents.flatMap((subagent) => formatSubagentSkillAssignmentStep(subagent, { parentTask: state.lastPrompt })),
   ]);
+}
+
+function repairTaskSubagentAssignmentContracts(state, event, requiredSubagents, records) {
+  const requiredByAgent = new Map(requiredSubagents.map((item) => [item.agent, item]));
+  const recordByAgent = new Map(records.map((record) => [record.agent, record]));
+  if ([...recordByAgent.keys()].some((agent) => !requiredByAgent.has(agent))) return false;
+  if (records.some(({ agent, skills = [] }) => {
+    const requiredSkills = requiredByAgent.get(agent)?.requiredSkills ?? [];
+    return skills.some((skill) => !requiredSkills.some((requiredSkill) => skillNamesEquivalent(requiredSkill, skill)));
+  })) return false;
+
+  let repaired = false;
+  for (const item of mutableTaskItems(event)) {
+    const agent = inferRepairableTaskAgent(item, requiredByAgent);
+    if (!agent) continue;
+    const required = requiredByAgent.get(agent);
+    const currentText = taskAssignmentText(item);
+    const requiredSkills = required.requiredSkills ?? [];
+    const hasAllSkills = requiredSkills.every((skill) => {
+      const recorded = recordByAgent.get(agent)?.skills ?? [];
+      return recorded.some((loadedSkill) => skillNamesEquivalent(skill, loadedSkill)) || textMentionsEquivalentSkill(currentText, skill);
+    });
+    const needsParent = state.lastRoute?.intent === 'bug-audit' && !hasParentTaskMarker(currentText);
+    const needsContract = !hasRequiredSubagentMarker(currentText, agent) || !hasAllSkills || needsParent;
+    if (!needsContract) continue;
+
+    setTaskAssignmentText(item, prependSubagentAssignmentContract({
+      agent,
+      requiredSkills,
+      parentTask: state.lastPrompt,
+      currentText,
+    }));
+    repaired = true;
+  }
+  return repaired;
+}
+
+function mutableTaskItems(event = {}) {
+  const items = [];
+  const seen = new Set();
+  const roots = [
+    event,
+    event.params,
+    event.arguments,
+    event.args,
+    event.input,
+    event.request,
+    event.details,
+  ].filter(Boolean);
+  for (const root of roots) collectMutableTaskItems(root, items, seen);
+  return items;
+}
+
+function collectMutableTaskItems(value, items, seen) {
+  if (!value || typeof value !== 'object') return;
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectMutableTaskItems(item, items, seen);
+    return;
+  }
+
+  if (Array.isArray(value.tasks)) {
+    for (const task of value.tasks) {
+      if (task && typeof task === 'object' && !Array.isArray(task)) items.push(task);
+    }
+  }
+
+  for (const [key, nested] of Object.entries(value)) {
+    if (key === 'tasks') continue;
+    collectMutableTaskItems(nested, items, seen);
+  }
+}
+
+function inferRepairableTaskAgent(item, requiredByAgent) {
+  const marker = parseRequiredSubagentMarker(taskAssignmentText(item));
+  if (marker && requiredByAgent.has(marker)) return marker;
+
+  for (const key of ['agent', 'subagent', 'subagent_type', 'subagentType']) {
+    const agent = normalizeTaskAgent(item[key]);
+    if (agent && requiredByAgent.has(agent)) return agent;
+  }
+
+  const role = normalizeTaskAgent(item.role);
+  if (role && requiredByAgent.has(role)) return role;
+  return '';
+}
+
+function taskAssignmentText(item) {
+  return [item.assignment, item.prompt, item.description]
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .filter((value) => typeof value === 'string')
+    .join('\n');
+}
+
+function setTaskAssignmentText(item, text) {
+  if ('assignment' in item || !('prompt' in item)) item.assignment = text;
+  else item.prompt = text;
+}
+
+function prependSubagentAssignmentContract({ agent, requiredSkills = [], parentTask = '', currentText = '' }) {
+  const cleaned = cleanText(currentText);
+  return [
+    `OMP_REQUIRED_SUBAGENT: ${agent}`,
+    `OMP_PARENT_TASK: ${formatParentTaskForAssignment(parentTask)}`,
+    'Required skills for this subagent:',
+    ...(requiredSkills.length ? requiredSkills.map((skill) => `- ${skill}`) : ['- none']),
+    '',
+    cleaned ? 'Assignment:' : null,
+    cleaned || null,
+  ].filter(Boolean).join('\n');
+}
+
+function parseRequiredSubagentMarker(text = '') {
+  const match = String(text).match(/(?:^|\n)\s*OMP_REQUIRED_SUBAGENT:\s*([^\r\n]+)/i);
+  return match ? normalizeTaskAgent(match[1]) : '';
+}
+
+function hasRequiredSubagentMarker(text = '', agent = '') {
+  return parseRequiredSubagentMarker(text) === agent;
+}
+
+function normalizeTaskAgent(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim().replace(/[:(].*$/, '').trim();
 }
 
 function taskSubagentSkillBlock(lines) {
