@@ -160,6 +160,15 @@ export function buildSubagentPromptFragment({ prompt = '' } = {}) {
 export function buildMissingGateContext({ route, state } = {}) {
   if (!route || route.intent === 'unknown') return null;
 
+  if (needsFactCheck(route) && !state?.evidence?.factCheckGate) {
+    return [
+      'OMP Enhancer Core gate is still open for this fact-checking task.',
+      'Run the fact-checking workflow before finishing: fact_check_analyze, independent fact_check_evidence lanes when sources are available, fact_check_report, then fact_check_gate.',
+      'The final answer must distinguish supported, contradicted, insufficient, and stale claims. Include FACT_CHECK_PLAN, FACT_EVIDENCE_A, FACT_EVIDENCE_B when required, FACT_CROSS_CHECK, FACT_REVIEW, FACT_CHECK_REPORT, FACT_CHECK_USAGE, SKILL_USAGE, and SUBAGENT_USAGE when subagents are routed.',
+      formatRecentToolFailures(state, ['fact_check_gate']),
+    ].filter(Boolean).join('\n');
+  }
+
   if (needsWritingQuality(route) && !state?.evidence?.writingQuality) {
     return [
       'OMP Enhancer Core gate is still open for this writing task.',
@@ -243,6 +252,10 @@ function completionGateChecklist(route) {
       : 'Bug-audit gate: generate, deduplicate, execute, and report high-signal test cases before BUG-AUDIT-REPORT claims.');
   }
 
+  if (route.intent === 'fact-check') {
+    gates.push('Fact-check gate: plan claims, collect independent evidence lanes when sources are available, cross-check agreement and conflicts, review overclaiming, then run fact_check_gate before final factual claims.');
+  }
+
   if (route.intent === 'security-review') {
     gates.push('Security gate: complete security risk analysis first; remediation or final risk claims must be checked by the reviewer role when changes are in scope.');
   }
@@ -322,6 +335,7 @@ function workflowFor(route) {
   if (intent === 'writing.en') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, writer -> checker -> writing_quality_check.';
   if (intent === 'bug-audit' && isFocusedBugAuditRoute(route)) return 'Focused bug audit workflow: preload focused audit skills -> inspect the bounded failure path directly -> generate and run the smallest high-signal local test matrix -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> focused BUG-AUDIT-REPORT.';
   if (intent === 'bug-audit') return 'Bug audit workflow: ecc-tdd-guide generates a deduplicated multi-channel executable test matrix -> ecc-code-reviewer static audit -> ecc-silent-failure-hunter failure-path audit -> ecc-pr-test-analyzer checks generated tests, duplicate removal, execution results, and coverage gaps -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> BUG-AUDIT-REPORT or final bug report.';
+  if (intent === 'fact-check') return 'Fact-check workflow: fact-planner -> fact-researcher-a and fact-researcher-b independent evidence lanes -> fact-cross-checker -> fact-reviewer -> fact_check_analyze -> fact_check_evidence as needed -> fact_check_report -> fact_check_gate -> FACT_CHECK_REPORT.';
   if (intent === 'testing') return 'Legacy testing intent: use the merged bug-audit workflow and testing-enhancer toolchain.';
   if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> implementation-task -> reviewer -> post-review testing checkpoint -> local test commands -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report.';
   if (intent === 'security-review') return 'Security workflow: ecc-security-reviewer -> reviewer -> fix or report only after risk evidence is checked.';
@@ -341,6 +355,9 @@ function routeBoundaryFor(route) {
   }
   if (intent === 'bug-audit') {
     return 'Route boundary: this is a bug audit workflow. Test-case files, disposable harnesses, and command invocations are allowed when needed for audit verification, but production-code fixes require a separate user request. Do not turn audit findings into production code edits without a fix request. The omp_test_* tools are owned by omp-testing-enhancer; core only routes to them and listens for their results.';
+  }
+  if (intent === 'fact-check') {
+    return 'Route boundary: this is a factual verification workflow. Read, search, cite, and report evidence; do not rewrite the source document or change project files unless the user explicitly asks for edits.';
   }
   if (intent === 'testing' || intent === 'implementation-with-tests') {
     return 'Route boundary: this is a code/testing workflow. Use the omp-testing-enhancer tools only after routed test or implementation work has actually been performed.';
@@ -597,4 +614,8 @@ function needsWritingQuality(route) {
 
 function needsTesting(route) {
   return route.intent === 'testing' || route.intent === 'implementation-with-tests' || route.intent === 'bug-audit';
+}
+
+function needsFactCheck(route) {
+  return route.intent === 'fact-check';
 }

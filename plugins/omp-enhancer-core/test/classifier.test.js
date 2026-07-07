@@ -105,6 +105,34 @@ test('resolveClassificationRoute maps bug audit classifier output to audit subag
   ]);
 });
 
+test('resolveClassificationRoute maps fact-check classifier output to cross-validated workflow', () => {
+  const result = resolveClassificationRoute({
+    prompt: '帮我事实核查这段文字里的数据、年份和引用真实性。',
+    output: JSON.stringify({
+      intent: 'fact-check',
+      secondaryIntents: [],
+      language: 'zh',
+      confidence: 0.93,
+      riskFlags: ['needs-fact-check', 'needs-subagents', 'needs-review'],
+      domainHints: ['citation authenticity', 'factual claims'],
+      reason: 'The user explicitly asks to verify factual claims, data, dates, and citations.',
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.route.intent, 'fact-check');
+  assert.equal(result.route.source, 'llm-classifier');
+  assert.deepEqual(result.route.requiredSkills, ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity']);
+  assert.deepEqual(result.route.requiredTools, ['fact_check_analyze', 'fact_check_evidence', 'fact_check_report', 'fact_check_gate']);
+  assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), [
+    'fact-planner',
+    'fact-researcher-a',
+    'fact-researcher-b',
+    'fact-cross-checker',
+    'fact-reviewer',
+  ]);
+});
+
 test('resolveClassificationRoute preserves focused audit mode from the deterministic route', () => {
   const result = resolveClassificationRoute({
     prompt: 'Do the bug investigation directly as a focused audit; report verified findings only.',

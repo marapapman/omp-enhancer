@@ -52,6 +52,18 @@ const expectedByIntent = {
       'ecc-pr-test-analyzer': ['verification-before-completion'],
     },
   },
+  'fact-check': {
+    agent: 'fact-checker',
+    requiredSkills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
+    requiredTools: ['fact_check_analyze', 'fact_check_evidence', 'fact_check_report', 'fact_check_gate'],
+    subagents: {
+      'fact-planner': ['fact-checking', 'claim-extraction'],
+      'fact-researcher-a': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+      'fact-researcher-b': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+      'fact-cross-checker': ['fact-checking', 'source-evaluation'],
+      'fact-reviewer': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+    },
+  },
   'security-review': {
     agent: 'ecc-security-reviewer',
     requiredSkills: ['security-review', 'security-scan'],
@@ -124,6 +136,7 @@ const workloadMatrix = [
   ['en coverage report writing', 'Write a test coverage report for the release notes; do not run tests.', 'writing.en'],
   ['en sentence polish', 'Polish this sentence for clarity and keep it concise.', 'writing.en'],
   ['zh large writing workload', '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。', 'writing.zh'],
+  ['zh chapter prose optimization', '帮我优化第一章的中文写作，让整体行文更顺滑，逻辑更通畅。', 'writing.zh'],
   ['zh small revision workload', '把这句话改成朴素直接的中文：我们需要进一步推动能力沉淀。', 'writing.zh'],
   ['en large writing workload', 'Draft a full English research proposal with background, methods, risks, and timeline.', 'writing.en'],
   ['en small revision workload', 'Polish this sentence for clarity: The workflow blocks unexpectedly.', 'writing.en'],
@@ -145,6 +158,8 @@ const workloadMatrix = [
   ['browser e2e verification', 'Run browser e2e verification for the changed workflow and report failures.', 'bug-audit'],
   ['read-only code bug finding workload', '帮我在代码里找 bug，只报告问题，不要修复。', 'bug-audit'],
   ['code testing workload', '帮我为 subagent fork 逻辑生成测试并运行门禁，不要改实现。', 'bug-audit'],
+  ['factual claim review', '帮我事实核查这段文字里的数据、年份和引用真实性。', 'fact-check'],
+  ['citation authenticity review', 'Verify citation authenticity and factual claims in this paragraph.', 'fact-check'],
   ['express path traversal', "审查这段 Express 代码的安全风险：app.get('/file', (req, res) => res.sendFile(req.query.path));", 'security-review'],
   ['secret leakage', '检查这个配置文件有没有 secret 泄漏和权限风险。', 'security-review'],
   ['auth bypass', 'Review this API handler for auth bypass and injection risks.', 'security-review'],
@@ -323,10 +338,12 @@ test('all workflow matrix subagents and skills are packaged by installed plugin 
   const agentRoots = [
     path.join(repoRoot, 'plugins', 'omp-config', 'agents'),
     path.join(repoRoot, 'plugins', 'writing-helper', 'agents'),
+    path.join(repoRoot, 'plugins', 'omp-fact-checker', 'agents'),
   ];
   const skillRoots = [
     path.join(repoRoot, 'plugins', 'omp-config', 'skills'),
     path.join(repoRoot, 'plugins', 'writing-helper', 'skills'),
+    path.join(repoRoot, 'plugins', 'omp-fact-checker', 'skills'),
   ];
   const skillNames = await skillNamesInRoots(skillRoots);
 
@@ -343,8 +360,9 @@ test('core workflow gate subagents run as blocking task agents', async () => {
   const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const agentRoots = [
     path.join(repoRoot, 'plugins', 'omp-config', 'agents'),
+    path.join(repoRoot, 'plugins', 'omp-fact-checker', 'agents'),
   ];
-  const blockingIntents = new Set(['implementation-with-tests', 'bug-audit', 'security-review', 'config-assets']);
+  const blockingIntents = new Set(['implementation-with-tests', 'bug-audit', 'security-review', 'config-assets', 'fact-check']);
 
   for (const route of routesFromMatrix().filter((item) => blockingIntents.has(item.intent))) {
     for (const { agent } of route.requiredSubagents) {

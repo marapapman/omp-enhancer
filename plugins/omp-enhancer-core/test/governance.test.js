@@ -127,6 +127,39 @@ test('focused bug audit governance preloads skills without heavy subagent delega
   assert.doesNotMatch(fragment, /OMP_REQUIRED_SUBAGENT:/);
 });
 
+test('fact-check governance advertises plan, independent evidence, cross-check, review, and gate', () => {
+  const fragment = buildGovernancePromptFragment({
+    route: {
+      intent: 'fact-check',
+      agent: 'fact-checker',
+      requiredSkills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
+      requiredTools: ['fact_check_analyze', 'fact_check_evidence', 'fact_check_report', 'fact_check_gate'],
+      requiredSubagents: [
+        { agent: 'fact-planner', duty: 'plan claims', requiredSkills: ['fact-checking', 'claim-extraction'] },
+        { agent: 'fact-researcher-a', duty: 'lane A evidence', requiredSkills: ['fact-checking', 'source-evaluation', 'citation-authenticity'] },
+        { agent: 'fact-researcher-b', duty: 'lane B evidence', requiredSkills: ['fact-checking', 'source-evaluation', 'citation-authenticity'] },
+        { agent: 'fact-cross-checker', duty: 'compare evidence lanes', requiredSkills: ['fact-checking', 'source-evaluation'] },
+        { agent: 'fact-reviewer', duty: 'review final verdicts', requiredSkills: ['fact-checking', 'source-evaluation', 'citation-authenticity'] },
+      ],
+    },
+  });
+
+  assert.match(fragment, /Intent:\s*fact-check/);
+  assert.match(fragment, /Fact-check workflow/);
+  assert.match(fragment, /independent evidence lanes/);
+  assert.match(fragment, /Fact-check gate/);
+  assert.match(fragment, /fact_check_gate/);
+  assert.match(fragment, /factual verification workflow/);
+  assert.match(fragment, /do not rewrite the source document/i);
+  assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*fact-planner/);
+  assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*fact-researcher-a/);
+  assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*fact-researcher-b/);
+  assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*fact-cross-checker/);
+  assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*fact-reviewer/);
+  assert.match(fragment, /SUBAGENT_USAGE:\n- fact-planner: fact-checking, claim-extraction/);
+  assert.match(fragment, /- fact-reviewer: fact-checking, source-evaluation, citation-authenticity/);
+});
+
 test('subagent contracts accept installed aliases while preserving canonical Required names', () => {
   const fragment = buildSubagentPromptFragment({
     prompt: [

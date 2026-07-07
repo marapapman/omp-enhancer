@@ -63,6 +63,7 @@ const CLASSIFIER_PREFLIGHT_FAILURE_TOOLS = new Set([
   'omp_config_doctor',
   'omp_config_assets',
   'omp_config_plan',
+  'fact_check_gate',
 ]);
 
 export default function registerCoreEnhancer(pi) {
@@ -342,9 +343,8 @@ export default function registerCoreEnhancer(pi) {
     } else {
       const preworkBlock = buildPreworkSkillGateBlock(state, name);
       if (preworkBlock) {
-        state.pendingSmartGate = createPendingSmartGate(state, preworkBlock.ruleGate, '');
         await persistState(pi, state);
-        return smartGateWrappedToolBlock(state, preworkBlock);
+        return preworkBlock;
       }
     }
     await persistState(pi, state);
@@ -372,6 +372,7 @@ export default function registerCoreEnhancer(pi) {
     if ((name === 'writing_quality_check' || name === 'writing_logic_check') && successful) state.evidence.writingQuality = true;
     if (name === 'omp_test_gate' && successful) state.evidence.testingGate = true;
     if (name === 'omp_test_report' && successful) state.evidence.testingReport = true;
+    if (name === 'fact_check_gate' && successful) state.evidence.factCheckGate = true;
     if (name === 'task') {
       recordTaskResult(state, event, { successful });
       recordSubagentDispatchFinished(state, event, { successful });
@@ -453,6 +454,7 @@ function emptyEvidence() {
     writingLogic: false,
     testingGate: false,
     testingReport: false,
+    factCheckGate: false,
     deliveredBugAuditReport: false,
     taskToolCalls: 0,
     loadedSkills: new Set(),
@@ -634,6 +636,7 @@ function serializeState(state) {
       writingLogic: state.evidence.writingLogic,
       testingGate: state.evidence.testingGate,
       testingReport: state.evidence.testingReport,
+      factCheckGate: state.evidence.factCheckGate,
       deliveredBugAuditReport: state.evidence.deliveredBugAuditReport,
       taskToolCalls: state.evidence.taskToolCalls,
       loadedSkills: [...state.evidence.loadedSkills],
@@ -766,6 +769,7 @@ function readEvidenceSnapshot(value) {
     writingLogic: value.writingLogic === true,
     testingGate: value.testingGate === true,
     testingReport: value.testingReport === true,
+    factCheckGate: value.factCheckGate === true,
     deliveredBugAuditReport: value.deliveredBugAuditReport === true,
     taskToolCalls: Number.isInteger(value.taskToolCalls) ? value.taskToolCalls : 0,
     loadedSkills: new Set(Array.isArray(value.loadedSkills) ? value.loadedSkills.filter(isString) : []),
@@ -957,9 +961,12 @@ function buildClassifierPreflight(route, prompt = '', extraReasons = [], { previ
 
 function classifierPreflightMode(route, reasons = [], extraReasons = []) {
   if (extraReasons.length) return 'required';
-  if (route?.intent !== 'unknown') return 'required';
-  const blockingReasons = reasons.filter((reason) => reason !== 'deterministic route is unknown');
-  return blockingReasons.length ? 'required' : 'observe';
+  return reasons.some((reason) => isBlockingClassifierPreflightReason(reason, route)) ? 'required' : 'observe';
+}
+
+function isBlockingClassifierPreflightReason(reason = '', route = null) {
+  if (route?.intent === 'unknown') return false;
+  return reason === 'user reports a concrete routing, workflow, gate, or classifier failure';
 }
 
 function classifierPreflightObservations(previousPreflight, prompt = '', mode = 'required') {
@@ -986,7 +993,7 @@ function classifierPreflightReasons(route, prompt = '') {
     return reasons;
   }
   if (!isWritingIntent(route.intent) && mentionsRoutingAnomaly(text) && !isClassifierInfrastructureRepairRequest(text)) {
-    reasons.push('user mentions routing, workflow, gate, or classifier confusion');
+    reasons.push('user reports a concrete routing, workflow, gate, or classifier failure');
   }
   if (isMixedWorkflowBoundary(text)) {
     reasons.push('task mixes writing, implementation, testing, or security workflow signals');
@@ -1197,6 +1204,7 @@ function specificGateKind(kind, context = '') {
   const text = String(context).toLowerCase();
   if (kind === 'workflow' && /writing qa|writing task|writing_quality_check|writing_logic_check/.test(text)) return 'writing-qa';
   if (kind === 'workflow' && /omp_test_gate|testing task|bug-audit|test gate|testing gate/.test(text)) return 'testing';
+  if (kind === 'workflow' && /fact_check_gate|fact-check|fact checking|factual verification|事实审查|事实核查/.test(text)) return 'fact-check';
   return kind;
 }
 
@@ -1377,6 +1385,7 @@ function summarizeSmartGateEvidence(state) {
     `Writing QA evidence: ${state.evidence.writingQuality ? 'ok' : 'not recorded'}`,
     `Testing gate evidence: ${state.evidence.testingGate ? 'ok' : 'not recorded'}`,
     `Testing report evidence: ${state.evidence.testingReport ? 'ok' : 'not recorded'}`,
+    `Fact-check gate evidence: ${state.evidence.factCheckGate ? 'ok' : 'not recorded'}`,
     `Tool failures: ${failures.join('; ') || 'none'}`,
   ].join('\n');
 }
@@ -1498,11 +1507,12 @@ function buildPreworkSkillBootstrapBlock(state) {
     return [
       '### OMP Enhancer Core pre-work skill bootstrap',
       'Actor-specific skill rule: task subagents load subagent skills; the main agent loads skills only for direct main-agent work.',
+      missing.length ? 'Direct main-agent work auto-read queue: if you intend to call edit, write, bash, QA, or test gates yourself, read these root skills before the first direct tool call:' : null,
+      ...(missing.length ? missing.map(formatMissingSkillReadStep) : []),
+      missing.length ? 'Do not use Tiny smart gate for ordinary missing skill reads; read the skills, wait for evidence, then retry the direct tool.' : null,
       'Before calling task, put the matching subagent skill contract into each task assignment. Do not read root route skills in the main agent just to unlock task.',
       'Required task assignment contracts:',
       ...requiredSubagents.flatMap((subagent) => formatSubagentSkillAssignmentStep(subagent, { parentTask, route: state.lastRoute })),
-      missing.length ? 'For direct main-agent work tools only, read missing root skills before using edit, write, bash, QA, or test gates:' : null,
-      ...(missing.length ? missing.map(formatMissingSkillReadStep) : []),
     ].filter(Boolean).join('\n');
   }
 
@@ -1537,7 +1547,9 @@ function buildPreworkSkillGateBlock(state, toolName) {
   if (!missing.length) return null;
   const ruleGate = toolRuleGateBlock(state, `prework:${toolName}`, [
     `OMP Enhancer Core pre-work main-agent skill gate blocked ${toolName}.`,
-    `Read all required skills before using this direct main-agent work tool. Missing skills: ${missing.join(', ')}.`,
+    'Automatic recovery: read the missing skills now, wait for the read results, then retry the blocked tool.',
+    'Do not call Tiny smart gate for ordinary missing skill reads. Smart gate is reserved for true false positives or already-satisfied evidence; reading the skills is the expected low-cost path.',
+    `Missing skills: ${missing.join(', ')}.`,
     'Required recovery order:',
     ...missing.map(formatMissingSkillReadStep),
     `After those read results return, retry ${toolName}. If you are forking task subagents instead, put the skills into the task assignments rather than reading them in the main agent.`,

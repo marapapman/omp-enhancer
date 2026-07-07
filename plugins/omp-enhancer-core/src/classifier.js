@@ -17,6 +17,7 @@ export const classifierIntents = [
   'writing.zh',
   'writing.en',
   'bug-audit',
+  'fact-check',
   'implementation-with-tests',
   // Legacy classifier value. The router resolves it through the bug-audit workflow.
   'testing',
@@ -32,6 +33,7 @@ export const classifierRiskFlags = [
   'needs-review',
   'needs-subagents',
   'needs-writing-qa',
+  'needs-fact-check',
   'needs-security-review',
   'needs-marketplace-check',
   'release-or-push',
@@ -113,6 +115,7 @@ export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
       '- Use bug-audit when the user asks to test, inspect, find, or report bugs without asking to fix or modify code.',
       '- Focused or direct bug investigations are still bug-audit; the deterministic route may attach a focused direct-audit mode.',
       '- Use bug-audit for executable test analysis, coverage review, browser verification, flaky test review, and read-only testing workflows. The legacy testing intent resolves to bug-audit and should not be preferred for new outputs.',
+      '- Use fact-check when the user explicitly asks to verify factual claims, data, dates, citations, source authenticity, or whether statements are supported by evidence. Fact-check is a plan + independent evidence + cross-check + review workflow, not a generic search route.',
       '- Prefer writing.zh for Chinese prose editing or drafting; prefer writing.en for English prose editing or drafting.',
       '- Pure bug-report drafting is writing; testing, finding, auditing, or verifying bugs is bug-audit.',
       '- Security announcements, privacy policies, license/compliance memos, and other prose artifacts are writing tasks when the user does not ask to audit or fix code/config/dependencies.',
@@ -259,6 +262,7 @@ function isWritingIntent(intent) {
 function isNonWritingWorkflowIntent(intent) {
   return intent === 'security-review'
     || intent === 'bug-audit'
+    || intent === 'fact-check'
     || intent === 'testing'
     || intent === 'implementation-with-tests'
     || intent === 'config-assets'

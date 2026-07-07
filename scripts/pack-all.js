@@ -7,6 +7,7 @@ const workspaces = [
   'plugins/omp-config',
   'plugins/writing-helper',
   'plugins/omp-test-enhancer',
+  'plugins/omp-fact-checker',
   'plugins/omp-enhancer-core'
 ]
 

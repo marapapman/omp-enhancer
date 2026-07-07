@@ -211,7 +211,7 @@ test('before_agent_start injects governance context and routes natural-language 
   assert.match(stopResult.additionalContext, /subagent|zh-writer|zh-checker/);
 });
 
-test('classifier preflight blocks ambiguous route work until classifier resolves route', async () => {
+test('classifier preflight observes ambiguous route work without rule blocking', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -220,10 +220,14 @@ test('classifier preflight blocks ambiguous route work until classifier resolves
   await event(pi, 'session_start')({}, ctx);
   const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
   assert.equal(start.route.intent, 'implementation-with-tests');
-  assert.match(start.additionalContext, /Classifier preflight: required/);
-  assert.match(start.additionalContext, /short construction prompt/);
+  assert.doesNotMatch(start.additionalContext, /Classifier preflight: required/);
 
-  const blocked = await event(pi, 'tool_call')(
+  const routeState = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(routeState.classifierPreflight.mode, 'observe');
+  assert.equal(routeState.classifierPreflight.required, false);
+  assert.deepEqual(routeState.classifierPreflight.reasons, ['short construction prompt is a low-confidence rule hit']);
+
+  const allowed = await event(pi, 'tool_call')(
     {
       toolName: 'task',
       input: {
@@ -234,10 +238,7 @@ test('classifier preflight blocks ambiguous route work until classifier resolves
     },
     ctx,
   );
-  assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /classifier preflight blocked task/);
-  assert.match(blocked.reason, /omp_core_classifier_prompt/);
-  assert.match(blocked.reason, /omp_core_resolve_classification/);
+  assert.equal(allowed, undefined);
 
   const promptResult = await tool(pi, 'omp_core_classifier_prompt').execute(
     'call-ambiguous-classifier-prompt',
@@ -247,6 +248,8 @@ test('classifier preflight blocks ambiguous route work until classifier resolves
     ctx,
   );
   assert.match(promptResult.content[0].text, /OMP Enhancer Core Classifier/);
+  assert.match(promptResult.content[0].text, /Observed uncertain context:/);
+  assert.match(promptResult.content[0].text, /写个页面/);
 
   await tool(pi, 'omp_core_resolve_classification').execute(
     'call-ambiguous-classifier-resolve',
@@ -267,7 +270,7 @@ test('classifier preflight blocks ambiguous route work until classifier resolves
     ctx,
   );
 
-  const allowed = await event(pi, 'tool_call')(
+  const allowedAfterResolve = await event(pi, 'tool_call')(
     {
       toolName: 'task',
       input: {
@@ -278,7 +281,7 @@ test('classifier preflight blocks ambiguous route work until classifier resolves
     },
     ctx,
   );
-  assert.equal(allowed, undefined);
+  assert.equal(allowedAfterResolve, undefined);
 });
 
 test('classifier infrastructure repair requests do not require classifier preflight', async () => {
@@ -705,7 +708,7 @@ test('task tool_call auto-attaches routed subagent contracts for exact roles', a
   assert.match(startFragment, /task subagents load subagent skills/);
   assert.match(startFragment, /Required task assignment contracts/);
   assert.match(startFragment, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
-  assert.match(startFragment, /For direct main-agent work tools only/);
+  assert.match(startFragment, /Direct main-agent work auto-read queue/);
   assert.ok(startFragment.indexOf('pre-work skill bootstrap') < startFragment.indexOf('Mandatory Subagent Workflow'));
 
   const taskEvent = {
@@ -951,7 +954,7 @@ test('governance prompt separates task subagent skills from direct main-agent re
   assert.match(governance.details.fragment, /Do not read root route skills in the main agent just to unlock task/);
   assert.match(governance.details.fragment, /Required task assignment contracts/);
   assert.match(governance.details.fragment, /OMP_REQUIRED_SUBAGENT:\s*zh-checker/);
-  assert.match(governance.details.fragment, /For direct main-agent work tools only/);
+  assert.match(governance.details.fragment, /Direct main-agent work auto-read queue/);
   assert.match(governance.details.fragment, /read skill:\/\/zh-writing-polish/);
   assert.match(governance.details.fragment, /read skill:\/\/zh-writing-checkers/);
   assert.match(governance.details.fragment, /Required skills:\n- plain-chinese-writing\n- zh-writing-polish\n- zh-writing-checkers/);
@@ -1033,7 +1036,7 @@ test('pre-work skill gate blocks simple writing edits until writing skills are r
   assert.equal(allowed, undefined);
 });
 
-test('pre-work tool gates can be released by accepted Tiny smart gate review', async () => {
+test('pre-work skill gate prioritizes skill-read recovery over Tiny smart gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -1050,41 +1053,24 @@ test('pre-work tool gates can be released by accepted Tiny smart gate review', a
   );
 
   assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /Tiny smart-gate override/);
-  assert.match(blocked.reason, /Rule gate key: writing\.zh:prework:edit/);
+  assert.match(blocked.reason, /Automatic recovery: read the missing skills now/);
+  assert.match(blocked.reason, /Do not call Tiny smart gate for ordinary missing skill reads/);
+  assert.match(blocked.reason, /read skill:\/\/plain-chinese-writing/);
+  assert.match(blocked.reason, /read skill:\/\/zh-writing-polish/);
+  assert.doesNotMatch(blocked.reason, /Tiny smart-gate override/);
 
   const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
-    'call-prework-smart-gate-prompt',
+    'call-prework-smart-gate-prompt-not-open',
     { gateKey: 'writing.zh:prework:edit' },
     undefined,
     undefined,
     ctx,
   );
 
-  assert.equal(smartPrompt.details.smartGate.gateKey, 'writing.zh:prework:edit');
-  assert.match(smartPrompt.content[0].text, /pre-work main-agent skill gate blocked edit/);
-  assert.match(smartPrompt.content[0].text, /modelRoles\.tiny/);
+  assert.equal(smartPrompt.details.smartGate.error, 'gate-key-mismatch');
+  assert.doesNotMatch(smartPrompt.content[0].text, /OMP Enhancer Core Smart Gate/);
 
-  const pass = await tool(pi, 'omp_core_resolve_smart_gate').execute(
-    'call-prework-smart-gate-pass',
-    {
-      gateKey: 'writing.zh:prework:edit',
-      output: JSON.stringify({
-        gate: 'writing.zh:prework:edit',
-        verdict: 'pass',
-        confidence: 0.86,
-        satisfied: true,
-        missing: [],
-        actions: [],
-        reason: 'Tiny reviewed this as a false-positive pre-work block for a minimal edit.',
-      }),
-    },
-    undefined,
-    undefined,
-    ctx,
-  );
-
-  assert.equal(pass.details.accepted, true);
+  await readSkills(pi, ctx, ['plain-chinese-writing', 'zh-writing-polish']);
 
   const allowed = await event(pi, 'tool_call')(
     { toolName: 'edit', input: { file: 'draft.md', old: 'x', new: 'y' } },
@@ -1092,14 +1078,6 @@ test('pre-work tool gates can be released by accepted Tiny smart gate review', a
   );
 
   assert.equal(allowed, undefined);
-
-  const nextEdit = await event(pi, 'tool_call')(
-    { toolName: 'edit', input: { file: 'other.md', old: 'a', new: 'b' } },
-    ctx,
-  );
-
-  assert.equal(nextEdit?.block, true);
-  assert.match(nextEdit.reason, /Rule gate key: writing\.zh:prework:edit/);
 });
 
 test('smart gate prompt rejects mismatched requested gate keys instead of falling back', async () => {
@@ -1109,19 +1087,21 @@ test('smart gate prompt rejects mismatched requested gate keys instead of fallin
 
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')(
-    { prompt: '把这句话改成朴素直接的中文：我们需要进一步推动配置层面的优化与能力沉淀。' },
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
     ctx,
   );
 
   const blocked = await event(pi, 'tool_call')(
-    { toolName: 'edit', input: { file: 'draft.md', old: 'x', new: 'y' } },
+    { toolName: 'task', input: { tasks: [{ role: 'draft the Chinese revision' }] } },
     ctx,
   );
 
   assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /Tiny smart-gate override/);
+  assert.match(blocked.reason, /Rule gate key: writing\.zh:task-subagent-contract/);
 
   const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
-    'call-prework-smart-gate-wrong-key',
+    'call-task-subagent-smart-gate-wrong-key',
     { gateKey: 'wrong:key' },
     undefined,
     undefined,
@@ -1131,7 +1111,7 @@ test('smart gate prompt rejects mismatched requested gate keys instead of fallin
   assert.equal(smartPrompt.details.smartGate.required, true);
   assert.equal(smartPrompt.details.smartGate.error, 'gate-key-mismatch');
   assert.equal(smartPrompt.details.smartGate.requestedGateKey, 'wrong:key');
-  assert.ok(smartPrompt.details.smartGate.openGateKeys.includes('writing.zh:prework:edit'));
+  assert.ok(smartPrompt.details.smartGate.openGateKeys.includes('writing.zh:task-subagent-contract'));
   assert.doesNotMatch(smartPrompt.content[0].text, /OMP Enhancer Core Smart Gate/);
 });
 
@@ -1174,7 +1154,8 @@ test('smart gate resolve requires a current pending gate before releasing tool g
   );
 
   assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /Rule gate key: writing\.zh:prework:edit/);
+  assert.match(blocked.reason, /Automatic recovery: read the missing skills now/);
+  assert.doesNotMatch(blocked.reason, /Rule gate key: writing\.zh:prework:edit/);
 });
 
 test('focused bug audit preloads main-agent skills instead of blocking on subagent delegation', async () => {
@@ -1899,6 +1880,84 @@ test('external testing-enhancer tool results close the testing gate only with pa
   const released = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
 
   assert.notEqual(released?.continue, true);
+});
+
+test('fact-check workflow requires cross-agent evidence and releases after fact_check_gate', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(pi.entries);
+  const prompt = '帮我事实核查这段文字里的数据、年份和引用真实性。';
+
+  await event(pi, 'session_start')({}, ctx);
+  const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
+  const fragment = governanceText(start, {});
+
+  assert.equal(start.route.intent, 'fact-check');
+  assert.match(fragment, /fact-planner/);
+  assert.match(fragment, /fact-researcher-a/);
+  assert.match(fragment, /fact-researcher-b/);
+  assert.match(fragment, /fact-cross-checker/);
+  assert.match(fragment, /fact-reviewer/);
+  assert.match(fragment, /Fact-check gate/);
+  assert.match(fragment, /fact_check_gate/);
+
+  await forkSubagents(pi, ctx, [
+    'fact-planner',
+    'fact-researcher-a',
+    'fact-researcher-b',
+    'fact-cross-checker',
+    'fact-reviewer',
+  ]);
+  await readSkills(pi, ctx, ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity']);
+
+  const allowedGateTool = await event(pi, 'tool_call')(
+    {
+      toolName: 'fact_check_gate',
+      input: { finalOutput: 'FACT_CHECK_PLAN\nFACT_EVIDENCE_A\nFACT_EVIDENCE_B\nFACT_CROSS_CHECK\nFACT_REVIEW\nFACT_CHECK_REPORT\nFACT_CHECK_USAGE' },
+    },
+    ctx,
+  );
+
+  assert.equal(allowedGateTool, undefined);
+
+  await event(pi, 'tool_result')(
+    {
+      name: 'fact_check_gate',
+      details: { ok: true, missing: [] },
+    },
+    ctx,
+  );
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-fact-check-skill-usage',
+    { output: skillUsageBlock(['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity']) },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const finalOutput = [
+    'FACT_CHECK_PLAN',
+    'FACT_EVIDENCE_A',
+    'FACT_EVIDENCE_B',
+    'FACT_CROSS_CHECK',
+    'FACT_REVIEW',
+    'FACT_CHECK_REPORT',
+    'FACT_CHECK_USAGE',
+    usageEvidence({
+      subagents: {
+        'fact-planner': ['fact-checking', 'claim-extraction'],
+        'fact-researcher-a': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+        'fact-researcher-b': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+        'fact-cross-checker': ['fact-checking', 'source-evaluation'],
+        'fact-reviewer': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+      },
+      skills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
+    }),
+  ].join('\n');
+
+  const released = await event(pi, 'session_stop')({ output: finalOutput }, ctx);
+
+  assert.equal(released, undefined);
 });
 
 test('external failed omp_test_gate keeps RED test evidence blocking', async () => {
@@ -3692,18 +3751,33 @@ test('unknown route classifier observations accumulate across follow-up prompts'
   assert.match(classifierPrompt.content[0].text, /现在看起来是插件路由问题/);
 });
 
-test('session_stop releases classifier preflight when final output proves classifier churn is unrelated', async () => {
+test('session_stop releases classifier preflight when route-mismatch tool failure churn is unrelated', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
-  const prompt = '写个页面';
+  const prompt = '请写一个页面并补测试。';
   const skills = ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'];
   const agents = ['plan', 'implementation-task', 'reviewer'];
 
   await event(pi, 'session_start')({}, ctx);
   const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
 
-  assert.match(start.additionalContext, /Classifier preflight: required/);
+  assert.doesNotMatch(start.additionalContext, /Classifier preflight: required/);
+
+  await event(pi, 'tool_result')(
+    {
+      name: 'task',
+      isError: true,
+      details: {
+        error: 'Route mismatch: task failed because the workflow route appears wrong.',
+      },
+    },
+    ctx,
+  );
+
+  const routeState = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(routeState.classifierPreflight.required, true);
+  assert.match(routeState.classifierPreflight.reasons.join('\n'), /task failed after routing/);
 
   await readSkills(pi, ctx, skills);
   await forkSubagents(pi, ctx, agents);
@@ -3825,6 +3899,11 @@ function subagentSkills(agent) {
     'ecc-security-reviewer': ['security-review', 'security-scan'],
     'ecc-tdd-guide': ['test-driven-development', 'search-first', 'ai-regression-testing'],
     'ecc-pr-test-analyzer': ['verification-before-completion'],
+    'fact-planner': ['fact-checking', 'claim-extraction'],
+    'fact-researcher-a': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+    'fact-researcher-b': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+    'fact-cross-checker': ['fact-checking', 'source-evaluation'],
+    'fact-reviewer': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
     'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
     'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
     writer: ['writing-markdown-helper'],

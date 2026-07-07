@@ -1,0 +1,43 @@
+{
+  "name": "omp-fact-checker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OMP fact-checking workflow plugin with claim planning, evidence collection, cross-checking, review, and workflow gates.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "agents",
+    "skills",
+    "test",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "omp": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "keywords": [
+    "pi-package",
+    "omp",
+    "omp-extension",
+    "fact-checking",
+    "claims",
+    "evidence",
+    "cross-check"
+  ],
+  "license": "UNLICENSED"
+}

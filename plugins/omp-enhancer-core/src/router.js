@@ -36,6 +36,13 @@ const releaseTerms = ['push', 'publish', 'upgrade', '推送', '发布', '升级'
 const noReleaseTerms = ['without publishing', 'without publish', 'do not publish', 'do not push', 'do not release', 'not publish', 'not push', 'not release', '不要发布', '不要推送', '不要刷新', '不发布', '不推送'];
 const knowledgeWorkTerms = ['调研', '科研', '研究', '文献', '论文', '资料', '清单', '正文', '官方文档', '文档', '链接', '用法', '示例', '片段', '命令', '表达式', '竞品', 'one-liner', 'command', 'cron', 'pg_dump', 'roadmap', 'sql', '查询', 'bash', 'readme', 'paper', 'papers', 'literature', 'arxiv', 'doi', 'pdf', 'scholar', 'pubmed', 'documentation', 'docs', 'links', 'usage', 'examples', '会议纪要', '待办事项', '日程', 'agenda', 'meeting minutes', 'todo', 'todos'];
 const knowledgeWorkActionTerms = ['调研', '检索', '查找', '搜索', '收集', '下载', '整理', '列出', '列', '总结', '分析', '查询', '查', '检查', '核对', '给出', '给', '统计', '演示', '解释', 'research', 'lookup', 'look up', 'search', 'find', 'download', 'collect', 'summarize', 'summarise', 'analyze', 'analyse', 'check', 'list', 'explain'];
+const factCheckTerms = ['fact check', 'fact-check', 'factcheck', 'verify facts', 'claim verification', 'factual review', 'factual audit', 'source check', 'citation authenticity', 'citation verification', '事实审查', '事实核查', '事实性审查', '事实检查', '查证', '核验事实', '核查事实', '核验真实性', '真实性核验', '引用真实性', '引用核验', '引用查证', '数据真实性', '结论是否有证据', '是否属实', '是否真实'];
+const factCheckToolchain = [
+  'fact_check_analyze',
+  'fact_check_evidence',
+  'fact_check_report',
+  'fact_check_gate',
+];
 const testingEnhancerTools = [
   'omp_test_analyze',
   'omp_test_context',
@@ -48,6 +55,7 @@ const testingEnhancerTools = [
 
 export const routedIntents = [
   'config-assets',
+  'fact-check',
   'bug-audit',
   'diagnosis',
   'release',
@@ -82,6 +90,13 @@ const subagentPlans = {
     subagent('ecc-silent-failure-hunter', 'hunt swallowed errors, bad fallbacks, and missing error propagation', ['diagnose']),
     subagent('ecc-pr-test-analyzer', 'review generated test execution, duplicate removal, and coverage gaps that affect bug confidence', ['verification-before-completion']),
   ],
+  factCheck: [
+    subagent('fact-planner', 'decompose source text into atomic factual claims and evidence plans', ['fact-checking', 'claim-extraction']),
+    subagent('fact-researcher-a', 'collect first-lane primary-source evidence for planned claims', ['fact-checking', 'source-evaluation', 'citation-authenticity']),
+    subagent('fact-researcher-b', 'independently collect counter-evidence, stale-version checks, and corroboration', ['fact-checking', 'source-evaluation', 'citation-authenticity']),
+    subagent('fact-cross-checker', 'compare independent evidence lanes and classify agreement, conflict, staleness, and insufficiency', ['fact-checking', 'source-evaluation']),
+    subagent('fact-reviewer', 'review final verdicts for overclaiming, stale evidence, and unsupported conclusions', ['fact-checking', 'source-evaluation', 'citation-authenticity']),
+  ],
   writingZh: [
     subagent('zh-writer', 'draft or rewrite Chinese text after required writing skills are loaded', ['plain-chinese-writing', 'zh-writing-polish']),
     subagent('zh-checker', 'review Chinese logic, style, and plain-writing compliance before final output', ['plain-chinese-writing', 'zh-writing-checkers']),
@@ -106,9 +121,10 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasTestReportWriting = isTestReportWritingRequest(normalized);
   const hasBugReportWriting = isBugReportWritingRequest(normalized);
   const hasGateValidatorStatusReport = isGateValidatorStatusReport(normalized);
+  const hasFactCheck = isFactCheckRequest(normalized);
   const hasBugAudit = !hasGateValidatorStatusReport && !hasBugReportWriting && isBugAuditRequest(normalized);
   const hasFocusedBugAudit = hasBugAudit && isFocusedDirectAuditRequest(normalized);
-  const hasKnowledgeOnly = isKnowledgeWorkWithoutWritingArtifact(normalized);
+  const hasKnowledgeOnly = !hasFactCheck && isKnowledgeWorkWithoutWritingArtifact(normalized);
   const hasCoding = !asksNoCodeChange && !hasBugAudit && !hasKnowledgeOnly && isCodeChangeRequest(normalized);
   const hasCodeChange = hasCoding && !hasTestReportWriting;
   const hasSecurityWritingArtifact = isSecurityWritingArtifact(normalized);
@@ -130,6 +146,10 @@ export function routeNaturalLanguageTask(input = {}) {
 
   if (hasSecurity && (!hasWriting || isSecurityAuditOrFixRequest(normalized)) && (!hasKnowledgeOnly || isSecurityAuditOrFixRequest(normalized))) {
     return routeByIntent('security-review');
+  }
+
+  if (hasFactCheck) {
+    return routeByIntent('fact-check');
   }
 
   if (hasBugAudit) {
@@ -232,6 +252,17 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       requiredSkills: ['security-review', 'security-scan'],
       requiredTools: [],
       requiredSubagents: subagentPlans.security,
+      source,
+    });
+  }
+
+  if (intent === 'fact-check') {
+    return route({
+      intent,
+      agent: 'fact-checker',
+      requiredSkills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
+      requiredTools: factCheckToolchain,
+      requiredSubagents: subagentPlans.factCheck,
       source,
     });
   }
@@ -465,6 +496,7 @@ function isCodeChangeRequest(text) {
     .replace(/(?:不要|别|不|无需|不用)\s*写入\s*(?:文件|项目|代码库|仓库)?/g, '')
     .replace(/(?:do not|don't|without|no need to)\s+(?:write|generate)\s+code/g, '');
   if (/(?:api reference|api.*文档|api.*document|api.*docs?)/.test(text) && isExplicitWritingAction(text)) return false;
+  if (isProseWritingOptimizationRequest(text)) return false;
   return /(?:修改|修复|修正|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|gate|路由|提示词|页面|ui)/.test(withoutNegatedCodeWriting)
     || /(?:重构|优化|修改|修复|修正).*(?:逻辑|代码|模块|函数|router|route|workflow|工作流|门禁|gate|路由|fork|subagent|误判|运行失败|启动失败|warning|dev server)/.test(withoutNegatedCodeWriting)
     || /(?:只改|只修改|改动|修改).*(?:一行|一处|少量|代码|文件)/.test(withoutNegatedCodeWriting)
@@ -498,6 +530,13 @@ function isCodeChangeRequest(text) {
     || /(?:错误提示|提示文案|error message|报错文案).*(?:改|修改|更新|优化|清楚|准确)/.test(withoutNegatedCodeWriting)
     || /(?:优化|降低|减少).*(?:advisor|调用频率|成本|cost|benchmark|热点函数)/.test(withoutNegatedCodeWriting)
     || isScopedCodeEditRequest(withoutNegatedCodeWriting);
+}
+
+function isProseWritingOptimizationRequest(text) {
+  const proseTarget = /(?:中文写作|英文写作|行文|文风|文稿|正文|段落|章节|第一章|第\s*[一二三四五六七八九十\d]+\s*章|论文|摘要|引言|相关工作|表达|表述|措辞|叙述|语言)/.test(text);
+  if (!proseTarget) return false;
+  return /(?:优化|改进|调整|修改|修订|润色|改写|让|使).{0,24}(?:写作|行文|表达|表述|措辞|逻辑|衔接|顺滑|通畅|流畅|自然|清楚|连贯)/.test(text)
+    || /(?:写作|行文|表达|表述|措辞|逻辑|衔接).{0,24}(?:顺滑|通畅|流畅|自然|清楚|连贯|更好|更通顺)/.test(text);
 }
 
 function isScopedCodeEditRequest(text) {
@@ -534,6 +573,12 @@ function isConfigAssetRequest(text) {
     || /(?:运行|执行|检查|排查).*(?:config doctor|doctor).*(?:hooks?|assets?|配置|资产|齐全|完整)/.test(text)
     || /(?:列出|查看|检查|核对).*(?:subagent|subagents|agent|agents|技能|skills?).*(?:清单|可用|当前|齐全|完整|packaged)/.test(text)
     || /(?:检查|核对|列出|查看|排查).*(?:marketplace catalog|marketplace|catalog).*(?:版本|version|插件|plugin|一致|同步)/.test(text);
+}
+
+function isFactCheckRequest(text) {
+  return includesAny(text, factCheckTerms)
+    || /(?:检查|审查|核对|验证|核验|查证).{0,20}(?:事实|真实性|引用|citation|claim|数据|数字|年份|出处|来源|证据)/.test(text)
+    || /(?:fact|factual|claim|citation).{0,30}(?:check|verify|verification|review|audit|authenticity)/.test(text);
 }
 
 function isGateValidatorStatusReport(text) {

@@ -75,6 +75,22 @@ const routingCases = [
     auditMode: 'focused',
   },
   {
+    name: 'fact-check request routes to fact-check workflow',
+    prompt: '帮我事实核查这段文字里的数据、年份和引用真实性。',
+    expectedIntent: 'fact-check',
+    expectedAgent: 'fact-checker',
+    requiredSkills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
+    requiredTools: ['fact_check_analyze', 'fact_check_evidence', 'fact_check_report', 'fact_check_gate'],
+    requiredSubagents: ['fact-planner', 'fact-researcher-a', 'fact-researcher-b', 'fact-cross-checker', 'fact-reviewer'],
+    requiredSubagentSkills: {
+      'fact-planner': ['fact-checking', 'claim-extraction'],
+      'fact-researcher-a': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+      'fact-researcher-b': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+      'fact-cross-checker': ['fact-checking', 'source-evaluation'],
+      'fact-reviewer': ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+    },
+  },
+  {
     name: 'implementation with tests request routes to coding plus testing profile',
     prompt: '实现这个路由功能并补测试，先写失败用例，再完成实现。',
     expectedIntent: 'implementation-with-tests',
@@ -236,7 +252,9 @@ test('routes mixed real-world workloads without false workflow gates', () => {
     ['read-only code bug finding', '帮我在代码里找 bug，只报告问题，不要修复。', 'bug-audit', ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer']],
     ['focused direct bug audit', '直接做 focused bug audit，只报告验证过的问题。', 'bug-audit', []],
     ['code testing workload', '帮我为 subagent fork 逻辑生成测试并运行门禁，不要改实现。', 'bug-audit', ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer']],
+    ['fact-check workload', 'Verify citation authenticity and factual claims in this paragraph.', 'fact-check', ['fact-planner', 'fact-researcher-a', 'fact-researcher-b', 'fact-cross-checker', 'fact-reviewer']],
     ['large Chinese writing', '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。', 'writing.zh', ['zh-writer', 'zh-checker']],
+    ['chapter writing polish with logic wording', '帮我优化第一章的中文写作，让整体行文更顺滑，逻辑更通畅。', 'writing.zh', ['zh-writer', 'zh-checker']],
     ['small Chinese text revision', '把这句话改成朴素直接的中文：我们需要进一步推动能力沉淀。', 'writing.zh', []],
     ['large English writing', 'Draft a full English research proposal with background, methods, risks, and timeline.', 'writing.en', ['writer', 'checker']],
     ['small English text revision', 'Polish this sentence for clarity: The workflow blocks unexpectedly.', 'writing.en', []],
@@ -672,6 +690,7 @@ test('routes writing workflow edge cases with correct complexity gates', () => {
     ['en linkedin post', 'Write an English LinkedIn post announcing the plugin update.', 'writing.en', 'complex', ['writer', 'checker']],
     ['en changelog entry', 'Draft a changelog entry for the route workflow fixes.', 'writing.en', 'complex', ['writer', 'checker']],
     ['writing tool failure remains implementation', 'Fix the writing_quality_check tool failure and add regression tests.', 'implementation-with-tests', null, ['plan', 'implementation-task', 'reviewer']],
+    ['plugin workflow logic optimization remains implementation', '帮我优化插件的工作流逻辑，并补测试。', 'implementation-with-tests', null, ['plan', 'implementation-task', 'reviewer']],
   ];
 
   for (const [name, prompt, expectedIntent, expectedComplexity, expectedSubagents] of writingCases) {
@@ -704,11 +723,12 @@ test('required route skills are registered in the root marketplace catalog', asy
   }
 });
 
-test('required route subagents are packaged by omp-config or writing-helper', async () => {
+test('required route subagents are packaged by owning workflow plugins', async () => {
   const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const roots = [
     path.join(repoRoot, 'plugins', 'omp-config', 'agents'),
     path.join(repoRoot, 'plugins', 'writing-helper', 'agents'),
+    path.join(repoRoot, 'plugins', 'omp-fact-checker', 'agents'),
   ];
 
   for (const item of routingCases) {
@@ -734,6 +754,7 @@ test('subagent providers match the configured workflow ownership', async () => {
   const ownerAgents = {
     'omp-config': await agentNames(path.join(repoRoot, 'plugins', 'omp-config', 'agents')),
     'writing-helper': await agentNames(path.join(repoRoot, 'plugins', 'writing-helper', 'agents')),
+    'omp-fact-checker': await agentNames(path.join(repoRoot, 'plugins', 'omp-fact-checker', 'agents')),
   };
   const testingEnhancerAgents = await agentNames(path.join(repoRoot, 'plugins', 'omp-test-enhancer', 'agents'));
 
@@ -866,6 +887,7 @@ async function agentNames(root) {
 
 function expectedSubagentOwner(intent) {
   if (intent === 'writing.zh' || intent === 'writing.en') return 'writing-helper';
+  if (intent === 'fact-check') return 'omp-fact-checker';
   if (['bug-audit', 'implementation-with-tests', 'security-review', 'config-assets'].includes(intent)) return 'omp-config';
   return null;
 }

@@ -8,6 +8,7 @@ const expected = [
   ['omp-config', './omp-config'],
   ['writing-helper', './writing-helper'],
   ['omp-testing-enhancer', './omp-test-enhancer'],
+  ['omp-fact-checker', './omp-fact-checker'],
   ['omp-enhancer-core', './omp-enhancer-core']
 ]
 

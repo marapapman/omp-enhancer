@@ -348,9 +348,24 @@
       "source": "./omp-test-enhancer"
     },
     {
+      "name": "omp-fact-checker",
+      "description": "Fact-checking workflow with claim planning, evidence collection, cross-agent validation, review, and low-noise gates.",
+      "version": "0.1.0",
+      "category": "development",
+      "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-fact-checker",
+      "repository": "https://github.com/marapapman/omp-enhancer",
+      "source": "./omp-fact-checker",
+      "skills": [
+        "./skills/citation-authenticity",
+        "./skills/claim-extraction",
+        "./skills/fact-checking",
+        "./skills/source-evaluation"
+      ]
+    },
+    {
       "name": "omp-enhancer-core",
       "description": "Unified OMP enhancer runtime router for coding, writing, testing, and config tasks.",
-      "version": "0.1.54",
+      "version": "0.1.55",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",
