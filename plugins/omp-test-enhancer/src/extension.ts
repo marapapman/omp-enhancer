@@ -69,7 +69,8 @@ async function handleTestCommand(pi: ExtensionAPI, args: string, ctx: ExtensionC
 }
 
 async function initializeConfig(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
-  const existing = await readTestingEnhancerConfig(ctx.cwd)
+  const cwd = typeof ctx.cwd === 'string' && ctx.cwd.trim() !== '' ? ctx.cwd : process.cwd()
+  const existing = await readTestingEnhancerConfig(cwd)
   const configPath = '.omp/testing-enhancer.yml'
 
   if (existing) {
@@ -79,8 +80,8 @@ async function initializeConfig(pi: ExtensionAPI, ctx: ExtensionCommandContext):
     return
   }
 
-  const packageManager = await detectPackageManager(ctx.cwd)
-  await writeTestingEnhancerConfig(ctx.cwd, defaultTestingEnhancerConfig(packageManager))
+  const packageManager = await detectPackageManager(cwd)
+  await writeTestingEnhancerConfig(cwd, defaultTestingEnhancerConfig(packageManager))
   await ctx.ui.notify(`Created ${configPath}`, 'info')
   await pi.appendEntry('omp-testing-enhancer.message', { kind: 'init', path: configPath })
 }

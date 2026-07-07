@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import registerTestingEnhancer from '../../src/extension.js'
 import type { CommandDefinition, ExtensionAPI, ExtensionEventHandler, ExtensionToolContext, ToolDefinition } from '../../src/ompApi.js'
 
@@ -38,6 +40,19 @@ describe('plugin load smoke', () => {
 
     expect(result.content[0]?.text).toContain('failed')
     expect(result.details).toMatchObject({ passed: false })
+  })
+
+  it('does not import browser check implementation during extension load', () => {
+    const source = readFileSync(join(process.cwd(), 'src/tools/testingTools.ts'), 'utf8')
+
+    expect(source).not.toMatch(/^import\s+\{[^}]*executeBrowserCheck[^}]*\}\s+from '\.\/browserCheck\.js'/m)
+  })
+
+  it('returns structured browser-check evidence when optional Playwright cannot load', () => {
+    const source = readFileSync(join(process.cwd(), 'src/tools/testingTools.ts'), 'utf8')
+
+    expect(source).toContain("status: 'skipped'")
+    expect(source).toContain('Playwright is not installed.')
   })
 })
 

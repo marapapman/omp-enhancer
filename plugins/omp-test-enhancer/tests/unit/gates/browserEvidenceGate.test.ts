@@ -88,6 +88,30 @@ describe('evaluateBrowserEvidenceGate', () => {
     }])
   })
 
+  it('blocks skipped browser evidence with fallback findings when frontend evidence is required', () => {
+    const skipped: BrowserEvidence = {
+      ...passedEvidence,
+      status: 'skipped',
+      findings: [{
+        gate: 'browser-interaction',
+        passed: true,
+        severity: 'warning',
+        category: 'setup',
+        summary: 'Playwright is not installed.',
+        evidence: { reason: 'missing optional dependency' }
+      }]
+    }
+
+    expect(evaluateBrowserEvidenceGate(skipped, { required: true, severity: 'blocker' })).toEqual([{
+      gate: 'browser-interaction',
+      passed: false,
+      severity: 'blocker',
+      summary: 'Browser check was skipped.',
+      evidence: skipped,
+      repairHint: 'Run browser evidence collection for frontend targets when browser behavior changed.'
+    }])
+  })
+
   it('blocks failed browser evidence when no structured finding was supplied', () => {
     const failed: BrowserEvidence = {
       ...passedEvidence,

@@ -46,8 +46,9 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /SUBAGENT_RESULT/);
   assert.match(fragment, /SUBAGENT_USAGE/);
   assert.match(fragment, /final assistant answer text/i);
-  assert.match(fragment, /tool call is only a preflight/i);
-  assert.match(fragment, /does not replace the closing SUBAGENT_USAGE block/i);
+  assert.match(fragment, /successful .*validate_subagent_usage tool call can satisfy the internal subagent gate/i);
+  assert.match(fragment, /closing answer should still include the SUBAGENT_USAGE block/i);
+  assert.doesNotMatch(fragment, /validator tool calls are preflight only/i);
   assert.match(fragment, /SUBAGENT_USAGE:\n- zh-writer: plain-chinese-writing, zh-writing-polish\n- zh-checker: plain-chinese-writing, zh-writing-checkers/);
   assert.match(fragment, /agent-name: every skill required by that subagent/);
   assert.match(fragment, /SKILL_USAGE/);

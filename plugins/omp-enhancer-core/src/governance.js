@@ -59,7 +59,7 @@ export function buildGovernancePromptFragment({
     '### SUBAGENT_USAGE contract',
     '',
     'Final routed outputs that list required subagents must include:',
-    'Put this block in the final assistant answer text. A successful omp_core_validate_subagent_usage tool call is only a preflight and does not replace the closing SUBAGENT_USAGE block.',
+    'Put this block in the final assistant answer text. A successful omp_core_validate_subagent_usage tool call can satisfy the internal subagent gate, but the closing answer should still include the SUBAGENT_USAGE block for user-visible evidence.',
     '',
     'SUBAGENT_USAGE',
     'Required:',
@@ -183,7 +183,8 @@ export function buildMissingGateContext({ route, state } = {}) {
         'OMP Enhancer Core gate is still open for this implementation testing task.',
         'Review is not the terminal phase. After plan, implementation-task, and reviewer have returned, switch to the post-review testing checkpoint before finishing.',
         'Post-review testing checkpoint: resolve reviewer blockers or report BLOCKERS, load any root skills needed for direct testing tools, run the relevant local test commands, then run omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report.',
-        'Do not finish with only reviewer approval. The testing gate closes only after a successful omp_test_gate result, with SKILL_USAGE evidence in the final response.',
+        'If omp_test_* tools are unavailable in this runtime, do not loop on missing tool calls; run the local test commands and close with a manual testing gate report covering indirect-test, test-file-scope, browser-interaction, browser-visual, and test-command evidence.',
+        'Do not finish with only reviewer approval. When omp_test_* tools are available, the testing gate closes after a successful omp_test_gate result with SKILL_USAGE evidence; otherwise the manual testing gate report closes the fallback path.',
         formatRecentToolFailures(state, ['omp_test_gate']),
       ].filter(Boolean).join('\n');
     }
@@ -191,6 +192,7 @@ export function buildMissingGateContext({ route, state } = {}) {
     return [
       'OMP Enhancer Core gate is still open for this bug-audit or implementation testing task.',
       'Run the testing-enhancer workflow and finish with omp_test_gate. Use omp_test_analyze and omp_test_context first; for bug-audit, build and execute a deduplicated test matrix instead of relying on static analysis alone. Call omp_test_browser_check only when browserPlan exists, omp_test_coverage_analyze only when a coverage report exists, and omp_test_mutation_context only when a mutation report exists. Keep SKILL_USAGE evidence in the final response.',
+      'If omp_test_* tools are unavailable in this runtime, do not loop on missing tool calls; run the local test commands and close with a manual testing gate report covering generated/executed/skipped cases and the testing gate evidence.',
       formatRecentToolFailures(state, ['omp_test_gate']),
     ].filter(Boolean).join('\n');
   }
@@ -239,7 +241,7 @@ function completionGateChecklist(route) {
   }
 
   if (needsTesting(route)) {
-    gates.push('Testing gate: run relevant local test/build/lint commands, then omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report before final claims.');
+    gates.push('Testing gate: run relevant local test/build/lint commands, then omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report before final claims; if omp_test_* tools are unavailable, provide an equivalent manual testing gate report with concrete local command evidence.');
   }
 
   if (needsWritingQuality(route)) {
@@ -276,7 +278,7 @@ function completionGateChecklist(route) {
     gates.push('No additional plugin-specific tool gate beyond the route boundary and final evidence requirements.');
   }
 
-  gates.push('Final evidence gate: final assistant answer text includes SKILL_USAGE, and includes SUBAGENT_USAGE when routed subagents are required; validator tool calls are preflight only and do not replace the final blocks.');
+  gates.push('Final evidence gate: final assistant answer text includes SKILL_USAGE, and includes SUBAGENT_USAGE when routed subagents are required; successful validator tool calls can satisfy internal gates, while final blocks remain required user-visible evidence.');
   return gates;
 }
 

@@ -150,6 +150,7 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasBugReportWriting = isBugReportWritingRequest(normalized);
   const hasGateValidatorStatusReport = isGateValidatorStatusReport(normalized);
   const hasFactCheck = isFactCheckRequest(normalized) || isFactCheckDocumentRequest(normalized);
+  const hasLocalSmokeOnly = isLocalSmokeOrProcessRunRequest(normalized);
   const hasBugAudit = !hasGateValidatorStatusReport && !hasBugReportWriting && isBugAuditRequest(normalized);
   const hasFocusedBugAudit = hasBugAudit && isFocusedDirectAuditRequest(normalized);
   const hasKnowledgeOnly = !hasFactCheck && isKnowledgeWorkWithoutWritingArtifact(normalized);
@@ -214,6 +215,10 @@ export function routeNaturalLanguageTask(input = {}) {
 
   if (hasBugAudit) {
     return routed('bug-audit', { auditMode: hasFocusedBugAudit ? 'focused' : null });
+  }
+
+  if (hasLocalSmokeOnly) {
+    return routed('agentic.simple');
   }
 
   if (hasTestReportWriting) {
@@ -691,6 +696,21 @@ function isTestAnalysisRequest(text) {
     || /(?:发布前|pre[-\s]?release).*(?:check|检查|pack|test|plugin list|marketplace)/.test(text);
 }
 
+function isLocalSmokeOrProcessRunRequest(text) {
+  if (/(?:browser|playwright|e2e|coverage|mutation|覆盖率|浏览器|截图|回归测试)/.test(text)) return false;
+  if (/(?:bug|bugs|缺陷).*(?:检查|审查|audit|find|hunt|定位|报告)/.test(text)) return false;
+  if (/(?:测试代码|单元测试|集成测试|测试用例|测试文件|test files?|test cases?)/.test(text)) return false;
+
+  const runsLocalProcess = /(?:后台启动|启动|运行|执行|跑|重跑|launch|start|run|execute|rerun).*(?:omp\s*进程|进程|process|插件加载|extension load|plugin load|smoke|烟测|本地.*验证|local.*verification)/.test(text)
+    || /(?:omp\s*进程|进程|process|插件加载|extension load|plugin load).*(?:启动|运行|执行|launch|start|run|execute|smoke|烟测|验证)/.test(text)
+    || /(?:后台启动|启动|运行|执行|跑|重跑|launch|start|run|execute|rerun).*(?:mimo|deepseek|advisor|model|模型).*(?:测试结果|验证结果|smoke|烟测)/.test(text);
+  const asksForResultOnly = /(?:测试结果|验证结果|是否启动成功|只报告|报告结果|report(?:ed)? result|result only|smoke_done)/.test(text)
+    || /(?:不要|不|别)\s*(?:改|修改|写入|审查|查找|检查).*(?:代码|bug|缺陷)/.test(text)
+    || /(?:do not|don't|without|no)\s+(?:change|modify|write|audit|inspect|find).*(?:code|bugs?|defects?)/.test(text);
+
+  return runsLocalProcess && asksForResultOnly;
+}
+
 function asksToRunTestVerification(text) {
   if (/(?:不|不要|无需|不用)\s*(?:运行|执行|重跑).*(?:测试|e2e|playwright)/.test(text)) return false;
   if (/(?:do not|don't|without|no need to)\s+(?:run|execute|rerun).*(?:tests?|e2e|playwright)/.test(text)) return false;
@@ -747,14 +767,18 @@ function isCodeChangeRequest(text) {
     .replace(/(?:不要|别|不|无需|不用)\s*(?:审|审查|检查|看)\s*代码/g, '')
     .replace(/(?:不要|别|不|无需|不用)\s*写入\s*(?:文件|项目|代码库|仓库)?/g, '')
     .replace(/(?:do not|don't|without|no need to)\s+(?:write|generate)\s+code/g, '');
+  const directTestArtifact = /(?:测试用例|测试文件|测试矩阵|边界测试|压力测试|\btests?\b|\btest cases?\b|\btest files?\b)/.test(withoutNegatedCodeWriting);
+  const explicitCreatedCodeTarget = /(?:逻辑|代码|功能|接口|模块|实现|handling|logic|feature)/.test(withoutNegatedCodeWriting);
   if (/(?:api reference|api.*文档|api.*document|api.*docs?)/.test(text) && isExplicitWritingAction(text)) return false;
   if (isProseWritingOptimizationRequest(text)) return false;
-  return /(?:修改|修复|修正|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|gate|路由|提示词|页面|ui)/.test(withoutNegatedCodeWriting)
+  return /(?:修改|修复|修正|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|gate|路由|提示词|页面|ui|router|route|workflowroute|fallback|回退逻辑)/.test(withoutNegatedCodeWriting)
     || /(?:重构|优化|修改|修复|修正).*(?:逻辑|代码|模块|函数|router|route|workflow|工作流|门禁|gate|路由|fork|subagent|误判|运行失败|启动失败|warning|dev server)/.test(withoutNegatedCodeWriting)
     || /(?:只改|只修改|改动|修改).*(?:一行|一处|少量|代码|文件)/.test(withoutNegatedCodeWriting)
     || /写.*(?:函数|代码|接口|功能|页面|模块|看板|dashboard|api|component|组件)/.test(withoutNegatedCodeWriting)
     || /(?:写|新增|添加|创建|生成).*(?:python|bash|node(?:\.js)?|shell|脚本).*(?:加入项目|写入项目|保存到|文件|仓库|代码库)/.test(withoutNegatedCodeWriting)
-    || /(?:实现|开发|创建|生成).*(?:函数|方法|接口|功能|看板|dashboard|api|component|组件|ui|页面|page|slides|html|路由|hook|流程)/.test(withoutNegatedCodeWriting)
+    || /(?:实现|开发).*(?:函数|方法|接口|功能|看板|dashboard|api|component|组件|ui|页面|page|slides|html|路由|hook|流程|router|route|workflowroute|fallback|回退)/.test(withoutNegatedCodeWriting)
+    || (/(?:创建|生成).*(?:函数|方法|接口|功能|看板|dashboard|api|component|组件|ui|页面|page|slides|html|路由|hook|流程|router|route|workflowroute|fallback|回退)/.test(withoutNegatedCodeWriting)
+      && (!directTestArtifact || explicitCreatedCodeTarget))
     || /(?:implement|build|develop|add|create)\s+.*(?:feature|fallback|handling|workflow|route|router|hook|logic)/.test(withoutNegatedCodeWriting)
     || /(?:fix|implement|update|modify|build)\s+.*(?:skill assignment|skill validation|governance prompt|prompt generation|task prompts?|final evidence|subagent skill)/.test(withoutNegatedCodeWriting)
     || /(?:fix|repair|resolve|update|modify)\s+.*(?:tool|workflow|gate|check|validator).*(?:failure|bug|error|regression)/.test(withoutNegatedCodeWriting)
@@ -958,7 +982,8 @@ function isSecurityConceptOnlyRequest(text) {
   if (!isSecurityConceptQuestion(text)) return false;
   const cleaned = text
     .replace(/(?:先)?(?:不|不要|无需|不用)\s*(?:审查|检查|看|分析).*(?:项目代码|代码|配置|文件|仓库)/g, '')
-    .replace(/(?:do not|don't|without|no need to)\s+(?:review|check|audit|inspect|analyze).*(?:code|config|files?|repo)/g, '');
+    .replace(/(?:do not|don't|without|no need to)\s+(?:review|check|audit|inspect|analyze).*(?:code|config|files?|repo)/g, '')
+    .replace(/\b(?:no|without)\s+(?:a\s+)?(?:code|config|files?|repo|repository|project)\s+(?:review|check|audit|inspection|analysis)\b/g, '');
   if (!/(?:是什么|是什么意思|解释|说明|define|explain|what is|what are)/.test(cleaned)) return false;
   return !/(?:审查|检查|分析|audit|review|inspect|check|handler|api|代码|配置|文件|secret|auth|权限|风险)/.test(cleaned);
 }

@@ -30,6 +30,14 @@ test('findPathRisks reports hardcoded Claude root home paths', () => {
   assert.match(findings[0].evidence, /\/root\/\.claude\/CLAUDE\.md/);
 });
 
+test('packaged model roles use the available opencode-go MiMo and DeepSeek defaults', async () => {
+  const config = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
+
+  assert.match(config, /default:\s+opencode-go\/mimo-v2\.5:high/);
+  assert.match(config, /advisor:\s+opencode-go\/deepseek-v4-flash:medium/);
+  assert.match(config, /tiny:\s+opencode-go\/deepseek-v4-flash:medium/);
+});
+
 async function writePluginPackage(root) {
   await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'omp-config' }));
 }
@@ -41,18 +49,22 @@ function packageRoot() {
 const expectedBundledSkills = [
   'astrbot-plugin-development',
   'brainstorming',
+  'canvas-design',
   'caveman',
   'conventional-commits',
   'deepseek-tool-calling',
   'diagnose',
   'dispatching-parallel-agents',
+  'docx',
   'docker-compose',
   'executing-plans',
   'finishing-a-development-branch',
+  'frontend-design',
   'go-testing',
   'grill-with-docs',
   'handoff',
   'improve-codebase-architecture',
+  'omp-marketplace-plugin-activation',
   'plan-execute-review-commit',
   'prototype',
   'receiving-code-review',
@@ -164,17 +176,16 @@ test('package manifest declares bundled skills as plugin content', async () => {
 test('packaged config template keeps MiMo as default and DeepSeek Flash as advisor', async () => {
   const template = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
 
-  assert.match(template, /advisor:\s*deepseek\/deepseek-v4-flash:xhigh/);
+  assert.match(template, /advisor:\s*opencode-go\/deepseek-v4-flash:medium/);
   assert.match(template, /tiny:\s*opencode-go\/deepseek-v4-flash:medium/);
   assert.doesNotMatch(template, /classifier:\s*opencode-go\/deepseek-v4-flash:medium/);
   assert.doesNotMatch(template, /modelTags:\s*\n\s*classifier:/);
-  assert.match(template, /default:\s*xiaomi\/mimo-v2\.5:high/);
+  assert.match(template, /default:\s*opencode-go\/mimo-v2\.5:high/);
   assert.match(template, /plan:\s*ollama-cloud\/deepseek-v4-pro:high/);
   assert.match(template, /task:\s*ollama-cloud\/deepseek-v4-flash:high/);
   assert.match(template, /webSearch:\s*codex/);
   assert.match(template, /backend:\s*mnemopi/);
   assert.doesNotMatch(template, /disabledProviders:\s*\n\s*-\s*deepseek/);
-  assert.doesNotMatch(template, /advisor:\s*opencode-go\/deepseek/);
   assert.doesNotMatch(template, /task:\s*opencode-go\/deepseek/);
 });
 
@@ -191,7 +202,7 @@ test('ships every omp-config skill from the plugin skills directory', async () =
     assert.match(skillDoc, /\S/, `${skill} should ship a non-empty SKILL.md`);
   }
 
-  assert.equal(actualSkills.length, 278);
+  assert.equal(actualSkills.length, 282);
   assert.ok(actualSkills.includes('ecc/accessibility'));
   assert.ok(actualSkills.includes('ecc/tdd-workflow'));
   assert.ok(actualSkills.includes('ecc/workspace-surface-audit'));

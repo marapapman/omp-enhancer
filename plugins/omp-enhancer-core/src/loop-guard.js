@@ -33,6 +33,7 @@ export function createLoopGuardState() {
     streamLineCarry: '',
     recentBlockLines: [],
     recentBlockFingerprints: [],
+    streamSkippingUsageBlock: false,
   };
 }
 
@@ -225,6 +226,7 @@ export function recordGeneratedText(state = createLoopGuardState(), text = '', c
 function resetLoopGuardStreamState(state) {
   state.streamBuffer = '';
   state.streamLineCarry = '';
+  state.streamSkippingUsageBlock = false;
   state.recentBlockLines = [];
   state.recentBlockFingerprints = [];
 }
@@ -232,9 +234,10 @@ function resetLoopGuardStreamState(state) {
 function recordRepeatedBlockHistory(state, chunk, options) {
   ensureRepeatedBlockHistory(state, options);
   const lines = takeCompletedStreamLines(state, chunk, options);
-  if (!lines.length) return null;
+  const filteredLines = filterExemptStreamLines(state, lines);
+  if (!filteredLines.length) return null;
 
-  for (const original of lines) {
+  for (const original of filteredLines) {
     const fingerprint = repeatedBlockLineFingerprint(original);
     if (!isRepeatedBlockCandidate(fingerprint, options)) continue;
 
@@ -248,6 +251,24 @@ function recordRepeatedBlockHistory(state, chunk, options) {
   return null;
 }
 
+function filterExemptStreamLines(state, lines) {
+  const kept = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (isEvidenceBlockHeader(trimmed)) {
+      state.streamSkippingUsageBlock = true;
+      continue;
+    }
+    if (state.streamSkippingUsageBlock) {
+      if (!trimmed) state.streamSkippingUsageBlock = false;
+      continue;
+    }
+    if (isTableLine(trimmed)) continue;
+    kept.push(line);
+  }
+  return kept;
+}
+
 function ensureRepeatedBlockHistory(state, options) {
   if (!isString(state.streamLineCarry)) state.streamLineCarry = '';
   state.recentBlockLines = Array.isArray(state.recentBlockLines)
@@ -256,6 +277,10 @@ function ensureRepeatedBlockHistory(state, options) {
   state.recentBlockFingerprints = Array.isArray(state.recentBlockFingerprints)
     ? state.recentBlockFingerprints.filter(isString).slice(-options.maxRepeatedBlockFingerprints)
     : [];
+}
+
+function isEvidenceBlockHeader(trimmed) {
+  return /^(?:#{1,6}\s*)?(?:SKILL_USAGE|SUBAGENT_USAGE|SUBAGENT_RESULT)\s*:?\s*$/iu.test(trimmed);
 }
 
 function takeCompletedStreamLines(state, chunk, options) {
@@ -361,7 +386,7 @@ export function stripExemptBlocks(text = '') {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (/^(SKILL_USAGE|SUBAGENT_USAGE)\s*:?\s*$/iu.test(trimmed)) {
+    if (isEvidenceBlockHeader(trimmed)) {
       skippingUsage = true;
       continue;
     }

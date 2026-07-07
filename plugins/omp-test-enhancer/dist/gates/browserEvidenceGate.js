@@ -12,15 +12,6 @@ export function evaluateBrowserEvidenceGate(evidence, options = {}) {
                 repairHint: 'Run omp_test_browser_check and pass its browserEvidence into omp_test_gate for frontend targets.'
             }];
     }
-    if (evidence.findings.length > 0) {
-        return evidence.findings.map(findingToGateResult);
-    }
-    if (evidence.status === 'passed') {
-        return [
-            { gate: 'browser-interaction', passed: true, severity: 'blocker', summary: 'Browser interactions passed.', evidence },
-            { gate: 'browser-visual', passed: true, severity: 'warning', summary: 'Browser visual checks passed.', evidence }
-        ];
-    }
     if (evidence.status === 'skipped') {
         const skippedSeverity = options.required ? severity : 'warning';
         return [{
@@ -31,6 +22,15 @@ export function evaluateBrowserEvidenceGate(evidence, options = {}) {
                 evidence,
                 repairHint: 'Run browser evidence collection for frontend targets when browser behavior changed.'
             }];
+    }
+    if (evidence.findings.length > 0) {
+        return evidence.findings.map(findingToGateResult);
+    }
+    if (evidence.status === 'passed') {
+        return [
+            { gate: 'browser-interaction', passed: true, severity: 'blocker', summary: 'Browser interactions passed.', evidence },
+            { gate: 'browser-visual', passed: true, severity: 'warning', summary: 'Browser visual checks passed.', evidence }
+        ];
     }
     return [{
             gate: 'browser-interaction',

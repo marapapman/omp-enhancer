@@ -1,5 +1,5 @@
-import { mkdtemp } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { createTestingEnhancerTools } from '../../../src/tools/testingTools.js'
@@ -24,6 +24,28 @@ describe('omp_test_analyze warnings', () => {
       targets: [],
       warnings: ['No readable changed files detected. Check that requested files are relative paths inside the repository.']
     })
+  })
+
+  it('falls back to process cwd when runtime context omits cwd', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-runtime-cwd-'))
+    const sourcePath = 'src/router.ts'
+    await mkdir(dirname(join(cwd, sourcePath)), { recursive: true })
+    await writeFile(join(cwd, sourcePath), 'export function routeTask() { return "ok" }')
+
+    const originalCwd = process.cwd()
+    try {
+      process.chdir(cwd)
+      const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_analyze').execute('call', {
+        files: [sourcePath]
+      }, undefined, undefined, { hasUI: false, ui: { notify: () => undefined } } as ExtensionToolContext)
+
+      expect(result.details).toMatchObject({
+        warnings: [],
+        targets: [expect.objectContaining({ sourceFile: sourcePath })]
+      })
+    } finally {
+      process.chdir(originalCwd)
+    }
   })
 })
 

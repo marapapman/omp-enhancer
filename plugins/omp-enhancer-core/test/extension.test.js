@@ -709,6 +709,8 @@ test('task tool_call auto-attaches routed subagent contracts for exact roles', a
   assert.match(startFragment, /Required task assignment contracts/);
   assert.match(startFragment, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
   assert.match(startFragment, /Direct main-agent work auto-read queue/);
+  assert.match(startFragment, /successful validator tool calls can satisfy internal gates/i);
+  assert.doesNotMatch(startFragment, /validator tool calls are preflight only/i);
   assert.ok(startFragment.indexOf('pre-work skill bootstrap') < startFragment.indexOf('Mandatory Subagent Workflow'));
 
   const taskEvent = {
@@ -1200,6 +1202,28 @@ test('focused bug audit preloads main-agent skills instead of blocking on subage
   );
 
   assert.equal(allowedTool, undefined);
+});
+
+test('local smoke verification stays out of bug-audit subagent gates', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = '帮我再后台启动一个 omp 进程，把模型换成 mimo v2.5 advisor 换成 deepseek v4 flash，测试结果。';
+
+  await event(pi, 'session_start')({}, ctx);
+  const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
+  const fragment = governanceText(start, {});
+
+  assert.equal(start.route.intent, 'unknown');
+  assert.deepEqual(start.route.requiredSubagents, []);
+  assert.doesNotMatch(fragment, /bug audit/i);
+  assert.doesNotMatch(fragment, /OMP_REQUIRED_SUBAGENT/i);
+
+  const stop = await event(pi, 'session_stop')({
+    output: '本地 OMP smoke 已完成，模型输出匹配预期。',
+  }, ctx);
+
+  assert.equal(stop, undefined);
 });
 
 test('pre-work skill gate accepts legacy ECC security skill aliases', async () => {
@@ -1763,6 +1787,8 @@ test('session_stop continues when an implementation-with-tests task has not run 
   assert.match(result.additionalContext, /Review is not the terminal phase/);
   assert.match(result.additionalContext, /post-review testing checkpoint/);
   assert.match(result.additionalContext, /Do not finish with only reviewer approval/);
+  assert.match(result.additionalContext, /manual testing gate report/i);
+  assert.doesNotMatch(result.additionalContext, /only after a successful omp_test_gate result/);
 });
 
 test('failed omp_test_gate results do not release implementation and testing gates', async () => {

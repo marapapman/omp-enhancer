@@ -47,7 +47,8 @@ async function handleTestCommand(pi, args, ctx) {
     await pi.sendUserMessage(buildAgentInstruction(mode), { deliverAs: 'steer' });
 }
 async function initializeConfig(pi, ctx) {
-    const existing = await readTestingEnhancerConfig(ctx.cwd);
+    const cwd = typeof ctx.cwd === 'string' && ctx.cwd.trim() !== '' ? ctx.cwd : process.cwd();
+    const existing = await readTestingEnhancerConfig(cwd);
     const configPath = '.omp/testing-enhancer.yml';
     if (existing) {
         const message = `OMP Testing Enhancer config already exists: ${configPath}`;
@@ -55,8 +56,8 @@ async function initializeConfig(pi, ctx) {
         await pi.appendEntry('omp-testing-enhancer.message', { kind: 'init', path: configPath });
         return;
     }
-    const packageManager = await detectPackageManager(ctx.cwd);
-    await writeTestingEnhancerConfig(ctx.cwd, defaultTestingEnhancerConfig(packageManager));
+    const packageManager = await detectPackageManager(cwd);
+    await writeTestingEnhancerConfig(cwd, defaultTestingEnhancerConfig(packageManager));
     await ctx.ui.notify(`Created ${configPath}`, 'info');
     await pi.appendEntry('omp-testing-enhancer.message', { kind: 'init', path: configPath });
 }

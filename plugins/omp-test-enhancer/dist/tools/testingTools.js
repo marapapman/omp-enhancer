@@ -5,7 +5,6 @@ import { evaluateTestCommandGate } from '../gates/testCommandGate.js';
 import { evaluateTestFileScopeGate } from '../gates/testFileScopeGate.js';
 import { readTestingEnhancerConfig } from '../config/testingConfig.js';
 import { findPublicEntryHints, findRelatedTests, readRepoFiles } from '../repo/repoScanner.js';
-import { executeBrowserCheck } from './browserCheck.js';
 const PROPERTY_TARGET_KINDS = ['pure-function', 'validator', 'parser', 'formatter'];
 const PROPERTY_EXPERIENCE_PATHS = [
     '.omp/testing-enhancer/property-examples.json',
@@ -55,7 +54,7 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
                 scenarios: z.array(z.unknown())
             }),
             execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-                const output = await (callbacks.runBrowserCheck ?? executeBrowserCheck)(params, ctx);
+                const output = await (callbacks.runBrowserCheck ?? runDefaultBrowserCheck)(params, ctx);
                 return textResult(output.status === 'passed' ? 'Browser check passed.' : output.status === 'skipped' ? 'Browser check skipped.' : 'Browser check failed.', output);
             }
         },
@@ -122,6 +121,32 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
             }
         }
     ];
+}
+async function runDefaultBrowserCheck(params, ctx) {
+    // Dynamic import is required here because browserCheck imports Playwright, an optional browser-only runtime dependency.
+    // Loading it statically makes the whole testing enhancer fail to register when Playwright is not installed.
+    try {
+        const { executeBrowserCheck } = await import('./browserCheck.js');
+        return executeBrowserCheck(params, ctx);
+    }
+    catch (error) {
+        return {
+            framework: 'playwright',
+            status: 'skipped',
+            runId: 'browser-check-unavailable',
+            baseUrl: params.baseUrl,
+            browser: 'chromium',
+            findings: [{
+                    gate: 'browser-interaction',
+                    passed: true,
+                    severity: 'warning',
+                    category: 'setup',
+                    summary: 'Playwright is not installed.',
+                    evidence: { message: error instanceof Error ? error.message : String(error) },
+                    repairHint: 'Install Playwright before running omp_test_browser_check, or skip browser interaction checks when no browser plan exists.'
+                }]
+        };
+    }
 }
 export function analyzeTestTargets(input) {
     const changedFiles = readChangedFiles(input);
@@ -216,14 +241,18 @@ function evidenceLines(evidence) {
     }
     return lines;
 }
+function contextCwd(ctx) {
+    return typeof ctx.cwd === 'string' && ctx.cwd.trim() !== '' ? ctx.cwd : process.cwd();
+}
 async function executeAnalyze(params, ctx) {
+    const cwd = contextCwd(ctx);
     const warnings = [];
     let files = [];
     if (Array.isArray(params.changedFiles)) {
         files = params.changedFiles.filter(isChangedFileInput);
     }
     else if (Array.isArray(params.files)) {
-        files = await readRepoFiles(ctx.cwd, params.files);
+        files = await readRepoFiles(cwd, params.files);
         if (params.files.length > 0 && files.length === 0)
             warnings.push('No readable changed files detected. Check that requested files are relative paths inside the repository.');
         if (files.length > 0 && files.length < params.files.length)
@@ -233,9 +262,9 @@ async function executeAnalyze(params, ctx) {
         const changedPaths = await readGitChangedPaths(ctx);
         if (changedPaths.length === 0)
             warnings.push('No changed files detected. Pass files to /test <file> or omp_test_analyze.files.');
-        files = await readRepoFiles(ctx.cwd, changedPaths);
+        files = await readRepoFiles(cwd, changedPaths);
     }
-    const targets = await enrichTargets(ctx.cwd, classifyChangedFiles(files));
+    const targets = await enrichTargets(cwd, classifyChangedFiles(files));
     return {
         runId: `test-${Date.now().toString(36)}`,
         targets,
@@ -244,18 +273,19 @@ async function executeAnalyze(params, ctx) {
     };
 }
 async function executeContext(params, ctx) {
+    const cwd = contextCwd(ctx);
     const target = readTarget(isRecord(params.target) ? params.target : {});
-    const existingTests = target.relatedTests ?? await findRelatedTests(ctx.cwd, target.sourceFile);
-    const publicEntryHints = target.publicEntryHints ?? await findPublicEntryHints(ctx.cwd, target.sourceFile, target.symbolName);
+    const existingTests = target.relatedTests ?? await findRelatedTests(cwd, target.sourceFile);
+    const publicEntryHints = target.publicEntryHints ?? await findPublicEntryHints(cwd, target.sourceFile, target.symbolName);
     const propertyContext = await collectPropertyRetrievalContext(ctx, target, existingTests);
     return buildContextForTarget(target, existingTests, publicEntryHints, propertyContext);
 }
 async function executeCoverageAnalyze(params, ctx) {
-    const report = params.coverageReport ?? await readJsonReport(ctx.cwd, params.reportPath);
+    const report = params.coverageReport ?? await readJsonReport(contextCwd(ctx), params.reportPath);
     return analyzeCoverageReport({ coverageReport: report, reportPath: params.reportPath });
 }
 async function executeMutationAnalyze(params, ctx) {
-    const report = params.mutationReport ?? await readJsonReport(ctx.cwd, params.reportPath);
+    const report = params.mutationReport ?? await readJsonReport(contextCwd(ctx), params.reportPath);
     return analyzeMutationReport({ mutationReport: report, reportPath: params.reportPath });
 }
 async function readJsonReport(cwd, reportPath) {
@@ -272,7 +302,7 @@ async function readJsonReport(cwd, reportPath) {
     }
 }
 async function executeGate(params, ctx) {
-    const config = await readTestingEnhancerConfig(ctx.cwd);
+    const config = await readTestingEnhancerConfig(contextCwd(ctx));
     const severities = gateSeveritiesFromConfig(config);
     const candidate = await readCandidateForGate(params, ctx);
     const targets = readTargets(params);
@@ -312,7 +342,7 @@ async function readCandidateForGate(params, ctx) {
     const paths = uniqueStrings([...candidatePaths, ...changedTestPaths]);
     if (paths.length === 0)
         return candidate;
-    const workspaceFiles = await readRepoFiles(ctx.cwd, paths);
+    const workspaceFiles = await readRepoFiles(contextCwd(ctx), paths);
     const workspaceByPath = new Map(workspaceFiles.map(file => [file.path, file.content]));
     const fallbackByPath = new Map(candidate.files.map(file => [file.path, file]));
     return {
@@ -381,7 +411,7 @@ async function readGitPathList(ctx, args) {
     if (!ctx.exec)
         return [];
     try {
-        const result = await ctx.exec('git', args, { cwd: ctx.cwd, timeout: 10000 });
+        const result = await ctx.exec('git', args, { cwd: contextCwd(ctx), timeout: 10000 });
         if (result.exitCode !== 0)
             return [];
         return result.stdout.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
@@ -394,11 +424,12 @@ async function runConfiguredCommand(command, ctx) {
     const [program, ...args] = splitCommand(command);
     if (!program)
         return undefined;
+    const cwd = contextCwd(ctx);
     if (ctx.exec) {
-        const result = await ctx.exec(program, args, { cwd: ctx.cwd, timeout: 120000 });
+        const result = await ctx.exec(program, args, { cwd, timeout: 120000 });
         return { command, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
     }
-    return runCommandDirectly(command, program, args, ctx.cwd);
+    return runCommandDirectly(command, program, args, cwd);
 }
 async function runCommandDirectly(command, program, args, cwd) {
     const { promise, resolve } = Promise.withResolvers();
@@ -558,7 +589,7 @@ async function collectPropertyRetrievalContext(ctx, target, existingTests) {
     const directPaths = uniqueStrings([target.sourceFile, ...existingTests, ...PROPERTY_EXPERIENCE_PATHS]);
     const directPathSet = new Set(directPaths);
     const similarPaths = await findLocalPropertySearchPaths(ctx, target, directPathSet);
-    const files = await readRepoFiles(ctx.cwd, uniqueStrings([...directPaths, ...similarPaths]));
+    const files = await readRepoFiles(contextCwd(ctx), uniqueStrings([...directPaths, ...similarPaths]));
     const experiencePathSet = new Set(PROPERTY_EXPERIENCE_PATHS);
     const experienceEntries = files.flatMap(file => experiencePathSet.has(file.path) ? parsePropertyExperienceEntries(file) : []);
     const similarPathSet = new Set(similarPaths);
@@ -598,7 +629,7 @@ async function readGitPropertyGrepPaths(ctx) {
             '*.jsx',
             '*.mjs',
             '*.cjs'
-        ], { cwd: ctx.cwd, timeout: 10000 });
+        ], { cwd: contextCwd(ctx), timeout: 10000 });
         if (result.exitCode !== 0)
             return [];
         return result.stdout.split(/\r?\n/).map(line => line.trim()).filter(Boolean);

@@ -76,6 +76,74 @@ test('detects repeated long planning blocks', () => {
   assert.match(result.repeatedText, /context-memory extractor/);
 });
 
+test('ignores repeated markdown evidence blocks', () => {
+  const evidence = [
+    '## SKILL_USAGE',
+    '- test-driven-development: loaded and used for RED then GREEN verification evidence.',
+    '- subagent-driven-development: loaded and used to fork plan, implementation-task, and reviewer.',
+    '- verification-before-completion: loaded and used for targeted, subset, and full test commands.',
+    '',
+    '## SUBAGENT_USAGE',
+    '- plan: completed with required skills and approved the scoped plan.',
+    '- implementation-task: completed with required skills and accepted the implementation.',
+    '- reviewer: completed with required skills and approved the final rereview.',
+    '',
+  ].join('\n');
+
+  const result = inspectGeneratedText(`${evidence}\n${evidence}`);
+
+  assert.equal(result.repeated, false);
+});
+
+test('stream loop guard ignores repeated markdown evidence blocks', () => {
+  const state = createLoopGuardState();
+  const evidence = [
+    '## SKILL_USAGE',
+    '- test-driven-development: loaded and used for RED then GREEN verification evidence.',
+    '- subagent-driven-development: loaded and used to fork plan, implementation-task, and reviewer.',
+    '- verification-before-completion: loaded and used for targeted, subset, and full test commands.',
+    '',
+    '## SUBAGENT_USAGE',
+    '- plan: completed with required skills and approved the scoped plan.',
+    '- implementation-task: completed with required skills and accepted the implementation.',
+    '- reviewer: completed with required skills and approved the final rereview.',
+    '',
+    '## SUBAGENT_RESULT',
+    '- plan: completed.',
+    '- implementation-task: completed.',
+    '- reviewer: completed.',
+    '',
+  ].join('\n');
+
+  const result = recordGeneratedText(state, `${evidence}\n${evidence}`, { flushIncompleteLine: true });
+
+  assert.equal(result.repeated, false);
+});
+
+test('stream loop guard ignores evidence blocks split across chunks', () => {
+  const state = createLoopGuardState();
+  const lines = [
+    '## SKILL_USAGE',
+    '- test-driven-development: loaded and used for RED then GREEN verification evidence.',
+    '- subagent-driven-development: loaded and used to fork plan, implementation-task, and reviewer.',
+    '- verification-before-completion: loaded and used for targeted, subset, and full test commands.',
+    '',
+    '## SUBAGENT_USAGE',
+    '- plan: completed with required skills and approved the scoped plan.',
+    '- implementation-task: completed with required skills and accepted the implementation.',
+    '- reviewer: completed with required skills and approved the final rereview.',
+    '',
+  ];
+  let result = { repeated: false };
+
+  for (const line of [...lines, ...lines]) {
+    result = recordGeneratedText(state, `${line}\n`);
+    if (result.repeated) break;
+  }
+
+  assert.equal(result.repeated, false);
+});
+
 test('records repeated planning blocks across stream chunks', () => {
   const state = createLoopGuardState();
   const text = [

@@ -33,8 +33,9 @@ interface BrowserSignalInput {
 }
 
 export async function executeBrowserCheck(params: BrowserCheckParams, ctx: ExtensionToolContext): Promise<BrowserEvidence> {
+  const cwd = typeof ctx.cwd === 'string' && ctx.cwd.trim() !== '' ? ctx.cwd : process.cwd()
   const runId = `browser-${Date.now().toString(36)}`
-  const artifactDir = params.artifactDir ?? join(ctx.cwd, '.omp', 'testing-enhancer-artifacts', runId)
+  const artifactDir = params.artifactDir ?? join(cwd, '.omp', 'testing-enhancer-artifacts', runId)
   await mkdir(artifactDir, { recursive: true })
 
   let server: ChildProcess | undefined
@@ -61,7 +62,7 @@ export async function executeBrowserCheck(params: BrowserCheckParams, ctx: Exten
     if (params.serverCommand) {
       const [program, ...args] = splitCommandLine(params.serverCommand)
       if (program) {
-        server = spawn(program, args, { cwd: ctx.cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+        server = spawn(program, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
         serverClosePromise = new Promise(resolve => {
           server?.once('error', error => {
             serverError = error
