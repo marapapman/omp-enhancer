@@ -916,6 +916,7 @@ test('routes result-only plugin load bug smoke as focused audit', () => {
   for (const prompt of [
     'Run plugin load smoke and check for bugs, result only.',
     'Check plugin load smoke for bugs, result only.',
+    'Execute plugin load smoke for bugs, result only.',
   ]) {
     const route = routeNaturalLanguageTask({ prompt });
 

@@ -728,7 +728,12 @@ function isBugAuditRequest(text) {
   if (asksForChange && !negatesFix && !isReportOnlyAudit(text)) {
     return false;
   }
+  if (/(?:不查|不找|不排查)\s*bug|no\s+bug\s+(?:hunt|audit|check)/.test(text)) {
+    return false;
+  }
   return /(?:check|find|audit|hunt|scan|test|run tests?|inspect|investigate)\s+.*(?:bugs?|defects?)/.test(text)
+    || /(?:plugin load|extension load|smoke|插件加载|烟测).*(?:bug|bugs|缺陷).*(?:result only|只报告|只输出|只看结果|不改|不要改)/.test(text)
+    || /(?:check|run|execute|运行|执行|检查).*(?:plugin load|extension load|smoke|插件加载|烟测).*(?:bug|bugs|缺陷).*(?:result only|只报告|只输出|只看结果|不改|不要改)/.test(text)
     || /\b(?:bugs?|defects?)\s+(?:audit|investigation|inspection|hunt|scan)\b/.test(text)
     || /(?:bugs?|defects?)\s+.*(?:audit|hunt|report|find|check|list)/.test(text)
     || /(?:测试|检查|排查|审查|扫描|查找|找|发现).*(?:bug|bugs|缺陷)/.test(text)
