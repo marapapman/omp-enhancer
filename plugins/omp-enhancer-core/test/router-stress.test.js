@@ -200,8 +200,11 @@ test('router stress matrix covers at least 100 natural-language cases without wr
       mismatches.push(`${name}: expected ${intent}, got ${route.intent}: ${prompt}`);
       continue;
     }
-    if (intent === 'unknown' || intent === 'diagnosis' || intent === 'release') {
+    if (intent === 'unknown' || intent === 'release') {
       assert.deepEqual(route.requiredSkills, [], name);
+      assert.deepEqual(route.requiredTools, [], name);
+      assert.deepEqual(route.requiredSubagents, [], name);
+    } else if (intent === 'diagnosis') {
       assert.deepEqual(route.requiredTools, [], name);
       assert.deepEqual(route.requiredSubagents, [], name);
     } else if (route.writingComplexity !== 'simple') {

@@ -322,15 +322,13 @@ export function buildLoopRecoveryContext(state = createLoopGuardState()) {
     : null;
 
   return [
-    'OMP Enhancer Core main-agent loop guard stopped the previous generation because it was repeating itself.',
+    'LOOP_BREAKER',
     `Reason: ${reason}`,
+    'Stop: do not call the same tool again or repeat the same sentence',
+    'Do next: summarize current state and choose a different next action',
+    'Limit: 5 lines',
     repeated,
     lastGood,
-    'Recovery rule: continue from the last non-repeated state and choose exactly one next action:',
-    '1. call the next required tool,',
-    '2. provide the final answer, or',
-    '3. report BLOCKERS with the exact missing evidence.',
-    'Do not repeat the stopped sentence or rephrase the same validation request.',
   ].filter(Boolean).join('\n');
 }
 

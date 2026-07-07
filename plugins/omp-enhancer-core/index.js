@@ -27,6 +27,13 @@ import {
   buildLoopRecoveryContext,
   defaultLoopGuardConfig,
 } from './src/loop-guard.js';
+import {
+  createGateRecoveryState,
+  readGateRecoveryState,
+  recordGateRecovery,
+  serializeGateRecoveryState,
+} from './src/gate-recovery.js';
+import { appendDebugLog, buildDebugRecord } from './src/debug-logger.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
 const LOOP_GUARD_RECOVERY_MESSAGE = 'omp-enhancer-core.loop-guard-recovery';
@@ -314,6 +321,7 @@ export default function registerCoreEnhancer(pi) {
     }
     const route = routeNaturalLanguageTask({ prompt });
     setRouteState(state, route, prompt);
+    await writeDebugLog(ctx, 'routes', buildDebugRecord({ kind: 'routes', prompt, route }));
     startLoopGuardRun(state.loopGuard, `${route.intent}:${state.routeStartedAt}`);
     await persistState(pi, state);
     const fragment = buildRoutedGovernanceContext(state, { route, parentTask: prompt, visibility: 'automatic' });
@@ -337,12 +345,28 @@ export default function registerCoreEnhancer(pi) {
       if (taskSkillBlock) {
         state.pendingSmartGate = createPendingSmartGate(state, taskSkillBlock.ruleGate, '');
         await persistState(pi, state);
+        await writeDebugLog(ctx, 'gates', buildDebugRecord({
+          kind: 'gates',
+          prompt: state.lastPrompt,
+          route: state.lastRoute,
+          gateKey: taskSkillBlock.ruleGate?.gateKey,
+          reasonCode: taskSkillBlock.reasonCode ?? 'task_subagent_contract',
+          payload: { level: taskSkillBlock.recovery?.level ?? 'block' },
+        }));
         return smartGateWrappedToolBlock(state, taskSkillBlock);
       }
       recordSubagentDispatchStarted(state, event);
     } else {
       const preworkBlock = buildPreworkSkillGateBlock(state, name);
       if (preworkBlock) {
+        await writeDebugLog(ctx, 'gates', buildDebugRecord({
+          kind: 'gates',
+          prompt: state.lastPrompt,
+          route: state.lastRoute,
+          gateKey: preworkBlock.ruleGate?.gateKey,
+          reasonCode: preworkBlock.reasonCode ?? 'missing_skill_read',
+          payload: { level: preworkBlock.recovery?.level ?? 'coach', toolName: name },
+        }));
         await persistState(pi, state);
         return preworkBlock;
       }
@@ -445,6 +469,7 @@ export function createState() {
     smartGateCompletionBypasses: [],
     evidence: emptyEvidence(),
     loopGuard: createLoopGuardState(),
+    gateRecovery: createGateRecoveryState(),
   };
 }
 
@@ -515,6 +540,7 @@ function setRouteState(state, route, prompt = '', { classifierResolved = false }
   state.smartGateCompletionBypasses = [];
   state.evidence = emptyEvidence();
   state.loopGuard = createLoopGuardState();
+  state.gateRecovery = createGateRecoveryState();
 }
 
 function resetState(state) {
@@ -529,6 +555,7 @@ function resetState(state) {
   state.smartGateCompletionBypasses = [];
   state.evidence = emptyEvidence();
   state.loopGuard = createLoopGuardState();
+  state.gateRecovery = createGateRecoveryState();
 }
 
 async function persistState(pi, state) {
@@ -538,6 +565,19 @@ async function persistState(pi, state) {
   } catch {
     // State persistence is a recovery path for isolated tool/hook runtimes; never
     // let it turn an otherwise valid tool result into a host-level tool failure.
+  }
+}
+
+async function writeDebugLog(ctx = {}, kind = 'routes', record = {}) {
+  try {
+    await appendDebugLog({
+      cwd: ctx.cwd || process.cwd(),
+      kind,
+      record,
+      env: process.env,
+    });
+  } catch {
+    // Debug logging must never alter route, tool, or gate behavior.
   }
 }
 
@@ -598,6 +638,7 @@ function replaceState(target, source) {
   target.smartGateCompletionBypasses = source.smartGateCompletionBypasses ?? [];
   target.evidence = source.evidence;
   target.loopGuard = mergeLiveLoopGuardState(liveLoopGuard, source.loopGuard ?? createLoopGuardState());
+  target.gateRecovery = readGateRecoveryState(source.gateRecovery);
 }
 
 function mergeLiveLoopGuardState(live, restored) {
@@ -631,6 +672,7 @@ function serializeState(state) {
     smartGate: state.smartGate,
     smartGateCompletionBypasses: state.smartGateCompletionBypasses,
     loopGuard: serializeLoopGuardState(state.loopGuard),
+    gateRecovery: serializeGateRecoveryState(state.gateRecovery),
     evidence: {
       writingQuality: state.evidence.writingQuality,
       writingLogic: state.evidence.writingLogic,
@@ -698,6 +740,7 @@ function readStateSnapshot(value) {
     smartGate: readSmartGateState(value.smartGate),
     smartGateCompletionBypasses: readSmartGateCompletionBypasses(value.smartGateCompletionBypasses),
     loopGuard: readLoopGuardSnapshot(value.loopGuard),
+    gateRecovery: readGateRecoveryState(value.gateRecovery),
     evidence,
   };
 }
@@ -923,14 +966,12 @@ function cleanToolCallId(value) {
 
 function isInternalCoreContinuation(prompt) {
   return String(prompt ?? '').includes('OMP Enhancer Core')
-    && (
-      String(prompt ?? '').includes('gate is still open')
-      || isLoopGuardRecoveryContinuation(prompt)
-    );
+    && String(prompt ?? '').includes('gate is still open')
+    || isLoopGuardRecoveryContinuation(prompt);
 }
 
 function isLoopGuardRecoveryContinuation(prompt) {
-  return String(prompt ?? '').includes('OMP Enhancer Core main-agent loop guard stopped the previous generation');
+  return String(prompt ?? '').trimStart().startsWith('LOOP_BREAKER');
 }
 
 function isSlashCommandPrompt(prompt) {
@@ -1393,6 +1434,7 @@ function summarizeSmartGateEvidence(state) {
 function buildMissingSkillUsageContext(state) {
   const requiredSkills = state.lastRoute?.requiredSkills ?? [];
   if (!requiredSkills.length) return null;
+  if (state.lastRoute?.gateMode === 'hidden-coach') return null;
   if (state.lastSkillUsage?.ok) return null;
   const failureContext = formatRecentToolFailures(state, ['read', 'omp_core_validate_skill_usage']);
   const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
@@ -1546,19 +1588,23 @@ function buildPreworkSkillGateBlock(state, toolName) {
   const missing = missingReadSkills(state);
   if (!missing.length) return null;
   const ruleGate = toolRuleGateBlock(state, `prework:${toolName}`, [
-    `OMP Enhancer Core pre-work main-agent skill gate blocked ${toolName}.`,
-    'Automatic recovery: read the missing skills now, wait for the read results, then retry the blocked tool.',
-    'Do not call Tiny smart gate for ordinary missing skill reads. Smart gate is reserved for true false positives or already-satisfied evidence; reading the skills is the expected low-cost path.',
+    `OMP Enhancer Core pre-work main-agent skill gate detected missing skills before ${toolName}.`,
     `Missing skills: ${missing.join(', ')}.`,
-    'Required recovery order:',
-    ...missing.map(formatMissingSkillReadStep),
-    `After those read results return, retry ${toolName}. If you are forking task subagents instead, put the skills into the task assignments rather than reading them in the main agent.`,
   ].join('\n'));
-  if (consumeSmartGateToolAllowance(state, ruleGate)) return null;
+  const recovery = recordGateRecovery(state.gateRecovery, {
+    gateKey: ruleGate.gateKey,
+    reasonCode: 'missing_skill_read',
+    doNext: missing.map((skill) => formatMissingSkillReadStep(skill).replace(/^- /, '')).join('; '),
+    doNot: `repeat ${toolName} before the skill reads return`,
+    after: `retry ${toolName} or continue the original task`,
+  });
 
   return {
-    block: true,
-    reason: ruleGate.context,
+    block: false,
+    reason: recovery.context,
+    additionalContext: recovery.context,
+    reasonCode: 'missing_skill_read',
+    recovery,
     ruleGate,
   };
 }
@@ -1894,6 +1940,16 @@ async function handleLoopGuardGeneratedOutput(pi, state, ctx = {}, text = '') {
   if (!detection.repeated) return undefined;
 
   const additionalContext = buildLoopRecoveryContext(state.loopGuard);
+  await writeDebugLog(ctx, 'loops', buildDebugRecord({
+    kind: 'loops',
+    prompt: state.lastPrompt,
+    route: state.lastRoute,
+    reasonCode: detection.kind ?? 'repeated_generation',
+    payload: {
+      reason: detection.reason,
+      repeatedText: detection.repeatedText,
+    },
+  }));
   const autoContinuation = await queueLoopGuardRecoveryContinuation(pi, state, additionalContext, detection);
   await persistState(pi, state);
   await ctx.ui?.notify?.('OMP Enhancer Core stopped a repeated main-agent generation.', 'warn');

@@ -214,7 +214,7 @@ const routingCases = [
     prompt: '检查 omp marketplace 插件打包出来的 config assets 和 hooks 是否齐全。',
     expectedIntent: 'config-assets',
     expectedAgent: 'config-assets',
-    requiredSkills: [],
+    requiredSkills: ['omp-marketplace-plugin-activation'],
     requiredTools: ['omp_config_doctor', 'omp_config_assets', 'omp_config_plan'],
     requiredSubagents: ['config-librarian', 'reviewer'],
     requiredSubagentSkills: {
@@ -325,7 +325,7 @@ test('routes common work situations without unreasonable workflow escalation', (
     ['research implementation plan only', '调研方案，并生成实现计划，但先不要实现。', 'unknown'],
   ];
 
-  const nonGated = new Set(['unknown', 'diagnosis', 'release']);
+  const nonGated = new Set(['unknown', 'release']);
 
   for (const [name, prompt, expectedIntent] of cases) {
     const route = routeNaturalLanguageTask({ prompt });
@@ -333,6 +333,9 @@ test('routes common work situations without unreasonable workflow escalation', (
     assert.equal(route.intent, expectedIntent, name);
     if (nonGated.has(expectedIntent)) {
       assert.deepEqual(route.requiredSkills, [], `${name} skills`);
+      assert.deepEqual(route.requiredTools, [], `${name} tools`);
+      assert.deepEqual(route.requiredSubagents, [], `${name} subagents`);
+    } else if (expectedIntent === 'diagnosis') {
       assert.deepEqual(route.requiredTools, [], `${name} tools`);
       assert.deepEqual(route.requiredSubagents, [], `${name} subagents`);
     } else {
@@ -875,14 +878,13 @@ test('leaves unrelated prompts unclaimed instead of inventing a plugin workflow'
   ]) {
     const route = routeNaturalLanguageTask({ prompt });
 
-    assert.deepEqual(route, {
-      intent: 'unknown',
-      agent: null,
-      requiredSkills: [],
-      requiredTools: [],
-      requiredSubagents: [],
-      source: 'natural-language',
-    }, prompt);
+    assert.equal(route.intent, 'unknown', prompt);
+    assert.equal(route.agent, null, prompt);
+    assert.deepEqual(route.requiredSkills, [], prompt);
+    assert.deepEqual(route.requiredTools, [], prompt);
+    assert.deepEqual(route.requiredSubagents, [], prompt);
+    assert.equal(route.source, 'natural-language', prompt);
+    assert.equal(route.workflowRoute, 'agentic.simple', prompt);
   }
 });
 

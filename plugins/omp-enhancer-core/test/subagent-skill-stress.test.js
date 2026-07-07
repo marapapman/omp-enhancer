@@ -46,14 +46,14 @@ const expectedByIntent = {
     },
   },
   'config-assets': {
-    requiredSkills: [],
+    requiredSkills: ['omp-marketplace-plugin-activation'],
     subagents: {
       'config-librarian': [],
       reviewer: [],
     },
   },
   diagnosis: {
-    requiredSkills: [],
+    requiredSkills: ['diagnose', 'systematic-debugging'],
     subagents: {},
   },
   release: {
