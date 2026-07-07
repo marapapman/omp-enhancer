@@ -746,6 +746,8 @@ function isBugAuditRequest(text) {
 function isFocusedDirectAuditRequest(text) {
   return /\b(?:focused|direct|single-agent|single agent|main-agent|main agent)\s+(?:bug\s+)?(?:audit|investigation|debugging|inspection)\b/.test(text)
     || /\b(?:do|run|handle|perform)\s+(?:the\s+)?(?:bug\s+)?(?:audit|investigation|inspection)\s+directly\b/.test(text)
+    || /(?:plugin load|extension load|smoke|插件加载|烟测).*(?:bug|bugs|缺陷).*(?:result only|只报告|只输出|只看结果|不改|不要改)/.test(text)
+    || /(?:check|run|execute|运行|执行|检查).*(?:plugin load|extension load|smoke|插件加载|烟测).*(?:bug|bugs|缺陷).*(?:result only|只报告|只输出|只看结果|不改|不要改)/.test(text)
     || /(?:直接|自己|主\s*agent|main\s*agent).*(?:审计|检查|排查|调查|找\s*bug|查\s*bug|bug\s*investigation)/.test(text)
     || /(?:聚焦|小范围|定向|局部|focused).*(?:审计|检查|排查|调查|bug|问题)/.test(text);
 }

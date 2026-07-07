@@ -306,7 +306,7 @@ test('routes common work situations without unreasonable workflow escalation', (
     ['pre-release check', '做发布前检查：pack、test、marketplace check、plugin list，不要发布。', 'bug-audit'],
     ['local OMP process smoke result', '帮我再后台启动一个 omp 进程，把模型换成 mimo v2.5 advisor 换成 deepseek v4 flash，测试结果。', 'unknown'],
     ['local extension smoke only', '运行本地插件加载 smoke 和进程验证，只报告是否启动成功，不查 bug，不改代码。', 'unknown'],
-    ['local smoke with bug check', 'Run plugin load smoke and check for bugs, result only.', 'bug-audit'],
+    ['local smoke with bug check', 'Run plugin load smoke and check for bugs, result only.', 'bug-audit', { focused: true }],
     ['rollback analysis', '分析是否需要 revert 这个提交，避免误删用户改动，不要改代码。', 'unknown'],
     ['unit test completion', '补全 router 的单元测试，覆盖边界情况。', 'bug-audit'],
     ['integration test completion', '补全集成测试，覆盖插件 hook 和 session state。', 'bug-audit'],
@@ -344,11 +344,14 @@ test('routes common work situations without unreasonable workflow escalation', (
 
   const nonGated = new Set(['unknown', 'release']);
 
-  for (const [name, prompt, expectedIntent] of cases) {
+  for (const [name, prompt, expectedIntent, options = {}] of cases) {
     const route = routeNaturalLanguageTask({ prompt });
 
     assert.equal(route.intent, expectedIntent, name);
-    if (nonGated.has(expectedIntent)) {
+    if (options.focused) {
+      assert.equal(route.auditMode, 'focused', `${name} audit mode`);
+      assert.deepEqual(route.requiredSubagents, [], `${name} subagents`);
+    } else if (nonGated.has(expectedIntent)) {
       assert.deepEqual(route.requiredSkills, [], `${name} skills`);
       assert.deepEqual(route.requiredTools, [], `${name} tools`);
       assert.deepEqual(route.requiredSubagents, [], `${name} subagents`);
@@ -906,6 +909,20 @@ test('leaves unrelated prompts unclaimed instead of inventing a plugin workflow'
     assert.deepEqual(route.requiredSubagents, [], prompt);
     assert.equal(route.source, 'natural-language', prompt);
     assert.equal(route.workflowRoute, 'agentic.simple', prompt);
+  }
+});
+
+test('routes result-only plugin load bug smoke as focused audit', () => {
+  for (const prompt of [
+    'Run plugin load smoke and check for bugs, result only.',
+    'Check plugin load smoke for bugs, result only.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.intent, 'bug-audit', prompt);
+    assert.equal(route.auditMode, 'focused', prompt);
+    assert.deepEqual(route.requiredSubagents, [], prompt);
+    assert.equal(route.workflowRoute, 'code.review', prompt);
   }
 });
 
