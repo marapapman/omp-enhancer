@@ -75,7 +75,7 @@ const expectedByIntent = {
   },
   'config-assets': {
     agent: 'config-assets',
-    requiredSkills: [],
+    requiredSkills: ['omp-marketplace-plugin-activation'],
     requiredTools: ['omp_config_doctor', 'omp_config_assets', 'omp_config_plan'],
     subagents: {
       'config-librarian': [],
@@ -84,7 +84,7 @@ const expectedByIntent = {
   },
   diagnosis: {
     agent: null,
-    requiredSkills: [],
+    requiredSkills: ['diagnose', 'systematic-debugging'],
     requiredTools: [],
     subagents: {},
   },

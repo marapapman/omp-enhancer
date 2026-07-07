@@ -216,7 +216,7 @@ test('resolveClassificationRoute falls back from low-confidence wrong intents to
   assert.equal(result.route.classifier.classification.intent, 'release');
 });
 
-test('resolveClassificationRoute lets high-confidence classifier override rigid writing fallback', () => {
+test('resolveClassificationRoute keeps product feature prompts on implementation route', () => {
   const result = resolveClassificationRoute({
     prompt: '请写一个用户看板，包含统计数字和最近活动。',
     output: JSON.stringify({
@@ -231,7 +231,7 @@ test('resolveClassificationRoute lets high-confidence classifier override rigid 
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.fallbackRoute.intent, 'writing.zh');
+  assert.equal(result.fallbackRoute.intent, 'implementation-with-tests');
   assert.equal(result.route.intent, 'implementation-with-tests');
   assert.equal(result.route.agent, 'implementer');
   assert.equal(result.route.source, 'llm-classifier');
@@ -239,7 +239,7 @@ test('resolveClassificationRoute lets high-confidence classifier override rigid 
   assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), ['plan', 'implementation-task', 'reviewer']);
 });
 
-test('resolveClassificationRoute keeps deterministic route when override confidence is not high enough', () => {
+test('resolveClassificationRoute no longer depends on classifier override for product feature prompts', () => {
   const result = resolveClassificationRoute({
     prompt: '请写一个用户看板，包含统计数字和最近活动。',
     output: JSON.stringify({
@@ -254,10 +254,10 @@ test('resolveClassificationRoute keeps deterministic route when override confide
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.fallbackRoute.intent, 'writing.zh');
-  assert.equal(result.route.intent, 'writing.zh');
+  assert.equal(result.fallbackRoute.intent, 'implementation-with-tests');
+  assert.equal(result.route.intent, 'implementation-with-tests');
   assert.equal(result.route.source, 'llm-classifier');
-  assert.equal(result.route.classifier.authority, 'fallback');
+  assert.equal(result.route.classifier.authority, 'classifier');
 });
 
 test('resolveClassificationRoute preserves Chinese writing when classifier self-identifies prose safety wording', () => {

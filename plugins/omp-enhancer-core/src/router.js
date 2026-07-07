@@ -1,3 +1,5 @@
+import { decorateWorkflowRoute } from './workflow-routes.js';
+
 const zhWritingTerms = ['中文', '论文', '摘要', '润色', '改写', '翻译腔', 'ai 味', '博士', '段落', '写作', '写', '报告', '文档', '起草', '引言', '相关工作', '审稿'];
 const strongZhWritingTerms = [
   '中文',
@@ -54,6 +56,19 @@ const testingEnhancerTools = [
 ];
 
 export const routedIntents = [
+  'agentic.simple',
+  'writing.zh',
+  'writing.en',
+  'writing.latex',
+  'writing.markdown',
+  'doc.convert.word',
+  'factcheck.document',
+  'code.dev',
+  'code.debug',
+  'code.review',
+  'omp.plugin',
+  'security.review',
+  'design.visual',
   'config-assets',
   'fact-check',
   'bug-audit',
@@ -61,8 +76,6 @@ export const routedIntents = [
   'release',
   'security-review',
   'implementation-with-tests',
-  'writing.zh',
-  'writing.en',
   'unknown',
 ];
 
@@ -136,7 +149,7 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasTestReportWriting = isTestReportWritingRequest(normalized);
   const hasBugReportWriting = isBugReportWritingRequest(normalized);
   const hasGateValidatorStatusReport = isGateValidatorStatusReport(normalized);
-  const hasFactCheck = isFactCheckRequest(normalized);
+  const hasFactCheck = isFactCheckRequest(normalized) || isFactCheckDocumentRequest(normalized);
   const hasBugAudit = !hasGateValidatorStatusReport && !hasBugReportWriting && isBugAuditRequest(normalized);
   const hasFocusedBugAudit = hasBugAudit && isFocusedDirectAuditRequest(normalized);
   const hasKnowledgeOnly = !hasFactCheck && isKnowledgeWorkWithoutWritingArtifact(normalized);
@@ -152,81 +165,178 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasRelease = isReleaseRequest(normalized);
   const hasConfigAssets = !hasGateValidatorStatusReport && isConfigAssetRequest(normalized);
   const hasDiagnosisOnly = hasGateValidatorStatusReport || isDiagnosisOnlyRequest(normalized, asksNoCodeChange);
+  const workflowRouteHint = workflowRouteHintForPrompt(normalized, prompt);
+  const shouldUseClassifier = shouldUseRouteClassifier(normalized, prompt, { workflowRouteHint, hasCodeChange, hasKnowledgeOnly, hasConfigAssets });
+  const routed = (intent, options = {}) => routeByIntent(intent, {
+    ...options,
+    prompt,
+    workflowRoute: options.workflowRoute ?? workflowRouteForPromptIntent(workflowRouteHint, intent),
+    shouldUseClassifier,
+  });
 
-  if (conceptOnly && !isSecurityConceptQuestion(normalized)) return unknownRoute();
+  if (conceptOnly && !isSecurityConceptQuestion(normalized)) return routed('agentic.simple');
 
-  if (hasGateValidatorStatusReport && !hasCodeChange) {
-    return routeByIntent('diagnosis');
+  if (isHardBlockRequest(normalized) && !hasWriting && !hasCodeChange && !hasBugAudit && !hasTestAnalysis && !hasDiagnosisOnly && !hasSecurity) {
+    return routed(hasRelease ? 'release' : 'agentic.simple', { workflowRoute: 'agentic.simple', hardBlock: true });
   }
 
+  if (workflowRouteHint === 'doc.convert.word') {
+    return routed('doc.convert.word', { workflowRoute: workflowRouteHint });
+  }
+
+  if (workflowRouteHint === 'writing.latex' && !hasCodeChange && !hasTestAnalysis) {
+    return routed(hasEnglishWriting ? 'writing.en' : 'writing.zh', { workflowRoute: workflowRouteHint, writingComplexity: 'simple' });
+  }
+
+  if (workflowRouteHint === 'writing.markdown' && !hasCodeChange) {
+    return routed(hasEnglishWriting ? 'writing.en' : 'writing.zh', { workflowRoute: workflowRouteHint, writingComplexity: 'simple' });
+  }
+
+  if (workflowRouteHint === 'design.visual' && !hasCodeChange) {
+    return routed('design.visual', { workflowRoute: workflowRouteHint });
+  }
+
+  if (hasGateValidatorStatusReport && !hasCodeChange) {
+    return routed('diagnosis');
+  }
+  if (isSecurityConceptOnlyRequest(normalized)) {
+    return routed('agentic.simple');
+  }
+
+
   if (hasSecurity && (!hasWriting || isSecurityAuditOrFixRequest(normalized)) && (!hasKnowledgeOnly || isSecurityAuditOrFixRequest(normalized))) {
-    return routeByIntent('security-review');
+    return routed('security-review');
   }
 
   if (hasFactCheck) {
-    return routeByIntent('fact-check');
+    return routed('fact-check');
   }
 
   if (hasBugAudit) {
-    return routeByIntent('bug-audit', { auditMode: hasFocusedBugAudit ? 'focused' : null });
+    return routed('bug-audit', { auditMode: hasFocusedBugAudit ? 'focused' : null });
   }
 
   if (hasTestReportWriting) {
-    return routeByIntent(hasEnglishWriting ? 'writing.en' : 'writing.zh', { writingComplexity: writingComplexityFor(normalized) });
+    return routed(hasEnglishWriting ? 'writing.en' : 'writing.zh', { writingComplexity: writingComplexityFor(normalized) });
   }
 
   if (hasCodeChange && hasTesting) {
-    return routeByIntent('implementation-with-tests');
+    return routed('implementation-with-tests');
   }
 
   if (hasDirectTestAuthoring) {
-    return routeByIntent('bug-audit');
+    return routed('bug-audit');
   }
 
   if (hasTestAnalysis && !hasTestReportWriting) {
-    return routeByIntent('bug-audit');
+    return routed('bug-audit');
   }
 
   if (hasCodeChange) {
-    return routeByIntent('implementation-with-tests');
+    return routed('implementation-with-tests');
   }
 
   if (hasChineseWriting) {
-    return routeByIntent('writing.zh', { writingComplexity: writingComplexityFor(normalized) });
+    return routed('writing.zh', { writingComplexity: writingComplexityFor(normalized) });
   }
 
   if (hasEnglishWriting) {
-    return routeByIntent('writing.en', { writingComplexity: writingComplexityFor(normalized) });
+    return routed('writing.en', { writingComplexity: writingComplexityFor(normalized) });
   }
 
   if (hasRelease && !hasDiagnosisOnly) {
-    return routeByIntent('release');
+    return routed('release', { workflowRoute: 'agentic.simple', hardBlock: true });
   }
 
   if (hasConfigAssets) {
-    return routeByIntent('config-assets');
+    return routed('config-assets');
   }
 
   if (hasKnowledgeOnly) {
-    return unknownRoute();
+    return routed('agentic.simple');
   }
 
   if (hasDiagnosisOnly) {
-    return routeByIntent('diagnosis');
+    return routed('diagnosis');
   }
 
   if (hasTesting && !hasWriting) {
-    return routeByIntent('bug-audit');
+    return routed('bug-audit');
   }
 
-  return unknownRoute();
+  return routed('agentic.simple');
 }
 
-export function routeByIntent(intent, { source = 'natural-language', writingComplexity = 'complex', auditMode = null } = {}) {
+export function routeByIntent(intent, { source = 'natural-language', writingComplexity = 'complex', auditMode = null, workflowRoute = null, shouldUseClassifier = false, hardBlock = false, prompt = '' } = {}) {
   if (intent === 'testing') {
     return routeByIntent('bug-audit', { source, writingComplexity });
   }
 
+  if (intent === 'agentic.simple') {
+    return route({
+      intent: 'unknown',
+      agent: null,
+      requiredSkills: [],
+      requiredTools: [],
+      requiredSubagents: [],
+      workflowRoute: 'agentic.simple',
+      shouldUseClassifier,
+      hardBlock,
+      source,
+    });
+  }
+
+  if (intent === 'writing.latex') {
+    return route({
+      intent,
+      agent: 'writing-helper.writer',
+      requiredSkills: workflowRoute === 'writing.latex' ? latexSkillsForPrompt(prompt) : ['format-markdown2latex'],
+      requiredTools: [],
+      requiredSubagents: [],
+      workflowRoute: 'writing.latex',
+      shouldUseClassifier,
+      source,
+    });
+  }
+
+  if (intent === 'writing.markdown') {
+    return route({
+      intent,
+      agent: 'writing-helper.writer',
+      requiredSkills: ['writing-markdown-helper'],
+      requiredTools: [],
+      requiredSubagents: [],
+      workflowRoute: 'writing.markdown',
+      shouldUseClassifier,
+      source,
+    });
+  }
+
+  if (intent === 'doc.convert.word') {
+    return route({
+      intent,
+      agent: null,
+      requiredSkills: ['docx'],
+      requiredTools: [],
+      requiredSubagents: [],
+      workflowRoute: 'doc.convert.word',
+      shouldUseClassifier,
+      source,
+    });
+  }
+
+  if (intent === 'design.visual') {
+    return route({
+      intent,
+      agent: 'designer',
+      requiredSkills: visualDesignSkillsForPrompt(prompt),
+      requiredTools: [],
+      requiredSubagents: [],
+      workflowRoute: 'design.visual',
+      shouldUseClassifier,
+      source,
+    });
+  }
   if (intent === 'diagnosis') {
     return route({
       intent,
@@ -235,6 +345,9 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       requiredTools: [],
       requiredSubagents: [],
       source,
+      workflowRoute,
+      shouldUseClassifier,
+      hardBlock,
     });
   }
 
@@ -246,6 +359,9 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       requiredTools: [],
       requiredSubagents: [],
       source,
+      workflowRoute,
+      shouldUseClassifier,
+      hardBlock,
     });
   }
 
@@ -257,6 +373,9 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       requiredTools: ['omp_config_doctor', 'omp_config_assets', 'omp_config_plan'],
       requiredSubagents: subagentPlans.configAssets,
       source,
+      workflowRoute,
+      shouldUseClassifier,
+      hardBlock,
     });
   }
 
@@ -268,6 +387,9 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       requiredTools: [],
       requiredSubagents: subagentPlans.security,
       source,
+      workflowRoute,
+      shouldUseClassifier,
+      hardBlock,
     });
   }
 
@@ -279,6 +401,9 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       requiredTools: factCheckToolchain,
       requiredSubagents: subagentPlans.factCheck,
       source,
+      workflowRoute,
+      shouldUseClassifier,
+      hardBlock,
     });
   }
 
@@ -292,6 +417,9 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
         requiredSubagents: [],
         auditMode,
         source,
+        workflowRoute,
+        shouldUseClassifier,
+        hardBlock,
       });
     }
 
@@ -302,6 +430,9 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       requiredTools: testingEnhancerTools,
       requiredSubagents: subagentPlans.bugAudit,
       source,
+      workflowRoute,
+      shouldUseClassifier,
+      hardBlock,
     });
   }
 
@@ -313,6 +444,9 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       requiredTools: testingEnhancerTools,
       requiredSubagents: subagentPlans.implementation,
       source,
+      workflowRoute,
+      shouldUseClassifier,
+      hardBlock,
     });
   }
 
@@ -328,6 +462,9 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       requiredSubagents: complex ? subagentPlans.writingZh : [],
       writingComplexity: complex ? 'complex' : 'simple',
       source,
+      workflowRoute,
+      shouldUseClassifier,
+      hardBlock,
     });
   }
 
@@ -341,6 +478,9 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       requiredSubagents: complex ? subagentPlans.writingEn : [],
       writingComplexity: complex ? 'complex' : 'simple',
       source,
+      workflowRoute,
+      shouldUseClassifier,
+      hardBlock,
     });
   }
 
@@ -355,6 +495,9 @@ function route({
   requiredSubagents = [],
   writingComplexity = null,
   auditMode = null,
+  workflowRoute = null,
+  shouldUseClassifier = false,
+  hardBlock = false,
   source = 'natural-language',
 }) {
   const routed = {
@@ -367,7 +510,10 @@ function route({
   };
   if (writingComplexity) routed.writingComplexity = writingComplexity;
   if (auditMode) routed.auditMode = auditMode;
-  return routed;
+  const decorated = decorateWorkflowRoute(routed, { workflowRoute });
+  decorated.shouldUseClassifier = Boolean(shouldUseClassifier);
+  if (hardBlock) decorated.gateMode = 'hard-block';
+  return decorated;
 }
 
 function subagent(agent, duty, requiredSkills = [], options = {}) {
@@ -376,6 +522,92 @@ function subagent(agent, duty, requiredSkills = [], options = {}) {
     routed.modelRoles = options.modelRoles;
   }
   return routed;
+}
+
+function workflowRouteForPromptIntent(workflowRouteHint, intent) {
+  if (workflowRouteHint) {
+    if (intent === 'implementation-with-tests') return 'code.dev';
+    if (intent === 'bug-audit') return 'code.review';
+    if (intent === 'diagnosis') return 'code.debug';
+    if (intent === 'fact-check') return 'factcheck.document';
+    if (intent === 'security-review') return 'security.review';
+    if (intent === 'config-assets') return 'omp.plugin';
+    if (intent === 'writing.zh' || intent === 'writing.en') return workflowRouteHint;
+    if (intent === 'release') return 'agentic.simple';
+    if (intent === 'agentic.simple') return 'agentic.simple';
+    return workflowRouteHint;
+  }
+  return null;
+}
+
+function workflowRouteHintForPrompt(text, original) {
+  if (isWordDocumentRequest(text)) return 'doc.convert.word';
+  if (isLatexWritingRequest(text)) return 'writing.latex';
+  if (isMarkdownWritingRequest(text)) return 'writing.markdown';
+  if (isVisualDesignRequest(text, original)) return 'design.visual';
+  return null;
+}
+
+function shouldUseRouteClassifier(text, original, { workflowRouteHint = null, hasCodeChange = false, hasKnowledgeOnly = false, hasConfigAssets = false } = {}) {
+  if (workflowRouteHint || (hasConfigAssets && !hasCodeChange)) return false;
+  if (/(?:补测试|加测试|添加测试|add (?:regression )?tests?|with tests?|并补测试)/.test(text)) return false;
+  if (/请写一个|写一个|写个/.test(text) && /(?:看板|页面|模块|功能|组件|dashboard|landing|component)/i.test(original)) return true;
+  if (/优化.*(?:workflow|工作流|skills?|技能)|(?:workflow|工作流).*优化/.test(text) && !hasKnowledgeOnly) return true;
+  if (/\bcli\b|官方文档|docs?|documentation|用法|参数/.test(text) && !hasCodeChange) return true;
+  return false;
+}
+
+function isHardBlockRequest(text) {
+  if (/(?:运行|检查|核对|verify|check|run).*(?:plugin list|升级成功|安装是否升级)/.test(text)) return false;
+  return isIrreversibleFileRequest(text) || (isReleaseRequest(text) && !includesAny(text, noReleaseTerms));
+}
+
+function isIrreversibleFileRequest(text) {
+  return /(?:删除|清空|移除).*(?:整个|全部|所有|缓存|目录|文件)|(?:delete|remove|wipe|clear).*(?:entire|all|cache|directory|folder|files?)/.test(text);
+}
+
+function isWordDocumentRequest(text) {
+  return /\b(?:docx|word document|word doc|ms word)\b/.test(text)
+    || /(?:word|docx|word\s*文档).*(?:转换|生成|创建|读取|提取|目录|标题|表格|report|document)/.test(text)
+    || /(?:转换|生成|创建|读取|提取).*(?:word|docx|word\s*文档)/.test(text);
+}
+
+function isLatexWritingRequest(text) {
+  return /\b(?:latex|tex)\b/.test(text)
+    || /(?:latex|会议模板|期刊模板|模板).*(?:转换|套用|修复|编译|排版)/.test(text)
+    || /(?:转换|套用|修复|排版).*(?:latex|tex|会议模板|期刊模板)/.test(text);
+}
+
+function isMarkdownWritingRequest(text) {
+  return /\bmarkdown\b/.test(text)
+    || /(?:整理成|转换成|生成|改写成)\s*(?:markdown|md)\b/.test(text);
+}
+
+function isFactCheckDocumentRequest(text) {
+  return /(?:核验|核查|查证|事实核查|事实审查|事实检查|verify|fact.?check).*(?:引用|事实|数据|年份|claims?|citations?|source|evidence|证据)/i.test(text)
+    || /(?:引用|事实|数据|年份|claims?|citations?|source|evidence|证据).*(?:核验|核查|查证|verify|fact.?check|supports?)/i.test(text);
+}
+
+function isVisualDesignRequest(text, original) {
+  if (/[\u4e00-\u9fff]/.test(original)) {
+    return /(?:设计|美化|视觉|布局|色彩|海报|首屏|landing page|dashboard).*(?:漂亮|视觉|布局|色彩|层次|海报|首屏|cta|poster|design)/i.test(text);
+  }
+  return /\b(?:design|beautify|visual|poster|landing page|dashboard|layout|cta)\b.*\b(?:polished|visual|layout|poster|design|style|hierarchy)\b/i.test(original)
+    || /\b(?:polish|beautify|style|refine)\b.*\b(?:visually|visual|spacing|typography|color|hover states?|layout)\b/i.test(original);
+}
+
+function latexSkillsForPrompt(prompt) {
+  const text = String(prompt).toLowerCase();
+  if (/latex.*markdown|tex.*markdown|latex.*md/.test(text)) return ['format-latex2markdown'];
+  if (/template|会议模板|期刊模板/.test(text)) return ['format-template-latex'];
+  if (/markdown|md|转成\s*latex|转换.*latex/.test(text)) return ['format-markdown2latex'];
+  return ['format-markdown2latex'];
+}
+
+function visualDesignSkillsForPrompt(prompt) {
+  const text = String(prompt).toLowerCase();
+  if (/poster|海报/.test(text)) return ['canvas-design'];
+  return ['frontend-design'];
 }
 
 function isChineseWriting(normalized, original) {
@@ -487,6 +719,7 @@ function isBugAuditRequest(text) {
     || /(?:检查|审查|核对).*(?:openapi|openapi spec|schema\.graphql|schema|resolver).*(?:实现|resolver|一致|match|缺|问题|风险)/.test(text)
     || /(?:检查|审查|核对).*(?:docker-compose|docker compose|helm values|k8s|kubernetes|manifest|配置文件|yml|yaml).*(?:只报告|缺|一致|问题|风险|端口|volume|required)/.test(text)
     || /(?:检查|审查|核对).*(?:classifier|router|route|prompt|提示词).*(?:误路由|错误路由|错误|诱导|问题|风险)/.test(text)
+    || /(?:review|audit|inspect)\s+.*(?:pull request|pr|code paths?|maintainability|defects?|regressions?).*(?:do not edit|without editing|read-only|report)/.test(text)
     || /(?:bug|bugs|缺陷).*(?:审计|检查|报告|清单|定位)/.test(text);
 }
 
@@ -519,9 +752,9 @@ function isCodeChangeRequest(text) {
   return /(?:修改|修复|修正|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|gate|路由|提示词|页面|ui)/.test(withoutNegatedCodeWriting)
     || /(?:重构|优化|修改|修复|修正).*(?:逻辑|代码|模块|函数|router|route|workflow|工作流|门禁|gate|路由|fork|subagent|误判|运行失败|启动失败|warning|dev server)/.test(withoutNegatedCodeWriting)
     || /(?:只改|只修改|改动|修改).*(?:一行|一处|少量|代码|文件)/.test(withoutNegatedCodeWriting)
-    || /写.*(?:函数|代码|接口|功能|页面|模块|api|component|组件)/.test(withoutNegatedCodeWriting)
+    || /写.*(?:函数|代码|接口|功能|页面|模块|看板|dashboard|api|component|组件)/.test(withoutNegatedCodeWriting)
     || /(?:写|新增|添加|创建|生成).*(?:python|bash|node(?:\.js)?|shell|脚本).*(?:加入项目|写入项目|保存到|文件|仓库|代码库)/.test(withoutNegatedCodeWriting)
-    || /(?:实现|开发|创建|生成).*(?:函数|方法|接口|功能|api|component|组件|ui|页面|page|slides|html|路由|hook|流程)/.test(withoutNegatedCodeWriting)
+    || /(?:实现|开发|创建|生成).*(?:函数|方法|接口|功能|看板|dashboard|api|component|组件|ui|页面|page|slides|html|路由|hook|流程)/.test(withoutNegatedCodeWriting)
     || /(?:implement|build|develop|add|create)\s+.*(?:feature|fallback|handling|workflow|route|router|hook|logic)/.test(withoutNegatedCodeWriting)
     || /(?:fix|implement|update|modify|build)\s+.*(?:skill assignment|skill validation|governance prompt|prompt generation|task prompts?|final evidence|subagent skill)/.test(withoutNegatedCodeWriting)
     || /(?:fix|repair|resolve|update|modify)\s+.*(?:tool|workflow|gate|check|validator).*(?:failure|bug|error|regression)/.test(withoutNegatedCodeWriting)
@@ -671,7 +904,7 @@ function isReportOnlyAudit(text) {
 }
 
 function isChinesePromptForEnglishWriting(text) {
-  return /(?:改成|写成|整理成).*(?:英文|英语|english).*(?:简历|resume|bullet|邮件|email|摘要|abstract|段落|paragraph|commit message|changelog|release notes|bug report|defect report|post)/.test(text)
+  return /(?:改成|写成|写|整理成).*(?:英文|英语|english).*(?:简历|resume|bullet|邮件|email|摘要|abstract|段落|paragraph|commit message|changelog|release notes|bug report|defect report|post)/.test(text)
     || /(?:英文|英语|english).*(?:简历|resume|bullet|邮件|email|摘要|abstract|段落|paragraph|commit message|conventional commit|changelog|release notes|bug report|defect report|linkedin post|post)/.test(text);
 }
 
@@ -721,13 +954,22 @@ function isSecurityConceptQuestion(text) {
   ]);
 }
 
+function isSecurityConceptOnlyRequest(text) {
+  if (!isSecurityConceptQuestion(text)) return false;
+  const cleaned = text
+    .replace(/(?:先)?(?:不|不要|无需|不用)\s*(?:审查|检查|看|分析).*(?:项目代码|代码|配置|文件|仓库)/g, '')
+    .replace(/(?:do not|don't|without|no need to)\s+(?:review|check|audit|inspect|analyze).*(?:code|config|files?|repo)/g, '');
+  if (!/(?:是什么|是什么意思|解释|说明|define|explain|what is|what are)/.test(cleaned)) return false;
+  return !/(?:审查|检查|分析|audit|review|inspect|check|handler|api|代码|配置|文件|secret|auth|权限|风险)/.test(cleaned);
+}
+
 function unknownRoute(source = 'natural-language') {
-  return {
+  return decorateWorkflowRoute({
     intent: 'unknown',
     agent: null,
     requiredSkills: [],
     requiredTools: [],
     requiredSubagents: [],
     source,
-  };
+  }, { workflowRoute: 'agentic.simple' });
 }

@@ -210,8 +210,9 @@ test('records loop guard state and returns one recovery context', () => {
 
   const context = takeLoopRecoveryContext(state);
 
-  assert.match(context, /main-agent loop guard stopped/);
-  assert.match(context, /choose exactly one next action/);
+  assert.match(context, /^LOOP_BREAKER\nReason: Repeated sentence 3 times\./);
+  assert.match(context, /Do next: summarize current state and choose a different next action/);
+  assert.match(context, /Limit: 5 lines/);
   assert.equal(state.recoveryAttempts, 1);
   assert.equal(state.recoveryPending, false);
   assert.equal(takeLoopRecoveryContext(state), null);
@@ -242,5 +243,5 @@ test('formats recovery context with the stopped repeated text', () => {
 
   assert.match(context, /Repeated sentence 3 times/);
   assert.match(context, /I am repeating the same validation request/i);
-  assert.match(context, /Do not repeat the stopped sentence/);
+  assert.match(context, /Stop: do not call the same tool again or repeat the same sentence/);
 });

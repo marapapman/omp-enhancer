@@ -417,13 +417,13 @@ test('assistant output loop guard aborts repeated main-agent generation and prep
   assert.equal(blocked.abort, true);
   assert.equal(blocked.autoContinue, true);
   assert.match(blocked.reason, /loop guard/i);
-  assert.match(blocked.additionalContext, /main-agent loop guard stopped/);
-  assert.match(blocked.additionalContext, /Do not repeat the stopped sentence/);
+  assert.match(blocked.additionalContext, /^LOOP_BREAKER\nReason:/);
+  assert.match(blocked.additionalContext, /Do next: summarize current state and choose a different next action/);
   assert.equal(pi.messages.length, 1);
   assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.loop-guard-recovery');
   assert.equal(pi.messages[0].message.display, false);
   assert.equal(pi.messages[0].message.attribution, 'agent');
-  assert.match(pi.messages[0].message.content, /choose exactly one next action/);
+  assert.match(pi.messages[0].message.content, /Do next: summarize current state and choose a different next action/);
   assert.deepEqual(pi.messages[0].options, { deliverAs: 'followUp', triggerTurn: true });
 });
 
@@ -502,7 +502,7 @@ test('message_update loop guard aborts real OMP text delta streams', async () =>
   assert.match(blocked.reason, /loop guard/i);
   assert.equal(pi.messages.length, 1);
   assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.loop-guard-recovery');
-  assert.match(pi.messages[0].message.content, /choose exactly one next action/);
+  assert.match(pi.messages[0].message.content, /Do next: summarize current state and choose a different next action/);
   assert.deepEqual(pi.messages[0].options, { deliverAs: 'followUp', triggerTurn: true });
 
   await event(pi, 'turn_start')({}, ctx);
@@ -561,7 +561,7 @@ test('message_update loop guard detects repeated planning blocks across streamed
   assert.equal(blocked.autoContinue, true);
   assert.equal(pi.messages.length, 1);
   assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.loop-guard-recovery');
-  assert.match(pi.messages[0].message.content, /continue from the last non-repeated state/);
+  assert.match(pi.messages[0].message.content, /Do next: summarize current state and choose a different next action/);
 });
 
 test('session_stop loop guard gives one bounded recovery for repeated final output', async () => {
@@ -583,7 +583,7 @@ test('session_stop loop guard gives one bounded recovery for repeated final outp
   const first = await event(pi, 'session_stop')({ output: repeated }, ctx);
 
   assert.equal(first?.continue, true);
-  assert.match(first.additionalContext, /main-agent loop guard stopped/);
+  assert.match(first.additionalContext, /^LOOP_BREAKER\nReason:/);
 
   const second = await event(pi, 'session_stop')({ output: repeated }, ctx);
 
@@ -616,7 +616,7 @@ test('session_stop loop guard reads real OMP last assistant message payloads', a
   const first = await event(pi, 'session_stop')(stopEvent, ctx);
 
   assert.equal(first?.continue, true);
-  assert.match(first.additionalContext, /main-agent loop guard stopped/);
+  assert.match(first.additionalContext, /^LOOP_BREAKER\nReason:/);
 
   const second = await event(pi, 'session_stop')(stopEvent, ctx);
 
@@ -990,7 +990,7 @@ test('pre-work skill gate allows read and core validation before blocking remain
     ctx,
   );
 
-  assert.equal(partiallyBlocked?.block, true);
+  assert.equal(partiallyBlocked?.block, false);
   assert.doesNotMatch(partiallyBlocked.reason, /Missing skills: plain-chinese-writing/);
   assert.match(partiallyBlocked.reason, /zh-writing-polish/);
   assert.match(partiallyBlocked.reason, /zh-writing-checkers/);
@@ -1005,7 +1005,7 @@ test('pre-work skill gate allows read and core validation before blocking remain
   assert.equal(allowed, undefined);
 });
 
-test('pre-work skill gate blocks simple writing edits until writing skills are read', async () => {
+test('pre-work skill gate coaches simple writing edits until writing skills are read', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -1021,8 +1021,8 @@ test('pre-work skill gate blocks simple writing edits until writing skills are r
     ctx,
   );
 
-  assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /blocked edit/);
+  assert.equal(blocked?.block, false);
+  assert.match(blocked.reason, /^RECOVERY\nReason: missing_skill_read/);
   assert.match(blocked.reason, /plain-chinese-writing/);
   assert.match(blocked.reason, /zh-writing-polish/);
 
@@ -1052,12 +1052,10 @@ test('pre-work skill gate prioritizes skill-read recovery over Tiny smart gate',
     ctx,
   );
 
-  assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /Automatic recovery: read the missing skills now/);
-  assert.match(blocked.reason, /Do not call Tiny smart gate for ordinary missing skill reads/);
+  assert.equal(blocked?.block, false);
+  assert.match(blocked.reason, /^RECOVERY\nReason: missing_skill_read/);
   assert.match(blocked.reason, /read skill:\/\/plain-chinese-writing/);
   assert.match(blocked.reason, /read skill:\/\/zh-writing-polish/);
-  assert.doesNotMatch(blocked.reason, /Tiny smart-gate override/);
 
   const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
     'call-prework-smart-gate-prompt-not-open',
@@ -1153,8 +1151,8 @@ test('smart gate resolve requires a current pending gate before releasing tool g
     ctx,
   );
 
-  assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /Automatic recovery: read the missing skills now/);
+  assert.equal(blocked?.block, false);
+  assert.match(blocked.reason, /^RECOVERY\nReason: missing_skill_read/);
   assert.doesNotMatch(blocked.reason, /Rule gate key: writing\.zh:prework:edit/);
 });
 
@@ -1189,8 +1187,8 @@ test('focused bug audit preloads main-agent skills instead of blocking on subage
     ctx,
   );
 
-  assert.equal(blockedTool?.block, true);
-  assert.match(blockedTool.reason, /pre-work main-agent skill gate/);
+  assert.equal(blockedTool?.block, false);
+  assert.match(blockedTool.reason, /^RECOVERY\nReason: missing_skill_read/);
   assert.match(blockedTool.reason, /diagnose/);
   assert.match(blockedTool.reason, /search-first/);
 

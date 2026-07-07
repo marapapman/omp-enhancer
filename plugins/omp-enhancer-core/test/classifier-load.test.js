@@ -185,7 +185,7 @@ const deterministicAuditCases = [
   ['config template', '列出 omp-config 模板里包含哪些 modelRoles 和 hooks。', 'config-assets'],
   ['security code', "审查这段 Express 代码的安全风险：app.get('/file', (req, res) => res.sendFile(req.query.path));", 'security-review'],
   ['security config secret', '检查这个配置文件有没有 secret 泄漏和权限风险。', 'security-review'],
-  ['security explain', '解释一下 XSS 是什么。', 'security-review'],
+  ['security explain', '解释一下 XSS 是什么。', 'unknown'],
   ['testing only', '为 classifier 写高信号单元测试，覆盖 fallback 和边界。', 'bug-audit'],
   ['coverage only', '检查当前测试覆盖率，并指出缺口，不要改代码。', 'bug-audit'],
   ['test word', 'What does the word test mean in English?', 'unknown'],
