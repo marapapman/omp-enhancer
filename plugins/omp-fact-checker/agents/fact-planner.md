@@ -2,6 +2,9 @@
 name: fact-planner
 description: Decompose a fact-checking task into checkable claims, evidence plans, risk levels, and scope boundaries before evidence collection.
 tools: read, search, find
+model:
+  - pi/plan
+  - pi/slow
 thinkingLevel: high
 blocking: true
 ---

@@ -135,11 +135,11 @@ test('fact-check governance advertises plan, independent evidence, cross-check, 
       requiredSkills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
       requiredTools: ['fact_check_analyze', 'fact_check_evidence', 'fact_check_report', 'fact_check_gate'],
       requiredSubagents: [
-        { agent: 'fact-planner', duty: 'plan claims', requiredSkills: ['fact-checking', 'claim-extraction'] },
+        { agent: 'fact-planner', duty: 'plan claims', requiredSkills: ['fact-checking', 'claim-extraction'], modelRoles: ['pi/plan', 'pi/slow'] },
         { agent: 'fact-researcher-a', duty: 'lane A evidence', requiredSkills: ['fact-checking', 'source-evaluation', 'citation-authenticity'] },
         { agent: 'fact-researcher-b', duty: 'lane B evidence', requiredSkills: ['fact-checking', 'source-evaluation', 'citation-authenticity'] },
-        { agent: 'fact-cross-checker', duty: 'compare evidence lanes', requiredSkills: ['fact-checking', 'source-evaluation'] },
-        { agent: 'fact-reviewer', duty: 'review final verdicts', requiredSkills: ['fact-checking', 'source-evaluation', 'citation-authenticity'] },
+        { agent: 'fact-cross-checker', duty: 'compare evidence lanes', requiredSkills: ['fact-checking', 'source-evaluation'], modelRoles: ['pi/slow'] },
+        { agent: 'fact-reviewer', duty: 'review final verdicts', requiredSkills: ['fact-checking', 'source-evaluation', 'citation-authenticity'], modelRoles: ['pi/slow'] },
       ],
     },
   });
@@ -158,6 +158,10 @@ test('fact-check governance advertises plan, independent evidence, cross-check, 
   assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*fact-reviewer/);
   assert.match(fragment, /SUBAGENT_USAGE:\n- fact-planner: fact-checking, claim-extraction/);
   assert.match(fragment, /- fact-reviewer: fact-checking, source-evaluation, citation-authenticity/);
+  assert.match(fragment, /fact-planner: plan claims; skills: fact-checking, claim-extraction; model roles: pi\/plan, pi\/slow/);
+  assert.match(fragment, /OMP_MODEL_ROLE_HINT:\s*pi\/plan -> pi\/slow/);
+  assert.match(fragment, /fact-reviewer: review final verdicts; skills: fact-checking, source-evaluation, citation-authenticity; model roles: pi\/slow/);
+  assert.match(fragment, /does not expose the native task\/completion tool/i);
 });
 
 test('subagent contracts accept installed aliases while preserving canonical Required names', () => {

@@ -74,9 +74,9 @@ omp plugin install omp-enhancer-core@omp-enhancer omp-testing-enhancer@omp-enhan
 
 After installing `omp-enhancer-core`, describe the task naturally. The core plugin injects routing guidance and completion gates through runtime hooks.
 
-- The default runtime model is MiMo v2.5, the advisor is DeepSeek V4 Flash, and task subagents plus all other roles follow the user's active OMP config.
+- The default runtime model is MiMo v2.5, the advisor is DeepSeek V4 Flash, and task subagents plus all other roles follow the user's active OMP config unless a route names an explicit model role. Fact-check planning uses `pi/plan` with `pi/slow` fallback, and fact-check cross-check/review use `pi/slow`.
 - The core runtime includes a main-agent loop guard for MiMo v2.5: repeated sentence or phrase generation is stopped when the host exposes assistant output events, with a one-shot recovery context as a fallback at `session_stop`.
-- Ambiguous routing can use `modelRoles.classifier`, which the packaged `omp-config` template defaults to `opencode-go/deepseek-v4-flash:medium`. Use `/classifier set <provider/model:effort>` or change that config role to try another classifier model.
+- Ambiguous routing can use OMP Tiny, `modelRoles.tiny`, which the packaged `omp-config` template defaults to `opencode-go/deepseek-v4-flash:medium`. Do not create a separate classifier role.
 - Coding tasks use lightweight TDD guidance, fork plan/task/reviewer subagents, pass role-specific skill lists to each subagent, and require testing evidence.
 - Security review tasks fork ecc-security-reviewer plus reviewer.
 - Writing tasks route to writer/checker or zh-writer/zh-checker subagents, require writing skills, and require writing QA evidence.
@@ -90,28 +90,17 @@ Slash commands remain compatibility helpers for older workflows. The new workflo
 
 The first classifier iteration is intentionally schema-first. `omp-enhancer-core` exposes:
 
-- `omp_core_classifier_prompt`: builds the strict JSON prompt and schema for the model configured as `modelRoles.classifier`.
+- `omp_core_classifier_prompt`: builds the strict JSON prompt and schema for OMP Tiny, `modelRoles.tiny`.
 - `omp_core_resolve_classification`: validates classifier JSON, maps it through the route whitelist, and then sets the normal routed workflow state.
 
 Configure the model in OMP config:
 
 ```yaml
 modelRoles:
-  classifier: opencode-go/deepseek-v4-flash:medium
-modelTags:
-  classifier:
-    name: Classifier
-    color: accent
+  tiny: opencode-go/deepseek-v4-flash:medium
 ```
 
-Or use the slash command:
-
-```text
-/classifier
-/classifier set opencode-go/deepseek-v4-flash:medium
-```
-
-`/model` changes the active session model. `modelRoles.classifier` controls the classifier role used by OMP Enhancer routing; `modelTags.classifier` gives that custom role a visible name in OMP builds that list configured roles.
+`/model` changes the active session model. Classifier preflight should dispatch through `modelRoles.tiny`; do not create or maintain a classifier-specific model role.
 
 The classifier may choose only an intent and risk flags. It cannot invent skills, tools, subagents, or gate formats; those still come from the core route catalog.
 

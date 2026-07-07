@@ -91,11 +91,26 @@ const subagentPlans = {
     subagent('ecc-pr-test-analyzer', 'review generated test execution, duplicate removal, and coverage gaps that affect bug confidence', ['verification-before-completion']),
   ],
   factCheck: [
-    subagent('fact-planner', 'decompose source text into atomic factual claims and evidence plans', ['fact-checking', 'claim-extraction']),
+    subagent(
+      'fact-planner',
+      'decompose source text into atomic factual claims and evidence plans',
+      ['fact-checking', 'claim-extraction'],
+      { modelRoles: ['pi/plan', 'pi/slow'] },
+    ),
     subagent('fact-researcher-a', 'collect first-lane primary-source evidence for planned claims', ['fact-checking', 'source-evaluation', 'citation-authenticity']),
     subagent('fact-researcher-b', 'independently collect counter-evidence, stale-version checks, and corroboration', ['fact-checking', 'source-evaluation', 'citation-authenticity']),
-    subagent('fact-cross-checker', 'compare independent evidence lanes and classify agreement, conflict, staleness, and insufficiency', ['fact-checking', 'source-evaluation']),
-    subagent('fact-reviewer', 'review final verdicts for overclaiming, stale evidence, and unsupported conclusions', ['fact-checking', 'source-evaluation', 'citation-authenticity']),
+    subagent(
+      'fact-cross-checker',
+      'compare independent evidence lanes and classify agreement, conflict, staleness, and insufficiency',
+      ['fact-checking', 'source-evaluation'],
+      { modelRoles: ['pi/slow'] },
+    ),
+    subagent(
+      'fact-reviewer',
+      'review final verdicts for overclaiming, stale evidence, and unsupported conclusions',
+      ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+      { modelRoles: ['pi/slow'] },
+    ),
   ],
   writingZh: [
     subagent('zh-writer', 'draft or rewrite Chinese text after required writing skills are loaded', ['plain-chinese-writing', 'zh-writing-polish']),
@@ -355,8 +370,12 @@ function route({
   return routed;
 }
 
-function subagent(agent, duty, requiredSkills = []) {
-  return { agent, duty, requiredSkills };
+function subagent(agent, duty, requiredSkills = [], options = {}) {
+  const routed = { agent, duty, requiredSkills };
+  if (Array.isArray(options.modelRoles) && options.modelRoles.length) {
+    routed.modelRoles = options.modelRoles;
+  }
+  return routed;
 }
 
 function isChineseWriting(normalized, original) {

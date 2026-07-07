@@ -13,6 +13,7 @@ const pluginFixtures = [
   { directory: 'omp-config', name: 'omp-config', version: '0.1.0' },
   { directory: 'writing-helper', name: 'writing-helper', version: '0.2.1', ref: 'v0.2.1' },
   { directory: 'omp-test-enhancer', name: 'omp-testing-enhancer', version: '0.1.3', ref: 'v0.1.3' },
+  { directory: 'omp-fact-checker', name: 'omp-fact-checker', version: '0.1.0' },
   { directory: 'omp-enhancer-core', name: 'omp-enhancer-core', version: '0.1.0' },
 ];
 
@@ -181,6 +182,7 @@ test('--plugin all --bump patch bumps every plugin package, every catalog entry,
       ['omp-config', { directory: 'omp-config', version: '0.1.1' }],
       ['writing-helper', { directory: 'writing-helper', version: '0.2.2' }],
       ['omp-testing-enhancer', { directory: 'omp-test-enhancer', version: '0.1.4' }],
+      ['omp-fact-checker', { directory: 'omp-fact-checker', version: '0.1.1' }],
       ['omp-enhancer-core', { directory: 'omp-enhancer-core', version: '0.1.1' }],
     ]);
 

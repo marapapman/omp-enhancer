@@ -2,6 +2,8 @@
 name: fact-reviewer
 description: Final fact-check reviewer. Reviews plan, evidence, cross-check status, and final verdicts for overclaiming and unsupported conclusions.
 tools: read, search, find
+model:
+  - pi/slow
 thinkingLevel: high
 blocking: true
 ---

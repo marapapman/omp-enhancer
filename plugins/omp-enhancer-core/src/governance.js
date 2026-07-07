@@ -414,7 +414,7 @@ function subagentWorkflowLines(route, { parentTask = '', includeModelWorkflowHin
     '### Mandatory Subagent Workflow',
     '',
     ...(includeModelWorkflowHints ? [
-      'Runtime model policy: the main/default agent uses MiMo v2.5; the advisor uses DeepSeek V4 Flash. Keep task subagents and all other model roles on the active OMP configuration unless the user explicitly overrides them.',
+      'Runtime model policy: the main/default agent uses MiMo v2.5; the advisor uses DeepSeek V4 Flash. Keep task subagents and all other model roles on the active OMP configuration unless this route names explicit subagent model roles or the user explicitly overrides them.',
       '',
       'Classifier model policy: ambiguous routing uses OMP Tiny (`modelRoles.tiny`) instead of a separate classifier role. A valid, high-confidence classifier route that resolves through the OMP route whitelist supersedes the deterministic rule route before assigning skills, tools, or subagents.',
       '',
@@ -443,12 +443,13 @@ function subagentWorkflowLines(route, { parentTask = '', includeModelWorkflowHin
   return [
     ...common,
     'Use a subagent-driven workflow for routed work. Before doing non-trivial implementation, testing, writing, security, or config work yourself, fork the listed roles with the OMP task tool so OMP can render native subagent TUI status lines. Call task once per distinct agent role; if several items share one agent, use the batch task shape.',
+    'If this environment does not expose the native task/completion tool, do not loop on unavailable tooling. Complete the assigned checkpoints directly, then close the gate with a complete SUBAGENT_USAGE block and each required SUBAGENT_RESULT evidence block.',
     '',
     'When calling task, set each task item `role` or `agent` to the exact required subagent name, such as `writer`, `checker`, `zh-writer`, or `zh-checker`. Do not use generic `task` as the only role for required subagents.',
     '',
     'Give every task item a short `description` or first assignment line that names the subagent duty; this is the text OMP can show after the subagent name in its native status display. Keep it specific and under 100 characters.',
     '',
-    'When forking each subagent, include that subagent-specific skill list in the task prompt. Tell the subagent to read the listed skill URI for each required skill before acting and to report which skills it loaded.',
+    'When forking each subagent, include that subagent-specific skill list and any listed model role hints in the task prompt. Tell the subagent to read the listed skill URI for each required skill before acting and to report which skills it loaded.',
     '',
     'Required subagents:',
     formatSubagents(requiredSubagents),
@@ -479,7 +480,8 @@ function formatSubagents(values = []) {
   return values.map((value) => {
     if (typeof value === 'string') return `- ${value}`;
     const skills = value.requiredSkills?.length ? value.requiredSkills.join(', ') : 'none';
-    return `- ${value.agent}: ${value.duty}; skills: ${skills}`;
+    const modelRoles = value.modelRoles?.length ? `; model roles: ${value.modelRoles.join(', ')}` : '';
+    return `- ${value.agent}: ${value.duty}; skills: ${skills}${modelRoles}`;
   }).join('\n');
 }
 
@@ -489,15 +491,20 @@ function formatPreforkSubagentContracts(values = [], { parentTask = '', route = 
   const parentTaskLine = formatParentTaskLine(parentTask);
   const workflowBriefing = formatWorkflowGateBriefingForAssignment(route);
 
-  return subagents.map(({ agent, requiredSkills }) => [
+  return subagents.map(({ agent, requiredSkills, modelRoles }) => [
     `Subagent: ${agent}`,
     'Task item fields:',
     `- role: ${agent}`,
     `- agent: ${agent}`,
     '- description: short duty text for OMP native subagent status',
+    ...(modelRoles.length ? [`- model role hint: ${modelRoles.join(' -> ')}`] : []),
     'Assignment must start with:',
     `OMP_REQUIRED_SUBAGENT: ${agent}`,
     parentTaskLine,
+    ...(modelRoles.length ? [
+      `OMP_MODEL_ROLE_HINT: ${modelRoles.join(' -> ')}`,
+      'Use the first available listed OMP model role for this subagent; do not silently downgrade to the generic task role unless those roles are unavailable.',
+    ] : []),
     ...(workflowBriefing ? [workflowBriefing] : []),
     'Required skills for this subagent:',
     formatList(requiredSkills),
@@ -548,10 +555,11 @@ function formatSubagentUsageBlock(values = []) {
 
 function normalizeSubagentValues(values = []) {
   return values.map((value) => {
-    if (typeof value === 'string') return { agent: value, requiredSkills: [] };
+    if (typeof value === 'string') return { agent: value, requiredSkills: [], modelRoles: [] };
     return {
       agent: value?.agent,
       requiredSkills: Array.isArray(value?.requiredSkills) ? value.requiredSkills : [],
+      modelRoles: Array.isArray(value?.modelRoles) ? value.modelRoles : [],
     };
   }).filter(({ agent }) => agent);
 }

@@ -749,6 +749,32 @@ test('required route subagents are packaged by owning workflow plugins', async (
   }
 });
 
+test('fact-check route pins planning and review checkpoints to higher-capability model roles', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '帮我事实核查这段文字里的数据、年份和引用真实性。',
+  });
+  const byAgent = new Map(route.requiredSubagents.map((item) => [item.agent, item]));
+
+  assert.deepEqual(byAgent.get('fact-planner')?.modelRoles, ['pi/plan', 'pi/slow']);
+  assert.deepEqual(byAgent.get('fact-cross-checker')?.modelRoles, ['pi/slow']);
+  assert.deepEqual(byAgent.get('fact-reviewer')?.modelRoles, ['pi/slow']);
+  assert.equal(byAgent.get('fact-researcher-a')?.modelRoles, undefined);
+  assert.equal(byAgent.get('fact-researcher-b')?.modelRoles, undefined);
+});
+
+test('packaged fact-check agents declare the model roles used by routing', async () => {
+  const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+  const agentsRoot = path.join(repoRoot, 'plugins', 'omp-fact-checker', 'agents');
+
+  const planner = await readFile(path.join(agentsRoot, 'fact-planner.md'), 'utf8');
+  const crossChecker = await readFile(path.join(agentsRoot, 'fact-cross-checker.md'), 'utf8');
+  const reviewer = await readFile(path.join(agentsRoot, 'fact-reviewer.md'), 'utf8');
+
+  assert.match(planner, /model:\s*\n\s*-\s*pi\/plan\s*\n\s*-\s*pi\/slow/);
+  assert.match(crossChecker, /model:\s*\n\s*-\s*pi\/slow/);
+  assert.match(reviewer, /model:\s*\n\s*-\s*pi\/slow/);
+});
+
 test('subagent providers match the configured workflow ownership', async () => {
   const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const ownerAgents = {

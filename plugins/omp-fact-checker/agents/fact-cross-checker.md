@@ -2,6 +2,8 @@
 name: fact-cross-checker
 description: Compare independent fact-check evidence lanes and identify agreement, conflicts, stale evidence, and unresolved claims.
 tools: read, search, find
+model:
+  - pi/slow
 thinkingLevel: high
 blocking: true
 ---

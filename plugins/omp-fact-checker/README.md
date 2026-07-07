@@ -23,3 +23,9 @@ The workflow is designed for low user interruption:
 - `fact-researcher-b`
 - `fact-cross-checker`
 - `fact-reviewer`
+
+Model policy:
+
+- `fact-planner` declares `pi/plan` then `pi/slow` so claim decomposition is not forced onto the generic task model.
+- `fact-cross-checker` and `fact-reviewer` declare `pi/slow` for high-signal review of evidence conflicts and final verdicts.
+- `fact-researcher-a` and `fact-researcher-b` stay on the active task/default subagent model for evidence collection.

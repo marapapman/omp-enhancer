@@ -1757,12 +1757,16 @@ function taskSubagentSkillBlock(state, kind, lines) {
   };
 }
 
-function formatSubagentSkillAssignmentStep({ agent, requiredSkills = [] }, { parentTask = '', route = null } = {}) {
+function formatSubagentSkillAssignmentStep({ agent, requiredSkills = [], modelRoles = [] }, { parentTask = '', route = null } = {}) {
   const workflowBriefing = formatWorkflowGateBriefingForAssignment(route);
   return [
     `- ${agent}:`,
     `  OMP_REQUIRED_SUBAGENT: ${agent}`,
     `  OMP_PARENT_TASK: ${formatParentTaskForAssignment(parentTask)}`,
+    ...(modelRoles.length ? [
+      `  OMP_MODEL_ROLE_HINT: ${modelRoles.join(' -> ')}`,
+      '  Use the first available listed OMP model role for this subagent; do not silently downgrade to the generic task role unless those roles are unavailable.',
+    ] : []),
     ...(workflowBriefing ? indentLines(workflowBriefing, '  ') : []),
     '  Required skills for this subagent:',
     ...(requiredSkills.length ? requiredSkills.map((skill) => `  - ${skill}`) : ['  - none']),
@@ -2118,6 +2122,7 @@ function buildMissingSubagentUsageContext(state) {
   return [
     'OMP Enhancer Core subagent gate is still open.',
     'Fork the required roles with the OMP task tool before doing or finishing routed work so OMP can render native subagent status lines, and include each role-specific skill list in the task prompt.',
+    'If the native task/completion tool is unavailable in this environment, do not keep retrying unavailable tooling; finish the role checkpoints directly and close with complete SUBAGENT_USAGE plus SUBAGENT_RESULT evidence blocks.',
     `Required subagents: ${formatRequiredSubagents(requiredSubagents)}.`,
     pending.length ? `Pending subagent task results: ${formatPendingSubagents(pending)}.` : null,
     stuck.length ? `Potentially stuck subagent tasks: ${formatPendingSubagents(stuck)}. Do not wait indefinitely; retry those task calls with smaller assignments or report BLOCKERS if they keep failing.` : null,
@@ -3080,16 +3085,20 @@ function subagentNames(subagents = []) {
 
 function subagentRequirements(subagents = []) {
   return subagents.map((value) => {
-    if (typeof value === 'string') return { agent: value, requiredSkills: [] };
+    if (typeof value === 'string') return { agent: value, requiredSkills: [], modelRoles: [] };
     return {
       agent: value?.agent,
       requiredSkills: Array.isArray(value?.requiredSkills) ? value.requiredSkills : [],
+      modelRoles: Array.isArray(value?.modelRoles) ? value.modelRoles : [],
     };
   }).filter(({ agent }) => agent);
 }
 
 function formatRequiredSubagents(subagents) {
-  return subagents.map(({ agent, requiredSkills }) => `${agent} [${requiredSkills.join(', ') || 'none'}]`).join('; ');
+  return subagents.map(({ agent, requiredSkills, modelRoles = [] }) => {
+    const roles = modelRoles.length ? `; models: ${modelRoles.join(' -> ')}` : '';
+    return `${agent} [${requiredSkills.join(', ') || 'none'}${roles}]`;
+  }).join('; ');
 }
 
 function formatMissingSkillAssignments(assignments) {

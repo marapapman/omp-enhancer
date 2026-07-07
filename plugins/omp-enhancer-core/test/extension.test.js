@@ -3817,6 +3817,23 @@ test('non-gated diagnosis release and unknown routes do not create repeated gate
   }
 });
 
+test('subagent gate fallback names final evidence path when native task tool is unavailable', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt: '帮我事实核查这段文字里的数据、年份和引用真实性。' }, ctx);
+
+  const result = await event(pi, 'session_stop')({}, ctx);
+
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /native task\/completion tool is unavailable/i);
+  assert.match(result.additionalContext, /complete SUBAGENT_USAGE plus SUBAGENT_RESULT/i);
+  assert.match(result.additionalContext, /fact-planner/);
+  assert.match(result.additionalContext, /fact-reviewer/);
+});
+
 function tool(pi, name) {
   const found = pi.tools.get(name);
   if (!found) throw new Error(`Missing tool ${name}`);
