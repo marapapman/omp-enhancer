@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { chromium, type Locator, type Page } from 'playwright'
 import { comparePng } from './imageDiff.js'
+import { isRecord } from '../utils.js'
 import type { BrowserArtifactRefs, BrowserEvidence, BrowserFinding, BrowserLocatorSpec, BrowserPlanStep, BrowserVisualCheck } from '../types.js'
 import type { ExtensionToolContext } from '../ompApi.js'
 
@@ -374,6 +375,3 @@ function buildEvidence(params: BrowserCheckParams, runId: string, headless: bool
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

@@ -12,6 +12,7 @@ import {
 } from './session/testingState.js'
 import { createTestingEnhancerTools } from './tools/testingTools.js'
 import type { AnalyzeOutput, GateOutput, ReportOutput } from './tools/testingTools.js'
+import { isRecord } from './utils.js'
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionToolContext } from './ompApi.js'
 
 let currentState: TestingEnhancerState = createInitialTestingState()
@@ -181,6 +182,3 @@ function buildAgentInstruction(mode: Exclude<TestCommandMode, { kind: 'help' } |
   ].join('\n')
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

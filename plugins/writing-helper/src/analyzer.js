@@ -49,10 +49,6 @@ function hasAny(value, words) {
   return words.some((word) => lower.includes(word.toLowerCase()));
 }
 
-function makeIssue(input) {
-  return input;
-}
-
 function strongConclusionIssues(text, language) {
   const issues = [];
   const strongWords = language === 'zh' ? ZH_STRONG_WORDS : EN_STRONG_WORDS;
@@ -65,23 +61,21 @@ function strongConclusionIssues(text, language) {
     /* node:coverage ignore next */
     if (hasAny(localWindow, SCOPE_WORDS) && !hasUniversal) continue;
 
-    issues.push(
-      makeIssue({
-        id: `evidence-${issues.length + 1}`,
-        severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
-        dimension: 'evidence',
-        location: locationFor(text, sentence.index, language),
-        quote: sentence.sentence,
-        problem:
-          language === 'zh'
-            ? '结论使用了过强表述，但局部文本没有给出足够范围或证据。'
-            : 'The claim uses strong wording without enough local scope or evidence.',
-        suggestion:
-          language === 'zh'
-            ? '收窄结论范围，或补充能够支撑该强结论的证据。'
-            : 'Narrow the claim or add evidence that supports the strong conclusion.',
-      }),
-    );
+    issues.push({
+      id: `evidence-${issues.length + 1}`,
+      severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
+      dimension: 'evidence',
+      location: locationFor(text, sentence.index, language),
+      quote: sentence.sentence,
+      problem:
+        language === 'zh'
+          ? '结论使用了过强表述，但局部文本没有给出足够范围或证据。'
+          : 'The claim uses strong wording without enough local scope or evidence.',
+      suggestion:
+        language === 'zh'
+          ? '收窄结论范围，或补充能够支撑该强结论的证据。'
+          : 'Narrow the claim or add evidence that supports the strong conclusion.',
+    });
   }
 
   return issues;
@@ -98,24 +92,22 @@ function dataConsistencyIssues(text, language) {
     if (uniqueValues.size <= 1) continue;
 
     const first = values[0];
-    issues.push(
-      makeIssue({
-        id: `data-${issues.length + 1}`,
-        severity: language === 'zh' ? 'FATAL' : 'CRITICAL',
-        dimension: 'data',
-        /* node:coverage ignore next */
-        location: locationFor(text, first?.index ?? 0, language),
-        quote: values.map((match) => match[0]).join('；'),
-        problem:
-          language === 'zh'
-            ? `同一指标“${label}”出现了不一致的数值。`
-            : `The same metric "${label}" appears with inconsistent values.`,
-        suggestion:
-          language === 'zh'
-            ? '核对正文、表格和实验记录，统一该指标的数值。'
-            : 'Check the text, tables, and experiment records, then use one consistent value.',
-      }),
-    );
+    issues.push({
+      id: `data-${issues.length + 1}`,
+      severity: language === 'zh' ? 'FATAL' : 'CRITICAL',
+      dimension: 'data',
+      /* node:coverage ignore next */
+      location: locationFor(text, first?.index ?? 0, language),
+      quote: values.map((match) => match[0]).join('；'),
+      problem:
+        language === 'zh'
+          ? `同一指标“${label}”出现了不一致的数值。`
+          : `The same metric "${label}" appears with inconsistent values.`,
+      suggestion:
+        language === 'zh'
+          ? '核对正文、表格和实验记录，统一该指标的数值。'
+          : 'Check the text, tables, and experiment records, then use one consistent value.',
+    });
   }
 
   return issues;
@@ -135,23 +127,21 @@ function terminologyIssues(text, language) {
     if (text.includes(`${left}（${right}）`) || text.includes(`${right}（${left}）`)) continue;
 
     const index = Math.max(0, text.indexOf(right));
-    issues.push(
-      makeIssue({
-        id: `terminology-${issues.length + 1}`,
-        severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
-        dimension: 'terminology',
-        location: locationFor(text, index, language),
-        quote: text.slice(index, Math.min(text.length, index + 80)),
-        problem:
-          language === 'zh'
-            ? `文档同时使用“${left}”和“${right}”，但没有说明二者是否为同一概念。`
-            : `The document uses both "${left}" and "${right}" without defining their relationship.`,
-        suggestion:
-          language === 'zh'
-            ? '首次出现时给出统一术语和缩写关系，后文保持一致。'
-            : 'Define the term and abbreviation on first use, then keep usage consistent.',
-      }),
-    );
+    issues.push({
+      id: `terminology-${issues.length + 1}`,
+      severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
+      dimension: 'terminology',
+      location: locationFor(text, index, language),
+      quote: text.slice(index, Math.min(text.length, index + 80)),
+      problem:
+        language === 'zh'
+          ? `文档同时使用“${left}”和“${right}”，但没有说明二者是否为同一概念。`
+          : `The document uses both "${left}" and "${right}" without defining their relationship.`,
+      suggestion:
+        language === 'zh'
+          ? '首次出现时给出统一术语和缩写关系，后文保持一致。'
+          : 'Define the term and abbreviation on first use, then keep usage consistent.',
+    });
   }
 
   return issues;
@@ -162,23 +152,21 @@ function contributionMismatchIssues(text, language) {
   const hasEvidenceSection = /实验|评估|案例|结果|消融|experiment|evaluation|case study|result|ablation/iu.test(text);
   if (!hasContribution || hasEvidenceSection) return [];
 
-  return [
-    makeIssue({
-      id: 'structure-1',
-      severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
-      dimension: 'structure',
-      location: language === 'zh' ? '全文' : 'whole document',
-      quote: language === 'zh' ? '本文提出' : 'we propose',
-      problem:
-        language === 'zh'
-          ? '文档提出了贡献或方法，但没有可见的实验、评估、案例或结果支撑。'
-          : 'The document makes a contribution or proposal claim without visible experiment, evaluation, case, or result support.',
-      suggestion:
-        language === 'zh'
-          ? '补充验证部分，或把贡献表述改成当前文档实际支持的范围。'
-          : 'Add a validation section or narrow the contribution to what the document supports.',
-    }),
-  ];
+  return [{
+    id: 'structure-1',
+    severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
+    dimension: 'structure',
+    location: language === 'zh' ? '全文' : 'whole document',
+    quote: language === 'zh' ? '本文提出' : 'we propose',
+    problem:
+      language === 'zh'
+        ? '文档提出了贡献或方法，但没有可见的实验、评估、案例或结果支撑。'
+        : 'The document makes a contribution or proposal claim without visible experiment, evaluation, case, or result support.',
+    suggestion:
+      language === 'zh'
+        ? '补充验证部分，或把贡献表述改成当前文档实际支持的范围。'
+        : 'Add a validation section or narrow the contribution to what the document supports.',
+  }];
 }
 
 function causalLeapIssues(text, language) {
@@ -194,24 +182,22 @@ function causalLeapIssues(text, language) {
     if (!hasAny(sentence.sentence, strongWords)) continue;
     if (hasAny(sentence.sentence, evidenceMarkers)) continue;
 
-    issues.push(
-      makeIssue({
-        id: `logic-${issues.length + 1}`,
-        /* node:coverage ignore next */
-        severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
-        dimension: 'logic',
-        location: locationFor(text, sentence.index, language),
-        quote: sentence.sentence,
-        problem:
-          language === 'zh'
-            ? '句子用结论连接词推出强结论，但没有在本句给出支撑依据。'
-            : 'The sentence uses a conclusion marker to make a strong claim without local support.',
-        suggestion:
-          language === 'zh'
-            ? '补充推理依据，或把强结论改为更谨慎的表述。'
-            : 'Add reasoning support or make the conclusion more cautious.',
-      }),
-    );
+    issues.push({
+      id: `logic-${issues.length + 1}`,
+      /* node:coverage ignore next */
+      severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
+      dimension: 'logic',
+      location: locationFor(text, sentence.index, language),
+      quote: sentence.sentence,
+      problem:
+        language === 'zh'
+          ? '句子用结论连接词推出强结论，但没有在本句给出支撑依据。'
+          : 'The sentence uses a conclusion marker to make a strong claim without local support.',
+      suggestion:
+        language === 'zh'
+          ? '补充推理依据，或把强结论改为更谨慎的表述。'
+          : 'Add reasoning support or make the conclusion more cautious.',
+    });
   }
 
   return issues;

@@ -5,6 +5,7 @@ import { evaluateTestCommandGate, type TestCommandResult } from '../gates/testCo
 import { evaluateTestFileScopeGate } from '../gates/testFileScopeGate.js'
 import { readTestingEnhancerConfig, type TestingEnhancerConfig } from '../config/testingConfig.js'
 import { findPublicEntryHints, findRelatedTests, readRepoFiles } from '../repo/repoScanner.js'
+import { isRecord } from '../utils.js'
 import type { BrowserCheckParams } from './browserCheck.js'
 import type { AgentToolResult, ExtensionToolContext, ToolDefinition } from '../ompApi.js'
 import type { ApiPlan, BrowserEvidence, BrowserFinding, BrowserPlan, CandidateFileChange, CandidateTest, ChangedTarget, CoverageAnalysis, CoverageGap, GateResult, MutationAnalysis, MutationSurvivor, PropertyPlan, RiskLevel, TargetKind } from '../types.js'
@@ -1467,10 +1468,3 @@ function fallbackCandidate(): CandidateTest {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== 'object') return false
-  if (value === null) return false
-  if (Array.isArray(value)) return false
-
-  return true
-}

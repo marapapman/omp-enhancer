@@ -1,3 +1,4 @@
+import { isRecord } from '../utils.js';
 export const TESTING_STATE_ENTRY = 'omp-testing-enhancer.state';
 export function createInitialTestingState() {
     return {
@@ -135,7 +136,4 @@ function isGateName(value) {
         value === 'test-command' ||
         value === 'browser-interaction' ||
         value === 'browser-visual';
-}
-function isRecord(value) {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

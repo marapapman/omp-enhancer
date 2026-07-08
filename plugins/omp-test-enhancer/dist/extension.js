@@ -3,6 +3,7 @@ import { defaultTestingEnhancerConfig, readTestingEnhancerConfig, writeTestingEn
 import { detectPackageManager } from './repo/repoScanner.js';
 import { TESTING_STATE_ENTRY, createInitialTestingState, markGateFinished, markGatePending, markReportGenerated, restoreTestingStateFromEntries } from './session/testingState.js';
 import { createTestingEnhancerTools } from './tools/testingTools.js';
+import { isRecord } from './utils.js';
 let currentState = createInitialTestingState();
 let currentPi;
 export function registerTestingEnhancer(pi) {
@@ -147,7 +148,4 @@ function buildAgentInstruction(mode) {
         '门禁通过后调用 omp_test_report 生成简短报告。',
         '必须使用这些工具：omp_test_analyze、omp_test_context、omp_test_gate、omp_test_report。按需使用 omp_test_browser_check、omp_test_coverage_analyze、omp_test_mutation_context。'
     ].join('\n');
-}
-function isRecord(value) {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

@@ -5,6 +5,7 @@ import { evaluateTestCommandGate } from '../gates/testCommandGate.js';
 import { evaluateTestFileScopeGate } from '../gates/testFileScopeGate.js';
 import { readTestingEnhancerConfig } from '../config/testingConfig.js';
 import { findPublicEntryHints, findRelatedTests, readRepoFiles } from '../repo/repoScanner.js';
+import { isRecord } from '../utils.js';
 const PROPERTY_TARGET_KINDS = ['pure-function', 'validator', 'parser', 'formatter'];
 const PROPERTY_EXPERIENCE_PATHS = [
     '.omp/testing-enhancer/property-examples.json',
@@ -1306,13 +1307,4 @@ function fallbackCandidate() {
         targetId: 'target',
         files: []
     };
-}
-function isRecord(value) {
-    if (typeof value !== 'object')
-        return false;
-    if (value === null)
-        return false;
-    if (Array.isArray(value))
-        return false;
-    return true;
 }

@@ -488,6 +488,8 @@ function subagentWorkflowLines(route, { parentTask = '', includeModelWorkflowHin
     '',
     'When calling task, set each task item `role` or `agent` to the exact required subagent name, such as `writer`, `checker`, `zh-writer`, or `zh-checker`. Do not use generic `task` as the only role for required subagents.',
     '',
+    'Do not read `agent://<agent-name>` to inspect or launch a required agent. `agent://` names completed subagent outputs, not callable agent types. Use the task tool to launch required agent types, then read `agent://<task-id>` only after that subagent has returned output.',
+    '',
     'Give every task item a short `description` or first assignment line that names the subagent duty; this is the text OMP can show after the subagent name in its native status display. Keep it specific and under 100 characters.',
     '',
     'When forking each subagent, include that subagent-specific skill list and any listed model role hints in the task prompt. Tell the subagent to read the listed skill URI for each required skill before acting and to report which skills it loaded.',

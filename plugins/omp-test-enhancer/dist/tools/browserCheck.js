@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
 import { comparePng } from './imageDiff.js';
+import { isRecord } from '../utils.js';
 export async function executeBrowserCheck(params, ctx) {
     const cwd = typeof ctx.cwd === 'string' && ctx.cwd.trim() !== '' ? ctx.cwd : process.cwd();
     const runId = `browser-${Date.now().toString(36)}`;
@@ -361,7 +362,4 @@ function buildEvidence(params, runId, headless, viewport, findings, artifacts) {
         findings,
         ...(artifacts && Object.keys(artifacts).length > 0 ? { artifacts } : {})
     };
-}
-function isRecord(value) {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

@@ -1,4 +1,5 @@
 import type { ChangedTarget, GateResult } from '../types.js'
+import { isRecord } from '../utils.js'
 
 export const TESTING_STATE_ENTRY = 'omp-testing-enhancer.state'
 
@@ -146,6 +147,3 @@ function isGateName(value: unknown): value is GateResult['gate'] {
     value === 'browser-visual'
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

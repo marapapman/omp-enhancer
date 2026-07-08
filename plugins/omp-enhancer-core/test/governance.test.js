@@ -39,6 +39,8 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /zh-writer:\s*draft Chinese text; skills: plain-chinese-writing, zh-writing-polish/);
   assert.match(fragment, /zh-checker:\s*review Chinese text; skills: plain-chinese-writing, zh-writing-checkers/);
   assert.match(fragment, /include that subagent-specific skill list/i);
+  assert.match(fragment, /`agent:\/\/` names completed subagent outputs, not callable agent types/i);
+  assert.match(fragment, /Use the task tool to launch required agent types/i);
   assert.match(fragment, /Pre-fork Subagent Contract/);
   assert.match(fragment, /OMP_REQUIRED_SUBAGENT:\s*zh-writer/);
   assert.match(fragment, /Workflow and gate briefing:/);
