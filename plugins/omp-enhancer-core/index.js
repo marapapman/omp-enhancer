@@ -283,6 +283,13 @@ export default function registerCoreEnhancer(pi) {
     });
   }
 
+  pi.on?.('message_end', async (event = {}, ctx = {}) => {
+    restoreStateFromContext(state, ctx);
+    const changed = recordAsyncResultMessage(state, event);
+    if (changed) await persistState(pi, state);
+    return undefined;
+  });
+
   for (const eventName of ['turn_start', 'agent_start']) {
     pi.on?.(eventName, async (_event = {}, ctx = {}) => {
       restoreStateFromContext(state, ctx);
@@ -379,7 +386,8 @@ export default function registerCoreEnhancer(pi) {
     restoreStateFromContext(state, ctx);
     if (toolEventName(event) !== 'task') return undefined;
     const updates = recordTaskExecutionUpdate(state, event);
-    if (updates.some((update) => update.persist)) await persistState(pi, state);
+    const changed = recordSubagentTaskProgressEvidence(state, event);
+    if (changed || updates.some((update) => update.persist)) await persistState(pi, state);
     return undefined;
   });
 
@@ -399,7 +407,7 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'fact_check_gate' && successful) state.evidence.factCheckGate = true;
     if (name === 'task') {
       recordTaskResult(state, event, { successful });
-      recordSubagentDispatchFinished(state, event, { successful });
+      recordSubagentTaskResultEvidence(state, event, { successful });
     }
     if (name === 'read' && successful) recordReadSkillEvidence(state, event);
     await persistState(pi, state);
@@ -488,6 +496,7 @@ function emptyEvidence() {
     taskSubagents: new Set(),
     pendingSubagents: new Map(),
     pendingSubagentCalls: new Map(),
+    pendingAsyncSubagentJobs: new Map(),
     subagentSkills: new Map(),
     subagentLoadedSkills: new Map(),
     unexpectedSubagentSkills: new Map(),
@@ -697,6 +706,11 @@ function serializeState(state) {
         id,
         agents: [...agents],
       })),
+      pendingAsyncSubagentJobs: [...state.evidence.pendingAsyncSubagentJobs.entries()].map(([jobId, pending]) => ({
+        jobId,
+        dispatchId: pending.dispatchId,
+        agents: [...pending.agents],
+      })),
       subagentSkills: [...state.evidence.subagentSkills.entries()].map(([agent, skills]) => ({
         agent,
         skills: [...skills],
@@ -821,6 +835,7 @@ function readEvidenceSnapshot(value) {
     taskSubagents: new Set(Array.isArray(value.taskSubagents) ? value.taskSubagents.filter(isString) : []),
     pendingSubagents: readPendingSubagents(value.pendingSubagents),
     pendingSubagentCalls: readPendingSubagentCalls(value.pendingSubagentCalls),
+    pendingAsyncSubagentJobs: readPendingAsyncSubagentJobs(value.pendingAsyncSubagentJobs),
     subagentSkills: readSubagentSkills(value.subagentSkills),
     subagentLoadedSkills: readSubagentSkills(value.subagentLoadedSkills),
     unexpectedSubagentSkills: readSubagentSkills(value.unexpectedSubagentSkills),
@@ -857,6 +872,19 @@ function readPendingSubagentCalls(value) {
     calls.set(item.id, new Set(Array.isArray(item.agents) ? item.agents.filter(isString) : []));
   }
   return calls;
+}
+
+function readPendingAsyncSubagentJobs(value) {
+  const jobs = new Map();
+  if (!Array.isArray(value)) return jobs;
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.jobId !== 'string') continue;
+    jobs.set(item.jobId, {
+      dispatchId: typeof item.dispatchId === 'string' ? item.dispatchId : '',
+      agents: new Set(Array.isArray(item.agents) ? item.agents.filter(isString) : []),
+    });
+  }
+  return jobs;
 }
 
 function readSubagentSkills(value) {
@@ -2155,6 +2183,7 @@ function buildMissingSubagentUsageContext(state) {
   const completedSubagents = completedSubagentsForGate(state);
   const pending = pendingRequiredSubagents(state, requiredSubagents);
   const stuck = stuckRequiredSubagents(state, requiredSubagents);
+  const runningAsyncJobs = runningRequiredSubagentJobs(state, requiredSubagents);
   const pendingAgents = new Set(pending.map(({ agent }) => agent));
   const missing = requiredSubagents.map(({ agent }) => agent).filter((agent) => !completedSubagents.has(agent) && !pendingAgents.has(agent));
   const missingSkillAssignments = requiredSubagents.flatMap(({ agent, requiredSkills }) => {
@@ -2173,7 +2202,7 @@ function buildMissingSubagentUsageContext(state) {
   });
 
   const failureContext = formatRecentToolFailures(state, ['task']);
-  if (!missing.length && !missingSkillAssignments.length && !missingAssignmentContext.length && !unexpectedSkillAssignments.length && !pending.length && !stuck.length && !failureContext) return null;
+  if (!missing.length && !missingSkillAssignments.length && !missingAssignmentContext.length && !unexpectedSkillAssignments.length && !pending.length && !stuck.length && !runningAsyncJobs.length && !failureContext) return null;
 
   return [
     'OMP Enhancer Core subagent gate is still open.',
@@ -2182,6 +2211,7 @@ function buildMissingSubagentUsageContext(state) {
     `Required subagents: ${formatRequiredSubagents(requiredSubagents)}.`,
     pending.length ? `Pending subagent task results: ${formatPendingSubagents(pending)}.` : null,
     stuck.length ? `Potentially stuck subagent tasks: ${formatPendingSubagents(stuck)}. Do not wait indefinitely; retry those task calls with smaller assignments or report BLOCKERS if they keep failing.` : null,
+    runningAsyncJobs.length ? `Running background subagent jobs: ${formatRunningSubagentJobs(runningAsyncJobs)}. Wait for their async-result completion before releasing the final answer; do not re-fork while the original job is still running.` : null,
     missing.length ? `Missing subagent completion evidence: ${missing.join(', ')}.` : null,
     missingSkillAssignments.length ? `Missing subagent skill assignments: ${formatMissingSkillAssignments(missingSkillAssignments)}.` : null,
     missingAssignmentContext.length ? `Missing bug-audit assignment context: ${missingAssignmentContext.join(', ')}. Re-run those task calls with OMP_PARENT_TASK and a concrete bug-audit assignment inherited from the user request.` : null,
@@ -2232,7 +2262,7 @@ function hasParentTaskMarker(text = '') {
 }
 
 function recordTaskExecutionUpdate(state, event = {}) {
-  const update = recordTaskProgress(state, event, { status: 'running', source: 'tool_execution_update' });
+  const update = recordTaskProgress(state, event, { status: '', source: 'tool_execution_update' });
   return update ? [update] : [];
 }
 
@@ -2241,6 +2271,75 @@ function recordTaskResult(state, event = {}, { successful } = {}) {
     status: successful ? 'completed' : 'failed',
     source: 'tool_result',
   });
+}
+
+function recordAsyncResultMessage(state, event = {}) {
+  const message = asyncResultMessage(event);
+  if (!message) return false;
+  let changed = false;
+  for (const job of extractAsyncResultJobs(message)) {
+    const jobId = asyncResultJobId(job);
+    if (!jobId) continue;
+    const { records, dispatchId } = pendingRecordsForAsyncJob(state, jobId);
+    if (!records.length) continue;
+    const jobEvent = taskEventFromAsyncResultJob(job, { dispatchId, jobId, message });
+    const progressUpdate = recordTaskProgress(state, jobEvent, { status: '', source: 'async-result' });
+    const evidenceChanged = applySubagentTaskCompletionEvidence(state, jobEvent, {
+      records,
+      dispatchId,
+      legacyCompleteWithoutSignal: false,
+    });
+    changed = changed || Boolean(progressUpdate?.persist) || evidenceChanged;
+  }
+  return changed;
+}
+
+function asyncResultMessage(event = {}) {
+  const message = isRecord(event.message) ? event.message : event;
+  const customType = cleanText(message.customType ?? event.customType);
+  return customType === 'async-result' ? message : null;
+}
+
+function extractAsyncResultJobs(message = {}) {
+  const details = isRecord(message.details) ? message.details : {};
+  const jobs = [];
+  for (const key of ['jobs', 'results']) {
+    if (Array.isArray(details[key])) jobs.push(...details[key].filter(isRecord));
+  }
+  for (const key of ['job', 'result']) {
+    if (isRecord(details[key])) jobs.push(details[key]);
+  }
+  if (isRecord(details) && asyncResultJobId(details)) jobs.push(details);
+  if (!jobs.length) {
+    const text = collectTextCandidates(message.content).join('\n');
+    const matches = [...text.matchAll(/\b[\w.-]*job[\w.-]*\b/gi)].map(([match]) => match);
+    const jobId = matches.findLast((match) => /[-.]\w|\d/.test(match) && match.toLowerCase() !== 'job') ?? '';
+    if (jobId) jobs.push({ jobId, type: 'task', status: 'completed' });
+  }
+  return jobs;
+}
+
+function asyncResultJobId(job = {}) {
+  return cleanProgressId(job.jobId ?? job.id ?? job.async?.jobId);
+}
+
+function taskEventFromAsyncResultJob(job = {}, { dispatchId = '', jobId = '', message = {} } = {}) {
+  const jobDetails = isRecord(job.details) ? { ...job.details } : {};
+  const rawStatus = cleanText(job.status ?? job.state ?? jobDetails.status ?? jobDetails.async?.state);
+  const asyncState = rawStatus ? normalizeSubagentStatus(rawStatus) : 'completed';
+  jobDetails.async = {
+    ...(isRecord(jobDetails.async) ? jobDetails.async : {}),
+    state: asyncState,
+    jobId,
+    type: cleanText(job.type ?? jobDetails.async?.type) || 'task',
+  };
+  if (!Array.isArray(jobDetails.results) && Array.isArray(job.results)) jobDetails.results = job.results;
+  if (!Array.isArray(jobDetails.progress) && Array.isArray(job.progress)) jobDetails.progress = job.progress;
+  return {
+    toolCallId: dispatchId || jobId,
+    details: jobDetails,
+    content: job.content ?? message.content,
+  };
 }
 
 function recordTaskDispatchStarted(state, event = {}, { dispatchId = '', records = [], startedAt = Date.now() } = {}) {
@@ -2379,6 +2478,11 @@ function extractTaskBlockText(event = {}) {
     .map((text) => cleanText(text))
     .filter(Boolean)
     .join('\n');
+}
+
+function asyncTaskJobId(event = {}) {
+  const details = extractTaskDetails(event);
+  return cleanProgressId(details.async?.jobId ?? details.jobId ?? event.jobId ?? event.id);
 }
 
 function taskItemStatus(item = {}) {
@@ -2575,16 +2679,130 @@ function recordSubagentDispatchStarted(state, event) {
   return records;
 }
 
-function recordSubagentDispatchFinished(state, event, { successful }) {
+function recordSubagentTaskResultEvidence(state, event, { successful }) {
   const { records, dispatchId } = subagentRecordsForToolResult(state, event);
   if (!successful) {
     clearPendingSubagentsForResult(state, { records, dispatchId });
-    return records;
+    clearPendingAsyncSubagentJobs(state, { records, dispatchId });
+    return Boolean(records.length);
   }
 
-  for (const record of records) recordCompletedSubagent(state, record);
-  clearPendingSubagentCallRecords(state, { records, dispatchId });
-  return records;
+  return applySubagentTaskCompletionEvidence(state, event, { records, dispatchId, legacyCompleteWithoutSignal: true });
+}
+
+function recordSubagentTaskProgressEvidence(state, event) {
+  const { records, dispatchId } = subagentRecordsForToolResult(state, event);
+  return applySubagentTaskCompletionEvidence(state, event, { records, dispatchId, legacyCompleteWithoutSignal: false });
+}
+
+function applySubagentTaskCompletionEvidence(state, event, { records = [], dispatchId = null, legacyCompleteWithoutSignal = false } = {}) {
+  if (!records.length) return false;
+  const decision = resolveSubagentTaskCompletion(event, records, { legacyCompleteWithoutSignal });
+  const jobId = asyncTaskJobId(event);
+  if (jobId && (decision.active || decision.completed.length || decision.failed.length)) {
+    recordPendingAsyncSubagentJob(state, jobId, dispatchId, records);
+  }
+
+  let changed = false;
+  if (decision.completed.length) {
+    for (const record of decision.completed) recordCompletedSubagent(state, record);
+    clearPendingSubagentCallRecords(state, {
+      records: decision.completed,
+      dispatchId: decision.completed.length === records.length ? dispatchId : null,
+    });
+    clearPendingAsyncSubagentJobs(state, {
+      records: decision.completed,
+      dispatchId: decision.completed.length === records.length ? dispatchId : null,
+    });
+    changed = true;
+  }
+
+  if (decision.failed.length && !decision.active) {
+    clearPendingSubagentsForResult(state, {
+      records: decision.failed,
+      dispatchId: decision.failed.length === records.length ? dispatchId : null,
+    });
+    clearPendingAsyncSubagentJobs(state, {
+      records: decision.failed,
+      dispatchId: decision.failed.length === records.length ? dispatchId : null,
+    });
+    changed = true;
+  }
+
+  return changed || Boolean(jobId && decision.active);
+}
+
+function resolveSubagentTaskCompletion(event, records = [], { legacyCompleteWithoutSignal = false } = {}) {
+  const details = extractTaskDetails(event);
+  const items = taskProgressItems(details);
+  const rawDirectStatus = cleanText(details.async?.state ?? details.status);
+  const directStatus = rawDirectStatus ? normalizeSubagentStatus(rawDirectStatus) : '';
+  const hasDirectStatus = ['running', 'completed', 'failed', 'aborted'].includes(directStatus);
+  const hasSignal = hasDirectStatus || items.length > 0;
+
+  if (!hasSignal) {
+    return {
+      completed: legacyCompleteWithoutSignal ? records : [],
+      failed: [],
+      active: !legacyCompleteWithoutSignal,
+    };
+  }
+
+  if (isActiveSubagentStatus(directStatus)) return { completed: completedRecordsFromTaskItems(items, records), failed: [], active: true };
+  if (isCompletedSubagentStatus(directStatus) && !items.length) return { completed: records, failed: [], active: false };
+  if (isFailedSubagentStatus(directStatus) && !items.length) return { completed: [], failed: records, active: false };
+
+  const completed = completedRecordsFromTaskItems(items, records);
+  const failed = failedRecordsFromTaskItems(items, records);
+  const active = items.some((item) => isActiveSubagentStatus(taskItemStatus(item)));
+  if (!active && completed.length === records.length) return { completed: records, failed: [], active: false };
+  if (!active && failed.length === records.length) return { completed: [], failed: records, active: false };
+  return { completed, failed, active };
+}
+
+function taskProgressItems(details = {}) {
+  const progressItems = Array.isArray(details.progress) ? details.progress.filter(isRecord) : [];
+  if (progressItems.length) return progressItems;
+  return Array.isArray(details.results) ? details.results.filter(isRecord) : [];
+}
+
+function completedRecordsFromTaskItems(items = [], records = []) {
+  return recordsFromTaskItemsByStatus(items, records, isCompletedSubagentStatus);
+}
+
+function failedRecordsFromTaskItems(items = [], records = []) {
+  return recordsFromTaskItemsByStatus(items, records, isFailedSubagentStatus);
+}
+
+function recordsFromTaskItemsByStatus(items = [], records = [], predicate = () => false) {
+  const selected = [];
+  const seen = new Set();
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    const status = taskItemStatus(item);
+    if (!predicate(status)) continue;
+    const record = recordForTaskItem(item, records, index);
+    if (!record || seen.has(record.agent)) continue;
+    selected.push(record);
+    seen.add(record.agent);
+  }
+  return selected;
+}
+
+function recordForTaskItem(item = {}, records = [], index = 0) {
+  const agent = taskItemAgentName(item);
+  if (agent) {
+    const exact = records.find((record) => record.agent === agent);
+    if (exact) return exact;
+  }
+  return records.length === 1 ? records[0] : records[index] ?? null;
+}
+
+function taskItemAgentName(item = {}) {
+  const explicit = cleanAgentName(item.role ?? item.subagent ?? item.subagentRole ?? item.requiredSubagent);
+  if (explicit && explicit !== 'task') return explicit;
+  const parsed = collectSubagentTaskRecords({ input: { tasks: [item] } });
+  return parsed[0]?.agent ?? '';
 }
 
 function recordPendingSubagent(state, { agent, skills = [], text = '' }, startedAt) {
@@ -2719,6 +2937,28 @@ function pendingRecordsForCall(state, dispatchId) {
     });
 }
 
+function pendingRecordsForAsyncJob(state, jobId) {
+  const job = state.evidence.pendingAsyncSubagentJobs.get(jobId);
+  if (!job) return { records: [], dispatchId: null };
+  const records = [...job.agents].map((agent) => {
+    const pending = state.evidence.pendingSubagents.get(agent);
+    return pending ? { agent, skills: [...pending.skills], text: [...(pending.texts ?? [])].join('\n') } : { agent, skills: [] };
+  });
+  return { records, dispatchId: job.dispatchId || null };
+}
+
+function recordPendingAsyncSubagentJob(state, jobId, dispatchId, records = []) {
+  const id = cleanProgressId(jobId);
+  if (!id || !records.length) return;
+  const current = state.evidence.pendingAsyncSubagentJobs.get(id);
+  const agents = new Set(current?.agents ?? []);
+  for (const { agent } of records) agents.add(agent);
+  state.evidence.pendingAsyncSubagentJobs.set(id, {
+    dispatchId: dispatchId || current?.dispatchId || '',
+    agents,
+  });
+}
+
 function clearPendingSubagentsForResult(state, { records = [], dispatchId = null } = {}) {
   const agents = records.length ? records.map(({ agent }) => agent) : [...state.evidence.pendingSubagents.keys()];
   for (const agent of agents) state.evidence.pendingSubagents.delete(agent);
@@ -2741,6 +2981,22 @@ function clearPendingSubagentCallRecords(state, { records = [], dispatchId = nul
   }
 }
 
+function clearPendingAsyncSubagentJobs(state, { records = [], dispatchId = null } = {}) {
+  if (!records.length && !dispatchId) {
+    state.evidence.pendingAsyncSubagentJobs.clear();
+    return;
+  }
+  const completedAgents = new Set(records.map(({ agent }) => agent));
+  for (const [jobId, pending] of state.evidence.pendingAsyncSubagentJobs.entries()) {
+    if (dispatchId && pending.dispatchId === dispatchId) {
+      state.evidence.pendingAsyncSubagentJobs.delete(jobId);
+      continue;
+    }
+    for (const agent of completedAgents) pending.agents.delete(agent);
+    if (!pending.agents.size) state.evidence.pendingAsyncSubagentJobs.delete(jobId);
+  }
+}
+
 function pendingRecords(state) {
   return [...state.evidence.pendingSubagents.entries()].map(([agent, pending]) => ({
     agent,
@@ -2760,6 +3016,26 @@ function stuckRequiredSubagents(state, requiredSubagents) {
   const now = Date.now();
   return pendingRequiredSubagents(state, requiredSubagents)
     .filter((pending) => pending.startedAt && now - pending.startedAt >= SUBAGENT_STUCK_AFTER_MS);
+}
+
+function runningRequiredSubagentJobs(state, requiredSubagents) {
+  const required = new Set(requiredSubagents.map(({ agent }) => agent));
+  const running = [];
+  for (const [jobId, pending] of state.evidence.pendingAsyncSubagentJobs.entries()) {
+    const agents = [...pending.agents].filter((agent) => required.has(agent));
+    if (!agents.length) continue;
+    const progress = state.evidence.taskProgress.get(pending.dispatchId) ?? state.evidence.taskProgress.get(jobId);
+    const status = progress?.status ?? 'running';
+    if (isActiveSubagentStatus(status)) running.push({ jobId, dispatchId: pending.dispatchId, agents, status });
+  }
+  return running;
+}
+
+function formatRunningSubagentJobs(values) {
+  return values.map(({ jobId, dispatchId, agents, status }) => {
+    const id = jobId || dispatchId || 'unknown-job';
+    return `${id} (${status}, ${agents.join(', ')})`;
+  }).join(', ');
 }
 
 function formatPendingSubagents(values) {

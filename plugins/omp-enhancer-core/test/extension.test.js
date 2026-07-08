@@ -89,6 +89,7 @@ test('registers core tools and hooks without a separate classifier command', () 
     'response_delta',
     'response_output_delta',
     'message_update',
+    'message_end',
     'turn_start',
     'agent_start',
     'before_agent_start',
@@ -2439,6 +2440,429 @@ test('task tool_execution_update records live task progress and completion', asy
   assert.match(status.content[0].text, /Tasks:\n- task task-live-progress: completed # Task complete \| 1 items, 1 done \| 2 req \| 1\.2k tokens \| 5s/);
   assert.deepEqual(notifications, []);
   assert.equal(pi.messages.length, 0);
+});
+
+test('async running task result keeps routed subagents pending and session_stop gated', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(pi.entries);
+  const prompt = '请写一个页面并补测试。';
+  const agents = ['plan', 'implementation-task', 'reviewer'];
+  const skills = ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'];
+  const assignments = Object.fromEntries(agents.map((agent) => [
+    agent,
+    [
+      `OMP_REQUIRED_SUBAGENT: ${agent}`,
+      'Required skills for this subagent:',
+      ...subagentSkills(agent).map((skill) => `- ${skill}`),
+    ].join('\n'),
+  ]));
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      toolCallId: 'task-async-running',
+      input: {
+        tasks: agents.map((agent) => ({
+          id: `Async${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
+          role: agent,
+          assignment: assignments[agent],
+        })),
+      },
+    },
+    ctx,
+  );
+
+  await event(pi, 'tool_result')(
+    {
+      name: 'task',
+      toolCallId: 'task-async-running',
+      content: [{ type: 'text', text: 'Task batch still running' }],
+      details: {
+        async: { state: 'running', jobId: 'task-job-1', type: 'task' },
+        progress: agents.map((agent, index) => ({
+          id: `Async${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
+          index,
+          agent: 'task',
+          status: 'running',
+          assignment: assignments[agent],
+        })),
+      },
+      isError: false,
+    },
+    ctx,
+  );
+
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-async-running-subagent-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.deepEqual(status.details.status.completed, []);
+  assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), agents);
+
+  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-async-running-skill-usage',
+    { output: skillUsageBlock(skills) },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const result = await event(pi, 'session_stop')(
+    { output: 'Final answer without a valid SUBAGENT_USAGE block.' },
+    ctx,
+  );
+
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /subagent gate/i);
+  assert.match(result.additionalContext, /Pending subagent task results: plan .*implementation-task .*reviewer/);
+  assert.match(result.additionalContext, /Running background subagent jobs: task-job-1 .*plan, implementation-task, reviewer/);
+});
+
+test('session_stop stays gated when final subagent usage clears pending roles but async task progress is still running', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(pi.entries);
+  const prompt = '请写一个页面并补测试。';
+  const agents = ['plan', 'implementation-task', 'reviewer'];
+  const skills = ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'];
+  const assignments = Object.fromEntries(agents.map((agent) => [
+    agent,
+    [
+      `OMP_REQUIRED_SUBAGENT: ${agent}`,
+      'Required skills for this subagent:',
+      ...subagentSkills(agent).map((skill) => `- ${skill}`),
+    ].join('\n'),
+  ]));
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      toolCallId: 'task-async-running-final-usage',
+      input: {
+        tasks: agents.map((agent) => ({
+          id: `Async${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
+          role: agent,
+          assignment: assignments[agent],
+        })),
+      },
+    },
+    ctx,
+  );
+
+  await event(pi, 'tool_result')(
+    {
+      name: 'task',
+      toolCallId: 'task-async-running-final-usage',
+      content: [{ type: 'text', text: 'Task batch still running' }],
+      details: {
+        async: { state: 'running', jobId: 'task-job-final-usage', type: 'task' },
+        progress: agents.map((agent, index) => ({
+          id: `Async${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
+          index,
+          agent: 'task',
+          status: 'running',
+          assignment: assignments[agent],
+        })),
+      },
+      isError: false,
+    },
+    ctx,
+  );
+
+  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
+
+  const result = await event(pi, 'session_stop')(
+    {
+      output: usageEvidence({
+        subagents: Object.fromEntries(agents.map((agent) => [agent, subagentSkills(agent)])),
+        skills,
+      }),
+    },
+    ctx,
+  );
+
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /running|background/i);
+  assert.match(result.additionalContext, /Running background subagent jobs: task-job-final-usage/);
+});
+
+test('async-result message_end completes routed subagents by async job id', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(pi.entries);
+  const prompt = '请写一个页面并补测试。';
+  const agents = ['plan', 'implementation-task', 'reviewer'];
+  const assignments = Object.fromEntries(agents.map((agent) => [
+    agent,
+    [
+      `OMP_REQUIRED_SUBAGENT: ${agent}`,
+      'Required skills for this subagent:',
+      ...subagentSkills(agent).map((skill) => `- ${skill}`),
+    ].join('\n'),
+  ]));
+  const results = agents.map((agent, index) => ({
+    id: `Async${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
+    index,
+    role: agent,
+    status: index === 0 ? 'completed' : 'success',
+    exitCode: index === 1 ? 0 : undefined,
+    requests: index + 1,
+    durationMs: 1000 + index,
+    assignment: assignments[agent],
+  }));
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      toolCallId: 'task-async-completion',
+      input: {
+        tasks: agents.map((agent) => ({
+          id: `Async${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
+          role: agent,
+          assignment: assignments[agent],
+        })),
+      },
+    },
+    ctx,
+  );
+  await event(pi, 'tool_result')(
+    {
+      name: 'task',
+      toolCallId: 'task-async-completion',
+      content: [{ type: 'text', text: 'Task batch still running as task-job-1' }],
+      details: {
+        async: { state: 'running', jobId: 'task-job-1', type: 'task' },
+        progress: agents.map((agent, index) => ({
+          id: `Async${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
+          index,
+          agent: 'task',
+          status: 'running',
+          assignment: assignments[agent],
+        })),
+      },
+      isError: false,
+    },
+    ctx,
+  );
+
+  await event(pi, 'message_end')(
+    {
+      message: {
+        role: 'custom',
+        customType: 'async-result',
+        content: [{ type: 'text', text: 'Async task job task-job-1 completed successfully.' }],
+        details: {
+          jobs: [
+            {
+              jobId: 'task-job-1',
+              type: 'task',
+              status: 'completed',
+              details: {
+                results,
+                totalDurationMs: 3003,
+              },
+            },
+          ],
+        },
+      },
+    },
+    ctx,
+  );
+
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-async-result-completed-subagent-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.deepEqual(status.details.status.completed, agents);
+  assert.deepEqual(status.details.status.pending, []);
+});
+
+test('async job mapping persists through session entries before async-result completion', async () => {
+  const entries = [];
+  const routePi = new FakePi(entries);
+  registerCoreEnhancer(routePi);
+  const routeCtx = extensionContext(entries);
+  const prompt = '请写一个页面并补测试。';
+  const agents = ['plan', 'implementation-task', 'reviewer'];
+  const jobId = 'task-job-persisted';
+  const dispatchId = 'task-async-persisted';
+  const assignments = Object.fromEntries(agents.map((agent) => [
+    agent,
+    [
+      `OMP_REQUIRED_SUBAGENT: ${agent}`,
+      'Required skills for this subagent:',
+      ...subagentSkills(agent).map((skill) => `- ${skill}`),
+    ].join('\n'),
+  ]));
+  const results = agents.map((agent, index) => ({
+    id: `PersistedAsync${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
+    index,
+    role: agent,
+    status: 'completed',
+    requests: index + 1,
+    durationMs: 1000 + index,
+    assignment: assignments[agent],
+  }));
+
+  await event(routePi, 'session_start')({}, routeCtx);
+  await event(routePi, 'before_agent_start')({ prompt }, routeCtx);
+  await event(routePi, 'tool_call')(
+    {
+      toolName: 'task',
+      toolCallId: dispatchId,
+      input: {
+        tasks: agents.map((agent) => ({
+          id: `PersistedAsync${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
+          role: agent,
+          assignment: assignments[agent],
+        })),
+      },
+    },
+    routeCtx,
+  );
+  await event(routePi, 'tool_result')(
+    {
+      name: 'task',
+      toolCallId: dispatchId,
+      content: [{ type: 'text', text: `Task batch still running as ${jobId}` }],
+      details: {
+        async: { state: 'running', jobId, type: 'task' },
+        progress: results.map((result) => ({
+          ...result,
+          agent: 'task',
+          status: 'running',
+        })),
+      },
+      isError: false,
+    },
+    routeCtx,
+  );
+
+  const completionPi = new FakePi(entries);
+  registerCoreEnhancer(completionPi);
+  const completionCtx = extensionContext(entries);
+
+  await event(completionPi, 'session_start')({}, completionCtx);
+  await event(completionPi, 'message_end')(
+    {
+      message: {
+        role: 'custom',
+        customType: 'async-result',
+        content: [{ type: 'text', text: `Async task job ${jobId} completed successfully.` }],
+        details: {
+          jobs: [
+            {
+              jobId,
+              type: 'task',
+              status: 'completed',
+              details: {
+                results,
+                totalDurationMs: 3003,
+              },
+            },
+          ],
+        },
+      },
+    },
+    completionCtx,
+  );
+
+  const status = await tool(completionPi, 'omp_core_subagent_status').execute(
+    'call-persisted-async-result-completed-subagent-status',
+    {},
+    undefined,
+    undefined,
+    completionCtx,
+  );
+  const completedTask = status.details.status.tasks.find(
+    (task) => (task.id === dispatchId || task.id === jobId) && task.status === 'completed',
+  );
+
+  assert.deepEqual(status.details.status.completed, agents);
+  assert.deepEqual(status.details.status.pending, []);
+  assert.ok(completedTask);
+  assert.equal(completedTask.completedCount, agents.length);
+});
+
+test('task execution update completion evidence closes routed subagents as secondary non-background evidence', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(pi.entries);
+  const prompt = '请写一个页面并补测试。';
+  const agents = ['plan', 'implementation-task', 'reviewer'];
+  const assignments = Object.fromEntries(agents.map((agent) => [
+    agent,
+    [
+      `OMP_REQUIRED_SUBAGENT: ${agent}`,
+      'Required skills for this subagent:',
+      ...subagentSkills(agent).map((skill) => `- ${skill}`),
+    ].join('\n'),
+  ]));
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  await event(pi, 'tool_call')(
+    {
+      toolName: 'task',
+      toolCallId: 'task-update-completes-subagents',
+      input: {
+        tasks: agents.map((agent) => ({
+          id: `Update${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
+          role: agent,
+          assignment: assignments[agent],
+        })),
+      },
+    },
+    ctx,
+  );
+
+  await event(pi, 'tool_execution_update')(
+    {
+      toolName: 'task',
+      toolCallId: 'task-update-completes-subagents',
+      partialResult: {
+        content: [{ type: 'text', text: 'All routed subagents completed' }],
+        details: {
+          progress: agents.map((agent, index) => ({
+            id: `Update${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
+            index,
+            agent: 'task',
+            status: index === 0 ? 'completed' : 'success',
+            exitCode: index === 1 ? 0 : undefined,
+            assignment: assignments[agent],
+          })),
+        },
+      },
+    },
+    ctx,
+  );
+
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-update-completed-subagent-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.deepEqual(status.details.status.completed, agents);
+  assert.deepEqual(status.details.status.pending, []);
 });
 
 test('subagent EventBus progress does not drive task-level progress display', async () => {
