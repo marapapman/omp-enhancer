@@ -5,11 +5,20 @@ import {
   buildLoopRecoveryContext,
   createLoopGuardState,
   inspectGeneratedText,
+  loopGuardPromptSection,
   recordGeneratedText,
   recordLoopGuardProgress,
   stripExemptBlocks,
   takeLoopRecoveryContext,
 } from '../src/loop-guard.js';
+
+test('loop guard prompt does not bind the main agent to a concrete model', () => {
+  const prompt = loopGuardPromptSection();
+
+  assert.doesNotMatch(prompt, /MiMo v2\.5/);
+  assert.doesNotMatch(prompt, /DeepSeek V4 Flash/);
+  assert.match(prompt, /active model configuration/i);
+});
 
 test('detects repeated Chinese sentences', () => {
   const text = [

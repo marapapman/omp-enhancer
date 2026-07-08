@@ -153,10 +153,14 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasFactCheck = isFactCheckRequest(normalized) || isFactCheckDocumentRequest(normalized);
   const hasLocalSmokeOnly = isLocalSmokeOrProcessRunRequest(normalized);
   const hasWorkflowValidation = isWorkflowValidationRequest(normalized);
-  const hasBugAudit = hasWorkflowValidation || (!hasGateValidatorStatusReport && !hasBugReportWriting && !hasTestReportWriting && isBugAuditRequest(normalized));
-  const hasFocusedBugAudit = hasWorkflowValidation || (hasBugAudit && isFocusedDirectAuditRequest(normalized));
   const hasKnowledgeOnly = !hasFactCheck && isKnowledgeWorkWithoutWritingArtifact(normalized);
-  const hasCoding = (!asksNoCodeChange || isPlanForCodeChange) && !hasBugAudit && !hasKnowledgeOnly && isCodeChangeRequest(normalized);
+  const hasAuditSummary = isAuditSummaryRequest(normalized);
+  const hasRouteToolDiagnostic = isRouteToolDiagnosticRequest(normalized);
+  const hasSummaryWriting = !hasAuditSummary && isSummaryWritingRequest(normalized);
+  const hasRawCodeChange = (!asksNoCodeChange || isPlanForCodeChange) && !hasKnowledgeOnly && isCodeChangeRequest(normalized);
+  const hasBugAudit = !hasRouteToolDiagnostic && (hasAuditSummary || (!hasSummaryWriting && (hasWorkflowValidation || (!hasRawCodeChange && !hasGateValidatorStatusReport && !hasBugReportWriting && !hasTestReportWriting && isBugAuditRequest(normalized)))));
+  const hasFocusedBugAudit = !hasRouteToolDiagnostic && (hasWorkflowValidation || (hasBugAudit && isFocusedDirectAuditRequest(normalized)));
+  const hasCoding = hasRawCodeChange && !hasBugAudit && !hasKnowledgeOnly;
   const hasCodeChange = hasCoding && !hasTestReportWriting;
   const hasSecurityWritingArtifact = isSecurityWritingArtifact(normalized);
   const hasEnglishWriting = isEnglishWriting(normalized)
@@ -213,6 +217,14 @@ export function routeNaturalLanguageTask(input = {}) {
 
   if (hasFactCheck) {
     return routed('fact-check');
+  }
+
+  if (hasRouteToolDiagnostic && !hasCodeChange) {
+    return routed('diagnosis');
+  }
+
+  if (hasSummaryWriting && !hasCodeChange) {
+    return routed(hasEnglishWriting ? 'writing.en' : 'writing.zh', { writingComplexity: 'simple' });
   }
 
   if (hasBugAudit) {
@@ -675,6 +687,33 @@ function isDirectTestAuthoring(text) {
     || text.includes('补测试');
 }
 
+function isRouteToolDiagnosticRequest(text) {
+  if (/(?:review|inspect|audit|check|find|hunt|检查|排查|审查|查找|扫描|审计).*(?:omp_core_route_task|omp_core_subagent_status|route_task).*(?:bugs?|defects?|实现|implementation|file-line findings|concrete findings|代码|问题|缺陷|风险)/.test(text)
+    && !/(?:tool check only|call exactly|route probe|probe prompt|路由行为|自检|diagnostic self-check)/.test(text)) return false;
+  return /(?:omp_core_route_task|omp_core_subagent_status|route_task|route probe|probe prompt|route\s*probe|route tool|tool check only)/.test(text)
+    || /(?:验证|检查).*(?:路由行为|route_task|omp_core_route_task|probe).*(?:不修改|不运行测试|不跑测试|已安装|installed|status)/.test(text)
+    || /(?:路由|route|gate|门禁).*(?:自检|诊断|验证).*(?:不修改|不运行测试|不跑测试)/.test(text);
+}
+
+function isAuditSummaryRequest(text) {
+  if (/(?:不要|不|别)\s*(?:找|查找|检查).*(?:bug|缺陷)/.test(text) || /(?:do not|don't|not)\s+(?:find|look for|check for).*(?:bugs?|defects?)/.test(text)) return false;
+  if (isConfigAssetRequest(text)) return false;
+  return /(?:inspect|audit|review|check|find|hunt).*(?:bugs?|defects?|file-line findings|concrete findings)/.test(text)
+    || /(?:检查|排查|审查|查找|扫描|审计|找|发现).*(?:代码|项目|插件|实现|接口|workflow|工作流|门禁|配置|config|docker-compose|文件).*(?:问题|缺陷|bug|风险|错误|隐患|发现)/.test(text);
+}
+
+function isSummaryWritingRequest(text) {
+  if (asksToRunTestVerification(text)) return false;
+  if (/(?:写|起草|撰写).*(?:总结|报告|文档|summary|report|document)/.test(text)) return false;
+  if (/(?:inspect|audit|review|check|find|hunt).*(?:bugs?|defects?|file-line findings|concrete findings)/.test(text)) return false;
+  if (/(?:检查|排查|审查|查找|扫描|审计|找|发现).*(?:代码|项目|插件|实现|接口|workflow|工作流|门禁|配置|config|docker-compose|文件).*(?:问题|缺陷|bug|风险|错误|隐患|发现)/.test(text)) return false;
+  return isObservedTestSummary(text)
+    || /(?:本轮|这轮|这一轮|此次|当前).*(?:测试|验证|e2e|门禁|gate|workflow|工作流).*(?:暴露|发现|遇到|出现).*(?:问题|风险|现象|结论)/
+      .test(text)
+    || /(?:总结|汇总|归纳|整理|压缩).*(?:问题|观察|现象|结论|结果|诊断结果|内容|记录|发现)/.test(text)
+    || /(?:summarize|summarise|condense)\s+.*(?:issues?|observations?|findings?|results?|content|notes?|diagnostics?)/.test(text);
+}
+
 function isTestReportWritingRequest(text) {
   if (asksToRunTestVerification(text)) return false;
   if (isImplementationPlanForCodeChange(text)) return false;
@@ -811,8 +850,8 @@ function isCodeChangeRequest(text) {
     || /(?:重构|优化|修改|修复|修正|调整).*(?:逻辑|代码|模块|函数|router|route|workflow|工作流|门禁|gate|路由|fork|subagent|误判|误挡|反复|运行失败|启动失败|warning|dev server|问题)/.test(withoutNegatedCodeWriting)
     || /(?:只改|只修改|改动|修改).*(?:一行|一处|少量|代码|文件)/.test(withoutNegatedCodeWriting)
     || /写.*(?:函数|代码|接口|功能|页面|模块|看板|dashboard|api|component|组件)/.test(withoutNegatedCodeWriting)
-    || /(?:写|新增|添加|创建|生成).*(?:python|bash|node(?:\.js)?|shell|脚本).*(?:加入项目|写入项目|保存到|文件|仓库|代码库)/.test(withoutNegatedCodeWriting)
-    || /(?:实现|开发).*(?:函数|方法|接口|功能|看板|dashboard|api|component|组件|ui|页面|page|slides|html|路由|hook|流程|router|route|workflowroute|fallback|回退)/.test(withoutNegatedCodeWriting)
+    || /(?:实现|implement)\s+[\w$]+(?:\.[\w$]+)*\s*\(/.test(withoutNegatedCodeWriting)
+    || /(?:实现|开发).*(?:函数|方法|接口|功能|看板|dashboard|api|component|组件|ui|页面|page|slides|html|路由|hook|流程|router|route|workflowroute|fallback|回退|模式|mode)/.test(withoutNegatedCodeWriting)
     || (/(?:创建|生成).*(?:函数|方法|接口|功能|看板|dashboard|api|component|组件|ui|页面|page|slides|html|路由|hook|流程|router|route|workflowroute|fallback|回退)/.test(withoutNegatedCodeWriting)
       && (!directTestArtifact || explicitCreatedCodeTarget))
     || /(?:implement|build|develop|add|create)\s+.*(?:feature|fallback|handling|workflow|route|router|hook|logic)/.test(withoutNegatedCodeWriting)

@@ -425,7 +425,7 @@ function subagentWorkflowLines(route, { parentTask = '', includeModelWorkflowHin
     '### Mandatory Subagent Workflow',
     '',
     ...(includeModelWorkflowHints ? [
-      'Runtime model policy: the main/default agent uses MiMo v2.5; the advisor uses DeepSeek V4 Flash. Keep task subagents and all other model roles on the active OMP configuration unless this route names explicit subagent model roles or the user explicitly overrides them.',
+      'Runtime model policy: use the active OMP configuration for main/default, advisor, Tiny, task subagents, and all other model roles without binding the prompt to a specific model name unless this route names explicit subagent model roles or the user explicitly overrides a role.',
       '',
       'Classifier model policy: ambiguous routing uses OMP Tiny (`modelRoles.tiny`) instead of a separate classifier role. A valid, high-confidence classifier route that resolves through the OMP route whitelist supersedes the deterministic rule route before assigning skills, tools, or subagents.',
       '',

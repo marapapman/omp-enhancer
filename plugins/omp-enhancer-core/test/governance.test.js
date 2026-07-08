@@ -27,8 +27,10 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.match(fragment, /delegates required skill loading to the task subagents/i);
   assert.match(fragment, /Do not read root route skills in the main agent just to unlock task/i);
   assert.match(fragment, /subagent task evidence and SUBAGENT_USAGE/i);
-  assert.match(fragment, /MiMo v2\.5/);
-  assert.match(fragment, /DeepSeek V4 Flash/);
+  assert.doesNotMatch(fragment, /MiMo v2\.5/);
+  assert.doesNotMatch(fragment, /DeepSeek V4 Flash/);
+  assert.match(fragment, /active OMP configuration/);
+  assert.match(fragment, /without binding the prompt to a specific model name/);
   assert.match(fragment, /modelRoles\.tiny/);
   assert.match(fragment, /separate classifier role/);
   assert.match(fragment, /route whitelist/);

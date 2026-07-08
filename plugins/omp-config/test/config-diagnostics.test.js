@@ -30,12 +30,13 @@ test('findPathRisks reports hardcoded Claude root home paths', () => {
   assert.match(findings[0].evidence, /\/root\/\.claude\/CLAUDE\.md/);
 });
 
-test('packaged model roles use the available opencode-go MiMo and DeepSeek defaults', async () => {
+test('packaged model roles use DeepSeek Flash as main and GLM as advisor', async () => {
   const config = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
 
-  assert.match(config, /default:\s+opencode-go\/mimo-v2\.5:high/);
-  assert.match(config, /advisor:\s+opencode-go\/deepseek-v4-flash:medium/);
+  assert.match(config, /default:\s+opencode-go\/deepseek-v4-flash:medium/);
+  assert.match(config, /advisor:\s+ollama-cloud\/glm-5\.2:xhigh/);
   assert.match(config, /tiny:\s+opencode-go\/deepseek-v4-flash:medium/);
+  assert.match(config, /modelPattern:\s+deepseek-v4-flash/);
 });
 
 async function writePluginPackage(root) {
@@ -173,14 +174,14 @@ test('package manifest declares bundled skills as plugin content', async () => {
   assert.ok(packageJson.keywords.includes('omp-plugin'));
 });
 
-test('packaged config template keeps MiMo as default and DeepSeek Flash as advisor', async () => {
+test('packaged config template keeps DeepSeek Flash as default and GLM as advisor', async () => {
   const template = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
 
-  assert.match(template, /advisor:\s*opencode-go\/deepseek-v4-flash:medium/);
+  assert.match(template, /advisor:\s*ollama-cloud\/glm-5\.2:xhigh/);
   assert.match(template, /tiny:\s*opencode-go\/deepseek-v4-flash:medium/);
   assert.doesNotMatch(template, /classifier:\s*opencode-go\/deepseek-v4-flash:medium/);
   assert.doesNotMatch(template, /modelTags:\s*\n\s*classifier:/);
-  assert.match(template, /default:\s*opencode-go\/mimo-v2\.5:high/);
+  assert.match(template, /default:\s*opencode-go\/deepseek-v4-flash:medium/);
   assert.match(template, /plan:\s*ollama-cloud\/deepseek-v4-pro:high/);
   assert.match(template, /task:\s*ollama-cloud\/deepseek-v4-flash:high/);
   assert.match(template, /webSearch:\s*codex/);

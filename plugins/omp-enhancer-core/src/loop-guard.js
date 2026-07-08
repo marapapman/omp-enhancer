@@ -361,7 +361,7 @@ export function loopGuardPromptSection() {
   return [
     '### Main Agent Loop Guard',
     '',
-    'You are the main/default agent running under MiMo v2.5 unless the user changes the model.',
+    'You are the main/default agent from the active model configuration.',
     'Do not repeat the same sentence, validation request, plan, or blocker.',
     'If you notice you are restating the same idea, stop and choose exactly one: call the next required tool, produce the final answer, or report BLOCKERS.',
     'Never continue an internal thought loop by rephrasing the same sentence. If no new evidence or action is available, stop instead of repeating.',

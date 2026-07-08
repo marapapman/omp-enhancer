@@ -7,9 +7,9 @@ skills:
     - /root/.omp/skills/ecc
     - /root/.claude/skills
 modelRoles: 
-  advisor: opencode-go/deepseek-v4-flash:medium
+  advisor: ollama-cloud/glm-5.2:xhigh
   commit: ollama-cloud/gemma3:4b
-  default: opencode-go/mimo-v2.5:high
+  default: opencode-go/deepseek-v4-flash:medium
   designer: ollama-cloud/glm-5.2:xhigh
   plan: ollama-cloud/deepseek-v4-pro:high
   slow: ollama-cloud/glm-5.2:xhigh
@@ -20,7 +20,7 @@ modelRoles:
 loopGuard:
   enabled: true
   mainAgent:
-    modelPattern: opencode-go/mimo-v2.5
+    modelPattern: deepseek-v4-flash
     maxRepeatedSentence: 3
     maxRepeatedPhrase: 2
     minRepeatedChars: 30

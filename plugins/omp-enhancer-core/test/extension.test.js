@@ -101,6 +101,48 @@ test('registers core tools and hooks without a separate classifier command', () 
   assert.deepEqual([...pi.commands.keys()], []);
 });
 
+test('route task probes do not replace an active routed workflow', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '总结已观测的 E2E 诊断结果：DeepSeek V4 Flash 主 agent 加 GLM 5.2 advisor 的测试中，记录路由、门禁、skill 使用和 workflow 遵守情况，不执行 bug audit，不修改代码，不运行新的测试。' },
+    ctx,
+  );
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-probe',
+    { prompt: '请在当前项目中实现 sortNumbers(values, options) 的 unique 模式：当 options.unique === true 时，返回升序且去重的新数组；默认行为保持只排序不去重。请遵守 implementation-with-tests workflow，先读取相关 skills，不要调用不存在的 skill 工具。按需 fork 子代理。完成后运行 npm test。最终输出 E2E_MARKER_IMPL、SKILL_USAGE、SUBAGENT_USAGE、测试命令和结果。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  const status = await tool(pi, 'omp_core_subagent_status').execute('call-status', {}, undefined, undefined, ctx);
+
+  assert.match(status.content[0].text, /Route:\s*writing\.zh/);
+  assert.doesNotMatch(status.content[0].text, /Route:\s*bug-audit/);
+});
+
+test('simple active writing summaries do not require writer checker subagents', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '本轮测试暴露了哪些问题' },
+    ctx,
+  );
+
+  const status = await tool(pi, 'omp_core_subagent_status').execute('call-simple-writing-status', {}, undefined, undefined, ctx);
+
+  assert.match(status.content[0].text, /Route:\s*writing\.zh/);
+  assert.match(status.content[0].text, /Required:\n- none/);
+  assert.deepEqual(status.details.status.required, []);
+});
+
 test('session_start does not create a classifier-specific model role', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);

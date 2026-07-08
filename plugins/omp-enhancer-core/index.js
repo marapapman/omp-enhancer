@@ -82,14 +82,18 @@ export default function registerCoreEnhancer(pi) {
   pi.registerTool({
     name: 'omp_core_route_task',
     label: 'Route OMP task',
-    description: 'Classify a natural-language task and return the required OMP enhancer route, skills, tools, and agent.',
-    parameters: z?.object ? z.object({ prompt: z.string() }) : undefined,
+    description: 'Classify a natural-language task and return the required OMP enhancer route, skills, tools, and agent. Probe-only by default when another route is active; pass activate:true to replace active route state.',
+    parameters: z?.object ? z.object({ prompt: z.string(), activate: z.boolean().optional() }) : undefined,
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const route = routeNaturalLanguageTask({ prompt: params.prompt });
-      setRouteState(state, route, params.prompt);
-      await persistState(pi, state);
-      return okResult(formatRoute(route), { route });
+      const shouldActivate = shouldActivateRouteProbe(state, params);
+      if (shouldActivate) {
+        setRouteState(state, route, params.prompt);
+        await persistState(pi, state);
+      }
+      const suffix = shouldActivate ? '' : '\nRoute probe only: active route state was not changed.';
+      return okResult(`${formatRoute(route)}${suffix}`, { route, activated: shouldActivate });
     },
   });
 
@@ -534,6 +538,17 @@ function formatSubagents(subagents = []) {
     const skills = requiredSkills.length ? `; skills: ${requiredSkills.join(', ')}` : '';
     return `${agent} (${duty}${skills})`;
   }).join(', ');
+}
+
+function shouldActivateRouteProbe(state, params = {}) {
+  if (params.activate === true) return true;
+  const activePrompt = normalizeRoutePrompt(state.lastPrompt);
+  if (!activePrompt) return true;
+  return normalizeRoutePrompt(params.prompt) === activePrompt;
+}
+
+function normalizeRoutePrompt(value = '') {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
 function setRouteState(state, route, prompt = '', { classifierResolved = false } = {}) {

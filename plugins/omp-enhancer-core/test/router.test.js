@@ -380,6 +380,66 @@ test('routes observed gate workflow regressions before classifier or smart-gate 
   assert.deepEqual(observedSummary.requiredSubagents, []);
   assert.deepEqual(observedSummary.requiredTools, []);
 
+  const observedDiagnosticSummary = routeNaturalLanguageTask({
+    prompt: '总结已观测的 E2E 诊断结果：DeepSeek V4 Flash 主 agent 加 GLM 5.2 advisor 的测试中，记录路由、门禁、skill 使用和 workflow 遵守情况，不执行 bug audit，不修改代码，不运行新的测试。',
+  });
+  assert.equal(observedDiagnosticSummary.intent, 'writing.zh');
+  assert.deepEqual(observedDiagnosticSummary.requiredSubagents, []);
+  assert.deepEqual(observedDiagnosticSummary.requiredTools, []);
+
+  const fileSummaryWithRouteWords = routeNaturalLanguageTask({
+    prompt: '请读取 observations.md，汇总里面的问题。不要修改文件，不要重新跑测试，只基于文件内容做判断。请特别检查这种总结请求是否会被错误路由到 bug-audit 或 config-assets。最后输出 E2E_MARKER_SUMMARY、SKILL_USAGE、是否触发 SUBAGENT_USAGE 或 session-stop-continuation。',
+  });
+  assert.equal(fileSummaryWithRouteWords.intent, 'writing.zh');
+  assert.deepEqual(fileSummaryWithRouteWords.requiredSubagents, []);
+  assert.deepEqual(fileSummaryWithRouteWords.requiredTools, []);
+
+  const observedResultsQuestion = routeNaturalLanguageTask({
+    prompt: '本轮测试暴露了哪些问题',
+  });
+  assert.equal(observedResultsQuestion.intent, 'writing.zh');
+  assert.deepEqual(observedResultsQuestion.requiredSubagents, []);
+  assert.deepEqual(observedResultsQuestion.requiredTools, []);
+
+  const installedRouteCheckSummary = routeNaturalLanguageTask({
+    prompt: '总结已观测的 E2E 诊断结果。请验证已安装的 OMP enhancer 新版本路由行为，不修改文件，不运行测试。必须使用工具调用 omp_core_route_task 分别检查两个 probe prompt，然后调用 omp_core_subagent_status。最终输出 E2E_MARKER_ROUTE_RESET，并报告 A 的 intent、B 的 intent、status 是否被 probe 污染成 bug-audit、SKILL_USAGE。',
+  });
+  assert.equal(installedRouteCheckSummary.intent, 'diagnosis');
+  assert.deepEqual(installedRouteCheckSummary.requiredSubagents, []);
+  assert.deepEqual(installedRouteCheckSummary.requiredTools, []);
+
+  const focusedRouteToolCheck = routeNaturalLanguageTask({
+    prompt: 'Tool check only. Do not modify files. Do not run tests. Do not fork subagents. Call exactly these tools in order: omp_core_route_task twice, then omp_core_subagent_status. Final answer must include E2E_MARKER_ROUTE_PROBE_JSON, A intent, B intent, status route, and whether any probe changed active route.',
+  });
+  assert.equal(focusedRouteToolCheck.intent, 'diagnosis');
+  assert.deepEqual(focusedRouteToolCheck.requiredSubagents, []);
+  assert.deepEqual(focusedRouteToolCheck.requiredTools, []);
+
+  const routeTaskCodeAudit = routeNaturalLanguageTask({
+    prompt: 'Review the omp_core_route_task implementation for bugs. Do not edit files; report concrete file-line findings only.',
+  });
+  assert.equal(routeTaskCodeAudit.intent, 'bug-audit');
+
+  const routeTaskChineseAudit = routeNaturalLanguageTask({
+    prompt: '检查 omp_core_route_task 的实现是否有 bug，不要修改代码，只报告。',
+  });
+  assert.equal(routeTaskChineseAudit.intent, 'bug-audit');
+
+  const freshChineseAuditSummary = routeNaturalLanguageTask({
+    prompt: '请检查当前代码并总结问题，不要修改文件。',
+  });
+  assert.equal(freshChineseAuditSummary.intent, 'bug-audit');
+
+  const freshConfigAuditSummary = routeNaturalLanguageTask({
+    prompt: '检查 docker-compose.yml 配置并汇总问题，只报告。',
+  });
+  assert.equal(freshConfigAuditSummary.intent, 'bug-audit');
+
+  const implementationWorkflowPrompt = routeNaturalLanguageTask({
+    prompt: '请在当前项目中实现 sortNumbers(values, options) 的 unique 模式：当 options.unique === true 时，返回升序且去重的新数组；默认行为保持只排序不去重。请遵守 implementation-with-tests workflow，先读取相关 skills，不要调用不存在的 skill 工具。按需 fork 子代理。完成后运行 npm test。最终输出 E2E_MARKER_IMPL、SKILL_USAGE、SUBAGENT_USAGE、测试命令和结果。',
+  });
+  assert.equal(implementationWorkflowPrompt.intent, 'implementation-with-tests');
+
   const repairPlan = routeNaturalLanguageTask({
     prompt: '去修复这些问题，但是先给我一个计划。对于门禁有关的问题，你的思路应该是尽量在事前做好工作，而不是事后阻止，不要给用户反复尝试的感觉。',
   });
