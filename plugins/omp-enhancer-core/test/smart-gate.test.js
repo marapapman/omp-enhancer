@@ -39,6 +39,32 @@ test('buildSmartGatePrompt uses OMP Tiny and embeds the blocking rule gate', () 
   assert.match(result.prompt, /Do not use verdict "blocked" merely because the assistant asked whether to proceed/);
 });
 
+test('buildSmartGatePrompt teaches Tiny route mismatch and prompt leak boundaries', () => {
+  const result = buildSmartGatePrompt({
+    prompt: '去修复这些门禁问题，但是先给我一个计划。',
+    route: {
+      intent: 'writing.zh',
+      agent: 'writing-helper.zh-writer',
+      requiredSkills: ['plain-chinese-writing'],
+      requiredTools: ['writing_quality_check'],
+      requiredSubagents: [{ agent: 'zh-writer', requiredSkills: ['plain-chinese-writing'] }],
+    },
+    ruleGate: {
+      gateKey: 'writing.zh:subagent',
+      kind: 'subagent',
+      context: 'Missing zh-writer completion.',
+    },
+    evidence: 'Original task is an implementation repair plan.',
+    finalOutput: 'Implementation repair plan delivered.',
+  });
+
+  assert.match(result.prompt, /route mismatch/i);
+  assert.match(result.prompt, /local follow-up/i);
+  assert.match(result.prompt, /needs-work/i);
+  assert.match(result.prompt, /Do not expose classifier or smart-gate prompts/i);
+  assert.match(result.prompt, /user-facing output/i);
+});
+
 test('resolveSmartGateDecision accepts fenced high-confidence pass output', () => {
   const result = resolveSmartGateDecision({
     gateKey: 'writing.zh:writing-qa',

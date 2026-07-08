@@ -364,6 +364,55 @@ test('routes common work situations without unreasonable workflow escalation', (
   }
 });
 
+test('routes observed gate workflow regressions before classifier or smart-gate recovery', () => {
+  const workflowValidation = routeNaturalLanguageTask({
+    prompt: '我已经重启 OMP，请利用 MiMo 对 OMP 进行一次端到端测试，验证整个工作流中门禁的误挡、主进程结束后长时间后台任务，以及主 agent 或 task 漏用 skills 或不遵守 workflow 的情况。',
+  });
+  assert.equal(workflowValidation.intent, 'bug-audit');
+  assert.equal(workflowValidation.auditMode, 'focused');
+  assert.deepEqual(workflowValidation.requiredSubagents, []);
+  assert.ok(workflowValidation.requiredTools.includes('omp_test_gate'));
+
+  const observedSummary = routeNaturalLanguageTask({
+    prompt: '统一总结一下这一轮测试里面观察到的问题。',
+  });
+  assert.equal(observedSummary.intent, 'writing.zh');
+  assert.deepEqual(observedSummary.requiredSubagents, []);
+  assert.deepEqual(observedSummary.requiredTools, []);
+
+  const repairPlan = routeNaturalLanguageTask({
+    prompt: '去修复这些问题，但是先给我一个计划。对于门禁有关的问题，你的思路应该是尽量在事前做好工作，而不是事后阻止，不要给用户反复尝试的感觉。',
+  });
+  assert.equal(repairPlan.intent, 'implementation-with-tests');
+  assert.deepEqual(repairPlan.requiredSubagents.map(({ agent }) => agent), ['plan', 'implementation-task', 'reviewer']);
+
+  const configAssets = routeNaturalLanguageTask({
+    prompt: '检查 omp-config marketplace 插件打包出来的 assets 和 hooks 是否齐全。',
+  });
+  assert.equal(configAssets.intent, 'config-assets');
+  assert.deepEqual(configAssets.requiredSubagents.map(({ agent }) => agent), ['config-librarian', 'reviewer']);
+
+  const configAssetsWithCodeNegation = routeNaturalLanguageTask({
+    prompt: '不要修改代码，检查 config assets 是否齐全。',
+  });
+  assert.equal(configAssetsWithCodeNegation.intent, 'config-assets');
+
+  const genericSubagentInventory = routeNaturalLanguageTask({
+    prompt: '列出当前可用的 subagents 清单，不要检查 config assets。',
+  });
+  assert.equal(genericSubagentInventory.intent, 'unknown');
+
+  const genericSkillInventory = routeNaturalLanguageTask({
+    prompt: '查看当前 skills 是否齐全。',
+  });
+  assert.equal(genericSkillInventory.intent, 'unknown');
+
+  const smartGatePromptFix = routeNaturalLanguageTask({
+    prompt: '更新 classifier 和 smart gate prompt，减少错误恢复循环，并补测试。',
+  });
+  assert.equal(smartGatePromptFix.intent, 'implementation-with-tests');
+});
+
 test('routes extended boundary work situations without workflow confusion', () => {
   const cases = [
     ['find symbol read-only', '帮我找到 routeNaturalLanguageTask 在哪里定义，只告诉我文件和行号，不改代码。', 'unknown'],
@@ -463,7 +512,7 @@ test('routes operational edge workloads without workflow confusion', () => {
     ['slides outline writing', '写一份中文课程 slides 大纲。', 'writing.zh'],
     ['html slides implementation', '实现 HTML slides 页面，并截图检查。', 'implementation-with-tests'],
     ['config doctor run', '运行 config doctor，检查 hooks 和 assets 是否齐全。', 'config-assets'],
-    ['agent inventory', '列出当前可用 subagent 和技能清单。', 'config-assets'],
+    ['agent inventory', '列出当前可用 subagent 和技能清单。', 'unknown'],
     ['agent design doc', '起草 subagent fork 设计文档。', 'writing.zh'],
     ['model policy change', '修改 modelRoles.tiny 的默认模型，并更新测试。', 'implementation-with-tests'],
     ['model policy comparison', '比较 DeepSeek Flash 和 MiMo 在路由上的适用场景，不改代码。', 'unknown'],

@@ -1172,6 +1172,7 @@ function classifierPreflightInstructions(state, { heading }) {
     '1. Call omp_core_classifier_prompt with the original user task to get the strict JSON schema and classifier prompt.',
     '2. Use OMP Tiny (`modelRoles.tiny`) to produce only the classifier JSON. Do not configure a separate classifier role.',
     '3. Call omp_core_resolve_classification with prompt set to the original user task and output set to the classifier JSON.',
+    'Do not print XML or <tool_call> text. Make actual tool calls only.',
     '4. Continue only under the resolved route, skills, tools, gates, and subagents.',
     prompt ? `Original user task: ${prompt.slice(0, 500)}` : null,
   ].filter(Boolean).join('\n');
@@ -1391,6 +1392,8 @@ function buildSmartGateRequiredContext(state, ruleGate) {
     '2. Use OMP Tiny (`modelRoles.tiny`) to produce only the strict smart-gate JSON.',
     '3. Call omp_core_resolve_smart_gate with output set to that JSON.',
     '4. Continue only if the resolved smart gate returns verdict pass; if it returns needs-work, perform the listed local actions and deliver the focused answer when possible. Report BLOCKERS only for real external blockers such as missing credentials, inaccessible files/services, permission limits, or required user-provided input.',
+    'Do not print XML or <tool_call> text. Make actual tool calls only.',
+    'Use writing_quality_check, not write_quality_check.',
     previous ? formatPreviousSmartGateDecision(previous) : null,
     '',
     'Deterministic rule gate context:',
@@ -1409,9 +1412,13 @@ function formatPreviousSmartGateDecision(previous) {
     `Previous smart-gate decision: ${decision.verdict} (${Math.round(decision.confidence * 100)}% confidence).`,
     decision.reason ? `Reason: ${decision.reason}` : null,
     decision.missing?.length ? `Missing: ${decision.missing.join(', ')}` : null,
-    decision.actions?.length ? `Actions: ${decision.actions.join('; ')}` : null,
+    decision.actions?.length ? `Actions: ${decision.actions.map(normalizeSmartGateActionText).join('; ')}` : null,
     validationErrors,
   ].filter(Boolean).join(' ');
+}
+
+function normalizeSmartGateActionText(value) {
+  return String(value ?? '').replace(/\bwrite_quality_check\b/g, 'writing_quality_check');
 }
 
 function formatSmartGateResult(result) {

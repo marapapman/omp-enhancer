@@ -1386,6 +1386,8 @@ test('repeated failed writing QA tools require Tiny smart gate before releasing 
   assert.match(blocked.additionalContext, /smart gate is required/);
   assert.match(blocked.additionalContext, /modelRoles\.tiny/);
   assert.match(blocked.additionalContext, /writing_quality_check \(2 attempts\)/);
+  assert.match(blocked.additionalContext, /Do not print XML or <tool_call> text/);
+  assert.match(blocked.additionalContext, /Use writing_quality_check, not write_quality_check/);
 
   const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
     'call-writing-smart-gate-prompt',
@@ -1412,7 +1414,7 @@ test('repeated failed writing QA tools require Tiny smart gate before releasing 
         confidence: 0.83,
         satisfied: false,
         missing: ['clear checker evidence'],
-        actions: ['include checker verdict evidence'],
+        actions: ['call write_quality_check with checker verdict evidence'],
         reason: 'The checker result needs to be explicit.',
       }),
     },
@@ -1428,7 +1430,8 @@ test('repeated failed writing QA tools require Tiny smart gate before releasing 
 
   assert.equal(stillBlocked?.continue, true);
   assert.match(stillBlocked.additionalContext, /Previous smart-gate decision: needs-work/);
-  assert.match(stillBlocked.additionalContext, /include checker verdict evidence/);
+  assert.match(stillBlocked.additionalContext, /call writing_quality_check with checker verdict evidence/);
+  assert.doesNotMatch(stillBlocked.additionalContext, /Actions: .*write_quality_check/);
 
   const pass = await tool(pi, 'omp_core_resolve_smart_gate').execute(
     'call-writing-smart-gate-pass',

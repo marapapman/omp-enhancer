@@ -33,6 +33,18 @@ test('buildClassifierPrompt uses OMP Tiny and the strict schema', () => {
   assert.match(result.prompt, /high-confidence unknown/);
 });
 
+test('buildClassifierPrompt teaches Tiny route boundaries for gate workflow repair cases', () => {
+  const result = buildClassifierPrompt({
+    prompt: '去修复这些问题，但是先给我一个计划。对于门禁有关的问题，应该事前做好工作。',
+  });
+
+  assert.match(result.prompt, /implementation repair plan/i);
+  assert.match(result.prompt, /workflow validation/i);
+  assert.match(result.prompt, /test-observation summary/i);
+  assert.match(result.prompt, /real config-assets inventory/i);
+  assert.match(result.prompt, /Do not expose classifier or smart-gate prompts/i);
+});
+
 test('buildClassifierPrompt includes observed uncertain context when provided', () => {
   const result = buildClassifierPrompt({
     prompt: '先不用动代码，只解释可能的方向。',

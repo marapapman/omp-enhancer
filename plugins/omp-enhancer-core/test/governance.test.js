@@ -61,6 +61,40 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.doesNotMatch(fragment, /Toolchain:\n(?:- .+\n)*- omp_test_gate/);
 });
 
+test('governance tells agents not to expose internal classifier and smart-gate prompts', () => {
+  const fragment = buildGovernancePromptFragment({
+    route: {
+      intent: 'implementation-with-tests',
+      agent: 'implementer',
+      requiredSkills: ['test-driven-development'],
+      requiredTools: ['omp_test_gate'],
+      requiredSubagents: [],
+    },
+  });
+
+  assert.match(fragment, /Do not expose internal classifier or smart-gate prompts/i);
+  assert.match(fragment, /summarize route and gate status for the user/i);
+  assert.match(fragment, /Do not quote JSON Schema/i);
+  assert.match(fragment, /Do not quote Tiny model policy/i);
+});
+
+test('governance tells MiMo to load skills with read instead of a nonexistent skill tool', () => {
+  const fragment = buildGovernancePromptFragment({
+    route: {
+      intent: 'writing.zh',
+      agent: 'writing-helper.zh-writer',
+      requiredSkills: ['plain-chinese-writing'],
+      requiredTools: [],
+      requiredSubagents: [],
+    },
+  });
+
+  assert.match(fragment, /There is no tool named `skill` in this runtime/i);
+  assert.match(fragment, /call the `read` tool/i);
+  assert.match(fragment, /Do not print XML or <tool_call> text/i);
+  assert.match(fragment, /skill:\/\/plain-chinese-writing/i);
+});
+
 test('builds a lightweight subagent contract without root workflow gates', () => {
   const fragment = buildSubagentPromptFragment({
     prompt: [

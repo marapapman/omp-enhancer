@@ -143,6 +143,7 @@ export function routeNaturalLanguageTask(input = {}) {
 
   const conceptOnly = isConceptOnlyQuestion(normalized);
   const asksNoCodeChange = includesAny(normalized, noCodeChangeTerms);
+  const isPlanForCodeChange = isImplementationPlanForCodeChange(normalized);
   const hasTesting = isTestingRequest(normalized);
   const hasDirectTestAuthoring = isDirectTestAuthoring(normalized);
   const hasTestAnalysis = isTestAnalysisRequest(normalized);
@@ -151,10 +152,11 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasGateValidatorStatusReport = isGateValidatorStatusReport(normalized);
   const hasFactCheck = isFactCheckRequest(normalized) || isFactCheckDocumentRequest(normalized);
   const hasLocalSmokeOnly = isLocalSmokeOrProcessRunRequest(normalized);
-  const hasBugAudit = !hasGateValidatorStatusReport && !hasBugReportWriting && isBugAuditRequest(normalized);
-  const hasFocusedBugAudit = hasBugAudit && isFocusedDirectAuditRequest(normalized);
+  const hasWorkflowValidation = isWorkflowValidationRequest(normalized);
+  const hasBugAudit = hasWorkflowValidation || (!hasGateValidatorStatusReport && !hasBugReportWriting && !hasTestReportWriting && isBugAuditRequest(normalized));
+  const hasFocusedBugAudit = hasWorkflowValidation || (hasBugAudit && isFocusedDirectAuditRequest(normalized));
   const hasKnowledgeOnly = !hasFactCheck && isKnowledgeWorkWithoutWritingArtifact(normalized);
-  const hasCoding = !asksNoCodeChange && !hasBugAudit && !hasKnowledgeOnly && isCodeChangeRequest(normalized);
+  const hasCoding = (!asksNoCodeChange || isPlanForCodeChange) && !hasBugAudit && !hasKnowledgeOnly && isCodeChangeRequest(normalized);
   const hasCodeChange = hasCoding && !hasTestReportWriting;
   const hasSecurityWritingArtifact = isSecurityWritingArtifact(normalized);
   const hasEnglishWriting = isEnglishWriting(normalized)
@@ -222,7 +224,7 @@ export function routeNaturalLanguageTask(input = {}) {
   }
 
   if (hasTestReportWriting) {
-    return routed(hasEnglishWriting ? 'writing.en' : 'writing.zh', { writingComplexity: writingComplexityFor(normalized) });
+    return routed(hasEnglishWriting ? 'writing.en' : 'writing.zh', { writingComplexity: isObservedTestSummary(normalized) ? 'simple' : writingComplexityFor(normalized) });
   }
 
   if (hasCodeChange && hasTesting) {
@@ -675,13 +677,21 @@ function isDirectTestAuthoring(text) {
 
 function isTestReportWritingRequest(text) {
   if (asksToRunTestVerification(text)) return false;
-  if (isReportOnlyAudit(text) && !/(?:写|起草|撰写|润色|改写|整理|draft|write|revise|polish|edit|improve)/.test(text)) return false;
-  return /(?:写|起草|撰写|润色|改写|整理)(?:一份|一个|这份|这段|当前)?(?:测试|覆盖率|门禁|回归|e2e|playwright)?(?:报告|总结|说明|文档|记录|复盘|计划)/.test(text)
-    || /(?:写|起草|撰写|整理).*(?:测试|覆盖率|门禁|回归|e2e|playwright).*(?:计划|报告|总结|说明|文档|记录|复盘)/.test(text)
+  if (isImplementationPlanForCodeChange(text)) return false;
+  if (isReportOnlyAudit(text) && !/(?:写|起草|撰写|润色|改写|整理|总结|归纳|draft|write|revise|polish|edit|improve)/.test(text)) return false;
+  return /(?:写|起草|撰写|润色|改写|整理|总结|归纳)(?:一份|一个|这份|这段|当前|一下|统一)?(?:测试|覆盖率|门禁|回归|e2e|playwright)?(?:报告|总结|说明|文档|记录|复盘|计划|问题|观察|现象|结论)/.test(text)
+    || /(?:写|起草|撰写|整理|总结|归纳).*(?:测试|覆盖率|门禁|回归|e2e|playwright).*(?:计划|报告|总结|说明|文档|记录|复盘|问题|观察|现象|结论)/.test(text)
+    || /(?:总结|归纳|整理).*(?:这一轮|本轮|当前).*(?:测试|验证|e2e).*(?:问题|观察|现象|结论)/.test(text)
     || /(?:检查|审查|核对|修复|修改).*(?:测试|覆盖率|门禁|回归|e2e|playwright).*(?:报告|章节|结论|措辞|表述|计划)/.test(text)
     || /(?:检查|审查|核对|修复|修改).*(?:报告|章节|结论|措辞|表述|计划).*(?:测试|覆盖率|门禁|回归|e2e|playwright)/.test(text)
-    || /(?:draft|write|revise|polish|edit|improve)\s+.*(?:test|testing|coverage|gate|regression|e2e|playwright).*(?:report|summary|notes|document|doc|writeup|postmortem)/.test(text)
-    || /(?:draft|write|revise|polish|edit|improve)\s+.*(?:report|summary|notes|document|doc|writeup|postmortem).*(?:test|testing|coverage|gate|regression|e2e|playwright)/.test(text);
+    || /(?:draft|write|revise|polish|edit|improve|summarize|summarise)\s+.*(?:test|testing|coverage|gate|regression|e2e|playwright).*(?:report|summary|notes|document|doc|writeup|postmortem|observations?|findings?)/.test(text)
+    || /(?:draft|write|revise|polish|edit|improve|summarize|summarise)\s+.*(?:report|summary|notes|document|doc|writeup|postmortem|observations?|findings?).*(?:test|testing|coverage|gate|regression|e2e|playwright)/.test(text);
+}
+
+function isObservedTestSummary(text) {
+  return /(?:总结|归纳|整理).*(?:这一轮|本轮|当前).*(?:测试|验证|e2e).*(?:问题|观察|现象|结论)/.test(text)
+    || /(?:统一总结).*(?:测试|验证|e2e).*(?:问题|观察|现象|结论)/.test(text)
+    || /(?:summarize|summarise)\s+.*(?:observed|completed|previous).*(?:test|testing|e2e|gate|workflow).*(?:issues?|observations?|findings?)/.test(text);
 }
 
 function isTestAnalysisRequest(text) {
@@ -694,6 +704,22 @@ function isTestAnalysisRequest(text) {
     || /(?:编译).*(?:latex|warnings?|warning|编译)/.test(text)
     || /(?:检查|审查|测试|排查).*(?:门禁|gate|路由|workflow|工作流|代码|实现|逻辑).*(?:误挡|异常|错误|失败|风险|bug|问题)/.test(text)
     || /(?:发布前|pre[-\s]?release).*(?:check|检查|pack|test|plugin list|marketplace)/.test(text);
+}
+
+function isWorkflowValidationRequest(text) {
+  const mentionsOmpWorkflow = /(?:omp|mimo|advisor|主\s*agent|后台任务|漏用\s*skills?|不遵守\s*workflow|误挡|误判)/.test(text);
+  const hasValidationAction = /(?:端到端|e2e|验证|测试|检查)/.test(text);
+  const hasWorkflowTarget = /(?:workflow|工作流|门禁|gate|路由|route|subagent|skills?|后台任务|主\s*agent|误挡|误判|漏用|不遵守)/.test(text);
+  const validatesWorkflow = /(?:端到端|e2e|验证|测试|检查).*(?:workflow|工作流|门禁|gate|路由|route|subagent|skills?|后台任务|主\s*agent|mimo|advisor)/.test(text)
+    || /(?:workflow|工作流|门禁|gate|路由|route|subagent|skills?|后台任务|主\s*agent|mimo|advisor).*(?:端到端|e2e|验证|测试|检查|误挡|误判|漏用|不遵守)/.test(text);
+  const asksForCodeChange = /(?:修复|修改|更新|调整|优化|实现|重构|改代码|新增|创建|fix|update|modify|implement|refactor|create|add)/.test(text);
+  return mentionsOmpWorkflow && hasValidationAction && hasWorkflowTarget && validatesWorkflow && !asksForCodeChange;
+}
+
+function isImplementationPlanForCodeChange(text) {
+  if (/(?:不要|先不要|不)\s*(?:写代码|改代码|修改|实现|修复)|(?:do not|don't)\s+(?:write|modify|implement|fix|change)/.test(text)) return false;
+  return /(?:先给|给我|制定|生成).*(?:计划|plan).*(?:修复|修改|实现|调整|优化|门禁|gate|路由|route|workflow|工作流|插件|plugin)/.test(text)
+    || /(?:修复|修改|实现|调整|优化).*(?:这些|上述|当前)?.*(?:问题|门禁|gate|路由|route|workflow|工作流|插件|plugin).*(?:计划|plan)/.test(text);
 }
 
 function isLocalSmokeOrProcessRunRequest(text) {
@@ -726,6 +752,9 @@ function isBugAuditRequest(text) {
     || /(?:不要|先不要)(?:修复|修改|改代码|改)|不(?:修复|修改|改代码|改实现)/.test(text);
   const asksForChange = /(?:\b(?:fix|repair|resolve|implement|modify|refactor|update|optimize|improve|adjust)\b|修复|修改|修正|更新|实现|重构|开发|优化|改进|调整|补测试|写测试|add tests?|write tests?)/.test(text);
   if (asksForChange && !negatesFix && !isReportOnlyAudit(text)) {
+    return false;
+  }
+  if (isExplicitWritingAction(text) && !/(?:do not edit|without editing|不要改|不改|只报告)/.test(text) && !/(?:测试|检查|排查|审查|扫描|查找|找|发现|运行|执行|test|run|check|find|audit|hunt|scan|inspect|investigate)/.test(text)) {
     return false;
   }
   if (/(?:不查|不找|不排查)\s*bug|no\s+bug\s+(?:hunt|audit|check)/.test(text)) {
@@ -778,8 +807,8 @@ function isCodeChangeRequest(text) {
   const explicitCreatedCodeTarget = /(?:逻辑|代码|功能|接口|模块|实现|handling|logic|feature)/.test(withoutNegatedCodeWriting);
   if (/(?:api reference|api.*文档|api.*document|api.*docs?)/.test(text) && isExplicitWritingAction(text)) return false;
   if (isProseWritingOptimizationRequest(text)) return false;
-  return /(?:修改|修复|修正|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|gate|路由|提示词|页面|ui|router|route|workflowroute|fallback|回退逻辑)/.test(withoutNegatedCodeWriting)
-    || /(?:重构|优化|修改|修复|修正).*(?:逻辑|代码|模块|函数|router|route|workflow|工作流|门禁|gate|路由|fork|subagent|误判|运行失败|启动失败|warning|dev server)/.test(withoutNegatedCodeWriting)
+  return /(?:修改|修复|修正|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本|这些|上述)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|gate|路由|提示词|页面|ui|router|route|workflowroute|fallback|回退逻辑|问题)/.test(withoutNegatedCodeWriting)
+    || /(?:重构|优化|修改|修复|修正|调整).*(?:逻辑|代码|模块|函数|router|route|workflow|工作流|门禁|gate|路由|fork|subagent|误判|误挡|反复|运行失败|启动失败|warning|dev server|问题)/.test(withoutNegatedCodeWriting)
     || /(?:只改|只修改|改动|修改).*(?:一行|一处|少量|代码|文件)/.test(withoutNegatedCodeWriting)
     || /写.*(?:函数|代码|接口|功能|页面|模块|看板|dashboard|api|component|组件)/.test(withoutNegatedCodeWriting)
     || /(?:写|新增|添加|创建|生成).*(?:python|bash|node(?:\.js)?|shell|脚本).*(?:加入项目|写入项目|保存到|文件|仓库|代码库)/.test(withoutNegatedCodeWriting)
@@ -792,6 +821,7 @@ function isCodeChangeRequest(text) {
     || /(?:新增|添加|创建|生成|更新|修改).*(?:mcp tool|tool 定义|makefile|target|schema\.graphql|graphql schema|openapi|terraform|module|resolver|subagent 模板).*(?:测试|验证|运行|接口|字段|定义|限制)?/.test(withoutNegatedCodeWriting)
     || /(?:fix|implement|modify|refactor|build|update)\s+(?:the\s+)?(?:plugin|config|configuration|logic|code|api|hook|hooks|marketplace|workflow|governance|prompt|router|route|validator|gate)/.test(withoutNegatedCodeWriting)
     || /(?:更新|修改|修复).*(?:classifier|router|route|prompt|提示词|模型白名单|白名单).*(?:代码|测试|路由|bug-audit|任务|规则|默认|优先)/.test(withoutNegatedCodeWriting)
+    || /(?:更新|修改|修复|调整).*(?:classifier|smart\s*gate|smart-gate|gate|prompt|提示词).*(?:prompt|提示词|恢复循环|错误恢复|测试|路由|规则|gate)/.test(withoutNegatedCodeWriting)
     || /(?:修复|修改|更新).*(?:modelroles|model roles|配置|config|默认模型|模型|白名单|whitelist|classifier).*(?:错误|问题|bug|不同步|默认值|默认模型|代码|测试)/.test(withoutNegatedCodeWriting)
     || /(?:修复|修改|更新).*(?:config assets?|assets?|配置资产).*(?:打包|遗漏|缺失|错误|问题)/.test(withoutNegatedCodeWriting)
     || /(?:修复|解决).*(?:typescript|ts|编译|构建|build|compile|dockerfile|docker|镜像|image).*(?:错误|失败|问题)/.test(withoutNegatedCodeWriting)
@@ -851,10 +881,19 @@ function isReleaseRequest(text) {
 }
 
 function isConfigAssetRequest(text) {
-  return (includesAny(text, configTerms)
-    && includesAny(text, ['config', 'assets', 'asset', 'hooks', 'hook', 'skills', 'skill', 'agents', 'templates', 'omp-config', 'marketplace', '配置', '打包', '模板', '清单', '技能']))
+  if (isWorkflowValidationRequest(text)) return false;
+  const textWithoutNegatedConfigAssets = text.replace(/(?:不要|不|别|无需|不用)[^，。；！\n]*(?:config assets?|配置资产)/g, '');
+  if (textWithoutNegatedConfigAssets !== text && !/(?:omp-config|marketplace|packaged|打包|配置资产|config doctor)/.test(textWithoutNegatedConfigAssets)) return false;
+  const hasExplicitConfigAsset = includesAny(text, ['omp-config', 'config asset', 'config assets', 'asset paths', 'config templates', 'config doctor', '配置资产', '配置模板', 'modelroles', 'model roles', 'provider 配置', 'provider config']);
+  const hasPackagedConfigInventory = includesAny(text, ['打包', 'packaged', 'marketplace', '模板', 'templates', 'hooks', 'hook', 'assets', 'asset'])
+    && (includesAny(text, ['config', 'omp-config', '配置', '资产', '模板', '打包']) || /packaged\s+(?:hooks?|agents?|skills?|templates?|assets?)/.test(text));
+  const listsConfigInventory = textWithoutNegatedConfigAssets === text
+    && /(?:列出|查看|检查|核对).*(?:subagent|subagents|agent|agents|技能|skills?|modelroles|model roles|provider).*(?:清单|可用|当前|齐全|完整|packaged|打包|配置)/.test(text)
+    && (hasExplicitConfigAsset || hasPackagedConfigInventory || /(?:config|omp-config|配置|marketplace|packaged|打包)/.test(text));
+  return (hasExplicitConfigAsset || hasPackagedConfigInventory)
+    && includesAny(text, ['config', 'assets', 'asset', 'hooks', 'hook', 'agents', 'templates', 'omp-config', 'marketplace', '配置', '打包', '模板', '清单', 'modelroles', 'provider'])
     || /(?:运行|执行|检查|排查).*(?:config doctor|doctor).*(?:hooks?|assets?|配置|资产|齐全|完整)/.test(text)
-    || /(?:列出|查看|检查|核对).*(?:subagent|subagents|agent|agents|技能|skills?).*(?:清单|可用|当前|齐全|完整|packaged)/.test(text)
+    || listsConfigInventory
     || /(?:检查|核对|列出|查看|排查).*(?:marketplace catalog|marketplace|catalog).*(?:版本|version|插件|plugin|一致|同步)/.test(text);
 }
 
