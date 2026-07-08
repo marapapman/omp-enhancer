@@ -40,6 +40,8 @@ export function buildGovernancePromptFragment({
     '',
     ...workflowGateBriefingLines(resolved),
     '',
+    ...workflowNextLines(resolved),
+    '',
     loopGuardPromptSection(),
     '',
     '### Advisor Guidance Policy',
@@ -365,6 +367,23 @@ function formatRecentToolFailures(state, toolNames = []) {
       return `- ${failure.tool}${attempts}: ${details || 'tool returned a failed result'}`;
     }),
   ].join('\n');
+}
+
+function workflowNextLines(route) {
+  const firstSkill = route.requiredSkills?.[0];
+  const delegatesWork = Boolean(route.requiredSubagents?.length);
+  const nextAction = firstSkill && delegatesWork
+    ? `Next action: load skill://${firstSkill} into the first routed subagent task assignment before acting.`
+    : firstSkill
+      ? `Next action: read skill://${firstSkill} before acting, then follow the route card.`
+      : 'Next action: follow the route card using the selected tools.';
+  return [
+    'WORKFLOW_NEXT',
+    nextAction,
+    'Soft guidance: keep this to one immediate action and adjust only when tool evidence conflicts.',
+    '',
+    'WORKFLOW_CONTEXT',
+  ];
 }
 
 function workflowFor(route) {

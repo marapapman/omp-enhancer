@@ -556,9 +556,21 @@ function formatSubagents(subagents = []) {
 
 function shouldActivateRouteProbe(state, params = {}) {
   if (params.activate === true) return true;
+  if (isRouteProbeOnlyPrompt(params.prompt)) return false;
   const activePrompt = normalizeRoutePrompt(state.lastPrompt);
   if (!activePrompt) return true;
   return normalizeRoutePrompt(params.prompt) === activePrompt;
+}
+
+function isRouteProbeOnlyPrompt(prompt = '') {
+  const normalized = normalizeRoutePrompt(prompt).toLowerCase();
+  if (!normalized) return false;
+  return /(?:tool check only|route\s*probe|probe prompt|probe changed active route|路由行为|路由自检|route\s*check)/.test(normalized)
+    || /(?:just|only)\s+(?:check|test|probe).*(?:route|routing)/.test(normalized)
+    || /\b(?:route|routing)\b.*(?:only|do not|don't|without|not).*(?:activat|run|execut|start)/.test(normalized)
+    || (/(?:omp_core_route_task|route_task)/.test(normalized)
+      && /omp_core_subagent_status/.test(normalized)
+      && /(?:call exactly|call .*twice|status route|probe|changed active route|只检查|不修改|不运行测试|do not modify|do not run tests)/.test(normalized));
 }
 
 function normalizeRoutePrompt(value = '') {

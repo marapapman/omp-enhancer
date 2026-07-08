@@ -372,7 +372,6 @@ test('routes observed gate workflow regressions before classifier or smart-gate 
   assert.equal(workflowValidation.auditMode, 'focused');
   assert.deepEqual(workflowValidation.requiredSubagents, []);
   assert.ok(workflowValidation.requiredTools.includes('omp_test_gate'));
-
   const observedSummary = routeNaturalLanguageTask({
     prompt: '统一总结一下这一轮测试里面观察到的问题。',
   });
@@ -471,6 +470,87 @@ test('routes observed gate workflow regressions before classifier or smart-gate 
     prompt: '更新 classifier 和 smart gate prompt，减少错误恢复循环，并补测试。',
   });
   assert.equal(smartGatePromptFix.intent, 'implementation-with-tests');
+});
+
+test('routes generic workflow compliance audit away from security review', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Audit workflow compliance for route and skill usage, report violations only.',
+  });
+
+  assert.equal(route.intent, 'bug-audit');
+  assert.equal(route.auditMode, 'focused');
+  assert.deepEqual(route.requiredSubagents, []);
+});
+
+test('routes compliance audit phrased before workflow target to focused bug audit', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Audit compliance with workflow and skill usage, report violations only.',
+  });
+
+  assert.equal(route.intent, 'bug-audit');
+  assert.equal(route.auditMode, 'focused');
+  assert.deepEqual(route.requiredSubagents, []);
+});
+
+test('routes Chinese workflow compliance audit with no-write constraint to focused bug audit', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '审计工作流合规性和 skill 使用情况，只报告违规，不改代码。',
+  });
+
+  assert.equal(route.intent, 'bug-audit');
+  assert.equal(route.auditMode, 'focused');
+  assert.deepEqual(route.requiredSubagents, []);
+});
+
+test('routes English workflow compliance audit with no-write constraint to focused bug audit', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Audit workflow compliance for route and skill usage. Do not write files; report violations only.',
+  });
+
+  assert.equal(route.intent, 'bug-audit');
+  assert.equal(route.auditMode, 'focused');
+  assert.deepEqual(route.requiredSubagents, []);
+});
+
+test('routes workflow compliance report writing to English writing profile', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Write a workflow compliance report for OMP gates; do not run tests.',
+  });
+
+  assert.equal(route.intent, 'writing.en');
+  assert.equal(route.agent, 'writing-helper.writer');
+  assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), ['writer', 'checker']);
+});
+
+test('routes workflow compliance report prose editing to English writing profile', () => {
+  for (const prompt of [
+    'Review the workflow compliance report for grammar and clarity.',
+    'Check the workflow compliance report wording.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.intent, 'writing.en', prompt);
+    assert.equal(route.agent, 'writing-helper.writer', prompt);
+    assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), ['writer', 'checker'], prompt);
+  }
+});
+
+test('keeps dependency license compliance security audit on security review', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Audit dependency license compliance and security vulnerabilities in this repo; report risks only and do not change code.',
+  });
+
+  assert.equal(route.intent, 'security-review');
+  assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), ['ecc-security-reviewer', 'reviewer']);
+});
+
+test('keeps security compliance audit for OMP gates on security review', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Run an E2E security compliance audit for OMP gates: check auth permissions and security vulnerabilities, report risks only.',
+  });
+
+  assert.equal(route.intent, 'security-review');
+  assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), ['ecc-security-reviewer', 'reviewer']);
 });
 
 test('routes extended boundary work situations without workflow confusion', () => {

@@ -293,6 +293,27 @@ test('names the selected agent route and toolchain in the governance fragment', 
   assert.match(fragment, /reviewer:\s*review the diff; skills: verification-before-completion/);
 });
 
+test('adds soft WORKFLOW_NEXT guidance for routed implementation work', () => {
+  const fragment = buildGovernancePromptFragment({
+    route: {
+      intent: 'implementation-with-tests',
+      agent: 'implementer',
+      requiredSkills: ['test-driven-development', 'verification-before-completion'],
+      requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_gate'],
+      requiredSubagents: [
+        { agent: 'implementation-task', duty: 'implement the task', requiredSkills: ['test-driven-development'] },
+      ],
+    },
+  });
+
+  assert.match(fragment, /WORKFLOW_NEXT/);
+  assert.match(fragment, /Next action:/);
+  assert.match(fragment, /(?:read|load) `?skill:\/\/test-driven-development`?.*before acting/i);
+
+  const workflowNextSection = fragment.match(/WORKFLOW_NEXT[\s\S]*?(?=\n[A-Z][A-Z_ ]+\n|$)/)?.[0] ?? '';
+  assert.doesNotMatch(workflowNextSection, /\b(?:MUST|REQUIRED|mandatory|gate|block|blocked|cannot proceed)\b/i);
+});
+
 test('keeps routing governance independent from slash commands', () => {
   const fragment = buildGovernancePromptFragment({
     route: {

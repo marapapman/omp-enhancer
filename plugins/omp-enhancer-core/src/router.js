@@ -31,7 +31,7 @@ const enWritingObjectTerms = ['paper', 'report', 'manuscript', 'abstract', 'rela
 const testingTerms = ['tests', 'testing', 'unit test', 'coverage', 'mutation', 'e2e', 'playwright', 'regression', 'flaky', 'flakiness', 'test flakiness', 'lint', 'eslint', 'prettier', 'benchmark', 'smoke', 'screenshot', '测试', '测试用例', '覆盖率', '门禁', '浏览器', '截图'];
 const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', 'code', 'component', 'migrate', 'migration', 'dependency', 'dependencies', '实现', '重构', '修复', '报错', '功能', '代码', '接口', '迁移', '依赖'];
 const configTerms = ['omp-config', 'config asset', 'config assets', 'asset paths', 'config templates', 'config doctor', 'assets', 'hooks', 'templates', 'modelroles', 'model roles', 'agents', 'skills', 'subagent', 'subagents', '配置资产', '配置模板', '技能清单'];
-const securityTerms = ['security', 'vulnerability', 'vulnerabilities', 'path traversal', 'path expansion', 'unsafe path', 'dangerous command', 'dangerous commands', 'command injection', 'command execution', 'auth bypass', 'xss', 'ssrf', 'injection', 'auth', 'authentication', 'authorization', 'permissions', 'privilege', 'oauth', 'owasp', 'license', 'compliance', 'privacy', 'high severity', '安全', '漏洞', '注入', '鉴权', '认证', '权限', '越权', '密钥', 'secret', 'secrets', '路径穿越', '危险命令', '合规', '隐私', '许可证'];
+const securityTerms = ['security', 'vulnerability', 'vulnerabilities', 'path traversal', 'path expansion', 'unsafe path', 'dangerous command', 'dangerous commands', 'command injection', 'command execution', 'auth bypass', 'xss', 'ssrf', 'injection', 'auth', 'authentication', 'authorization', 'permissions', 'privilege', 'oauth', 'owasp', 'license', 'privacy', 'high severity', '安全', '漏洞', '注入', '鉴权', '认证', '权限', '越权', '密钥', 'secret', 'secrets', '路径穿越', '危险命令', '隐私', '许可证'];
 const noCodeChangeTerms = ['不要改代码', '不改代码', '不要写代码', '不写代码', '不要写入文件', '不要写入项目', '不写入文件', '不写入项目', '不写文件', '不写脚本', '不要改实现', '不改实现', '不修实现', '不要修代码', '不修代码', '不要实现', '先不要实现', '不实现', '不要改', '不要修改代码', '不要修改文件', '不修改文件', '先不要修', '不要修复', '不要修改', '只诊断', '只分析', '只检查', '只列清单', 'do not change', 'do not modify', 'do not fix', 'do not implement', 'do not write code', 'without writing code', 'diagnosis only', 'read-only'];
 const diagnosisTerms = ['why', 'diagnose', 'diagnosis', 'investigate', 'root cause', '原因', '为什么', '诊断', '定位', '排查', '是什么导致', '是什么原因', 'warning:', 'failed', 'failure'];
 const releaseTerms = ['push', 'publish', 'upgrade', '推送', '发布', '升级', '刷新'];
@@ -746,13 +746,21 @@ function isTestAnalysisRequest(text) {
 }
 
 function isWorkflowValidationRequest(text) {
-  const mentionsOmpWorkflow = /(?:omp|mimo|advisor|主\s*agent|后台任务|漏用\s*skills?|不遵守\s*workflow|误挡|误判)/.test(text);
-  const hasValidationAction = /(?:端到端|e2e|验证|测试|检查)/.test(text);
-  const hasWorkflowTarget = /(?:workflow|工作流|门禁|gate|路由|route|subagent|skills?|后台任务|主\s*agent|误挡|误判|漏用|不遵守)/.test(text);
-  const validatesWorkflow = /(?:端到端|e2e|验证|测试|检查).*(?:workflow|工作流|门禁|gate|路由|route|subagent|skills?|后台任务|主\s*agent|mimo|advisor)/.test(text)
-    || /(?:workflow|工作流|门禁|gate|路由|route|subagent|skills?|后台任务|主\s*agent|mimo|advisor).*(?:端到端|e2e|验证|测试|检查|误挡|误判|漏用|不遵守)/.test(text);
-  const asksForCodeChange = /(?:修复|修改|更新|调整|优化|实现|重构|改代码|新增|创建|fix|update|modify|implement|refactor|create|add)/.test(text);
-  return mentionsOmpWorkflow && hasValidationAction && hasWorkflowTarget && validatesWorkflow && !asksForCodeChange;
+  const mentionsOmpWorkflow = /(?:\bomp\b(?!-config)|mimo|advisor|主\s*agent|后台任务|漏用\s*skills?|不遵守\s*workflow|误挡|误判)/.test(text);
+  const hasValidationAction = /(?:端到端|e2e|验证|测试|检查|审计|审查|核对|audit|check|review|inspect)/.test(text);
+  const hasWorkflowTarget = /(?:workflow|工作流|门禁|gate|路由|route|routing|subagent|skills?|skill usage|skill\s*使用|技能使用|后台任务|主\s*agent|误挡|误判|漏用|不遵守)/.test(text);
+  const validatesWorkflow = /(?:端到端|e2e|验证|测试|检查|审计|审查|核对|audit|check|review|inspect).*(?:workflow|工作流|门禁|gate|路由|route|routing|subagent|skills?|skill usage|skill\s*使用|技能使用|后台任务|主\s*agent|mimo|advisor)/.test(text)
+    || /(?:workflow|工作流|门禁|gate|路由|route|routing|subagent|skills?|skill usage|skill\s*使用|技能使用|后台任务|主\s*agent|mimo|advisor).*(?:端到端|e2e|验证|测试|检查|审计|审查|核对|audit|check|review|inspect|误挡|误判|漏用|不遵守|合规|遵守|违规|compliance|adherence|violations?)/.test(text);
+  const hasWorkflowReportWriting = isExplicitWritingAction(text)
+    || /(?:review|check|proofread|copyedit).*(?:report|document|wording|grammar|clarity|style)/.test(text)
+    || /(?:report|document|wording).*(?:grammar|clarity|wording|style)/.test(text);
+  const hasGenericWorkflowCompliance = /(?:审计|审查|检查|核对|audit|check|review|inspect).*(?:workflow|工作流|路由|route|routing|skills?|skill usage|skill\s*使用|技能使用).*(?:合规|遵守|违规|compliance|adherence|violations?)/.test(text)
+    || /(?:workflow|工作流|路由|route|routing|skills?|skill usage|skill\s*使用|技能使用).*(?:合规|遵守|违规|compliance|adherence|violations?).*(?:审计|审查|检查|核对|audit|check|review|inspect|report\s+violations?)/.test(text);
+  const codeChangeText = text
+    .replace(/(?:不要|别|不|无需|不用)\s*(?:修复|修改|更新|调整|优化|实现|重构|改|新增|创建|写|编写)\s*(?:代码|代码库|文件|脚本|项目|仓库)?/g, '')
+    .replace(/(?:do not|don't|without|no need to)\s+(?:fix|update|modify|implement|refactor|create|add|write|change)(?:\s+(?:code|files?|to\s+(?:the\s+)?(?:repo|repository|project)|in\s+(?:the\s+)?(?:repo|repository|project)))?/g, '');
+  const asksForCodeChange = /(?:修复|修改|更新|调整|优化|实现|重构|改代码|新增|创建|fix|update|modify|implement|refactor|create|add)/.test(codeChangeText);
+  return !hasWorkflowReportWriting && ((mentionsOmpWorkflow && hasValidationAction && hasWorkflowTarget && validatesWorkflow) || hasGenericWorkflowCompliance) && !asksForCodeChange;
 }
 
 function isImplementationPlanForCodeChange(text) {
@@ -997,7 +1005,7 @@ function isExplicitWritingAction(text) {
     .replace(/(?:不要|别|不|无需|不用)\s*写入\s*(?:文件|项目|代码库|仓库)?/g, '')
     .replace(/(?:不要|别|不|无需|不用)\s*(?:写|撰写|生成)\s*正文/g, '')
     .replace(/(?:不要|别|不|无需|不用)\s*(?:写|撰写|生成).*(?:正文|综述)/g, '')
-    .replace(/(?:do not|don't|without|no need to)\s+(?:write|generate)\s+code/g, '');
+    .replace(/(?:do not|don't|without|no need to)\s+(?:write|generate)(?:\s+(?:code|files?|to\s+(?:the\s+)?(?:repo|repository|project)|in\s+(?:the\s+)?(?:repo|repository|project)))?/g, '');
   return /(?:写|起草|撰写|润色|改写|修订|修饰|改得|改成|翻译|draft|write|revise|polish|edit|improve)\b/.test(cleaned)
     || /(?:写|起草|撰写|润色|改写|修订|修饰|改得|改成|翻译|翻译腔|ai 味|表达|风格|表述|措辞)/.test(cleaned);
 }

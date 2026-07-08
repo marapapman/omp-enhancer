@@ -125,6 +125,77 @@ test('route task probes do not replace an active routed workflow', async () => {
   assert.doesNotMatch(status.content[0].text, /Route:\s*bug-audit/);
 });
 
+
+test('route task read-only router review prompts activate a fresh session by default', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Review routing compliance in src/router.js; do not modify files.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const result = await tool(pi, 'omp_core_route_task').execute(
+    'call-read-only-router-review-route',
+    { prompt },
+    undefined,
+    undefined,
+    ctx,
+  );
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-read-only-router-review-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(result.details.activated, true);
+  assert.notEqual(status.details.status.route, 'none');
+  assert.doesNotMatch(status.content[0].text, /No active routed workflow|Route:\s*none/);
+});
+
+test('route task probe-only prompts do not activate a fresh session by default', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Tool check only. Do not modify files. Call omp_core_route_task twice, then omp_core_subagent_status. Report whether any probe changed active route.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const result = await tool(pi, 'omp_core_route_task').execute(
+    'call-route-probe-default',
+    { prompt },
+    undefined,
+    undefined,
+    ctx,
+  );
+  const status = await tool(pi, 'omp_core_subagent_status').execute('call-route-probe-default-status', {}, undefined, undefined, ctx);
+
+  assert.equal(result.details.activated, false);
+  assert.match(result.content[0].text, /Route probe only/);
+  assert.equal(status.details.status.route, 'none');
+  assert.notEqual(status.details.status.route, result.details.route.intent);
+});
+
+test('route task natural probe wording does not activate a fresh session by default', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Just check the route for this implementation task; do not run it or activate workflow state.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const result = await tool(pi, 'omp_core_route_task').execute(
+    'call-natural-route-probe-default',
+    { prompt },
+    undefined,
+    undefined,
+    ctx,
+  );
+  const status = await tool(pi, 'omp_core_subagent_status').execute('call-natural-route-probe-default-status', {}, undefined, undefined, ctx);
+
+  assert.equal(result.details.activated, false);
+  assert.equal(status.details.status.route, 'none');
+  assert.notEqual(status.details.status.route, result.details.route.intent);
+});
+
 test('simple active writing summaries do not require writer checker subagents', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
