@@ -110,7 +110,7 @@ test('e2e implementation route auto-attaches task contracts and releases after t
   assert.equal(stopped, undefined);
 });
 
-test('e2e broad bug audit task call gets parent context repair but still requires testing gate', async () => {
+test('e2e broad bug audit task call gets parent context repair without post-completion testing gate', async () => {
   const { pi, ctx } = registeredCore();
   const prompt = '帮我测试整个插件工作流并检查 bug，只报告问题，不要修复。';
 
@@ -154,7 +154,7 @@ test('e2e broad bug audit task call gets parent context repair but still require
     ctx,
   );
 
-  const blocked = await event(pi, 'session_stop')(
+  const releasedWithoutPostGate = await event(pi, 'session_stop')(
     {
       output: usageEvidence({
         subagents: {
@@ -169,8 +169,7 @@ test('e2e broad bug audit task call gets parent context repair but still require
     ctx,
   );
 
-  assert.equal(blocked?.continue, true);
-  assert.match(blocked.additionalContext, /omp_test_gate/);
+  assert.equal(releasedWithoutPostGate, undefined);
 
   await event(pi, 'tool_result')({ name: 'omp_test_gate', details: { passed: true } }, ctx);
   const released = await event(pi, 'session_stop')(

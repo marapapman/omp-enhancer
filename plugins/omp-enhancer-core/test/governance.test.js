@@ -63,6 +63,42 @@ test('builds a Mandatory Skill Workflow fragment with required and loaded skill 
   assert.doesNotMatch(fragment, /Toolchain:\n(?:- .+\n)*- omp_test_gate/);
 });
 
+test('governance tells main agent to apply and reconcile advisor guidance', () => {
+  const fragment = buildGovernancePromptFragment({
+    route: {
+      intent: 'implementation-with-tests',
+      agent: 'implementer',
+      requiredSkills: ['test-driven-development'],
+      requiredTools: ['omp_test_gate'],
+      requiredSubagents: [],
+    },
+  });
+
+  assert.match(fragment, /Advisor Guidance Policy/);
+  assert.match(fragment, /serious weight/i);
+  assert.match(fragment, /If empirical evidence contradicts advisor guidance/i);
+  assert.match(fragment, /do not silently ignore/i);
+  assert.match(fragment, /without binding the prompt to a specific advisor model/i);
+  assert.doesNotMatch(fragment, /DeepSeek V4 Flash/);
+});
+
+test('unknown route still carries advisor guidance without workflow gates', () => {
+  const fragment = buildGovernancePromptFragment({
+    route: {
+      intent: 'unknown',
+      agent: null,
+      requiredSkills: [],
+      requiredTools: [],
+      requiredSubagents: [],
+    },
+  });
+
+  assert.match(fragment, /Intent:\s*unknown/);
+  assert.match(fragment, /Advisor Guidance Policy/);
+  assert.match(fragment, /specific advisor model/i);
+  assert.doesNotMatch(fragment, /Mandatory Skill Workflow/);
+});
+
 test('governance tells agents not to expose internal classifier and smart-gate prompts', () => {
   const fragment = buildGovernancePromptFragment({
     route: {

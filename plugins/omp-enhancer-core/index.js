@@ -354,7 +354,9 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'task') {
       const taskSkillBlock = buildTaskSubagentSkillGateBlock(state, event);
       if (taskSkillBlock) {
-        state.pendingSmartGate = createPendingSmartGate(state, taskSkillBlock.ruleGate, '');
+        if (taskSkillBlock.block !== false) {
+          state.pendingSmartGate = createPendingSmartGate(state, taskSkillBlock.ruleGate, '');
+        }
         await persistState(pi, state);
         await writeDebugLog(ctx, 'gates', buildDebugRecord({
           kind: 'gates',
@@ -362,9 +364,9 @@ export default function registerCoreEnhancer(pi) {
           route: state.lastRoute,
           gateKey: taskSkillBlock.ruleGate?.gateKey,
           reasonCode: taskSkillBlock.reasonCode ?? 'task_subagent_contract',
-          payload: { level: taskSkillBlock.recovery?.level ?? 'block' },
+          payload: { level: taskSkillBlock.recovery?.level ?? (taskSkillBlock.block === false ? 'coach' : 'block') },
         }));
-        return smartGateWrappedToolBlock(state, taskSkillBlock);
+        return taskSkillBlock.block === false ? taskSkillBlock : smartGateWrappedToolBlock(state, taskSkillBlock);
       }
       recordSubagentDispatchStarted(state, event);
     } else {
@@ -442,26 +444,38 @@ export default function registerCoreEnhancer(pi) {
       await persistState(pi, state);
     }
 
-    const missingClassifierPreflightContext = buildMissingClassifierPreflightContext(state);
-    if (missingClassifierPreflightContext) {
-      return { continue: true, additionalContext: missingClassifierPreflightContext };
-    }
-
-    const ruleGate = buildCompletionRuleGateBlock(state);
-    if (ruleGate) {
-      if (consumeSmartGateCompletionAllowance(state, ruleGate)) {
-        const nextRuleGate = buildCompletionRuleGateBlock(state);
-        if (!nextRuleGate) {
-          await persistState(pi, state);
-          return undefined;
-        }
-        state.pendingSmartGate = createPendingSmartGate(state, nextRuleGate, finalOutput);
-        await persistState(pi, state);
-        return { continue: true, additionalContext: buildSmartGateRequiredContext(state, nextRuleGate) };
+    if (!finalOutput) {
+      const missingClassifierPreflightContext = buildMissingClassifierPreflightContext(state);
+      if (missingClassifierPreflightContext) {
+        return { continue: true, additionalContext: missingClassifierPreflightContext };
       }
-      state.pendingSmartGate = createPendingSmartGate(state, ruleGate, finalOutput);
+
+      const ruleGate = buildCompletionRuleGateBlock(state);
+      if (ruleGate) {
+        if (consumeSmartGateCompletionAllowance(state, ruleGate)) {
+          const nextRuleGate = buildCompletionRuleGateBlock(state);
+          if (!nextRuleGate) {
+            await persistState(pi, state);
+            return undefined;
+          }
+          state.pendingSmartGate = createPendingSmartGate(state, nextRuleGate, finalOutput);
+          await persistState(pi, state);
+          return { continue: true, additionalContext: buildSmartGateRequiredContext(state, nextRuleGate) };
+        }
+        state.pendingSmartGate = createPendingSmartGate(state, ruleGate, finalOutput);
+        await persistState(pi, state);
+        return { continue: true, additionalContext: buildSmartGateRequiredContext(state, ruleGate) };
+      }
+    } else {
+      state.pendingSmartGate = null;
+      if (state.classifierPreflight?.required) {
+        state.classifierPreflight = {
+          ...state.classifierPreflight,
+          required: false,
+          mode: 'observe',
+        };
+      }
       await persistState(pi, state);
-      return { continue: true, additionalContext: buildSmartGateRequiredContext(state, ruleGate) };
     }
 
     return undefined;
@@ -1241,16 +1255,8 @@ function resolveSmartGatePromptRuleGate(state, requestedGateKey = '') {
 }
 
 function openSmartGateRuleGates(state) {
-  const gates = [];
   const pending = pendingSmartGateRuleGate(state);
-  if (pending) gates.push(pending);
-  for (const gate of buildCompletionRuleGateBlocks(state)) {
-    if (!completionSmartGateBypassAllows(state, gate)
-      && !gates.some((candidate) => candidate.gateKey === gate.gateKey)) {
-      gates.push(gate);
-    }
-  }
-  return gates;
+  return pending ? [pending] : [];
 }
 
 function pendingSmartGateRuleGate(state) {
@@ -1845,10 +1851,19 @@ function normalizeTaskAgent(value) {
 
 function taskSubagentSkillBlock(state, kind, lines) {
   const ruleGate = toolRuleGateBlock(state, kind, lines.filter(Boolean).join('\n'));
-  if (consumeSmartGateToolAllowance(state, ruleGate)) return null;
+  const recovery = recordGateRecovery(state.gateRecovery, {
+    gateKey: ruleGate.gateKey,
+    reasonCode: kind,
+    doNext: 'use the routed pre-work assignment contracts on the next task call when subagent work is still needed',
+    doNot: 'fork extra subagents after the user-facing answer only to satisfy this gate',
+    after: 'continue the original task with the best available evidence',
+  });
   return {
-    block: true,
-    reason: ruleGate.context,
+    block: false,
+    reason: [ruleGate.context, recovery.context].filter(Boolean).join('\n\n'),
+    additionalContext: recovery.context,
+    reasonCode: kind,
+    recovery,
     ruleGate,
   };
 }

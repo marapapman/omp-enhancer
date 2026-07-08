@@ -22,6 +22,10 @@ export function buildGovernancePromptFragment({
       'Use natural language context. Do not force a plugin workflow unless the user asks for coding, writing, testing, security, or config work.',
       '',
       loopGuardPromptSection(),
+      '',
+      '### Advisor Guidance Policy',
+      '',
+      ...advisorGuidanceLines(resolved),
     ].join('\n');
   }
 
@@ -37,6 +41,11 @@ export function buildGovernancePromptFragment({
     ...workflowGateBriefingLines(resolved),
     '',
     loopGuardPromptSection(),
+    '',
+    '### Advisor Guidance Policy',
+    '',
+    ...advisorGuidanceLines(resolved),
+    '',
     '',
     '### Mandatory Skill Workflow',
     '',
@@ -91,6 +100,27 @@ export function buildGovernancePromptFragment({
     'Loaded:',
     '- skill-name',
   ].join('\n');
+}
+
+function advisorGuidanceLines(route) {
+  const mayDoStatefulWork = [
+    'implementation-with-tests',
+    'bug-audit',
+    'diagnosis',
+    'security-review',
+    'config-assets',
+    'release',
+  ].includes(route?.intent);
+
+  return [
+    'Use the active OMP advisor configuration without binding the prompt to a specific advisor model.',
+    'When an advisor result or advisor message exists in the transcript, give that advice serious weight before choosing the next action.',
+    ...(mayDoStatefulWork ? [
+      'If the runtime exposes an advisor tool, consult it after read-only orientation and before the first edit, write, or state-changing command on non-trivial routed work. If no advisor tool is exposed, continue without inventing one.',
+    ] : []),
+    'If empirical evidence contradicts advisor guidance, follow the primary-source evidence, explain the conflict briefly, and do not silently ignore the advisor.',
+    'If advisor guidance conflicts with the user request, repository facts, or tool results, reconcile the conflict with evidence before committing to a plan or final answer.',
+  ];
 }
 
 function skillWorkflowLines(route) {

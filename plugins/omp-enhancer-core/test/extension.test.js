@@ -688,6 +688,47 @@ test('session_stop continues when a routed writing task has not run writing QA',
   assert.match(result.additionalContext, /plain-chinese-writing|SKILL_USAGE/);
 });
 
+test('session_stop treats missing workflow evidence as pre-work guidance instead of post-completion work', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  const startResult = await event(pi, 'before_agent_start')(
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    ctx,
+  );
+  const startFragment = governanceText(startResult, {});
+
+  assert.match(startFragment, /pre-work skill bootstrap/i);
+  assert.match(startFragment, /Required task assignment contracts/);
+
+  const released = await event(pi, 'session_stop')({ output: '我已经完成摘要润色。' }, ctx);
+
+  assert.equal(released, undefined);
+});
+
+test('task subagent contract gaps are non-blocking pre-work coaching', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: 'Review this API handler for auth bypass and injection risks.' },
+    ctx,
+  );
+
+  const coached = await event(pi, 'tool_call')(
+    { toolName: 'task', input: { agent: 'ecc-security-reviewer' } },
+    ctx,
+  );
+
+  assert.equal(coached?.block, false);
+  assert.match(coached.reason, /task subagent skill/i);
+  assert.match(coached.reason, /Required task assignment contracts/i);
+});
+
 test('writing reports about tests do not require omp_test_gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -942,7 +983,7 @@ test('bug-audit task tool_call auto-attaches missing parent task context for exa
   assert.match(taskEvent.input.tasks[0].assignment, /Required skills for this subagent:\n- test-driven-development\n- search-first\n- ai-regression-testing/);
 });
 
-test('task tool_call does not report prose role text as an unexpected subagent', async () => {
+test('task tool_call coaches prose role text without opening a smart-gate override', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -953,7 +994,7 @@ test('task tool_call does not report prose role text as an unexpected subagent',
     ctx,
   );
 
-  const blocked = await event(pi, 'tool_call')(
+  const coached = await event(pi, 'tool_call')(
     {
       toolName: 'task',
       input: {
@@ -968,10 +1009,110 @@ test('task tool_call does not report prose role text as an unexpected subagent',
     ctx,
   );
 
-  assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /must fork named subagents/);
-  assert.doesNotMatch(blocked.reason, /Unexpected task subagents/);
-  assert.doesNotMatch(blocked.reason, /draft the Chinese revision/);
+  assert.equal(coached?.block, false);
+  assert.match(coached.reason, /must fork named subagents/);
+  assert.doesNotMatch(coached.reason, /Unexpected task subagents/);
+  assert.doesNotMatch(coached.reason, /draft the Chinese revision/);
+});
+test('smart gate prompt has no task-contract gate after non-blocking task coaching', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    ctx,
+  );
+
+  const coached = await event(pi, 'tool_call')(
+    { toolName: 'task', input: { tasks: [{ role: 'draft the Chinese revision' }] } },
+    ctx,
+  );
+
+  assert.equal(coached?.block, false);
+
+  const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
+    'call-task-subagent-smart-gate-wrong-key',
+    { gateKey: 'wrong:key' },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(smartPrompt.details.smartGate.required, false);
+  assert.doesNotMatch(smartPrompt.content[0].text, /OMP Enhancer Core Smart Gate/);
+});
+test('failed writing QA tool results are recorded but do not force a post-completion continuation', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-failed-writing-qa-route',
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
+  await readSkills(pi, ctx, ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers']);
+  await event(pi, 'tool_result')(
+    {
+      name: 'writing_quality_check',
+      isError: true,
+      details: { error: 'Unable to read document.' },
+    },
+    ctx,
+  );
+
+  const result = await event(pi, 'session_stop')({ output: '任务完成。' }, ctx);
+
+  assert.equal(result, undefined);
+});
+test('repeated failed writing QA tools do not reopen a completion smart gate after final output', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await tool(pi, 'omp_core_route_task').execute(
+    'call-repeated-failed-writing-qa-route',
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_result')(
+    { name: 'writing_quality_check', isError: true, details: { error: 'Tool unavailable.' } },
+    ctx,
+  );
+  await event(pi, 'tool_result')(
+    { name: 'writing_logic_check', isError: true, details: { error: 'Tool unavailable.' } },
+    ctx,
+  );
+
+  const released = await event(pi, 'session_stop')({ output: '写作 QA 已完成，证据充分。' }, ctx);
+
+  assert.equal(released, undefined);
+});
+test('completion smart gate is not opened after a user-facing final answer', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。' },
+    ctx,
+  );
+
+  const released = await event(pi, 'session_stop')({
+    output: 'Final answer without delegated writing agents, writing QA, or SKILL_USAGE.',
+  }, ctx);
+
+  assert.equal(released, undefined);
 });
 
 test('governance prompt separates task subagent skills from direct main-agent reads', async () => {
@@ -1110,7 +1251,7 @@ test('pre-work skill gate prioritizes skill-read recovery over Tiny smart gate',
     ctx,
   );
 
-  assert.equal(smartPrompt.details.smartGate.error, 'gate-key-mismatch');
+  assert.equal(smartPrompt.details.smartGate.required, false);
   assert.doesNotMatch(smartPrompt.content[0].text, /OMP Enhancer Core Smart Gate/);
 
   await readSkills(pi, ctx, ['plain-chinese-writing', 'zh-writing-polish']);
@@ -1123,40 +1264,6 @@ test('pre-work skill gate prioritizes skill-read recovery over Tiny smart gate',
   assert.equal(allowed, undefined);
 });
 
-test('smart gate prompt rejects mismatched requested gate keys instead of falling back', async () => {
-  const pi = new FakePi();
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext();
-
-  await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')(
-    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
-    ctx,
-  );
-
-  const blocked = await event(pi, 'tool_call')(
-    { toolName: 'task', input: { tasks: [{ role: 'draft the Chinese revision' }] } },
-    ctx,
-  );
-
-  assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /Tiny smart-gate override/);
-  assert.match(blocked.reason, /Rule gate key: writing\.zh:task-subagent-contract/);
-
-  const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
-    'call-task-subagent-smart-gate-wrong-key',
-    { gateKey: 'wrong:key' },
-    undefined,
-    undefined,
-    ctx,
-  );
-
-  assert.equal(smartPrompt.details.smartGate.required, true);
-  assert.equal(smartPrompt.details.smartGate.error, 'gate-key-mismatch');
-  assert.equal(smartPrompt.details.smartGate.requestedGateKey, 'wrong:key');
-  assert.ok(smartPrompt.details.smartGate.openGateKeys.includes('writing.zh:task-subagent-contract'));
-  assert.doesNotMatch(smartPrompt.content[0].text, /OMP Enhancer Core Smart Gate/);
-});
 
 test('smart gate resolve requires a current pending gate before releasing tool gates', async () => {
   const pi = new FakePi();
@@ -1280,19 +1387,19 @@ test('pre-work skill gate accepts legacy ECC security skill aliases', async () =
     ctx,
   );
 
-  const blocked = await event(pi, 'tool_call')(
+  const coached = await event(pi, 'tool_call')(
     { toolName: 'task', input: { agent: 'ecc-security-reviewer' } },
     ctx,
   );
 
-  assert.equal(blocked?.block, true);
-  assert.match(blocked.reason, /task subagent skill gate/);
-  assert.match(blocked.reason, /Missing subagent skill assignments/);
-  assert.match(blocked.reason, /Workflow and gate briefing:/);
-  assert.match(blocked.reason, /Parent intent:\s*security-review/);
-  assert.match(blocked.reason, /Security gate/);
-  assert.match(blocked.reason, /security-review/);
-  assert.match(blocked.reason, /security-scan/);
+  assert.equal(coached?.block, false);
+  assert.match(coached.reason, /task subagent skill/i);
+  assert.match(coached.reason, /Missing subagent skill assignments/);
+  assert.match(coached.reason, /Workflow and gate briefing:/);
+  assert.match(coached.reason, /Parent intent:\s*security-review/);
+  assert.match(coached.reason, /Security gate/);
+  assert.match(coached.reason, /security-review/);
+  assert.match(coached.reason, /security-scan/);
 
   const allowed = await event(pi, 'tool_call')(
     {
@@ -1313,252 +1420,8 @@ test('pre-work skill gate accepts legacy ECC security skill aliases', async () =
   assert.equal(allowed, undefined);
 });
 
-test('failed writing QA tool results do not release the writing gate', async () => {
-  const pi = new FakePi();
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext();
 
-  await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-failed-writing-qa-route',
-    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
-    undefined,
-    undefined,
-    ctx,
-  );
-  await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
-  await readSkills(pi, ctx, ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers']);
-  await event(pi, 'tool_result')(
-    {
-      name: 'writing_quality_check',
-      isError: true,
-      details: { error: 'Unable to read document.' },
-    },
-    ctx,
-  );
 
-  const result = await event(pi, 'session_stop')({ output: '任务完成。' }, ctx);
-
-  assert.equal(result?.continue, true);
-  assert.match(result.additionalContext, /writing QA|writing_quality_check|writing_logic_check/);
-  assert.match(result.additionalContext, /Recent failed tool results/);
-  assert.match(result.additionalContext, /writing_quality_check: Unable to read document/);
-
-  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
-  const released = await event(pi, 'session_stop')({ output: '任务完成。' }, ctx);
-
-  assert.equal(released, undefined);
-});
-
-test('repeated failed writing QA tools require Tiny smart gate before releasing equivalent subagent QA evidence', async () => {
-  const pi = new FakePi();
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext();
-
-  await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-repeated-failed-writing-qa-route',
-    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
-    undefined,
-    undefined,
-    ctx,
-  );
-  await event(pi, 'tool_result')(
-    {
-      name: 'task',
-      params: {
-        agent: 'zh-writer',
-        prompt: [
-          'OMP_PARENT_TASK: extension test routed task',
-          'Required skills for this subagent:',
-          '- plain-chinese-writing',
-          '- zh-writing-polish',
-        ].join('\n'),
-      },
-      content: [{ type: 'text', text: 'ZhWriterFinal PASS 16/16. SKILL_USAGE Loaded: plain-chinese-writing, zh-writing-polish.' }],
-    },
-    ctx,
-  );
-  await event(pi, 'tool_result')(
-    {
-      name: 'task',
-      params: {
-        agent: 'zh-checker',
-        prompt: [
-          'OMP_PARENT_TASK: extension test routed task',
-          'Required skills for this subagent:',
-          '- plain-chinese-writing',
-          '- zh-writing-checkers',
-        ].join('\n'),
-      },
-      content: [{ type: 'text', text: 'ZhChecker3 READY. ZhCheckerFinal PASS 15/15, no CRITICAL or IMPORTANT issues.' }],
-    },
-    ctx,
-  );
-  await event(pi, 'tool_result')(
-    { name: 'writing_quality_check', isError: true, details: { error: 'Tool unavailable.' } },
-    ctx,
-  );
-  await event(pi, 'tool_result')(
-    { name: 'writing_logic_check', isError: true, details: { error: 'Tool unavailable.' } },
-    ctx,
-  );
-  await event(pi, 'tool_result')(
-    { name: 'writing_quality_check', isError: true, details: { error: 'Tool unavailable.' } },
-    ctx,
-  );
-
-  const finalOutput = [
-    '写作 QA 已完成，证据充分。',
-    '- ZhWriterFinal PASS 16/16',
-    '- ZhChecker3 READY',
-    '- ZhCheckerFinal PASS 15/15',
-    usageEvidence({
-      subagents: {
-        'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
-        'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
-      },
-      skills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
-    }),
-  ].join('\n');
-
-  const blocked = await event(pi, 'session_stop')({ output: finalOutput }, ctx);
-
-  assert.equal(blocked?.continue, true);
-  assert.match(blocked.additionalContext, /smart gate is required/);
-  assert.match(blocked.additionalContext, /modelRoles\.tiny/);
-  assert.match(blocked.additionalContext, /writing_quality_check \(2 attempts\)/);
-  assert.match(blocked.additionalContext, /Do not print XML or <tool_call> text/);
-  assert.match(blocked.additionalContext, /Use writing_quality_check, not write_quality_check/);
-
-  const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
-    'call-writing-smart-gate-prompt',
-    { finalOutput },
-    undefined,
-    undefined,
-    ctx,
-  );
-  const gateKey = smartPrompt.details.smartGate.gateKey;
-
-  assert.equal(gateKey, 'writing.zh:writing-qa');
-  assert.equal(smartPrompt.details.smartGate.modelRole, 'tiny');
-  assert.match(smartPrompt.content[0].text, /OMP Enhancer Core Smart Gate/);
-  assert.match(smartPrompt.content[0].text, /modelRoles\.tiny/);
-  assert.match(smartPrompt.content[0].text, /ZhCheckerFinal PASS/);
-
-  const needsWork = await tool(pi, 'omp_core_resolve_smart_gate').execute(
-    'call-writing-smart-gate-needs-work',
-    {
-      gateKey,
-      output: JSON.stringify({
-        gate: gateKey,
-        verdict: 'needs-work',
-        confidence: 0.83,
-        satisfied: false,
-        missing: ['clear checker evidence'],
-        actions: ['call write_quality_check with checker verdict evidence'],
-        reason: 'The checker result needs to be explicit.',
-      }),
-    },
-    undefined,
-    undefined,
-    ctx,
-  );
-
-  assert.equal(needsWork.details.accepted, false);
-  const stillBlocked = await event(pi, 'session_stop')({
-    output: 'Smart gate returned needs-work. Keeping the writing QA gate open until checker evidence is explicit.',
-  }, ctx);
-
-  assert.equal(stillBlocked?.continue, true);
-  assert.match(stillBlocked.additionalContext, /Previous smart-gate decision: needs-work/);
-  assert.match(stillBlocked.additionalContext, /call writing_quality_check with checker verdict evidence/);
-  assert.doesNotMatch(stillBlocked.additionalContext, /Actions: .*write_quality_check/);
-
-  const pass = await tool(pi, 'omp_core_resolve_smart_gate').execute(
-    'call-writing-smart-gate-pass',
-    {
-      gateKey,
-      output: JSON.stringify({
-        gate: gateKey,
-        verdict: 'pass',
-        confidence: 0.91,
-        satisfied: true,
-        missing: [],
-        actions: [],
-        reason: 'Final output includes explicit writer and checker QA evidence plus complete skill usage.',
-      }),
-    },
-    undefined,
-    undefined,
-    ctx,
-  );
-
-  assert.equal(pass.details.accepted, true);
-  const released = await event(pi, 'session_stop')({
-    output: 'Final delivery after accepted smart gate. ZhWriterFinal and ZhCheckerFinal evidence was reviewed.',
-  }, ctx);
-
-  assert.equal(released, undefined);
-});
-
-test('completion smart gate pass releases only the matching final gate before rechecking remaining gates', async () => {
-  const pi = new FakePi();
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext();
-
-  await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')(
-    { prompt: '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。' },
-    ctx,
-  );
-
-  const firstBlocked = await event(pi, 'session_stop')({
-    output: 'Final answer without delegated writing agents, writing QA, or SKILL_USAGE.',
-  }, ctx);
-
-  assert.equal(firstBlocked?.continue, true);
-  assert.match(firstBlocked.additionalContext, /Rule gate still open: writing\.zh:subagent/);
-
-  const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
-    'call-subagent-smart-gate-prompt',
-    { gateKey: 'writing.zh:subagent' },
-    undefined,
-    undefined,
-    ctx,
-  );
-
-  assert.equal(smartPrompt.details.smartGate.gateKey, 'writing.zh:subagent');
-
-  const pass = await tool(pi, 'omp_core_resolve_smart_gate').execute(
-    'call-subagent-smart-gate-pass',
-    {
-      gateKey: 'writing.zh:subagent',
-      output: JSON.stringify({
-        gate: 'writing.zh:subagent',
-        verdict: 'pass',
-        confidence: 0.91,
-        satisfied: true,
-        missing: [],
-        actions: [],
-        reason: 'Tiny accepted equivalent subagent evidence for only the subagent gate.',
-      }),
-    },
-    undefined,
-    undefined,
-    ctx,
-  );
-
-  assert.equal(pass.details.accepted, true);
-
-  const stillBlocked = await event(pi, 'session_stop')({
-    output: 'Still missing writing QA and SKILL_USAGE after the subagent smart gate pass.',
-  }, ctx);
-
-  assert.equal(stillBlocked?.continue, true);
-  assert.match(stillBlocked.additionalContext, /Rule gate still open: writing\.zh:writing-qa/);
-  assert.doesNotMatch(stillBlocked.additionalContext, /Rule gate still open: writing\.zh:subagent/);
-});
 
 test('session_stop requires successful SKILL_USAGE validation even after writing QA', async () => {
   const pi = new FakePi();
@@ -1837,60 +1700,41 @@ test('session_stop continues when an implementation-with-tests task has not run 
   assert.doesNotMatch(result.additionalContext, /only after a successful omp_test_gate result/);
 });
 
-test('failed omp_test_gate results do not release implementation and testing gates', async () => {
-  const cases = [
-    {
-      prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。',
-      agents: ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'],
-      skills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
-    },
-    {
-      prompt: '实现自然语言路由并补测试，测试写完后要过门禁。',
-      agents: ['plan', 'implementation-task', 'reviewer'],
-      skills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-    },
-  ];
+test('failed omp_test_gate results are recorded but do not force a post-completion continuation', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
 
-  for (const item of cases) {
-    const pi = new FakePi();
-    registerCoreEnhancer(pi);
-    const ctx = extensionContext();
-
-    await event(pi, 'session_start')({}, ctx);
-    await event(pi, 'before_agent_start')({ prompt: item.prompt }, ctx);
-    await forkSubagents(pi, ctx, item.agents);
-    await tool(pi, 'omp_core_validate_skill_usage').execute(
-      `call-failed-test-gate-skill-usage-${item.agents.length}`,
-      { output: skillUsageBlock(item.skills) },
-      undefined,
-      undefined,
-      ctx,
-    );
-    await event(pi, 'tool_result')(
-      {
-        name: 'omp_test_gate',
-        details: {
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt: '实现自然语言路由并补测试，测试写完后要过门禁。' }, ctx);
+  await forkSubagents(pi, ctx, ['plan', 'implementation-task', 'reviewer']);
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-failed-test-gate-skill-usage',
+    { output: skillUsageBlock(['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion']) },
+    undefined,
+    undefined,
+    ctx,
+  );
+  await event(pi, 'tool_result')(
+    {
+      name: 'omp_test_gate',
+      details: {
+        passed: false,
+        results: [{
+          gate: 'indirect-test',
           passed: false,
-          results: [{
-            gate: 'indirect-test',
-            passed: false,
-            severity: 'blocker',
-            summary: 'Test imports private implementation details.',
-            repairHint: 'Test through public behavior.',
-          }],
-        },
+          severity: 'blocker',
+          summary: 'Test imports private implementation details.',
+          repairHint: 'Test through public behavior.',
+        }],
       },
-      ctx,
-    );
+    },
+    ctx,
+  );
 
-    const result = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
+  const result = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
 
-    assert.equal(result?.continue, true);
-    assert.match(result.additionalContext, /omp_test_gate/);
-    assert.match(result.additionalContext, /Recent failed tool results/);
-    assert.match(result.additionalContext, /Test imports private implementation details/);
-    assert.match(result.additionalContext, /Repair: Test through public behavior/);
-  }
+  assert.equal(result, undefined);
 });
 
 test('external testing-enhancer tool results close the testing gate only with passing evidence', async () => {
@@ -2030,41 +1874,6 @@ test('fact-check workflow requires cross-agent evidence and releases after fact_
   assert.equal(released, undefined);
 });
 
-test('external failed omp_test_gate keeps RED test evidence blocking', async () => {
-  const pi = new FakePi();
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext(pi.entries);
-
-  await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')({ prompt: '实现自然语言路由并补测试，测试写完后要过门禁。' }, ctx);
-  await forkSubagents(pi, ctx, ['plan', 'implementation-task', 'reviewer']);
-  await tool(pi, 'omp_core_validate_skill_usage').execute(
-    'call-red-test-gate-skill-usage',
-    { output: skillUsageBlock(['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion']) },
-    undefined,
-    undefined,
-    ctx,
-  );
-
-  await event(pi, 'tool_result')(
-    {
-      name: 'omp_test_gate',
-      details: {
-        passed: false,
-        command: 'npm test --workspace plugins/omp-enhancer-core',
-        summary: '118 tests, 96 pass, 22 fail (bugs confirmed RED).',
-      },
-    },
-    ctx,
-  );
-
-  const blocked = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
-
-  assert.equal(blocked?.continue, true);
-  assert.match(blocked.additionalContext, /omp_test_gate/);
-  assert.match(blocked.additionalContext, /Recent failed tool results/);
-  assert.match(blocked.additionalContext, /bugs confirmed RED|Gate input marked passed=false/);
-});
 
 test('session_stop continues when a routed task has not forked required subagents', async () => {
   const pi = new FakePi();
@@ -2487,159 +2296,7 @@ test('task tool_execution_update records live task progress and completion', asy
   assert.equal(pi.messages.length, 0);
 });
 
-test('async running task result keeps routed subagents pending and session_stop gated', async () => {
-  const pi = new FakePi();
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext(pi.entries);
-  const prompt = '请写一个页面并补测试。';
-  const agents = ['plan', 'implementation-task', 'reviewer'];
-  const skills = ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'];
-  const assignments = Object.fromEntries(agents.map((agent) => [
-    agent,
-    [
-      `OMP_REQUIRED_SUBAGENT: ${agent}`,
-      'Required skills for this subagent:',
-      ...subagentSkills(agent).map((skill) => `- ${skill}`),
-    ].join('\n'),
-  ]));
 
-  await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')({ prompt }, ctx);
-  await event(pi, 'tool_call')(
-    {
-      toolName: 'task',
-      toolCallId: 'task-async-running',
-      input: {
-        tasks: agents.map((agent) => ({
-          id: `Async${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
-          role: agent,
-          assignment: assignments[agent],
-        })),
-      },
-    },
-    ctx,
-  );
-
-  await event(pi, 'tool_result')(
-    {
-      name: 'task',
-      toolCallId: 'task-async-running',
-      content: [{ type: 'text', text: 'Task batch still running' }],
-      details: {
-        async: { state: 'running', jobId: 'task-job-1', type: 'task' },
-        progress: agents.map((agent, index) => ({
-          id: `Async${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
-          index,
-          agent: 'task',
-          status: 'running',
-          assignment: assignments[agent],
-        })),
-      },
-      isError: false,
-    },
-    ctx,
-  );
-
-  const status = await tool(pi, 'omp_core_subagent_status').execute(
-    'call-async-running-subagent-status',
-    {},
-    undefined,
-    undefined,
-    ctx,
-  );
-
-  assert.deepEqual(status.details.status.completed, []);
-  assert.deepEqual(status.details.status.pending.map(({ agent }) => agent), agents);
-
-  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
-  await tool(pi, 'omp_core_validate_skill_usage').execute(
-    'call-async-running-skill-usage',
-    { output: skillUsageBlock(skills) },
-    undefined,
-    undefined,
-    ctx,
-  );
-
-  const result = await event(pi, 'session_stop')(
-    { output: 'Final answer without a valid SUBAGENT_USAGE block.' },
-    ctx,
-  );
-
-  assert.equal(result?.continue, true);
-  assert.match(result.additionalContext, /subagent gate/i);
-  assert.match(result.additionalContext, /Pending subagent task results: plan .*implementation-task .*reviewer/);
-  assert.match(result.additionalContext, /Running background subagent jobs: task-job-1 .*plan, implementation-task, reviewer/);
-});
-
-test('session_stop stays gated when final subagent usage clears pending roles but async task progress is still running', async () => {
-  const pi = new FakePi();
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext(pi.entries);
-  const prompt = '请写一个页面并补测试。';
-  const agents = ['plan', 'implementation-task', 'reviewer'];
-  const skills = ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'];
-  const assignments = Object.fromEntries(agents.map((agent) => [
-    agent,
-    [
-      `OMP_REQUIRED_SUBAGENT: ${agent}`,
-      'Required skills for this subagent:',
-      ...subagentSkills(agent).map((skill) => `- ${skill}`),
-    ].join('\n'),
-  ]));
-
-  await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')({ prompt }, ctx);
-  await event(pi, 'tool_call')(
-    {
-      toolName: 'task',
-      toolCallId: 'task-async-running-final-usage',
-      input: {
-        tasks: agents.map((agent) => ({
-          id: `Async${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
-          role: agent,
-          assignment: assignments[agent],
-        })),
-      },
-    },
-    ctx,
-  );
-
-  await event(pi, 'tool_result')(
-    {
-      name: 'task',
-      toolCallId: 'task-async-running-final-usage',
-      content: [{ type: 'text', text: 'Task batch still running' }],
-      details: {
-        async: { state: 'running', jobId: 'task-job-final-usage', type: 'task' },
-        progress: agents.map((agent, index) => ({
-          id: `Async${agent.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase())}`,
-          index,
-          agent: 'task',
-          status: 'running',
-          assignment: assignments[agent],
-        })),
-      },
-      isError: false,
-    },
-    ctx,
-  );
-
-  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
-
-  const result = await event(pi, 'session_stop')(
-    {
-      output: usageEvidence({
-        subagents: Object.fromEntries(agents.map((agent) => [agent, subagentSkills(agent)])),
-        skills,
-      }),
-    },
-    ctx,
-  );
-
-  assert.equal(result?.continue, true);
-  assert.match(result.additionalContext, /running|background/i);
-  assert.match(result.additionalContext, /Running background subagent jobs: task-job-final-usage/);
-});
 
 test('async-result message_end completes routed subagents by async job id', async () => {
   const pi = new FakePi();
@@ -3472,50 +3129,6 @@ test('skill validation tool combines SKILL_USAGE output with successful read ski
   assert.equal(result, undefined);
 });
 
-test('failed read skill results do not release the skill gate', async () => {
-  const pi = new FakePi();
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext();
-
-  await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-failed-read-route',
-    { prompt: 'Draft an English related work paragraph and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
-  await forkSubagents(pi, ctx, ['writer', 'checker']);
-  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
-  await event(pi, 'tool_result')(
-    {
-      toolName: 'read',
-      params: { uri: 'skill://writing-markdown-helper' },
-      isError: true,
-      content: [{ type: 'text', text: 'missing skill' }],
-    },
-    ctx,
-  );
-  await event(pi, 'tool_result')(
-    {
-      toolName: 'read',
-      details: {
-        toolName: 'read',
-        params: { uri: 'skill://writing-checkers' },
-        isError: true,
-      },
-    },
-    ctx,
-  );
-
-  const blocked = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
-
-  assert.equal(blocked?.continue, true);
-  assert.match(blocked.additionalContext, /SKILL_USAGE/);
-  assert.match(blocked.additionalContext, /writing-markdown-helper|writing-checkers/);
-  assert.match(blocked.additionalContext, /Recent failed tool results/);
-  assert.match(blocked.additionalContext, /read \(2 attempts\): missing skill/);
-});
 
 test('read skill evidence persists through session entries across isolated plugin instances', async () => {
   const entries = [];
@@ -3923,33 +3536,6 @@ test('session_stop accepts final usage blocks when validator tool state is unava
   assert.equal(result, undefined);
 });
 
-test('session_stop rejects completion notes that only blame validator session state', async () => {
-  const pi = new FakePi();
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext();
-
-  await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')(
-    { prompt: 'Draft an English related work paragraph and check the logic.' },
-    ctx,
-  );
-  await forkSubagents(pi, ctx, ['writer', 'checker']);
-  await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
-
-  const result = await event(pi, 'session_stop')(
-    {
-      output: [
-        'All work complete. All verification evidence provided.',
-        'The omp_core_validate_* tools have a known session-state bug that prevents formal validation.',
-      ].join(' '),
-    },
-    ctx,
-  );
-
-  assert.equal(result?.continue, true);
-  assert.match(result.additionalContext, /SKILL_USAGE/);
-  assert.match(result.additionalContext, /No successful SKILL_USAGE validation/);
-});
 
 test('writing gate releases after complete evidence and does not reblock repeated session_stop calls', async () => {
   const entries = [];
@@ -4066,97 +3652,7 @@ test('bug-audit route accepts complete final subagent evidence when task telemet
   await assertReleasedStops(pi, ctx, [{}, { output: 'Final summary only.' }]);
 });
 
-test('bug-audit delivered report stops internal validation loops after confirmed findings', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext(entries);
 
-  await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')(
-    { prompt: 'Find bugs in the project and report verified findings only.' },
-    ctx,
-  );
-
-  const placeholder = await event(pi, 'session_stop')(
-    {
-      output: [
-        'BUG-AUDIT-REPORT',
-        'Status: draft',
-        'Findings:',
-        '- none yet',
-      ].join('\n'),
-    },
-    ctx,
-  );
-
-  assert.equal(placeholder?.continue, true);
-  assert.match(placeholder.additionalContext, /subagent gate|omp_test_gate|SKILL_USAGE/);
-
-  const delivered = await event(pi, 'session_stop')(
-    {
-      output: [
-        'BUG-AUDIT-REPORT',
-        'Summary: 4 RED-confirmed bugs, 12 total live findings.',
-        'Findings:',
-        '- RED-confirmed bug: router accepts stale task evidence after reroute.',
-        '- RED-confirmed bug: task gate prompt omitted required parent context.',
-      ].join('\n'),
-    },
-    ctx,
-  );
-
-  assert.equal(delivered, undefined);
-
-  const restoredPi = new FakePi(entries);
-  registerCoreEnhancer(restoredPi);
-  await assertReleasedStops(restoredPi, extensionContext(entries), [{}, { output: 'No new validation evidence.' }]);
-});
-
-test('bug audit route requires audit subagents with parent task context', async () => {
-  const pi = new FakePi();
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext();
-  const prompt = '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。';
-  const agents = ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'];
-
-  await event(pi, 'session_start')({}, ctx);
-  const routeResult = await event(pi, 'before_agent_start')({ prompt }, ctx);
-
-  assert.equal(routeResult.route.intent, 'bug-audit');
-  assert.deepEqual(routeResult.route.requiredSubagents.map(({ agent }) => agent), agents);
-  assert.match(routeResult.additionalContext, /Bug audit workflow/);
-  assert.match(routeResult.additionalContext, /OMP_PARENT_TASK: 帮我测试项目并检查 bug/);
-
-  for (const agent of agents) {
-    await event(pi, 'tool_result')(
-      {
-        name: 'task',
-        params: {
-          agent,
-          prompt: [
-            'Required skills for this subagent:',
-            ...subagentSkills(agent).map((skill) => `- ${skill}`),
-          ].join('\n'),
-        },
-      },
-      ctx,
-    );
-  }
-  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
-
-  const finalOutput = usageEvidence({
-    subagents: Object.fromEntries(agents.map((agent) => [agent, subagentSkills(agent)])),
-    skills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
-  });
-  const blocked = await event(pi, 'session_stop')({ output: finalOutput }, ctx);
-
-  assert.equal(blocked?.continue, true);
-  assert.match(blocked.additionalContext, /Missing bug-audit assignment context: ecc-tdd-guide, ecc-code-reviewer, ecc-silent-failure-hunter, ecc-pr-test-analyzer/);
-
-  await forkSubagents(pi, ctx, agents);
-  await assertReleasedStops(pi, ctx, [{ output: finalOutput }, {}, {}]);
-});
 
 test('failed skill validation can be corrected by final evidence without repeated blocking', async () => {
   const pi = new FakePi();

@@ -270,7 +270,7 @@ function missingWorkflowGateCases() {
 }
 
 function failedWorkflowGateCases() {
-  return profilePromptCases('failed workflow gate', async (profile, prompt) => {
+  return profilePromptCases('failed workflow gate is pre-work evidence only after final output', async (profile, prompt) => {
     const { pi, ctx } = await startRuntime(prompt);
     await forkSubagents(pi, ctx, profile);
     await validateSkillUsage(pi, ctx, profile.skills);
@@ -284,9 +284,8 @@ function failedWorkflowGateCases() {
       },
       ctx,
     );
-    const blocked = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
-    assert.equal(blocked?.continue, true);
-    assert.match(blocked.additionalContext, profile.missingGate);
+    const released = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
+    assert.equal(released, undefined);
   }, (profile) => Boolean(profile.gateTool));
 }
 
