@@ -364,6 +364,61 @@ test('routes common work situations without unreasonable workflow escalation', (
   }
 });
 
+test('routes E2E route/status/skill workflow audits as diagnosis-only probes', () => {
+  const prompt = [
+    'OMP_E2E_ROUTE_WORKFLOW_AUDIT',
+    'Only perform route/status/skill checks for the installed OMP enhancer.',
+    'Do not modify files, do not run tests, do not fork subagents, and do not perform bug audit or security review.',
+    'Call exactly omp_core_route_task for the probe prompts, then omp_core_subagent_status.',
+    'Return compact JSON only with A intent, B intent, status route, skill usage, and whether any probe changed active route.',
+  ].join('\n');
+
+  const route = routeNaturalLanguageTask({ prompt });
+
+  assert.equal(route.intent, 'diagnosis');
+  assert.notEqual(route.intent, 'writing.zh');
+  assert.notEqual(route.intent, 'bug-audit');
+  assert.notEqual(route.intent, 'security-review');
+  assert.deepEqual(route.requiredTools, []);
+  assert.deepEqual(route.requiredSubagents, []);
+});
+
+test('routes constrained E2E workflow audits with plain-text summaries as diagnosis-only probes', () => {
+  const cases = [
+    {
+      name: 'short plain-text route status skill summary',
+      prompt: [
+        'OMP_E2E_ROUTE_WORKFLOW_AUDIT',
+        'Only perform route/status/skill checks for the installed OMP enhancer.',
+        'Do not modify files, do not run tests, and do not fork subagents.',
+        'Call exactly omp_core_route_task for the probe prompts, then omp_core_subagent_status.',
+        'Return a short plain-text summary with A intent, B intent, status route, skill usage, and whether any probe changed active route.',
+      ].join('\n'),
+    },
+    {
+      name: 'negated security-review wording stays bounded to routing checks',
+      prompt: [
+        'OMP_E2E_ROUTE_WORKFLOW_AUDIT',
+        'Only perform route/status/skill checks for the installed OMP enhancer.',
+        'Do not modify files, do not run tests, do not fork subagents, and do not perform security review.',
+        'Call exactly omp_core_route_task for the probe prompts, then omp_core_subagent_status.',
+        'Return a short plain-text summary with A intent, B intent, status route, skill usage, and whether any probe changed active route.',
+      ].join('\n'),
+    },
+  ];
+
+  for (const { name, prompt } of cases) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.intent, 'diagnosis', name);
+    assert.notEqual(route.intent, 'security-review', name);
+    assert.notEqual(route.intent, 'bug-audit', name);
+    assert.notEqual(route.intent, 'writing.zh', name);
+    assert.deepEqual(route.requiredTools, [], name);
+    assert.deepEqual(route.requiredSubagents, [], name);
+  }
+});
+
 test('routes observed gate workflow regressions before classifier or smart-gate recovery', () => {
   const workflowValidation = routeNaturalLanguageTask({
     prompt: '我已经重启 OMP，请利用 MiMo 对 OMP 进行一次端到端测试，验证整个工作流中门禁的误挡、主进程结束后长时间后台任务，以及主 agent 或 task 漏用 skills 或不遵守 workflow 的情况。',

@@ -88,12 +88,18 @@ export default function registerCoreEnhancer(pi) {
       restoreStateFromContext(state, ctx);
       const route = routeNaturalLanguageTask({ prompt: params.prompt });
       const shouldActivate = shouldActivateRouteProbe(state, params);
+      const probeOnly = !shouldActivate;
       if (shouldActivate) {
         setRouteState(state, route, params.prompt);
         await persistState(pi, state);
       }
       const suffix = shouldActivate ? '' : '\nRoute probe only: active route state was not changed.';
-      return okResult(`${formatRoute(route)}${suffix}`, { route, activated: shouldActivate });
+      return okResult(`${formatRoute(route)}${suffix}${formatRouteProbeGuidance(route, { probeOnly })}`, {
+        route,
+        activated: shouldActivate,
+        probe_only: probeOnly,
+        state_changed: shouldActivate,
+      });
     },
   });
 
@@ -552,6 +558,17 @@ function formatSubagents(subagents = []) {
     const skills = requiredSkills.length ? `; skills: ${requiredSkills.join(', ')}` : '';
     return `${agent} (${duty}${skills})`;
   }).join(', ');
+}
+
+function formatRouteProbeGuidance(route, { probeOnly = false } = {}) {
+  if (!probeOnly) return '';
+  const requiredSkills = route?.requiredSkills ?? [];
+  if (!requiredSkills.length) return '';
+  return [
+    '',
+    `Returned required skill URIs: ${requiredSkills.map((skill) => `skill://${skill}`).join(', ')}`,
+    'Probe guidance: if this audit must judge skill usage, read these returned skills before marking them loaded or missing; do not execute this routed workflow unless the user explicitly activates it.',
+  ].join('\n');
 }
 
 function shouldActivateRouteProbe(state, params = {}) {

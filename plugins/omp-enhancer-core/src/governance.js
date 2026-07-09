@@ -40,7 +40,7 @@ export function buildGovernancePromptFragment({
     '',
     ...workflowGateBriefingLines(resolved),
     '',
-    ...workflowNextLines(resolved),
+    ...workflowNextLines(resolved, parentTask),
     '',
     loopGuardPromptSection(),
     '',
@@ -369,7 +369,7 @@ function formatRecentToolFailures(state, toolNames = []) {
   ].join('\n');
 }
 
-function workflowNextLines(route) {
+function workflowNextLines(route, parentTask = '') {
   const firstSkill = route.requiredSkills?.[0];
   const delegatesWork = Boolean(route.requiredSubagents?.length);
   const nextAction = firstSkill && delegatesWork
@@ -377,13 +377,26 @@ function workflowNextLines(route) {
     : firstSkill
       ? `Next action: read skill://${firstSkill} before acting, then follow the route card.`
       : 'Next action: follow the route card using the selected tools.';
+  const constrainedProbe = isConstrainedRouteStatusSkillPrompt(parentTask);
   return [
     'WORKFLOW_NEXT',
     nextAction,
+    ...(constrainedProbe ? [
+      'User constraint: route/status/skill checks only.',
+      'Do not call eval, bash, task, edit, write, project QA tools, or test commands while this constraint is active.',
+      'If compact JSON is requested, return raw compact JSON only with no Markdown fence, preface, or explanation.',
+    ] : []),
     'Soft guidance: keep this to one immediate action and adjust only when tool evidence conflicts.',
     '',
     'WORKFLOW_CONTEXT',
   ];
+}
+
+function isConstrainedRouteStatusSkillPrompt(prompt = '') {
+  const text = String(prompt).toLowerCase();
+  const limitsTools = /(?:route\/status\/skill|route.*status.*skill|omp_core_route_task.*omp_core_subagent_status|omp_core_subagent_status.*omp_core_route_task)/.test(text);
+  const avoidsStatefulWork = /(?:do not modify|do not run tests|do not fork|不修改|不运行测试|不跑测试|不\s*fork)/.test(text);
+  return limitsTools && avoidsStatefulWork;
 }
 
 function workflowFor(route) {

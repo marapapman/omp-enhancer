@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildGovernancePromptFragment, buildSubagentPromptFragment } from '../src/governance.js';
+import { routeNaturalLanguageTask } from '../src/router.js';
 
 test('builds a Mandatory Skill Workflow fragment with required and loaded skill accounting', () => {
   const fragment = buildGovernancePromptFragment({
@@ -312,6 +313,29 @@ test('adds soft WORKFLOW_NEXT guidance for routed implementation work', () => {
 
   const workflowNextSection = fragment.match(/WORKFLOW_NEXT[\s\S]*?(?=\n[A-Z][A-Z_ ]+\n|$)/)?.[0] ?? '';
   assert.doesNotMatch(workflowNextSection, /\b(?:MUST|REQUIRED|mandatory|gate|block|blocked|cannot proceed)\b/i);
+});
+
+test('adds constrained route probe governance for compact JSON checks without extra tools', () => {
+  const prompt = [
+    'OMP_E2E_ROUTE_WORKFLOW_AUDIT',
+    'Only perform route/status/skill checks for the installed OMP enhancer.',
+    'Do not modify files, do not run tests, do not fork subagents, and do not perform bug audit or security review.',
+    'Call exactly omp_core_route_task for the probe prompts, then omp_core_subagent_status.',
+    'Return compact JSON only with A intent, B intent, status route, skill usage, and whether any probe changed active route.',
+  ].join('\n');
+  const route = routeNaturalLanguageTask({ prompt });
+  const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
+
+  assert.equal(route.intent, 'diagnosis');
+  assert.match(fragment, /route\/status\/skill checks/i);
+  assert.match(fragment, /compact JSON/i);
+  assert.match(fragment, /no Markdown fence/i);
+  assert.match(fragment, /do not (?:call|use).*eval/i);
+  assert.match(fragment, /do not (?:call|use).*bash/i);
+  assert.match(fragment, /do not (?:call|use).*task/i);
+  assert.match(fragment, /do not (?:call|use).*edit/i);
+  assert.match(fragment, /do not (?:call|use).*write/i);
+  assert.match(fragment, /do not (?:run|call|use).*test commands/i);
 });
 
 test('keeps routing governance independent from slash commands', () => {

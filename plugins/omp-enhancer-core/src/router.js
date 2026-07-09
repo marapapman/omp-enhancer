@@ -181,6 +181,10 @@ export function routeNaturalLanguageTask(input = {}) {
     shouldUseClassifier,
   });
 
+  if (isConstrainedE2EWorkflowAuditPrompt(normalized)) {
+    return routed('diagnosis');
+  }
+
   if (conceptOnly && !isSecurityConceptQuestion(normalized)) return routed('agentic.simple');
 
   if (isHardBlockRequest(normalized) && !hasWriting && !hasCodeChange && !hasBugAudit && !hasTestAnalysis && !hasDiagnosisOnly && !hasSecurity) {
@@ -743,6 +747,13 @@ function isTestAnalysisRequest(text) {
     || /(?:编译).*(?:latex|warnings?|warning|编译)/.test(text)
     || /(?:检查|审查|测试|排查).*(?:门禁|gate|路由|workflow|工作流|代码|实现|逻辑).*(?:误挡|异常|错误|失败|风险|bug|问题)/.test(text)
     || /(?:发布前|pre[-\s]?release).*(?:check|检查|pack|test|plugin list|marketplace)/.test(text);
+}
+
+function isConstrainedE2EWorkflowAuditPrompt(text) {
+  if (!/omp_e2e_[a-z0-9_]*workflow_audit/.test(text)) return false;
+  const limitsTools = /(?:route\/status\/skill|route.*status.*skill|omp_core_route_task.*omp_core_subagent_status|omp_core_subagent_status.*omp_core_route_task)/.test(text);
+  const avoidsStatefulWork = /(?:do not modify|do not run tests|do not fork|不修改|不运行测试|不跑测试|不\s*fork)/.test(text);
+  return limitsTools && avoidsStatefulWork;
 }
 
 function isWorkflowValidationRequest(text) {

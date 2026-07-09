@@ -175,6 +175,134 @@ test('route task probe-only prompts do not activate a fresh session by default',
   assert.notEqual(status.details.status.route, result.details.route.intent);
 });
 
+test('route task probe details expose probe-only and state-change booleans', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const probePrompt = 'Tool check only. Do not modify files. Call omp_core_route_task twice, then omp_core_subagent_status. Report whether any probe changed active route.';
+  const activePrompt = 'Review routing compliance in src/router.js; do not modify files.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const probeResult = await tool(pi, 'omp_core_route_task').execute(
+    'call-route-probe-machine-readable',
+    { prompt: probePrompt },
+    undefined,
+    undefined,
+    ctx,
+  );
+  const activeResult = await tool(pi, 'omp_core_route_task').execute(
+    'call-route-active-machine-readable',
+    { prompt: activePrompt, activate: true },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(probeResult.details.probe_only, true);
+  assert.equal(probeResult.details.state_changed, false);
+  assert.equal(activeResult.details.probe_only, false);
+  assert.equal(activeResult.details.state_changed, true);
+});
+
+test('probe-only route task output returns required skill URIs without changing route state', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '总结已观测的 E2E 诊断结果，记录路由、门禁和 skill 使用情况，不修改代码，不运行新的测试。' },
+    ctx,
+  );
+  const result = await tool(pi, 'omp_core_route_task').execute(
+    'call-required-skill-probe',
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-required-skill-probe-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(result.details.probe_only, true);
+  assert.equal(result.details.state_changed, false);
+  assert.match(result.content[0].text, /Returned required skill URIs:\s*.*skill:\/\/[^\s,]+/);
+  assert.equal(status.details.status.route, 'writing.zh');
+});
+
+test('before_agent_start keeps E2E route/status/skill audits out of writing and bug-audit status', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = [
+    'OMP_E2E_ROUTE_WORKFLOW_AUDIT',
+    'Only perform route/status/skill checks for the installed OMP enhancer.',
+    'Do not modify files, do not run tests, do not fork subagents, and do not perform bug audit or security review.',
+    'Call exactly omp_core_route_task for the probe prompts, then omp_core_subagent_status.',
+    'Return compact JSON only with A intent, B intent, status route, skill usage, and whether any probe changed active route.',
+  ].join('\n');
+
+  await event(pi, 'session_start')({}, ctx);
+  const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-e2e-route-workflow-audit-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(start.route.intent, 'diagnosis');
+  assert.equal(status.details.status.route, 'diagnosis');
+  assert.doesNotMatch(status.content[0].text, /Route:\s*(?:writing\.zh|bug-audit)/);
+  assert.deepEqual(status.details.status.required, []);
+});
+
+test('before_agent_start keeps plain-text E2E workflow audits on diagnosis route', async () => {
+  const prompts = [
+    [
+      'OMP_E2E_ROUTE_WORKFLOW_AUDIT',
+      'Only perform route/status/skill checks for the installed OMP enhancer.',
+      'Do not modify files, do not run tests, and do not fork subagents.',
+      'Call exactly omp_core_route_task for the probe prompts, then omp_core_subagent_status.',
+      'Return a short plain-text summary with A intent, B intent, status route, skill usage, and whether any probe changed active route.',
+    ].join('\n'),
+    [
+      'OMP_E2E_ROUTE_WORKFLOW_AUDIT',
+      'Only perform route/status/skill checks for the installed OMP enhancer.',
+      'Do not modify files, do not run tests, do not fork subagents, and do not perform security review.',
+      'Call exactly omp_core_route_task for the probe prompts, then omp_core_subagent_status.',
+      'Return a short plain-text summary with A intent, B intent, status route, skill usage, and whether any probe changed active route.',
+    ].join('\n'),
+  ];
+
+  for (const prompt of prompts) {
+    const pi = new FakePi();
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext();
+
+    await event(pi, 'session_start')({}, ctx);
+    const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
+    const status = await tool(pi, 'omp_core_subagent_status').execute(
+      'call-plain-text-e2e-workflow-audit-status',
+      {},
+      undefined,
+      undefined,
+      ctx,
+    );
+
+    assert.equal(start.route.intent, 'diagnosis');
+    assert.equal(status.details.status.route, 'diagnosis');
+    assert.doesNotMatch(status.content[0].text, /Route:\s*(?:security-review|bug-audit|writing\.zh)/);
+    assert.deepEqual(status.details.status.required, []);
+  }
+});
+
 test('route task natural probe wording does not activate a fresh session by default', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
