@@ -392,6 +392,17 @@ test('routes explicit agentic review or analysis prompts away from bug audit whe
   }
 });
 
+test('routes Chinese agentic route and skill probes away from writing without dispatching subagents', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '请并行派发多个 subagents，一个检查 router，一个检查 governance，一个检查 testing gate，然后汇总结论。注意这只是路由和技能使用测试，不要真的派发。',
+  });
+
+  assert.notEqual(route.intent, 'writing.zh');
+  assert.equal(route.intent, 'bug-audit');
+  assert.equal(route.auditMode, 'focused');
+  assert.deepEqual(route.requiredSubagents, []);
+});
+
 test('routes E2E route/status/skill workflow audits as diagnosis-only probes', () => {
   const prompt = [
     'OMP_E2E_ROUTE_WORKFLOW_AUDIT',

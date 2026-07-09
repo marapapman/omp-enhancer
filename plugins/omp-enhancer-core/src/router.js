@@ -228,6 +228,10 @@ export function routeNaturalLanguageTask(input = {}) {
     return routed('diagnosis');
   }
 
+  if (isAgenticRouteSkillProbeWithoutDispatch(normalized)) {
+    return routed('bug-audit', { auditMode: 'focused' });
+  }
+
   if (hasSummaryWriting && !hasCodeChange) {
     return routed(hasEnglishWriting ? 'writing.en' : 'writing.zh', { writingComplexity: 'simple' });
   }
@@ -798,6 +802,15 @@ function isLocalSmokeOrProcessRunRequest(text) {
     || /(?:do not|don't|without|no)\s+(?:change|modify|write|audit|inspect|find).*(?:code|bugs?|defects?)/.test(text);
 
   return runsLocalProcess && asksForResultOnly;
+}
+
+function isAgenticRouteSkillProbeWithoutDispatch(text) {
+  const mentionsAgenticDispatch = /(?:subagents?|agentic|并行|派发|委派|fork|dispatch|delegate)/.test(text);
+  const suppressesDispatch = /(?:不要|别|不|无需|不用).{0,12}(?:真的)?(?:派发|委派|fork|dispatch|delegate|启动|运行|执行)/.test(text)
+    || /(?:do not|don't|without|no need to).{0,24}(?:dispatch|delegate|fork|spawn|run)\s+(?:agents?|subagents?)/.test(text);
+  const routeSkillGateProbe = /(?:路由|route|routing|router|governance|testing\s*gate|门禁|gate|skills?|skill\s*使用|技能使用)/.test(text);
+  const asksToInspect = /(?:检查|审查|核对|验证|测试|check|review|inspect|probe|test)/.test(text);
+  return mentionsAgenticDispatch && suppressesDispatch && routeSkillGateProbe && asksToInspect;
 }
 
 function isAgenticImplementationCoordinationRequest(text) {
