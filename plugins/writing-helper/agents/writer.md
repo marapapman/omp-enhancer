@@ -84,9 +84,9 @@ Before writing any Chinese text, mentally run through the `plain-chinese-writing
 | `format-latex2markdown` | Convert LaTeX back to Markdown | `.md` file |
 | `format-template-latex` | Apply conference/journal LaTeX template | template-applied `.tex` |
 
-**Default workflow:** write (Fine/Strict/Fast) → `writing-checkers` → `writing-review` → fix → `format-humanizer` → `format-submission-precheck`
+**Default workflow:** write (Fine/Strict/Fast) → `read skill://writing-checkers` → `read skill://writing-review` → fix → `read skill://format-humanizer` → `read skill://format-submission-precheck`
 
-**Chinese thesis workflow:** `plain-chinese-writing` (always applied) → write (Fine/Strict/Fast) → `writing-checkers` → `writing-review` → fix → `pku-chinese-phd-thesis-checker` → `format-humanizer` → `format-submission-precheck`
+**Chinese thesis workflow:** `read skill://plain-chinese-writing` (always applied) → write (Fine/Strict/Fast) → `read skill://writing-checkers` → `read skill://writing-review` → fix → `read skill://pku-chinese-phd-thesis-checker` → `read skill://format-humanizer` → `read skill://format-submission-precheck`
 
 ---
 

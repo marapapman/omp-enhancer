@@ -34,6 +34,7 @@ import {
   serializeGateRecoveryState,
 } from './src/gate-recovery.js';
 import { appendDebugLog, buildDebugRecord } from './src/debug-logger.js';
+import { installPluginSkills } from './src/install-skills.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
 const LOOP_GUARD_RECOVERY_MESSAGE = 'omp-enhancer-core.loop-guard-recovery';
@@ -72,6 +73,9 @@ const CLASSIFIER_PREFLIGHT_FAILURE_TOOLS = new Set([
   'omp_config_plan',
   'fact_check_gate',
 ]);
+
+let skillsAutoInstalled = false;
+
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
@@ -286,11 +290,35 @@ export default function registerCoreEnhancer(pi) {
     },
   });
 
+
+  pi.registerTool({
+    name: 'omp_core_install_skills',
+    label: 'Install plugin skills',
+    description: 'Install all marketplace plugin skills into OMP skill resolution paths (~/.omp/skills/ and managed-skills/). Skills are symlinked from the plugin cache. Idempotent — only creates missing symlinks, never overwrites real skill directories.',
+    parameters: z?.object ? z.object({ dryRun: z.boolean().optional() }) : undefined,
+    execute: async (_callId, params = {}) => {
+      const result = await installPluginSkills({ dryRun: params.dryRun ?? false });
+      const summary = [
+        `Installed: ${result.installed.length}`,
+        `Skipped: ${result.skipped.length}`,
+        `Errors: ${result.errors.length}`,
+        ...(result.warnings.length ? [`Warnings: ${result.warnings.length}`] : []),
+      ].join(', ');
+      return okResult(summary, result);
+    },
+  });
+
   pi.on?.('session_start', async (_event = {}, ctx = {}) => {
     const restored = restoreStateFromContext(state, ctx);
     if (!restored) resetState(state);
+    // One-time skill installation from marketplace plugins (idempotent, low-noise)
+    if (!skillsAutoInstalled) {
+      skillsAutoInstalled = true;
+      installPluginSkills().catch(() => {});
+    }
     return undefined;
   });
+
 
   for (const eventName of ASSISTANT_OUTPUT_EVENTS) {
     pi.on?.(eventName, async (event = {}, ctx = {}) => {
@@ -493,7 +521,7 @@ export default function registerCoreEnhancer(pi) {
 
     return undefined;
   });
-}
+ }
 
 export function createState() {
   return {

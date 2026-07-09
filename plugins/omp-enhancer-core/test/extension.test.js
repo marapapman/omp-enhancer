@@ -79,6 +79,7 @@ test('registers core tools and hooks without a separate classifier command', () 
     'omp_core_validate_subagent_usage',
     'omp_core_subagent_status',
     'omp_core_governance_prompt',
+    'omp_core_install_skills',
   ]);
   assert.equal([...pi.tools.values()].every((tool) => typeof tool.execute === 'function'), true);
   assert.deepEqual(pi.eventHandlers.map((handler) => handler.event), [
