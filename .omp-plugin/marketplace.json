@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for config assets, writing support, test workflow support, and core runtime routing.",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "omp-config",
       "description": "Pluginized OMP configuration assets, agents, skills, hooks, model override templates, and config diagnostics.",
-      "version": "0.1.16",
+      "version": "0.1.17",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -306,7 +306,7 @@
     {
       "name": "writing-helper",
       "description": "Standalone OMP writing helper with logic checks, quality checks, citation verification, writer/checker agents, and writing skills.",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -345,7 +345,7 @@
     {
       "name": "omp-testing-enhancer",
       "description": "Help OMP agents write and check tests with target analysis, public API context, browser evidence, coverage and mutation analyzers, quality gates, and reports.",
-      "version": "0.1.10",
+      "version": "0.1.11",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -354,7 +354,7 @@
     {
       "name": "omp-fact-checker",
       "description": "Fact-checking workflow with claim planning, evidence collection, cross-agent validation, review, and low-noise gates.",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-fact-checker",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -369,7 +369,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "Unified OMP enhancer runtime router for coding, writing, testing, and config tasks.",
-      "version": "0.1.73",
+      "version": "0.1.74",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",
