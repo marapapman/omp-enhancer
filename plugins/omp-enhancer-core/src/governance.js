@@ -384,7 +384,8 @@ function workflowNextLines(route, parentTask = '') {
     ...(constrainedProbe ? [
       'User constraint: route/status/skill checks only.',
       'Do not call eval, bash, task, edit, write, project QA tools, or test commands while this constraint is active.',
-      'If compact JSON is requested, return raw compact JSON only with no Markdown fence, preface, or explanation.',
+      'If compact JSON is requested, return one raw single JSON object with no Markdown fence, without Markdown fences, without a preface, and without trailing explanation.',
+      'Do not repeat SKILL_USAGE, SUBAGENT_USAGE, or evidence blocks inside compact JSON route/status/skill check responses; encode only the compact fields the user requested.',
     ] : []),
     'Soft guidance: keep this to one immediate action and adjust only when tool evidence conflicts.',
     '',

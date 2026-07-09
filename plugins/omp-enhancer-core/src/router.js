@@ -157,7 +157,8 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasAuditSummary = isAuditSummaryRequest(normalized);
   const hasRouteToolDiagnostic = isRouteToolDiagnosticRequest(normalized);
   const hasSummaryWriting = !hasAuditSummary && isSummaryWritingRequest(normalized);
-  const hasRawCodeChange = (!asksNoCodeChange || isPlanForCodeChange) && !hasKnowledgeOnly && isCodeChangeRequest(normalized);
+  const hasAgenticImplementationCoordination = isAgenticImplementationCoordinationRequest(normalized);
+  const hasRawCodeChange = (!asksNoCodeChange || isPlanForCodeChange) && (!hasKnowledgeOnly || hasAgenticImplementationCoordination) && (isCodeChangeRequest(normalized) || hasAgenticImplementationCoordination);
   const hasBugAudit = !hasRouteToolDiagnostic && (hasAuditSummary || (!hasSummaryWriting && (hasWorkflowValidation || (!hasRawCodeChange && !hasGateValidatorStatusReport && !hasBugReportWriting && !hasTestReportWriting && isBugAuditRequest(normalized)))));
   const hasFocusedBugAudit = !hasRouteToolDiagnostic && (hasWorkflowValidation || (hasBugAudit && isFocusedDirectAuditRequest(normalized)));
   const hasCoding = hasRawCodeChange && !hasBugAudit && !hasKnowledgeOnly;
@@ -230,6 +231,10 @@ export function routeNaturalLanguageTask(input = {}) {
   if (hasSummaryWriting && !hasCodeChange) {
     return routed(hasEnglishWriting ? 'writing.en' : 'writing.zh', { writingComplexity: 'simple' });
   }
+  if (hasAgenticImplementationCoordination && !asksNoCodeChange) {
+    return routed('implementation-with-tests');
+  }
+
 
   if (hasBugAudit) {
     return routed('bug-audit', { auditMode: hasFocusedBugAudit ? 'focused' : null });
@@ -793,6 +798,17 @@ function isLocalSmokeOrProcessRunRequest(text) {
     || /(?:do not|don't|without|no)\s+(?:change|modify|write|audit|inspect|find).*(?:code|bugs?|defects?)/.test(text);
 
   return runsLocalProcess && asksForResultOnly;
+}
+
+function isAgenticImplementationCoordinationRequest(text) {
+  const withoutNegatedAudit = text
+    .replace(/(?:do not|don't|not|without|no)\s+(?:ask(?:ing)?\s+for\s+)?(?:do\s+)?(?:a\s+)?(?:broad\s+)?bug[-\s]?audit/g, '')
+    .replace(/(?:不要|不|别)[^，。；\n]*(?:bug\s*audit|bug\s*审计|缺陷审计|查\s*bug|找\s*bug)/g, '');
+  const coordinatesAgents = /(?:parallelize|parallel|coordinate|delegate|fork|task subagents?|subagents?|agents?|agentic|并行|协调|委派|子代理|多代理)/.test(withoutNegatedAudit);
+  const implementationAction = /(?:implement|implementation|fix|update|modify|refactor|add|create|build|实现|修复|修改|更新|重构|添加|新增)/.test(withoutNegatedAudit);
+  const codeTarget = /(?:code|tests?|router|routing|governance|prompt|plugin|behavior|代码|测试|路由|插件|提示词|行为)/.test(withoutNegatedAudit);
+  const positiveBugAudit = /(?:bug[-\s]?audit|find bugs?|inspect .*bugs?|audit .*bugs?|查\s*bug|找\s*bug|只报告|report findings)/.test(withoutNegatedAudit);
+  return coordinatesAgents && implementationAction && codeTarget && !positiveBugAudit;
 }
 
 function asksToRunTestVerification(text) {

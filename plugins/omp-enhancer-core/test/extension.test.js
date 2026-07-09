@@ -204,6 +204,42 @@ test('route task probe details expose probe-only and state-change booleans', asy
   assert.equal(activeResult.details.state_changed, true);
 });
 
+test('status distinguishes active route from last probe route and reports whether the probe changed state', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
+    ctx,
+  );
+  const probeResult = await tool(pi, 'omp_core_route_task').execute(
+    'call-route-probe-after-active-route',
+    { prompt: 'Implement router probe status handling and add regression tests.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-status-after-route-probe',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(probeResult.details.probe_only, true);
+  assert.equal(probeResult.details.state_changed, false);
+  assert.equal(status.details.status.route, 'writing.zh');
+  assert.equal(status.details.status.active_route, 'writing.zh');
+  assert.equal(status.details.status.last_probe_route, 'implementation-with-tests');
+  assert.equal(status.details.status.last_probe_changed_active_route, false);
+  assert.match(status.content[0].text, /Active route:\s*writing\.zh/);
+  assert.match(status.content[0].text, /Last probe route:\s*implementation-with-tests/);
+  assert.match(status.content[0].text, /Probe changed active route:\s*(?:false|no)/i);
+});
+
 test('probe-only route task output returns required skill URIs without changing route state', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);

@@ -91,8 +91,15 @@ export default function registerCoreEnhancer(pi) {
       const probeOnly = !shouldActivate;
       if (shouldActivate) {
         setRouteState(state, route, params.prompt);
-        await persistState(pi, state);
+      } else {
+        state.lastRouteProbe = {
+          route,
+          prompt: String(params.prompt ?? ''),
+          changedActiveRoute: false,
+          probedAt: Date.now(),
+        };
       }
+      await persistState(pi, state);
       const suffix = shouldActivate ? '' : '\nRoute probe only: active route state was not changed.';
       return okResult(`${formatRoute(route)}${suffix}${formatRouteProbeGuidance(route, { probeOnly })}`, {
         route,
@@ -493,6 +500,7 @@ export function createState() {
     lastRoute: null,
     lastPrompt: '',
     routeStartedAt: 0,
+    lastRouteProbe: null,
     lastSkillUsage: null,
     lastSubagentUsage: null,
     classifierPreflight: null,
@@ -597,6 +605,7 @@ function normalizeRoutePrompt(value = '') {
 function setRouteState(state, route, prompt = '', { classifierResolved = false } = {}) {
   const previousPreflight = state.classifierPreflight;
   state.lastRoute = route;
+  state.lastRouteProbe = null;
   state.lastPrompt = String(prompt ?? '');
   state.routeStartedAt = Date.now();
   state.lastSkillUsage = null;
@@ -612,6 +621,7 @@ function setRouteState(state, route, prompt = '', { classifierResolved = false }
 
 function resetState(state) {
   state.lastRoute = null;
+  state.lastRouteProbe = null;
   state.lastPrompt = '';
   state.routeStartedAt = 0;
   state.lastSkillUsage = null;
@@ -697,6 +707,7 @@ function replaceState(target, source) {
   target.lastRoute = source.lastRoute;
   target.lastPrompt = source.lastPrompt ?? '';
   target.routeStartedAt = source.routeStartedAt;
+  target.lastRouteProbe = source.lastRouteProbe;
   target.lastSkillUsage = source.lastSkillUsage;
   target.lastSubagentUsage = source.lastSubagentUsage;
   target.classifierPreflight = source.classifierPreflight ?? null;
@@ -730,6 +741,7 @@ function mergeLiveLoopGuardState(live, restored) {
 function serializeState(state) {
   return {
     lastRoute: state.lastRoute,
+    lastRouteProbe: state.lastRouteProbe,
     lastPrompt: state.lastPrompt ?? '',
     routeStartedAt: state.routeStartedAt,
     lastSkillUsage: state.lastSkillUsage,
@@ -803,6 +815,7 @@ function readStateSnapshot(value) {
   if (!evidence) return null;
   return {
     lastRoute: isRecord(value.lastRoute) ? value.lastRoute : null,
+    lastRouteProbe: isRecord(value.lastRouteProbe) ? value.lastRouteProbe : null,
     lastPrompt: isString(value.lastPrompt) ? value.lastPrompt : '',
     routeStartedAt: Number.isFinite(value.routeStartedAt) ? value.routeStartedAt : 0,
     lastSkillUsage: isRecord(value.lastSkillUsage) ? value.lastSkillUsage : null,
@@ -3117,6 +3130,9 @@ function buildSubagentStatus(state) {
   const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
   return {
     route: state.lastRoute?.intent ?? 'none',
+    active_route: state.lastRoute?.intent ?? 'none',
+    last_probe_route: state.lastRouteProbe?.route?.intent ?? 'none',
+    last_probe_changed_active_route: Boolean(state.lastRouteProbe?.changedActiveRoute),
     required: requiredSubagents,
     completed: [...completedSubagentsForGate(state)],
     pending: pendingRequiredSubagents(state, requiredSubagents).map(({ agent, startedAt, lastSeenAt, attempts, skills }) => ({
@@ -3172,6 +3188,9 @@ function formatSubagentStatus(state) {
 
   return [
     `Route: ${status.route}`,
+    `Active route: ${status.active_route}`,
+    `Last probe route: ${status.last_probe_route}`,
+    `Probe changed active route: ${status.last_probe_changed_active_route}`,
     'Required:',
     required,
     'Completed:',

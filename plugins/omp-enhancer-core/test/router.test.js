@@ -364,6 +364,34 @@ test('routes common work situations without unreasonable workflow escalation', (
   }
 });
 
+test('routes explicit agentic review or analysis prompts away from bug audit when no bug finding is requested', () => {
+  const cases = [
+    {
+      name: 'parallel read-only architecture review',
+      prompt: 'Parallelize this: fork subagents to review and analyze the router architecture, then summarize tradeoffs. Do not find bugs and do not modify files.',
+      expectedIntent: 'unknown',
+      expectedWorkflowRoute: 'agentic.simple',
+      expectedSubagents: [],
+    },
+    {
+      name: 'agentic implementation with review subagents',
+      prompt: 'Please parallelize the work: fork subagents for code review and analysis, then update the router behavior and add regression tests. I am not asking for a bug audit.',
+      expectedIntent: 'implementation-with-tests',
+      expectedWorkflowRoute: 'code.dev',
+      expectedSubagents: ['plan', 'implementation-task', 'reviewer'],
+    },
+  ];
+
+  for (const { name, prompt, expectedIntent, expectedWorkflowRoute, expectedSubagents } of cases) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.intent, expectedIntent, name);
+    assert.notEqual(route.intent, 'bug-audit', name);
+    assert.equal(route.workflowRoute ?? null, expectedWorkflowRoute, name);
+    assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), expectedSubagents, name);
+  }
+});
+
 test('routes E2E route/status/skill workflow audits as diagnosis-only probes', () => {
   const prompt = [
     'OMP_E2E_ROUTE_WORKFLOW_AUDIT',

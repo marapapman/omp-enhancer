@@ -338,6 +338,26 @@ test('adds constrained route probe governance for compact JSON checks without ex
   assert.match(fragment, /do not (?:run|call|use).*test commands/i);
 });
 
+test('compact JSON governance requires raw single-object final output without loop-prone evidence blocks', () => {
+  const prompt = [
+    'OMP_E2E_ROUTE_WORKFLOW_AUDIT',
+    'Only perform route/status/skill checks for the installed OMP enhancer.',
+    'Do not modify files, do not run tests, do not fork subagents, and do not perform bug audit or security review.',
+    'Call exactly omp_core_route_task for the probe prompts, then omp_core_subagent_status.',
+    'Return compact JSON only with A intent, B intent, status route, skill usage, and whether any probe changed active route.',
+  ].join('\n');
+  const route = routeNaturalLanguageTask({ prompt });
+  const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
+
+  assert.match(fragment, /raw single JSON object/i);
+  assert.match(fragment, /without Markdown fences/i);
+  assert.match(fragment, /without (?:a )?preface/i);
+  assert.match(fragment, /without trailing explanation/i);
+  assert.match(fragment, /do not repeat .*SKILL_USAGE/i);
+  assert.match(fragment, /do not repeat .*SUBAGENT_USAGE/i);
+  assert.match(fragment, /do not repeat .*evidence blocks/i);
+});
+
 test('keeps routing governance independent from slash commands', () => {
   const fragment = buildGovernancePromptFragment({
     route: {
