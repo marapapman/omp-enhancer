@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for config assets, writing support, test workflow support, and core runtime routing.",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "omp-config",
       "description": "Pluginized OMP configuration assets, agents, skills, hooks, model override templates, and config diagnostics.",
-      "version": "0.1.17",
+      "version": "0.1.18",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -345,7 +345,7 @@
     {
       "name": "omp-testing-enhancer",
       "description": "Help OMP agents write and check tests with target analysis, public API context, browser evidence, coverage and mutation analyzers, quality gates, and reports.",
-      "version": "0.1.11",
+      "version": "0.1.12",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -369,7 +369,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "Unified OMP enhancer runtime router for coding, writing, testing, and config tasks.",
-      "version": "0.1.74",
+      "version": "0.1.75",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",
