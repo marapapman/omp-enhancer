@@ -203,6 +203,26 @@ test('focused bug audit governance preloads skills without heavy subagent delega
   assert.doesNotMatch(fragment, /OMP_REQUIRED_SUBAGENT:/);
 });
 
+test('focused read-only review governance never asks the model to repair forbidden test evidence', () => {
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({
+      prompt: '只读审查 src/router.js。禁止修改任何文件，禁止运行测试，禁止联网，禁止启动 subagent，禁止提交或发布。仅使用读取类工具，最后报告发现。',
+      routerMode,
+    });
+    const fragment = buildGovernancePromptFragment({ route });
+
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'forbidden', routerMode);
+    assert.match(fragment, /Intent:\s*code\.review/i, routerMode);
+    assert.match(fragment, /Agent route:\s*none/i, routerMode);
+    assert.match(fragment, /read-only code review/i, routerMode);
+    assert.match(fragment, /test execution is forbidden/i, routerMode);
+    assert.doesNotMatch(fragment, /Focused Bug Audit Test Generation Contract/, routerMode);
+    assert.doesNotMatch(fragment, /generate and run .*test matrix/i, routerMode);
+    assert.doesNotMatch(fragment, /command invocations are allowed/i, routerMode);
+    assert.doesNotMatch(fragment, /omp_test_/i, routerMode);
+  }
+});
+
 test('fact-check governance advertises plan, independent evidence, cross-check, review, and gate', () => {
   const fragment = buildGovernancePromptFragment({
     route: {

@@ -304,6 +304,7 @@ test('affirmative and double-negative test or web instructions are not treated a
     'Do not skip the tests; run the tests after fixing src/router.js.',
     'Do not run the dev server; fix src/router.js and run the tests.',
     '不要跳过测试；修复 src/router.js 后运行测试。',
+    '禁止跳过测试；修复 src/router.js 后运行测试。',
   ]) {
     const descriptor = describeNaturalLanguageTask({ prompt });
     assert.equal(descriptor.constraints.testExecution, 'required', prompt);
@@ -315,6 +316,7 @@ test('affirmative and double-negative test or web instructions are not treated a
     'Do not avoid web browsing; fact-check this document online.',
     'Do not use the mock network; browse the web to fact-check this document.',
     '不要跳过网页搜索，请上网查证这份文档的事实。',
+    '禁止跳过网页搜索，请上网查证这份文档的事实。',
     '不要修改网络模块，请上网查证这份文档的事实。',
   ]) {
     const descriptor = describeNaturalLanguageTask({ prompt });
@@ -332,6 +334,7 @@ test('affirmative release clauses are not mistaken for no-external-write constra
     '不要再等了，发布这个包。',
     '不需要等待，直接部署。',
     '不要跳过发布步骤，发布它。',
+    '禁止跳过发布步骤，发布它。',
   ]) {
     const descriptor = describeNaturalLanguageTask({ prompt });
     assert.equal(descriptor.operation, 'release', prompt);
@@ -356,6 +359,7 @@ test('affirmative modification clauses are not mistaken for read-only constraint
     "Don't hesitate to modify src/router.js.",
     'Do not avoid changing src/router.js.',
     '不要只分析，实现修复 src/router.js。',
+    '禁止只分析，实现修复 src/router.js。',
   ]) {
     const descriptor = describeNaturalLanguageTask({ prompt });
     assert.equal(descriptor.operation, 'modify', prompt);
@@ -373,6 +377,7 @@ test('affirmative subagent clauses are not mistaken for no-subagent constraints'
     '不要犹豫，使用子代理。',
     '不用等待，直接使用子代理。',
     '不要跳过子代理协作。',
+    '禁止跳过子代理协作。',
   ]) {
     const descriptor = describeNaturalLanguageTask({ prompt });
     assert.notEqual(descriptor.constraints.subagents, 'forbidden', prompt);

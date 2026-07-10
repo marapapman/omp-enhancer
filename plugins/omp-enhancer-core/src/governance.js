@@ -7,7 +7,7 @@ export function buildGovernancePromptFragment({
   parentTask = '',
   includeModelWorkflowHints = true,
 } = {}) {
-  const resolved = route ?? {
+  const resolved = projectRouteForGovernance(route) ?? {
     intent: 'unknown',
     agent: null,
     requiredSkills: [],
@@ -105,6 +105,38 @@ export function buildGovernancePromptFragment({
   ].join('\n');
 }
 
+function projectRouteForGovernance(route) {
+  if (!route) return route;
+  const constraints = route.taskDescriptor?.constraints ?? {};
+  const canonical = useEnforcedRoutePlan(route)
+    || constraints.testExecution === 'forbidden'
+    || constraints.subagents === 'forbidden';
+  if (!canonical) return route;
+  const plan = route.routePlan ?? {};
+  const projected = {
+    ...route,
+    requiredSkills: Array.isArray(plan.requiredSkills)
+      ? plan.requiredSkills
+      : (route.requiredSkills ?? []).filter((skill) => constraints.testExecution !== 'forbidden'
+        || !['test-driven-development', 'ai-regression-testing'].includes(skill)),
+    requiredTools: Array.isArray(plan.requiredTools)
+      ? plan.requiredTools
+      : (route.requiredTools ?? []).filter((tool) => constraints.testExecution !== 'forbidden'
+        || !/^omp_test_/i.test(tool)),
+    requiredSubagents: Array.isArray(plan.requiredSubagents)
+      ? plan.requiredSubagents
+      : constraints.subagents === 'forbidden' ? [] : route.requiredSubagents ?? [],
+  };
+  if (!isReadOnlyCodeReview(projected)) return projected;
+  return {
+    ...projected,
+    intent: 'code.review',
+    workflowRoute: 'code.review',
+    agent: null,
+    auditMode: 'focused',
+  };
+}
+
 function advisorGuidanceLines(route) {
   const mayDoStatefulWork = [
     'implementation-with-tests',
@@ -128,6 +160,13 @@ function advisorGuidanceLines(route) {
 
 function skillWorkflowLines(route) {
   const hasSubagents = (route.requiredSubagents ?? []).length > 0;
+  if (isReadOnlyCodeReview(route)) {
+    return [
+      'This is a read-only code review. Inspect the requested scope and report concrete evidence directly.',
+      'Test execution is forbidden for this route. Do not run test commands, generate test files, or enter a testing workflow.',
+      'Do not turn findings into production-code edits or test-evidence repair attempts.',
+    ];
+  }
   if (isFocusedBugAuditRoute(route)) {
     return [
       'This is a focused direct bug-audit route. The main agent does the bounded audit directly instead of forking the heavy audit subagent set.',
@@ -280,6 +319,10 @@ function completionGateChecklist(route) {
   const gates = [];
   const requiredSubagents = route.requiredSubagents ?? [];
 
+  if (isReadOnlyCodeReview(route)) {
+    gates.push('Read-only review boundary: report file and symbol evidence without running tests or repairing test evidence.');
+  }
+
   if (requiredSubagents.length) {
     gates.push(`Native subagent gate: fork ${requiredSubagents.map(({ agent }) => agent).join(', ')} with their role skill contracts and finish with SUBAGENT_USAGE.`);
   }
@@ -296,7 +339,7 @@ function completionGateChecklist(route) {
     gates.push('Writing QA gate: run writing_logic_check or writing_quality_check before final writing claims.');
   }
 
-  if (route.intent === 'bug-audit') {
+  if (route.intent === 'bug-audit' && needsTesting(route)) {
     gates.push(isFocusedBugAuditRoute(route)
       ? 'Focused audit gate: generate and run a compact bounded test matrix before the focused BUG-AUDIT-REPORT.'
       : 'Bug-audit gate: generate, deduplicate, execute, and report high-signal test cases before BUG-AUDIT-REPORT claims.');
@@ -341,7 +384,7 @@ function stripRouteBoundaryLabel(value = '') {
 }
 
 function reviewToTestingHandoffLines(route) {
-  if (route.intent !== 'implementation-with-tests') return [];
+  if (route.intent !== 'implementation-with-tests' || !needsTesting(route)) return [];
   return [
     '### Review-to-Testing Handoff',
     '',
@@ -409,6 +452,7 @@ function isConstrainedRouteStatusSkillPrompt(prompt = '') {
 
 function workflowFor(route) {
   const intent = route.intent;
+  if (isReadOnlyCodeReview(route)) return 'Read-only code review workflow: inspect the requested file and directly related code -> collect concrete file and symbol evidence -> report findings without test execution or test-evidence repair.';
   if ((intent === 'writing.zh' || intent === 'writing.en') && !(route.requiredSubagents ?? []).length) {
     return 'Writing workflow: lightweight edit handled directly by the main agent after required skills are loaded.';
   }
@@ -428,6 +472,9 @@ function workflowFor(route) {
 
 function routeBoundaryFor(route) {
   const intent = route.intent;
+  if (isReadOnlyCodeReview(route)) {
+    return 'Route boundary: this is a read-only code review. Test execution is forbidden; do not run test commands, create test files, enter a testing workflow, or edit production code. Report only evidence from permitted read operations.';
+  }
   if ((intent === 'writing.zh' || intent === 'writing.en') && !(route.requiredSubagents ?? []).length) {
     return 'Route boundary: this is a lightweight writing workflow. The main agent must load the required writing skill(s), edit directly, and must not fork writer/checker subagents.';
   }
@@ -447,7 +494,7 @@ function routeBoundaryFor(route) {
 }
 
 function bugAuditTestGenerationLines(route) {
-  if (route.intent !== 'bug-audit') return [];
+  if (route.intent !== 'bug-audit' || !needsTesting(route)) return [];
 
   if (isFocusedBugAuditRoute(route)) {
     return [
@@ -551,6 +598,15 @@ function subagentWorkflowLines(route, { parentTask = '', includeModelWorkflowHin
 
 function isFocusedBugAuditRoute(route) {
   return route?.intent === 'bug-audit' && route.auditMode === 'focused';
+}
+
+function isReadOnlyCodeReview(route) {
+  const descriptor = route?.taskDescriptor;
+  return descriptor?.operation === 'inspect'
+    && Array.isArray(descriptor.domains)
+    && descriptor.domains.includes('code')
+    && descriptor.constraints?.workspaceWrite === 'forbidden'
+    && descriptor.constraints?.testExecution === 'forbidden';
 }
 
 function formatList(values = []) {

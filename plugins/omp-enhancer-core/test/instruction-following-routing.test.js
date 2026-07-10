@@ -23,6 +23,27 @@ test('Chinese clause separators preserve every explicit negative constraint', ()
   assert.equal(route.taskDescriptor.phases.some((phase) => phase.kind === 'release'), false);
 });
 
+test('strong Chinese prohibition words preserve every explicit negative constraint', () => {
+  for (const prompt of [
+    '只读审查 src/router.js。禁止修改任何文件，禁止运行测试，禁止联网，禁止启动 subagent，禁止提交或发布。仅使用读取类工具，最后报告发现。',
+    '只读审查 src/router.js。不得修改任何文件，不得运行测试，不得联网，不得启动 subagent，不得提交或发布。仅使用读取类工具，最后报告发现。',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'inspect', prompt);
+    assert.deepEqual(route.taskDescriptor.constraints, {
+      workspaceWrite: 'forbidden',
+      ...FORBIDDEN_SIDE_EFFECTS,
+    }, prompt);
+    assert.deepEqual(route.routePlan.requiredTools, [], prompt);
+    assert.equal(
+      route.routePlan.gateRequirements.some(({ key }) => key === 'test-evidence'),
+      false,
+      prompt,
+    );
+  }
+});
+
 test('English compound fixes preserve no-test, no-network, no-subagent, and no-release ceilings', () => {
   const route = routeNaturalLanguageTask({
     prompt: 'Fix the bug in src/router.js, but do not run tests, use the network, use subagents, or publish.',

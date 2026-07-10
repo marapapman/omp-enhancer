@@ -18,6 +18,27 @@ test('enforce gate mode consumes RoutePlan resources for focused read-only revie
   });
 });
 
+test('enforce gate mode does not repair forbidden testing evidence for strong Chinese prohibitions', async () => {
+  await withEnv({ OMP_GATE_RECOVERY_MODE: 'enforce', OMP_ROUTER_V2_MODE: 'enforce' }, async () => {
+    const { pi, ctx, startResult } = await startRuntime(
+      '只读审查 src/router.js。禁止修改任何文件，禁止运行测试，禁止联网，禁止启动 subagent，禁止提交或发布。仅使用读取类工具，最后报告发现。',
+    );
+    const stopped = await event(pi, 'session_stop')({ output: '只读审查完成。' }, ctx);
+    const state = latestState(pi);
+
+    assert.equal(stopped, undefined);
+    assert.equal(state.lastRoute.taskDescriptor.constraints.testExecution, 'forbidden');
+    assert.equal(state.lastRoute.taskDescriptor.constraints.networkAccess, 'forbidden');
+    assert.equal(state.lastRoute.taskDescriptor.constraints.subagents, 'forbidden');
+    assert.deepEqual(state.lastRoute.routePlan.requiredTools, []);
+    assert.equal(state.gateController.phase, 'satisfied');
+    assert.deepEqual(state.gateController.openGates, {});
+    assert.match(startResult?.additionalContext ?? '', /read-only code review/i);
+    assert.match(startResult?.additionalContext ?? '', /test execution is forbidden/i);
+    assert.doesNotMatch(startResult?.additionalContext ?? '', /omp_test_|test generation contract|run .*test matrix/i);
+  });
+});
+
 test('loop modes have live disabled, observe, and enforce behavior', async () => {
   const repeated = [
     'The model is repeating the same validation request.',
@@ -105,8 +126,8 @@ async function startRuntime(prompt) {
     hasUI: false,
   };
   await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')({ prompt }, ctx);
-  return { pi, ctx };
+  const startResult = await event(pi, 'before_agent_start')({ prompt }, ctx);
+  return { pi, ctx, startResult };
 }
 
 function latestState(pi) {

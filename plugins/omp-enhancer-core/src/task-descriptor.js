@@ -295,11 +295,11 @@ function collectSignals(text, prompt) {
   const documentTargetWithCodeExclusion = workspaceScopes.targets.some((target) => /(?:^|\/)(?:readme(?:\.[a-z0-9]+)?|[^/]+\.(?:md|mdx|rst|txt|tex|docx?))$/i.test(target))
     && /(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*(?:代码|源代码)|\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?(?:code|source code)\b/i.test(workspaceConstraintText);
   const noWorkspaceWrite = !documentTargetWithCodeExclusion
-    && /(?:不要|不|别|无需|不用)[^，。；、：;,:.!\n]{0,16}(?:修改|改动|改|编辑|写入|修复|实现)(?:[^，。；、：;,:.!\n]{0,8}(?:代码|文件|实现|它))?|(?:只读|只检查|只分析|只报告|仅报告)|\bread[- ]?only\b|(?:do not|don't|without|no need to)[^,.;!\n]{0,24}(?:modify|edit|change|write|fix|implement)|(?:report|findings?)\s+only/.test(workspaceConstraintText);
-  const noActionExecution = /(?:不要|不|别|无需|不用)\s*(?:实际)?(?:执行|运行)(?!\s*(?:测试|tests?))\s*(?:(?:任何|这个|该|上述)\s*)?(?:操作|命令|动作|内容)?\s*(?:[，。；;,.!！]|$)|(?:do not|don't|without|no need to)\s+(?:actually\s+)?(?:execute|run|perform|do)(?!\s+tests?)(?:\s+(?:it|anything|the\s+(?:command|action|operation)))?\s*(?:[,.;!]|$)|without\s+(?:actually\s+)?doing\s+it/.test(text);
+    && /(?:不要|不|别|无需|不用|禁止|不得)[^，。；、：;,:.!\n]{0,16}(?:修改|改动|改|编辑|写入|修复|实现)(?:[^，。；、：;,:.!\n]{0,8}(?:代码|文件|实现|它))?|(?:只读|只检查|只分析|只报告|仅报告)|\bread[- ]?only\b|(?:do not|don't|without|no need to)[^,.;!\n]{0,24}(?:modify|edit|change|write|fix|implement)|(?:report|findings?)\s+only/.test(workspaceConstraintText);
+  const noActionExecution = /(?:不要|不|别|无需|不用|禁止|不得)\s*(?:实际)?(?:执行|运行)(?!\s*(?:测试|tests?))\s*(?:(?:任何|这个|该|上述)\s*)?(?:操作|命令|动作|内容)?\s*(?:[，。；;,.!！]|$)|(?:do not|don't|without|no need to)\s+(?:actually\s+)?(?:execute|run|perform|do)(?!\s+tests?)(?:\s+(?:it|anything|the\s+(?:command|action|operation)))?\s*(?:[,.;!]|$)|without\s+(?:actually\s+)?doing\s+it/.test(text);
   const instructionalAdvice = /(?:请)?(?:告诉|解释|说明)(?:我)?.{0,16}(?:如何|怎么)|(?:如何|怎么).{0,12}(?:做|操作|执行|删除|推送)|\bhow\s+(?:do|can|should|would)\s+i\b|\bexplain\s+how\s+to\b/.test(text);
   const advisory = /有什么.{0,30}(?:优化|改进).{0,12}(?:地方|建议)|(?:可以|可).{0,12}(?:优化|改进)|(?:优化|改进)建议|给出.{0,12}(?:优化|改进)建议|suggest\s+(?:improvements?|optimizations?)|assess\s+whether.{0,30}(?:reasonable|sound)/.test(text);
-  const noTestExecution = /(?:不要|不|别|无需|不用)[^，。；;,.!\n]{0,16}(?:运行|执行|跑|重跑)[^，。；;,.!\n]{0,12}(?:测试|test)|(?:测试|test)[^，。；;,.!\n]{0,16}(?:不要|不|别)[^，。；;,.!\n]{0,8}(?:运行|执行)|(?:do not|don't|without)[^,.;!\n]{0,18}(?:run|execute|rerun)[^,.;!\n]{0,12}(?:tests?|testing)|(?:command|命令).{0,24}(?:不要|不|别|do not|don't).{0,8}(?:执行|运行|execute|run)/.test(globalTestConstraintText)
+  const noTestExecution = /(?:不要|不|别|无需|不用|禁止|不得)[^，。；;,.!\n]{0,16}(?:运行|执行|跑|重跑)[^，。；;,.!\n]{0,12}(?:测试|test)|(?:测试|test)[^，。；;,.!\n]{0,16}(?:不要|不|别|禁止|不得)[^，。；;,.!\n]{0,8}(?:运行|执行)|(?:do not|don't|without)[^,.;!\n]{0,18}(?:run|execute|rerun)[^,.;!\n]{0,12}(?:tests?|testing)|(?:command|命令).{0,24}(?:不要|不|别|禁止|不得|do not|don't).{0,8}(?:执行|运行|execute|run)/.test(globalTestConstraintText)
     || hasNaturalNoTestExecution(globalTestConstraintText)
     || englishNegativeClauseIncludes(globalTestConstraintText, /\b(?:(?:run|execute|rerun|do)\s+)?(?:the\s+)?(?:tests?|testing)\b/i);
   const noExternalWrite = hasExplicitNoExternalWrite(externalConstraintText)
@@ -307,7 +307,7 @@ function collectSignals(text, prompt) {
   const noNetworkAccess = /(?:只|仅).{0,12}(?:本地|离线)|(?:local|offline)\s+only/.test(networkConstraintText)
     || hasNaturalNoNetworkAccess(networkConstraintText)
     || englishNegativeClauseIncludes(networkConstraintText, /\b(?:(?:use|access|browse|search)\s+(?:the\s+)?(?:web|internet|network|online(?:\s+sources?)?)|go\s+online)\b/i);
-  const noSubagents = /(?:不要|不|别|无需|不用).{0,18}(?:子代理|子 agent|subagent|sub-agent)|(?:只由|仅由).{0,12}(?:主代理|主 agent|main agent)|(?:do not|don't|without|no).{0,18}(?:subagents?|sub-agents?)|(?:main agent only|only the main agent)/.test(subagentConstraintText)
+  const noSubagents = /(?:不要|不|别|无需|不用|禁止|不得).{0,18}(?:子代理|子 agent|subagent|sub-agent)|(?:只由|仅由).{0,12}(?:主代理|主 agent|main agent)|(?:do not|don't|without|no).{0,18}(?:subagents?|sub-agents?)|(?:main agent only|only the main agent)/.test(subagentConstraintText)
     || englishNegativeClauseIncludes(subagentConstraintText, /\b(?:use\s+)?(?:subagents?|sub-agents?)\b/i);
   const releaseArtifact = /(?:release notes?|changelog|发布公告|发布说明|release announcement|release report)/.test(text);
   const dependencyUpgrade = /(?:升级|更新).{0,18}(?:npm|依赖|dependencies?|packages?)|\b(?:upgrade|update).{0,18}(?:dependencies?|packages?)\b/.test(text);
@@ -330,7 +330,7 @@ function collectSignals(text, prompt) {
     || /\b(?:draft|write|revise|edit)\b.{0,36}\b(?:proposal|report|paper|manuscript|abstract|paragraph|section|letter|email|memo|announcement|documentation|docs?)\b/.test(text);
   const securityWork = /(?:安全|漏洞|鉴权|认证|权限|越权|注入|密钥)|\b(?:security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|privilege|xss|ssrf|injection|secrets?)\b/.test(text);
   const testWork = /(?:测试|回归测试|单元测试|覆盖率)|\b(?:tests?|testing|regression|coverage|vitest|pytest|npm test)\b/.test(text);
-  const noTestAuthoring = /(?:不要|不|别|无需|不用).{0,16}(?:生成|编写|新增|添加|写).{0,12}(?:测试代码|测试文件|测试用例|tests?|test code)|(?:do not|don't|without).{0,20}(?:generate|write|add|create).{0,16}(?:tests?|test code)/.test(text);
+  const noTestAuthoring = /(?:不要|不|别|无需|不用|禁止|不得).{0,16}(?:生成|编写|新增|添加|写).{0,12}(?:测试代码|测试文件|测试用例|tests?|test code)|(?:do not|don't|without).{0,20}(?:generate|write|add|create).{0,16}(?:tests?|test code)/.test(text);
   const broadBugAudit = (
     /(?:检查|审查|审计|排查).{0,24}(?:(?:整个|全|全部|所有).{0,8})?(?:项目|代码库|代码).{0,20}(?:(?:所有|全部|全面).{0,8})?(?:bugs?|缺陷)/.test(text)
     || /\b(?:audit|inspect|review|check|find|hunt)\b.{0,36}\b(?:the\s+)?(?:whole|entire|full|all)\s+(?:project|codebase|repository|repo|code)\b.{0,36}\b(?:bugs?|defects?)\b/.test(text)
@@ -378,10 +378,10 @@ function collectSignals(text, prompt) {
     || /^(?:请\s*)?(?:提交当前(?:修改|改动|变更)|创建\s*(?:一个)?\s*git\s+提交|暂存.{0,32}提交|修订.{0,20}(?:上次|最后一次)?提交)/.test(text.trim())
   );
   const actionText = workspaceConstraintText
-    .replace(/(?:不要|不|别|无需|不用)[^，。；;,.!\n]{0,24}(?:修改|改动|改|编辑|写入|修复|实现)(?:[^，。；;,.!\n]{0,8}(?:代码|文件|实现|它))?/g, '')
+    .replace(/(?:不要|不|别|无需|不用|禁止|不得)[^，。；;,.!\n]{0,24}(?:修改|改动|改|编辑|写入|修复|实现)(?:[^，。；;,.!\n]{0,8}(?:代码|文件|实现|它))?/g, '')
     .replace(/(?:do not|don't|without|no need to)[^,.;!\n]{0,32}(?:modify|edit|change|write|fix|implement)(?:[^,.;!\n]{0,12}(?:code|files?|it))?/g, '');
   const effectiveActionText = actionText
-    .replace(/(?:不要|不|别|无需|不用).{0,20}(?:生成|编写|新增|添加|写).{0,12}(?:测试代码|测试文件|测试用例)/g, '')
+    .replace(/(?:不要|不|别|无需|不用|禁止|不得).{0,20}(?:生成|编写|新增|添加|写).{0,12}(?:测试代码|测试文件|测试用例)/g, '')
     .replace(/(?:do not|don't|without).{0,24}(?:generate|write|add|create).{0,16}(?:tests?|test code)/g, '');
   const codeTarget = hasCodeTarget(effectiveActionText) || workspaceScopes.exclusions.length > 0;
   const directCodeCreate = !noWorkspaceWrite && !noActionExecution && codeTarget && (
@@ -580,8 +580,8 @@ function normalizeAffirmativeWorkspacePhrases(text) {
   return String(text)
     .replace(/\b(?:do not|don't|dont|never)\s+hesitate\s+to\s+(modify|edit|change|write|fix|implement)\b/g, '$1')
     .replace(/\b(?:do not|don't|dont|never)\s+(?:avoid|refrain\s+from)\s+(?:changing|modifying|editing|writing|fixing|implementing)\b/g, 'modify')
-    .replace(/(?:不要|别|不能|不得)\s*(?:只|仅)\s*(?:分析|检查|审查|报告)/g, ' ')
-    .replace(/(?:不要|别|不能|不得)\s*(?:犹豫|避免)\s*(?:修改|改动|编辑|写入|修复|实现)/g, '实现');
+    .replace(/(?:不要|别|不能|不得|禁止)\s*(?:只|仅)\s*(?:分析|检查|审查|报告)/g, ' ')
+    .replace(/(?:不要|别|不能|不得|禁止)\s*(?:犹豫|避免)\s*(?:修改|改动|编辑|写入|修复|实现)/g, '实现');
 }
 
 function normalizeAffirmativeExternalWritePhrases(text) {
@@ -591,7 +591,7 @@ function normalizeAffirmativeExternalWritePhrases(text) {
     .replace(/\b(?:do not|don't|dont|never)\s+(?:skip|omit|avoid)\s+(?:the\s+)?(?:publish(?:ing)?|release|deployment)\s*(?:step)?/g, ' publish ')
     .replace(/(?:不要|别|无需|不用|不必|不需要)\s*(?:再)?(?:等待|等|延迟|推迟|拖延)(?:\s*(?:发布|部署|上线))?/g, ' ')
     .replace(/(?:没有|不存在)\s*(?:发布|部署|上线)?\s*(?:阻碍|阻塞|障碍|问题)/g, ' ')
-    .replace(/(?:不要|别|不能|不得)\s*(?:跳过|省略|避免)\s*(?:发布|部署|上线)(?:步骤|环节)?/g, ' 发布 ');
+    .replace(/(?:不要|别|不能|不得|禁止)\s*(?:跳过|省略|避免)\s*(?:发布|部署|上线)(?:步骤|环节)?/g, ' 发布 ');
 }
 
 function hasExplicitNoExternalWrite(text) {
@@ -601,7 +601,7 @@ function hasExplicitNoExternalWrite(text) {
       + '|\\bwithout\\s+(?:pushing|publishing|releasing|deploying)\\b',
     'i',
   );
-  const chinese = /(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:不要|别|无需|不用|不必|不)\s*(?:再|实际)?\s*(?:推送|发布|部署|上线|升级\s*(?:插件|marketplace))/;
+  const chinese = /(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:不要|别|无需|不用|不必|不|禁止|不得)\s*(?:再|实际)?\s*(?:提交|推送|发布|部署|上线|升级\s*(?:插件|marketplace))/;
   return english.test(text) || chinese.test(text);
 }
 
@@ -609,14 +609,14 @@ function normalizeAffirmativeSubagentPhrases(text) {
   return String(text)
     .replace(/\b(?:do not|don't|dont|never)\s+hesitate\s+to\s+use\s+(?:subagents?|sub-agents?)\b/g, ' use subagents ')
     .replace(/\b(?:no need to|do not|don't|dont|never)\s+(?:avoid|skip)\s+(?:using\s+)?(?:subagents?|sub-agents?)\b/g, ' use subagents ')
-    .replace(/(?:不要|别|不能|不得)\s*(?:犹豫|跳过|避免)(?:\s*[，,])?\s*(?:直接)?\s*(?:使用)?\s*(?:子代理|子\s*agent)(?:协作)?/g, ' 使用子代理 ')
+    .replace(/(?:不要|别|不能|不得|禁止)\s*(?:犹豫|跳过|避免)(?:\s*[，,])?\s*(?:直接)?\s*(?:使用)?\s*(?:子代理|子\s*agent)(?:协作)?/g, ' 使用子代理 ')
     .replace(/(?:不用|无需|不必)\s*(?:等待|等)(?:\s*[，,])?\s*(?:直接)?\s*使用\s*(?:子代理|子\s*agent)/g, ' 使用子代理 ');
 }
 
 function maskAffirmativeTestPhrases(text) {
   return String(text)
     .replace(/\b(?:do not|don't|dont|never)\s+(?:skip|omit|avoid)\s+(?:(?:running|doing)\s+)?(?:the\s+)?(?:tests?|testing)\b/g, ' ')
-    .replace(/(?:不要|别|不能|不得)\s*(?:跳过|省略|略过|避免)\s*(?:运行|执行|做|进行)?\s*(?:这些?|所有|全部)?\s*测试/g, ' ');
+    .replace(/(?:不要|别|不能|不得|禁止)\s*(?:跳过|省略|略过|避免)\s*(?:运行|执行|做|进行)?\s*(?:这些?|所有|全部)?\s*测试/g, ' ');
 }
 
 function testAllowlistFor(text = '') {
@@ -679,14 +679,14 @@ function hasNaturalNoTestExecution(text) {
       + '|\\bwithout\\s+(?:(?:running|executing|rerunning)\\s+(?:the\\s+)?(?:tests?|testing)|testing(?:\\s+(?:it|this|that|the\\s+(?:change|fix|code)))?)\\b',
     'i',
   );
-  const chinese = /(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:跳过|省略|略过)\s*(?:所有|全部|这些?|相关)?\s*测试|(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:不要|别|无需|不用|不必)\s*(?:再)?(?:运行|执行|跑|重跑|做|进行)?\s*(?:任何|这些?|相关|现有|全部|所有)?\s*测试/;
+  const chinese = /(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:跳过|省略|略过)\s*(?:所有|全部|这些?|相关)?\s*测试|(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:不要|别|无需|不用|不必|禁止|不得)\s*(?:再)?(?:运行|执行|跑|重跑|做|进行)?\s*(?:任何|这些?|相关|现有|全部|所有)?\s*测试/;
   return english.test(text) || chinese.test(text);
 }
 
 function maskAffirmativeNetworkPhrases(text) {
   return String(text)
     .replace(/\b(?:do not|don't|dont|never)\s+(?:skip|omit|avoid)\s+(?:(?:the|any)\s+)?(?:(?:web|internet|online|network)\s+)?(?:browsing|search|access)\b/g, ' ')
-    .replace(/(?:不要|别|不能|不得)\s*(?:跳过|省略|略过|避免)\s*(?:网页|网络|互联网|在线)?\s*(?:搜索|浏览|访问|上网)/g, ' ');
+    .replace(/(?:不要|别|不能|不得|禁止)\s*(?:跳过|省略|略过|避免)\s*(?:网页|网络|互联网|在线)?\s*(?:搜索|浏览|访问|上网)/g, ' ');
 }
 
 function hasNaturalNoNetworkAccess(text) {
@@ -698,7 +698,7 @@ function hasNaturalNoNetworkAccess(text) {
       + '|\\bno\\s+(?:web\\s+browsing|internet\\s+access|network\\s+access)\\b',
     'i',
   );
-  const chinese = /(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:不要|别|无需|不用|不必)\s*(?:上网|联网|访问\s*(?:外网|互联网|网络)|浏览\s*(?:网页|互联网|网络)|(?:进行)?\s*(?:网页|网络|互联网)搜索|使用\s*(?:网络|互联网)|(?:网络|互联网)访问|(?:网络|互联网)(?=\s|[，。；、：;,:.!！]|$))|(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:跳过|省略|略过)\s*(?:网页|网络|互联网|在线)\s*(?:搜索|浏览|访问)/;
+  const chinese = /(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:不要|别|无需|不用|不必|禁止|不得)\s*(?:上网|联网|访问\s*(?:外网|互联网|网络)|浏览\s*(?:网页|互联网|网络)|(?:进行)?\s*(?:网页|网络|互联网)搜索|使用\s*(?:网络|互联网)|(?:网络|互联网)访问|(?:网络|互联网)(?=\s|[，。；、：;,:.!！]|$))|(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:跳过|省略|略过)\s*(?:网页|网络|互联网|在线)\s*(?:搜索|浏览|访问)/;
   return english.test(text) || chinese.test(text);
 }
 
