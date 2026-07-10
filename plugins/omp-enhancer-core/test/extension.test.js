@@ -852,6 +852,48 @@ test('message_update loop guard detects repeated planning blocks across streamed
   assert.equal(pi.messages.length, 0);
 });
 
+test('session_stop does not replay one normal streamed report into loop history', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({
+    prompt: '只读诊断 router 的当前行为，不要修改文件，不要运行测试。',
+  }, ctx);
+
+  // This is the shape of the v0.1.78 read-only E2E report: several distinct,
+  // evidence-bearing lines with no repeated passage inside the report itself.
+  const report = [
+    '## 只读审查报告：`src/router.js`',
+    '**1. 实现与模块名称不匹配**',
+    '`route` 接收一个参数并原样返回，没有执行路径匹配、参数提取或分发决策。',
+    '**2. 当前源码中没有调用方**',
+    '`grep` 只找到定义本身，未找到其他模块导入该函数或调用 `route()`。',
+    '**3. 现有测试只覆盖恒等性质**',
+    '`test/router.test.js` 只验证输入值被原样返回，无法证明任何真实路由语义。',
+    '### 建议',
+    '如果文件只是占位符，应标注预期契约；如果不需要路由能力，应移除死代码及对应测试。',
+  ].join('\n');
+
+  for (let index = 0; index < report.length; index += 73) {
+    const result = await event(pi, 'message_update')({
+      assistantMessageEvent: {
+        type: 'text_delta',
+        delta: report.slice(index, index + 73),
+        contentIndex: 0,
+      },
+    }, ctx);
+    assert.equal(result, undefined);
+  }
+
+  const stop = await event(pi, 'session_stop')({ output: report }, ctx);
+
+  assert.equal(stop, undefined);
+  const routeState = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(routeState.loopGuard.repeatedGenerationCount, 0);
+});
+
 test('session_stop loop guard gives one bounded recovery for repeated final output', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);

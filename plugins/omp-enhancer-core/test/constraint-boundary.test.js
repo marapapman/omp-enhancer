@@ -200,7 +200,7 @@ test('an exact local test target can run without granting hidden network or work
   const preload = await event(preloadRuntime.pi, 'tool_call')({
     toolName: 'bash', input: { command: 'node --test --import ./hidden-network.js test/router.test.js' },
   }, preloadRuntime.ctx);
-  assert.equal(preload?.reasonCode, 'network-access-unverifiable');
+  assert.equal(preload?.reasonCode, 'test-target-authorization-required');
 
   if (process.platform !== 'win32') {
     const caseRuntime = await routedRuntime(prompt);
@@ -209,6 +209,53 @@ test('an exact local test target can run without granting hidden network or work
     }, caseRuntime.ctx);
     assert.equal(wrongCase?.reasonCode, 'test-target-authorization-required');
   }
+});
+
+test('multiple exact local test targets require one direct complete allowlist command', async () => {
+  const prompt = 'Only run node --test test/router.test.js test/governance.test.js; do not modify files, use the network, use subagents, or publish.';
+  const allowed = await routedRuntime(prompt);
+  const allowedCall = await event(allowed.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'node --test test/router.test.js test/governance.test.js' },
+  }, allowed.ctx);
+  assert.notEqual(allowedCall?.block, true, allowedCall?.reason);
+
+  for (const command of [
+    'node --test test/router.test.js',
+    'node --test test/governance.test.js',
+    'node --test test/governance.test.js test/router.test.js',
+    'node --test test/router.test.js/evil.test.js test/governance.test.js',
+    'node --test test/router.test.js test/governance.test.js test/extension.test.js',
+    'node --test --import ./preload.js test/router.test.js test/governance.test.js',
+  ]) {
+    const runtime = await routedRuntime(prompt);
+    const blocked = await event(runtime.pi, 'tool_call')({ toolName: 'bash', input: { command } }, runtime.ctx);
+    assert.equal(blocked?.reasonCode, 'test-target-authorization-required', command);
+  }
+
+  const recoverable = await routedRuntime(prompt);
+  const firstRepair = await event(recoverable.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'node --test test/router.test.js' },
+  }, recoverable.ctx);
+  assert.equal(firstRepair?.reasonCode, 'test-target-authorization-required');
+  assert.match(firstRepair?.reason ?? '', /bounded mechanical repair|node --test test\/router\.test\.js test\/governance\.test\.js/i);
+  const canonical = await event(recoverable.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'node --test test/router.test.js test/governance.test.js' },
+  }, recoverable.ctx);
+  assert.notEqual(canonical?.block, true, canonical?.reason);
+
+  const terminalRepair = await routedRuntime(prompt);
+  assert.equal((await event(terminalRepair.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'node --test test/router.test.js' },
+  }, terminalRepair.ctx))?.reasonCode, 'test-target-authorization-required');
+  const exhausted = await event(terminalRepair.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'node --test test/governance.test.js test/router.test.js' },
+  }, terminalRepair.ctx);
+  assert.equal(exhausted?.reasonCode, 'protected-action-terminal');
+  assert.match(exhausted?.reason ?? '', /only remaining permitted.*node --test test\/router\.test\.js test\/governance\.test\.js/is);
+  const recoveredCanonical = await event(terminalRepair.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'node --test test/router.test.js test/governance.test.js' },
+  }, terminalRepair.ctx);
+  assert.notEqual(recoveredCanonical?.block, true, recoveredCanonical?.reason);
 });
 
 test('authorized local automation is not mistaken for an external write', async () => {

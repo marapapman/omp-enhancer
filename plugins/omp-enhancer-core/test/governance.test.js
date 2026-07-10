@@ -314,6 +314,25 @@ test('a constrained read-only security review gets one satisfiable evidence cont
   assert.doesNotMatch(fragment, /omp_test_|-> reviewer -> fix|fork .*security/i);
 });
 
+test('a focused offline repository fact check avoids the heavyweight cross-source gate', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '离线核查 docs/notes.md 中 The stable fact is 42 是否能由仓库内证据支持。禁止联网，禁止修改任何文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。若证据不足就明确报告证据不足。',
+    routerMode: 'enforce',
+  });
+  const fragment = buildGovernancePromptFragment({ route });
+  const repair = buildMissingGateContexts({ route, state: { evidence: {} } });
+
+  assert.match(fragment, /Intent:\s*fact-check/i);
+  assert.match(fragment, /Agent route:\s*none/i);
+  assert.match(fragment, /focused offline repository-evidence check/i);
+  assert.match(fragment, /claim text itself is not independent evidence/i);
+  assert.match(fragment, /insufficient/i);
+  assert.doesNotMatch(fragment, /fact_check_|fact-planner|fact-researcher/i);
+  assert.equal(repair.length, 1);
+  assert.match(repair[0].context, /local fact-evidence gate.*built-in grep.*repository root/is);
+  assert.doesNotMatch(repair[0].context, /fact_check_analyze|fact_check_gate/i);
+});
+
 test('fact-check governance advertises plan, independent evidence, cross-check, review, and gate', () => {
   const fragment = buildGovernancePromptFragment({
     route: {

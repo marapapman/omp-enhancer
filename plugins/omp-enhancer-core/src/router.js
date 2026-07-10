@@ -624,8 +624,14 @@ function isMarkdownWritingRequest(text) {
 }
 
 function isFactCheckDocumentRequest(text) {
-  return /(?:核验|核查|查证|事实核查|事实审查|事实检查|verify|fact.?check).*(?:引用|事实|数据|年份|claims?|citations?|source|evidence|证据)/i.test(text)
-    || /(?:引用|事实|数据|年份|claims?|citations?|source|evidence|证据).*(?:核验|核查|查证|verify|fact.?check|supports?)/i.test(text);
+  const sentenceText = String(text).replace(/((?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+)\.([a-z0-9]{1,10})\b/gi, '$1_fileext_$2');
+  return sentenceText.split(/[。！？.!?\n]+/).some((clause) => (
+    /(?:核验|核查|查证|事实核查|事实审查|事实检查|verify|fact.?check)[^。！？.!?\n]{0,160}(?:引用|事实|数据|年份|claims?|citations?|source|evidence|证据)/i.test(clause)
+    || /(?:引用|事实|数据|年份|claims?|citations?|source|evidence|证据)[^。！？.!?\n]{0,160}(?:核验|核查|查证|verify|fact.?check)/i.test(clause)
+    || /(?:是否|whether|does|do)[^。！？.!?\n]{0,120}(?:evidence|证据)[^。！？.!?\n]{0,40}(?:support|支持|支撑|证明)/i.test(clause)
+    || /(?:check|verify)[^。！？.!?\n]{0,80}(?:cited\s+source|citation(?:\s+source)?)[^。！？.!?\n]{0,80}supports?[^。！？.!?\n]{0,40}claims?/i.test(clause)
+    || /(?:check|verify)[^。！？.!?\n]{0,80}claims?[^。！？.!?\n]{0,80}supported\s+by[^。！？.!?\n]{0,40}(?:the\s+)?(?:cited\s+source|citation(?:\s+source)?)/i.test(clause)
+  ));
 }
 
 function isVisualDesignRequest(text, original) {

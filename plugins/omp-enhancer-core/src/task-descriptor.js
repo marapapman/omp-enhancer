@@ -335,7 +335,18 @@ function collectSignals(text, prompt) {
       || /(?:删除|移除|销毁|清空).{0,40}(?:github|gitlab|notion|slack|远程|生产|数据库|记录|issue|页面|存储桶|部署|集群)/.test(text));
   const releaseRequested = !noActionExecution && !noExternalWrite && !releaseArtifact && !dependencyUpgrade && !localReleaseCache && !releaseConcept
     && /(?:推送|发布|部署|上线|升级.{0,8}(?:插件|marketplace))|\b(?:push|publish|deploy|release)\b|\bupgrade\s+\S+@\S+/.test(text);
-  const factWork = /(?:事实核查|事实审查|查证|核验事实|引用核验|引用真实性)|(?:核查|检查|核验).{0,24}(?:事实|声明|主张|引用)|\bfact[- ]?check\b|(?:verify|check)\s+(?:the\s+)?(?:facts?|claims?)/.test(text);
+  const factSentenceText = text.replace(/((?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+)\.([a-z0-9]{1,10})\b/gi, '$1_fileext_$2');
+  const factWork = /(?:事实核查|事实审查|查证|核验事实|引用核验|引用真实性)|(?:核查|检查|核验).{0,24}(?:事实|声明|主张|引用)|\bfact[- ]?check\b|(?:verify|check)\s+(?:the\s+)?(?:facts?|claims?)/.test(text)
+    || /(?:核查|核验|查证|verify|check)[^。！？.!?\n]{0,120}(?:(?:证据|evidence)[^。！？.!?\n]{0,16}(?:支持|支撑|证明|supports?)|(?:支持|支撑|证明|supports?)[^。！？.!?\n]{0,40}(?:证据|evidence))/.test(factSentenceText)
+    || /(?:check|verify)[^。！？.!?\n]{0,80}(?:cited\s+source|citation(?:\s+source)?)[^。！？.!?\n]{0,80}supports?[^。！？.!?\n]{0,40}claims?/.test(factSentenceText)
+    || /(?:check|verify)[^。！？.!?\n]{0,80}claims?[^。！？.!?\n]{0,80}supported\s+by[^。！？.!?\n]{0,40}(?:the\s+)?(?:cited\s+source|citation(?:\s+source)?)/.test(factSentenceText);
+  const factDocumentTargets = uniqueStrings([...String(prompt).matchAll(/(?:^|[\s`'"])((?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?))(?=$|[\s`'"，。；、：;,:.!！])/gi)]
+    .map((match) => match[1]));
+  const focusedLocalFactWork = factWork
+    && noWorkspaceWrite && noNetworkAccess && noSubagents
+    && factDocumentTargets.length === 1
+    && /(?:证据|evidence)[^。！？.!?\n]{0,20}(?:支持|支撑|证明|supports?)|(?:支持|支撑|证明|supports?)[^。！？.!?\n]{0,40}(?:证据|evidence)/.test(factSentenceText)
+    && !/(?:全部|所有|整个(?:仓库|项目|代码库)|全仓库|多条|引用)|\b(?:all|every|entire|repo[- ]wide|repository[- ]wide|multiple|citations?)\b/.test(text);
   const writingWork = /(?:润色|改写|写作|撰写|起草|中文表述|英文表述|文案|措辞|readme|安装说明)|\b(?:polish|proofread|rewrite|prose|wording|readme)\b/.test(text)
     || /(?:写|撰写|起草).{0,24}(?:报告|提案|论文|摘要|说明|文档)/.test(text)
     || /\b(?:draft|write|revise|edit)\b.{0,36}\b(?:proposal|report|paper|manuscript|abstract|paragraph|section|letter|email|memo|announcement|documentation|docs?)\b/.test(text);
@@ -485,6 +496,7 @@ function collectSignals(text, prompt) {
     externalActionRequested,
     localCompanionModify,
     factWork,
+    focusedLocalFactWork,
     writingWork,
     securityWork,
     testWork,
@@ -803,6 +815,7 @@ function constraintsFor(signals, operation, domains) {
 }
 
 function complexityFor(signals, operation, domains) {
+  if (signals.focusedLocalFactWork) return 'focused';
   if (signals.factWork || signals.securityWork && (operation === 'modify' || operation === 'inspect')) return 'broad';
   if (signals.broadBugAudit) return 'broad';
   if (domains.includes('writing')

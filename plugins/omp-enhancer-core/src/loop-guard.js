@@ -225,6 +225,16 @@ export function recordGeneratedText(state = createLoopGuardState(), text = '', c
   return detection;
 }
 
+export function recordFinalGeneratedText(state = createLoopGuardState(), text = '', config = {}) {
+  // message_update already records the assistant's streamed deltas. The host's
+  // session_stop payload is the authoritative full output, not another delta;
+  // replaying it onto the live buffer makes every sufficiently long report
+  // look like a repeated block. Replace only the stream-local history, while
+  // preserving recovery state and the real repetition checks within `text`.
+  resetLoopGuardStreamState(state);
+  return recordGeneratedText(state, text, { ...config, flushIncompleteLine: true });
+}
+
 function resetLoopGuardStreamState(state) {
   state.streamBuffer = '';
   state.streamLineCarry = '';

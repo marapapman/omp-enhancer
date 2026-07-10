@@ -126,8 +126,32 @@ test('an exact test-file command remains execute-only under explicit side-effect
     assert.deepEqual(route.taskDescriptor.testExecutionTargets, [
       'plugins/omp-enhancer-core/test/router.test.js',
     ], prompt);
+    assert.deepEqual(route.routePlan.requiredSkills, [], prompt);
     assert.equal(route.taskDescriptor.phases.some((phase) => phase.kind === 'release'), false, prompt);
   }
+});
+
+test('a complete multi-file exact test request stays bounded to its ordered target list', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Only run node --test test/router.test.js test/governance.test.js; do not modify files, use the network, use subagents, or publish.',
+    routerMode: 'enforce',
+  });
+
+  assert.equal(route.taskDescriptor.operation, 'execute');
+  assert.deepEqual(route.taskDescriptor.testExecutionTargets, [
+    'test/router.test.js',
+    'test/governance.test.js',
+  ]);
+  assert.deepEqual(route.taskDescriptor.constraints, {
+    workspaceWrite: 'forbidden',
+    testExecution: 'required',
+    networkAccess: 'forbidden',
+    externalWrite: 'forbidden',
+    subagents: 'forbidden',
+  });
+  assert.deepEqual(route.routePlan.requiredSkills, []);
+  assert.deepEqual(route.routePlan.requiredTools, []);
+  assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'test-evidence', mode: 'required' }]);
 });
 
 test('one Chinese prohibition marker scopes across a compact side-effect list', () => {
@@ -211,4 +235,115 @@ test('offline fact inspection stays read-only and never turns a negated publish 
     subagents: 'unspecified',
   });
   assert.equal(route.taskDescriptor.phases.some((phase) => phase.kind === 'release'), false);
+});
+
+test('offline repository-evidence support questions stay on the fact-check route', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '离线核查 docs/notes.md 中 The stable fact is 42 是否能由仓库内证据支持。禁止联网，禁止修改任何文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。若证据不足就明确报告证据不足。',
+    routerMode: 'enforce',
+  });
+
+  assert.equal(route.intent, 'fact-check');
+  assert.equal(route.agent, 'fact-checker');
+  assert.equal(route.taskDescriptor.operation, 'inspect');
+  assert.equal(route.taskDescriptor.complexity, 'focused');
+  assert.equal(route.taskDescriptor.domains.includes('facts'), true);
+  assert.deepEqual(route.taskDescriptor.constraints, {
+    workspaceWrite: 'forbidden',
+    ...FORBIDDEN_SIDE_EFFECTS,
+  });
+  assert.deepEqual(route.routePlan.phases, [{ kind: 'inspect', domain: 'facts' }]);
+  assert.deepEqual(route.routePlan.requiredSkills, []);
+  assert.deepEqual(route.routePlan.requiredTools, []);
+  assert.deepEqual(route.routePlan.requiredSubagents, []);
+  assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'fact-evidence', mode: 'required' }]);
+  assert.equal(route.taskDescriptor.phases.some((phase) => phase.kind === 'release'), false);
+
+  const observed = routeNaturalLanguageTask({
+    prompt: '离线核查 docs/notes.md 中 The stable fact is 42 是否能由仓库内证据支持。禁止联网，禁止修改任何文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。若证据不足就明确报告证据不足。',
+    routerMode: 'observe',
+  });
+  assert.equal(observed.intent, 'fact-check');
+});
+
+test('a root README fact target does not add a writing workflow to focused offline inspection', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '离线核查 README.md 中 The stable identifier is X 是否能由仓库内证据支持。禁止联网，禁止修改任何文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。若证据不足就明确报告证据不足。',
+    routerMode: 'enforce',
+  });
+
+  assert.equal(route.intent, 'fact-check');
+  assert.equal(route.taskDescriptor.complexity, 'focused');
+  assert.deepEqual(route.routePlan.requiredSkills, []);
+  assert.deepEqual(route.routePlan.requiredTools, []);
+  assert.deepEqual(route.routePlan.requiredSubagents, []);
+  assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'fact-evidence', mode: 'required' }]);
+});
+
+test('broad offline repository fact audits keep the full fact workflow', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '离线事实核查整个仓库中的全部声明和引用。禁止联网，禁止修改文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。',
+    routerMode: 'enforce',
+  });
+
+  assert.equal(route.intent, 'fact-check');
+  assert.equal(route.taskDescriptor.operation, 'inspect');
+  assert.equal(route.taskDescriptor.complexity, 'broad');
+  assert.deepEqual(route.routePlan.requiredSkills, [
+    'fact-checking',
+    'claim-extraction',
+    'source-evaluation',
+    'citation-authenticity',
+  ]);
+  assert.deepEqual(route.routePlan.requiredTools, [
+    'fact_check_analyze',
+    'fact_check_evidence',
+    'fact_check_report',
+    'fact_check_gate',
+  ]);
+  assert.deepEqual(route.routePlan.requiredSubagents, []);
+  assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'fact-evidence', mode: 'required' }]);
+});
+
+test('cited-source support checks stay on the fact route in both router modes', () => {
+  for (const prompt of [
+    'Check whether the cited source actually supports each claim in this section.',
+    'Check whether each claim in this section is supported by the cited source.',
+    'Verify whether the citation supports each claim in this section.',
+  ]) {
+    for (const routerMode of ['observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+
+      assert.equal(route.intent, 'fact-check', `${routerMode}: ${prompt}`);
+      assert.equal(route.taskDescriptor.domains.includes('facts'), true, `${routerMode}: ${prompt}`);
+      assert.equal(route.routePlan.gateRequirements.some(({ key }) => key === 'fact-evidence'), true, `${routerMode}: ${prompt}`);
+    }
+  }
+});
+
+test('source-code support wording does not become a cited-source fact check', () => {
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({
+      prompt: 'Check whether source code supports the claim made by this interface.',
+      routerMode,
+    });
+
+    assert.notEqual(route.intent, 'fact-check', routerMode);
+    assert.equal(route.taskDescriptor.domains.includes('facts'), false, routerMode);
+    assert.equal(route.routePlan.gateRequirements.some(({ key }) => key === 'fact-evidence'), false, routerMode);
+  }
+});
+
+test('evidence wording in a later sentence does not turn a grammar check into fact-checking', () => {
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({
+      prompt: 'Check docs/notes.md for grammar. Repository evidence supports the existing statement; report wording issues only.',
+      routerMode,
+    });
+
+    assert.notEqual(route.intent, 'fact-check', routerMode);
+    assert.equal(route.taskDescriptor.domains.includes('facts'), false, routerMode);
+    assert.notEqual(route.taskDescriptor.constraints.networkAccess, 'required', routerMode);
+    assert.equal(route.routePlan.gateRequirements.some(({ key }) => key === 'fact-evidence'), false, routerMode);
+  }
 });

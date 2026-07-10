@@ -18,6 +18,7 @@ import { buildSmartGatePrompt, resolveSmartGateDecision, smartGateDefaults } fro
 import {
   createLoopGuardState,
   readLoopGuardSnapshot,
+  recordFinalGeneratedText,
   recordGeneratedText,
   recordLoopGuardProgress,
   prepareLoopGuardContinuation,
@@ -106,6 +107,7 @@ const USER_INPUT_ACTION_BLOCKERS = new Set([
   'irreversible-approval-required',
 ]);
 const REPAIRABLE_ACTION_BLOCKERS = new Set([
+  'test-target-authorization-required',
   'external-action-repair-required',
   'external-target-excluded',
   'external-target-repair-required',
@@ -516,6 +518,9 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
+    if (state.actionBoundary?.terminal === true && isCanonicalExactTestRepair(state, name, event)) {
+      state.actionBoundary = createActionBoundaryState();
+    }
     if (isTerminalOnlyGateState(state.gateController)
       || state.actionBoundary?.terminal === true
       || state.actionBoundary?.awaitingUserReason) {
@@ -592,6 +597,7 @@ export default function registerCoreEnhancer(pi) {
     if (name && successful) recordLoopGuardProgress(state.loopGuard, `tool_result:${name}`);
     const mutationEvidenceChanged = name && recordMutationEvidenceInvalidation(state, name, event, { successful });
     const testEvidenceChanged = name && recordObservedTestEvidence(state, name, event, { successful });
+    const localFactEvidenceChanged = name && recordFocusedLocalFactEvidence(state, name, event, { successful });
     const securityEvidenceChanged = name && recordSecurityInspectionEvidence(state, name, event, { successful });
     const releaseEvidenceChanged = name && recordReleaseEvidence(state, name, event, { successful, ctx });
     recordTrustedIrreversibleResult(state, name, event, { successful });
@@ -603,14 +609,17 @@ export default function registerCoreEnhancer(pi) {
     if ((name === 'writing_quality_check' || name === 'writing_logic_check') && successful) state.evidence.writingQuality = true;
     if (name === 'omp_test_gate' && isExplicitPassingGateResult(event)) state.evidence.testingGate = true;
     if (name === 'omp_test_report' && successful) state.evidence.testingReport = true;
-    if (name === 'fact_check_gate' && isExplicitPassingGateResult(event)) state.evidence.factCheckGate = true;
+    if (name === 'fact_check_gate'
+      && !isFocusedLocalFactInspectionRoute(state.lastRoute)
+      && isExplicitPassingGateResult(event)) state.evidence.factCheckGate = true;
     if (name === 'task') {
       recordTaskResult(state, event, { successful, pending });
       recordSubagentTaskResultEvidence(state, event, { successful, pending });
     }
     if (name === 'read' && successful) recordReadSkillEvidence(state, event);
     if (name && (isRelevantSuccessfulGateEvidence(name, event)
-      || mutationEvidenceChanged || testEvidenceChanged || securityEvidenceChanged || releaseEvidenceChanged)) {
+      || mutationEvidenceChanged || testEvidenceChanged || localFactEvidenceChanged
+      || securityEvidenceChanged || releaseEvidenceChanged)) {
       state.gateController = applyGateEvidence(state.gateController, {
         routeId: gateControllerRouteId(state),
         evidenceRevision: state.gateController.evidenceRevision + 1,
@@ -770,6 +779,7 @@ function emptyEvidence() {
     testingGate: false,
     testingReport: false,
     factCheckGate: false,
+    focusedFactEvidence: null,
     testingEnhancerEvidence: null,
     reviewEvidence: false,
     mainAgentSecurityReview: false,
@@ -1076,6 +1086,7 @@ function serializeState(state) {
       testingGate: state.evidence.testingGate,
       testingReport: state.evidence.testingReport,
       factCheckGate: state.evidence.factCheckGate,
+      focusedFactEvidence: state.evidence.focusedFactEvidence,
       testingEnhancerEvidence: state.evidence.testingEnhancerEvidence,
       reviewEvidence: state.evidence.reviewEvidence,
       mainAgentSecurityReview: state.evidence.mainAgentSecurityReview,
@@ -1149,7 +1160,10 @@ function readStateSnapshot(value) {
   if (!isRecord(value)) return null;
   const evidence = readEvidenceSnapshot(value.evidence);
   if (!evidence) return null;
-  constrainEvidenceToRoute(evidence, gateControllerRouteId(value));
+  const routeId = gateControllerRouteId(value);
+  constrainEvidenceToRoute(evidence, routeId);
+  if (isFocusedLocalFactInspectionRoute(value.lastRoute)
+    && evidence.focusedFactEvidence?.routeId !== routeId) evidence.factCheckGate = false;
   return {
     lastRoute: isRecord(value.lastRoute) ? value.lastRoute : null,
     lastRouteProbe: isRecord(value.lastRouteProbe) ? value.lastRouteProbe : null,
@@ -1182,8 +1196,30 @@ function readBoundEvidenceRecord(value, expectedSource) {
   return { ...value };
 }
 
+function readFocusedFactEvidenceRecord(value) {
+  const record = readBoundEvidenceRecord(value, 'host-focused-fact-inspection');
+  const digestArray = (items, { required = false } = {}) => Array.isArray(items)
+    && (!required || items.length > 0)
+    && items.every((item) => /^[a-f0-9]{64}$/.test(String(item)));
+  if (!record
+    || record.toolName !== 'grep'
+    || !/^[a-f0-9]{64}$/.test(String(record.resultDigest ?? ''))
+    || !digestArray(record.queryTermDigests, { required: true })
+    || !digestArray(record.claimPathDigests, { required: true })
+    || !digestArray(record.matchedPathDigests)
+    || !['no-match', 'claim-only', 'independent-hit', 'unparseable-hit'].includes(record.matchKind)
+    || typeof record.independentMatchObserved !== 'boolean'
+    || !Number.isFinite(record.observedAt)) return null;
+  return {
+    ...record,
+    queryTermDigests: uniqueValues(record.queryTermDigests),
+    claimPathDigests: uniqueValues(record.claimPathDigests),
+    matchedPathDigests: uniqueValues(record.matchedPathDigests),
+  };
+}
+
 function constrainEvidenceToRoute(evidence, routeId) {
-  for (const key of ['securityInspectionEvidence', 'testCommandEvidence', 'releaseActionEvidence', 'releaseVerificationEvidence', 'irreversibleExecution']) {
+  for (const key of ['focusedFactEvidence', 'securityInspectionEvidence', 'testCommandEvidence', 'releaseActionEvidence', 'releaseVerificationEvidence', 'irreversibleExecution']) {
     if (evidence[key]?.routeId !== routeId) evidence[key] = null;
   }
   evidence.releaseVerified = evidence.releaseVerified === true
@@ -1333,6 +1369,7 @@ function readEvidenceSnapshot(value) {
   if (!isRecord(value)) return null;
   const releaseActionEvidence = readBoundEvidenceRecord(value.releaseActionEvidence, 'host-release-action');
   const releaseVerificationEvidence = readBoundEvidenceRecord(value.releaseVerificationEvidence, 'host-release-verification');
+  const focusedFactEvidence = readFocusedFactEvidenceRecord(value.focusedFactEvidence);
   const securityInspectionEvidence = readBoundEvidenceRecord(value.securityInspectionEvidence, 'host-security-inspection');
   return {
     writingQuality: value.writingQuality === true,
@@ -1340,6 +1377,7 @@ function readEvidenceSnapshot(value) {
     testingGate: value.testingGate === true,
     testingReport: value.testingReport === true,
     factCheckGate: value.factCheckGate === true,
+    focusedFactEvidence,
     testingEnhancerEvidence: readTestingEnhancerEvidence(value.testingEnhancerEvidence),
     reviewEvidence: value.reviewEvidence === true,
     mainAgentSecurityReview: value.mainAgentSecurityReview === true,
@@ -1909,8 +1947,8 @@ function buildSessionStopGateRecords(state, { loopRecoveryContext = null } = {})
         'Protected security gate is open. Complete the routed security review and provide this exact multiline evidence block without unsupported risk claims:',
         'SECURITY_REVIEW',
         'Scope: <reviewed file and any callers actually inspected>',
-        'Findings: <supported findings, or none>',
-        'Evidence: <file and symbol evidence>',
+        'Findings: <supported findings, or none confirmed in the inspected scope>',
+        'Evidence: <concrete boundary, caller, or sink evidence; a function name or missing validation alone is insufficient>',
         'OpenBlockers: none',
         'Verdict: COMPLETE',
       ].join('\n'),
@@ -2431,10 +2469,10 @@ function buildPreworkSkillBootstrapBlock(state) {
   if (isExactTestExecutionRoute(state.lastRoute)) {
     return [
       '### OMP Enhancer Core exact-test skill preflight',
-      'This route authorizes one exact test file, not a broader audit workflow.',
+      'This route authorizes one complete list of exact test files, not a broader audit workflow.',
       'Read the missing direct-work skill(s) before the test command:',
       ...missing.map(formatMissingSkillReadStep),
-      'Use read for runner configuration, then run one direct command naming only the authorized test target. Do not call bug-audit analysis tools, generate tests, or substitute an aggregate suite.',
+      'Use read for runner configuration, then run one direct command naming every authorized test target once and in order. Do not call bug-audit analysis tools, generate tests, omit targets, or substitute an aggregate suite.',
     ].join('\n');
   }
 
@@ -2514,11 +2552,14 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
   const exactTestTargets = Array.isArray(descriptor.testExecutionTargets) ? descriptor.testExecutionTargets : [];
   if (action.testExecution && exactTestTargets.length) {
     const observedTestTargets = testExecutionTargetsInCommand(text);
-    const outsideTarget = observedTestTargets.find((target) => !exactTestTargets.some((allowed) => scopedPathMatches(target, allowed)));
-    if (hasUnsafeResultMasking(text) || !observedTestTargets.length || outsideTarget) {
+    const outsideTarget = observedTestTargets.find((target) => !exactTestTargets.some((allowed) => exactTestPathMatches(target, allowed)));
+    const incompleteOrReorderedTargets = observedTestTargets.length !== exactTestTargets.length
+      || observedTestTargets.some((target, index) => !exactTestPathMatches(target, exactTestTargets[index]));
+    if (hasUnsafeResultMasking(text) || !observedTestTargets.length || outsideTarget || incompleteOrReorderedTargets
+      || !isDirectExactLocalTestCommand(text, exactTestTargets)) {
       return protectedConstraintBlock(
         'test-target-authorization-required',
-        `The user authorized only the exact test target${exactTestTargets.length === 1 ? '' : 's'} ${exactTestTargets.join(', ')}. Run a single direct test command naming only that target; aggregate suites, substituted files, pipelines, redirections, and compound commands are outside the authorization.`,
+        `The user authorized only the exact test target${exactTestTargets.length === 1 ? '' : 's'} ${exactTestTargets.join(', ')}. Use exactly: node --test ${exactTestTargets.join(' ')}. Aggregate suites, omitted, reordered, duplicated, nested, or substituted files, runner preloads, pipelines, redirections, and compound commands are outside the authorization.`,
       );
     }
   }
@@ -2729,14 +2770,25 @@ function testExecutionTargetsInCommand(command = '') {
 }
 
 function isDirectExactLocalTestCommand(command = '', allowedTargets = []) {
-  if (hasUnsafeResultMasking(command) || allowedTargets.length !== 1) return false;
-  // The explicitly named test file is treated as user-authorized executable
+  if (hasUnsafeResultMasking(command) || allowedTargets.length === 0) return false;
+  // Every explicitly named test file is treated as user-authorized executable
   // code. This proves the command boundary only; it is not a sandbox or a
-  // proof that the test file and its imports have no internal side effects.
-  const match = String(command).trim().match(/^node\s+--test\s+(["']?)((?:\.\/)?[a-z0-9_.\/-]+(?:\.test|\.spec)\.[cm]?[jt]sx?)\1$/i);
+  // proof that the test files and their imports have no internal side effects.
+  const match = String(command).trim().match(/^node\s+--test\s+(.+)$/i);
   if (!match) return false;
-  const observed = match[2].replace(/^\.\//, '').replace(/\\/g, '/');
-  return scopedPathMatches(observed, allowedTargets[0]);
+  const tokens = match[1].match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? [];
+  const observed = tokens.map((token) => token.replace(/^(?:"([^"]*)"|'([^']*)')$/, '$1$2'));
+  if (observed.length !== allowedTargets.length
+    || observed.some((target) => !/^(?:\.\/)?[a-z0-9_.\/-]+(?:\.test|\.spec)\.[cm]?[jt]sx?$/i.test(target))) return false;
+  return observed.every((target, index) => exactTestPathMatches(target, allowedTargets[index]));
+}
+
+function exactTestPathMatches(observed = '', allowed = '') {
+  const normalize = (value) => posix.normalize(String(value).trim().replace(/\\/g, '/').replace(/^\.\//, ''));
+  const left = normalize(observed);
+  const right = normalize(allowed);
+  if (!left || !right || left === '.' || right === '.' || left.startsWith('../') || right.startsWith('../')) return false;
+  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right;
 }
 
 function scopedWorkspaceActionBlock(descriptor, action, event = {}, actionText = '', ctx = {}) {
@@ -2945,6 +2997,14 @@ function recordProtectedActionDenial(state, boundary, toolName = '', event = {})
         reason: `${boundary.reason} This is one bounded mechanical repair using existing user authority; retry only with the exact trusted target fields.`,
       };
     }
+    if (boundary.reasonCode === 'test-target-authorization-required') {
+      const exactTargets = state.lastRoute?.taskDescriptor?.testExecutionTargets ?? [];
+      return {
+        ...boundary,
+        reasonCode: 'protected-action-terminal',
+        reason: `OMP_GATE_TERMINAL: repeated non-canonical exact-test commands exhausted alternative repairs. Do not try another method. The only remaining permitted tool call is the canonical command: node --test ${exactTargets.join(' ')}. If that exact command cannot run, report the task blocked.`,
+      };
+    }
   }
   if (USER_INPUT_ACTION_BLOCKERS.has(boundary.reasonCode)) {
     current.awaitingUserReason = boundary.reasonCode;
@@ -2968,6 +3028,14 @@ function recordProtectedActionDenial(state, boundary, toolName = '', event = {})
     reasonCode: 'protected-action-terminal',
     reason: `OMP_GATE_TERMINAL: repeated protected action denials exhausted the route-local action budget. Do not call or run any more tools or commands; report the blocked constraint to the user. Last denial: ${boundary.reason}`,
   };
+}
+
+function isCanonicalExactTestRepair(state, toolName = '', event = {}) {
+  if ((state.actionBoundary?.reasonCounts?.['test-target-authorization-required'] ?? 0) < 2) return false;
+  if (!TRUSTED_HOST_TEST_EXECUTORS.has(String(toolName).toLowerCase())) return false;
+  const targets = state.lastRoute?.taskDescriptor?.testExecutionTargets ?? [];
+  return isExactTestExecutionRoute(state.lastRoute)
+    && isDirectExactLocalTestCommand(toolActionText(event), targets);
 }
 
 function createTrustedApprovalState() {
@@ -3415,13 +3483,19 @@ function missingReadSkills(state) {
 
 function recordFinalOutputEvidence(state, event = {}) {
   const output = extractFinalOutputText(event);
+  if (isFocusedLocalFactInspectionRoute(state.lastRoute)) {
+    state.evidence.factCheckGate = focusedFactConclusionMatchesEvidence(state, output);
+  }
   if (!output) return;
 
   if (state.lastRoute?.intent === 'bug-audit' && isDeliverableBugAuditReport(output)) {
     state.evidence.deliveredBugAuditReport = true;
   }
   if (isStructuredReviewEvidence(output)) state.evidence.reviewEvidence = true;
-  if (isStructuredSecurityReview(output, { allowFindings: isReadOnlySecurityReportRoute(state.lastRoute) })) {
+  if (isStructuredSecurityReview(output, {
+    allowFindings: isReadOnlySecurityReportRoute(state.lastRoute),
+    securitySignals: state.evidence.securityInspectionEvidence?.securitySignals ?? [],
+  })) {
     state.evidence.mainAgentSecurityReview = true;
   }
   if (matchesObservedManualTestingReport(state, output)) {
@@ -3453,7 +3527,7 @@ function isStructuredReviewEvidence(output = '') {
     && !hasContradictoryPassEvidence(text);
 }
 
-function isStructuredSecurityReview(output = '', { allowFindings = false } = {}) {
+function isStructuredSecurityReview(output = '', { allowFindings = false, securitySignals = [] } = {}) {
   const text = String(output);
   const verdict = text.match(/(?:^|\n)\s*Verdict:\s*(PASS|READY|APPROVED|FINDINGS|COMPLETE)\b/i)?.[1]?.toUpperCase();
   const acceptedVerdict = ['PASS', 'READY', 'APPROVED'].includes(verdict)
@@ -3463,7 +3537,58 @@ function isStructuredSecurityReview(output = '', { allowFindings = false } = {})
     && /(?:^|\n)\s*Findings?:\s*\S/i.test(text)
     && /(?:^|\n)\s*Evidence:\s*\S/i.test(text)
     && acceptedVerdict
+    && (!allowFindings || !hasUnsupportedSecurityClaims(text, securitySignals))
     && (['FINDINGS', 'COMPLETE'].includes(verdict) || !hasContradictoryPassEvidence(text));
+}
+
+function hasUnsupportedSecurityClaims(output = '', securitySignals = []) {
+  const findings = securityEvidenceField(String(output), 'Findings?');
+  if (isPureSecurityNoFinding(findings)) return false;
+  const categories = securityClaimCategories(findings);
+  const observed = new Set(Array.isArray(securitySignals) ? securitySignals : []);
+  return [...categories].some((category) => !observed.has(category));
+}
+
+function isPureSecurityNoFinding(value = '') {
+  const text = String(value).trim();
+  if (!text) return false;
+  const negativeClause = String.raw`no\s+(?:(?:confirmed|supported|demonstrated|open|unresolved|high[- ]severity|exploitable)\s+){0,5}(?:security\s+)?(?:bypass(?:es)?|findings?|issues?|vulnerabilit(?:y|ies)|blockers?)(?:\s+(?:remain|remains|found|were\s+found|was\s+found|in\s+(?:the\s+)?inspected\s+(?:scope|paths?)))?`;
+  const noneClause = String.raw`none(?:\s+confirmed)?(?:\s+in\s+(?:the\s+)?inspected\s+(?:scope|paths?))?`;
+  const english = new RegExp(`^(?:${negativeClause}|${noneClause}(?:\\s*(?::|[-–—]|\\()\\s*${negativeClause}\\s*\\)?)?)[.!]?$`, 'i');
+  const chinese = /^(?:无|没有|未发现)(?:已确认|有证据支持|可证实|未解决|开放|遗留|高危|严重)?(?:的)?(?:安全)?(?:发现|漏洞|问题|阻塞项)(?:存在|遗留|未解决|在已检查范围内)?[。！]?$/;
+  return english.test(text) || chinese.test(text);
+}
+
+function securityClaimCategories(value = '') {
+  const text = String(value);
+  const categories = new Set();
+  if (/\b(?:xss|cross[- ]site scripting)\b|(?:跨站脚本|跨站注入)/i.test(text)) categories.add('xss-sink');
+  if (/\b(?:sql\s*injection|sqli)\b|sql\s*注入/i.test(text)) categories.add('sql-sink');
+  if (/\b(?:command\s*injection|rce|remote\s+code\s+execution)\b|(?:命令注入|远程代码执行|任意代码执行)/i.test(text)) categories.add('code-execution-sink');
+  if (/\bpath\s*traversal\b|路径遍历/i.test(text)) categories.add('filesystem-sink');
+  if (/\bcrlf\s*injection\b|crlf\s*注入/i.test(text)) categories.add('header-sink');
+  if (/\bssrf\b|服务端请求伪造/i.test(text)) categories.add('network-sink');
+  if (/\b(?:auth(?:entication|orization)?\s*bypass|access[- ]control\s*bypass)\b|(?:鉴权绕过|认证绕过|权限绕过)/i.test(text)) categories.add('auth-boundary');
+  if (/\b(?:authorize|authorization|authentication|permissions?|access[- ]control)\b[^.;\n]{0,80}\b(?:always|unconditional(?:ly)?)\b[^.;\n]{0,30}\b(?:return|allow|grant|true)\b|(?:鉴权|认证|授权|权限)[^。；\n]{0,60}(?:始终|无条件)[^。；\n]{0,20}(?:返回|允许|放行|true)/i.test(text)) {
+    categories.add('auth-boundary');
+  }
+  if (/\b(?:open\s+redirect|credential\s+theft|csrf|prototype\s+pollution|redos|denial\s+of\s+service|hard[- ]coded\s+secret|api\s+key\s+leak|arbitrary\s+(?:files?|read|write)|unauthori[sz]ed\s+(?:access|state|action))\b|(?:开放重定向|凭据窃取|原型污染|拒绝服务|硬编码密钥|任意文件|未授权访问)/i.test(text)) {
+    categories.add('generic-risk');
+  }
+  if (categories.size === 0
+    && /\b(?:high|critical|medium|unsafe|vulnerabilit(?:y|ies)|exploit(?:able|ation)?|attacker|attackers|security\s+(?:issue|risk|flaw))\b|(?:高危|严重|中危|不安全|漏洞|攻击者)/i.test(text)) {
+    categories.add('generic-risk');
+  }
+  if (categories.size === 0) categories.add('generic-risk');
+  return categories;
+}
+
+function securityEvidenceField(output = '', label = '') {
+  const match = String(output).match(new RegExp(
+    `(?:^|\\n)\\s*${label}:\\s*([\\s\\S]*?)(?=\\n\\s*(?:Scope|Findings?|Evidence|OpenBlockers|Verdict):|$)`,
+    'i',
+  ));
+  return match?.[1]?.trim() ?? '';
 }
 
 function isReadOnlySecurityReportRoute(route) {
@@ -3608,13 +3733,13 @@ function buildLoopRecoveryStopContext(state, event = {}) {
   const output = extractFinalOutputText(event);
   if (state.loopGuard.recoveryPending) {
     if (!output || state.loopGuard.streamTriggered) return buildLoopRecoveryContext(state.loopGuard);
-    const recoveryDetection = recordGeneratedText(state.loopGuard, output, { flushIncompleteLine: true });
+    const recoveryDetection = recordFinalGeneratedText(state.loopGuard, output);
     if (recoveryDetection.repeated) return buildLoopRecoveryContext(state.loopGuard);
     recordLoopGuardProgress(state.loopGuard, 'non_repeated_progress');
     return null;
   }
   if (!output) return null;
-  const detection = recordGeneratedText(state.loopGuard, output, { flushIncompleteLine: true });
+  const detection = recordFinalGeneratedText(state.loopGuard, output);
   if (!detection.repeated) return null;
   return buildLoopRecoveryContext(state.loopGuard);
 }
@@ -5013,6 +5138,7 @@ function recordMutationEvidenceInvalidation(state, toolName = '', event = {}, _r
   state.evidence.testingEnhancerEvidence = null;
   state.evidence.testCommandEvidence = null;
   state.evidence.factCheckGate = false;
+  state.evidence.focusedFactEvidence = null;
   state.evidence.reviewEvidence = false;
   state.evidence.mainAgentSecurityReview = false;
   state.evidence.securityInspectionObserved = false;
@@ -5154,6 +5280,312 @@ function isNonExecutingTestProbe(command = '') {
   return /(?:^|\s)(?:--help|-h|--listtests|--list-tests|--collect-only|--passwithnotests)(?:\s|$)/i.test(String(command));
 }
 
+function recordFocusedLocalFactEvidence(state, toolName = '', event = {}, { successful = false } = {}) {
+  if (!successful || !isFocusedLocalFactInspectionRoute(state.lastRoute)) return false;
+  if (!/^grep$/i.test(String(toolName))) return false;
+  const input = firstToolInputRecord(event);
+  const pattern = String(input.pattern ?? input.query ?? input.search ?? '').trim();
+  const scope = String(input.path ?? input.cwd ?? '.').trim().replace(/\\/g, '/');
+  const repositoryWide = new Set(['', '.', './', '*', './*', '**/*', './**/*']).has(scope);
+  const claimPaths = extractFocusedFactClaimPaths(state.lastPrompt);
+  const claimLexicalText = focusedFactClaimLexicalText(state.lastPrompt, claimPaths);
+  const claimTokens = new Set(focusedFactLexicalTokens(claimLexicalText));
+  const claimTerms = focusedFactLexicalTokens(pattern).filter((term) => claimTokens.has(term));
+  const resultText = toolResultText(event).trim();
+  if (!pattern || !repositoryWide || !claimTerms.length || !claimPaths.length || !resultText) return false;
+
+  const observation = classifyFocusedFactGrepResult(event, resultText, claimPaths, claimTerms);
+  const routeId = gateControllerRouteId(state);
+  const previous = state.evidence.focusedFactEvidence?.routeId === routeId
+    ? state.evidence.focusedFactEvidence
+    : null;
+  const inputDigest = digestEvidence(JSON.stringify({ pattern, scope }));
+  const resultDigest = digestEvidence(JSON.stringify({
+    resultText,
+    observedPaths: observation.observedPaths,
+    matchCount: observation.matchCount,
+  }));
+  const evidence = {
+    schemaVersion: 1,
+    source: 'host-focused-fact-inspection',
+    routeId,
+    toolName: 'grep',
+    inputDigest,
+    resultDigest,
+    queryTermDigests: claimTerms.map(digestEvidence),
+    claimPathDigests: claimPaths.map(digestEvidence),
+    matchedPathDigests: uniqueValues([
+      ...(previous?.matchedPathDigests ?? []),
+      ...observation.matchedPaths.map(digestEvidence),
+    ]),
+    matchKind: observation.matchKind,
+    independentMatchObserved: previous?.independentMatchObserved === true
+      || observation.matchKind === 'independent-hit',
+    observedAt: Date.now(),
+  };
+  const changed = state.evidence.factCheckGate === true
+    || !previous
+    || previous.inputDigest !== evidence.inputDigest
+    || previous.resultDigest !== evidence.resultDigest
+    || previous.matchKind !== evidence.matchKind
+    || previous.independentMatchObserved !== evidence.independentMatchObserved;
+  state.evidence.focusedFactEvidence = evidence;
+  state.evidence.factCheckGate = false;
+  return changed;
+}
+
+function isFocusedLocalFactInspectionRoute(route) {
+  const descriptor = route?.taskDescriptor;
+  return descriptor?.operation === 'inspect'
+    && descriptor.domains?.includes('facts')
+    && descriptor.complexity === 'focused'
+    && descriptor.constraints?.workspaceWrite === 'forbidden'
+    && descriptor.constraints?.networkAccess === 'forbidden'
+    && descriptor.constraints?.externalWrite === 'forbidden'
+    && descriptor.constraints?.subagents === 'forbidden';
+}
+
+function focusedFactLexicalText(value = '') {
+  let text = String(value).normalize('NFKC').toLowerCase()
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/(?:^|[\s"'`(])(?:\.\.?\/)?(?:[a-z0-9_.@-]+\/)*[a-z0-9_.@-]+\.[a-z0-9]{1,12}(?=$|[\s"'`),:.;!?，。；：！？])/gi, ' ');
+  const metaTerms = [
+    'independent evidence', 'repository evidence', 'claim verification', 'factual verification',
+    'contradicted', 'contradiction', 'verification', 'repository', 'supported', 'supporting',
+    'documents', 'document', 'evidence', 'sources', 'source', 'claims', 'claim', 'facts', 'fact',
+    'verify', 'support', 'contradict', 'conclusion', 'offline', 'local', 'subagent', 'network',
+    'target', 'this', 'says', 'states', 'contains', 'content',
+    'tests', 'test', 'edits', 'edit', 'commit', 'publish', 'files', 'file', 'true', 'false',
+    '独立证据', '仓库证据', '事实性核查', '事实核查', '事实审查', '得到支持', '证据支持',
+    '陈述', '声明', '事实', '证据', '支持', '反驳', '矛盾', '核查', '核验', '查证', '仓库',
+    '来源', '文档', '文件', '目标', '对象', '内容', '结论', '真实', '属实', '离线', '本地', '联网', '网络', '测试', '修改',
+    '禁止', '提交', '发布', '是否', '能否', '若', '如果', '明确报告',
+  ].sort((left, right) => right.length - left.length);
+  for (const term of metaTerms) {
+    text = text.replace(new RegExp(escapeRegularExpression(term), 'giu'), ' ');
+  }
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function focusedFactClaimLexicalText(value = '', claimPaths = []) {
+  const placeholders = [];
+  const masked = String(value).replace(
+    /(?:^|[\s"'`(])((?:\.\.?\/)?(?:[a-z0-9_.@-]+\/)*[a-z0-9_.@-]+\.[a-z0-9]{1,12})(?=$|[\s"'`),:.;!?，。；：！？])/gi,
+    (_match, path) => {
+      const normalized = normalizeFocusedFactPath(path);
+      const index = placeholders.push(normalized) - 1;
+      return ` FOCUSED_FACT_PATH_${index} `;
+    },
+  );
+  const wantedPaths = new Set(claimPaths.map(normalizeFocusedFactPath));
+  const clauses = masked.split(/[。！？!?\n\r;,；，]+/u).map((clause) => clause.trim()).filter(Boolean);
+  const selected = new Set();
+  for (let index = 0; index < clauses.length; index += 1) {
+    const clausePaths = [...clauses[index].matchAll(/FOCUSED_FACT_PATH_(\d+)/g)]
+      .map((match) => placeholders[Number(match[1])])
+      .filter(Boolean);
+    if (!clausePaths.some((path) => wantedPaths.has(path))) continue;
+    selected.add(index);
+    const withoutPaths = stripFocusedFactConstraintSpans(clauses[index].replace(/FOCUSED_FACT_PATH_\d+/g, ' '));
+    if (focusedFactClaimClauseTokens(withoutPaths).length > 0) continue;
+    for (const adjacent of [index - 1, index + 1]) {
+      if (adjacent < 0 || adjacent >= clauses.length || focusedFactInstructionClause(clauses[adjacent])) continue;
+      selected.add(adjacent);
+    }
+  }
+  return [...selected]
+    .sort((left, right) => left - right)
+    .map((index) => stripFocusedFactConstraintSpans(clauses[index].replace(/FOCUSED_FACT_PATH_\d+/g, ' ')))
+    .map(focusedFactLexicalText)
+    .filter(Boolean)
+    .join(' ');
+}
+
+function stripFocusedFactConstraintSpans(value = '') {
+  return String(value)
+    .replace(/\b(?:do\s+not|don't|must\s+not|without)\s+(?:use\s+)?(?:the\s+)?(?:network|internet|edit|modify|write|run|execute|start|launch|commit|publish)(?:\s+(?:any\s+)?(?:files?|tests?|subagents?|sub-agents?|changes?))?(?:\s+(?:while|during))?/giu, ' ')
+    .replace(/(?:禁止|不得|不要|不可|不允许|无需)(?:联网|使用网络|修改(?:任何)?文件|编辑(?:任何)?文件|写入(?:任何)?文件|运行测试|执行测试|启动(?:任何)?(?:subagent|子代理)|提交|发布)(?:并|且|同时)?/gu, ' ');
+}
+
+function focusedFactInstructionClause(value = '') {
+  const text = String(value).normalize('NFKC').toLowerCase();
+  return /(?:禁止|不得|不要|不可|不允许|无需)[^。！？!?]{0,80}(?:联网|网络|修改|编辑|写入|测试|运行|执行|启动|subagent|子代理|提交|发布)/u.test(text)
+    || /\b(?:do\s+not|don't|must\s+not|without|forbid(?:den)?)\b[^.!?]{0,120}\b(?:network|internet|edit|write|test|run|execute|start|subagent|commit|publish)\b/iu.test(text)
+    || /(?:若|如果)[^。！？!?]{0,40}(?:证据不足|无独立证据)[^。！？!?]{0,40}(?:报告|说明|指出)/u.test(text)
+    || /\bif\b[^.!?]{0,80}\b(?:insufficient evidence|no independent evidence)\b[^.!?]{0,80}\b(?:report|say|state)\b/iu.test(text);
+}
+
+function focusedFactLexicalTokens(value = '') {
+  const lexical = focusedFactLexicalText(value);
+  return uniqueValues((lexical.match(/[a-z0-9][a-z0-9_@.-]*|[\u3400-\u9fff]+/giu) ?? [])
+    .map((term) => term.replace(/[.@_-]+$/u, ''))
+    .filter(Boolean));
+}
+
+function focusedFactClaimClauseTokens(value = '') {
+  const taskLabels = new Set([
+    'check', 'checking', 'fact-check', 'fact-checking', 'target', 'this', 'file', 'document', 'claim',
+    '核查', '核验', '查证', '事实核查', '目标', '文件', '文档', '声明',
+  ]);
+  return focusedFactLexicalTokens(value).filter((term) => !taskLabels.has(term));
+}
+
+function extractFocusedFactClaimPaths(value = '') {
+  return uniqueValues([...String(value).matchAll(/(?:^|[\s"'`(])((?:\.\.?\/)?(?:[a-z0-9_.@-]+\/)*[a-z0-9_.@-]+\.[a-z0-9]{1,12})(?=$|[\s"'`),:.;!?，。；：！？])/gi)]
+    .map((match) => normalizeFocusedFactPath(match[1]))
+    .filter(Boolean));
+}
+
+function normalizeFocusedFactPath(value = '') {
+  const normalized = posix.normalize(String(value).trim().replace(/\\/g, '/').replace(/^\.\//, ''));
+  return normalized === '.' ? '' : normalized.replace(/^\/+/, '');
+}
+
+function classifyFocusedFactGrepResult(event = {}, resultText = '', claimPaths = [], claimTerms = []) {
+  const text = stripFocusedFactTerminalControls(resultText).trim();
+  const details = isRecord(event.details) ? event.details : {};
+  const observedPaths = focusedFactObservedResultPaths(details);
+  const matchCount = Number.isFinite(details.matchCount) ? Number(details.matchCount) : null;
+  const noMatch = /^(?:no matches?(?: found)?|0 matches?(?: found)?|未找到(?:任何)?匹配|无匹配(?:结果)?)\.?$/iu.test(text)
+    || matchCount === 0 && observedPaths.length === 0;
+  if (noMatch) return { matchKind: 'no-match', matchedPaths: [], observedPaths, matchCount };
+
+  const lines = text.split(/\r?\n/);
+  const parsedMatches = [];
+  for (const line of lines) {
+    const match = line.match(/^\s*(?:[-*]\s*)?((?:\/|\.\.?\/)?(?:[^:\r\n]+\/)*[^:\r\n/]+\.[a-z0-9]{1,12}):(?:(?:\d+):)?(.*)$/i);
+    if (!match || !focusedFactLineContainsClaimTerm(match[2], claimTerms)) continue;
+    parsedMatches.push(normalizeFocusedFactPath(match[1]));
+  }
+
+  let groupedDirectory = '';
+  let groupedPath = '';
+  for (const line of lines) {
+    const directory = line.match(/^\s*#(?!#)\s+(.+?\/)\s*$/u);
+    if (directory) {
+      groupedDirectory = normalizeFocusedFactPath(directory[1]);
+      groupedPath = '';
+      continue;
+    }
+    const file = line.match(/^\s*##\s+(.+?)(?:#[0-9a-f]+)?\s*$/iu);
+    if (file) {
+      groupedPath = normalizeFocusedFactPath(posix.join(groupedDirectory, file[1]));
+      continue;
+    }
+    const resultLine = line.match(/^\s*\*?\s*\d+\s*[:│]\s?(.*)$/u);
+    if (groupedPath && resultLine && focusedFactLineContainsClaimTerm(resultLine[1], claimTerms)) {
+      parsedMatches.push(groupedPath);
+    }
+  }
+
+  const matchedPaths = uniqueValues(parsedMatches)
+    .filter(Boolean)
+    .filter((path) => !focusedFactExcludedEvidencePath(path))
+    .filter((path) => observedPaths.length === 0
+      || observedPaths.some((observedPath) => focusedFactObservedPathsMatch(path, observedPath)));
+  if (!matchedPaths.length) {
+    return { matchKind: 'unparseable-hit', matchedPaths: [], observedPaths, matchCount };
+  }
+  const independent = matchedPaths.some((matchedPath) => !claimPaths.some((claimPath) => focusedFactPathsMatch(matchedPath, claimPath)));
+  return {
+    matchKind: independent ? 'independent-hit' : 'claim-only',
+    matchedPaths,
+    observedPaths,
+    matchCount,
+  };
+}
+
+function stripFocusedFactTerminalControls(value = '') {
+  return String(value)
+    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, '')
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
+}
+
+function focusedFactObservedResultPaths(details = {}) {
+  const filePaths = Array.isArray(details.files) ? details.files : [];
+  const fileMatches = Array.isArray(details.fileMatches) ? details.fileMatches : [];
+  return uniqueValues([...filePaths, ...fileMatches].flatMap((entry) => {
+    if (typeof entry === 'string') return [normalizeFocusedFactPath(entry)];
+    if (!isRecord(entry)) return [];
+    const path = entry.path ?? entry.file ?? entry.filePath;
+    return typeof path === 'string' ? [normalizeFocusedFactPath(path)] : [];
+  }).filter(Boolean));
+}
+
+function focusedFactObservedPathsMatch(parsedPath = '', observedPath = '') {
+  const parsed = normalizeFocusedFactPath(parsedPath);
+  const observed = normalizeFocusedFactPath(observedPath);
+  return parsed === observed || parsed.endsWith(`/${observed}`) || observed.endsWith(`/${parsed}`);
+}
+
+function focusedFactLineContainsClaimTerm(value = '', claimTerms = []) {
+  const text = focusedFactLexicalText(stripFocusedFactTerminalControls(value));
+  const tokens = new Set(focusedFactLexicalTokens(text));
+  return claimTerms.some((term) => /^[\u3400-\u9fff]+$/u.test(term)
+    ? text.includes(term)
+    : tokens.has(term));
+}
+
+function focusedFactExcludedEvidencePath(value = '') {
+  const path = normalizeFocusedFactPath(value);
+  return /(?:^|\/)(?:\.git|\.omp|node_modules)(?:\/|$)/u.test(path);
+}
+
+function focusedFactPathsMatch(observedPath = '', claimPath = '') {
+  const observed = normalizeFocusedFactPath(observedPath);
+  const claim = normalizeFocusedFactPath(claimPath);
+  if (!observed || !claim) return false;
+  if (observed === claim || observed.endsWith(`/${claim}`)) return true;
+  return !observed.includes('/') && observed === claim.split('/').at(-1);
+}
+
+function focusedFactConclusionMatchesEvidence(state, output = '') {
+  const evidence = readFocusedFactEvidenceRecord(state.evidence.focusedFactEvidence);
+  if (!evidence || evidence.routeId !== gateControllerRouteId(state)) return false;
+  const conclusion = classifyFocusedFactConclusion(output);
+  if (conclusion.kind === 'insufficient') return true;
+  return evidence.independentMatchObserved === true
+    && (conclusion.kind === 'supported' || conclusion.kind === 'contradicted');
+}
+
+function classifyFocusedFactConclusion(value = '') {
+  const text = String(value).normalize('NFKC').toLowerCase();
+  if (/\b(?:not|does\s+not\s+have)\s+(?:unsupported|insufficient(?:\s+(?:repository\s+)?evidence)?|false|incorrect|inaccurate|wrong)\b/iu.test(text)
+    || /(?:并非|不是|非)\s*(?:证据不足|没有独立证据|无独立证据|未找到独立证据|不属实|不正确|不准确|错误)/u.test(text)) {
+    return { kind: 'mixed' };
+  }
+  const decisiveNegativePatterns = [
+    /\bnot\s+(?:true|accurate|correct|valid)\b/giu,
+    /(?:不属实|不正确|不准确|不真实)/gu,
+  ];
+  let residual = text;
+  const decisiveNegative = decisiveNegativePatterns.some((pattern) => {
+    pattern.lastIndex = 0;
+    const matched = pattern.test(residual);
+    pattern.lastIndex = 0;
+    if (matched) residual = residual.replace(pattern, ' ');
+    return matched;
+  });
+  const insufficientPatterns = [
+    /\bnot\s+(?:independently\s+)?supported\b/giu,
+    /\b(?:unsupported|insufficient\s+(?:repository\s+)?evidence|(?:repository\s+)?evidence\s+(?:is|was|remains)\s+insufficient|not\s+enough\s+evidence|no\s+independent\s+(?:repository\s+)?evidence|cannot\s+(?:confirm|support|verify|contradict)|unable\s+to\s+(?:confirm|support|verify|contradict))\b/giu,
+    /(?:证据不足|没有|未找到|无)独立证据/gu,
+    /(?:证据不足|不足以支持|无法支持|不能支持|未得到支持|无法证实|不能确认|无法确认|无法反驳|不能反驳)/gu,
+  ];
+  const insufficient = insufficientPatterns.some((pattern) => {
+    pattern.lastIndex = 0;
+    return pattern.test(residual);
+  });
+  for (const pattern of insufficientPatterns) residual = residual.replace(pattern, ' ');
+  const supported = /\b(?:support(?:ed|s)?|confirm(?:ed|s)?|corroborat(?:ed|es?)|substantiat(?:ed|es?)|validat(?:ed|es?)|true|accurate|correct|valid)\b|(?:得到|获得|有|证据)支持|证实|证据充分|属实|正确|准确|真实/iu.test(residual);
+  const contradicted = decisiveNegative
+    || /\b(?:contradict(?:ed|s)?|refut(?:ed|es?)|disprov(?:ed|es?)|false|incorrect|inaccurate|wrong)\b|(?:反驳|矛盾|并非事实|证明为假|错误)/iu.test(residual);
+  if (insufficient && !supported && !contradicted) return { kind: 'insufficient' };
+  if (!insufficient && supported && !contradicted) return { kind: 'supported' };
+  if (!insufficient && contradicted && !supported) return { kind: 'contradicted' };
+  return { kind: supported || contradicted || insufficient ? 'mixed' : 'unknown' };
+}
+
 function recordSecurityInspectionEvidence(state, toolName = '', event = {}, { successful = false } = {}) {
   if (!successful || !routeRequiresSecurityEvidence(state.lastRoute)) return false;
   if (toolName === 'read' && extractReadSkillNames(event).length > 0) return false;
@@ -5174,12 +5606,22 @@ function recordSecurityInspectionEvidence(state, toolName = '', event = {}, { su
   const previousCoverage = state.evidence.securityInspectionEvidence?.routeId === gateControllerRouteId(state)
     ? state.evidence.securityInspectionEvidence.targetCoverageDigests ?? []
     : [];
+  const previousSignals = state.evidence.securityInspectionEvidence?.routeId === gateControllerRouteId(state)
+    ? state.evidence.securityInspectionEvidence.securitySignals ?? []
+    : [];
   const scopeCoverage = securityRouteCoverage(state.lastPrompt, targetText, previousCoverage);
+  const observedSignals = securitySignalsForHostText(resultText, { trustScannerFindings: scanner });
+  const inspectedPaths = extractSecurityScopePaths(targetText);
+  const directCallerEvidence = !scopeCoverage.matched
+    && state.evidence.securityInspectionEvidence?.routeId === gateControllerRouteId(state)
+    && state.evidence.securityInspectionEvidence?.complete === true
+    && observedSignals.length > 0
+    && isDirectSecurityCallerEvidence(requestedSecurityPaths, inspectedPaths, resultText, observedSignals);
   if ((scanner && /--(?:version|help)\b/i.test(command))
     || (scanner && (!hasSecurityInspectionTarget(targetText) || isEmptySecurityScanResult(resultText)))
     || (!scanner && (!inspectionTool || !hasSecurityInspectionTarget(targetText)))
     || requestedSecurityPaths.some((path) => securityCommandExcludesPath(command, path))
-    || !scopeCoverage.matched
+    || (!scopeCoverage.matched && !directCallerEvidence)
     || !resultText.trim()) return false;
   state.evidence.securityInspectionEvidence = {
     schemaVersion: 1,
@@ -5190,11 +5632,365 @@ function recordSecurityInspectionEvidence(state, toolName = '', event = {}, { su
     resultDigest: digestEvidence(resultText),
     targetCoverageDigests: scopeCoverage.coveredDigests,
     expectedTargetCount: scopeCoverage.expectedCount,
+    securitySignals: uniqueValues([...previousSignals, ...observedSignals]),
     complete: scopeCoverage.complete,
     observedAt: Date.now(),
   };
   state.evidence.securityInspectionObserved = scopeCoverage.complete;
   return true;
+}
+
+function securitySignalsForHostText(value = '', { trustScannerFindings = false } = {}) {
+  const text = stripCodeComments(String(value));
+  if (trustScannerFindings) {
+    const categoryToSignal = new Map([
+      ['xss-sink', 'xss-sink'],
+      ['sql-sink', 'sql-sink'],
+      ['code-execution-sink', 'code-execution-sink'],
+      ['filesystem-sink', 'filesystem-sink'],
+      ['header-sink', 'header-sink'],
+      ['network-sink', 'network-sink'],
+      ['auth-boundary', 'auth-boundary'],
+    ]);
+    return uniqueValues([...securityClaimCategories(text)]
+      .map((category) => categoryToSignal.get(category))
+      .filter(Boolean));
+  }
+
+  const staticBindings = new Set();
+  const signals = new Set();
+  for (const statement of splitSecurityStatements(text)) {
+    if (hasDynamicXssSink(statement, staticBindings)) signals.add('xss-sink');
+    if (hasDynamicCallSink(statement, /(?:[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*\.(?:query|execute|rawQuery)|prisma\.\$queryRaw)/i, staticBindings)) signals.add('sql-sink');
+    if (hasDynamicCallSink(statement, /(?:eval|Function|[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*\.(?:exec|execFile|spawn|system))/i, staticBindings)) signals.add('code-execution-sink');
+    if (hasDynamicCallSink(statement, /(?:[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*\.(?:readFile|writeFile|createReadStream|createWriteStream|open|unlink|rename|copyFile))/i, staticBindings)) signals.add('filesystem-sink');
+    if (hasDynamicCallSink(statement, /(?:[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*\.(?:setHeader|writeHead|appendHeader|header))/i, staticBindings)) signals.add('header-sink');
+    if (hasDynamicCallSink(statement, /(?:fetch|axios(?:\.[a-z_$][\w$]*)?|got(?:\.[a-z_$][\w$]*)?|[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*\.request)/i, staticBindings)) signals.add('network-sink');
+    if (hasUnconditionalAuthBoundary(statement)) signals.add('auth-boundary');
+    updateStaticSecurityBinding(statement, staticBindings);
+  }
+  return [...signals];
+}
+
+function hasDynamicXssSink(statement = '', staticBindings = new Set()) {
+  return securityXssExpressions(statement)
+    .some((expression) => isDynamicSecurityExpression(expression, staticBindings));
+}
+
+function securityXssExpressions(statement = '') {
+  const patterns = [
+    /\bdangerouslySetInnerHTML\s*(?:=|:)\s*\{\{?\s*__html\s*:\s*([^}\n]+)/gi,
+    /(?:\b(?:this|[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*)|\])\s*\.\s*(?:innerHTML|outerHTML)\s*=\s*([^\n]+)/gi,
+    /\b[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*\s*\[\s*['"](?:innerHTML|outerHTML)['"]\s*\]\s*=\s*([^\n]+)/gi,
+    /\bdocument\.write\s*\(\s*([^\n)]*)/gi,
+  ];
+  const stringRanges = securityNonCodeRanges(statement);
+  return patterns.flatMap((pattern) => [...String(statement).matchAll(pattern)]
+    .filter((match) => !securityIndexInsideRanges(match.index ?? -1, stringRanges))
+    .map((match) => match[1]));
+}
+
+function hasDynamicCallSink(statement = '', calleePattern, staticBindings = new Set()) {
+  return securityCallExpressions(statement, calleePattern)
+    .some((arg) => isDynamicSecurityExpression(arg, staticBindings));
+}
+
+function securityCallExpressions(statement = '', calleePattern) {
+  const pattern = new RegExp(`\\b${calleePattern.source}\\s*\\(\\s*([^\\n)]*)`, 'gi');
+  const stringRanges = securityNonCodeRanges(statement);
+  return [...String(statement).matchAll(pattern)]
+    .filter((match) => !securityIndexInsideRanges(match.index ?? -1, stringRanges))
+    .filter((match) => !isSecurityCallDeclaration(statement, match))
+    .flatMap((match) => splitSimpleCallArguments(match[1]));
+}
+
+function isSecurityCallDeclaration(statement = '', match = {}) {
+  const text = String(statement);
+  const callee = String(match[0] ?? '').split('(')[0].trim();
+  if (callee.includes('.')) return false;
+  const before = text.slice(0, match.index ?? 0);
+  if (/\b(?:function|func|fn|def|async|get|set)\s*$/i.test(before)) return true;
+  const after = text.slice((match.index ?? 0) + String(match[0] ?? '').length);
+  if (/\b(?:if|for|while|switch|catch|with)\s*$/i.test(before)
+    && /^\)\s*(?:\{|:)/.test(after)) return false;
+  return /^\)\s*(?::[^={;]+)?\{/i.test(after)
+    || /^\)\s*:\s*[^;{}]+\s*(?:;|$)/i.test(after);
+}
+
+function splitSimpleCallArguments(value = '') {
+  return String(value).split(',').map((part) => part.trim()).filter(Boolean);
+}
+
+function isDynamicSecurityExpression(value = '', staticBindings = new Set()) {
+  const expression = String(value).trim().replace(/[})\]]+\s*$/, '').trim();
+  if (!expression) return false;
+  const staticAtom = String.raw`(?:null|undefined|true|false|-?\d+(?:\.\d+)?|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\`(?:\\.|[^\`$]|\$(?!\{))*\`)`;
+  if (new RegExp(`^${staticAtom}(?:\\s*\\+\\s*${staticAtom})*$`, 'i').test(expression)) return false;
+  if (/^[a-z_$][\w$]*$/i.test(expression) && staticBindings.has(expression)) return false;
+  return true;
+}
+
+function updateStaticSecurityBinding(statement = '', staticBindings = new Set()) {
+  const assignment = String(statement).trim().match(/^(?:(?:const|let|var)\s+)?([a-z_$][\w$]*)\s*=(?!=)\s*([\s\S]+)$/i);
+  if (!assignment) return;
+  if (isDynamicSecurityExpression(assignment[2], staticBindings)) staticBindings.delete(assignment[1]);
+  else staticBindings.add(assignment[1]);
+}
+
+function hasUnconditionalAuthBoundary(statement = '') {
+  const text = String(statement);
+  return hasSecurityCodeMatch(text, /\b(?:authorize|authenticate|checkAccess|hasPermission|isAdmin|accessControl)\b[^{}\n]{0,80}\{[^}\n]{0,120}\breturn\s+true\b/i)
+    || hasSecurityCodeMatch(text, /\b(?:authorize|authenticate|checkAccess|hasPermission|isAdmin|accessControl)\b[^=\n]{0,80}=>\s*true\b/i);
+}
+
+function splitSecurityStatements(value = '') {
+  const text = String(value);
+  const statements = [];
+  let start = 0;
+  let quote = '';
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === quote) quote = '';
+      continue;
+    }
+    if (character === '"' || character === "'" || character === '`') {
+      quote = character;
+      continue;
+    }
+    if (character === ';' || character === '\n') {
+      statements.push(text.slice(start, index));
+      start = index + 1;
+    }
+  }
+  statements.push(text.slice(start));
+  return statements;
+}
+
+function securityStringRanges(value = '') {
+  const text = String(value);
+  const ranges = [];
+  let start = -1;
+  let quote = '';
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (!quote) {
+      if (character === '"' || character === "'" || character === '`') {
+        quote = character;
+        start = index;
+      }
+      continue;
+    }
+    if (escaped) escaped = false;
+    else if (character === '\\') escaped = true;
+    else if (character === quote) {
+      ranges.push([start, index]);
+      quote = '';
+      start = -1;
+    }
+  }
+  if (quote && start >= 0) ranges.push([start, text.length - 1]);
+  return ranges;
+}
+
+function securityRegexRanges(value = '') {
+  const text = String(value);
+  const stringRanges = securityStringRanges(text);
+  const ranges = [];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] !== '/' || securityIndexInsideRanges(index, stringRanges)) continue;
+    if (text[index + 1] === '/' || text[index + 1] === '*') continue;
+    let previousIndex = index - 1;
+    while (previousIndex >= 0 && /\s/.test(text[previousIndex])) previousIndex -= 1;
+    const previous = previousIndex >= 0 ? text[previousIndex] : '';
+    const prefix = text.slice(0, index).match(/([a-z_$][\w$]*)\s*$/i)?.[1]?.toLowerCase() ?? '';
+    const startsExpression = previousIndex < 0
+      || /[=(:,[!&|?;{}]/.test(previous)
+      || ['return', 'case', 'throw', 'yield', 'await'].includes(prefix);
+    if (!startsExpression) continue;
+
+    let escaped = false;
+    let inCharacterClass = false;
+    let end = -1;
+    for (let cursor = index + 1; cursor < text.length; cursor += 1) {
+      const character = text[cursor];
+      if (character === '\n') break;
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (character === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (character === '[') inCharacterClass = true;
+      else if (character === ']') inCharacterClass = false;
+      else if (character === '/' && !inCharacterClass) {
+        end = cursor;
+        while (/[dgimsuvy]/i.test(text[end + 1] ?? '')) end += 1;
+        break;
+      }
+    }
+    if (end < 0) continue;
+    ranges.push([index, end]);
+    index = end;
+  }
+  return ranges;
+}
+
+function securityNonCodeRanges(value = '') {
+  return [...securityStringRanges(value), ...securityRegexRanges(value)];
+}
+
+function securityIndexInsideRanges(index = -1, ranges = []) {
+  return ranges.some(([start, end]) => index >= start && index <= end);
+}
+
+function hasSecurityCodeMatch(value = '', pattern) {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  const matches = String(value).matchAll(new RegExp(pattern.source, flags));
+  const ranges = securityNonCodeRanges(value);
+  return [...matches].some((match) => !securityIndexInsideRanges(match.index ?? -1, ranges));
+}
+
+function stripCodeComments(value = '') {
+  return String(value)
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ')
+    .replace(/(^|\s)#[^\n]*/g, '$1 ');
+}
+
+function isDirectSecurityCallerEvidence(requestedPaths = [], inspectedPaths = [], value = '', observedSignals = []) {
+  const code = stripCodeComments(String(value));
+  const callerPaths = uniqueValues(inspectedPaths.map(normalizeSecurityModulePath).filter(Boolean));
+  if (callerPaths.length !== 1) return false;
+  return requestedPaths.some((requestedPath) => {
+    const bindings = [];
+    for (const match of code.matchAll(/\bimport\s+([^;\n]+?)\s+from\s*['"]([^'"]+)['"]/gi)) {
+      if (!securityImportMatchesRequestedPath(match[2], callerPaths[0], requestedPath)) continue;
+      bindings.push(...importedLocalBindings(match[1]));
+    }
+    for (const match of code.matchAll(/\b(?:const|let|var)\s+([^=;\n]+?)\s*=\s*require\s*\(\s*['"]([^'"]+)['"]\s*\)/gi)) {
+      if (!securityImportMatchesRequestedPath(match[2], callerPaths[0], requestedPath)) continue;
+      bindings.push(...requiredLocalBindings(match[1]));
+    }
+    const uniqueBindings = uniqueValues(bindings);
+    if (!uniqueBindings.length) return false;
+    return hasBoundSecuritySignal(code, uniqueBindings, observedSignals);
+  });
+}
+
+function securityImportMatchesRequestedPath(specifier = '', callerPath = '', requestedPath = '') {
+  if (!/^\.\.?\//.test(String(specifier))) return false;
+  const callerDirectory = posix.dirname(normalizeSecurityModulePath(callerPath));
+  const resolvedImport = normalizeSecurityModulePath(posix.join(callerDirectory, specifier));
+  const requested = normalizeSecurityModulePath(requestedPath);
+  return stripSecurityModuleExtension(resolvedImport) === stripSecurityModuleExtension(requested);
+}
+
+function normalizeSecurityModulePath(value = '') {
+  const normalized = posix.normalize(String(value).trim().replace(/\\/g, '/').replace(/^\.\//, ''));
+  return normalized === '.' || normalized.startsWith('../') || posix.isAbsolute(normalized) ? '' : normalized;
+}
+
+function stripSecurityModuleExtension(value = '') {
+  return String(value).replace(/\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|rb|php|cs)$/i, '');
+}
+
+function hasBoundSecuritySignal(code = '', bindings = [], observedSignals = []) {
+  if (!bindings.length) return false;
+  const tainted = new Set();
+  const staticBindings = new Set();
+  for (const statement of splitSecurityStatements(code)) {
+    if (observedSignals.some((signal) => securitySignalUsesBoundData(
+      statement,
+      signal,
+      bindings,
+      tainted,
+      staticBindings,
+    ))) return true;
+
+    const assignment = String(statement).trim().match(/^(?:(?:const|let|var)\s+)?([a-z_$][\w$]*)\s*=(?!=)\s*([\s\S]+)$/i);
+    if (assignment) {
+      const rhs = assignment[2];
+      const taintedRhs = hasDynamicBoundCall(rhs, bindings, staticBindings)
+        || expressionReferencesSecurityNames(rhs, tainted);
+      if (taintedRhs) tainted.add(assignment[1]);
+      else tainted.delete(assignment[1]);
+    }
+    updateStaticSecurityBinding(statement, staticBindings);
+  }
+  return false;
+}
+
+function securitySignalUsesBoundData(statement = '', signal = '', bindings = [], tainted = new Set(), staticBindings = new Set()) {
+  const expressions = securityExpressionsForSignal(statement, signal);
+  return expressions.some((expression) => isDynamicSecurityExpression(expression, staticBindings)
+    && (hasDynamicBoundCall(expression, bindings, staticBindings)
+      || expressionReferencesSecurityNames(expression, tainted)));
+}
+
+function securityExpressionsForSignal(statement = '', signal = '') {
+  if (signal === 'xss-sink') return securityXssExpressions(statement);
+  const patterns = {
+    'sql-sink': /(?:[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*\.(?:query|execute|rawQuery)|prisma\.\$queryRaw)/i,
+    'code-execution-sink': /(?:eval|Function|[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*\.(?:exec|execFile|spawn|system))/i,
+    'filesystem-sink': /(?:[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*\.(?:readFile|writeFile|createReadStream|createWriteStream|open|unlink|rename|copyFile))/i,
+    'header-sink': /(?:[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*\.(?:setHeader|writeHead|appendHeader|header))/i,
+    'network-sink': /(?:fetch|axios(?:\.[a-z_$][\w$]*)?|got(?:\.[a-z_$][\w$]*)?|[a-z_$][\w$]*(?:\.[a-z_$][\w$]*)*\.request)/i,
+  };
+  return patterns[signal] ? securityCallExpressions(statement, patterns[signal]) : [];
+}
+
+function hasDynamicBoundCall(value = '', bindings = [], staticBindings = new Set()) {
+  const text = String(value);
+  const stringRanges = securityNonCodeRanges(text);
+  return bindings.some((binding) => {
+    const escaped = binding.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`\\b${escaped}(?:\\.[a-z_$][\\w$]*)?\\s*\\(\\s*([^\\n)]*)`, 'gi');
+    return [...text.matchAll(pattern)]
+      .filter((match) => !securityIndexInsideRanges(match.index ?? -1, stringRanges))
+      .some((match) => splitSimpleCallArguments(match[1])
+        .some((arg) => isDynamicSecurityExpression(arg, staticBindings)));
+  });
+}
+
+function expressionReferencesSecurityNames(value = '', names = new Set()) {
+  return [...names].some((name) => hasSecurityCodeMatch(
+    value,
+    new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
+  ));
+}
+
+function importedLocalBindings(clause = '') {
+  const text = String(clause);
+  const bindings = [];
+  const named = text.match(/\{([^}]*)\}/)?.[1] ?? '';
+  for (const item of named.split(',')) {
+    const match = item.trim().match(/^[a-z_$][\w$]*(?:\s+as\s+([a-z_$][\w$]*))?$/i);
+    if (match) bindings.push(match[1] ?? item.trim());
+  }
+  const namespace = text.match(/\*\s+as\s+([a-z_$][\w$]*)/i)?.[1];
+  if (namespace) bindings.push(namespace);
+  const defaultBinding = text.replace(/\{[^}]*\}|\*\s+as\s+[a-z_$][\w$]*/gi, '').split(',')[0].trim();
+  if (/^[a-z_$][\w$]*$/i.test(defaultBinding)) bindings.push(defaultBinding);
+  return uniqueValues(bindings);
+}
+
+function requiredLocalBindings(clause = '') {
+  const text = String(clause).trim();
+  const named = text.match(/^\{([^}]*)\}$/)?.[1];
+  if (named != null) {
+    return uniqueValues(named.split(',').flatMap((item) => {
+      const match = item.trim().match(/^([a-z_$][\w$]*)(?:\s*:\s*([a-z_$][\w$]*))?$/i);
+      return match ? [match[2] ?? match[1]] : [];
+    }));
+  }
+  return /^[a-z_$][\w$]*$/i.test(text) ? [text] : [];
 }
 
 function securityCommandExcludesPath(command = '', requestedPath = '') {

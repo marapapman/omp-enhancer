@@ -127,6 +127,15 @@ function projectRouteForGovernance(route) {
       ? plan.requiredSubagents
       : constraints.subagents === 'forbidden' ? [] : route.requiredSubagents ?? [],
   };
+  if (isFocusedLocalFactInspection(projected)) {
+    return {
+      ...projected,
+      intent: 'fact-check',
+      workflowRoute: 'factcheck.local',
+      agent: null,
+      auditMode: 'focused',
+    };
+  }
   if (isExactTestExecution(projected)) {
     return {
       ...projected,
@@ -192,25 +201,33 @@ function advisorGuidanceLines(route) {
 
 function skillWorkflowLines(route) {
   const hasSubagents = (route.requiredSubagents ?? []).length > 0;
+  if (isFocusedLocalFactInspection(route)) {
+    return [
+      'This is a focused offline repository-evidence check handled directly by the main agent; no network, subagent, edit, test, or heavyweight cross-source fact workflow is authorized.',
+      'Read the claim and search independent repository files for corroborating or contradicting evidence. The claim text itself is not independent evidence.',
+      'Report supported, contradicted, or insufficient evidence explicitly. If the repository contains only the claim itself, conclude that local evidence is insufficient and stop.',
+    ];
+  }
   if (isExactTestExecution(route)) {
     const targets = route.taskDescriptor?.testExecutionTargets ?? [];
     return [
-      `This is one exact test execution for ${targets.join(', ')}; no broader verification scope is authorized.`,
+      `This is one exact test execution for the complete target list ${targets.join(', ')}; no broader verification scope is authorized.`,
       'Inspect package or runner configuration with the read tool. Do not use shell pipelines, redirections, aliases, or exploratory commands for that inspection.',
-      'Run one direct host test command that names only the authorized test file, then report the observed result. Do not substitute an aggregate suite or add runner preloads and extra flags.',
+      'Run one direct host test command that names every authorized test file once and in the requested order, then report the observed result. Do not omit or substitute targets, use an aggregate suite, or add runner preloads and extra flags.',
     ];
   }
   if (isReadOnlySecurityReview(route)) {
     return [
       'This is a focused read-only security review handled by the main agent; no subagent, test, edit, network, or release workflow is authorized.',
       'Before reviewing, read skill://security-review and skill://security-scan. Then inspect the target and, when needed to substantiate impact, direct local callers with read-only tools.',
-      'Report only code-supported facts. Missing validation, authentication, logging, or sanitization is not itself an exploitable vulnerability unless the local caller contract proves that responsibility and impact.',
+      'Report only code-supported facts. Missing validation, authentication, logging, or sanitization is not itself an exploitable vulnerability unless a concrete local caller or security-sensitive sink proves that responsibility and impact.',
+      'Do not assign vulnerability names or severity from a function name, pass-through behavior, or hypothetical downstream use. If no concrete caller or sink supports impact, use Findings: none confirmed in the inspected scope.',
       'For this report-only route, Verdict: COMPLETE means the evidence collection is complete; it does not approve a remediation or claim the code is safe.',
       'Finish with this exact multiline evidence block:',
       'SECURITY_REVIEW',
       'Scope: <reviewed file and any callers actually inspected>',
-      'Findings: <supported findings, or none>',
-      'Evidence: <file and symbol evidence>',
+      'Findings: <supported findings, or none confirmed in the inspected scope>',
+      'Evidence: <concrete boundary, caller, or sink evidence; a function name or missing validation alone is insufficient>',
       'OpenBlockers: none',
       'Verdict: COMPLETE',
     ];
@@ -317,12 +334,18 @@ export function buildMissingGateContexts({ route, state } = {}) {
   const contexts = [];
 
   if (needsFactCheck(route) && !state?.evidence?.factCheckGate) {
-    contexts.push({ key: 'fact-check', context: [
-      'OMP Enhancer Core gate is still open for this fact-checking task.',
-      'Run the fact-checking workflow before finishing: fact_check_analyze, independent fact_check_evidence lanes when sources are available, fact_check_report, then fact_check_gate.',
-      'The final answer must distinguish supported, contradicted, insufficient, and stale claims. Include FACT_CHECK_PLAN, FACT_EVIDENCE_A, FACT_EVIDENCE_B when required, FACT_CROSS_CHECK, FACT_REVIEW, FACT_CHECK_REPORT, FACT_CHECK_USAGE, SKILL_USAGE, and SUBAGENT_USAGE when subagents are routed.',
-      formatRecentToolFailures(state, ['fact_check_gate']),
-    ].filter(Boolean).join('\n') });
+    contexts.push(isFocusedLocalFactInspection(route)
+      ? { key: 'fact-check', context: [
+        'OMP Enhancer Core local fact-evidence gate is still open.',
+        'Use one successful built-in grep over the repository root with a concrete claim-related pattern before concluding. Reading or repeating only the claim text is not independent evidence.',
+        'Then report supported, contradicted, or insufficient repository evidence explicitly. Do not use the network, subagents, tests, edits, or the heavyweight fact_check_* workflow.',
+      ].join('\n') }
+      : { key: 'fact-check', context: [
+        'OMP Enhancer Core gate is still open for this fact-checking task.',
+        'Run the fact-checking workflow before finishing: fact_check_analyze, independent fact_check_evidence lanes when sources are available, fact_check_report, then fact_check_gate.',
+        'The final answer must distinguish supported, contradicted, insufficient, and stale claims. Include FACT_CHECK_PLAN, FACT_EVIDENCE_A, FACT_EVIDENCE_B when required, FACT_CROSS_CHECK, FACT_REVIEW, FACT_CHECK_REPORT, FACT_CHECK_USAGE, SKILL_USAGE, and SUBAGENT_USAGE when subagents are routed.',
+        formatRecentToolFailures(state, ['fact_check_gate']),
+      ].filter(Boolean).join('\n') });
   }
 
   if (needsWritingQuality(route) && !state?.evidence?.writingQuality) {
@@ -435,7 +458,9 @@ function completionGateChecklist(route) {
   }
 
   if (route.intent === 'fact-check') {
-    gates.push('Fact-check gate: plan claims, collect independent evidence lanes when sources are available, cross-check agreement and conflicts, review overclaiming, then run fact_check_gate before final factual claims.');
+    gates.push(isFocusedLocalFactInspection(route)
+      ? 'Local fact-evidence gate: run one built-in grep over the repository root with a concrete claim-related pattern, then report supported, contradicted, or insufficient evidence without external research.'
+      : 'Fact-check gate: plan claims, collect independent evidence lanes when sources are available, cross-check agreement and conflicts, review overclaiming, then run fact_check_gate before final factual claims.');
   }
 
   if (route.intent === 'security-review' || routeRequiresGate(route, 'security-evidence')) {
@@ -444,8 +469,8 @@ function completionGateChecklist(route) {
         'Security evidence gate: after loading the two required security skills and inspecting the requested source scope, include this exact multiline block:',
         'SECURITY_REVIEW',
         'Scope: <reviewed file and any callers actually inspected>',
-        'Findings: <supported findings, or none>',
-        'Evidence: <file and symbol evidence>',
+        'Findings: <supported findings, or none confirmed in the inspected scope>',
+        'Evidence: <concrete boundary, caller, or sink evidence; a function name or missing validation alone is insufficient>',
         'OpenBlockers: none',
         'Verdict: COMPLETE',
       ].join('\n')
@@ -551,6 +576,7 @@ function isConstrainedRouteStatusSkillPrompt(prompt = '') {
 
 function workflowFor(route) {
   const intent = route.intent;
+  if (isFocusedLocalFactInspection(route)) return 'Focused local fact workflow: read the claim -> search repository evidence -> separate the claim from independent support -> report supported, contradicted, or insufficient evidence without external research.';
   if (isExactTestExecution(route)) return `Exact test target workflow: inspect runner configuration with read -> run one direct command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} -> report the host-observed result without generating additional tests.`;
   if (isReadOnlySecurityReview(route)) return 'Focused read-only security workflow: load security-review and security-scan -> inspect the requested file and direct local callers -> separate code facts from unsupported threat assumptions -> emit SECURITY_REVIEW evidence without edits or tests.';
   if (isReadOnlyCodeReview(route)) return 'Read-only code review workflow: inspect the requested file and directly related code -> collect concrete file and symbol evidence -> report findings without test execution or test-evidence repair.';
@@ -591,7 +617,7 @@ function routeBoundaryFor(route) {
       constraints.subagents === 'forbidden' ? 'subagents' : null,
       constraints.externalWrite !== 'required' ? 'external writes' : null,
     ].filter(Boolean);
-    return `Route boundary: execute only the exact test target ${targets.join(', ')}. Use read for configuration inspection and one direct test command; aggregate tests, substituted targets, pipelines, redirections, and runner preloads are outside scope.${extras.length ? ` ${extras.join(', ')} remain forbidden.` : ''}`;
+    return `Route boundary: execute only the complete exact test target list ${targets.join(', ')}. Use read for configuration inspection and one direct command naming every target once and in order; aggregate tests, omitted or substituted targets, pipelines, redirections, and runner preloads are outside scope.${extras.length ? ` ${extras.join(', ')} remain forbidden.` : ''}`;
   }
   if (isReadOnlySecurityReview(route)) {
     return 'Route boundary: this is a read-only, local security review. Use read-only tools, inspect the requested source scope and direct callers, and report only supported findings; do not edit, run tests, use the network, delegate, or release.';
@@ -624,8 +650,11 @@ function routeBoundaryFor(route) {
   if (intent === 'bug-audit') {
     return 'Route boundary: this is a bug audit workflow. Test-case files, disposable harnesses, and command invocations are allowed when needed for audit verification, but production-code fixes require a separate user request. Do not turn audit findings into production code edits without a fix request. The omp_test_* tools are owned by omp-testing-enhancer; core only routes to them and listens for their results.';
   }
-  if (intent === 'fact-check') {
+  if (intent === 'fact-check' && !isFocusedLocalFactInspection(route)) {
     return 'Route boundary: this is a factual verification workflow. Read, search, cite, and report evidence; do not rewrite the source document or change project files unless the user explicitly asks for edits.';
+  }
+  if (isFocusedLocalFactInspection(route)) {
+    return 'Route boundary: use only local read/search tools to evaluate repository evidence. Do not treat the claim itself as corroboration, and do not edit, test, browse, delegate, or release.';
   }
   if (intent === 'testing' || intent === 'implementation-with-tests') {
     return 'Route boundary: this is a code/testing workflow. Use the omp-testing-enhancer tools only after routed test or implementation work has actually been performed.';
@@ -757,6 +786,17 @@ function isReadOnlySecurityReview(route) {
     && descriptor.domains.includes('security')
     && descriptor.constraints?.workspaceWrite === 'forbidden'
     && descriptor.constraints?.testExecution === 'forbidden'
+    && descriptor.constraints?.subagents === 'forbidden';
+}
+
+function isFocusedLocalFactInspection(route) {
+  const descriptor = route?.taskDescriptor;
+  return descriptor?.operation === 'inspect'
+    && descriptor.domains?.includes('facts')
+    && descriptor.complexity === 'focused'
+    && descriptor.constraints?.workspaceWrite === 'forbidden'
+    && descriptor.constraints?.networkAccess === 'forbidden'
+    && descriptor.constraints?.externalWrite === 'forbidden'
     && descriptor.constraints?.subagents === 'forbidden';
 }
 

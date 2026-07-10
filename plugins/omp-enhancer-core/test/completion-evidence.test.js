@@ -195,12 +195,7 @@ test('a required-test route needs fresh host-observed test evidence in addition 
 test('one successful exact host test closes the exact-test gate without a bug-audit repair', async () => {
   await withEnforce(async () => {
     const { pi, ctx } = await startRuntime('只运行 test/router.test.js 并报告结果。禁止修改任何文件，禁止联网，禁止启动 subagent，禁止提交或发布。');
-    await event(pi, 'tool_result')(successfulToolResult({
-      toolCallId: 'read-exact-test-skill',
-      toolName: 'read',
-      input: { path: 'skill://verification-before-completion' },
-      output: 'verification-before-completion instructions',
-    }), ctx);
+    assert.deepEqual(latestState(pi).lastRoute.routePlan.requiredSkills, []);
     const command = 'node --test test/router.test.js';
     const call = await event(pi, 'tool_call')({ toolName: 'bash', input: { command } }, ctx);
     assert.notEqual(call?.block, true, call?.reason);
@@ -215,7 +210,7 @@ test('one successful exact host test closes the exact-test gate without a bug-au
     assert.equal(latestState(pi).evidence.testingGate, true);
     assert.ok(latestState(pi).evidence.testCommandEvidence);
     assert.equal(await event(pi, 'session_stop')({
-      output: `${skillUsage(['verification-before-completion'])}\ntest/router.test.js passed: 1 test, 0 failures.`,
+      output: 'test/router.test.js passed: 1 test, 0 failures.',
     }, ctx), undefined);
 
     for (const [name, output] of [
@@ -233,6 +228,33 @@ test('one successful exact host test closes the exact-test gate without a bug-au
       assert.equal(latestState(negative.pi).evidence.testingGate, false, name);
       assert.equal(latestState(negative.pi).evidence.testCommandEvidence, null, name);
     }
+  });
+});
+
+test('one direct command covering every exact target closes a multi-target route', async () => {
+  await withEnforce(async () => {
+    const prompt = 'Only run node --test test/router.test.js test/governance.test.js; do not modify files, use the network, use subagents, or publish.';
+    const { pi, ctx } = await startRuntime(prompt);
+    assert.deepEqual(latestState(pi).lastRoute.taskDescriptor.testExecutionTargets, [
+      'test/router.test.js',
+      'test/governance.test.js',
+    ]);
+    assert.deepEqual(latestState(pi).lastRoute.routePlan.requiredSkills, []);
+    assert.deepEqual(latestState(pi).lastRoute.routePlan.requiredTools, []);
+
+    const command = 'node --test test/router.test.js test/governance.test.js';
+    const call = await event(pi, 'tool_call')({ toolName: 'bash', input: { command } }, ctx);
+    assert.notEqual(call?.block, true, call?.reason);
+    await event(pi, 'tool_result')(successfulToolResult({
+      toolCallId: 'multi-exact-host-test',
+      toolName: 'bash',
+      input: { command },
+      output: 'ℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0',
+    }), ctx);
+
+    assert.equal(latestState(pi).evidence.testingGate, true);
+    assert.ok(latestState(pi).evidence.testCommandEvidence);
+    assert.equal(await event(pi, 'session_stop')({ output: 'Both authorized test files passed.' }, ctx), undefined);
   });
 });
 
@@ -653,6 +675,279 @@ test('definite workspace mutations and hook-capable commits invalidate stale tes
   });
 });
 
+test('focused offline fact evidence is claim-bound and conclusion-consistent', async (t) => {
+  await t.test('generic meta searches record nothing while a real negative search supports only an insufficient conclusion', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startFocusedFactRuntime();
+      const route = latestState(pi).lastRoute;
+      assert.deepEqual(route.routePlan.requiredSkills, []);
+      assert.deepEqual(route.routePlan.requiredTools, []);
+      assert.deepEqual(route.routePlan.requiredSubagents, []);
+
+      const unsupported = await event(pi, 'session_stop')({ output: '该陈述得到仓库内证据支持。' }, ctx);
+      assert.equal(unsupported?.continue, true);
+      assert.match(unsupported.additionalContext, /local fact-evidence gate.*built-in grep.*repository root/is);
+
+      for (const pattern of ['unrelated-token', 'claim|evidence|support|repository', '声明|证据|支持|仓库']) {
+        await event(pi, 'tool_result')(successfulToolResult({
+          toolCallId: `non-evidence-${pattern.length}`,
+          toolName: 'grep',
+          input: { pattern, path: '.' },
+          output: pattern === 'unrelated-token'
+            ? 'No matches found'
+            : 'docs/reference.md:8:Independent source text.',
+        }), ctx);
+        assert.equal(latestState(pi).evidence.focusedFactEvidence, null, pattern);
+        assert.equal(latestState(pi).evidence.factCheckGate, false, pattern);
+      }
+
+      await recordFocusedFactGrep(pi, ctx, {
+        id: 'negative-claim-search',
+        output: 'No matches found',
+      });
+      assert.equal(latestState(pi).evidence.focusedFactEvidence.matchKind, 'no-match');
+      assert.equal(latestState(pi).evidence.factCheckGate, false);
+      assert.equal(await event(pi, 'session_stop')({
+        output: '没有找到独立证据，因此当前仓库证据不足，无法支持该陈述。',
+      }, ctx), undefined);
+      assert.equal(latestState(pi).evidence.factCheckGate, true);
+    });
+  });
+
+  for (const observation of [
+    { name: 'no matches', output: 'No matches found', kind: 'no-match' },
+    { name: 'the claim document only', output: 'docs/notes.md:3:The stable fact is 42.', kind: 'claim-only' },
+  ]) {
+    await t.test(`${observation.name} cannot support or contradict the claim`, async () => {
+      for (const conclusion of [
+        '该陈述得到仓库内证据支持。',
+        '仓库证据反驳了该陈述，该陈述不属实。',
+        'The claim is incorrect.',
+        '该陈述错误。',
+      ]) {
+        await withEnforce(async () => {
+          const { pi, ctx } = await startFocusedFactRuntime();
+          await recordFocusedFactGrep(pi, ctx, { id: `${observation.kind}-${conclusion.length}`, output: observation.output });
+          assert.equal(latestState(pi).evidence.focusedFactEvidence.matchKind, observation.kind);
+          const blocked = await event(pi, 'session_stop')({ output: conclusion }, ctx);
+          assert.equal(blocked?.continue, true, conclusion);
+          assert.equal(latestState(pi).evidence.factCheckGate, false, conclusion);
+        });
+      }
+
+      await withEnforce(async () => {
+        const { pi, ctx } = await startFocusedFactRuntime();
+        await recordFocusedFactGrep(pi, ctx, { id: `${observation.kind}-not-supported`, output: observation.output });
+        assert.equal(await event(pi, 'session_stop')({
+          output: 'The claim is not supported by independent repository evidence.',
+        }, ctx), undefined);
+      });
+    });
+  }
+
+  await t.test('an independent file hit permits an explicit supported or contradicted conclusion', async () => {
+    for (const conclusion of [
+      '独立的仓库证据支持该陈述。',
+      '独立的仓库证据与该陈述矛盾，因此反驳了该陈述。',
+      'The independent repository evidence shows that the claim is incorrect.',
+      '独立仓库证据表明该陈述错误。',
+      'The independent repository evidence shows that the claim is not true.',
+      '独立仓库证据表明该陈述不正确。',
+      '独立仓库证据表明该陈述不属实。',
+    ]) {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startFocusedFactRuntime();
+        await recordFocusedFactGrep(pi, ctx, {
+          id: `independent-${conclusion.length}`,
+          output: [
+            'docs/notes.md:3:The stable fact is 42.',
+            'docs/reference.md:8:The independently maintained stable value is 42.',
+          ].join('\n'),
+        });
+        const evidence = latestState(pi).evidence.focusedFactEvidence;
+        assert.equal(evidence.matchKind, 'independent-hit');
+        assert.equal(evidence.independentMatchObserved, true);
+        assert.equal(latestState(pi).evidence.factCheckGate, false);
+        assert.equal(await event(pi, 'session_stop')({ output: conclusion }, ctx), undefined);
+        assert.equal(latestState(pi).evidence.factCheckGate, true);
+      });
+    }
+  });
+
+  await t.test('an insufficient prefix cannot hide a decisive unsupported conclusion', async () => {
+    for (const conclusion of [
+      '证据不足，但该陈述仍然得到支持。',
+      'evidence is insufficient. Nevertheless, the claim is true and accurate.',
+      '证据不足；不过该陈述属实且正确。',
+    ]) {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startFocusedFactRuntime();
+        await recordFocusedFactGrep(pi, ctx, { id: `mixed-conclusion-${conclusion.length}`, output: 'No matches found' });
+        const blocked = await event(pi, 'session_stop')({ output: conclusion }, ctx);
+        assert.equal(blocked?.continue, true, conclusion);
+        assert.equal(latestState(pi).evidence.factCheckGate, false, conclusion);
+      });
+    }
+  });
+
+  await t.test('a double negation cannot masquerade as an insufficient conclusion', async () => {
+    for (const conclusion of [
+      'The claim is not unsupported.',
+      'The claim does not have insufficient evidence.',
+      '该陈述并非证据不足。',
+      '该陈述不是证据不足。',
+    ]) {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startFocusedFactRuntime();
+        await recordFocusedFactGrep(pi, ctx, { id: `double-negative-${conclusion.length}`, output: 'No matches found' });
+        const blocked = await event(pi, 'session_stop')({ output: conclusion }, ctx);
+        assert.equal(blocked?.continue, true, conclusion);
+        assert.equal(latestState(pi).evidence.factCheckGate, false, conclusion);
+      });
+    }
+  });
+
+  await t.test('only claim-related text in grep result lines can become independent evidence', async () => {
+    for (const pattern of ['42|.*', '42|禁止', '42|运行', '42|启动', '42|任何', '42|unrelated']) {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startFocusedFactRuntime();
+        await event(pi, 'tool_result')(successfulToolResult({
+          toolCallId: `branch-bypass-${pattern.length}`,
+          toolName: 'grep',
+          input: { pattern, path: '.' },
+          output: 'docs/reference.md:8:completely unrelated text',
+        }), ctx);
+        const evidence = latestState(pi).evidence.focusedFactEvidence;
+        assert.equal(evidence.matchKind, 'unparseable-hit', pattern);
+        assert.equal(evidence.independentMatchObserved, false, pattern);
+        const blocked = await event(pi, 'session_stop')({ output: '独立仓库证据支持该陈述。' }, ctx);
+        assert.equal(blocked?.continue, true, pattern);
+      });
+    }
+  });
+
+  await t.test('real grouped grep output and structured result paths are parsed without trusting unrelated lines', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startFocusedFactRuntime();
+      await recordFocusedFactGrep(pi, ctx, {
+        id: 'grouped-independent-result',
+        output: [
+          '# docs/',
+          '## notes.md#842A',
+          ' 2:',
+          '*3:The stable fact is 42.',
+          '',
+          '## reference.md#842A',
+          '*8:The independently maintained stable value is 42.',
+        ].join('\n'),
+        details: {
+          matchCount: 2,
+          fileCount: 2,
+          files: ['docs/notes.md', 'docs/reference.md'],
+          fileMatches: [{ path: 'docs/notes.md', count: 1 }, { path: 'docs/reference.md', count: 1 }],
+        },
+      });
+      const evidence = latestState(pi).evidence.focusedFactEvidence;
+      assert.equal(evidence.matchKind, 'independent-hit');
+      assert.equal(evidence.independentMatchObserved, true);
+      assert.equal(await event(pi, 'session_stop')({ output: '独立仓库证据支持该陈述。' }, ctx), undefined);
+    });
+
+    await withEnforce(async () => {
+      const { pi, ctx } = await startFocusedFactRuntime();
+      await recordFocusedFactGrep(pi, ctx, {
+        id: 'grouped-unrelated-result',
+        output: ['# docs/', '## reference.md#842A', '*8:禁止运行测试。'].join('\n'),
+        pattern: '42|运行',
+        details: {
+          matchCount: 1,
+          fileCount: 1,
+          files: ['docs/reference.md'],
+          fileMatches: [{ path: 'docs/reference.md', count: 1 }],
+        },
+      });
+      const evidence = latestState(pi).evidence.focusedFactEvidence;
+      assert.equal(evidence.matchKind, 'unparseable-hit');
+      assert.equal(evidence.independentMatchObserved, false);
+    });
+
+    await withEnforce(async () => {
+      const { pi, ctx } = await startFocusedFactRuntime();
+      await recordFocusedFactGrep(pi, ctx, {
+        id: 'ansi-claim-result',
+        output: '\u001b[32mdocs/notes.md\u001b[0m:3:The stable fact is 42.',
+        details: {
+          matchCount: 1,
+          fileCount: 1,
+          files: ['docs/notes.md'],
+          fileMatches: [{ path: 'docs/notes.md', count: 1 }],
+        },
+      });
+      assert.equal(latestState(pi).evidence.focusedFactEvidence.matchKind, 'claim-only');
+    });
+  });
+
+  await t.test('root-level claim files and exact short fact values can record a negative search', async () => {
+    for (const fact of [
+      { path: 'notes.md', claim: 'The stable fact is 9', pattern: '9' },
+      { path: 'README.md', claim: 'The stable identifier is X', pattern: 'X' },
+    ]) {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startRuntime(focusedFactPrompt(fact.path, fact.claim));
+        assert.equal(latestState(pi).lastRoute.intent, 'fact-check', fact.path);
+        await recordFocusedFactGrep(pi, ctx, {
+          id: `short-root-${fact.path}`,
+          output: 'No matches found',
+          pattern: fact.pattern,
+          details: { matchCount: 0, fileCount: 0, files: [], fileMatches: [] },
+        });
+        assert.equal(latestState(pi).evidence.focusedFactEvidence.matchKind, 'no-match', fact.path);
+        assert.equal(await event(pi, 'session_stop')({ output: '没有找到独立证据，因此证据不足。' }, ctx), undefined);
+      });
+    }
+  });
+
+  await t.test('claim extraction survives a same-clause constraint prefix and a path-only target clause', async () => {
+    for (const prompt of [
+      'Do not edit files while offline fact-checking whether docs/notes.md says The stable fact is 42 and whether repository evidence supports it. Do not use the network, run tests, start subagents, commit, or publish.',
+      'Offline fact-check this target: docs/notes.md\nClaim: The stable fact is 42\nCheck whether repository evidence supports it.\nDo not edit files, use the network, run tests, start subagents, commit, or publish.',
+    ]) {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startRuntime(prompt);
+        assert.equal(latestState(pi).lastRoute.intent, 'fact-check');
+        await recordFocusedFactGrep(pi, ctx, {
+          id: `claim-shape-${prompt.length}`,
+          output: 'No matches found',
+          pattern: '42',
+          details: { matchCount: 0, fileCount: 0, files: [], fileMatches: [] },
+        });
+        assert.equal(latestState(pi).evidence.focusedFactEvidence.matchKind, 'no-match', prompt);
+        assert.equal(await event(pi, 'session_stop')({ output: 'No independent repository evidence was found; evidence is insufficient.' }, ctx), undefined);
+      });
+    }
+  });
+
+  await t.test('the route-bound record survives restart and is cleared by a new route', async () => {
+    await withEnforce(async () => {
+      const first = await startFocusedFactRuntime();
+      await recordFocusedFactGrep(first.pi, first.ctx, { id: 'persisted-no-match', output: 'No matches found' });
+      const routeId = latestState(first.pi).evidence.focusedFactEvidence.routeId;
+
+      const restored = await restartRuntime(first.pi.entries);
+      assert.equal(latestState(restored.pi).evidence.focusedFactEvidence.routeId, routeId);
+      assert.equal(await event(restored.pi, 'session_stop')({
+        output: '仓库中没有独立证据，当前结论是证据不足。',
+      }, restored.ctx), undefined);
+
+      await event(restored.pi, 'before_agent_start')({
+        prompt: focusedFactPrompt('docs/other.md', 'The alternate stable fact is 84'),
+      }, restored.ctx);
+      assert.equal(latestState(restored.pi).evidence.focusedFactEvidence, null);
+      assert.equal(latestState(restored.pi).evidence.factCheckGate, false);
+    });
+  });
+});
+
 test('no-subagent security review has a satisfiable main-agent evidence contract', async () => {
   await withEnforce(async () => {
     const { pi, ctx } = await startRuntime('Audit this authentication module for vulnerabilities, but do not use subagents; main agent only.');
@@ -693,6 +988,454 @@ test('read-only security findings complete the report but cannot approve a remed
     assert.equal(blocked?.continue, true);
     assert.equal(latestState(remediation.pi).evidence.mainAgentSecurityReview, false);
   });
+});
+
+test('read-only security evidence rejects caller-dependent vulnerability claims without a concrete sink', async () => {
+  await withEnforce(async () => {
+    const { pi, ctx } = await startRuntime('只读审查 src/router.js 是否存在安全问题。禁止修改任何文件，禁止运行测试，禁止联网，禁止启动 subagent，禁止提交或发布。只报告有代码证据支持的结论。');
+    await recordSecuritySkillReads(pi, ctx);
+    await event(pi, 'tool_result')(successfulToolResult({
+      toolCallId: 'identity-router-read',
+      toolName: 'read',
+      input: { path: 'src/router.js' },
+      output: 'export function route(value) { return value; }',
+    }), ctx);
+
+    const speculative = [
+      skillUsage(['security-review', 'security-scan']),
+      'SECURITY_REVIEW',
+      'Scope: src/router.js (sole file; no callers inspected)',
+      'Findings: No input validation. If used as a URL router, this permits path traversal, XSS, SQL injection, and command injection. [HIGH]',
+      'Evidence: src/router.js returns value unchanged; the function name implies URL routing.',
+      'OpenBlockers: none',
+      'Verdict: COMPLETE',
+    ].join('\n');
+    const blocked = await event(pi, 'session_stop')({ output: speculative }, ctx);
+    assert.equal(blocked?.continue, true);
+    assert.match(blocked.additionalContext, /caller|sink|unsupported|supported/i);
+    assert.equal(latestState(pi).evidence.mainAgentSecurityReview, false);
+
+    const supportedCompletion = [
+      skillUsage(['security-review', 'security-scan']),
+      'SECURITY_REVIEW',
+      'Scope: src/router.js; no production caller or security-sensitive sink was inspected',
+      'Findings: none confirmed in the inspected scope',
+      'Evidence: src/router.js is an identity function; this alone proves no exploitable path, sink, or impact',
+      'OpenBlockers: none',
+      'Verdict: COMPLETE',
+    ].join('\n');
+    assert.equal(await event(pi, 'session_stop')({ output: supportedCompletion }, ctx), undefined);
+    assert.equal(latestState(pi).evidence.mainAgentSecurityReview, true);
+  });
+});
+
+test('security finding categories must match host-observed sink evidence', async () => {
+  await withEnforce(async () => {
+    for (const findings of [
+      'none confirmed in the inspected scope; potential path traversal and XSS [HIGH] if a caller renders the value',
+      'none confirmed in the inspected scope. Potential XSS [HIGH] if a caller renders the value',
+      'none confirmed in the inspected scope! Potential XSS [HIGH] if a caller renders the value',
+      'No issues but XSS is present [HIGH]',
+      'None confirmed, but path traversal exists',
+      'Path traversal and XSS are present [HIGH]',
+      'Critical unsafe routing vulnerability is present [HIGH]',
+      'Open redirect enables credential theft',
+      'CSRF permits unauthorized state changes',
+      'Prototype pollution permits attacker-controlled properties',
+      'ReDoS enables denial of service',
+      'A hard-coded secret leaks the API key',
+      'An attacker can read arbitrary files',
+    ]) {
+      const attempt = await startRuntime('Audit src/router.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+      await recordSecuritySkillReads(attempt.pi, attempt.ctx);
+      await event(attempt.pi, 'tool_result')(successfulToolResult({
+        toolCallId: `identity-${findings.length}`,
+        toolName: 'read',
+        input: { path: 'src/router.js' },
+        output: 'export function route(value) { return value; }',
+      }), attempt.ctx);
+      const blocked = await event(attempt.pi, 'session_stop')({ output: [
+        skillUsage(['security-review', 'security-scan']),
+        'SECURITY_REVIEW',
+        'Scope: src/router.js',
+        `Findings: ${findings}`,
+        'Evidence: src/router.js returns value unchanged',
+        'OpenBlockers: none',
+        'Verdict: COMPLETE',
+      ].join('\n') }, attempt.ctx);
+      assert.equal(blocked?.continue, true, findings);
+      assert.equal(latestState(attempt.pi).evidence.mainAgentSecurityReview, false, findings);
+    }
+
+    const commentOnly = await startRuntime('Audit src/router.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+    await recordSecuritySkillReads(commentOnly.pi, commentOnly.ctx);
+    await event(commentOnly.pi, 'tool_result')(successfulToolResult({
+      toolCallId: 'comment-only-inner-html',
+      toolName: 'read',
+      input: { path: 'src/router.js' },
+      output: [
+        '// Do not use innerHTML here',
+        'export function route(value) { return value; } // never pass to innerHTML',
+        'const note = "innerHTML is not used";',
+        'value = value # do not use innerHTML',
+      ].join('\n'),
+    }), commentOnly.ctx);
+    assert.deepEqual(latestState(commentOnly.pi).evidence.securityInspectionEvidence.securitySignals, []);
+    const commentClaim = [
+      skillUsage(['security-review', 'security-scan']),
+      'SECURITY_REVIEW',
+      'Scope: src/router.js',
+      'Findings: XSS is present [HIGH]',
+      'Evidence: the source comment mentions innerHTML',
+      'OpenBlockers: none',
+      'Verdict: COMPLETE',
+    ].join('\n');
+    assert.equal((await event(commentOnly.pi, 'session_stop')({ output: commentClaim }, commentOnly.ctx))?.continue, true);
+    assert.equal(latestState(commentOnly.pi).evidence.mainAgentSecurityReview, false);
+
+    const caller = await startRuntime('Audit src/router.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+    await recordSecuritySkillReads(caller.pi, caller.ctx);
+    await event(caller.pi, 'tool_result')(successfulToolResult({
+      toolCallId: 'caller-target-router',
+      toolName: 'read',
+      input: { path: 'src/router.js' },
+      output: 'export function route(value) { return value; }',
+    }), caller.ctx);
+    await event(caller.pi, 'tool_result')(successfulToolResult({
+      toolCallId: 'unrelated-xss-sink',
+      toolName: 'read',
+      input: { path: 'src/unrelated.js' },
+      output: [
+        "import { route } from './router';",
+        "route('safe');",
+        'export function unrelated(input) { return <div dangerouslySetInnerHTML={{ __html: input }} />; }',
+      ].join('\n'),
+    }), caller.ctx);
+    assert.deepEqual(latestState(caller.pi).evidence.securityInspectionEvidence.securitySignals, []);
+    await event(caller.pi, 'tool_result')(successfulToolResult({
+      toolCallId: 'direct-caller-xss-sink',
+      toolName: 'read',
+      input: { path: 'src/view.js' },
+      output: [
+        "import { route } from './router';",
+        'export function View({ input }) {',
+        '  const html = route(input);',
+        '  return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+        '}',
+      ].join('\n'),
+    }), caller.ctx);
+    assert.deepEqual(latestState(caller.pi).evidence.securityInspectionEvidence.securitySignals, ['xss-sink']);
+    const callerFinding = [
+      skillUsage(['security-review', 'security-scan']),
+      'SECURITY_REVIEW',
+      'Scope: src/router.js and direct caller src/view.js',
+      'Findings: route(input) reaches dangerouslySetInnerHTML in its direct caller, enabling XSS [HIGH]',
+      'Evidence: src/view.js imports src/router.js and assigns route(input) to dangerouslySetInnerHTML',
+      'OpenBlockers: none',
+      'Verdict: COMPLETE',
+    ].join('\n');
+    assert.equal(await event(caller.pi, 'session_stop')({ output: callerFinding }, caller.ctx), undefined);
+    assert.equal(latestState(caller.pi).evidence.mainAgentSecurityReview, true);
+
+    const supported = await startRuntime('Audit src/view.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+    await recordSecuritySkillReads(supported.pi, supported.ctx);
+    await event(supported.pi, 'tool_result')(successfulToolResult({
+      toolCallId: 'react-xss-sink',
+      toolName: 'read',
+      input: { path: 'src/view.js' },
+      output: 'export function View({ input }) { return <div dangerouslySetInnerHTML={{ __html: input }} />; }',
+    }), supported.ctx);
+    const mixedUnsupported = [
+      skillUsage(['security-review', 'security-scan']),
+      'SECURITY_REVIEW',
+      'Scope: src/view.js View()',
+      'Findings: user-controlled HTML reaches dangerouslySetInnerHTML, enabling XSS; Open redirect also enables credential theft',
+      'Evidence: src/view.js assigns input directly to dangerouslySetInnerHTML',
+      'OpenBlockers: none',
+      'Verdict: COMPLETE',
+    ].join('\n');
+    assert.equal((await event(supported.pi, 'session_stop')({ output: mixedUnsupported }, supported.ctx))?.continue, true);
+    assert.equal(latestState(supported.pi).evidence.mainAgentSecurityReview, false);
+    const directFinding = [
+      skillUsage(['security-review', 'security-scan']),
+      'SECURITY_REVIEW',
+      'Scope: src/view.js View()',
+      'Findings: user-controlled HTML reaches dangerouslySetInnerHTML, enabling XSS [HIGH]',
+      'Evidence: src/view.js View() assigns input directly to dangerouslySetInnerHTML',
+      'OpenBlockers: none',
+      'Verdict: COMPLETE',
+    ].join('\n');
+    assert.equal(await event(supported.pi, 'session_stop')({ output: directFinding }, supported.ctx), undefined);
+    assert.deepEqual(latestState(supported.pi).evidence.securityInspectionEvidence.securitySignals, ['xss-sink']);
+    assert.equal(latestState(supported.pi).evidence.mainAgentSecurityReview, true);
+  });
+});
+
+test('security findings require a concrete dynamic source-to-sink flow', async (t) => {
+  await t.test('no-finding prefixes cannot hide a colon-delimited vulnerability claim', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime('Audit src/router.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+      await recordSecuritySkillReads(pi, ctx);
+      await event(pi, 'tool_result')(successfulToolResult({
+        toolCallId: 'colon-bypass-router', toolName: 'read', input: { path: 'src/router.js' }, output: 'export function route(value) { return value; }',
+      }), ctx);
+      const blocked = await event(pi, 'session_stop')({ output: [
+        skillUsage(['security-review', 'security-scan']),
+        'SECURITY_REVIEW',
+        'Scope: src/router.js',
+        'Findings: none confirmed: XSS [HIGH]',
+        'Evidence: src/router.js inspected',
+        'OpenBlockers: none',
+        'Verdict: COMPLETE',
+      ].join('\n') }, ctx);
+      assert.equal(blocked?.continue, true);
+      assert.equal(latestState(pi).evidence.mainAgentSecurityReview, false);
+    });
+  });
+
+  await t.test('a constant HTML sink does not prove user-controlled XSS', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime('Audit src/view.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+      await recordSecuritySkillReads(pi, ctx);
+      await event(pi, 'tool_result')(successfulToolResult({
+        toolCallId: 'constant-react-sink',
+        toolName: 'read',
+        input: { path: 'src/view.js' },
+        output: 'export function View() { return <div dangerouslySetInnerHTML={{ __html: "<b>fixed</b>" }} />; }',
+      }), ctx);
+      assert.deepEqual(latestState(pi).evidence.securityInspectionEvidence.securitySignals, []);
+      const blocked = await event(pi, 'session_stop')({ output: [
+        skillUsage(['security-review', 'security-scan']),
+        'SECURITY_REVIEW',
+        'Scope: src/view.js',
+        'Findings: user-controlled HTML reaches dangerouslySetInnerHTML, enabling XSS [HIGH]',
+        'Evidence: src/view.js contains a constant literal sink value',
+        'OpenBlockers: none',
+        'Verdict: COMPLETE',
+      ].join('\n') }, ctx);
+      assert.equal(blocked?.continue, true);
+      assert.equal(latestState(pi).evidence.mainAgentSecurityReview, false);
+    });
+  });
+
+  await t.test('reassigning routed data to a constant kills the direct-caller flow', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime('Audit src/router.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+      await recordSecuritySkillReads(pi, ctx);
+      await event(pi, 'tool_result')(successfulToolResult({
+        toolCallId: 'killed-flow-router', toolName: 'read', input: { path: 'src/router.js' }, output: 'export function route(value) { return value; }',
+      }), ctx);
+      await event(pi, 'tool_result')(successfulToolResult({
+        toolCallId: 'killed-flow-caller',
+        toolName: 'read',
+        input: { path: 'src/view.js' },
+        output: [
+          'import { route } from "./router";',
+          'let html = route(input);',
+          'html = "<b>fixed</b>";',
+          'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+        ].join('\n'),
+      }), ctx);
+      assert.deepEqual(latestState(pi).evidence.securityInspectionEvidence.securitySignals, []);
+      const blocked = await event(pi, 'session_stop')({ output: [
+        skillUsage(['security-review', 'security-scan']),
+        'SECURITY_REVIEW',
+        'Scope: src/router.js and src/view.js',
+        'Findings: route(input) reaches dangerouslySetInnerHTML, enabling XSS [HIGH]',
+        'Evidence: src/view.js imports route but replaces its result with a constant',
+        'OpenBlockers: none',
+        'Verdict: COMPLETE',
+      ].join('\n') }, ctx);
+      assert.equal(blocked?.continue, true);
+      assert.equal(latestState(pi).evidence.mainAgentSecurityReview, false);
+    });
+  });
+
+  await t.test('a same-basename import from another directory is not the requested caller', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime('Audit src/router.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+      await recordSecuritySkillReads(pi, ctx);
+      await event(pi, 'tool_result')(successfulToolResult({
+        toolCallId: 'wrong-module-router', toolName: 'read', input: { path: 'src/router.js' }, output: 'export function route(value) { return value; }',
+      }), ctx);
+      await event(pi, 'tool_result')(successfulToolResult({
+        toolCallId: 'wrong-module-caller',
+        toolName: 'read',
+        input: { path: 'src/view.js' },
+        output: [
+          'import { route } from "./legacy/router";',
+          'const html = route(input);',
+          'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+        ].join('\n'),
+      }), ctx);
+      assert.deepEqual(latestState(pi).evidence.securityInspectionEvidence.securitySignals, []);
+      const blocked = await event(pi, 'session_stop')({ output: [
+        skillUsage(['security-review', 'security-scan']),
+        'SECURITY_REVIEW',
+        'Scope: src/router.js and src/view.js',
+        'Findings: src/router.js reaches dangerouslySetInnerHTML, enabling XSS [HIGH]',
+        'Evidence: src/view.js imports a different legacy/router module',
+        'OpenBlockers: none',
+        'Verdict: COMPLETE',
+      ].join('\n') }, ctx);
+      assert.equal(blocked?.continue, true);
+      assert.equal(latestState(pi).evidence.mainAgentSecurityReview, false);
+    });
+  });
+
+  for (const item of [
+    {
+      name: 'sink syntax inside a string',
+      target: 'src/view.js',
+      source: 'const example = "element.innerHTML = input";',
+    },
+    {
+      name: 'sink syntax inside a regular-expression literal',
+      target: 'src/view.js',
+      source: 'const pattern = /innerHTML = input/;',
+    },
+    {
+      name: 'a local variable named innerHTML',
+      target: 'src/view.js',
+      source: 'const innerHTML = input;',
+    },
+    {
+      name: 'a detached object property named __html',
+      target: 'src/view.js',
+      source: 'const payload = { __html: input };',
+    },
+    {
+      name: 'a direct concatenation of literals',
+      target: 'src/view.js',
+      source: 'export function View() { element.innerHTML = "<b>" + "fixed</b>"; }',
+    },
+    {
+      name: 'a variable assigned only literal concatenation',
+      target: 'src/view.js',
+      source: 'const html = "<b>" + "fixed</b>"; element.innerHTML = html;',
+    },
+  ]) {
+    await t.test(`${item.name} is not a dynamic XSS flow`, async () => {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startRuntime(`Audit ${item.target} for security issues. Do not modify files, run tests, use the network, or use subagents.`);
+        await recordSecuritySkillReads(pi, ctx);
+        await event(pi, 'tool_result')(successfulToolResult({
+          toolCallId: `static-xss-${item.name.length}`, toolName: 'read', input: { path: item.target }, output: item.source,
+        }), ctx);
+        assert.deepEqual(latestState(pi).evidence.securityInspectionEvidence.securitySignals, [], item.name);
+      });
+    });
+  }
+
+  for (const item of [
+    { name: 'SQL', source: 'if db.query(input) { return true; }', signal: 'sql-sink' },
+    { name: 'code execution', source: 'child_process.exec(input);', signal: 'code-execution-sink' },
+    { name: 'filesystem', source: 'fs.open(input);', signal: 'filesystem-sink' },
+    { name: 'network', source: 'client.request(input);', signal: 'network-sink' },
+    { name: 'header', source: 'response.setHeader(input);', signal: 'header-sink' },
+  ]) {
+    await t.test(`a concrete ${item.name} receiver call remains a sink`, async () => {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startRuntime('Audit src/module.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+        await recordSecuritySkillReads(pi, ctx);
+        await event(pi, 'tool_result')(successfulToolResult({
+          toolCallId: `receiver-${item.name.length}`, toolName: 'read', input: { path: 'src/module.js' }, output: item.source,
+        }), ctx);
+        assert.deepEqual(latestState(pi).evidence.securityInspectionEvidence.securitySignals, [item.signal], item.name);
+      });
+    });
+  }
+
+  for (const item of [
+    { name: 'SQL call', source: 'export function query(input) { return input; }' },
+    { name: 'class SQL method', source: 'class Store { query(input) { return input; } }' },
+    { name: 'Python SQL function', source: 'def query(input):\n    return input' },
+    { name: 'Go SQL function', source: 'func query(input string) string { return input }' },
+    { name: 'TypeScript SQL interface method', source: 'interface Store { query(input: string): string; }' },
+    { name: 'code execution call', source: 'export function exec(input) { return input; }' },
+    { name: 'filesystem call', source: 'export function open(input) { return input; }' },
+    { name: 'network call', source: 'export function request(input) { return input; }' },
+    { name: 'header call', source: 'export function setHeader(input) { return input; }' },
+  ]) {
+    await t.test(`a ${item.name} declaration is not a sink invocation`, async () => {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startRuntime('Audit src/module.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+        await recordSecuritySkillReads(pi, ctx);
+        await event(pi, 'tool_result')(successfulToolResult({
+          toolCallId: `declaration-${item.name.length}`, toolName: 'read', input: { path: 'src/module.js' }, output: item.source,
+        }), ctx);
+        assert.deepEqual(latestState(pi).evidence.securityInspectionEvidence.securitySignals, [], item.name);
+      });
+    });
+  }
+
+  for (const item of [
+    {
+      name: 'a direct literal argument',
+      caller: [
+        'import { route } from "./router";',
+        'const html = route("<b>fixed</b>");',
+        'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+      ].join('\n'),
+    },
+    {
+      name: 'a variable known to contain a literal',
+      caller: [
+        'import { route } from "./router";',
+        'const fixed = "<b>fixed</b>";',
+        'const html = route(fixed);',
+        'return <div dangerouslySetInnerHTML={{ __html: html }} />;',
+      ].join('\n'),
+    },
+    {
+      name: 'a routed value used outside an unrelated sink expression',
+      caller: [
+        'import { route } from "./router";',
+        'const routed = route(input);',
+        'return <div data-route={routed} dangerouslySetInnerHTML={{ __html: other }} />;',
+      ].join('\n'),
+    },
+  ]) {
+    await t.test(`${item.name} does not bind the requested target to XSS`, async () => {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startRuntime('Audit src/router.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+        await recordSecuritySkillReads(pi, ctx);
+        await event(pi, 'tool_result')(successfulToolResult({
+          toolCallId: `static-caller-target-${item.name.length}`, toolName: 'read', input: { path: 'src/router.js' }, output: 'export function route(value) { return value; }',
+        }), ctx);
+        await event(pi, 'tool_result')(successfulToolResult({
+          toolCallId: `static-caller-${item.name.length}`, toolName: 'read', input: { path: 'src/view.js' }, output: item.caller,
+        }), ctx);
+        assert.deepEqual(latestState(pi).evidence.securityInspectionEvidence.securitySignals, [], item.name);
+      });
+    });
+  }
+});
+
+test('pure no-finding security wording accepts benign explanatory variants', async () => {
+  for (const findings of [
+    'none confirmed: no exploitable issue found',
+    'none confirmed (no exploitable issue found)',
+    'none confirmed - no exploitable issue found',
+  ]) {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime('Audit src/router.js for security issues. Do not modify files, run tests, use the network, or use subagents.');
+      await recordSecuritySkillReads(pi, ctx);
+      await event(pi, 'tool_result')(successfulToolResult({
+        toolCallId: `benign-negative-${findings.length}`, toolName: 'read', input: { path: 'src/router.js' }, output: 'export function route(value) { return value; }',
+      }), ctx);
+      const released = await event(pi, 'session_stop')({ output: [
+        skillUsage(['security-review', 'security-scan']),
+        'SECURITY_REVIEW',
+        'Scope: src/router.js',
+        `Findings: ${findings}`,
+        'Evidence: no concrete security-sensitive caller or sink was observed',
+        'OpenBlockers: none',
+        'Verdict: COMPLETE',
+      ].join('\n') }, ctx);
+      assert.equal(released, undefined, findings);
+    });
+  }
 });
 
 test('security inspection coverage is bound to every explicit requested target', async () => {
@@ -1229,14 +1972,45 @@ async function withEnforce(run) {
 async function startRuntime(prompt, { testingToolAvailable = false } = {}) {
   const pi = new FakePi(testingToolAvailable);
   registerCoreEnhancer(pi);
-  const ctx = {
+  const ctx = runtimeContext(pi);
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  return { pi, ctx };
+}
+
+function focusedFactPrompt(path = 'docs/notes.md', claim = 'The stable fact is 42') {
+  return `离线核查 ${path} 中 ${claim} 是否能由仓库内证据支持。禁止联网，禁止修改任何文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。若证据不足就明确报告证据不足。`;
+}
+
+function startFocusedFactRuntime() {
+  return startRuntime(focusedFactPrompt());
+}
+
+async function recordFocusedFactGrep(pi, ctx, { id, output, pattern = 'stable fact|42', details }) {
+  await event(pi, 'tool_result')(successfulToolResult({
+    toolCallId: id,
+    toolName: 'grep',
+    input: { pattern, path: '.' },
+    output,
+    details,
+  }), ctx);
+}
+
+async function restartRuntime(entries, { testingToolAvailable = false } = {}) {
+  const pi = new FakePi(testingToolAvailable);
+  pi.entries.push(...entries);
+  registerCoreEnhancer(pi);
+  const ctx = runtimeContext(pi);
+  await event(pi, 'session_start')({}, ctx);
+  return { pi, ctx };
+}
+
+function runtimeContext(pi) {
+  return {
     sessionManager: { getBranch: () => pi.entries, getSessionId: () => 'session-1' },
     ui: { notify: () => undefined },
     hasUI: false,
   };
-  await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')({ prompt }, ctx);
-  return { pi, ctx };
 }
 
 function skillUsage(skills) {
@@ -1313,13 +2087,14 @@ async function recordReleaseResult(pi, ctx, command, output) {
   }), ctx);
 }
 
-function successfulToolResult({ toolCallId, toolName, input, output }) {
+function successfulToolResult({ toolCallId, toolName, input, output, details }) {
   return {
     type: 'tool_result',
     toolCallId,
     toolName,
     input,
     content: [{ type: 'text', text: output }],
+    ...(details ? { details } : {}),
     isError: false,
   };
 }

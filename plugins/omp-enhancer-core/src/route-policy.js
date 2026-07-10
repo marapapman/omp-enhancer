@@ -70,6 +70,18 @@ export function buildRoutePlan(descriptor, route = {}) {
     && domains.has('code')
     && descriptor?.complexity === 'broad'
     && !domains.has('security');
+  const focusedLocalFactInspection = descriptor?.operation === 'inspect'
+    && domains.has('facts')
+    && descriptor?.complexity === 'focused'
+    && descriptor?.constraints?.workspaceWrite === 'forbidden'
+    && descriptor?.constraints?.networkAccess === 'forbidden'
+    && descriptor?.constraints?.externalWrite === 'forbidden'
+    && descriptor?.constraints?.subagents === 'forbidden';
+  const exactTestExecution = descriptor?.operation === 'execute'
+    && descriptor?.constraints?.testExecution === 'required'
+    && Array.isArray(descriptor?.testExecutionTargets)
+    && descriptor.testExecutionTargets.length > 0
+    && phases.every(({ kind }) => kind === 'verify');
   if (broadCodeAudit && testsAuthorized
     && !phases.some(({ kind, domain }) => kind === 'verify' && domain === 'tests')) {
     const reviewIndex = phases.findIndex(({ kind }) => kind === 'review');
@@ -85,13 +97,15 @@ export function buildRoutePlan(descriptor, route = {}) {
   const gateRequirements = [];
 
   if (domains.has('facts')) {
-    requiredSkills.push(...FACT_SKILLS);
-    requiredTools.push(...FACT_TOOLS);
-    requiredSubagents.push(...subagentPlans.factCheck);
+    if (!focusedLocalFactInspection) {
+      requiredSkills.push(...FACT_SKILLS);
+      requiredTools.push(...FACT_TOOLS);
+      requiredSubagents.push(...subagentPlans.factCheck);
+    }
     gateRequirements.push(gateRequirement('fact-evidence', 'required'));
   }
 
-  if (domains.has('writing')) {
+  if (domains.has('writing') && !focusedLocalFactInspection) {
     if (domains.has('document')) {
       requiredSkills.push('writing-markdown-helper');
     } else if (descriptor?.language === 'zh') {
@@ -151,7 +165,7 @@ export function buildRoutePlan(descriptor, route = {}) {
     requiredSkills.push('verification-before-completion');
   }
 
-  if (descriptor?.operation === 'execute' && domains.has('tests')) {
+  if (descriptor?.operation === 'execute' && domains.has('tests') && !exactTestExecution) {
     requiredSkills.push('verification-before-completion');
     requiredTools.push('omp_test_gate', 'omp_test_report');
   }
