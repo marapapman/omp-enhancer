@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from 'node:fs/promises'
+import { writeSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -22,12 +23,12 @@ async function main() {
 
     if (options.apply) {
       await applyRelease(result)
-      console.log('release files updated')
+      writeLine(process.stdout, 'release files updated')
     } else {
-      console.log('dry-run: no files were changed')
+      writeLine(process.stdout, 'dry-run: no files were changed')
     }
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error))
+    writeLine(process.stderr, error instanceof Error ? error.message : String(error))
     process.exitCode = 1
   }
 }
@@ -184,14 +185,18 @@ async function writeJson(filePath, value) {
 }
 
 function printPlan(result) {
-  console.log(result.options.apply ? 'release plan:' : 'dry-run release plan:')
+  writeLine(process.stdout, result.options.apply ? 'release plan:' : 'dry-run release plan:')
   for (const change of result.changes) {
-    console.log(`- ${change.file} ${change.field}: ${change.from} -> ${change.to}`)
+    writeLine(process.stdout, `- ${change.file} ${change.field}: ${change.from} -> ${change.to}`)
   }
 }
 
 function printHelp() {
-  console.log(`Usage: node scripts/release.js --plugin <name|all> (--version <x.y.z>|--bump patch|minor|major) [--apply] [--pin-ref] [--allow-downgrade]\n\nDefault mode is track-main: catalog refs are removed so marketplace upgrade tracks the latest GitHub marketplace catalog.`)
+  writeLine(process.stdout, `Usage: node scripts/release.js --plugin <name|all> (--version <x.y.z>|--bump patch|minor|major) [--apply] [--pin-ref] [--allow-downgrade]\n\nDefault mode is track-main: catalog refs are removed so marketplace upgrade tracks the latest GitHub marketplace catalog.`)
+}
+
+function writeLine(stream, value) {
+  writeSync(stream.fd, `${value}\n`)
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

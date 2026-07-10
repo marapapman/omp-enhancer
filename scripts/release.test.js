@@ -104,9 +104,13 @@ async function snapshotReleaseFiles(root) {
 
 function runRelease(root, args) {
   return new Promise((resolveResult, reject) => {
+    const childEnv = { ...process.env, NO_COLOR: '1' };
+    for (const key of Object.keys(childEnv)) {
+      if (key === 'NODE_CHANNEL_FD' || key.startsWith('NODE_TEST_')) delete childEnv[key];
+    }
     const child = spawn(process.execPath, [releaseScript, ...args], {
       cwd: root,
-      env: { ...process.env, NO_COLOR: '1' },
+      env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
