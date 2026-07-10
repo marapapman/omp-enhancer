@@ -309,7 +309,7 @@ function expectedForRoute(intent, route) {
   return expectedByIntent[intent];
 }
 
-test('runtime subagent gate blocks task prompts with unexpected skill assignments', async () => {
+test('runtime subagent gate reports unexpected skill assignments at the task boundary', async () => {
   const representatives = Object.entries(workloadSuites)
     .filter(([intent]) => Object.keys(expectedByIntent[intent].subagents).length)
     .map(([intent, prompts]) => ({ intent, prompt: prompts[0] }));
@@ -320,25 +320,18 @@ test('runtime subagent gate blocks task prompts with unexpected skill assignment
     const first = route.requiredSubagents[0];
     const unexpected = unexpectedSkillFor(first.requiredSkills);
 
-    for (const subagent of route.requiredSubagents) {
-      await event(pi, 'tool_result')({
-        name: 'task',
-        params: {
-          agent: subagent.agent,
-          prompt: assignmentPrompt(
-            subagent.agent,
-            subagent.agent === first.agent
-              ? [...subagent.requiredSkills, unexpected]
-              : subagent.requiredSkills,
-          ),
-        },
-      }, ctx);
-    }
+    const coached = await event(pi, 'tool_call')({
+      toolName: 'task',
+      toolCallId: `unexpected-${intent}`,
+      input: {
+        agent: first.agent,
+        prompt: assignmentPrompt(first.agent, [...first.requiredSkills, unexpected]),
+      },
+    }, ctx);
 
-    const blocked = await event(pi, 'session_stop')({}, ctx);
-    assert.equal(blocked?.continue, true, intent);
-    assert.match(blocked.additionalContext, /Unexpected subagent skill assignments/, intent);
-    assert.match(blocked.additionalContext, new RegExp(escapeRegExp(unexpected)), intent);
+    assert.equal(coached?.block, false, intent);
+    assert.match(coached.reason, /Unexpected subagent skill assignments/, intent);
+    assert.match(coached.reason, new RegExp(escapeRegExp(unexpected)), intent);
   }
 });
 

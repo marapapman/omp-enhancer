@@ -1,5 +1,6 @@
 import { loopGuardPromptSection } from './loop-guard.js';
 import { skillReadNameCandidates } from './skill-usage.js';
+import { useEnforcedRoutePlan } from './runtime-policy.js';
 
 export function buildGovernancePromptFragment({
   route,
@@ -199,46 +200,52 @@ export function buildSubagentPromptFragment({ prompt = '' } = {}) {
 }
 
 export function buildMissingGateContext({ route, state } = {}) {
-  if (!route || route.intent === 'unknown') return null;
+  return buildMissingGateContexts({ route, state })[0]?.context ?? null;
+}
+
+export function buildMissingGateContexts({ route, state } = {}) {
+  if (!route || route.intent === 'unknown') return [];
+
+  const contexts = [];
 
   if (needsFactCheck(route) && !state?.evidence?.factCheckGate) {
-    return [
+    contexts.push({ key: 'fact-check', context: [
       'OMP Enhancer Core gate is still open for this fact-checking task.',
       'Run the fact-checking workflow before finishing: fact_check_analyze, independent fact_check_evidence lanes when sources are available, fact_check_report, then fact_check_gate.',
       'The final answer must distinguish supported, contradicted, insufficient, and stale claims. Include FACT_CHECK_PLAN, FACT_EVIDENCE_A, FACT_EVIDENCE_B when required, FACT_CROSS_CHECK, FACT_REVIEW, FACT_CHECK_REPORT, FACT_CHECK_USAGE, SKILL_USAGE, and SUBAGENT_USAGE when subagents are routed.',
       formatRecentToolFailures(state, ['fact_check_gate']),
-    ].filter(Boolean).join('\n');
+    ].filter(Boolean).join('\n') });
   }
 
   if (needsWritingQuality(route) && !state?.evidence?.writingQuality) {
-    return [
+    contexts.push({ key: 'writing-qa', context: [
       'OMP Enhancer Core gate is still open for this writing task.',
       'Run writing QA before finishing. Use writing_quality_check or writing_logic_check, and make sure SKILL_USAGE lists the required writing skills such as plain-chinese-writing when required.',
       formatRecentToolFailures(state, ['writing_quality_check', 'writing_logic_check']),
-    ].filter(Boolean).join('\n');
+    ].filter(Boolean).join('\n') });
   }
 
   if (needsTesting(route) && !state?.evidence?.testingGate) {
     if (route.intent === 'implementation-with-tests') {
-      return [
+      contexts.push({ key: 'testing', context: [
         'OMP Enhancer Core gate is still open for this implementation testing task.',
         'Review is not the terminal phase. After plan, implementation-task, and reviewer have returned, switch to the post-review testing checkpoint before finishing.',
         'Post-review testing checkpoint: resolve reviewer blockers or report BLOCKERS, load any root skills needed for direct testing tools, run the relevant local test commands, then run omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report.',
         'If omp_test_* tools are unavailable in this runtime, do not loop on missing tool calls; run the local test commands and close with a manual testing gate report covering indirect-test, test-file-scope, browser-interaction, browser-visual, and test-command evidence.',
-        'Do not finish with only reviewer approval. When omp_test_* tools are available, the testing gate closes after a successful omp_test_gate result with SKILL_USAGE evidence; otherwise the manual testing gate report closes the fallback path.',
+        'Do not finish with only reviewer approval. When omp_test_* tools are available, first produce a successful host-observed test command result, then close the testing checkpoint with a successful omp_test_gate result and SKILL_USAGE evidence; omp_test_gate never executes a command from its arguments or project config. Otherwise the manual testing gate report closes the fallback path.',
         formatRecentToolFailures(state, ['omp_test_gate']),
-      ].filter(Boolean).join('\n');
+      ].filter(Boolean).join('\n') });
+    } else {
+      contexts.push({ key: 'testing', context: [
+        'OMP Enhancer Core gate is still open for this bug-audit or implementation testing task.',
+        'Run the testing-enhancer workflow and finish with omp_test_gate. Use omp_test_analyze and omp_test_context first; for bug-audit, build and execute a deduplicated test matrix instead of relying on static analysis alone. Call omp_test_browser_check only when browserPlan exists, omp_test_coverage_analyze only when a coverage report exists, and omp_test_mutation_context only when a mutation report exists. Keep SKILL_USAGE evidence in the final response.',
+        'If omp_test_* tools are unavailable in this runtime, do not loop on missing tool calls; run the local test commands and close with a manual testing gate report covering generated/executed/skipped cases and the testing gate evidence.',
+        formatRecentToolFailures(state, ['omp_test_gate']),
+      ].filter(Boolean).join('\n') });
     }
-
-    return [
-      'OMP Enhancer Core gate is still open for this bug-audit or implementation testing task.',
-      'Run the testing-enhancer workflow and finish with omp_test_gate. Use omp_test_analyze and omp_test_context first; for bug-audit, build and execute a deduplicated test matrix instead of relying on static analysis alone. Call omp_test_browser_check only when browserPlan exists, omp_test_coverage_analyze only when a coverage report exists, and omp_test_mutation_context only when a mutation report exists. Keep SKILL_USAGE evidence in the final response.',
-      'If omp_test_* tools are unavailable in this runtime, do not loop on missing tool calls; run the local test commands and close with a manual testing gate report covering generated/executed/skipped cases and the testing gate evidence.',
-      formatRecentToolFailures(state, ['omp_test_gate']),
-    ].filter(Boolean).join('\n');
   }
 
-  return null;
+  return contexts;
 }
 
 function workflowGateBriefingLines(route) {
@@ -277,12 +284,12 @@ function completionGateChecklist(route) {
     gates.push(`Native subagent gate: fork ${requiredSubagents.map(({ agent }) => agent).join(', ')} with their role skill contracts and finish with SUBAGENT_USAGE.`);
   }
 
-  if (route.intent === 'implementation-with-tests') {
+  if (route.intent === 'implementation-with-tests' && needsTesting(route)) {
     gates.push('Review-to-testing gate: reviewer approval is followed by the post-review testing checkpoint; reviewer approval alone is not enough.');
   }
 
   if (needsTesting(route)) {
-    gates.push('Testing gate: run relevant local test/build/lint commands, then omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report before final claims; if omp_test_* tools are unavailable, provide an equivalent manual testing gate report with concrete local command evidence.');
+    gates.push('Testing gate: run relevant local test/build/lint commands through an explicit host tool call, then omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report before final claims. omp_test_gate only validates route-scoped host evidence and never executes its testCommand/config command. If omp_test_* tools are unavailable, provide an equivalent manual testing gate report with concrete local command evidence.');
   }
 
   if (needsWritingQuality(route)) {
@@ -692,14 +699,29 @@ function parseWorkflowGateBriefing(prompt = '') {
 }
 
 function needsWritingQuality(route) {
+  if (useEnforcedRoutePlan(route)) {
+    return (route.routePlan.gateRequirements ?? [])
+      .some((gate) => gate.key === 'writing-quality' && gate.mode === 'required');
+  }
   return (route.intent === 'writing.zh' || route.intent === 'writing.en')
     && (route.requiredTools ?? []).some((tool) => tool === 'writing_quality_check' || tool === 'writing_logic_check');
 }
 
 function needsTesting(route) {
-  return route.intent === 'testing' || route.intent === 'implementation-with-tests' || route.intent === 'bug-audit';
+  if (route?.taskDescriptor?.constraints?.testExecution === 'forbidden') return false;
+  if (useEnforcedRoutePlan(route)) {
+    return (route.routePlan.gateRequirements ?? [])
+      .some((gate) => gate.key === 'test-evidence' && gate.mode === 'required');
+  }
+  return route.intent === 'testing'
+    || (route.intent === 'implementation-with-tests' || route.intent === 'bug-audit')
+      && (route.requiredTools ?? []).some((tool) => /^omp_test_/i.test(tool));
 }
 
 function needsFactCheck(route) {
+  if (useEnforcedRoutePlan(route)) {
+    return (route.routePlan.gateRequirements ?? [])
+      .some((gate) => gate.key === 'fact-evidence' && gate.mode === 'required');
+  }
   return route.intent === 'fact-check';
 }

@@ -82,6 +82,7 @@ test('e2e implementation route auto-attaches task contracts and releases after t
     ctx,
   );
   await event(pi, 'tool_result')({ name: 'omp_test_gate', details: { passed: true } }, ctx);
+  await recordPassingHostTest(pi, ctx);
 
   const status = await tool(pi, 'omp_core_subagent_status').execute(
     'status-after-implementation-e2e',
@@ -110,7 +111,7 @@ test('e2e implementation route auto-attaches task contracts and releases after t
   assert.equal(stopped, undefined);
 });
 
-test('e2e broad bug audit task call gets parent context repair without post-completion testing gate', async () => {
+test('e2e broad bug audit task call gets parent context repair and still requires testing evidence', async () => {
   const { pi, ctx } = registeredCore();
   const prompt = '帮我测试整个插件工作流并检查 bug，只报告问题，不要修复。';
 
@@ -154,7 +155,7 @@ test('e2e broad bug audit task call gets parent context repair without post-comp
     ctx,
   );
 
-  const releasedWithoutPostGate = await event(pi, 'session_stop')(
+  const missingTestingEvidence = await event(pi, 'session_stop')(
     {
       output: usageEvidence({
         subagents: {
@@ -169,9 +170,11 @@ test('e2e broad bug audit task call gets parent context repair without post-comp
     ctx,
   );
 
-  assert.equal(releasedWithoutPostGate, undefined);
+  assert.equal(missingTestingEvidence?.continue, true);
+  assert.match(missingTestingEvidence.additionalContext, /omp_test_gate/);
 
   await event(pi, 'tool_result')({ name: 'omp_test_gate', details: { passed: true } }, ctx);
+  await recordPassingHostTest(pi, ctx);
   const released = await event(pi, 'session_stop')(
     {
       output: usageEvidence({
@@ -222,6 +225,15 @@ function event(pi, name) {
   const found = pi.eventHandlers.find((handler) => handler.event === name);
   if (!found) throw new Error(`Missing event ${name}`);
   return found.handler;
+}
+
+async function recordPassingHostTest(pi, ctx, command = 'npm test') {
+  await event(pi, 'tool_result')({
+    name: 'bash',
+    params: { command },
+    content: [{ type: 'text', text: '42 tests passed, 0 failed' }],
+    isError: false,
+  }, ctx);
 }
 
 function extensionContext(entries = []) {

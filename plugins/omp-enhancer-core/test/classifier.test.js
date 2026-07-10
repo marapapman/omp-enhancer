@@ -22,15 +22,31 @@ test('buildClassifierPrompt uses OMP Tiny and the strict schema', () => {
   assert.equal(result.minRouteOverrideConfidence, classifierDefaults.minRouteOverrideConfidence);
   assert.equal(result.minUnknownOverrideConfidence, classifierDefaults.minUnknownOverrideConfidence);
   assert.equal(result.schema, classifierSchema);
+  assert.deepEqual(result.schema.required, [
+    'operationHint',
+    'domains',
+    'phaseHints',
+    'riskFlags',
+    'language',
+    'confidence',
+    'reason',
+  ]);
+  assert.equal('intent' in result.schema.properties, false);
+  assert.equal('constraints' in result.schema.properties, false);
+  assert.equal('capabilities' in result.schema.properties, false);
+  assert.equal('skills' in result.schema.properties, false);
+  assert.equal('tools' in result.schema.properties, false);
+  assert.equal('agents' in result.schema.properties, false);
+  assert.equal('gates' in result.schema.properties, false);
   assert.equal(result.fallbackRoute.intent, 'diagnosis');
   assert.match(result.prompt, /modelRoles\.tiny/);
   assert.match(result.prompt, /opencode-go\/deepseek-v4-flash:medium/);
   assert.match(result.prompt, /Return only JSON/);
-  assert.match(result.prompt, /Do not invent skill names/);
-  assert.match(result.prompt, /Deterministic rule route is only a fallback baseline/);
-  assert.match(result.prompt, /low-confidence non-unknown classifications may fall back/);
-  assert.match(result.prompt, /override a non-unknown deterministic route/);
-  assert.match(result.prompt, /high-confidence unknown/);
+  assert.match(result.prompt, /descriptor hints only/);
+  assert.match(result.prompt, /deterministic rule route is the capability ceiling/i);
+  assert.match(result.prompt, /all low-confidence hints fall back/);
+  assert.match(result.prompt, /cannot exceed the deterministic capability ceiling/);
+  assert.match(result.prompt, /cannot remove deterministic release, security, or irreversible-operation requirements/);
 });
 
 test('buildClassifierPrompt teaches Tiny route boundaries for gate workflow repair cases', () => {
@@ -247,7 +263,7 @@ test('resolveClassificationRoute keeps product feature prompts on implementation
   assert.equal(result.route.intent, 'implementation-with-tests');
   assert.equal(result.route.agent, 'implementer');
   assert.equal(result.route.source, 'llm-classifier');
-  assert.equal(result.route.classifier.authority, 'classifier');
+  assert.equal(result.route.classifier.authority, 'advisory');
   assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), ['plan', 'implementation-task', 'reviewer']);
 });
 
@@ -269,7 +285,7 @@ test('resolveClassificationRoute no longer depends on classifier override for pr
   assert.equal(result.fallbackRoute.intent, 'implementation-with-tests');
   assert.equal(result.route.intent, 'implementation-with-tests');
   assert.equal(result.route.source, 'llm-classifier');
-  assert.equal(result.route.classifier.authority, 'classifier');
+  assert.equal(result.route.classifier.authority, 'advisory');
 });
 
 test('resolveClassificationRoute preserves Chinese writing when classifier self-identifies prose safety wording', () => {
@@ -385,4 +401,25 @@ test('resolveClassificationRoute rejects out-of-range classifier confidence', ()
 
   assert.equal(result.ok, false);
   assert.match(result.validation.errors.join('\n'), /Invalid confidence/);
+});
+
+test('resolveClassificationRoute falls back instead of throwing on invalid collection types', () => {
+  const result = resolveClassificationRoute({
+    prompt: 'Draft an English paragraph.',
+    output: JSON.stringify({
+      operationHint: 'modify',
+      domains: 7,
+      phaseHints: false,
+      language: 'en',
+      confidence: 0.9,
+      riskFlags: { unsafe: true },
+      reason: 'Malformed descriptor hints.',
+    }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.route.classifier.status, 'fallback');
+  assert.match(result.validation.errors.join('\n'), /domains must be an array/);
+  assert.match(result.validation.errors.join('\n'), /phaseHints must be an array/);
+  assert.match(result.validation.errors.join('\n'), /riskFlags must be an array/);
 });

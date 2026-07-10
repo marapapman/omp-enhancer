@@ -1,4 +1,8 @@
 import { decorateWorkflowRoute } from './workflow-routes.js';
+import { describeNaturalLanguageTask, descriptorFromLegacyIntent, normalizeTaskDescriptor } from './task-descriptor.js';
+import { attachCompiledTaskRoute, compileTaskRoutePolicy } from './route-policy.js';
+import { resolveGateMode, resolveRouterMode } from './runtime-policy.js';
+import { subagentPlans } from './subagent-plans.js';
 
 const zhWritingTerms = ['中文', '论文', '摘要', '润色', '改写', '翻译腔', 'ai 味', '博士', '段落', '写作', '写', '报告', '文档', '起草', '引言', '相关工作', '审稿'];
 const strongZhWritingTerms = [
@@ -79,63 +83,56 @@ export const routedIntents = [
   'unknown',
 ];
 
-const subagentPlans = {
-  configAssets: [
-    subagent('config-librarian', 'inventory packaged assets, agents, skills, hooks, and config templates before edits'),
-    subagent('reviewer', 'review the final config or marketplace diff before release'),
-  ],
-  implementation: [
-    subagent('plan', 'decompose non-trivial or multi-file changes into an executable plan', ['brainstorming', 'subagent-driven-development']),
-    subagent('implementation-task', 'implement the planned code and test changes in the smallest coherent batch', ['test-driven-development', 'verification-before-completion']),
-    subagent('reviewer', 'review the resulting diff before final claims, commit, or push', ['verification-before-completion']),
-  ],
-  security: [
-    subagent('ecc-security-reviewer', 'audit user-input, auth, file, network, secrets, and dependency risks', ['security-review', 'security-scan']),
-    subagent('reviewer', 'check the remediation diff for behavior regressions', ['security-review']),
-  ],
-  bugAudit: [
-    subagent(
-      'ecc-tdd-guide',
-      'generate a deduplicated multi-channel boundary, load, mode, and input test matrix before audit verification',
-      ['test-driven-development', 'search-first', 'ai-regression-testing'],
-    ),
-    subagent('ecc-code-reviewer', 'audit code paths for concrete bugs with file and line evidence', ['verification-before-completion']),
-    subagent('ecc-silent-failure-hunter', 'hunt swallowed errors, bad fallbacks, and missing error propagation', ['diagnose']),
-    subagent('ecc-pr-test-analyzer', 'review generated test execution, duplicate removal, and coverage gaps that affect bug confidence', ['verification-before-completion']),
-  ],
-  factCheck: [
-    subagent(
-      'fact-planner',
-      'decompose source text into atomic factual claims and evidence plans',
-      ['fact-checking', 'claim-extraction'],
-      { modelRoles: ['pi/plan', 'pi/slow'] },
-    ),
-    subagent('fact-researcher-a', 'collect first-lane primary-source evidence for planned claims', ['fact-checking', 'source-evaluation', 'citation-authenticity']),
-    subagent('fact-researcher-b', 'independently collect counter-evidence, stale-version checks, and corroboration', ['fact-checking', 'source-evaluation', 'citation-authenticity']),
-    subagent(
-      'fact-cross-checker',
-      'compare independent evidence lanes and classify agreement, conflict, staleness, and insufficiency',
-      ['fact-checking', 'source-evaluation'],
-      { modelRoles: ['pi/slow'] },
-    ),
-    subagent(
-      'fact-reviewer',
-      'review final verdicts for overclaiming, stale evidence, and unsupported conclusions',
-      ['fact-checking', 'source-evaluation', 'citation-authenticity'],
-      { modelRoles: ['pi/slow'] },
-    ),
-  ],
-  writingZh: [
-    subagent('zh-writer', 'draft or rewrite Chinese text after required writing skills are loaded', ['plain-chinese-writing', 'zh-writing-polish']),
-    subagent('zh-checker', 'review Chinese logic, style, and plain-writing compliance before final output', ['plain-chinese-writing', 'zh-writing-checkers']),
-  ],
-  writingEn: [
-    subagent('writer', 'draft or revise English writing after required writing skills are loaded', ['writing-markdown-helper']),
-    subagent('checker', 'review English logic, style, formatting, and citation quality before final output', ['writing-checkers']),
-  ],
-};
-
 export function routeNaturalLanguageTask(input = {}) {
+  const prompt = String(input.prompt ?? input.text ?? '');
+  const described = describeNaturalLanguageTask({ prompt });
+  const legacyRoute = routeNaturalLanguageTaskLegacy(input);
+  const policy = compileTaskRoutePolicy(described, { legacyRoute });
+  const routerMode = resolveRouterMode(input.routerMode ?? input.mode);
+  const gateRecoveryMode = resolveGateMode(input.gateRecoveryMode);
+  const usePolicyRoute = routerMode === 'enforce'
+    && (policy.shouldOverrideLegacy || shouldOverrideLegacyRoute(described, legacyRoute, prompt));
+  const routed = usePolicyRoute
+    ? routeByLegacyIntent(policy.intent, {
+      prompt,
+      source: 'natural-language',
+      workflowRoute: policy.workflowRoute,
+      auditMode: policy.auditMode,
+      writingComplexity: policy.writingComplexity,
+      hardBlock: policy.hardBlock,
+      shouldUseClassifier: described.provenance.needsClassifier,
+    })
+    : legacyRoute;
+  return {
+    ...attachCompiledTaskRoute(routed, described),
+    routerMode,
+    gateRecoveryMode,
+    routeObservation: routerMode === 'observe' ? {
+      legacyIntent: legacyRoute.intent,
+      plannedIntent: policy.intent,
+      disagrees: legacyRoute.intent !== policy.intent,
+    } : null,
+  };
+}
+
+function shouldOverrideLegacyRoute(descriptor, legacyRoute, prompt = '') {
+  const domains = new Set(descriptor?.domains ?? []);
+  const text = String(prompt).toLowerCase();
+  if (descriptor?.operation === 'execute' && domains.has('tests')
+    && /(?:只|仅|only).{0,20}(?:运行|执行|跑|run|execute).{0,20}(?:npm test|bun test|pytest|vitest|tests?)/.test(text)) return true;
+  if (descriptor?.operation === 'answer' && domains.has('tests') && /(?:命令|command)/.test(text)) return true;
+  if (descriptor?.constraints?.externalWrite === 'required' && descriptor.operation === 'modify') return true;
+  if (domains.has('security') && domains.has('code') && descriptor?.operation === 'modify'
+    && (!domains.has('writing') || /(?:修复|fix|patch).{0,30}(?:漏洞|鉴权|认证|权限|security|vulnerab|auth|secret|注入)/.test(text))) return true;
+  if (descriptor?.operation === 'inspect' && domains.has('code')) {
+    if (legacyRoute?.intent === 'implementation-with-tests') return true;
+    if (legacyRoute?.intent === 'bug-audit' && descriptor.complexity === 'focused') return true;
+    return /有什么.{0,30}(?:优化|改进)|(?:优化|改进)建议|是否合理|suggest\s+(?:improvements?|optimizations?)|assess\s+whether.{0,30}(?:reasonable|sound)|(?:review|分析|检查).{0,40}(?:router\.js|routenaturallanguagetask)|concrete defects/.test(text);
+  }
+  return false;
+}
+
+function routeNaturalLanguageTaskLegacy(input = {}) {
   const prompt = String(input.prompt ?? input.text ?? '');
   const normalized = prompt.toLowerCase();
 
@@ -175,7 +172,7 @@ export function routeNaturalLanguageTask(input = {}) {
   const hasDiagnosisOnly = hasGateValidatorStatusReport || isDiagnosisOnlyRequest(normalized, asksNoCodeChange);
   const workflowRouteHint = workflowRouteHintForPrompt(normalized, prompt);
   const shouldUseClassifier = shouldUseRouteClassifier(normalized, prompt, { workflowRouteHint, hasCodeChange, hasKnowledgeOnly, hasConfigAssets });
-  const routed = (intent, options = {}) => routeByIntent(intent, {
+  const routed = (intent, options = {}) => routeByLegacyIntent(intent, {
     ...options,
     prompt,
     workflowRoute: options.workflowRoute ?? workflowRouteForPromptIntent(workflowRouteHint, intent),
@@ -299,12 +296,31 @@ export function routeNaturalLanguageTask(input = {}) {
   return routed('agentic.simple');
 }
 
-export function routeByIntent(intent, { source = 'natural-language', writingComplexity = 'complex', auditMode = null, workflowRoute = null, shouldUseClassifier = false, hardBlock = false, prompt = '' } = {}) {
+export function routeByIntent(intent, options = {}) {
+  const descriptor = options.taskDescriptor == null
+    ? descriptorFromLegacyIntent(intent, {
+      prompt: options.prompt,
+      language: options.language,
+      auditMode: options.auditMode,
+    })
+    : normalizeTaskDescriptor(options.taskDescriptor);
+  const policy = compileTaskRoutePolicy(descriptor, { requestedIntent: intent });
+  const route = routeByLegacyIntent(policy.intent, {
+    ...options,
+    auditMode: options.auditMode ?? policy.auditMode,
+    workflowRoute: options.workflowRoute ?? policy.workflowRoute,
+    writingComplexity: options.writingComplexity ?? policy.writingComplexity,
+    hardBlock: options.hardBlock ?? policy.hardBlock,
+  });
+  return attachCompiledTaskRoute(route, descriptor);
+}
+
+function routeByLegacyIntent(intent, { source = 'natural-language', writingComplexity = 'complex', auditMode = null, workflowRoute = null, shouldUseClassifier = false, hardBlock = false, prompt = '' } = {}) {
   if (intent === 'testing') {
-    return routeByIntent('bug-audit', { source, writingComplexity });
+    return routeByLegacyIntent('bug-audit', { source, writingComplexity, auditMode: auditMode ?? 'focused', workflowRoute });
   }
 
-  if (intent === 'agentic.simple') {
+  if (intent === 'agentic.simple' || intent === 'unknown') {
     return route({
       intent: 'unknown',
       agent: null,
@@ -417,7 +433,7 @@ export function routeByIntent(intent, { source = 'natural-language', writingComp
       agent: 'ecc-security-reviewer',
       requiredSkills: ['security-review', 'security-scan'],
       requiredTools: [],
-      requiredSubagents: subagentPlans.security,
+      requiredSubagents: subagentPlans.securityReview,
       source,
       workflowRoute,
       shouldUseClassifier,
@@ -548,14 +564,6 @@ function route({
   return decorated;
 }
 
-function subagent(agent, duty, requiredSkills = [], options = {}) {
-  const routed = { agent, duty, requiredSkills };
-  if (Array.isArray(options.modelRoles) && options.modelRoles.length) {
-    routed.modelRoles = options.modelRoles;
-  }
-  return routed;
-}
-
 function workflowRouteForPromptIntent(workflowRouteHint, intent) {
   if (workflowRouteHint) {
     if (intent === 'implementation-with-tests') return 'code.dev';
@@ -681,6 +689,7 @@ function isComplexWritingRequest(text) {
 }
 
 function isTestingRequest(text) {
+  if (isLocalOperationalExecutionRequest(text)) return false;
   return includesAny(text, testingTerms)
     || /(?:write|add|create|run|execute|fix|update|check)\s+tests?\b/.test(text)
     || /\btest\s+(?:this|the|my|our|it|function|code|plugin|workflow|route|logic)\b/.test(text)
@@ -688,6 +697,15 @@ function isTestingRequest(text) {
     || text.includes('写高信号单元测试')
     || text.includes('写测试')
     || text.includes('补测试');
+}
+
+function isLocalOperationalExecutionRequest(text) {
+  const value = String(text).trim();
+  return /^(?:(?:please)\s+)?(?:(?:run|start|launch)\s+)?(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:start|dev|serve)\b/.test(value)
+    || /^(?:(?:please)\s+)?(?:run|start|launch)\b.{0,64}(?:\blocal\s+(?:dev|development)\s+server\b|\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:start|dev|serve)\b)/.test(value)
+    || /^(?:请\s*)?(?:运行|执行|启动)\s*.{0,48}(?:本地开发服务器|开发服务|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:start|dev|serve)\b)/.test(value)
+    || /^(?:(?:please)\s+)?(?:run|execute|apply)\b.{0,56}\b(?:local\s+)?(?:database\s+)?migration(?:\s+script)?\b/.test(value)
+    || /^(?:请\s*)?(?:运行|执行|应用).{0,40}(?:本地)?(?:数据库)?迁移脚本/.test(value);
 }
 
 function isDirectTestAuthoring(text) {
@@ -747,6 +765,7 @@ function isObservedTestSummary(text) {
 }
 
 function isTestAnalysisRequest(text) {
+  if (isLocalOperationalExecutionRequest(text)) return false;
   if (isBugReportWritingRequest(text)) return false;
   return includesAny(text, ['flaky', 'flakiness', 'test flakiness'])
     || /(?:review|check|analyze|analyse|audit|investigate|inspect)\s+.*(?:tests?|testing|coverage|flaky|flakiness|browser|e2e|playwright)/.test(text)

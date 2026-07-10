@@ -1,4 +1,5 @@
 import { mkdir, open, rename, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 const maxBytes = 10 * 1024 * 1024;
@@ -17,11 +18,14 @@ export function debugLogPath({ cwd = process.cwd(), kind = 'routes' } = {}) {
   return path.join(cwd || process.cwd(), '.omp', 'logs', filesByKind[kind] ?? filesByKind.routes);
 }
 
-export function buildDebugRecord({ kind, prompt = '', route = null, gateKey = '', reasonCode = '', payload = {} } = {}) {
+export function buildDebugRecord({ kind, prompt = '', route = null, gateKey = '', reasonCode = '', payload = {}, env = process.env } = {}) {
+  const normalizedPrompt = String(prompt ?? '');
+  const unsafePromptLogging = env?.OMP_DEBUG_GATES_UNSAFE_PROMPTS === '1';
   return {
     ts: new Date().toISOString(),
     kind,
-    prompt: String(prompt ?? ''),
+    promptDigest: normalizedPrompt ? createHash('sha256').update(normalizedPrompt).digest('hex') : null,
+    ...(unsafePromptLogging ? { prompt: normalizedPrompt, unsafePromptLogging: true } : {}),
     workflowRoute: route?.workflowRoute ?? null,
     intent: route?.intent ?? null,
     gateKey: gateKey || null,

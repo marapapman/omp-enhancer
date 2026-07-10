@@ -215,7 +215,8 @@ test('classifier prompt builder remains stable under parallel load profiles', as
       assert.equal(built.temperature, 0);
       assert.equal(built.maxOutputTokens, 500);
       assert.match(built.prompt, /Return only JSON/);
-      assert.match(built.prompt, /Do not invent skill names/);
+      assert.match(built.prompt, /descriptor hints only/);
+      assert.match(built.prompt, /capability ceiling/);
       assert.match(built.prompt, /JSON Schema:/);
     }
   }

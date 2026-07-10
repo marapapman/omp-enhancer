@@ -1,6 +1,6 @@
 import {
   buildGovernancePromptFragment,
-  buildMissingGateContext,
+  buildMissingGateContexts,
   buildSubagentPromptFragment,
   formatWorkflowGateBriefingForAssignment,
 } from './src/governance.js';
@@ -23,9 +23,7 @@ import {
   prepareLoopGuardContinuation,
   serializeLoopGuardState,
   startLoopGuardRun,
-  takeLoopRecoveryContext,
   buildLoopRecoveryContext,
-  defaultLoopGuardConfig,
 } from './src/loop-guard.js';
 import {
   createGateRecoveryState,
@@ -33,11 +31,38 @@ import {
   recordGateRecovery,
   serializeGateRecoveryState,
 } from './src/gate-recovery.js';
+import {
+  applyGateEvidence,
+  createGateControllerState,
+  evaluateGateController,
+  readGateControllerState,
+  resetGateControllerForRoute,
+  serializeGateControllerState,
+} from './src/gate-controller.js';
 import { appendDebugLog, buildDebugRecord } from './src/debug-logger.js';
 import { installPluginSkills } from './src/install-skills.js';
+import { readRuntimePolicy, useEnforcedRoutePlan } from './src/runtime-policy.js';
+import { createHash } from 'node:crypto';
+import { readFileSync, realpathSync } from 'node:fs';
+import { isAbsolute, join, relative, resolve } from 'node:path';
+import {
+  classifyToolAction,
+  hasUnsafeResultMasking,
+  isDryRunAction,
+} from './src/action-policy.js';
+import {
+  analyzeReleasePromptContract,
+  createReleaseMutationRecord,
+  releaseMutationMatchesPrompt,
+  supportsReleaseMutation,
+  verifyReleaseMutation,
+} from './src/release-evidence.js';
+import { externalActionMatchesTool } from './src/external-action-policy.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
-const LOOP_GUARD_RECOVERY_MESSAGE = 'omp-enhancer-core.loop-guard-recovery';
+const CORE_GATE_OWNER_ENTRY = 'omp-enhancer-core.gate-owner';
+const TESTING_EVIDENCE_ENTRY = 'omp-testing-enhancer.evidence';
+const CORE_GATE_OWNER_SYMBOL = Symbol.for('omp-enhancer.core.gate-owner');
 const ASSISTANT_OUTPUT_EVENTS = [
   'assistant_delta',
   'assistant_message',
@@ -73,9 +98,40 @@ const CLASSIFIER_PREFLIGHT_FAILURE_TOOLS = new Set([
   'omp_config_plan',
   'fact_check_gate',
 ]);
-
-let skillsAutoInstalled = false;
-
+const USER_INPUT_ACTION_BLOCKERS = new Set([
+  'external-destructive-action-unsupported',
+  'external-action-target-confirmation-required',
+  'release-target-confirmation-required',
+  'release-verification-unsupported',
+  'irreversible-approval-required',
+]);
+const REPAIRABLE_ACTION_BLOCKERS = new Set([
+  'external-action-repair-required',
+  'external-target-excluded',
+  'external-target-repair-required',
+  'irreversible-approval-mismatch-repair-required',
+  'release-command-repair-required',
+]);
+const TRUSTED_HOST_TEST_EXECUTORS = new Set([
+  'bash',
+  'shell',
+  'terminal',
+  'exec',
+  'exec_command',
+  'run',
+  'run_command',
+  'command',
+  // The host-owned functions namespace is trusted only for these exact shell
+  // executor names. Provider or attacker-controlled lookalikes are not.
+  'functions.bash',
+  'functions.shell',
+  'functions.terminal',
+  'functions.exec',
+  'functions.exec_command',
+  'functions.run',
+  'functions.run_command',
+  'functions.command',
+]);
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
@@ -86,15 +142,19 @@ export default function registerCoreEnhancer(pi) {
   pi.registerTool({
     name: 'omp_core_route_task',
     label: 'Route OMP task',
-    description: 'Classify a natural-language task and return the required OMP enhancer route, skills, tools, and agent. Probe-only by default when another route is active; pass activate:true to replace active route state.',
+    description: 'Probe a natural-language task and return the required OMP enhancer route, skills, tools, and agent. This model-callable tool never creates or replaces active user-turn authorization.',
     parameters: z?.object ? z.object({ prompt: z.string(), activate: z.boolean().optional() }) : undefined,
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const route = routeNaturalLanguageTask({ prompt: params.prompt });
-      const shouldActivate = shouldActivateRouteProbe(state, params);
+      const shouldActivate = false;
       const probeOnly = !shouldActivate;
       if (shouldActivate) {
-        setRouteState(state, route, params.prompt);
+        // A model-callable tool is not a trusted user-turn boundary. An initial
+        // call may bootstrap otherwise-empty state, but prompt variance on an
+        // active route must never mint a new route id or replenish the shared
+        // GateController budget. before_agent_start owns genuine turn resets.
+        setRouteState(state, route, params.prompt, { newTurn: false });
       } else {
         state.lastRouteProbe = {
           route,
@@ -138,8 +198,59 @@ export default function registerCoreEnhancer(pi) {
     parameters: z?.object ? z.object({ prompt: z.string(), output: z.string() }) : undefined,
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
-      const result = resolveClassificationRoute({ prompt: params.prompt, output: params.output });
-      setRouteState(state, result.route, params.prompt, { classifierResolved: true });
+      if (!state.lastRoute || !state.routeStartedAt) {
+        const probe = resolveClassificationRoute({
+          prompt: String(params.prompt ?? ''),
+          output: params.output,
+        });
+        state.lastRouteProbe = {
+          route: probe.route,
+          prompt: String(params.prompt ?? ''),
+          changedActiveRoute: false,
+          probedAt: Date.now(),
+        };
+        await persistState(pi, state);
+        return okResult(`${formatRoute(probe.route)}\nClassifier probe only: no trusted active user route was changed.`, {
+          ...probe,
+          activated: false,
+          probe_only: true,
+        });
+      }
+      if (state.classifierAttempted) {
+        return okResult(`${formatRoute(state.lastRoute)}\nClassifier refinement already attempted for this user turn; the active monotonic route was preserved.`, {
+          ok: true,
+          route: state.lastRoute,
+          fallbackRoute: state.lastRoute,
+          activated: false,
+          repeated: true,
+        });
+      }
+      const previousPreflight = state.classifierPreflight;
+      // Classifier output may refine the active user task, but its model-owned
+      // prompt argument is not an authorization boundary. Pin resolution to
+      // the original active prompt whenever one exists.
+      const classificationPrompt = state.lastPrompt || String(params.prompt ?? '');
+      const result = resolveClassificationRoute({ prompt: classificationPrompt, output: params.output });
+      state.classifierAttempted = true;
+      setRouteState(state, result.route, classificationPrompt, {
+        classifierResolved: result.ok === true,
+        newTurn: false,
+      });
+      if (!result.ok) {
+        const fallbackPreflight = state.classifierPreflight ?? previousPreflight ?? {
+          prompt: classificationPrompt,
+          fallbackIntent: result.route?.intent ?? state.lastRoute?.intent ?? 'unknown',
+          reasons: ['classifier output was invalid; deterministic fallback retained'],
+          observations: [],
+        };
+        state.classifierPreflight = {
+          ...fallbackPreflight,
+          required: false,
+          mode: 'observe',
+          attempted: true,
+          failed: true,
+        };
+      }
       await persistState(pi, state);
       return okResult(formatRoute(result.route), result);
     },
@@ -230,7 +341,9 @@ export default function registerCoreEnhancer(pi) {
     parameters: z?.object ? z.object({ output: z.string(), requiredSkills: z.array(z.string()).optional() }) : undefined,
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
-      const requiredSkills = params.requiredSkills ?? state.lastRoute?.requiredSkills ?? [];
+      const requiredSkills = state.lastRoute
+        ? routeRequiredSkills(state.lastRoute)
+        : params.requiredSkills ?? [];
       const validation = validateSkillUsage({
         requiredSkills,
         output: params.output ?? '',
@@ -249,7 +362,9 @@ export default function registerCoreEnhancer(pi) {
     parameters: z?.object ? z.object({ output: z.string(), requiredSubagents: z.array(z.string()).optional() }) : undefined,
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
-      const requiredSubagents = params.requiredSubagents ?? state.lastRoute?.requiredSubagents ?? [];
+      const requiredSubagents = state.lastRoute
+        ? routeRequiredSubagents(state.lastRoute)
+        : params.requiredSubagents ?? [];
       const validation = validateSubagentUsage({ requiredSubagents, output: params.output ?? '' });
       state.lastSubagentUsage = validation;
       if (validation.ok) recordSubagentFinalUsage(state, params.output ?? '');
@@ -276,11 +391,8 @@ export default function registerCoreEnhancer(pi) {
     parameters: z?.object ? z.object({ prompt: z.string().optional() }) : undefined,
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
-      const route = params.prompt ? routeNaturalLanguageTask({ prompt: params.prompt }) : state.lastRoute;
-      if (params.prompt && route) {
-        setRouteState(state, route, params.prompt);
-        await persistState(pi, state);
-      }
+      const requestedRoute = params.prompt ? routeNaturalLanguageTask({ prompt: params.prompt }) : null;
+      const route = state.lastRoute ?? requestedRoute;
       const fragment = buildRoutedGovernanceContext(state, {
         route,
         parentTask: params.prompt ?? state.lastPrompt,
@@ -311,11 +423,20 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('session_start', async (_event = {}, ctx = {}) => {
     const restored = restoreStateFromContext(state, ctx);
     if (!restored) resetState(state);
-    // One-time skill installation from marketplace plugins (idempotent, low-noise)
-    if (!skillsAutoInstalled) {
-      skillsAutoInstalled = true;
-      installPluginSkills().catch(() => {});
-    }
+    refreshTestingToolAvailability(state, pi);
+    await persistCoreGateOwner(pi);
+    return undefined;
+  });
+
+  pi.on?.('tool_approval_requested', async (event = {}, ctx = {}) => {
+    restoreStateFromContext(state, ctx);
+    recordTrustedApprovalRequest(state, event, ctx);
+    return undefined;
+  });
+
+  pi.on?.('tool_approval_resolved', async (event = {}, ctx = {}) => {
+    restoreStateFromContext(state, ctx);
+    recordTrustedApprovalResolution(state, event, ctx);
     return undefined;
   });
 
@@ -347,19 +468,14 @@ export default function registerCoreEnhancer(pi) {
 
   pi.on?.('before_agent_start', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
+    refreshTestingToolAvailability(state, pi);
     const prompt = extractPrompt(event);
     // Slash commands are owned by OMP or by the registering plugin command handler.
     // Core routing only handles natural-language tasks.
     if (isSlashCommandPrompt(prompt)) return undefined;
-    const recoveryContext = takeLoopRecoveryContext(state.loopGuard);
-    if (recoveryContext) {
-      if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${recoveryContext}`;
-      else event.additionalContext = [event.additionalContext, recoveryContext].filter(Boolean).join('\n\n');
-      await persistState(pi, state);
-      return { additionalContext: recoveryContext, route: state.lastRoute };
-    }
     if (isInternalCoreContinuation(prompt)) {
-      if (isLoopGuardRecoveryContinuation(prompt) && state.loopGuard.streamTriggered && !state.loopGuard.recoveryPending) {
+      if ((isLoopGuardRecoveryContinuation(prompt) || /^OMP_GATE_REPAIR\b/.test(String(prompt).trimStart()))
+        && state.loopGuard.streamTriggered) {
         prepareLoopGuardContinuation(state.loopGuard);
         await persistState(pi, state);
       }
@@ -371,12 +487,26 @@ export default function registerCoreEnhancer(pi) {
       else event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
       return { additionalContext: fragment, route: { intent: 'subagent', agent: null, requiredSkills: [], requiredTools: [], requiredSubagents: [] } };
     }
-    const route = routeNaturalLanguageTask({ prompt });
-    setRouteState(state, route, prompt);
-    await writeDebugLog(ctx, 'routes', buildDebugRecord({ kind: 'routes', prompt, route }));
+    const inheritedContinuation = shouldInheritUserContinuation(state, prompt);
+    const effectivePrompt = inheritedContinuation
+      ? `${state.lastPrompt}\nTrusted user continuation: ${prompt}`
+      : prompt;
+    const route = inheritedContinuation
+      ? inheritContinuationRoute(state.lastRoute)
+      : routeNaturalLanguageTask({ prompt });
+    setRouteState(state, route, effectivePrompt);
+    await writeDebugLog(ctx, 'routes', buildDebugRecord({
+      kind: 'routes',
+      prompt: effectivePrompt,
+      route,
+      payload: {
+        routerMode: route.routerMode ?? null,
+        routeObservation: route.routeObservation ?? null,
+      },
+    }));
     startLoopGuardRun(state.loopGuard, `${route.intent}:${state.routeStartedAt}`);
     await persistState(pi, state);
-    const fragment = buildRoutedGovernanceContext(state, { route, parentTask: prompt, visibility: 'automatic' });
+    const fragment = buildRoutedGovernanceContext(state, { route, parentTask: effectivePrompt, visibility: 'automatic' });
     if (!fragment) return { route };
     if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${fragment}`;
     else event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
@@ -386,7 +516,22 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
-    if (name) recordLoopGuardProgress(state.loopGuard, `tool_call:${name}`);
+    if (isTerminalOnlyGateState(state.gateController)
+      || state.actionBoundary?.terminal === true
+      || state.actionBoundary?.awaitingUserReason) {
+      return {
+        block: true,
+        reason: state.actionBoundary?.awaitingUserReason
+          ? `OMP_AWAITING_USER is active for ${state.actionBoundary.awaitingUserReason}. Do not call or run more tools; ask the user for the required authorization or confirmation.`
+          : 'OMP_GATE_TERMINAL is active. Do not call or run any more tools or commands; produce only the final degraded or blocked status for the user.',
+      };
+    }
+    const protectedBoundary = buildProtectedActionBoundaryBlock(state, name, event, ctx);
+    if (protectedBoundary) {
+      const denial = recordProtectedActionDenial(state, protectedBoundary, name, event);
+      await persistState(pi, state);
+      return denial;
+    }
     const classifierBlock = buildClassifierPreflightGateBlock(state, name);
     if (classifierBlock) {
       await persistState(pi, state);
@@ -441,86 +586,107 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('tool_result', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
-    if (name) recordLoopGuardProgress(state.loopGuard, `tool_result:${name}`);
+    const failed = isFailedToolEvent(event);
+    const pending = isPendingToolEvent(event);
     const successful = isSuccessfulToolEvent(event);
+    if (name && successful) recordLoopGuardProgress(state.loopGuard, `tool_result:${name}`);
+    const mutationEvidenceChanged = name && recordMutationEvidenceInvalidation(state, name, event, { successful });
+    const testEvidenceChanged = name && recordObservedTestEvidence(state, name, event, { successful });
+    const securityEvidenceChanged = name && recordSecurityInspectionEvidence(state, name, event, { successful });
+    const releaseEvidenceChanged = name && recordReleaseEvidence(state, name, event, { successful, ctx });
+    recordTrustedIrreversibleResult(state, name, event, { successful });
     if (name && successful && name !== 'read') clearToolFailures(state, name);
-    if (name && !successful) {
+    if (name && failed) {
       recordToolFailure(state, name, event);
       maybeRequireClassifierAfterToolFailure(state, name, event);
     }
     if ((name === 'writing_quality_check' || name === 'writing_logic_check') && successful) state.evidence.writingQuality = true;
-    if (name === 'omp_test_gate' && successful) state.evidence.testingGate = true;
+    if (name === 'omp_test_gate' && isExplicitPassingGateResult(event)) state.evidence.testingGate = true;
     if (name === 'omp_test_report' && successful) state.evidence.testingReport = true;
-    if (name === 'fact_check_gate' && successful) state.evidence.factCheckGate = true;
+    if (name === 'fact_check_gate' && isExplicitPassingGateResult(event)) state.evidence.factCheckGate = true;
     if (name === 'task') {
-      recordTaskResult(state, event, { successful });
-      recordSubagentTaskResultEvidence(state, event, { successful });
+      recordTaskResult(state, event, { successful, pending });
+      recordSubagentTaskResultEvidence(state, event, { successful, pending });
     }
     if (name === 'read' && successful) recordReadSkillEvidence(state, event);
+    if (name && (isRelevantSuccessfulGateEvidence(name, event)
+      || mutationEvidenceChanged || testEvidenceChanged || securityEvidenceChanged || releaseEvidenceChanged)) {
+      state.gateController = applyGateEvidence(state.gateController, {
+        routeId: gateControllerRouteId(state),
+        evidenceRevision: state.gateController.evidenceRevision + 1,
+      });
+    }
     await persistState(pi, state);
     return undefined;
   });
 
   pi.on?.('session_stop', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
+    if (state.actionBoundary?.awaitingUserReason) {
+      await persistState(pi, state);
+      return undefined;
+    }
+    adoptTestingEnhancerEvidence(state, ctx);
     recordFinalOutputEvidence(state, event);
     reconcileSkillUsageFromReadEvidence(state);
+    const loopMode = readRuntimePolicy().loopMode;
+    const loopRecoveryContext = loopMode === 'legacy' || loopMode === 'enforce'
+      ? buildLoopRecoveryStopContext(state, event)
+      : null;
+    const gateRecords = buildSessionStopGateRecords(state, { loopRecoveryContext });
+    const evaluation = evaluateGateController(state.gateController, {
+      routeId: gateControllerRouteId(state),
+      evidenceRevision: state.gateController.evidenceRevision,
+      evidenceDigest: gateEvidenceDigest(state),
+      openGates: gateRecords,
+      repairActions: [{
+        actionKind: 'collect_gate_evidence',
+        normalizedResultCode: 'missing_evidence',
+        evidenceDigest: gateEvidenceDigest(state),
+      }],
+    });
+    state.gateController = evaluation.state;
+    await writeDebugLog(ctx, 'gates', buildDebugRecord({
+      kind: 'gates',
+      route: state.lastRoute,
+      reasonCode: evaluation.decision.kind,
+      payload: {
+        phase: evaluation.decision.phase,
+        openGateCount: evaluation.decision.openGateKeys.length,
+        missingEvidenceCodes: evaluation.decision.missingEvidenceCodes,
+        budget: evaluation.decision.budget,
+        terminalReason: evaluation.decision.terminalReason ?? null,
+      },
+    }));
 
-    if (isBugAuditDeliveryComplete(state)) {
+    if (evaluation.decision.kind === 'release' || evaluation.decision.kind === 'coach') {
+      state.pendingSmartGate = null;
       await persistState(pi, state);
       return undefined;
     }
 
-    const loopRecoveryContext = buildLoopRecoveryStopContext(state, event);
-    if (loopRecoveryContext) {
-      await persistState(pi, state);
-      return { continue: true, additionalContext: loopRecoveryContext };
-    }
-
     await persistState(pi, state);
-
-    const finalOutput = extractFinalOutputText(event);
-    if (state.classifierPreflight?.required && isClassifierInfrastructureChurnDelivery(finalOutput)) {
-      state.classifierPreflight = null;
-      await persistState(pi, state);
+    const details = { gateDecision: evaluation.decision };
+    if (evaluation.decision.kind === 'repair') {
+      return {
+        continue: true,
+        additionalContext: formatGateRepairContext(state, gateRecords, evaluation.decision),
+        details,
+      };
     }
-
-    if (!finalOutput) {
-      const missingClassifierPreflightContext = buildMissingClassifierPreflightContext(state);
-      if (missingClassifierPreflightContext) {
-        return { continue: true, additionalContext: missingClassifierPreflightContext };
-      }
-
-      const ruleGate = buildCompletionRuleGateBlock(state);
-      if (ruleGate) {
-        if (consumeSmartGateCompletionAllowance(state, ruleGate)) {
-          const nextRuleGate = buildCompletionRuleGateBlock(state);
-          if (!nextRuleGate) {
-            await persistState(pi, state);
-            return undefined;
-          }
-          state.pendingSmartGate = createPendingSmartGate(state, nextRuleGate, finalOutput);
-          await persistState(pi, state);
-          return { continue: true, additionalContext: buildSmartGateRequiredContext(state, nextRuleGate) };
-        }
-        state.pendingSmartGate = createPendingSmartGate(state, ruleGate, finalOutput);
-        await persistState(pi, state);
-        return { continue: true, additionalContext: buildSmartGateRequiredContext(state, ruleGate) };
-      }
-    } else {
-      state.pendingSmartGate = null;
-      if (state.classifierPreflight?.required) {
-        state.classifierPreflight = {
-          ...state.classifierPreflight,
-          required: false,
-          mode: 'observe',
-        };
-      }
-      await persistState(pi, state);
+    if (evaluation.decision.kind === 'terminal') {
+      return {
+        continue: true,
+        additionalContext: formatGateTerminalContext(state, gateRecords, evaluation.decision),
+        details,
+      };
     }
-
-    return undefined;
+    return { continue: false, details };
   });
+  // Publish the live owner lease only after every synchronous registration
+  // succeeded. A partially loaded/discarded core must not suppress Testing's
+  // bounded standalone completion owner.
+  registerCoreGateOwner(pi);
  }
 
 export function createState() {
@@ -532,12 +698,59 @@ export function createState() {
     lastSkillUsage: null,
     lastSubagentUsage: null,
     classifierPreflight: null,
+    classifierAttempted: false,
     pendingSmartGate: null,
     smartGate: null,
     smartGateCompletionBypasses: [],
     evidence: emptyEvidence(),
     loopGuard: createLoopGuardState(),
     gateRecovery: createGateRecoveryState(),
+    gateController: createGateControllerState(),
+    trustedApprovals: createTrustedApprovalState(),
+    testingToolAvailability: 'unknown',
+    actionBoundary: createActionBoundaryState(),
+  };
+}
+
+function registerCoreGateOwner(pi) {
+  const marker = coreGateOwnerMarker();
+  const ownerSurface = gateOwnerSurface(pi);
+  try {
+    Object.defineProperty(ownerSurface, CORE_GATE_OWNER_SYMBOL, {
+      configurable: true,
+      enumerable: false,
+      writable: false,
+      value: marker,
+    });
+  } catch {
+    try {
+      ownerSurface[CORE_GATE_OWNER_SYMBOL] = marker;
+    } catch {
+      // Persisted markers remain diagnostics; Testing keeps its bounded
+      // standalone owner when this live shared lease cannot be installed.
+    }
+  }
+}
+
+function gateOwnerSurface(pi) {
+  const events = pi?.events;
+  return events && (typeof events === 'object' || typeof events === 'function') ? events : pi;
+}
+
+async function persistCoreGateOwner(pi) {
+  if (typeof pi?.appendEntry !== 'function') return;
+  try {
+    await pi.appendEntry(CORE_GATE_OWNER_ENTRY, coreGateOwnerMarker());
+  } catch {
+    // Marker persistence is advisory; the in-process symbol remains authoritative.
+  }
+}
+
+function coreGateOwnerMarker() {
+  return {
+    schemaVersion: 1,
+    owner: 'omp-enhancer-core',
+    controllerSchemaVersion: 2,
   };
 }
 
@@ -548,6 +761,19 @@ function emptyEvidence() {
     testingGate: false,
     testingReport: false,
     factCheckGate: false,
+    testingEnhancerEvidence: null,
+    reviewEvidence: false,
+    mainAgentSecurityReview: false,
+    securityInspectionObserved: false,
+    securityInspectionEvidence: null,
+    testCommandEvidence: null,
+    releaseActionEvidence: null,
+    releaseVerificationEvidence: null,
+    releaseVerified: false,
+    irreversibleExecution: null,
+    irreversibleApproved: false,
+    lastDefiniteMutationAt: 0,
+    mutationRevision: 0,
     deliveredBugAuditReport: false,
     taskToolCalls: 0,
     loadedSkills: new Set(),
@@ -561,6 +787,7 @@ function emptyEvidence() {
     subagentLoadedSkills: new Map(),
     unexpectedSubagentSkills: new Map(),
     subagentAssignments: new Map(),
+    subagentResultTexts: new Map(),
     taskProgress: new Map(),
     testAnalysis: null,
     testContext: null,
@@ -607,14 +834,6 @@ function formatRouteProbeGuidance(route, { probeOnly = false } = {}) {
   ].join('\n');
 }
 
-function shouldActivateRouteProbe(state, params = {}) {
-  if (params.activate === true) return true;
-  if (isRouteProbeOnlyPrompt(params.prompt)) return false;
-  const activePrompt = normalizeRoutePrompt(state.lastPrompt);
-  if (!activePrompt) return true;
-  return normalizeRoutePrompt(params.prompt) === activePrompt;
-}
-
 function isRouteProbeOnlyPrompt(prompt = '') {
   const normalized = normalizeRoutePrompt(prompt).toLowerCase();
   if (!normalized) return false;
@@ -630,14 +849,55 @@ function normalizeRoutePrompt(value = '') {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
-function setRouteState(state, route, prompt = '', { classifierResolved = false } = {}) {
+function shouldInheritUserContinuation(state, prompt = '') {
+  if (!isTerseUserContinuation(prompt) || !state?.lastRoute?.taskDescriptor) return false;
+  const descriptor = state.lastRoute.taskDescriptor;
+  if (!['modify', 'create', 'execute'].includes(descriptor.operation)) return false;
+  if (descriptor.constraints?.externalWrite === 'required') return false;
+  if ((descriptor.risk?.flags ?? []).includes('irreversible-file-operation')) return false;
+  return Boolean(state.lastPrompt && state.routeStartedAt);
+}
+
+function isTerseUserContinuation(prompt = '') {
+  const text = normalizeRoutePrompt(prompt).toLowerCase();
+  return /^(?:继续(?:吧|执行|实现)?|开始吧|开始执行(?:吧)?|按(?:照)?(?:这个|该|上述)?计划执行|照(?:这个|该|上述)?方案做|就(?:按)?这么做|执行吧|go ahead|continue|proceed(?: with (?:the|this) plan)?|start now|do it)$/i.test(text);
+}
+
+function inheritContinuationRoute(previousRoute) {
+  const descriptor = previousRoute.taskDescriptor;
+  return {
+    ...previousRoute,
+    taskDescriptor: {
+      ...descriptor,
+      provenance: {
+        ...descriptor.provenance,
+        reasons: [...new Set([...(descriptor.provenance?.reasons ?? []), 'trusted user continuation'])],
+      },
+    },
+    continuation: { inherited: true },
+  };
+}
+
+function setRouteState(state, route, prompt = '', { classifierResolved = false, newTurn = true } = {}) {
   const previousPreflight = state.classifierPreflight;
+  const previousRouteStartedAt = Number.isFinite(state.routeStartedAt) ? state.routeStartedAt : 0;
+  if (!newTurn && state.routeStartedAt) {
+    state.lastRoute = route;
+    state.lastRouteProbe = null;
+    state.lastPrompt = String(prompt ?? '');
+    state.classifierPreflight = classifierResolved ? null : buildClassifierPreflight(route, prompt, [], { previousPreflight });
+    state.pendingSmartGate = null;
+    state.smartGate = null;
+    state.smartGateCompletionBypasses = [];
+    return;
+  }
   state.lastRoute = route;
   state.lastRouteProbe = null;
   state.lastPrompt = String(prompt ?? '');
-  state.routeStartedAt = Date.now();
+  state.routeStartedAt = Math.max(Date.now(), previousRouteStartedAt + 1);
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
+  state.classifierAttempted = false;
   state.classifierPreflight = classifierResolved ? null : buildClassifierPreflight(route, prompt, [], { previousPreflight });
   state.pendingSmartGate = null;
   state.smartGate = null;
@@ -645,6 +905,11 @@ function setRouteState(state, route, prompt = '', { classifierResolved = false }
   state.evidence = emptyEvidence();
   state.loopGuard = createLoopGuardState();
   state.gateRecovery = createGateRecoveryState();
+  state.gateController = resetGateControllerForRoute(state.gateController, {
+    routeId: gateControllerRouteId(state),
+  });
+  state.trustedApprovals = createTrustedApprovalState();
+  state.actionBoundary = createActionBoundaryState();
 }
 
 function resetState(state) {
@@ -655,12 +920,16 @@ function resetState(state) {
   state.lastSkillUsage = null;
   state.lastSubagentUsage = null;
   state.classifierPreflight = null;
+  state.classifierAttempted = false;
   state.pendingSmartGate = null;
   state.smartGate = null;
   state.smartGateCompletionBypasses = [];
   state.evidence = emptyEvidence();
   state.loopGuard = createLoopGuardState();
   state.gateRecovery = createGateRecoveryState();
+  state.gateController = createGateControllerState();
+  state.trustedApprovals = createTrustedApprovalState();
+  state.actionBoundary = createActionBoundaryState();
 }
 
 async function persistState(pi, state) {
@@ -732,6 +1001,8 @@ function routeStartIndexFor(entries, routeStartedAt, fallbackIndex) {
 
 function replaceState(target, source) {
   const liveLoopGuard = target.loopGuard;
+  const liveApprovals = target.trustedApprovals;
+  const liveTestingToolAvailability = target.testingToolAvailability;
   target.lastRoute = source.lastRoute;
   target.lastPrompt = source.lastPrompt ?? '';
   target.routeStartedAt = source.routeStartedAt;
@@ -739,12 +1010,19 @@ function replaceState(target, source) {
   target.lastSkillUsage = source.lastSkillUsage;
   target.lastSubagentUsage = source.lastSubagentUsage;
   target.classifierPreflight = source.classifierPreflight ?? null;
+  target.classifierAttempted = source.classifierAttempted === true;
   target.pendingSmartGate = source.pendingSmartGate ?? null;
   target.smartGate = source.smartGate ?? null;
   target.smartGateCompletionBypasses = source.smartGateCompletionBypasses ?? [];
   target.evidence = source.evidence;
   target.loopGuard = mergeLiveLoopGuardState(liveLoopGuard, source.loopGuard ?? createLoopGuardState());
   target.gateRecovery = readGateRecoveryState(source.gateRecovery);
+  target.gateController = readGateControllerState(source.gateController, {
+    routeId: gateControllerRouteId(source),
+  });
+  target.trustedApprovals = liveApprovals ?? createTrustedApprovalState();
+  target.testingToolAvailability = liveTestingToolAvailability ?? 'unknown';
+  target.actionBoundary = source.actionBoundary ?? createActionBoundaryState();
 }
 
 function mergeLiveLoopGuardState(live, restored) {
@@ -775,17 +1053,33 @@ function serializeState(state) {
     lastSkillUsage: state.lastSkillUsage,
     lastSubagentUsage: state.lastSubagentUsage,
     classifierPreflight: state.classifierPreflight,
+    classifierAttempted: state.classifierAttempted === true,
     pendingSmartGate: state.pendingSmartGate,
     smartGate: state.smartGate,
     smartGateCompletionBypasses: state.smartGateCompletionBypasses,
     loopGuard: serializeLoopGuardState(state.loopGuard),
     gateRecovery: serializeGateRecoveryState(state.gateRecovery),
+    gateController: serializeGateControllerState(state.gateController),
+    actionBoundary: state.actionBoundary,
     evidence: {
       writingQuality: state.evidence.writingQuality,
       writingLogic: state.evidence.writingLogic,
       testingGate: state.evidence.testingGate,
       testingReport: state.evidence.testingReport,
       factCheckGate: state.evidence.factCheckGate,
+      testingEnhancerEvidence: state.evidence.testingEnhancerEvidence,
+      reviewEvidence: state.evidence.reviewEvidence,
+      mainAgentSecurityReview: state.evidence.mainAgentSecurityReview,
+      securityInspectionObserved: state.evidence.securityInspectionObserved,
+      securityInspectionEvidence: state.evidence.securityInspectionEvidence,
+      testCommandEvidence: state.evidence.testCommandEvidence,
+      releaseActionEvidence: state.evidence.releaseActionEvidence,
+      releaseVerificationEvidence: state.evidence.releaseVerificationEvidence,
+      releaseVerified: state.evidence.releaseVerified,
+      irreversibleExecution: state.evidence.irreversibleExecution,
+      irreversibleApproved: false,
+      lastDefiniteMutationAt: state.evidence.lastDefiniteMutationAt,
+      mutationRevision: state.evidence.mutationRevision,
       deliveredBugAuditReport: state.evidence.deliveredBugAuditReport,
       taskToolCalls: state.evidence.taskToolCalls,
       loadedSkills: [...state.evidence.loadedSkills],
@@ -797,6 +1091,7 @@ function serializeState(state) {
         startedAt: pending.startedAt,
         lastSeenAt: pending.lastSeenAt,
         attempts: pending.attempts,
+        mutationRevision: pending.mutationRevision,
         skills: [...pending.skills],
         texts: [...(pending.texts ?? [])],
       })),
@@ -825,6 +1120,10 @@ function serializeState(state) {
         agent,
         texts: [...texts],
       })),
+      subagentResultTexts: [...state.evidence.subagentResultTexts.entries()].map(([agent, texts]) => ({
+        agent,
+        texts: [...texts],
+      })),
       taskProgress: [...state.evidence.taskProgress.entries()].map(([key, progress]) => ({
         key,
         ...progress,
@@ -841,6 +1140,7 @@ function readStateSnapshot(value) {
   if (!isRecord(value)) return null;
   const evidence = readEvidenceSnapshot(value.evidence);
   if (!evidence) return null;
+  constrainEvidenceToRoute(evidence, gateControllerRouteId(value));
   return {
     lastRoute: isRecord(value.lastRoute) ? value.lastRoute : null,
     lastRouteProbe: isRecord(value.lastRouteProbe) ? value.lastRouteProbe : null,
@@ -849,12 +1149,112 @@ function readStateSnapshot(value) {
     lastSkillUsage: isRecord(value.lastSkillUsage) ? value.lastSkillUsage : null,
     lastSubagentUsage: isRecord(value.lastSubagentUsage) ? value.lastSubagentUsage : null,
     classifierPreflight: readClassifierPreflight(value.classifierPreflight),
+    classifierAttempted: value.classifierAttempted === true || Boolean(value.lastRoute?.classifier),
     pendingSmartGate: readPendingSmartGate(value.pendingSmartGate),
     smartGate: readSmartGateState(value.smartGate),
     smartGateCompletionBypasses: readSmartGateCompletionBypasses(value.smartGateCompletionBypasses),
     loopGuard: readLoopGuardSnapshot(value.loopGuard),
     gateRecovery: readGateRecoveryState(value.gateRecovery),
+    gateController: readGateControllerState(value, {
+      routeId: gateControllerRouteId(value),
+    }),
+    actionBoundary: readActionBoundaryState(value.actionBoundary),
     evidence,
+  };
+}
+
+function readBoundEvidenceRecord(value, expectedSource) {
+  const digest = value?.commandDigest ?? value?.inputDigest ?? value?.toolCallIdDigest;
+  if (!isRecord(value)
+    || value.schemaVersion !== 1
+    || value.source !== expectedSource
+    || !isString(value.routeId)
+    || !/^[a-f0-9]{64}$/.test(String(digest ?? ''))) return null;
+  return { ...value };
+}
+
+function constrainEvidenceToRoute(evidence, routeId) {
+  for (const key of ['securityInspectionEvidence', 'testCommandEvidence', 'releaseActionEvidence', 'releaseVerificationEvidence', 'irreversibleExecution']) {
+    if (evidence[key]?.routeId !== routeId) evidence[key] = null;
+  }
+  evidence.releaseVerified = evidence.releaseVerified === true
+    && releaseEvidencePairMatches(evidence.releaseActionEvidence, evidence.releaseVerificationEvidence);
+}
+
+function releaseEvidencePairMatches(actionEvidence, verificationEvidence) {
+  return Boolean(actionEvidence
+    && verificationEvidence
+    && actionEvidence.routeId === verificationEvidence.routeId
+    && isRecord(actionEvidence.policy)
+    && actionEvidence.policy.schemaVersion === 1
+    && /^[a-f0-9]{64}$/.test(String(actionEvidence.policy.targetFingerprint ?? ''))
+    && verificationEvidence.actionCommandDigest === actionEvidence.commandDigest
+    && verificationEvidence.policyDigest === digestEvidence(JSON.stringify(actionEvidence.policy)));
+}
+
+function gateControllerRouteId(state = {}) {
+  const startedAt = Number.isFinite(state.routeStartedAt) ? state.routeStartedAt : 0;
+  return `route:${startedAt || 'unknown'}`;
+}
+
+function routeRequiredSkills(route) {
+  const skills = useDescriptorCeilingProjection(route)
+    ? route.routePlan?.requiredSkills ?? []
+    : route?.requiredSkills ?? [];
+  const constraints = route?.taskDescriptor?.constraints ?? {};
+  return skills.filter((skill) => {
+    if (constraints.testExecution === 'forbidden'
+      && ['test-driven-development', 'ai-regression-testing'].includes(skill)) return false;
+    if (constraints.subagents === 'forbidden' && skill === 'subagent-driven-development') return false;
+    return true;
+  });
+}
+
+function routeRequiredTools(route) {
+  const tools = useDescriptorCeilingProjection(route)
+    ? route.routePlan?.requiredTools ?? []
+    : route?.requiredTools ?? [];
+  if (route?.taskDescriptor?.constraints?.testExecution !== 'forbidden') return tools;
+  return tools.filter((toolName) => !/^omp_test_/i.test(toolName));
+}
+
+function routeRequiredSubagents(route) {
+  const constraints = route?.taskDescriptor?.constraints ?? {};
+  if (constraints.subagents === 'forbidden') return [];
+  if (!useDescriptorCeilingProjection(route)) return route?.requiredSubagents ?? [];
+  const planned = route.routePlan?.requiredSubagents ?? [];
+  const legacyByAgent = new Map(
+    subagentRequirements(route?.requiredSubagents).map((item) => [item.agent, item]),
+  );
+  return planned.map((entry) => {
+    const agent = typeof entry === 'string' ? entry : entry?.agent;
+    const legacy = legacyByAgent.get(agent);
+    return {
+      ...(legacy ?? {}),
+      ...(typeof entry === 'object' && entry ? entry : {}),
+      agent,
+      requiredSkills: [...new Set([
+        ...(legacy?.requiredSkills ?? []),
+        ...(Array.isArray(entry?.requiredSkills) ? entry.requiredSkills : []),
+      ])],
+    };
+  }).filter((item) => item.agent);
+}
+
+function useDescriptorCeilingProjection(route) {
+  const constraints = route?.taskDescriptor?.constraints ?? {};
+  return useEnforcedRoutePlan(route)
+    || constraints.testExecution === 'forbidden'
+    || constraints.subagents === 'forbidden';
+}
+
+function routeForRuntime(route) {
+  if (!route) return route;
+  return {
+    ...route,
+    requiredSkills: routeRequiredSkills(route),
+    requiredTools: routeRequiredTools(route),
+    requiredSubagents: routeRequiredSubagents(route),
   };
 }
 
@@ -868,6 +1268,8 @@ function readClassifierPreflight(value) {
     fallbackIntent: isString(value.fallbackIntent) ? value.fallbackIntent : 'unknown',
     reasons: Array.isArray(value.reasons) ? value.reasons.filter(isString) : [],
     observations: Array.isArray(value.observations) ? value.observations.filter(isString).slice(-4) : [],
+    attempted: value.attempted === true,
+    failed: value.failed === true,
   };
 }
 
@@ -920,12 +1322,30 @@ function legacySmartGateInstanceId(value) {
 
 function readEvidenceSnapshot(value) {
   if (!isRecord(value)) return null;
+  const releaseActionEvidence = readBoundEvidenceRecord(value.releaseActionEvidence, 'host-release-action');
+  const releaseVerificationEvidence = readBoundEvidenceRecord(value.releaseVerificationEvidence, 'host-release-verification');
+  const securityInspectionEvidence = readBoundEvidenceRecord(value.securityInspectionEvidence, 'host-security-inspection');
   return {
     writingQuality: value.writingQuality === true,
     writingLogic: value.writingLogic === true,
     testingGate: value.testingGate === true,
     testingReport: value.testingReport === true,
     factCheckGate: value.factCheckGate === true,
+    testingEnhancerEvidence: readTestingEnhancerEvidence(value.testingEnhancerEvidence),
+    reviewEvidence: value.reviewEvidence === true,
+    mainAgentSecurityReview: value.mainAgentSecurityReview === true,
+    securityInspectionEvidence,
+    securityInspectionObserved: securityInspectionEvidence?.complete === true,
+    testCommandEvidence: readBoundEvidenceRecord(value.testCommandEvidence, 'host-tool-result'),
+    releaseActionEvidence,
+    releaseVerificationEvidence,
+    releaseVerified: value.releaseVerified === true
+      && releaseEvidencePairMatches(releaseActionEvidence, releaseVerificationEvidence),
+    irreversibleExecution: readBoundEvidenceRecord(value.irreversibleExecution, 'host-tool-approval'),
+    // Legacy booleans cannot grant either execution authority or completion.
+    irreversibleApproved: false,
+    lastDefiniteMutationAt: Number.isFinite(value.lastDefiniteMutationAt) ? Math.max(0, value.lastDefiniteMutationAt) : 0,
+    mutationRevision: Number.isInteger(value.mutationRevision) ? Math.max(0, value.mutationRevision) : 0,
     deliveredBugAuditReport: value.deliveredBugAuditReport === true,
     taskToolCalls: Number.isInteger(value.taskToolCalls) ? value.taskToolCalls : 0,
     loadedSkills: new Set(Array.isArray(value.loadedSkills) ? value.loadedSkills.filter(isString) : []),
@@ -939,6 +1359,7 @@ function readEvidenceSnapshot(value) {
     subagentLoadedSkills: readSubagentSkills(value.subagentLoadedSkills),
     unexpectedSubagentSkills: readSubagentSkills(value.unexpectedSubagentSkills),
     subagentAssignments: readSubagentAssignments(value.subagentAssignments),
+    subagentResultTexts: readSubagentAssignments(value.subagentResultTexts),
     taskProgress: readTaskProgress(value.taskProgress),
     testAnalysis: isRecord(value.testAnalysis) ? value.testAnalysis : null,
     testContext: isRecord(value.testContext) ? value.testContext : null,
@@ -947,15 +1368,71 @@ function readEvidenceSnapshot(value) {
   };
 }
 
+function readTestingEnhancerEvidence(value) {
+  if (!isRecord(value) || value.schemaVersion !== 1) return null;
+  if (!isString(value.routeId) || !isString(value.runId)) return null;
+  if (!['pending', 'passed', 'failed'].includes(value.status)) return null;
+  if (!/^[a-f0-9]{64}$/.test(String(value.evidenceDigest ?? ''))) return null;
+  return {
+    schemaVersion: 1,
+    routeId: value.routeId,
+    runId: value.runId,
+    status: value.status,
+    pending: value.pending === true,
+    passed: value.passed === true,
+    failed: value.failed === true,
+    blockers: Array.isArray(value.blockers) ? value.blockers.filter(isString).slice(0, 16) : [],
+    evidenceDigest: value.evidenceDigest,
+    evidenceRevision: Number.isInteger(value.evidenceRevision) ? Math.max(0, value.evidenceRevision) : 0,
+    updatedAt: Number.isFinite(value.updatedAt) ? value.updatedAt : 0,
+  };
+}
+
+function adoptTestingEnhancerEvidence(state, ctx = {}) {
+  const entries = ctx.sessionManager?.getBranch?.();
+  if (!Array.isArray(entries)) return false;
+  const expectedRouteId = state.gateController?.routeId;
+  if (!expectedRouteId) return false;
+
+  let evidence = null;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry?.customType !== TESTING_EVIDENCE_ENTRY) continue;
+    evidence = readTestingEnhancerEvidence(entry.data);
+    if (evidence) break;
+  }
+  if (!evidence || evidence.routeId !== expectedRouteId) return false;
+  if (!evidence.runId || evidence.runId === 'testing-unscoped') return false;
+  if (evidence.updatedAt && evidence.updatedAt < state.routeStartedAt) return false;
+  if (state.evidence.lastDefiniteMutationAt > 0
+    && (!evidence.updatedAt || evidence.updatedAt < state.evidence.lastDefiniteMutationAt)) return false;
+  const previous = state.evidence.testingEnhancerEvidence;
+  if (previous?.evidenceDigest === evidence.evidenceDigest
+    && previous?.evidenceRevision === evidence.evidenceRevision) return false;
+
+  state.evidence.testingEnhancerEvidence = evidence;
+  if (evidence.status === 'passed' && evidence.passed) {
+    state.evidence.testingGate = true;
+    state.gateController = applyGateEvidence(state.gateController, {
+      routeId: gateControllerRouteId(state),
+      evidenceRevision: state.gateController.evidenceRevision + 1,
+    });
+  } else if (evidence.status === 'failed' && evidence.failed) {
+    state.evidence.testingGate = false;
+  }
+  return true;
+}
+
 function readPendingSubagents(value) {
   const pending = new Map();
   if (!Array.isArray(value)) return pending;
   for (const item of value) {
     if (!isRecord(item) || typeof item.agent !== 'string') continue;
-    pending.set(item.agent, {
+      pending.set(item.agent, {
       startedAt: Number.isFinite(item.startedAt) ? item.startedAt : 0,
       lastSeenAt: Number.isFinite(item.lastSeenAt) ? item.lastSeenAt : 0,
       attempts: Number.isInteger(item.attempts) ? item.attempts : 1,
+      mutationRevision: Number.isInteger(item.mutationRevision) ? Math.max(0, item.mutationRevision) : 0,
       skills: new Set(Array.isArray(item.skills) ? item.skills.filter(isString) : []),
       texts: new Set(Array.isArray(item.texts) ? item.texts.filter(isString) : []),
     });
@@ -1092,7 +1569,8 @@ function cleanToolCallId(value) {
 }
 
 function isInternalCoreContinuation(prompt) {
-  return String(prompt ?? '').includes('OMP Enhancer Core')
+  return /^(?:OMP_GATE_REPAIR|OMP_GATE_TERMINAL)\b/.test(String(prompt ?? '').trimStart())
+    || String(prompt ?? '').includes('OMP Enhancer Core')
     && String(prompt ?? '').includes('gate is still open')
     || isLoopGuardRecoveryContinuation(prompt);
 }
@@ -1244,12 +1722,14 @@ function isShortConstructionPrompt(text = '', original = '') {
 function buildClassifierPreflightGateBlock(state, toolName) {
   const preflight = state.classifierPreflight;
   if (!preflight?.required || !toolName || CLASSIFIER_PREFLIGHT_EXEMPT_TOOLS.has(toolName)) return null;
-  return {
-    block: true,
-    reason: classifierPreflightInstructions(state, {
-      heading: `OMP Enhancer Core classifier preflight blocked ${toolName}.`,
-    }),
+  state.classifierPreflight = {
+    ...preflight,
+    required: false,
+    mode: 'observe',
+    attempted: true,
+    failed: false,
   };
+  return null;
 }
 
 function buildMissingClassifierPreflightContext(state) {
@@ -1308,13 +1788,255 @@ function buildCompletionRuleGateBlocks(state) {
   const missingSubagentContext = buildMissingSubagentUsageContext(state);
   if (missingSubagentContext) blocks.push(completionRuleGateBlock(state, 'subagent', missingSubagentContext));
 
-  const missingGateContext = buildMissingGateContext({ route: state.lastRoute, state });
-  if (missingGateContext) blocks.push(completionRuleGateBlock(state, 'workflow', missingGateContext));
+  for (const missingGate of buildMissingGateContexts({
+    route: routeForRuntime(state.lastRoute),
+    state,
+  })) {
+    blocks.push(completionRuleGateBlock(state, 'workflow', missingGate.context, missingGate.key));
+  }
+  if (stateRequiresObservedTestCommand(state)
+    && state.evidence.testingGate
+    && !hasFreshRouteScopedTestCommandEvidence(state)) {
+    blocks.push(completionRuleGateBlock(state, 'workflow', [
+      'OMP Enhancer Core has recorded a passing Testing Enhancer gate, but the required host-observed test command evidence is still missing.',
+      'Do not rerun omp_test_gate: that gate has already passed. Run the relevant local test command through a host shell or command tool and use its real successful result.',
+      'Dry runs, masked failures, model-authored summaries, and test results from an older route or from before the latest workspace mutation do not satisfy this evidence boundary.',
+    ].join('\n'), 'testing'));
+  }
 
   const missingSkillContext = buildMissingSkillUsageContext(state);
   if (missingSkillContext) blocks.push(completionRuleGateBlock(state, 'skill', missingSkillContext));
 
   return blocks;
+}
+
+function stateRequiresObservedTestCommand(state) {
+  return state.lastRoute?.taskDescriptor?.constraints?.testExecution === 'required';
+}
+
+function hasFreshRouteScopedTestCommandEvidence(state) {
+  const evidence = state.evidence?.testCommandEvidence;
+  const observedAt = evidence?.observedAt;
+  const routeStartedAt = Number.isFinite(state.routeStartedAt) ? state.routeStartedAt : 0;
+  const mutationRevision = Number.isInteger(state.evidence?.mutationRevision)
+    ? state.evidence.mutationRevision
+    : 0;
+  const lastMutationAt = Number.isFinite(state.evidence?.lastDefiniteMutationAt)
+    ? state.evidence.lastDefiniteMutationAt
+    : 0;
+  return Boolean(evidence
+    && evidence.schemaVersion === 1
+    && evidence.source === 'host-tool-result'
+    && evidence.routeId === gateControllerRouteId(state)
+    && /^[a-f0-9]{64}$/.test(String(evidence.commandDigest ?? ''))
+    && /^[a-f0-9]{64}$/.test(String(evidence.resultDigest ?? ''))
+    && Number.isFinite(observedAt)
+    && observedAt >= routeStartedAt
+    && observedAt >= lastMutationAt
+    && evidence.mutationRevision === mutationRevision);
+}
+
+function buildSessionStopGateRecords(state, { loopRecoveryContext = null } = {}) {
+  const records = [];
+  if (state.classifierPreflight?.required) {
+    state.classifierPreflight = {
+      ...state.classifierPreflight,
+      required: false,
+      mode: 'observe',
+      attempted: state.classifierPreflight.attempted === true,
+    };
+  }
+
+  for (const ruleGate of buildCompletionRuleGateBlocks(state)) {
+    const protection = completionGateProtection(ruleGate);
+    const softBypass = protection !== 'protected'
+      && (completionSmartGateBypassAllows(state, ruleGate)
+        || consumeSmartGateCompletionAllowance(state, ruleGate));
+    if (softBypass) continue;
+    records.push(sessionGateRecord({
+      gateKey: ruleGate.gateKey,
+      missingEvidenceCodes: completionMissingEvidenceCodes(ruleGate),
+      protection,
+      context: ruleGate.context,
+    }, state));
+  }
+
+  const requiredGateKeys = new Set(
+    (state.lastRoute?.routePlan?.gateRequirements ?? [])
+      .filter((gate) => gate.mode === 'required')
+      .map((gate) => gate.key),
+  );
+  if (requiredGateKeys.has('review-evidence') && !hasReviewEvidence(state)) {
+    records.push(sessionGateRecord({
+      gateKey: 'review',
+      missingEvidenceCodes: ['review_gate'],
+      protection: 'soft',
+      context: 'Required review evidence is still open. Complete the routed reviewer checkpoint, or for an explicitly focused main-agent task provide REVIEW_EVIDENCE with Scope, Findings, and Verdict: PASS.',
+    }, state));
+  }
+  if (requiredGateKeys.has('security-evidence') && !hasSecurityReviewEvidence(state)) {
+    records.push(sessionGateRecord({
+      gateKey: 'security',
+      missingEvidenceCodes: ['review_gate'],
+      protection: 'protected',
+      context: 'Protected security gate is open. Complete the routed security review and report concrete security evidence before claiming the remediation is safe.',
+    }, state));
+  }
+  if (requiredGateKeys.has('release-approval') && !state.evidence.releaseVerified) {
+    records.push(sessionGateRecord({
+      gateKey: 'release',
+      missingEvidenceCodes: ['release_verification'],
+      protection: 'protected',
+      context: 'Protected release gate is open. Do not claim or repeat a publish, push, deploy, or upgrade until a successful release action and verification are recorded.',
+    }, state));
+  }
+  if (requiredGateKeys.has('irreversible-approval') && !hasTrustedIrreversibleCompletion(state)) {
+    records.push(sessionGateRecord({
+      gateKey: 'irreversible',
+      missingEvidenceCodes: ['user-approval-required'],
+      protection: 'protected',
+      context: 'Protected irreversible-operation gate is open. A trusted host approval event is required; route text, model output, and tool arguments cannot grant it. Do not delete, wipe, or clear files or caches.',
+    }, state));
+  }
+  if (loopRecoveryContext) {
+    records.push(sessionGateRecord({
+      gateKey: 'legacy:loop',
+      reasonCode: 'legacy_loop_recovery_pending',
+      missingEvidenceCodes: ['non_repeated_progress'],
+      protection: 'protected',
+      context: loopRecoveryContext,
+    }, state));
+  }
+  return mergeSessionGateRecords(records);
+}
+
+function sessionGateRecord({
+  gateKey,
+  reasonCode = 'missing_evidence',
+  missingEvidenceCodes = [],
+  protection = 'soft',
+  context = '',
+}, state) {
+  return {
+    gateKey,
+    reasonCode,
+    missingEvidenceCodes,
+    protection,
+    evidenceDigest: gateEvidenceDigest(state),
+    context,
+  };
+}
+
+function completionGateProtection(ruleGate = {}) {
+  if (ruleGate.kind === 'workflow' && specificGateKind(ruleGate.kind, ruleGate.context) === 'fact-check') {
+    return 'protected';
+  }
+  return 'soft';
+}
+
+function completionMissingEvidenceCodes(ruleGate = {}) {
+  if (ruleGate.kind === 'skill') return ['skill_usage'];
+  if (ruleGate.kind === 'subagent') return ['review_gate'];
+  const gateKind = specificGateKind(ruleGate.kind, ruleGate.context);
+  if (gateKind === 'writing-qa') return ['writing_qa'];
+  if (gateKind === 'testing') return ['testing_gate'];
+  if (gateKind === 'fact-check') return ['review_gate'];
+  return ['missing_evidence'];
+}
+
+function mergeSessionGateRecords(records = []) {
+  const rank = { coach: 0, soft: 1, protected: 2 };
+  const merged = new Map();
+  for (const record of records) {
+    const previous = merged.get(record.gateKey);
+    if (!previous) {
+      merged.set(record.gateKey, { ...record, missingEvidenceCodes: [...record.missingEvidenceCodes] });
+      continue;
+    }
+    previous.missingEvidenceCodes = [...new Set([
+      ...previous.missingEvidenceCodes,
+      ...record.missingEvidenceCodes,
+    ])].sort();
+    if (rank[record.protection] > rank[previous.protection]) previous.protection = record.protection;
+    previous.context = [previous.context, record.context].filter(Boolean).join('\n\n');
+  }
+  return [...merged.values()];
+}
+
+function hasSecurityReviewEvidence(state) {
+  return hasQualifiedSecuritySubagentEvidence(state)
+    || (state.lastRoute?.taskDescriptor?.constraints?.subagents === 'forbidden'
+      && state.evidence.mainAgentSecurityReview === true
+      && state.evidence.securityInspectionEvidence?.routeId === gateControllerRouteId(state)
+      && state.evidence.securityInspectionEvidence?.complete === true
+      && hasHostObservedSkills(state, ['security-review', 'security-scan']));
+}
+
+function hasQualifiedSecuritySubagentEvidence(state) {
+  const requirement = subagentRequirements(routeRequiredSubagents(state.lastRoute))
+    .find(({ agent }) => agent === 'ecc-security-reviewer');
+  if (!requirement || !state.evidence.taskSubagents.has(requirement.agent)) return false;
+  const assigned = [...(state.evidence.subagentSkills.get(requirement.agent) ?? new Set())];
+  const loaded = [...(state.evidence.subagentLoadedSkills.get(requirement.agent) ?? new Set())];
+  const securitySkills = ['security-review', 'security-scan'];
+  const hasSkills = securitySkills.every((skill) => (
+    assigned.some((candidate) => skillNamesEquivalent(skill, candidate))
+    && loaded.some((candidate) => skillNamesEquivalent(skill, candidate))
+  ));
+  if (!hasSkills) return false;
+  return [...(state.evidence.subagentResultTexts.get(requirement.agent) ?? new Set())]
+    .some((text) => isStructuredSecurityReview(text));
+}
+
+function hasHostObservedSkills(state, required = []) {
+  const loaded = [...state.evidence.loadedSkills];
+  return required.every((skill) => loaded.some((candidate) => skillNamesEquivalent(skill, candidate)));
+}
+
+function hasReviewEvidence(state) {
+  const completed = completedSubagentsForGate(state);
+  return state.evidence.reviewEvidence === true
+    || completed.has('reviewer')
+    || completed.has('ecc-code-reviewer')
+    || completed.has('fact-reviewer')
+    || completed.has('fact-cross-checker');
+}
+
+function gateEvidenceDigest(state) {
+  return `revision-${state.gateController?.evidenceRevision ?? 0}`;
+}
+
+function isTerminalOnlyGateState(controller = {}) {
+  return (controller.phase === 'degraded' || controller.phase === 'blocked')
+    && (controller.budget?.terminalUsed ?? 0) > 0
+    && Object.keys(controller.openGates ?? {}).length > 0;
+}
+
+function formatGateRepairContext(state, records, decision) {
+  return [
+    'OMP_GATE_REPAIR',
+    `Gate status: collecting. Shared route budget: ${decision.budget.repairUsed}/${decision.budget.repairMax} repairs; ${decision.budget.terminalUsed}/${decision.budget.terminalMax} terminal-only continuations.`,
+    `Open gates (${records.length}) and all missing evidence:`,
+    ...records.map((record) => `- ${record.gateKey} [${record.protection}]: ${record.missingEvidenceCodes.join(', ')}`),
+    '',
+    'Perform one combined evidence-repair pass for all open gates. Do not repeat a failed action without new relevant evidence.',
+    ...records.map((record) => record.context).filter(Boolean),
+  ].join('\n');
+}
+
+function formatGateTerminalContext(state, records, decision) {
+  const blocked = decision.phase === 'blocked';
+  return [
+    'OMP_GATE_TERMINAL',
+    `Final terminal status: ${blocked ? 'BLOCKED' : 'DEGRADED'}.`,
+    'Do not call more tools or commands. Produce only one concise user-facing final status.',
+    blocked
+      ? 'Protected security, release, fact, or irreversible evidence is still missing; do not claim success or perform the protected action.'
+      : 'Low-risk workflow evidence remains unverified; clearly state what was not completed and do not claim it passed.',
+    `Terminal reason: ${decision.terminalReason ?? 'missing_evidence'}.`,
+    'Open gates and missing evidence:',
+    ...records.map((record) => `- ${record.gateKey}: ${record.missingEvidenceCodes.join(', ')}`),
+  ].join('\n');
 }
 
 function resolveSmartGatePromptRuleGate(state, requestedGateKey = '') {
@@ -1341,11 +2063,11 @@ function pendingSmartGateRuleGate(state) {
   };
 }
 
-function completionRuleGateBlock(state, kind, context) {
+function completionRuleGateBlock(state, kind, context, gateKind = '') {
   const routeIntent = state.lastRoute?.intent ?? 'unknown';
   return {
     kind,
-    gateKey: `${routeIntent}:${specificGateKind(kind, context)}`,
+    gateKey: `${routeIntent}:${gateKind || specificGateKind(kind, context)}`,
     routeIntent,
     context,
   };
@@ -1527,7 +2249,7 @@ function formatSmartGateResult(result) {
 }
 
 function summarizeSmartGateEvidence(state) {
-  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  const requiredSubagents = subagentRequirements(routeRequiredSubagents(state.lastRoute));
   const pending = [...state.evidence.pendingSubagents.entries()]
     .map(([agent, item]) => `${agent}:${item.attempts ?? 1}:${[...item.skills].join(',') || 'no-skills'}`);
   const completed = [...completedSubagentsForGate(state)];
@@ -1541,7 +2263,7 @@ function summarizeSmartGateEvidence(state) {
   });
   return [
     `Route intent: ${state.lastRoute?.intent ?? 'unknown'}`,
-    `Required skills: ${(state.lastRoute?.requiredSkills ?? []).join(', ') || 'none'}`,
+    `Required skills: ${routeRequiredSkills(state.lastRoute).join(', ') || 'none'}`,
     `Loaded main-agent skills: ${loadedSkills.join(', ') || 'none'}`,
     `Required subagents: ${requiredSubagents.map(({ agent }) => agent).join(', ') || 'none'}`,
     `Completed subagents: ${completed.join(', ') || 'none'}`,
@@ -1558,12 +2280,12 @@ function summarizeSmartGateEvidence(state) {
 }
 
 function buildMissingSkillUsageContext(state) {
-  const requiredSkills = state.lastRoute?.requiredSkills ?? [];
+  const requiredSkills = routeRequiredSkills(state.lastRoute);
   if (!requiredSkills.length) return null;
   if (state.lastRoute?.gateMode === 'hidden-coach') return null;
   if (state.lastSkillUsage?.ok) return null;
   const failureContext = formatRecentToolFailures(state, ['read', 'omp_core_validate_skill_usage']);
-  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  const requiredSubagents = subagentRequirements(routeRequiredSubagents(state.lastRoute));
 
   if (requiredSubagents.length) {
     return [
@@ -1589,17 +2311,18 @@ function buildMissingSkillUsageContext(state) {
 function buildRoutedGovernanceContext(state, { route, parentTask = '', visibility = 'automatic' } = {}) {
   const automatic = visibility !== 'explicit';
   if (automatic && route?.intent === 'unknown' && !state.classifierPreflight?.required) return null;
+  const governedRoute = routeForRuntime(route);
 
   return [
     buildModelRoutingCheckpointBlock({
-      route,
+      route: governedRoute,
       parentTask,
       preflight: state.classifierPreflight,
       includePassiveGuidance: !automatic,
     }),
     buildPreworkSkillBootstrapBlock(state),
     buildGovernancePromptFragment({
-      route,
+      route: governedRoute,
       parentTask,
       includeModelWorkflowHints: !automatic,
     }),
@@ -1666,7 +2389,7 @@ function classifierPromptContext(state, prompt = '') {
 }
 
 function buildPreworkSkillBootstrapBlock(state) {
-  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  const requiredSubagents = subagentRequirements(routeRequiredSubagents(state.lastRoute));
   const missing = missingReadSkills(state);
   const parentTask = state.lastPrompt;
   if (!requiredSubagents.length && !missing.length) return null;
@@ -1709,6 +2432,562 @@ function isFocusedBugAuditRoute(route) {
   return route?.intent === 'bug-audit' && route.auditMode === 'focused';
 }
 
+function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx = {}) {
+  const descriptor = state.lastRoute?.taskDescriptor;
+  if (!toolName) return null;
+  const text = toolActionText(event);
+  const action = classifyToolAction({ toolName, text });
+  if (isKnownFirstPartyNetworkAction(toolName, event)) action.networkAccess = true;
+  if (toolName === 'omp_core_install_skills') {
+    action.workspaceWrite = firstToolInputRecord(event).dryRun !== true;
+  }
+  const approvalToken = consumeTrustedApprovalToken(state, event, toolName);
+
+  if (!descriptor) {
+    if (action.workspaceWrite || action.subagent || action.testExecution || action.networkAccess || action.externalWrite || action.opaqueEffects || action.unverifiableNetworkEffects || action.irreversible) {
+      return protectedConstraintBlock(
+        'active-route-required',
+        'A trusted before_agent_start user route is required before tools may write files, run tests, delegate work, publish, or perform destructive actions.',
+      );
+    }
+    return null;
+  }
+  const constraints = descriptor.constraints ?? {};
+
+  if (action.subagent && constraints.subagents === 'forbidden') {
+    return protectedConstraintBlock('subagents-forbidden', 'The user explicitly forbade subagents; route plans and classifier hints cannot delegate this task.');
+  }
+  const testKind = action.testExecution
+    ? toolName === 'omp_test_browser_check' ? 'e2e' : testKindForCommand(text)
+    : null;
+  const testAllowlist = Array.isArray(descriptor.testAllowlist) ? descriptor.testAllowlist : [];
+  if (action.testExecution && testAllowlist.length && (!testKind || !testAllowlist.includes(testKind))) {
+    return protectedConstraintBlock(
+      'test-kind-authorization-required',
+      `The user authorized only ${testAllowlist.join(', ')} tests. ${testKind ? `${testKind} is outside that allowlist.` : 'This generic test command does not prove which test kind it will execute.'} Use an explicitly named allowed test target; do not retry with an alias or aggregate suite.`,
+    );
+  }
+  const exactTestTargets = Array.isArray(descriptor.testExecutionTargets) ? descriptor.testExecutionTargets : [];
+  if (action.testExecution && exactTestTargets.length) {
+    const observedTestTargets = testExecutionTargetsInCommand(text);
+    const outsideTarget = observedTestTargets.find((target) => !exactTestTargets.some((allowed) => scopedPathMatches(target, allowed)));
+    if (hasUnsafeResultMasking(text) || !observedTestTargets.length || outsideTarget) {
+      return protectedConstraintBlock(
+        'test-target-authorization-required',
+        `The user authorized only the exact test target${exactTestTargets.length === 1 ? '' : 's'} ${exactTestTargets.join(', ')}. Run a single direct test command naming only that target; aggregate suites, substituted files, pipelines, redirections, and compound commands are outside the authorization.`,
+      );
+    }
+  }
+  const excludedTestKind = testKind && (descriptor.testExclusions ?? []).includes(testKind) ? testKind : null;
+  if (excludedTestKind) {
+    return protectedConstraintBlock(
+      'test-kind-forbidden',
+      `The user authorized selected tests but explicitly excluded ${excludedTestKind} tests. Choose an authorized test kind; do not retry with an equivalent ${excludedTestKind} runner.`,
+    );
+  }
+  if (action.testExecution && constraints.testExecution === 'forbidden') {
+    return protectedConstraintBlock('test-execution-forbidden', 'The user explicitly forbade test execution; classifier or workflow hints cannot override that constraint.');
+  }
+
+  if (action.networkAccess && constraints.networkAccess === 'forbidden') {
+    return protectedConstraintBlock('network-access-forbidden', 'The user explicitly forbade network access; web, fetch, remote shell, and provider calls are not authorized.');
+  }
+  if ((action.opaqueEffects || action.unverifiableNetworkEffects) && constraints.networkAccess === 'forbidden') {
+    return protectedConstraintBlock('network-access-unverifiable', 'This opaque script or automation target can execute hidden network effects, so it cannot run while the user has explicitly forbidden network access. Inspect it or use a directly classifiable local command.');
+  }
+  const workspaceScopeBlock = scopedWorkspaceActionBlock(descriptor, action, event, text);
+  if (workspaceScopeBlock) return workspaceScopeBlock;
+  const externalScopeBlock = scopedExternalActionBlock(descriptor, action, text);
+  if (externalScopeBlock) return externalScopeBlock;
+  if (action.externalWrite
+    && action.irreversible
+    && descriptor.provenance?.reasons?.includes('irreversible external operation requested')) {
+    return protectedConstraintBlock(
+      'external-destructive-action-unsupported',
+      'The request authorizes a destructive external target, but this runtime has no deterministic pre-mutation target contract and independent post-deletion verification for that provider action. It is intentionally unsupported: do not retry or substitute another target; report the limitation so the user can use a provider-native manual workflow.',
+    );
+  }
+  const connectorBoundary = externalConnectorActionBlock(descriptor, action, toolName, event);
+  if (connectorBoundary) return connectorBoundary;
+  if (action.externalWrite
+    && routeRequiresReleaseVerification(state.lastRoute)
+    && hasPendingReleaseMutation(state)) {
+    return protectedConstraintBlock(
+      'release-verification-pending',
+      'A prior external mutation on this route is still awaiting its bound independent verification. Verify that exact target and immutable value before starting another release mutation; do not replace or skip the pending evidence.',
+    );
+  }
+  if ((action.externalWrite || action.opaqueEffects
+      || action.unverifiableNetworkEffects
+        && !action.unverifiableWorkspaceEffects
+        && isUnverifiableReleaseCandidate(text))
+    && routeRequiresReleaseVerification(state.lastRoute)
+    && !supportsReleaseMutation(releaseEvidenceInput(toolName, event, ctx))) {
+    const promptContract = analyzeReleasePromptContract(state.lastPrompt);
+    if (promptContract.status === 'complete') {
+      return protectedConstraintBlock(
+        'release-command-repair-required',
+        `The trusted user request already contains a complete ${promptContract.kind} target, but this command does not encode the deterministic mutation/verification contract. Correct the command once using this contract: ${formatReleaseCommandRepair(promptContract)}. Do not ask the user to repeat the same authorization and do not substitute another target.`,
+      );
+    }
+    return protectedConstraintBlock(
+      'release-verification-unsupported',
+      `This external mutation has no deterministic independent-verification contract and the trusted prompt target is ${promptContract.status}. Stop tool use and ask for one complete, non-conflicting supported target, or report that the provider action is unsupported.`,
+    );
+  }
+  if (action.externalWrite
+    && routeRequiresReleaseVerification(state.lastRoute)
+    && !releaseMutationMatchesPrompt(releaseEvidenceInput(toolName, event, ctx), state.lastPrompt)) {
+    return protectedConstraintBlock(
+      'release-target-confirmation-required',
+      'The release command target is not fully bound to the trusted user request. Ask the user to confirm the exact repository/registry/cluster target and immutable revision, version, ref, tag, or image in one message; do not execute or retry a different release command.',
+    );
+  }
+  if (action.unverifiableWorkspaceEffects
+    && constraints.workspaceWrite === 'forbidden'
+    && descriptor.provenance?.reasons?.includes('read-only or advisory language')) {
+    return protectedConstraintBlock(
+      'workspace-effects-unverifiable',
+      'The user explicitly forbade workspace changes. This repository-controlled test, build, or script can write files, and no trusted read-only workspace sandbox is available, so it cannot safely run on this route.',
+    );
+  }
+  if (action.workspaceWrite && constraints.workspaceWrite === 'forbidden') {
+    return protectedConstraintBlock('workspace-write-forbidden', 'The deterministic task descriptor is read-only; file writes are not authorized.');
+  }
+  if (action.externalWrite && constraints.externalWrite !== 'required') {
+    return protectedConstraintBlock('external-write-forbidden', 'Push, publish, deploy, merge, and upgrade actions require explicit user authorization in the current task.');
+  }
+  if (action.unverifiableNetworkEffects
+    && constraints.externalWrite !== 'required'
+    && descriptor.provenance?.reasons?.includes('external write forbidden')) {
+    return protectedConstraintBlock(
+      'external-effects-unverifiable',
+      'The user explicitly forbade push, publish, deploy, or other external writes. This unclassified command can hide remote mutations, so use a directly classifiable local command or inspect the command implementation first.',
+    );
+  }
+  if (action.irreversible) {
+    if (!approvalToken) {
+      if (hasTrustedApprovalForRouteTool(state, toolName)) {
+        return protectedConstraintBlock(
+          'irreversible-approval-mismatch-repair-required',
+          'A trusted approval exists for this route and tool, but not for this tool-call identity. Use the already approved host call exactly once; do not ask the user to repeat approval and do not substitute another call id or tool.',
+        );
+      }
+      return protectedConstraintBlock(
+        'irreversible-approval-required',
+        'This irreversible operation requires a trusted host approval event before execution; approval cannot be granted by route or tool arguments. Yolo/automatic host modes may emit no approval event and therefore cannot satisfy this boundary: do not retry the command, and ask the user to rerun it with interactive write approval enabled.',
+      );
+    }
+    stageTrustedIrreversibleCall(state, approvalToken, text);
+  }
+  if (action.opaqueEffects && !action.externalWrite && constraints.externalWrite !== 'required') {
+    return protectedConstraintBlock('external-effects-unverifiable', 'This opaque script or automation target can hide remote mutations, so it cannot run without explicit external-write authorization. Inspect it or use a directly classifiable local command.');
+  }
+  return null;
+}
+
+function externalConnectorActionBlock(descriptor, action, toolName = '', event = {}) {
+  if (!action.externalWrite) return null;
+  const expected = descriptor.externalActionContract;
+  if (!expected || expected.state === 'unsupported') return null;
+
+  if (expected.state === 'incomplete') {
+    return protectedConstraintBlock(
+      'external-action-target-confirmation-required',
+      `The trusted request names a ${expected.provider ?? 'connector'} ${expected.action ?? 'mutation'} but does not contain one complete target. Stop before any external mutation and ask once for the exact target; do not guess or try candidate recipients, channels, projects, folders, calendars, or pages.`,
+    );
+  }
+
+  if (expected.state === 'conflicting') {
+    const multiAction = expected.reasons?.some((reason) => String(reason).includes('unsupported-multi-action'));
+    return protectedConstraintBlock(
+      'external-action-target-confirmation-required',
+      multiAction
+        ? 'The trusted request contains multiple connector mutations. This route intentionally supports one bound connector action at a time: ask once to split or sequence the actions, and do not choose one target or provider on the user\'s behalf.'
+        : `The trusted request contains conflicting targets for the ${expected.provider ?? 'connector'} ${expected.action ?? 'mutation'}. Ask once for one exact target; do not try each candidate.`,
+    );
+  }
+
+  if (expected.state === 'complete'
+    && !externalActionMatchesTool(expected, {
+      toolName,
+      input: firstToolInputRecord(event),
+    })) {
+    return protectedConstraintBlock(
+      'external-action-repair-required',
+      `This external tool call does not match the provider, action, and exact target already authorized by the trusted request (${formatExternalActionContract(expected)}). Correct the call once using only that contract; do not ask the user to repeat it, substitute another target, or try a different external service.`,
+    );
+  }
+  return null;
+}
+
+function formatExternalActionContract(contract = {}) {
+  const provider = String(contract.provider ?? 'connector');
+  const action = String(contract.action ?? 'mutation');
+  const targetKind = String(contract.target?.kind ?? 'target');
+  const targetValue = String(contract.target?.value ?? 'missing');
+  return `${provider}/${action} ${targetKind}=${targetValue}`;
+}
+
+function isUnverifiableReleaseCandidate(command = '') {
+  return /(?:^|[\s_./:-])(?:publish|deploy|release|push|upload|upgrade|promote|rollback|rollout|ship)(?:$|[\s_./:-])/i.test(String(command));
+}
+
+function formatReleaseCommandRepair(contract = {}) {
+  const target = contract.target ?? {};
+  switch (contract.kind) {
+    case 'git-push':
+      return `git push ${target.remote} ${target.sourceName}:${target.targetRef}`;
+    case 'npm-publish':
+      return `from the trusted package directory run npm publish . --ignore-scripts --registry ${target.registry} --tag ${target.tag}; the host manifest must be ${target.packageName}@${target.version}`;
+    case 'docker-push':
+      return `docker push ${target.image}`;
+    case 'gh-release':
+      return `gh release create ${target.tag} --repo ${target.repo}${target.prerelease ? ' --prerelease' : ''}${target.targetCommitish ? ` --target ${target.targetCommitish}` : ''}`;
+    case 'kubectl-rollout':
+      return `kubectl set image deployment/${target.deployment} ${(target.containerImages ?? []).map(({ container, image }) => `${container}=${image}`).join(' ')} --namespace ${target.namespace} --context ${target.context}`;
+    case 'helm-upgrade':
+      return `helm upgrade --install ${target.release} ${target.chart} --namespace ${target.namespace} --kube-context ${target.context}${target.chartVersion ? ` --version ${target.chartVersion}` : ''}`;
+    case 'omp-plugin-upgrade':
+      return `omp plugin upgrade ${target.pluginId} --scope ${target.scope}`;
+    default:
+      return JSON.stringify(target);
+  }
+}
+
+function testKindForCommand(command = '') {
+  const text = String(command).toLowerCase();
+  const patterns = {
+    unit: /(?:^|[\s:_./-])unit(?:$|[\s:_./-])/,
+    integration: /(?:^|[\s:_./-])integration(?:$|[\s:_./-])/,
+    e2e: /(?:^|[\s:_./-])(?:e2e|end-to-end|playwright|cypress|webdriver|selenium|browser-smoke)(?:$|[\s:_./-])/,
+    smoke: /(?:^|[\s:_./-])smoke(?:$|[\s:_./-])/,
+  };
+  return ['unit', 'integration', 'e2e', 'smoke'].find((kind) => patterns[kind].test(text)) ?? null;
+}
+
+function testExecutionTargetsInCommand(command = '') {
+  return uniqueValues([...String(command).matchAll(/(?:^|[\s`'"])((?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java))(?=$|[\s`'",;:])/gi)]
+    .map((match) => String(match[1]).replace(/^\.\//, '').replace(/\\/g, '/').toLowerCase()));
+}
+
+function scopedWorkspaceActionBlock(descriptor, action, event = {}, actionText = '') {
+  if (!action.workspaceWrite && !action.definiteWorkspaceMutation) return null;
+  const allowed = Array.isArray(descriptor.workspaceWriteTargets) ? descriptor.workspaceWriteTargets : [];
+  const excluded = Array.isArray(descriptor.workspaceWriteExclusions) ? descriptor.workspaceWriteExclusions : [];
+  if (!allowed.length && !excluded.length) return null;
+  const observed = workspaceActionTargets(event, actionText);
+  const denied = observed.find((target) => excluded.some((entry) => scopedPathMatches(target, entry)));
+  if (denied) {
+    return protectedConstraintBlock(
+      'workspace-target-excluded',
+      `The trusted user request explicitly excludes workspace target ${denied}. Modify only the authorized target set: ${allowed.join(', ') || 'no other target was named'}.`,
+    );
+  }
+  if (allowed.length && action.definiteWorkspaceMutation
+    && (!observed.length || observed.some((target) => !allowed.some((entry) => scopedPathMatches(target, entry))))) {
+    return protectedConstraintBlock(
+      'workspace-target-authorization-required',
+      `This definite workspace mutation is outside the trusted target allowlist (${allowed.join(', ')}). Use a directly targeted edit within that scope; do not broaden the file set.`,
+    );
+  }
+  return null;
+}
+
+function workspaceActionTargets(event = {}, actionText = '') {
+  const input = firstToolInputRecord(event);
+  const direct = [
+    input.path,
+    input.file,
+    input.filePath,
+    input.filename,
+    ...(Array.isArray(input.paths) ? input.paths : []),
+    ...(Array.isArray(input.files) ? input.files : []),
+  ].filter((value) => typeof value === 'string');
+  const commandPaths = [...String(actionText).matchAll(/(?:^|[\s"'`])((?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:[a-z0-9_.-]+))(?:$|[\s"'`,;:])/gi)]
+    .map((match) => match[1]);
+  return uniqueValues([...direct, ...commandPaths].map((value) => String(value).replace(/^\.\//, '').replace(/\\/g, '/')));
+}
+
+function scopedPathMatches(observed = '', scoped = '') {
+  const target = String(observed).replace(/^\.\//, '').replace(/\\/g, '/').toLowerCase();
+  const expected = String(scoped).replace(/^\.\//, '').replace(/\\/g, '/').toLowerCase();
+  return target === expected || target.startsWith(`${expected.replace(/\/$/, '')}/`);
+}
+
+function scopedExternalActionBlock(descriptor, action, actionText = '') {
+  if (!action.externalWrite) return null;
+  const allowed = Array.isArray(descriptor.externalWriteTargets) ? descriptor.externalWriteTargets : [];
+  const excluded = Array.isArray(descriptor.externalWriteExclusions) ? descriptor.externalWriteExclusions : [];
+  if (!allowed.length && !excluded.length) return null;
+  const observed = environmentTargetsInAction(actionText);
+  const denied = observed.find((target) => excluded.includes(target));
+  if (denied) {
+    return protectedConstraintBlock(
+      'external-target-excluded',
+      `The user explicitly excluded the ${denied} external target. Retry at most once using only the authorized target (${allowed.join(', ') || 'none'}); never substitute another environment.`,
+    );
+  }
+  if (allowed.length && (!observed.length || observed.some((target) => !allowed.includes(target)))) {
+    return protectedConstraintBlock(
+      'external-target-repair-required',
+      `The external command does not prove the trusted target allowlist (${allowed.join(', ')}). Encode that exact environment once; do not ask the user to repeat the same scope and do not choose a different target.`,
+    );
+  }
+  return null;
+}
+
+function environmentTargetsInAction(value = '') {
+  const text = String(value).toLowerCase();
+  const observed = [];
+  if (/(?:^|[^a-z])(?:production|prod)(?:$|[^a-z])/.test(text)) observed.push('production');
+  if (/(?:^|[^a-z])(?:staging|stage)(?:$|[^a-z])/.test(text)) observed.push('staging');
+  if (/(?:^|[^a-z])(?:development|dev)(?:$|[^a-z])/.test(text)) observed.push('development');
+  if (/(?:^|[^a-z])test(?:$|[^a-z])/.test(text)) observed.push('test');
+  return uniqueValues(observed);
+}
+
+function isKnownFirstPartyNetworkAction(toolName = '', event = {}) {
+  const input = firstToolInputRecord(event);
+  if (toolName === 'writing_quality_check') return input.allowNetwork !== false;
+  if (toolName === 'fact_check_evidence') return input.allowNetwork === true;
+  return false;
+}
+
+function firstToolInputRecord(event = {}) {
+  return [
+    event.input,
+    event.params,
+    event.args,
+    event.arguments,
+    event.details?.input,
+    event.details?.params,
+  ].find(isRecord) ?? {};
+}
+
+function protectedConstraintBlock(reasonCode, reason) {
+  return {
+    block: true,
+    reasonCode,
+    reason: `OMP protected action boundary blocked this tool call. ${reason}`,
+  };
+}
+
+function createActionBoundaryState() {
+  return {
+    schemaVersion: 1,
+    denialCount: 0,
+    terminal: false,
+    awaitingUserReason: null,
+    fingerprints: [],
+    reasonCounts: {},
+  };
+}
+
+function readActionBoundaryState(value) {
+  if (!isRecord(value) || value.schemaVersion !== 1) return createActionBoundaryState();
+  const denialCount = Math.min(2, Math.max(0, Number.isInteger(value.denialCount) ? value.denialCount : 0));
+  const reasonCounts = isRecord(value.reasonCounts)
+    ? Object.fromEntries(Object.entries(value.reasonCounts)
+      .filter(([key, count]) => /^[a-z0-9-]{1,64}$/.test(key) && Number.isInteger(count))
+      .map(([key, count]) => [key, Math.min(2, Math.max(0, count))])
+      .slice(-8))
+    : {};
+  return {
+    schemaVersion: 1,
+    denialCount,
+    terminal: value.terminal === true || Object.values(reasonCounts).some((count) => count >= 2),
+    awaitingUserReason: USER_INPUT_ACTION_BLOCKERS.has(value.awaitingUserReason)
+      ? value.awaitingUserReason
+      : null,
+    fingerprints: Array.isArray(value.fingerprints)
+      ? value.fingerprints.filter((item) => /^[a-f0-9]{64}$/.test(String(item))).slice(-2)
+      : [],
+    reasonCounts,
+  };
+}
+
+function recordProtectedActionDenial(state, boundary, toolName = '', event = {}) {
+  const current = readActionBoundaryState(state.actionBoundary);
+  const fingerprint = digestEvidence(`${boundary.reasonCode}:${toolName}:${toolActionText(event)}`);
+  current.denialCount = Math.min(2, current.denialCount + 1);
+  current.reasonCounts[boundary.reasonCode] = Math.min(2, (current.reasonCounts[boundary.reasonCode] ?? 0) + 1);
+  current.fingerprints = [...new Set([...current.fingerprints, fingerprint])].slice(-2);
+  if (REPAIRABLE_ACTION_BLOCKERS.has(boundary.reasonCode)) {
+    current.terminal = current.reasonCounts[boundary.reasonCode] >= 2;
+    state.actionBoundary = current;
+    if (!current.terminal) {
+      return {
+        ...boundary,
+        reason: `${boundary.reason} This is one bounded mechanical repair using existing user authority; retry only with the exact trusted target fields.`,
+      };
+    }
+  }
+  if (USER_INPUT_ACTION_BLOCKERS.has(boundary.reasonCode)) {
+    current.awaitingUserReason = boundary.reasonCode;
+    current.terminal = false;
+    state.actionBoundary = current;
+    return {
+      ...boundary,
+      reason: `${boundary.reason} Stop tool use now and ask the user once; the completion gate will allow that clarification message without a repair loop.`,
+    };
+  }
+  current.terminal = current.reasonCounts[boundary.reasonCode] >= 2;
+  state.actionBoundary = current;
+  if (!current.terminal) {
+    return {
+      ...boundary,
+      reason: `${boundary.reason} Do not retry this protected action without new user authorization or a new trusted route.`,
+    };
+  }
+  return {
+    ...boundary,
+    reasonCode: 'protected-action-terminal',
+    reason: `OMP_GATE_TERMINAL: repeated protected action denials exhausted the route-local action budget. Do not call or run any more tools or commands; report the blocked constraint to the user. Last denial: ${boundary.reason}`,
+  };
+}
+
+function createTrustedApprovalState() {
+  return {
+    requests: new Map(),
+    tokens: new Map(),
+    inFlight: new Map(),
+    usedCallIds: new Set(),
+  };
+}
+
+function recordTrustedApprovalRequest(state, event = {}, ctx = {}) {
+  const approval = approvalEventIdentity(state, event, ctx);
+  if (!approval || state.trustedApprovals.usedCallIds.has(approval.toolCallId)) return false;
+  pruneTrustedApprovalState(state.trustedApprovals);
+  state.trustedApprovals.requests.set(approval.toolCallId, approval);
+  return true;
+}
+
+function recordTrustedApprovalResolution(state, event = {}, ctx = {}) {
+  const approval = approvalEventIdentity(state, event, ctx);
+  if (!approval) return false;
+  pruneTrustedApprovalState(state.trustedApprovals);
+  const requested = state.trustedApprovals.requests.get(approval.toolCallId);
+  if (!sameApprovalIdentity(requested, approval)) return false;
+  state.trustedApprovals.requests.delete(approval.toolCallId);
+  if (event.approved !== true) {
+    state.trustedApprovals.usedCallIds.add(approval.toolCallId);
+    return false;
+  }
+  state.trustedApprovals.tokens.set(approval.toolCallId, approval);
+  return true;
+}
+
+function approvalEventIdentity(state, event = {}, ctx = {}) {
+  const sessionId = cleanApprovalIdentity(event.sessionId);
+  const toolCallId = toolEventCallId(event);
+  const toolName = cleanApprovalIdentity(toolEventName(event));
+  const expectedSessionId = cleanApprovalIdentity(ctx.sessionManager?.getSessionId?.());
+  if (!state.lastRoute || !state.routeStartedAt || !sessionId || !toolCallId || !toolName) return null;
+  if (expectedSessionId && sessionId !== expectedSessionId) return null;
+  return {
+    routeId: gateControllerRouteId(state),
+    sessionId,
+    toolCallId,
+    toolName,
+    recordedAt: Date.now(),
+  };
+}
+
+function sameApprovalIdentity(left, right) {
+  return Boolean(left && right
+    && left.routeId === right.routeId
+    && left.sessionId === right.sessionId
+    && left.toolCallId === right.toolCallId
+    && left.toolName === right.toolName);
+}
+
+function consumeTrustedApprovalToken(state, event = {}, toolName = '') {
+  const toolCallId = toolEventCallId(event);
+  if (!toolCallId || !toolName) return null;
+  pruneTrustedApprovalState(state.trustedApprovals);
+  const token = state.trustedApprovals.tokens.get(toolCallId);
+  if (!token) return null;
+  state.trustedApprovals.tokens.delete(toolCallId);
+  state.trustedApprovals.usedCallIds.add(toolCallId);
+  if (token.routeId !== gateControllerRouteId(state) || token.toolName !== toolName) return null;
+  return token;
+}
+
+function hasTrustedApprovalForRouteTool(state, toolName = '') {
+  pruneTrustedApprovalState(state.trustedApprovals);
+  return [...state.trustedApprovals.tokens.values()].some((token) => (
+    token.routeId === gateControllerRouteId(state) && token.toolName === toolName
+  ));
+}
+
+function stageTrustedIrreversibleCall(state, token, text = '') {
+  if (!token) return false;
+  const toolCallId = token.toolCallId;
+  state.trustedApprovals.inFlight.set(toolCallId, {
+    ...token,
+    inputDigest: digestEvidence(text),
+  });
+  return true;
+}
+
+function recordTrustedIrreversibleResult(state, toolName = '', event = {}, { successful = false } = {}) {
+  const toolCallId = toolEventCallId(event);
+  if (!toolCallId) return false;
+  const pending = state.trustedApprovals.inFlight.get(toolCallId);
+  if (!pending) return false;
+  state.trustedApprovals.inFlight.delete(toolCallId);
+  if (!successful
+    || !isSuccessfulApprovedToolResult(event)
+    || pending.routeId !== gateControllerRouteId(state)
+    || pending.toolName !== toolName
+    || pending.inputDigest !== digestEvidence(toolActionText(event))) return false;
+  state.evidence.irreversibleExecution = {
+    schemaVersion: 1,
+    source: 'host-tool-approval',
+    routeId: pending.routeId,
+    toolName,
+    toolCallIdDigest: digestEvidence(toolCallId),
+    inputDigest: pending.inputDigest,
+    completedAt: Date.now(),
+  };
+  return true;
+}
+
+function isSuccessfulApprovedToolResult(event = {}) {
+  const exitCodes = [event.exitCode, event.details?.exitCode, event.result?.exitCode, event.result?.details?.exitCode]
+    .filter((value) => Number.isFinite(value));
+  if (exitCodes.some((value) => value !== 0)) return false;
+  const asyncStates = [event.details?.async?.state, event.result?.details?.async?.state]
+    .map((value) => String(value ?? '').toLowerCase())
+    .filter(Boolean);
+  return !asyncStates.some((value) => ['pending', 'running', 'started', 'in_progress', 'in-progress'].includes(value));
+}
+
+function hasTrustedIrreversibleCompletion(state) {
+  const evidence = state.evidence.irreversibleExecution;
+  return evidence?.schemaVersion === 1
+    && evidence.source === 'host-tool-approval'
+    && evidence.routeId === gateControllerRouteId(state);
+}
+
+function pruneTrustedApprovalState(approvals, now = Date.now()) {
+  const expiresBefore = now - 2 * 60 * 1000;
+  while (approvals.requests.size > 64) approvals.requests.delete(approvals.requests.keys().next().value);
+  for (const collection of [approvals.tokens, approvals.inFlight]) {
+    for (const [key, value] of collection) {
+      if ((value.recordedAt ?? 0) < expiresBefore) collection.delete(key);
+    }
+    while (collection.size > 64) collection.delete(collection.keys().next().value);
+  }
+  while (approvals.usedCallIds.size > 128) approvals.usedCallIds.delete(approvals.usedCallIds.values().next().value);
+}
+
+function cleanApprovalIdentity(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
 function buildPreworkSkillGateBlock(state, toolName) {
   if (!isPreworkSkillGateTool(toolName, state.lastRoute)) return null;
   const missing = missingReadSkills(state);
@@ -1736,7 +3015,7 @@ function buildPreworkSkillGateBlock(state, toolName) {
 }
 
 function buildTaskSubagentSkillGateBlock(state, event = {}) {
-  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  const requiredSubagents = subagentRequirements(routeRequiredSubagents(state.lastRoute));
   if (!requiredSubagents.length) return null;
 
   const requiredByAgent = new Map(requiredSubagents.map((item) => [item.agent, item.requiredSkills]));
@@ -2007,7 +3286,7 @@ function genericWorkToolsRequiringSkills() {
 
 function missingReadSkills(state) {
   const loaded = [...state.evidence.loadedSkills];
-  return (state.lastRoute?.requiredSkills ?? [])
+  return routeRequiredSkills(state.lastRoute)
     .filter((skill) => !loaded.some((loadedSkill) => skillNamesEquivalent(skill, loadedSkill)));
 }
 
@@ -2018,8 +3297,13 @@ function recordFinalOutputEvidence(state, event = {}) {
   if (state.lastRoute?.intent === 'bug-audit' && isDeliverableBugAuditReport(output)) {
     state.evidence.deliveredBugAuditReport = true;
   }
+  if (isStructuredReviewEvidence(output)) state.evidence.reviewEvidence = true;
+  if (isStructuredSecurityReview(output)) state.evidence.mainAgentSecurityReview = true;
+  if (matchesObservedManualTestingReport(state, output)) {
+    state.evidence.testingGate = true;
+  }
 
-  const requiredSkills = state.lastRoute?.requiredSkills ?? [];
+  const requiredSkills = routeRequiredSkills(state.lastRoute);
   if (requiredSkills.length && !state.lastSkillUsage?.ok && hasLoadedSkillEvidence(output)) {
     state.lastSkillUsage = validateSkillUsage({
       requiredSkills,
@@ -2028,10 +3312,135 @@ function recordFinalOutputEvidence(state, event = {}) {
     });
   }
 
-  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  const requiredSubagents = subagentRequirements(routeRequiredSubagents(state.lastRoute));
   if (requiredSubagents.length && !state.lastSubagentUsage?.ok && /\bSUBAGENT_USAGE\b/i.test(output)) {
     state.lastSubagentUsage = validateSubagentUsage({ requiredSubagents, output });
     if (state.lastSubagentUsage.ok) recordSubagentFinalUsage(state, output);
+  }
+}
+
+function isStructuredReviewEvidence(output = '') {
+  const text = String(output);
+  return /(?:^|\n)\s*REVIEW_EVIDENCE\s*(?:\n|$)/i.test(text)
+    && /(?:^|\n)\s*Scope:\s*\S/i.test(text)
+    && /(?:^|\n)\s*Findings?:\s*\S/i.test(text)
+    && /(?:^|\n)\s*Verdict:\s*(?:PASS|READY|APPROVED)\b/i.test(text)
+    && !hasContradictoryPassEvidence(text);
+}
+
+function isStructuredSecurityReview(output = '') {
+  const text = String(output);
+  return /(?:^|\n)\s*SECURITY_REVIEW\s*(?:\n|$)/i.test(text)
+    && /(?:^|\n)\s*Scope:\s*\S/i.test(text)
+    && /(?:^|\n)\s*Findings?:\s*\S/i.test(text)
+    && /(?:^|\n)\s*Evidence:\s*\S/i.test(text)
+    && /(?:^|\n)\s*Verdict:\s*(?:PASS|READY|APPROVED)\b/i.test(text)
+    && !hasContradictoryPassEvidence(text);
+}
+
+function hasContradictoryPassEvidence(value = '') {
+  const text = String(value);
+  if (/(?:^|\n)\s*Verdict:\s*(?:FAIL|FAILED|BLOCKED|NEEDS?[-_ ]WORK)\b/i.test(text)) return true;
+
+  const lines = text.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const blocker = lines[index].match(/^\s*(?:OpenBlockers|Blockers):\s*(.*)$/i);
+    if (!blocker) continue;
+    const inline = blocker[1].trim();
+    if (inline && !/^(?:none|no(?:ne)?|n\/a|nil|zero|\[\]|无|没有|不存在)[.!。]?$/i.test(inline)) return true;
+    if (!inline) {
+      const next = lines[index + 1]?.trim() ?? '';
+      if (/^-\s*\S/.test(next) && !/^-\s*(?:none|n\/a|无|没有)\b/i.test(next)) return true;
+    }
+  }
+
+  return text.split(/[\n.;。；]+/).some((clause) => contradictoryFindingClause(clause));
+}
+
+function contradictoryFindingClause(value = '') {
+  const clause = String(value).trim();
+  if (!clause) return false;
+  const englishSeverity = /\b(?:critical|high(?:-severity)?)\b/i.test(clause);
+  const englishResolved = /\b(?:fixed|resolved|remediated|mitigated|closed|addressed)\b/i.test(clause);
+  const englishNegated = /\b(?:no|none|zero|without)\b.{0,80}\b(?:critical|high(?:-severity)?|unresolved|open|remaining|vulnerabilit(?:y|ies)|bypass)\b/i.test(clause);
+  const explicitOpen = /\b(?:unresolved|unfixed|unmitigated|remaining|still\s+open|remains?\s+(?:open|unresolved)|active|exploitable)\b/i.test(clause);
+  const confirmedSevere = englishSeverity
+    && /\b(?:confirmed|vulnerabilit(?:y|ies)|bypass|blockers?)\b/i.test(clause);
+  if (englishSeverity && !englishResolved && !englishNegated && (explicitOpen || confirmedSevere)) return true;
+
+  const chineseSeverity = /(?:高危|严重|关键)/.test(clause);
+  const chineseResolved = /(?:已修复|已解决|已缓解|已关闭|不存在|未发现|没有|无(?:任何)?)/.test(clause);
+  const chineseOpen = /(?:未解决|仍存在|未修复|可利用|已确认|漏洞|阻断)/.test(clause);
+  return chineseSeverity && chineseOpen && !chineseResolved;
+}
+
+function parseStructuredManualTestingReport(output = '') {
+  const text = String(output);
+  if (!/(?:^|\n)\s*MANUAL_TESTING_GATE_REPORT\s*(?:\n|$)/i.test(text)
+    || !/(?:^|\n)\s*Result:\s*PASS\b/i.test(text)
+    || !/(?:^|\n)\s*Scope:\s*\S/i.test(text)
+    || !/(?:^|\n)\s*Evidence:\s*\S/i.test(text)) return null;
+  const command = text.match(/(?:^|\n)\s*Command:\s*(\S[^\n]*)/i)?.[1]?.trim();
+  return command ? { command } : null;
+}
+
+function matchesObservedManualTestingReport(state, output = '') {
+  const report = parseStructuredManualTestingReport(output);
+  const evidence = state.evidence.testCommandEvidence;
+  return Boolean(report
+    && state.evidence.testingEnhancerEvidence?.status !== 'failed'
+    && hasTestingToolUnavailableEvidence(state)
+    && evidence?.source === 'host-tool-result'
+    && evidence.routeId === gateControllerRouteId(state)
+    && manualTestScopeMatches(state.lastPrompt, report.command)
+    && evidence.commandDigest === digestEvidence(report.command));
+}
+
+function manualTestScopeMatches(prompt = '', command = '') {
+  const targets = extractSecurityScopePaths(String(prompt).toLowerCase())
+    .filter((path) => /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|rb|php|cs)$|(?:^|\/)(?:src|lib|app|server|api)\//i.test(path));
+  if (!targets.length || isFullTestSuiteCommand(command)) return true;
+  const text = String(command).toLowerCase();
+  return targets.every((target) => {
+    const basename = target.split('/').at(-1) ?? target;
+    const stem = basename.replace(/\.[^.]+$/, '');
+    return text.includes(target) || stem.length >= 3 && new RegExp(`(?:^|[^a-z0-9])${escapeRegularExpression(stem)}(?:[^a-z0-9]|$)`, 'i').test(text);
+  });
+}
+
+function escapeRegularExpression(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isFullTestSuiteCommand(command = '') {
+  const text = String(command).trim();
+  return /^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test(?:\s+--(?:workspace|workspaces)\s+\S+)?$/i.test(text)
+    || /^cargo\s+(?:test|nextest\s+run)(?:\s+--workspace)?$/i.test(text)
+    || /^go\s+test\s+\.\/\.\.\.$/i.test(text)
+    || /^pytest(?:\s+-[\w=-]+)*$/i.test(text)
+    || /^node\s+--test$/i.test(text);
+}
+
+function hasTestingToolUnavailableEvidence(state) {
+  return state.testingToolAvailability === 'unavailable'
+    || state.evidence.toolFailures.some((failure) => (
+    /^omp_test_/i.test(failure.tool)
+    && /(?:not found|unknown tool|unavailable|not registered|missing tool|unsupported)/i.test([
+      failure.message,
+      failure.summary,
+      failure.repairHint,
+    ].filter(Boolean).join(' '))
+    ));
+}
+
+function refreshTestingToolAvailability(state, pi) {
+  if (typeof pi?.getActiveTools !== 'function') return;
+  try {
+    const active = pi.getActiveTools();
+    if (!Array.isArray(active)) return;
+    state.testingToolAvailability = active.includes('omp_test_gate') ? 'available' : 'unavailable';
+  } catch {
+    state.testingToolAvailability = 'unknown';
   }
 }
 
@@ -2060,15 +3469,23 @@ function isDeliverableBugAuditReport(output = '') {
 }
 
 function buildLoopRecoveryStopContext(state, event = {}) {
-  if (state.loopGuard.recoveryPending) return takeLoopRecoveryContext(state.loopGuard);
   const output = extractFinalOutputText(event);
+  if (state.loopGuard.recoveryPending) {
+    if (!output || state.loopGuard.streamTriggered) return buildLoopRecoveryContext(state.loopGuard);
+    const recoveryDetection = recordGeneratedText(state.loopGuard, output, { flushIncompleteLine: true });
+    if (recoveryDetection.repeated) return buildLoopRecoveryContext(state.loopGuard);
+    recordLoopGuardProgress(state.loopGuard, 'non_repeated_progress');
+    return null;
+  }
   if (!output) return null;
   const detection = recordGeneratedText(state.loopGuard, output, { flushIncompleteLine: true });
   if (!detection.repeated) return null;
-  return takeLoopRecoveryContext(state.loopGuard);
+  return buildLoopRecoveryContext(state.loopGuard);
 }
 
 async function handleLoopGuardGeneratedOutput(pi, state, ctx = {}, text = '') {
+  const loopMode = readRuntimePolicy().loopMode;
+  if (loopMode === 'disabled') return undefined;
   if (state.loopGuard.streamTriggered) return undefined;
   if (!text) return undefined;
   const detection = recordGeneratedText(state.loopGuard, text);
@@ -2077,15 +3494,20 @@ async function handleLoopGuardGeneratedOutput(pi, state, ctx = {}, text = '') {
   const additionalContext = buildLoopRecoveryContext(state.loopGuard);
   await writeDebugLog(ctx, 'loops', buildDebugRecord({
     kind: 'loops',
-    prompt: state.lastPrompt,
     route: state.lastRoute,
     reasonCode: detection.kind ?? 'repeated_generation',
     payload: {
-      reason: detection.reason,
-      repeatedText: detection.repeatedText,
+      fingerprint: detection.fingerprint,
+      repairUsed: state.gateController?.budget?.repairUsed ?? 0,
+      terminalUsed: state.gateController?.budget?.terminalUsed ?? 0,
     },
   }));
-  const autoContinuation = await queueLoopGuardRecoveryContinuation(pi, state, additionalContext, detection);
+  const autoContinuation = { queued: false, reason: 'GateController owns continuation decisions' };
+  if (loopMode === 'observe') {
+    recordLoopGuardProgress(state.loopGuard, 'observe-only');
+    await persistState(pi, state);
+    return undefined;
+  }
   await persistState(pi, state);
   await ctx.ui?.notify?.('OMP Enhancer Core stopped a repeated main-agent generation.', 'warn');
   try {
@@ -2103,45 +3525,8 @@ async function handleLoopGuardGeneratedOutput(pi, state, ctx = {}, text = '') {
   };
 }
 
-async function queueLoopGuardRecoveryContinuation(pi, state, fallbackContext, detection) {
-  if (typeof pi?.sendMessage !== 'function') {
-    return { queued: false, reason: 'sendMessage unavailable' };
-  }
-  if (!state.loopGuard.recoveryPending) {
-    return { queued: false, reason: 'recovery context unavailable' };
-  }
-  if (state.loopGuard.recoveryAttempts >= defaultLoopGuardConfig.maxRecoveryAttempts) {
-    return { queued: false, reason: 'recovery attempt limit reached' };
-  }
-  const content = fallbackContext;
-  if (!content) return { queued: false, reason: 'recovery context unavailable' };
-
-  try {
-    await pi.sendMessage({
-      customType: LOOP_GUARD_RECOVERY_MESSAGE,
-      content,
-      display: false,
-      attribution: 'agent',
-      details: {
-        reason: detection.reason,
-        repeatedText: detection.repeatedText,
-      },
-    }, {
-      deliverAs: 'followUp',
-      triggerTurn: true,
-    });
-    takeLoopRecoveryContext(state.loopGuard);
-    return { queued: true, customType: LOOP_GUARD_RECOVERY_MESSAGE };
-  } catch (error) {
-    return {
-      queued: false,
-      reason: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
 function reconcileSkillUsageFromReadEvidence(state) {
-  const requiredSkills = state.lastRoute?.requiredSkills ?? [];
+  const requiredSkills = routeRequiredSkills(state.lastRoute);
   const loadedSkills = effectiveLoadedSkillsForValidation(state);
   if (!requiredSkills.length || state.lastSkillUsage?.ok || !loadedSkills.length) return;
   state.lastSkillUsage = validateSkillUsage({
@@ -2159,7 +3544,7 @@ function effectiveLoadedSkillsForValidation(state) {
 }
 
 function delegatedLoadedSkills(state) {
-  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  const requiredSubagents = subagentRequirements(routeRequiredSubagents(state.lastRoute));
   const loaded = [];
   for (const { agent, requiredSkills } of requiredSubagents) {
     const recorded = [...(state.evidence.subagentLoadedSkills.get(agent) ?? new Set())];
@@ -2284,7 +3669,7 @@ function collectTextCandidates(value, seen = new Set()) {
 }
 
 function buildMissingSubagentUsageContext(state) {
-  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  const requiredSubagents = subagentRequirements(routeRequiredSubagents(state.lastRoute));
   if (!requiredSubagents.length) return null;
 
   const completedSubagents = completedSubagentsForGate(state);
@@ -2373,9 +3758,9 @@ function recordTaskExecutionUpdate(state, event = {}) {
   return update ? [update] : [];
 }
 
-function recordTaskResult(state, event = {}, { successful } = {}) {
+function recordTaskResult(state, event = {}, { successful, pending } = {}) {
   return recordTaskProgress(state, event, {
-    status: successful ? 'completed' : 'failed',
+    status: pending ? 'running' : successful ? 'completed' : 'failed',
     source: 'tool_result',
   });
 }
@@ -2768,6 +4153,7 @@ function touchPendingSubagent(state, { agent, skills = [], text = '' }, startedA
     startedAt: current?.startedAt ?? startedAt,
     lastSeenAt,
     attempts: current?.attempts ?? 1,
+    mutationRevision: current?.mutationRevision ?? state.evidence.mutationRevision ?? 0,
     skills: nextSkills,
     texts: nextTexts,
   });
@@ -2786,8 +4172,15 @@ function recordSubagentDispatchStarted(state, event) {
   return records;
 }
 
-function recordSubagentTaskResultEvidence(state, event, { successful }) {
+function recordSubagentTaskResultEvidence(state, event, { successful, pending }) {
   const { records, dispatchId } = subagentRecordsForToolResult(state, event);
+  if (pending) {
+    return applySubagentTaskCompletionEvidence(state, event, {
+      records,
+      dispatchId,
+      legacyCompleteWithoutSignal: false,
+    });
+  }
   if (!successful) {
     clearPendingSubagentsForResult(state, { records, dispatchId });
     clearPendingAsyncSubagentJobs(state, { records, dispatchId });
@@ -2922,6 +4315,7 @@ function recordPendingSubagent(state, { agent, skills = [], text = '' }, started
     startedAt: current?.startedAt ?? startedAt,
     lastSeenAt: startedAt,
     attempts: (current?.attempts ?? 0) + 1,
+    mutationRevision: current?.mutationRevision ?? state.evidence.mutationRevision ?? 0,
     skills: nextSkills,
     texts: nextTexts,
   });
@@ -2934,8 +4328,13 @@ function recordPendingSubagentCall(state, dispatchId, records) {
   state.evidence.pendingSubagentCalls.set(dispatchId, agents);
 }
 
-function recordCompletedSubagent(state, { agent, text = '', skills = [] }) {
+function recordCompletedSubagent(state, { agent, text = '', resultText = '', skills = [] }) {
   const pending = state.evidence.pendingSubagents.get(agent);
+  if (isReviewEvidenceAgent(agent)
+    && (pending?.mutationRevision ?? -1) < (state.evidence.mutationRevision ?? 0)) {
+    state.evidence.pendingSubagents.delete(agent);
+    return;
+  }
   const mergedSkills = new Set(pending?.skills ?? []);
   for (const skill of skills) mergedSkills.add(skill);
   const mergedTexts = new Set(pending?.texts ?? []);
@@ -2946,7 +4345,20 @@ function recordCompletedSubagent(state, { agent, text = '', skills = [] }) {
   state.evidence.taskSubagents.add(agent);
   recordSubagentAssignmentEvidence(state, { agent, texts: [...mergedTexts] });
   recordSubagentSkillEvidence(state, { agent, text, skills: [...mergedSkills] });
-  recordSubagentLoadedSkillEvidence(state, { agent, texts: [...mergedTexts] });
+  recordSubagentResultEvidence(state, { agent, text: resultText });
+  recordSubagentLoadedSkillEvidence(state, { agent, texts: resultText ? [resultText] : [] });
+}
+
+function isReviewEvidenceAgent(agent = '') {
+  return /(?:reviewer|checker|cross-check|security|silent-failure|pr-test)/i.test(String(agent));
+}
+
+function recordSubagentResultEvidence(state, { agent, text = '' }) {
+  const cleaned = cleanText(text);
+  if (!agent || !cleaned) return;
+  const recorded = state.evidence.subagentResultTexts.get(agent) ?? new Set();
+  recorded.add(cleaned);
+  state.evidence.subagentResultTexts.set(agent, recorded);
 }
 
 function recordSubagentFinalUsage(state, output) {
@@ -2967,7 +4379,7 @@ function recordSubagentAssignmentEvidence(state, { agent, texts = [] }) {
 }
 
 function recordSubagentSkillEvidence(state, { agent, text = '', skills = [] }) {
-  const requiredByAgent = new Map(subagentRequirements(state.lastRoute?.requiredSubagents).map((item) => [item.agent, item.requiredSkills]));
+  const requiredByAgent = new Map(subagentRequirements(routeRequiredSubagents(state.lastRoute)).map((item) => [item.agent, item.requiredSkills]));
   const requiredSkills = requiredByAgent.get(agent) ?? [];
   const unexpectedSkills = skills.filter((skill) => !requiredSkills.some((requiredSkill) => skillNamesEquivalent(requiredSkill, skill)));
   if (unexpectedSkills.length) {
@@ -2987,7 +4399,7 @@ function recordSubagentSkillEvidence(state, { agent, text = '', skills = [] }) {
 }
 
 function recordSubagentLoadedSkillEvidence(state, { agent, texts = [] }) {
-  const requiredByAgent = new Map(subagentRequirements(state.lastRoute?.requiredSubagents).map((item) => [item.agent, item.requiredSkills]));
+  const requiredByAgent = new Map(subagentRequirements(routeRequiredSubagents(state.lastRoute)).map((item) => [item.agent, item.requiredSkills]));
   const requiredSkills = requiredByAgent.get(agent) ?? [];
   if (!requiredSkills.length) return;
 
@@ -3029,6 +4441,7 @@ function attachToolResultText(records = [], resultText = '') {
   return records.map((record) => ({
     ...record,
     text: [record.text, cleaned].filter(Boolean).join('\n'),
+    resultText: cleaned,
   }));
 }
 
@@ -3155,7 +4568,7 @@ function formatPendingSubagents(values) {
 }
 
 function buildSubagentStatus(state) {
-  const requiredSubagents = subagentRequirements(state.lastRoute?.requiredSubagents);
+  const requiredSubagents = subagentRequirements(routeRequiredSubagents(state.lastRoute));
   return {
     route: state.lastRoute?.intent ?? 'none',
     active_route: state.lastRoute?.intent ?? 'none',
@@ -3441,20 +4854,604 @@ function formatRecentToolFailures(state, toolNames = []) {
   ].join('\n');
 }
 
+function recordMutationEvidenceInvalidation(state, toolName = '', event = {}, _result = {}) {
+  const command = toolActionText(event);
+  const action = classifyToolAction({ toolName, text: command });
+  if ((!action.workspaceWrite && !action.definiteWorkspaceMutation) || toolName === 'omp_core_install_skills') return false;
+
+  state.evidence.releaseActionEvidence = null;
+  state.evidence.releaseVerificationEvidence = null;
+  state.evidence.releaseVerified = false;
+  if (isVcsMetadataOnlyMutation(command, toolName)) return true;
+
+  state.evidence.lastDefiniteMutationAt = Math.max(
+    Date.now(),
+    (state.evidence.lastDefiniteMutationAt ?? 0) + 1,
+  );
+  state.evidence.mutationRevision = (state.evidence.mutationRevision ?? 0) + 1;
+
+  state.evidence.writingQuality = false;
+  state.evidence.writingLogic = false;
+  state.evidence.testingGate = false;
+  state.evidence.testingReport = false;
+  state.evidence.testingEnhancerEvidence = null;
+  state.evidence.testCommandEvidence = null;
+  state.evidence.factCheckGate = false;
+  state.evidence.reviewEvidence = false;
+  state.evidence.mainAgentSecurityReview = false;
+  state.evidence.securityInspectionObserved = false;
+  state.evidence.securityInspectionEvidence = null;
+  state.lastSubagentUsage = null;
+  invalidateReviewSubagentEvidence(state);
+  return true;
+}
+
+function invalidateReviewSubagentEvidence(state) {
+  const agents = new Set([
+    ...state.evidence.taskSubagents,
+    ...state.evidence.forkedSubagents,
+    ...state.evidence.subagentResultTexts.keys(),
+  ].filter((agent) => /(?:reviewer|checker|cross-check|security|silent-failure|pr-test)/i.test(agent)));
+  for (const agent of agents) {
+    state.evidence.taskSubagents.delete(agent);
+    state.evidence.forkedSubagents.delete(agent);
+    state.evidence.subagentSkills.delete(agent);
+    state.evidence.subagentLoadedSkills.delete(agent);
+    state.evidence.subagentAssignments.delete(agent);
+    state.evidence.subagentResultTexts.delete(agent);
+  }
+}
+
+function isVcsMetadataOnlyMutation(command = '', toolName = '') {
+  if (!/^(?:bash|shell|terminal|exec|exec_command|run|run_command|command)$/i.test(toolName)) return false;
+  const text = String(command).trim();
+  // A commit may run repository-controlled pre/post hooks that rewrite source
+  // files. Keep only operations without executable hook surfaces on the
+  // metadata-only fast path.
+  if (hasUnsafeResultMasking(text)) return false;
+  if (/^git\s+add\b/i.test(text)) return true;
+  return /^git\s+tag\b/i.test(text) && !/(?:^|\s)(?:-d|--delete)(?:\s|$)/i.test(text);
+}
+
+function recordObservedTestEvidence(state, toolName = '', event = {}, { successful = false } = {}) {
+  if (!TRUSTED_HOST_TEST_EXECUTORS.has(String(toolName).toLowerCase())) return false;
+  const command = toolActionText(event);
+  const action = classifyToolAction({ toolName, text: command });
+  if (!action.testExecution) return false;
+  const resultText = toolResultText(event);
+  if (!successful
+    || hasUnsafeResultMasking(command)
+    || isDryRunAction(command)
+    || isNonExecutingTestProbe(command)
+    || !isExplicitPositiveTestOutput(resultText, command)) {
+    state.evidence.testCommandEvidence = null;
+    return false;
+  }
+  state.evidence.testCommandEvidence = {
+    schemaVersion: 1,
+    source: 'host-tool-result',
+    routeId: gateControllerRouteId(state),
+    commandDigest: digestEvidence(command),
+    resultDigest: digestEvidence(resultText),
+    mutationRevision: state.evidence.mutationRevision,
+    observedAt: Math.max(
+      Date.now(),
+      Number.isFinite(state.routeStartedAt) ? state.routeStartedAt : 0,
+      Number.isFinite(state.evidence.lastDefiniteMutationAt) ? state.evidence.lastDefiniteMutationAt : 0,
+    ),
+  };
+  return true;
+}
+
+function isExplicitPositiveTestOutput(value = '', command = '') {
+  const text = String(value).trim();
+  const goTestCommand = /^go\s+test\b/i.test(String(command).trim());
+  const goExecutedSuite = text.split(/\r?\n/).some((line) => /^ok\s+\S+/.test(line.trim()) && !/\[no test files\]/i.test(line));
+  const gradleTestCommand = /^(?:\.\/)?gradle(?:w)?\b[^\n]*\b(?:test|check)\b/i.test(String(command).trim());
+  const gradleTestTaskLines = text.split(/\r?\n/).filter((line) => /^>\s*Task\s+:[^\n]*test\b/i.test(line.trim()));
+  const gradleExecutedSuite = gradleTestTaskLines.some((line) => !/\b(?:NO-SOURCE|SKIPPED|UP-TO-DATE|FROM-CACHE)\b/i.test(line));
+  if (!text) return false;
+  const unittestSummary = text.match(/\bran\s+([1-9]\d*)\s+tests?\b[\s\S]{0,160}(?:^|\n)\s*OK(?:\s*\(([^\n)]*)\))?\s*$/i);
+  const unittestSkipped = unittestSummary?.[2]?.match(/\bskipped\s*=\s*(\d+)\b/i);
+  if (unittestSummary && unittestSkipped
+    && Number(unittestSkipped[1]) >= Number(unittestSummary[1])) return false;
+  const phpunitIssueSummary = text.match(/\bOK,\s*but there were issues!(?=\s|$)[\s\S]{0,200}\btests?\s*:\s*([1-9]\d*)\s*,\s*assertions?\s*:\s*(\d+)\b/i);
+  if (phpunitIssueSummary && Number(phpunitIssueSummary[2]) === 0) return false;
+  const withoutZeroFailures = text
+    .replace(/\b0\s+(?:tests?\s+)?fail(?:ed|ures?)\b/gi, '')
+    .replace(/(?:^|\n)\s*#\s*fail\s+0\b/gi, '');
+  if (/(?:^|\n)\s*not ok\b|\btests? failed\b|\b[1-9]\d*\s+(?:tests?\s+)?fail(?:s|ed|ures?)?\b|\b(?:failed|failing|failures?|errors?)\s*:\s*[1-9]\d*\b|(?:^|\n)\s*#\s*fail\s+[1-9]\d*\b|\bBUILD FAILED\b|\bfatal:|\berror:/i.test(withoutZeroFailures)) return false;
+  const hasCountedNonzeroSuite = /\b[1-9]\d*\s+(?:tests?\s+)?passed\b|\btests?\s+[1-9]\d*\s+passed\b|\b[1-9]\d*\s+passing\b|\b[1-9]\d*\s+pass\b|(?:^|\n)\s*#\s*pass\s+[1-9]\d*\b|\btest result:\s*ok\.[^\n]*\b[1-9]\d*\s+passed\b|\btests?\s+run:\s*[1-9]\d*\s*,\s*failures?\s*:\s*0\s*,\s*errors?\s*:\s*0\b|\bfailed\s*:\s*0\b[^\n]{0,120}\bpassed\s*:\s*[1-9]\d*\b|\bpassed\s*:\s*[1-9]\d*\b[^\n]{0,120}\bfailed\s*:\s*0\b|\btest summary\s*:\s*total\s*:\s*[1-9]\d*\s*,\s*failed\s*:\s*0\s*,\s*succeeded\s*:\s*[1-9]\d*\b|\btest run successful\b[^\n]{0,120}\btotal tests?\s*:\s*[1-9]\d*\b|\bran\s+[1-9]\d*\s+tests?\b[\s\S]{0,160}(?:^|\n)\s*OK(?:\s*\([^\n)]*\))?\s*$|\bOK,\s*but there were issues!\b[\s\S]{0,200}\btests?\s*:\s*[1-9]\d*\b|\b[1-9]\d*\s+tests?\s+completed\b|\b[1-9]\d*\s+examples?\s*,\s*0\s+failures?\b|\b100%\s+tests?\s+passed\b[^\n]{0,100}\b0\s+tests?\s+failed\s+out\s+of\s+[1-9]\d*\b|\bOK\s*\(\s*[1-9]\d*\s+tests?\s*,\s*[1-9]\d*\s+assertions?\s*\)|\bexecuted\s+[1-9]\d*\s+tests?\s*,\s*with\s+0\s+failures?\b|\b[1-9]\d*\s+tests?\s*,\s*0\s+failures?\b|\btests?\s*:\s*[1-9]\d*\b[\s\S]{0,200}\bpassing\s*:\s*[1-9]\d*\b[\s\S]{0,120}\bfailing\s*:\s*0\b/i.test(text);
+  const hasPhpunitIssuesNonzeroSuite = Boolean(phpunitIssueSummary && Number(phpunitIssueSummary[2]) > 0);
+  const hasWeakPositiveSuite = /(?:^|\n)\s*PASS\s+\S/i.test(text)
+    || !goTestCommand && /(?:^|\n)\s*ok\s+\S+/i.test(text);
+  const hasRunnerSpecificNonzeroSuite = goTestCommand && goExecutedSuite
+    || gradleTestCommand && gradleExecutedSuite && /\bBUILD SUCCESSFUL\b/i.test(text);
+  const hasEmptySuite = /\b(?:no tests? (?:found|collected|run)|zero tests?|ran\s+0\s+tests?|collected\s+0\s+(?:items?|tests?)|0\s+tests?\s+(?:passed|run|collected)|tests?\s+0\s+passed|0\s+passed|0\s+passing)\b/i.test(text)
+    || /\[(?:no test files|no tests? to run)\]/i.test(text)
+    || /(?:^|\n)\s*#\s*(?:pass|tests?)\s+0\b/i.test(text)
+    || gradleTestCommand && gradleTestTaskLines.length > 0 && !gradleExecutedSuite;
+  if (hasEmptySuite && !hasCountedNonzeroSuite && !hasRunnerSpecificNonzeroSuite && !hasPhpunitIssuesNonzeroSuite) return false;
+  return hasCountedNonzeroSuite || hasWeakPositiveSuite || hasRunnerSpecificNonzeroSuite || hasPhpunitIssuesNonzeroSuite;
+}
+
+function isNonExecutingTestProbe(command = '') {
+  return /(?:^|\s)(?:--help|-h|--listtests|--list-tests|--collect-only|--passwithnotests)(?:\s|$)/i.test(String(command));
+}
+
+function recordSecurityInspectionEvidence(state, toolName = '', event = {}, { successful = false } = {}) {
+  if (!successful || !routeRequiresSecurityEvidence(state.lastRoute)) return false;
+  if (toolName === 'read' && extractReadSkillNames(event).length > 0) return false;
+  const command = toolActionText(event);
+  const resultText = toolResultText(event);
+  const shellTool = /^(?:bash|shell|terminal|exec|exec_command|run|run_command|command)$/i.test(toolName);
+  if (shellTool && hasUnsafeResultMasking(command)) return false;
+  const scanner = /^(?:semgrep|trivy|snyk|codeql)$/i.test(toolName)
+    || shellTool
+      && /^(?:semgrep|trivy|snyk|codeql)\b/i.test(command)
+      && !/\s--(?:version|help)\b/i.test(command);
+  const inspectionTool = /^(?:read|grep|rg|search)$/i.test(toolName)
+    || shellTool
+      && /^(?:rg|grep|sed\s+-n|cat|head|tail)\b/i.test(command)
+      && !/\s--(?:version|help)\b/i.test(command);
+  const targetText = securityInspectionTargetText(event, command);
+  const requestedSecurityPaths = extractSecurityScopePaths(state.lastPrompt);
+  const previousCoverage = state.evidence.securityInspectionEvidence?.routeId === gateControllerRouteId(state)
+    ? state.evidence.securityInspectionEvidence.targetCoverageDigests ?? []
+    : [];
+  const scopeCoverage = securityRouteCoverage(state.lastPrompt, targetText, previousCoverage);
+  if ((scanner && /--(?:version|help)\b/i.test(command))
+    || (scanner && (!hasSecurityInspectionTarget(targetText) || isEmptySecurityScanResult(resultText)))
+    || (!scanner && (!inspectionTool || !hasSecurityInspectionTarget(targetText)))
+    || requestedSecurityPaths.some((path) => securityCommandExcludesPath(command, path))
+    || !scopeCoverage.matched
+    || !resultText.trim()) return false;
+  state.evidence.securityInspectionEvidence = {
+    schemaVersion: 1,
+    source: 'host-security-inspection',
+    routeId: gateControllerRouteId(state),
+    toolName,
+    inputDigest: digestEvidence(command),
+    resultDigest: digestEvidence(resultText),
+    targetCoverageDigests: scopeCoverage.coveredDigests,
+    expectedTargetCount: scopeCoverage.expectedCount,
+    complete: scopeCoverage.complete,
+    observedAt: Date.now(),
+  };
+  state.evidence.securityInspectionObserved = scopeCoverage.complete;
+  return true;
+}
+
+function securityCommandExcludesPath(command = '', requestedPath = '') {
+  const exclusions = [];
+  const optionPattern = /(?:^|\s)(--exclude(?:-dir)?|--ignore(?:-pattern)?|--glob|-g)(?:=|\s+)(?:"([^"]*)"|'([^']*)'|([^\s]+))/gi;
+  for (const match of String(command).matchAll(optionPattern)) {
+    const option = match[1].toLowerCase();
+    let pattern = String(match[2] ?? match[3] ?? match[4] ?? '').trim();
+    if ((option === '--glob' || option === '-g') && !pattern.startsWith('!')) continue;
+    pattern = pattern.replace(/^!+/, '').replace(/^\.\//, '').replace(/\\/g, '/');
+    if (pattern) exclusions.push({ option, pattern });
+  }
+
+  const requested = String(requestedPath).toLowerCase().replace(/^\.\//, '').replace(/\\/g, '/');
+  const basename = requested.split('/').at(-1) ?? requested;
+  return exclusions.some(({ option, pattern }) => {
+    const normalized = pattern.toLowerCase().replace(/\/{2,}/g, '/');
+    if (normalized === requested || normalized === basename) return true;
+    if (requested.startsWith(`${normalized.replace(/\/$/, '')}/`)) return true;
+    if (option === '--exclude-dir' && requested.split('/').includes(normalized.replace(/^.*\//, ''))) return true;
+    const glob = normalized
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*\*/g, '\\x00')
+      .replace(/\*/g, '[^/]*')
+      .replace(/\\x00/g, '.*');
+    try {
+      return new RegExp(`^(?:${glob}|.*/${glob})$`, 'i').test(requested);
+    } catch {
+      return true;
+    }
+  });
+}
+
+function securityInspectionTargetText(event = {}, command = '') {
+  const candidates = [
+    event.path,
+    event.file,
+    event.uri,
+    event.input?.path,
+    event.input?.file,
+    event.input?.uri,
+    event.input?.cwd,
+    event.params?.path,
+    event.params?.file,
+    event.params?.uri,
+    event.args?.path,
+    event.args?.file,
+    event.details?.input?.path,
+    event.details?.input?.file,
+    command,
+  ];
+  return candidates.filter((value) => typeof value === 'string').join('\n');
+}
+
+function hasSecurityInspectionTarget(value = '') {
+  const text = String(value);
+  if (!text.trim()) return false;
+  return /(?:^|[\s"'`:(])(?:\.\/)?(?:src|lib|app|server|api|auth|security|config|scripts?|\.github\/workflows)\//i.test(text)
+    || /(?:^|[\s"'`/:(])(?:Dockerfile|Makefile|package(?:-lock)?\.json|pyproject\.toml|Cargo\.toml|go\.mod)(?:$|[\s"'`:)])/i.test(text)
+    || /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|rb|php|cs|ya?ml|toml|json|env|sh|sql)(?::\d+)?(?:$|[\s"'`:)])/i.test(text);
+}
+
+function isEmptySecurityScanResult(value = '') {
+  const text = String(value);
+  return /\b(?:0\s+files?\s+(?:scanned|analyzed|checked)|(?:scanned|analyzed|checked)\s+0\s+files?|no\s+files?\s+(?:were\s+)?(?:scanned|analyzed|checked)|nothing\s+to\s+scan)\b/i.test(text)
+    || /(?:^|\n)\s*usage:\s*(?:semgrep|trivy|snyk|codeql)\b/i.test(text);
+}
+
+function securityRouteCoverage(prompt = '', inspectedTarget = '', previousDigests = []) {
+  const request = String(prompt).toLowerCase();
+  const target = String(inspectedTarget).toLowerCase();
+  const explicitPaths = extractSecurityScopePaths(request);
+  if (explicitPaths.length) {
+    const expected = explicitPaths.map((path) => digestEvidence(path));
+    const covered = new Set(previousDigests.filter((digest) => expected.includes(digest)));
+    let matched = false;
+    for (const path of explicitPaths) {
+      if (!inspectionCoversSecurityPath(target, path)) continue;
+      covered.add(digestEvidence(path));
+      matched = true;
+    }
+    return {
+      matched,
+      coveredDigests: [...covered].sort(),
+      expectedCount: expected.length,
+      complete: expected.every((digest) => covered.has(digest)),
+    };
+  }
+
+  const scopedTerms = [];
+  if (/(?:authentication|authorization|\bauth\b|登录|认证|鉴权|授权)/i.test(request)) scopedTerms.push(/(?:auth|credential|identity|session|login|access)/i);
+  if (/(?:cryptograph|encryption|cipher|\btls\b|\bssl\b|加密|密码学|证书)/i.test(request)) scopedTerms.push(/(?:crypto|cipher|encrypt|decrypt|tls|ssl|cert|key)/i);
+  if (/(?:secret|credential|token|密钥|凭据|令牌)/i.test(request)) scopedTerms.push(/(?:secret|credential|token|env|config|auth)/i);
+  if (/(?:dependenc|supply chain|依赖|供应链)/i.test(request)) scopedTerms.push(/(?:package(?:-lock)?\.json|lock|depend|vendor|cargo\.toml|go\.mod|pyproject)/i);
+  const matched = scopedTerms.every((pattern) => pattern.test(target))
+    || /(?:^|[\s"'`=])(?:\.\/)?(?:src|lib|app|server|api)\/(?:$|[\s"'`])/i.test(target);
+  return { matched, coveredDigests: [], expectedCount: 0, complete: matched };
+}
+
+function extractSecurityScopePaths(value = '') {
+  return uniqueValues([...String(value).matchAll(/(?:^|[\s"'`(])((?:\.\.?\/)?(?:[a-z0-9_.-]+\/)+[a-z0-9_.-]+|[a-z0-9_.-]+\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|rb|php|cs|ya?ml|toml|json|env|sh|sql))(?:$|[\s"'`),:])/gi)]
+    .map((match) => match[1].replace(/^\.\//, '').replace(/\/{2,}/g, '/')));
+}
+
+function inspectionCoversSecurityPath(inspectedTarget = '', requestedPath = '') {
+  const target = String(inspectedTarget).toLowerCase();
+  const requested = String(requestedPath).toLowerCase();
+  if (hasStandaloneSecurityPath(target, requested)) return true;
+  const parts = requested.split('/');
+  if (parts.length < 2) return false;
+  for (let length = parts.length - 1; length >= 1; length -= 1) {
+    const ancestor = `${parts.slice(0, length).join('/')}/`;
+    if (hasStandaloneSecurityPath(target, ancestor)) return true;
+  }
+  return false;
+}
+
+function hasStandaloneSecurityPath(value = '', path = '') {
+  const escaped = String(path).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[\\s"'\\x60=:(,])(?:\\.\\/)?${escaped}(?:$|[\\s"'\\x60),])`, 'i').test(String(value));
+}
+
+function routeRequiresSecurityEvidence(route) {
+  return route?.intent === 'security-review'
+    || (route?.routePlan?.gateRequirements ?? []).some(({ key, mode }) => key === 'security-evidence' && mode === 'required');
+}
+
+function routeRequiresReleaseVerification(route) {
+  return (route?.routePlan?.gateRequirements ?? [])
+    .some(({ key, mode }) => key === 'release-approval' && mode === 'required');
+}
+
+function hasPendingReleaseMutation(state) {
+  return state.evidence.releaseActionEvidence?.routeId === gateControllerRouteId(state)
+    && state.evidence.releaseVerified !== true;
+}
+
+function recordReleaseEvidence(state, toolName = '', event = {}, { successful = false, ctx = {} } = {}) {
+  const command = toolActionText(event);
+  const action = classifyToolAction({ toolName, text: command });
+  const routeId = gateControllerRouteId(state);
+  const input = releaseEvidenceInput(toolName, event, ctx, { successful });
+  if (action.externalWrite) {
+    if (state.evidence.releaseActionEvidence?.routeId === routeId
+      && state.evidence.releaseVerified !== true) return false;
+    state.evidence.releaseVerified = false;
+    state.evidence.releaseVerificationEvidence = null;
+    if (!releaseMutationMatchesPrompt(input, state.lastPrompt)) {
+      state.evidence.releaseActionEvidence = null;
+      return false;
+    }
+    const policy = createReleaseMutationRecord(input);
+    if (!policy) {
+      state.evidence.releaseActionEvidence = null;
+      return false;
+    }
+    state.evidence.releaseActionEvidence = {
+      schemaVersion: 1,
+      source: 'host-release-action',
+      routeId,
+      commandDigest: digestEvidence(command),
+      policy,
+      observedAt: Date.now(),
+    };
+    return true;
+  }
+
+  const actionEvidence = state.evidence.releaseActionEvidence;
+  if (!actionEvidence || actionEvidence.routeId !== routeId) return false;
+  if (!verifyReleaseMutation(actionEvidence.policy, input)) return false;
+  state.evidence.releaseVerificationEvidence = {
+    schemaVersion: 1,
+    source: 'host-release-verification',
+    routeId,
+    commandDigest: digestEvidence(command),
+    resultDigest: digestEvidence(toolResultText(event)),
+    actionCommandDigest: actionEvidence.commandDigest,
+    policyDigest: digestEvidence(JSON.stringify(actionEvidence.policy)),
+    observedAt: Date.now(),
+  };
+  state.evidence.releaseVerified = true;
+  return true;
+}
+
+function releaseEvidenceInput(toolName = '', event = {}, ctx = {}, { successful = false } = {}) {
+  const command = toolActionText(event);
+  const npmContext = trustedNpmReleaseContext(command, event, ctx);
+  const npmEvidenceCommand = isNpmReleaseEvidenceCommand(command);
+  return {
+    toolName,
+    command,
+    resultText: toolResultText(event),
+    successful,
+    masked: hasUnsafeResultMasking(command),
+    dryRun: isDryRunAction(command),
+    cwd: npmEvidenceCommand ? npmContext?.cwd ?? '' : toolWorkingDirectory(event, ctx),
+    npmManifest: npmContext?.manifest ?? null,
+  };
+}
+
+function isNpmReleaseEvidenceCommand(command = '') {
+  return /^(?:(?:\/[^\s/]+)+\/)?npm\s+(?:publish|view|info)\b/i.test(String(command).trim());
+}
+
+function trustedNpmReleaseContext(command = '', event = {}, ctx = {}) {
+  if (!isNpmReleaseEvidenceCommand(command)) return null;
+  if (typeof ctx.cwd !== 'string' || !isAbsolute(ctx.cwd)) return null;
+  let trustedRoot;
+  try {
+    trustedRoot = realpathSync(ctx.cwd);
+  } catch {
+    return null;
+  }
+
+  const declaredCwds = [
+    event.cwd,
+    event.workdir,
+    event.input?.cwd,
+    event.input?.workdir,
+    event.params?.cwd,
+    event.params?.workdir,
+    event.args?.cwd,
+    event.args?.workdir,
+    event.details?.cwd,
+    event.details?.workdir,
+    event.details?.input?.cwd,
+    event.details?.input?.workdir,
+  ].filter((value) => typeof value === 'string' && value.trim());
+  const effectiveCwds = new Set();
+  for (const declared of declaredCwds) {
+    try {
+      const declaredPath = realpathSync(isAbsolute(declared) ? declared : resolve(trustedRoot, declared));
+      const fromRoot = relative(trustedRoot, declaredPath);
+      if (fromRoot === '..' || fromRoot.startsWith('../') || isAbsolute(fromRoot)) return null;
+      effectiveCwds.add(declaredPath);
+    } catch {
+      return null;
+    }
+  }
+  if (effectiveCwds.size > 1) return null;
+  const cwd = effectiveCwds.values().next().value ?? trustedRoot;
+
+  if (!/^(?:(?:\/[^\s/]+)+\/)?npm\s+publish\b/i.test(String(command).trim())) {
+    return { cwd, manifest: null };
+  }
+  try {
+    const packageJsonPath = join(cwd, 'package.json');
+    if (realpathSync(packageJsonPath) !== packageJsonPath) return null;
+    const raw = readFileSync(packageJsonPath, 'utf8');
+    const manifest = JSON.parse(raw);
+    return {
+      cwd,
+      manifest: {
+        source: 'host-package-json',
+        cwd,
+        name: manifest?.name,
+        version: manifest?.version,
+        digest: digestEvidence(raw),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function toolWorkingDirectory(event = {}, ctx = {}) {
+  const candidates = [
+    event.cwd,
+    event.workdir,
+    event.input?.cwd,
+    event.input?.workdir,
+    event.params?.cwd,
+    event.params?.workdir,
+    event.args?.cwd,
+    event.args?.workdir,
+    event.details?.cwd,
+    event.details?.workdir,
+    event.details?.input?.cwd,
+    event.details?.input?.workdir,
+    ctx.cwd,
+    process.cwd(),
+  ];
+  return candidates.find((value) => typeof value === 'string' && value.startsWith('/')) ?? '';
+}
+
+function toolResultText(event = {}) {
+  const candidates = [
+    event.output,
+    event.stdout,
+    event.stderr,
+    event.content,
+    event.response,
+    event.result,
+    event.details?.output,
+    event.details?.stdout,
+    event.details?.stderr,
+    event.details?.content,
+    event.details?.response,
+  ];
+  return candidates
+    .flatMap((candidate) => collectTextCandidates(candidate))
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function digestEvidence(value = '') {
+  return createHash('sha256').update(String(value).trim()).digest('hex');
+}
+
 function isSuccessfulToolEvent(event = {}) {
-  return !isFailedToolEvent(event);
+  return !isFailedToolEvent(event) && !isPendingToolEvent(event);
+}
+
+function isPendingToolEvent(event = {}) {
+  const envelopes = [
+    event,
+    event.details,
+    event.result,
+    event.result?.details,
+    event.details?.result,
+    event.details?.result?.details,
+    event.details?.async,
+    event.result?.details?.async,
+  ].filter(isRecord);
+  return envelopes.some((value) => {
+    const status = String(value.state ?? value.status ?? '').trim().toLowerCase();
+    return ['pending', 'running', 'started', 'in_progress', 'in-progress'].includes(status);
+  });
 }
 
 function isFailedToolEvent(event = {}) {
-  return event.isError === true
-    || event.error === true
-    || event.ok === false
-    || event.passed === false
-    || event.status === 'error'
-    || event.details?.isError === true
-    || event.details?.error === true
-    || event.details?.ok === false
-    || event.details?.passed === false;
+  const envelopes = [
+    event,
+    event.details,
+    event.result,
+    event.result?.details,
+    event.details?.result,
+    event.details?.result?.details,
+  ].filter(isRecord);
+  return envelopes.some((value) => {
+    const status = String(value.status ?? '').trim().toLowerCase();
+    const exitCode = value.exitCode ?? value.exit_code;
+    return value.isError === true
+      || value.error === true
+      || value.ok === false
+      || value.passed === false
+      || Number.isFinite(exitCode) && exitCode !== 0
+      || ['error', 'failed', 'failure', 'blocked', 'cancelled', 'canceled'].includes(status);
+  });
+}
+
+function isExplicitPassingGateResult(event = {}) {
+  if (isFailedToolEvent(event)) return false;
+  const envelopes = [
+    event,
+    event.details,
+    event.result,
+    event.result?.details,
+    event.details?.result,
+    event.details?.result?.details,
+  ].filter(isRecord);
+  return envelopes.some((value) => {
+    const status = String(value.status ?? '').trim().toLowerCase();
+    if (value.ok === true || value.passed === true) return true;
+    if (['ok', 'pass', 'passed', 'success', 'succeeded', 'completed'].includes(status)) return true;
+    return Array.isArray(value.results)
+      && value.results.length > 0
+      && value.results.every((result) => isRecord(result) && result.passed === true);
+  });
+}
+
+function isRelevantSuccessfulGateEvidence(toolName = '', event = {}) {
+  if (isFailedToolEvent(event)) return false;
+  if (toolName === 'omp_core_validate_skill_usage' || toolName === 'omp_core_validate_subagent_usage') {
+    return [
+      event.validation,
+      event.details?.validation,
+      event.result?.validation,
+      event.result?.details?.validation,
+      event.details?.result?.validation,
+      event.details?.result?.details?.validation,
+    ].some((validation) => isRecord(validation) && validation.ok === true);
+  }
+  if (toolName === 'omp_test_gate' || toolName === 'fact_check_gate') {
+    return isExplicitPassingGateResult(event);
+  }
+  if (toolName === 'read') return extractReadSkillNames(event).length > 0;
+  return toolName === 'task'
+    || toolName === 'writing_quality_check'
+    || toolName === 'writing_logic_check'
+    || toolName === 'omp_test_report';
+}
+
+function safeEventSearchText(event = {}) {
+  try {
+    return JSON.stringify({
+      params: event.params,
+      input: event.input,
+      args: event.args,
+      arguments: event.arguments,
+      command: event.command,
+      details: {
+        command: event.details?.command,
+        params: event.details?.params,
+        input: event.details?.input,
+      },
+    });
+  } catch {
+    return '';
+  }
+}
+
+function toolActionText(event = {}) {
+  const candidates = [
+    event.command,
+    event.input?.command,
+    event.input?.cmd,
+    event.params?.command,
+    event.params?.cmd,
+    event.args?.command,
+    event.args?.cmd,
+    event.arguments?.command,
+    event.arguments?.cmd,
+    event.details?.command,
+    event.details?.input?.command,
+    event.details?.input?.cmd,
+    event.details?.params?.command,
+    event.details?.params?.cmd,
+  ];
+  const command = candidates.find((value) => typeof value === 'string' && value.trim());
+  return command ? command.trim() : safeEventSearchText(event);
 }
 
 function extractReadSkillNames(event = {}) {

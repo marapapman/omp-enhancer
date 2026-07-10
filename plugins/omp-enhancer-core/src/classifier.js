@@ -1,4 +1,6 @@
 import { routeByIntent, routedIntents, routeNaturalLanguageTask } from './router.js';
+import { buildRoutePlan } from './route-policy.js';
+import { normalizeTaskDescriptor } from './task-descriptor.js';
 
 export const classifierDefaults = {
   modelRole: 'tiny',
@@ -43,7 +45,76 @@ export const classifierRiskFlags = [
 
 export const classifierLanguages = ['zh', 'en', 'mixed', 'unknown'];
 
+export const classifierOperationHints = [
+  'answer',
+  'inspect',
+  'diagnose',
+  'plan',
+  'create',
+  'modify',
+  'execute',
+  'release',
+];
+
+export const classifierDomains = [
+  'general',
+  'code',
+  'tests',
+  'writing',
+  'facts',
+  'security',
+  'config',
+  'visual',
+  'document',
+  'plugin',
+];
+
+export const classifierPhaseKinds = [
+  'answer',
+  'inspect',
+  'diagnose',
+  'plan',
+  'create',
+  'modify',
+  'execute',
+  'verify',
+  'review',
+  'release',
+];
+
 export const classifierSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['operationHint', 'domains', 'phaseHints', 'riskFlags', 'language', 'confidence', 'reason'],
+  properties: {
+    operationHint: { type: 'string', enum: classifierOperationHints },
+    domains: {
+      type: 'array',
+      items: { type: 'string', enum: classifierDomains },
+    },
+    phaseHints: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['kind', 'domain'],
+        properties: {
+          kind: { type: 'string', enum: classifierPhaseKinds },
+          domain: { type: 'string', enum: classifierDomains },
+        },
+      },
+    },
+    language: { type: 'string', enum: classifierLanguages },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    riskFlags: {
+      type: 'array',
+      items: { type: 'string', enum: classifierRiskFlags },
+    },
+    reason: { type: 'string' },
+  },
+};
+
+const legacyClassifierSchema = {
   type: 'object',
   additionalProperties: false,
   required: ['intent', 'secondaryIntents', 'language', 'confidence', 'riskFlags', 'domainHints', 'reason'],
@@ -97,42 +168,47 @@ export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
       '',
       'You classify OMP enhancer user tasks. Return only JSON. Do not solve the task.',
       '',
-      'Allowed intents:',
-      formatList(classifierIntents),
+      'Allowed operation hints:',
+      formatList(classifierOperationHints),
+      '',
+      'Allowed domains:',
+      formatList(classifierDomains),
+      '',
+      'Allowed phase kinds:',
+      formatList(classifierPhaseKinds),
       '',
       'Allowed riskFlags:',
       formatList(classifierRiskFlags),
       '',
       'Rules:',
-      '- Do not invent skill names, agent names, tools, commands, or gates.',
-      `- Deterministic rule route is only a fallback baseline: ${ruleRoute.intent}. You may override it when the task intent clearly fits another allowed workflow.`,
-      '- Use diagnosis only when the user mainly asks why something failed and does not ask for a code/config change.',
-      '- Use release only when the user mainly asks to publish, push, upgrade, or release without asking for implementation.',
-      '- Prefer implementation-with-tests for code/plugin changes, even when the task mentions config or marketplace.',
-      '- Chinese requests like "写一个登录功能", "写个页面", "写用户模块", or other product/code construction are implementation-with-tests, not prose writing.',
-      '- File-path, line-number, function, module, or scoped source edits are still implementation-with-tests even when the user asks for a small precise change.',
-      '- Dependency upgrades, code migrations, scaffolding new plugin commands/agents/skills, and deleting legacy code are implementation-with-tests.',
-      '- Use bug-audit when the user asks to test, inspect, find, or report bugs without asking to fix or modify code.',
-      '- Focused or direct bug investigations are still bug-audit; the deterministic route may attach a focused direct-audit mode.',
-      '- Use bug-audit for executable test analysis, coverage review, browser verification, flaky test review, and read-only testing workflows. The legacy testing intent resolves to bug-audit and should not be preferred for new outputs.',
-      '- Use fact-check when the user explicitly asks to verify factual claims, data, dates, citations, source authenticity, or whether statements are supported by evidence. Fact-check is a plan + independent evidence + cross-check + review workflow, not a generic search route.',
-      '- Prefer writing.zh for Chinese prose editing or drafting; prefer writing.en for English prose editing or drafting.',
-      '- Pure bug-report drafting is writing; testing, finding, auditing, or verifying bugs is bug-audit.',
+      '- Return descriptor hints only. Do not output or invent constraints, capabilities, skills, tools, agents, commands, or gates.',
+      `- The deterministic rule route is the capability ceiling and fallback baseline: ${ruleRoute.intent}. Hints may add requirements but never remove rule phases or risks.`,
+      '- Use operationHint diagnose only when the user mainly asks why something failed and does not ask for a code/config change.',
+      '- Use operationHint release only when the user mainly asks to publish, push, or deploy without asking for implementation.',
+      '- Use operationHint modify with code/tests/plugin domains for implementation work, even when config or marketplace is mentioned.',
+      '- Chinese requests like "写一个登录功能", "写个页面", "写用户模块", or other product/code construction use modify/create with code or visual domains, not writing.',
+      '- File-path, line-number, function, module, dependency upgrade, migration, scaffolding, and legacy-code deletion tasks are still code modification.',
+      '- Use inspect with code/tests domains when the user asks to test, inspect, find, or report bugs without asking to fix code.',
+      '- Focused or direct bug investigations are still inspect/diagnose; the deterministic route may retain a focused direct-audit mode.',
+      '- Executable test analysis, coverage review, browser verification, and flaky-test review use tests domain and verify/review phase hints.',
+      '- Explicit factual verification uses facts domain and inspect/review phase hints.',
+      '- Prose editing or drafting uses writing domain; language selects the writing workflow.',
+      '- Pure bug-report drafting is writing; executable testing, finding, auditing, or verifying bugs uses code/tests.',
       '- Security announcements, privacy policies, license/compliance memos, and other prose artifacts are writing tasks when the user does not ask to audit or fix code/config/dependencies.',
       '- Research, scientific exploration, literature/PDF download, and daily office organization are unknown unless the user explicitly asks to draft, revise, polish, or write a concrete prose artifact.',
       '- Read-only module explanation, API usage lookup, official-doc lookup, source lists, and implementation-plan research are unknown unless the user asks to edit code, run tests, or draft a prose artifact.',
-      '- A request to draft, revise, polish, or write a report/summary/document about tests, coverage, gates, or release status is a writing task, not a testing workflow. Use bug-audit only when the user asks to run, add, repair, or analyze tests as executable verification work.',
-      '- Do not classify prose drafting, editing, or polishing as security-review only because the text mentions safety, risk, review, or security. Use security-review only for code, config, auth, secrets, vulnerability, or infrastructure security work.',
-      '- Never override a deterministic writing route into security-review for safety, risk, privacy, license, or security wording unless the original task asks to audit or fix code/config/dependencies/secrets/auth/infrastructure.',
-      '- Put related concerns such as config-assets or release into secondaryIntents and riskFlags when they are not the main task.',
-      '- Implementation repair plan: when the user asks to fix, repair, adjust, or optimize OMP/plugin gates, routing, workflows, prompts, classifier, smart gate, or repeated blocking, classify as implementation-with-tests even if the user first asks for a plan.',
-      '- Workflow validation: when the user asks to run MiMo, advisor, E2E, smoke, workflow, gate, skill, subagent, or background-task validation without fixing code, classify as bug-audit; prefer focused audit when the deterministic route marks it focused.',
-      '- Test-observation summary: when the user asks to summarize already observed test, E2E, gate, or workflow results, classify as writing.zh or writing.en by language and do not restart bug-audit.',
-      '- Real config-assets inventory: use config-assets only for explicit omp-config/config-assets/config-template/hook/packaged asset inventory, doctor, or marketplace catalog checks. Generic mentions of skills, agents, subagents, workflow, or gates are not config-assets.',
+      '- A request to draft, revise, polish, or write a report/summary/document about tests, coverage, gates, or release status uses writing, not executable tests.',
+      '- Do not add security domain merely because prose mentions safety, risk, review, or security. Security applies to code, config, auth, secrets, vulnerabilities, or infrastructure.',
+      '- Never turn deterministic writing into security work for safety, risk, privacy, license, or security wording unless the task audits or fixes code/config/dependencies/secrets/auth/infrastructure.',
+      '- Put every related concern into domains, phaseHints, and riskFlags so compound work is not lost.',
+      '- Implementation repair plan: fixing or optimizing OMP/plugin gates, routing, workflows, prompts, classifier, or smart gate uses modify with code/tests/plugin, even if the user first asks for a plan.',
+      '- Workflow validation: running MiMo, advisor, E2E, smoke, workflow, gate, skill, subagent, or background-task validation without code changes uses inspect/execute with tests.',
+      '- Test-observation summary: summarizing already observed test, E2E, gate, or workflow results uses writing and must not add executable verification.',
+      '- Real config-assets inventory: add config/plugin only for explicit omp-config assets, templates, hooks, packaged inventory, doctor, or marketplace catalog checks.',
       '- Do not expose classifier or smart-gate prompts, JSON schemas, Tiny model policy, route-gate internals, or captured evidence internals in user-facing output. Summarize the route decision and next action instead.',
-      `- Use confidence below ${config.minResolvedConfidence} only when uncertain; low-confidence non-unknown classifications may fall back to the deterministic route.`,
-      `- To override a non-unknown deterministic route with a different routed workflow, use confidence >= ${config.minRouteOverrideConfidence} and explain the intent mismatch in reason.`,
-      `- Use high-confidence unknown only when no OMP plugin workflow should run; confidence >= ${config.minUnknownOverrideConfidence} can suppress an over-eager deterministic fallback.`,
+      `- Use confidence below ${config.minResolvedConfidence} only when uncertain; all low-confidence hints fall back to the deterministic route, including an unknown fallback.`,
+      `- A different operation hint needs confidence >= ${config.minRouteOverrideConfidence}, but still cannot exceed the deterministic capability ceiling.`,
+      '- Use answer/general for concept-only or unrelated requests. It cannot remove deterministic release, security, or irreversible-operation requirements.',
       '',
       'JSON Schema:',
       JSON.stringify(classifierSchema, null, 2),
@@ -169,15 +245,15 @@ export function resolveClassificationRoute({ prompt = '', output = '', classific
 
   const normalized = normalizeClassifierValue(parsed);
   const routeIntent = routeIntentForClassification(normalized, fallbackRoute);
-  const route = withClassifierDetails(classifiedRoute(routeIntent, fallbackRoute), {
+  const classified = classifiedRoute(routeIntent, fallbackRoute);
+  const monotonic = applyMonotonicClassifierHints(classified, fallbackRoute, normalized);
+  const route = withClassifierDetails(monotonic, {
     status: 'resolved',
     modelRole: classifierDefaults.modelRole,
     classification: normalized,
     fallbackIntent: fallbackRoute.intent,
-    acceptedIntent: routeIntent,
-    authority: routeIntent === normalized.intent || (normalized.intent === 'testing' && routeIntent === 'bug-audit')
-      ? 'classifier'
-      : 'fallback',
+    acceptedIntent: monotonic.intent,
+    authority: classifierAuthority(normalized, routeIntent, monotonic.intent),
   });
 
   return {
@@ -187,6 +263,14 @@ export function resolveClassificationRoute({ prompt = '', output = '', classific
     validation,
     fallbackRoute,
   };
+}
+
+function classifierAuthority(classification, routeIntent, acceptedIntent) {
+  if (classification.confidence < classifierDefaults.minResolvedConfidence) return 'fallback';
+  if (classification.intent == null) return 'advisory';
+  if (routeIntent === classification.intent) return 'advisory';
+  if (classification.intent === 'testing' && acceptedIntent === 'bug-audit') return 'advisory';
+  return 'fallback';
 }
 
 export function parseClassifierOutput(output = '') {
@@ -205,27 +289,81 @@ function validateClassifierValue(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { ok: false, errors: ['Classifier output is not a JSON object.'] };
   }
+  const legacy = isLegacyClassifierValue(value);
+  const schema = legacy ? legacyClassifierSchema : classifierSchema;
   for (const key of Object.keys(value)) {
-    if (!classifierSchema.required.includes(key)) errors.push(`Unsupported classifier field: ${key}`);
+    if (!schema.required.includes(key)) errors.push(`Unsupported classifier field: ${key}`);
   }
-  if (!classifierIntents.includes(value.intent)) errors.push(`Invalid intent: ${String(value.intent)}`);
+  for (const key of schema.required) {
+    if (!(key in value)) errors.push(`Missing classifier field: ${key}`);
+  }
   if (!classifierLanguages.includes(value.language)) errors.push(`Invalid language: ${String(value.language)}`);
   const confidence = Number(value.confidence);
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) errors.push('Invalid confidence.');
-  for (const key of ['secondaryIntents', 'riskFlags', 'domainHints']) {
-    if (!Array.isArray(value[key])) errors.push(`${key} must be an array.`);
-  }
-  for (const intent of value.secondaryIntents ?? []) {
-    if (!classifierIntents.includes(intent)) errors.push(`Invalid secondaryIntent: ${String(intent)}`);
-  }
-  for (const flag of value.riskFlags ?? []) {
+  if (legacy) validateLegacyClassifierFields(value, errors);
+  else validateDescriptorHintFields(value, errors);
+  for (const flag of Array.isArray(value.riskFlags) ? value.riskFlags : []) {
     if (!classifierRiskFlags.includes(flag)) errors.push(`Invalid riskFlag: ${String(flag)}`);
   }
   if (typeof value.reason !== 'string') errors.push('reason must be a string.');
   return { ok: errors.length === 0, errors };
 }
 
+function isLegacyClassifierValue(value) {
+  return 'intent' in value || 'secondaryIntents' in value || 'domainHints' in value;
+}
+
+function validateLegacyClassifierFields(value, errors) {
+  if (!classifierIntents.includes(value.intent)) errors.push(`Invalid intent: ${String(value.intent)}`);
+  for (const key of ['secondaryIntents', 'riskFlags', 'domainHints']) {
+    if (!Array.isArray(value[key])) errors.push(`${key} must be an array.`);
+  }
+  for (const intent of Array.isArray(value.secondaryIntents) ? value.secondaryIntents : []) {
+    if (!classifierIntents.includes(intent)) errors.push(`Invalid secondaryIntent: ${String(intent)}`);
+  }
+}
+
+function validateDescriptorHintFields(value, errors) {
+  if (!classifierOperationHints.includes(value.operationHint)) {
+    errors.push(`Invalid operationHint: ${String(value.operationHint)}`);
+  }
+  for (const key of ['domains', 'phaseHints', 'riskFlags']) {
+    if (!Array.isArray(value[key])) errors.push(`${key} must be an array.`);
+  }
+  for (const domain of Array.isArray(value.domains) ? value.domains : []) {
+    if (!classifierDomains.includes(domain)) errors.push(`Invalid domain: ${String(domain)}`);
+  }
+  for (const phase of Array.isArray(value.phaseHints) ? value.phaseHints : []) {
+    if (!phase || typeof phase !== 'object' || Array.isArray(phase)) {
+      errors.push('phaseHint must be an object.');
+      continue;
+    }
+    for (const key of Object.keys(phase)) {
+      if (key !== 'kind' && key !== 'domain') errors.push(`Unsupported phaseHint field: ${key}`);
+    }
+    if (!classifierPhaseKinds.includes(phase.kind)) errors.push(`Invalid phaseHint kind: ${String(phase.kind)}`);
+    if (!classifierDomains.includes(phase.domain)) errors.push(`Invalid phaseHint domain: ${String(phase.domain)}`);
+  }
+}
+
 function normalizeClassifierValue(value) {
+  if (!isLegacyClassifierValue(value)) {
+    return {
+      intent: null,
+      secondaryIntents: [],
+      operationHint: value.operationHint,
+      domains: unique((value.domains ?? []).filter((domain) => classifierDomains.includes(domain))),
+      phaseHints: uniquePhases((value.phaseHints ?? []).filter(({ kind, domain } = {}) => (
+        classifierPhaseKinds.includes(kind) && classifierDomains.includes(domain)
+      ))),
+      language: value.language,
+      confidence: clamp(Number(value.confidence), 0, 1),
+      riskFlags: unique((value.riskFlags ?? []).filter((flag) => classifierRiskFlags.includes(flag))),
+      domainHints: [],
+      reason: value.reason.trim(),
+      format: 'descriptor-hints-v1',
+    };
+  }
   return {
     intent: value.intent,
     secondaryIntents: unique((value.secondaryIntents ?? []).filter((intent) => classifierIntents.includes(intent))),
@@ -234,12 +372,16 @@ function normalizeClassifierValue(value) {
     riskFlags: unique((value.riskFlags ?? []).filter((flag) => classifierRiskFlags.includes(flag))),
     domainHints: unique((value.domainHints ?? []).map((hint) => String(hint).trim()).filter(Boolean)).slice(0, 8),
     reason: value.reason.trim(),
+    format: 'legacy-intent-v1',
   };
 }
 
 function routeIntentForClassification(classification, fallbackRoute) {
+  if (classification.confidence < classifierDefaults.minResolvedConfidence) {
+    return fallbackRoute.intent;
+  }
+  if (classification.intent == null) return fallbackRoute.intent;
   if (classification.intent === 'unknown') {
-    if (classification.confidence >= classifierDefaults.minUnknownOverrideConfidence) return 'unknown';
     if (fallbackRoute.intent !== 'unknown') return fallbackRoute.intent;
     return 'unknown';
   }
@@ -247,17 +389,363 @@ function routeIntentForClassification(classification, fallbackRoute) {
     if (fallbackRoute.intent !== 'unknown') return fallbackRoute.intent;
     return 'unknown';
   }
-  if (classification.confidence < classifierDefaults.minResolvedConfidence && fallbackRoute.intent !== 'unknown') {
-    return fallbackRoute.intent;
-  }
   if (classification.intent === fallbackRoute.intent) return classification.intent;
   if (shouldPreserveWritingFallback(classification, fallbackRoute)) {
     return fallbackRoute.intent;
   }
   if (fallbackRoute.intent !== 'unknown' && classification.confidence < classifierDefaults.minRouteOverrideConfidence) return fallbackRoute.intent;
-  if (routedIntents.includes(classification.intent)) return classification.intent;
+  if (routedIntents.includes(classification.intent)) {
+    const candidateRoute = routeByIntent(classification.intent, { source: 'llm-classifier' });
+    if (!routeFitsDeterministicCeiling(candidateRoute, fallbackRoute)) return fallbackRoute.intent;
+    if (!preservesProtectedRequirements(candidateRoute, fallbackRoute)) return fallbackRoute.intent;
+    return classification.intent;
+  }
   if (fallbackRoute.intent !== 'unknown') return fallbackRoute.intent;
   return 'unknown';
+}
+
+function applyMonotonicClassifierHints(route, fallbackRoute, classification) {
+  const fallbackDescriptor = fallbackRoute.taskDescriptor;
+  if (!fallbackDescriptor) return preserveLegacyRequirements(route, fallbackRoute);
+
+  const useHints = classification.confidence >= classifierDefaults.minResolvedConfidence;
+  const additions = useHints
+    ? classifierDescriptorAdditions(classification, fallbackRoute)
+    : [];
+  const descriptor = mergeTaskDescriptors(fallbackDescriptor, additions, classification, useHints);
+  const compiledPlan = buildRoutePlan(descriptor, route);
+  const routePlan = mergeRoutePlans(fallbackRoute.routePlan, route.routePlan, compiledPlan, {
+    extraGates: classifierGateRequirements(classification, descriptor, useHints),
+  });
+
+  return preserveLegacyRequirements({
+    ...route,
+    taskDescriptor: descriptor,
+    routePlan,
+  }, fallbackRoute);
+}
+
+function classifierDescriptorAdditions(classification, fallbackRoute) {
+  if (classification.format === 'descriptor-hints-v1') {
+    const addition = safeHintDescriptorAddition(classification, fallbackRoute);
+    return addition ? [addition] : [];
+  }
+  const intents = unique([
+    classification.intent,
+    ...classification.secondaryIntents,
+    ...intentsForRiskFlags(classification.riskFlags),
+  ]).filter((intent) => intent !== 'unknown');
+
+  if (shouldPreserveWritingFallback(classification, fallbackRoute)) {
+    return intents
+      .filter((intent) => intent !== 'security-review')
+      .map((intent) => safeDescriptorAddition(intent, fallbackRoute))
+      .filter(Boolean);
+  }
+
+  return intents
+    .map((intent) => safeDescriptorAddition(intent, fallbackRoute))
+    .filter(Boolean);
+}
+
+function safeHintDescriptorAddition(classification, fallbackRoute) {
+  const ceiling = fallbackRoute.taskDescriptor;
+  if (!ceiling) return null;
+  if (classification.operationHint === 'release' && ceiling.constraints.externalWrite !== 'required') return null;
+  if (classification.operationHint === 'execute' && ceiling.constraints.testExecution !== 'required') return null;
+  if ((classification.operationHint === 'modify' || classification.operationHint === 'create')
+    && classification.domains.some((domain) => domain !== 'writing' && domain !== 'general')
+    && ceiling.constraints.workspaceWrite !== 'required') return null;
+
+  const phases = classification.phaseHints
+    .filter((phase) => phaseFitsDeterministicCeiling(phase, ceiling));
+  if (!phases.length) return null;
+  const phaseDomains = new Set(phases.map(({ domain }) => domain));
+  const domains = classification.domains.filter((domain) => (
+    ceiling.domains.includes(domain) || phaseDomains.has(domain)
+  ));
+  if (!domains.length) return null;
+
+  const riskFlags = [];
+  let riskLevel = 'low';
+  for (const flag of classification.riskFlags) {
+    const mapped = descriptorRiskFlag(flag, ceiling);
+    if (!mapped) continue;
+    riskFlags.push(mapped.flag);
+    riskLevel = maxRiskLevel(riskLevel, mapped.level);
+  }
+  if (domains.includes('security')) {
+    riskFlags.push('security-sensitive');
+    riskLevel = maxRiskLevel(riskLevel, 'high');
+  }
+  if (domains.includes('facts')) {
+    riskFlags.push('factual-claims');
+    riskLevel = maxRiskLevel(riskLevel, 'medium');
+  }
+
+  return normalizeTaskDescriptor({
+    operation: classification.operationHint,
+    domains,
+    constraints: ceiling.constraints,
+    capabilities: ceiling.capabilities,
+    phases,
+    risk: { level: riskLevel, flags: riskFlags },
+    complexity: domains.length > 2 ? 'broad' : 'focused',
+    language: classification.language,
+  });
+}
+
+function safeDescriptorAddition(intent, fallbackRoute) {
+  const candidate = routeByIntent(intent, { source: 'llm-classifier' });
+  const descriptor = candidate.taskDescriptor;
+  const ceiling = fallbackRoute.taskDescriptor;
+  if (!descriptor || !ceiling) return null;
+
+  if (intent === 'release' && ceiling.constraints.externalWrite !== 'required') return null;
+  if ((intent === 'testing' || intent === 'implementation-with-tests')
+    && descriptor.constraints.testExecution === 'required'
+    && ceiling.constraints.testExecution !== 'required') return null;
+  if (descriptor.constraints.workspaceWrite === 'required'
+    && ceiling.constraints.workspaceWrite !== 'required') return null;
+  if (descriptor.constraints.networkAccess === 'required'
+    && ceiling.constraints.networkAccess !== 'required') return null;
+
+  const phases = descriptor.phases.filter((phase) => phaseFitsDeterministicCeiling(phase, ceiling));
+  if (!phases.length) return null;
+  return {
+    ...descriptor,
+    constraints: ceiling.constraints,
+    capabilities: ceiling.capabilities,
+    phases,
+  };
+}
+
+function mergeTaskDescriptors(fallbackDescriptor, additions, classification, useHints) {
+  const domains = [...fallbackDescriptor.domains];
+  const phases = [...fallbackDescriptor.phases];
+  const riskFlags = [...fallbackDescriptor.risk.flags];
+  let riskLevel = fallbackDescriptor.risk.level;
+  let complexity = fallbackDescriptor.complexity;
+
+  for (const addition of additions) {
+    domains.push(...addition.domains);
+    phases.push(...addition.phases);
+    riskFlags.push(...addition.risk.flags);
+    riskLevel = maxRiskLevel(riskLevel, addition.risk.level);
+    complexity = maxComplexity(complexity, addition.complexity);
+  }
+
+  if (useHints) {
+    for (const flag of classification.riskFlags) {
+      const mapped = descriptorRiskFlag(flag, fallbackDescriptor);
+      if (!mapped) continue;
+      riskFlags.push(mapped.flag);
+      riskLevel = maxRiskLevel(riskLevel, mapped.level);
+    }
+  }
+
+  return normalizeTaskDescriptor({
+    ...fallbackDescriptor,
+    domains,
+    constraints: fallbackDescriptor.constraints,
+    capabilities: fallbackDescriptor.capabilities,
+    phases,
+    risk: { level: riskLevel, flags: riskFlags },
+    complexity,
+    language: useHints && fallbackDescriptor.language === 'unknown' && classification.language !== 'unknown'
+      ? classification.language
+      : fallbackDescriptor.language,
+    provenance: {
+      ...fallbackDescriptor.provenance,
+      reasons: unique([
+        ...fallbackDescriptor.provenance.reasons,
+        ...(additions.length ? ['classifier advisory requirements merged'] : []),
+      ]),
+    },
+  });
+}
+
+function classifierGateRequirements(classification, descriptor, useHints) {
+  if (!useHints) return [];
+  const gates = [];
+  const flags = new Set(classification.riskFlags);
+  const domains = new Set(descriptor.domains);
+  const constraints = descriptor.constraints;
+
+  if (flags.has('needs-security-review') && domains.has('security')) gates.push({ key: 'security-evidence', mode: 'required' });
+  if (flags.has('needs-tests') && constraints.testExecution === 'required') gates.push({ key: 'test-evidence', mode: 'required' });
+  if (flags.has('needs-review') && descriptor.phases.some(({ kind }) => kind === 'review')) {
+    gates.push({ key: 'review-evidence', mode: 'required' });
+  }
+  if (flags.has('needs-writing-qa') && domains.has('writing')) gates.push({ key: 'writing-quality', mode: 'required' });
+  if (flags.has('needs-fact-check') && domains.has('facts')) gates.push({ key: 'fact-evidence', mode: 'required' });
+  if (flags.has('release-or-push') && constraints.externalWrite === 'required') gates.push({ key: 'release-approval', mode: 'required' });
+  return gates;
+}
+
+function routeFitsDeterministicCeiling(candidateRoute, fallbackRoute) {
+  const candidate = candidateRoute.taskDescriptor;
+  const ceiling = fallbackRoute.taskDescriptor;
+  if (!candidate || !ceiling) return candidateRoute.intent === fallbackRoute.intent;
+
+  for (const key of ['workspaceWrite', 'testExecution', 'networkAccess', 'externalWrite', 'subagents']) {
+    if (candidate.constraints[key] === 'required' && ceiling.constraints[key] !== 'required') return false;
+  }
+  const allowedCapabilities = new Set(ceiling.capabilities);
+  if (candidate.capabilities.some((capability) => !allowedCapabilities.has(capability))) return false;
+  return candidate.phases.every((phase) => phaseFitsDeterministicCeiling(phase, ceiling));
+}
+
+function phaseFitsDeterministicCeiling(phase, ceiling) {
+  if (!phase?.kind) return false;
+  if (phase.kind === 'release') {
+    return ceiling.constraints.externalWrite === 'required' && ceiling.capabilities.includes('external.write');
+  }
+  if (phase.kind === 'verify' || phase.kind === 'execute' && phase.domain === 'tests') {
+    return ceiling.constraints.testExecution === 'required' && ceiling.capabilities.includes('tests.execute');
+  }
+  if ((phase.kind === 'modify' || phase.kind === 'create') && phase.domain !== 'writing' && phase.domain !== 'general') {
+    return ceiling.constraints.workspaceWrite === 'required' && ceiling.capabilities.includes('fs.write');
+  }
+  if (phase.domain === 'facts') {
+    return ceiling.constraints.networkAccess === 'required' && ceiling.capabilities.includes('network.read');
+  }
+  if (phase.domain === 'general' || phase.domain === 'writing') return true;
+  return ceiling.capabilities.includes('fs.read');
+}
+
+function preservesProtectedRequirements(candidateRoute, fallbackRoute) {
+  const required = requiredGateKeys(fallbackRoute.routePlan);
+  if (!required.length) return true;
+  const candidate = new Set(requiredGateKeys(candidateRoute.routePlan));
+  return required.every((key) => candidate.has(key));
+}
+
+function requiredGateKeys(routePlan) {
+  return (routePlan?.gateRequirements ?? [])
+    .filter(({ mode }) => mode === 'required')
+    .map(({ key }) => key);
+}
+
+function preserveLegacyRequirements(route, fallbackRoute) {
+  return {
+    ...route,
+    requiredSkills: unique([...(fallbackRoute.requiredSkills ?? []), ...(route.requiredSkills ?? [])]),
+    requiredTools: unique([...(fallbackRoute.requiredTools ?? []), ...(route.requiredTools ?? [])]),
+    requiredSubagents: uniqueSubagents([...(fallbackRoute.requiredSubagents ?? []), ...(route.requiredSubagents ?? [])]),
+    shouldForkSubagents: Boolean(fallbackRoute.shouldForkSubagents || route.shouldForkSubagents),
+    hardBlockReasons: unique([...(fallbackRoute.hardBlockReasons ?? []), ...(route.hardBlockReasons ?? [])]),
+  };
+}
+
+function mergeRoutePlans(...values) {
+  const options = values.at(-1)?.extraGates ? values.pop() : { extraGates: [] };
+  const plans = values.filter(Boolean);
+  const fallback = plans[0] ?? {};
+  const latest = plans.at(-1) ?? fallback;
+  return {
+    ...fallback,
+    ...latest,
+    version: Math.max(...plans.map(({ version = 1 }) => version), 1),
+    phases: uniquePhases(plans.flatMap(({ phases = [] }) => phases)),
+    requiredSkills: unique(plans.flatMap(({ requiredSkills = [] }) => requiredSkills)),
+    requiredTools: unique(plans.flatMap(({ requiredTools = [] }) => requiredTools)),
+    requiredSubagents: uniqueSubagents(plans.flatMap(({ requiredSubagents = [] }) => requiredSubagents)),
+    gateRequirements: mergeGateRequirements([
+      ...plans.flatMap(({ gateRequirements = [] }) => gateRequirements),
+      ...options.extraGates,
+    ]),
+  };
+}
+
+function mergeGateRequirements(requirements) {
+  const byKey = new Map();
+  for (const requirement of requirements) {
+    if (!requirement?.key) continue;
+    const current = byKey.get(requirement.key);
+    if (!current || current.mode === 'advisory' && requirement.mode === 'required') {
+      byKey.set(requirement.key, { key: requirement.key, mode: requirement.mode });
+    }
+  }
+  const order = ['security-evidence', 'test-evidence', 'review-evidence', 'fact-evidence', 'writing-quality', 'release-approval'];
+  return [...byKey.values()].sort((left, right) => gateOrder(left.key, order) - gateOrder(right.key, order));
+}
+
+function gateOrder(key, order) {
+  const index = order.indexOf(key);
+  return index === -1 ? order.length : index;
+}
+
+function uniquePhases(phases) {
+  const seen = new Set();
+  return phases.filter((phase) => {
+    const key = `${phase?.kind ?? ''}:${phase?.domain ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return Boolean(phase?.kind && phase?.domain);
+  });
+}
+
+function uniqueSubagents(subagents) {
+  const byAgent = new Map();
+  for (const subagent of subagents) {
+    const agent = typeof subagent === 'string' ? subagent : subagent?.agent;
+    if (!agent) continue;
+    const current = byAgent.get(agent);
+    if (typeof subagent === 'string' && current) continue;
+    const incoming = typeof subagent === 'string' ? { agent, requiredSkills: [] } : subagent;
+    byAgent.set(agent, {
+      ...(typeof current === 'object' ? current : {}),
+      ...incoming,
+      agent,
+      requiredSkills: unique([
+        ...(current?.requiredSkills ?? []),
+        ...(incoming?.requiredSkills ?? []),
+      ]),
+      ...(current?.modelRoles || incoming?.modelRoles ? {
+        modelRoles: unique([...(current?.modelRoles ?? []), ...(incoming?.modelRoles ?? [])]),
+      } : {}),
+    });
+  }
+  return [...byAgent.values()];
+}
+
+function intentsForRiskFlags(flags) {
+  const intents = [];
+  if (flags.includes('needs-security-review')) intents.push('security-review');
+  if (flags.includes('needs-tests')) intents.push('testing');
+  if (flags.includes('needs-writing-qa')) intents.push('writing.en');
+  if (flags.includes('needs-fact-check')) intents.push('fact-check');
+  if (flags.includes('release-or-push')) intents.push('release');
+  return intents;
+}
+
+function descriptorRiskFlag(flag, ceiling) {
+  if (flag === 'needs-security-review' && ceiling.capabilities.includes('fs.read')) {
+    return { flag: 'security-sensitive', level: 'high' };
+  }
+  if (flag === 'needs-tests' && ceiling.constraints.testExecution === 'required') {
+    return { flag: 'test-execution', level: 'medium' };
+  }
+  if (flag === 'needs-fact-check' && ceiling.constraints.networkAccess === 'required') {
+    return { flag: 'factual-claims', level: 'medium' };
+  }
+  if ((flag === 'release-or-push' || flag === 'needs-marketplace-check')
+    && ceiling.constraints.externalWrite === 'required') {
+    return { flag: 'external-write', level: 'high' };
+  }
+  if (flag === 'ambiguous') return { flag: 'ambiguous', level: 'low' };
+  return null;
+}
+
+function maxRiskLevel(left, right) {
+  const order = ['low', 'medium', 'high', 'critical'];
+  return order[Math.max(order.indexOf(left), order.indexOf(right), 0)];
+}
+
+function maxComplexity(left, right) {
+  const order = ['simple', 'focused', 'broad'];
+  return order[Math.max(order.indexOf(left), order.indexOf(right), 0)];
 }
 
 function isWritingIntent(intent) {

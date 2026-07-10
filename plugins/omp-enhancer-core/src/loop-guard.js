@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 export const defaultLoopGuardConfig = {
   maxRepeatedSentence: 3,
   maxRepeatedPhrase: 2,
@@ -408,7 +410,8 @@ export function fingerprintGeneratedText(text = '') {
     .replace(/[^\p{L}\p{N}\u4E00-\u9FFF]+/gu, ' ')
     .replace(/\s+/gu, ' ')
     .trim();
-  return normalized.slice(-240);
+  if (!normalized) return '';
+  return createHash('sha256').update(normalized).digest('hex');
 }
 
 function detectRepeatedSentence(text, options) {

@@ -84,6 +84,8 @@ test('registers core tools and hooks without a separate classifier command', () 
   assert.equal([...pi.tools.values()].every((tool) => typeof tool.execute === 'function'), true);
   assert.deepEqual(pi.eventHandlers.map((handler) => handler.event), [
     'session_start',
+    'tool_approval_requested',
+    'tool_approval_resolved',
     'assistant_delta',
     'assistant_message',
     'assistant_output',
@@ -127,7 +129,7 @@ test('route task probes do not replace an active routed workflow', async () => {
 });
 
 
-test('route task read-only router review prompts activate a fresh session by default', async () => {
+test('route task read-only router review prompts remain non-authorizing probes on an empty session', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -149,9 +151,10 @@ test('route task read-only router review prompts activate a fresh session by def
     ctx,
   );
 
-  assert.equal(result.details.activated, true);
-  assert.notEqual(status.details.status.route, 'none');
-  assert.doesNotMatch(status.content[0].text, /No active routed workflow|Route:\s*none/);
+  assert.equal(result.details.activated, false);
+  assert.equal(result.details.probe_only, true);
+  assert.equal(status.details.status.route, 'none');
+  assert.match(status.content[0].text, /No active routed workflow|Route:\s*none/);
 });
 
 test('route task probe-only prompts do not activate a fresh session by default', async () => {
@@ -201,8 +204,8 @@ test('route task probe details expose probe-only and state-change booleans', asy
 
   assert.equal(probeResult.details.probe_only, true);
   assert.equal(probeResult.details.state_changed, false);
-  assert.equal(activeResult.details.probe_only, false);
-  assert.equal(activeResult.details.state_changed, true);
+  assert.equal(activeResult.details.probe_only, true);
+  assert.equal(activeResult.details.state_changed, false);
 });
 
 test('status distinguishes active route from last probe route and reports whether the probe changed state', async () => {
@@ -402,15 +405,20 @@ test('session_start does not create a classifier-specific model role', async () 
   assert.deepEqual(tags.classifier, undefined);
 });
 
-test('classifier tools expose model role configuration and resolve route state', async () => {
+test('classifier tools refine a trusted route monotonically without creating authorization', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
+  const prompt = 'Draft an English related work paragraph and check the logic.';
+  const started = await event(pi, 'before_agent_start')({ prompt }, ctx);
+  const before = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(started.route.intent, 'writing.en');
+
   const promptResult = await tool(pi, 'omp_core_classifier_prompt').execute(
     'call-classifier-prompt',
-    { prompt: 'Draft an English related work paragraph and check the logic.' },
+    { prompt },
     undefined,
     undefined,
     ctx,
@@ -423,7 +431,7 @@ test('classifier tools expose model role configuration and resolve route state',
   const routeResult = await tool(pi, 'omp_core_resolve_classification').execute(
     'call-classifier-resolve',
     {
-      prompt: 'Draft an English related work paragraph and check the logic.',
+      prompt,
       output: JSON.stringify({
         intent: 'writing.en',
         secondaryIntents: [],
@@ -442,6 +450,16 @@ test('classifier tools expose model role configuration and resolve route state',
   assert.equal(routeResult.details.route.intent, 'writing.en');
   assert.equal(routeResult.details.route.source, 'llm-classifier');
   assert.deepEqual(routeResult.details.route.requiredSubagents.map(({ agent }) => agent), ['writer', 'checker']);
+  const after = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(after.lastPrompt, prompt);
+  assert.equal(after.classifierAttempted, true);
+  assert.equal(after.gateController.routeId, before.gateController.routeId);
+  assert.deepEqual(after.gateController.budget, before.gateController.budget);
+  assert.deepEqual(
+    after.lastRoute.taskDescriptor.constraints,
+    before.lastRoute.taskDescriptor.constraints,
+    'classifier refinement must not grant capabilities beyond the trusted user route',
+  );
 
   const governance = await tool(pi, 'omp_core_governance_prompt').execute(
     'call-classifier-governance',
@@ -608,9 +626,7 @@ test('before_agent_start bypasses OMP built-in slash commands without injecting 
     '/auth-broker',
   ];
 
-  for (const slashCommand of builtInSlashCommands) {
-    await assertSlashCommandBypassed(slashCommand, 'host command context');
-  }
+  await assertSlashCommandsBypassed(builtInSlashCommands, 'host command context');
 });
 
 test('before_agent_start bypasses plugin and unknown slash commands so command handlers own them', async () => {
@@ -632,9 +648,7 @@ test('before_agent_start bypasses plugin and unknown slash commands so command h
     '/writing-helper:writing-quality paper.md',
   ];
 
-  for (const slashCommand of pluginSlashCommands) {
-    await assertSlashCommandBypassed(slashCommand, 'plugin command context');
-  }
+  await assertSlashCommandsBypassed(pluginSlashCommands, 'plugin command context');
 });
 
 test('before_agent_start still routes prompts that begin with absolute paths', async () => {
@@ -694,19 +708,15 @@ test('assistant output loop guard aborts repeated main-agent generation and prep
   const blocked = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
 
   assert.equal(blocked.abort, true);
-  assert.equal(blocked.autoContinue, true);
+  assert.equal(blocked.autoContinue, false);
   assert.match(blocked.reason, /loop guard/i);
   assert.match(blocked.additionalContext, /^LOOP_BREAKER\nReason:/);
   assert.match(blocked.additionalContext, /Do next: summarize current state and choose a different next action/);
-  assert.equal(pi.messages.length, 1);
-  assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.loop-guard-recovery');
-  assert.equal(pi.messages[0].message.display, false);
-  assert.equal(pi.messages[0].message.attribution, 'agent');
-  assert.match(pi.messages[0].message.content, /Do next: summarize current state and choose a different next action/);
-  assert.deepEqual(pi.messages[0].options, { deliverAs: 'followUp', triggerTurn: true });
+  assert.equal(pi.messages.length, 0);
+  assert.match(blocked.details.autoContinuation.reason, /GateController/);
 });
 
-test('before_agent_start treats loop guard auto-continuations as internal prompts', async () => {
+test('before_agent_start treats GateController loop repair continuations as internal prompts', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -722,10 +732,14 @@ test('before_agent_start treats loop guard auto-continuations as internal prompt
   const blocked = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
 
   assert.equal(blocked.abort, true);
-  assert.equal(blocked.autoContinue, true);
-  assert.equal(pi.messages.length, 1);
+  assert.equal(blocked.autoContinue, false);
+  assert.equal(pi.messages.length, 0);
 
-  const continuationStart = await event(pi, 'before_agent_start')({ prompt: pi.messages[0].message.content }, ctx);
+  const repair = await event(pi, 'session_stop')({}, ctx);
+  assert.equal(repair?.continue, true);
+  assert.match(repair.additionalContext, /^OMP_GATE_REPAIR/);
+
+  const continuationStart = await event(pi, 'before_agent_start')({ prompt: repair.additionalContext }, ctx);
 
   assert.equal(continuationStart, undefined);
 
@@ -738,7 +752,7 @@ test('before_agent_start treats loop guard auto-continuations as internal prompt
 
   assert.equal(blockedAgain.abort, true);
   assert.equal(blockedAgain.autoContinue, false);
-  assert.match(blockedAgain.details.autoContinuation.reason, /limit/i);
+  assert.match(blockedAgain.details.autoContinuation.reason, /GateController/i);
 });
 
 test('message_update loop guard aborts real OMP text delta streams', async () => {
@@ -777,12 +791,9 @@ test('message_update loop guard aborts real OMP text delta streams', async () =>
 
   assert.equal(abortCount, 1);
   assert.equal(blocked.abort, true);
-  assert.equal(blocked.autoContinue, true);
+  assert.equal(blocked.autoContinue, false);
   assert.match(blocked.reason, /loop guard/i);
-  assert.equal(pi.messages.length, 1);
-  assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.loop-guard-recovery');
-  assert.match(pi.messages[0].message.content, /Do next: summarize current state and choose a different next action/);
-  assert.deepEqual(pi.messages[0].options, { deliverAs: 'followUp', triggerTurn: true });
+  assert.equal(pi.messages.length, 0);
 
   await event(pi, 'turn_start')({}, ctx);
   const nonRepeatedAfterRecoveryStart = await event(pi, 'message_update')(
@@ -837,10 +848,8 @@ test('message_update loop guard detects repeated planning blocks across streamed
   assert.equal(abortCount, 1);
   assert.equal(blocked.abort, true);
   assert.match(blocked.reason, /Repeated \d-line block 2 times/);
-  assert.equal(blocked.autoContinue, true);
-  assert.equal(pi.messages.length, 1);
-  assert.equal(pi.messages[0].message.customType, 'omp-enhancer-core.loop-guard-recovery');
-  assert.match(pi.messages[0].message.content, /Do next: summarize current state and choose a different next action/);
+  assert.equal(blocked.autoContinue, false);
+  assert.equal(pi.messages.length, 0);
 });
 
 test('session_stop loop guard gives one bounded recovery for repeated final output', async () => {
@@ -862,11 +871,16 @@ test('session_stop loop guard gives one bounded recovery for repeated final outp
   const first = await event(pi, 'session_stop')({ output: repeated }, ctx);
 
   assert.equal(first?.continue, true);
-  assert.match(first.additionalContext, /^LOOP_BREAKER\nReason:/);
+  assert.match(first.additionalContext, /^OMP_GATE_REPAIR/);
+  assert.match(first.additionalContext, /LOOP_BREAKER\nReason:/);
 
   const second = await event(pi, 'session_stop')({ output: repeated }, ctx);
 
-  assert.equal(second, undefined);
+  assert.equal(second?.continue, true);
+  assert.match(second.additionalContext, /^OMP_GATE_TERMINAL/);
+  assert.match(second.additionalContext, /BLOCKED/);
+  const stopped = await event(pi, 'session_stop')({ output: repeated }, ctx);
+  assert.equal(stopped?.continue, false);
 });
 
 test('session_stop loop guard reads real OMP last assistant message payloads', async () => {
@@ -895,11 +909,13 @@ test('session_stop loop guard reads real OMP last assistant message payloads', a
   const first = await event(pi, 'session_stop')(stopEvent, ctx);
 
   assert.equal(first?.continue, true);
-  assert.match(first.additionalContext, /^LOOP_BREAKER\nReason:/);
+  assert.match(first.additionalContext, /^OMP_GATE_REPAIR/);
+  assert.match(first.additionalContext, /LOOP_BREAKER\nReason:/);
 
   const second = await event(pi, 'session_stop')(stopEvent, ctx);
 
-  assert.equal(second, undefined);
+  assert.equal(second?.continue, true);
+  assert.match(second.additionalContext, /^OMP_GATE_TERMINAL/);
 });
 
 test('session_stop continues when a routed writing task has not run writing QA', async () => {
@@ -908,13 +924,7 @@ test('session_stop continues when a routed writing task has not run writing QA',
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-1',
-    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '请润色这段中文论文摘要，检查逻辑和表达。');
   await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
 
   const result = await event(pi, 'session_stop')({}, ctx);
@@ -924,7 +934,7 @@ test('session_stop continues when a routed writing task has not run writing QA',
   assert.match(result.additionalContext, /plain-chinese-writing|SKILL_USAGE/);
 });
 
-test('session_stop treats missing workflow evidence as pre-work guidance instead of post-completion work', async () => {
+test('session_stop checks all missing workflow evidence even when final output is non-empty', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -939,9 +949,12 @@ test('session_stop treats missing workflow evidence as pre-work guidance instead
   assert.match(startFragment, /pre-work skill bootstrap/i);
   assert.match(startFragment, /Required task assignment contracts/);
 
-  const released = await event(pi, 'session_stop')({ output: '我已经完成摘要润色。' }, ctx);
+  const blocked = await event(pi, 'session_stop')({ output: '我已经完成摘要润色。' }, ctx);
 
-  assert.equal(released, undefined);
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /subagent gate/i);
+  assert.match(blocked.additionalContext, /writing QA/i);
+  assert.match(blocked.additionalContext, /skill gate/i);
 });
 
 test('task subagent contract gaps are non-blocking pre-work coaching', async () => {
@@ -1279,19 +1292,13 @@ test('smart gate prompt has no task-contract gate after non-blocking task coachi
   assert.equal(smartPrompt.details.smartGate.required, false);
   assert.doesNotMatch(smartPrompt.content[0].text, /OMP Enhancer Core Smart Gate/);
 });
-test('failed writing QA tool results are recorded but do not force a post-completion continuation', async () => {
+test('failed writing QA tool results remain open after non-empty final output', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-failed-writing-qa-route',
-    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '请润色这段中文论文摘要，检查逻辑和表达。');
   await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
   await readSkills(pi, ctx, ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers']);
   await event(pi, 'tool_result')(
@@ -1305,21 +1312,17 @@ test('failed writing QA tool results are recorded but do not force a post-comple
 
   const result = await event(pi, 'session_stop')({ output: '任务完成。' }, ctx);
 
-  assert.equal(result, undefined);
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /writing QA/i);
+  assert.match(result.additionalContext, /Unable to read document/);
 });
-test('repeated failed writing QA tools do not reopen a completion smart gate after final output', async () => {
+test('repeated failed writing QA tools use the bounded controller instead of a completion smart gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-repeated-failed-writing-qa-route',
-    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '请润色这段中文论文摘要，检查逻辑和表达。');
   await event(pi, 'tool_result')(
     { name: 'writing_quality_check', isError: true, details: { error: 'Tool unavailable.' } },
     ctx,
@@ -1329,11 +1332,15 @@ test('repeated failed writing QA tools do not reopen a completion smart gate aft
     ctx,
   );
 
-  const released = await event(pi, 'session_stop')({ output: '写作 QA 已完成，证据充分。' }, ctx);
+  const blocked = await event(pi, 'session_stop')({ output: '写作 QA 已完成，证据充分。' }, ctx);
 
-  assert.equal(released, undefined);
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /writing QA/i);
+  assert.match(blocked.additionalContext, /Tool unavailable/);
+  const routeState = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(routeState.pendingSmartGate, null);
 });
-test('completion smart gate is not opened after a user-facing final answer', async () => {
+test('non-empty final output is checked without opening a completion smart gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -1344,11 +1351,14 @@ test('completion smart gate is not opened after a user-facing final answer', asy
     ctx,
   );
 
-  const released = await event(pi, 'session_stop')({
+  const blocked = await event(pi, 'session_stop')({
     output: 'Final answer without delegated writing agents, writing QA, or SKILL_USAGE.',
   }, ctx);
 
-  assert.equal(released, undefined);
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /^OMP_GATE_REPAIR/);
+  const routeState = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(routeState.pendingSmartGate, null);
 });
 
 test('governance prompt separates task subagent skills from direct main-agent reads', async () => {
@@ -1427,7 +1437,7 @@ test('pre-work skill gate allows read and core validation before blocking remain
   assert.equal(allowed, undefined);
 });
 
-test('pre-work skill gate coaches simple writing edits until writing skills are read', async () => {
+test('read-only writing tasks block file edits even after writing skills are read', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -1443,10 +1453,8 @@ test('pre-work skill gate coaches simple writing edits until writing skills are 
     ctx,
   );
 
-  assert.equal(blocked?.block, false);
-  assert.match(blocked.reason, /^RECOVERY\nReason: missing_skill_read/);
-  assert.match(blocked.reason, /plain-chinese-writing/);
-  assert.match(blocked.reason, /zh-writing-polish/);
+  assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /read-only|file writes/i);
 
   await readSkills(pi, ctx, ['plain-chinese-writing', 'zh-writing-polish']);
 
@@ -1455,10 +1463,11 @@ test('pre-work skill gate coaches simple writing edits until writing skills are 
     ctx,
   );
 
-  assert.equal(allowed, undefined);
+  assert.equal(allowed?.block, true);
+  assert.match(allowed.reason, /read-only|file writes/i);
 });
 
-test('pre-work skill gate prioritizes skill-read recovery over Tiny smart gate', async () => {
+test('protected read-only boundary takes priority over Tiny smart gate', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -1474,10 +1483,8 @@ test('pre-work skill gate prioritizes skill-read recovery over Tiny smart gate',
     ctx,
   );
 
-  assert.equal(blocked?.block, false);
-  assert.match(blocked.reason, /^RECOVERY\nReason: missing_skill_read/);
-  assert.match(blocked.reason, /read skill:\/\/plain-chinese-writing/);
-  assert.match(blocked.reason, /read skill:\/\/zh-writing-polish/);
+  assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /read-only|file writes/i);
 
   const smartPrompt = await tool(pi, 'omp_core_smart_gate_prompt').execute(
     'call-prework-smart-gate-prompt-not-open',
@@ -1497,11 +1504,12 @@ test('pre-work skill gate prioritizes skill-read recovery over Tiny smart gate',
     ctx,
   );
 
-  assert.equal(allowed, undefined);
+  assert.equal(allowed?.block, true);
+  assert.match(allowed.reason, /read-only|file writes/i);
 });
 
 
-test('smart gate resolve requires a current pending gate before releasing tool gates', async () => {
+test('smart gate resolve requires a current pending gate and cannot release protected boundaries', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -1539,8 +1547,8 @@ test('smart gate resolve requires a current pending gate before releasing tool g
     ctx,
   );
 
-  assert.equal(blocked?.block, false);
-  assert.match(blocked.reason, /^RECOVERY\nReason: missing_skill_read/);
+  assert.equal(blocked?.block, true);
+  assert.match(blocked.reason, /read-only|file writes/i);
   assert.doesNotMatch(blocked.reason, /Rule gate key: writing\.zh:prework:edit/);
 });
 
@@ -1665,13 +1673,7 @@ test('session_stop requires successful SKILL_USAGE validation even after writing
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-writing-route',
-    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '请润色这段中文论文摘要，检查逻辑和表达。');
   await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
   await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
 
@@ -1732,15 +1734,9 @@ test('session_stop ignores prior route SKILL_USAGE and tool evidence after routi
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-testing-route',
-    { prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。');
   await forkSubagents(pi, ctx, ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer']);
-  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
+  await event(pi, 'tool_result')({ name: 'omp_test_gate', details: { passed: true } }, ctx);
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-testing-skill-usage',
     {
@@ -1915,13 +1911,7 @@ test('session_stop continues when an implementation-with-tests task has not run 
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-2',
-    { prompt: '实现自然语言路由并补测试，测试写完后要过门禁。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '实现自然语言路由并补测试，测试写完后要过门禁。');
   await forkSubagents(pi, ctx, ['plan', 'implementation-task', 'reviewer']);
 
   const result = await event(pi, 'session_stop')({}, ctx);
@@ -1936,7 +1926,7 @@ test('session_stop continues when an implementation-with-tests task has not run 
   assert.doesNotMatch(result.additionalContext, /only after a successful omp_test_gate result/);
 });
 
-test('failed omp_test_gate results are recorded but do not force a post-completion continuation', async () => {
+test('failed omp_test_gate results remain open after non-empty final output', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -1970,7 +1960,9 @@ test('failed omp_test_gate results are recorded but do not force a post-completi
 
   const result = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
 
-  assert.equal(result, undefined);
+  assert.equal(result?.continue, true);
+  assert.match(result.additionalContext, /omp_test_gate/);
+  assert.match(result.additionalContext, /Test imports private implementation details/);
 });
 
 test('external testing-enhancer tool results close the testing gate only with passing evidence', async () => {
@@ -2019,6 +2011,7 @@ test('external testing-enhancer tool results close the testing gate only with pa
     },
     ctx,
   );
+  await recordPassingHostTest(pi, ctx, 'npm test --workspace plugins/omp-enhancer-core');
   await event(pi, 'tool_result')(
     {
       name: 'omp_test_report',
@@ -2117,13 +2110,7 @@ test('session_stop continues when a routed task has not forked required subagent
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-subagents',
-    { prompt: '实现自然语言路由并补测试。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '实现自然语言路由并补测试。');
 
   const blocked = await event(pi, 'session_stop')({}, ctx);
 
@@ -2145,13 +2132,7 @@ test('failed task tool results do not count as forked subagents', async () => {
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-failed-task-result',
-    { prompt: '实现自然语言路由并补测试。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '实现自然语言路由并补测试。');
   await event(pi, 'tool_result')(
     {
       name: 'task',
@@ -2184,13 +2165,7 @@ test('failed task results keep subagent gate blocked even after prior task tool_
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-task-tool-call-then-failure',
-    { prompt: '实现自然语言路由并补测试。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '实现自然语言路由并补测试。');
   await event(pi, 'tool_call')(
     {
       toolName: 'task',
@@ -2233,13 +2208,7 @@ test('session_stop continues when forked subagents lack required skill assignmen
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-subagent-skills',
-    { prompt: '实现自然语言路由并补测试。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '实现自然语言路由并补测试。');
   for (const agent of ['plan', 'implementation-task', 'reviewer']) {
     await event(pi, 'tool_result')({ name: 'task', params: { agent, prompt: 'Do the assigned work.' } }, ctx);
   }
@@ -2258,13 +2227,7 @@ test('pending task tool_call evidence blocks completion until task result return
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-english-writing-route',
-    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph for a systems paper and check the logic.');
   await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
   await event(pi, 'tool_call')(
     {
@@ -2332,13 +2295,7 @@ test('stale pending task calls are reported as potentially stuck', async () => {
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-stale-task-route',
-    { prompt: '实现自然语言路由并补测试。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '实现自然语言路由并补测试。');
   await readSkills(pi, ctx, [
     'brainstorming',
     'test-driven-development',
@@ -2372,13 +2329,7 @@ test('subagent status tool reports pending and completed roles', async () => {
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-status-route',
-    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph for a systems paper and check the logic.');
   await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
   await event(pi, 'tool_call')(
     {
@@ -2425,13 +2376,7 @@ test('task tool_execution_update records live task progress and completion', asy
   ctx.ui = { notify: async (text, level) => notifications.push({ text, level }) };
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-live-progress-route',
-    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph for a systems paper and check the logic.');
   await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
 
   const assignment = [
@@ -2809,13 +2754,7 @@ test('subagent EventBus progress does not drive task-level progress display', as
   const ctx = extensionContext(pi.entries);
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-eventbus-progress-route',
-    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph for a systems paper and check the logic.');
 
   const assignment = [
     'OMP_REQUIRED_SUBAGENT: writer',
@@ -2857,13 +2796,7 @@ test('task status preserves rich task-block telemetry inside the plugin', async 
   const ctx = extensionContext(pi.entries);
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-rich-progress-route',
-    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph for a systems paper and check the logic.');
 
   const assignment = [
     'OMP_REQUIRED_SUBAGENT: writer',
@@ -2947,13 +2880,7 @@ test('completing one of two pending task calls keeps the other subagent running'
   ctx.ui = { notify: async (text, level) => notifications.push({ text, level }) };
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-two-independent-subagents-route',
-    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph for a systems paper and check the logic.');
   await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
   await event(pi, 'tool_call')(
     {
@@ -3016,13 +2943,7 @@ test('task tool_call leaves running subagents to native OMP TUI', async () => {
   ctx.ui = { notify: async (text, level) => notifications.push({ text, level }) };
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-running-notification-route',
-    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph for a systems paper and check the logic.');
   await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
   await event(pi, 'tool_call')(
     {
@@ -3049,13 +2970,7 @@ test('task tool_result leaves completed and failed subagents to native OMP TUI',
   ctx.ui = { notify: async (text, level) => notifications.push({ text, level }) };
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-completed-notification-route',
-    { prompt: 'Draft an English related work paragraph for a systems paper and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph for a systems paper and check the logic.');
   await readSkills(pi, ctx, ['writing-markdown-helper', 'writing-checkers']);
   await event(pi, 'tool_call')(
     {
@@ -3072,13 +2987,7 @@ test('task tool_result leaves completed and failed subagents to native OMP TUI',
 
   assert.deepEqual(notifications, []);
 
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-failed-notification-route',
-    { prompt: 'Implement an API change and add tests.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Implement an API change and add tests.');
   await readSkills(pi, ctx, [
     'brainstorming',
     'test-driven-development',
@@ -3107,13 +3016,7 @@ test('session_stop accepts SKILL_USAGE from the final output event without a sep
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-final-output-skill-route',
-    { prompt: 'Draft an English related work paragraph and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph and check the logic.');
   await forkSubagents(pi, ctx, ['writer', 'checker']);
   await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
 
@@ -3148,22 +3051,32 @@ test('session_stop accepts delegated subagent skill evidence without main-agent 
     ctx,
   );
   for (const [agent, skills] of Object.entries({ writer: ['writing-markdown-helper'], checker: ['writing-checkers'] })) {
+    const toolCallId = `delegated-skill-${agent}`;
+    const prompt = [
+      `OMP_REQUIRED_SUBAGENT: ${agent}`,
+      'OMP_PARENT_TASK: Draft an English related work paragraph and check the logic.',
+      'Required skills for this subagent:',
+      ...skills.map((skill) => `- ${skill}`),
+    ].join('\n');
+    await event(pi, 'tool_call')(
+      { toolName: 'task', toolCallId, input: { agent, prompt } },
+      ctx,
+    );
     await event(pi, 'tool_result')(
       {
         name: 'task',
-        params: {
-          agent,
-          prompt: [
-            'Required skills for this subagent:',
-            ...skills.map((skill) => `- ${skill}`),
-            '',
+        toolCallId,
+        params: { agent, prompt },
+        content: [{
+          type: 'text',
+          text: [
             'SKILL_USAGE',
             'Required:',
             ...skills.map((skill) => `- ${skill}`),
             'Loaded:',
             ...skills.map((skill) => `- ${skill}`),
           ].join('\n'),
-        },
+        }],
       },
       ctx,
     );
@@ -3181,13 +3094,7 @@ test('session_stop accepts SKILL_USAGE from real OMP last assistant message payl
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-final-last-assistant-skill-route',
-    { prompt: 'Draft an English related work paragraph and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph and check the logic.');
   await forkSubagents(pi, ctx, ['writer', 'checker']);
   await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
 
@@ -3222,13 +3129,7 @@ test('skill validation tool accepts common model-formatted evidence and releases
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-model-formatted-skill-route',
-    { prompt: 'Draft an English related work paragraph and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph and check the logic.');
   await forkSubagents(pi, ctx, ['writer', 'checker']);
   await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
   const validation = await tool(pi, 'omp_core_validate_skill_usage').execute(
@@ -3260,13 +3161,7 @@ test('skill validation tool accepts a fenced final evidence block when no plain 
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-fenced-skill-route',
-    { prompt: 'Draft an English related work paragraph and check the logic.' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, 'Draft an English related work paragraph and check the logic.');
   await forkSubagents(pi, ctx, ['writer', 'checker']);
   await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
   const validation = await tool(pi, 'omp_core_validate_skill_usage').execute(
@@ -3302,13 +3197,7 @@ test('session_stop accepts successful read skill evidence without a final SKILL_
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-read-evidence-route',
-    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '请润色这段中文论文摘要，检查逻辑和表达。');
   await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
   await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
   await readSkills(pi, ctx, ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers']);
@@ -3324,13 +3213,7 @@ test('skill validation tool combines SKILL_USAGE output with successful read ski
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-combined-read-evidence-route',
-    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '请润色这段中文论文摘要，检查逻辑和表达。');
   await forkSubagents(pi, ctx, ['zh-writer', 'zh-checker']);
   await event(pi, 'tool_result')({ name: 'writing_quality_check' }, ctx);
   await readSkills(pi, ctx, ['zh-writing-polish', 'zh-writing-checkers']);
@@ -3441,13 +3324,7 @@ test('validated SUBAGENT_USAGE can close subagent gate when native task telemetr
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-subagent-usage',
-    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '请润色这段中文论文摘要，检查逻辑和表达。');
   await tool(pi, 'omp_core_validate_subagent_usage').execute(
     'call-valid-subagent-usage',
     {
@@ -3484,13 +3361,7 @@ test('incomplete validated SUBAGENT_USAGE still blocks missing routed subagents'
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await tool(pi, 'omp_core_route_task').execute(
-    'call-incomplete-subagent-usage',
-    { prompt: '请润色这段中文论文摘要，检查逻辑和表达。' },
-    undefined,
-    undefined,
-    ctx,
-  );
+  await establishTrustedRoute(pi, ctx, '请润色这段中文论文摘要，检查逻辑和表达。');
   await tool(pi, 'omp_core_validate_subagent_usage').execute(
     'call-incomplete-subagent-usage-validation',
     {
@@ -3832,7 +3703,8 @@ test('bug-audit testing gate releases after test gate and skill evidence without
   assert.equal(blocked?.continue, true);
   assert.match(blocked.additionalContext, /omp_test_gate/);
 
-  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
+  await event(pi, 'tool_result')({ name: 'omp_test_gate', details: { passed: true } }, ctx);
+  await recordPassingHostTest(pi, ctx);
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-complete-testing-skill-usage',
     {
@@ -3858,7 +3730,8 @@ test('bug-audit route accepts complete final subagent evidence when task telemet
     { prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。' },
     ctx,
   );
-  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
+  await event(pi, 'tool_result')({ name: 'omp_test_gate', details: { passed: true } }, ctx);
+  await recordPassingHostTest(pi, ctx);
   await tool(pi, 'omp_core_validate_skill_usage').execute(
     'call-testing-skill-usage-without-task',
     {
@@ -3923,7 +3796,7 @@ test('failed skill validation can be corrected by final evidence without repeate
   await assertReleasedStops(pi, ctx, [{ output: correctedOutput }, {}, {}]);
 });
 
-test('unknown routes observe classifier context without blocking tools or final output', async () => {
+test('unknown routes enforce read-only boundaries without blocking final output', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -3936,7 +3809,8 @@ test('unknown routes observe classifier context without blocking tools or final 
   assert.equal(start.additionalContext, undefined);
 
   const toolResult = await event(pi, 'tool_call')({ toolName: 'bash', input: { command: 'date' } }, ctx);
-  assert.equal(toolResult, undefined);
+  assert.equal(toolResult?.block, true);
+  assert.equal(toolResult?.reasonCode, 'workspace-write-forbidden');
 
   await assertReleasedStops(pi, ctx, [{ output: 'Paris.' }, {}, { output: 'Done.' }]);
 });
@@ -4006,7 +3880,8 @@ test('session_stop releases classifier preflight when route-mismatch tool failur
 
   await readSkills(pi, ctx, skills);
   await forkSubagents(pi, ctx, agents);
-  await event(pi, 'tool_result')({ name: 'omp_test_gate' }, ctx);
+  await event(pi, 'tool_result')({ name: 'omp_test_gate', details: { passed: true } }, ctx);
+  await recordPassingHostTest(pi, ctx);
 
   const finalOutput = [
     usageEvidence({
@@ -4024,10 +3899,9 @@ test('session_stop releases classifier preflight when route-mismatch tool failur
   assert.equal(released, undefined);
 });
 
-test('non-gated diagnosis release and unknown routes do not create repeated gate continuations', async () => {
+test('non-gated diagnosis and unknown routes do not create repeated gate continuations', async () => {
   const workloads = [
     { prompt: '为什么这个插件一直提示 SKILL_USAGE validation 失败？先诊断原因，不要改代码。', classifier: false },
-    { prompt: 'Push the current release commit and upgrade marketplace plugins.', classifier: false },
     { prompt: 'What is the capital of France?', classifier: false },
   ];
 
@@ -4040,6 +3914,21 @@ test('non-gated diagnosis release and unknown routes do not create repeated gate
     await event(pi, 'before_agent_start')({ prompt }, ctx);
     await assertReleasedStops(pi, ctx, [{}, {}, { output: 'Done.' }]);
   }
+});
+
+test('release routes keep a protected verification gate after non-empty final output', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({
+    prompt: 'Push the current release commit and upgrade marketplace plugins.',
+  }, ctx);
+  const blocked = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
+
+  assert.equal(blocked?.continue, true);
+  assert.match(blocked.additionalContext, /release \[protected\]|Protected release gate/);
 });
 
 test('subagent gate fallback names final evidence path when native task tool is unavailable', async () => {
@@ -4071,7 +3960,7 @@ function event(pi, name) {
   return found.handler;
 }
 
-async function assertSlashCommandBypassed(slashCommand, contextText) {
+async function assertSlashCommandsBypassed(slashCommands, contextText) {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -4082,36 +3971,44 @@ async function assertSlashCommandBypassed(slashCommand, contextText) {
     ctx,
   );
 
-  const slashEvent = { prompt: slashCommand, additionalContext: contextText };
-  const slashResult = await event(pi, 'before_agent_start')(slashEvent, ctx);
+  for (const slashCommand of slashCommands) {
+    const slashEvent = { prompt: slashCommand, additionalContext: contextText };
+    const slashResult = await event(pi, 'before_agent_start')(slashEvent, ctx);
 
-  assert.equal(slashResult, undefined, slashCommand);
-  assert.equal(slashEvent.additionalContext, contextText, slashCommand);
+    assert.equal(slashResult, undefined, slashCommand);
+    assert.equal(slashEvent.additionalContext, contextText, slashCommand);
+  }
 
   const governance = await tool(pi, 'omp_core_governance_prompt').execute(
-    `call-governance-after-slash-bypass-${slashCommand.replace(/[^A-Za-z0-9]+/g, '-')}`,
+    'call-governance-after-slash-bypass-matrix',
     {},
     undefined,
     undefined,
     ctx,
   );
 
-  assert.equal(governance.details.route.intent, 'implementation-with-tests', slashCommand);
+  assert.equal(governance.details.route.intent, 'implementation-with-tests');
 }
 
 async function forkSubagents(pi, ctx, agents) {
-  for (const agent of agents) {
+  for (const [index, agent] of agents.entries()) {
+    const toolCallId = `fork-${agent}-${index}`;
+    const prompt = [
+      `OMP_REQUIRED_SUBAGENT: ${agent}`,
+      'OMP_PARENT_TASK: extension test routed task',
+      'Required skills for this subagent:',
+      ...subagentSkills(agent).map((skill) => `- ${skill}`),
+    ].join('\n');
+    await event(pi, 'tool_call')(
+      { toolName: 'task', toolCallId, input: { agent, prompt } },
+      ctx,
+    );
     await event(pi, 'tool_result')(
       {
         name: 'task',
-        params: {
-          agent,
-          prompt: [
-            'OMP_PARENT_TASK: extension test routed task',
-            'Required skills for this subagent:',
-            ...subagentSkills(agent).map((skill) => `- ${skill}`),
-          ].join('\n'),
-        },
+        toolCallId,
+        params: { agent, prompt },
+        content: [{ type: 'text', text: `${agent} completed the assigned checkpoint.` }],
       },
       ctx,
     );
@@ -4129,6 +4026,18 @@ async function readSkills(pi, ctx, skills) {
       ctx,
     );
   }
+}
+
+async function recordPassingHostTest(pi, ctx, command = 'npm test') {
+  await event(pi, 'tool_result')(
+    {
+      name: 'bash',
+      params: { command },
+      content: [{ type: 'text', text: '42 tests passed, 0 failed' }],
+      isError: false,
+    },
+    ctx,
+  );
 }
 
 function subagentSkills(agent) {
@@ -4152,6 +4061,12 @@ function subagentSkills(agent) {
     checker: ['writing-checkers'],
     'config-librarian': [],
   }[agent] ?? [];
+}
+
+async function establishTrustedRoute(pi, ctx, prompt) {
+  const started = await event(pi, 'before_agent_start')({ prompt }, ctx);
+  assert.ok(started?.route, 'before_agent_start must establish the trusted active route for this workflow test');
+  return started.route;
 }
 
 function governanceText(result, eventPayload) {

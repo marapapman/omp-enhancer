@@ -76,7 +76,7 @@ test('pre-work missing skills coach instead of hard-blocking the tool', async ()
 
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')(
-    { prompt: '把这句话改成朴素直接的中文：我们需要进一步推动配置层面的优化与能力沉淀。' },
+    { prompt: '请编辑 draft.md，把这句话改成朴素直接的中文：我们需要进一步推动配置层面的优化与能力沉淀。' },
     ctx,
   );
 
@@ -113,8 +113,17 @@ test('debug logger writes jsonl records only when OMP_DEBUG_GATES is enabled', a
     assert.equal(enabled.file, debugLogPath({ cwd, kind: 'routes' }));
     const [line] = (await readFile(enabled.file, 'utf8')).trim().split('\n');
     const parsed = JSON.parse(line);
-    assert.equal(parsed.prompt, 'full prompt');
+    assert.equal('prompt' in parsed, false);
+    assert.match(parsed.promptDigest, /^[a-f0-9]{64}$/);
     assert.equal(parsed.workflowRoute, 'agentic.simple');
+
+    const unsafe = buildDebugRecord({
+      kind: 'gates',
+      prompt: 'full prompt',
+      env: { OMP_DEBUG_GATES_UNSAFE_PROMPTS: '1' },
+    });
+    assert.equal(unsafe.prompt, 'full prompt');
+    assert.equal(unsafe.unsafePromptLogging, true);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
@@ -131,7 +140,7 @@ test('OMP_DEBUG_GATES integration writes routes gates and loops jsonl files', as
     const ctx = extensionContext(entries, cwd);
 
     await event(pi, 'session_start')({}, ctx);
-    await event(pi, 'before_agent_start')({ prompt: '把这句话改成朴素直接的中文：需要推动能力沉淀。' }, ctx);
+    await event(pi, 'before_agent_start')({ prompt: '请编辑 draft.md，把这句话改成朴素直接的中文：需要推动能力沉淀。' }, ctx);
     await event(pi, 'tool_call')({ toolName: 'edit', input: { file: 'draft.md' } }, ctx);
     await event(pi, 'message_update')(
       {
@@ -155,7 +164,10 @@ test('OMP_DEBUG_GATES integration writes routes gates and loops jsonl files', as
     assert.equal(gateLog.payload.level, 'coach');
     assert.equal(loopLog.kind, 'loops');
     assert.ok(loopLog.reasonCode);
-    assert.match(loopLog.payload.reason, /Repeated/);
+    assert.match(loopLog.payload.fingerprint, /^[a-f0-9]{64}$/);
+    assert.equal('reason' in loopLog.payload, false);
+    assert.equal('repeatedText' in loopLog.payload, false);
+    assert.equal('prompt' in loopLog, false);
   } finally {
     if (previous === undefined) delete process.env.OMP_DEBUG_GATES;
     else process.env.OMP_DEBUG_GATES = previous;

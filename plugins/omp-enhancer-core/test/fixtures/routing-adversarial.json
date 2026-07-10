@@ -1,0 +1,762 @@
+[
+  {
+    "id": "gate_review_read_only_zh",
+    "equivalenceGroup": "gate-review-read-only",
+    "prompt": "你再检查一下路由和门禁逻辑，路由逻辑是否正确合理，有什么可以优化的地方。门禁逻辑是否太硬，是否会出现让模型反复尝试的情况。",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "inspect",
+        "domains": ["code", "plugin"],
+        "constraints": {
+          "workspaceWrite": "forbidden",
+          "testExecution": "unspecified",
+          "networkAccess": "unspecified",
+          "externalWrite": "forbidden",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "shell.execute"],
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "risk": { "level": "low", "flags": [] },
+        "complexity": "focused",
+        "language": "zh"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "requiredSkills": [],
+        "requiredTools": [],
+        "requiredSubagents": [],
+        "gateRequirements": [
+          { "key": "review-evidence", "mode": "advisory" }
+        ]
+      },
+      "legacy": {
+        "intent": "bug-audit",
+        "workflowRoute": "code.review",
+        "gateMode": "review-gate"
+      }
+    }
+  },
+  {
+    "id": "gate_review_read_only_en",
+    "equivalenceGroup": "gate-review-read-only",
+    "prompt": "Review the router and gate logic, assess whether the design is reasonable, and suggest improvements. Do not modify the code.",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "inspect",
+        "domains": ["code", "plugin"],
+        "constraints": {
+          "workspaceWrite": "forbidden",
+          "testExecution": "unspecified",
+          "networkAccess": "unspecified",
+          "externalWrite": "forbidden",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "shell.execute"],
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "risk": { "level": "low", "flags": [] },
+        "complexity": "focused",
+        "language": "en"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "requiredSkills": [],
+        "requiredTools": [],
+        "requiredSubagents": [],
+        "gateRequirements": [
+          { "key": "review-evidence", "mode": "advisory" }
+        ]
+      },
+      "legacy": {
+        "intent": "bug-audit",
+        "workflowRoute": "code.review",
+        "gateMode": "review-gate"
+      }
+    }
+  },
+  {
+    "id": "optimization_suggestions_no_write_zh",
+    "prompt": "检查本项目的代码并给出优化建议，不要修改任何文件。",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "inspect",
+        "domains": ["code"],
+        "constraints": {
+          "workspaceWrite": "forbidden",
+          "testExecution": "unspecified",
+          "networkAccess": "unspecified",
+          "externalWrite": "forbidden",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "shell.execute"],
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "risk": { "level": "low", "flags": [] },
+        "complexity": "focused",
+        "language": "zh"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "requiredSkills": [],
+        "requiredTools": [],
+        "requiredSubagents": [],
+        "gateRequirements": [
+          { "key": "review-evidence", "mode": "advisory" }
+        ]
+      },
+      "legacy": {
+        "intent": "bug-audit",
+        "workflowRoute": "code.review",
+        "gateMode": "review-gate"
+      }
+    }
+  },
+  {
+    "id": "router_file_review_no_write_zh",
+    "prompt": "分析 plugins/omp-enhancer-core/src/router.js 的实现是否合理，不改代码。",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "inspect",
+        "domains": ["code", "plugin"],
+        "constraints": {
+          "workspaceWrite": "forbidden",
+          "testExecution": "unspecified",
+          "networkAccess": "unspecified",
+          "externalWrite": "forbidden",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "shell.execute"],
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "risk": { "level": "low", "flags": [] },
+        "complexity": "focused",
+        "language": "zh"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "requiredSkills": [],
+        "requiredTools": [],
+        "requiredSubagents": [],
+        "gateRequirements": [
+          { "key": "review-evidence", "mode": "advisory" }
+        ]
+      },
+      "legacy": {
+        "intent": "bug-audit",
+        "workflowRoute": "code.review",
+        "gateMode": "review-gate"
+      }
+    }
+  },
+  {
+    "id": "run_single_test_command_zh",
+    "prompt": "只运行 npm test 并告诉我结果，不要修改代码。",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "execute",
+        "domains": ["tests"],
+        "constraints": {
+          "workspaceWrite": "forbidden",
+          "testExecution": "required",
+          "networkAccess": "unspecified",
+          "externalWrite": "forbidden",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "shell.execute", "tests.execute"],
+        "phases": [
+          { "kind": "verify", "domain": "tests" }
+        ],
+        "risk": { "level": "medium", "flags": ["test-execution"] },
+        "complexity": "focused",
+        "language": "zh"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "verify", "domain": "tests" }
+        ],
+        "requiredSkills": ["verification-before-completion"],
+        "requiredTools": ["omp_test_gate", "omp_test_report"],
+        "requiredSubagents": [],
+        "gateRequirements": [
+          { "key": "test-evidence", "mode": "required" }
+        ]
+      },
+      "legacy": {
+        "intent": "bug-audit",
+        "workflowRoute": "code.review",
+        "gateMode": "review-gate"
+      }
+    }
+  },
+  {
+    "id": "provide_test_command_no_execute_zh",
+    "prompt": "给我一个运行测试的命令，但不要执行。",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "answer",
+        "domains": ["tests"],
+        "constraints": {
+          "workspaceWrite": "forbidden",
+          "testExecution": "forbidden",
+          "networkAccess": "unspecified",
+          "externalWrite": "forbidden",
+          "subagents": "unspecified"
+        },
+        "capabilities": [],
+        "phases": [
+          { "kind": "answer", "domain": "tests" }
+        ],
+        "risk": { "level": "low", "flags": [] },
+        "complexity": "focused",
+        "language": "zh"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "answer", "domain": "tests" }
+        ],
+        "requiredSkills": [],
+        "requiredTools": [],
+        "requiredSubagents": [],
+        "gateRequirements": []
+      },
+      "legacy": {
+        "intent": "unknown",
+        "workflowRoute": "agentic.simple",
+        "gateMode": "none"
+      }
+    }
+  },
+  {
+    "id": "fix_test_push_zh",
+    "equivalenceGroup": "fix-test-release",
+    "prompt": "修复路由 bug，运行测试，然后推送插件新版本。",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "modify",
+        "domains": ["code", "tests", "plugin"],
+        "constraints": {
+          "workspaceWrite": "required",
+          "testExecution": "required",
+          "networkAccess": "required",
+          "externalWrite": "required",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "fs.write", "shell.execute", "tests.execute", "network.read", "external.write", "credentials"],
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "verify", "domain": "tests" },
+          { "kind": "review", "domain": "code" },
+          { "kind": "release", "domain": "plugin" }
+        ],
+        "risk": { "level": "high", "flags": ["external-write", "test-execution", "workspace-write"] },
+        "complexity": "focused",
+        "language": "zh"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "verify", "domain": "tests" },
+          { "kind": "review", "domain": "code" },
+          { "kind": "release", "domain": "plugin" }
+        ],
+        "requiredSkills": ["test-driven-development", "verification-before-completion"],
+        "requiredTools": ["omp_test_gate"],
+        "requiredSubagents": [],
+        "gateRequirements": [
+          { "key": "test-evidence", "mode": "required" },
+          { "key": "review-evidence", "mode": "required" },
+          { "key": "release-approval", "mode": "required" }
+        ]
+      },
+      "legacy": {
+        "intent": "implementation-with-tests",
+        "workflowRoute": "code.dev",
+        "gateMode": "test-review-gate"
+      }
+    }
+  },
+  {
+    "id": "fix_test_push_en",
+    "equivalenceGroup": "fix-test-release",
+    "prompt": "Fix the routing bug, run the tests, and then publish the new plugin release.",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "modify",
+        "domains": ["code", "tests", "plugin"],
+        "constraints": {
+          "workspaceWrite": "required",
+          "testExecution": "required",
+          "networkAccess": "required",
+          "externalWrite": "required",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "fs.write", "shell.execute", "tests.execute", "network.read", "external.write", "credentials"],
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "verify", "domain": "tests" },
+          { "kind": "review", "domain": "code" },
+          { "kind": "release", "domain": "plugin" }
+        ],
+        "risk": { "level": "high", "flags": ["external-write", "test-execution", "workspace-write"] },
+        "complexity": "focused",
+        "language": "en"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "verify", "domain": "tests" },
+          { "kind": "review", "domain": "code" },
+          { "kind": "release", "domain": "plugin" }
+        ],
+        "requiredSkills": ["test-driven-development", "verification-before-completion"],
+        "requiredTools": ["omp_test_gate"],
+        "requiredSubagents": [],
+        "gateRequirements": [
+          { "key": "test-evidence", "mode": "required" },
+          { "key": "review-evidence", "mode": "required" },
+          { "key": "release-approval", "mode": "required" }
+        ]
+      },
+      "legacy": {
+        "intent": "implementation-with-tests",
+        "workflowRoute": "code.dev",
+        "gateMode": "test-review-gate"
+      }
+    }
+  },
+  {
+    "id": "readme_update_push_zh",
+    "prompt": "更新 README 的安装说明，并把改动推送到 GitHub。",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "modify",
+        "domains": ["writing", "document", "plugin"],
+        "constraints": {
+          "workspaceWrite": "required",
+          "testExecution": "unspecified",
+          "networkAccess": "required",
+          "externalWrite": "required",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "fs.write", "shell.execute", "network.read", "external.write", "credentials"],
+        "phases": [
+          { "kind": "inspect", "domain": "writing" },
+          { "kind": "modify", "domain": "writing" },
+          { "kind": "verify", "domain": "writing" },
+          { "kind": "review", "domain": "writing" },
+          { "kind": "release", "domain": "plugin" }
+        ],
+        "risk": { "level": "high", "flags": ["external-write", "workspace-write"] },
+        "complexity": "focused",
+        "language": "zh"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "writing" },
+          { "kind": "modify", "domain": "writing" },
+          { "kind": "verify", "domain": "writing" },
+          { "kind": "review", "domain": "writing" },
+          { "kind": "release", "domain": "plugin" }
+        ],
+        "requiredSkills": ["writing-markdown-helper", "verification-before-completion"],
+        "requiredTools": [],
+        "requiredSubagents": [],
+        "gateRequirements": [
+          { "key": "review-evidence", "mode": "required" },
+          { "key": "release-approval", "mode": "required" }
+        ]
+      },
+      "legacy": {
+        "intent": "implementation-with-tests",
+        "workflowRoute": "code.dev",
+        "gateMode": "test-review-gate"
+      }
+    }
+  },
+  {
+    "id": "factcheck_polish_zh",
+    "equivalenceGroup": "factcheck-polish",
+    "prompt": "对这份论文做事实核查并润色中文表述。",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "modify",
+        "domains": ["writing", "facts"],
+        "constraints": {
+          "workspaceWrite": "forbidden",
+          "testExecution": "unspecified",
+          "networkAccess": "required",
+          "externalWrite": "forbidden",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "network.read", "subagents"],
+        "phases": [
+          { "kind": "inspect", "domain": "facts" },
+          { "kind": "modify", "domain": "writing" },
+          { "kind": "review", "domain": "writing" }
+        ],
+        "risk": { "level": "medium", "flags": ["factual-claims", "network-read"] },
+        "complexity": "broad",
+        "language": "zh"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "facts" },
+          { "kind": "modify", "domain": "writing" },
+          { "kind": "review", "domain": "writing" }
+        ],
+        "requiredSkills": ["fact-checking", "claim-extraction", "source-evaluation", "citation-authenticity", "plain-chinese-writing", "zh-writing-polish", "zh-writing-checkers"],
+        "requiredTools": ["fact_check_analyze", "fact_check_evidence", "fact_check_report", "fact_check_gate", "writing_logic_check", "writing_quality_check"],
+        "requiredSubagents": ["fact-planner", "fact-researcher-a", "fact-researcher-b", "fact-cross-checker", "fact-reviewer", "zh-writer", "zh-checker"],
+        "gateRequirements": [
+          { "key": "fact-evidence", "mode": "required" },
+          { "key": "writing-quality", "mode": "required" }
+        ]
+      },
+      "legacy": {
+        "intent": "fact-check",
+        "workflowRoute": "factcheck.document",
+        "gateMode": "fact-check-gate"
+      }
+    }
+  },
+  {
+    "id": "factcheck_polish_en",
+    "equivalenceGroup": "factcheck-polish",
+    "prompt": "Fact-check this paper and polish its English prose.",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "modify",
+        "domains": ["writing", "facts"],
+        "constraints": {
+          "workspaceWrite": "forbidden",
+          "testExecution": "unspecified",
+          "networkAccess": "required",
+          "externalWrite": "forbidden",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "network.read", "subagents"],
+        "phases": [
+          { "kind": "inspect", "domain": "facts" },
+          { "kind": "modify", "domain": "writing" },
+          { "kind": "review", "domain": "writing" }
+        ],
+        "risk": { "level": "medium", "flags": ["factual-claims", "network-read"] },
+        "complexity": "broad",
+        "language": "en"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "facts" },
+          { "kind": "modify", "domain": "writing" },
+          { "kind": "review", "domain": "writing" }
+        ],
+        "requiredSkills": ["fact-checking", "claim-extraction", "source-evaluation", "citation-authenticity", "writing-markdown-helper", "writing-checkers"],
+        "requiredTools": ["fact_check_analyze", "fact_check_evidence", "fact_check_report", "fact_check_gate", "writing_logic_check", "writing_quality_check"],
+        "requiredSubagents": ["fact-planner", "fact-researcher-a", "fact-researcher-b", "fact-cross-checker", "fact-reviewer", "writer", "checker"],
+        "gateRequirements": [
+          { "key": "fact-evidence", "mode": "required" },
+          { "key": "writing-quality", "mode": "required" }
+        ]
+      },
+      "legacy": {
+        "intent": "fact-check",
+        "workflowRoute": "factcheck.document",
+        "gateMode": "fact-check-gate"
+      }
+    }
+  },
+  {
+    "id": "security_fix_test_release_zh",
+    "equivalenceGroup": "security-fix-test-release",
+    "prompt": "修复这个鉴权漏洞，补安全回归测试，然后发布新版本。",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "modify",
+        "domains": ["code", "tests", "security", "plugin"],
+        "constraints": {
+          "workspaceWrite": "required",
+          "testExecution": "required",
+          "networkAccess": "required",
+          "externalWrite": "required",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "fs.write", "shell.execute", "tests.execute", "network.read", "subagents", "external.write", "credentials"],
+        "phases": [
+          { "kind": "inspect", "domain": "security" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "verify", "domain": "tests" },
+          { "kind": "review", "domain": "security" },
+          { "kind": "release", "domain": "plugin" }
+        ],
+        "risk": { "level": "critical", "flags": ["external-write", "security-sensitive", "test-execution", "workspace-write"] },
+        "complexity": "broad",
+        "language": "zh"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "security" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "verify", "domain": "tests" },
+          { "kind": "review", "domain": "security" },
+          { "kind": "release", "domain": "plugin" }
+        ],
+        "requiredSkills": ["security-review", "security-scan", "brainstorming", "test-driven-development", "subagent-driven-development", "verification-before-completion"],
+        "requiredTools": ["omp_test_analyze", "omp_test_context", "omp_test_browser_check", "omp_test_coverage_analyze", "omp_test_mutation_context", "omp_test_gate", "omp_test_report"],
+        "requiredSubagents": ["ecc-security-reviewer", "implementation-task", "reviewer"],
+        "gateRequirements": [
+          { "key": "security-evidence", "mode": "required" },
+          { "key": "test-evidence", "mode": "required" },
+          { "key": "review-evidence", "mode": "required" },
+          { "key": "release-approval", "mode": "required" }
+        ]
+      },
+      "legacy": {
+        "intent": "implementation-with-tests",
+        "workflowRoute": "code.dev",
+        "gateMode": "test-review-gate"
+      }
+    }
+  },
+  {
+    "id": "security_fix_test_release_en",
+    "equivalenceGroup": "security-fix-test-release",
+    "prompt": "Fix the authorization vulnerability, add security regression tests, and publish a new release.",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "modify",
+        "domains": ["code", "tests", "security", "plugin"],
+        "constraints": {
+          "workspaceWrite": "required",
+          "testExecution": "required",
+          "networkAccess": "required",
+          "externalWrite": "required",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "fs.write", "shell.execute", "tests.execute", "network.read", "subagents", "external.write", "credentials"],
+        "phases": [
+          { "kind": "inspect", "domain": "security" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "verify", "domain": "tests" },
+          { "kind": "review", "domain": "security" },
+          { "kind": "release", "domain": "plugin" }
+        ],
+        "risk": { "level": "critical", "flags": ["external-write", "security-sensitive", "test-execution", "workspace-write"] },
+        "complexity": "broad",
+        "language": "en"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "security" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "verify", "domain": "tests" },
+          { "kind": "review", "domain": "security" },
+          { "kind": "release", "domain": "plugin" }
+        ],
+        "requiredSkills": ["security-review", "security-scan", "brainstorming", "test-driven-development", "subagent-driven-development", "verification-before-completion"],
+        "requiredTools": ["omp_test_analyze", "omp_test_context", "omp_test_browser_check", "omp_test_coverage_analyze", "omp_test_mutation_context", "omp_test_gate", "omp_test_report"],
+        "requiredSubagents": ["ecc-security-reviewer", "implementation-task", "reviewer"],
+        "gateRequirements": [
+          { "key": "security-evidence", "mode": "required" },
+          { "key": "test-evidence", "mode": "required" },
+          { "key": "review-evidence", "mode": "required" },
+          { "key": "release-approval", "mode": "required" }
+        ]
+      },
+      "legacy": {
+        "intent": "implementation-with-tests",
+        "workflowRoute": "code.dev",
+        "gateMode": "test-review-gate"
+      }
+    }
+  },
+  {
+    "id": "fix_without_test_execution_zh",
+    "prompt": "不要运行测试，只修复 router.js 的这个判断并说明改动。",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "modify",
+        "domains": ["code", "tests"],
+        "constraints": {
+          "workspaceWrite": "required",
+          "testExecution": "forbidden",
+          "networkAccess": "unspecified",
+          "externalWrite": "forbidden",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "fs.write", "shell.execute"],
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "risk": { "level": "medium", "flags": ["workspace-write"] },
+        "complexity": "focused",
+        "language": "zh"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "requiredSkills": ["verification-before-completion"],
+        "requiredTools": [],
+        "requiredSubagents": [],
+        "gateRequirements": [
+          { "key": "review-evidence", "mode": "required" }
+        ]
+      },
+      "legacy": {
+        "intent": "implementation-with-tests",
+        "workflowRoute": "code.dev",
+        "gateMode": "test-review-gate"
+      }
+    }
+  },
+  {
+    "id": "fix_test_without_push_zh",
+    "prompt": "不要推送也不要发布，修复路由逻辑并运行回归测试。",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "modify",
+        "domains": ["code", "tests", "plugin"],
+        "constraints": {
+          "workspaceWrite": "required",
+          "testExecution": "required",
+          "networkAccess": "unspecified",
+          "externalWrite": "forbidden",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "fs.write", "shell.execute", "tests.execute"],
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "verify", "domain": "tests" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "risk": { "level": "medium", "flags": ["test-execution", "workspace-write"] },
+        "complexity": "focused",
+        "language": "zh"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "modify", "domain": "code" },
+          { "kind": "verify", "domain": "tests" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "requiredSkills": ["test-driven-development", "verification-before-completion"],
+        "requiredTools": ["omp_test_gate"],
+        "requiredSubagents": [],
+        "gateRequirements": [
+          { "key": "test-evidence", "mode": "required" },
+          { "key": "review-evidence", "mode": "required" }
+        ]
+      },
+      "legacy": {
+        "intent": "implementation-with-tests",
+        "workflowRoute": "code.dev",
+        "gateMode": "test-review-gate"
+      }
+    }
+  },
+  {
+    "id": "single_function_review_en",
+    "prompt": "Review routeNaturalLanguageTask for concrete defects and report findings only. Do not edit it.",
+    "expected": {
+      "taskDescriptor": {
+        "version": 1,
+        "operation": "inspect",
+        "domains": ["code"],
+        "constraints": {
+          "workspaceWrite": "forbidden",
+          "testExecution": "unspecified",
+          "networkAccess": "unspecified",
+          "externalWrite": "forbidden",
+          "subagents": "unspecified"
+        },
+        "capabilities": ["fs.read", "shell.execute"],
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "risk": { "level": "low", "flags": [] },
+        "complexity": "focused",
+        "language": "en"
+      },
+      "routePlan": {
+        "version": 1,
+        "phases": [
+          { "kind": "inspect", "domain": "code" },
+          { "kind": "review", "domain": "code" }
+        ],
+        "requiredSkills": [],
+        "requiredTools": [],
+        "requiredSubagents": [],
+        "gateRequirements": [
+          { "key": "review-evidence", "mode": "advisory" }
+        ]
+      },
+      "legacy": {
+        "intent": "bug-audit",
+        "workflowRoute": "code.review",
+        "gateMode": "review-gate"
+      }
+    }
+  }
+]
