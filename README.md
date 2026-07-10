@@ -4,7 +4,7 @@ This repository is an OMP marketplace monorepo containing four plugins. `omp-enh
 
 ## Plugins
 
-- `omp-enhancer-core`: routes natural-language coding, writing, testing, security, and config tasks, provides `/classifier` for classifier model configuration, then gates skill and subagent evidence.
+- `omp-enhancer-core`: compiles natural-language tasks into a versioned descriptor and route plan, provides `/classifier` diagnostics, and owns bounded completion gating.
 - `omp-config`: packages OMP config assets, agents, skills, hooks, templates, and safe diagnostics.
 - `writing-helper`: provides writing QA tools, writer/checker agents, and writing skills.
 - `omp-testing-enhancer`: provides test analysis, browser evidence, coverage, mutation, gates, and reports.
@@ -74,12 +74,13 @@ omp plugin install omp-enhancer-core@omp-enhancer omp-testing-enhancer@omp-enhan
 
 After installing `omp-enhancer-core`, describe the task naturally. The core plugin injects routing guidance and completion gates through runtime hooks.
 
-- The default runtime model is MiMo v2.5, the advisor is DeepSeek V4 Flash, and task subagents plus all other roles follow the user's active OMP config unless a route names an explicit model role. Fact-check planning uses `pi/plan` with `pi/slow` fallback, and fact-check cross-check/review use `pi/slow`.
-- The core runtime includes a main-agent loop guard for MiMo v2.5: repeated sentence or phrase generation is stopped when the host exposes assistant output events, with a one-shot recovery context as a fallback at `session_stop`.
+- Model selection follows the active OMP `modelRoles` config unless a route names an explicit role. Fact-check planning uses `pi/plan` with `pi/slow` fallback, and fact-check cross-check/review use `pi/slow`.
+- Routing first builds a `TaskDescriptor` containing operation, domains, explicit constraints, ordered phases, capabilities, risk, and complexity. A `RoutePlan` then selects skills, tools, subagents, and gate requirements. Legacy intent fields remain a compatibility projection during rollout.
+- The core runtime detects repeated sentence, phrase, block, and n-gram generation. Detection never sends a follow-up message itself; `GateController` owns every repair or terminal continuation.
 - Ambiguous routing can use OMP Tiny, `modelRoles.tiny`, which the packaged `omp-config` template defaults to `opencode-go/deepseek-v4-flash:medium`. Do not create a separate classifier role.
-- Coding tasks use lightweight TDD guidance, fork plan/task/reviewer subagents, pass role-specific skill lists to each subagent, and require testing evidence.
+- Broad coding tasks use lightweight TDD guidance, fork plan/task/reviewer subagents with role-specific skill lists, and require testing evidence. Focused changes stay with the main agent unless broader delegation is justified.
 - Security review tasks fork ecc-security-reviewer plus reviewer.
-- Writing tasks route to writer/checker or zh-writer/zh-checker subagents, require writing skills, and require writing QA evidence.
+- Broad writing tasks route to writer/checker or zh-writer/zh-checker subagents; simple edits stay with the main agent. Both retain the applicable writing skills and QA evidence requirements.
 - Chinese writing requires `plain-chinese-writing`.
 - Test authoring, coverage review, flaky-test analysis, browser verification, and bug checks are routed into the merged bug-audit workflow. Bug-audit must generate and execute a deduplicated multi-channel test matrix across boundary inputs, load, operating modes, and failure paths; static analysis alone is incomplete. `omp-enhancer-core` only declares and listens for the `omp_test_*` toolchain; `omp-testing-enhancer` owns the tool implementations, including browser, coverage, and mutation tools when the target context provides them.
 - Config tasks use `omp_config_doctor`, `omp_config_assets`, and `omp_config_plan`, with librarian/reviewer subagent evidence before completion.
@@ -88,7 +89,7 @@ Slash commands remain compatibility helpers for older workflows. The new workflo
 
 ### Classifier model configuration
 
-The first classifier iteration is intentionally schema-first. `omp-enhancer-core` exposes:
+The classifier is an advisory, monotonic hint source. `omp-enhancer-core` exposes:
 
 - `omp_core_classifier_prompt`: builds the strict JSON prompt and schema for OMP Tiny, `modelRoles.tiny`.
 - `omp_core_resolve_classification`: validates classifier JSON, maps it through the route whitelist, and then sets the normal routed workflow state.
@@ -100,26 +101,60 @@ modelRoles:
   tiny: opencode-go/deepseek-v4-flash:medium
 ```
 
-`/model` changes the active session model. Classifier preflight should dispatch through `modelRoles.tiny`; do not create or maintain a classifier-specific model role.
+`/model` changes the active session model. Classifier preflight should dispatch through `modelRoles.tiny`; do not create or maintain a classifier-specific model role. Invalid or unavailable classifier output falls back to the deterministic descriptor and does not freeze normal tools or start another classifier loop.
 
-The classifier may choose only an intent and risk flags. It cannot invent skills, tools, subagents, or gate formats; those still come from the core route catalog.
+Classifier JSON may contain only `operationHint`, `domains`, `phaseHints`, `riskFlags`, `language`, `confidence`, and `reason` (with one-version legacy compatibility). It cannot grant constraints or capabilities, invent skills/tools/subagents/gates, remove deterministic phases, relax an explicit prohibition, or reduce protected security/release risk.
+
+Model-callable route, classifier, governance, and validator tools are pinned to the active user-turn authorization. They may inspect or refine that task, but changing a tool argument cannot create a new user turn, replenish the controller budget, grant file/network/subagent authority, or remove required evidence.
+
+### Routing and gate rollout modes
+
+The following environment variables are read by the core runtime:
+
+```bash
+export OMP_ROUTER_V2_MODE=observe
+export OMP_GATE_RECOVERY_MODE=observe
+export OMP_LOOP_GUARD_MODE=legacy
+```
+
+- `OMP_ROUTER_V2_MODE=legacy|observe|enforce`: `observe` is the default. It executes the legacy-compatible route and records descriptor disagreement; `enforce` activates descriptor policy selection.
+- `OMP_GATE_RECOVERY_MODE=legacy|observe|enforce`: `observe` is the default. `enforce` consumes RoutePlan resources directly; every mode still uses the same bounded controller and protected action boundary.
+- `OMP_LOOP_GUARD_MODE=legacy|observe|enforce|disabled`: `legacy` is the default. `observe` records repetition without aborting output; `legacy` and `enforce` abort detected repetition and hand it to the controller; `disabled` bypasses detection.
+
+Completion checks always collect final evidence first, aggregate every open gate, and make one controller decision. A route has at most two repair continuations and one terminal-only continuation. Exhausted writing/testing metadata gates become explicit `degraded` results; exhausted security, release, fact, irreversible-operation, or loop protection becomes `blocked`. Non-empty final text is still checked, and a failed tool result never counts as evidence.
+
+Short user follow-ups such as `继续`, `Go ahead`, or `Proceed with the plan` inherit only an existing non-release executable route. They preserve every prior prohibition and cannot create write or release authority without context. A release-target confirmation or missing trusted host approval enters an awaiting-user terminal state immediately, so the model can ask once instead of spending the repair budget retrying an action that needs new authority.
+
+The protected action boundary is fail-closed for explicitly offline work. Repository-controlled tests, builds, package scripts, and automation can execute arbitrary network code, so they cannot prove a no-network constraint without a host network sandbox. The core blocks those commands under an explicit offline route rather than claiming heuristic command classification is equivalent to OS isolation.
+
+Evidence-sensitive fallback paths are tied to host-observed actions rather than final-answer assertions:
+
+- A manual testing fallback requires a successful test command result and a structured `MANUAL_TESTING_GATE_REPORT` whose `Command` exactly matches the observed command. Masked commands, dry runs, empty test suites, failure output, and command substitutions do not close the gate.
+- With Testing Enhancer available, `omp_test_gate` still requires a successful route-scoped host-observed test result. The gate never executes `testCommand` input or `.omp/testing-enhancer.yml` commands; those fields only constrain the expected command digest. Browser artifacts are confined below the real project `.omp/testing-enhancer-artifacts` directory, and inline server startup is limited to package-manager start/dev/serve/preview scripts.
+- When a security route explicitly forbids subagents, the main-agent fallback requires host-observed reads of both `security-review` and `security-scan`, a successful source or scanner inspection, and a structured `SECURITY_REVIEW` report. Report text or `SKILL_USAGE` self-attestation alone is insufficient.
+- A reversible connector action is not a release. Email, Slack, Jira, Google Drive, Calendar, and Notion mutations run only when the trusted prompt's provider, action, and exact role-bearing target match the tool call. A missing or conflicting target pauses for one clarification; a mismatched call gets one mechanical correction. Multi-action connector prompts must be split or sequenced explicitly, and destructive connector actions remain unsupported.
+- A release gate first binds the concrete repository, registry, package/version, ref, image, namespace, and cluster values to the trusted user request. Incomplete or conflicting targets stop before mutation. Completion then requires two distinct host-observed steps: a real successful external mutation followed by a compatible read-only verification such as `git ls-remote`, an exact npm dist-tag observation, or the applicable deployment/status query. Echoed commands, dry runs, masked failures, target substitutions, and mutation output without later verification remain gated.
+
+When both core and `omp-testing-enhancer` share a live runtime owner marker, core is the only `session_stop` continuation owner. Testing Enhancer publishes versioned, route-scoped evidence. A historical persisted marker is diagnostic only and cannot make Testing Enhancer surrender ownership. Without a live core owner, Testing Enhancer retains its own bounded standalone gate.
+
+For irreversible file operations, core observes the host's `tool_approval_requested` and `tool_approval_resolved` events and accepts only a matching approved chain bound to the live session, route, tool call, and tool name. The authorized call is consumed once; its input is bound at execution time, and the irreversible completion gate closes only after a successful matching tool result. Route text, model output, tool arguments, restored session data, resolved-only events, and replayed or cross-route approvals cannot self-grant destructive authority. Some host yolo/automatic-approval paths may emit no approval event; in that case destructive actions deliberately fail closed. Do not retry the blocked command: rerun it with interactive write approval enabled so the host can emit the bound approval events.
 
 ### Main-agent loop guard
 
-The packaged config enables a bounded repetition guard for the MiMo default model:
+The packaged config contains host-side detector tuning only:
 
 ```yaml
 loopGuard:
   enabled: true
   mainAgent:
-    modelPattern: xiaomi/mimo-v2.5
+    modelPattern: deepseek-v4-flash
     maxRepeatedSentence: 3
     maxRepeatedPhrase: 2
-    maxRecoveryAttempts: 1
-    fallbackRole: advisor
 ```
 
-The guard ignores fenced code blocks, SKILL_USAGE/SUBAGENT_USAGE evidence blocks, and markdown tables so normal outputs are not treated as loops.
+Core recovery count and ownership are not configured by this YAML block. They are fixed by `GateController` and the rollout variables above. The core detector ignores fenced code blocks, SKILL_USAGE/SUBAGENT_USAGE evidence blocks, and markdown tables so normal outputs are not treated as loops.
+
+Set `OMP_DEBUG_GATES=1` to write structured route, gate, and loop JSONL diagnostics under `.omp/logs`. Prompts are hashed by default. Raw prompt logging is available only with the explicitly unsafe `OMP_DEBUG_GATES_UNSAFE_PROMPTS=1` switch.
 
 Upgrade all installed marketplace plugins with the validated command:
 

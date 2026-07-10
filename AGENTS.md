@@ -6,7 +6,7 @@ This is an OMP marketplace monorepo for the OMP Enhancer stack. It packages runt
 
 Current workspace plugins:
 
-- `plugins/omp-enhancer-core`: runtime router, governance prompt injection, skill/subagent gates, smart gates, loop guard.
+- `plugins/omp-enhancer-core`: task descriptor compiler, runtime router, governance injection, unified gate controller, and loop detector.
 - `plugins/omp-config`: packaged agents, skills, hooks, templates, and config diagnostics.
 - `plugins/writing-helper`: writing logic/style/citation QA tools, writer/checker agents, writing skills.
 - `plugins/omp-test-enhancer`: test target analysis, test context, browser evidence, coverage/mutation context, quality gates, reports.
@@ -19,13 +19,14 @@ The repo is an npm workspace monorepo. `.omp-plugin/marketplace.json` is the mar
 Core runtime flow in `plugins/omp-enhancer-core/index.js`:
 
 1. OMP lifecycle hooks call `registerCoreEnhancer(pi)`.
-2. Natural-language prompts route through `src/router.js` into an intent/workflow route.
-3. `src/workflow-routes.js` maps routes such as `code.dev`, `code.debug`, `writing.zh`, `factcheck.document`, `security.review`, and `omp.plugin` to required skills, tools, gates, and subagents.
-4. `src/governance.js` injects route-specific guidance into agent prompts.
-5. Tool calls and task/subagent events update serialized session state entries.
-6. Completion gates validate required evidence such as `SKILL_USAGE`, `SUBAGENT_USAGE`, testing evidence, writing QA evidence, or fact-check reports.
-7. `src/smart-gate.js` can build strict JSON review prompts for low-noise completion checks.
-8. `src/loop-guard.js` watches assistant output for repeated sentence/phrase loops and can emit recovery context.
+2. `src/task-descriptor.js` extracts operation, domains, explicit authorization constraints, ordered phases, capabilities, complexity, and protected risk.
+3. `src/route-policy.js` compiles the descriptor into a `RoutePlan`; `src/router.js` preserves the legacy route projection for observe/rollback modes.
+4. `src/workflow-routes.js` supplies legacy-compatible route resources and `src/governance.js` injects route-specific guidance.
+5. `src/classifier.js` accepts only monotonic descriptor hints; it cannot grant side effects or remove deterministic requirements.
+6. Tool calls, tool results, host approval events, and task/subagent events update versioned, route-scoped session evidence. Protected evidence is accepted only from the matching host-observed action chain.
+7. `src/gate-controller.js` aggregates every open completion gate and owns the shared two-repair plus one-terminal continuation budget. Release, security, irreversible-operation, and trustworthy manual-test fallbacks remain fail-closed until their concrete evidence contracts are satisfied.
+8. `src/loop-guard.js` detects repetition and fingerprints it; it never schedules a continuation independently.
+9. When Testing Enhancer is installed, it publishes versioned evidence and defers `session_stop` continuation ownership to core.
 
 Common extension pattern:
 
@@ -38,9 +39,14 @@ Common extension pattern:
 
 - `plugins/omp-enhancer-core/`: core routing and gate state machine.
   - `index.js`: main registration, tool/hook wiring, state persistence.
-  - `src/router.js`: heuristic natural-language classifier.
+  - `src/task-descriptor.js`: deterministic task and authorization model.
+  - `src/route-policy.js`: descriptor-to-route-plan compiler and public intent aliases.
+  - `src/subagent-plans.js`: shared actor duties and per-role skill contracts for legacy and enforce routes.
+  - `src/router.js`: legacy-compatible natural-language projection and rollout selection.
+  - `src/runtime-policy.js`: live `legacy|observe|enforce` rollout switches.
   - `src/governance.js`: prompt and gate context builders.
-  - `src/classifier.js`: strict JSON classifier prompt/schema builder.
+  - `src/classifier.js`: strict JSON classifier hints and monotonic merge.
+  - `src/gate-controller.js`: pure bounded completion state machine and migrations.
   - `src/smart-gate.js`: strict JSON smart-gate prompt/schema builder.
   - `src/skill-usage.js`, `src/subagent-usage.js`: evidence parsers and validators.
 - `plugins/omp-test-enhancer/`: TypeScript testing enhancer.
@@ -116,6 +122,18 @@ Use `--dry-run` before `--apply` when changing versions or marketplace catalog e
 - Error handling is intentionally low-noise in hooks and state persistence. Many hook failures are converted to gate context or swallowed to avoid breaking the host session; do not replace that with noisy throws unless the tool contract requires it.
 - Tool implementations should return structured `details` for tests and machine checks, not only human-readable text.
 - Dependency injection is common in tests: fake `pi`/`omp` APIs, fake Zod schema builders, temporary repo directories, and injectable fetch/provider functions.
+
+Protected evidence contracts:
+
+- Irreversible actions require a matching `tool_approval_requested` plus approved `tool_approval_resolved` chain. Core binds it to the live session, route, tool-call id, tool name, and executed input, consumes it once, and requires a successful matching result. Yolo/automatic-approval modes may emit no approval event, so destructive actions must fail closed in that case; do not retry, and rerun with interactive write approval enabled.
+- Release evidence requires a real successful mutation followed by an independent compatible verification. Command-shaped prose, dry runs, masked failures, and a mutation result without later verification are not release completion evidence.
+- Bind every release mutation target to the trusted user prompt before execution. A self-consistent mutation/verifier pair for a different repository, package, ref, image, namespace, or cluster is unauthorized. Missing target confirmation and missing host approval must allow one user-facing clarification without a GateController repair loop.
+- An explicit no-network route treats repository-controlled tests, builds, package scripts, and automation as unverifiable unless the host supplies a real network sandbox. Do not document command-name heuristics as network isolation.
+- A no-subagent security fallback requires host-observed reads of `security-review` and `security-scan`, a successful source/scanner inspection, and a structured `SECURITY_REVIEW`; model self-attestation is not sufficient.
+- A manual testing fallback requires positive host-observed test output and a structured report whose command matches the observed command. Reject masking, dry-run/no-test modes, empty suites, failure output, and substituted commands.
+- `omp_test_gate` must never execute `testCommand` input or project-configured commands. It only consumes route-scoped evidence from an explicit host-observed test tool result; persist digests and exit status, not raw commands or output.
+- Browser-check artifacts must remain below the real project `.omp/testing-enhancer-artifacts` directory. Reject traversal and symlink escape, and restrict an optional `serverCommand` to package-manager start/dev/serve/preview scripts.
+- Reversible connector mutations are target-bound actions, not releases. Require an exact trusted provider/action/role-target match for email, Slack, Jira, Google Drive, Calendar, and Notion calls. Missing or conflicting targets pause once, mismatches get one bounded mechanical repair, multi-action prompts require explicit sequencing, and destructive connector actions fail closed as unsupported.
 
 ## Important Files
 
