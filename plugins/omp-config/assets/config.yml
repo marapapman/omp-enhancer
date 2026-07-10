@@ -24,9 +24,6 @@ loopGuard:
     maxRepeatedSentence: 3
     maxRepeatedPhrase: 2
     minRepeatedChars: 30
-    noProgressSeconds: 25
-    maxRecoveryAttempts: 1
-    fallbackRole: advisor
 memory: 
   backend: mnemopi
 compaction: 

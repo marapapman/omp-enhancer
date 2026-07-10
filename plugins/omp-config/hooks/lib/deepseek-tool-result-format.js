@@ -118,6 +118,17 @@ function readToolName(event) {
   return 'tool';
 }
 
+function preserveOutcomeMetadata(event, result) {
+  const preserved = { ...result };
+  if (!Object.hasOwn(preserved, 'details') && Object.hasOwn(event, 'details')) {
+    preserved.details = event.details;
+  }
+  for (const key of ['isError', 'error', 'ok', 'passed', 'status']) {
+    if (!Object.hasOwn(preserved, key) && Object.hasOwn(event, key)) preserved[key] = event[key];
+  }
+  return preserved;
+}
+
 export function formatToolResultEvent(rawEvent = {}) {
   const event = isRecord(rawEvent) ? rawEvent : {};
   const toolName = readToolName(event);
@@ -126,11 +137,11 @@ export function formatToolResultEvent(rawEvent = {}) {
 
   if (event.isError) {
     const errorText = formatError(text, toolName);
-    return {
+    return preserveOutcomeMetadata(event, {
       content: [textContent(errorText)],
-      details: { toolName, isError: true },
+      details: { ...(isRecord(event.details) ? event.details : {}), toolName, isError: true },
       isError: true,
-    };
+    });
   }
 
   switch (toolName) {
@@ -159,5 +170,5 @@ export function formatToolResultEvent(rawEvent = {}) {
   }
 
   text = ensureNonEmpty(text, toolName, false);
-  return { content: [textContent(text)] };
+  return preserveOutcomeMetadata(event, { content: [textContent(text)] });
 }

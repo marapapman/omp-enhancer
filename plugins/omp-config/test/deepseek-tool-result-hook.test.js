@@ -38,3 +38,22 @@ test('DeepSeek tool result hook returns error content arrays', async () => {
     isError: true,
   });
 });
+
+test('DeepSeek tool result hook preserves structured gate outcome metadata', () => {
+  const result = formatToolResultEvent({
+    toolName: 'omp_test_gate',
+    content: [{ type: 'text', text: 'Gate failed.' }],
+    details: { runId: 'run-1', passed: false, blockers: ['test-command'] },
+    status: 'failed',
+    ok: false,
+    passed: false,
+  });
+
+  assert.deepEqual(result, {
+    content: [{ type: 'text', text: 'Gate failed.' }],
+    details: { runId: 'run-1', passed: false, blockers: ['test-command'] },
+    status: 'failed',
+    ok: false,
+    passed: false,
+  });
+});

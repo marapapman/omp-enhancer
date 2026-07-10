@@ -37,6 +37,7 @@ test('packaged model roles use DeepSeek Flash as main and GLM as advisor', async
   assert.match(config, /advisor:\s+ollama-cloud\/glm-5\.2:xhigh/);
   assert.match(config, /tiny:\s+opencode-go\/deepseek-v4-flash:medium/);
   assert.match(config, /modelPattern:\s+deepseek-v4-flash/);
+  assert.doesNotMatch(config, /maxRecoveryAttempts|fallbackRole|noProgressSeconds/);
 });
 
 async function writePluginPackage(root) {
