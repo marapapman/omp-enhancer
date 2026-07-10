@@ -58,7 +58,9 @@ const DEFAULT_CONSTRAINTS = Object.freeze({
 
 export function describeNaturalLanguageTask(input = {}) {
   const prompt = String(input.prompt ?? input.text ?? '');
-  const text = prompt.toLowerCase();
+  const directivePrompt = writingDirectivePromptForSignals(prompt);
+  const operationalPrompt = writingOperationalPromptForSignals(directivePrompt);
+  const text = operationalPrompt.toLowerCase();
   const promptLanguage = languageFor(prompt);
   if (isCompletedGateStatusReport(text)) {
     return normalizeTaskDescriptor({
@@ -79,9 +81,9 @@ export function describeNaturalLanguageTask(input = {}) {
       },
     });
   }
-  const signals = collectSignals(text, prompt);
+  const signals = collectSignals(text, operationalPrompt, { scopePrompt: directivePrompt });
   const language = signals.writingWork
-    ? resolveWritingTargetLanguage(prompt, promptLanguage)
+    ? resolveWritingTargetLanguage(directivePrompt, promptLanguage)
     : promptLanguage;
   const operation = operationFor(signals);
   const domains = domainsFor(signals, operation);
@@ -280,12 +282,12 @@ export function normalizeTaskDescriptor(value = {}) {
   };
 }
 
-function collectSignals(text, prompt) {
+function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
   const positiveDomainText = positiveDomainSignalText(text);
   const externalActionContract = analyzeExternalActionPrompt(prompt);
   const externalActionContracts = analyzeExternalActionContracts(prompt);
   const externalActionRequested = ['complete', 'incomplete', 'conflicting'].includes(externalActionContract?.state);
-  const workspaceScopes = workspaceWriteScopesFor(prompt);
+  const workspaceScopes = workspaceWriteScopesFor(scopePrompt);
   const externalScopes = externalWriteScopesFor(prompt);
   const workspaceConstraintText = maskScopedWorkspaceWriteNegatives(normalizeAffirmativeWorkspacePhrases(stripQuotedConstraintMentions(text)));
   const testConstraintText = maskAffirmativeTestPhrases(text);
@@ -344,17 +346,23 @@ function collectSignals(text, prompt) {
     || /(?:核查|核验|查证|verify|check)[^。！？.!?\n]{0,120}(?:(?:证据|evidence)[^。！？.!?\n]{0,16}(?:支持|支撑|证明|supports?)|(?:支持|支撑|证明|supports?)[^。！？.!?\n]{0,40}(?:证据|evidence))/.test(factSentenceText)
     || /(?:check|verify)[^。！？.!?\n]{0,80}(?:cited\s+source|citation(?:\s+source)?)[^。！？.!?\n]{0,80}supports?[^。！？.!?\n]{0,40}claims?/.test(factSentenceText)
     || /(?:check|verify)[^。！？.!?\n]{0,80}claims?[^。！？.!?\n]{0,80}supported\s+by[^。！？.!?\n]{0,40}(?:the\s+)?(?:cited\s+source|citation(?:\s+source)?)/.test(factSentenceText);
-  const factDocumentTargets = uniqueStrings([...String(prompt).matchAll(/(?:^|[\s`'"])((?:\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?))(?=$|[\s`'"，。；、：;,:.!！])/gi)]
+  const factDocumentTargets = uniqueStrings([...String(scopePrompt).matchAll(/(?:^|[\s`'"])((?:\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?))(?=$|[\s`'"，。；、：;,:.!！])/gi)]
     .map((match) => match[1]));
   const focusedLocalFactWork = factWork
     && noWorkspaceWrite && noNetworkAccess && noSubagents
     && factDocumentTargets.length === 1
     && /(?:证据|evidence)[^。！？.!?\n]{0,20}(?:支持|支撑|证明|supports?)|(?:支持|支撑|证明|supports?)[^。！？.!?\n]{0,40}(?:证据|evidence)/.test(factSentenceText)
     && !/(?:全部|所有|整个(?:仓库|项目|代码库)|全仓库|多条|引用)|\b(?:all|every|entire|repo[- ]wide|repository[- ]wide|multiple|citations?)\b/.test(text);
-  const writingWork = /(?:润色|改写|翻译|写作|撰写|起草|中文表述|英文表述|文案|措辞|readme|安装说明)|\b(?:polish|proofread|rewrite|translate|translation|prose|wording|readme)\b/.test(text)
+  const initialWritingWork = /(?:润色|改写|翻译|写作|撰写|起草|中文表述|英文表述|文案|措辞|readme|安装说明)|\b(?:polish|proofread|rewrite|translate|translation|prose|wording|readme)\b/.test(text)
     || /(?:写|撰写|起草).{0,24}(?:报告|提案|论文|摘要|说明|文档)/.test(text)
     || /\b(?:draft|write|revise|edit)\b.{0,36}\b(?:proposal|report|paper|manuscript|abstract|paragraph|section|letter|email|memo|announcement|documentation|docs?)\b/.test(text);
-  const securityWork = /(?:安全|漏洞|鉴权|认证|权限|越权|注入|密钥)|\b(?:security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|privilege|xss|ssrf|injection|secrets?)\b/.test(text);
+  const securitySignalText = positiveSecurityDomainSignalText(text);
+  const explicitSecurityAudit = isExplicitSecurityAuditRequest(securitySignalText);
+  const securityProseWriting = isSecurityProseWritingRequest(securitySignalText, explicitSecurityAudit);
+  const writingWork = (initialWritingWork || securityProseWriting)
+    && (!explicitSecurityAudit || isWritingTransformationDirective(prompt));
+  const securityWork = !securityProseWriting
+    && /(?:安全|漏洞|鉴权|认证|权限|越权|注入|密钥)|\b(?:security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|privilege|xss|ssrf|injection|secrets?)\b/.test(securitySignalText);
   const testWork = /(?:测试|回归测试|单元测试|覆盖率)|\b(?:tests?|testing|regression|coverage|vitest|pytest|npm test)\b/.test(positiveDomainText);
   const noTestAuthoring = /(?:不要|不|别|无需|不用|禁止|不得).{0,16}(?:生成|编写|新增|添加|写).{0,12}(?:测试代码|测试文件|测试用例|tests?|test code)|(?:do not|don't|without).{0,20}(?:generate|write|add|create).{0,16}(?:tests?|test code)/.test(text);
   const broadBugAudit = (
@@ -408,7 +416,11 @@ function collectSignals(text, prompt) {
     .replace(/(?:do not|don't|without|no need to)[^,.;!\n]{0,32}(?:modify|edit|change|write|fix|implement)(?:[^,.;!\n]{0,12}(?:code|files?|it))?/g, '');
   const effectiveActionText = actionText
     .replace(/(?:不要|不|别|无需|不用|禁止|不得).{0,20}(?:生成|编写|新增|添加|写).{0,12}(?:测试代码|测试文件|测试用例)/g, '')
-    .replace(/(?:do not|don't|without).{0,24}(?:generate|write|add|create).{0,16}(?:tests?|test code)/g, '');
+    .replace(/(?:do not|don't|without).{0,24}(?:generate|write|add|create).{0,16}(?:tests?|test code)/g, '')
+    .replace(/(?:不要|别|无需|不用|禁止|不得|不\s*(?:要|做|进行|触发)?)[^，,。；;.! ！\n]{0,28}(?:代码)?安全(?:审查|审计|扫描)/g, '')
+    .replace(/(?:do not|don't|without)[^,.;!\n]{0,36}(?:code\s+)?security\s+(?:review|audit|scan)/g, '')
+    .replace(/(?:不要|别|无需|不用|禁止|不得|不\s*(?:要|做|进行|触发)?)\s*(?:审查|审计|扫描|审)\s*(?:代码|代码库|仓库|依赖)/g, '')
+    .replace(/(?:do not|don't|without|no need to)\s+(?:(?:perform|run)\s+)?(?:an?\s+)?(?:audit(?:ing)?|review(?:ing)?|inspect(?:ing)?|scan(?:ning)?)\s+(?:the\s+)?(?:code|codebase|repository|repo|dependenc(?:y|ies))/g, '');
   const codeTarget = hasCodeTarget(effectiveActionText) || workspaceScopes.exclusions.length > 0;
   const nonTestActionText = testExecutionTargets.length
     ? effectiveActionText.replace(/(?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)/gi, ' ')
@@ -431,7 +443,7 @@ function collectSignals(text, prompt) {
     || /^(?:(?:请|帮我|麻烦)\s*)?(?:看一下|看下|看看)(?:\s|$)/.test(effectiveActionText.trim())
   );
   const directModify = !advisory && !noActionExecution && (directDestructiveModify || localGitMetadata || implicitModify || dependencyUpgrade
-    || /(?:修复|修改|修正|实现|重构|更新|调整|收紧|加固|撰写|起草|添加|新增|删除|只修复|补.{0,8}(?:测试|用例))|\b(?:fix|modify|implement|refactor|update|harden|tighten|add|remove|draft|write|revise|edit|polish|rewrite)\b/.test(effectiveActionText));
+    || /(?:修复|修改|编辑|修正|实现|重构|更新|调整|收紧|加固|润色|改写|校对|修订|撰写|起草|添加|新增|删除|只修复|补.{0,8}(?:测试|用例))|\b(?:fix|modify|implement|refactor|update|harden|tighten|add|remove|draft|write|revise|edit|polish|proofread|rewrite|improve)\b/.test(effectiveActionText));
   const visualWork = /(?:视觉|界面|页面|组件|动效)/.test(text)
     || /\b(?:visual|dashboard|landing page|responsive|hover|ui)\b/.test(text);
   const directCreate = directCodeCreate
@@ -484,6 +496,8 @@ function collectSignals(text, prompt) {
   if (irreversibleFileOperation) reasons.push('irreversible file operation requested');
   if (irreversibleExternalOperation) reasons.push('irreversible external operation requested');
   if (factWork && writingWork) reasons.push('compound fact and writing work');
+  if (securityProseWriting) reasons.push('security prose refinement without security audit');
+  if (securityWork && explicitSecurityAudit) reasons.push('explicit security audit requested');
   if (securityWork && directModify) reasons.push('security-sensitive implementation');
   if (implicitModify) reasons.push('implicit code modification imperative');
   if (localGitMetadata) reasons.push('local git metadata mutation requested');
@@ -520,6 +534,7 @@ function collectSignals(text, prompt) {
     factWork,
     focusedLocalFactWork,
     writingWork,
+    securityProseWriting,
     securityWork,
     testWork,
     noTestAuthoring,
@@ -561,8 +576,20 @@ function workspaceWriteScopesFor(value = '') {
   ], normalizeWorkspaceTarget), ...collectQuotedWorkspaceTargets(source, { negative: true })]);
   const positiveSource = maskScopedWorkspaceWriteNegatives(source);
   const targets = uniqueStrings([...collectScopedTargets(positiveSource, [
-    /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise)\s+(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
+    /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
     /(?:修复|更新|修改|编辑|调整|润色|改写)\s*[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
+    /\b(?:polish|proofread|rewrite|revise|edit|improve)\b[^.;!\n]{0,80}?\b(?:in|inside|within)\s+(?:the\s+)?[`'"]?((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?/giu,
+    /(?:润色|改写|校对|修订|编辑)(?:一下|下)?[^。；;\n]{0,80}?((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))\s*(?:中|里|内)(?:的)?\s*(?:措辞|文字|文案|句子|段落|章节|内容|表述)/giu,
+    /\b(?:in|inside|within)\s+(?:the\s+)?[`'"]?((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?\s*[,;:]?\s*(?:please\s+)?(?:polish|proofread|rewrite|revise|edit|improve)\b/giu,
+    /(?:在|把|请把)\s*[`'"]?((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?\s*(?:中|里|内)(?:的)?[^。；;\n]{0,32}?(?:润色|改写|校对|修订|编辑|改善|优化)/giu,
+    /\b(?:for|about)\s+(?:the\s+)?[`'"]?((?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?\s*[,;:]?[^.;!\n]{0,32}\b(?:polish|proofread|rewrite|revise|edit|improve)\b/giu,
+    /\b(?:polish|proofread|rewrite|revise|edit|improve)\b[^.;!\n]{0,80}?(?:\(|\b(?:of|in|inside|within)\s+)[`'"]?((?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?/giu,
+    /\b(?:polish|proofread|rewrite|revise|edit|improve)\b[^.;!\n:]{0,48}:\s*[`'"]?((?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?/giu,
+    /(?:^|[，,。；;\n])\s*(?:请)?(?:润色|改写|校对|修订|编辑|改善|优化)[^。；;\n]{0,32}(?:文件(?:是|为)|目标(?:是|为))\s*[`'"]?((?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?/giu,
+    /(?:对|针对)\s*[`'"]?((?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?[^。；;\n]{0,32}(?:润色|改写|校对|修订|编辑|改善|优化)/giu,
+    /(?:^|[，,。；;\n]\s*)[`'"]?((?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?\s*(?:需要|需|要)[^。；;\n]{0,24}(?:润色|改写|校对|修订|编辑|改善|优化)/giu,
+    /(?:把|请把)\s*[`'"]?((?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?[^。；;\n]{0,24}(?:润色|改写|修改|校对|修订|编辑|改善|优化)/giu,
+    /(?:^|[.!?;\n]\s*)[`'"]?((?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?\s+(?:needs?|requires?)\s+[^.!?;\n]{0,32}\b(?:polish|proofread|rewrite|revision|editing|improvement)\b/giu,
   ], normalizeWorkspaceTarget),
   ...collectQuotedWorkspaceTargets(positiveSource),
   ...collectAffirmativeWorkspaceTargetLists(positiveSource)]);
@@ -572,7 +599,7 @@ function workspaceWriteScopesFor(value = '') {
 function collectAffirmativeWorkspaceTargetLists(value = '') {
   const source = String(value);
   const targets = [];
-  const actions = /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise)\s+(?:the\s+)?|(?:修复|更新|修改|编辑|调整|润色|改写)\s*/giu;
+  const actions = /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:the\s+)?|(?:修复|更新|修改|编辑|调整|润色|改写|校对|修订)(?:一下|下)?\s*/giu;
   for (const match of source.matchAll(actions)) {
     let remaining = source.slice((match.index ?? 0) + match[0].length).split(/[。；;\n]/u, 1)[0] ?? '';
     let next = consumeLeadingWorkspaceTarget(remaining);
@@ -603,7 +630,7 @@ function consumeLeadingWorkspaceTarget(value = '') {
     const target = normalizeWorkspaceTarget(quoted[2]);
     if (target) return { target, rest: String(value).slice(quoted[0].length) };
   }
-  const match = String(value).match(/^\s*[`'"]?((?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.[a-z0-9_.-]+)[`'"]?/iu);
+  const match = String(value).match(/^\s*[`'"]?((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf|js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|json|jsonc|yml|yaml|toml))[`'"]?(?=$|\s|[，。；、：;,:.!！]|(?:中|里|内)(?:的)?)/iu);
   if (!match) return null;
   const target = normalizeWorkspaceTarget(match[1]);
   return target ? { target, rest: String(value).slice(match[0].length) } : null;
@@ -717,6 +744,25 @@ function positiveDomainSignalText(value = '') {
     .replace(/\bwithout\s+[^,.;!\n]+/gi, ' ')
     .replace(/(?:不要|别|无需|不用|禁止|不得)\s*[^，,。；;.!！\n]+/g, ' ')
     .replace(/(?:^|[，,。；;.!！\n]\s*|(?:但|并且|然后)\s*)不\s*(?:运行|执行|跑|重跑|提交|推送|发布|部署|上线)\s*[^，,。；;.!！\n]*/g, ' ');
+}
+
+function positiveSecurityDomainSignalText(value = '') {
+  return positiveDomainSignalText(value)
+    .replace(/(?:不要|别|无需|不用|禁止|不得|不\s*(?:要|做|进行|触发)?)[^，,。；;.! ！\n]{0,28}(?:代码)?安全(?:审查|审计|扫描)/g, ' ')
+    .replace(/(?:do not|don't|without)[^,.;!\n]{0,36}(?:code\s+)?security\s+(?:review|audit|scan)/g, ' ');
+}
+
+function isExplicitSecurityAuditRequest(text = '') {
+  const source = String(text);
+  return /(?:安全(?:审计|扫描)|(?:审计|扫描).{0,32}安全|(?:检查|审查).{0,64}(?:漏洞|鉴权|认证|权限|越权|绕过|注入|密钥))|\b(?:audit|scan)\b.{0,96}\b(?:security|auth|permissions?|vulnerabilit(?:y|ies)|bypass|injection|secrets?)\b|\b(?:security|auth|permissions?|vulnerabilit(?:y|ies)|bypass|injection|secrets?)\b.{0,96}\b(?:audit|scan)\b|\b(?:review|check|inspect|assess)\b.{0,128}\b(?:for|against)\b.{0,32}\b(?:security\s+(?:issues?|risks?)|vulnerabilit(?:y|ies)|auth(?:entication|orization)?(?:\s+bypass)?|permissions?(?:\s+issues?)?|bypass(?:\s+risks?)?|injection|secrets?)\b/i.test(source);
+}
+
+function isSecurityProseWritingRequest(text = '', explicitSecurityAudit = false) {
+  const source = String(text);
+  const proseArtifact = /(?:安全(?:政策|策略|公告|说明|文案|通知|草案|措辞|表述))|\bsecurity\s+(?:policy|announcement|notice|advisory|draft|wording|prose|copy)\b/.test(source);
+  const proseAction = /(?:润色|改写|校对|修订|起草|撰写|措辞|语气|表达|文案)|\b(?:polish|proofread|rewrite|revise|draft|write|wording|clarity|tone|grammar|prose)\b/.test(source);
+  const securityThreatReview = /(?:漏洞|鉴权|认证|权限|越权|绕过|注入|密钥)|\b(?:vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|bypass|xss|ssrf|injection|secrets?)\b/.test(source);
+  return proseArtifact && proseAction && !explicitSecurityAudit && !securityThreatReview;
 }
 
 function normalizeAffirmativeExternalWritePhrases(text) {
@@ -864,7 +910,7 @@ function operationFor(signals) {
   if ((signals.noWorkspaceWrite || signals.advisory) && signals.review) return 'inspect';
   if (signals.diagnosis) return 'diagnose';
   if (signals.directCreate && !signals.directModify) return 'create';
-  if (signals.directModify || signals.directTestAuthoring || signals.writingWork && /(?:润色|改写|翻译|更新|撰写|起草|写)|\b(?:polish|rewrite|translate|update|draft|write|revise|edit)\b/.test(signals.text)) return 'modify';
+  if (signals.directModify || signals.directTestAuthoring || signals.writingWork && /(?:润色|改写|校对|修订|翻译|更新|撰写|起草|写)|\b(?:polish|rewrite|proofread|translate|update|draft|write|revise|edit|improve)\b/.test(signals.text)) return 'modify';
   if (signals.releaseRequested) return 'release';
   if (signals.review || signals.factWork || signals.securityWork) return 'inspect';
   return 'answer';
@@ -929,10 +975,14 @@ function constraintsFor(signals, operation, domains) {
 
 function complexityFor(signals, operation, domains) {
   if (signals.focusedLocalFactWork) return 'focused';
+  if (signals.securityProseWriting
+    && /(?:起草|撰写|写).{0,32}(?:安全公告|安全政策|安全说明)|\b(?:draft|write)\b.{0,48}\bsecurity\s+(?:announcement|policy|notice|advisory)\b/.test(signals.text)) return 'broad';
   if (signals.factWork || signals.securityWork && (operation === 'modify' || operation === 'inspect')) return 'broad';
   if (signals.broadBugAudit) return 'broad';
   if (domains.includes('writing')
     && /(?:完整|长篇|全面|研究提案|项目总结)|\b(?:full|long|substantive|complete|comprehensive)\b.{0,36}\b(?:proposal|report|paper|document)\b/.test(signals.text)) return 'broad';
+  if (domains.includes('writing') && !(signals.workspaceWriteTargets ?? []).length
+    && /(?:一份|报告|文档|邮件|审稿回复|相关工作|引言|申请材料|研究计划|实验报告|项目报告|风险提示)|\b(?:report|document|proposal|letter|email|summary|related work|section|chapter|manuscript|paper|abstract|writeup|postmortem)\b/.test(signals.text)) return 'broad';
   if (domains.includes('writing')
     && /(?:论文|摘要|报告|提案).{0,24}(?:润色|检查逻辑|检查表达|审查)|(?:润色|审查).{0,24}(?:论文|摘要|报告|提案)/.test(signals.text)) return 'broad';
   if (domains.includes('writing')
@@ -1019,6 +1069,17 @@ function phasesFor({ operation, domains, constraints, signals }) {
       externalPhase,
     ]);
   }
+  if (domains.includes('security') && domains.includes('writing')) {
+    return compactPhases([
+      { kind: 'inspect', domain: 'security' },
+      { kind: 'modify', domain: 'writing' },
+      { kind: 'verify', domain: 'writing' },
+      constraints.testExecution === 'required' ? { kind: 'verify', domain: 'tests' } : null,
+      { kind: 'review', domain: 'writing' },
+      { kind: 'review', domain: 'security' },
+      externalPhase,
+    ]);
+  }
   if (domains.includes('security')) {
     return compactPhases([
       { kind: 'inspect', domain: 'security' },
@@ -1033,6 +1094,7 @@ function phasesFor({ operation, domains, constraints, signals }) {
       { kind: 'inspect', domain: 'writing' },
       { kind: 'modify', domain: 'writing' },
       { kind: 'verify', domain: 'writing' },
+      constraints.testExecution === 'required' ? { kind: 'verify', domain: 'tests' } : null,
       { kind: 'review', domain: 'writing' },
       externalPhase,
     ]);
@@ -1233,6 +1295,210 @@ function normalizeTestExecutionTargets(values) {
     .filter((value) => /(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)$/i.test(value)));
 }
 
+export function writingDirectivePromptForSignals(prompt = '') {
+  const source = String(prompt);
+  const withoutQuotedPayload = maskQuotedWritingPayload(source);
+  const withoutRelationalPayload = maskRelationalWritingPayload(withoutQuotedPayload);
+  const withoutColonPayload = maskColonWritingPayload(withoutRelationalPayload);
+  return maskEmbeddedWritingAuthority(withoutColonPayload);
+}
+
+export function writingOperationalPromptForSignals(prompt = '') {
+  const source = String(prompt);
+  if (!isWritingTransformationDirective(source)) return source;
+  let neutralized = source;
+  const neutralizeTarget = (match, inner) => {
+    if (!isStructuredWritingTargetReference(inner)) return match;
+    return ` ${neutralizeStructuredWritingFileReference(inner)} `;
+  };
+  const operational = neutralizeUnquotedStructuredWritingFileReferences(neutralized
+    .replace(/“([^”\n]{1,4000})”/g, neutralizeTarget)
+    .replace(/‘([^’\n]{1,4000})’/g, neutralizeTarget)
+    .replace(/"((?:\\.|[^"\\\n]){1,4000})"/g, neutralizeTarget)
+    .replace(/`([^`\n]{1,4000})`/g, neutralizeTarget)
+    .replace(/'((?:\\.|[^'\\\n]){1,4000})'/g, neutralizeTarget));
+  const technicalVerification = /(?:重新)?编译|链接检查|\b(?:compile|rebuild|link check)\b/i.test(source);
+  return technicalVerification ? operational : `${operational} __writing_content__ wording`;
+}
+
+function maskQuotedWritingPayload(source = '') {
+  const maskProse = (match, inner, offset) => (
+    isStructuredWritingTargetReference(inner) && !isAfterWritingPayloadColon(source, offset)
+      ? match
+      : ' __payload__ '
+  );
+  const masked = String(source)
+    .replace(/“([^”\n]{1,4000})”/g, maskProse)
+    .replace(/‘([^’\n]{1,4000})’/g, maskProse)
+    .replace(/"((?:\\.|[^"\\\n]){1,4000})"/g, maskProse)
+    .replace(/`([^`\n]{1,4000})`/g, maskProse)
+    .replace(/'((?:\\.|[^'\\\n]){1,4000})'/g, maskProse);
+  return masked !== source && isWritingTransformationDirective(masked) ? masked : source;
+}
+
+function maskRelationalWritingPayload(source = '') {
+  const value = String(source).replace(/改(?:成|为)(?=\s*(?:提醒|说明|告诉|写明|注明|声称|建议|要求))/gu, '改写成');
+  if (!isWritingTransformationDirective(value)) return value;
+  const boundaries = [];
+  const addBoundary = (pattern, adjustment = 0) => {
+    const match = pattern.exec(value);
+    if (match) boundaries.push((match.index ?? 0) + adjustment);
+  };
+  addBoundary(/\bso(?:\s+that)?\s+(?:(?:it|this|the\s+(?:copy|text|wording|document|file))\s+)?(?:says?|tells?|mentions?|explains?|states?|notes?|reminds?|warns?)\b/i);
+  addBoundary(/\bto\s+(?:say|tell|mention|explain|state|note|remind|warn)\b/i);
+  addBoundary(/\b(?:with|using)\s+(?:copy|wording|text|content)\s+that\b/i);
+  const chineseResult = /(?:改写|修改|改|写|整理)(?:成|为)(?=\s*(?:提醒|说明|告诉|写明|注明|声称|建议|要求))/u.exec(value);
+  if (chineseResult) boundaries.push((chineseResult.index ?? 0) + chineseResult[0].length - 1);
+  addBoundary(/[，,]\s*(?:让|使)(?:这份|该|其|文案|文本|内容|说明|文档)?[^，,。；;.!！\n]{0,12}(?:提醒|说明|告诉|写明|注明|声称|建议|要求)/u);
+  const boundary = boundaries.sort((left, right) => left - right)
+    .find((index) => containsAuthorityBearingWritingPayload(value.slice(index)));
+  if (!Number.isInteger(boundary)) return value;
+  const end = independentWritingContinuationBoundary(value, boundary);
+  return `${value.slice(0, boundary).trimEnd()} __payload__${value.slice(end)}`;
+}
+
+function containsAuthorityBearingWritingPayload(value = '') {
+  return /(?:测试|发布|提交|推送|部署|上线|联网|网络|子代理|代理|安全|漏洞|插件|代码|路由|门禁|工作流|安装)|\b(?:tests?|testing|publish|release|commit|push|deploy|network|internet|web|subagents?|agents?|security|vulnerabilit(?:y|ies)|plugins?|code|router|routing|gates?|workflows?|install)\b/i.test(String(value));
+}
+
+function independentWritingContinuationBoundary(value = '', start = 0) {
+  const tail = String(value).slice(start);
+  const continuation = /[。！？.!?；;](?=\s*(?:(?:then|next|separately|finally|after\s+that|also)\b|(?:然后|接着|随后|另外|最后|再)(?:请)?))/iu.exec(tail);
+  return continuation ? start + (continuation.index ?? 0) : String(value).length;
+}
+
+function maskEmbeddedWritingAuthority(source = '') {
+  const value = String(source);
+  if (!isWritingTransformationDirective(value)) return value;
+  const protectedValues = [];
+  const protect = (text) => {
+    const marker = `__protected_writing_${protectedValues.length}__`;
+    protectedValues.push(String(text));
+    return marker;
+  };
+  const englishAction = '(?:(?:actually\\s+)?(?:run|execute|rerun)\\b[^.!?;\\n]{0,24}\\b(?:tests?|testing)\\b|(?:push|publish|deploy|release|commit)\\b|(?:access|browse|search|use)\\b[^.!?;\\n]{0,24}\\b(?:network|internet|web)\\b|(?:use|spawn|fork|call|delegate\\s+to)\\b[^.!?;\\n]{0,24}\\b(?:subagents?|sub-agents?|agents?)\\b|(?:audit|scan|inspect|review|check)\\b[^!?;\\n]{0,96}\\b(?:security|vulnerabilit(?:y|ies)|auth|permissions?|bypass|injection|secrets?|code)\\b|(?:fix|modify|implement)\\b[^!?;\\n]{0,64}(?:(?:src|lib|app|packages|plugins)/|\\bcode\\b))';
+  const chineseAction = '(?:(?:实际)?(?:运行|执行|跑|重跑)[^。！？；;\\n]{0,20}(?:测试|npm\\s+test)|(?:提交|推送|发布|部署|上线)|(?:访问|浏览|搜索|使用|连接)[^。！？；;\\n]{0,20}(?:网络|互联网|网页|外网)|(?:使用|调用|创建|派生|委派给)[^。！？；;\\n]{0,20}(?:子代理|子\\s*agent|代理)|(?:审计|扫描|检查|审查)[^。！？；;\\n]{0,64}(?:安全|漏洞|鉴权|权限|越权|注入|密钥|代码)|(?:修复|修改|实现)[^。！？；;\\n]{0,48}(?:(?:src|lib|app|packages|plugins)/|代码))';
+  let protectedSource = value;
+  const protectCapturedAction = (pattern) => {
+    protectedSource = protectedSource.replace(pattern, (match, prefix, action) => `${prefix}${protect(action)}`);
+  };
+  protectCapturedAction(new RegExp(`(^|[.!?;]\\s*(?:(?:then|next|separately|finally|after\\s+that|also)\\s+)?)(${englishAction}[^.!?;\\n]*)`, 'gim'));
+  protectCapturedAction(new RegExp(`(^|[。！？；;]\\s*(?:(?:然后|接着|随后|另外|最后|再)(?:请)?\\s*)?)(${chineseAction}[^。！？；;\\n]*)`, 'gmu'));
+  protectCapturedAction(new RegExp(`((?:readme(?:\\.md)?|(?:\\/?[\\p{L}\\p{N}_.-]+/)*[\\p{L}\\p{N}_.-]+\\.(?:md|mdx|rst|txt|tex|docx?|pdf)|document|file|wording|sentence|paragraph|copy|text)\\s*(?:,\\s*(?:(?:and|then)\\s+)?|\\s+(?:and|then)\\s+))(${englishAction}[^.!?;\\n]*)`, 'gimu'));
+  protectCapturedAction(new RegExp(`((?:(?:\\/?[\\p{L}\\p{N}_.-]+/)*[\\p{L}\\p{N}_.-]+\\.(?:md|mdx|rst|txt|tex|docx?|pdf)|文档|文件|措辞|句子|段落|文案|文字)\\s*(?:[，,]\\s*(?:(?:并且|并|然后|再)\\s*)?|\\s*(?:并且|并|然后|再)\\s*))(${chineseAction}[^。！？；;\\n]*)`, 'gmu'));
+  protectCapturedAction(/(^|[.!?;,]\s*(?:but\s+)?)(?:((?:do not|don't|without|no need to)[^.!?;\n]{0,160}))/gim);
+  protectCapturedAction(/(^|[。！？；;，,、]\s*(?:但\s*)?)(?:((?:不要|别|无需|不用|禁止|不得|不\s*(?:要|做|进行|触发)?)[^。！？；;、\n]{0,160}))/gmu);
+  protectedSource = protectedSource.replace(/((?:润色|改写|修改|更新|校对|修订|编辑)[^。！？；;\n]{0,96}?)(\s*[，,]?\s*(?:并且|并|然后)\s*(?:把(?:这些?|上述)?(?:改动|修改|变更)\s*)?)((?:发布|提交|推送|部署|上线)[^。！？；;\n]*)/gu, (match, directive, coordinator, action) => (
+    /(?:改写|修改|编辑)?成|(?:让|使)|关于|以(?:便|用于)?\s*(?:描述|说明)|(?:提醒|要求|告诉).{0,32}$/u.test(directive)
+      ? match
+      : `${directive}${coordinator}${protect(action)}`
+  ));
+  protectedSource = protectedSource.replace(/((?:translate|polish|proofread|rewrite|revise|edit|update|improve)\b[^!?;\n]{0,128}?)(\s+(?:and|then)\s+)((?:push|publish|deploy|release|commit)\b[^.!?;\n]*)/giu, (match, directive, coordinator, action) => (
+    /\b(?:so|about)\b|\bto\s+(?:say|tell|mention|explain|state|note|remind|warn|instruct|document|describe|recommend)\b|\bwith\s+(?:instructions?|copy|wording|text|content)\b/iu.test(directive)
+      ? match
+      : `${directive}${coordinator}${protect(action)}`
+  ));
+  protectedSource = protectQuotedStructuredWritingReferences(protectedSource, protect);
+  protectedSource = protectStructuredWritingReferences(protectedSource, protect);
+  protectedSource = protectedSource.replace(/(?:安全(?:政策|策略|公告|说明|文案|通知|草案|措辞)|插件\s*(?:readme|文档|说明)|发布(?:说明|公告)|测试(?:覆盖率)?报告|安装说明)|\b(?:security\s+(?:policy|announcement|notice|advisory|draft|wording)|plugin\s+(?:readme|documentation|docs?)|release\s+notes?|test(?:\s+coverage)?\s+report|coverage\s+report|installation\s+(?:guide|instructions?))\b/giu, (match) => protect(match));
+  const sanitized = protectedSource
+    .replace(/\b(?:npm\s+test|tests?|testing|publish|release|push|deploy|commit|network|internet|web|subagents?|sub-agents?|security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|bypass|injection|secrets?|plugins?|code|router|routing|gates?|workflows?|install)\b/giu, ' __embedded_content__ ')
+    .replace(/(?:测试|发布|提交|推送|部署|上线|联网|网络|互联网|网页|子代理|安全|审计|扫描|审查|漏洞|鉴权|认证|权限|越权|注入|密钥|插件|代码|路由|门禁|工作流|安装)/gu, ' __embedded_content__ ');
+  let restored = sanitized;
+  for (let index = protectedValues.length - 1; index >= 0; index -= 1) {
+    restored = restored.split(`__protected_writing_${index}__`).join(protectedValues[index]);
+  }
+  return restored;
+}
+
+function protectStructuredWritingReferences(value, protect) {
+  return String(value).replace(/(^|[^\p{L}\p{N}_.-])((?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.(?:md|mdx|rst|txt|tex|docx?|pdf|js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h|hpp|rb|php|sh|sql|yml|yaml|json|jsonc|toml|ini|cfg|xml|html|css|scss|less|vue|svelte))(?=$|[^\p{L}\p{N}_-]|[中里内的])/giu, (match, boundary, target) => `${boundary}${protect(target)}`);
+}
+
+function protectQuotedStructuredWritingReferences(value, protect) {
+  const protectTarget = (match, inner) => (isStructuredWritingTargetReference(inner) ? protect(match) : match);
+  return String(value)
+    .replace(/“([^”\n]{1,4000})”/g, protectTarget)
+    .replace(/‘([^’\n]{1,4000})’/g, protectTarget)
+    .replace(/"((?:\\.|[^"\\\n]){1,4000})"/g, protectTarget)
+    .replace(/`([^`\n]{1,4000})`/g, protectTarget)
+    .replace(/'((?:\\.|[^'\\\n]){1,4000})'/g, protectTarget);
+}
+
+function neutralizeUnquotedStructuredWritingFileReferences(value = '') {
+  return String(value).replace(/(^|[^\p{L}\p{N}_.-])((?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.(?:md|mdx|rst|txt|tex|docx?|pdf|js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h|hpp|rb|php|sh|sql|yml|yaml|json|jsonc|toml|ini|cfg|xml|html|css|scss|less|vue|svelte))(?=$|[^\p{L}\p{N}_-]|[中里内的])/giu, (match, boundary, target) => `${boundary}${neutralizeStructuredWritingFileReference(target)}`);
+}
+
+function neutralizeStructuredWritingFileReference(value = '') {
+  const target = String(value).trim();
+  const attachedDirective = target.match(/^((?:(?:请|帮我|麻烦)\s*)?(?:把\s*)?(?:润色|改写|修改|编辑|校对|修订|更新|改善|优化)(?:一下|下)?)(.+\.(?:md|mdx|rst|txt|tex|docx?|pdf|js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|json|yml|yaml|toml))$/iu);
+  if (attachedDirective && isStructuredWritingTargetReference(attachedDirective[2])) {
+    return `${attachedDirective[1]}${neutralizeStructuredWritingFileReference(attachedDirective[2])}`;
+  }
+  const slash = target.lastIndexOf('/');
+  const prefix = slash >= 0 ? target.slice(0, slash + 1) : '';
+  const basename = slash >= 0 ? target.slice(slash + 1) : target;
+  const extension = basename.match(/\.[a-z0-9]{1,12}$/i)?.[0] ?? '';
+  return `${prefix}__target__${extension}`;
+}
+
+function isAfterWritingPayloadColon(source = '', offset = 0) {
+  const value = String(source);
+  for (let index = 0; index < offset; index += 1) {
+    if (value[index] !== ':' && value[index] !== '：') continue;
+    if (value[index] === ':' && isPathOrUrlColon(value, index)) continue;
+    if (isWritingTransformationDirective(value.slice(0, index))) return true;
+  }
+  return false;
+}
+
+function isStructuredWritingTargetReference(value = '') {
+  const text = String(value).trim();
+  if (/^(?:readme|makefile|dockerfile|license)(?:\.[a-z0-9]{1,12})?$/i.test(text)) return true;
+  const knownFileExtension = /\.(?:md|mdx|rst|txt|tex|docx?|pdf|js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h|hpp|rb|php|sh|sql|yml|yaml|json|jsonc|toml|ini|cfg|xml|html|css|scss|less|vue|svelte)$/i;
+  if (knownFileExtension.test(text) && !/[\u0000-\u001f\u007f"'`<>|]/.test(text)) return true;
+  return false;
+}
+
+function maskColonWritingPayload(source = '') {
+  const value = String(source);
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] !== ':' && value[index] !== '：') continue;
+    if (value[index] === ':' && isPathOrUrlColon(value, index)) continue;
+    const directive = value.slice(0, index);
+    if (isWritingTransformationDirective(directive)) {
+      if (value.slice(index + 1).includes('__payload__')) return value;
+      const payload = value.slice(index + 1).trim().replace(/[。.!！]+$/u, '').trim();
+      if (isStructuredWritingTargetReference(payload)) return value;
+      const end = independentWritingContinuationBoundary(value, index + 1);
+      return `${directive} __payload__${value.slice(end)}`;
+    }
+  }
+  return value;
+}
+
+function isPathOrUrlColon(value, index) {
+  const before = value[index - 1] ?? '';
+  const after = value[index + 1] ?? '';
+  return /[a-z]/i.test(before) && /[\\/]/.test(after)
+    || after === '/' && value[index + 2] === '/';
+}
+
+function isWritingTransformationDirective(value = '') {
+  const original = String(value).toLowerCase();
+  if (/(?:测试用例|测试代码).{0,24}(?:写成|写入|生成|新增|添加).{0,16}(?:测试)?文件|(?:写成|写入|生成|新增|添加).{0,24}(?:测试用例|测试代码|测试文件)|\b(?:write|generate|add|create)\b.{0,48}\b(?:tests?|test cases?|test code|test files?)\b/i.test(original)) return false;
+  const text = original
+    .replace(/(?:do not|don't|without|no need to)[^.;!\n]{0,80}(?:write|edit|revise|polish|rewrite|draft|improve)[^.;!\n]*/gi, ' ')
+    .replace(/(?:不要|别|无需|不用|禁止|不得|不\s*(?:要|做|进行)?)[^。；;！!\n]{0,80}(?:写|编辑|修改|润色|改写|校对|修订|起草|改善|优化)[^。；;！!\n]*/g, ' ');
+  return /(?:翻译|润色|改写|校对|修订|写成|整理成)/.test(text)
+    || /\b(?:translate|polish|proofread|rewrite)\b/.test(text)
+    || /\b(?:edit|revise|update|improve)\b[^。！？.!?\n]{0,64}(?:readme|(?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.(?:md|mdx|rst|txt|tex|docx?|pdf))\b/iu.test(text)
+    || /(?:修改|编辑|更新|改善|优化)[^。！？.!?\n]{0,64}(?:readme|(?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.(?:md|mdx|rst|txt|tex|docx?|pdf))/u.test(text)
+    || /(?:把|请把)\s*(?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.(?:md|mdx|rst|txt|tex|docx?|pdf)[^。！？.!?\n]{0,32}(?:润色|改写|修改|改为|改成|校对|修订|编辑|改善|优化)/u.test(text)
+    || /(?:修改|编辑|写|撰写|起草|改善|优化).{0,48}(?:句子|段落|文字|文案|措辞|标题|摘要|邮件|说明|正文)/.test(text)
+    || /\b(?:edit|revise|write|draft|improve)\b.{0,48}\b(?:sentence|paragraph|text|wording|copy|title|abstract|email|prose)\b/.test(text);
+}
+
 function languageFor(prompt) {
   const value = String(prompt ?? '');
   if (/[一-鿿]/.test(value)) return 'zh';
@@ -1270,7 +1536,7 @@ export function resolveWritingTargetLanguage(prompt, fallback = 'unknown') {
 }
 
 function positiveWritingLanguageClauses(prompt = '') {
-  return String(prompt).toLowerCase().split(/[，,。！？；;.!?\n]+|\bbut\b|\band(?=\s+(?:do not|don't|never))|但|并且(?=\s*(?:不要|别|禁止|不得|不\s*(?:改|修改|润色|翻译|写)))/u)
+  return String(prompt).toLowerCase().split(/[，,。！？；;.!?\n]+|\bbut\b|\band(?=\s+(?:do not|don't|never))|\s+(?=(?:do not|don't|never|without)\b)|但|并且(?=\s*(?:不要|别|禁止|不得|不\s*(?:改|修改|润色|翻译|写)))|(?=(?:不要|别|禁止|不得|无需|不用|不\s*(?:改|修改|润色|翻译|写)))/u)
     .map((value) => value.trim())
     .filter(Boolean)
     .filter((value) => !/(?:不要|别|禁止|不得|无需|不用|不\s*(?:改|修改|润色|翻译|写)|do not|don't|never|without)/i.test(value));

@@ -401,7 +401,7 @@
           { "kind": "review", "domain": "writing" },
           { "kind": "release", "domain": "plugin" }
         ],
-        "requiredSkills": ["writing-markdown-helper", "verification-before-completion"],
+        "requiredSkills": ["plain-chinese-writing", "zh-writing-polish", "verification-before-completion"],
         "requiredTools": [],
         "requiredSubagents": [],
         "gateRequirements": [
@@ -410,9 +410,9 @@
         ]
       },
       "legacy": {
-        "intent": "implementation-with-tests",
-        "workflowRoute": "code.dev",
-        "gateMode": "test-review-gate"
+        "intent": "writing.zh",
+        "workflowRoute": "writing.zh",
+        "gateMode": "quality-gate"
       }
     }
   },

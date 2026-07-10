@@ -140,6 +140,128 @@ test('the public route tool exposes exact tests as first-class bounded testing w
   }
 });
 
+test('the public route tool isolates writing payload authority in observe and enforce modes', async () => {
+  const previous = process.env.OMP_ROUTER_V2_MODE;
+  try {
+    for (const mode of ['observe', 'enforce']) {
+      process.env.OMP_ROUTER_V2_MODE = mode;
+      const pi = new FakePi();
+      registerCoreEnhancer(pi);
+      const result = await pi.tools.get('omp_core_route_task').execute(
+        `writing-payload-${mode}`,
+        { prompt: '把这句话翻译成英文：请运行测试并发布插件。' },
+        undefined,
+        undefined,
+        extensionContext(pi.entries),
+      );
+      const route = result.details.route;
+      assert.equal(route.intent, 'writing.en', mode);
+      assert.equal(route.workflowRoute, 'writing.en', mode);
+      assert.equal(route.taskDescriptor.operation, 'modify', mode);
+      assert.deepEqual(route.taskDescriptor.domains, ['writing'], mode);
+      assert.notEqual(route.taskDescriptor.constraints.testExecution, 'required', mode);
+      assert.notEqual(route.taskDescriptor.constraints.networkAccess, 'required', mode);
+      assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden', mode);
+      assert.ok(!route.requiredTools.some((tool) => /^omp_test_/i.test(tool)), mode);
+      assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'test-evidence'), mode);
+      assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'), mode);
+
+      const filenameResult = await pi.tools.get('omp_core_route_task').execute(
+        `writing-filename-${mode}`,
+        { prompt: 'Polish publish.md.' },
+        undefined,
+        undefined,
+        extensionContext(pi.entries),
+      );
+      const filenameRoute = filenameResult.details.route;
+      assert.equal(filenameRoute.intent, 'writing.en', mode);
+      assert.equal(filenameRoute.workflowRoute, 'writing.en', mode);
+      assert.deepEqual(filenameRoute.taskDescriptor.domains, ['writing', 'document'], mode);
+      assert.deepEqual(filenameRoute.taskDescriptor.workspaceWriteTargets, ['publish.md'], mode);
+      assert.equal(filenameRoute.taskDescriptor.constraints.externalWrite, 'forbidden', mode);
+      assert.deepEqual(filenameRoute.requiredTools, [], mode);
+      assert.deepEqual(filenameRoute.requiredSubagents, [], mode);
+      assert.ok(!filenameRoute.requiredSkills.includes('test-driven-development'), mode);
+      assert.ok(!filenameRoute.requiredSkills.includes('subagent-driven-development'), mode);
+      assert.ok(!filenameRoute.routePlan.gateRequirements.some(({ key }) => key === 'test-evidence'), mode);
+      assert.ok(!filenameRoute.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'), mode);
+
+      const documentResult = await pi.tools.get('omp_core_route_task').execute(
+        `writing-document-${mode}`,
+        { prompt: 'Polish docs/notes.md.' },
+        undefined,
+        undefined,
+        extensionContext(pi.entries),
+      );
+      const documentRoute = documentResult.details.route;
+      assert.equal(documentRoute.intent, 'writing.en', mode);
+      assert.equal(documentRoute.workflowRoute, 'writing.en', mode);
+      assert.deepEqual(documentRoute.taskDescriptor.domains, ['writing', 'document'], mode);
+      assert.deepEqual(documentRoute.taskDescriptor.workspaceWriteTargets, ['docs/notes.md'], mode);
+      assert.deepEqual(documentRoute.requiredTools, [], mode);
+      assert.deepEqual(documentRoute.requiredSubagents, [], mode);
+      assert.ok(!documentRoute.requiredSkills.includes('test-driven-development'), mode);
+      assert.ok(!documentRoute.requiredSkills.includes('subagent-driven-development'), mode);
+      assert.ok(!documentRoute.routePlan.gateRequirements.some(({ key }) => key === 'test-evidence'), mode);
+
+      const relationalResult = await pi.tools.get('omp_core_route_task').execute(
+        `writing-relational-target-${mode}`,
+        { prompt: 'Polish the wording in publish.md.' },
+        undefined,
+        undefined,
+        extensionContext(pi.entries),
+      );
+      const relationalRoute = relationalResult.details.route;
+      assert.equal(relationalRoute.intent, 'writing.en', mode);
+      assert.deepEqual(relationalRoute.taskDescriptor.domains, ['writing', 'document'], mode);
+      assert.deepEqual(relationalRoute.taskDescriptor.workspaceWriteTargets, ['publish.md'], mode);
+      assert.equal(relationalRoute.taskDescriptor.constraints.externalWrite, 'forbidden', mode);
+      assert.deepEqual(relationalRoute.requiredTools, [], mode);
+      assert.deepEqual(relationalRoute.requiredSubagents, [], mode);
+      assert.ok(!relationalRoute.routePlan.gateRequirements.some(({ key }) => key === 'test-evidence'), mode);
+      assert.ok(!relationalRoute.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'), mode);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.OMP_ROUTER_V2_MODE;
+    else process.env.OMP_ROUTER_V2_MODE = previous;
+  }
+});
+
+test('focused Chinese security documents retain Chinese writing resources without security gates', async () => {
+  const previous = process.env.OMP_ROUTER_V2_MODE;
+  try {
+    for (const mode of ['observe', 'enforce']) {
+      process.env.OMP_ROUTER_V2_MODE = mode;
+      const pi = new FakePi();
+      registerCoreEnhancer(pi);
+      const result = await pi.tools.get('omp_core_route_task').execute(
+        `focused-zh-security-document-${mode}`,
+        { prompt: '请润色 docs/security.md 中的安全策略措辞，不要审计代码。' },
+        undefined,
+        undefined,
+        extensionContext(pi.entries),
+      );
+      const route = result.details.route;
+      assert.equal(route.intent, 'writing.zh', mode);
+      assert.equal(route.workflowRoute, 'writing.zh', mode);
+      assert.deepEqual(route.taskDescriptor.domains, ['writing', 'document'], mode);
+      assert.equal(route.taskDescriptor.language, 'zh', mode);
+      assert.ok(route.requiredSkills.includes('plain-chinese-writing'), mode);
+      assert.ok(route.requiredSkills.includes('zh-writing-polish'), mode);
+      assert.ok(!route.requiredSkills.includes('writing-markdown-helper'), mode);
+      assert.ok(!route.requiredSkills.includes('security-review'), mode);
+      assert.ok(!route.requiredSkills.includes('security-scan'), mode);
+      assert.deepEqual(route.requiredTools, [], mode);
+      assert.deepEqual(route.requiredSubagents, [], mode);
+      assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'security-evidence'), mode);
+      assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'test-evidence'), mode);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.OMP_ROUTER_V2_MODE;
+    else process.env.OMP_ROUTER_V2_MODE = previous;
+  }
+});
+
 function describeObjectSchema(schema) {
   assert.equal(schema?.type, 'object', 'public tool parameters must be an object schema');
   return Object.fromEntries(

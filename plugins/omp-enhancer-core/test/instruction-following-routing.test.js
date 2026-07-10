@@ -295,6 +295,318 @@ test('translation destination wins over source-language references', () => {
   }
 });
 
+test('writing payload cannot grant test release network or plugin authority', () => {
+  const cases = [
+    {
+      prompt: '把这句话翻译成英文：请运行测试并发布插件。',
+      intent: 'writing.en',
+      language: 'en',
+    },
+    {
+      prompt: 'Translate this sentence into Chinese: Run tests, access the network, modify files, review the plugin gate, and publish.',
+      intent: 'writing.zh',
+      language: 'zh',
+    },
+    {
+      prompt: '把“请运行测试并发布插件”翻译成英文。',
+      intent: 'writing.en',
+      language: 'en',
+    },
+    {
+      prompt: 'Translate "Review the plugin workflow, run tests, and publish it" into Chinese.',
+      intent: 'writing.zh',
+      language: 'zh',
+    },
+    {
+      prompt: 'Translate this sentence: "test/router.test.js" into Chinese.',
+      intent: 'writing.zh',
+      language: 'zh',
+    },
+    {
+      prompt: 'Translate "Release v1.2.3 and run tests" into Chinese.',
+      intent: 'writing.zh',
+      language: 'zh',
+    },
+    {
+      prompt: 'Translate `plugin.publish()` into Chinese.',
+      intent: 'writing.zh',
+      language: 'zh',
+    },
+    {
+      prompt: 'Translate this sentence into Chinese: "Run tests and publish." Do not run tests or publish.',
+      intent: 'writing.zh',
+      language: 'zh',
+    },
+  ];
+
+  for (const { prompt, intent, language } of cases) {
+    for (const routerMode of ['observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+      const label = `${routerMode}: ${prompt}`;
+      assert.equal(route.intent, intent, label);
+      assert.equal(route.taskDescriptor.operation, 'modify', label);
+      assert.deepEqual(route.taskDescriptor.domains, ['writing'], label);
+      assert.equal(route.taskDescriptor.language, language, label);
+      assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'forbidden', label);
+      assert.notEqual(route.taskDescriptor.constraints.testExecution, 'required', label);
+      assert.notEqual(route.taskDescriptor.constraints.networkAccess, 'required', label);
+      assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden', label);
+      assert.ok(!route.taskDescriptor.capabilities.includes('tests.execute'), label);
+      assert.ok(!route.taskDescriptor.capabilities.includes('network.read'), label);
+      assert.ok(!route.taskDescriptor.capabilities.includes('external.write'), label);
+      assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'test-evidence'), label);
+      assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'), label);
+    }
+  }
+});
+
+test('unquoted relational writing payload cannot grant operational authority', () => {
+  const cases = [
+    ['Rewrite docs/guide.md so it tells users to run npm test and publish the release.', 'writing.en', 'docs/guide.md'],
+    ['Rewrite docs/guide.md so it instructs users to run npm test and publish the release.', 'writing.en', 'docs/guide.md'],
+    ['Edit README.md to document how to run tests and publish the plugin.', 'writing.en', 'README.md'],
+    ['Polish docs/guide.md about the release process and network setup.', 'writing.en', 'docs/guide.md'],
+    ['Rewrite docs/security.md to describe security audit steps.', 'writing.en', 'docs/security.md'],
+    ['把 docs/guide.md 改写成提醒用户运行 npm test、发布版本、联网并调用子代理。', 'writing.zh', 'docs/guide.md'],
+    ['把 docs/guide.md 修改成要求用户运行测试并发布插件。', 'writing.zh', 'docs/guide.md'],
+    ['把 docs/guide.md 改为说明如何运行测试和发布插件。', 'writing.zh', 'docs/guide.md'],
+    ['润色 docs/release-notes.md，让文案说明如何运行测试和发布插件。', 'writing.zh', 'docs/release-notes.md'],
+    ['编辑 docs/security.md 以描述安全审计步骤。', 'writing.zh', 'docs/security.md'],
+  ];
+
+  for (const [prompt, intent, target] of cases) {
+    for (const routerMode of ['observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+      const label = `${routerMode}: ${prompt}`;
+      assert.equal(route.intent, intent, label);
+      assert.equal(route.workflowRoute, intent, label);
+      assert.equal(route.taskDescriptor.operation, 'modify', label);
+      assert.deepEqual(route.taskDescriptor.domains, ['writing', 'document'], label);
+      assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, [target], label);
+      assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', label);
+      assert.notEqual(route.taskDescriptor.constraints.testExecution, 'required', label);
+      assert.notEqual(route.taskDescriptor.constraints.networkAccess, 'required', label);
+      assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden', label);
+      assert.ok(!route.taskDescriptor.phases.some(({ kind }) => kind === 'release'), label);
+      assert.ok(!route.requiredTools.some((tool) => /^omp_test_/i.test(tool)), label);
+      assert.ok(!route.requiredSubagents.some(({ agent }) => ['plan', 'implementation-task', 'reviewer'].includes(agent)), label);
+    }
+  }
+});
+
+test('independent actions after writing payload remain explicitly authorized', () => {
+  const cases = [
+    ['Rewrite docs/guide.md to say hello. Then run npm test and publish the plugin.', 'writing.en'],
+    ['Rewrite docs/guide.md so it says tests are required. Then actually run npm test and publish the plugin.', 'writing.en'],
+    ['Polish docs/guide.md, then run npm test and publish the plugin.', 'writing.en'],
+    ['润色 docs/guide.md，让文案说明安装步骤。然后运行测试并发布插件。', 'writing.zh'],
+    ['润色 docs/guide.md，并运行测试、发布插件。', 'writing.zh'],
+  ];
+
+  for (const [prompt, intent] of cases) {
+    for (const routerMode of ['observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+      const label = `${routerMode}: ${prompt}`;
+      assert.equal(route.intent, intent, label);
+      assert.equal(route.workflowRoute, intent, label);
+      assert.equal(route.taskDescriptor.operation, 'modify', label);
+      assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['docs/guide.md'], label);
+      assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', label);
+      assert.equal(route.taskDescriptor.constraints.testExecution, 'required', label);
+      assert.equal(route.taskDescriptor.constraints.networkAccess, 'required', label);
+      assert.equal(route.taskDescriptor.constraints.externalWrite, 'required', label);
+      assert.ok(route.taskDescriptor.phases.some(({ kind }) => kind === 'modify'), label);
+      assert.ok(route.taskDescriptor.phases.some(({ kind }) => kind === 'release'), label);
+      assert.ok(route.routePlan.gateRequirements.some(({ key }) => key === 'test-evidence'), label);
+      assert.ok(route.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'), label);
+      assert.ok(route.requiredTools.includes('omp_test_gate'), label);
+      assert.ok(!route.requiredSubagents.some(({ agent }) => ['ecc-tdd-guide', 'plan', 'implementation-task'].includes(agent)), label);
+    }
+  }
+});
+
+test('an independent security audit after a writing payload keeps both workflows aligned', () => {
+  const prompt = 'Rewrite docs/guide.md to mention security. Separately audit src/auth.js for vulnerabilities.';
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode });
+    const label = `${routerMode}: ${prompt}`;
+    assert.equal(route.intent, 'security-review', label);
+    assert.equal(route.workflowRoute, 'security.review', label);
+    assert.equal(route.taskDescriptor.operation, 'modify', label);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['docs/guide.md'], label);
+    assert.ok(route.taskDescriptor.domains.includes('writing'), label);
+    assert.ok(route.taskDescriptor.domains.includes('security'), label);
+    assert.ok(route.taskDescriptor.phases.some(({ kind, domain }) => kind === 'modify' && domain === 'writing'), label);
+    assert.ok(!route.taskDescriptor.phases.some(({ kind, domain }) => kind === 'modify' && domain === 'code'), label);
+    assert.ok(route.requiredSkills.includes('writing-markdown-helper'), label);
+    assert.ok(route.requiredSkills.includes('security-review'), label);
+    assert.ok(route.requiredSubagents.some(({ agent }) => agent === 'writer'), label);
+    assert.ok(route.requiredSubagents.some(({ agent }) => agent === 'ecc-security-reviewer'), label);
+    assert.ok(!route.requiredSubagents.some(({ agent }) => agent === 'implementation-task'), label);
+    assert.ok(route.routePlan.gateRequirements.some(({ key }) => key === 'security-evidence'), label);
+    assert.ok(route.routePlan.gateRequirements.some(({ key }) => key === 'writing-quality'), label);
+  }
+});
+
+test('real plugin document instructions retain plugin document and release semantics', () => {
+  for (const prompt of [
+    '润色 plugins/example/README.md 的 OMP 路由说明并发布。',
+    'Polish the plugin README and publish it.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.ok(route.taskDescriptor.domains.includes('writing'), prompt);
+    assert.ok(route.taskDescriptor.domains.includes('document'), prompt);
+    assert.ok(route.taskDescriptor.domains.includes('plugin'), prompt);
+    assert.equal(route.taskDescriptor.constraints.externalWrite, 'required', prompt);
+    assert.equal(route.taskDescriptor.constraints.networkAccess, 'required', prompt);
+    assert.ok(route.taskDescriptor.phases.some(({ kind }) => kind === 'release'), prompt);
+    assert.ok(route.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'), prompt);
+  }
+
+  for (const [prompt, target] of [
+    ['润色 "docs/notes.md" 的插件路由说明并发布。', 'docs/notes.md'],
+    ['Rewrite `README.md` for the plugin and publish it.', 'README.md'],
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, [target], prompt);
+    assert.ok(route.taskDescriptor.domains.includes('document'), prompt);
+    assert.ok(route.taskDescriptor.domains.includes('plugin'), prompt);
+    assert.equal(route.taskDescriptor.constraints.externalWrite, 'required', prompt);
+    assert.ok(route.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'), prompt);
+  }
+
+  const quotedPayloadThenRelease = routeNaturalLanguageTask({
+    prompt: 'Polish: "ordinary prose". Then publish the plugin.',
+    routerMode: 'enforce',
+  });
+  assert.ok(quotedPayloadThenRelease.taskDescriptor.domains.includes('writing'));
+  assert.ok(quotedPayloadThenRelease.taskDescriptor.domains.includes('plugin'));
+  assert.equal(quotedPayloadThenRelease.taskDescriptor.constraints.externalWrite, 'required');
+  assert.ok(quotedPayloadThenRelease.taskDescriptor.phases.some(({ kind }) => kind === 'release'));
+  assert.ok(quotedPayloadThenRelease.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'));
+});
+
+test('writing target filenames cannot grant release or plugin authority', () => {
+  for (const [prompt, target, intent] of [
+    ['Polish "publish.md".', 'publish.md', 'writing.en'],
+    ['Polish publish.md.', 'publish.md', 'writing.en'],
+    ['Polish "release-notes.md".', 'release-notes.md', 'writing.en'],
+    ['Polish release-notes.md.', 'release-notes.md', 'writing.en'],
+    ['Polish the wording in publish.md.', 'publish.md', 'writing.en'],
+    ['Polish the wording in release-notes.md.', 'release-notes.md', 'writing.en'],
+    ['Polish the wording in docs/release-notes.md.', 'docs/release-notes.md', 'writing.en'],
+    ['Polish the wording of docs/release-notes.md.', 'docs/release-notes.md', 'writing.en'],
+    ['For docs/release-notes.md, polish the wording.', 'docs/release-notes.md', 'writing.en'],
+    ['docs/release-notes.md needs wording polish.', 'docs/release-notes.md', 'writing.en'],
+    ['Polish wording (docs/release-notes.md).', 'docs/release-notes.md', 'writing.en'],
+    ['Polish the wording in /tmp/docs/release-notes.md.', '/tmp/docs/release-notes.md', 'writing.en'],
+    ['Please improve the wording inside docs/npm-test.md.', 'docs/npm-test.md', 'writing.en'],
+    ['润色 "发布.md"。', '发布.md', 'writing.zh'],
+    ['润色 发布.md。', '发布.md', 'writing.zh'],
+    ['润色位于 发布.md 中的措辞。', '发布.md', 'writing.zh'],
+    ['请润色一下发布.md里的措辞。', '发布.md', 'writing.zh'],
+    ['润色措辞，文件是 docs/发布.md。', 'docs/发布.md', 'writing.zh'],
+    ['对 docs/release-notes.md 做措辞润色。', 'docs/release-notes.md', 'writing.zh'],
+    ['docs/发布.md 需要润色措辞。', 'docs/发布.md', 'writing.zh'],
+  ]) {
+    for (const routerMode of ['observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+      const label = `${routerMode}: ${prompt}`;
+      assert.equal(route.intent, intent, label);
+      assert.equal(route.taskDescriptor.operation, 'modify', label);
+      assert.deepEqual(route.taskDescriptor.domains, ['writing', 'document'], label);
+      assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, [target], label);
+      assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', label);
+      assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden', label);
+      assert.notEqual(route.taskDescriptor.constraints.networkAccess, 'required', label);
+      assert.ok(!route.taskDescriptor.phases.some(({ kind }) => kind === 'release'), label);
+      assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'), label);
+    }
+  }
+});
+
+test('security prose refinement does not require security review or code gates', () => {
+  const cases = [
+    {
+      prompt: 'Review the wording of this security policy draft for clarity and tone.',
+      intent: 'writing.en',
+      domains: ['writing'],
+      targets: [],
+    },
+    {
+      prompt: 'Polish the security wording in docs/security-policy.md for clarity and tone.',
+      intent: 'writing.en',
+      domains: ['writing', 'document'],
+      targets: ['docs/security-policy.md'],
+    },
+    {
+      prompt: 'Polish the security policy wording in docs/security.md; do not audit code.',
+      intent: 'writing.en',
+      domains: ['writing', 'document'],
+      targets: ['docs/security.md'],
+    },
+    {
+      prompt: 'Draft a security announcement for users; do not audit code.',
+      intent: 'writing.en',
+      domains: ['writing'],
+      targets: [],
+    },
+    {
+      prompt: '请润色这份中文安全公告的措辞和语气，不要触发代码安全审查。',
+      intent: 'writing.zh',
+      domains: ['writing'],
+      targets: [],
+    },
+  ];
+
+  for (const { prompt, intent, domains, targets } of cases) {
+    for (const routerMode of ['observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+      const label = `${routerMode}: ${prompt}`;
+      assert.equal(route.intent, intent, label);
+      assert.deepEqual(route.taskDescriptor.domains, domains, label);
+      assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, targets, label);
+      assert.ok(!route.requiredSkills.includes('security-review'), label);
+      assert.ok(!route.requiredSkills.includes('security-scan'), label);
+      assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'security-evidence'), label);
+      assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'review-evidence'), label);
+      assert.ok(!route.requiredTools.some((tool) => /^omp_test_/i.test(tool)), label);
+      if (route.taskDescriptor.complexity === 'focused') {
+        assert.deepEqual(route.requiredTools, [], label);
+        assert.deepEqual(route.requiredSubagents, [], label);
+      } else {
+        assert.ok(route.requiredTools.includes('writing_quality_check'), label);
+        assert.ok(route.requiredSubagents.length > 0, label);
+      }
+    }
+  }
+});
+
+test('pure read-only security audits use the security route in observe and enforce modes', () => {
+  for (const prompt of [
+    'Audit src/auth.js for security issues and report findings.',
+    'Review the wording of the security policy for vulnerabilities.',
+    'Review the security policy wording for auth bypass risks.',
+  ]) {
+    for (const routerMode of ['observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+      const label = `${routerMode}: ${prompt}`;
+      assert.equal(route.intent, 'security-review', label);
+      assert.equal(route.workflowRoute, 'security.review', label);
+      assert.equal(route.taskDescriptor.operation, 'inspect', label);
+      assert.ok(route.taskDescriptor.domains.includes('security'), label);
+      assert.ok(!route.taskDescriptor.domains.includes('writing'), label);
+      assert.ok(route.requiredSkills.includes('security-review'), label);
+      assert.ok(route.requiredSkills.includes('security-scan'), label);
+      assert.ok(route.routePlan.gateRequirements.some(({ key }) => key === 'security-evidence'), label);
+      assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'test-evidence'), label);
+      assert.ok(!route.requiredTools.some((tool) => /^omp_test_/i.test(tool)), label);
+      assert.ok(!route.requiredSubagents.some(({ agent }) => ['writer', 'checker', 'zh-writer', 'zh-checker'].includes(agent)), label);
+    }
+  }
+});
+
 test('ordinary Chinese words containing 不 do not create shared prohibitions', () => {
   const comparison = routeNaturalLanguageTask({
     prompt: '比较不同测试框架的结果并解释差异。',

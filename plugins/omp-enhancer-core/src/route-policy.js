@@ -92,10 +92,15 @@ export function buildRoutePlan(descriptor, route = {}) {
       : [...phases, verify];
   }
   const phaseKinds = new Set(phases.map(({ kind }) => kind));
+  const securityProseRefinement = (descriptor?.provenance?.reasons ?? [])
+    .includes('security prose refinement without security audit');
   const requiredSkills = [];
   const requiredTools = [];
   const requiredSubagents = [];
   const gateRequirements = [];
+  const codeModification = phases.some(({ kind, domain }) => (
+    ['modify', 'create'].includes(kind) && domain === 'code'
+  ));
 
   if (domains.has('facts')) {
     if (!focusedLocalFactInspection) {
@@ -107,9 +112,7 @@ export function buildRoutePlan(descriptor, route = {}) {
   }
 
   if (domains.has('writing') && !focusedLocalFactInspection) {
-    if (domains.has('document')) {
-      requiredSkills.push('writing-markdown-helper');
-    } else if (descriptor?.language === 'zh') {
+    if (descriptor?.language === 'zh') {
       requiredSkills.push('plain-chinese-writing', 'zh-writing-polish');
       if (domains.has('facts') || descriptor?.complexity === 'broad') requiredSkills.push('zh-writing-checkers');
       if (domains.has('facts') || descriptor?.complexity === 'broad') requiredSubagents.push(...subagentPlans.writingZh);
@@ -127,12 +130,11 @@ export function buildRoutePlan(descriptor, route = {}) {
   if (domains.has('security') && descriptor?.operation !== 'answer') {
     requiredSkills.unshift('security-review', 'security-scan');
     gateRequirements.push(gateRequirement('security-evidence', 'required'));
-    if (descriptor?.operation === 'inspect' && descriptor?.complexity === 'broad') {
+    if (descriptor?.complexity === 'broad' && !codeModification) {
       requiredSubagents.push(...subagentPlans.securityReview);
     }
   }
 
-  const codeModification = ['modify', 'create'].includes(descriptor?.operation) && domains.has('code');
   if (codeModification) {
     if (descriptor?.complexity === 'broad') requiredSkills.push(...IMPLEMENTATION_SKILLS);
     else {
@@ -147,6 +149,13 @@ export function buildRoutePlan(descriptor, route = {}) {
         ? subagentPlans.securityRemediation
         : subagentPlans.implementation));
     }
+  }
+
+  const writingTestVerification = domains.has('writing') && testsAuthorized
+    && phases.some(({ kind, domain }) => kind === 'verify' && domain === 'tests');
+  if (writingTestVerification) {
+    requiredSkills.push('verification-before-completion');
+    requiredTools.push('omp_test_gate');
   }
 
   if (broadCodeAudit) {
@@ -175,7 +184,7 @@ export function buildRoutePlan(descriptor, route = {}) {
     gateRequirements.push(gateRequirement('test-evidence', 'required'));
   }
 
-  if (phaseKinds.has('review') && (codeModification || domains.has('document'))) {
+  if (phaseKinds.has('review') && (codeModification || domains.has('document')) && !securityProseRefinement) {
     gateRequirements.push(gateRequirement('review-evidence', 'required'));
   } else if (descriptor?.operation === 'inspect' && domains.has('code')) {
     gateRequirements.push(gateRequirement('review-evidence', 'advisory'));
@@ -243,6 +252,8 @@ export function attachCompiledTaskRoute(route, descriptor) {
 
 function legacyIntentForDescriptor(descriptor = {}) {
   const domains = new Set(descriptor.domains ?? []);
+  const explicitSecurityAudit = (descriptor?.provenance?.reasons ?? [])
+    .includes('explicit security audit requested');
   if (descriptor.operation === 'answer') return 'unknown';
   if (descriptor.operation === 'execute' && domains.has('tests')) return 'testing';
   if (descriptor.operation === 'execute') return 'unknown';
@@ -250,10 +261,10 @@ function legacyIntentForDescriptor(descriptor = {}) {
   if (descriptor.operation === 'release') return 'release';
   if (descriptor.operation === 'create' && domains.has('visual')) return 'design.visual';
   if (domains.has('facts')) return 'fact-check';
+  if (explicitSecurityAudit && domains.has('security') && domains.has('writing')) return 'security-review';
   if (domains.has('security') && descriptor.operation !== 'modify') return 'security-review';
   if (descriptor.operation === 'modify' && (domains.has('code') || domains.has('security')
-    || domains.has('document') && domains.has('plugin')
-      && (!domains.has('writing') || descriptor.constraints?.externalWrite === 'required'))) {
+    || domains.has('document') && domains.has('plugin') && !domains.has('writing'))) {
     return 'implementation-with-tests';
   }
   if (domains.has('writing')) return descriptor.language === 'zh' ? 'writing.zh' : 'writing.en';

@@ -1,5 +1,12 @@
 import { decorateWorkflowRoute } from './workflow-routes.js';
-import { describeNaturalLanguageTask, descriptorFromLegacyIntent, normalizeTaskDescriptor, resolveWritingTargetLanguage } from './task-descriptor.js';
+import {
+  describeNaturalLanguageTask,
+  descriptorFromLegacyIntent,
+  normalizeTaskDescriptor,
+  resolveWritingTargetLanguage,
+  writingDirectivePromptForSignals,
+  writingOperationalPromptForSignals,
+} from './task-descriptor.js';
 import { attachCompiledTaskRoute, compileTaskRoutePolicy } from './route-policy.js';
 import { resolveGateMode, resolveRouterMode } from './runtime-policy.js';
 import { subagentPlans } from './subagent-plans.js';
@@ -87,13 +94,32 @@ export const routedIntents = [
 
 export function routeNaturalLanguageTask(input = {}) {
   const prompt = String(input.prompt ?? input.text ?? '');
+  const directivePrompt = writingDirectivePromptForSignals(prompt);
+  const operationalPrompt = writingOperationalPromptForSignals(directivePrompt);
   const described = describeNaturalLanguageTask({ prompt });
-  const legacyRoute = routeNaturalLanguageTaskLegacy(input);
+  const legacyRoute = routeNaturalLanguageTaskLegacy({
+    ...input,
+    prompt: operationalPrompt,
+    text: operationalPrompt,
+  });
   const policy = compileTaskRoutePolicy(described, { legacyRoute });
   const routerMode = resolveRouterMode(input.routerMode ?? input.mode);
   const gateRecoveryMode = resolveGateMode(input.gateRecoveryMode);
   const canonicalTestExecution = isCanonicalTestingProjection(described, prompt);
-  const usePolicyRoute = (routerMode !== 'legacy' && canonicalTestExecution)
+  const canonicalPureWriting = isCanonicalPureWritingProjection(described, legacyRoute, prompt);
+  const canonicalPureSecurity = isCanonicalPureSecurityProjection(described);
+  const canonicalSecurityWriting = isCanonicalSecurityWritingProjection(described);
+  const canonicalWritingActions = isCanonicalWritingActionProjection(described);
+  const payloadSanitized = directivePrompt !== prompt;
+  const alignedPayloadProjection = payloadSanitized && (
+    legacyRoute.intent === policy.intent && legacyRoute.workflowRoute === policy.workflowRoute
+    || ['writing.zh', 'writing.en'].includes(policy.intent) && legacyRoute.intent !== 'design.visual'
+  );
+  const authorityBearingTargetNeutralized = writingTargetAuthorityNeutralized(directivePrompt, operationalPrompt);
+  const usePolicyRoute = (routerMode !== 'legacy'
+    && (canonicalTestExecution || canonicalPureWriting || canonicalPureSecurity || canonicalSecurityWriting
+      || canonicalWritingActions
+      || alignedPayloadProjection || authorityBearingTargetNeutralized))
     || (routerMode === 'enforce'
       && (policy.shouldOverrideLegacy || shouldOverrideLegacyRoute(described, legacyRoute, prompt)));
   const routed = usePolicyRoute
@@ -107,8 +133,18 @@ export function routeNaturalLanguageTask(input = {}) {
       shouldUseClassifier: described.provenance.needsClassifier,
     })
     : legacyRoute;
+  const compiled = attachCompiledTaskRoute(routed, described);
+  const projected = routerMode !== 'legacy'
+    && (isCanonicalFocusedSafeWritingProjection(described) || canonicalSecurityWriting || canonicalWritingActions)
+    ? {
+      ...compiled,
+      requiredSkills: compiled.routePlan.requiredSkills,
+      requiredTools: compiled.routePlan.requiredTools,
+      requiredSubagents: compiled.routePlan.requiredSubagents,
+    }
+    : compiled;
   return {
-    ...attachCompiledTaskRoute(routed, described),
+    ...projected,
     routerMode,
     gateRecoveryMode,
     routeObservation: routerMode === 'observe' ? {
@@ -117,6 +153,60 @@ export function routeNaturalLanguageTask(input = {}) {
       disagrees: legacyRoute.intent !== policy.intent,
     } : null,
   };
+}
+
+function isCanonicalFocusedSafeWritingProjection(descriptor) {
+  const domains = descriptor?.domains ?? [];
+  if (!['modify', 'inspect'].includes(descriptor?.operation)) return false;
+  if (descriptor?.complexity !== 'focused' || !domains.includes('writing')) return false;
+  if (!domains.every((domain) => ['writing', 'document', 'plugin'].includes(domain))) return false;
+  const focusedSecurityProse = (descriptor?.provenance?.reasons ?? [])
+    .includes('security prose refinement without security audit');
+  if (!focusedSecurityProse) return false;
+  if (descriptor?.constraints?.testExecution === 'required') return false;
+  return descriptor?.constraints?.externalWrite !== 'required';
+}
+
+function isCanonicalSecurityWritingProjection(descriptor) {
+  const domains = descriptor?.domains ?? [];
+  if (descriptor?.operation !== 'modify' || !domains.includes('security') || !domains.includes('writing')) return false;
+  if (!(descriptor?.provenance?.reasons ?? []).includes('explicit security audit requested')) return false;
+  if (descriptor?.constraints?.testExecution === 'required') return false;
+  return descriptor?.constraints?.externalWrite !== 'required';
+}
+
+function isCanonicalWritingActionProjection(descriptor) {
+  const domains = descriptor?.domains ?? [];
+  if (descriptor?.operation !== 'modify' || !domains.includes('writing')) return false;
+  if (!(descriptor?.workspaceWriteTargets ?? []).length) return false;
+  if (!domains.every((domain) => ['tests', 'writing', 'document', 'plugin'].includes(domain))) return false;
+  return descriptor?.constraints?.testExecution === 'required'
+    || descriptor?.constraints?.externalWrite === 'required';
+}
+
+function isCanonicalPureSecurityProjection(descriptor) {
+  const domains = descriptor?.domains ?? [];
+  if (descriptor?.operation !== 'inspect' || !domains.includes('security')) return false;
+  if (!(descriptor?.provenance?.reasons ?? []).includes('explicit security audit requested')) return false;
+  if (domains.some((domain) => ['writing', 'facts', 'tests', 'visual'].includes(domain))) return false;
+  if (!domains.every((domain) => ['security', 'code', 'plugin', 'config'].includes(domain))) return false;
+  return descriptor?.constraints?.testExecution !== 'required';
+}
+
+function isCanonicalPureWritingProjection(descriptor, legacyRoute, prompt = '') {
+  const domains = descriptor?.domains ?? [];
+  if (descriptor?.operation !== 'modify' || !domains.includes('writing')) return false;
+  if (!(descriptor?.workspaceWriteTargets ?? []).length) return false;
+  if (!domains.every((domain) => ['writing', 'document', 'plugin'].includes(domain))) return false;
+  if (descriptor?.constraints?.testExecution === 'required') return false;
+  if (legacyRoute?.intent === 'design.visual') return false;
+  return !/(?:重新)?编译|链接检查|\b(?:compile|rebuild|link check)\b/i.test(String(prompt));
+}
+
+function writingTargetAuthorityNeutralized(directivePrompt = '', operationalPrompt = '') {
+  if (directivePrompt === operationalPrompt) return false;
+  const authorityPattern = /(?:提交|推送|发布|部署|上线|测试|安全|插件|路由|门禁|工作流)|\b(?:commit|push|publish|release|deploy|tests?|testing|security|plugins?|router|routing|gates?|workflows?)\b/i;
+  return authorityPattern.test(directivePrompt) && !authorityPattern.test(operationalPrompt);
 }
 
 function isCanonicalTestingProjection(descriptor, prompt = '') {
