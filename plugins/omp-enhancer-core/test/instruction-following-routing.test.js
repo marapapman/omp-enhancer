@@ -82,12 +82,17 @@ test('a global no-write prohibition wins over a bounded other-files clause', () 
   }
 });
 
-test('a bounded document polish stays on the writing route despite negated test and release words', () => {
+test('a bounded English document polish uses English writing skills despite a Chinese instruction', () => {
   const route = routeNaturalLanguageTask({
     prompt: '润色 docs/notes.md 的标题和英文句子，保持事实 42 不变。只修改 docs/notes.md；禁止修改其他文件，禁止运行测试，禁止联网，禁止启动 subagent，禁止提交或发布。',
     routerMode: 'enforce',
   });
-  assert.equal(route.intent, 'writing.zh');
+  assert.equal(route.intent, 'writing.en');
+  assert.equal(route.workflowRoute, 'writing.en');
+  assert.deepEqual(route.taskDescriptor.domains, ['writing', 'document']);
+  assert.ok(route.requiredSkills.includes('writing-markdown-helper'));
+  assert.ok(!route.requiredSkills.includes('writing-checkers'));
+  assert.ok(!route.requiredSkills.includes('zh-writing-polish'));
   assert.equal(route.taskDescriptor.operation, 'modify');
   assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['docs/notes.md']);
   assert.equal(route.taskDescriptor.constraints.testExecution, 'forbidden');
@@ -96,12 +101,50 @@ test('a bounded document polish stays on the writing route despite negated test 
   assert.ok(!route.routePlan.requiredTools.some((tool) => /^omp_test_/i.test(tool)));
 });
 
+test('a negative English reference does not override an explicit Chinese writing target', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '润色 docs/notes.md 的中文段落，不要改英文引用。只修改 docs/notes.md；禁止运行测试和发布。',
+    routerMode: 'enforce',
+  });
+  assert.equal(route.intent, 'writing.zh');
+  assert.equal(route.taskDescriptor.language, 'zh');
+  assert.deepEqual(route.taskDescriptor.domains, ['writing', 'document']);
+  assert.equal(route.taskDescriptor.constraints.testExecution, 'forbidden');
+  assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden');
+  assert.ok(!route.requiredSkills.includes('writing-checkers'));
+});
+
+test('writing target language is symmetric and shared across legacy and descriptor projections', () => {
+  for (const prompt of [
+    'Please polish this Chinese paragraph.',
+    'Polish this paragraph in Chinese.',
+    'Please polish this Chinese paragraph, but do not change the English quotation.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    assert.equal(route.intent, 'writing.zh', prompt);
+    assert.equal(route.workflowRoute, 'writing.zh', prompt);
+    assert.equal(route.taskDescriptor.language, 'zh', prompt);
+    assert.ok(route.requiredSkills.includes('plain-chinese-writing'), prompt);
+    assert.ok(!route.requiredSkills.includes('writing-markdown-helper'), prompt);
+  }
+
+  const english = routeNaturalLanguageTask({
+    prompt: '请润色下面的英文句子，使表达自然。',
+    routerMode: 'enforce',
+  });
+  assert.equal(english.intent, 'writing.en');
+  assert.equal(english.taskDescriptor.language, 'en');
+  assert.ok(english.requiredSkills.includes('writing-markdown-helper'));
+  assert.ok(!english.requiredSkills.includes('zh-writing-polish'));
+});
+
 test('English compound fixes preserve no-test, no-network, no-subagent, and no-release ceilings', () => {
   const route = routeNaturalLanguageTask({
     prompt: 'Fix the bug in src/router.js, but do not run tests, use the network, use subagents, or publish.',
   });
 
   assert.equal(route.taskDescriptor.operation, 'modify');
+  assert.deepEqual(route.taskDescriptor.domains, ['code']);
   assert.deepEqual(route.taskDescriptor.constraints, {
     workspaceWrite: 'required',
     ...FORBIDDEN_SIDE_EFFECTS,
@@ -116,6 +159,9 @@ test('an exact test-file command remains execute-only under explicit side-effect
   ]) {
     const route = routeNaturalLanguageTask({ prompt });
     assert.equal(route.taskDescriptor.operation, 'execute', prompt);
+    assert.deepEqual(route.taskDescriptor.domains, ['tests'], prompt);
+    assert.equal(route.intent, 'testing', prompt);
+    assert.equal(route.workflowRoute, 'code.test', prompt);
     assert.deepEqual(route.taskDescriptor.constraints, {
       workspaceWrite: 'forbidden',
       testExecution: 'required',
@@ -138,6 +184,9 @@ test('a complete multi-file exact test request stays bounded to its ordered targ
   });
 
   assert.equal(route.taskDescriptor.operation, 'execute');
+  assert.deepEqual(route.taskDescriptor.domains, ['tests']);
+  assert.equal(route.intent, 'testing');
+  assert.equal(route.workflowRoute, 'code.test');
   assert.deepEqual(route.taskDescriptor.testExecutionTargets, [
     'test/router.test.js',
     'test/governance.test.js',
@@ -160,6 +209,7 @@ test('one Chinese prohibition marker scopes across a compact side-effect list', 
     routerMode: 'enforce',
   });
   assert.equal(route.taskDescriptor.operation, 'execute');
+  assert.deepEqual(route.taskDescriptor.domains, ['tests']);
   assert.deepEqual(route.taskDescriptor.testExecutionTargets, ['test/router.test.js']);
   assert.deepEqual(route.taskDescriptor.constraints, {
     workspaceWrite: 'forbidden',
@@ -168,6 +218,81 @@ test('one Chinese prohibition marker scopes across a compact side-effect list', 
     externalWrite: 'forbidden',
     subagents: 'forbidden',
   });
+});
+
+test('forbidden tests and publishing do not create positive task domains', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '只回答这个问题，不要运行测试，不要发布。',
+    routerMode: 'enforce',
+  });
+  assert.equal(route.intent, 'unknown');
+  assert.equal(route.workflowRoute, 'agentic.simple');
+  assert.deepEqual(route.taskDescriptor.domains, ['general']);
+  assert.equal(route.taskDescriptor.constraints.testExecution, 'forbidden');
+  assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden');
+});
+
+test('a compact Chinese bare prohibition applies to both tests and publishing', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '只回答这个问题，不运行测试和发布。',
+    routerMode: 'enforce',
+  });
+  assert.equal(route.intent, 'unknown');
+  assert.equal(route.workflowRoute, 'agentic.simple');
+  assert.deepEqual(route.taskDescriptor.domains, ['general']);
+  assert.equal(route.taskDescriptor.constraints.testExecution, 'forbidden');
+  assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden');
+  assert.notEqual(route.taskDescriptor.constraints.networkAccess, 'required');
+});
+
+test('an exact test target does not erase a second review or publish action', () => {
+  const review = routeNaturalLanguageTask({
+    prompt: 'Run test/router.test.js and review src/router.js for bugs.',
+    routerMode: 'enforce',
+  });
+  assert.equal(review.intent, 'bug-audit');
+  assert.equal(review.workflowRoute, 'code.review');
+  assert.equal(review.taskDescriptor.operation, 'inspect');
+  assert.deepEqual(review.taskDescriptor.domains, ['code', 'tests']);
+  assert.deepEqual(review.taskDescriptor.phases, [
+    { kind: 'inspect', domain: 'code' },
+    { kind: 'verify', domain: 'tests' },
+    { kind: 'review', domain: 'code' },
+  ]);
+
+  const publish = routeNaturalLanguageTask({
+    prompt: 'Run test/router.test.js, then publish the package.',
+    routerMode: 'enforce',
+  });
+  assert.equal(publish.intent, 'release');
+  assert.equal(publish.taskDescriptor.operation, 'release');
+  assert.deepEqual(publish.taskDescriptor.domains, ['tests', 'plugin']);
+  assert.equal(publish.taskDescriptor.constraints.testExecution, 'required');
+  assert.equal(publish.taskDescriptor.constraints.externalWrite, 'required');
+  assert.equal(publish.taskDescriptor.constraints.networkAccess, 'required');
+  assert.deepEqual(publish.taskDescriptor.phases, [
+    { kind: 'verify', domain: 'tests' },
+    { kind: 'release', domain: 'plugin' },
+  ]);
+  assert.ok(publish.routePlan.gateRequirements.some(({ key }) => key === 'test-evidence'));
+  assert.ok(publish.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'));
+});
+
+test('translation destination wins over source-language references', () => {
+  for (const prompt of [
+    'Translate this English paragraph into Chinese.',
+    '把下面的英文句子翻译成中文。',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    assert.equal(route.intent, 'writing.zh', prompt);
+    assert.equal(route.workflowRoute, 'writing.zh', prompt);
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.deepEqual(route.taskDescriptor.domains, ['writing'], prompt);
+    assert.equal(route.taskDescriptor.language, 'zh', prompt);
+    assert.ok(route.requiredSkills.includes('plain-chinese-writing'), prompt);
+    assert.ok(route.routePlan.requiredSkills.includes('plain-chinese-writing'), prompt);
+    assert.ok(!route.requiredSkills.includes('writing-markdown-helper'), prompt);
+  }
 });
 
 test('ordinary Chinese words containing 不 do not create shared prohibitions', () => {

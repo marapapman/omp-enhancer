@@ -59,7 +59,7 @@ const DEFAULT_CONSTRAINTS = Object.freeze({
 export function describeNaturalLanguageTask(input = {}) {
   const prompt = String(input.prompt ?? input.text ?? '');
   const text = prompt.toLowerCase();
-  const language = languageFor(prompt);
+  const promptLanguage = languageFor(prompt);
   if (isCompletedGateStatusReport(text)) {
     return normalizeTaskDescriptor({
       version: 1,
@@ -70,7 +70,7 @@ export function describeNaturalLanguageTask(input = {}) {
       phases: [{ kind: 'inspect', domain: 'plugin' }, { kind: 'diagnose', domain: 'plugin' }],
       risk: { level: 'low', flags: [] },
       complexity: 'focused',
-      language,
+      language: promptLanguage,
       provenance: {
         ruleConfidence: 0.99,
         reasons: ['completed gate status report'],
@@ -80,6 +80,9 @@ export function describeNaturalLanguageTask(input = {}) {
     });
   }
   const signals = collectSignals(text, prompt);
+  const language = signals.writingWork
+    ? resolveWritingTargetLanguage(prompt, promptLanguage)
+    : promptLanguage;
   const operation = operationFor(signals);
   const domains = domainsFor(signals, operation);
   const constraints = constraintsFor(signals, operation, domains);
@@ -122,7 +125,7 @@ export function descriptorFromLegacyIntent(intent = 'unknown', options = {}) {
   const language = options.language ?? languageFor(options.prompt ?? '');
   const focused = options.auditMode === 'focused';
 
-  if (normalized === 'testing') {
+  if (normalized === 'testing' || normalized === 'code.test') {
     return legacyDescriptor({
       operation: 'execute',
       domains: ['tests'],
@@ -278,6 +281,7 @@ export function normalizeTaskDescriptor(value = {}) {
 }
 
 function collectSignals(text, prompt) {
+  const positiveDomainText = positiveDomainSignalText(text);
   const externalActionContract = analyzeExternalActionPrompt(prompt);
   const externalActionContracts = analyzeExternalActionContracts(prompt);
   const externalActionRequested = ['complete', 'incomplete', 'conflicting'].includes(externalActionContract?.state);
@@ -321,7 +325,7 @@ function collectSignals(text, prompt) {
     || chineseNegativeClauseIncludes(subagentConstraintText, /(?:子代理|子\s*agent|subagents?|sub-agents?)/i)
     || englishNegativeClauseIncludes(subagentConstraintText, /\b(?:use\s+)?(?:subagents?|sub-agents?)\b/i);
   const releaseArtifact = /(?:release notes?|changelog|发布公告|发布说明|release announcement|release report)/.test(text);
-  const dependencyUpgrade = /(?:升级|更新).{0,18}(?:npm|依赖|dependencies?|packages?)|\b(?:upgrade|update).{0,18}(?:dependencies?|packages?)\b/.test(text);
+  const dependencyUpgrade = /(?:升级|更新).{0,18}(?:npm|依赖|dependenc(?:y|ies)|packages?)|\b(?:upgrade|update).{0,18}(?:dependenc(?:y|ies)|packages?)\b/.test(text);
   const localReleaseCache = /(?:发布缓存|release cache)/.test(text);
   const releaseConcept = /(?:release|发布).{0,12}(?:是什么|含义|概念)|(?:what is|explain).{0,18}(?:a\s+)?release\b/.test(text);
   const externalActionDestructive = externalActionContract?.state === 'unsupported'
@@ -347,11 +351,11 @@ function collectSignals(text, prompt) {
     && factDocumentTargets.length === 1
     && /(?:证据|evidence)[^。！？.!?\n]{0,20}(?:支持|支撑|证明|supports?)|(?:支持|支撑|证明|supports?)[^。！？.!?\n]{0,40}(?:证据|evidence)/.test(factSentenceText)
     && !/(?:全部|所有|整个(?:仓库|项目|代码库)|全仓库|多条|引用)|\b(?:all|every|entire|repo[- ]wide|repository[- ]wide|multiple|citations?)\b/.test(text);
-  const writingWork = /(?:润色|改写|写作|撰写|起草|中文表述|英文表述|文案|措辞|readme|安装说明)|\b(?:polish|proofread|rewrite|prose|wording|readme)\b/.test(text)
+  const writingWork = /(?:润色|改写|翻译|写作|撰写|起草|中文表述|英文表述|文案|措辞|readme|安装说明)|\b(?:polish|proofread|rewrite|translate|translation|prose|wording|readme)\b/.test(text)
     || /(?:写|撰写|起草).{0,24}(?:报告|提案|论文|摘要|说明|文档)/.test(text)
     || /\b(?:draft|write|revise|edit)\b.{0,36}\b(?:proposal|report|paper|manuscript|abstract|paragraph|section|letter|email|memo|announcement|documentation|docs?)\b/.test(text);
   const securityWork = /(?:安全|漏洞|鉴权|认证|权限|越权|注入|密钥)|\b(?:security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|privilege|xss|ssrf|injection|secrets?)\b/.test(text);
-  const testWork = /(?:测试|回归测试|单元测试|覆盖率)|\b(?:tests?|testing|regression|coverage|vitest|pytest|npm test)\b/.test(text);
+  const testWork = /(?:测试|回归测试|单元测试|覆盖率)|\b(?:tests?|testing|regression|coverage|vitest|pytest|npm test)\b/.test(positiveDomainText);
   const noTestAuthoring = /(?:不要|不|别|无需|不用|禁止|不得).{0,16}(?:生成|编写|新增|添加|写).{0,12}(?:测试代码|测试文件|测试用例|tests?|test code)|(?:do not|don't|without).{0,20}(?:generate|write|add|create).{0,16}(?:tests?|test code)/.test(text);
   const broadBugAudit = (
     /(?:检查|审查|审计|排查).{0,24}(?:(?:整个|全|全部|所有).{0,8})?(?:项目|代码库|代码).{0,20}(?:(?:所有|全部|全面).{0,8})?(?:bugs?|缺陷)/.test(text)
@@ -406,6 +410,10 @@ function collectSignals(text, prompt) {
     .replace(/(?:不要|不|别|无需|不用|禁止|不得).{0,20}(?:生成|编写|新增|添加|写).{0,12}(?:测试代码|测试文件|测试用例)/g, '')
     .replace(/(?:do not|don't|without).{0,24}(?:generate|write|add|create).{0,16}(?:tests?|test code)/g, '');
   const codeTarget = hasCodeTarget(effectiveActionText) || workspaceScopes.exclusions.length > 0;
+  const nonTestActionText = testExecutionTargets.length
+    ? effectiveActionText.replace(/(?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)/gi, ' ')
+    : effectiveActionText;
+  const nonTestCodeTarget = hasCodeTarget(nonTestActionText) || workspaceScopes.exclusions.length > 0;
   const directCodeCreate = !noWorkspaceWrite && !noActionExecution && codeTarget && (
     /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:create|build)\b.{0,96}\b(?:function|file|module|parser|handler|listener|class|component)\b/.test(effectiveActionText.trim())
     || /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:create|build)\s+[`'"]?(?:src\/|lib\/|app\/)?[a-z0-9_./-]+\.[cm]?[jt]sx?\b/.test(effectiveActionText.trim())
@@ -433,17 +441,30 @@ function collectSignals(text, prompt) {
   const conceptOnly = /(?:解释|是什么|含义|概念)|\b(?:what is|explain|define)\b/.test(text)
     && !review && !directModify && !directTestAuthoring;
   const answerOnly = (noTestExecution && /(?:命令|command)/.test(text) || noActionExecution && instructionalAdvice) && !directModify;
-  const pluginWork = /(?:(?<![#a-z0-9_-])omp(?![a-z0-9_-])|omp-enhancer|插件|路由|门禁|分类器|工作流|github)|\b(?:plugin|classifier|workflow|gate logic)\b/.test(text)
-    || releaseRequested
-    || noExternalWrite && !externalActionRequested;
-  const codeWork = localBuildExecution || localGitMetadata || codeTarget
-    || /(?:代码|代码库|实现|函数|模块|接口|bug|鉴权漏洞)|(?:路由|门禁).{0,8}逻辑|逻辑.{0,8}(?:路由|门禁)|\b(?:code|codebase|repository|repo|function|module|api|bugs?|router|routenaturallanguagetask|implementation)\b/.test(effectiveActionText)
-    || directModify && !writingWork;
+  const pluginWork = /(?:(?<![#a-z0-9_-])omp(?![a-z0-9_-])|omp-enhancer|插件|路由|门禁|分类器|工作流|github)|\b(?:plugin|classifier|workflow|gate logic)\b/.test(positiveDomainText)
+    || releaseRequested;
   const documentWork = /(?:readme|安装说明|docx|word 文档|latex)|\b(?:readme|docx|latex|markdown document)\b/.test(text)
     || workspaceScopes.targets.some((target) => /\.(?:md|mdx|rst|txt|tex|docx?)$/iu.test(target))
     || /(?:^|[\s`'"])(?:\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?)(?=$|[\s`'"，。；、：;,:.!！])/i.test(text);
   const configWork = dependencyInstallExecution || setupScriptExecution
     || /(?:配置资产|配置模板|config assets?|config doctor)|\b(?:config assets?|config doctor)\b/.test(text);
+  const secondaryPositiveAction = releaseRequested
+    || externalActionRequested
+    || irreversibleExternalOperation
+    || localDevExecution
+    || localMigrationExecution
+    || localAutomationExecution
+    || directModify
+    || directCreate
+    || diagnosis
+    || (review && (nonTestCodeTarget || pluginWork || writingWork || documentWork
+      || factWork || securityWork || configWork || visualWork))
+    || (conceptOnly && nonTestCodeTarget);
+  const pureExactTestExecution = directTestExecution && !directModify && !directTestAuthoring
+    && testExecutionTargets.length > 0 && !secondaryPositiveAction;
+  const codeWork = !pureExactTestExecution && (localBuildExecution || localGitMetadata || nonTestCodeTarget
+    || /(?:代码|代码库|实现|函数|模块|接口|bug|鉴权漏洞)|(?:路由|门禁).{0,8}逻辑|逻辑.{0,8}(?:路由|门禁)|\b(?:code|codebase|repository|repo|function|module|api|bugs?|router|routenaturallanguagetask|implementation)\b/.test(nonTestActionText)
+    || directModify && !writingWork);
   const ambiguous = ambiguousCodeAction || /(?:不确定|可能是|ambiguous|unclear)/.test(text);
   const localCompanionModify = externalActionRequested && directModify && (codeTarget || writingWork || documentWork);
   const reasons = [];
@@ -521,7 +542,7 @@ function collectSignals(text, prompt) {
     review,
     conceptOnly,
     answerOnly,
-    pluginWork,
+    pluginWork: pureExactTestExecution ? false : pluginWork,
     codeWork,
     documentWork,
     visualWork,
@@ -688,6 +709,16 @@ function normalizeAffirmativeWorkspacePhrases(text) {
     .replace(/(?:不要|别|不能|不得|禁止)\s*(?:犹豫|避免)\s*(?:修改|改动|编辑|写入|修复|实现)/g, '实现');
 }
 
+function positiveDomainSignalText(value = '') {
+  return normalizeAffirmativeExternalWritePhrases(String(value)
+    .replace(/\b(?:do not|don't|dont|never)\s+(?:skip|omit|avoid)\s+(?:(?:running|doing)\s+)?(?:the\s+)?(?:tests?|testing)\b/gi, ' run tests ')
+    .replace(/(?:不要|别|不能|不得|禁止)\s*(?:跳过|省略|略过|避免)\s*(?:运行|执行|做|进行)?\s*(?:这些?|所有|全部)?\s*测试/gi, ' 运行测试 '))
+    .replace(/\b(?:do not|don't|dont|never|no need to)\s+[^,.;!\n]+/gi, ' ')
+    .replace(/\bwithout\s+[^,.;!\n]+/gi, ' ')
+    .replace(/(?:不要|别|无需|不用|禁止|不得)\s*[^，,。；;.!！\n]+/g, ' ')
+    .replace(/(?:^|[，,。；;.!！\n]\s*|(?:但|并且|然后)\s*)不\s*(?:运行|执行|跑|重跑|提交|推送|发布|部署|上线)\s*[^，,。；;.!！\n]*/g, ' ');
+}
+
 function normalizeAffirmativeExternalWritePhrases(text) {
   return String(text)
     .replace(/\b(?:no need to|do not|don't|dont|never)\s+(?:wait|delay|postpone|hold\s+off)(?:\s+(?:for\s+)?(?:the\s+)?(?:release|deployment|publication))?/g, ' ')
@@ -814,8 +845,8 @@ function englishNegativeClauseIncludes(text, targetPattern) {
 }
 
 function chineseNegativeClauseIncludes(text, targetPattern) {
-  for (const match of String(text).matchAll(/(?:不要|别|无需|不用|禁止|不得)\s*([^，,。；;.!！\n]{1,200})/g)) {
-    const items = match[1].split(/(?:、|以及|或者|或)/).map((item) => item.trim()).filter(Boolean);
+  for (const match of String(text).matchAll(/(?:不要|别|无需|不用|禁止|不得|不(?=\s*(?:运行|执行|跑|重跑|提交|推送|发布|部署|上线|联网|上网|使用|修改|改动|编辑|写入)))\s*([^，,。；;.!！\n]{1,200})/g)) {
+    const items = match[1].split(/(?:、|以及|或者|或|和|与|并且|然后)/).map((item) => item.trim()).filter(Boolean);
     if (items.length > 1 && targetPattern.test(items.slice(1).join(' '))) return true;
   }
   return false;
@@ -826,13 +857,14 @@ function operationFor(signals) {
   if (signals.conceptOnly) return 'answer';
   if (signals.externalActionRequested && !signals.localCompanionModify) return 'execute';
   if (signals.localDevExecution || signals.localMigrationExecution || signals.localAutomationExecution || signals.irreversibleExternalOperation) return 'execute';
+  if (signals.releaseRequested && signals.directTestExecution && !signals.directModify) return 'release';
   if (!signals.noTestExecution && signals.directTestExecution && !signals.directModify && !signals.directTestAuthoring
     && !(signals.review && signals.codeWork)) return 'execute';
   if (signals.noWorkspaceWrite && (signals.directModify || signals.directCreate || signals.directTestAuthoring)) return 'inspect';
   if ((signals.noWorkspaceWrite || signals.advisory) && signals.review) return 'inspect';
   if (signals.diagnosis) return 'diagnose';
   if (signals.directCreate && !signals.directModify) return 'create';
-  if (signals.directModify || signals.directTestAuthoring || signals.writingWork && /(?:润色|改写|更新|撰写|起草|写)|\b(?:polish|rewrite|update|draft|write|revise|edit)\b/.test(signals.text)) return 'modify';
+  if (signals.directModify || signals.directTestAuthoring || signals.writingWork && /(?:润色|改写|翻译|更新|撰写|起草|写)|\b(?:polish|rewrite|translate|update|draft|write|revise|edit)\b/.test(signals.text)) return 'modify';
   if (signals.releaseRequested) return 'release';
   if (signals.review || signals.factWork || signals.securityWork) return 'inspect';
   return 'answer';
@@ -954,7 +986,10 @@ function phasesFor({ operation, domains, constraints, signals }) {
     return [{ kind: 'verify', domain: 'tests' }];
   }
   if (operation === 'diagnose') return [{ kind: 'inspect', domain: 'code' }, { kind: 'diagnose', domain: 'code' }];
-  if (operation === 'release') return [{ kind: 'release', domain: 'plugin' }];
+  if (operation === 'release') return compactPhases([
+    signals.directTestExecution ? { kind: 'verify', domain: 'tests' } : null,
+    { kind: 'release', domain: 'plugin' },
+  ]);
   if (operation === 'create' && domains.includes('visual')) return [{ kind: 'create', domain: 'visual' }, { kind: 'review', domain: 'visual' }];
 
   const externalPhase = signals.externalActionRequested
@@ -1086,6 +1121,8 @@ function canonicalLegacyIntent(intent) {
     'implementation-with-tests': 'code.dev',
     'code.debug': 'code.debug',
     diagnosis: 'code.debug',
+    'code.test': 'testing',
+    testing: 'testing',
     'code.review': 'code.review',
     'bug-audit': 'code.review',
     'omp.plugin': 'omp.plugin',
@@ -1201,6 +1238,42 @@ function languageFor(prompt) {
   if (/[一-鿿]/.test(value)) return 'zh';
   if (/[A-Za-z]/.test(value)) return 'en';
   return 'unknown';
+}
+
+export function resolveWritingTargetLanguage(prompt, fallback = 'unknown') {
+  const clauses = positiveWritingLanguageClauses(prompt);
+  const explicitEnglishTranslation = clauses.some((text) => (
+    /(?:翻译|译)(?:成|为)\s*(?:英文|英语|english)/.test(text)
+    || /\btranslate\b[^。！？.!?\n]{0,96}\b(?:into|to)\s+english\b/.test(text)
+  ));
+  const explicitChineseTranslation = clauses.some((text) => (
+    /(?:翻译|译)(?:成|为)\s*(?:中文|汉语|chinese)/.test(text)
+    || /\btranslate\b[^。！？.!?\n]{0,96}\b(?:into|to)\s+chinese\b/.test(text)
+  ));
+  if (explicitEnglishTranslation !== explicitChineseTranslation) {
+    return explicitEnglishTranslation ? 'en' : 'zh';
+  }
+  const englishTarget = clauses.some((text) => (
+    /(?:翻译成|改成|写成|整理成).{0,12}(?:英文|英语|english)/.test(text)
+    || /(?:润色|改写|修订|修改).{0,48}(?:英文|英语|english)\s*(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|copy|正文|prose|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)/.test(text)
+    || /(?:英文|英语|english)\s*(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|copy|正文|prose|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)/.test(text)
+    || /(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|copy|正文|prose|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)\s+(?:in|into|as)\s+(?:英文|英语|english)/.test(text)
+  ));
+  if (englishTarget) return 'en';
+  const chineseTarget = clauses.some((text) => (
+    /(?:翻译成|改成|写成|整理成).{0,12}(?:中文|汉语|chinese)/.test(text)
+    || /(?:润色|改写|修订|修改).{0,48}(?:中文|汉语|chinese)\s*(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|正文|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)/.test(text)
+    || /(?:中文|汉语|chinese)\s*(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|正文|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)/.test(text)
+    || /(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|正文|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)\s+(?:in|into|as)\s+(?:中文|汉语|chinese)/.test(text)
+  ));
+  return chineseTarget ? 'zh' : fallback;
+}
+
+function positiveWritingLanguageClauses(prompt = '') {
+  return String(prompt).toLowerCase().split(/[，,。！？；;.!?\n]+|\bbut\b|\band(?=\s+(?:do not|don't|never))|但|并且(?=\s*(?:不要|别|禁止|不得|不\s*(?:改|修改|润色|翻译|写)))/u)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter((value) => !/(?:不要|别|禁止|不得|无需|不用|不\s*(?:改|修改|润色|翻译|写)|do not|don't|never|without)/i.test(value));
 }
 
 function clamp(value) {

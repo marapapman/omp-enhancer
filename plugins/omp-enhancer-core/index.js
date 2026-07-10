@@ -44,8 +44,8 @@ import { appendDebugLog, buildDebugRecord } from './src/debug-logger.js';
 import { installPluginSkills } from './src/install-skills.js';
 import { readRuntimePolicy, useEnforcedRoutePlan } from './src/runtime-policy.js';
 import { createHash } from 'node:crypto';
-import { readFileSync, realpathSync } from 'node:fs';
-import { isAbsolute, join, posix, relative, resolve } from 'node:path';
+import { lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import {
   classifyToolAction,
   hasUnsafeResultMasking,
@@ -3051,6 +3051,13 @@ function scopedWorkspaceActionBlock(descriptor, action, event = {}, actionText =
   if (!action.workspaceWrite && !action.definiteWorkspaceMutation) return null;
   const allowed = Array.isArray(descriptor.workspaceWriteTargets) ? descriptor.workspaceWriteTargets : [];
   const excluded = Array.isArray(descriptor.workspaceWriteExclusions) ? descriptor.workspaceWriteExclusions : [];
+  const escapedDirectTarget = directWorkspaceActionTargetOutsideRoot(event, ctx);
+  if (escapedDirectTarget) {
+    return protectedConstraintBlock(
+      'workspace-target-authorization-required',
+      `The direct workspace target ${escapedDirectTarget} resolves outside the trusted workspace root. Symlink and realpath escapes cannot be authorized by a lexical allowlist entry.`,
+    );
+  }
   if (!allowed.length && !excluded.length) return null;
   const observed = workspaceActionTargets(event, actionText, ctx);
   const denied = observed.find((target) => excluded.some((entry) => scopedPathMatches(target, entry)));
@@ -3068,6 +3075,68 @@ function scopedWorkspaceActionBlock(descriptor, action, event = {}, actionText =
     );
   }
   return null;
+}
+
+function directWorkspaceActionTargetOutsideRoot(event = {}, ctx = {}) {
+  const input = firstToolInputRecord(event);
+  const direct = [
+    input.path,
+    input.file,
+    input.filePath,
+    input.filename,
+    ...(Array.isArray(input.paths) ? input.paths : []),
+    ...(Array.isArray(input.files) ? input.files : []),
+  ].filter((value) => typeof value === 'string' && value.length > 0);
+  if (!direct.length) return '';
+  let root;
+  try {
+    root = realpathSync(resolve(ctx.cwd || process.cwd()));
+  } catch {
+    return direct[0];
+  }
+  for (const target of direct) {
+    const authoredPath = resolve(root, target);
+    let exists = false;
+    try {
+      lstatSync(authoredPath);
+      exists = true;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') return target;
+    }
+    let effectivePath;
+    if (exists) {
+      try {
+        effectivePath = realpathSync(authoredPath);
+      } catch {
+        return target;
+      }
+    } else {
+      effectivePath = nearestExistingRealPath(dirname(authoredPath));
+      if (!effectivePath) return target;
+    }
+    if (!sameRealPath(root, effectivePath) && !relativeWorkspaceRealPath(root, effectivePath)) return target;
+  }
+  return '';
+}
+
+function nearestExistingRealPath(startPath = '') {
+  let candidate = startPath;
+  while (candidate) {
+    try {
+      lstatSync(candidate);
+      try {
+        return realpathSync(candidate);
+      } catch {
+        return '';
+      }
+    } catch (error) {
+      if (error?.code !== 'ENOENT') return '';
+    }
+    const parent = dirname(candidate);
+    if (parent === candidate) return '';
+    candidate = parent;
+  }
+  return '';
 }
 
 function workspaceActionTargets(event = {}, actionText = '', ctx = {}) {
@@ -3091,14 +3160,14 @@ function workspaceActionTargets(event = {}, actionText = '', ctx = {}) {
   ]).filter((value) => value !== '/dev/null');
   const readBoundEditPaths = editAnchorTargetsFromBranch(event, ctx);
   return uniqueValues([...direct, ...commandPaths, ...patchPaths, ...readBoundEditPaths]
-    .map((value) => String(value).trim().replace(/^['"]|['"]$/g, '').replace(/^\.\//, '').replace(/\\/g, '/')));
+    .map((value) => normalizeWorkspaceActionPath(value)));
 }
 
 function editAnchorTargetsFromBranch(event = {}, ctx = {}) {
   const input = firstToolInputRecord(event);
   const anchors = uniqueValues([input.input, input.anchor, input.patch, input.diff]
     .filter((value) => typeof value === 'string')
-    .flatMap((value) => [...value.matchAll(/\[[^\]\n#]+#[a-z0-9]+\]/gi)].map((match) => match[0].toLowerCase())));
+    .flatMap((value) => [...value.matchAll(/\[[^\]\n#]+#[a-z0-9]+\]/gi)].map((match) => match[0])));
   if (!anchors.length) return [];
   const entries = ctx.sessionManager?.getBranch?.();
   if (!Array.isArray(entries)) return ['__omp_unresolved_edit_anchor__'];
@@ -3110,33 +3179,125 @@ function editAnchorTargetsFromBranch(event = {}, ctx = {}) {
   }
   const targets = [];
   for (const anchor of anchors) {
-    const matches = [];
+    const anchorMatch = anchor.match(/^\[([^\]\n#]+)#([a-z0-9]+)\]$/i);
+    if (!anchorMatch) return ['__omp_unresolved_edit_anchor__'];
+    const [, declaredPath, rawAnchorTag] = anchorMatch;
+    const anchorTag = rawAnchorTag.toLowerCase();
+    const declared = editAnchorDeclaredPathSelection(root, declaredPath);
+    if (!declared) return ['__omp_unresolved_edit_anchor__'];
+    const sourcePaths = [];
     for (const entry of entries) {
       const message = entry?.message ?? entry;
       if (message?.role !== 'toolResult' || message?.toolName !== 'read' || !isSuccessfulToolEvent(message)) continue;
-      if (!toolResultText(message).toLowerCase().includes(anchor)) continue;
-      const source = message.details?.meta?.source;
-      if (source?.type !== 'path' || typeof source.value !== 'string' || !source.value.trim()) continue;
-      let sourcePath;
-      try {
-        sourcePath = realpathSync(resolve(source.value));
-      } catch {
-        continue;
-      }
-      const target = relative(root, sourcePath);
-      if (!target || target.startsWith('..') || isAbsolute(target)) continue;
-      matches.push(target);
+      const observedTags = [...toolResultText(message).matchAll(/\[[^\]\n#]+#([a-z0-9]+)\]/gi)]
+        .map((match) => match[1].toLowerCase());
+      if (!observedTags.includes(anchorTag)) continue;
+      const sourcePath = trustedEditAnchorReadSourcePath(message, root);
+      if (!sourcePath) return ['__omp_unresolved_edit_anchor__'];
+      sourcePaths.push(sourcePath);
     }
-    const uniqueMatches = uniqueValues(matches);
-    if (uniqueMatches.length !== 1) return ['__omp_unresolved_edit_anchor__'];
-    targets.push(uniqueMatches[0]);
+    // Hashline narrows missing-path recovery to snapshots with the same
+    // platform-native basename before requiring one unique source.
+    const candidateSources = declared.exists
+      ? sourcePaths
+      : sourcePaths.filter((sourcePath) => basename(declaredPath) === basename(sourcePath));
+    const uniqueSources = uniqueRealPaths(candidateSources);
+    if (uniqueSources.length !== 1) return ['__omp_unresolved_edit_anchor__'];
+    const sourcePath = uniqueSources[0];
+    let selectedPath = sourcePath;
+    if (declared.exists) {
+      if (!sameRealPath(declared.realPath, sourcePath)) return ['__omp_unresolved_edit_anchor__'];
+      selectedPath = declared.realPath;
+    }
+    const target = relativeWorkspaceRealPath(root, selectedPath);
+    if (!target) return ['__omp_unresolved_edit_anchor__'];
+    targets.push(target);
   }
   return uniqueValues(targets);
 }
 
+function editAnchorDeclaredPathSelection(root, declaredPath = '') {
+  if (typeof declaredPath !== 'string' || !declaredPath) return null;
+  const authoredPath = resolve(root, declaredPath);
+  try {
+    lstatSync(authoredPath);
+  } catch (error) {
+    return error?.code === 'ENOENT' ? { exists: false, authoredPath } : null;
+  }
+  try {
+    const realPath = realpathSync(authoredPath);
+    return relativeWorkspaceRealPath(root, realPath)
+      ? { exists: true, authoredPath, realPath }
+      : null;
+  } catch {
+    // A broken or looping symlink exists lexically, so the host will not
+    // safely recover it through an unrelated tag source.
+    return null;
+  }
+}
+
+function trustedEditAnchorReadSourcePath(message = {}, root = '') {
+  const details = isRecord(message.details) ? message.details : null;
+  if (!details) return '';
+  const hasResolvedPath = Object.prototype.hasOwnProperty.call(details, 'resolvedPath');
+  const hasMetaSource = isRecord(details.meta)
+    && Object.prototype.hasOwnProperty.call(details.meta, 'source');
+  if (!hasResolvedPath && !hasMetaSource) return '';
+
+  const candidates = [];
+  if (hasResolvedPath) candidates.push(details.resolvedPath);
+  if (hasMetaSource) {
+    const source = details.meta.source;
+    if (!isRecord(source) || source.type !== 'path') return '';
+    candidates.push(source.value);
+  }
+
+  const realPaths = [];
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string' || !candidate || !isAbsolute(candidate)) return '';
+    try {
+      const realPath = realpathSync(candidate);
+      if (!relativeWorkspaceRealPath(root, realPath)) return '';
+      realPaths.push(realPath);
+    } catch {
+      return '';
+    }
+  }
+  const uniquePaths = uniqueRealPaths(realPaths);
+  return uniquePaths.length === 1 ? uniquePaths[0] : '';
+}
+
+function relativeWorkspaceRealPath(root = '', target = '') {
+  const value = relative(root, target);
+  if (!value || value === '..' || value.startsWith(`..${sep}`) || isAbsolute(value)) return '';
+  return value;
+}
+
+function uniqueRealPaths(paths = []) {
+  const byIdentity = new Map();
+  for (const path of paths) byIdentity.set(realPathIdentity(path), path);
+  return [...byIdentity.values()];
+}
+
+function sameRealPath(left = '', right = '') {
+  return realPathIdentity(left) === realPathIdentity(right);
+}
+
+function realPathIdentity(value = '') {
+  const path = String(value);
+  return process.platform === 'win32' ? path.toLowerCase() : path;
+}
+
+function normalizeWorkspaceActionPath(value = '') {
+  let path = String(value).trim().replace(/^['"]|['"]$/g, '').replace(/^\.\//, '');
+  if (process.platform === 'win32') path = path.replace(/\\/g, '/');
+  return path;
+}
+
 function scopedPathMatches(observed = '', scoped = '') {
   const normalize = (value) => {
-    const path = posix.normalize(String(value).replace(/^\.\//, '').replace(/\\/g, '/'));
+    const separators = process.platform === 'win32' ? String(value).replace(/\\/g, '/') : String(value);
+    const path = posix.normalize(separators.replace(/^\.\//, ''));
     if (!path || path === '..' || path.startsWith('../')) return null;
     return process.platform === 'win32' ? path.toLowerCase() : path;
   };
@@ -5478,9 +5639,7 @@ function documentReadSnapshotPayload(event = {}, pending = {}) {
     event.details?.result?.details,
   ].find((value) => isRecord(value) && isRecord(value.displayContent));
   if (!details) return null;
-  if (typeof pending.resolvedPath !== 'string'
-    || typeof details.resolvedPath !== 'string'
-    || resolve(details.resolvedPath) !== resolve(pending.resolvedPath)
+  if (!trustedDocumentReadResultPath(details, pending)
     || details.suffixResolution !== undefined && details.suffixResolution !== null) return null;
   const display = details.displayContent;
   if (typeof display.text !== 'string' || display.startLine !== 1) return null;
@@ -5498,11 +5657,34 @@ function documentReadSnapshotIsTruncated(event = {}, pending = {}) {
     event.details?.result?.details,
   ].find((value) => isRecord(value) && isRecord(value.displayContent));
   if (!details
-    || typeof pending.resolvedPath !== 'string'
-    || typeof details.resolvedPath !== 'string'
-    || resolve(details.resolvedPath) !== resolve(pending.resolvedPath)
+    || !trustedDocumentReadResultPath(details, pending)
     || details.suffixResolution !== undefined && details.suffixResolution !== null) return false;
   return details.truncation !== undefined && details.truncation !== null && details.truncation !== false;
+}
+
+function trustedDocumentReadResultPath(details = {}, pending = {}) {
+  if (typeof pending.resolvedPath !== 'string' || !isAbsolute(pending.resolvedPath)) return '';
+  const expected = resolve(pending.resolvedPath);
+  let trustedPathCount = 0;
+
+  if (details.resolvedPath !== undefined) {
+    if (typeof details.resolvedPath !== 'string'
+      || !isAbsolute(details.resolvedPath)
+      || resolve(details.resolvedPath) !== expected) return '';
+    trustedPathCount += 1;
+  }
+
+  const source = isRecord(details.meta) ? details.meta.source : undefined;
+  if (source !== undefined) {
+    if (!isRecord(source)
+      || source.type !== 'path'
+      || typeof source.value !== 'string'
+      || !isAbsolute(source.value)
+      || resolve(source.value) !== expected) return '';
+    trustedPathCount += 1;
+  }
+
+  return trustedPathCount > 0 ? expected : '';
 }
 
 function hasPositiveElision(value) {

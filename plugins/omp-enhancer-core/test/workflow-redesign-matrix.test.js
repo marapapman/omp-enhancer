@@ -32,6 +32,7 @@ test('workflow route catalog exposes the frozen route set', () => {
     'factcheck.document',
     'code.dev',
     'code.debug',
+    'code.test',
     'code.review',
     'omp.plugin',
     'security.review',

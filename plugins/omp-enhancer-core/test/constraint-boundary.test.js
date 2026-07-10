@@ -1080,7 +1080,7 @@ test('scoped workspace write authorization blocks excluded and unmentioned files
   assert.equal(ambiguousEdit?.reasonCode, 'workspace-target-authorization-required');
 });
 
-test('read-bound edit anchors reject symlink targets outside the workspace', async (t) => {
+test('direct and read-bound edits reject symlink targets outside the workspace', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'omp-anchor-root-'));
   const outside = await mkdtemp(join(tmpdir(), 'omp-anchor-outside-'));
   t.after(async () => Promise.all([rm(root, { recursive: true, force: true }), rm(outside, { recursive: true, force: true })]));
@@ -1088,6 +1088,28 @@ test('read-bound edit anchors reject symlink targets outside the workspace', asy
   const outsideFile = join(outside, 'router.js');
   await writeFile(outsideFile, 'export const route = value => value;\n');
   await symlink(outsideFile, join(root, 'src/router.js'));
+
+  const nestedMissing = await routedRuntime('Fix nested/missing/new.js and do not modify any other files.', { cwd: root });
+  const allowedNestedMissing = await event(nestedMissing.pi, 'tool_call')({
+    toolName: 'edit',
+    input: { path: 'nested/missing/new.js' },
+  }, nestedMissing.ctx);
+  assert.notEqual(allowedNestedMissing?.reasonCode, 'workspace-target-authorization-required');
+
+  const direct = await routedRuntime('Fix src/router.js and do not modify any other files.', { cwd: root });
+  const blockedDirect = await event(direct.pi, 'tool_call')({
+    toolName: 'edit',
+    input: { path: 'src/router.js' },
+  }, direct.ctx);
+  assert.equal(blockedDirect?.reasonCode, 'workspace-target-authorization-required');
+
+  const unscoped = await routedRuntime('Fix the parser bug.', { cwd: root });
+  assert.deepEqual(latestCoreState(unscoped.pi).lastRoute.taskDescriptor.workspaceWriteTargets, []);
+  const blockedUnscoped = await event(unscoped.pi, 'tool_call')({
+    toolName: 'edit',
+    input: { path: 'src/router.js' },
+  }, unscoped.ctx);
+  assert.equal(blockedUnscoped?.reasonCode, 'workspace-target-authorization-required');
 
   const runtime = await routedRuntime('Fix src/router.js and do not modify any other files.', { cwd: root });
   runtime.pi.entries.push({
@@ -1101,9 +1123,179 @@ test('read-bound edit anchors reject symlink targets outside the workspace', asy
   });
   const blocked = await event(runtime.pi, 'tool_call')({
     toolName: 'edit',
-    input: { input: '[router.js#BEEF]\nSWAP 1.=1:\n+export const route = value => value.trim();' },
+    input: { input: '[src/router.js#BEEF]\nSWAP 1.=1:\n+export const route = value => value.trim();' },
   }, runtime.ctx);
   assert.equal(blocked?.reasonCode, 'workspace-target-authorization-required');
+
+  const recovered = await routedRuntime('Fix src/router.js and do not modify any other files.', { cwd: root });
+  recovered.pi.entries.push(runtime.pi.entries.find((entry) => entry.type === 'message'));
+  const blockedRecovery = await event(recovered.pi, 'tool_call')({
+    toolName: 'edit',
+    input: { input: '[missing/router.js#BEEF]\nSWAP 1.=1:\n+export const route = value => value.trim();' },
+  }, recovered.ctx);
+  assert.equal(blockedRecovery?.reasonCode, 'workspace-target-authorization-required');
+});
+
+test('RPIV edit anchors mirror host path selection and trusted read identity', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'omp-anchor-root-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await Promise.all([
+    mkdir(join(root, 'docs'), { recursive: true }),
+    mkdir(join(root, 'src'), { recursive: true }),
+    mkdir(join(root, 'test'), { recursive: true }),
+  ]);
+  await Promise.all([
+    writeFile(join(root, 'docs/notes.md'), '# Notes\n'),
+    writeFile(join(root, 'docs/Notes.md'), '# Case-sensitive Notes\n'),
+    writeFile(join(root, 'docs/other.md'), '# Other\n'),
+    writeFile(join(root, 'src/router.js'), 'export const source = true;\n'),
+    writeFile(join(root, 'test/router.js'), 'export const test = true;\n'),
+    writeFile(join(root, 'router.js'), 'export const basenameShadow = true;\n'),
+    ...(process.platform === 'win32' ? [] : [
+      writeFile(join(root, 'docs\\notes.md'), '# Literal backslash\n'),
+    ]),
+  ]);
+
+  const addReadResult = (runtime, {
+    target,
+    renderedAnchor,
+    resolvedPath = target === undefined ? undefined : join(root, target),
+    metaSource,
+  }) => {
+    const details = { displayContent: { text: '# Notes\n', startLine: 1 } };
+    if (resolvedPath !== undefined) details.resolvedPath = resolvedPath;
+    if (metaSource !== undefined) details.meta = { source: metaSource };
+    runtime.pi.entries.push({
+      type: 'message',
+      message: {
+        role: 'toolResult',
+        toolName: 'read',
+        content: [{ type: 'text', text: `${renderedAnchor}\n1:# Notes` }],
+        details,
+        isError: false,
+      },
+    });
+  };
+  const callRpivEdit = (runtime, anchor) => event(runtime.pi, 'tool_call')({
+    toolName: 'edit',
+    input: { input: `${anchor}\nSWAP 1.=1:\n+# Polished notes` },
+  }, runtime.ctx);
+
+  await t.test('an existing declared path must be the same real file as every read identity field', async () => {
+    const runtime = await routedRuntime('Polish docs/notes.md and do not modify any other files.', { cwd: root });
+    addReadResult(runtime, {
+      target: 'docs/notes.md',
+      renderedAnchor: '[notes.md#842A]',
+      metaSource: { type: 'path', value: join(root, 'docs/notes.md') },
+    });
+    const allowed = await callRpivEdit(runtime, '[docs/notes.md#842A]');
+    assert.notEqual(allowed?.reasonCode, 'workspace-target-authorization-required');
+  });
+
+  await t.test('a missing declared path may recover through one same-basename tag source', async () => {
+    const runtime = await routedRuntime('Polish docs/notes.md and do not modify any other files.', { cwd: root });
+    addReadResult(runtime, {
+      target: undefined,
+      renderedAnchor: '[notes.md#A11E]',
+      metaSource: { type: 'path', value: join(root, 'docs/notes.md') },
+    });
+    addReadResult(runtime, { target: 'docs/other.md', renderedAnchor: '[other.md#A11E]' });
+    const allowed = await callRpivEdit(runtime, '[missing/notes.md#A11E]');
+    assert.notEqual(allowed?.reasonCode, 'workspace-target-authorization-required');
+  });
+
+  await t.test('an existing basename shadow wins over tag recovery', async () => {
+    const runtime = await routedRuntime('Fix src/router.js and do not modify any other files.', { cwd: root });
+    addReadResult(runtime, { target: 'src/router.js', renderedAnchor: '[router.js#BA5E]' });
+    const blocked = await callRpivEdit(runtime, '[router.js#BA5E]');
+    assert.equal(blocked?.reasonCode, 'workspace-target-authorization-required');
+  });
+
+  await t.test('POSIX path case is preserved and case twins are not interchangeable', {
+    skip: process.platform === 'win32',
+  }, async () => {
+    const exact = await routedRuntime('Polish docs/Notes.md and do not modify any other files.', { cwd: root });
+    addReadResult(exact, { target: 'docs/Notes.md', renderedAnchor: '[Notes.md#CA5E]' });
+    assert.notEqual((await callRpivEdit(exact, '[docs/Notes.md#CA5E]'))?.reasonCode,
+      'workspace-target-authorization-required');
+
+    const twin = await routedRuntime('Polish docs/Notes.md and do not modify any other files.', { cwd: root });
+    addReadResult(twin, { target: 'docs/notes.md', renderedAnchor: '[notes.md#CA5F]' });
+    assert.equal((await callRpivEdit(twin, '[docs/Notes.md#CA5F]'))?.reasonCode,
+      'workspace-target-authorization-required');
+  });
+
+  await t.test('POSIX backslashes remain filename characters rather than separators', {
+    skip: process.platform === 'win32',
+  }, async () => {
+    const exact = await routedRuntime('Polish "docs\\notes.md" and do not modify any other files.', { cwd: root });
+    assert.deepEqual(latestCoreState(exact.pi).lastRoute.taskDescriptor.workspaceWriteTargets, ['docs\\notes.md']);
+    addReadResult(exact, { target: 'docs\\notes.md', renderedAnchor: '[docs\\notes.md#BACC]' });
+    assert.notEqual((await callRpivEdit(exact, '[docs\\notes.md#BACC]'))?.reasonCode,
+      'workspace-target-authorization-required');
+
+    const slashTwin = await routedRuntime('Polish "docs\\notes.md" and do not modify any other files.', { cwd: root });
+    addReadResult(slashTwin, { target: 'docs/notes.md', renderedAnchor: '[docs/notes.md#BACD]' });
+    assert.equal((await callRpivEdit(slashTwin, '[docs\\notes.md#BACD]'))?.reasonCode,
+      'workspace-target-authorization-required');
+  });
+
+  await t.test('conflicting resolvedPath and meta.source fields are unresolved', async () => {
+    const runtime = await routedRuntime('Polish docs/notes.md and do not modify any other files.', { cwd: root });
+    addReadResult(runtime, {
+      target: 'docs/notes.md',
+      renderedAnchor: '[notes.md#C0FF]',
+      metaSource: { type: 'path', value: join(root, 'docs/other.md') },
+    });
+    assert.equal((await callRpivEdit(runtime, '[docs/notes.md#C0FF]'))?.reasonCode,
+      'workspace-target-authorization-required');
+  });
+
+  await t.test('relative and non-path read identities are unresolved even beside a valid field', async () => {
+    const cases = [
+      { resolvedPath: 'docs/notes.md' },
+      {
+        resolvedPath: join(root, 'docs/notes.md'),
+        metaSource: { type: 'path', value: 'docs/notes.md' },
+      },
+      {
+        resolvedPath: join(root, 'docs/notes.md'),
+        metaSource: { type: 'url', value: join(root, 'docs/notes.md') },
+      },
+    ];
+    for (const [index, identity] of cases.entries()) {
+      const runtime = await routedRuntime('Polish docs/notes.md and do not modify any other files.', { cwd: root });
+      const tag = `BAD${index}`;
+      addReadResult(runtime, { renderedAnchor: `[notes.md#${tag}]`, ...identity });
+      assert.equal((await callRpivEdit(runtime, `[docs/notes.md#${tag}]`))?.reasonCode,
+        'workspace-target-authorization-required');
+    }
+  });
+
+  await t.test('one tag observed from multiple read sources is unresolved', async () => {
+    const runtime = await routedRuntime('Fix src/router.js and do not modify any other files.', { cwd: root });
+    addReadResult(runtime, { target: 'src/router.js', renderedAnchor: '[router.js#D00D]' });
+    addReadResult(runtime, { target: 'test/router.js', renderedAnchor: '[router.js#D00D]' });
+    assert.equal((await callRpivEdit(runtime, '[missing/router.js#D00D]'))?.reasonCode,
+      'workspace-target-authorization-required');
+  });
+
+  await t.test('missing, wrong-target, and out-of-scope identities remain unresolved', async () => {
+    const missing = await routedRuntime('Polish docs/notes.md and do not modify any other files.', { cwd: root });
+    addReadResult(missing, { target: undefined, renderedAnchor: '[notes.md#77CC]' });
+    assert.equal((await callRpivEdit(missing, '[docs/notes.md#77CC]'))?.reasonCode,
+      'workspace-target-authorization-required');
+
+    const mislabeled = await routedRuntime('Polish docs/notes.md and do not modify any other files.', { cwd: root });
+    addReadResult(mislabeled, { target: 'docs/notes.md', renderedAnchor: '[notes.md#55DD]' });
+    assert.equal((await callRpivEdit(mislabeled, '[docs/other.md#55DD]'))?.reasonCode,
+      'workspace-target-authorization-required');
+
+    const outside = await routedRuntime('Polish docs/notes.md and do not modify any other files.', { cwd: root });
+    addReadResult(outside, { target: 'docs/other.md', renderedAnchor: '[other.md#991B]' });
+    assert.equal((await callRpivEdit(outside, '[docs/other.md#991B]'))?.reasonCode,
+      'workspace-target-authorization-required');
+  });
 });
 
 test('scoped deployment authorization rejects production while preserving the trusted staging target', async () => {

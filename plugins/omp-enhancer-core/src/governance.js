@@ -142,7 +142,7 @@ function projectRouteForGovernance(route) {
     return {
       ...projected,
       intent: 'testing',
-      workflowRoute: 'testing',
+      workflowRoute: 'code.test',
       agent: null,
       auditMode: 'focused',
       requiredTools: [],
@@ -619,7 +619,7 @@ function workflowFor(route) {
   if (intent === 'bug-audit' && isFocusedBugAuditRoute(route)) return 'Focused bug audit workflow: preload focused audit skills -> inspect the bounded failure path directly -> generate and run the smallest high-signal local test matrix -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> focused BUG-AUDIT-REPORT.';
   if (intent === 'bug-audit') return 'Bug audit workflow: ecc-tdd-guide generates a deduplicated multi-channel executable test matrix -> ecc-code-reviewer static audit -> ecc-silent-failure-hunter failure-path audit -> ecc-pr-test-analyzer checks generated tests, duplicate removal, execution results, and coverage gaps -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> BUG-AUDIT-REPORT or final bug report.';
   if (intent === 'fact-check') return 'Fact-check workflow: fact-planner -> fact-researcher-a and fact-researcher-b independent evidence lanes -> fact-cross-checker -> fact-reviewer -> fact_check_analyze -> fact_check_evidence as needed -> fact_check_report -> fact_check_gate -> FACT_CHECK_REPORT.';
-  if (intent === 'testing') return 'Legacy testing intent: use the merged bug-audit workflow and testing-enhancer toolchain.';
+  if (intent === 'testing') return 'Focused testing workflow: run only the authorized test target list once with a direct host command, then report the observed result.';
   if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> implementation-task -> reviewer -> post-review testing checkpoint -> local test commands -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report.';
   if (intent === 'security-review') return 'Security workflow: ecc-security-reviewer -> reviewer -> fix or report only after risk evidence is checked.';
   if (intent === 'config-assets') return 'Config workflow: use omp_config_doctor, omp_config_assets, or omp_config_plan as needed.';

@@ -389,6 +389,9 @@ function routeIntentForClassification(classification, fallbackRoute) {
     if (fallbackRoute.intent !== 'unknown') return fallbackRoute.intent;
     return 'unknown';
   }
+  if (classification.intent === 'testing' && !isCanonicalTestingRoute(fallbackRoute)) {
+    return fallbackRoute.intent;
+  }
   if (classification.intent === fallbackRoute.intent) return classification.intent;
   if (shouldPreserveWritingFallback(classification, fallbackRoute)) {
     return fallbackRoute.intent;
@@ -402,6 +405,14 @@ function routeIntentForClassification(classification, fallbackRoute) {
   }
   if (fallbackRoute.intent !== 'unknown') return fallbackRoute.intent;
   return 'unknown';
+}
+
+function isCanonicalTestingRoute(route = {}) {
+  const descriptor = route.taskDescriptor ?? {};
+  return route.intent === 'testing'
+    && route.workflowRoute === 'code.test'
+    && descriptor.operation === 'execute'
+    && descriptor.constraints?.testExecution === 'required';
 }
 
 function applyMonotonicClassifierHints(route, fallbackRoute, classification) {

@@ -1,5 +1,5 @@
 import { decorateWorkflowRoute } from './workflow-routes.js';
-import { describeNaturalLanguageTask, descriptorFromLegacyIntent, normalizeTaskDescriptor } from './task-descriptor.js';
+import { describeNaturalLanguageTask, descriptorFromLegacyIntent, normalizeTaskDescriptor, resolveWritingTargetLanguage } from './task-descriptor.js';
 import { attachCompiledTaskRoute, compileTaskRoutePolicy } from './route-policy.js';
 import { resolveGateMode, resolveRouterMode } from './runtime-policy.js';
 import { subagentPlans } from './subagent-plans.js';
@@ -69,6 +69,7 @@ export const routedIntents = [
   'factcheck.document',
   'code.dev',
   'code.debug',
+  'code.test',
   'code.review',
   'omp.plugin',
   'security.review',
@@ -80,6 +81,7 @@ export const routedIntents = [
   'release',
   'security-review',
   'implementation-with-tests',
+  'testing',
   'unknown',
 ];
 
@@ -90,8 +92,10 @@ export function routeNaturalLanguageTask(input = {}) {
   const policy = compileTaskRoutePolicy(described, { legacyRoute });
   const routerMode = resolveRouterMode(input.routerMode ?? input.mode);
   const gateRecoveryMode = resolveGateMode(input.gateRecoveryMode);
-  const usePolicyRoute = routerMode === 'enforce'
-    && (policy.shouldOverrideLegacy || shouldOverrideLegacyRoute(described, legacyRoute, prompt));
+  const canonicalTestExecution = isCanonicalTestingProjection(described, prompt);
+  const usePolicyRoute = (routerMode !== 'legacy' && canonicalTestExecution)
+    || (routerMode === 'enforce'
+      && (policy.shouldOverrideLegacy || shouldOverrideLegacyRoute(described, legacyRoute, prompt)));
   const routed = usePolicyRoute
     ? routeByLegacyIntent(policy.intent, {
       prompt,
@@ -113,6 +117,15 @@ export function routeNaturalLanguageTask(input = {}) {
       disagrees: legacyRoute.intent !== policy.intent,
     } : null,
   };
+}
+
+function isCanonicalTestingProjection(descriptor, prompt = '') {
+  if (descriptor?.operation !== 'execute'
+    || descriptor?.constraints?.testExecution !== 'required'
+    || !descriptor?.domains?.includes('tests')) return false;
+  if ((descriptor.testExecutionTargets ?? []).length > 0) return true;
+  const text = String(prompt).toLowerCase();
+  return /(?:只|仅)\s*(?:运行|执行|跑|重跑)\s*(?:npm\s+test|pnpm\s+test|yarn\s+test|bun\s+test|pytest|vitest)|\bonly\s+(?:run|execute|rerun)\s+(?:npm\s+test|pnpm\s+test|yarn\s+test|bun\s+test|pytest|vitest)\b/.test(text);
 }
 
 function shouldOverrideLegacyRoute(descriptor, legacyRoute, prompt = '') {
@@ -161,10 +174,13 @@ function routeNaturalLanguageTaskLegacy(input = {}) {
   const hasCoding = hasRawCodeChange && !hasBugAudit && !hasKnowledgeOnly;
   const hasCodeChange = hasCoding && !hasTestReportWriting;
   const hasSecurityWritingArtifact = isSecurityWritingArtifact(normalized);
-  const hasEnglishWriting = isEnglishWriting(normalized)
-    || isChinesePromptForEnglishWriting(normalized)
-    || (hasSecurityWritingArtifact && !/[\u4e00-\u9fff]/.test(prompt));
-  const hasChineseWriting = !hasEnglishWriting && (isChineseWriting(normalized, prompt) || hasSecurityWritingArtifact);
+  const writingTargetLanguage = resolveWritingTargetLanguage(prompt, 'unknown');
+  const hasEnglishWriting = writingTargetLanguage === 'en'
+    || writingTargetLanguage === 'unknown' && (isEnglishWriting(normalized)
+      || (hasSecurityWritingArtifact && !/[\u4e00-\u9fff]/.test(prompt)));
+  const hasChineseWriting = writingTargetLanguage === 'zh'
+    || writingTargetLanguage === 'unknown' && !hasEnglishWriting
+      && (isChineseWriting(normalized, prompt) || hasSecurityWritingArtifact);
   const hasWriting = hasChineseWriting || hasEnglishWriting;
   const hasSecurity = includesAny(normalized, securityTerms);
   const hasRelease = isReleaseRequest(normalized);
@@ -317,7 +333,18 @@ export function routeByIntent(intent, options = {}) {
 
 function routeByLegacyIntent(intent, { source = 'natural-language', writingComplexity = 'complex', auditMode = null, workflowRoute = null, shouldUseClassifier = false, hardBlock = false, prompt = '' } = {}) {
   if (intent === 'testing') {
-    return routeByLegacyIntent('bug-audit', { source, writingComplexity, auditMode: auditMode ?? 'focused', workflowRoute });
+    return route({
+      intent: 'testing',
+      agent: null,
+      requiredSkills: [],
+      requiredTools: [],
+      requiredSubagents: [],
+      auditMode: auditMode ?? 'focused',
+      source,
+      workflowRoute: workflowRoute ?? 'code.test',
+      shouldUseClassifier,
+      hardBlock,
+    });
   }
 
   if (intent === 'agentic.simple' || intent === 'unknown') {
@@ -682,7 +709,7 @@ function writingComplexityFor(text) {
 }
 
 function isSimpleWritingRequest(text) {
-  const explicitSnippet = /(?:这句话|一句话|这个句子|短句|这段话|下面这段|下面文字|下面说明|这段说明|这段文字)/.test(text)
+  const explicitSnippet = /(?:这句话|一句话|这个句子|英文句子|中文句子|短句|这段话|下面这段|下面文字|下面说明|这段说明|这段文字)/.test(text)
     || /(?:sentence|one sentence|short phrase|this(?:\s+\w+){0,3}\s+paragraph|the paragraph|this wording)\b/.test(text);
   if (explicitSnippet) return true;
   if (isComplexWritingRequest(text)) return false;
@@ -691,7 +718,7 @@ function isSimpleWritingRequest(text) {
 
 function isComplexWritingRequest(text) {
   return /(?:一份|完整|大量|长文|整篇|章节|小节|报告|文档|审稿回复|相关工作|引言|申请材料|研究计划|实验报告|项目报告)/.test(text)
-    || /\b(?:report|document|docs?|proposal|release notes|changelog|letter|email|summary|related work|section|chapter|manuscript|paper|abstract|writeup|postmortem)\b/.test(text);
+    || /\b(?:report|document|proposal|release notes|changelog|letter|email|summary|related work|section|chapter|manuscript|paper|abstract|writeup|postmortem)\b|\bdocs?\b(?!\/)/.test(text);
 }
 
 function isTestingRequest(text) {
@@ -1083,11 +1110,6 @@ function isStandaloneCommandOrSnippetRequest(text) {
 function isReportOnlyAudit(text) {
   return /(?:只|仅)(?:报告|输出|列出|列)\b/.test(text)
     || /(?:只|仅).*(?:报告|清单|结果|问题)/.test(text);
-}
-
-function isChinesePromptForEnglishWriting(text) {
-  return /(?:改成|写成|写|整理成).*(?:英文|英语|english).*(?:简历|resume|bullet|邮件|email|摘要|abstract|段落|paragraph|commit message|changelog|release notes|bug report|defect report|post)/.test(text)
-    || /(?:英文|英语|english).*(?:简历|resume|bullet|邮件|email|摘要|abstract|段落|paragraph|commit message|conventional commit|changelog|release notes|bug report|defect report|linkedin post|post)/.test(text);
 }
 
 function includesAny(text, terms) {

@@ -8,6 +8,7 @@ export const workflowRouteNames = [
   'factcheck.document',
   'code.dev',
   'code.debug',
+  'code.test',
   'code.review',
   'omp.plugin',
   'security.review',
@@ -81,6 +82,12 @@ export const workflowRouteCatalog = {
     skills: ['diagnose', 'systematic-debugging'],
     gate: ['Debugging may stop at diagnosis when the user requested read-only analysis.', 'Missing skills produce hidden coaching, not a hard block.'],
   }),
+  'code.test': routeMeta({
+    do: ['Run only the explicitly authorized local test target or target list.', 'Report the host-observed result without generating or broadening tests.'],
+    doNot: ['Do not turn bounded test execution into implementation or bug-audit work.', 'Do not add aggregate suites, redirects, preloads, pipelines, or substituted targets.'],
+    skills: [],
+    gate: ['Exact host-observed test evidence closes the route.', 'A rejected non-exact command receives one bounded mechanical correction.'],
+  }),
   'code.review': routeMeta({
     do: ['Review code paths for concrete defects, maintainability, and regressions.', 'Report file, symbol, and evidence for each finding.'],
     doNot: ['Do not edit production code in a read-only review.', 'Do not report speculative issues as confirmed bugs.'],
@@ -110,6 +117,7 @@ export const workflowRouteCatalog = {
 };
 
 export function workflowRouteForLegacyIntent(intent, { auditMode = null } = {}) {
+  if (intent === 'testing') return 'code.test';
   if (intent === 'implementation-with-tests') return 'code.dev';
   if (intent === 'diagnosis') return 'code.debug';
   if (intent === 'bug-audit') return auditMode === 'focused' ? 'code.review' : 'code.review';
@@ -174,6 +182,7 @@ export function gateModeForRoute(workflowRoute, route = {}) {
   if (workflowRoute === 'agentic.simple') return 'none';
   if (workflowRoute === 'factcheck.document') return 'fact-check-gate';
   if (workflowRoute === 'code.dev') return 'test-review-gate';
+  if (workflowRoute === 'code.test') return 'test-gate';
   if (workflowRoute === 'code.review') return 'review-gate';
   if (workflowRoute === 'security.review') return 'security-gate';
   if (workflowRoute === 'writing.zh' || workflowRoute === 'writing.en' || workflowRoute === 'writing.latex' || workflowRoute === 'writing.markdown' || workflowRoute === 'doc.convert.word') return 'quality-gate';

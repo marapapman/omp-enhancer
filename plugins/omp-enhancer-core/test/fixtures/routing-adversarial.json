@@ -213,9 +213,9 @@
         ]
       },
       "legacy": {
-        "intent": "bug-audit",
-        "workflowRoute": "code.review",
-        "gateMode": "review-gate"
+        "intent": "testing",
+        "workflowRoute": "code.test",
+        "gateMode": "test-gate"
       }
     }
   },
@@ -627,7 +627,7 @@
       "taskDescriptor": {
         "version": 1,
         "operation": "modify",
-        "domains": ["code", "tests"],
+        "domains": ["code"],
         "constraints": {
           "workspaceWrite": "required",
           "testExecution": "forbidden",

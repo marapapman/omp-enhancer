@@ -13,6 +13,7 @@ const compatibilityCases = [
   ['factcheck.document', 'fact-check', 'factcheck.document', 'inspect'],
   ['code.dev', 'implementation-with-tests', 'code.dev', 'modify'],
   ['code.debug', 'diagnosis', 'code.debug', 'diagnose'],
+  ['code.test', 'testing', 'code.test', 'execute'],
   ['code.review', 'bug-audit', 'code.review', 'inspect'],
   ['omp.plugin', 'config-assets', 'omp.plugin', 'inspect'],
   ['security.review', 'security-review', 'security.review', 'inspect'],
@@ -24,6 +25,7 @@ const compatibilityCases = [
   ['release', 'release', 'agentic.simple', 'release'],
   ['security-review', 'security-review', 'security.review', 'inspect'],
   ['implementation-with-tests', 'implementation-with-tests', 'code.dev', 'modify'],
+  ['testing', 'testing', 'code.test', 'execute'],
   ['unknown', 'unknown', 'agentic.simple', 'answer'],
 ];
 
@@ -50,12 +52,14 @@ test('every public canonical and legacy intent round-trips through one compiler'
   }
 });
 
-test('legacy testing alias still maps to a focused test route without broad audit subagents', () => {
+test('testing is a first-class focused route without bug-audit resources', () => {
   const route = routeByIntent('testing', { source: 'compatibility-test', auditMode: 'focused' });
-  assert.equal(route.intent, 'bug-audit');
-  assert.equal(route.workflowRoute, 'code.review');
+  assert.equal(route.intent, 'testing');
+  assert.equal(route.workflowRoute, 'code.test');
   assert.equal(route.taskDescriptor?.operation, 'execute');
   assert.equal(route.taskDescriptor?.complexity, 'focused');
+  assert.deepEqual(route.requiredSkills, []);
+  assert.deepEqual(route.requiredTools, []);
   assert.deepEqual(route.routePlan?.requiredSubagents, []);
   assert.ok(route.routePlan?.gateRequirements.some(({ key }) => key === 'test-evidence'));
 });

@@ -14,6 +14,8 @@ export const PUBLIC_INTENT_ALIASES = Object.freeze({
   'implementation-with-tests': 'implementation-with-tests',
   'code.debug': 'diagnosis',
   diagnosis: 'diagnosis',
+  'code.test': 'testing',
+  testing: 'testing',
   'code.review': 'bug-audit',
   'bug-audit': 'bug-audit',
   'omp.plugin': 'config-assets',
@@ -22,7 +24,6 @@ export const PUBLIC_INTENT_ALIASES = Object.freeze({
   'security-review': 'security-review',
   'design.visual': 'design.visual',
   release: 'release',
-  testing: 'bug-audit',
 });
 
 const FACT_SKILLS = ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'];
@@ -44,7 +45,7 @@ export function compileTaskRoutePolicy(descriptor, { requestedIntent = '', legac
     intent,
     workflowRoute,
     auditMode,
-    writingComplexity: descriptor?.complexity === 'simple' ? 'simple' : 'complex',
+    writingComplexity: descriptor?.complexity === 'broad' ? 'complex' : 'simple',
     hardBlock: intent === 'release',
     shouldOverrideLegacy: Boolean(requestedIntent || descriptor?.provenance?.requiresPolicyRoute),
     legacyIntent: legacyRoute?.intent ?? null,
@@ -243,7 +244,7 @@ export function attachCompiledTaskRoute(route, descriptor) {
 function legacyIntentForDescriptor(descriptor = {}) {
   const domains = new Set(descriptor.domains ?? []);
   if (descriptor.operation === 'answer') return 'unknown';
-  if (descriptor.operation === 'execute' && domains.has('tests')) return 'bug-audit';
+  if (descriptor.operation === 'execute' && domains.has('tests')) return 'testing';
   if (descriptor.operation === 'execute') return 'unknown';
   if (descriptor.operation === 'diagnose') return 'diagnosis';
   if (descriptor.operation === 'release') return 'release';
@@ -271,6 +272,7 @@ function workflowRouteForIntent(intent) {
     'doc.convert.word': 'doc.convert.word',
     'fact-check': 'factcheck.document',
     'implementation-with-tests': 'code.dev',
+    testing: 'code.test',
     diagnosis: 'code.debug',
     'bug-audit': 'code.review',
     'config-assets': 'omp.plugin',

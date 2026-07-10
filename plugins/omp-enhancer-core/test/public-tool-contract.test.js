@@ -109,6 +109,37 @@ test('all public omp_core tools preserve the structured result envelope', async 
   }
 });
 
+test('the public route tool exposes exact tests as first-class bounded testing work', async () => {
+  const previous = process.env.OMP_ROUTER_V2_MODE;
+  try {
+    for (const mode of ['observe', 'enforce']) {
+      process.env.OMP_ROUTER_V2_MODE = mode;
+      const pi = new FakePi();
+      registerCoreEnhancer(pi);
+      const result = await pi.tools.get('omp_core_route_task').execute(
+        `exact-test-${mode}`,
+        { prompt: 'Only run test/router.test.js; do not modify files, use the network, use subagents, or publish.' },
+        undefined,
+        undefined,
+        extensionContext(pi.entries),
+      );
+      const route = result.details.route;
+      assert.equal(route.intent, 'testing', mode);
+      assert.equal(route.workflowRoute, 'code.test', mode);
+      assert.equal(route.agent, null, mode);
+      assert.deepEqual(route.requiredSkills, [], mode);
+      assert.deepEqual(route.requiredTools, [], mode);
+      assert.deepEqual(route.requiredSubagents, [], mode);
+      assert.deepEqual(route.taskDescriptor.domains, ['tests'], mode);
+      assert.deepEqual(route.taskDescriptor.testExecutionTargets, ['test/router.test.js'], mode);
+      assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'test-evidence', mode: 'required' }], mode);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.OMP_ROUTER_V2_MODE;
+    else process.env.OMP_ROUTER_V2_MODE = previous;
+  }
+});
+
 function describeObjectSchema(schema) {
   assert.equal(schema?.type, 'object', 'public tool parameters must be an object schema');
   return Object.fromEntries(

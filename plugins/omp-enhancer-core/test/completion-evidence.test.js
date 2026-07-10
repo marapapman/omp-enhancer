@@ -976,8 +976,10 @@ test('fact-preserving document edits require host-observed semantic invariants',
       // is not the preservation snapshot. Core must use displayContent.text.
       content: [{ type: 'text', text: `1: ${text.replace(/\n/g, '\n2: ')}` }],
       details: {
-        resolvedPath: `${runtime.ctx.cwd}/docs/notes.md`,
         displayContent: { text, startLine: 1 },
+        meta: {
+          source: { type: 'path', value: `${runtime.ctx.cwd}/docs/notes.md` },
+        },
         summary: { elidedSpans: [], elidedLines: 0 },
       },
       isError: false,
@@ -1126,6 +1128,72 @@ test('fact-preserving document edits require host-observed semantic invariants',
     });
   });
 
+  await t.test('the real host path source establishes the exact route baseline', async () => {
+    await withEnforce(async () => {
+      const runtime = await startRuntime(prompt);
+      await recordDocumentSnapshot(runtime, original, 'preservation-host-path-source');
+      assert.ok(latestState(runtime.pi).evidence.documentPreservationBaseline);
+    });
+  });
+
+  await t.test('host source metadata must identify the exact authorized absolute path', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime(prompt);
+      const rejectedSources = [
+        {
+          id: 'preservation-source-non-path',
+          details: {
+            meta: { source: { type: 'url', value: `${ctx.cwd}/docs/notes.md` } },
+          },
+        },
+        {
+          id: 'preservation-source-relative',
+          details: {
+            meta: { source: { type: 'path', value: 'docs/notes.md' } },
+          },
+        },
+        {
+          id: 'preservation-source-outside',
+          details: {
+            meta: { source: { type: 'path', value: '/tmp/evil/docs/notes.md' } },
+          },
+        },
+        {
+          id: 'preservation-source-wrong-target',
+          details: {
+            meta: { source: { type: 'path', value: `${ctx.cwd}/docs/other.md` } },
+          },
+        },
+        {
+          id: 'preservation-source-conflicts-with-resolved-path',
+          details: {
+            resolvedPath: `${ctx.cwd}/docs/notes.md`,
+            meta: { source: { type: 'path', value: `${ctx.cwd}/docs/other.md` } },
+          },
+        },
+      ];
+
+      for (const item of rejectedSources) {
+        const call = {
+          type: 'tool_call', toolCallId: item.id, toolName: 'read',
+          input: { path: 'docs/notes.md', selector: 'raw' },
+        };
+        assert.notEqual((await event(pi, 'tool_call')(call, ctx))?.block, true);
+        await event(pi, 'tool_result')({
+          type: 'tool_result', toolCallId: item.id, toolName: 'read',
+          content: [{ type: 'text', text: original }],
+          details: {
+            displayContent: { text: original, startLine: 1 },
+            summary: { lines: 3, elidedSpans: 0, elidedLines: 0 },
+            ...item.details,
+          },
+          isError: false,
+        }, ctx);
+        assert.equal(latestState(pi).evidence.documentPreservationBaseline, null, item.id);
+      }
+    });
+  });
+
   await t.test('a host-truncated whole-document read stops method retries and asks for a smaller task', async () => {
     await withEnforce(async () => {
       const { pi, ctx } = await startRuntime('全面润色 docs/notes.md 的全部章节，保持所有事实和数字不变。只修改 docs/notes.md。');
@@ -1142,8 +1210,10 @@ test('fact-preserving document edits require host-observed semantic invariants',
         toolName: 'read',
         content: [{ type: 'text', text: 'truncated host output' }],
         details: {
-          resolvedPath: `${ctx.cwd}/docs/notes.md`,
           displayContent: { text: original, startLine: 1 },
+          meta: {
+            source: { type: 'path', value: `${ctx.cwd}/docs/notes.md` },
+          },
           truncation: { truncated: true, totalLines: 4001, outputLines: 3000 },
           summary: { lines: 4001, elidedSpans: 0, elidedLines: 0 },
         },
@@ -1380,7 +1450,7 @@ test('fact-preserving document edits require host-observed semantic invariants',
   await t.test('a self-authored PASS cannot override semantic drift, while a corrective edit survives restart', async () => {
     await withEnforce(async () => {
       const first = await startRuntime(prompt);
-      assert.equal(first.pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data.lastRoute.intent, 'writing.zh');
+      assert.equal(first.pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data.lastRoute.intent, 'writing.en');
       await recordDocumentSnapshot(first, original, 'preservation-baseline-read');
       await runRealEdit(first, original, drifted, 'preservation-bad-edit');
       await recordDocumentSnapshot(first, drifted, 'preservation-drifted-readback');
