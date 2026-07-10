@@ -304,6 +304,8 @@ test('unknown provider reads expose unverifiable network effects while exact loc
     'read',
     'grep',
     'functions.update_plan',
+    'todo',
+    'functions.todo',
     'functions.create_goal',
     'functions.update_goal',
     'collaboration.send_message',

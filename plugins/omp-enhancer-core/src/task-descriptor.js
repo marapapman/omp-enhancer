@@ -306,15 +306,19 @@ function collectSignals(text, prompt) {
   const noActionExecution = /(?:不要|不|别|无需|不用|禁止|不得)\s*(?:实际)?(?:执行|运行)(?!\s*(?:测试|tests?))\s*(?:(?:任何|这个|该|上述)\s*)?(?:操作|命令|动作|内容)?\s*(?:[，。；;,.!！]|$)|(?:do not|don't|without|no need to)\s+(?:actually\s+)?(?:execute|run|perform|do)(?!\s+tests?)(?:\s+(?:it|anything|the\s+(?:command|action|operation)))?\s*(?:[,.;!]|$)|without\s+(?:actually\s+)?doing\s+it/.test(text);
   const instructionalAdvice = /(?:请)?(?:告诉|解释|说明)(?:我)?.{0,16}(?:如何|怎么)|(?:如何|怎么).{0,12}(?:做|操作|执行|删除|推送)|\bhow\s+(?:do|can|should|would)\s+i\b|\bexplain\s+how\s+to\b/.test(text);
   const advisory = /有什么.{0,30}(?:优化|改进).{0,12}(?:地方|建议)|(?:可以|可).{0,12}(?:优化|改进)|(?:优化|改进)建议|给出.{0,12}(?:优化|改进)建议|suggest\s+(?:improvements?|optimizations?)|assess\s+whether.{0,30}(?:reasonable|sound)/.test(text);
-  const noTestExecution = /(?:不要|不|别|无需|不用|禁止|不得)[^，。；;,.!\n]{0,16}(?:运行|执行|跑|重跑)[^，。；;,.!\n]{0,12}(?:测试|test)|(?:测试|test)[^，。；;,.!\n]{0,16}(?:不要|不|别|禁止|不得)[^，。；;,.!\n]{0,8}(?:运行|执行)|(?:do not|don't|without)[^,.;!\n]{0,18}(?:run|execute|rerun)[^,.;!\n]{0,12}(?:tests?|testing)|(?:command|命令).{0,24}(?:不要|不|别|禁止|不得|do not|don't).{0,8}(?:执行|运行|execute|run)/.test(globalTestConstraintText)
+  const noTestExecution = /(?:(?:不要|别|无需|不用|禁止|不得)[^，。；;,.!\n]{0,16}|不\s*)(?:运行|执行|跑|重跑)[^，。；;,.!\n]{0,12}(?:测试|test)|(?:测试|test)[^，。；;,.!\n]{0,16}(?:(?:不要|别|禁止|不得)[^，。；;,.!\n]{0,8}|不\s*)(?:运行|执行)|(?:do not|don't|without)[^,.;!\n]{0,18}(?:run|execute|rerun)[^,.;!\n]{0,12}(?:tests?|testing)|(?:command|命令).{0,24}(?:不要|不|别|禁止|不得|do not|don't).{0,8}(?:执行|运行|execute|run)/.test(globalTestConstraintText)
     || hasNaturalNoTestExecution(globalTestConstraintText)
+    || chineseNegativeClauseIncludes(globalTestConstraintText, /(?:运行|执行|跑|重跑)?\s*(?:测试|test)/i)
     || englishNegativeClauseIncludes(globalTestConstraintText, /\b(?:(?:run|execute|rerun|do)\s+)?(?:the\s+)?(?:tests?|testing)\b/i);
   const noExternalWrite = hasExplicitNoExternalWrite(externalConstraintText)
+    || chineseNegativeClauseIncludes(externalConstraintText, /(?:提交|推送|发布|部署|上线|升级\s*(?:插件|marketplace))/i)
     || englishNegativeClauseIncludes(externalConstraintText, /\b(?:push|publish|release|deploy)\b/i);
   const noNetworkAccess = /(?:只|仅).{0,12}(?:本地|离线)|(?:local|offline)\s+only/.test(networkConstraintText)
     || hasNaturalNoNetworkAccess(networkConstraintText)
+    || chineseNegativeClauseIncludes(networkConstraintText, /(?:上网|联网|外网|互联网|网络|网页搜索|网络搜索)/i)
     || englishNegativeClauseIncludes(networkConstraintText, /\b(?:(?:use|access|browse|search)\s+(?:the\s+)?(?:web|internet|network|online(?:\s+sources?)?)|go\s+online)\b/i);
   const noSubagents = /(?:不要|不|别|无需|不用|禁止|不得).{0,18}(?:子代理|子 agent|subagent|sub-agent)|(?:只由|仅由).{0,12}(?:主代理|主 agent|main agent)|(?:do not|don't|without|no).{0,18}(?:subagents?|sub-agents?)|(?:main agent only|only the main agent)/.test(subagentConstraintText)
+    || chineseNegativeClauseIncludes(subagentConstraintText, /(?:子代理|子\s*agent|subagents?|sub-agents?)/i)
     || englishNegativeClauseIncludes(subagentConstraintText, /\b(?:use\s+)?(?:subagents?|sub-agents?)\b/i);
   const releaseArtifact = /(?:release notes?|changelog|发布公告|发布说明|release announcement|release report)/.test(text);
   const dependencyUpgrade = /(?:升级|更新).{0,18}(?:npm|依赖|dependencies?|packages?)|\b(?:upgrade|update).{0,18}(?:dependencies?|packages?)\b/.test(text);
@@ -712,6 +716,14 @@ function hasNaturalNoNetworkAccess(text) {
 function englishNegativeClauseIncludes(text, targetPattern) {
   for (const match of String(text).matchAll(/\b(?:do not|don't|dont|never|no need to)\s+([^.;!\n]{1,200})/gi)) {
     if (targetPattern.test(match[1])) return true;
+  }
+  return false;
+}
+
+function chineseNegativeClauseIncludes(text, targetPattern) {
+  for (const match of String(text).matchAll(/(?:不要|别|无需|不用|禁止|不得)\s*([^，,。；;.!！\n]{1,200})/g)) {
+    const items = match[1].split(/(?:、|以及|或者|或)/).map((item) => item.trim()).filter(Boolean);
+    if (items.length > 1 && targetPattern.test(items.slice(1).join(' '))) return true;
   }
   return false;
 }

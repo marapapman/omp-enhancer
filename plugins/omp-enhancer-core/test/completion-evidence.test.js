@@ -192,6 +192,50 @@ test('a required-test route needs fresh host-observed test evidence in addition 
   });
 });
 
+test('one successful exact host test closes the exact-test gate without a bug-audit repair', async () => {
+  await withEnforce(async () => {
+    const { pi, ctx } = await startRuntime('只运行 test/router.test.js 并报告结果。禁止修改任何文件，禁止联网，禁止启动 subagent，禁止提交或发布。');
+    await event(pi, 'tool_result')(successfulToolResult({
+      toolCallId: 'read-exact-test-skill',
+      toolName: 'read',
+      input: { path: 'skill://verification-before-completion' },
+      output: 'verification-before-completion instructions',
+    }), ctx);
+    const command = 'node --test test/router.test.js';
+    const call = await event(pi, 'tool_call')({ toolName: 'bash', input: { command } }, ctx);
+    assert.notEqual(call?.block, true, call?.reason);
+
+    await event(pi, 'tool_result')(successfulToolResult({
+      toolCallId: 'exact-host-test',
+      toolName: 'bash',
+      input: { command },
+      output: 'ℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0',
+    }), ctx);
+
+    assert.equal(latestState(pi).evidence.testingGate, true);
+    assert.ok(latestState(pi).evidence.testCommandEvidence);
+    assert.equal(await event(pi, 'session_stop')({
+      output: `${skillUsage(['verification-before-completion'])}\ntest/router.test.js passed: 1 test, 0 failures.`,
+    }, ctx), undefined);
+
+    for (const [name, output] of [
+      ['failed', 'ℹ tests 1\nℹ pass 0\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0'],
+      ['empty', 'ℹ tests 0\nℹ pass 0\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0'],
+      ['all-cancelled', 'ℹ tests 1\nℹ pass 0\nℹ fail 0\nℹ cancelled 1\nℹ skipped 0'],
+    ]) {
+      const negative = await startRuntime('只运行 test/router.test.js 并报告结果。禁止修改任何文件，禁止联网，禁止启动 subagent，禁止提交或发布。');
+      await event(negative.pi, 'tool_result')(successfulToolResult({
+        toolCallId: `exact-host-test-${name}`,
+        toolName: 'bash',
+        input: { command },
+        output,
+      }), negative.ctx);
+      assert.equal(latestState(negative.pi).evidence.testingGate, false, name);
+      assert.equal(latestState(negative.pi).evidence.testCommandEvidence, null, name);
+    }
+  });
+});
+
 test('host-observed core test evidence trusts only exact local shell executor identities', async () => {
   await withEnforce(async () => {
     const { pi, ctx } = await startRuntime('修复 parser 中的小 bug 并运行测试。', { testingToolAvailable: true });
@@ -627,6 +671,27 @@ test('no-subagent security review has a satisfiable main-agent evidence contract
     }, ctx);
     assert.equal(released, undefined);
     assert.equal(latestState(pi).evidence.mainAgentSecurityReview, true);
+  });
+});
+
+test('read-only security findings complete the report but cannot approve a remediation', async () => {
+  await withEnforce(async () => {
+    const report = await startRuntime('Audit src/auth.js for vulnerabilities, but do not modify files or use subagents; main agent only.');
+    await recordSecuritySkillReads(report.pi, report.ctx);
+    await event(report.pi, 'tool_result')(successfulToolResult({
+      toolCallId: 'finding-source-read', toolName: 'read', input: { path: 'src/auth.js' }, output: 'export function authorize() { return true; }',
+    }), report.ctx);
+    assert.equal(await event(report.pi, 'session_stop')({ output: securityFindingsEvidence() }, report.ctx), undefined);
+    assert.equal(latestState(report.pi).evidence.mainAgentSecurityReview, true);
+
+    const remediation = await startRuntime('Fix the vulnerability in src/auth.js, but do not run tests or use subagents.');
+    await recordSecuritySkillReads(remediation.pi, remediation.ctx);
+    await event(remediation.pi, 'tool_result')(successfulToolResult({
+      toolCallId: 'remediation-source-read', toolName: 'read', input: { path: 'src/auth.js' }, output: 'export function authorize() { return true; }',
+    }), remediation.ctx);
+    const blocked = await event(remediation.pi, 'session_stop')({ output: securityFindingsEvidence() }, remediation.ctx);
+    assert.equal(blocked?.continue, true);
+    assert.equal(latestState(remediation.pi).evidence.mainAgentSecurityReview, false);
   });
 });
 
@@ -1213,6 +1278,18 @@ function securityReviewEvidence() {
     'Findings: no confirmed bypass in the inspected paths',
     'Evidence: traced credential parsing and authorization checks',
     'Verdict: PASS',
+  ].join('\n');
+}
+
+function securityFindingsEvidence() {
+  return [
+    skillUsage(['security-review', 'security-scan']),
+    'SECURITY_REVIEW',
+    'Scope: src/auth.js',
+    'Findings: authorization always returns true',
+    'Evidence: src/auth.js authorize() has an unconditional true return',
+    'OpenBlockers: none',
+    'Verdict: FINDINGS',
   ].join('\n');
 }
 

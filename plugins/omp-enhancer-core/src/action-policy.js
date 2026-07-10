@@ -6,7 +6,7 @@ const MUTATION_TOOL_TOKEN = /(?:^|[_-])(?:write|edit|patch|apply|create|update|d
 const DESTRUCTIVE_TOOL_TOKEN = /(?:^|[_-])(?:delete|remove|destroy|purge|wipe|clear)(?:$|[_-])/i;
 const REMOTE_TOOL_NAMESPACE = /(?:^|[_-])(?:github|gitlab|bitbucket|linear|jira|slack|email|notion|database|aws|gcloud|azure|docker|kubernetes|kubectl|helm|terraform|browser|web)(?:$|[_-])/i;
 const LOCAL_FILESYSTEM_NAMESPACE = /(?:^|[_-])(?:filesystem|file_system|local_file)(?:$|[_-])/i;
-const LOCAL_PLATFORM_TOOL = /^(?:read|grep|glob|view_image|write_stdin|update_plan|request_user_input|get_goal|create_goal|update_goal|request_plugin_install|functions_(?:read|grep|glob|view_image|write_stdin|update_plan|request_user_input|get_goal|create_goal|update_goal|request_plugin_install)|collaboration_(?:spawn_agent|delegate|send_message|followup_task|interrupt_agent|list_agents|wait_agent)|omp_core_[a-z0-9_]+|omp_test_[a-z0-9_]+|omp_config_[a-z0-9_]+|writing_(?:quality|logic)_check|fact_check_(?:gate|evidence|analyze|report))$/i;
+const LOCAL_PLATFORM_TOOL = /^(?:read|grep|glob|view_image|write_stdin|update_plan|todo|request_user_input|get_goal|create_goal|update_goal|request_plugin_install|functions_(?:read|grep|glob|view_image|write_stdin|update_plan|todo|request_user_input|get_goal|create_goal|update_goal|request_plugin_install)|collaboration_(?:spawn_agent|delegate|send_message|followup_task|interrupt_agent|list_agents|wait_agent)|omp_core_[a-z0-9_]+|omp_test_[a-z0-9_]+|omp_config_[a-z0-9_]+|writing_(?:quality|logic)_check|fact_check_(?:gate|evidence|analyze|report))$/i;
 
 export function classifyToolAction({ toolName = '', text = '' } = {}) {
   const name = canonicalToolName(toolName);

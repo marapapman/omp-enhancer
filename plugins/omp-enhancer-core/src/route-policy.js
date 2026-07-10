@@ -236,7 +236,9 @@ function legacyIntentForDescriptor(descriptor = {}) {
   if (descriptor.operation === 'create' && domains.has('visual')) return 'design.visual';
   if (domains.has('facts')) return 'fact-check';
   if (domains.has('security') && descriptor.operation !== 'modify') return 'security-review';
-  if (descriptor.operation === 'modify' && (domains.has('code') || domains.has('document') && domains.has('plugin') || domains.has('security'))) {
+  if (descriptor.operation === 'modify' && (domains.has('code') || domains.has('security')
+    || domains.has('document') && domains.has('plugin')
+      && (!domains.has('writing') || descriptor.constraints?.externalWrite === 'required'))) {
     return 'implementation-with-tests';
   }
   if (domains.has('writing')) return descriptor.language === 'zh' ? 'writing.zh' : 'writing.en';

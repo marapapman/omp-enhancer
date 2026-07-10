@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildGovernancePromptFragment, buildSubagentPromptFragment } from '../src/governance.js';
+import { buildGovernancePromptFragment, buildMissingGateContexts, buildSubagentPromptFragment } from '../src/governance.js';
 import { routeNaturalLanguageTask } from '../src/router.js';
 
 test('builds a Mandatory Skill Workflow fragment with required and loaded skill accounting', () => {
@@ -276,6 +276,42 @@ test('a no-test modification with release authority keeps release and verificati
   assert.match(fragment, /independent(?:ly)? verif/i);
   assert.match(fragment, /test execution.*forbidden/i);
   assert.doesNotMatch(fragment, /post-review testing|test generation contract|omp_test_|run .*tests?/i);
+});
+
+test('an exact test file is presented as bounded testing rather than a bug audit', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '只运行 test/router.test.js 并报告结果。禁止修改文件、联网、启动 subagent 或发布。',
+    routerMode: 'enforce',
+  });
+  const fragment = buildGovernancePromptFragment({ route });
+  const repair = buildMissingGateContexts({
+    route,
+    state: { evidence: {} },
+  });
+  assert.match(fragment, /Intent:\s*testing/i);
+  assert.match(fragment, /Agent route:\s*none/i);
+  assert.match(fragment, /test\/router\.test\.js/i);
+  assert.match(fragment, /configuration with (?:the )?read tool/i);
+  assert.match(fragment, /one direct (?:host )?test command/i);
+  assert.doesNotMatch(fragment, /bug audit|test generation contract|test matrix|omp_test_analyze|omp_test_context/i);
+  assert.match(repair[0]?.context ?? '', /exact-test evidence.*one direct host command/is);
+  assert.doesNotMatch(repair[0]?.context ?? '', /bug audit|omp_test_analyze|omp_test_context/i);
+});
+
+test('a constrained read-only security review gets one satisfiable evidence contract', () => {
+  const fragment = buildGovernancePromptFragment({
+    route: routeNaturalLanguageTask({
+      prompt: '只读审查 src/router.js 是否存在安全问题。禁止修改任何文件，禁止运行测试，禁止联网，禁止启动 subagent，禁止提交或发布。只报告有代码证据支持的结论。',
+      routerMode: 'enforce',
+    }),
+  });
+  assert.match(fragment, /Intent:\s*security-review/i);
+  assert.match(fragment, /Agent route:\s*none/i);
+  assert.match(fragment, /read skill:\/\/security-review.*skill:\/\/security-scan/is);
+  assert.match(fragment, /SECURITY_REVIEW.*Scope:.*Findings:.*Evidence:.*OpenBlockers:\s*none.*Verdict:\s*COMPLETE/is);
+  assert.match(fragment, /COMPLETE means the evidence collection is complete.*does not approve a remediation/is);
+  assert.match(fragment, /Missing validation.*not itself an exploitable vulnerability/is);
+  assert.doesNotMatch(fragment, /omp_test_|-> reviewer -> fix|fork .*security/i);
 });
 
 test('fact-check governance advertises plan, independent evidence, cross-check, review, and gate', () => {

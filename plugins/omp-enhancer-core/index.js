@@ -44,7 +44,7 @@ import { installPluginSkills } from './src/install-skills.js';
 import { readRuntimePolicy, useEnforcedRoutePlan } from './src/runtime-policy.js';
 import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { isAbsolute, join, posix, relative, resolve } from 'node:path';
 import {
   classifyToolAction,
   hasUnsafeResultMasking,
@@ -1890,7 +1890,14 @@ function buildSessionStopGateRecords(state, { loopRecoveryContext = null } = {})
       gateKey: 'review',
       missingEvidenceCodes: ['review_gate'],
       protection: 'soft',
-      context: 'Required review evidence is still open. Complete the routed reviewer checkpoint, or for an explicitly focused main-agent task provide REVIEW_EVIDENCE with Scope, Findings, and Verdict: PASS.',
+      context: [
+        'Required review evidence is still open. Complete the routed reviewer checkpoint, or for an explicitly focused main-agent task provide this exact multiline block:',
+        'REVIEW_EVIDENCE',
+        'Scope: <reviewed target and change>',
+        'Findings: <concrete static review findings>',
+        'OpenBlockers: none',
+        'Verdict: PASS',
+      ].join('\n'),
     }, state));
   }
   if (requiredGateKeys.has('security-evidence') && !hasSecurityReviewEvidence(state)) {
@@ -1898,7 +1905,15 @@ function buildSessionStopGateRecords(state, { loopRecoveryContext = null } = {})
       gateKey: 'security',
       missingEvidenceCodes: ['review_gate'],
       protection: 'protected',
-      context: 'Protected security gate is open. Complete the routed security review and report concrete security evidence before claiming the remediation is safe.',
+      context: [
+        'Protected security gate is open. Complete the routed security review and provide this exact multiline evidence block without unsupported risk claims:',
+        'SECURITY_REVIEW',
+        'Scope: <reviewed file and any callers actually inspected>',
+        'Findings: <supported findings, or none>',
+        'Evidence: <file and symbol evidence>',
+        'OpenBlockers: none',
+        'Verdict: COMPLETE',
+      ].join('\n'),
     }, state));
   }
   if (requiredGateKeys.has('release-approval') && !state.evidence.releaseVerified) {
@@ -2413,6 +2428,16 @@ function buildPreworkSkillBootstrapBlock(state) {
   const parentTask = state.lastPrompt;
   if (!requiredSubagents.length && !missing.length) return null;
 
+  if (isExactTestExecutionRoute(state.lastRoute)) {
+    return [
+      '### OMP Enhancer Core exact-test skill preflight',
+      'This route authorizes one exact test file, not a broader audit workflow.',
+      'Read the missing direct-work skill(s) before the test command:',
+      ...missing.map(formatMissingSkillReadStep),
+      'Use read for runner configuration, then run one direct command naming only the authorized test target. Do not call bug-audit analysis tools, generate tests, or substitute an aggregate suite.',
+    ].join('\n');
+  }
+
   if (requiredSubagents.length) {
     return [
       '### OMP Enhancer Core pre-work skill bootstrap',
@@ -2525,7 +2550,7 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
     && !exactLocalTestCommandAuthorized) {
     return protectedConstraintBlock('network-access-unverifiable', 'This opaque script or automation target can execute hidden network effects, so it cannot run while the user has explicitly forbidden network access. Inspect it or use a directly classifiable local command.');
   }
-  const workspaceScopeBlock = scopedWorkspaceActionBlock(descriptor, action, event, text);
+  const workspaceScopeBlock = scopedWorkspaceActionBlock(descriptor, action, event, text, ctx);
   if (workspaceScopeBlock) return workspaceScopeBlock;
   const externalScopeBlock = scopedExternalActionBlock(descriptor, action, text);
   if (externalScopeBlock) return externalScopeBlock;
@@ -2700,7 +2725,7 @@ function testKindForCommand(command = '') {
 
 function testExecutionTargetsInCommand(command = '') {
   return uniqueValues([...String(command).matchAll(/(?:^|[\s`'"])((?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java))(?=$|[\s`'",;:])/gi)]
-    .map((match) => String(match[1]).replace(/^\.\//, '').replace(/\\/g, '/').toLowerCase()));
+    .map((match) => String(match[1]).replace(/^\.\//, '').replace(/\\/g, '/')));
 }
 
 function isDirectExactLocalTestCommand(command = '', allowedTargets = []) {
@@ -2710,16 +2735,16 @@ function isDirectExactLocalTestCommand(command = '', allowedTargets = []) {
   // proof that the test file and its imports have no internal side effects.
   const match = String(command).trim().match(/^node\s+--test\s+(["']?)((?:\.\/)?[a-z0-9_.\/-]+(?:\.test|\.spec)\.[cm]?[jt]sx?)\1$/i);
   if (!match) return false;
-  const observed = match[2].replace(/^\.\//, '').replace(/\\/g, '/').toLowerCase();
+  const observed = match[2].replace(/^\.\//, '').replace(/\\/g, '/');
   return scopedPathMatches(observed, allowedTargets[0]);
 }
 
-function scopedWorkspaceActionBlock(descriptor, action, event = {}, actionText = '') {
+function scopedWorkspaceActionBlock(descriptor, action, event = {}, actionText = '', ctx = {}) {
   if (!action.workspaceWrite && !action.definiteWorkspaceMutation) return null;
   const allowed = Array.isArray(descriptor.workspaceWriteTargets) ? descriptor.workspaceWriteTargets : [];
   const excluded = Array.isArray(descriptor.workspaceWriteExclusions) ? descriptor.workspaceWriteExclusions : [];
   if (!allowed.length && !excluded.length) return null;
-  const observed = workspaceActionTargets(event, actionText);
+  const observed = workspaceActionTargets(event, actionText, ctx);
   const denied = observed.find((target) => excluded.some((entry) => scopedPathMatches(target, entry)));
   if (denied) {
     return protectedConstraintBlock(
@@ -2737,7 +2762,7 @@ function scopedWorkspaceActionBlock(descriptor, action, event = {}, actionText =
   return null;
 }
 
-function workspaceActionTargets(event = {}, actionText = '') {
+function workspaceActionTargets(event = {}, actionText = '', ctx = {}) {
   const input = firstToolInputRecord(event);
   const direct = [
     input.path,
@@ -2756,13 +2781,60 @@ function workspaceActionTargets(event = {}, actionText = '') {
     ...[...patch.matchAll(/^\*\*\*\s+Move\s+(?:to|from):\s+(.+?)\s*$/gmi)].map((match) => match[1]),
     ...[...patch.matchAll(/^(?:---|\+\+\+)\s+(?:[ab]\/)?(.+?)\s*$/gm)].map((match) => match[1]),
   ]).filter((value) => value !== '/dev/null');
-  return uniqueValues([...direct, ...commandPaths, ...patchPaths]
+  const readBoundEditPaths = editAnchorTargetsFromBranch(event, ctx);
+  return uniqueValues([...direct, ...commandPaths, ...patchPaths, ...readBoundEditPaths]
     .map((value) => String(value).trim().replace(/^['"]|['"]$/g, '').replace(/^\.\//, '').replace(/\\/g, '/')));
 }
 
+function editAnchorTargetsFromBranch(event = {}, ctx = {}) {
+  const input = firstToolInputRecord(event);
+  const anchors = uniqueValues([input.input, input.anchor, input.patch, input.diff]
+    .filter((value) => typeof value === 'string')
+    .flatMap((value) => [...value.matchAll(/\[[^\]\n#]+#[a-z0-9]+\]/gi)].map((match) => match[0].toLowerCase())));
+  if (!anchors.length) return [];
+  const entries = ctx.sessionManager?.getBranch?.();
+  if (!Array.isArray(entries)) return ['__omp_unresolved_edit_anchor__'];
+  let root;
+  try {
+    root = realpathSync(resolve(ctx.cwd || process.cwd()));
+  } catch {
+    return ['__omp_unresolved_edit_anchor__'];
+  }
+  const targets = [];
+  for (const anchor of anchors) {
+    const matches = [];
+    for (const entry of entries) {
+      const message = entry?.message ?? entry;
+      if (message?.role !== 'toolResult' || message?.toolName !== 'read' || !isSuccessfulToolEvent(message)) continue;
+      if (!toolResultText(message).toLowerCase().includes(anchor)) continue;
+      const source = message.details?.meta?.source;
+      if (source?.type !== 'path' || typeof source.value !== 'string' || !source.value.trim()) continue;
+      let sourcePath;
+      try {
+        sourcePath = realpathSync(resolve(source.value));
+      } catch {
+        continue;
+      }
+      const target = relative(root, sourcePath);
+      if (!target || target.startsWith('..') || isAbsolute(target)) continue;
+      matches.push(target);
+    }
+    const uniqueMatches = uniqueValues(matches);
+    if (uniqueMatches.length !== 1) return ['__omp_unresolved_edit_anchor__'];
+    targets.push(uniqueMatches[0]);
+  }
+  return uniqueValues(targets);
+}
+
 function scopedPathMatches(observed = '', scoped = '') {
-  const target = String(observed).replace(/^\.\//, '').replace(/\\/g, '/').toLowerCase();
-  const expected = String(scoped).replace(/^\.\//, '').replace(/\\/g, '/').toLowerCase();
+  const normalize = (value) => {
+    const path = posix.normalize(String(value).replace(/^\.\//, '').replace(/\\/g, '/'));
+    if (!path || path === '..' || path.startsWith('../')) return null;
+    return process.platform === 'win32' ? path.toLowerCase() : path;
+  };
+  const target = normalize(observed);
+  const expected = normalize(scoped);
+  if (!target || !expected) return false;
   return target === expected || target.startsWith(`${expected.replace(/\/$/, '')}/`);
 }
 
@@ -3349,7 +3421,9 @@ function recordFinalOutputEvidence(state, event = {}) {
     state.evidence.deliveredBugAuditReport = true;
   }
   if (isStructuredReviewEvidence(output)) state.evidence.reviewEvidence = true;
-  if (isStructuredSecurityReview(output)) state.evidence.mainAgentSecurityReview = true;
+  if (isStructuredSecurityReview(output, { allowFindings: isReadOnlySecurityReportRoute(state.lastRoute) })) {
+    state.evidence.mainAgentSecurityReview = true;
+  }
   if (matchesObservedManualTestingReport(state, output)) {
     state.evidence.testingGate = true;
   }
@@ -3379,14 +3453,25 @@ function isStructuredReviewEvidence(output = '') {
     && !hasContradictoryPassEvidence(text);
 }
 
-function isStructuredSecurityReview(output = '') {
+function isStructuredSecurityReview(output = '', { allowFindings = false } = {}) {
   const text = String(output);
+  const verdict = text.match(/(?:^|\n)\s*Verdict:\s*(PASS|READY|APPROVED|FINDINGS|COMPLETE)\b/i)?.[1]?.toUpperCase();
+  const acceptedVerdict = ['PASS', 'READY', 'APPROVED'].includes(verdict)
+    || allowFindings && ['FINDINGS', 'COMPLETE'].includes(verdict);
   return /(?:^|\n)\s*SECURITY_REVIEW\s*(?:\n|$)/i.test(text)
     && /(?:^|\n)\s*Scope:\s*\S/i.test(text)
     && /(?:^|\n)\s*Findings?:\s*\S/i.test(text)
     && /(?:^|\n)\s*Evidence:\s*\S/i.test(text)
-    && /(?:^|\n)\s*Verdict:\s*(?:PASS|READY|APPROVED)\b/i.test(text)
-    && !hasContradictoryPassEvidence(text);
+    && acceptedVerdict
+    && (['FINDINGS', 'COMPLETE'].includes(verdict) || !hasContradictoryPassEvidence(text));
+}
+
+function isReadOnlySecurityReportRoute(route) {
+  const descriptor = route?.taskDescriptor;
+  return descriptor?.operation === 'inspect'
+    && descriptor.domains?.includes('security')
+    && descriptor.constraints?.workspaceWrite === 'forbidden'
+    && descriptor.constraints?.externalWrite !== 'required';
 }
 
 function hasContradictoryPassEvidence(value = '') {
@@ -4969,6 +5054,9 @@ function recordObservedTestEvidence(state, toolName = '', event = {}, { successf
   const command = toolActionText(event);
   const action = classifyToolAction({ toolName, text: command });
   if (!action.testExecution) return false;
+  const exactTestRoute = isExactTestExecutionRoute(state.lastRoute);
+  const exactTargets = state.lastRoute?.taskDescriptor?.testExecutionTargets ?? [];
+  const exactCommand = exactTestRoute && isDirectExactLocalTestCommand(command, exactTargets);
   const resultText = toolResultText(event);
   if (!successful
     || hasUnsafeResultMasking(command)
@@ -4976,6 +5064,7 @@ function recordObservedTestEvidence(state, toolName = '', event = {}, { successf
     || isNonExecutingTestProbe(command)
     || !isExplicitPositiveTestOutput(resultText, command)) {
     state.evidence.testCommandEvidence = null;
+    if (exactTestRoute) state.evidence.testingGate = false;
     return false;
   }
   state.evidence.testCommandEvidence = {
@@ -4991,11 +5080,26 @@ function recordObservedTestEvidence(state, toolName = '', event = {}, { successf
       Number.isFinite(state.evidence.lastDefiniteMutationAt) ? state.evidence.lastDefiniteMutationAt : 0,
     ),
   };
+  if (exactCommand) state.evidence.testingGate = true;
   return true;
+}
+
+function isExactTestExecutionRoute(route) {
+  const descriptor = route?.taskDescriptor;
+  return descriptor?.operation === 'execute'
+    && descriptor.constraints?.testExecution === 'required'
+    && Array.isArray(descriptor.testExecutionTargets)
+    && descriptor.testExecutionTargets.length > 0
+    && (descriptor.phases ?? []).every(({ kind }) => kind === 'verify');
 }
 
 function isExplicitPositiveTestOutput(value = '', command = '') {
   const text = String(value).trim();
+  const nodeTestSummary = parseNodeTestSummary(text);
+  if (nodeTestSummary && (nodeTestSummary.tests === 0
+    || nodeTestSummary.pass === 0
+    || nodeTestSummary.fail > 0
+    || nodeTestSummary.cancelled > 0)) return false;
   const goTestCommand = /^go\s+test\b/i.test(String(command).trim());
   const goExecutedSuite = text.split(/\r?\n/).some((line) => /^ok\s+\S+/.test(line.trim()) && !/\[no test files\]/i.test(line));
   const gradleTestCommand = /^(?:\.\/)?gradle(?:w)?\b[^\n]*\b(?:test|check)\b/i.test(String(command).trim());
@@ -5012,7 +5116,8 @@ function isExplicitPositiveTestOutput(value = '', command = '') {
     .replace(/\b0\s+(?:tests?\s+)?fail(?:ed|ures?)\b/gi, '')
     .replace(/(?:^|\n)\s*#\s*fail\s+0\b/gi, '');
   if (/(?:^|\n)\s*not ok\b|\btests? failed\b|\b[1-9]\d*\s+(?:tests?\s+)?fail(?:s|ed|ures?)?\b|\b(?:failed|failing|failures?|errors?)\s*:\s*[1-9]\d*\b|(?:^|\n)\s*#\s*fail\s+[1-9]\d*\b|\bBUILD FAILED\b|\bfatal:|\berror:/i.test(withoutZeroFailures)) return false;
-  const hasCountedNonzeroSuite = /\b[1-9]\d*\s+(?:tests?\s+)?passed\b|\btests?\s+[1-9]\d*\s+passed\b|\b[1-9]\d*\s+passing\b|\b[1-9]\d*\s+pass\b|(?:^|\n)\s*#\s*pass\s+[1-9]\d*\b|\btest result:\s*ok\.[^\n]*\b[1-9]\d*\s+passed\b|\btests?\s+run:\s*[1-9]\d*\s*,\s*failures?\s*:\s*0\s*,\s*errors?\s*:\s*0\b|\bfailed\s*:\s*0\b[^\n]{0,120}\bpassed\s*:\s*[1-9]\d*\b|\bpassed\s*:\s*[1-9]\d*\b[^\n]{0,120}\bfailed\s*:\s*0\b|\btest summary\s*:\s*total\s*:\s*[1-9]\d*\s*,\s*failed\s*:\s*0\s*,\s*succeeded\s*:\s*[1-9]\d*\b|\btest run successful\b[^\n]{0,120}\btotal tests?\s*:\s*[1-9]\d*\b|\bran\s+[1-9]\d*\s+tests?\b[\s\S]{0,160}(?:^|\n)\s*OK(?:\s*\([^\n)]*\))?\s*$|\bOK,\s*but there were issues!\b[\s\S]{0,200}\btests?\s*:\s*[1-9]\d*\b|\b[1-9]\d*\s+tests?\s+completed\b|\b[1-9]\d*\s+examples?\s*,\s*0\s+failures?\b|\b100%\s+tests?\s+passed\b[^\n]{0,100}\b0\s+tests?\s+failed\s+out\s+of\s+[1-9]\d*\b|\bOK\s*\(\s*[1-9]\d*\s+tests?\s*,\s*[1-9]\d*\s+assertions?\s*\)|\bexecuted\s+[1-9]\d*\s+tests?\s*,\s*with\s+0\s+failures?\b|\b[1-9]\d*\s+tests?\s*,\s*0\s+failures?\b|\btests?\s*:\s*[1-9]\d*\b[\s\S]{0,200}\bpassing\s*:\s*[1-9]\d*\b[\s\S]{0,120}\bfailing\s*:\s*0\b/i.test(text);
+  const hasCountedNonzeroSuite = Boolean(nodeTestSummary)
+    || /\b[1-9]\d*\s+(?:tests?\s+)?passed\b|\btests?\s+[1-9]\d*\s+passed\b|\b[1-9]\d*\s+passing\b|\b[1-9]\d*\s+pass\b|(?:^|\n)\s*#\s*pass\s+[1-9]\d*\b|\btest result:\s*ok\.[^\n]*\b[1-9]\d*\s+passed\b|\btests?\s+run:\s*[1-9]\d*\s*,\s*failures?\s*:\s*0\s*,\s*errors?\s*:\s*0\b|\bfailed\s*:\s*0\b[^\n]{0,120}\bpassed\s*:\s*[1-9]\d*\b|\bpassed\s*:\s*[1-9]\d*\b[^\n]{0,120}\bfailed\s*:\s*0\b|\btest summary\s*:\s*total\s*:\s*[1-9]\d*\s*,\s*failed\s*:\s*0\s*,\s*succeeded\s*:\s*[1-9]\d*\b|\btest run successful\b[^\n]{0,120}\btotal tests?\s*:\s*[1-9]\d*\b|\bran\s+[1-9]\d*\s+tests?\b[\s\S]{0,160}(?:^|\n)\s*OK(?:\s*\([^\n)]*\))?\s*$|\bOK,\s*but there were issues!\b[\s\S]{0,200}\btests?\s*:\s*[1-9]\d*\b|\b[1-9]\d*\s+tests?\s+completed\b|\b[1-9]\d*\s+examples?\s*,\s*0\s+failures?\b|\b100%\s+tests?\s+passed\b[^\n]{0,100}\b0\s+tests?\s+failed\s+out\s+of\s+[1-9]\d*\b|\bOK\s*\(\s*[1-9]\d*\s+tests?\s*,\s*[1-9]\d*\s+assertions?\s*\)|\bexecuted\s+[1-9]\d*\s+tests?\s*,\s*with\s+0\s+failures?\b|\b[1-9]\d*\s+tests?\s*,\s*0\s+failures?\b|\btests?\s*:\s*[1-9]\d*\b[\s\S]{0,200}\bpassing\s*:\s*[1-9]\d*\b[\s\S]{0,120}\bfailing\s*:\s*0\b/i.test(text);
   const hasPhpunitIssuesNonzeroSuite = Boolean(phpunitIssueSummary && Number(phpunitIssueSummary[2]) > 0);
   const hasWeakPositiveSuite = /(?:^|\n)\s*PASS\s+\S/i.test(text)
     || !goTestCommand && /(?:^|\n)\s*ok\s+\S+/i.test(text);
@@ -5024,6 +5129,25 @@ function isExplicitPositiveTestOutput(value = '', command = '') {
     || gradleTestCommand && gradleTestTaskLines.length > 0 && !gradleExecutedSuite;
   if (hasEmptySuite && !hasCountedNonzeroSuite && !hasRunnerSpecificNonzeroSuite && !hasPhpunitIssuesNonzeroSuite) return false;
   return hasCountedNonzeroSuite || hasWeakPositiveSuite || hasRunnerSpecificNonzeroSuite || hasPhpunitIssuesNonzeroSuite;
+}
+
+function parseNodeTestSummary(value = '') {
+  const text = String(value);
+  const field = (name) => {
+    const match = text.match(new RegExp(`(?:^|\\n)\\s*(?:ℹ\\s*)?${name}\\s+(\\d+)\\b`, 'i'));
+    return match ? Number(match[1]) : null;
+  };
+  const tests = field('tests');
+  const pass = field('pass');
+  const fail = field('fail');
+  if (![tests, pass, fail].every(Number.isInteger)) return null;
+  return {
+    tests,
+    pass,
+    fail,
+    cancelled: field('cancelled') ?? 0,
+    skipped: field('skipped') ?? 0,
+  };
 }
 
 function isNonExecutingTestProbe(command = '') {

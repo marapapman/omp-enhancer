@@ -82,6 +82,20 @@ test('a global no-write prohibition wins over a bounded other-files clause', () 
   }
 });
 
+test('a bounded document polish stays on the writing route despite negated test and release words', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '润色 docs/notes.md 的标题和英文句子，保持事实 42 不变。只修改 docs/notes.md；禁止修改其他文件，禁止运行测试，禁止联网，禁止启动 subagent，禁止提交或发布。',
+    routerMode: 'enforce',
+  });
+  assert.equal(route.intent, 'writing.zh');
+  assert.equal(route.taskDescriptor.operation, 'modify');
+  assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['docs/notes.md']);
+  assert.equal(route.taskDescriptor.constraints.testExecution, 'forbidden');
+  assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden');
+  assert.deepEqual(route.routePlan.requiredSubagents, []);
+  assert.ok(!route.routePlan.requiredTools.some((tool) => /^omp_test_/i.test(tool)));
+});
+
 test('English compound fixes preserve no-test, no-network, no-subagent, and no-release ceilings', () => {
   const route = routeNaturalLanguageTask({
     prompt: 'Fix the bug in src/router.js, but do not run tests, use the network, use subagents, or publish.',
@@ -114,6 +128,43 @@ test('an exact test-file command remains execute-only under explicit side-effect
     ], prompt);
     assert.equal(route.taskDescriptor.phases.some((phase) => phase.kind === 'release'), false, prompt);
   }
+});
+
+test('one Chinese prohibition marker scopes across a compact side-effect list', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '只运行 test/router.test.js 并报告结果。禁止修改文件、联网、启动 subagent 或发布。',
+    routerMode: 'enforce',
+  });
+  assert.equal(route.taskDescriptor.operation, 'execute');
+  assert.deepEqual(route.taskDescriptor.testExecutionTargets, ['test/router.test.js']);
+  assert.deepEqual(route.taskDescriptor.constraints, {
+    workspaceWrite: 'forbidden',
+    testExecution: 'required',
+    networkAccess: 'forbidden',
+    externalWrite: 'forbidden',
+    subagents: 'forbidden',
+  });
+});
+
+test('ordinary Chinese words containing 不 do not create shared prohibitions', () => {
+  const comparison = routeNaturalLanguageTask({
+    prompt: '比较不同测试框架的结果并解释差异。',
+    routerMode: 'enforce',
+  });
+  assert.notEqual(comparison.taskDescriptor.constraints.testExecution, 'forbidden');
+
+  const coverage = routeNaturalLanguageTask({
+    prompt: '分析测试覆盖不足并运行测试。',
+    routerMode: 'enforce',
+  });
+  assert.equal(coverage.taskDescriptor.constraints.testExecution, 'required');
+
+  const release = routeNaturalLanguageTask({
+    prompt: '修复不发布版本号的问题并发布新版本。',
+    routerMode: 'enforce',
+  });
+  assert.equal(release.taskDescriptor.constraints.externalWrite, 'required');
+  assert.ok(release.taskDescriptor.phases.some(({ kind }) => kind === 'release'));
 });
 
 test('document editing can forbid code changes without freezing the requested document target', () => {

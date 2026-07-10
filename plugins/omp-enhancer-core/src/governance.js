@@ -127,6 +127,25 @@ function projectRouteForGovernance(route) {
       ? plan.requiredSubagents
       : constraints.subagents === 'forbidden' ? [] : route.requiredSubagents ?? [],
   };
+  if (isExactTestExecution(projected)) {
+    return {
+      ...projected,
+      intent: 'testing',
+      workflowRoute: 'testing',
+      agent: null,
+      auditMode: 'focused',
+      requiredTools: [],
+    };
+  }
+  if (isReadOnlySecurityReview(projected)) {
+    return {
+      ...projected,
+      intent: 'security-review',
+      workflowRoute: 'security.review',
+      agent: null,
+      auditMode: 'focused',
+    };
+  }
   if (isReadOnlyCodeReview(projected)) {
     return {
       ...projected,
@@ -173,6 +192,29 @@ function advisorGuidanceLines(route) {
 
 function skillWorkflowLines(route) {
   const hasSubagents = (route.requiredSubagents ?? []).length > 0;
+  if (isExactTestExecution(route)) {
+    const targets = route.taskDescriptor?.testExecutionTargets ?? [];
+    return [
+      `This is one exact test execution for ${targets.join(', ')}; no broader verification scope is authorized.`,
+      'Inspect package or runner configuration with the read tool. Do not use shell pipelines, redirections, aliases, or exploratory commands for that inspection.',
+      'Run one direct host test command that names only the authorized test file, then report the observed result. Do not substitute an aggregate suite or add runner preloads and extra flags.',
+    ];
+  }
+  if (isReadOnlySecurityReview(route)) {
+    return [
+      'This is a focused read-only security review handled by the main agent; no subagent, test, edit, network, or release workflow is authorized.',
+      'Before reviewing, read skill://security-review and skill://security-scan. Then inspect the target and, when needed to substantiate impact, direct local callers with read-only tools.',
+      'Report only code-supported facts. Missing validation, authentication, logging, or sanitization is not itself an exploitable vulnerability unless the local caller contract proves that responsibility and impact.',
+      'For this report-only route, Verdict: COMPLETE means the evidence collection is complete; it does not approve a remediation or claim the code is safe.',
+      'Finish with this exact multiline evidence block:',
+      'SECURITY_REVIEW',
+      'Scope: <reviewed file and any callers actually inspected>',
+      'Findings: <supported findings, or none>',
+      'Evidence: <file and symbol evidence>',
+      'OpenBlockers: none',
+      'Verdict: COMPLETE',
+    ];
+  }
   if (isReadOnlyCodeReview(route)) {
     return [
       'This is a read-only code review. Inspect the requested scope and report concrete evidence directly.',
@@ -292,7 +334,14 @@ export function buildMissingGateContexts({ route, state } = {}) {
   }
 
   if (needsTesting(route) && !state?.evidence?.testingGate) {
-    if (route.intent === 'implementation-with-tests') {
+    if (isExactTestExecution(route)) {
+      contexts.push({ key: 'testing', context: [
+        'OMP Enhancer Core exact-test evidence is still open.',
+        `Use read to inspect runner configuration, then execute one direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} and report the observed result.`,
+        'Do not run aggregate aliases, additional test targets, pipelines, redirections, runner preloads, or generated test cases.',
+        formatRecentToolFailures(state, ['omp_test_gate']),
+      ].filter(Boolean).join('\n') });
+    } else if (route.intent === 'implementation-with-tests') {
       contexts.push({ key: 'testing', context: [
         'OMP Enhancer Core gate is still open for this implementation testing task.',
         'Review is not the terminal phase. After plan, implementation-task, and reviewer have returned, switch to the post-review testing checkpoint before finishing.',
@@ -359,11 +408,20 @@ function completionGateChecklist(route) {
   }
 
   if (routeRequiresGate(route, 'review-evidence')) {
-    gates.push('Review evidence gate: complete the routed reviewer checkpoint, or for a focused main-agent change include REVIEW_EVIDENCE with Scope, Findings, OpenBlockers: none, and Verdict: PASS after the static review.');
+    gates.push([
+      'Review evidence gate: complete the routed reviewer checkpoint, or for a focused main-agent change include this exact multiline block after the static review:',
+      'REVIEW_EVIDENCE',
+      'Scope: <reviewed target and change>',
+      'Findings: <concrete static review findings>',
+      'OpenBlockers: none',
+      'Verdict: PASS',
+    ].join('\n'));
   }
 
   if (needsTesting(route)) {
-    gates.push('Testing gate: run relevant local test/build/lint commands through an explicit host tool call, then omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report before final claims. omp_test_gate only validates route-scoped host evidence and never executes its testCommand/config command. If omp_test_* tools are unavailable, provide an equivalent manual testing gate report with concrete local command evidence.');
+    gates.push(isExactTestExecution(route)
+      ? `Exact test evidence gate: use read for runner configuration, execute one direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')}, and report that observed result; do not run additional targets or aggregate aliases.`
+      : 'Testing gate: run relevant local test/build/lint commands through an explicit host tool call, then omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report before final claims. omp_test_gate only validates route-scoped host evidence and never executes its testCommand/config command. If omp_test_* tools are unavailable, provide an equivalent manual testing gate report with concrete local command evidence.');
   }
 
   if (needsWritingQuality(route)) {
@@ -381,7 +439,17 @@ function completionGateChecklist(route) {
   }
 
   if (route.intent === 'security-review' || routeRequiresGate(route, 'security-evidence')) {
-    gates.push('Security gate: complete security risk analysis first; remediation or final risk claims must be checked by the reviewer role when changes are in scope.');
+    gates.push(isReadOnlySecurityReview(route)
+      ? [
+        'Security evidence gate: after loading the two required security skills and inspecting the requested source scope, include this exact multiline block:',
+        'SECURITY_REVIEW',
+        'Scope: <reviewed file and any callers actually inspected>',
+        'Findings: <supported findings, or none>',
+        'Evidence: <file and symbol evidence>',
+        'OpenBlockers: none',
+        'Verdict: COMPLETE',
+      ].join('\n')
+      : 'Security gate: complete security risk analysis first; remediation or final risk claims must be checked by the reviewer role when changes are in scope.');
   }
 
   if (route.intent === 'config-assets') {
@@ -483,6 +551,8 @@ function isConstrainedRouteStatusSkillPrompt(prompt = '') {
 
 function workflowFor(route) {
   const intent = route.intent;
+  if (isExactTestExecution(route)) return `Exact test target workflow: inspect runner configuration with read -> run one direct command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} -> report the host-observed result without generating additional tests.`;
+  if (isReadOnlySecurityReview(route)) return 'Focused read-only security workflow: load security-review and security-scan -> inspect the requested file and direct local callers -> separate code facts from unsupported threat assumptions -> emit SECURITY_REVIEW evidence without edits or tests.';
   if (isReadOnlyCodeReview(route)) return 'Read-only code review workflow: inspect the requested file and directly related code -> collect concrete file and symbol evidence -> report findings without test execution or test-evidence repair.';
   if (isCodeModificationWithoutTests(route)) {
     const actors = (route.requiredSubagents ?? []).map(({ agent }) => agent).filter(Boolean);
@@ -511,6 +581,21 @@ function workflowFor(route) {
 
 function routeBoundaryFor(route) {
   const intent = route.intent;
+  if (isExactTestExecution(route)) {
+    const descriptor = route.taskDescriptor ?? {};
+    const targets = descriptor.testExecutionTargets ?? [];
+    const constraints = descriptor.constraints ?? {};
+    const extras = [
+      constraints.workspaceWrite === 'forbidden' ? 'workspace writes' : null,
+      constraints.networkAccess === 'forbidden' ? 'network access' : null,
+      constraints.subagents === 'forbidden' ? 'subagents' : null,
+      constraints.externalWrite !== 'required' ? 'external writes' : null,
+    ].filter(Boolean);
+    return `Route boundary: execute only the exact test target ${targets.join(', ')}. Use read for configuration inspection and one direct test command; aggregate tests, substituted targets, pipelines, redirections, and runner preloads are outside scope.${extras.length ? ` ${extras.join(', ')} remain forbidden.` : ''}`;
+  }
+  if (isReadOnlySecurityReview(route)) {
+    return 'Route boundary: this is a read-only, local security review. Use read-only tools, inspect the requested source scope and direct callers, and report only supported findings; do not edit, run tests, use the network, delegate, or release.';
+  }
   if (isReadOnlyCodeReview(route)) {
     return 'Route boundary: this is a read-only code review. Test execution is forbidden; do not run test commands, create test files, enter a testing workflow, or edit production code. Report only evidence from permitted read operations.';
   }
@@ -660,8 +745,28 @@ function isReadOnlyCodeReview(route) {
   return descriptor?.operation === 'inspect'
     && Array.isArray(descriptor.domains)
     && descriptor.domains.includes('code')
+    && !descriptor.domains.includes('security')
     && descriptor.constraints?.workspaceWrite === 'forbidden'
     && descriptor.constraints?.testExecution === 'forbidden';
+}
+
+function isReadOnlySecurityReview(route) {
+  const descriptor = route?.taskDescriptor;
+  return descriptor?.operation === 'inspect'
+    && Array.isArray(descriptor.domains)
+    && descriptor.domains.includes('security')
+    && descriptor.constraints?.workspaceWrite === 'forbidden'
+    && descriptor.constraints?.testExecution === 'forbidden'
+    && descriptor.constraints?.subagents === 'forbidden';
+}
+
+function isExactTestExecution(route) {
+  const descriptor = route?.taskDescriptor;
+  return descriptor?.operation === 'execute'
+    && descriptor.constraints?.testExecution === 'required'
+    && Array.isArray(descriptor.testExecutionTargets)
+    && descriptor.testExecutionTargets.length > 0
+    && (descriptor.phases ?? []).every(({ kind }) => kind === 'verify');
 }
 
 function isCodeModificationWithoutTests(route) {

@@ -201,6 +201,14 @@ test('an exact local test target can run without granting hidden network or work
     toolName: 'bash', input: { command: 'node --test --import ./hidden-network.js test/router.test.js' },
   }, preloadRuntime.ctx);
   assert.equal(preload?.reasonCode, 'network-access-unverifiable');
+
+  if (process.platform !== 'win32') {
+    const caseRuntime = await routedRuntime(prompt);
+    const wrongCase = await event(caseRuntime.pi, 'tool_call')({
+      toolName: 'bash', input: { command: 'node --test Test/Router.test.js' },
+    }, caseRuntime.ctx);
+    assert.equal(wrongCase?.reasonCode, 'test-target-authorization-required');
+  }
 });
 
 test('authorized local automation is not mistaken for an external write', async () => {
@@ -921,6 +929,23 @@ test('scoped workspace write authorization blocks excluded and unmentioned files
   }, broadened.ctx);
   assert.equal(broadenedEdit?.reasonCode, 'workspace-target-authorization-required');
 
+  if (process.platform !== 'win32') {
+    const wrongCase = await routedRuntime('Fix src/router.js and do not modify any other files.');
+    const wrongCaseEdit = await event(wrongCase.pi, 'tool_call')({
+      toolName: 'edit', input: { path: 'SRC/ROUTER.js' },
+    }, wrongCase.ctx);
+    assert.equal(wrongCaseEdit?.reasonCode, 'workspace-target-authorization-required');
+  }
+
+  for (const tool of [
+    { toolName: 'edit', input: { path: 'src/router.js/../secret.js' } },
+    { toolName: 'apply_patch', input: { patch: '*** Begin Patch\n*** Update File: src/router.js/../secret.js\n@@\n-old\n+new\n*** End Patch' } },
+  ]) {
+    const traversal = await routedRuntime('Fix src/router.js and do not modify any other files.');
+    const blockedTraversal = await event(traversal.pi, 'tool_call')(tool, traversal.ctx);
+    assert.equal(blockedTraversal?.reasonCode, 'workspace-target-authorization-required');
+  }
+
   const multiFilePatch = await routedRuntime('Fix src/router.js and do not modify any other files.');
   const blockedPatch = await event(multiFilePatch.pi, 'tool_call')({
     toolName: 'apply_patch',
@@ -957,6 +982,81 @@ test('scoped workspace write authorization blocks excluded and unmentioned files
     },
   }, movedPatch.ctx);
   assert.equal(blockedMove?.reasonCode, 'workspace-target-authorization-required');
+
+  const anchored = await routedRuntime('Fix src/router.js and do not modify any other files.');
+  anchored.pi.entries.push({
+    type: 'message',
+    message: {
+      role: 'toolResult',
+      toolName: 'read',
+      content: [{ type: 'text', text: '[router.js#ABCD]\n1:export function route(value) {' }],
+      details: { meta: { source: { type: 'path', value: join(process.cwd(), 'src/router.js') } } },
+    },
+  });
+  const anchoredEdit = await event(anchored.pi, 'tool_call')({
+    toolName: 'edit',
+    input: { input: '[router.js#ABCD]\nSWAP 1.=1:\n+export function route(value) {' },
+  }, anchored.ctx);
+  assert.notEqual(anchoredEdit?.reasonCode, 'workspace-target-authorization-required');
+
+  const forged = await routedRuntime('Fix src/router.js and do not modify any other files.');
+  const forgedEdit = await event(forged.pi, 'tool_call')({
+    toolName: 'edit',
+    input: { input: '[router.js#FFFF]\nSWAP 1.=1:\n+export function route(value) {' },
+  }, forged.ctx);
+  assert.equal(forgedEdit?.reasonCode, 'workspace-target-authorization-required');
+
+  const mixed = await routedRuntime('Fix src/router.js and do not modify any other files.');
+  mixed.pi.entries.push(anchored.pi.entries.find((entry) => entry.type === 'message'));
+  const mixedEdit = await event(mixed.pi, 'tool_call')({
+    toolName: 'edit',
+    input: { input: '[router.js#ABCD]\nSWAP 1.=1:\n+ok\n[LICENSE#FFFF]\nSWAP 1.=1:\n+not allowed' },
+  }, mixed.ctx);
+  assert.equal(mixedEdit?.reasonCode, 'workspace-target-authorization-required');
+
+  const ambiguous = await routedRuntime('Fix src/router.js and do not modify any other files.');
+  for (const value of ['src/router.js', 'test/router.test.js']) {
+    ambiguous.pi.entries.push({
+      type: 'message',
+      message: {
+        role: 'toolResult',
+        toolName: 'read',
+        content: [{ type: 'text', text: '[shared.js#D00D]\n1:same anchor' }],
+        details: { meta: { source: { type: 'path', value: join(process.cwd(), value) } } },
+      },
+    });
+  }
+  const ambiguousEdit = await event(ambiguous.pi, 'tool_call')({
+    toolName: 'edit',
+    input: { input: '[shared.js#D00D]\nSWAP 1.=1:\n+ambiguous' },
+  }, ambiguous.ctx);
+  assert.equal(ambiguousEdit?.reasonCode, 'workspace-target-authorization-required');
+});
+
+test('read-bound edit anchors reject symlink targets outside the workspace', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'omp-anchor-root-'));
+  const outside = await mkdtemp(join(tmpdir(), 'omp-anchor-outside-'));
+  t.after(async () => Promise.all([rm(root, { recursive: true, force: true }), rm(outside, { recursive: true, force: true })]));
+  await mkdir(join(root, 'src'), { recursive: true });
+  const outsideFile = join(outside, 'router.js');
+  await writeFile(outsideFile, 'export const route = value => value;\n');
+  await symlink(outsideFile, join(root, 'src/router.js'));
+
+  const runtime = await routedRuntime('Fix src/router.js and do not modify any other files.', { cwd: root });
+  runtime.pi.entries.push({
+    type: 'message',
+    message: {
+      role: 'toolResult',
+      toolName: 'read',
+      content: [{ type: 'text', text: '[router.js#BEEF]\n1:export const route = value => value;' }],
+      details: { meta: { source: { type: 'path', value: join(root, 'src/router.js') } } },
+    },
+  });
+  const blocked = await event(runtime.pi, 'tool_call')({
+    toolName: 'edit',
+    input: { input: '[router.js#BEEF]\nSWAP 1.=1:\n+export const route = value => value.trim();' },
+  }, runtime.ctx);
+  assert.equal(blocked?.reasonCode, 'workspace-target-authorization-required');
 });
 
 test('scoped deployment authorization rejects production while preserving the trusted staging target', async () => {
