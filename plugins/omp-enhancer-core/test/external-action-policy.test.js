@@ -12,6 +12,7 @@ test('supported reversible connector prompts compile complete provider/action/ta
   const cases = [
     ['Send an email to alice@example.com.', 'email', 'send', 'recipient', 'alice@example.com'],
     ['Post a Slack message to channel #ops.', 'slack', 'post-message', 'channel', 'ops'],
+    ['在 Slack 频道 #omp-e2e 发送消息 hello；不要发布。', 'slack', 'post-message', 'channel', 'omp-e2e'],
     ['Create a Jira issue in project CORE.', 'jira', 'create-issue', 'project', 'CORE'],
     ['Upload report.pdf to Google Drive folder reports.', 'google-drive', 'upload-file', 'folder', 'reports'],
     ['Schedule an event on team@example.com calendar.', 'calendar', 'create-event', 'calendar', 'team@example.com'],

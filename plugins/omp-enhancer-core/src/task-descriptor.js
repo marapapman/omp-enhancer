@@ -411,11 +411,14 @@ function collectSignals(text, prompt) {
   const conceptOnly = /(?:解释|是什么|含义|概念)|\b(?:what is|explain|define)\b/.test(text)
     && !review && !directModify && !directTestAuthoring;
   const answerOnly = (noTestExecution && /(?:命令|command)/.test(text) || noActionExecution && instructionalAdvice) && !directModify;
-  const pluginWork = /(?:\bomp\b|omp-enhancer|插件|路由|门禁|分类器|工作流|github)|\b(?:plugin|classifier|workflow|gate logic)\b/.test(text) || releaseRequested || noExternalWrite;
+  const pluginWork = /(?:(?<![#a-z0-9_-])omp(?![a-z0-9_-])|omp-enhancer|插件|路由|门禁|分类器|工作流|github)|\b(?:plugin|classifier|workflow|gate logic)\b/.test(text)
+    || releaseRequested
+    || noExternalWrite && !externalActionRequested;
   const codeWork = localBuildExecution || localGitMetadata || codeTarget
     || /(?:代码|代码库|实现|函数|模块|接口|bug|鉴权漏洞)|(?:路由|门禁).{0,8}逻辑|逻辑.{0,8}(?:路由|门禁)|\b(?:code|codebase|repository|repo|function|module|api|bugs?|router|routenaturallanguagetask|implementation)\b/.test(effectiveActionText)
     || directModify && !writingWork;
-  const documentWork = /(?:readme|安装说明|docx|word 文档|latex)|\b(?:readme|docx|latex|markdown document)\b/.test(text);
+  const documentWork = /(?:readme|安装说明|docx|word 文档|latex)|\b(?:readme|docx|latex|markdown document)\b/.test(text)
+    || /(?:^|[\s`'"])(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?)(?=$|[\s`'"，。；、：;,:.!！])/i.test(text);
   const configWork = dependencyInstallExecution || setupScriptExecution
     || /(?:配置资产|配置模板|config assets?|config doctor)|\b(?:config assets?|config doctor)\b/.test(text);
   const ambiguous = ambiguousCodeAction || /(?:不确定|可能是|ambiguous|unclear)/.test(text);

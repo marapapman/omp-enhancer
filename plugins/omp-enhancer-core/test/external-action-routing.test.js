@@ -13,6 +13,18 @@ const CONNECTOR_PROMPTS = [
   'Update Notion page roadmap.',
 ];
 
+test('Chinese Slack target-before-action wording remains a connector action under a no-release ceiling', () => {
+  const prompt = '在 Slack 频道 #omp-e2e 发送消息 hello；不要发布。';
+  const descriptor = describeNaturalLanguageTask({ prompt });
+  assert.equal(descriptor.operation, 'execute');
+  assert.deepEqual(descriptor.domains, ['general']);
+  assert.equal(descriptor.constraints.externalWrite, 'required');
+  assert.equal(descriptor.externalActionContract?.state, 'complete');
+  assert.equal(descriptor.externalActionContract?.provider, 'slack');
+  assert.deepEqual(descriptor.externalActionContract?.target, { kind: 'channel', value: 'omp-e2e' });
+  assert.equal(descriptor.phases.some(({ kind }) => kind === 'release'), false);
+});
+
 test('complete reversible connector actions compile as external execution rather than releases', () => {
   for (const prompt of CONNECTOR_PROMPTS) {
     const descriptor = describeNaturalLanguageTask({ prompt });

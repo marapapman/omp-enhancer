@@ -179,6 +179,7 @@ function reversibleCandidates(source) {
         /\b(?:post|send)\b[^.!?\n]{0,56}\bslack\b[^.!?\n]{0,32}\b(?:message|post)?\b/gi,
         /\bslack\b[^.!?\n]{0,40}\b(?:post|send)\b/gi,
         /(?:在|向)?\s*slack\s*(?:频道)?\s*(?:发送|发布)\s*(?:消息)?/gi,
+        /(?:在|向)?\s*slack\s*(?:频道)?\s*#?[a-z0-9_-]+\s*(?:发送|发布)\s*(?:消息)?/gi,
       ],
     },
     {
@@ -298,6 +299,7 @@ function slackTargetsForPrompt(source) {
     new RegExp(`\\bslack\\b[^.!?\\n]{0,56}\\bchannel\\s+(?:id\\s+)?((?:${channel})(?:\\s*(?:,|and|&)\\s*${channel})*)`, 'gi'),
     new RegExp(`\\b(?:to|in)\\s+(?:the\\s+)?(?:channel\\s+)?((?:${channel})(?:\\s*(?:,|and|&)\\s*${channel})*)[^.!?\\n]{0,32}\\b(?:on|in)\\s+slack\\b`, 'gi'),
     new RegExp(`slack[^。！!？?\\n]{0,32}(?:到|向|在)\\s*(?:频道)?\\s*((?:${channel})(?:\\s*(?:、|，|,|和|及)\\s*${channel})*)`, 'gi'),
+    new RegExp(`slack\\s*(?:频道)?\\s*((?:${channel})(?:\\s*(?:、|，|,|和|及)\\s*${channel})*)\\s*(?:发送|发布)`, 'gi'),
   ];
   const values = [];
   for (const pattern of patterns) {
