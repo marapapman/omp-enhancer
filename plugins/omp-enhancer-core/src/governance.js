@@ -1,6 +1,7 @@
 import { loopGuardPromptSection } from './loop-guard.js';
 import { skillReadNameCandidates } from './skill-usage.js';
 import { useEnforcedRoutePlan } from './runtime-policy.js';
+import { requiresDocumentPreservation } from './document-preservation.js';
 
 export function buildGovernancePromptFragment({
   route,
@@ -38,6 +39,7 @@ export function buildGovernancePromptFragment({
     '',
     'Use this natural language route. Do not require a command prefix.',
     routeBoundaryFor(resolved),
+    ...documentPreservationGuidanceLines(resolved, parentTask),
     '',
     ...workflowGateBriefingLines(resolved),
     '',
@@ -196,6 +198,27 @@ function advisorGuidanceLines(route) {
     ] : []),
     'If empirical evidence contradicts advisor guidance, follow the primary-source evidence, explain the conflict briefly, and do not silently ignore the advisor.',
     'If advisor guidance conflicts with the user request, repository facts, or tool results, reconcile the conflict with evidence before committing to a plan or final answer.',
+  ];
+}
+
+function documentPreservationGuidanceLines(route, parentTask = '') {
+  const descriptor = route?.taskDescriptor;
+  if (descriptor?.operation !== 'modify'
+    || !descriptor?.domains?.includes('document')
+    || !requiresDocumentPreservation(parentTask)) return [];
+  const targets = Array.isArray(descriptor.workspaceWriteTargets) ? descriptor.workspaceWriteTargets : [];
+  if (targets.length !== 1) return [
+    'Document preservation constraint: this request names multiple document targets, but host preservation evidence is bound to one complete document at a time.',
+    'Do not edit, write, patch, run a mutating shell command, or delegate a writing subagent. Ask the user to split the work into one exact document per task.',
+  ];
+  return [
+    'Document preservation constraint: this is a style edit, not authority to change factual propositions.',
+    'Preserve the full claim, including its subject, predicate, exact values, polarity, quantifiers, range, and modality. Keeping only the same number does not preserve the fact.',
+    `Before any direct or subagent mutation, use the direct read tool to read the complete authorized document ${targets[0]} so the host can bind the baseline; prefer the full selector "raw". Do not use a line-range selector, suffix-matched path, or alternate copy.`,
+    'If that full read is truncated by the host, stop method attempts and ask the user to split the document/task into one smaller exact file or explicitly narrow the preservation scope; chunked reads cannot establish this whole-document baseline.',
+    'After the final direct edit and after all subagent work, the parent agent must directly read the complete authorized document once so host evidence can compare it with the original baseline.',
+    'The host check is a conservative lexical and structural invariant, not a proof of arbitrary semantic equivalence; keep factual rewrites minimal so the invariant remains mechanically verifiable.',
+    'Use the smallest equivalent rephrase; if a factual sentence is already clear, leave it unchanged. Compare the original and final claim before reporting completion.',
   ];
 }
 

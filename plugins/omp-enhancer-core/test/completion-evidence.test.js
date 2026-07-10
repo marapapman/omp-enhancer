@@ -948,6 +948,534 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
   });
 });
 
+test('fact-preserving document edits require host-observed semantic invariants', async (t) => {
+  const prompt = '润色 docs/notes.md 的标题和英文句子，使表达更自然，但保持事实 42 不变。只修改 docs/notes.md；禁止运行测试、联网、启动 subagent、提交或发布。';
+  const original = '# Notes\n\nThe stable fact is 42.\n';
+  const drifted = '# Random Notes\n\nAt least 42 is still a constant.\n';
+  const repaired = '# Random Notes\n\nThe stable fact remains 42.\n';
+  const review = [
+    'REVIEW_EVIDENCE',
+    'Scope: docs/notes.md before and after the focused edit',
+    'Findings: the final sentence preserves the original factual proposition',
+    'OpenBlockers: none',
+    'Verdict: PASS',
+  ].join('\n');
+  const recordDocumentSnapshot = async (runtime, text, id) => {
+    const readCall = {
+      type: 'tool_call',
+      toolCallId: id,
+      toolName: 'read',
+      input: { path: 'docs/notes.md' },
+    };
+    assert.notEqual((await event(runtime.pi, 'tool_call')(readCall, runtime.ctx))?.block, true);
+    await event(runtime.pi, 'tool_result')({
+      type: 'tool_result',
+      toolCallId: id,
+      toolName: 'read',
+      // The rendered content may contain line numbers or elision markers and
+      // is not the preservation snapshot. Core must use displayContent.text.
+      content: [{ type: 'text', text: `1: ${text.replace(/\n/g, '\n2: ')}` }],
+      details: {
+        resolvedPath: `${runtime.ctx.cwd}/docs/notes.md`,
+        displayContent: { text, startLine: 1 },
+        summary: { elidedSpans: [], elidedLines: 0 },
+      },
+      isError: false,
+    }, runtime.ctx);
+  };
+  const runRealEdit = async (runtime, oldText, newText, id) => {
+    const editCall = {
+      type: 'tool_call',
+      toolCallId: id,
+      toolName: 'edit',
+      input: {
+        path: 'docs/notes.md',
+        edits: [{ oldText, newText }],
+      },
+    };
+    assert.notEqual((await event(runtime.pi, 'tool_call')(editCall, runtime.ctx))?.block, true);
+    await event(runtime.pi, 'tool_result')({
+      type: 'tool_result',
+      toolCallId: id,
+      toolName: 'edit',
+      content: [{ type: 'text', text: 'Successfully replaced 1 block(s) in docs/notes.md.' }],
+      details: {
+        diff: 'host-observed diff',
+        patch: '--- docs/notes.md\n+++ docs/notes.md',
+        firstChangedLine: 1,
+      },
+      isError: false,
+    }, runtime.ctx);
+  };
+
+  await t.test('a real write result cannot establish a baseline or let a later edit wash the overwrite', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime(prompt);
+      const writeCall = {
+        type: 'tool_call',
+        toolCallId: 'preservation-real-write',
+        toolName: 'write',
+        input: { path: 'docs/notes.md', content: drifted },
+      };
+      const blockedWrite = await event(pi, 'tool_call')(writeCall, ctx);
+      assert.equal(blockedWrite?.block, true);
+      assert.match(blockedWrite.reason, /preservation.*baseline|baseline.*preservation/i);
+
+      // Real OMP WriteToolDetails contain no trusted path/oldText/newText
+      // snapshot. Injecting the result models replay or a hook bypass and must
+      // still poison, not establish, the route baseline.
+      await event(pi, 'tool_result')(successfulToolResult({
+        toolCallId: writeCall.toolCallId,
+        toolName: 'write',
+        input: writeCall.input,
+        output: 'Successfully wrote 43 bytes to docs/notes.md',
+      }), ctx);
+      assert.equal(latestState(pi).evidence.documentPreservationBaseline, null);
+
+      const laterEdit = await event(pi, 'tool_call')({
+        type: 'tool_call',
+        toolCallId: 'preservation-edit-after-overwrite',
+        toolName: 'edit',
+        input: {
+          path: 'docs/notes.md',
+          edits: [{ oldText: drifted, newText: repaired }],
+        },
+      }, ctx);
+      assert.equal(laterEdit?.block, true);
+      assert.match(laterEdit.reason, /baseline.*(?:unavailable|before)|preservation.*baseline/i);
+      assert.equal(latestState(pi).evidence.documentPreservationBaseline, null);
+    });
+  });
+
+  await t.test('line selectors, elided, and non-leading reads cannot establish the baseline', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime(prompt);
+      const rejectedReads = [
+        {
+          id: 'preservation-selector-read',
+          input: { path: 'docs/notes.md', selector: '1-10' },
+          details: { displayContent: { text: original, startLine: 1 } },
+        },
+        {
+          id: 'preservation-raw-range-read',
+          input: { path: 'docs/notes.md', selector: 'raw:1-10' },
+          details: { displayContent: { text: original, startLine: 1 } },
+        },
+        {
+          id: 'preservation-elided-read',
+          input: { path: 'docs/notes.md' },
+          details: {
+            displayContent: { text: original, startLine: 1 },
+            summary: { elidedSpans: [{ start: 2, end: 3 }], elidedLines: 1 },
+          },
+        },
+        {
+          id: 'preservation-non-leading-read',
+          input: { path: 'docs/notes.md' },
+          details: { displayContent: { text: original, startLine: 2 } },
+        },
+      ];
+
+      for (const item of rejectedReads) {
+        await event(pi, 'tool_call')({
+          type: 'tool_call', toolCallId: item.id, toolName: 'read', input: item.input,
+        }, ctx);
+        await event(pi, 'tool_result')({
+          type: 'tool_result', toolCallId: item.id, toolName: 'read',
+          content: [{ type: 'text', text: `1: ${original}` }],
+          details: { resolvedPath: `${ctx.cwd}/docs/notes.md`, ...item.details },
+          isError: false,
+        }, ctx);
+        assert.equal(latestState(pi).evidence.documentPreservationBaseline, null, item.id);
+      }
+
+      const blocked = await event(pi, 'tool_call')({
+        type: 'tool_call',
+        toolCallId: 'preservation-edit-after-incomplete-reads',
+        toolName: 'edit',
+        input: { path: 'docs/notes.md', edits: [{ oldText: original, newText: repaired }] },
+      }, ctx);
+      assert.equal(blocked?.block, true);
+      assert.match(blocked.reason, /read the complete authorized document/i);
+    });
+  });
+
+  await t.test('a complete raw selector read can establish the exact route baseline', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime(prompt);
+      const call = {
+        type: 'tool_call',
+        toolCallId: 'preservation-complete-raw-read',
+        toolName: 'read',
+        input: { path: 'docs/notes.md', selector: 'raw' },
+      };
+      assert.notEqual((await event(pi, 'tool_call')(call, ctx))?.block, true);
+      await event(pi, 'tool_result')({
+        type: 'tool_result',
+        toolCallId: call.toolCallId,
+        toolName: 'read',
+        content: [{ type: 'text', text: original }],
+        details: {
+          resolvedPath: `${ctx.cwd}/docs/notes.md`,
+          displayContent: { text: original, startLine: 1 },
+          summary: { lines: 3, elidedSpans: 0, elidedLines: 0 },
+        },
+        isError: false,
+      }, ctx);
+      assert.ok(latestState(pi).evidence.documentPreservationBaseline);
+    });
+  });
+
+  await t.test('a host-truncated whole-document read stops method retries and asks for a smaller task', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime('全面润色 docs/notes.md 的全部章节，保持所有事实和数字不变。只修改 docs/notes.md。');
+      const call = {
+        type: 'tool_call',
+        toolCallId: 'preservation-truncated-whole-read',
+        toolName: 'read',
+        input: { path: 'docs/notes.md', selector: 'raw' },
+      };
+      await event(pi, 'tool_call')(call, ctx);
+      await event(pi, 'tool_result')({
+        type: 'tool_result',
+        toolCallId: call.toolCallId,
+        toolName: 'read',
+        content: [{ type: 'text', text: 'truncated host output' }],
+        details: {
+          resolvedPath: `${ctx.cwd}/docs/notes.md`,
+          displayContent: { text: original, startLine: 1 },
+          truncation: { truncated: true, totalLines: 4001, outputLines: 3000 },
+          summary: { lines: 4001, elidedSpans: 0, elidedLines: 0 },
+        },
+        isError: false,
+      }, ctx);
+      const state = latestState(pi);
+      assert.equal(state.evidence.documentPreservationBaseline, null);
+      assert.equal(state.actionBoundary.awaitingUserReason, 'document-preservation-snapshot-too-large');
+      assert.doesNotMatch(JSON.stringify(state.actionBoundary), /stable fact|docs\/notes/i);
+
+      for (const attempted of [
+        {
+          type: 'tool_call', toolCallId: 'preservation-chunk-retry', toolName: 'read',
+          input: { path: 'docs/notes.md', selector: 'raw:3001-' },
+        },
+        {
+          type: 'tool_call', toolCallId: 'preservation-edit-after-truncation', toolName: 'edit',
+          input: { path: 'docs/notes.md', edits: [{ oldText: original, newText: repaired }] },
+        },
+      ]) {
+        const blocked = await event(pi, 'tool_call')(attempted, ctx);
+        assert.equal(blocked?.block, true);
+        assert.match(blocked.reason, /truncation|truncated/i);
+        assert.match(blocked.reason, /chunked reads cannot establish|split the document\/task/i);
+        assert.doesNotMatch(blocked.reason, /read the complete authorized document once/i);
+      }
+      assert.equal(await event(pi, 'session_stop')({ output: 'Need a smaller exact task.' }, ctx), undefined);
+
+      const restored = await restartRuntime(pi.entries);
+      assert.equal(latestState(restored.pi).actionBoundary.awaitingUserReason, 'document-preservation-snapshot-too-large');
+      const blockedAfterRestart = await event(restored.pi, 'tool_call')({
+        type: 'tool_call',
+        toolCallId: 'preservation-edit-after-truncation-restart',
+        toolName: 'edit',
+        input: { path: 'docs/notes.md', edits: [{ oldText: original, newText: repaired }] },
+      }, restored.ctx);
+      assert.equal(blockedAfterRestart?.block, true);
+      assert.match(blockedAfterRestart.reason, /chunked reads cannot establish|split the document\/task/i);
+    });
+  });
+
+  await t.test('suffix-impostor and suffix-resolved reads cannot establish the route baseline', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime(prompt);
+      const impostor = {
+        type: 'tool_call',
+        toolCallId: 'preservation-suffix-impostor',
+        toolName: 'read',
+        input: { path: '/tmp/evil/docs/notes.md' },
+      };
+      await event(pi, 'tool_call')(impostor, ctx);
+      await event(pi, 'tool_result')({
+        type: 'tool_result',
+        toolCallId: impostor.toolCallId,
+        toolName: 'read',
+        content: [{ type: 'text', text: original }],
+        details: {
+          resolvedPath: '/tmp/evil/docs/notes.md',
+          displayContent: { text: original, startLine: 1 },
+          summary: { elidedSpans: 0, elidedLines: 0 },
+        },
+        isError: false,
+      }, ctx);
+      assert.equal(latestState(pi).evidence.documentPreservationBaseline, null);
+
+      const recovered = {
+        type: 'tool_call',
+        toolCallId: 'preservation-suffix-resolution',
+        toolName: 'read',
+        input: { path: 'docs/notes.md' },
+      };
+      await event(pi, 'tool_call')(recovered, ctx);
+      await event(pi, 'tool_result')({
+        type: 'tool_result',
+        toolCallId: recovered.toolCallId,
+        toolName: 'read',
+        content: [{ type: 'text', text: original }],
+        details: {
+          resolvedPath: `${ctx.cwd}/docs/notes.md`,
+          suffixResolution: { from: 'notes.md', to: 'docs/notes.md' },
+          displayContent: { text: original, startLine: 1 },
+          summary: { elidedSpans: 0, elidedLines: 0 },
+        },
+        isError: false,
+      }, ctx);
+      assert.equal(latestState(pi).evidence.documentPreservationBaseline, null);
+    });
+  });
+
+  await t.test('absolute preservation targets are accepted only when they resolve inside the trusted cwd', async () => {
+    await withEnforce(async () => {
+      const insideTarget = `${process.cwd()}/docs/Absolute Notes.md`;
+      const inside = await startRuntime(`Polish "${insideTarget}" while keeping facts unchanged.`);
+      assert.deepEqual(latestState(inside.pi).lastRoute.taskDescriptor.workspaceWriteTargets, [insideTarget]);
+      const insideRead = {
+        type: 'tool_call', toolCallId: 'preservation-absolute-inside', toolName: 'read',
+        input: { path: insideTarget, selector: 'raw' },
+      };
+      await event(inside.pi, 'tool_call')(insideRead, inside.ctx);
+      await event(inside.pi, 'tool_result')({
+        type: 'tool_result', toolCallId: insideRead.toolCallId, toolName: 'read',
+        content: [{ type: 'text', text: original }],
+        details: {
+          resolvedPath: insideTarget,
+          displayContent: { text: original, startLine: 1 },
+          summary: { lines: 3, elidedSpans: 0, elidedLines: 0 },
+        },
+        isError: false,
+      }, inside.ctx);
+      assert.ok(latestState(inside.pi).evidence.documentPreservationBaseline);
+
+      const outsideTarget = '/tmp/evil/Outside Notes.md';
+      const outside = await startRuntime(`Polish "${outsideTarget}" while keeping facts unchanged.`);
+      assert.deepEqual(latestState(outside.pi).lastRoute.taskDescriptor.workspaceWriteTargets, [outsideTarget]);
+      const outsideRead = {
+        type: 'tool_call', toolCallId: 'preservation-absolute-outside', toolName: 'read',
+        input: { path: outsideTarget, selector: 'raw' },
+      };
+      await event(outside.pi, 'tool_call')(outsideRead, outside.ctx);
+      await event(outside.pi, 'tool_result')({
+        type: 'tool_result', toolCallId: outsideRead.toolCallId, toolName: 'read',
+        content: [{ type: 'text', text: original }],
+        details: {
+          resolvedPath: outsideTarget,
+          displayContent: { text: original, startLine: 1 },
+          summary: { lines: 3, elidedSpans: 0, elidedLines: 0 },
+        },
+        isError: false,
+      }, outside.ctx);
+      assert.equal(latestState(outside.pi).evidence.documentPreservationBaseline, null);
+      const blocked = await event(outside.pi, 'tool_call')({
+        type: 'tool_call', toolCallId: 'preservation-absolute-outside-edit', toolName: 'edit',
+        input: { path: outsideTarget, edits: [{ oldText: original, newText: repaired }] },
+      }, outside.ctx);
+      assert.equal(blocked?.block, true);
+      assert.match(blocked.reason, /baseline|outside.*allowlist/i);
+    });
+  });
+
+  await t.test('broad single-document preservation uses the same baseline and session gate', async () => {
+    await withEnforce(async () => {
+      const broadPrompt = '全面润色 docs/notes.md 的全部章节，保持所有事实和数字不变。只修改 docs/notes.md，不联网。';
+      const runtime = await startRuntime(broadPrompt);
+      assert.equal(latestState(runtime.pi).lastRoute.taskDescriptor.complexity, 'broad');
+      await recordDocumentSnapshot(runtime, original, 'preservation-broad-baseline');
+      await event(runtime.pi, 'tool_result')(successfulToolResult({
+        toolCallId: 'preservation-broad-edit',
+        toolName: 'edit',
+        input: { path: 'docs/notes.md', edits: [{ oldText: original, newText: drifted }] },
+        output: 'updated docs/notes.md',
+      }), runtime.ctx);
+      await recordDocumentSnapshot(runtime, drifted, 'preservation-broad-readback');
+      assert.equal(latestState(runtime.pi).evidence.documentPreservationEvidence.ok, false);
+      const blocked = await event(runtime.pi, 'session_stop')({ output: review }, runtime.ctx);
+      assert.equal(blocked?.continue, true);
+      assert.match(blocked.additionalContext, /Document preservation evidence/i);
+    });
+  });
+
+  await t.test('subagent mutation attempts require a parent baseline and a parent full readback', async () => {
+    await withEnforce(async () => {
+      for (const [kind, routedPrompt] of [
+        ['focused', '润色 docs/notes.md，事实和数字不变。只修改 docs/notes.md。'],
+        ['broad', '全面润色 docs/notes.md 的全部章节，保持所有事实和数字不变。只修改 docs/notes.md，不联网。'],
+      ]) {
+        const runtime = await startRuntime(routedPrompt);
+        assert.equal(latestState(runtime.pi).lastRoute.taskDescriptor.complexity, kind);
+        const taskCall = {
+          type: 'tool_call',
+          toolCallId: `preservation-${kind}-subagent-before-baseline`,
+          toolName: 'task',
+          input: { agent: 'writer', task: 'Polish only docs/notes.md and preserve every fact.' },
+        };
+        const blockedTask = await event(runtime.pi, 'tool_call')(taskCall, runtime.ctx);
+        assert.equal(blockedTask?.block, true, kind);
+        assert.match(blockedTask.reason, /baseline/i, kind);
+
+        await recordDocumentSnapshot(runtime, original, `preservation-${kind}-subagent-baseline`);
+        const beforeRevision = latestState(runtime.pi).evidence.mutationRevision;
+        await event(runtime.pi, 'tool_result')(successfulToolResult({
+          toolCallId: `preservation-${kind}-subagent-result`,
+          toolName: 'task',
+          input: taskCall.input,
+          output: 'Subagent completed the requested document edit.',
+        }), runtime.ctx);
+        assert.equal(latestState(runtime.pi).evidence.mutationRevision, beforeRevision + 1, kind);
+        const beforeReadback = await event(runtime.pi, 'session_stop')({ output: review }, runtime.ctx);
+        assert.equal(beforeReadback?.continue, true, kind);
+        assert.match(beforeReadback.additionalContext, /Document preservation evidence/i, kind);
+
+        await recordDocumentSnapshot(runtime, original, `preservation-${kind}-subagent-readback`);
+        assert.equal(latestState(runtime.pi).evidence.documentPreservationEvidence.ok, true, kind);
+        assert.equal(
+          latestState(runtime.pi).evidence.documentPreservationEvidence.mutationRevision,
+          latestState(runtime.pi).evidence.mutationRevision,
+          kind,
+        );
+      }
+    });
+  });
+
+  await t.test('spawn and delegate results invalidate preservation evidence without penalizing status-only collaboration tools', async () => {
+    await withEnforce(async () => {
+      for (const toolName of ['collaboration.spawn_agent', 'delegate']) {
+        const runtime = await startRuntime('润色 docs/notes.md，事实和数字不变。只修改 docs/notes.md。');
+        const key = toolName.replace(/\W+/gu, '-');
+        await recordDocumentSnapshot(runtime, original, `preservation-${key}-baseline`);
+        const beforeRevision = latestState(runtime.pi).evidence.mutationRevision;
+        await event(runtime.pi, 'tool_result')(successfulToolResult({
+          toolCallId: `preservation-${key}-result`,
+          toolName,
+          input: { task: 'Polish only docs/notes.md and preserve every fact.' },
+          output: 'Subagent work completed.',
+        }), runtime.ctx);
+        assert.equal(latestState(runtime.pi).evidence.mutationRevision, beforeRevision + 1, toolName);
+        assert.equal(latestState(runtime.pi).evidence.documentPreservationEvidence, null, toolName);
+      }
+
+      const statusRuntime = await startRuntime('润色 docs/notes.md，事实和数字不变。只修改 docs/notes.md。');
+      await recordDocumentSnapshot(statusRuntime, original, 'preservation-status-baseline');
+      const beforeStatus = latestState(statusRuntime.pi).evidence.mutationRevision;
+      for (const toolName of ['collaboration.list_agents', 'collaboration.wait_agent', 'collaboration.interrupt_agent']) {
+        await event(statusRuntime.pi, 'tool_result')(successfulToolResult({
+          toolCallId: `preservation-${toolName}-result`,
+          toolName,
+          input: {},
+          output: 'status only',
+        }), statusRuntime.ctx);
+      }
+      assert.equal(latestState(statusRuntime.pi).evidence.mutationRevision, beforeStatus);
+    });
+  });
+
+  await t.test('a self-authored PASS cannot override semantic drift, while a corrective edit survives restart', async () => {
+    await withEnforce(async () => {
+      const first = await startRuntime(prompt);
+      assert.equal(first.pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data.lastRoute.intent, 'writing.zh');
+      await recordDocumentSnapshot(first, original, 'preservation-baseline-read');
+      await runRealEdit(first, original, drifted, 'preservation-bad-edit');
+      await recordDocumentSnapshot(first, drifted, 'preservation-drifted-readback');
+      let state = latestState(first.pi);
+      assert.equal(state.evidence.documentPreservationEvidence.ok, false);
+      assert.deepEqual(state.evidence.documentPreservationEvidence.reasonCodes, [
+        'range-terms-added',
+        'core-anchors-added',
+        'core-anchors-dropped',
+      ]);
+      assert.doesNotMatch(JSON.stringify({
+        baseline: state.evidence.documentPreservationBaseline,
+        evidence: state.evidence.documentPreservationEvidence,
+      }), /The stable fact|At least|docs\/notes\.md/);
+
+      for (const skill of state.lastRoute.routePlan.requiredSkills) {
+        await event(first.pi, 'tool_result')(successfulToolResult({
+          toolCallId: `preservation-read-${skill}`,
+          toolName: 'read',
+          input: { path: `skill://${skill}` },
+          output: `${skill} instructions`,
+        }), first.ctx);
+      }
+      const blocked = await event(first.pi, 'session_stop')({ output: review }, first.ctx);
+      assert.equal(blocked?.continue, true);
+      assert.match(blocked.additionalContext, /Document preservation evidence.*range-terms-added.*core-anchors-added.*core-anchors-dropped/is);
+      assert.equal(latestState(first.pi).evidence.reviewEvidence, true, 'review prose may pass only its own gate');
+
+      const restored = await restartRuntime(first.pi.entries);
+      assert.ok(latestState(restored.pi).evidence.documentPreservationBaseline);
+      await runRealEdit(restored, drifted, repaired, 'preservation-corrective-edit');
+      await recordDocumentSnapshot(restored, repaired, 'preservation-repaired-readback');
+      state = latestState(restored.pi);
+      assert.equal(state.evidence.documentPreservationEvidence.ok, true);
+      assert.equal(state.evidence.documentPreservationEvidence.mutationRevision, state.evidence.mutationRevision);
+      assert.equal(await event(restored.pi, 'session_stop')({ output: review }, restored.ctx), undefined);
+    });
+  });
+
+  await t.test('a later violating mutation invalidates earlier passing preservation evidence', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime(prompt);
+      const runtime = { pi, ctx };
+      await recordDocumentSnapshot(runtime, original, 'preservation-later-baseline-read');
+      await runRealEdit(runtime, original, repaired, 'preservation-initial-pass');
+      await recordDocumentSnapshot(runtime, repaired, 'preservation-initial-readback');
+      assert.equal(latestState(pi).evidence.documentPreservationEvidence.ok, true);
+      await runRealEdit(runtime, repaired, drifted, 'preservation-later-drift');
+      await recordDocumentSnapshot(runtime, drifted, 'preservation-later-drift-readback');
+      const state = latestState(pi);
+      assert.equal(state.evidence.documentPreservationEvidence.ok, false);
+      assert.equal(state.evidence.documentPreservationEvidence.mutationRevision, state.evidence.mutationRevision);
+    });
+  });
+
+  await t.test('ordinary polish without an explicit preservation constraint does not gain this gate', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startRuntime('润色 docs/notes.md 的标题和英文句子。只修改 docs/notes.md；禁止运行测试、联网、启动 subagent、提交或发布。');
+      await runRealEdit({ pi, ctx }, original, drifted, 'ordinary-polish-edit');
+      assert.equal(latestState(pi).evidence.documentPreservationBaseline, null);
+      assert.equal(latestState(pi).evidence.documentPreservationEvidence, null);
+      const stopped = await event(pi, 'session_stop')({ output: review }, ctx);
+      assert.doesNotMatch(stopped?.additionalContext ?? '', /Document preservation evidence/i);
+    });
+  });
+
+  await t.test('multi-document preservation mutations fail closed until the user splits the task', async () => {
+    await withEnforce(async () => {
+      const multiPrompt = '润色 docs/one.md 和 docs/two.md，使表达自然，但保持两个文档中的事实和数字不变。只修改 docs/one.md 和 docs/two.md；禁止运行测试、联网、启动 subagent、提交或发布。';
+      const { pi, ctx } = await startRuntime(multiPrompt);
+      const state = latestState(pi);
+      assert.deepEqual(state.lastRoute.taskDescriptor.workspaceWriteTargets, ['docs/one.md', 'docs/two.md']);
+      const blocked = await event(pi, 'tool_call')({
+        type: 'tool_call',
+        toolCallId: 'preservation-multi-target-edit',
+        toolName: 'edit',
+        input: {
+          path: 'docs/one.md',
+          edits: [{ oldText: 'The stable fact is 42.', newText: 'The stable fact remains 42.' }],
+        },
+      }, ctx);
+      assert.equal(blocked?.block, true);
+      assert.match(blocked.reason, /split.*one document|one complete document|single.*document/i);
+      const blockedTask = await event(pi, 'tool_call')({
+        type: 'tool_call',
+        toolCallId: 'preservation-multi-target-task',
+        toolName: 'task',
+        input: { agent: 'writer', task: 'Polish docs/one.md and docs/two.md.' },
+      }, ctx);
+      assert.equal(blockedTask?.block, true);
+      assert.match(blockedTask.reason, /OMP_AWAITING_USER|split.*one document|one complete document|single.*document/i);
+    });
+  });
+});
+
 test('no-subagent security review has a satisfiable main-agent evidence contract', async () => {
   await withEnforce(async () => {
     const { pi, ctx } = await startRuntime('Audit this authentication module for vulnerabilities, but do not use subagents; main agent only.');
@@ -2007,6 +2535,7 @@ async function restartRuntime(entries, { testingToolAvailable = false } = {}) {
 
 function runtimeContext(pi) {
   return {
+    cwd: process.cwd(),
     sessionManager: { getBranch: () => pi.entries, getSessionId: () => 'session-1' },
     ui: { notify: () => undefined },
     hasUI: false,

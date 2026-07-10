@@ -692,10 +692,13 @@ test('before_agent_start treats gate validator status reports as diagnosis witho
   assert.equal(stop, undefined);
 });
 
-test('assistant output loop guard aborts repeated main-agent generation and prepares recovery context', async () => {
-  const pi = new FakePi();
+test('assistant output loop guard defers repeated generation to bounded session-stop recovery', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
   registerCoreEnhancer(pi);
-  const ctx = extensionContext();
+  const ctx = extensionContext(entries);
+  let abortCount = 0;
+  ctx.abort = () => { abortCount += 1; };
 
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')({ prompt: 'Implement classifier fallback handling and add tests.' }, ctx);
@@ -705,21 +708,29 @@ test('assistant output loop guard aborts repeated main-agent generation and prep
     'The system is asking me to validate SKILL_USAGE again.',
     'The system is asking me to validate SKILL_USAGE again.',
   ].join('\n');
-  const blocked = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
+  const detected = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
 
-  assert.equal(blocked.abort, true);
-  assert.equal(blocked.autoContinue, false);
-  assert.match(blocked.reason, /loop guard/i);
-  assert.match(blocked.additionalContext, /^LOOP_BREAKER\nReason:/);
-  assert.match(blocked.additionalContext, /Do next: summarize current state and choose a different next action/);
-  assert.equal(pi.messages.length, 0);
-  assert.match(blocked.details.autoContinuation.reason, /GateController/);
+  assert.equal(detected, undefined);
+  assert.equal(abortCount, 0);
+  const pending = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(pending.loopGuard.repeatedGenerationCount, 1);
+  assert.equal(pending.loopGuard.recoveryPending, true);
+  assert.equal(pending.loopGuard.streamTriggered, true);
+
+  const repair = await event(pi, 'session_stop')({ output: repeated }, ctx);
+  assert.equal(repair?.continue, true);
+  assert.match(repair.additionalContext, /^OMP_GATE_REPAIR/);
+  assert.match(repair.additionalContext, /LOOP_BREAKER\nReason:/);
+  assert.match(repair.additionalContext, /Do next: summarize current state and choose a different next action/);
 });
 
-test('before_agent_start treats GateController loop repair continuations as internal prompts', async () => {
-  const pi = new FakePi();
+test('before_agent_start treats deferred GateController loop repair continuations as internal prompts', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
   registerCoreEnhancer(pi);
-  const ctx = extensionContext();
+  const ctx = extensionContext(entries);
+  let abortCount = 0;
+  ctx.abort = () => { abortCount += 1; };
 
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')({ prompt: 'Implement classifier fallback handling and add tests.' }, ctx);
@@ -729,11 +740,10 @@ test('before_agent_start treats GateController loop repair continuations as inte
     'The system is asking me to validate SKILL_USAGE again.',
     'The system is asking me to validate SKILL_USAGE again.',
   ].join('\n');
-  const blocked = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
+  const detected = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
 
-  assert.equal(blocked.abort, true);
-  assert.equal(blocked.autoContinue, false);
-  assert.equal(pi.messages.length, 0);
+  assert.equal(detected, undefined);
+  assert.equal(abortCount, 0);
 
   const repair = await event(pi, 'session_stop')({}, ctx);
   assert.equal(repair?.continue, true);
@@ -748,17 +758,73 @@ test('before_agent_start treats GateController loop repair continuations as inte
     'I will now run the focused regression test.',
     'I will now run the focused regression test.',
   ].join('\n');
-  const blockedAgain = await event(pi, 'assistant_delta')({ delta: repeatedAgain }, ctx);
+  const detectedAgain = await event(pi, 'assistant_delta')({ delta: repeatedAgain }, ctx);
 
-  assert.equal(blockedAgain.abort, true);
-  assert.equal(blockedAgain.autoContinue, false);
-  assert.match(blockedAgain.details.autoContinuation.reason, /GateController/i);
+  assert.equal(detectedAgain, undefined);
+  assert.equal(abortCount, 0);
+  const routeState = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(routeState.loopGuard.recoveryPending, true);
+  assert.equal(routeState.loopGuard.streamTriggered, true);
 });
 
-test('message_update loop guard aborts real OMP text delta streams', async () => {
-  const pi = new FakePi();
+test('message_update loop guard ignores the real v0.1.79 security-repair thinking delta', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
   registerCoreEnhancer(pi);
-  const ctx = extensionContext();
+  const ctx = extensionContext(entries);
+  let abortCount = 0;
+  ctx.abort = () => { abortCount += 1; };
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({
+    prompt: '只读审查 src/router.js 是否存在安全问题。禁止修改任何文件，禁止运行测试，禁止联网，禁止启动 subagent，禁止提交或发布。只报告有代码证据支持的结论。',
+  }, ctx);
+
+  const repair = await event(pi, 'session_stop')({
+    output: 'No confirmed security issue was found in the inspected file.',
+  }, ctx);
+  assert.equal(repair?.continue, true);
+  assert.match(repair.additionalContext, /^OMP_GATE_REPAIR/);
+
+  await event(pi, 'before_agent_start')({ prompt: repair.additionalContext }, ctx);
+  const capturedThinking = [
+    "I've read both skills. Now I need to:",
+    '',
+    '1. Call `omp_core_validate_skill_usage` with output set to the full SKILL_USAGE response text including these skill reads.',
+    '',
+    'But wait — the instruction says "If your previous final response already included SKILL_USAGE, call omp_core_validate_skill_usage with output set to that full response text." My previous response did not include a SKILL_USAGE block. So I need to produce one first, then validate it.',
+    '',
+    'Let me construct the SKILL_USAGE block showing I loaded both skills, and then provide the SECURITY_REVIEW evidence block.',
+    '',
+    'Actually, looking more carefully at the instruction: "read each missing required skill with `skill://<skill-name>`, wait for those read results, then call omp_core_validate_skill_usage with output set to the full SKILL_USAGE response text."',
+    '',
+    "I've read both skills. Now I need to call `omp_core_validate_skill_usage` with output that is a",
+  ].join('\n');
+  const result = await event(pi, 'message_update')({
+    message: {
+      role: 'assistant',
+      content: [{ type: 'thinking', thinking: capturedThinking }],
+    },
+    assistantMessageEvent: {
+      type: 'thinking_delta',
+      delta: capturedThinking,
+      contentIndex: 0,
+    },
+  }, ctx);
+
+  assert.equal(result, undefined);
+  assert.equal(abortCount, 0);
+  const routeState = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(routeState.loopGuard.repeatedGenerationCount, 0);
+  assert.equal(routeState.loopGuard.recoveryPending, false);
+  assert.equal(routeState.loopGuard.streamTriggered, false);
+});
+
+test('message_update loop guard defers real OMP text delta streams without process abort', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
   let abortCount = 0;
   ctx.abort = () => { abortCount += 1; };
 
@@ -781,7 +847,7 @@ test('message_update loop guard aborts real OMP text delta streams', async () =>
   assert.equal(ignoredToolDelta, undefined);
   assert.equal(abortCount, 0);
 
-  const blocked = await event(pi, 'message_update')(
+  const detected = await event(pi, 'message_update')(
     {
       message: { role: 'assistant', content: [{ type: 'text', text: repeated }] },
       assistantMessageEvent: { type: 'text_delta', delta: repeated, contentIndex: 0 },
@@ -789,13 +855,24 @@ test('message_update loop guard aborts real OMP text delta streams', async () =>
     ctx,
   );
 
-  assert.equal(abortCount, 1);
-  assert.equal(blocked.abort, true);
-  assert.equal(blocked.autoContinue, false);
-  assert.match(blocked.reason, /loop guard/i);
-  assert.equal(pi.messages.length, 0);
+  assert.equal(detected, undefined);
+  assert.equal(abortCount, 0);
+  const pending = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(pending.loopGuard.repeatedGenerationCount, 1);
+  assert.equal(pending.loopGuard.recoveryPending, true);
+  assert.equal(pending.loopGuard.streamTriggered, true);
 
-  await event(pi, 'turn_start')({}, ctx);
+  const repair = await event(pi, 'session_stop')({ output: repeated }, ctx);
+  assert.equal(repair?.continue, true);
+  assert.match(repair.additionalContext, /^OMP_GATE_REPAIR/);
+  assert.match(repair.additionalContext, /LOOP_BREAKER\nReason:/);
+
+  await event(pi, 'before_agent_start')({ prompt: repair.additionalContext }, ctx);
+  await event(pi, 'tool_result')({ name: 'read' }, ctx);
+  const progressed = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(progressed.loopGuard.recoveryPending, false);
+  assert.equal(progressed.loopGuard.streamTriggered, false);
+
   const nonRepeatedAfterRecoveryStart = await event(pi, 'message_update')(
     {
       message: { role: 'assistant', content: [{ type: 'text', text: 'I will inspect the next required file and then run the focused test.' }] },
@@ -834,22 +911,23 @@ test('message_update loop guard detects repeated planning blocks across streamed
     '',
   ].join('\n');
 
-  let blocked;
+  let detected;
   for (let index = 0; index < text.length; index += 75) {
-    blocked = await event(pi, 'message_update')(
+    detected = await event(pi, 'message_update')(
       {
         assistantMessageEvent: { type: 'text_delta', delta: text.slice(index, index + 75), contentIndex: 0 },
       },
       ctx,
     );
-    if (blocked?.abort) break;
   }
 
-  assert.equal(abortCount, 1);
-  assert.equal(blocked.abort, true);
-  assert.match(blocked.reason, /Repeated \d-line block 2 times/);
-  assert.equal(blocked.autoContinue, false);
-  assert.equal(pi.messages.length, 0);
+  assert.equal(detected, undefined);
+  assert.equal(abortCount, 0);
+  const pending = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+  assert.equal(pending.loopGuard.repeatedGenerationCount, 1);
+  assert.equal(pending.loopGuard.recoveryPending, true);
+  assert.equal(pending.loopGuard.streamTriggered, true);
+  assert.match(pending.loopGuard.lastAbortReason, /Repeated \d-line block 2 times/);
 });
 
 test('session_stop does not replay one normal streamed report into loop history', async () => {

@@ -220,6 +220,74 @@ test('generic Markdown document paths are writable only at the requested target'
   assert.equal(route.taskDescriptor.constraints.subagents, 'forbidden');
 });
 
+test('fact and local-property constraints do not turn an authorized document edit read-only', () => {
+  for (const prompt of [
+    '只润色 docs/notes.md，不改事实和数字。',
+    '润色 docs/notes.md，不要改 API 名称。',
+    '润色 docs/notes.md 的结构，不要改文案和样式。',
+    'Polish docs/notes.md, but do not change facts or API names.',
+    'Edit docs/notes.md for structure; do not change its wording or style.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['docs/notes.md'], prompt);
+  }
+});
+
+test('metalinguistic preservation phrases remain ordinary writable edits', () => {
+  for (const prompt of [
+    'Polish docs/notes.md. The phrase ‘facts unchanged’ itself should be rewritten. Only modify docs/notes.md.',
+    '润色 docs/notes.md；把“事实不变”这四个字改得更自然。只修改 docs/notes.md。',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['docs/notes.md'], prompt);
+  }
+});
+
+test('multi-document preservation prompts retain every explicitly authorized target', () => {
+  for (const prompt of [
+    '润色 docs/a.md、docs/b.md，保持事实不变，只修改 docs/a.md、docs/b.md。',
+    'Polish docs/a.md and docs/b.md; keep facts unchanged; only modify docs/a.md and docs/b.md.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['docs/a.md', 'docs/b.md'], prompt);
+  }
+});
+
+test('absolute and quoted-space document targets remain exact writable document routes', () => {
+  for (const [prompt, target] of [
+    ['润色 /home/dingli/Letter/main.tex，保持事实和数字不变。', '/home/dingli/Letter/main.tex'],
+    ['Polish "/home/dingli/Letter/My Notes.tex" while keeping facts unchanged.', '/home/dingli/Letter/My Notes.tex'],
+    ['润色 "/home/dingli/Letter/研究 说明.tex"，保持事实不变。', '/home/dingli/Letter/研究 说明.tex'],
+    ['Polish "docs/My Notes.md"; facts unchanged.', 'docs/My Notes.md'],
+    ['润色“docs/研究 说明.tex”，保持事实不变。', 'docs/研究 说明.tex'],
+    ['润色‘docs/研究 说明.tex’，保持事实不变。', 'docs/研究 说明.tex'],
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.equal(route.taskDescriptor.domains.includes('document'), true, prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, [target], prompt);
+  }
+});
+
+test('quoted source documents and exclusions are not silently added to the write allowlist', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Polish "docs/My Notes.md" using facts from "docs/Source Notes.md", but do not modify "docs/Source Notes.md".',
+    routerMode: 'enforce',
+  });
+
+  assert.equal(route.taskDescriptor.operation, 'modify');
+  assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['docs/My Notes.md']);
+  assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, ['docs/Source Notes.md']);
+  assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required');
+});
+
 test('offline fact inspection stays read-only and never turns a negated publish into release', () => {
   const route = routeNaturalLanguageTask({
     prompt: '核查 README.md 中的事实，但不要联网、不要修改、不要发布',

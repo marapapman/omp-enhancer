@@ -283,7 +283,7 @@ function collectSignals(text, prompt) {
   const externalActionRequested = ['complete', 'incomplete', 'conflicting'].includes(externalActionContract?.state);
   const workspaceScopes = workspaceWriteScopesFor(prompt);
   const externalScopes = externalWriteScopesFor(prompt);
-  const workspaceConstraintText = maskScopedWorkspaceWriteNegatives(normalizeAffirmativeWorkspacePhrases(text));
+  const workspaceConstraintText = maskScopedWorkspaceWriteNegatives(normalizeAffirmativeWorkspacePhrases(stripQuotedConstraintMentions(text)));
   const testConstraintText = maskAffirmativeTestPhrases(text);
   const testAllowlist = testAllowlistFor(testConstraintText);
   const testExclusions = testExclusionsFor(testConstraintText);
@@ -302,7 +302,7 @@ function collectSignals(text, prompt) {
     ? workspaceConstraintText.replace(boundedWorkspaceWritePattern, ' ')
     : workspaceConstraintText;
   const noWorkspaceWrite = !documentTargetWithCodeExclusion
-    && /(?:不要|不|别|无需|不用|禁止|不得)[^，。；、：;,:.!\n]{0,16}(?:修改|改动|改|编辑|写入|修复|实现)(?:[^，。；、：;,:.!\n]{0,8}(?:代码|文件|实现|它))?|(?:只读|只检查|只分析|只报告|仅报告)|\bread[- ]?only\b|(?:do not|don't|without|no need to)[^,.;!\n]{0,24}(?:modify|edit|change|write|fix|implement)|(?:report|findings?)\s+only/.test(workspaceWriteCeilingText);
+    && /(?:不要|不|别|无需|不用|禁止|不得)\s*(?:实际)?(?:做|进行)?\s*(?:任何|全部|所有)?\s*(?:修改|改动|改变|更改|改|编辑|写入|修复|实现)\s*(?:(?:任何|全部|所有)?\s*(?:代码|源代码|文件|实现|工作区|内容|项目|仓库|代码库|它)|(?=[，。；、：;,:.!\n]|$))|(?:只读|只检查|只分析|只报告|仅报告)|\bread[- ]?only\b|(?:do not|don't|without|no need to)\s+(?:actually\s+)?(?:modify(?:ing)?|edit(?:ing)?|chang(?:e|ing)|writ(?:e|ing)(?:\s+to)?|fix(?:ing)?|implement(?:ing)?)\s*(?:(?:(?:any|all)\s+)?(?:code|source\s+code|files?|implementation|workspace|project|repository|repo|it|anything)\b|(?=[,.;!\n]|$))|(?:report|findings?)\s+only/.test(workspaceWriteCeilingText);
   const noActionExecution = /(?:不要|不|别|无需|不用|禁止|不得)\s*(?:实际)?(?:执行|运行)(?!\s*(?:测试|tests?))\s*(?:(?:任何|这个|该|上述)\s*)?(?:操作|命令|动作|内容)?\s*(?:[，。；;,.!！]|$)|(?:do not|don't|without|no need to)\s+(?:actually\s+)?(?:execute|run|perform|do)(?!\s+tests?)(?:\s+(?:it|anything|the\s+(?:command|action|operation)))?\s*(?:[,.;!]|$)|without\s+(?:actually\s+)?doing\s+it/.test(text);
   const instructionalAdvice = /(?:请)?(?:告诉|解释|说明)(?:我)?.{0,16}(?:如何|怎么)|(?:如何|怎么).{0,12}(?:做|操作|执行|删除|推送)|\bhow\s+(?:do|can|should|would)\s+i\b|\bexplain\s+how\s+to\b/.test(text);
   const advisory = /有什么.{0,30}(?:优化|改进).{0,12}(?:地方|建议)|(?:可以|可).{0,12}(?:优化|改进)|(?:优化|改进)建议|给出.{0,12}(?:优化|改进)建议|suggest\s+(?:improvements?|optimizations?)|assess\s+whether.{0,30}(?:reasonable|sound)/.test(text);
@@ -340,7 +340,7 @@ function collectSignals(text, prompt) {
     || /(?:核查|核验|查证|verify|check)[^。！？.!?\n]{0,120}(?:(?:证据|evidence)[^。！？.!?\n]{0,16}(?:支持|支撑|证明|supports?)|(?:支持|支撑|证明|supports?)[^。！？.!?\n]{0,40}(?:证据|evidence))/.test(factSentenceText)
     || /(?:check|verify)[^。！？.!?\n]{0,80}(?:cited\s+source|citation(?:\s+source)?)[^。！？.!?\n]{0,80}supports?[^。！？.!?\n]{0,40}claims?/.test(factSentenceText)
     || /(?:check|verify)[^。！？.!?\n]{0,80}claims?[^。！？.!?\n]{0,80}supported\s+by[^。！？.!?\n]{0,40}(?:the\s+)?(?:cited\s+source|citation(?:\s+source)?)/.test(factSentenceText);
-  const factDocumentTargets = uniqueStrings([...String(prompt).matchAll(/(?:^|[\s`'"])((?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?))(?=$|[\s`'"，。；、：;,:.!！])/gi)]
+  const factDocumentTargets = uniqueStrings([...String(prompt).matchAll(/(?:^|[\s`'"])((?:\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?))(?=$|[\s`'"，。；、：;,:.!！])/gi)]
     .map((match) => match[1]));
   const focusedLocalFactWork = factWork
     && noWorkspaceWrite && noNetworkAccess && noSubagents
@@ -440,7 +440,8 @@ function collectSignals(text, prompt) {
     || /(?:代码|代码库|实现|函数|模块|接口|bug|鉴权漏洞)|(?:路由|门禁).{0,8}逻辑|逻辑.{0,8}(?:路由|门禁)|\b(?:code|codebase|repository|repo|function|module|api|bugs?|router|routenaturallanguagetask|implementation)\b/.test(effectiveActionText)
     || directModify && !writingWork;
   const documentWork = /(?:readme|安装说明|docx|word 文档|latex)|\b(?:readme|docx|latex|markdown document)\b/.test(text)
-    || /(?:^|[\s`'"])(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?)(?=$|[\s`'"，。；、：;,:.!！])/i.test(text);
+    || workspaceScopes.targets.some((target) => /\.(?:md|mdx|rst|txt|tex|docx?)$/iu.test(target))
+    || /(?:^|[\s`'"])(?:\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?)(?=$|[\s`'"，。；、：;,:.!！])/i.test(text);
   const configWork = dependencyInstallExecution || setupScriptExecution
     || /(?:配置资产|配置模板|config assets?|config doctor)|\b(?:config assets?|config doctor)\b/.test(text);
   const ambiguous = ambiguousCodeAction || /(?:不确定|可能是|ambiguous|unclear)/.test(text);
@@ -532,24 +533,104 @@ function collectSignals(text, prompt) {
 
 function workspaceWriteScopesFor(value = '') {
   const source = String(value);
-  const exclusions = collectScopedTargets(source, [
+  const exclusions = uniqueStrings([...collectScopedTargets(source, [
     /\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
     /\bbut\s+(?:do\s+)?not\s+(?:(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+)?(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
     /(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
-  ], normalizeWorkspaceTarget);
+  ], normalizeWorkspaceTarget), ...collectQuotedWorkspaceTargets(source, { negative: true })]);
   const positiveSource = maskScopedWorkspaceWriteNegatives(source);
-  const targets = collectScopedTargets(positiveSource, [
+  const targets = uniqueStrings([...collectScopedTargets(positiveSource, [
     /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise)\s+(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
     /(?:修复|更新|修改|编辑|调整|润色|改写)\s*[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
-  ], normalizeWorkspaceTarget);
+  ], normalizeWorkspaceTarget),
+  ...collectQuotedWorkspaceTargets(positiveSource),
+  ...collectAffirmativeWorkspaceTargetLists(positiveSource)]);
   return { targets, exclusions };
+}
+
+function collectAffirmativeWorkspaceTargetLists(value = '') {
+  const source = String(value);
+  const targets = [];
+  const actions = /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise)\s+(?:the\s+)?|(?:修复|更新|修改|编辑|调整|润色|改写)\s*/giu;
+  for (const match of source.matchAll(actions)) {
+    let remaining = source.slice((match.index ?? 0) + match[0].length).split(/[。；;\n]/u, 1)[0] ?? '';
+    let next = consumeLeadingWorkspaceTarget(remaining);
+    if (!next) continue;
+    targets.push(next.target);
+    remaining = next.rest;
+    while (remaining) {
+      const separator = remaining.match(/^\s*(?:以及|、|，|,|和|与|\band\b|\bor\b)\s*/iu);
+      if (!separator) break;
+      next = consumeLeadingWorkspaceTarget(remaining.slice(separator[0].length));
+      if (!next) break;
+      targets.push(next.target);
+      remaining = next.rest;
+    }
+  }
+  return uniqueStrings(targets);
+}
+
+function consumeLeadingWorkspaceTarget(value = '') {
+  const curved = String(value).match(/^\s*(?:“(?<double>[^”\n]+)”|‘(?<single>[^’\n]+)’)/u);
+  const curvedValue = curved?.groups?.double ?? curved?.groups?.single;
+  if (curvedValue && /\.[\p{L}\p{N}_.-]+$/u.test(curvedValue.trim())) {
+    const target = normalizeWorkspaceTarget(curvedValue);
+    if (target) return { target, rest: String(value).slice(curved[0].length) };
+  }
+  const quoted = String(value).match(/^\s*([`'"])([^\n]+?)\1/u);
+  if (quoted && /\.[\p{L}\p{N}_.-]+$/u.test(quoted[2].trim())) {
+    const target = normalizeWorkspaceTarget(quoted[2]);
+    if (target) return { target, rest: String(value).slice(quoted[0].length) };
+  }
+  const match = String(value).match(/^\s*[`'"]?((?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.[a-z0-9_.-]+)[`'"]?/iu);
+  if (!match) return null;
+  const target = normalizeWorkspaceTarget(match[1]);
+  return target ? { target, rest: String(value).slice(match[0].length) } : null;
+}
+
+function collectQuotedWorkspaceTargets(value = '', { negative = false } = {}) {
+  const source = String(value);
+  const patterns = negative ? [
+    /\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?([`'"])([^\n]+?)\1/giu,
+    /(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*([`'"])([^\n]+?)\1/giu,
+    /\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?(?:“(?<target>[^”\n]+)”|‘(?<targetSingle>[^’\n]+)’)/giu,
+    /(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*(?:“(?<target>[^”\n]+)”|‘(?<targetSingle>[^’\n]+)’)/giu,
+  ] : [
+    /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise)\s+(?:the\s+)?([`'"])([^\n]+?)\1/giu,
+    /(?:修复|更新|修改|编辑|调整|润色|改写)\s*([`'"])([^\n]+?)\1/giu,
+    /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise)\s+(?:the\s+)?(?:“(?<target>[^”\n]+)”|‘(?<targetSingle>[^’\n]+)’)/giu,
+    /(?:修复|更新|修改|编辑|调整|润色|改写)\s*(?:“(?<target>[^”\n]+)”|‘(?<targetSingle>[^’\n]+)’)/giu,
+  ];
+  const targets = [];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const target = normalizeWorkspaceTarget(match.groups?.target ?? match.groups?.targetSingle ?? match[2]);
+      if (target && /\.[\p{L}\p{N}_.-]+$/u.test(target)) targets.push(target);
+    }
+  }
+  return uniqueStrings(targets);
 }
 
 function maskScopedWorkspaceWriteNegatives(value = '') {
   return String(value)
+    .replace(/\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?(?:“[^”\n]+”|‘[^’\n]+’)/giu, ' ')
+    .replace(/(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*(?:“[^”\n]+”|‘[^’\n]+’)/giu, ' ')
+    .replace(/\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?([`'"])[^\n]+?\1/giu, ' ')
+    .replace(/(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*([`'"])[^\n]+?\1/giu, ' ')
     .replace(/\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?[`'"]?[a-z0-9_./-]+\.[a-z0-9_.-]+[`'"]?/gi, ' ')
     .replace(/\bbut\s+(?:do\s+)?not\s+(?:(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+)?(?:the\s+)?[`'"]?[a-z0-9_./-]+\.[a-z0-9_.-]+[`'"]?/gi, ' ')
     .replace(/(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*[`'"]?[a-z0-9_./-]+\.[a-z0-9_.-]+[`'"]?/gi, ' ');
+}
+
+function stripQuotedConstraintMentions(value = '') {
+  return String(value)
+    .replace(/[“‘]([^”’\n]*)[”’]/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ')
+    .replace(/"([^"\n]*)"/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ')
+    .replace(/(?<![\p{L}\p{N}])'([^'\n]+)'(?![\p{L}\p{N}])/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ');
+}
+
+function quotedPathMention(value = '') {
+  return /(?:^|[/\\])[^/\\\n]+\.[\p{L}\p{N}_.-]+$/u.test(String(value).trim());
 }
 
 function externalWriteScopesFor(value = '') {

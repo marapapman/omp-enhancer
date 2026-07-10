@@ -59,6 +59,11 @@ import {
   verifyReleaseMutation,
 } from './src/release-evidence.js';
 import { externalActionMatchesTool } from './src/external-action-policy.js';
+import {
+  createDocumentPreservationBaseline,
+  evaluateDocumentPreservation,
+  requiresDocumentPreservation,
+} from './src/document-preservation.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
 const CORE_GATE_OWNER_ENTRY = 'omp-enhancer-core.gate-owner';
@@ -102,12 +107,15 @@ const CLASSIFIER_PREFLIGHT_FAILURE_TOOLS = new Set([
 const USER_INPUT_ACTION_BLOCKERS = new Set([
   'external-destructive-action-unsupported',
   'external-action-target-confirmation-required',
+  'document-preservation-multi-target-unsupported',
+  'document-preservation-snapshot-too-large',
   'release-target-confirmation-required',
   'release-verification-unsupported',
   'irreversible-approval-required',
 ]);
 const REPAIRABLE_ACTION_BLOCKERS = new Set([
   'test-target-authorization-required',
+  'document-preservation-baseline-required',
   'external-action-repair-required',
   'external-target-excluded',
   'external-target-repair-required',
@@ -527,7 +535,7 @@ export default function registerCoreEnhancer(pi) {
       return {
         block: true,
         reason: state.actionBoundary?.awaitingUserReason
-          ? `OMP_AWAITING_USER is active for ${state.actionBoundary.awaitingUserReason}. Do not call or run more tools; ask the user for the required authorization or confirmation.`
+          ? formatAwaitingUserToolBlock(state.actionBoundary.awaitingUserReason)
           : 'OMP_GATE_TERMINAL is active. Do not call or run any more tools or commands; produce only the final degraded or blocked status for the user.',
       };
     }
@@ -596,6 +604,12 @@ export default function registerCoreEnhancer(pi) {
     const successful = isSuccessfulToolEvent(event);
     if (name && successful) recordLoopGuardProgress(state.loopGuard, `tool_result:${name}`);
     const mutationEvidenceChanged = name && recordMutationEvidenceInvalidation(state, name, event, { successful });
+    const documentPreservationEvidenceChanged = name && recordDocumentPreservationEvidence(
+      state,
+      name,
+      event,
+      { successful, mutationEvidenceChanged },
+    );
     const testEvidenceChanged = name && recordObservedTestEvidence(state, name, event, { successful });
     const localFactEvidenceChanged = name && recordFocusedLocalFactEvidence(state, name, event, { successful });
     const securityEvidenceChanged = name && recordSecurityInspectionEvidence(state, name, event, { successful });
@@ -618,7 +632,8 @@ export default function registerCoreEnhancer(pi) {
     }
     if (name === 'read' && successful) recordReadSkillEvidence(state, event);
     if (name && (isRelevantSuccessfulGateEvidence(name, event)
-      || mutationEvidenceChanged || testEvidenceChanged || localFactEvidenceChanged
+      || mutationEvidenceChanged || documentPreservationEvidenceChanged
+      || testEvidenceChanged || localFactEvidenceChanged
       || securityEvidenceChanged || releaseEvidenceChanged)) {
       state.gateController = applyGateEvidence(state.gateController, {
         routeId: gateControllerRouteId(state),
@@ -727,6 +742,10 @@ export function createState() {
     trustedApprovals: createTrustedApprovalState(),
     testingToolAvailability: 'unknown',
     actionBoundary: createActionBoundaryState(),
+    // Ephemeral only: the path is authorized by the route and the raw read
+    // result is consumed directly from the matching host event. Nothing from
+    // this map is serialized into session state.
+    pendingDocumentPreservationReads: new Map(),
   };
 }
 
@@ -780,6 +799,8 @@ function emptyEvidence() {
     testingReport: false,
     factCheckGate: false,
     focusedFactEvidence: null,
+    documentPreservationBaseline: null,
+    documentPreservationEvidence: null,
     testingEnhancerEvidence: null,
     reviewEvidence: false,
     mainAgentSecurityReview: false,
@@ -922,6 +943,7 @@ function setRouteState(state, route, prompt = '', { classifierResolved = false, 
   state.smartGate = null;
   state.smartGateCompletionBypasses = [];
   state.evidence = emptyEvidence();
+  state.pendingDocumentPreservationReads?.clear();
   state.loopGuard = createLoopGuardState();
   state.gateRecovery = createGateRecoveryState();
   state.gateController = resetGateControllerForRoute(state.gateController, {
@@ -944,6 +966,7 @@ function resetState(state) {
   state.smartGate = null;
   state.smartGateCompletionBypasses = [];
   state.evidence = emptyEvidence();
+  state.pendingDocumentPreservationReads = new Map();
   state.loopGuard = createLoopGuardState();
   state.gateRecovery = createGateRecoveryState();
   state.gateController = createGateControllerState();
@@ -1087,6 +1110,8 @@ function serializeState(state) {
       testingReport: state.evidence.testingReport,
       factCheckGate: state.evidence.factCheckGate,
       focusedFactEvidence: state.evidence.focusedFactEvidence,
+      documentPreservationBaseline: state.evidence.documentPreservationBaseline,
+      documentPreservationEvidence: state.evidence.documentPreservationEvidence,
       testingEnhancerEvidence: state.evidence.testingEnhancerEvidence,
       reviewEvidence: state.evidence.reviewEvidence,
       mainAgentSecurityReview: state.evidence.mainAgentSecurityReview,
@@ -1218,8 +1243,132 @@ function readFocusedFactEvidenceRecord(value) {
   };
 }
 
+function readDocumentPreservationBaselineRecord(value) {
+  if (!isRecord(value)
+    || value.schemaVersion !== 1
+    || value.source !== 'host-document-preservation-baseline'
+    || !isString(value.routeId)
+    || !Number.isFinite(value.observedAt)
+    || !isSha256Digest(value.targetPathDigest)
+    || !isSha256Digest(value.documentDigest)) return null;
+  const exactLiterals = readDigestCountList(value.exactLiterals);
+  const polarity = readDigestCountList(value.controlledTerms?.polarity);
+  const range = readDigestCountList(value.controlledTerms?.range);
+  const modality = readDigestCountList(value.controlledTerms?.modality);
+  const coreAnchors = readDigestCountList(value.coreAnchors);
+  const counts = readNonnegativeCountRecord(value.counts, [
+    'proseLines', 'factualLines', 'headingLines', 'exactLiterals',
+    'polarityTerms', 'rangeTerms', 'modalityTerms', 'coreAnchors',
+  ]);
+  if (!exactLiterals || !polarity || !range || !modality || !coreAnchors || !counts) return null;
+  return {
+    schemaVersion: 1,
+    source: 'host-document-preservation-baseline',
+    routeId: value.routeId,
+    targetPathDigest: value.targetPathDigest,
+    documentDigest: value.documentDigest,
+    exactLiterals,
+    controlledTerms: { polarity, range, modality },
+    coreAnchors,
+    counts,
+    observedAt: value.observedAt,
+  };
+}
+
+function readDocumentPreservationEvidenceRecord(value) {
+  if (!isRecord(value)
+    || value.schemaVersion !== 1
+    || value.source !== 'host-document-preservation-evidence'
+    || !isString(value.routeId)
+    || !Number.isInteger(value.mutationRevision)
+    || value.mutationRevision < 0
+    || !Number.isFinite(value.observedAt)
+    || !isSha256Digest(value.baselineDigest)
+    || !isSha256Digest(value.targetPathDigest)
+    || !isSha256Digest(value.documentDigest)
+    || typeof value.ok !== 'boolean') return null;
+  const allowedReasons = new Set([
+    'target-path-mismatch', 'exact-literal-set-changed', 'exact-literal-count-changed',
+    'polarity-terms-added', 'polarity-terms-removed',
+    'range-terms-added', 'range-terms-removed',
+    'modality-terms-added', 'modality-terms-removed',
+    'prose-lines-added', 'prose-lines-removed',
+    'core-anchors-added', 'core-anchors-dropped',
+  ]);
+  const reasonCodes = Array.isArray(value.reasonCodes)
+    ? uniqueValues(value.reasonCodes.filter((reason) => allowedReasons.has(reason)))
+    : null;
+  if (!reasonCodes || reasonCodes.length !== value.reasonCodes.length || value.ok !== (reasonCodes.length === 0)) return null;
+  const checks = {};
+  for (const key of ['targetPath', 'exactLiterals', 'polarityTerms', 'rangeTerms', 'modalityTerms', 'proseLines', 'coreAnchors']) {
+    const check = value.checks?.[key];
+    if (!isRecord(check)
+      || typeof check.ok !== 'boolean'
+      || !Number.isInteger(check.addedCount)
+      || check.addedCount < 0
+      || !Number.isInteger(check.removedCount)
+      || check.removedCount < 0) return null;
+    checks[key] = { ok: check.ok, addedCount: check.addedCount, removedCount: check.removedCount };
+  }
+  const counts = readNonnegativeCountRecord(value.counts, [
+    'baselineProseLines', 'observedProseLines',
+    'baselineFactualLines', 'observedFactualLines',
+    'baselineExactLiterals', 'observedExactLiterals',
+    'baselineCoreAnchors', 'observedCoreAnchors',
+  ]);
+  if (!counts) return null;
+  return {
+    schemaVersion: 1,
+    source: 'host-document-preservation-evidence',
+    routeId: value.routeId,
+    mutationRevision: value.mutationRevision,
+    baselineDigest: value.baselineDigest,
+    targetPathDigest: value.targetPathDigest,
+    documentDigest: value.documentDigest,
+    ok: value.ok,
+    reasonCodes,
+    checks,
+    counts,
+    observedAt: value.observedAt,
+  };
+}
+
+function readDigestCountList(value) {
+  if (!Array.isArray(value)) return null;
+  const entries = [];
+  const seen = new Set();
+  for (const entry of value) {
+    if (!isRecord(entry)
+      || !isSha256Digest(entry.digest)
+      || !Number.isInteger(entry.count)
+      || entry.count <= 0
+      || seen.has(entry.digest)) return null;
+    seen.add(entry.digest);
+    entries.push({ digest: entry.digest, count: entry.count });
+  }
+  return entries;
+}
+
+function readNonnegativeCountRecord(value, keys = []) {
+  if (!isRecord(value)) return null;
+  const record = {};
+  for (const key of keys) {
+    if (!Number.isInteger(value[key]) || value[key] < 0) return null;
+    record[key] = value[key];
+  }
+  return record;
+}
+
+function isSha256Digest(value) {
+  return /^[a-f0-9]{64}$/.test(String(value ?? ''));
+}
+
 function constrainEvidenceToRoute(evidence, routeId) {
-  for (const key of ['focusedFactEvidence', 'securityInspectionEvidence', 'testCommandEvidence', 'releaseActionEvidence', 'releaseVerificationEvidence', 'irreversibleExecution']) {
+  for (const key of [
+    'focusedFactEvidence', 'documentPreservationBaseline', 'documentPreservationEvidence',
+    'securityInspectionEvidence', 'testCommandEvidence', 'releaseActionEvidence',
+    'releaseVerificationEvidence', 'irreversibleExecution',
+  ]) {
     if (evidence[key]?.routeId !== routeId) evidence[key] = null;
   }
   evidence.releaseVerified = evidence.releaseVerified === true
@@ -1370,6 +1519,8 @@ function readEvidenceSnapshot(value) {
   const releaseActionEvidence = readBoundEvidenceRecord(value.releaseActionEvidence, 'host-release-action');
   const releaseVerificationEvidence = readBoundEvidenceRecord(value.releaseVerificationEvidence, 'host-release-verification');
   const focusedFactEvidence = readFocusedFactEvidenceRecord(value.focusedFactEvidence);
+  const documentPreservationBaseline = readDocumentPreservationBaselineRecord(value.documentPreservationBaseline);
+  const documentPreservationEvidence = readDocumentPreservationEvidenceRecord(value.documentPreservationEvidence);
   const securityInspectionEvidence = readBoundEvidenceRecord(value.securityInspectionEvidence, 'host-security-inspection');
   return {
     writingQuality: value.writingQuality === true,
@@ -1378,6 +1529,8 @@ function readEvidenceSnapshot(value) {
     testingReport: value.testingReport === true,
     factCheckGate: value.factCheckGate === true,
     focusedFactEvidence,
+    documentPreservationBaseline,
+    documentPreservationEvidence,
     testingEnhancerEvidence: readTestingEnhancerEvidence(value.testingEnhancerEvidence),
     reviewEvidence: value.reviewEvidence === true,
     mainAgentSecurityReview: value.mainAgentSecurityReview === true,
@@ -1923,6 +2076,17 @@ function buildSessionStopGateRecords(state, { loopRecoveryContext = null } = {})
       .filter((gate) => gate.mode === 'required')
       .map((gate) => gate.key),
   );
+  if (isDocumentPreservationRoute(state)
+    && state.evidence.mutationRevision > 0
+    && !hasFreshDocumentPreservationEvidence(state)) {
+    records.push(sessionGateRecord({
+      gateKey: 'document-preservation',
+      reasonCode: 'preservation_invariant',
+      missingEvidenceCodes: ['preservation_invariant'],
+      protection: 'soft',
+      context: documentPreservationRepairContext(state),
+    }, state));
+  }
   if (requiredGateKeys.has('review-evidence') && !hasReviewEvidence(state)) {
     records.push(sessionGateRecord({
       gateKey: 'review',
@@ -2072,6 +2236,34 @@ function hasReviewEvidence(state) {
     || completed.has('ecc-code-reviewer')
     || completed.has('fact-reviewer')
     || completed.has('fact-cross-checker');
+}
+
+function hasFreshDocumentPreservationEvidence(state) {
+  const baseline = state.evidence.documentPreservationBaseline;
+  const evidence = state.evidence.documentPreservationEvidence;
+  const routeId = gateControllerRouteId(state);
+  return Boolean(baseline
+    && evidence
+    && baseline.routeId === routeId
+    && evidence.routeId === routeId
+    && evidence.targetPathDigest === baseline.targetPathDigest
+    && evidence.baselineDigest === digestEvidence(`baseline:${JSON.stringify(documentPreservationBaselinePayload(baseline))}`)
+    && evidence.mutationRevision === state.evidence.mutationRevision
+    && evidence.ok === true);
+}
+
+function documentPreservationRepairContext(state) {
+  const evidence = state.evidence.documentPreservationEvidence;
+  const issues = evidence?.routeId === gateControllerRouteId(state)
+    && evidence.mutationRevision === state.evidence.mutationRevision
+    ? evidence.reasonCodes
+    : [];
+  return [
+    'Document preservation evidence is still open for this explicitly fact-preserving edit.',
+    issues.length ? `Host-observed invariant failures: ${issues.join(', ')}.` : 'The host did not observe a usable old/new document snapshot for the current mutation.',
+    'Restore the original factual proposition or use a minimal equivalent rephrase. Preserve exact values, dates, citations, polarity, quantifiers, range terms, modality, and the claim core; keeping only the number is not sufficient.',
+    'Use one direct edit on the authorized document and then read it back. Do not run tests, use the network, fork subagents, or claim that a self-authored REVIEW_EVIDENCE block overrides this host evidence.',
+  ].join('\n');
 }
 
 function gateEvidenceDigest(state) {
@@ -2681,7 +2873,71 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
   if (action.opaqueEffects && !action.externalWrite && constraints.externalWrite !== 'required') {
     return protectedConstraintBlock('external-effects-unverifiable', 'This opaque script or automation target can hide remote mutations, so it cannot run without explicit external-write authorization. Inspect it or use a directly classifiable local command.');
   }
+  const preservationBoundary = prepareDocumentPreservationToolCall(state, toolName, event, action, ctx);
+  if (preservationBoundary) return preservationBoundary;
   return null;
+}
+
+function prepareDocumentPreservationToolCall(state, toolName = '', event = {}, action = {}, ctx = {}) {
+  if (!isDocumentPreservationRequest(state)) return null;
+  const subagentMutation = isDocumentPreservationPotentialSubagentMutation(toolName, action);
+  const targets = state.lastRoute.taskDescriptor.workspaceWriteTargets;
+  if (targets.length !== 1) {
+    if (!action.workspaceWrite && !action.definiteWorkspaceMutation && !subagentMutation) return null;
+    return protectedConstraintBlock(
+      'document-preservation-multi-target-unsupported',
+      `This fact-preserving edit names ${targets.length || 'no exact'} document targets, but the current host evidence contract binds one complete document baseline at a time. Do not mutate any target; ask the user to split the request into one document per task with one exact path.`,
+    );
+  }
+  if (!isDocumentPreservationRoute(state)) return null;
+  const name = String(toolName).toLowerCase();
+  const targetPath = targets[0];
+  const routeId = gateControllerRouteId(state);
+  const input = firstToolInputRecord(event);
+
+  if (name === 'read') {
+    const callId = toolEventCallId(event);
+    const expectedPath = trustedDocumentPreservationReadPath(input.path, targetPath, ctx);
+    const selector = typeof input.selector === 'string' ? input.selector.trim().toLowerCase() : input.selector;
+    const partialRead = selector !== undefined && selector !== 'raw';
+    if (callId && !partialRead && expectedPath) {
+      const pending = state.pendingDocumentPreservationReads ?? new Map();
+      if (pending.size >= 8) pending.delete(pending.keys().next().value);
+      pending.set(callId, { routeId, path: targetPath, resolvedPath: expectedPath });
+      state.pendingDocumentPreservationReads = pending;
+    }
+    return null;
+  }
+
+  if (!action.workspaceWrite && !action.definiteWorkspaceMutation && !subagentMutation) return null;
+  const baseline = state.evidence.documentPreservationBaseline;
+  if (baseline?.routeId === routeId) return null;
+  const priorMutation = state.evidence.mutationRevision > 0;
+  return protectedConstraintBlock(
+    'document-preservation-baseline-required',
+    priorMutation
+      ? `The fact-preserving document baseline is unavailable because this route already observed a mutation before a trusted full read of ${targetPath}. Do not use a later edit to redefine the drifted text as the baseline; report that the original document must be restored or start a new trusted route after restoration.`
+      : `Before changing ${targetPath}, read the complete authorized document once with the direct read tool so the host can bind a factual-preservation baseline. Write, edit, patch, shell, and subagent mutations cannot run before that baseline, and model-supplied old/new text is not trusted evidence.`,
+  );
+}
+
+function isDocumentPreservationPotentialSubagentMutation(toolName = '', action = {}) {
+  if (!action.subagent) return false;
+  const name = String(toolName).trim().replace(/[./:\\]+/g, '_').replace(/_+/g, '_').toLowerCase();
+  return /^(?:task|spawn_agent|delegate|collaboration_(?:spawn_agent|delegate|followup_task|send_message))$/u.test(name)
+    || !/^(?:collaboration_(?:list_agents|wait_agent|interrupt_agent))$/u.test(name);
+}
+
+function trustedDocumentPreservationReadPath(observedPath, targetPath, ctx = {}) {
+  if (typeof observedPath !== 'string' || typeof targetPath !== 'string') return '';
+  const root = typeof ctx.cwd === 'string' && isAbsolute(ctx.cwd) ? resolve(ctx.cwd) : resolve(process.cwd());
+  const target = posix.normalize(targetPath.trim().replace(/\\/g, '/').replace(/^\.\//, ''));
+  if (!target || target === '.' || target.startsWith('../')) return '';
+  const expected = isAbsolute(target) ? resolve(target) : resolve(root, target);
+  const observed = resolve(root, observedPath.trim());
+  const expectedRelative = relative(root, expected);
+  if (expectedRelative === '..' || expectedRelative.startsWith('../') || isAbsolute(expectedRelative)) return '';
+  return observed === expected ? expected : '';
 }
 
 function externalConnectorActionBlock(descriptor, action, toolName = '', event = {}) {
@@ -2946,6 +3202,13 @@ function protectedConstraintBlock(reasonCode, reason) {
     reasonCode,
     reason: `OMP protected action boundary blocked this tool call. ${reason}`,
   };
+}
+
+function formatAwaitingUserToolBlock(reasonCode = '') {
+  if (reasonCode === 'document-preservation-snapshot-too-large') {
+    return 'OMP_AWAITING_USER is active because the authorized document could not be read completely without host truncation. Line-range and chunked reads cannot establish this whole-document baseline. Do not try another selector, read, edit, shell, or subagent method; ask the user to split the document/task into one smaller exact file or explicitly narrow the preservation scope.';
+  }
+  return `OMP_AWAITING_USER is active for ${reasonCode}. Do not call or run more tools; ask the user for the required authorization or confirmation.`;
 }
 
 function createActionBoundaryState() {
@@ -3752,7 +4015,6 @@ async function handleLoopGuardGeneratedOutput(pi, state, ctx = {}, text = '') {
   const detection = recordGeneratedText(state.loopGuard, text);
   if (!detection.repeated) return undefined;
 
-  const additionalContext = buildLoopRecoveryContext(state.loopGuard);
   await writeDebugLog(ctx, 'loops', buildDebugRecord({
     kind: 'loops',
     route: state.lastRoute,
@@ -3763,27 +4025,20 @@ async function handleLoopGuardGeneratedOutput(pi, state, ctx = {}, text = '') {
       terminalUsed: state.gateController?.budget?.terminalUsed ?? 0,
     },
   }));
-  const autoContinuation = { queued: false, reason: 'GateController owns continuation decisions' };
   if (loopMode === 'observe') {
     recordLoopGuardProgress(state.loopGuard, 'observe-only');
     await persistState(pi, state);
     return undefined;
   }
   await persistState(pi, state);
-  await ctx.ui?.notify?.('OMP Enhancer Core stopped a repeated main-agent generation.', 'warn');
-  try {
-    ctx.abort?.();
-  } catch {
-    // Stream abort is best-effort; return the structured result for hosts that
-    // honor handler return values.
-  }
-  return {
-    abort: true,
-    reason: `OMP Enhancer Core loop guard: ${detection.reason}`,
-    additionalContext,
-    autoContinue: autoContinuation.queued,
-    details: { loopGuard: detection, autoContinuation },
-  };
+  await ctx.ui?.notify?.('OMP Enhancer Core detected repeated generation; bounded recovery will run when this turn settles.', 'warn');
+  // OMP maps extension ctx.abort() to a deliberate user interrupt. That path
+  // intentionally skips session_stop, so aborting here would bypass the shared
+  // GateController repair/terminal budget and terminate print-mode runs. Keep
+  // the pending loop evidence and let the natural settle path perform the one
+  // bounded recovery. A successful tool result clears this pending state as
+  // real progress before session_stop.
+  return undefined;
 }
 
 function reconcileSkillUsageFromReadEvidence(state) {
@@ -3880,7 +4135,10 @@ function extractFinalOutputText(event = {}) {
 function extractAssistantMessageDelta(event = {}) {
   const assistantEvent = event.assistantMessageEvent ?? event.details?.assistantMessageEvent;
   if (!isRecord(assistantEvent)) return '';
-  if (assistantEvent.type && assistantEvent.type !== 'text_delta' && assistantEvent.type !== 'thinking_delta') return '';
+  // Hidden reasoning is not user-visible output. Models commonly restate a
+  // gate instruction while selecting the next tool, so enforcing the output
+  // loop guard on thinking_delta can abort the method attempt itself.
+  if (assistantEvent.type && assistantEvent.type !== 'text_delta') return '';
   return typeof assistantEvent.delta === 'string' ? assistantEvent.delta : '';
 }
 
@@ -5115,10 +5373,14 @@ function formatRecentToolFailures(state, toolNames = []) {
   ].join('\n');
 }
 
-function recordMutationEvidenceInvalidation(state, toolName = '', event = {}, _result = {}) {
+function recordMutationEvidenceInvalidation(state, toolName = '', event = {}, result = {}) {
   const command = toolActionText(event);
   const action = classifyToolAction({ toolName, text: command });
-  if ((!action.workspaceWrite && !action.definiteWorkspaceMutation) || toolName === 'omp_core_install_skills') return false;
+  const preservationSubagentMutation = isDocumentPreservationPotentialSubagentMutation(toolName, action)
+    && result.successful === true
+    && isDocumentPreservationRoute(state);
+  if ((!action.workspaceWrite && !action.definiteWorkspaceMutation && !preservationSubagentMutation)
+    || toolName === 'omp_core_install_skills') return false;
 
   state.evidence.releaseActionEvidence = null;
   state.evidence.releaseVerificationEvidence = null;
@@ -5139,6 +5401,7 @@ function recordMutationEvidenceInvalidation(state, toolName = '', event = {}, _r
   state.evidence.testCommandEvidence = null;
   state.evidence.factCheckGate = false;
   state.evidence.focusedFactEvidence = null;
+  state.evidence.documentPreservationEvidence = null;
   state.evidence.reviewEvidence = false;
   state.evidence.mainAgentSecurityReview = false;
   state.evidence.securityInspectionObserved = false;
@@ -5146,6 +5409,134 @@ function recordMutationEvidenceInvalidation(state, toolName = '', event = {}, _r
   state.lastSubagentUsage = null;
   invalidateReviewSubagentEvidence(state);
   return true;
+}
+
+function recordDocumentPreservationEvidence(
+  state,
+  toolName = '',
+  event = {},
+  { successful = false } = {},
+) {
+  if (!isDocumentPreservationRoute(state) || String(toolName).toLowerCase() !== 'read') return false;
+  const callId = toolEventCallId(event);
+  const pending = callId ? state.pendingDocumentPreservationReads?.get(callId) : null;
+  if (callId) state.pendingDocumentPreservationReads?.delete(callId);
+  if (!successful || !pending) return false;
+  const targetPath = state.lastRoute.taskDescriptor.workspaceWriteTargets[0];
+  const routeId = gateControllerRouteId(state);
+  if (pending.routeId !== routeId || pending.path !== targetPath) return false;
+  const snapshot = documentReadSnapshotPayload(event, pending);
+  if (!snapshot) {
+    if (!documentReadSnapshotIsTruncated(event, pending)) return false;
+    recordProtectedActionDenial(state, protectedConstraintBlock(
+      'document-preservation-snapshot-too-large',
+      `The complete trusted read of ${targetPath} was truncated or elided, so this route cannot establish a whole-document preservation baseline. Additional line-range reads cannot satisfy this invariant. Do not try another read, edit, shell command, or subagent method; ask the user to split the document/task into one smaller exact file or explicitly narrow the preservation scope.`,
+    ), 'read', event);
+    return true;
+  }
+  const documentText = snapshot.text;
+  let baseline = state.evidence.documentPreservationBaseline;
+  if (!baseline || baseline.routeId !== routeId) {
+    // Once any mutation occurred without a baseline, a read of the drifted
+    // document must never redefine that content as the original truth.
+    if (state.evidence.mutationRevision > 0) return false;
+    const created = createDocumentPreservationBaseline({
+      oldText: documentText,
+      targetPath,
+    });
+    baseline = created ? {
+      ...created,
+      routeId,
+      observedAt: Date.now(),
+    } : null;
+    state.evidence.documentPreservationBaseline = baseline;
+  }
+
+  if (!baseline) {
+    state.evidence.documentPreservationEvidence = null;
+    return true;
+  }
+  const evaluated = evaluateDocumentPreservation({
+    baseline: documentPreservationBaselinePayload(baseline),
+    newText: documentText,
+    targetPath,
+  });
+  state.evidence.documentPreservationEvidence = evaluated ? {
+    ...evaluated,
+    routeId,
+    mutationRevision: state.evidence.mutationRevision,
+    observedAt: Date.now(),
+  } : null;
+  return true;
+}
+
+function documentReadSnapshotPayload(event = {}, pending = {}) {
+  const details = [
+    event.details,
+    event.result?.details,
+    event.details?.result,
+    event.details?.result?.details,
+  ].find((value) => isRecord(value) && isRecord(value.displayContent));
+  if (!details) return null;
+  if (typeof pending.resolvedPath !== 'string'
+    || typeof details.resolvedPath !== 'string'
+    || resolve(details.resolvedPath) !== resolve(pending.resolvedPath)
+    || details.suffixResolution !== undefined && details.suffixResolution !== null) return null;
+  const display = details.displayContent;
+  if (typeof display.text !== 'string' || display.startLine !== 1) return null;
+  if (details.truncation !== undefined && details.truncation !== null && details.truncation !== false) return null;
+  const summary = isRecord(details.summary) ? details.summary : null;
+  if (summary && (hasPositiveElision(summary.elidedSpans) || hasPositiveElision(summary.elidedLines))) return null;
+  return { text: display.text };
+}
+
+function documentReadSnapshotIsTruncated(event = {}, pending = {}) {
+  const details = [
+    event.details,
+    event.result?.details,
+    event.details?.result,
+    event.details?.result?.details,
+  ].find((value) => isRecord(value) && isRecord(value.displayContent));
+  if (!details
+    || typeof pending.resolvedPath !== 'string'
+    || typeof details.resolvedPath !== 'string'
+    || resolve(details.resolvedPath) !== resolve(pending.resolvedPath)
+    || details.suffixResolution !== undefined && details.suffixResolution !== null) return false;
+  return details.truncation !== undefined && details.truncation !== null && details.truncation !== false;
+}
+
+function hasPositiveElision(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  return Number.isFinite(value) ? Number(value) > 0 : Boolean(value);
+}
+
+function isDocumentPreservationRoute(state) {
+  const descriptor = state.lastRoute?.taskDescriptor;
+  return isDocumentPreservationRequest(state)
+    && Array.isArray(descriptor.workspaceWriteTargets)
+    && descriptor.workspaceWriteTargets.length === 1;
+}
+
+function isDocumentPreservationRequest(state) {
+  const descriptor = state.lastRoute?.taskDescriptor;
+  return descriptor?.operation === 'modify'
+    && descriptor?.domains?.includes('document')
+    && descriptor?.constraints?.workspaceWrite === 'required'
+    && Array.isArray(descriptor.workspaceWriteTargets)
+    && requiresDocumentPreservation(state.lastPrompt);
+}
+
+function documentPreservationBaselinePayload(value = {}) {
+  return {
+    schemaVersion: value.schemaVersion,
+    source: value.source,
+    targetPathDigest: value.targetPathDigest,
+    documentDigest: value.documentDigest,
+    exactLiterals: value.exactLiterals,
+    controlledTerms: value.controlledTerms,
+    coreAnchors: value.coreAnchors,
+    counts: value.counts,
+  };
 }
 
 function invalidateReviewSubagentEvidence(state) {

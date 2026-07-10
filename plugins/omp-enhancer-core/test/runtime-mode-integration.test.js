@@ -60,8 +60,9 @@ test('loop modes have live disabled, observe, and enforce behavior', async () =>
   await withEnv({ OMP_LOOP_GUARD_MODE: 'enforce' }, async () => {
     const { pi, ctx } = await startRuntime('Diagnose this issue only.');
     const result = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
-    assert.equal(result?.abort, true);
-    assert.equal(result?.autoContinue, false);
+    assert.equal(result, undefined);
+    assert.equal(latestState(pi).loopGuard.recoveryPending, true);
+    assert.equal(latestState(pi).loopGuard.streamTriggered, true);
   });
 });
 

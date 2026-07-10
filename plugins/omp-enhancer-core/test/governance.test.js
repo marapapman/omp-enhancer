@@ -136,6 +136,43 @@ test('governance tells MiMo to load skills with read instead of a nonexistent sk
   assert.match(fragment, /skill:\/\/plain-chinese-writing/i);
 });
 
+test('focused fact-preserving document polish warns that keeping only a number is not preservation', () => {
+  const parentTask = '润色 docs/notes.md 的标题和英文句子，但保持事实 42 不变。只修改 docs/notes.md；禁止运行测试、联网、启动 subagent、提交或发布。';
+  const route = routeNaturalLanguageTask({ prompt: parentTask, routerMode: 'enforce' });
+  const fragment = buildGovernancePromptFragment({ route, parentTask });
+
+  assert.match(fragment, /Document preservation constraint/i);
+  assert.match(fragment, /Preserve the full claim.*subject.*predicate.*exact values.*polarity.*quantifiers.*range.*modality/is);
+  assert.match(fragment, /Keeping only the same number does not preserve the fact/i);
+  assert.match(fragment, /Before any direct or subagent mutation.*read.*complete authorized document/is);
+  assert.match(fragment, /parent agent.*read.*complete authorized document once/is);
+  assert.match(fragment, /smallest equivalent rephrase/i);
+
+  const ordinaryTask = '润色 docs/notes.md 的标题和英文句子。只修改 docs/notes.md；禁止运行测试、联网、启动 subagent、提交或发布。';
+  const ordinary = buildGovernancePromptFragment({
+    route: routeNaturalLanguageTask({ prompt: ordinaryTask, routerMode: 'enforce' }),
+    parentTask: ordinaryTask,
+  });
+  assert.doesNotMatch(ordinary, /Document preservation constraint/i);
+});
+
+test('broad document preservation receives the same baseline guidance and multi-target work is split', () => {
+  const broadTask = '全面润色 docs/thesis.md 的全部章节，保持所有事实、数据和引用不变。只修改 docs/thesis.md，不联网。';
+  const broadRoute = routeNaturalLanguageTask({ prompt: broadTask, routerMode: 'enforce' });
+  assert.equal(broadRoute.taskDescriptor.complexity, 'broad');
+  const broad = buildGovernancePromptFragment({ route: broadRoute, parentTask: broadTask });
+  assert.match(broad, /Document preservation constraint/i);
+  assert.match(broad, /Before any direct or subagent mutation.*complete authorized document/is);
+  assert.match(broad, /After the final direct edit and after all subagent work/is);
+
+  const multiTask = '润色 docs/a.md、docs/b.md，保持事实不变，只修改 docs/a.md、docs/b.md。';
+  const multiRoute = routeNaturalLanguageTask({ prompt: multiTask, routerMode: 'enforce' });
+  const multi = buildGovernancePromptFragment({ route: multiRoute, parentTask: multiTask });
+  assert.match(multi, /multiple document targets/i);
+  assert.match(multi, /split.*one exact document per task/i);
+  assert.match(multi, /Do not.*delegate a writing subagent/is);
+});
+
 test('builds a lightweight subagent contract without root workflow gates', () => {
   const fragment = buildSubagentPromptFragment({
     prompt: [

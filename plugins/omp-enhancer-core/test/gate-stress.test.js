@@ -704,17 +704,18 @@ test('failed tool results do not count as loop or gate evidence progress', async
     'I need to validate the same gate again.',
     'I need to validate the same gate again.',
   ].join('\n');
-  const aborted = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
-  assert.equal(aborted?.abort, true);
+  const deferred = await event(pi, 'assistant_delta')({ delta: repeated }, ctx);
+  assert.equal(deferred, undefined);
 
   const before = latestCoreState(pi);
+  assert.equal(before.loopGuard.recoveryPending, true);
+  assert.equal(before.loopGuard.streamTriggered, true);
   await event(pi, 'tool_result')({
     name: 'omp_test_gate',
     status: 'failed',
   }, ctx);
   const after = latestCoreState(pi);
 
-  assert.equal(before.loopGuard.recoveryPending, true);
   assert.equal(after.loopGuard.recoveryPending, true);
   assert.equal(after.gateController.evidenceRevision, before.gateController.evidenceRevision);
   assert.equal(after.evidence.testingGate, false);
