@@ -44,6 +44,44 @@ test('strong Chinese prohibition words preserve every explicit negative constrai
   }
 });
 
+test('a strong prohibition on other files preserves the explicitly requested write target', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '修复 src/parser.js 中 parse 函数，只做最小修改。禁止修改任何其他文件，禁止运行测试，禁止联网，禁止启动 subagent，禁止提交或发布。',
+    routerMode: 'enforce',
+  });
+
+  assert.equal(route.taskDescriptor.operation, 'modify');
+  assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['src/parser.js']);
+  assert.deepEqual(route.taskDescriptor.constraints, {
+    workspaceWrite: 'required',
+    ...FORBIDDEN_SIDE_EFFECTS,
+  });
+  assert.deepEqual(route.routePlan.phases, [
+    { kind: 'inspect', domain: 'code' },
+    { kind: 'modify', domain: 'code' },
+    { kind: 'review', domain: 'code' },
+  ]);
+});
+
+test('a global no-write prohibition wins over a bounded other-files clause', () => {
+  for (const prompt of [
+    '修复 src/parser.js。禁止修改任何文件，也禁止修改任何其他文件。',
+    'Fix src/parser.js. Do not modify any files, and do not modify any other files.',
+    '修复 src/parser.js。不要修改文件，也不要修改其他文件。',
+    'Fix src/parser.js. Do not modify files; do not modify other files.',
+    '只读分析并给出修复 src/parser.js 的方案；禁止修改任何其他文件。',
+    'Read-only: explain how to fix src/parser.js; do not modify any other files.',
+    '只报告 src/parser.js 的问题；不要修改任何其他文件。',
+    'Report findings for src/parser.js only; do not modify any other files.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'forbidden', prompt);
+    assert.equal(route.taskDescriptor.operation, 'inspect', prompt);
+    assert.ok(!route.routePlan.phases.some(({ kind }) => kind === 'modify'), prompt);
+    assert.ok(!route.taskDescriptor.capabilities.includes('fs.write'), prompt);
+  }
+});
+
 test('English compound fixes preserve no-test, no-network, no-subagent, and no-release ceilings', () => {
   const route = routeNaturalLanguageTask({
     prompt: 'Fix the bug in src/router.js, but do not run tests, use the network, use subagents, or publish.',

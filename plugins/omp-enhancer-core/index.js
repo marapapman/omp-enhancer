@@ -634,6 +634,15 @@ export default function registerCoreEnhancer(pi) {
       ? buildLoopRecoveryStopContext(state, event)
       : null;
     const gateRecords = buildSessionStopGateRecords(state, { loopRecoveryContext });
+    if (state.actionBoundary?.terminal === true) {
+      state.gateController = {
+        ...state.gateController,
+        budget: {
+          ...state.gateController.budget,
+          repairUsed: state.gateController.budget.repairMax,
+        },
+      };
+    }
     const evaluation = evaluateGateController(state.gateController, {
       routeId: gateControllerRouteId(state),
       evidenceRevision: state.gateController.evidenceRevision,
@@ -1847,6 +1856,16 @@ function buildSessionStopGateRecords(state, { loopRecoveryContext = null } = {})
     };
   }
 
+  if (state.actionBoundary?.terminal === true) {
+    records.push(sessionGateRecord({
+      gateKey: 'action-boundary',
+      reasonCode: 'protected_action_denials_exhausted',
+      missingEvidenceCodes: ['constraint_violation'],
+      protection: 'protected',
+      context: 'Repeated protected-action denials exhausted the route boundary. Do not call more tools or claim the task succeeded; report the violated user constraint and the incomplete action.',
+    }, state));
+  }
+
   for (const ruleGate of buildCompletionRuleGateBlocks(state)) {
     const protection = completionGateProtection(ruleGate);
     const softBypass = protection !== 'protected'
@@ -2031,7 +2050,7 @@ function formatGateTerminalContext(state, records, decision) {
     `Final terminal status: ${blocked ? 'BLOCKED' : 'DEGRADED'}.`,
     'Do not call more tools or commands. Produce only one concise user-facing final status.',
     blocked
-      ? 'Protected security, release, fact, or irreversible evidence is still missing; do not claim success or perform the protected action.'
+      ? 'Protected security, release, fact, irreversible, or action-boundary evidence is still missing; do not claim success or perform the protected action.'
       : 'Low-risk workflow evidence remains unverified; clearly state what was not completed and do not claim it passed.',
     `Terminal reason: ${decision.terminalReason ?? 'missing_evidence'}.`,
     'Open gates and missing evidence:',
@@ -2478,6 +2497,15 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
       );
     }
   }
+  const exactLocalTestCommandAuthorized = action.testExecution
+    && constraints.testExecution === 'required'
+    && exactTestTargets.length > 0
+    && TRUSTED_HOST_TEST_EXECUTORS.has(String(toolName).toLowerCase())
+    && isDirectExactLocalTestCommand(text, exactTestTargets)
+    && !action.networkAccess
+    && !action.externalWrite
+    && !action.workspaceWrite
+    && !action.irreversible;
   const excludedTestKind = testKind && (descriptor.testExclusions ?? []).includes(testKind) ? testKind : null;
   if (excludedTestKind) {
     return protectedConstraintBlock(
@@ -2492,7 +2520,9 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
   if (action.networkAccess && constraints.networkAccess === 'forbidden') {
     return protectedConstraintBlock('network-access-forbidden', 'The user explicitly forbade network access; web, fetch, remote shell, and provider calls are not authorized.');
   }
-  if ((action.opaqueEffects || action.unverifiableNetworkEffects) && constraints.networkAccess === 'forbidden') {
+  if ((action.opaqueEffects || action.unverifiableNetworkEffects)
+    && constraints.networkAccess === 'forbidden'
+    && !exactLocalTestCommandAuthorized) {
     return protectedConstraintBlock('network-access-unverifiable', 'This opaque script or automation target can execute hidden network effects, so it cannot run while the user has explicitly forbidden network access. Inspect it or use a directly classifiable local command.');
   }
   const workspaceScopeBlock = scopedWorkspaceActionBlock(descriptor, action, event, text);
@@ -2545,6 +2575,7 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
   }
   if (action.unverifiableWorkspaceEffects
     && constraints.workspaceWrite === 'forbidden'
+    && !exactLocalTestCommandAuthorized
     && descriptor.provenance?.reasons?.includes('read-only or advisory language')) {
     return protectedConstraintBlock(
       'workspace-effects-unverifiable',
@@ -2559,6 +2590,7 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
   }
   if (action.unverifiableNetworkEffects
     && constraints.externalWrite !== 'required'
+    && !exactLocalTestCommandAuthorized
     && descriptor.provenance?.reasons?.includes('external write forbidden')) {
     return protectedConstraintBlock(
       'external-effects-unverifiable',
@@ -2671,6 +2703,17 @@ function testExecutionTargetsInCommand(command = '') {
     .map((match) => String(match[1]).replace(/^\.\//, '').replace(/\\/g, '/').toLowerCase()));
 }
 
+function isDirectExactLocalTestCommand(command = '', allowedTargets = []) {
+  if (hasUnsafeResultMasking(command) || allowedTargets.length !== 1) return false;
+  // The explicitly named test file is treated as user-authorized executable
+  // code. This proves the command boundary only; it is not a sandbox or a
+  // proof that the test file and its imports have no internal side effects.
+  const match = String(command).trim().match(/^node\s+--test\s+(["']?)((?:\.\/)?[a-z0-9_.\/-]+(?:\.test|\.spec)\.[cm]?[jt]sx?)\1$/i);
+  if (!match) return false;
+  const observed = match[2].replace(/^\.\//, '').replace(/\\/g, '/').toLowerCase();
+  return scopedPathMatches(observed, allowedTargets[0]);
+}
+
 function scopedWorkspaceActionBlock(descriptor, action, event = {}, actionText = '') {
   if (!action.workspaceWrite && !action.definiteWorkspaceMutation) return null;
   const allowed = Array.isArray(descriptor.workspaceWriteTargets) ? descriptor.workspaceWriteTargets : [];
@@ -2706,7 +2749,15 @@ function workspaceActionTargets(event = {}, actionText = '') {
   ].filter((value) => typeof value === 'string');
   const commandPaths = [...String(actionText).matchAll(/(?:^|[\s"'`])((?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:[a-z0-9_.-]+))(?:$|[\s"'`,;:])/gi)]
     .map((match) => match[1]);
-  return uniqueValues([...direct, ...commandPaths].map((value) => String(value).replace(/^\.\//, '').replace(/\\/g, '/')));
+  const patchTexts = [input.patch, input.diff]
+    .filter((value) => typeof value === 'string' && value.trim());
+  const patchPaths = patchTexts.flatMap((patch) => [
+    ...[...patch.matchAll(/^\*\*\*\s+(?:Add|Update|Delete)\s+File:\s+(.+?)\s*$/gmi)].map((match) => match[1]),
+    ...[...patch.matchAll(/^\*\*\*\s+Move\s+(?:to|from):\s+(.+?)\s*$/gmi)].map((match) => match[1]),
+    ...[...patch.matchAll(/^(?:---|\+\+\+)\s+(?:[ab]\/)?(.+?)\s*$/gm)].map((match) => match[1]),
+  ]).filter((value) => value !== '/dev/null');
+  return uniqueValues([...direct, ...commandPaths, ...patchPaths]
+    .map((value) => String(value).trim().replace(/^['"]|['"]$/g, '').replace(/^\.\//, '').replace(/\\/g, '/')));
 }
 
 function scopedPathMatches(observed = '', scoped = '') {

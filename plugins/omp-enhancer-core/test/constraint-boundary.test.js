@@ -176,6 +176,33 @@ test('explicit no-network routes fail closed for repository-controlled automatio
   }
 });
 
+test('an exact local test target can run without granting hidden network or workspace authority', async () => {
+  const prompt = '只运行 test/router.test.js 并报告测试结果。禁止修改任何文件，禁止联网，禁止启动 subagent，禁止提交或发布。';
+  const runtime = await routedRuntime(prompt);
+  const exact = await event(runtime.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'node --test test/router.test.js' },
+  }, runtime.ctx);
+  assert.notEqual(exact?.block, true, exact?.reason);
+
+  const aggregateRuntime = await routedRuntime(prompt);
+  const aggregate = await event(aggregateRuntime.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'node --test' },
+  }, aggregateRuntime.ctx);
+  assert.equal(aggregate?.reasonCode, 'test-target-authorization-required');
+
+  const networkRuntime = await routedRuntime(prompt);
+  const network = await event(networkRuntime.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'node --test test/router.test.js && curl https://example.com' },
+  }, networkRuntime.ctx);
+  assert.equal(network?.block, true);
+
+  const preloadRuntime = await routedRuntime(prompt);
+  const preload = await event(preloadRuntime.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'node --test --import ./hidden-network.js test/router.test.js' },
+  }, preloadRuntime.ctx);
+  assert.equal(preload?.reasonCode, 'network-access-unverifiable');
+});
+
 test('authorized local automation is not mistaken for an external write', async () => {
   for (const { prompt, command } of [
     { prompt: 'Run npm run build.', command: 'npm run build' },
@@ -893,6 +920,43 @@ test('scoped workspace write authorization blocks excluded and unmentioned files
     toolName: 'edit', input: { path: 'package.json' },
   }, broadened.ctx);
   assert.equal(broadenedEdit?.reasonCode, 'workspace-target-authorization-required');
+
+  const multiFilePatch = await routedRuntime('Fix src/router.js and do not modify any other files.');
+  const blockedPatch = await event(multiFilePatch.pi, 'tool_call')({
+    toolName: 'apply_patch',
+    input: {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: src/router.js',
+        '@@',
+        '-old',
+        '+new',
+        '*** Update File: LICENSE',
+        '@@',
+        '-old',
+        '+new',
+        '*** End Patch',
+      ].join('\n'),
+    },
+  }, multiFilePatch.ctx);
+  assert.equal(blockedPatch?.reasonCode, 'workspace-target-authorization-required');
+
+  const movedPatch = await routedRuntime('Fix src/router.js and do not modify any other files.');
+  const blockedMove = await event(movedPatch.pi, 'tool_call')({
+    toolName: 'apply_patch',
+    input: {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: src/router.js',
+        '*** Move to: LICENSE',
+        '@@',
+        '-old',
+        '+new',
+        '*** End Patch',
+      ].join('\n'),
+    },
+  }, movedPatch.ctx);
+  assert.equal(blockedMove?.reasonCode, 'workspace-target-authorization-required');
 });
 
 test('scoped deployment authorization rejects production while preserving the trusted staging target', async () => {
@@ -1232,6 +1296,11 @@ test('repeated protected-action denials terminalize per constraint while distinc
   assert.equal(second?.reasonCode, 'protected-action-terminal');
   assert.equal(terminalSafeCall?.block, true);
   assert.match(terminalSafeCall.reason, /OMP_GATE_TERMINAL/);
+  const terminalStop = await event(repeated.pi, 'session_stop')({ output: 'Done.' }, repeated.ctx);
+  assert.equal(terminalStop?.continue, true);
+  assert.match(terminalStop?.additionalContext ?? '', /^OMP_GATE_TERMINAL/);
+  assert.equal(latestCoreState(repeated.pi).gateController.phase, 'blocked');
+  assert.ok(latestCoreState(repeated.pi).gateController.openGates['action-boundary']);
 
   const distinct = await routedRuntime(prompt);
   assert.equal((await event(distinct.pi, 'tool_call')({

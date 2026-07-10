@@ -294,8 +294,15 @@ function collectSignals(text, prompt) {
   const subagentConstraintText = normalizeAffirmativeSubagentPhrases(text);
   const documentTargetWithCodeExclusion = workspaceScopes.targets.some((target) => /(?:^|\/)(?:readme(?:\.[a-z0-9]+)?|[^/]+\.(?:md|mdx|rst|txt|tex|docx?))$/i.test(target))
     && /(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*(?:代码|源代码)|\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?(?:code|source code)\b/i.test(workspaceConstraintText);
+  const boundedWorkspaceWritePattern = /(?:不要|不|别|无需|不用|禁止|不得)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*(?:任何)?\s*(?:其他|其它|其余)\s*(?:文件|代码|内容)?|\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:any\s+)?other\s+(?:files?|code)\b/gi;
+  const boundedWorkspaceWriteTarget = workspaceScopes.targets.length > 0
+    && boundedWorkspaceWritePattern.test(workspaceConstraintText);
+  boundedWorkspaceWritePattern.lastIndex = 0;
+  const workspaceWriteCeilingText = boundedWorkspaceWriteTarget
+    ? workspaceConstraintText.replace(boundedWorkspaceWritePattern, ' ')
+    : workspaceConstraintText;
   const noWorkspaceWrite = !documentTargetWithCodeExclusion
-    && /(?:不要|不|别|无需|不用|禁止|不得)[^，。；、：;,:.!\n]{0,16}(?:修改|改动|改|编辑|写入|修复|实现)(?:[^，。；、：;,:.!\n]{0,8}(?:代码|文件|实现|它))?|(?:只读|只检查|只分析|只报告|仅报告)|\bread[- ]?only\b|(?:do not|don't|without|no need to)[^,.;!\n]{0,24}(?:modify|edit|change|write|fix|implement)|(?:report|findings?)\s+only/.test(workspaceConstraintText);
+    && /(?:不要|不|别|无需|不用|禁止|不得)[^，。；、：;,:.!\n]{0,16}(?:修改|改动|改|编辑|写入|修复|实现)(?:[^，。；、：;,:.!\n]{0,8}(?:代码|文件|实现|它))?|(?:只读|只检查|只分析|只报告|仅报告)|\bread[- ]?only\b|(?:do not|don't|without|no need to)[^,.;!\n]{0,24}(?:modify|edit|change|write|fix|implement)|(?:report|findings?)\s+only/.test(workspaceWriteCeilingText);
   const noActionExecution = /(?:不要|不|别|无需|不用|禁止|不得)\s*(?:实际)?(?:执行|运行)(?!\s*(?:测试|tests?))\s*(?:(?:任何|这个|该|上述)\s*)?(?:操作|命令|动作|内容)?\s*(?:[，。；;,.!！]|$)|(?:do not|don't|without|no need to)\s+(?:actually\s+)?(?:execute|run|perform|do)(?!\s+tests?)(?:\s+(?:it|anything|the\s+(?:command|action|operation)))?\s*(?:[,.;!]|$)|without\s+(?:actually\s+)?doing\s+it/.test(text);
   const instructionalAdvice = /(?:请)?(?:告诉|解释|说明)(?:我)?.{0,16}(?:如何|怎么)|(?:如何|怎么).{0,12}(?:做|操作|执行|删除|推送)|\bhow\s+(?:do|can|should|would)\s+i\b|\bexplain\s+how\s+to\b/.test(text);
   const advisory = /有什么.{0,30}(?:优化|改进).{0,12}(?:地方|建议)|(?:可以|可).{0,12}(?:优化|改进)|(?:优化|改进)建议|给出.{0,12}(?:优化|改进)建议|suggest\s+(?:improvements?|optimizations?)|assess\s+whether.{0,30}(?:reasonable|sound)/.test(text);
@@ -716,6 +723,7 @@ function operationFor(signals) {
   if (signals.localDevExecution || signals.localMigrationExecution || signals.localAutomationExecution || signals.irreversibleExternalOperation) return 'execute';
   if (!signals.noTestExecution && signals.directTestExecution && !signals.directModify && !signals.directTestAuthoring
     && !(signals.review && signals.codeWork)) return 'execute';
+  if (signals.noWorkspaceWrite && (signals.directModify || signals.directCreate || signals.directTestAuthoring)) return 'inspect';
   if ((signals.noWorkspaceWrite || signals.advisory) && signals.review) return 'inspect';
   if (signals.diagnosis) return 'diagnose';
   if (signals.directCreate && !signals.directModify) return 'create';

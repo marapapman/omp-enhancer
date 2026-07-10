@@ -223,6 +223,61 @@ test('focused read-only review governance never asks the model to repair forbidd
   }
 });
 
+test('focused no-test modification governance keeps the edit target without suggesting test methods', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '修复 src/parser.js 中 parse 函数，只做最小修改。禁止修改任何其他文件，禁止运行测试，禁止联网，禁止启动 subagent，禁止提交或发布。',
+    routerMode: 'enforce',
+  });
+  const fragment = buildGovernancePromptFragment({ route });
+
+  assert.equal(route.taskDescriptor.operation, 'modify');
+  assert.match(fragment, /Intent:\s*code\.dev/i);
+  assert.match(fragment, /Agent route:\s*none/i);
+  assert.match(fragment, /Edit only src\/parser\.js/i);
+  assert.match(fragment, /test execution.*forbidden/i);
+  assert.match(fragment, /REVIEW_EVIDENCE.*Scope.*Findings.*OpenBlockers.*Verdict:\s*PASS/is);
+  assert.doesNotMatch(fragment, /post-review testing|test generation contract|omp_test_|run .*tests?/i);
+});
+
+test('no-test modification governance preserves unspecified capabilities and broad security actors', () => {
+  const focused = buildGovernancePromptFragment({
+    route: routeNaturalLanguageTask({
+      prompt: 'Fix src/parser.js but do not run tests.',
+      routerMode: 'enforce',
+    }),
+  });
+  assert.doesNotMatch(focused, /network access, subagents.*forbidden/i);
+  assert.doesNotMatch(focused, /post-review testing|test generation contract|omp_test_|run .*tests?/i);
+
+  const security = buildGovernancePromptFragment({
+    route: routeNaturalLanguageTask({
+      prompt: '修复 src/auth.js 的安全漏洞，但禁止运行测试。',
+      routerMode: 'enforce',
+    }),
+  });
+  assert.match(security, /Intent:\s*security-review/i);
+  assert.match(security, /ecc-security-reviewer/i);
+  assert.match(security, /implementation-task/i);
+  assert.match(security, /reviewer/i);
+  assert.doesNotMatch(security, /focused code modification|subagents.*forbidden|network access.*forbidden/i);
+  assert.doesNotMatch(security, /post-review testing|test generation contract|omp_test_|run .*tests?/i);
+});
+
+test('a no-test modification with release authority keeps release and verification guidance', () => {
+  const fragment = buildGovernancePromptFragment({
+    route: routeNaturalLanguageTask({
+      prompt: '修复 src/parser.js，禁止运行测试，然后提交并发布插件。',
+      routerMode: 'enforce',
+    }),
+  });
+  assert.match(fragment, /Intent:\s*release/i);
+  assert.match(fragment, /Release gate/i);
+  assert.match(fragment, /authorized release/i);
+  assert.match(fragment, /independent(?:ly)? verif/i);
+  assert.match(fragment, /test execution.*forbidden/i);
+  assert.doesNotMatch(fragment, /post-review testing|test generation contract|omp_test_|run .*tests?/i);
+});
+
 test('fact-check governance advertises plan, independent evidence, cross-check, review, and gate', () => {
   const fragment = buildGovernancePromptFragment({
     route: {

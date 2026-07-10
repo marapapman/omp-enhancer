@@ -127,14 +127,27 @@ function projectRouteForGovernance(route) {
       ? plan.requiredSubagents
       : constraints.subagents === 'forbidden' ? [] : route.requiredSubagents ?? [],
   };
-  if (!isReadOnlyCodeReview(projected)) return projected;
-  return {
-    ...projected,
-    intent: 'code.review',
-    workflowRoute: 'code.review',
-    agent: null,
-    auditMode: 'focused',
-  };
+  if (isReadOnlyCodeReview(projected)) {
+    return {
+      ...projected,
+      intent: 'code.review',
+      workflowRoute: 'code.review',
+      agent: null,
+      auditMode: 'focused',
+    };
+  }
+  if (isCodeModificationWithoutTests(projected)) {
+    const securitySensitive = projected.taskDescriptor?.domains?.includes('security');
+    const releaseRequired = routeRequiresGate(projected, 'release-approval')
+      || projected.taskDescriptor?.constraints?.externalWrite === 'required';
+    return {
+      ...projected,
+      intent: releaseRequired ? 'release' : securitySensitive ? 'security-review' : 'code.dev',
+      workflowRoute: releaseRequired ? 'release' : securitySensitive ? 'security-review' : 'code.dev',
+      agent: null,
+    };
+  }
+  return projected;
 }
 
 function advisorGuidanceLines(route) {
@@ -165,6 +178,20 @@ function skillWorkflowLines(route) {
       'This is a read-only code review. Inspect the requested scope and report concrete evidence directly.',
       'Test execution is forbidden for this route. Do not run test commands, generate test files, or enter a testing workflow.',
       'Do not turn findings into production-code edits or test-evidence repair attempts.',
+    ];
+  }
+  if (isCodeModificationWithoutTests(route)) {
+    const releaseRequired = routeRequiresGate(route, 'release-approval')
+      || route.taskDescriptor?.constraints?.externalWrite === 'required';
+    return [
+      hasSubagents
+        ? 'This is a routed code modification with an explicit no-test boundary; keep every listed review and subagent contract that does not require test execution.'
+        : 'This is a focused direct code modification with an explicit no-test boundary.',
+      hasSubagents
+        ? 'Delegate only to the listed required subagents with their assigned skills, apply the authorized edit, and use static review evidence.'
+        : 'Load the listed direct-work skills, inspect the requested target, apply the smallest authorized edit, and perform a static review.',
+      'Test execution is forbidden for this route. Do not enter a testing workflow or try test commands as verification.',
+      ...(releaseRequired ? ['After static review, perform only the explicitly authorized release action and independently verify its exact target and immutable version or revision.'] : []),
     ];
   }
   if (isFocusedBugAuditRoute(route)) {
@@ -331,6 +358,10 @@ function completionGateChecklist(route) {
     gates.push('Review-to-testing gate: reviewer approval is followed by the post-review testing checkpoint; reviewer approval alone is not enough.');
   }
 
+  if (routeRequiresGate(route, 'review-evidence')) {
+    gates.push('Review evidence gate: complete the routed reviewer checkpoint, or for a focused main-agent change include REVIEW_EVIDENCE with Scope, Findings, OpenBlockers: none, and Verdict: PASS after the static review.');
+  }
+
   if (needsTesting(route)) {
     gates.push('Testing gate: run relevant local test/build/lint commands through an explicit host tool call, then omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report before final claims. omp_test_gate only validates route-scoped host evidence and never executes its testCommand/config command. If omp_test_* tools are unavailable, provide an equivalent manual testing gate report with concrete local command evidence.');
   }
@@ -349,7 +380,7 @@ function completionGateChecklist(route) {
     gates.push('Fact-check gate: plan claims, collect independent evidence lanes when sources are available, cross-check agreement and conflicts, review overclaiming, then run fact_check_gate before final factual claims.');
   }
 
-  if (route.intent === 'security-review') {
+  if (route.intent === 'security-review' || routeRequiresGate(route, 'security-evidence')) {
     gates.push('Security gate: complete security risk analysis first; remediation or final risk claims must be checked by the reviewer role when changes are in scope.');
   }
 
@@ -361,7 +392,7 @@ function completionGateChecklist(route) {
     gates.push('Diagnosis gate: inspect the concrete failure path and explain root cause before proposing or making fixes.');
   }
 
-  if (route.intent === 'release') {
+  if (route.intent === 'release' || routeRequiresGate(route, 'release-approval')) {
     gates.push('Release gate: verify repository state and the requested packaging, push, marketplace, or upgrade checks before release claims.');
   }
 
@@ -453,6 +484,14 @@ function isConstrainedRouteStatusSkillPrompt(prompt = '') {
 function workflowFor(route) {
   const intent = route.intent;
   if (isReadOnlyCodeReview(route)) return 'Read-only code review workflow: inspect the requested file and directly related code -> collect concrete file and symbol evidence -> report findings without test execution or test-evidence repair.';
+  if (isCodeModificationWithoutTests(route)) {
+    const actors = (route.requiredSubagents ?? []).map(({ agent }) => agent).filter(Boolean);
+    const releaseRequired = routeRequiresGate(route, 'release-approval')
+      || route.taskDescriptor?.constraints?.externalWrite === 'required';
+    const actorStep = actors.length ? ` -> delegate the routed checkpoints (${actors.join(', ')})` : '';
+    const releaseStep = releaseRequired ? ' -> perform the explicitly authorized release -> independently verify the exact released target and immutable version or revision' : '';
+    return `No-test code modification workflow: inspect the authorized scope${actorStep} -> apply the authorized change -> use static review evidence${releaseStep} -> report the untested change explicitly.`;
+  }
   if ((intent === 'writing.zh' || intent === 'writing.en') && !(route.requiredSubagents ?? []).length) {
     return 'Writing workflow: lightweight edit handled directly by the main agent after required skills are loaded.';
   }
@@ -474,6 +513,22 @@ function routeBoundaryFor(route) {
   const intent = route.intent;
   if (isReadOnlyCodeReview(route)) {
     return 'Route boundary: this is a read-only code review. Test execution is forbidden; do not run test commands, create test files, enter a testing workflow, or edit production code. Report only evidence from permitted read operations.';
+  }
+  if (isCodeModificationWithoutTests(route)) {
+    const descriptor = route.taskDescriptor ?? {};
+    const constraints = descriptor.constraints ?? {};
+    const targets = route.taskDescriptor?.workspaceWriteTargets ?? [];
+    const forbidden = [
+      'test execution',
+      constraints.networkAccess === 'forbidden' ? 'network access' : null,
+      constraints.subagents === 'forbidden' ? 'subagents' : null,
+      constraints.externalWrite !== 'required' ? 'external writes' : null,
+    ].filter(Boolean);
+    const scope = targets.length ? targets.join(', ') : 'the explicitly authorized workspace scope';
+    const releaseBoundary = constraints.externalWrite === 'required'
+      ? ' External writes are limited to the explicitly authorized release target and require independent post-release verification.'
+      : '';
+    return `Route boundary: this is a ${descriptor.complexity === 'broad' ? 'routed' : 'focused'} code modification. Edit only ${scope}; ${forbidden.join(', ')} ${forbidden.length === 1 ? 'is' : 'are'} forbidden.${releaseBoundary} Use static review and state that the change was not test-executed.`;
   }
   if ((intent === 'writing.zh' || intent === 'writing.en') && !(route.requiredSubagents ?? []).length) {
     return 'Route boundary: this is a lightweight writing workflow. The main agent must load the required writing skill(s), edit directly, and must not fork writer/checker subagents.';
@@ -607,6 +662,20 @@ function isReadOnlyCodeReview(route) {
     && descriptor.domains.includes('code')
     && descriptor.constraints?.workspaceWrite === 'forbidden'
     && descriptor.constraints?.testExecution === 'forbidden';
+}
+
+function isCodeModificationWithoutTests(route) {
+  const descriptor = route?.taskDescriptor;
+  return ['modify', 'create'].includes(descriptor?.operation)
+    && Array.isArray(descriptor.domains)
+    && descriptor.domains.includes('code')
+    && descriptor.constraints?.workspaceWrite === 'required'
+    && descriptor.constraints?.testExecution === 'forbidden';
+}
+
+function routeRequiresGate(route, key) {
+  return (route?.routePlan?.gateRequirements ?? [])
+    .some((gate) => gate?.key === key && gate?.mode === 'required');
 }
 
 function formatList(values = []) {
