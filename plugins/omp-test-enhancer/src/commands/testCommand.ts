@@ -47,7 +47,7 @@ export function buildTestHelpText(): string {
     '  /test src/auth/parseToken.ts',
     '',
     '/test check',
-    '  只运行测试门禁。适合已经改完测试后检查。',
+    '  只检查测试门禁，不会执行测试命令。先用宿主 shell 运行期望测试，再调用 gate。',
     '',
     '/test report',
     '  显示最近一次测试增强报告。',
@@ -70,9 +70,10 @@ export function buildTestHelpText(): string {
     '4. API 目标按 apiPlan 补状态码、响应体和契约字段测试。',
     '5. 有 coverage 报告时调用 omp_test_coverage_analyze。',
     '6. 有 mutation 报告时调用 omp_test_mutation_context。',
-    '7. 写完测试后必须运行 omp_test_gate。',
-    '8. 门禁失败时按 repairHints 修复。',
-    '9. 门禁通过后生成报告。',
-    '10. 如果测试改了但没有验证，插件会在会话结束前提醒继续检查。'
+    '7. 写完测试后通过宿主 shell 显式运行期望测试命令。',
+    '8. 测试成功后运行 omp_test_gate；gate 只消费当前 route 的宿主证据，不执行命令。',
+    '9. 门禁失败时按 repairHints 修复。',
+    '10. 门禁通过后生成报告。',
+    '11. 如果测试改了但没有验证，插件会在会话结束前提醒继续检查。'
   ].join('\n')
 }

@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { evaluateBrowserEvidenceGate } from '../gates/browserEvidenceGate.js'
 import { evaluateIndirectTestGate } from '../gates/indirectTestGate.js'
 import { evaluateTestCommandGate, type TestCommandResult } from '../gates/testCommandGate.js'
@@ -7,6 +7,7 @@ import { readTestingEnhancerConfig, type TestingEnhancerConfig } from '../config
 import { findPublicEntryHints, findRelatedTests, readRepoFiles } from '../repo/repoScanner.js'
 import { isRecord } from '../utils.js'
 import type { BrowserCheckParams } from './browserCheck.js'
+import type { ObservedTestCommandEvidence } from '../session/testingState.js'
 import type { AgentToolResult, ExtensionToolContext, ToolDefinition } from '../ompApi.js'
 import type { ApiPlan, BrowserEvidence, BrowserFinding, BrowserPlan, CandidateFileChange, CandidateTest, ChangedTarget, CoverageAnalysis, CoverageGap, GateResult, MutationAnalysis, MutationSurvivor, PropertyPlan, RiskLevel, TargetKind } from '../types.js'
 
@@ -46,10 +47,11 @@ export interface ReportOutput {
 }
 
 export interface TestingToolCallbacks {
-  onAnalyze?(output: AnalyzeOutput): Promise<void> | void
-  onGate?(output: GateOutput): Promise<void> | void
-  onReport?(output: ReportOutput): Promise<void> | void
+  onAnalyze?(output: AnalyzeOutput, ctx: ExtensionToolContext): Promise<void> | void
+  onGate?(output: GateOutput, ctx: ExtensionToolContext): Promise<void> | void
+  onReport?(output: ReportOutput, ctx: ExtensionToolContext): Promise<void> | void
   getRecentGateResults?(): GateResult[]
+  getObservedTestCommandEvidence?(): ObservedTestCommandEvidence | undefined
   runBrowserCheck?(params: BrowserCheckParams, ctx: ExtensionToolContext): Promise<BrowserEvidence>
 }
 
@@ -152,7 +154,7 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       }),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
         const output = await executeAnalyze(params as AnalyzeParams, ctx)
-        await callbacks.onAnalyze?.(output)
+        await callbacks.onAnalyze?.(output, ctx)
         return textResult(output.targets.length === 1 ? 'Found 1 test target.' : `Found ${output.targets.length} test targets.`, output)
       }
     },
@@ -219,8 +221,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
         browserEvidence: z.optional(z.unknown())
       }),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-        const output = await executeGate(params as GateParams, ctx)
-        await callbacks.onGate?.(output)
+        const output = await executeGate(params as GateParams, ctx, callbacks.getObservedTestCommandEvidence?.())
+        await callbacks.onGate?.(output, ctx)
         return textResult(output.passed ? 'Test gate passed.' : 'Test gate failed.', output)
       }
     },
@@ -232,7 +234,7 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
         gateResults: z.optional(z.array(gateResultSchema)),
         runId: z.optional(z.string())
       }),
-      execute: async (_toolCallId, params, _signal, _onUpdate, _ctx) => {
+      execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
         const reportParams = params as ReportParams
         const explicitResults = Array.isArray(reportParams.gateResults) ? reportParams.gateResults : undefined
         const stateResults = explicitResults ?? callbacks.getRecentGateResults?.()
@@ -242,7 +244,7 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
         }
 
         const output = buildTestReport({ gateResults: stateResults })
-        await callbacks.onReport?.(output)
+        await callbacks.onReport?.(output, ctx)
         return textResult(output.markdown, output)
       }
     }
@@ -433,7 +435,7 @@ async function readJsonReport(cwd: string, reportPath: string | undefined): Prom
   }
 }
 
-async function executeGate(params: GateParams, ctx: ExtensionToolContext): Promise<GateOutput> {
+async function executeGate(params: GateParams, ctx: ExtensionToolContext, observedTestCommand?: ObservedTestCommandEvidence): Promise<GateOutput> {
   const config = await readTestingEnhancerConfig(contextCwd(ctx))
   const severities = gateSeveritiesFromConfig(config)
   const candidate = await readCandidateForGate(params, ctx)
@@ -449,15 +451,17 @@ async function executeGate(params: GateParams, ctx: ExtensionToolContext): Promi
     targetIds: browserTargets.map(target => target.id)
   })
   const hasStaticBlocker = staticResults.some(result => !result.passed && result.severity === 'blocker')
-  const command = params.testCommand ?? config?.test.command
-  const commandResult = command && !hasStaticBlocker ? await runConfiguredCommand(command, ctx) : undefined
-  const commandSeverity = command || config ? severities.testCommand : 'warning'
+  const expectedCommand = params.testCommand ?? config?.test.command
+  const commandResult = !hasStaticBlocker
+    ? observedTestCommandResult(observedTestCommand, expectedCommand)
+    : undefined
+  const commandSeverity = expectedCommand || observedTestCommand || config ? severities.testCommand : 'warning'
   const results = [
     ...staticResults,
     ...browserResults,
     ...evaluateTestCommandGate(commandResult, {
       severity: commandSeverity,
-      skippedDueToStaticBlocker: Boolean(command && hasStaticBlocker)
+      skippedDueToStaticBlocker: Boolean((expectedCommand || observedTestCommand) && hasStaticBlocker)
     })
   ]
 
@@ -564,81 +568,19 @@ async function readGitPathList(ctx: ExtensionToolContext, args: string[]): Promi
   }
 }
 
-async function runConfiguredCommand(command: string, ctx: ExtensionToolContext): Promise<TestCommandResult | undefined> {
-  const [program, ...args] = splitCommand(command)
-  if (!program) return undefined
-  const cwd = contextCwd(ctx)
-
-  if (ctx.exec) {
-    const result = await ctx.exec(program, args, { cwd, timeout: 120000 })
-    return { command, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr }
+function observedTestCommandResult(evidence: ObservedTestCommandEvidence | undefined, expectedCommand?: string): TestCommandResult | undefined {
+  if (!evidence) return undefined
+  if (expectedCommand && digestCommand(expectedCommand) !== evidence.commandDigest) return undefined
+  return {
+    command: `host-observed:sha256:${evidence.commandDigest.slice(0, 16)}`,
+    exitCode: evidence.exitCode,
+    stdout: '',
+    stderr: ''
   }
-
-  return runCommandDirectly(command, program, args, cwd)
 }
 
-async function runCommandDirectly(command: string, program: string, args: string[], cwd: string): Promise<TestCommandResult> {
-  const { promise, resolve } = Promise.withResolvers<TestCommandResult>()
-  const child = spawn(program, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
-  let stdout = ''
-  let stderr = ''
-  let settled = false
-
-  const finish = (result: TestCommandResult): void => {
-    if (settled) return
-    settled = true
-    clearTimeout(timeout)
-    resolve(result)
-  }
-
-  const timeout = setTimeout(() => {
-    child.kill('SIGTERM')
-    finish({
-      command,
-      exitCode: 1,
-      stdout,
-      stderr: stderr ? `${stderr}\nCommand timed out.` : 'Command timed out.'
-    })
-  }, 120000)
-
-  child.stdout.setEncoding('utf8')
-  child.stderr.setEncoding('utf8')
-  child.stdout.on('data', chunk => { stdout += String(chunk) })
-  child.stderr.on('data', chunk => { stderr += String(chunk) })
-  child.on('error', error => {
-    finish({ command, exitCode: 1, stdout, stderr: error.message })
-  })
-  child.on('close', code => {
-    finish({ command, exitCode: code ?? 1, stdout, stderr })
-  })
-
-  return promise
-}
-
-function splitCommand(command: string): string[] {
-  const tokens: string[] = []
-  let current = ''
-  let quote: 'single' | 'double' | undefined
-
-  for (const char of command) {
-    if (char === "'" && quote !== 'double') {
-      quote = quote === 'single' ? undefined : 'single'
-      continue
-    }
-    if (char === '"' && quote !== 'single') {
-      quote = quote === 'double' ? undefined : 'double'
-      continue
-    }
-    if (/\s/.test(char) && !quote) {
-      if (current) tokens.push(current)
-      current = ''
-      continue
-    }
-    current += char
-  }
-
-  if (current) tokens.push(current)
-  return tokens
+function digestCommand(command: string): string {
+  return createHash('sha256').update(String(command).trim()).digest('hex')
 }
 
 function buildContextForTarget(target: ChangedTarget, existingTests: string[], publicEntryHints: string[], propertyContext?: PropertyRetrievalContext): ContextOutput {
@@ -1467,4 +1409,3 @@ function fallbackCandidate(): CandidateTest {
     files: []
   }
 }
-

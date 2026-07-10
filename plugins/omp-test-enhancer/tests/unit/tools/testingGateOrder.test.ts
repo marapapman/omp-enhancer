@@ -32,7 +32,7 @@ describe('omp_test_gate execution order', () => {
       passed: false,
       results: expect.arrayContaining([
         expect.objectContaining({ gate: 'test-file-scope', passed: false }),
-        expect.objectContaining({ gate: 'test-command', severity: 'warning', summary: 'Test command skipped because static blocker gates failed.' })
+        expect.objectContaining({ gate: 'test-command', severity: 'warning', summary: 'Host-observed test evidence was not evaluated because static blockers remain.' })
       ])
     })
   })

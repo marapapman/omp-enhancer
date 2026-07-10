@@ -33,6 +33,7 @@ export function renderTestingEnhancerConfig(config) {
     return [
         'version: 1',
         'test:',
+        '  # Expected host-observed command; omp_test_gate never executes it.',
         `  command: ${config.test.command ?? ''}`,
         'coverage:',
         `  command: ${config.coverage.command ?? ''}`,

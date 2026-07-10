@@ -1,14 +1,41 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { executeBrowserCheck, normalizeBrowserFindings, splitCommandLine } from '../../../src/tools/browserCheck.js'
+import { executeBrowserCheck, isAllowedBrowserServerCommand, normalizeBrowserFindings, resolveSafeBrowserArtifactDir, splitCommandLine } from '../../../src/tools/browserCheck.js'
 import type { ExtensionToolContext } from '../../../src/ompApi.js'
 
 describe('browserCheck helpers', () => {
   it('splits command lines with quoted arguments', () => {
     expect(splitCommandLine('bun run dev --host "127.0.0.1"')).toEqual(['bun', 'run', 'dev', '--host', '127.0.0.1'])
+  })
+
+  it('allows only explicit package-manager dev-server commands', () => {
+    for (const command of ['npm start', 'npm run dev -- --host 127.0.0.1', 'pnpm preview', 'yarn serve', 'bun run dev']) {
+      expect(isAllowedBrowserServerCommand(command)).toBe(true)
+    }
+    for (const command of ['rm -rf cache', 'curl https://example.com', 'node server.js', 'npm run release', 'npm run dev && rm -rf cache']) {
+      expect(isAllowedBrowserServerCommand(command)).toBe(false)
+    }
+  })
+
+  it('contains browser artifacts under the trusted root and rejects traversal or symlinks', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omp-testing-artifacts-'))
+    const outside = await mkdtemp(join(tmpdir(), 'omp-testing-outside-'))
+    try {
+      const safe = await resolveSafeBrowserArtifactDir(cwd, '.omp/testing-enhancer-artifacts/custom', 'run')
+      expect(safe).toBe(join(cwd, '.omp', 'testing-enhancer-artifacts', 'custom'))
+      expect(await resolveSafeBrowserArtifactDir(cwd, '../escaped', 'run')).toBeNull()
+
+      const root = join(cwd, '.omp', 'testing-enhancer-artifacts')
+      await mkdir(root, { recursive: true })
+      await symlink(outside, join(root, 'linked'))
+      expect(await resolveSafeBrowserArtifactDir(cwd, '.omp/testing-enhancer-artifacts/linked/run', 'run')).toBeNull()
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
+    }
   })
 
   it('normalizes console and network findings by severity', () => {
@@ -46,5 +73,22 @@ describe('browserCheck helpers', () => {
       status: 'failed',
       findings: [expect.objectContaining({ gate: 'browser-interaction', severity: 'blocker', category: 'setup' })]
     })
+  })
+
+  it('rejects a destructive serverCommand before spawning it', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-dangerous-server-'))
+    const marker = join(cwd, 'keep.txt')
+    await writeFile(marker, 'keep')
+    try {
+      const evidence = await executeBrowserCheck({
+        baseUrl: 'http://127.0.0.1:3000',
+        serverCommand: 'rm -rf keep.txt',
+        scenarios: []
+      }, { cwd, ui: { notify: () => undefined }, hasUI: false } satisfies ExtensionToolContext)
+      expect(evidence.status).toBe('failed')
+      await expect(access(marker)).resolves.toBeUndefined()
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+    }
   })
 })

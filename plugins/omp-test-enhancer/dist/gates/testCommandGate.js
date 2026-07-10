@@ -4,7 +4,7 @@ export function evaluateTestCommandGate(result, options = {}) {
                 gate: 'test-command',
                 passed: true,
                 severity: 'warning',
-                summary: 'Test command skipped because static blocker gates failed.',
+                summary: 'Host-observed test evidence was not evaluated because static blockers remain.',
                 evidence: {}
             }];
     }
@@ -14,7 +14,7 @@ export function evaluateTestCommandGate(result, options = {}) {
                 gate: 'test-command',
                 passed: severity === 'warning',
                 severity,
-                summary: 'No test command configured.',
+                summary: 'No matching host-observed test command evidence.',
                 evidence: {}
             }];
     }
@@ -23,7 +23,7 @@ export function evaluateTestCommandGate(result, options = {}) {
                 gate: 'test-command',
                 passed: true,
                 severity,
-                summary: 'Configured test command passed.',
+                summary: 'Matching host-observed test command passed.',
                 evidence: { command: result.command, exitCode: result.exitCode }
             }];
     }
@@ -31,7 +31,7 @@ export function evaluateTestCommandGate(result, options = {}) {
             gate: 'test-command',
             passed: false,
             severity,
-            summary: 'Configured test command failed.',
+            summary: 'Host-observed test evidence did not satisfy the expected command and exit-status contract.',
             evidence: { command: result.command, exitCode: result.exitCode }
         }];
 }

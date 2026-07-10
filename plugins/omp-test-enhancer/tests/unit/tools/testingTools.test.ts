@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { access, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
@@ -695,7 +696,7 @@ describe('createTestingEnhancerTools execute layer', () => {
     })
   })
 
-  it('runs test commands even when ctx.exec is unavailable', async () => {
+  it('consumes host-observed test evidence without executing the command inside the gate', async () => {
     const target: ChangedTarget = {
       id: 'src/user/UserService.ts#UserService',
       sourceFile: 'src/user/UserService.ts',
@@ -705,7 +706,16 @@ describe('createTestingEnhancerTools execute layer', () => {
     }
     const command = `${process.execPath} -e "process.stdout.write('ok')"`
 
-    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_gate').execute(
+    const tools = createTestingEnhancerTools(fakeZod(), {
+      getObservedTestCommandEvidence: () => ({
+        schemaVersion: 1,
+        routeId: 'route-1',
+        commandDigest: createHash('sha256').update(command).digest('hex'),
+        exitCode: 0,
+        observedAt: Date.now()
+      })
+    })
+    const result = await tool(tools, 'omp_test_gate').execute(
       'call',
       {
         targets: [target],
@@ -727,10 +737,50 @@ describe('createTestingEnhancerTools execute layer', () => {
         expect.objectContaining({
           gate: 'test-command',
           passed: true,
-          evidence: { command, exitCode: 0 }
+          evidence: { command: expect.stringMatching(/^host-observed:sha256:/), exitCode: 0 }
         })
       ])
     })
+  })
+
+  it('never executes a model-supplied or configured command inside omp_test_gate', async () => {
+    const cwd = await tempRepo()
+    const marker = join(cwd, 'pwned.txt')
+    const malicious = `${process.execPath} -e "require('fs').writeFileSync('${marker}', 'bad')"`
+    await mkdir(join(cwd, '.omp'), { recursive: true })
+    await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), [
+      'version: 1',
+      'test:',
+      `  command: ${malicious}`,
+      'coverage:',
+      '  command:',
+      'gates:',
+      '  indirectTest: block',
+      '  productionEdits: block',
+      '  testCommand: block',
+      ''
+    ].join('\n'))
+    const target: ChangedTarget = {
+      id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts',
+      symbolName: 'UserService', kind: 'service', risk: 'high'
+    }
+    const gate = tool(createTestingEnhancerTools(fakeZod()), 'omp_test_gate')
+    for (const params of [
+      {
+        targets: [target], candidate: { id: 'candidate', targetId: target.id, files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: 'expect(result).toBe(true)' }] },
+        testCommand: malicious
+      },
+      {
+        targets: [target], candidate: { id: 'candidate', targetId: target.id, files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: 'expect(result).toBe(true)' }] }
+      }
+    ]) {
+      const result = await gate.execute('call', params, undefined, undefined, context(cwd))
+      expect(result.details).toMatchObject({
+        passed: false,
+        results: expect.arrayContaining([expect.objectContaining({ gate: 'test-command', passed: false })])
+      })
+      await expect(access(marker)).rejects.toThrow()
+    }
   })
 })
 

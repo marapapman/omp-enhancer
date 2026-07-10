@@ -66,6 +66,7 @@ describe('registerTestingEnhancer', () => {
     expect([...pi.tools.values()].every(tool => typeof tool.execute === 'function')).toBe(true)
     expect(pi.eventHandlers.map(handler => handler.event)).toEqual([
       'session_start',
+      'tool_call',
       'tool_result',
       'session_stop'
     ])

@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { evaluateBrowserEvidenceGate } from '../gates/browserEvidenceGate.js';
 import { evaluateIndirectTestGate } from '../gates/indirectTestGate.js';
 import { evaluateTestCommandGate } from '../gates/testCommandGate.js';
@@ -29,7 +29,7 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
             }),
             execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
                 const output = await executeAnalyze(params, ctx);
-                await callbacks.onAnalyze?.(output);
+                await callbacks.onAnalyze?.(output, ctx);
                 return textResult(output.targets.length === 1 ? 'Found 1 test target.' : `Found ${output.targets.length} test targets.`, output);
             }
         },
@@ -96,8 +96,8 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
                 browserEvidence: z.optional(z.unknown())
             }),
             execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-                const output = await executeGate(params, ctx);
-                await callbacks.onGate?.(output);
+                const output = await executeGate(params, ctx, callbacks.getObservedTestCommandEvidence?.());
+                await callbacks.onGate?.(output, ctx);
                 return textResult(output.passed ? 'Test gate passed.' : 'Test gate failed.', output);
             }
         },
@@ -109,7 +109,7 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
                 gateResults: z.optional(z.array(gateResultSchema)),
                 runId: z.optional(z.string())
             }),
-            execute: async (_toolCallId, params, _signal, _onUpdate, _ctx) => {
+            execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
                 const reportParams = params;
                 const explicitResults = Array.isArray(reportParams.gateResults) ? reportParams.gateResults : undefined;
                 const stateResults = explicitResults ?? callbacks.getRecentGateResults?.();
@@ -117,7 +117,7 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
                     return textResult('No test gate result found.', { found: false });
                 }
                 const output = buildTestReport({ gateResults: stateResults });
-                await callbacks.onReport?.(output);
+                await callbacks.onReport?.(output, ctx);
                 return textResult(output.markdown, output);
             }
         }
@@ -302,7 +302,7 @@ async function readJsonReport(cwd, reportPath) {
         return undefined;
     }
 }
-async function executeGate(params, ctx) {
+async function executeGate(params, ctx, observedTestCommand) {
     const config = await readTestingEnhancerConfig(contextCwd(ctx));
     const severities = gateSeveritiesFromConfig(config);
     const candidate = await readCandidateForGate(params, ctx);
@@ -318,15 +318,17 @@ async function executeGate(params, ctx) {
         targetIds: browserTargets.map(target => target.id)
     });
     const hasStaticBlocker = staticResults.some(result => !result.passed && result.severity === 'blocker');
-    const command = params.testCommand ?? config?.test.command;
-    const commandResult = command && !hasStaticBlocker ? await runConfiguredCommand(command, ctx) : undefined;
-    const commandSeverity = command || config ? severities.testCommand : 'warning';
+    const expectedCommand = params.testCommand ?? config?.test.command;
+    const commandResult = !hasStaticBlocker
+        ? observedTestCommandResult(observedTestCommand, expectedCommand)
+        : undefined;
+    const commandSeverity = expectedCommand || observedTestCommand || config ? severities.testCommand : 'warning';
     const results = [
         ...staticResults,
         ...browserResults,
         ...evaluateTestCommandGate(commandResult, {
             severity: commandSeverity,
-            skippedDueToStaticBlocker: Boolean(command && hasStaticBlocker)
+            skippedDueToStaticBlocker: Boolean((expectedCommand || observedTestCommand) && hasStaticBlocker)
         })
     ];
     return {
@@ -421,75 +423,20 @@ async function readGitPathList(ctx, args) {
         return [];
     }
 }
-async function runConfiguredCommand(command, ctx) {
-    const [program, ...args] = splitCommand(command);
-    if (!program)
+function observedTestCommandResult(evidence, expectedCommand) {
+    if (!evidence)
         return undefined;
-    const cwd = contextCwd(ctx);
-    if (ctx.exec) {
-        const result = await ctx.exec(program, args, { cwd, timeout: 120000 });
-        return { command, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
-    }
-    return runCommandDirectly(command, program, args, cwd);
-}
-async function runCommandDirectly(command, program, args, cwd) {
-    const { promise, resolve } = Promise.withResolvers();
-    const child = spawn(program, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    let settled = false;
-    const finish = (result) => {
-        if (settled)
-            return;
-        settled = true;
-        clearTimeout(timeout);
-        resolve(result);
+    if (expectedCommand && digestCommand(expectedCommand) !== evidence.commandDigest)
+        return undefined;
+    return {
+        command: `host-observed:sha256:${evidence.commandDigest.slice(0, 16)}`,
+        exitCode: evidence.exitCode,
+        stdout: '',
+        stderr: ''
     };
-    const timeout = setTimeout(() => {
-        child.kill('SIGTERM');
-        finish({
-            command,
-            exitCode: 1,
-            stdout,
-            stderr: stderr ? `${stderr}\nCommand timed out.` : 'Command timed out.'
-        });
-    }, 120000);
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', chunk => { stdout += String(chunk); });
-    child.stderr.on('data', chunk => { stderr += String(chunk); });
-    child.on('error', error => {
-        finish({ command, exitCode: 1, stdout, stderr: error.message });
-    });
-    child.on('close', code => {
-        finish({ command, exitCode: code ?? 1, stdout, stderr });
-    });
-    return promise;
 }
-function splitCommand(command) {
-    const tokens = [];
-    let current = '';
-    let quote;
-    for (const char of command) {
-        if (char === "'" && quote !== 'double') {
-            quote = quote === 'single' ? undefined : 'single';
-            continue;
-        }
-        if (char === '"' && quote !== 'single') {
-            quote = quote === 'double' ? undefined : 'double';
-            continue;
-        }
-        if (/\s/.test(char) && !quote) {
-            if (current)
-                tokens.push(current);
-            current = '';
-            continue;
-        }
-        current += char;
-    }
-    if (current)
-        tokens.push(current);
-    return tokens;
+function digestCommand(command) {
+    return createHash('sha256').update(String(command).trim()).digest('hex');
 }
 function buildContextForTarget(target, existingTests, publicEntryHints, propertyContext) {
     const indirectKinds = ['api-client', 'api-provider', 'service', 'repository', 'react-component', 'cli', 'unknown'];

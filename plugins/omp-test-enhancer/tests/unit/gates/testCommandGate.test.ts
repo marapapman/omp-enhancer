@@ -7,7 +7,7 @@ describe('evaluateTestCommandGate', () => {
       gate: 'test-command',
       passed: true,
       severity: 'warning',
-      summary: 'No test command configured.',
+      summary: 'No matching host-observed test command evidence.',
       evidence: {}
     }])
   })
@@ -17,7 +17,7 @@ describe('evaluateTestCommandGate', () => {
       gate: 'test-command',
       passed: false,
       severity: 'blocker',
-      summary: 'No test command configured.',
+      summary: 'No matching host-observed test command evidence.',
       evidence: {}
     }])
   })
@@ -27,7 +27,7 @@ describe('evaluateTestCommandGate', () => {
       gate: 'test-command',
       passed: true,
       severity: 'blocker',
-      summary: 'Configured test command passed.',
+      summary: 'Matching host-observed test command passed.',
       evidence: { command: 'bunx vitest run', exitCode: 0 }
     }])
   })
@@ -37,7 +37,7 @@ describe('evaluateTestCommandGate', () => {
       gate: 'test-command',
       passed: false,
       severity: 'blocker',
-      summary: 'Configured test command failed.',
+      summary: 'Host-observed test evidence did not satisfy the expected command and exit-status contract.',
       evidence: { command: 'bunx vitest run', exitCode: 1 }
     }])
   })
@@ -47,7 +47,7 @@ describe('evaluateTestCommandGate', () => {
       gate: 'test-command',
       passed: false,
       severity: 'warning',
-      summary: 'Configured test command failed.',
+      summary: 'Host-observed test evidence did not satisfy the expected command and exit-status contract.',
       evidence: { command: 'bunx vitest run', exitCode: 1 }
     }])
   })
@@ -57,7 +57,7 @@ describe('evaluateTestCommandGate', () => {
       gate: 'test-command',
       passed: true,
       severity: 'warning',
-      summary: 'Test command skipped because static blocker gates failed.',
+      summary: 'Host-observed test evidence was not evaluated because static blockers remain.',
       evidence: {}
     }])
   })
@@ -70,7 +70,7 @@ describe('evaluateTestCommandGate', () => {
       gate: 'test-command',
       passed: true,
       severity: 'warning',
-      summary: 'Test command skipped because static blocker gates failed.',
+      summary: 'Host-observed test evidence was not evaluated because static blockers remain.',
       evidence: {}
     }])
   })
@@ -80,7 +80,7 @@ describe('evaluateTestCommandGate', () => {
       gate: 'test-command',
       passed: false,
       severity: 'blocker',
-      summary: 'Configured test command failed.',
+      summary: 'Host-observed test evidence did not satisfy the expected command and exit-status contract.',
       evidence: { command: 'npm test', exitCode: -1 }
     }])
   })

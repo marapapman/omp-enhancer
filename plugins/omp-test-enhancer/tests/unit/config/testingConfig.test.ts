@@ -20,6 +20,7 @@ describe('testingConfig', () => {
     const rendered = renderTestingEnhancerConfig(config)
 
     expect(rendered).toContain('version: 1')
+    expect(rendered).toContain('# Expected host-observed command; omp_test_gate never executes it.')
     expect(rendered).toContain('command: bunx vitest run')
     expect(rendered).toContain('browser:')
     expect(rendered).toContain('  headless: true')

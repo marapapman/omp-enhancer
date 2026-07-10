@@ -50,6 +50,12 @@ function context(cwd: string, exec?: ExtensionToolContext['exec']): ExtensionToo
   return { cwd, hasUI: false, ui: { notify: () => undefined }, ...(exec ? { exec } : {}) }
 }
 
+async function emit(pi: FakePi, eventName: string, payload: unknown, ctx: ExtensionToolContext): Promise<void> {
+  for (const registration of pi.eventHandlers.filter(entry => entry.event === eventName)) {
+    await registration.handler(payload, ctx)
+  }
+}
+
 async function executeTool<TDetails>(pi: FakePi, name: string, params: unknown, ctx: ExtensionToolContext): Promise<AgentToolResult & { details: TDetails }> {
   const result = await tool(pi, name).execute(name, params, undefined, undefined, ctx)
   if (result.details === undefined) throw new Error(`${name} returned no details`)
@@ -77,6 +83,14 @@ describe('omp-test-enhancer e2e workflow', () => {
       }
     })
 
+    await emit(pi, 'tool_result', {
+      name: 'bash',
+      input: { command: 'npm test' },
+      exitCode: 0,
+      isError: false,
+      content: [{ type: 'text', text: '42 tests passed, 0 failed' }]
+    }, ctx)
+
     const gate = await executeTool<GateOutput>(pi, 'omp_test_gate', {
       targets: [target],
       candidate: {
@@ -94,7 +108,7 @@ describe('omp-test-enhancer e2e workflow', () => {
           ].join('\n')
         }]
       },
-      testCommand: `${process.execPath} -e "process.exit(0)"`
+      testCommand: 'npm test'
     }, ctx)
 
     expect(gate.details).toMatchObject({
@@ -169,7 +183,7 @@ describe('omp-test-enhancer e2e workflow', () => {
     await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), [
       'version: 1',
       'test:',
-      `  command: ${process.execPath} -e "process.exit(3)"`,
+      '  command: npm test',
       'coverage:',
       '  command:',
       'browser:',
@@ -186,6 +200,14 @@ describe('omp-test-enhancer e2e workflow', () => {
     ].join('\n'))
 
     const pi = createRegisteredPlugin()
+    const ctx = context(cwd)
+    await executeTool<AnalyzeOutput>(pi, 'omp_test_analyze', { files: ['src/ui/LoginForm.tsx'] }, ctx)
+    await emit(pi, 'tool_result', {
+      name: 'bash',
+      input: { command: 'npm test' },
+      exitCode: 3,
+      isError: true
+    }, ctx)
     const target: ChangedTarget = {
       id: 'src/ui/LoginForm.tsx#LoginForm',
       sourceFile: 'src/ui/LoginForm.tsx',
@@ -205,7 +227,7 @@ describe('omp-test-enhancer e2e workflow', () => {
           content: 'wrapper.find("button").instance().setState({ ready: true })'
         }]
       }
-    }, context(cwd))
+    }, ctx)
 
     expect(gate.details).toMatchObject({
       passed: true,
@@ -213,11 +235,11 @@ describe('omp-test-enhancer e2e workflow', () => {
         expect.objectContaining({ gate: 'test-file-scope', passed: false, severity: 'warning' }),
         expect.objectContaining({ gate: 'indirect-test', passed: false, severity: 'warning' }),
         expect.objectContaining({ gate: 'browser-interaction', passed: true, severity: 'warning' }),
-        expect.objectContaining({ gate: 'test-command', passed: false, severity: 'warning' })
+        expect.objectContaining({ gate: 'test-command', passed: true, severity: 'warning', evidence: {} })
       ])
     })
 
-    const report = await executeTool<ReportOutput>(pi, 'omp_test_report', {}, context(cwd))
+    const report = await executeTool<ReportOutput>(pi, 'omp_test_report', {}, ctx)
     expect(report.details.markdown).toContain('test-file-scope: warning')
     expect(report.details.markdown).toContain('test-command: warning')
   })
@@ -261,10 +283,17 @@ describe('omp-test-enhancer e2e workflow', () => {
       }]
     }
 
+    await emit(pi, 'tool_result', {
+      name: 'bash',
+      input: { command: 'npm test' },
+      exitCode: 2,
+      isError: true
+    }, ctx)
+
     const failedGate = await executeTool<GateOutput>(pi, 'omp_test_gate', {
       targets: [target],
       candidate,
-      testCommand: `${process.execPath} -e "process.exit(2)"`
+      testCommand: 'npm test'
     }, ctx)
 
     expect(failedGate.details).toMatchObject({
@@ -277,10 +306,18 @@ describe('omp-test-enhancer e2e workflow', () => {
     expect(failedReport.details.markdown).toContain('Result: failed')
     expect(failedReport.details.markdown).toContain('test-command: failed')
 
+    await emit(pi, 'tool_result', {
+      name: 'bash',
+      input: { command: 'npm test' },
+      exitCode: 0,
+      isError: false,
+      content: [{ type: 'text', text: '42 tests passed, 0 failed' }]
+    }, ctx)
+
     const repairedGate = await executeTool<GateOutput>(pi, 'omp_test_gate', {
       targets: [target],
       candidate,
-      testCommand: `${process.execPath} -e "process.exit(0)"`
+      testCommand: 'npm test'
     }, ctx)
 
     expect(repairedGate.details).toMatchObject({

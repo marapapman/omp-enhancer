@@ -21,7 +21,7 @@ const warning: GateResult = {
   gate: 'test-command',
   passed: true,
   severity: 'warning',
-  summary: 'No test command configured.',
+  summary: 'No matching host-observed test command evidence.',
   evidence: {}
 }
 
@@ -55,7 +55,7 @@ describe('buildTestReport', () => {
       'Result: passed',
       '',
       '* indirect-test: passed',
-      '* test-command: warning, No test command configured.'
+      '* test-command: warning, No matching host-observed test command evidence.'
     ].join('\n'))
 
     expect(buildTestReport({ gateResults: [failed] }).markdown).toBe([

@@ -56,6 +56,8 @@ export interface CommandDefinition {
 }
 
 export interface ExtensionAPI {
+  /** Shared by the per-extension API wrappers in the real OMP loader. */
+  events?: object
   zod: {
     z: {
       object(shape: Record<string, unknown>): unknown

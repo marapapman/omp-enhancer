@@ -9,8 +9,10 @@ This command explains the marketplace workflow. It is not the extension-register
 3. If `browserPlan` is returned, call `omp_test_browser_check` to run browser user events and collect console, pageerror, network, and visual evidence. Skip it when no `browserPlan` exists.
 4. If a coverage report exists, call `omp_test_coverage_analyze` to extract uncovered statements, branches, and functions.
 5. If a mutation report exists, call `omp_test_mutation_context` to extract surviving mutants and repair hints.
-6. Update or add tests, then run `omp_test_gate` to check indirect-test, test-file-scope, browser-interaction, browser-visual, and test-command gates.
-7. Finish with `omp_test_report` to summarize the gate results.
+6. Update or add tests.
+7. Run the expected test command through an explicit host shell tool call and confirm its real successful result. `omp_test_gate` never executes a command from arguments or config.
+8. Run `omp_test_gate` to consume the current-route host evidence and check indirect-test, test-file-scope, browser-interaction, browser-visual, and test-command gates.
+9. Finish with `omp_test_report` to summarize the gate results.
 
 Suggested loop:
 
@@ -20,5 +22,6 @@ Suggested loop:
 - `omp_test_coverage_analyze` when a coverage report exists
 - `omp_test_mutation_context` when a mutation report exists
 - update the candidate tests
+- run the expected tests through the host shell
 - `omp_test_gate`
 - `omp_test_report`

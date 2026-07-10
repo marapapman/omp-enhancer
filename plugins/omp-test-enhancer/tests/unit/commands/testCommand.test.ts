@@ -53,6 +53,8 @@ describe('buildTestHelpText', () => {
     expect(help).toContain('apiPlan')
     expect(help).toContain('coverage')
     expect(help).toContain('mutation')
+    expect(help).toContain('不会执行测试命令')
+    expect(help).toContain('宿主 shell')
     expect(help).not.toContain('--help')
     expect(help).not.toContain('--check')
     expect(help).not.toContain('--report')

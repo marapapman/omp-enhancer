@@ -1,5 +1,5 @@
-import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, realpath } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
 import { comparePng } from './imageDiff.js';
@@ -7,16 +7,27 @@ import { isRecord } from '../utils.js';
 export async function executeBrowserCheck(params, ctx) {
     const cwd = typeof ctx.cwd === 'string' && ctx.cwd.trim() !== '' ? ctx.cwd : process.cwd();
     const runId = `browser-${Date.now().toString(36)}`;
-    const artifactDir = params.artifactDir ?? join(cwd, '.omp', 'testing-enhancer-artifacts', runId);
-    await mkdir(artifactDir, { recursive: true });
-    let server;
-    let serverClosed = false;
-    let serverError;
-    let serverClosePromise;
     const findings = [];
     const artifacts = {};
     const headless = params.setup?.headless ?? true;
     const viewport = params.setup?.viewport ?? { width: 1280, height: 720 };
+    const artifactDir = await resolveSafeBrowserArtifactDir(cwd, params.artifactDir, runId);
+    if (!artifactDir) {
+        findings.push({
+            gate: 'browser-interaction',
+            passed: false,
+            severity: 'blocker',
+            category: 'setup',
+            summary: 'Browser artifact directory escapes the trusted artifact root or crosses a symbolic link.',
+            evidence: {},
+            repairHint: 'Use the default artifact directory or a path under .omp/testing-enhancer-artifacts without symbolic links.'
+        });
+        return buildEvidence(params, runId, headless, viewport, findings, artifacts);
+    }
+    let server;
+    let serverClosed = false;
+    let serverError;
+    let serverClosePromise;
     const traceMode = params.setup?.trace ?? 'off';
     const serviceWorkers = params.setup?.serviceWorkers ?? 'block';
     const consoleErrors = [];
@@ -30,6 +41,18 @@ export async function executeBrowserCheck(params, ctx) {
     let tracingStarted = false;
     try {
         if (params.serverCommand) {
+            if (!isAllowedBrowserServerCommand(params.serverCommand)) {
+                findings.push({
+                    gate: 'browser-interaction',
+                    passed: false,
+                    severity: 'blocker',
+                    category: 'setup',
+                    summary: 'Browser serverCommand is not an allowed local package-manager dev-server command.',
+                    evidence: {},
+                    repairHint: 'Start the server separately or use npm, pnpm, yarn, or bun with start, dev, serve, or preview.'
+                });
+                return buildEvidence(params, runId, headless, viewport, findings, artifacts);
+            }
             const [program, ...args] = splitCommandLine(params.serverCommand);
             if (program) {
                 server = spawn(program, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -162,6 +185,58 @@ export async function executeBrowserCheck(params, ctx) {
             await serverClosePromise;
         }
     }
+}
+export function isAllowedBrowserServerCommand(command) {
+    const source = String(command).trim();
+    if (!source || /[;&|<>`]|\$\(|\r|\n/.test(source))
+        return false;
+    const [program, ...args] = splitCommandLine(source);
+    if (!['npm', 'pnpm', 'yarn', 'bun'].includes(program ?? ''))
+        return false;
+    const values = args.filter(arg => arg !== '--');
+    if (program === 'npm') {
+        if (values[0] === 'start')
+            return true;
+        return values[0] === 'run' && /^(?:start|dev|serve|preview)$/.test(values[1] ?? '');
+    }
+    if (values[0] === 'run')
+        return /^(?:start|dev|serve|preview)$/.test(values[1] ?? '');
+    return /^(?:start|dev|serve|preview)$/.test(values[0] ?? '');
+}
+export async function resolveSafeBrowserArtifactDir(cwd, requested, runId) {
+    try {
+        const trustedCwd = await realpath(cwd);
+        const root = join(trustedCwd, '.omp', 'testing-enhancer-artifacts');
+        await mkdir(root, { recursive: true });
+        const trustedRoot = await realpath(root);
+        const candidate = requested ? resolve(trustedCwd, requested) : join(trustedRoot, runId);
+        if (!pathIsWithin(trustedRoot, candidate))
+            return null;
+        let existingAncestor = candidate;
+        while (pathIsWithin(trustedRoot, existingAncestor)) {
+            try {
+                const resolvedAncestor = await realpath(existingAncestor);
+                if (!pathIsWithin(trustedRoot, resolvedAncestor))
+                    return null;
+                break;
+            }
+            catch {
+                if (existingAncestor === trustedRoot)
+                    return null;
+                existingAncestor = dirname(existingAncestor);
+            }
+        }
+        await mkdir(candidate, { recursive: true });
+        const resolved = await realpath(candidate);
+        return pathIsWithin(trustedRoot, resolved) ? resolved : null;
+    }
+    catch {
+        return null;
+    }
+}
+function pathIsWithin(root, candidate) {
+    const fromRoot = relative(root, candidate);
+    return fromRoot === '' || (!fromRoot.startsWith('..') && !isAbsolute(fromRoot));
 }
 function serverCommandFailureFinding(command, error) {
     return {
