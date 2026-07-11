@@ -410,6 +410,98 @@ test('implicit implementation verification rejects traversal and symlink escapes
   }
 });
 
+test('test execution binds every declared cwd and workdir to the trusted project root', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'omp-core-test-cwd-binding-'));
+  const root = join(parent, 'repo');
+  const testDir = join(root, 'test');
+  const command = 'node --test test/local.test.js';
+  try {
+    await mkdir(testDir, { recursive: true });
+    await writeFile(join(testDir, 'local.test.js'), 'import test from "node:test"; test("local", () => {});\n');
+
+    for (const input of [
+      { command, cwd: parent },
+      { command, workdir: '..' },
+      { command, cwd: root, workdir: parent },
+    ]) {
+      const implicit = await routedRuntime('Fix src/router.js locally.', { cwd: root });
+      const blocked = await event(implicit.pi, 'tool_call')({
+        toolCallId: `implicit-cwd-mismatch-${JSON.stringify(input).length}`,
+        toolName: 'bash',
+        input,
+      }, implicit.ctx);
+      assert.equal(blocked?.reasonCode, 'test-target-authorization-required', JSON.stringify(input));
+
+      const exact = await routedRuntime(
+        'Only run node --test test/local.test.js; do not modify files, use subagents, or publish.',
+        { cwd: root },
+      );
+      const exactBlocked = await event(exact.pi, 'tool_call')({
+        toolCallId: `exact-cwd-mismatch-${JSON.stringify(input).length}`,
+        toolName: 'bash',
+        input,
+      }, exact.ctx);
+      assert.equal(exactBlocked?.reasonCode, 'test-target-authorization-required', JSON.stringify(input));
+
+      const exclusive = await routedRuntime(
+        'Run exactly test/local.test.js once and do not call any other tool.',
+        { cwd: root },
+      );
+      const exclusiveBlocked = await event(exclusive.pi, 'tool_call')({
+        toolCallId: `exclusive-cwd-mismatch-${JSON.stringify(input).length}`,
+        toolName: 'bash',
+        input,
+      }, exclusive.ctx);
+      assert.equal(exclusiveBlocked?.reasonCode, 'exclusive-tool-input-mismatch', JSON.stringify(input));
+    }
+
+    const exclusivePackage = await routedRuntime(
+      'Use bash exactly once to run npm test. Do not call any other tool.',
+      { cwd: root },
+    );
+    const packageBlocked = await event(exclusivePackage.pi, 'tool_call')({
+      toolCallId: 'exclusive-package-cwd-mismatch',
+      toolName: 'bash',
+      input: { command: 'npm test', cwd: parent },
+    }, exclusivePackage.ctx);
+    assert.equal(packageBlocked?.reasonCode, 'exclusive-tool-input-mismatch');
+
+    for (const [index, alternateShape] of [
+      { arguments: { command: 'npm test', cwd: parent } },
+      { details: { params: { command: 'npm test', workdir: '..' } } },
+    ].entries()) {
+      const alternate = await routedRuntime(
+        'Use bash exactly once to run npm test. Do not call any other tool.',
+        { cwd: root },
+      );
+      const alternateBlocked = await event(alternate.pi, 'tool_call')({
+        toolCallId: `exclusive-package-alternate-cwd-${index}`,
+        toolName: 'bash',
+        ...alternateShape,
+      }, alternate.ctx);
+      assert.equal(alternateBlocked?.reasonCode, 'exclusive-tool-input-mismatch');
+    }
+
+    const ordinaryPackage = await routedRuntime('Run npm test and report the result.', { cwd: root });
+    const ordinaryPackageBlocked = await event(ordinaryPackage.pi, 'tool_call')({
+      toolCallId: 'ordinary-package-cwd-mismatch',
+      toolName: 'bash',
+      input: { command: 'npm test', cwd: parent },
+    }, ordinaryPackage.ctx);
+    assert.equal(ordinaryPackageBlocked?.reasonCode, 'test-target-authorization-required');
+
+    const nested = await routedRuntime('Fix src/router.js locally.', { cwd: root });
+    const nestedAllowed = await event(nested.pi, 'tool_call')({
+      toolCallId: 'implicit-nested-cwd',
+      toolName: 'bash',
+      input: { command: 'node --test local.test.js', cwd: testDir, workdir: 'test' },
+    }, nested.ctx);
+    assert.notEqual(nestedAllowed?.block, true, nestedAllowed?.reason);
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+
 test('an offline exclusive package test is rejected before execution without method repair', async () => {
   const runtime = await routedRuntime('Use the bash tool exactly once to run npm test. Do not call any other tool, edit files, use subagents, or access the network. Return exactly PASS if it succeeds, otherwise FAIL.');
   const blocked = await event(runtime.pi, 'tool_call')({
@@ -2340,6 +2432,26 @@ test('incomplete, conflicting, and multi-action connector requests pause once in
       prompt,
     );
   }
+
+  const chinese = await routedRuntime('发送一封邮件。');
+  const chineseBlocked = await event(chinese.pi, 'tool_call')({
+    toolName: 'gmail.send_email', input: { to: 'alice@example.com', body: '状态更新' },
+  }, chinese.ctx);
+  assert.equal(chineseBlocked?.reasonCode, 'external-action-target-confirmation-required');
+  assert.equal(
+    await event(chinese.pi, 'session_stop')({ output: '请提供一个明确的收件人。' }, chinese.ctx),
+    undefined,
+  );
+
+  const dishonest = await routedRuntime('发送一封邮件。');
+  await event(dishonest.pi, 'tool_call')({
+    toolName: 'gmail.send_email', input: { to: 'alice@example.com', body: '状态更新' },
+  }, dishonest.ctx);
+  const corrected = await event(dishonest.pi, 'session_stop')({
+    output: '邮件已成功发送，请提供一个明确的收件人。',
+  }, dishonest.ctx);
+  assert.equal(corrected?.continue, true);
+  assert.equal(corrected?.details?.reasonCode, 'awaiting-user-terminal-output-correction');
 });
 
 test('irreversible routes block destructive command variants without trusted approval', async () => {

@@ -1783,7 +1783,7 @@ test('fact-preserving document edits require host-observed semantic invariants',
       }, runtime.ctx);
       assert.equal(noRetry?.block, true);
       assert.match(noRetry.reason, /OMP_AWAITING_USER.*unambiguous document scope/is);
-      assert.equal(await event(runtime.pi, 'session_stop')({ output: 'Please identify one exact editable sentence.' }, runtime.ctx), undefined);
+      assert.equal(await event(runtime.pi, 'session_stop')({ output: '请明确一个可编辑的句子。' }, runtime.ctx), undefined);
 
       const restored = await restartRuntime(runtime.pi.entries);
       state = latestState(restored.pi);

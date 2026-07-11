@@ -180,7 +180,7 @@ export default function registerCoreEnhancer(pi) {
           probedAt: Date.now(),
         };
       }
-      recordDirectExclusiveToolSuccess(state, 'omp_core_route_task', _callId, params);
+      recordDirectExclusiveToolSuccess(state, 'omp_core_route_task', _callId, params, ctx);
       await persistState(pi, state);
       const suffix = shouldActivate ? '' : '\nRoute probe only: active route state was not changed.';
       return okResult(`${formatRoute(route)}${suffix}${formatRouteProbeGuidance(route, { probeOnly })}`, {
@@ -399,7 +399,7 @@ export default function registerCoreEnhancer(pi) {
     execute: async (_callId, _params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const result = okResult(formatSubagentStatus(state), { status: buildSubagentStatus(state) });
-      recordDirectExclusiveToolSuccess(state, 'omp_core_subagent_status', _callId, _params);
+      recordDirectExclusiveToolSuccess(state, 'omp_core_subagent_status', _callId, _params, ctx);
       await persistState(pi, state);
       return result;
     },
@@ -611,7 +611,7 @@ export default function registerCoreEnhancer(pi) {
         return preworkBlock;
       }
     }
-    recordExclusiveToolCallStart(state, name, event);
+    recordExclusiveToolCallStart(state, name, event, ctx);
     await persistState(pi, state);
     return undefined;
   });
@@ -680,7 +680,7 @@ export default function registerCoreEnhancer(pi) {
       failed,
       pending,
     });
-    recordExclusiveToolResult(state, name, event, exclusiveDisposition);
+    recordExclusiveToolResult(state, name, event, exclusiveDisposition, ctx);
     await persistState(pi, state);
     return undefined;
   });
@@ -1164,12 +1164,17 @@ function restoreStateFromContext(state, ctx = {}) {
 function restoreStateFromEntries(entries) {
   let snapshot = null;
   let index = -1;
+  const trustedPriorExclusiveSuccesses = new Set();
   for (const [entryIndex, entry] of entries.entries()) {
     if (!isCoreStateEntry(entry)) continue;
-    const parsed = readStateSnapshot(entry.data);
+    const parsed = readStateSnapshot(entry.data, { trustedPriorExclusiveSuccesses });
     if (parsed) {
       snapshot = parsed;
       index = entryIndex;
+      if (parsed.exclusiveToolState?.status === 'succeeded'
+        && !parsed.exclusiveToolState.reasonCode) {
+        trustedPriorExclusiveSuccesses.add(exclusiveToolStateIdentity(parsed.exclusiveToolState));
+      }
     }
   }
   if (!snapshot) return null;
@@ -1360,7 +1365,7 @@ function serializeState(state) {
   };
 }
 
-function readStateSnapshot(value) {
+function readStateSnapshot(value, { trustedPriorExclusiveSuccesses = new Set() } = {}) {
   if (!isRecord(value)) return null;
   const evidence = readEvidenceSnapshot(value.evidence);
   if (!evidence) return null;
@@ -1396,6 +1401,7 @@ function readStateSnapshot(value) {
       value.exclusiveToolState,
       gateControllerRouteId(value),
       value.lastRoute?.taskDescriptor?.exclusiveToolContract,
+      { trustedPriorExclusiveSuccesses },
     ),
     focusedFactSearch,
     evidence,
@@ -3187,7 +3193,7 @@ function isFocusedBugAuditRoute(route) {
 function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx = {}) {
   const descriptor = state.lastRoute?.taskDescriptor;
   if (!toolName) return null;
-  const exclusiveToolBlock = exclusiveToolBoundaryBlock(state, toolName, event);
+  const exclusiveToolBlock = exclusiveToolBoundaryBlock(state, toolName, event, ctx);
   if (exclusiveToolBlock) return exclusiveToolBlock;
   const text = toolActionText(event);
   const action = classifyToolAction({ toolName, text });
@@ -3263,8 +3269,12 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
     const outsideTarget = observedTestTargets.find((target) => !exactTestTargets.some((allowed) => exactTestPathMatches(target, allowed)));
     const incompleteOrReorderedTargets = observedTestTargets.length !== exactTestTargets.length
       || observedTestTargets.some((target, index) => !exactTestPathMatches(target, exactTestTargets[index]));
+    const trustedExecutionTarget = directTestTargetsWithinTrustedRoot(exactTestTargets, event, ctx, {
+      requireRootCwd: true,
+      requireExisting: false,
+    });
     if (hasUnsafeResultMasking(text) || !observedTestTargets.length || outsideTarget || incompleteOrReorderedTargets
-      || !isDirectExactLocalTestCommand(text, exactTestTargets)) {
+      || !isDirectExactLocalTestCommand(text, exactTestTargets) || !trustedExecutionTarget) {
       return protectedConstraintBlock(
         'test-target-authorization-required',
         `The user authorized only the exact test target${exactTestTargets.length === 1 ? '' : 's'} ${exactTestTargets.join(', ')}. Use exactly: node --test ${exactTestTargets.join(' ')}. Aggregate suites, omitted, reordered, duplicated, nested, or substituted files, runner preloads, pipelines, redirections, and compound commands are outside the authorization.`,
@@ -3276,6 +3286,10 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
     && exactTestTargets.length > 0
     && TRUSTED_HOST_TEST_EXECUTORS.has(String(toolName).toLowerCase())
     && isDirectExactLocalTestCommand(text, exactTestTargets)
+    && directTestTargetsWithinTrustedRoot(exactTestTargets, event, ctx, {
+      requireRootCwd: true,
+      requireExisting: false,
+    })
     && !action.networkAccess
     && !action.externalWrite
     && !action.workspaceWrite
@@ -3383,12 +3397,19 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
       'The user explicitly forbade push, publish, deploy, or other external writes. This unclassified command can hide remote mutations, so use a directly classifiable local command or inspect the command implementation first.',
     );
   }
+  if (action.testExecution && !trustedToolExecutionContext(event, ctx)) {
+    return protectedConstraintBlock(
+      'test-target-authorization-required',
+      'The test execution cwd/workdir is missing, conflicting, nonexistent, or outside the trusted project root. Run the test only from the active project or one real in-project subdirectory; do not substitute an external directory containing a same-named test.',
+    );
+  }
   const implicitImplementationVerification = implicitlyAuthorizedImplementationVerification({
     route: state.lastRoute,
     toolName,
     command: text,
     action,
     testScope,
+    event,
     ctx,
   });
   if (action.testExecution
@@ -3434,6 +3455,7 @@ function implicitlyAuthorizedImplementationVerification({
   command = '',
   action = {},
   testScope = 'none',
+  event = {},
   ctx = {},
 } = {}) {
   const descriptor = route?.taskDescriptor;
@@ -3453,7 +3475,7 @@ function implicitlyAuthorizedImplementationVerification({
     && testScope === 'focused'
     && targets.length > 0
     && isDirectExactLocalTestCommand(command, targets)
-    && directTestTargetsWithinTrustedRoot(targets, ctx)
+    && directTestTargetsWithinTrustedRoot(targets, event, ctx, { requireExisting: true })
     && !hasUnsafeResultMasking(command)
     && !isDryRunAction(command)
     && !action.networkAccess
@@ -3463,32 +3485,82 @@ function implicitlyAuthorizedImplementationVerification({
     && !action.opaqueEffects;
 }
 
-function directTestTargetsWithinTrustedRoot(targets = [], ctx = {}) {
-  let root;
-  try {
-    root = realpathSync(resolve(typeof ctx.cwd === 'string' && isAbsolute(ctx.cwd)
-      ? ctx.cwd
-      : process.cwd()));
-  } catch {
-    return false;
-  }
+function directTestTargetsWithinTrustedRoot(targets = [], event = {}, ctx = {}, {
+  requireRootCwd = false,
+  requireExisting = true,
+} = {}) {
+  const executionContext = trustedToolExecutionContext(event, ctx);
+  if (!executionContext || requireRootCwd && executionContext.cwd !== executionContext.root) return false;
+  const { root, cwd } = executionContext;
   return targets.length > 0 && targets.every((target) => {
-    const normalized = posix.normalize(String(target).trim().replace(/\\/g, '/').replace(/^\.\//, ''));
-    if (!normalized || normalized === '.' || normalized.startsWith('../') || isAbsolute(normalized)) return false;
-    const candidate = resolve(root, normalized);
+    const raw = String(target).trim().replace(/\\/g, '/').replace(/^\.\//, '');
+    const normalized = posix.normalize(raw);
+    if (!normalized || normalized === '.' || raw.split('/').includes('..')
+      || normalized.startsWith('../') || isAbsolute(normalized)) return false;
+    const candidate = resolve(cwd, normalized);
     const lexicalRelative = relative(root, candidate);
     if (!lexicalRelative || lexicalRelative === '..' || lexicalRelative.startsWith('../') || isAbsolute(lexicalRelative)) return false;
     try {
       const actual = realpathSync(candidate);
-      const actualRelative = relative(root, actual);
-      return Boolean(actualRelative)
-        && actualRelative !== '..'
-        && !actualRelative.startsWith('../')
-        && !isAbsolute(actualRelative);
+      return pathIsStrictlyWithinRoot(actual, root);
     } catch {
+      if (requireExisting) return false;
+      try {
+        if (lstatSync(candidate).isSymbolicLink()) return false;
+      } catch {
+        // A user-authorized exact test path may not exist yet. Its nearest
+        // existing ancestor must still resolve inside the trusted root.
+      }
+      let ancestor = dirname(candidate);
+      while (ancestor !== dirname(ancestor)) {
+        try {
+          return ancestor === root || pathIsStrictlyWithinRoot(realpathSync(ancestor), root);
+        } catch {
+          ancestor = dirname(ancestor);
+        }
+      }
       return false;
     }
   });
+}
+
+function trustedToolExecutionContext(event = {}, ctx = {}) {
+  let root;
+  try {
+    if (typeof ctx.cwd === 'string' && ctx.cwd.trim() && !isAbsolute(ctx.cwd)) return null;
+    root = realpathSync(resolve(typeof ctx.cwd === 'string' && ctx.cwd.trim()
+      ? ctx.cwd
+      : process.cwd()));
+  } catch {
+    return null;
+  }
+  const declared = [
+    event.cwd,
+    event.workdir,
+    event.details?.cwd,
+    event.details?.workdir,
+    ...toolInputRecords(event).flatMap((record) => [record.cwd, record.workdir]),
+  ].filter((value) => typeof value === 'string' && value.trim());
+  const resolved = new Set();
+  for (const value of declared) {
+    try {
+      const cwd = realpathSync(isAbsolute(value) ? value : resolve(root, value));
+      if (cwd !== root && !pathIsStrictlyWithinRoot(cwd, root)) return null;
+      resolved.add(cwd);
+    } catch {
+      return null;
+    }
+  }
+  if (resolved.size > 1) return null;
+  return { root, cwd: resolved.values().next().value ?? root };
+}
+
+function pathIsStrictlyWithinRoot(path = '', root = '') {
+  const fromRoot = relative(root, path);
+  return Boolean(fromRoot)
+    && fromRoot !== '..'
+    && !fromRoot.startsWith('../')
+    && !isAbsolute(fromRoot);
 }
 
 function prepareDocumentPreservationToolCall(state, toolName = '', event = {}, action = {}, ctx = {}) {
@@ -4019,6 +4091,10 @@ function isKnownFirstPartyNetworkAction(toolName = '', event = {}) {
 }
 
 function firstToolInputRecord(event = {}) {
+  return toolInputRecords(event)[0] ?? {};
+}
+
+function toolInputRecords(event = {}) {
   return [
     event.input,
     event.params,
@@ -4026,7 +4102,7 @@ function firstToolInputRecord(event = {}) {
     event.arguments,
     event.details?.input,
     event.details?.params,
-  ].find(isRecord) ?? {};
+  ].filter(isRecord);
 }
 
 function protectedConstraintBlock(reasonCode, reason) {
@@ -4104,7 +4180,9 @@ function exclusiveToolUnsatisfiableReason(route) {
   return null;
 }
 
-function readExclusiveToolState(value, routeId = '', contract = null) {
+function readExclusiveToolState(value, routeId = '', contract = null, {
+  trustedPriorExclusiveSuccesses = new Set(),
+} = {}) {
   if (contract?.mode !== 'exclusive') return null;
   const unavailable = () => ({
     schemaVersion: 1,
@@ -4136,7 +4214,12 @@ function readExclusiveToolState(value, routeId = '', contract = null) {
     && (restored.toolName || restored.toolCallIdDigest || restored.inputDigest || restored.reasonCode)) return unavailable();
   if (['pending', 'succeeded', 'failed'].includes(restored.status)
     && (restored.toolName !== allowedTool || !restored.toolCallIdDigest || !restored.inputDigest)) return unavailable();
-  if (['pending', 'succeeded'].includes(restored.status) && restored.reasonCode) return unavailable();
+  if (restored.status === 'pending' && restored.reasonCode) return unavailable();
+  if (restored.status === 'succeeded'
+    && restored.reasonCode
+    && !(restored.reasonCode === 'exclusive-tool-success-output-correction-budget-exhausted'
+      && restored.finalCorrectionUsed === true
+      && trustedPriorExclusiveSuccesses.has(exclusiveToolStateIdentity(restored)))) return unavailable();
   if (restored.status === 'failed'
     && !['exclusive-tool-result-failed', 'exclusive-tool-terminal-correction-budget-exhausted']
       .includes(restored.reasonCode)) return unavailable();
@@ -4145,6 +4228,15 @@ function readExclusiveToolState(value, routeId = '', contract = null) {
       || restored.toolName && restored.toolName !== allowedTool
       || Boolean(restored.toolCallIdDigest) !== Boolean(restored.inputDigest))) return unavailable();
   return restored;
+}
+
+function exclusiveToolStateIdentity(value = {}) {
+  return digestEvidence([
+    value.routeId,
+    value.toolName,
+    value.toolCallIdDigest,
+    value.inputDigest,
+  ].map((item) => String(item ?? '')).join(':'));
 }
 
 function mergeExclusiveToolState(live, restored, routeId = '') {
@@ -4156,7 +4248,7 @@ function mergeExclusiveToolState(live, restored, routeId = '') {
   return (rank[current.status] ?? 3) >= (rank[snapshot.status] ?? 3) ? current : snapshot;
 }
 
-function exclusiveToolBoundaryBlock(state, toolName = '', event = {}) {
+function exclusiveToolBoundaryBlock(state, toolName = '', event = {}, ctx = {}) {
   const contract = state.lastRoute?.taskDescriptor?.exclusiveToolContract;
   if (contract?.mode !== 'exclusive') return null;
   const toolState = state.exclusiveToolState;
@@ -4182,7 +4274,7 @@ function exclusiveToolBoundaryBlock(state, toolName = '', event = {}) {
     markExclusiveToolBlocked(state, 'exclusive-tool-not-authorized');
     return protectedConstraintBlock('exclusive-tool-not-authorized', `The user authorized only ${(contract.allowedTools ?? []).join(', ')} exactly once and forbade every other tool. Do not substitute ${toolName || 'another tool'}.`);
   }
-  if (!exclusiveToolInputMatches(state, event)) {
+  if (!exclusiveToolInputMatches(state, event, ctx)) {
     markExclusiveToolBlocked(state, 'exclusive-tool-input-mismatch');
     return protectedConstraintBlock('exclusive-tool-input-mismatch', 'The proposed input does not match the trusted one-tool input binding. The single-call contract forbids a mechanical retry or alternate input.');
   }
@@ -4194,12 +4286,15 @@ function exclusiveToolCallMatchesAllowedTool(state, toolName = '') {
   return allowed.includes(canonicalExclusiveRuntimeToolName(toolName));
 }
 
-function exclusiveToolInputMatches(state, event = {}) {
+function exclusiveToolInputMatches(state, event = {}, ctx = {}) {
   const input = state.lastRoute?.taskDescriptor?.exclusiveToolContract?.input;
   if (!input || input.status === 'ambiguous') return false;
   if (input.kind === 'exact-command') {
     const command = String(toolActionText(event)).trim().replace(/\s+/g, ' ');
-    return digestEvidence(command) === input.digest;
+    const executionContext = trustedToolExecutionContext(event, ctx);
+    return digestEvidence(command) === input.digest
+      && Boolean(executionContext)
+      && executionContext.cwd === executionContext.root;
   }
   if (input.kind === 'exact-path') {
     const record = firstToolInputRecord(event);
@@ -4238,21 +4333,22 @@ function canonicalExclusiveRuntimeToolName(value = '') {
   return name;
 }
 
-function recordDirectExclusiveToolSuccess(state, toolName = '', callId = '', input = {}) {
+function recordDirectExclusiveToolSuccess(state, toolName = '', callId = '', input = {}, ctx = {}) {
   const event = {
     toolName,
     toolCallId: String(callId ?? ''),
     input,
   };
   if (state.exclusiveToolState?.status === 'unused') {
-    if (!exclusiveToolCallMatchesAllowedTool(state, toolName) || !exclusiveToolInputMatches(state, event)) return false;
-    recordExclusiveToolCallStart(state, toolName, event);
+    if (!exclusiveToolCallMatchesAllowedTool(state, toolName) || !exclusiveToolInputMatches(state, event, ctx)) return false;
+    recordExclusiveToolCallStart(state, toolName, event, ctx);
   }
-  return recordExclusiveToolResult(state, toolName, event, { successful: true });
+  return recordExclusiveToolResult(state, toolName, event, { successful: true }, ctx);
 }
 
-function recordExclusiveToolCallStart(state, toolName = '', event = {}) {
+function recordExclusiveToolCallStart(state, toolName = '', event = {}, ctx = {}) {
   if (!exclusiveToolCallMatchesAllowedTool(state, toolName) || state.exclusiveToolState?.status !== 'unused') return false;
+  if (!exclusiveToolInputMatches(state, event, ctx)) return false;
   state.exclusiveToolState = {
     ...state.exclusiveToolState,
     status: 'pending',
@@ -4300,18 +4396,18 @@ function exclusiveToolResultDisposition(state, toolName = '', {
   };
 }
 
-function recordExclusiveToolResult(state, toolName = '', event = {}, { successful = false, failed = false, pending = false } = {}) {
+function recordExclusiveToolResult(state, toolName = '', event = {}, { successful = false, failed = false, pending = false } = {}, ctx = {}) {
   const current = state.exclusiveToolState;
   if (!current || pending) return false;
   if (current.status === 'unused'
     && exclusiveToolCallMatchesAllowedTool(state, toolName)
-    && exclusiveToolInputMatches(state, event)) {
+    && exclusiveToolInputMatches(state, event, ctx)) {
     markExclusiveToolBlocked(state, 'exclusive-tool-unpaired-result');
     return true;
   }
   if (current.status !== 'pending') return false;
   const normalizedTool = canonicalExclusiveRuntimeToolName(toolName);
-  if (current.toolName !== normalizedTool || !exclusiveToolInputMatches(state, event)) return false;
+  if (current.toolName !== normalizedTool || !exclusiveToolInputMatches(state, event, ctx)) return false;
   const callId = toolEventCallId(event);
   if (!callId || current.toolCallIdDigest !== digestEvidence(callId)) return false;
   state.exclusiveToolState = {
@@ -4428,16 +4524,16 @@ function terminalAwaitingUserOutputIsHonest(output = '', reasonCode = '') {
   if (!text || terminalOutputHasPositiveClaim(text)) return false;
   if (terminalOutputHasBlockedClaim(text)) return true;
   const patterns = {
-    'external-destructive-action-unsupported': /\b(?:unsupported|not\s+safely\s+supported|provider-native\s+(?:manual\s+)?workflow)\b/i,
-    'external-action-target-confirmation-required': /\b(?:provide|confirm|name|identify|split|sequence)\b[^.!?\n]{0,96}\b(?:exact|single|one)\b[^.!?\n]{0,64}\b(?:target|recipient|channel|folder|calendar|page|action)\b/i,
-    'document-preservation-multi-target-unsupported': /\b(?:provide|name|identify|choose|split)\b[^.!?\n]{0,96}\b(?:one|single|exact)\b[^.!?\n]{0,48}\b(?:document|file|target)\b/i,
-    'document-preservation-scope-confirmation-required': /\b(?:identify|provide|name|confirm)\b[^.!?\n]{0,96}\b(?:one|single|exact)\b[^.!?\n]{0,64}\b(?:editable\s+sentence|sentence|protected\s+literal|scope)\b/i,
-    'document-preservation-snapshot-too-large': /\b(?:need|provide|split|choose|use)\b[^.!?\n]{0,96}\b(?:smaller|narrower|one|single|exact)\b[^.!?\n]{0,64}\b(?:task|file|document|scope|section)\b/i,
-    'release-target-confirmation-required': /\b(?:provide|confirm|name|identify)\b[^.!?\n]{0,96}\b(?:exact|complete)\b[^.!?\n]{0,64}\b(?:repository|registry|cluster|target|revision|version|ref|tag|image)\b/i,
-    'release-verification-unsupported': /\b(?:unsupported|provide|confirm|need|requires?)\b[^.!?\n]{0,128}\b(?:verifiable|verification|exact|supported)\b[^.!?\n]{0,64}\b(?:target|contract|command|workflow)?\b/i,
-    'irreversible-approval-required': /\b(?:rerun|enable|provide|requires?)\b[^.!?\n]{0,96}\b(?:interactive|trusted|host)\b[^.!?\n]{0,48}\bapproval\b/i,
-    'exclusive-tool-contract-unsatisfiable': /\b(?:restate|provide|confirm|need|requires?)\b[^.!?\n]{0,128}\b(?:exact|authorized|conflict|constraint|capability|input|action)\b/i,
-    'network-access-unverifiable': /\b(?:restate|provide|confirm|need|requires?)\b[^.!?\n]{0,128}\b(?:network|sandbox|offline|exact|conflict|constraint)\b/i,
+    'external-destructive-action-unsupported': /\b(?:unsupported|not\s+safely\s+supported|provider-native\s+(?:manual\s+)?workflow)\b|(?:不支持|无法安全支持|提供商原生.{0,8}手动流程)/iu,
+    'external-action-target-confirmation-required': /\b(?:provide|confirm|name|identify|split|sequence)\b[^.!?\n]{0,96}\b(?:exact|single|one)\b[^.!?\n]{0,64}\b(?:target|recipient|channel|folder|calendar|page|action)\b|(?:请)?(?:提供|确认|指定|说明|拆分|排序).{0,32}(?:一个|单一|唯一|明确|确切).{0,24}(?:目标|收件人|频道|文件夹|日历|页面|操作)/iu,
+    'document-preservation-multi-target-unsupported': /\b(?:provide|name|identify|choose|split)\b[^.!?\n]{0,96}\b(?:one|single|exact)\b[^.!?\n]{0,48}\b(?:document|file|target)\b|(?:请)?(?:提供|指定|明确|选择|拆分).{0,32}(?:一个|单一|唯一|明确|确切).{0,24}(?:文档|文件|目标)/iu,
+    'document-preservation-scope-confirmation-required': /\b(?:identify|provide|name|confirm)\b[^.!?\n]{0,96}\b(?:one|single|exact)\b[^.!?\n]{0,64}\b(?:editable\s+sentence|sentence|protected\s+literal|scope)\b|(?:请)?(?:明确|提供|指定|确认).{0,32}(?:一个|单一|唯一|明确|确切).{0,24}(?:可编辑的?句子|句子|受保护的?字面量|范围)/iu,
+    'document-preservation-snapshot-too-large': /\b(?:need|provide|split|choose|use)\b[^.!?\n]{0,96}\b(?:smaller|narrower|one|single|exact)\b[^.!?\n]{0,64}\b(?:task|file|document|scope|section)\b|(?:需要|请提供|请拆分|请选择|请使用).{0,32}(?:更小|更窄|一个|单一|明确|确切).{0,24}(?:任务|文件|文档|范围|章节)/iu,
+    'release-target-confirmation-required': /\b(?:provide|confirm|name|identify)\b[^.!?\n]{0,96}\b(?:exact|complete)\b[^.!?\n]{0,64}\b(?:repository|registry|cluster|target|revision|version|ref|tag|image)\b|(?:请)?(?:提供|确认|指定|明确).{0,32}(?:明确|完整|确切).{0,24}(?:仓库|注册表|集群|目标|修订|版本|引用|标签|镜像)/iu,
+    'release-verification-unsupported': /\b(?:unsupported|provide|confirm|needs?|requires?)\b[^.!?\n]{0,128}\b(?:verifiable|verification|exact|supported)\b[^.!?\n]{0,64}\b(?:target|contract|command|workflow)?\b|(?:不支持|请提供|请确认|需要|要求).{0,48}(?:可验证|验证|明确|确切|受支持).{0,24}(?:目标|契约|命令|流程)?/iu,
+    'irreversible-approval-required': /\b(?:rerun|enable|provide|requires?)\b[^.!?\n]{0,96}\b(?:interactive|trusted|host)\b[^.!?\n]{0,48}\bapproval\b|(?:请)?(?:重新运行|启用|提供|需要).{0,32}(?:交互式|可信|宿主).{0,24}(?:批准|审批|授权)/iu,
+    'exclusive-tool-contract-unsatisfiable': /\b(?:restate|provide|confirm|needs?|requires?)\b[^.!?\n]{0,128}\b(?:exact|authorized|conflict|constraint|capability|input|action)\b|(?:请)?(?:重新说明|提供|确认|需要).{0,48}(?:明确|确切|已授权|冲突|约束|能力|输入|操作)/iu,
+    'network-access-unverifiable': /\b(?:restate|provide|confirm|needs?|requires?)\b[^.!?\n]{0,128}\b(?:network|sandbox|offline|exact|conflict|constraint)\b|(?:请)?(?:重新说明|提供|确认|需要).{0,48}(?:网络|沙箱|离线|明确|确切|冲突|约束)/iu,
   };
   return patterns[reasonCode]?.test(text) === true;
 }

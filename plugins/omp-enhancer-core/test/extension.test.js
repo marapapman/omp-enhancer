@@ -634,6 +634,54 @@ test('a successful exclusive test rejects a natural-language failure claim once'
   }, ctx), undefined);
 });
 
+test('a successful correction exhaustion survives restart without reopening the tool budget', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Run exactly test/parser.test.js once and do not call any other tool. Then summarize the result.';
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-success-exhaustion',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx);
+  await event(pi, 'tool_result')({
+    type: 'tool_result',
+    toolCallId: 'exclusive-success-exhaustion',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+    output: 'ok 1 - parser\n1..1\n# tests 1\n# pass 1\n# fail 0',
+    isError: false,
+    details: { exitCode: 0 },
+  }, ctx);
+  assert.equal((await event(pi, 'session_stop')({ output: 'The tests failed.' }, ctx))?.continue, true);
+  assert.equal(await event(pi, 'session_stop')({ output: 'The tests failed again.' }, ctx), undefined);
+
+  const restored = new FakePi([...pi.entries]);
+  registerCoreEnhancer(restored);
+  const restoredCtx = extensionContext(restored.entries);
+  await event(restored, 'session_start')({}, restoredCtx);
+  const continued = await event(restored, 'before_agent_start')({ prompt: 'Continue.', systemPrompt: [] }, restoredCtx);
+  assert.match(continued.systemPrompt.join('\n'), /Exhausted Exclusive Tool Route/i);
+  const snapshot = restored.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  assert.equal(snapshot.exclusiveToolState.status, 'succeeded');
+  assert.equal(
+    snapshot.exclusiveToolState.reasonCode,
+    'exclusive-tool-success-output-correction-budget-exhausted',
+  );
+  assert.equal(snapshot.exclusiveToolState.finalCorrectionUsed, true);
+  const replay = await event(restored, 'tool_call')({
+    toolCallId: 'exclusive-success-exhaustion-replay',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, restoredCtx);
+  assert.equal(replay?.reasonCode, 'exclusive-tool-contract-unsatisfiable');
+});
+
 test('quoted PASS examples do not override an active prose-summary instruction', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -731,6 +779,28 @@ test('malformed restored exclusive success state fails closed', async () => {
   const stopped = await event(restored, 'session_stop')({ output: 'No defect was found.' }, restoredCtx);
   assert.equal(stopped?.continue, true);
   assert.equal(stopped?.details?.reasonCode, 'exclusive-tool-terminal-output-correction');
+
+  const exhaustedForgery = structuredClone(snapshot);
+  exhaustedForgery.exclusiveToolState.reasonCode = 'exclusive-tool-success-output-correction-budget-exhausted';
+  exhaustedForgery.exclusiveToolState.finalCorrectionUsed = true;
+  const forged = new FakePi([{
+    type: 'custom',
+    customType: 'omp-enhancer-core.state',
+    data: exhaustedForgery,
+  }]);
+  registerCoreEnhancer(forged);
+  const forgedCtx = extensionContext(forged.entries);
+  await event(forged, 'session_start')({}, forgedCtx);
+  const forgedStop = await event(forged, 'session_stop')({
+    output: 'The read succeeded and no defect was found.',
+  }, forgedCtx);
+  assert.equal(forgedStop?.continue, true);
+  assert.equal(forgedStop?.details?.reasonCode, 'exclusive-tool-terminal-output-correction');
+  const forgedState = forged.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  assert.equal(forgedState.exclusiveToolState.status, 'blocked');
+  assert.equal(forgedState.exclusiveToolState.reasonCode, 'exclusive-tool-state-unavailable');
 });
 
 test('a restored failed exclusive call cannot be relabeled succeeded', async () => {
