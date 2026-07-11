@@ -498,9 +498,11 @@ export default function registerCoreEnhancer(pi) {
     }
     if (isSubagentLaunchPrompt(prompt)) {
       const fragment = buildSubagentPromptFragment({ prompt });
-      if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${fragment}`;
-      else event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
-      return { additionalContext: fragment, route: { intent: 'subagent', agent: null, requiredSkills: [], requiredTools: [], requiredSubagents: [] } };
+      const injection = injectBeforeAgentSystemPrompt(event, fragment);
+      return {
+        ...injection,
+        route: { intent: 'subagent', agent: null, requiredSkills: [], requiredTools: [], requiredSubagents: [] },
+      };
     }
     const inheritedContinuation = shouldInheritUserContinuation(state, prompt);
     const effectivePrompt = inheritedContinuation
@@ -523,9 +525,7 @@ export default function registerCoreEnhancer(pi) {
     await persistState(pi, state);
     const fragment = buildRoutedGovernanceContext(state, { route, parentTask: effectivePrompt, visibility: 'automatic' });
     if (!fragment) return { route };
-    if (event.systemPrompt) event.systemPrompt = `${event.systemPrompt}\n\n${fragment}`;
-    else event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
-    return { additionalContext: fragment, route };
+    return { ...injectBeforeAgentSystemPrompt(event, fragment), route };
   });
 
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
@@ -2752,6 +2752,21 @@ function buildRoutedGovernanceContext(state, { route, parentTask = '', visibilit
       includeModelWorkflowHints: !automatic,
     }),
   ].filter(Boolean).join('\n\n');
+}
+
+function injectBeforeAgentSystemPrompt(event = {}, fragment = '') {
+  const existing = Array.isArray(event.systemPrompt)
+    ? event.systemPrompt.filter((block) => typeof block === 'string' && block.length > 0)
+    : typeof event.systemPrompt === 'string' && event.systemPrompt.length > 0
+      ? [event.systemPrompt]
+      : [];
+  const systemPrompt = [...existing, String(fragment)];
+
+  // Current OMP consumes the returned systemPrompt block array. Keep the
+  // additionalContext mirror for older hosts and the public test/debug shape.
+  event.systemPrompt = systemPrompt;
+  event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
+  return { systemPrompt, additionalContext: fragment };
 }
 
 function buildModelRoutingCheckpointBlock({

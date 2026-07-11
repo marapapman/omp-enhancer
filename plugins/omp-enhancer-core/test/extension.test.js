@@ -554,6 +554,27 @@ test('before_agent_start injects governance context and routes natural-language 
   assert.match(stopResult.additionalContext, /subagent|zh-writer|zh-checker/);
 });
 
+test('before_agent_start returns the current OMP system-prompt block contract', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const systemPrompt = ['base system block', 'project instructions'];
+  const agentEvent = {
+    prompt: 'Fix only src/parser.js so parseCsv trims each item. Do not run tests or use subagents.',
+    systemPrompt,
+  };
+
+  await event(pi, 'session_start')({}, ctx);
+  const result = await event(pi, 'before_agent_start')(agentEvent, ctx);
+
+  assert.ok(Array.isArray(result.systemPrompt));
+  assert.deepEqual(result.systemPrompt.slice(0, 2), systemPrompt);
+  assert.match(result.systemPrompt.at(-1), /pre-work skill bootstrap/i);
+  assert.match(result.systemPrompt.at(-1), /skill:\/\/verification-before-completion/i);
+  assert.deepEqual(agentEvent.systemPrompt, result.systemPrompt);
+  assert.match(result.additionalContext, /pre-work skill bootstrap/i);
+});
+
 test('classifier preflight observes ambiguous route work without rule blocking', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
