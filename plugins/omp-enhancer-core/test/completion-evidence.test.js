@@ -917,6 +917,7 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
       });
       const repair = await event(pi, 'session_stop')({ output: 'Repository inspection complete.' }, ctx);
       assert.equal(repair?.continue, true);
+      assert.match(repair.additionalContext, /fact-check:fact-check \[protected\]: review_gate/i);
       assert.match(repair.additionalContext, /already recorded host-observed local fact evidence/i);
       assert.match(repair.additionalContext, /do not run grep or another method again/i);
       assert.doesNotMatch(repair.additionalContext, /use one successful built-in grep/i);
@@ -954,6 +955,95 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
       }, ctx), undefined);
       assert.equal(latestState(pi).evidence.factCheckGate, true);
     });
+  });
+
+  await t.test('real E2E fact conclusions close on the first response and exact prompts suppress prose guidance', async () => {
+    const cases = [
+      {
+        label: 'supported corroboration',
+        prompt: 'Offline, verify whether the README claim "The stable fact is 42" is supported by repository-local evidence. Do not modify files. Do not run tests. Do not use subagents. Do not access the network. Use exactly one built-in focused grep over the repository root and no other tools. Return exactly FACT_VERDICT: SUPPORTED, FACT_VERDICT: CONTRADICTED, or FACT_VERDICT: INSUFFICIENT.',
+        pattern: 'The stable fact is 42',
+        grepOutput: [
+          '# README.md#AE4B',
+          '*3:The stable fact is 42. This parser description is kind of rather wordy and could be clearer for readers.',
+          '# docs/',
+          '## evidence.md#AA7F',
+          '*3:The stable fact is 42.',
+        ].join('\n'),
+        details: {
+          matchCount: 2,
+          fileCount: 2,
+          files: ['README.md', 'docs/evidence.md'],
+          fileMatches: [
+            { path: 'README.md', count: 1 },
+            { path: 'docs/evidence.md', count: 1 },
+          ],
+        },
+        finalOutput: [
+          'The claim **"The stable fact is 42"** appears verbatim at line 3 of `README.md`. It is additionally corroborated by `docs/evidence.md`, which repeats the same statement. No contradictory text was found in any repository file.',
+          '',
+          'FACT_VERDICT: SUPPORTED',
+        ].join('\n'),
+      },
+      {
+        label: 'no-match insufficiency',
+        prompt: 'Offline, verify whether the claim "The moon is green" is supported by repository-local evidence. Do not modify files. Do not run tests. Do not use subagents. Do not access the network. Use exactly one built-in focused grep over the repository root and no other tools. If it returns no matches, do not retry or change search methods; return exactly FACT_VERDICT: INSUFFICIENT.',
+        pattern: 'moon.*green|green.*moon',
+        grepOutput: 'No matches found',
+        details: { matchCount: 0, fileCount: 0, files: [], fileMatches: [] },
+        finalOutput: [
+          'No repository-local evidence found matching the claim "The moon is green". The single grep across the entire repository root returned zero matches for `moon.*green|green.*moon`.',
+          '',
+          'FACT_VERDICT: INSUFFICIENT',
+        ].join('\n'),
+      },
+      {
+        label: 'supported adverb phrase',
+        prompt: 'Offline, verify whether the README claim "The stable fact is 42" is supported by repository-local evidence. Do not modify files. Do not run tests. Do not use subagents. Do not access the network. Use exactly one built-in focused grep over the repository root and no other tools. Return exactly FACT_VERDICT: SUPPORTED, FACT_VERDICT: CONTRADICTED, or FACT_VERDICT: INSUFFICIENT.',
+        pattern: 'The stable fact is 42',
+        grepOutput: [
+          'README.md:3:The stable fact is 42.',
+          'docs/evidence.md:3:The stable fact is 42.',
+        ].join('\n'),
+        details: {
+          matchCount: 2,
+          fileCount: 2,
+          files: ['README.md', 'docs/evidence.md'],
+          fileMatches: [
+            { path: 'README.md', count: 1 },
+            { path: 'docs/evidence.md', count: 1 },
+          ],
+        },
+        finalOutput: 'Repository-local evidence directly and unambiguously confirms the README claim.\n\nFACT_VERDICT: SUPPORTED',
+      },
+    ];
+
+    for (const item of cases) {
+      await withEnforce(async () => {
+        const pi = new FakePi();
+        registerCoreEnhancer(pi);
+        const ctx = runtimeContext(pi);
+        await event(pi, 'session_start')({}, ctx);
+        const started = await event(pi, 'before_agent_start')({ prompt: item.prompt, systemPrompt: [] }, ctx);
+        assert.match(started.message?.content ?? '', /return only one evidence-consistent FACT_VERDICT line/i, item.label);
+        assert.match(started.message?.content ?? '', /Do not add prose, Markdown/i, item.label);
+        assert.doesNotMatch(started.message?.content ?? '', /Explain the host-observed evidence/i, item.label);
+
+        await recordFocusedFactGrep(pi, ctx, {
+          id: `e2e-first-response-${item.label.replace(/\s+/g, '-')}`,
+          pattern: item.pattern,
+          output: item.grepOutput,
+          details: item.details,
+          paired: true,
+        });
+
+        assert.equal(await event(pi, 'session_stop')({ output: item.finalOutput }, ctx), undefined, item.label);
+        const state = latestState(pi);
+        assert.equal(state.evidence.factCheckGate, true, item.label);
+        assert.equal(state.gateController.budget.repairUsed, 0, item.label);
+        assert.equal(state.gateController.phase, 'satisfied', item.label);
+      });
+    }
   });
 
   await t.test('a pathless one-grep no-match closes without retry or a prose wrapper', async () => {

@@ -96,7 +96,7 @@ export function routeNaturalLanguageTask(input = {}) {
   const prompt = String(input.prompt ?? input.text ?? '');
   const directivePrompt = writingDirectivePromptForSignals(prompt);
   const operationalPrompt = writingOperationalPromptForSignals(directivePrompt);
-  const explicitSubagentsRequested = hasExplicitSubagentRequest(prompt);
+  const explicitSubagentsRequested = hasExplicitSubagentRequest(directivePrompt);
   const described = promoteExplicitSubagentDescriptor(
     describeNaturalLanguageTask({ prompt }),
     explicitSubagentsRequested,

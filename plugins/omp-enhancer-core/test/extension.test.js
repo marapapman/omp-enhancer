@@ -203,6 +203,23 @@ test('a command-only exact test receives one immediate shell-only contract', asy
   assert.doesNotMatch(started.systemPrompt.join('\n'), /SKILL_USAGE contract|Final evidence gate|Diagnosis gate|Mandatory Skill Workflow/i);
 });
 
+test('a generic exclusive read tells the model to preserve an exact final literal byte-for-byte', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Review src/parser.js for a defect. Use read exactly once to inspect src/parser.js, then return exactly: MISMATCH: parseCsv splits items without trimming them. Do not call any other tool.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const started = await event(pi, 'before_agent_start')({ prompt, systemPrompt: [] }, ctx);
+
+  assert.deepEqual(started.route.taskDescriptor.exclusiveToolContract?.allowedTools, ['read']);
+  assert.ok(started.message, JSON.stringify(started, null, 2));
+  assert.match(started.message.content, /copy it byte-for-byte/i);
+  assert.match(started.message.content, /without Markdown backticks/i);
+  assert.match(started.systemPrompt.join('\n'), /copy it byte-for-byte without Markdown quoting or extra prose/i);
+  assert.doesNotMatch(started.systemPrompt.join('\n'), /FACT_VERDICT/);
+});
+
 test('a target-only exclusive test never receives a configuration-read instruction', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -1123,6 +1140,37 @@ test('an exclusive route probe binds the exact nested prompt instead of any rout
     }, ctx);
     assert.notEqual(call?.block, true, `${wrapper}: ${call?.reason}`);
   }
+});
+
+test('prompt exactly route probes bind terminal punctuation byte-for-byte', async () => {
+  const innerPrompt = 'Run npm test.';
+  const wrapper = `Use omp_core_route_task exactly once with prompt exactly: ${innerPrompt} Do not call any other tool.`;
+
+  const wrongPi = new FakePi();
+  registerCoreEnhancer(wrongPi);
+  const wrongCtx = extensionContext();
+  await event(wrongPi, 'session_start')({}, wrongCtx);
+  const wrongStart = await event(wrongPi, 'before_agent_start')({ prompt: wrapper }, wrongCtx);
+  assert.equal(wrongStart.route.taskDescriptor.exclusiveToolContract?.input?.status, 'bound');
+  assert.match(wrongStart.message.content, /copied byte-for-byte, including terminal punctuation/i);
+  const wrong = await event(wrongPi, 'tool_call')({
+    toolCallId: 'exclusive-route-exact-punctuation-mismatch',
+    toolName: 'omp_core_route_task',
+    input: { prompt: 'Run npm test' },
+  }, wrongCtx);
+  assert.equal(wrong?.reasonCode, 'exclusive-tool-input-mismatch');
+
+  const correctPi = new FakePi();
+  registerCoreEnhancer(correctPi);
+  const correctCtx = extensionContext();
+  await event(correctPi, 'session_start')({}, correctCtx);
+  await event(correctPi, 'before_agent_start')({ prompt: wrapper }, correctCtx);
+  const correct = await event(correctPi, 'tool_call')({
+    toolCallId: 'exclusive-route-exact-punctuation-match',
+    toolName: 'omp_core_route_task',
+    input: { prompt: innerPrompt },
+  }, correctCtx);
+  assert.notEqual(correct?.block, true, correct?.reason);
 });
 
 test('before_agent_start keeps plain-text E2E workflow audits on diagnosis route', async () => {

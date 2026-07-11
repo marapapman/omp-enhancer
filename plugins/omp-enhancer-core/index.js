@@ -2477,7 +2477,8 @@ function sessionGateRecord({
 }
 
 function completionGateProtection(ruleGate = {}) {
-  if (ruleGate.kind === 'workflow' && specificGateKind(ruleGate.kind, ruleGate.context) === 'fact-check') {
+  const gateKind = ruleGate.gateKind || specificGateKind(ruleGate.kind, ruleGate.context);
+  if (ruleGate.kind === 'workflow' && gateKind === 'fact-check') {
     return 'protected';
   }
   return 'soft';
@@ -2486,7 +2487,7 @@ function completionGateProtection(ruleGate = {}) {
 function completionMissingEvidenceCodes(ruleGate = {}) {
   if (ruleGate.kind === 'skill') return ['skill_usage'];
   if (ruleGate.kind === 'subagent') return ['review_gate'];
-  const gateKind = specificGateKind(ruleGate.kind, ruleGate.context);
+  const gateKind = ruleGate.gateKind || specificGateKind(ruleGate.kind, ruleGate.context);
   if (gateKind === 'writing-qa') return ['writing_qa'];
   if (gateKind === 'testing') return ['testing_gate'];
   if (gateKind === 'fact-check') return ['review_gate'];
@@ -2642,9 +2643,11 @@ function pendingSmartGateRuleGate(state) {
 
 function completionRuleGateBlock(state, kind, context, gateKind = '') {
   const routeIntent = state.lastRoute?.intent ?? 'unknown';
+  const normalizedGateKind = gateKind || specificGateKind(kind, context);
   return {
     kind,
-    gateKey: `${routeIntent}:${gateKind || specificGateKind(kind, context)}`,
+    gateKind: normalizedGateKind,
+    gateKey: `${routeIntent}:${normalizedGateKind}`,
     routeIntent,
     context,
   };
@@ -2952,6 +2955,13 @@ function injectBeforeAgentSystemPrompt(event = {}, fragment = '', immediateContr
   };
 }
 
+function focusedFactExactVerdictOnlyRequested(prompt = '') {
+  const text = activeUnquotedTerminalInstructionText(prompt);
+  if (!/FACT_VERDICT\s*:\s*(?:INSUFFICIENT|SUPPORTED|CONTRADICTED)/iu.test(text)) return false;
+  return /\b(?:return|respond|output|report)\s+(?:(?:only|exactly)\s+){1,2}(?:one\s+of\s*:?\s*)?FACT_VERDICT\b/iu.test(text)
+    || /(?:只|仅)(?:需|要)?(?:返回|输出|报告)|(?:精确|严格)(?:地)?(?:返回|输出|报告)/u.test(text);
+}
+
 function buildImmediateRouteContract(state) {
   const route = state.lastRoute;
   if (!route) return '';
@@ -2959,7 +2969,7 @@ function buildImmediateRouteContract(state) {
   if (reasons.has('exclusive route task diagnostic probe')) {
     return [
       'OMP Enhancer Core immediate route contract:',
-      'Call omp_core_route_task exactly once with the user-supplied probe prompt. Do not call any other tool or execute the probed task. Return the route output and any explanation explicitly requested by the user in the first completion response.',
+      'Call omp_core_route_task exactly once with the user-supplied probe prompt copied byte-for-byte, including terminal punctuation. Do not call any other tool or execute the probed task. Return the route output and any explanation explicitly requested by the user in the first completion response.',
     ].join('\n');
   }
   if (reasons.has('exclusive subagent status diagnostic probe')) {
@@ -3012,15 +3022,19 @@ function buildImmediateRouteContract(state) {
       ].join('\n');
     }
     if (isFocusedLocalFactInspectionRoute(route) && allowedTool === 'grep') {
+      const exactVerdictOnly = focusedFactExactVerdictOnlyRequested(state.lastPrompt);
       return [
         'OMP Enhancer Core immediate exclusive-tool contract:',
         'Use exactly one built-in repository grep for the claim. Do not retry, switch search methods, or call the heavyweight fact toolchain.',
-        'Explain the host-observed evidence as requested, then end the first response with exactly one evidence-consistent FACT_VERDICT line.',
+        exactVerdictOnly
+          ? 'After the host result, return only one evidence-consistent FACT_VERDICT line exactly as requested. Do not add prose, Markdown, headings, quoting, prefixes, or suffixes.'
+          : 'Explain the host-observed evidence as requested, then end the first response with exactly one evidence-consistent FACT_VERDICT line.',
       ].join('\n');
     }
     return [
       'OMP Enhancer Core immediate exclusive-tool contract:',
-      `Call only ${allowedTool} exactly once with the bound input. Do not load skills, call workflow/QA tools, delegate, substitute another method, or retry after failure. Then follow the user's requested output format in the first completion response.`,
+      `Call only ${allowedTool} exactly once with the bound input. Do not load skills, call workflow/QA tools, delegate, substitute another method, or retry after failure.`,
+      'If the user requested an exact final literal, copy it byte-for-byte in the first completion response without Markdown backticks, quoting, prefixes, suffixes, or explanatory prose.',
     ].join('\n');
   }
   if (isExactTestExecutionRoute(route)) {
@@ -3036,9 +3050,12 @@ function buildImmediateRouteContract(state) {
       ].join('\n');
   }
   if (isFocusedLocalFactInspectionRoute(route)) {
+    const exactVerdictOnly = focusedFactExactVerdictOnlyRequested(state.lastPrompt);
     return [
       'OMP Enhancer Core immediate route contract:',
-      'Use exactly one built-in repository grep for the claim. Do not retry, switch search methods, or call the heavyweight fact toolchain. Explain the observed evidence as requested, then end the first completion response with exactly one evidence-consistent FACT_VERDICT line.',
+      exactVerdictOnly
+        ? 'Use exactly one built-in repository grep for the claim. Do not retry, switch search methods, or call the heavyweight fact toolchain. After the host result, return only one evidence-consistent FACT_VERDICT line exactly as requested, with no prose or Markdown.'
+        : 'Use exactly one built-in repository grep for the claim. Do not retry, switch search methods, or call the heavyweight fact toolchain. Explain the observed evidence as requested, then end the first completion response with exactly one evidence-consistent FACT_VERDICT line.',
     ].join('\n');
   }
 
@@ -7441,8 +7458,8 @@ function focusedFactConclusionMatchesEvidence(state, output = '') {
 function hasAffirmativeFocusedFactRestatement(value = '', claimText = '') {
   const claimTokens = focusedFactLexicalTokens(claimText);
   if (!claimTokens.length) return false;
-  return String(value).split(/[.!?。！？\n;；]+/u).some((clause) => {
-    if (/\b(?:insufficient|unverified|unproven|unsupported|unconfirmed|unresolved|inconclusive|cannot|unable|not)\b|(?:证据不足|未验证|未证实|未确认|不受支持|无法|不能|不足以|没有|未找到)/iu.test(clause)) return false;
+  return String(value).split(/[.!?。！？\n;,，；]+|\b(?:but|however|nevertheless)\b|(?:但|不过|然而)/iu).some((clause) => {
+    if (/\b(?:no|zero|insufficient|unverified|unproven|unsupported|unconfirmed|unresolved|inconclusive|cannot|unable|not)\b|(?:证据不足|未验证|未证实|未确认|不受支持|无法|不能|不足以|没有|未找到)/iu.test(clause)) return false;
     if (!/\b(?:is|are|was|were|equals?|remains?|holds?)\b|(?:为|是|等于|成立|属实|正确|准确)/iu.test(clause)) return false;
     const normalized = focusedFactLexicalText(clause);
     const tokens = new Set(focusedFactLexicalTokens(normalized));
@@ -7495,6 +7512,8 @@ function classifyFocusedFactConclusion(value = '') {
     /\bnot\s+(?:independently\s+)?supported\b/giu,
     /\b(?:did|does|do)\s+not\s+establish\s+(?:independent\s+)?(?:repository\s+)?support\b/giu,
     /\b(?:the|this)\s+(?:claim|statement|assertion)\s+(?:is|was|remains)\s+(?:currently\s+)?(?:unverified|unproven|unsupported|unresolved|inconclusive|not\s+(?:proven|verified|confirmed)|under\s+review)\b/giu,
+    /\bno\s+(?:repository[- ]local|local|repository)\s+evidence\s+(?:was\s+)?found\b/giu,
+    /\b(?:grep|search)[^.!?\n]{0,120}\b(?:returned|found)\s+(?:zero|no|0)\s+matches?\b/giu,
     /\b(?:no|zero)\b[^.!?\n]{0,120}\b(?:can|could|is\s+able\s+to)\s+(?:independently\s+)?(?:support|confirm|verify|contradict|corroborate)\b/giu,
     /\b(?:unsupported|insufficient\s+(?:repository\s+)?evidence|(?:repository\s+)?evidence\s+(?:(?:is|was|remains)\s+)?insufficient|not\s+enough\s+evidence|no\s+independent\s+(?:repository\s+)?evidence|cannot\s+(?:confirm|support|verify|contradict)|unable\s+to\s+(?:confirm|support|verify|contradict))\b/giu,
     /(?:没有|无|未找到|不存在)[^。！？\n]{0,120}(?:能|能够|可以|足以)(?:独立)?(?:支持|证实|确认|验证|反驳)/gu,
@@ -7536,12 +7555,14 @@ function hasConflictingFocusedFactAssertion(value = '', insufficientPatterns = [
 
 function classifyExplicitFocusedFactVerdict(value = '') {
   const text = String(value);
-  const claim = String.raw`(?:the|this)\s+(?:claim|statement|assertion)`;
-  const evidence = String.raw`(?:independent\s+)?(?:repository\s+)?evidence`;
+  const claim = String.raw`(?:(?:the|this|README)\s+)?(?:claim|statement|assertion)`;
+  const evidence = String.raw`(?:independent\s+)?(?:(?:repository(?:[- ]local)?|local\s+repository)\s+)?evidence`;
   const supportedPatterns = [
     new RegExp(String.raw`\b${claim}\s+(?:is|was|remains|appears\s+to\s+be)\s+(?:independently\s+)?(?:supported|confirmed|corroborated|substantiated|validated|proven|proved|verified|established|true|accurate|correct|valid)\b`, 'iu'),
     new RegExp(String.raw`\b${evidence}\s+(?:supports?|confirms?|corroborates?|substantiates?|validates?)\s+${claim}\b`, 'iu'),
+    new RegExp(String.raw`\b${evidence}\b[^.!?\n]{0,64}\b(?:supports?|confirms?|corroborates?|substantiates?|validates?)\b[^.!?\n]{0,64}\b${claim}\b`, 'iu'),
     new RegExp(String.raw`\b${evidence}\s+(?:shows?|demonstrates?|indicates?)\s+that\s+${claim}\s+(?:is|was)\s+(?:true|accurate|correct|valid)\b`, 'iu'),
+    /\b(?:the|this)\s+(?:claim|statement|assertion)\b[^.!?\n]{0,160}\bappears?\s+verbatim\b/iu,
     /(?:该|此|这个)?(?:陈述|声明|断言|结论)[^。！？\n]{0,24}(?:(?:得到|获得|受到)[^。！？\n]{0,12}支持|(?<!不)(?:为真|成立|属实|正确|准确|真实|可信|可靠))/u,
     /(?:独立的?)?(?:仓库内?)?证据[^。！？\n]{0,12}(?:支持|证实|确认)(?:了)?(?:该|此|这个)?(?:陈述|声明|断言|结论)/u,
     /(?:独立的?)?(?:仓库内?)?证据[^。！？\n]{0,12}(?:表明|显示|证明)(?:了)?(?:该|此|这个)?(?:陈述|声明|断言|结论)[^。！？\n]{0,8}(?<!不)(?:属实|正确|准确|真实)/u,

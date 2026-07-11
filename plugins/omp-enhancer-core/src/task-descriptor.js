@@ -162,7 +162,7 @@ export function describeNaturalLanguageTask(input = {}) {
   }
   const signals = collectSignals(text, operationalPrompt, {
     scopePrompt: directivePrompt,
-    rawPrompt: prompt,
+    rawPrompt: directivePrompt,
   });
   const language = signals.writingWork
     ? resolveWritingTargetLanguage(directivePrompt, promptLanguage)
@@ -1875,6 +1875,10 @@ function exclusiveRouteProbePrompt(value = '') {
     return String(quoted ? quoted.slice(1).find((part) => part != null) : payload).trim();
   };
   return extractBeforeLast(
+    /\b(?:with\s+)?prompt\s+exactly\s*:\s*/i,
+    /\s+(?:(?:then|next)\s+(?:report|return|respond)\b|(?:do\s+not|don't|never)\s+(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b)/gi,
+    /\s+(?:(?:report|return|respond)\b|(?:do\s+not|don't|never)\s+(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b)/gi,
+  ) || extractBeforeLast(
     /\bwith\s+(?:this\s+)?prompt\s*:\s*/i,
     /\s+then\s+(?:report|return|respond)\b/gi,
     /\s+(?:report|return|respond)\b/gi,
@@ -2092,13 +2096,17 @@ function activateExplicitQuotedInstruction(value = '') {
 
 function maskMetaQuotedInstructionPayload(value = '') {
   const source = String(value);
-  const metaRequest = /^\s*(?:(?:please|can\s+you|could\s+you)\s+)?(?:explain|analy[sz]e|discuss|compare|assess|review)\b[^\n]{0,96}\b(?:sentence|instruction|phrase|prompt|wording|example|text)\b/i.test(source)
-    || /^\s*(?:请)?(?:解释|分析|讨论|比较|评估|审查).{0,48}(?:句子|指令|提示词|短语|措辞|示例|文本)/u.test(source);
-  if (!metaRequest) return source;
-  return source
+  const maskedPayloads = source
     .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/gu, ' __quoted_instruction_example__ ')
     .replace(/^[\t ]*>[^\n]*(?:\n|$)/gmu, ' __quoted_instruction_example__ ')
     .replace(/"[^"\n]*"|“[^”\n]*”|'[^'\n]*'|‘[^’\n]*’|`[^`\n]*`/gu, ' __quoted_instruction_example__ ');
+  const metaRequest = /^\s*(?:(?:please|can\s+you|could\s+you)\s+)?(?:explain|analy[sz]e|discuss|compare|assess|review)\b[^\n]{0,96}\b(?:sentence|instruction|phrase|prompt|wording|example|text)\b/i.test(source)
+    || /^\s*(?:请)?(?:解释|分析|讨论|比较|评估|审查).{0,48}(?:句子|指令|提示词|短语|措辞|示例|文本)/u.test(source);
+  const explicitlyUntrusted = /\b(?:untrusted|non[- ]authoritative)\s+(?:(?:quoted|fenced|blockquoted?)\s+)?(?:data|instruction|prompt|text|sentence|example|block)\b/i.test(maskedPayloads)
+    || /\bdo\s+not\s+(?:execute|follow|obey|act\s+on)\b[^.!?\n]{0,48}\b(?:(?:quoted|fenced|blockquoted?)\s+)?(?:instruction|prompt|text|data)\b/i.test(maskedPayloads)
+    || /(?:不可信|非权威).{0,12}(?:引用|引述|代码块|块引用|指令|提示词|文本|数据)|不要.{0,12}(?:执行|遵循).{0,12}(?:引用|引述|代码块|块引用|指令|提示词)/u.test(maskedPayloads);
+  if (!metaRequest && !explicitlyUntrusted) return source;
+  return maskedPayloads;
 }
 
 export function writingOperationalPromptForSignals(prompt = '') {

@@ -135,19 +135,21 @@ function exclusiveToolGovernanceFragment(route = {}) {
     : input.kind === 'exact-path'
       ? `Call ${tool} exactly once for this exact path: ${input.target}.`
       : input.kind === 'route-probe'
-        ? 'Call omp_core_route_task exactly once for the user-supplied probe prompt.'
+        ? 'Call omp_core_route_task exactly once with the user-supplied probe prompt copied byte-for-byte, including terminal punctuation.'
         : input.kind === 'status-probe'
           ? 'Call omp_core_subagent_status exactly once.'
           : `Call ${tool} exactly once with the bound claim input.`;
   const output = input.kind === 'exact-path'
-    ? 'Report the limitation of that one read and end with exactly FACT_VERDICT: INSUFFICIENT.'
+    ? isFocusedLocalFactInspection(route)
+      ? 'Report the limitation of that one read and end with exactly FACT_VERDICT: INSUFFICIENT.'
+      : 'Report only the result requested by the user. If an exact literal was requested, copy it byte-for-byte without Markdown quoting or extra prose.'
     : input.kind === 'focused-claim-search'
       ? 'Report only the evidence observed from that one search and one evidence-consistent FACT_VERDICT line.'
       : input.kind === 'route-probe'
         ? 'Report the requested route fields and any explanation explicitly requested by the user.'
         : input.kind === 'status-probe'
           ? 'Return only the status result or literal requested by the user.'
-          : 'After the host result, follow only the final response format requested by the user.';
+          : 'After the host result, follow only the final response format requested by the user. If an exact literal was requested, copy it byte-for-byte without Markdown quoting or extra prose.';
   return [
     '## OMP Enhancer Core Exclusive Tool Route',
     '',
