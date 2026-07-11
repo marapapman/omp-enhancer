@@ -106,6 +106,31 @@ export function describeNaturalLanguageTask(input = {}) {
       },
     });
   }
+  if (isExclusiveSubagentStatusDiagnosticProbe(text)) {
+    return normalizeTaskDescriptor({
+      version: 1,
+      operation: 'diagnose',
+      domains: ['plugin'],
+      constraints: {
+        workspaceWrite: 'forbidden',
+        testExecution: 'forbidden',
+        networkAccess: 'forbidden',
+        externalWrite: 'forbidden',
+        subagents: 'forbidden',
+      },
+      capabilities: ['fs.read'],
+      phases: [{ kind: 'inspect', domain: 'plugin' }, { kind: 'diagnose', domain: 'plugin' }],
+      risk: { level: 'low', flags: [] },
+      complexity: 'focused',
+      language: promptLanguage,
+      provenance: {
+        ruleConfidence: 0.99,
+        reasons: ['exclusive subagent status diagnostic probe'],
+        requiresPolicyRoute: true,
+        needsClassifier: false,
+      },
+    });
+  }
   if (isRouteStatusSkillDiagnosticProbe(text)) {
     return normalizeTaskDescriptor({
       version: 1,
@@ -411,9 +436,9 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
     && !releaseMentionedAsTestSubject && !releaseMentionedAsReviewSubject
     && /(?:推送|发布|部署|上线|(?:升级|刷新).{0,32}(?:插件|marketplace|用户安装|已安装|[a-z0-9_.-]+@[a-z0-9_.-]+))|\b(?:push|publish|deploy|release)\b|\b(?:upgrade|refresh)\b.{0,48}\b(?:installed\s+plugins?|plugin\s+install|marketplace\s+install|marketplace|[a-z0-9_.-]+@[a-z0-9_.-]+)\b/.test(text);
   const suppliedFindingsReport = /\b(?:write|draft|prepare|summarize|summarise|compile|turn)\b.{0,72}\b(?:report|summary)\b.{0,72}\b(?:from|based\s+on|using)\b.{0,32}\b(?:supplied|provided|existing|verified|listed|observed)\b.{0,24}\b(?:findings?|results?|logs?|defects?|issues?)\b|\b(?:write|draft|prepare|summarize|summarise|compile|turn)\b.{0,72}\b(?:supplied|provided|existing|verified|already\s+listed|observed)\b.{0,32}\b(?:findings?|results?|logs?|defects?|issues?)\b.{0,72}\b(?:report|summary)\b|\b(?:bug|code\s+review|test\s+(?:failure\s+)?|security\s+audit)\s*(?:report|summary)\b.{0,48}\bfrom\b.{0,32}\b(?:these|the|supplied|provided|existing|verified)\b.{0,24}\b(?:findings?|results?|logs?)\b|(?:把|将|根据|基于).{0,32}(?:已有|已验证|已列出|提供的|上述|这些).{0,96}(?:发现|结论|问题|缺陷|结果|日志).{0,48}(?:整理|总结|汇总|写成|起草|编写).{0,24}(?:报告|摘要|总结)|(?:整理|总结|汇总|起草|编写).{0,48}(?:已有|已验证|已列出|提供的|上述|这些).{0,96}(?:发现|结论|问题|缺陷|结果|日志).{0,32}(?:报告|摘要|总结)|(?:已有|已验证|已列出|提供的|上述|这些).{0,96}(?:安全(?:审计)?发现|bug\s*发现|代码缺陷|测试结果|测试日志|发现).{0,40}(?:整理|总结|汇总|写成|起草|编写).{0,24}(?:报告|摘要|总结)/.test(text);
-  const factReviewForbidden = /\b(?:without|do\s+not|don't|no\s+need\s+to)\b.{0,32}\b(?:verif(?:y|ying)|fact[- ]?check(?:ing)?|check(?:ing)?)\b.{0,24}\b(?:claims?|facts?)\b|(?:不要|不再|无需|不用|不)\s*(?:再|进行|执行)?\s*(?:核验|核查|查证|事实核查).{0,16}(?:声明|主张|事实)?/.test(text);
-  const securityReviewForbidden = /\b(?:without|do\s+not|don't|no\s+need\s+to)\b.{0,36}\b(?:perform|run|do)?\s*(?:a\s+)?(?:security\s+)?(?:audit|review|scan)\b|(?:不要|不再|无需|不用|不).{0,24}(?:做|进行|执行)?\s*(?:代码)?安全(?:审查|审计|扫描)|(?:不要|不再|无需|不用|不).{0,16}(?:审查|审计|扫描)(?:代码|仓库|实现)/.test(text);
-  const codeReviewForbidden = /(?:不要|不|无需|不用)\s*(?:再|进行|执行)?\s*(?:判断|检查|审查|分析).{0,16}(?:代码|源码|实现)(?:问题)?|\b(?:do\s+not|don't|without|no\s+need\s+to)\b.{0,24}\b(?:judge|check|review|inspect|analyze)\b.{0,16}\b(?:code|source|implementation)\b/.test(text)
+  const factReviewForbidden = /\b(?:without|do\s+not|don't|no\s+need\s+to)\b[^.!?;\n]{0,32}\b(?:verif(?:y|ying)|fact[- ]?check(?:ing)?|check(?:ing)?)\b[^.!?;\n]{0,24}\b(?:claims?|facts?)\b|(?:不要|不再|无需|不用|不)\s*(?:再|进行|执行)?\s*(?:核验|核查|查证|事实核查)[^。！？；;\n]{0,16}(?:声明|主张|事实)?/.test(text);
+  const securityReviewForbidden = /\b(?:without|do\s+not|don't|no\s+need\s+to)\b[^.!?;\n]{0,36}\b(?:perform|run|do)?\s*(?:a\s+)?(?:security\s+)?(?:audit|review|scan)\b|(?:不要|不再|无需|不用|不)[^。！？；;\n]{0,24}(?:做|进行|执行)?\s*(?:代码)?安全(?:审查|审计|扫描)|(?:不要|不再|无需|不用|不)[^。！？；;\n]{0,16}(?:审查|审计|扫描)(?:代码|仓库|实现)/.test(text);
+  const codeReviewForbidden = /(?:不要|不|无需|不用)\s*(?:再|进行|执行)?\s*(?:判断|检查|审查|分析)[^。！？；;\n]{0,16}(?:代码|源码|实现)(?:问题)?|\b(?:do\s+not|don't|without|no\s+need\s+to)\b[^.!?;\n]{0,24}\b(?:judge|check|review|inspect|analyze)\b[^.!?;\n]{0,16}\b(?:code|source|implementation)\b/.test(text)
     || chineseNegativeClauseIncludes(text, /(?:判断|检查|审查|分析).{0,16}(?:代码|源码|实现)(?:问题)?/i)
     || englishNegativeClauseIncludes(text, /\b(?:judge|check|review|inspect|analyze)\b.{0,24}\b(?:code|source|implementation)\b/i);
   const testReportWriting = /\b(?:write|draft|prepare|revise|edit|summarize|summarise)\b.{0,48}\btest\s+(?:(?:failure|coverage|execution|result|results|gate)\s+)?report\b|(?:写|起草|撰写|整理|总结|修订|修改).{0,32}(?:测试|覆盖率|失败|门禁).{0,16}(?:报告|总结|结果说明)/.test(text);
@@ -429,9 +454,14 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
   const factDocumentTargets = explicitFactDocumentTargets.length
     ? explicitFactDocumentTargets
     : /\bREADME\b(?!\s*\.)/i.test(scopePrompt) ? ['README.md'] : [];
+  const forbidsOtherFactTools = /\b(?:and\s+)?no\s+(?:other|additional)\s+tools?\b/.test(text)
+    || /\b(?:do\s+not|don't|never)\b[^.!?\n]{0,80}\b(?:use|call|invoke)\s+(?:any\s+)?(?:other|additional)\s+tools?\b/.test(text)
+    || /\bwithout\s+(?:(?:using|calling|invoking)\s+)?(?:any\s+)?(?:other|additional)\s+tools?\b/.test(text);
+  const explicitSingleRepositoryFactSearch = /\b(?:use|run|perform)\s+exactly\s+one\s+(?:built[- ]?in\s+)?(?:focused\s+)?grep\b[^.!?\n]{0,80}\b(?:repository|repo)\s+root\b/.test(text)
+    && forbidsOtherFactTools;
   const focusedLocalFactWork = factWork
     && noWorkspaceWrite && noNetworkAccess && noSubagents
-    && factDocumentTargets.length === 1
+    && (factDocumentTargets.length === 1 || explicitSingleRepositoryFactSearch && noTestExecution)
     && /(?:证据|evidence)[^。！？.!?\n]{0,20}(?:支持|支撑|证明|support(?:s|ed)?)|(?:支持|支撑|证明|support(?:s|ed)?)[^。！？.!?\n]{0,40}(?:证据|evidence)/.test(factSentenceText)
     && !/(?:全部|所有|整个(?:仓库|项目|代码库)|全仓库|多条|引用)|\b(?:all|every|entire|repo[- ]wide|repository[- ]wide|multiple|citations?)\b/.test(text);
   const explicitDefectAudit = !suppliedFindingsReport && /\b(?:inspect|audit|review|check|find|hunt)\b.{0,80}\b(?:plugin|project|codebase|repository|repo|code|implementation|pull\s+request|pr)\b.{0,80}\b(?:bugs?|defects?)\b|\b(?:inspect|audit|review|check|find|hunt)\b.{0,40}\b(?:bugs?|defects?)\b|(?:检查|审查|审计|排查|查找).{0,64}(?:插件|项目|代码库|仓库|代码|实现).{0,64}(?:bug|缺陷|问题)|(?:检查|审查|审计|排查|查找).{0,40}(?:bug|缺陷)/.test(text);
@@ -659,6 +689,15 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
     || (conceptOnly && nonTestCodeTarget);
   const pureExactTestExecution = directTestExecution && !directModify && !directTestAuthoring
     && testExecutionTargets.length > 0 && !secondaryPositiveAction;
+  const exclusiveExactTestExecution = directTestExecution
+    && testExecutionTargets.length > 0
+    && /\b(?:bash|shell)\s+tool\s+exactly\s+once\b/.test(text)
+    && /\bdo\s+not\s+(?:call|use|invoke)\s+(?:any\s+)?other\s+tools?\b/.test(text)
+    && noWorkspaceWrite && noNetworkAccess && noSubagents
+    && !directTestAuthoring && !releaseRequested && !externalActionRequested
+    && !irreversibleFileOperation && !irreversibleExternalOperation
+    && !/(?:\b(?:then|after(?:wards)?|next)\b[^.!?\n]{0,32}\b(?:edit|modify|fix|write|implement|refactor)\b|(?:然后|接着|之后|再)[^。！？\n]{0,24}(?:编辑|修改|修复|写入|实现|重构))/.test(positiveDomainText);
+  const exactTestOnlyExecution = pureExactTestExecution || exclusiveExactTestExecution;
   const effectiveNonTestCodeTarget = codeReviewForbidden && writingWork ? false : nonTestCodeTarget;
   const codeDomainText = suppliedFindingsReport
     ? ''
@@ -667,7 +706,7 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
     : bugReportWriting
     ? nonTestActionText.replace(/\bbug\s+report\b/gi, ' ')
     : observedTestSummaryWriting || codeReviewForbidden && writingWork ? '' : nonTestActionText;
-  const codeWork = !pureExactTestExecution && (localBuildExecution || localGitMetadata || directTestAuthoring || directCreate && !documentArtifactCreateRequested || explicitDefectAudit || bugReportCompanionCodeAction || effectiveNonTestCodeTarget
+  const codeWork = !exactTestOnlyExecution && (localBuildExecution || localGitMetadata || directTestAuthoring || directCreate && !documentArtifactCreateRequested || explicitDefectAudit || bugReportCompanionCodeAction || effectiveNonTestCodeTarget
     || /(?:代码|代码库|实现|函数|模块|接口|bug|鉴权漏洞)|(?:路由|门禁).{0,8}逻辑|逻辑.{0,8}(?:路由|门禁)|\b(?:code|codebase|repository|repo|function|module|api|bugs?|router|routenaturallanguagetask|implementation)\b/.test(codeDomainText)
     || codeModificationRequested
     || directModify && !writingWork);
@@ -680,6 +719,8 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
   if (testAllowlist.length) reasons.push('test kind allowlist requested');
   if (testExclusions.length) reasons.push('test kind exclusions requested');
   if (testExecutionTargets.length) reasons.push('exact test execution targets requested');
+  if (exclusiveExactTestExecution) reasons.push('exclusive command-only exact test requested');
+  if (explicitSingleRepositoryFactSearch) reasons.push('explicit single repository fact search requested');
   if (noExternalWrite) reasons.push('external write forbidden');
   if (externalScopes.targets.length || externalScopes.exclusions.length) reasons.push('scoped external write targets requested');
   if (noNetworkAccess) reasons.push('network access forbidden');
@@ -748,6 +789,7 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
     noTestAuthoring,
     broadBugAudit,
     directTestExecution,
+    pureExactTestExecution: exactTestOnlyExecution,
     directTestAuthoring,
     primaryDirectTestAuthoring,
     localDevExecution,
@@ -768,7 +810,7 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
     review,
     conceptOnly,
     answerOnly,
-    pluginWork: pureExactTestExecution ? false : pluginWork,
+    pluginWork: exactTestOnlyExecution ? false : pluginWork,
     codeWork,
     documentWork,
     visualWork,
@@ -1149,6 +1191,7 @@ function operationFor(signals) {
   if (signals.localDevExecution || signals.localMigrationExecution || signals.localAutomationExecution || signals.irreversibleExternalOperation) return 'execute';
   if (signals.releaseRequested && signals.directTestExecution && !signals.directModify
     && !signals.writingWork && !signals.directCreate) return 'release';
+  if (signals.pureExactTestExecution) return 'execute';
   if (signals.writingWork
     && !(signals.observedTestSummaryWriting && signals.directTestExecution)
     && (!signals.directTestExecution
@@ -1590,6 +1633,54 @@ function isExclusiveRouteTaskDiagnosticProbe(text = '') {
   return /\b(?:do\s+not|don't|without)\s+(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b/.test(value)
     || /(?:不要|不得|禁止|不)\s*(?:使用|调用)\s*(?:任何)?\s*(?:其他|其它)\s*工具/.test(value)
     || /只\s*调用\s*一次\s*omp_core_route_task/.test(value);
+}
+
+function isExclusiveSubagentStatusDiagnosticProbe(text = '') {
+  const value = String(text).trim().toLowerCase();
+  if (!value || !/\bomp_core_subagent_status\b/.test(value)) return false;
+  const firstBoundary = value.search(/[.!?。！？\n]/u);
+  const firstClause = (firstBoundary === -1 ? value : value.slice(0, firstBoundary)).trim();
+  const remainder = firstBoundary === -1 ? '' : value.slice(firstBoundary + 1).trim();
+  const oneShot = /^(?:(?:please|can you|could you|would you)\s+)?(?:call|invoke|use)\s+(?:only\s+)?omp_core_subagent_status\s+(?:exactly\s+once(?:\s+only)?|once)\s+to\s+(?:inspect|check|report)\s+(?:the\s+)?(?:current\s+)?(?:route\s+)?status$/u.test(firstClause)
+    || /^(?:请|帮我|麻烦)?\s*只\s*(?:调用|使用)\s*(?:一次\s*)?omp_core_subagent_status\s*(?:一次)?\s*(?:来|以便)?\s*(?:检查|查看|报告)(?:当前)?(?:路由)?状态$/u.test(firstClause);
+  if (!oneShot) return false;
+  const noOtherTools = /\b(?:do\s+not|don't|without)\b[^.!?\n]{0,160}\b(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b/.test(value)
+    || /(?:不要|不得|禁止|不)\s*(?:使用|调用)\s*(?:任何)?\s*(?:其他|其它)\s*工具/.test(value);
+  if (!noOtherTools || !remainder) return false;
+  const responseLiteral = String.raw`(?:[a-z0-9_.-]{1,48}\s*:\s*)?[a-z0-9_.-]{1,48}`;
+  const conditionalResponsePattern = new RegExp(
+    String.raw`^if\s+(?:it|(?:that|the)\s+(?:tool(?:\s+call)?|status(?:\s+(?:tool|call))?))\s+succeeds?\s*,\s*return\s+exactly\s+${responseLiteral}\s*[;；]\s*otherwise\s*,?\s*return\s+exactly\s+${responseLiteral}$`,
+    'u',
+  );
+  const chineseConditionalResponsePattern = new RegExp(
+    String.raw`^(?:如果|若)(?:该|这个)?(?:工具|状态(?:工具|调用)?)(?:调用)?(?:成功|执行成功)[，,]\s*(?:只)?(?:返回|输出)\s*${responseLiteral}\s*[;；]\s*(?:否则|不然)[，,]?\s*(?:只)?(?:返回|输出)\s*${responseLiteral}$`,
+    'u',
+  );
+  const directResponsePattern = new RegExp(
+    String.raw`^(?:return|respond|report)\s+exactly\s+${responseLiteral}$`,
+    'u',
+  );
+  const chineseDirectResponsePattern = new RegExp(
+    String.raw`^(?:只)?(?:返回|输出|报告)\s*${responseLiteral}$`,
+    'u',
+  );
+  const englishForbiddenItem = String.raw`(?:(?:start|use|fork)\s+(?:any\s+)?subagents?|(?:modify|edit|write(?:\s+to)?)\s+(?:any\s+)?(?:files?|code|project|workspace)|(?:run|execute)\s+(?:any\s+)?tests?|(?:access|use)\s+(?:the\s+)?network|(?:call|use|invoke)\s+(?:any\s+)?(?:other|additional)\s+tools?|(?:push|publish|deploy|release)(?:\s+(?:anything|the\s+(?:plugin|release)))?)`;
+  const englishNegativeConstraintPattern = new RegExp(
+    String.raw`^(?:do\s+not|don't|never)\s+${englishForbiddenItem}(?:\s*(?:,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+)${englishForbiddenItem})*$`,
+    'u',
+  );
+  const chineseForbiddenItem = String.raw`(?:(?:启动|使用)(?:任何)?子代理|修改(?:任何)?(?:文件|代码|项目|工作区)|运行(?:任何)?测试|访问网络|联网|调用(?:任何)?(?:其他|其它)工具|推送|发布|部署)`;
+  const chineseNegativeConstraintPattern = new RegExp(
+    String.raw`^(?:不要|不得|禁止|别)\s*${chineseForbiddenItem}(?:\s*(?:[，,、]\s*(?:(?:以及|并且|或)\s*)?|(?:以及|并且|或)\s*)${chineseForbiddenItem})*$`,
+    'u',
+  );
+  const remainderClauses = remainder.split(/[.!?。！？\n]+/u).map((clause) => clause.trim()).filter(Boolean);
+  return remainderClauses.length > 0 && remainderClauses.every((clause) => conditionalResponsePattern.test(clause)
+    || chineseConditionalResponsePattern.test(clause)
+    || directResponsePattern.test(clause)
+    || chineseDirectResponsePattern.test(clause)
+    || englishNegativeConstraintPattern.test(clause)
+    || chineseNegativeConstraintPattern.test(clause));
 }
 
 function orderedUnique(values, order) {

@@ -466,7 +466,8 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('message_end', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
     const changed = recordAsyncResultMessage(state, event);
-    if (changed) await persistState(pi, state);
+    const reviewChanged = recordAssistantReviewEvidence(state, event);
+    if (changed || reviewChanged) await persistState(pi, state);
     return undefined;
   });
 
@@ -1274,17 +1275,25 @@ function readFocusedFactEvidenceRecord(value) {
   const digestArray = (items, { required = false } = {}) => Array.isArray(items)
     && (!required || items.length > 0)
     && items.every((item) => /^[a-f0-9]{64}$/.test(String(item)));
+  // Legacy evidence always required a concrete claim path. Only a new record
+  // that explicitly stores false may opt into the pathless one-search contract.
+  const claimSourceBound = record?.claimSourceBound === undefined
+    ? true
+    : record.claimSourceBound;
   if (!record
     || record.toolName !== 'grep'
     || !/^[a-f0-9]{64}$/.test(String(record.resultDigest ?? ''))
     || !digestArray(record.queryTermDigests, { required: true })
-    || !digestArray(record.claimPathDigests, { required: true })
+    || typeof claimSourceBound !== 'boolean'
+    || !digestArray(record.claimPathDigests, { required: claimSourceBound })
+    || !claimSourceBound && record.claimPathDigests.length > 0
     || !digestArray(record.matchedPathDigests)
     || !['no-match', 'claim-only', 'independent-hit', 'unparseable-hit'].includes(record.matchKind)
     || typeof record.independentMatchObserved !== 'boolean'
     || !Number.isFinite(record.observedAt)) return null;
   return {
     ...record,
+    claimSourceBound,
     queryTermDigests: uniqueValues(record.queryTermDigests),
     claimPathDigests: uniqueValues(record.claimPathDigests),
     matchedPathDigests: uniqueValues(record.matchedPathDigests),
@@ -4203,6 +4212,15 @@ function recordFinalOutputEvidence(state, event = {}) {
   }
 }
 
+function recordAssistantReviewEvidence(state, event = {}) {
+  const message = isRecord(event.message) ? event.message : event;
+  if (message?.role !== 'assistant') return false;
+  const output = extractGeneratedOutputText(event);
+  if (!isStructuredReviewEvidence(output) || state.evidence.reviewEvidence === true) return false;
+  state.evidence.reviewEvidence = true;
+  return true;
+}
+
 function isStructuredReviewEvidence(output = '') {
   const text = String(output);
   return /(?:^|\n)\s*REVIEW_EVIDENCE\s*(?:\n|$)/i.test(text)
@@ -6134,7 +6152,7 @@ function recordFocusedLocalFactEvidence(state, toolName = '', event = {}, { succ
   const claimTokens = new Set(focusedFactLexicalTokens(claimLexicalText));
   const claimTerms = focusedFactLexicalTokens(pattern).filter((term) => claimTokens.has(term));
   const resultText = toolResultText(event).trim();
-  if (!pattern || !repositoryWide || !claimTerms.length || !claimPaths.length || !resultText) return false;
+  if (!pattern || !repositoryWide || !claimTerms.length || !resultText) return false;
 
   const observation = classifyFocusedFactGrepResult(event, resultText, claimPaths, claimTerms);
   const routeId = gateControllerRouteId(state);
@@ -6156,6 +6174,7 @@ function recordFocusedLocalFactEvidence(state, toolName = '', event = {}, { succ
     resultDigest,
     queryTermDigests: claimTerms.map(digestEvidence),
     claimPathDigests: claimPaths.map(digestEvidence),
+    claimSourceBound: claimPaths.length > 0,
     matchedPathDigests: uniqueValues([
       ...(previous?.matchedPathDigests ?? []),
       ...observation.matchedPaths.map(digestEvidence),
@@ -6255,6 +6274,13 @@ function focusedFactLexicalText(value = '') {
 }
 
 function focusedFactClaimLexicalText(value = '', claimPaths = []) {
+  if (!claimPaths.length) {
+    const explicitQuotedClaim = String(value).normalize('NFKC').match(
+      /\bclaim\s+(?:that\s+)?["“']([^"”'\n]{1,240})["”']/iu,
+    );
+    const lexicalClaim = focusedFactLexicalText(explicitQuotedClaim?.[1] ?? '');
+    if (lexicalClaim) return lexicalClaim;
+  }
   const placeholders = [];
   const masked = focusedFactPromptWithImplicitPaths(value).replace(
     /(?:^|[\s"'`(])((?:\.\.?\/)?(?:[a-z0-9_.@-]+\/)*[a-z0-9_.@-]+\.[a-z0-9]{1,12})(?=$|[\s"'`),:.;!?，。；：！？])/gi,
@@ -6439,6 +6465,13 @@ function focusedFactConclusionMatchesEvidence(state, output = '') {
   const verdict = extractFocusedFactVerdict(output);
   if (!verdict) return false;
   const prose = String(output).replace(/(?:^|\n)\s*FACT_VERDICT\s*:\s*(?:INSUFFICIENT|SUPPORTED|CONTRADICTED)\s*(?=\n|$)/giu, '\n');
+  if (!prose.trim()) {
+    if (verdict === 'insufficient') {
+      return failedSearch || ['no-match', 'claim-only', 'unparseable-hit'].includes(evidence?.matchKind);
+    }
+    return evidence?.independentMatchObserved === true
+      && (verdict === 'supported' || verdict === 'contradicted');
+  }
   const conclusion = classifyFocusedFactConclusion(prose);
   if (conclusion.kind !== verdict) return false;
   if (verdict === 'insufficient') {

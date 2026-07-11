@@ -157,6 +157,29 @@ test('route task read-only router review prompts remain non-authorizing probes o
   assert.match(status.content[0].text, /No active routed workflow|Route:\s*none/);
 });
 
+test('an exclusive status observation finishes without opening workflow gates', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Call omp_core_subagent_status exactly once only to inspect the current route status. If that tool succeeds, return exactly STATUS_ALLOWED: YES; otherwise return exactly STATUS_ALLOWED: NO. Do not start subagents, modify files, run tests, access the network, or call any other tool.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const started = await event(pi, 'before_agent_start')({ prompt }, ctx);
+  assert.equal(started.route.intent, 'diagnosis');
+  assert.deepEqual(started.route.requiredSkills, []);
+  assert.deepEqual(started.route.routePlan.gateRequirements, []);
+
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-exclusive-status-observation',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+  assert.equal(status.isError, false);
+  assert.equal(await event(pi, 'session_stop')({ output: 'STATUS_ALLOWED: YES' }, ctx), undefined);
+});
+
 test('route task probe-only prompts do not activate a fresh session by default', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -3886,6 +3909,46 @@ test('focused test authoring accepts complete final direct review evidence when 
 
   assert.equal(finalOnly, undefined);
   await assertReleasedStops(pi, ctx, [{}, { output: 'Final summary only.' }]);
+});
+
+test('structured review evidence from an earlier assistant message survives a final summary', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const skills = ['test-driven-development', 'verification-before-completion'];
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。' },
+    ctx,
+  );
+  await event(pi, 'tool_result')({ name: 'omp_test_gate', details: { passed: true } }, ctx);
+  await recordPassingHostTest(pi, ctx);
+  await tool(pi, 'omp_core_validate_skill_usage').execute(
+    'call-message-review-skill-usage',
+    { output: skillUsageBlock(skills) },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  await event(pi, 'message_end')({
+    message: {
+      role: 'assistant',
+      content: [{
+        type: 'text',
+        text: [
+          'REVIEW_EVIDENCE',
+          'Scope: focused test change in src/router.js',
+          'Findings: the regression test covers the requested boundary without production edits',
+          'OpenBlockers: none',
+          'Verdict: PASS',
+        ].join('\n'),
+      }],
+    },
+  }, ctx);
+
+  assert.equal(await event(pi, 'session_stop')({ output: 'Final summary only.' }, ctx), undefined);
 });
 
 

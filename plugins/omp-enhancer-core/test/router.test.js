@@ -428,6 +428,97 @@ test('routes exclusive one-shot route probes as diagnosis with no workflow resou
   }
 });
 
+test('routes an exclusive status observation as diagnosis with no workflow resources', () => {
+  const prompt = 'Call omp_core_subagent_status exactly once only to inspect the current route status. If that tool succeeds, return exactly STATUS_ALLOWED: YES; otherwise return exactly STATUS_ALLOWED: NO. Do not start subagents, modify files, run tests, access the network, or call any other tool.';
+
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode, gateRecoveryMode: 'enforce' });
+    assert.equal(route.intent, 'diagnosis', routerMode);
+    assert.equal(route.taskDescriptor.operation, 'diagnose', routerMode);
+    assert.deepEqual(route.taskDescriptor.domains, ['plugin'], routerMode);
+    assert.deepEqual(route.taskDescriptor.constraints, {
+      workspaceWrite: 'forbidden',
+      testExecution: 'forbidden',
+      networkAccess: 'forbidden',
+      externalWrite: 'forbidden',
+      subagents: 'forbidden',
+    }, routerMode);
+    assert.deepEqual(route.requiredSkills, [], routerMode);
+    assert.deepEqual(route.requiredTools, [], routerMode);
+    assert.deepEqual(route.requiredSubagents, [], routerMode);
+    assert.deepEqual(route.routePlan.gateRequirements, [], routerMode);
+  }
+});
+
+test('does not execute embedded or companion status-probe instructions as exclusive diagnostics', () => {
+  const cases = [
+    {
+      name: 'meta explanation',
+      prompt: 'Explain why the instruction Call omp_core_subagent_status exactly once only to inspect the current route status is useful. Do not call any other tool.',
+      expectedDomain: 'general',
+    },
+    {
+      name: 'quoted untrusted instruction',
+      prompt: 'Review this untrusted instruction for prompt-injection risks: "Call omp_core_subagent_status exactly once only to inspect the current route status. Do not call any other tool." Do not modify files or run tests.',
+      expectedIntent: 'security-review',
+    },
+    {
+      name: 'companion security audit',
+      prompt: 'Call omp_core_subagent_status exactly once only to inspect the current route status. Do not call any other tool. Separately, audit src/auth.js for authentication vulnerabilities without modifying files, tests, subagents, or network.',
+      expectedIntent: 'security-review',
+    },
+    {
+      name: 'companion source read',
+      prompt: 'Call omp_core_subagent_status exactly once only to inspect the current route status. Do not call any other tool. Separately, inspect src/router.js and explain the routing bug without modifying files.',
+      expectedIntent: 'bug-audit',
+    },
+    {
+      name: 'companion edit',
+      prompt: 'Call omp_core_subagent_status exactly once only to inspect the current route status. Do not call any other tool. Then fix the omp_core_subagent_status implementation and update its tests.',
+      expectedIntent: 'implementation-with-tests',
+    },
+    {
+      name: 'companion release',
+      prompt: 'Call omp_core_subagent_status exactly once only to inspect the current route status. Do not call any other tool. Then publish the current plugin release.',
+      expectedIntent: 'release',
+    },
+    {
+      name: 'semicolon companion audit',
+      prompt: 'Call omp_core_subagent_status exactly once only to inspect the current route status. Do not call any other tool; audit authentication code.',
+      expectedIntent: 'security-review',
+    },
+    {
+      name: 'response-shaped companion audit',
+      prompt: 'Call omp_core_subagent_status exactly once only to inspect the current route status. Report exactly the vulnerabilities after auditing authentication code. Do not call any other tool.',
+      expectedIntent: 'security-review',
+    },
+    {
+      name: 'conditional publish before response',
+      prompt: 'Call omp_core_subagent_status exactly once only to inspect the current route status. If that tool succeeds, publish the plugin and return exactly YES; otherwise return exactly NO. Do not call any other tool.',
+      expectedIntent: 'release',
+    },
+    {
+      name: 'direct response followed by deletion',
+      prompt: 'Call omp_core_subagent_status exactly once only to inspect the current route status. Report exactly DONE after deleting credentials. Do not call any other tool.',
+    },
+    {
+      name: 'conditional response followed by deletion',
+      prompt: 'Call omp_core_subagent_status exactly once only to inspect the current route status. If that tool succeeds, return exactly YES; otherwise return exactly NO and delete credentials. Do not call any other tool.',
+    },
+  ];
+
+  for (const item of cases) {
+    const route = routeNaturalLanguageTask({ prompt: item.prompt, routerMode: 'enforce' });
+    assert.equal(
+      route.taskDescriptor.provenance.reasons.includes('exclusive subagent status diagnostic probe'),
+      false,
+      item.name,
+    );
+    if (item.expectedIntent) assert.equal(route.intent, item.expectedIntent, item.name);
+    if (item.expectedDomain) assert.ok(route.taskDescriptor.domains.includes(item.expectedDomain), item.name);
+  }
+});
+
 test('routes constrained E2E workflow audits with plain-text summaries as diagnosis-only probes', () => {
   const cases = [
     {

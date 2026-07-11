@@ -158,6 +158,7 @@ test('an exact test-file command remains execute-only under explicit side-effect
   for (const prompt of [
     '只运行 plugins/omp-enhancer-core/test/router.test.js，不要修改文件、不要联网、不要使用 subagent、不要发布',
     'Only run node --test plugins/omp-enhancer-core/test/router.test.js; do not modify files, use the network, use subagents, or publish.',
+    'Use the bash tool exactly once to run exactly `node --test plugins/omp-enhancer-core/test/router.test.js`. Do not call any other tool, edit any file, use subagents, or access the network. A successful matching host result closes this exact-test route directly; do not call omp_test_gate or omp_core_subagent_status. If the host result passes, return exactly PASS; otherwise return exactly FAIL.',
   ]) {
     const route = routeNaturalLanguageTask({ prompt });
     assert.equal(route.taskDescriptor.operation, 'execute', prompt);
@@ -203,6 +204,17 @@ test('a complete multi-file exact test request stays bounded to its ordered targ
   assert.deepEqual(route.routePlan.requiredSkills, []);
   assert.deepEqual(route.routePlan.requiredTools, []);
   assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'test-evidence', mode: 'required' }]);
+});
+
+test('an exact test command does not hide a real companion edit', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Use the bash tool exactly once to run exactly `node --test test/parser.test.js`, then edit src/parser.js to fix the parser. Do not use subagents or access the network.',
+    routerMode: 'enforce',
+  });
+
+  assert.notDeepEqual(route.taskDescriptor.domains, ['tests']);
+  assert.equal(route.taskDescriptor.domains.includes('code'), true);
+  assert.equal(route.taskDescriptor.phases.some(({ kind, domain }) => kind === 'modify' && domain === 'code'), true);
 });
 
 test('one Chinese prohibition marker scopes across a compact side-effect list', () => {
@@ -1092,6 +1104,50 @@ test('an English supported-by repository claim uses the focused single-search fa
     assert.deepEqual(route.requiredTools, [], routerMode);
     assert.deepEqual(route.requiredSubagents, [], routerMode);
     assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'fact-evidence', mode: 'required' }], routerMode);
+  }
+});
+
+test('an explicitly single-grep local claim stays focused without a document target', () => {
+  const prompt = 'Offline, verify whether the claim "The moon is green" is supported by repository-local evidence. Do not modify files. Do not run tests. Do not use subagents. Do not access the network. Use exactly one built-in focused grep over the repository root and no other tools. If it returns no matches, do not retry or change search methods; return exactly FACT_VERDICT: INSUFFICIENT.';
+
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode });
+    assert.equal(route.intent, 'fact-check', routerMode);
+    assert.equal(route.taskDescriptor.operation, 'inspect', routerMode);
+    assert.equal(route.taskDescriptor.complexity, 'focused', routerMode);
+    assert.deepEqual(route.requiredSkills, [], routerMode);
+    assert.deepEqual(route.requiredTools, [], routerMode);
+    assert.deepEqual(route.requiredSubagents, [], routerMode);
+    assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'fact-evidence', mode: 'required' }], routerMode);
+  }
+});
+
+test('do-not-retry alone cannot erase explicitly requested fact-check tools', () => {
+  const prompt = 'Offline, verify whether the claim "The moon is green" is supported by repository-local evidence. Do not modify files. Do not run tests. Do not use subagents. Do not access the network. Use exactly one built-in focused grep over the repository root. If it returns no matches, do not retry. Then use fact_check_analyze and fact_check_report to interpret the evidence.';
+
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode });
+    assert.equal(route.intent, 'fact-check', routerMode);
+    assert.equal(route.taskDescriptor.complexity, 'broad', routerMode);
+    assert.ok(route.requiredSkills.includes('fact-checking'), routerMode);
+    assert.ok(route.requiredTools.includes('fact_check_analyze'), routerMode);
+    assert.ok(route.requiredTools.includes('fact_check_report'), routerMode);
+    assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'fact-evidence', mode: 'required' }], routerMode);
+  }
+});
+
+test('review prohibitions stop at semicolons before a new fact or security action', () => {
+  const cases = [
+    ['Do not summarize; fact-check the claims in docs/claims.md using repository evidence.', 'fact-check'],
+    ['Do not edit the prior report; perform a security review of src/app.js for authentication bypass risks.', 'security-review'],
+    ['不要修改旧报告；对 src/app.js 做安全审查。', 'security-review'],
+  ];
+
+  for (const [prompt, expectedIntent] of cases) {
+    for (const routerMode of ['observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+      assert.equal(route.intent, expectedIntent, `${routerMode}: ${prompt}`);
+    }
   }
 });
 

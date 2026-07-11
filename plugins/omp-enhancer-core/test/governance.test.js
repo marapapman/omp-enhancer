@@ -337,6 +337,19 @@ test('an exact test file is presented as bounded testing rather than a bug audit
   assert.doesNotMatch(repair[0]?.context ?? '', /bug audit|omp_test_analyze|omp_test_context/i);
 });
 
+test('a command-only exact test never asks for a configuration read', () => {
+  const prompt = 'Use the bash tool exactly once to run exactly `node --test test/parser.test.js`. Do not call any other tool, edit any file, use subagents, or access the network. A successful matching host result closes this exact-test route directly; do not call omp_test_gate or omp_core_subagent_status. If the host result passes, return exactly PASS; otherwise return exactly FAIL.';
+  const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+  const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
+  const repair = buildMissingGateContexts({ route, state: { evidence: {} } });
+
+  assert.equal(route.intent, 'testing');
+  assert.ok(route.taskDescriptor.provenance.reasons.includes('exclusive command-only exact test requested'));
+  assert.match(fragment, /do not call read or any other tool/i);
+  assert.doesNotMatch(fragment, /configuration (?:with|inspection).*read tool/i);
+  assert.match(repair[0]?.context ?? '', /do not call read or any other tool/i);
+});
+
 test('a constrained read-only security review gets one satisfiable evidence contract', () => {
   const fragment = buildGovernancePromptFragment({
     route: routeNaturalLanguageTask({
@@ -501,6 +514,27 @@ test('adds soft WORKFLOW_NEXT guidance for routed implementation work', () => {
 
   const workflowNextSection = fragment.match(/WORKFLOW_NEXT[\s\S]*?(?=\n[A-Z][A-Z_ ]+\n|$)/)?.[0] ?? '';
   assert.doesNotMatch(workflowNextSection, /\b(?:MUST|REQUIRED|mandatory|gate|block|blocked|cannot proceed)\b/i);
+});
+
+test('direct workflows bootstrap every required skill before task tools', () => {
+  const fragment = buildGovernancePromptFragment({
+    route: {
+      intent: 'fact-check',
+      agent: 'fact-checker',
+      requiredSkills: ['fact-checking', 'claim-extraction', 'source-evaluation'],
+      requiredTools: ['fact_check_analyze'],
+      requiredSubagents: [],
+    },
+  });
+
+  const workflowNextSection = fragment.match(/WORKFLOW_NEXT[\s\S]*?(?=\n[A-Z][A-Z_ ]+\n|$)/)?.[0] ?? '';
+  assert.match(workflowNextSection, /skill:\/\/fact-checking/);
+  assert.match(workflowNextSection, /skill:\/\/claim-extraction/);
+  assert.match(workflowNextSection, /skill:\/\/source-evaluation/);
+  assert.match(workflowNextSection, /wait for every read result/i);
+  assert.match(workflowNextSection, /omp_core_validate_skill_usage/i);
+  assert.match(workflowNextSection, /before using task-domain tools/i);
+  assert.match(workflowNextSection, /do not defer skill evidence to a completion repair/i);
 });
 
 test('adds constrained route probe governance for compact JSON checks without extra tools', () => {

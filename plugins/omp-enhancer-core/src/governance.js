@@ -233,9 +233,12 @@ function skillWorkflowLines(route) {
   }
   if (isExactTestExecution(route)) {
     const targets = route.taskDescriptor?.testExecutionTargets ?? [];
+    const commandOnly = isCommandOnlyExactTestExecution(route);
     return [
       `This is one exact test execution for the complete target list ${targets.join(', ')}; no broader verification scope is authorized.`,
-      'Inspect package or runner configuration with the read tool. Do not use shell pipelines, redirections, aliases, or exploratory commands for that inspection.',
+      commandOnly
+        ? 'The user authorized only the single direct test command. Do not call read or any other tool before or after it.'
+        : 'Inspect package or runner configuration with the read tool. Do not use shell pipelines, redirections, aliases, or exploratory commands for that inspection.',
       'Run one direct host test command that names every authorized test file once and in the requested order, then report the observed result. A successful matching host result closes this exact-test evidence directly; do not call omp_test_gate or omp_core_subagent_status to infer whether it is complete. Do not omit or substitute targets, use an aggregate suite, or add runner preloads and extra flags.',
     ];
   }
@@ -411,9 +414,12 @@ export function buildMissingGateContexts({ route, state } = {}) {
 
   if (needsTesting(route) && !state?.evidence?.testingGate) {
     if (isExactTestExecution(route)) {
+      const commandOnly = isCommandOnlyExactTestExecution(route);
       contexts.push({ key: 'testing', context: [
         'OMP Enhancer Core exact-test evidence is still open.',
-        `Use read to inspect runner configuration, then execute one direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} and report the observed result.`,
+        commandOnly
+          ? `Execute the one direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} and report the observed result; do not call read or any other tool.`
+          : `Use read to inspect runner configuration, then execute one direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} and report the observed result.`,
         'Do not run aggregate aliases, additional test targets, pipelines, redirections, runner preloads, or generated test cases.',
         formatRecentToolFailures(state, ['omp_test_gate']),
       ].filter(Boolean).join('\n') });
@@ -496,7 +502,9 @@ function completionGateChecklist(route) {
 
   if (needsTesting(route)) {
     gates.push(isExactTestExecution(route)
-      ? `Exact test evidence gate: use read for runner configuration, execute one direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')}, and report that observed result; do not run additional targets or aggregate aliases.`
+      ? isCommandOnlyExactTestExecution(route)
+        ? `Exact test evidence gate: execute the single direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')}, and report that observed result; do not call another tool, run additional targets, or use aggregate aliases.`
+        : `Exact test evidence gate: use read for runner configuration, execute one direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')}, and report that observed result; do not run additional targets or aggregate aliases.`
       : 'Testing gate: run relevant local test/build/lint commands through an explicit host tool call, then omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report before final claims. omp_test_gate only validates route-scoped host evidence and never executes its testCommand/config command. If omp_test_* tools are unavailable, provide an equivalent manual testing gate report with concrete local command evidence.');
   }
 
@@ -599,27 +607,35 @@ function formatRecentToolFailures(state, toolNames = []) {
 function workflowNextLines(route, parentTask = '') {
   const exclusiveRouteProbe = (route.taskDescriptor?.provenance?.reasons ?? [])
     .includes('exclusive route task diagnostic probe');
+  const exclusiveStatusProbe = (route.taskDescriptor?.provenance?.reasons ?? [])
+    .includes('exclusive subagent status diagnostic probe');
+  const exclusiveObservationProbe = exclusiveRouteProbe || exclusiveStatusProbe;
   const firstSkill = route.requiredSkills?.[0];
+  const directSkills = route.requiredSkills ?? [];
   const delegatesWork = Boolean(route.requiredSubagents?.length);
   const nextAction = exclusiveRouteProbe
     ? 'Next action: call omp_core_route_task exactly once with the user-supplied prompt, then report only the requested route fields.'
+    : exclusiveStatusProbe
+      ? 'Next action: call omp_core_subagent_status exactly once, then report only the requested status result.'
     : firstSkill && delegatesWork
     ? `Next action: load skill://${firstSkill} into the first routed subagent task assignment before acting.`
-    : firstSkill
-      ? `Next action: read skill://${firstSkill} before acting, then follow the route card.`
+    : directSkills.length
+      ? `Next action sequence before task work: read ${directSkills.map((skill) => `skill://${skill}`).join(', ')}; wait for every read result; then call omp_core_validate_skill_usage with all required and loaded skills before using task-domain tools.`
       : 'Next action: follow the route card using the selected tools.';
-  const constrainedProbe = exclusiveRouteProbe || isConstrainedRouteStatusSkillPrompt(parentTask);
+  const constrainedProbe = exclusiveObservationProbe || isConstrainedRouteStatusSkillPrompt(parentTask);
   return [
     'WORKFLOW_NEXT',
     nextAction,
     ...(constrainedProbe ? [
       'User constraint: route/status/skill checks only.',
-      ...(exclusiveRouteProbe ? ['Do not call any tool other than the single requested omp_core_route_task probe. Do not load routed skills or execute the probed workflow.'] : []),
+      ...(exclusiveObservationProbe ? [`Do not call any tool other than the single requested ${exclusiveRouteProbe ? 'omp_core_route_task' : 'omp_core_subagent_status'} probe. Do not load routed skills or execute the probed workflow.`] : []),
       'Do not call eval, bash, task, edit, write, project QA tools, or test commands while this constraint is active.',
       'If compact JSON is requested, return one raw single JSON object with no Markdown fence, without Markdown fences, without a preface, and without trailing explanation.',
       'Do not repeat SKILL_USAGE, SUBAGENT_USAGE, or evidence blocks inside compact JSON route/status/skill check responses; encode only the compact fields the user requested.',
     ] : []),
-    'Soft guidance: keep this to one immediate action and adjust only when tool evidence conflicts.',
+    directSkills.length && !delegatesWork
+      ? 'Soft guidance: complete this bounded skill bootstrap once, then perform the task; do not defer skill evidence to a completion repair.'
+      : 'Soft guidance: keep this to one immediate action and adjust only when tool evidence conflicts.',
     '',
     'WORKFLOW_CONTEXT',
   ];
@@ -635,7 +651,9 @@ function isConstrainedRouteStatusSkillPrompt(prompt = '') {
 function workflowFor(route) {
   const intent = route.intent;
   if (isFocusedLocalFactInspection(route)) return 'Focused local fact workflow: read the claim -> search repository evidence -> separate the claim from independent support -> report supported, contradicted, or insufficient evidence without external research.';
-  if (isExactTestExecution(route)) return `Exact test target workflow: inspect runner configuration with read -> run one direct command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} -> report the host-observed result without generating additional tests.`;
+  if (isExactTestExecution(route)) return isCommandOnlyExactTestExecution(route)
+    ? `Exact test target workflow: run the single direct command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} -> report the host-observed result without another tool call.`
+    : `Exact test target workflow: inspect runner configuration with read -> run one direct command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} -> report the host-observed result without generating additional tests.`;
   if (isReadOnlySecurityReview(route)) return 'Focused read-only security workflow: load security-review and security-scan -> inspect the requested file and direct local callers -> separate code facts from unsupported threat assumptions -> emit SECURITY_REVIEW evidence without edits or tests.';
   if (isReadOnlyCodeReview(route)) return 'Read-only code review workflow: inspect the requested file and directly related code -> collect concrete file and symbol evidence -> report findings without test execution or test-evidence repair.';
   if (isCodeModificationWithoutTests(route)) {
@@ -676,7 +694,10 @@ function routeBoundaryFor(route) {
       constraints.subagents === 'forbidden' ? 'subagents' : null,
       constraints.externalWrite !== 'required' ? 'external writes' : null,
     ].filter(Boolean);
-    return `Route boundary: execute only the complete exact test target list ${targets.join(', ')}. Use read for configuration inspection and one direct command naming every target once and in order; aggregate tests, omitted or substituted targets, pipelines, redirections, and runner preloads are outside scope.${extras.length ? ` ${extras.join(', ')} remain forbidden.` : ''}`;
+    const commandSequence = isCommandOnlyExactTestExecution(route)
+      ? 'Use only the single direct command naming every target once and in order; do not call read or any other tool'
+      : 'Use read for configuration inspection and one direct command naming every target once and in order';
+    return `Route boundary: execute only the complete exact test target list ${targets.join(', ')}. ${commandSequence}; aggregate tests, omitted or substituted targets, pipelines, redirections, and runner preloads are outside scope.${extras.length ? ` ${extras.join(', ')} remain forbidden.` : ''}`;
   }
   if (isReadOnlySecurityReview(route)) {
     return 'Route boundary: this is a read-only, local security review. Use read-only tools, inspect the requested source scope and direct callers, and report only supported findings; do not edit, run tests, use the network, delegate, or release.';
@@ -866,6 +887,12 @@ function isExactTestExecution(route) {
     && Array.isArray(descriptor.testExecutionTargets)
     && descriptor.testExecutionTargets.length > 0
     && (descriptor.phases ?? []).every(({ kind }) => kind === 'verify');
+}
+
+function isCommandOnlyExactTestExecution(route) {
+  return isExactTestExecution(route)
+    && (route.taskDescriptor?.provenance?.reasons ?? [])
+      .includes('exclusive command-only exact test requested');
 }
 
 function isCodeModificationWithoutTests(route) {

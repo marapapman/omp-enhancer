@@ -927,6 +927,66 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
     });
   });
 
+  await t.test('an exact machine verdict closes directly when it matches host evidence', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startFocusedFactRuntime();
+      await recordFocusedFactGrep(pi, ctx, {
+        id: 'exact-insufficient-verdict',
+        output: 'No matches found',
+      });
+      assert.equal(await event(pi, 'session_stop')({
+        output: 'FACT_VERDICT: INSUFFICIENT',
+      }, ctx), undefined);
+      assert.equal(latestState(pi).evidence.factCheckGate, true);
+    });
+
+    await withEnforce(async () => {
+      const { pi, ctx } = await startFocusedFactRuntime();
+      await recordFocusedFactGrep(pi, ctx, {
+        id: 'exact-supported-verdict',
+        output: [
+          'docs/notes.md:3:The stable fact is 42.',
+          'docs/reference.md:8:The independently maintained stable value is 42.',
+        ].join('\n'),
+      });
+      assert.equal(await event(pi, 'session_stop')({
+        output: 'FACT_VERDICT: SUPPORTED',
+      }, ctx), undefined);
+      assert.equal(latestState(pi).evidence.factCheckGate, true);
+    });
+  });
+
+  await t.test('a pathless one-grep no-match closes without retry or a prose wrapper', async () => {
+    await withEnforce(async () => {
+      const prompt = 'Offline, verify whether the claim "The moon is green" is supported by repository-local evidence. Do not modify files. Do not run tests. Do not use subagents. Do not access the network. Use exactly one built-in focused grep over the repository root and no other tools. If it returns no matches, do not retry or change search methods; return exactly FACT_VERDICT: INSUFFICIENT.';
+      const { pi, ctx } = await startRuntime(prompt);
+      assert.equal(latestState(pi).lastRoute.taskDescriptor.complexity, 'focused');
+
+      await recordFocusedFactGrep(pi, ctx, {
+        id: 'pathless-exact-insufficient',
+        pattern: 'moon.*green|green.*moon',
+        output: 'No matches found',
+        details: { matchCount: 0, fileCount: 0, files: [], fileMatches: [] },
+      });
+
+      assert.equal(latestState(pi).focusedFactSearch.status, 'succeeded');
+      assert.equal(latestState(pi).evidence.focusedFactEvidence.matchKind, 'no-match');
+      assert.equal(latestState(pi).evidence.focusedFactEvidence.claimSourceBound, false);
+      assert.equal(await event(pi, 'session_stop')({
+        output: 'FACT_VERDICT: INSUFFICIENT',
+      }, ctx), undefined);
+      assert.equal(latestState(pi).gateController.budget.repairUsed, 0);
+
+      const retry = await event(pi, 'tool_call')({
+        type: 'tool_call',
+        toolCallId: 'pathless-exact-insufficient-retry',
+        toolName: 'grep',
+        input: { pattern: 'moon green', path: '.' },
+      }, ctx);
+      assert.equal(retry?.reasonCode, 'focused-fact-search-budget-exhausted');
+    });
+  });
+
   await t.test('the terminal verdict is singular, mandatory, and consistent with the prose', async () => {
     for (const output of [
       'Evidence is insufficient. The claim remains unverified.',
@@ -1185,6 +1245,39 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
       }, restored.ctx);
       assert.equal(latestState(restored.pi).evidence.focusedFactEvidence, null);
       assert.equal(latestState(restored.pi).evidence.factCheckGate, false);
+    });
+  });
+
+  await t.test('legacy claim-source binding migrates fail-closed while explicit pathless records remain valid', async () => {
+    await withEnforce(async () => {
+      const runtime = await startFocusedFactRuntime();
+      await recordFocusedFactGrep(runtime.pi, runtime.ctx, {
+        id: 'migration-source-record',
+        output: 'No matches found',
+      });
+
+      const cases = [
+        { name: 'legacy path-bound', sourceBound: undefined, pathMode: 'keep', accepted: true, expectedBound: true },
+        { name: 'legacy empty path', sourceBound: undefined, pathMode: 'empty', accepted: false },
+        { name: 'explicit pathless', sourceBound: false, pathMode: 'empty', accepted: true, expectedBound: false },
+        { name: 'pathless with paths', sourceBound: false, pathMode: 'keep', accepted: false },
+        { name: 'path-bound without paths', sourceBound: true, pathMode: 'empty', accepted: false },
+      ];
+
+      for (const item of cases) {
+        const entries = structuredClone(runtime.pi.entries);
+        const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+        const record = snapshot.evidence.focusedFactEvidence;
+        if (item.sourceBound === undefined) delete record.claimSourceBound;
+        else record.claimSourceBound = item.sourceBound;
+        if (item.pathMode === 'empty') record.claimPathDigests = [];
+
+        const restored = await restartRuntime(entries);
+        await event(restored.pi, 'session_stop')({ output: 'FACT_VERDICT: INSUFFICIENT' }, restored.ctx);
+        const evidence = latestState(restored.pi).evidence.focusedFactEvidence;
+        assert.equal(Boolean(evidence), item.accepted, item.name);
+        if (item.accepted) assert.equal(evidence.claimSourceBound, item.expectedBound, item.name);
+      }
     });
   });
 });
