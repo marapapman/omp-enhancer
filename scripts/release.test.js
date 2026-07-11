@@ -38,6 +38,22 @@ async function createReleaseFixture() {
     workspaces: pluginFixtures.map((plugin) => `plugins/${plugin.directory}`),
   });
 
+  await writeJson(join(root, 'package-lock.json'), {
+    name: 'omp-enhancer-monorepo',
+    lockfileVersion: 3,
+    requires: true,
+    packages: {
+      '': {
+        name: 'omp-enhancer-monorepo',
+        workspaces: pluginFixtures.map((plugin) => `plugins/${plugin.directory}`),
+      },
+      ...Object.fromEntries(pluginFixtures.map((plugin) => [
+        `plugins/${plugin.directory}`,
+        { version: plugin.version },
+      ])),
+    },
+  });
+
   await writeJson(join(root, '.omp-plugin', 'marketplace.json'), {
     name: 'omp-enhancer',
     owner: { name: 'marapapman' },
@@ -88,9 +104,14 @@ async function readPluginPackage(root, directory) {
   return readJson(join(root, 'plugins', directory, 'package.json'));
 }
 
+async function readPackageLock(root) {
+  return readJson(join(root, 'package-lock.json'));
+}
+
 async function snapshotReleaseFiles(root) {
   const files = [
     'package.json',
+    'package-lock.json',
     '.omp-plugin/marketplace.json',
     ...pluginFixtures.map((plugin) => `plugins/${plugin.directory}/package.json`),
   ];
@@ -149,7 +170,7 @@ function assertReleaseFailed(result, messagePattern) {
   assert.match(output, messagePattern, formatResult(result));
 }
 
-test('--plugin writing-helper --version tracks main by removing ref and syncing package/catalog versions', async () => {
+test('--plugin writing-helper --version tracks main and syncs package, lock, and catalog versions', async () => {
   await withReleaseFixture(async (root) => {
     const result = await runRelease(root, [
       '--plugin',
@@ -162,11 +183,14 @@ test('--plugin writing-helper --version tracks main by removing ref and syncing 
     assertReleaseSucceeded(result);
 
     const packageJson = await readPluginPackage(root, 'writing-helper');
+    const packageLock = await readPackageLock(root);
     const catalog = await readCatalog(root);
     const writingHelper = catalog.plugins.find((plugin) => plugin.name === 'writing-helper');
     const testingEnhancer = catalog.plugins.find((plugin) => plugin.name === 'omp-testing-enhancer');
 
     assert.equal(packageJson.version, '0.3.0');
+    assert.equal(packageLock.packages['plugins/writing-helper'].version, '0.3.0');
+    assert.equal(packageLock.packages['plugins/omp-config'].version, '0.1.0');
     assert.equal(writingHelper.version, '0.3.0');
     assert.equal(Object.hasOwn(writingHelper, 'ref'), false);
     assert.equal(testingEnhancer.version, '0.1.3');
@@ -182,6 +206,7 @@ test('--plugin all --bump patch bumps every plugin package, every catalog entry,
     assertReleaseSucceeded(result);
 
     const catalog = await readCatalog(root);
+    const packageLock = await readPackageLock(root);
     const expectedVersions = new Map([
       ['omp-config', { directory: 'omp-config', version: '0.1.1' }],
       ['writing-helper', { directory: 'writing-helper', version: '0.2.2' }],
@@ -196,6 +221,11 @@ test('--plugin all --bump patch bumps every plugin package, every catalog entry,
       const catalogPlugin = catalog.plugins.find((plugin) => plugin.name === name);
 
       assert.equal(packageJson.version, expected.version, `${name} package version`);
+      assert.equal(
+        packageLock.packages[`plugins/${expected.directory}`].version,
+        expected.version,
+        `${name} package-lock workspace version`,
+      );
       assert.equal(catalogPlugin.version, expected.version, `${name} catalog version`);
       assert.equal(Object.hasOwn(catalogPlugin, 'ref'), false, `${name} tracks main by default`);
     }
@@ -216,10 +246,12 @@ test('--pin-ref pins the selected plugin catalog entry to v<version>', async () 
     assertReleaseSucceeded(result);
 
     const catalog = await readCatalog(root);
+    const packageLock = await readPackageLock(root);
     const writingHelper = catalog.plugins.find((plugin) => plugin.name === 'writing-helper');
     const config = catalog.plugins.find((plugin) => plugin.name === 'omp-config');
 
     assert.equal(writingHelper.version, '0.3.0');
+    assert.equal(packageLock.packages['plugins/writing-helper'].version, '0.3.0');
     assert.equal(writingHelper.ref, 'v0.3.0');
     assert.equal(config.version, '0.1.0');
     assert.equal(Object.hasOwn(config, 'ref'), false);
@@ -237,6 +269,7 @@ test('--dry-run reports planned changes without writing release files', async ()
     assert.match(result.stdout, /0\.2\.1/);
     assert.match(result.stdout, /0\.3\.0/);
     assert.match(result.stdout, /package\.json/);
+    assert.match(result.stdout, /package-lock\.json/);
     assert.match(result.stdout, /marketplace\.json/);
     assert.deepEqual(await snapshotReleaseFiles(root), before);
   });
@@ -278,11 +311,42 @@ test('version downgrade fails unless --allow-downgrade is explicit', async () =>
     assertReleaseSucceeded(allowed);
 
     const packageJson = await readPluginPackage(root, 'writing-helper');
+    const packageLock = await readPackageLock(root);
     const catalog = await readCatalog(root);
     const writingHelper = catalog.plugins.find((plugin) => plugin.name === 'writing-helper');
 
     assert.equal(packageJson.version, '0.2.0');
+    assert.equal(packageLock.packages['plugins/writing-helper'].version, '0.2.0');
     assert.equal(writingHelper.version, '0.2.0');
     assert.equal(Object.hasOwn(writingHelper, 'ref'), false);
+  });
+});
+
+test('--apply repairs a stale selected workspace lock version without changing unselected entries', async () => {
+  await withReleaseFixture(async (root) => {
+    const lockPath = join(root, 'package-lock.json');
+    const staleLock = await readJson(lockPath);
+    staleLock.packages['plugins/omp-enhancer-core'].version = '0.0.9';
+    await writeJson(lockPath, staleLock);
+
+    const result = await runRelease(root, [
+      '--plugin',
+      'omp-enhancer-core',
+      '--version',
+      '0.1.1',
+      '--apply',
+    ]);
+
+    assertReleaseSucceeded(result);
+
+    const packageJson = await readPluginPackage(root, 'omp-enhancer-core');
+    const packageLock = await readPackageLock(root);
+    const catalog = await readCatalog(root);
+    const core = catalog.plugins.find((plugin) => plugin.name === 'omp-enhancer-core');
+
+    assert.equal(packageJson.version, '0.1.1');
+    assert.equal(packageLock.packages['plugins/omp-enhancer-core'].version, '0.1.1');
+    assert.equal(packageLock.packages['plugins/writing-helper'].version, '0.2.1');
+    assert.equal(core.version, '0.1.1');
   });
 });

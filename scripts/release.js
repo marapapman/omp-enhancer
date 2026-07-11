@@ -78,13 +78,16 @@ function readValue(args, index, flag) {
 
 export async function planRelease(rootDir, options) {
   const rootPackagePath = path.join(rootDir, 'package.json')
+  const packageLockPath = path.join(rootDir, 'package-lock.json')
   const catalogPath = path.join(rootDir, '.omp-plugin', 'marketplace.json')
   const rootPackage = await readJson(rootPackagePath)
+  const packageLock = await readJson(packageLockPath)
   const catalog = await readJson(catalogPath)
   const selectedNames = resolveSelectedPlugins(options.plugin)
   const changes = []
 
   const plannedRootPackage = structuredClone(rootPackage)
+  const plannedPackageLock = structuredClone(packageLock)
   const plannedCatalog = structuredClone(catalog)
 
   if (options.plugin === 'all' && options.bump) {
@@ -100,6 +103,11 @@ export async function planRelease(rootDir, options) {
     const packageJson = await readJson(packagePath)
     const catalogPlugin = plannedCatalog.plugins?.find((plugin) => plugin.name === name)
     if (!catalogPlugin) throw new Error(`marketplace entry for ${name} was not found`)
+    const workspaceKey = `plugins/${directory}`
+    const lockWorkspace = plannedPackageLock.packages?.[workspaceKey]
+    if (!lockWorkspace || typeof lockWorkspace !== 'object' || Array.isArray(lockWorkspace)) {
+      throw new Error(`package-lock workspace entry ${workspaceKey} was not found`)
+    }
 
     const currentVersion = String(packageJson.version)
     const nextVersion = options.version ?? bumpVersion(currentVersion, options.bump)
@@ -112,11 +120,14 @@ export async function planRelease(rootDir, options) {
     const plannedPackage = structuredClone(packageJson)
     plannedPackage.version = nextVersion
     catalogPlugin.version = nextVersion
+    const currentLockVersion = String(lockWorkspace.version ?? '')
+    lockWorkspace.version = nextVersion
 
     if (options.pinRef) catalogPlugin.ref = releaseTagForVersion(nextVersion)
     else delete catalogPlugin.ref
 
     changes.push({ file: `plugins/${directory}/package.json`, field: 'version', from: currentVersion, to: nextVersion, content: plannedPackage, path: packagePath })
+    changes.push({ file: 'package-lock.json', field: `packages.${workspaceKey}.version`, from: currentLockVersion, to: nextVersion })
     changes.push({ file: '.omp-plugin/marketplace.json', field: `${name}.version`, from: currentVersion, to: nextVersion })
     changes.push({ file: '.omp-plugin/marketplace.json', field: `${name}.ref`, from: catalogPlugin.ref ?? 'track-main', to: options.pinRef ? releaseTagForVersion(nextVersion) : 'track-main' })
   }
@@ -125,8 +136,10 @@ export async function planRelease(rootDir, options) {
     rootDir,
     options,
     rootPackagePath,
+    packageLockPath,
     catalogPath,
     rootPackage: plannedRootPackage,
+    packageLock: plannedPackageLock,
     catalog: plannedCatalog,
     changes
   }
@@ -137,6 +150,7 @@ export async function applyRelease(result) {
   for (const change of packageChanges) {
     await writeJson(change.path, change.content)
   }
+  await writeJson(result.packageLockPath, result.packageLock)
   await writeJson(result.catalogPath, result.catalog)
 }
 
