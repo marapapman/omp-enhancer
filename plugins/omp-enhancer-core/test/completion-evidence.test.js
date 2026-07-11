@@ -682,6 +682,129 @@ test('definite workspace mutations and hook-capable commits invalidate stale tes
 });
 
 test('focused offline fact evidence is claim-bound and conclusion-consistent', async (t) => {
+  await t.test('the route permits only one grep even when a model starts searches in parallel', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startFocusedFactRuntime();
+      const first = await event(pi, 'tool_call')({
+        type: 'tool_call',
+        toolCallId: 'focused-fact-first-search',
+        toolName: 'grep',
+        input: { pattern: 'stable fact 42', path: '.' },
+      }, ctx);
+      assert.notEqual(first?.block, true);
+      const second = await event(pi, 'tool_call')({
+        type: 'tool_call',
+        toolCallId: 'focused-fact-parallel-search',
+        toolName: 'grep',
+        input: { pattern: 'The stable fact', path: '.' },
+      }, ctx);
+      assert.equal(second?.block, true);
+      assert.equal(second.reasonCode, 'focused-fact-search-budget-exhausted');
+      assert.match(second.reason, /one repository search.*already started/is);
+    });
+  });
+
+  await t.test('wrapped, alternate, and namespaced searches cannot bypass the one-grep budget', async () => {
+    await withEnforce(async () => {
+      for (const [label, toolName, input] of [
+        ['shell grep', 'bash', { command: 'grep -R "stable fact 42" .' }],
+        ['shell rg', 'bash', { command: 'rg "stable fact 42" .' }],
+        ['namespaced grep', 'functions.grep', { pattern: 'stable fact 42', path: '.' }],
+        ['alternate rg tool', 'rg', { pattern: 'stable fact 42', path: '.' }],
+        ['generic search tool', 'search', { query: 'stable fact 42', path: '.' }],
+      ]) {
+        const before = await startFocusedFactRuntime();
+        const alternateFirst = await event(before.pi, 'tool_call')({
+          type: 'tool_call',
+          toolCallId: `focused-fact-alternate-first-${label}`,
+          toolName,
+          input,
+        }, before.ctx);
+        assert.equal(alternateFirst?.reasonCode, 'focused-fact-search-method-forbidden', label);
+
+        const corrected = await event(before.pi, 'tool_call')({
+          type: 'tool_call',
+          toolCallId: `focused-fact-corrected-${label}`,
+          toolName: 'grep',
+          input: { pattern: 'stable fact 42', path: '.' },
+        }, before.ctx);
+        assert.notEqual(corrected?.block, true, label);
+
+        const after = await startFocusedFactRuntime();
+        const grep = await event(after.pi, 'tool_call')({
+          type: 'tool_call',
+          toolCallId: `focused-fact-trusted-${label}`,
+          toolName: 'grep',
+          input: { pattern: 'stable fact 42', path: '.' },
+        }, after.ctx);
+        assert.notEqual(grep?.block, true, label);
+        const alternateAfter = await event(after.pi, 'tool_call')({
+          type: 'tool_call',
+          toolCallId: `focused-fact-alternate-after-${label}`,
+          toolName,
+          input,
+        }, after.ctx);
+        assert.equal(alternateAfter?.reasonCode, 'focused-fact-search-budget-exhausted', label);
+      }
+    });
+  });
+
+  await t.test('a failed or empty grep is persisted and closes as blocked insufficient evidence without retry', async () => {
+    await withEnforce(async () => {
+      for (const variant of ['failed', 'empty']) {
+        const runtime = await startFocusedFactRuntime();
+        const callId = `focused-fact-${variant}-search`;
+        const started = await event(runtime.pi, 'tool_call')({
+          type: 'tool_call',
+          toolCallId: callId,
+          toolName: 'grep',
+          input: { pattern: 'stable fact 42', path: '.' },
+        }, runtime.ctx);
+        assert.notEqual(started?.block, true, variant);
+        assert.equal(latestState(runtime.pi).focusedFactSearch.status, 'started', variant);
+
+        await event(runtime.pi, 'tool_result')({
+          type: 'tool_result',
+          toolCallId: callId,
+          toolName: 'grep',
+          input: { pattern: 'stable fact 42', path: '.' },
+          content: [{ type: 'text', text: variant === 'failed' ? 'grep unavailable' : '' }],
+          isError: variant === 'failed',
+        }, runtime.ctx);
+        assert.equal(latestState(runtime.pi).focusedFactSearch.status, 'failed', variant);
+        assert.equal(
+          latestState(runtime.pi).focusedFactSearch.failureCode,
+          variant === 'failed' ? 'tool-failed' : 'empty-or-unusable-result',
+          variant,
+        );
+
+        const restored = await restartRuntime(runtime.pi.entries);
+        assert.equal(latestState(restored.pi).focusedFactSearch.status, 'failed', variant);
+        const retry = await event(restored.pi, 'tool_call')({
+          type: 'tool_call',
+          toolCallId: `${callId}-retry`,
+          toolName: 'grep',
+          input: { pattern: 'stable fact 42', path: '.' },
+        }, restored.ctx);
+        assert.equal(retry?.reasonCode, 'focused-fact-search-budget-exhausted', variant);
+
+        const repair = await event(restored.pi, 'session_stop')({ output: 'The focused repository search failed.' }, restored.ctx);
+        assert.equal(repair?.continue, true, variant);
+        assert.match(repair.additionalContext, /do not run grep or another search method again/i, variant);
+        assert.doesNotMatch(repair.additionalContext, /use one successful built-in grep/i, variant);
+
+        const finalOutput = factVerdictOutput(
+          'The focused repository search failed, so verification is blocked and repository evidence is insufficient.',
+        );
+        assert.equal(await event(restored.pi, 'session_stop')({ output: finalOutput }, restored.ctx), undefined, variant);
+        assert.equal(latestState(restored.pi).evidence.factCheckGate, true, variant);
+        const completed = await restartRuntime(restored.pi.entries);
+        assert.equal(latestState(completed.pi).focusedFactSearch.status, 'failed', variant);
+        assert.equal(latestState(completed.pi).evidence.factCheckGate, true, variant);
+      }
+    });
+  });
+
   await t.test('generic meta searches record nothing while a real negative search supports only an insufficient conclusion', async () => {
     await withEnforce(async () => {
       const { pi, ctx } = await startFocusedFactRuntime();
@@ -1488,6 +1611,95 @@ test('fact-preserving document edits require host-observed semantic invariants',
       const blocked = await event(runtime.pi, 'session_stop')({ output: review }, runtime.ctx);
       assert.equal(blocked?.continue, true);
       assert.match(blocked.additionalContext, /Document preservation evidence/i);
+    });
+  });
+
+  await t.test('an explicit sentence scope accepts one concise edit and survives restart without repair', async () => {
+    await withEnforce(async () => {
+      const scopedPrompt = 'Polish docs/notes.md so the second sentence is concise and direct. Preserve the heading and the exact factual value 42. Modify only docs/notes.md. Do not run tests, use subagents, access the network, commit, or publish.';
+      const scopedOriginal = '# Notes\n\nThe stable fact is 42. This description is kind of rather wordy and could be clearer for readers.\n';
+      const scopedFinal = '# Notes\n\nThe stable fact is 42. This description is unnecessarily wordy.\n';
+      const runtime = await startRuntime(scopedPrompt);
+
+      await recordDocumentSnapshot(runtime, scopedOriginal, 'preservation-explicit-scope-baseline');
+      let state = latestState(runtime.pi);
+      assert.equal(state.evidence.documentPreservationBaseline.scope.mode, 'explicit-sentence');
+      assert.equal(state.evidence.documentPreservationBaseline.scope.status, 'resolved');
+      assert.equal(state.evidence.documentPreservationBaseline.scope.segmenterVersion, 1);
+      assert.deepEqual(state.evidence.documentPreservationBaseline.scope.editableSentenceOrdinals, [2]);
+
+      await runRealEdit(runtime, scopedOriginal, scopedFinal, 'preservation-explicit-scope-edit');
+      await recordDocumentSnapshot(runtime, scopedFinal, 'preservation-explicit-scope-readback');
+      state = latestState(runtime.pi);
+      assert.equal(state.evidence.mutationRevision, 1);
+      assert.equal(state.evidence.documentPreservationEvidence.ok, true);
+      assert.deepEqual(state.evidence.documentPreservationEvidence.reasonCodes, []);
+      assert.equal(state.evidence.documentPreservationEvidence.checks.modalityTerms.ok, false);
+      assert.equal(state.evidence.documentPreservationEvidence.checks.modalityTerms.applicable, false);
+      assert.equal(state.evidence.documentPreservationEvidence.scopeChecks.immutableScope.ok, true);
+
+      const restored = await restartRuntime(runtime.pi.entries);
+      state = latestState(restored.pi);
+      assert.equal(state.evidence.documentPreservationBaseline.scope.mode, 'explicit-sentence');
+      assert.equal(state.evidence.documentPreservationBaseline.scope.status, 'resolved');
+      assert.equal(state.evidence.documentPreservationBaseline.scope.segmenterVersion, 1);
+      assert.equal(state.evidence.documentPreservationEvidence.ok, true);
+      assert.equal(state.evidence.documentPreservationEvidence.mutationRevision, 1);
+      assert.equal(state.evidence.documentPreservationEvidence.checks.modalityTerms.ok, false);
+      assert.equal(state.evidence.documentPreservationEvidence.checks.modalityTerms.applicable, false);
+      assert.equal(state.evidence.documentPreservationEvidence.scopeChecks.protectedLiterals.ok, true);
+      assert.equal(state.evidence.documentPreservationEvidence.scopeChecks.sentenceCount.ok, true);
+      assert.equal(state.evidence.documentPreservationEvidence.scopeChecks.headingSequence.ok, true);
+      assert.equal(state.evidence.documentPreservationEvidence.scopeChecks.immutableScope.ok, true);
+      assert.doesNotMatch(JSON.stringify({
+        baseline: state.evidence.documentPreservationBaseline,
+        evidence: state.evidence.documentPreservationEvidence,
+      }), /The stable fact|kind of rather wordy|docs\/notes\.md/);
+    });
+  });
+
+  await t.test('an unresolved explicit sentence scope pauses once for user clarification and survives restart', async () => {
+    await withEnforce(async () => {
+      const scopedPrompt = 'Polish docs/notes.md so the second sentence is concise. Preserve the heading and the exact factual value 42. Modify only docs/notes.md.';
+      const ambiguous = '# Notes\n\nThe first value is 42. The second value is also 42.\n';
+      const runtime = await startRuntime(scopedPrompt);
+      await recordDocumentSnapshot(runtime, ambiguous, 'preservation-unresolved-scope-baseline');
+      let state = latestState(runtime.pi);
+      assert.equal(state.evidence.documentPreservationBaseline.scope.status, 'unresolved');
+      assert.equal(state.evidence.documentPreservationBaseline.scope.reasonCode, 'protected-literal-ambiguous');
+
+      const blocked = await event(runtime.pi, 'tool_call')({
+        type: 'tool_call',
+        toolCallId: 'preservation-unresolved-scope-edit',
+        toolName: 'edit',
+        input: { path: 'docs/notes.md', edits: [{ oldText: ambiguous, newText: ambiguous }] },
+      }, runtime.ctx);
+      assert.equal(blocked?.block, true);
+      assert.equal(blocked.reasonCode, 'document-preservation-scope-confirmation-required');
+      assert.match(blocked.reason, /ask the user once|exactly one editable sentence/is);
+      state = latestState(runtime.pi);
+      assert.equal(state.actionBoundary.awaitingUserReason, 'document-preservation-scope-confirmation-required');
+      assert.equal(state.evidence.mutationRevision, 0);
+
+      const noRetry = await event(runtime.pi, 'tool_call')({
+        type: 'tool_call',
+        toolCallId: 'preservation-unresolved-scope-reread',
+        toolName: 'read',
+        input: { path: 'docs/notes.md' },
+      }, runtime.ctx);
+      assert.equal(noRetry?.block, true);
+      assert.match(noRetry.reason, /OMP_AWAITING_USER.*unambiguous document scope/is);
+      assert.equal(await event(runtime.pi, 'session_stop')({ output: 'Please identify one exact editable sentence.' }, runtime.ctx), undefined);
+
+      const restored = await restartRuntime(runtime.pi.entries);
+      state = latestState(restored.pi);
+      assert.equal(state.evidence.documentPreservationBaseline.scope.status, 'unresolved');
+      assert.equal(state.actionBoundary.awaitingUserReason, 'document-preservation-scope-confirmation-required');
+      const restoredBlock = await event(restored.pi, 'tool_call')({
+        toolName: 'read', input: { path: 'docs/notes.md' },
+      }, restored.ctx);
+      assert.equal(restoredBlock?.block, true);
+      assert.match(restoredBlock.reason, /OMP_AWAITING_USER/);
     });
   });
 

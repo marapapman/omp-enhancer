@@ -10,8 +10,8 @@ import {
 const TARGET = 'docs/notes.md';
 const ORIGINAL = '# Notes\n\nThe stable fact is 42.\n';
 
-function baseline(text = ORIGINAL, targetPath = TARGET) {
-  return createDocumentPreservationBaseline({ oldText: text, targetPath });
+function baseline(text = ORIGINAL, targetPath = TARGET, prompt) {
+  return createDocumentPreservationBaseline({ oldText: text, targetPath, prompt });
 }
 
 function evaluate(newText, oldBaseline = baseline(), targetPath = TARGET) {
@@ -432,6 +432,249 @@ test('minimal claim-preserving equivalents and title-only edits pass', () => {
   }
 });
 
+test('explicit sentence scope permits one style rewrite while binding heading, literal, and all other text', () => {
+  const prompt = 'Polish README.md so the second sentence is concise and direct. Preserve the heading and the exact factual value 42.';
+  const original = '# Parser Fixture\n\nThe stable fact is 42. This parser description is kind of rather wordy and could be clearer for readers.\n';
+  const scoped = baseline(original, 'README.md', prompt);
+
+  assert.equal(scoped?.scope?.mode, 'explicit-sentence');
+  assert.equal(scoped?.scope?.status, 'resolved');
+  assert.equal(scoped?.scope?.segmenterVersion, 1);
+  assert.deepEqual(scoped?.scope?.editableSentenceOrdinals, [2]);
+  const concise = evaluateDocumentPreservation({
+    baseline: scoped,
+    newText: '# Parser Fixture\n\nThe stable fact is 42. This parser description is unnecessarily wordy.\n',
+    targetPath: 'README.md',
+  });
+  assert.equal(concise?.ok, true);
+  assert.equal(concise.checks.modalityTerms.ok, false);
+  assert.equal(concise.checks.modalityTerms.applicable, false);
+  assert.equal(concise.scopeChecks.immutableScope.ok, true);
+
+  for (const [name, changed] of [
+    ['heading', '# Different Fixture\n\nThe stable fact is 42. This parser description is unnecessarily wordy.\n'],
+    ['literal', '# Parser Fixture\n\nThe stable fact is 43. This parser description is unnecessarily wordy.\n'],
+    ['first sentence', '# Parser Fixture\n\nThe stable value is 42. This parser description is unnecessarily wordy.\n'],
+    ['extra sentence', '# Parser Fixture\n\nThe stable fact is 42. This parser description is unnecessarily wordy. Another claim appears.\n'],
+  ]) {
+    const evidence = evaluateDocumentPreservation({ baseline: scoped, newText: changed, targetPath: 'README.md' });
+    assert.equal(evidence?.ok, false, name);
+  }
+});
+
+test('explicit preservation scope fails closed when the protected literal is ambiguous or editable', () => {
+  const prompt = 'Polish README.md so the second sentence is concise. Preserve the heading and the exact factual value 42.';
+  const ambiguous = createDocumentPreservationBaseline({
+      oldText: '# Notes\n\nThe first value is 42. The second value is also 42.\n',
+      targetPath: 'README.md',
+      prompt,
+    });
+  assert.equal(ambiguous?.scope?.status, 'unresolved');
+  assert.equal(ambiguous?.scope?.reasonCode, 'protected-literal-ambiguous');
+  const editable = createDocumentPreservationBaseline({
+      oldText: '# Notes\n\nThe first sentence is plain. The second value is 42.\n',
+      targetPath: 'README.md',
+      prompt,
+    });
+  assert.equal(editable?.scope?.status, 'unresolved');
+  assert.equal(editable?.scope?.reasonCode, 'protected-literal-in-editable-sentence');
+  for (const record of [ambiguous, editable]) {
+    const serialized = JSON.stringify(record);
+    assert.doesNotMatch(serialized, /The first|The second|README\.md/);
+  }
+
+  for (const coordinatedPrompt of [
+    'Polish the second and third sentences. Preserve the heading and the exact factual value 42.',
+    '润色第二句和第三句。保留标题和精确事实数值 42。',
+  ]) {
+    const coordinated = baseline(
+      '# Notes\n\nThe stable fact is 42. The second sentence is wordy. The third sentence is wordy.\n',
+      'README.md',
+      coordinatedPrompt,
+    );
+    assert.equal(coordinated?.scope?.status, 'unresolved', coordinatedPrompt);
+    assert.equal(coordinated?.scope?.reasonCode, 'ambiguous-editable-sentence', coordinatedPrompt);
+  }
+});
+
+test('explicit sentence authorization requires an affirmative edit clause and no residual global preservation', () => {
+  const original = '# Notes\n\nThe stable fact is 42. The second metric is 7.\n';
+  for (const prompt of [
+    'Do not edit the second sentence. Preserve the heading and the exact factual value 42; polish wording elsewhere.',
+    'Do not edit the second sentence, polish wording elsewhere. Preserve the heading and the exact factual value 42.',
+    'Do not edit the second sentence but polish wording elsewhere. Preserve the heading and the exact factual value 42.',
+    'Polish every sentence except the second sentence. Preserve the heading and the exact factual value 42.',
+    'Polish all but not the second sentence. Preserve the heading and the exact factual value 42.',
+    'Polish all but the second sentence. Preserve the heading and the exact factual value 42.',
+    'Make no changes to the second sentence. Preserve the heading and the exact factual value 42.',
+    'Make the second sentence remain unchanged. Preserve the heading and the exact factual value 42.',
+    "I don't want you to edit the second sentence. Preserve the heading and the exact factual value 42.",
+    'Rather than polish the second sentence, polish wording elsewhere. Preserve the heading and the exact factual value 42.',
+    'Polish the second sentence. Preserve the heading, the exact factual value 42, and all numbers.',
+    'Polish the second sentence. Preserve the heading, the exact factual value 42, and preserve facts.',
+    'Polish the second sentence. Preserve the heading and the exact factual value 42. Keep all content unchanged.',
+    'Polish the second sentence. Preserve the heading and the exact factual value 42. Everything must remain unchanged.',
+    'Polish the second sentence. Preserve the heading and the exact factual value 42. Do not alter any text.',
+    '不要修改第二句，润色其他文字。保留标题和精确事实数值 42。',
+    '不要修改第二句而润色其他文字。保留标题和精确事实数值 42。',
+    '不要对第二句进行修改，只润色其他文字。保留标题和精确事实数值 42。',
+    '第二句不要进行修改，只润色其他文字。保留标题和精确事实数值 42。',
+    '对第二句不作修改，只润色其他文字。保留标题和精确事实数值 42。',
+    '我不希望你修改第二句，只润色其他文字。保留标题和精确事实数值 42。',
+    '不要尝试修改第二句，只润色其他文字。保留标题和精确事实数值 42。',
+    '润色除第二句以外的文字。保留标题和精确事实数值 42。',
+    '润色所有文字，第二句除外。保留标题和精确事实数值 42。',
+    '润色第 二 句除外的文字。保留标题和精确事实数值 42。',
+    '润色第二句。保留标题和精确事实数值 42，并保留所有数字。',
+    '润色第二句。保留标题和精确事实数值 42，并保留事实。',
+    '润色第二句。保留标题和精确事实数值 42。其余内容保持不变。',
+    '润色第二句。保留标题和精确事实数值 42。不要修改任何文字。',
+  ]) {
+    const strict = baseline(original, 'README.md', prompt);
+    assert.equal(strict?.scope, undefined, prompt);
+    const evidence = evaluateDocumentPreservation({
+      baseline: strict,
+      newText: '# Notes\n\nThe stable fact is 42. The second metric is 8.\n',
+      targetPath: 'README.md',
+    });
+    assert.equal(evidence?.ok, false, prompt);
+  }
+
+  for (const prompt of [
+    'Make the second sentence concise. Preserve the heading and the exact factual value 42.',
+    '对第二句进行润色，使其简洁。保留标题和精确事实数值 42。',
+  ]) {
+    const scoped = baseline(original, 'README.md', prompt);
+    assert.equal(scoped?.scope?.status, 'resolved', prompt);
+    assert.deepEqual(scoped.scope.editableSentenceOrdinals, [2], prompt);
+  }
+});
+
+test('Chinese affirmative sentence scope resolves while preserving its protected value', () => {
+  const prompt = '润色 README.md 的第二句，使其简洁直接。保留标题和精确事实数值 42。';
+  const original = '# 标题\n\n稳定事实是 42。这个说明非常冗长，需要精简。\n';
+  const scoped = baseline(original, 'README.md', prompt);
+  assert.equal(scoped?.scope?.status, 'resolved');
+  assert.deepEqual(scoped?.scope?.editableSentenceOrdinals, [2]);
+  const evidence = evaluateDocumentPreservation({
+    baseline: scoped,
+    newText: '# 标题\n\n稳定事实是 42。这个说明需要精简。\n',
+    targetPath: 'README.md',
+  });
+  assert.equal(evidence?.ok, true);
+});
+
+test('hard-wrapped Markdown is segmented by visible prose blocks instead of physical lines', () => {
+  const prompt = 'Polish the second sentence. Preserve the heading and the exact factual value 42.';
+  const original = '# Notes\n\nThe stable fact is 42 and remains\ntrue. This prose is kind of rather wordy.\n';
+  const scoped = baseline(original, 'README.md', prompt);
+  assert.equal(scoped?.scope?.sentenceCount, 2);
+
+  const outsideChange = evaluateDocumentPreservation({
+    baseline: scoped,
+    newText: '# Notes\n\nThe stable fact is 42 and remains\nfalse. This prose is kind of rather wordy.\n',
+    targetPath: 'README.md',
+  });
+  assert.equal(outsideChange?.ok, false);
+  assert.ok(outsideChange.reasonCodes.includes('immutable-scope-changed'));
+
+  const scopedChange = evaluateDocumentPreservation({
+    baseline: scoped,
+    newText: '# Notes\n\nThe stable fact is 42 and remains\ntrue. This prose is concise.\n',
+    targetPath: 'README.md',
+  });
+  assert.equal(scopedChange?.ok, true);
+
+  const chinese = baseline(
+    '# 说明\n\n稳定事实是 42 并且保持\n不变。这个说明十分冗长。\n',
+    'README.md',
+    '润色第二句。保留标题和精确事实数值 42。',
+  );
+  assert.equal(chinese?.scope?.sentenceCount, 2);
+  const chineseDrift = evaluateDocumentPreservation({
+    baseline: chinese,
+    newText: '# 说明\n\n稳定事实是 42 并且保持\n变化。这个说明十分冗长。\n',
+    targetPath: 'README.md',
+  });
+  assert.equal(chineseDrift?.ok, false);
+
+  const quote = baseline(
+    '# Quote\n\n> The stable fact is 42 and remains\n> true. This quoted prose is rather\n> wordy.\n',
+    'README.md',
+    prompt,
+  );
+  assert.equal(quote?.scope?.sentenceCount, 2);
+  const quotedOutsideChange = evaluateDocumentPreservation({
+    baseline: quote,
+    newText: '# Quote\n\n> The stable fact is 42 and remains\n> false. This quoted prose is rather\n> wordy.\n',
+    targetPath: 'README.md',
+  });
+  assert.equal(quotedOutsideChange?.ok, false);
+  const quotedContainerEscape = evaluateDocumentPreservation({
+    baseline: quote,
+    newText: '# Quote\n\n> The stable fact is 42 and remains\n> true. This quoted prose is rather\nwordy.\n',
+    targetPath: 'README.md',
+  });
+  assert.equal(quotedContainerEscape?.ok, false);
+  assert.ok(quotedContainerEscape.reasonCodes.includes('immutable-scope-changed'));
+  const quotedScopedChange = evaluateDocumentPreservation({
+    baseline: quote,
+    newText: '# Quote\n\n> The stable fact is 42 and remains\n> true. This quoted prose is concise.\n',
+    targetPath: 'README.md',
+  });
+  assert.equal(quotedScopedChange?.ok, true);
+
+  const canonical = baseline(
+    '# Notes\r\n\r\nThe stable fact is 42 and remains\r\ntrue. Cafe\u0301 wording is verbose.\r\n',
+    'README.md',
+    prompt,
+  );
+  assert.equal(canonical?.scope?.sentenceCount, 2);
+  const canonicalScopedChange = evaluateDocumentPreservation({
+    baseline: canonical,
+    newText: '# Notes\n\nThe stable fact is 42 and remains\ntrue. Café wording is concise.\n',
+    targetPath: 'README.md',
+  });
+  assert.equal(canonicalScopedChange?.ok, true);
+});
+
+test('scoped evidence reports real readback counts instead of synthetic placeholders', () => {
+  const prompt = 'Polish the second sentence. Preserve the heading and the exact factual value 42.';
+  const original = '# Notes\n\nThe stable fact is 42. This wording could improve.\n';
+  const scoped = baseline(original, 'README.md', prompt);
+  const evidence = evaluateDocumentPreservation({
+    baseline: scoped,
+    newText: '# Notes\n\nThe stable fact is 42. Concise wording.\n',
+    targetPath: 'README.md',
+  });
+  const observed = baseline('# Notes\n\nThe stable fact is 42. Concise wording.\n');
+  assert.equal(evidence?.ok, true);
+  assert.equal(evidence.counts.observedProseLines, observed.counts.proseLines);
+  assert.equal(evidence.counts.observedFactualLines, observed.counts.factualLines);
+  assert.equal(evidence.counts.observedExactLiterals, observed.counts.exactLiterals);
+  assert.equal(evidence.counts.observedCoreAnchors, observed.counts.coreAnchors);
+  assert.equal(evidence.checks.modalityTerms.applicable, false);
+  assert.equal(evidence.scopeChecks.protectedLiterals.ok, true);
+  assert.equal(evidence.scopeChecks.sentenceCount.ok, true);
+  assert.equal(evidence.scopeChecks.headingSequence.ok, true);
+  assert.equal(evidence.scopeChecks.immutableScope.ok, true);
+});
+
+test('broad preserve-all-facts keeps the strict lexical invariant', () => {
+  const prompt = 'Polish README.md while preserving all facts and their meaning unchanged.';
+  const original = '# Parser Fixture\n\nThe stable fact is 42. This parser description could be clearer for readers.\n';
+  const strict = baseline(original, 'README.md', prompt);
+  const evidence = evaluateDocumentPreservation({
+    baseline: strict,
+    newText: '# Parser Fixture\n\nThe stable fact is 42. This parser description is clearer.\n',
+    targetPath: 'README.md',
+  });
+
+  assert.equal(strict?.scope, undefined);
+  assert.equal(evidence?.ok, false);
+  assert.ok(evidence.reasonCodes.includes('modality-terms-removed'));
+});
+
 test('Markdown headings are excluded from literals, semantic terms, and core anchors', () => {
   const oldBaseline = baseline('# At least 41 Notes\n\nThe stable fact is 42.\n');
   const evidence = evaluate('# Only 99 Notes\n\nThe stable fact is 42.\n', oldBaseline);
@@ -452,6 +695,21 @@ test('evidence is target-bound and malformed baselines fail closed', () => {
   assert.equal(wrongTarget?.ok, false);
   assert.deepEqual(wrongTarget.reasonCodes, ['target-path-mismatch']);
   assert.equal(evaluateDocumentPreservation({ baseline: {}, newText: ORIGINAL, targetPath: TARGET }), null);
+  const scoped = baseline(
+    '# Notes\n\nThe stable fact is 42. This wording is verbose.\n',
+    TARGET,
+    'Polish the second sentence. Preserve the heading and the exact factual value 42.',
+  );
+  assert.equal(evaluateDocumentPreservation({
+    baseline: { ...scoped, scope: { ...scoped.scope, segmenterVersion: 2 } },
+    newText: '# Notes\n\nThe stable fact is 42. Concise wording.\n',
+    targetPath: TARGET,
+  }), null);
+  assert.equal(evaluateDocumentPreservation({
+    baseline: { ...scoped, scope: { ...scoped.scope, contractDigest: '0'.repeat(64) } },
+    newText: '# Notes\n\nThe stable fact is 42. Concise wording.\n',
+    targetPath: TARGET,
+  }), null);
   assert.equal(createDocumentPreservationBaseline({ oldText: null, targetPath: TARGET }), null);
   assert.equal(createDocumentPreservationBaseline({ oldText: ORIGINAL, targetPath: '' }), null);
 });

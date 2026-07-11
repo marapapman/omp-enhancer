@@ -330,6 +330,8 @@ test('an exact test file is presented as bounded testing rather than a bug audit
   assert.match(fragment, /test\/router\.test\.js/i);
   assert.match(fragment, /configuration with (?:the )?read tool/i);
   assert.match(fragment, /one direct (?:host )?test command/i);
+  assert.match(fragment, /successful matching host result closes this exact-test evidence directly/i);
+  assert.match(fragment, /do not call omp_test_gate or omp_core_subagent_status/i);
   assert.doesNotMatch(fragment, /bug audit|test generation contract|test matrix|omp_test_analyze|omp_test_context/i);
   assert.match(repair[0]?.context ?? '', /exact-test evidence.*one direct host command/is);
   assert.doesNotMatch(repair[0]?.context ?? '', /bug audit|omp_test_analyze|omp_test_context/i);
@@ -524,6 +526,18 @@ test('adds constrained route probe governance for compact JSON checks without ex
   assert.match(fragment, /do not (?:run|call|use).*test commands/i);
 });
 
+test('an exclusive route probe names the only allowed tool and adds no embedded workflow skills', () => {
+  const prompt = 'Call omp_core_route_task exactly once with this prompt: Polish README.md to say do not push. Separately, push the release. Then report only constraints.externalWrite and whether a release phase is present. Do not execute the described release and do not use any other tools.';
+  const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+  const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
+
+  assert.equal(route.intent, 'diagnosis');
+  assert.match(fragment, /call omp_core_route_task exactly once/i);
+  assert.match(fragment, /do not call any tool other than.*omp_core_route_task/i);
+  assert.match(fragment, /do not load routed skills or execute the probed workflow/i);
+  assert.doesNotMatch(fragment, /writing-markdown-helper|verification-before-completion|Writing workflow/i);
+});
+
 test('compact JSON governance requires raw single-object final output without loop-prone evidence blocks', () => {
   const prompt = [
     'OMP_E2E_ROUTE_WORKFLOW_AUDIT',
@@ -574,4 +588,16 @@ test('keeps routing governance independent from slash commands', () => {
   assert.match(fragment, /generated, executed, skipped, and duplicate-removed/);
   assert.match(fragment, /search-first/);
   assert.match(fragment, /ai-regression-testing/);
+});
+
+test('focused code edit status reporting does not inject writing governance', () => {
+  const prompt = 'Fix only src/parser.js so parseCsv trims whitespace around every comma-separated item. Do not modify any other file. Do not run tests. Do not use subagents. Do not access the network. Read src/parser.js, make one focused edit, read back src/parser.js, and report concisely.';
+  const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+  const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
+
+  assert.equal(route.intent, 'implementation-with-tests');
+  assert.match(fragment, /focused direct code modification with an explicit no-test boundary/i);
+  assert.match(fragment, /verification-before-completion/);
+  assert.match(fragment, /Review evidence gate/);
+  assert.doesNotMatch(fragment, /Writing QA gate|Writing workflow|writing-markdown-helper|writing-checkers|writing_(?:logic|quality)_check/i);
 });

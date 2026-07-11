@@ -408,6 +408,26 @@ test('routes E2E route/status/skill workflow audits as diagnosis-only probes', (
   assert.deepEqual(route.requiredSubagents, []);
 });
 
+test('routes exclusive one-shot route probes as diagnosis with no workflow resources', () => {
+  const prompts = [
+    'Call omp_core_route_task exactly once with this prompt: Polish README.md to say do not push. Separately, push the release. Then report only constraints.externalWrite and whether a release phase is present. Do not execute the described release and do not use any other tools.',
+    '只调用一次 omp_core_route_task，参数 prompt 为：写测试但不要改实现。然后只报告 workspaceWrite、complexity 和 phases。不要修改文件，不要运行测试，不要启动子代理，不要联网。',
+  ];
+
+  for (const prompt of prompts) {
+    for (const routerMode of ['observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode, gateRecoveryMode: 'enforce' });
+      assert.equal(route.intent, 'diagnosis', `${routerMode}: ${prompt}`);
+      assert.equal(route.taskDescriptor.operation, 'diagnose', `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.taskDescriptor.domains, ['plugin'], `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.requiredSkills, [], `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.requiredTools, [], `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.requiredSubagents, [], `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.routePlan.gateRequirements, [], `${routerMode}: ${prompt}`);
+    }
+  }
+});
+
 test('routes constrained E2E workflow audits with plain-text summaries as diagnosis-only probes', () => {
   const cases = [
     {
@@ -1279,6 +1299,23 @@ test('routes result-only plugin load bug smoke as focused audit', () => {
     assert.deepEqual(route.requiredSubagents, [], prompt);
     assert.equal(route.workflowRoute, 'code.review', prompt);
   }
+});
+
+test('enforce mode keeps a focused code edit with a trailing status report out of writing routes', () => {
+  const prompt = 'Fix only src/parser.js so parseCsv trims whitespace around every comma-separated item. Do not modify any other file. Do not run tests. Do not use subagents. Do not access the network. Read src/parser.js, make one focused edit, read back src/parser.js, and report concisely.';
+  const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+
+  assert.equal(route.intent, 'implementation-with-tests');
+  assert.equal(route.workflowRoute, 'code.dev');
+  assert.deepEqual(route.taskDescriptor.domains, ['code']);
+  assert.equal(route.taskDescriptor.complexity, 'focused');
+  assert.deepEqual(route.requiredSkills, ['verification-before-completion']);
+  assert.deepEqual(route.requiredTools, []);
+  assert.deepEqual(route.requiredSubagents, []);
+  assert.deepEqual(route.routePlan.gateRequirements, [
+    { key: 'review-evidence', mode: 'required' },
+  ]);
+  assert.doesNotMatch(route.routeCard, /writing-markdown-helper|writing-checkers|writing_(?:logic|quality)_check/i);
 });
 
 async function registrySkillNames(repoRoot, catalog) {

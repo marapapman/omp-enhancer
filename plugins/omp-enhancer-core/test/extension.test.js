@@ -303,6 +303,29 @@ test('before_agent_start keeps E2E route/status/skill audits out of writing and 
   assert.deepEqual(status.details.status.required, []);
 });
 
+test('before_agent_start keeps an exclusive one-shot route probe free of embedded workflow gates', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Call omp_core_route_task exactly once with this prompt: Polish README.md to say do not push. Separately, push the release. Then report only constraints.externalWrite and whether a release phase is present. Do not execute the described release and do not use any other tools.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
+  assert.equal(start.route.intent, 'diagnosis');
+  assert.deepEqual(start.route.requiredSkills, []);
+  assert.deepEqual(start.route.requiredTools, []);
+  assert.deepEqual(start.route.requiredSubagents, []);
+  assert.deepEqual(start.route.routePlan.gateRequirements, []);
+
+  const routeCall = await event(pi, 'tool_call')({
+    type: 'tool_call',
+    toolCallId: 'exclusive-route-probe-call',
+    toolName: 'omp_core_route_task',
+    input: { prompt: 'Polish README.md to say do not push. Separately, push the release.' },
+  }, ctx);
+  assert.notEqual(routeCall?.block, true, routeCall?.reason);
+});
+
 test('before_agent_start keeps plain-text E2E workflow audits on diagnosis route', async () => {
   const prompts = [
     [

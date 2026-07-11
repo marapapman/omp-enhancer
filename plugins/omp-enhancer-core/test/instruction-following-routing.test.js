@@ -1080,6 +1080,21 @@ test('an English README evidence claim remains a focused fact inspection rather 
   }
 });
 
+test('an English supported-by repository claim uses the focused single-search fact route', () => {
+  const prompt = 'Offline, verify whether the README claim "The stable fact is 42" is supported by repository-local evidence. Do not modify files. Do not run tests. Do not use subagents. Do not access the network. Use at most one focused search command and conclude supported, contradicted, or insufficient.';
+
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode });
+    assert.equal(route.intent, 'fact-check', routerMode);
+    assert.equal(route.taskDescriptor.operation, 'inspect', routerMode);
+    assert.equal(route.taskDescriptor.complexity, 'focused', routerMode);
+    assert.deepEqual(route.requiredSkills, [], routerMode);
+    assert.deepEqual(route.requiredTools, [], routerMode);
+    assert.deepEqual(route.requiredSubagents, [], routerMode);
+    assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'fact-evidence', mode: 'required' }], routerMode);
+  }
+});
+
 test('reports from supplied findings remain response-only writing without reopening subject workflows', () => {
   const cases = [
     ['Write a code review summary from the supplied findings; do not inspect or change code.', 'writing.en'],

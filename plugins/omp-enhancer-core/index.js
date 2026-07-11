@@ -61,6 +61,7 @@ import {
 } from './src/release-evidence.js';
 import { externalActionMatchesTool } from './src/external-action-policy.js';
 import {
+  DOCUMENT_SENTENCE_SEGMENTER_VERSION,
   createDocumentPreservationBaseline,
   evaluateDocumentPreservation,
   requiresDocumentPreservation,
@@ -109,6 +110,7 @@ const USER_INPUT_ACTION_BLOCKERS = new Set([
   'external-destructive-action-unsupported',
   'external-action-target-confirmation-required',
   'document-preservation-multi-target-unsupported',
+  'document-preservation-scope-confirmation-required',
   'document-preservation-snapshot-too-large',
   'release-target-confirmation-required',
   'release-verification-unsupported',
@@ -613,7 +615,13 @@ export default function registerCoreEnhancer(pi) {
       { successful, mutationEvidenceChanged },
     );
     const testEvidenceChanged = name && recordObservedTestEvidence(state, name, event, { successful });
+    const focusedFactEvidenceBefore = state.evidence.focusedFactEvidence;
     const localFactEvidenceChanged = name && recordFocusedLocalFactEvidence(state, name, event, { successful });
+    const focusedFactSearchChanged = name && recordFocusedFactSearchResult(state, name, event, {
+      successful,
+      pending,
+      evidenceRecorded: state.evidence.focusedFactEvidence !== focusedFactEvidenceBefore,
+    });
     const securityEvidenceChanged = name && recordSecurityInspectionEvidence(state, name, event, { successful });
     const releaseEvidenceChanged = name && recordReleaseEvidence(state, name, event, { successful, ctx });
     recordTrustedIrreversibleResult(state, name, event, { successful });
@@ -635,7 +643,7 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'read' && successful) recordReadSkillEvidence(state, event);
     if (name && (isRelevantSuccessfulGateEvidence(name, event)
       || mutationEvidenceChanged || documentPreservationEvidenceChanged
-      || testEvidenceChanged || localFactEvidenceChanged
+      || testEvidenceChanged || localFactEvidenceChanged || focusedFactSearchChanged
       || securityEvidenceChanged || releaseEvidenceChanged)) {
       state.gateController = applyGateEvidence(state.gateController, {
         routeId: gateControllerRouteId(state),
@@ -748,6 +756,7 @@ export function createState() {
     // result is consumed directly from the matching host event. Nothing from
     // this map is serialized into session state.
     pendingDocumentPreservationReads: new Map(),
+    focusedFactSearch: null,
   };
 }
 
@@ -847,10 +856,20 @@ function okResult(text, details = {}) {
 }
 
 function formatRoute(route) {
+  const descriptor = route?.taskDescriptor ?? {};
+  const constraints = descriptor.constraints ?? {};
+  const phases = Array.isArray(descriptor.phases) ? descriptor.phases : [];
   return [
     `Intent: ${route.intent}`,
     `Agent route: ${route.agent ?? 'none'}`,
     route.auditMode ? `Audit mode: ${route.auditMode}` : null,
+    `constraints.workspaceWrite: ${constraints.workspaceWrite ?? 'unspecified'}`,
+    `constraints.testExecution: ${constraints.testExecution ?? 'unspecified'}`,
+    `constraints.networkAccess: ${constraints.networkAccess ?? 'unspecified'}`,
+    `constraints.externalWrite: ${constraints.externalWrite ?? 'unspecified'}`,
+    `constraints.subagents: ${constraints.subagents ?? 'unspecified'}`,
+    `complexity: ${descriptor.complexity ?? 'unknown'}`,
+    `phases: ${phases.length ? phases.map(({ kind, domain }) => `${kind}:${domain}`).join(' -> ') : 'none'}`,
     `Required skills: ${route.requiredSkills.length ? route.requiredSkills.join(', ') : 'none'}`,
     `Required tools: ${route.requiredTools.length ? route.requiredTools.join(', ') : 'none'}`,
     `Required subagents: ${formatSubagents(route.requiredSubagents)}`,
@@ -946,6 +965,7 @@ function setRouteState(state, route, prompt = '', { classifierResolved = false, 
   state.smartGateCompletionBypasses = [];
   state.evidence = emptyEvidence();
   state.pendingDocumentPreservationReads?.clear();
+  state.focusedFactSearch = null;
   state.loopGuard = createLoopGuardState();
   state.gateRecovery = createGateRecoveryState();
   state.gateController = resetGateControllerForRoute(state.gateController, {
@@ -969,6 +989,7 @@ function resetState(state) {
   state.smartGateCompletionBypasses = [];
   state.evidence = emptyEvidence();
   state.pendingDocumentPreservationReads = new Map();
+  state.focusedFactSearch = null;
   state.loopGuard = createLoopGuardState();
   state.gateRecovery = createGateRecoveryState();
   state.gateController = createGateControllerState();
@@ -1047,6 +1068,7 @@ function replaceState(target, source) {
   const liveLoopGuard = target.loopGuard;
   const liveApprovals = target.trustedApprovals;
   const liveTestingToolAvailability = target.testingToolAvailability;
+  const liveFocusedFactSearch = target.focusedFactSearch;
   target.lastRoute = source.lastRoute;
   target.lastPrompt = source.lastPrompt ?? '';
   target.routeStartedAt = source.routeStartedAt;
@@ -1067,6 +1089,22 @@ function replaceState(target, source) {
   target.trustedApprovals = liveApprovals ?? createTrustedApprovalState();
   target.testingToolAvailability = liveTestingToolAvailability ?? 'unknown';
   target.actionBoundary = source.actionBoundary ?? createActionBoundaryState();
+  target.focusedFactSearch = mergeLiveFocusedFactSearchState(
+    liveFocusedFactSearch,
+    source.focusedFactSearch,
+    gateControllerRouteId(source),
+  );
+}
+
+function mergeLiveFocusedFactSearchState(live, restored, routeId = '') {
+  const current = live?.routeId === routeId ? live : null;
+  const snapshot = restored?.routeId === routeId ? restored : null;
+  if (!current) return snapshot;
+  if (!snapshot) return current;
+  const rank = { started: 1, succeeded: 2, failed: 2 };
+  return (rank[current.status] ?? 0) > (rank[snapshot.status] ?? 0)
+    ? current
+    : snapshot;
 }
 
 function mergeLiveLoopGuardState(live, restored) {
@@ -1105,6 +1143,7 @@ function serializeState(state) {
     gateRecovery: serializeGateRecoveryState(state.gateRecovery),
     gateController: serializeGateControllerState(state.gateController),
     actionBoundary: state.actionBoundary,
+    focusedFactSearch: state.focusedFactSearch,
     evidence: {
       writingQuality: state.evidence.writingQuality,
       writingLogic: state.evidence.writingLogic,
@@ -1188,9 +1227,15 @@ function readStateSnapshot(value) {
   const evidence = readEvidenceSnapshot(value.evidence);
   if (!evidence) return null;
   const routeId = gateControllerRouteId(value);
+  const focusedFactSearch = readFocusedFactSearchState(
+    value.focusedFactSearch,
+    routeId,
+    value.focusedFactSearchRouteId,
+  );
   constrainEvidenceToRoute(evidence, routeId);
   if (isFocusedLocalFactInspectionRoute(value.lastRoute)
-    && evidence.focusedFactEvidence?.routeId !== routeId) evidence.factCheckGate = false;
+    && evidence.focusedFactEvidence?.routeId !== routeId
+    && focusedFactSearch?.status !== 'failed') evidence.factCheckGate = false;
   return {
     lastRoute: isRecord(value.lastRoute) ? value.lastRoute : null,
     lastRouteProbe: isRecord(value.lastRouteProbe) ? value.lastRouteProbe : null,
@@ -1209,6 +1254,7 @@ function readStateSnapshot(value) {
       routeId: gateControllerRouteId(value),
     }),
     actionBoundary: readActionBoundaryState(value.actionBoundary),
+    focusedFactSearch,
     evidence,
   };
 }
@@ -1245,6 +1291,34 @@ function readFocusedFactEvidenceRecord(value) {
   };
 }
 
+function readFocusedFactSearchState(value, routeId = '', legacyRouteId = null) {
+  if (legacyRouteId === routeId && !isRecord(value)) {
+    return {
+      schemaVersion: 1,
+      routeId,
+      status: 'started',
+      failureCode: null,
+      observedAt: 0,
+    };
+  }
+  if (!isRecord(value)
+    || value.schemaVersion !== 1
+    || value.routeId !== routeId
+    || !['started', 'succeeded', 'failed'].includes(value.status)
+    || !Number.isFinite(value.observedAt)) return null;
+  const failureCode = value.failureCode == null ? null : String(value.failureCode);
+  if (value.status === 'failed'
+    && !['tool-failed', 'empty-or-unusable-result'].includes(failureCode)) return null;
+  if (value.status !== 'failed' && failureCode !== null) return null;
+  return {
+    schemaVersion: 1,
+    routeId,
+    status: value.status,
+    failureCode,
+    observedAt: value.observedAt,
+  };
+}
+
 function readDocumentPreservationBaselineRecord(value) {
   if (!isRecord(value)
     || value.schemaVersion !== 1
@@ -1258,11 +1332,13 @@ function readDocumentPreservationBaselineRecord(value) {
   const range = readDigestCountList(value.controlledTerms?.range);
   const modality = readDigestCountList(value.controlledTerms?.modality);
   const coreAnchors = readDigestCountList(value.coreAnchors);
+  const scope = value.scope === undefined ? undefined : readDocumentPreservationScope(value.scope);
   const counts = readNonnegativeCountRecord(value.counts, [
     'proseLines', 'factualLines', 'headingLines', 'exactLiterals',
     'polarityTerms', 'rangeTerms', 'modalityTerms', 'coreAnchors',
   ]);
-  if (!exactLiterals || !polarity || !range || !modality || !coreAnchors || !counts) return null;
+  if (!exactLiterals || !polarity || !range || !modality || !coreAnchors || !counts
+    || value.scope !== undefined && !scope) return null;
   return {
     schemaVersion: 1,
     source: 'host-document-preservation-baseline',
@@ -1273,8 +1349,57 @@ function readDocumentPreservationBaselineRecord(value) {
     controlledTerms: { polarity, range, modality },
     coreAnchors,
     counts,
+    ...(scope ? { scope } : {}),
     observedAt: value.observedAt,
   };
+}
+
+function readDocumentPreservationScope(value) {
+  if (!isRecord(value)
+    || value.mode !== 'explicit-sentence'
+    || !['resolved', 'unresolved'].includes(value.status)
+    || value.segmenterVersion !== DOCUMENT_SENTENCE_SEGMENTER_VERSION
+    || !isSha256Digest(value.contractDigest)) return null;
+  if (value.status === 'unresolved') {
+    const reasons = new Set([
+      'ambiguous-editable-sentence',
+      'protected-literal-missing',
+      'editable-sentence-out-of-range',
+      'protected-heading-missing',
+      'protected-literal-ambiguous',
+      'protected-literal-in-editable-sentence',
+    ]);
+    if (!reasons.has(value.reasonCode)) return null;
+    const contract = {
+      mode: 'explicit-sentence',
+      status: 'unresolved',
+      segmenterVersion: DOCUMENT_SENTENCE_SEGMENTER_VERSION,
+      reasonCode: value.reasonCode,
+    };
+    if (value.contractDigest !== digestEvidence(`explicit-sentence:${JSON.stringify(contract)}`)) return null;
+    return { ...contract, contractDigest: value.contractDigest };
+  }
+  if (!Array.isArray(value.editableSentenceOrdinals)
+    || value.editableSentenceOrdinals.length !== 1
+    || !value.editableSentenceOrdinals.every((ordinal) => Number.isSafeInteger(ordinal) && ordinal > 0)
+    || !Number.isSafeInteger(value.sentenceCount)
+    || value.sentenceCount < value.editableSentenceOrdinals[0]
+    || !isSha256Digest(value.immutableSkeletonDigest)
+    || !isSha256Digest(value.headingSequenceDigest)) return null;
+  const protectedLiteralDigests = readDigestCountList(value.protectedLiteralDigests);
+  if (!protectedLiteralDigests?.length) return null;
+  const contract = {
+    mode: 'explicit-sentence',
+    status: 'resolved',
+    segmenterVersion: DOCUMENT_SENTENCE_SEGMENTER_VERSION,
+    editableSentenceOrdinals: [...value.editableSentenceOrdinals],
+    sentenceCount: value.sentenceCount,
+    immutableSkeletonDigest: value.immutableSkeletonDigest,
+    headingSequenceDigest: value.headingSequenceDigest,
+    protectedLiteralDigests,
+  };
+  if (value.contractDigest !== digestEvidence(`explicit-sentence:${JSON.stringify(contract)}`)) return null;
+  return { ...contract, contractDigest: value.contractDigest };
 }
 
 function readDocumentPreservationEvidenceRecord(value) {
@@ -1296,6 +1421,8 @@ function readDocumentPreservationEvidenceRecord(value) {
     'modality-terms-added', 'modality-terms-removed',
     'prose-lines-added', 'prose-lines-removed',
     'core-anchors-added', 'core-anchors-dropped',
+    'protected-literal-count-changed', 'sentence-count-changed',
+    'heading-sequence-changed', 'immutable-scope-changed',
   ]);
   const reasonCodes = Array.isArray(value.reasonCodes)
     ? uniqueValues(value.reasonCodes.filter((reason) => allowedReasons.has(reason)))
@@ -1310,7 +1437,27 @@ function readDocumentPreservationEvidenceRecord(value) {
       || check.addedCount < 0
       || !Number.isInteger(check.removedCount)
       || check.removedCount < 0) return null;
-    checks[key] = { ok: check.ok, addedCount: check.addedCount, removedCount: check.removedCount };
+    if (check.applicable !== undefined && typeof check.applicable !== 'boolean') return null;
+    checks[key] = {
+      ok: check.ok,
+      addedCount: check.addedCount,
+      removedCount: check.removedCount,
+      ...(check.applicable === false ? { applicable: false } : {}),
+    };
+  }
+  let scopeChecks;
+  if (value.scopeChecks !== undefined) {
+    scopeChecks = {};
+    for (const key of ['protectedLiterals', 'sentenceCount', 'headingSequence', 'immutableScope']) {
+      const check = value.scopeChecks?.[key];
+      if (!isRecord(check)
+        || typeof check.ok !== 'boolean'
+        || !Number.isInteger(check.addedCount)
+        || check.addedCount < 0
+        || !Number.isInteger(check.removedCount)
+        || check.removedCount < 0) return null;
+      scopeChecks[key] = { ok: check.ok, addedCount: check.addedCount, removedCount: check.removedCount };
+    }
   }
   const counts = readNonnegativeCountRecord(value.counts, [
     'baselineProseLines', 'observedProseLines',
@@ -1330,6 +1477,7 @@ function readDocumentPreservationEvidenceRecord(value) {
     ok: value.ok,
     reasonCodes,
     checks,
+    ...(scopeChecks ? { scopeChecks } : {}),
     counts,
     observedAt: value.observedAt,
   };
@@ -2732,6 +2880,32 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
   }
   const constraints = descriptor.constraints ?? {};
 
+  const focusedSearchKind = isFocusedLocalFactInspectionRoute(state.lastRoute)
+    ? classifyFocusedFactSearchAction(toolName, text)
+    : 'none';
+  if (focusedSearchKind !== 'none') {
+    const routeId = gateControllerRouteId(state);
+    if (state.focusedFactSearch?.routeId === routeId) {
+      return protectedConstraintBlock(
+        'focused-fact-search-budget-exhausted',
+        `This focused offline route authorizes one repository search, and that budget is already ${state.focusedFactSearch.status}. Do not launch a parallel, broader, wrapped, namespaced, or alternate search method; use the recorded result or report the failed search as insufficient evidence.`,
+      );
+    }
+    if (focusedSearchKind !== 'trusted-grep') {
+      return protectedConstraintBlock(
+        'focused-fact-search-method-forbidden',
+        'This focused offline route permits only one direct built-in grep call. Shell grep/rg, namespaced grep variants, search/glob tools, and other alternate repository-search methods are outside the route contract. Use the built-in grep once; do not retry through another method.',
+      );
+    }
+    state.focusedFactSearch = {
+      schemaVersion: 1,
+      routeId,
+      status: 'started',
+      failureCode: null,
+      observedAt: Date.now(),
+    };
+  }
+
   if (action.subagent && constraints.subagents === 'forbidden') {
     return protectedConstraintBlock('subagents-forbidden', 'The user explicitly forbade subagents; route plans and classifier hints cannot delegate this task.');
   }
@@ -2944,7 +3118,15 @@ function prepareDocumentPreservationToolCall(state, toolName = '', event = {}, a
 
   if (!action.workspaceWrite && !action.definiteWorkspaceMutation && !subagentMutation) return null;
   const baseline = state.evidence.documentPreservationBaseline;
-  if (baseline?.routeId === routeId) return null;
+  if (baseline?.routeId === routeId) {
+    if (baseline.scope?.mode === 'explicit-sentence' && baseline.scope.status === 'unresolved') {
+      return protectedConstraintBlock(
+        'document-preservation-scope-confirmation-required',
+        `The trusted document snapshot could not resolve the explicit sentence-preservation contract (${baseline.scope.reasonCode}). Ask the user to name exactly one editable sentence and one exact protected literal outside that sentence; do not reread, edit, or guess another scope.`,
+      );
+    }
+    return null;
+  }
   const priorMutation = state.evidence.mutationRevision > 0;
   return protectedConstraintBlock(
     'document-preservation-baseline-required',
@@ -3444,6 +3626,9 @@ function protectedConstraintBlock(reasonCode, reason) {
 function formatAwaitingUserToolBlock(reasonCode = '') {
   if (reasonCode === 'document-preservation-snapshot-too-large') {
     return 'OMP_AWAITING_USER is active because the authorized document could not be read completely without host truncation. Line-range and chunked reads cannot establish this whole-document baseline. Do not try another selector, read, edit, shell, or subagent method; ask the user to split the document/task into one smaller exact file or explicitly narrow the preservation scope.';
+  }
+  if (reasonCode === 'document-preservation-scope-confirmation-required') {
+    return 'OMP_AWAITING_USER is active because the editable sentence or protected literal could not be mapped to one unambiguous document scope. Do not call more tools; ask the user to name exactly one sentence and one protected literal outside that sentence.';
   }
   return `OMP_AWAITING_USER is active for ${reasonCode}. Do not call or run more tools; ask the user for the required authorization or confirmation.`;
 }
@@ -5330,6 +5515,9 @@ function buildSubagentStatus(state) {
     active_route: state.lastRoute?.intent ?? 'none',
     last_probe_route: state.lastRouteProbe?.route?.intent ?? 'none',
     last_probe_changed_active_route: Boolean(state.lastRouteProbe?.changedActiveRoute),
+    required_tools: routeRequiredTools(state.lastRoute),
+    gate_requirements: state.lastRoute?.routePlan?.gateRequirements ?? [],
+    testing_gate_satisfied: state.evidence.testingGate === true,
     required: requiredSubagents,
     completed: [...completedSubagentsForGate(state)],
     pending: pendingRequiredSubagents(state, requiredSubagents).map(({ agent, startedAt, lastSeenAt, attempts, skills }) => ({
@@ -5388,6 +5576,9 @@ function formatSubagentStatus(state) {
     `Active route: ${status.active_route}`,
     `Last probe route: ${status.last_probe_route}`,
     `Probe changed active route: ${status.last_probe_changed_active_route}`,
+    `Required tools: ${status.required_tools.length ? status.required_tools.join(', ') : 'none'}`,
+    `Gate requirements: ${status.gate_requirements.length ? status.gate_requirements.map(({ key, mode }) => `${key}:${mode}`).join(', ') : 'none'}`,
+    `Testing gate satisfied: ${status.testing_gate_satisfied}`,
     'Required:',
     required,
     'Completed:',
@@ -5680,6 +5871,7 @@ function recordDocumentPreservationEvidence(
     const created = createDocumentPreservationBaseline({
       oldText: documentText,
       targetPath,
+      prompt: state.lastPrompt,
     });
     baseline = created ? {
       ...created,
@@ -5794,6 +5986,7 @@ function documentPreservationBaselinePayload(value = {}) {
     controlledTerms: value.controlledTerms,
     coreAnchors: value.coreAnchors,
     counts: value.counts,
+    ...(value.scope ? { scope: value.scope } : {}),
   };
 }
 
@@ -5931,7 +6124,7 @@ function isNonExecutingTestProbe(command = '') {
 
 function recordFocusedLocalFactEvidence(state, toolName = '', event = {}, { successful = false } = {}) {
   if (!successful || !isFocusedLocalFactInspectionRoute(state.lastRoute)) return false;
-  if (!/^grep$/i.test(String(toolName))) return false;
+  if (classifyFocusedFactSearchAction(toolName, toolActionText(event)) !== 'trusted-grep') return false;
   const input = firstToolInputRecord(event);
   const pattern = String(input.pattern ?? input.query ?? input.search ?? '').trim();
   const scope = String(input.path ?? input.cwd ?? '.').trim().replace(/\\/g, '/');
@@ -5983,6 +6176,35 @@ function recordFocusedLocalFactEvidence(state, toolName = '', event = {}, { succ
   return changed;
 }
 
+function recordFocusedFactSearchResult(
+  state,
+  toolName = '',
+  event = {},
+  { successful = false, pending = false, evidenceRecorded = false } = {},
+) {
+  if (pending || !isFocusedLocalFactInspectionRoute(state.lastRoute)) return false;
+  if (classifyFocusedFactSearchAction(toolName, toolActionText(event)) !== 'trusted-grep') return false;
+  const routeId = gateControllerRouteId(state);
+  const next = {
+    schemaVersion: 1,
+    routeId,
+    status: successful && evidenceRecorded ? 'succeeded' : 'failed',
+    failureCode: successful && evidenceRecorded
+      ? null
+      : successful ? 'empty-or-unusable-result' : 'tool-failed',
+    observedAt: Date.now(),
+  };
+  const previous = state.focusedFactSearch?.routeId === routeId
+    ? state.focusedFactSearch
+    : null;
+  const changed = !previous
+    || previous.status !== next.status
+    || previous.failureCode !== next.failureCode;
+  state.focusedFactSearch = next;
+  if (next.status === 'failed') state.evidence.factCheckGate = false;
+  return changed;
+}
+
 function isFocusedLocalFactInspectionRoute(route) {
   const descriptor = route?.taskDescriptor;
   return descriptor?.operation === 'inspect'
@@ -5992,6 +6214,22 @@ function isFocusedLocalFactInspectionRoute(route) {
     && descriptor.constraints?.networkAccess === 'forbidden'
     && descriptor.constraints?.externalWrite === 'forbidden'
     && descriptor.constraints?.subagents === 'forbidden';
+}
+
+function classifyFocusedFactSearchAction(toolName = '', actionText = '') {
+  const rawName = String(toolName).trim().toLowerCase();
+  if (rawName === 'grep') return 'trusted-grep';
+  const canonicalName = rawName
+    .replace(/[./:\\]+/g, '_')
+    .replace(/_+/g, '_');
+  if (/(?:^|_)(?:grep|rg|ripgrep|search|glob|find|fd|ag|ack)(?:_|$)/u.test(canonicalName)) {
+    return 'alternate';
+  }
+  if (TRUSTED_HOST_TEST_EXECUTORS.has(rawName)
+    && /\b(?:git\s+grep|grep|rg|ripgrep|ag|ack|find|fd)\b/iu.test(String(actionText))) {
+    return 'alternate';
+  }
+  return 'none';
 }
 
 function focusedFactLexicalText(value = '') {
@@ -6018,7 +6256,7 @@ function focusedFactLexicalText(value = '') {
 
 function focusedFactClaimLexicalText(value = '', claimPaths = []) {
   const placeholders = [];
-  const masked = String(value).replace(
+  const masked = focusedFactPromptWithImplicitPaths(value).replace(
     /(?:^|[\s"'`(])((?:\.\.?\/)?(?:[a-z0-9_.@-]+\/)*[a-z0-9_.@-]+\.[a-z0-9]{1,12})(?=$|[\s"'`),:.;!?，。；：！？])/gi,
     (_match, path) => {
       const normalized = normalizeFocusedFactPath(path);
@@ -6080,9 +6318,13 @@ function focusedFactClaimClauseTokens(value = '') {
 }
 
 function extractFocusedFactClaimPaths(value = '') {
-  return uniqueValues([...String(value).matchAll(/(?:^|[\s"'`(])((?:\.\.?\/)?(?:[a-z0-9_.@-]+\/)*[a-z0-9_.@-]+\.[a-z0-9]{1,12})(?=$|[\s"'`),:.;!?，。；：！？])/gi)]
+  return uniqueValues([...focusedFactPromptWithImplicitPaths(value).matchAll(/(?:^|[\s"'`(])((?:\.\.?\/)?(?:[a-z0-9_.@-]+\/)*[a-z0-9_.@-]+\.[a-z0-9]{1,12})(?=$|[\s"'`),:.;!?，。；：！？])/gi)]
     .map((match) => normalizeFocusedFactPath(match[1]))
     .filter(Boolean));
+}
+
+function focusedFactPromptWithImplicitPaths(value = '') {
+  return String(value).replace(/\bREADME\b(?!\s*\.(?:md|mdx|rst|txt))/giu, 'README.md');
 }
 
 function normalizeFocusedFactPath(value = '') {
@@ -6190,7 +6432,10 @@ function focusedFactPathsMatch(observedPath = '', claimPath = '') {
 
 function focusedFactConclusionMatchesEvidence(state, output = '') {
   const evidence = readFocusedFactEvidenceRecord(state.evidence.focusedFactEvidence);
-  if (!evidence || evidence.routeId !== gateControllerRouteId(state)) return false;
+  const routeId = gateControllerRouteId(state);
+  const search = readFocusedFactSearchState(state.focusedFactSearch, routeId);
+  const failedSearch = search?.status === 'failed';
+  if ((!evidence || evidence.routeId !== routeId) && !failedSearch) return false;
   const verdict = extractFocusedFactVerdict(output);
   if (!verdict) return false;
   const prose = String(output).replace(/(?:^|\n)\s*FACT_VERDICT\s*:\s*(?:INSUFFICIENT|SUPPORTED|CONTRADICTED)\s*(?=\n|$)/giu, '\n');
@@ -6201,7 +6446,7 @@ function focusedFactConclusionMatchesEvidence(state, output = '') {
     const claimText = focusedFactRestatementClaimText(state.lastPrompt, claimPaths);
     return !hasAffirmativeFocusedFactRestatement(prose, claimText);
   }
-  return evidence.independentMatchObserved === true
+  return evidence?.independentMatchObserved === true
     && (verdict === 'supported' || verdict === 'contradicted');
 }
 
@@ -6223,7 +6468,7 @@ function hasAffirmativeFocusedFactRestatement(value = '', claimText = '') {
 }
 
 function focusedFactRestatementClaimText(value = '', claimPaths = []) {
-  const source = String(value).normalize('NFKC');
+  const source = focusedFactPromptWithImplicitPaths(value).normalize('NFKC');
   const afterPath = source.match(/(?:^|[\s"'`(])(?:\.\.?\/)?(?:[a-z0-9_.@-]+\/)*[a-z0-9_.@-]+\.[a-z0-9]{1,12}\s*(?:中|里|内)\s*([^。！？!?\n]{1,240}?)(?=\s*(?:是否|能否).{0,32}(?:证据|支持|支撑))/iu);
   if (afterPath?.[1]) {
     const lexical = focusedFactLexicalText(afterPath[1]);

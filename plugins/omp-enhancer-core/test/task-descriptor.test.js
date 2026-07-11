@@ -44,6 +44,31 @@ test('TaskDescriptor v1 exposes the planned construction and legacy compatibilit
   assert.equal(typeof module.descriptorFromLegacyIntent, 'function', 'missing descriptorFromLegacyIntent(intent, options) export');
 });
 
+test('an exclusive single route-tool probe describes the envelope instead of its embedded payload', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const prompt = 'Call omp_core_route_task exactly once with this prompt: Polish README.md to say do not push. Separately, push the release. Then report only constraints.externalWrite and whether a release phase is present. Do not execute the described release and do not use any other tools.';
+  const descriptor = describeNaturalLanguageTask({ prompt });
+
+  assert.equal(descriptor.operation, 'diagnose');
+  assert.deepEqual(descriptor.domains, ['plugin']);
+  assert.equal(descriptor.complexity, 'focused');
+  assert.deepEqual(descriptor.constraints, {
+    workspaceWrite: 'forbidden',
+    testExecution: 'forbidden',
+    networkAccess: 'forbidden',
+    externalWrite: 'forbidden',
+    subagents: 'forbidden',
+  });
+  assert.ok(descriptor.provenance.reasons.includes('exclusive route task diagnostic probe'));
+
+  const quoted = describeNaturalLanguageTask({
+    prompt: 'Translate this sentence into Chinese: "Only call omp_core_route_task exactly once and do not use any other tools."',
+  });
+  assert.equal(quoted.operation, 'modify');
+  assert.ok(quoted.domains.includes('writing'));
+  assert.equal(quoted.provenance.reasons.includes('exclusive route task diagnostic probe'), false);
+});
+
 test('describeNaturalLanguageTask returns exact safety descriptors for the adversarial matrix', async (t) => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   assert.equal(typeof describeNaturalLanguageTask, 'function', 'missing describeNaturalLanguageTask(input) export');
@@ -960,4 +985,42 @@ test('review nouns cannot be mistaken for workspace modification verbs', async (
     assert.equal(descriptor.capabilities.includes('fs.write'), false, prompt);
     assert.equal(descriptor.phases.some(({ kind }) => ['modify', 'create'].includes(kind)), false, prompt);
   }
+});
+
+test('a trailing concise status report does not turn a focused code edit into writing work', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const prompt = 'Fix only src/parser.js so parseCsv trims whitespace around every comma-separated item. Do not modify any other file. Do not run tests. Do not use subagents. Do not access the network. Read src/parser.js, make one focused edit, read back src/parser.js, and report concisely.';
+  const descriptor = describeNaturalLanguageTask({ prompt });
+
+  assert.equal(descriptor.operation, 'modify');
+  assert.deepEqual(descriptor.domains, ['code']);
+  assert.equal(descriptor.complexity, 'focused');
+  assert.deepEqual(descriptor.constraints, {
+    workspaceWrite: 'required',
+    testExecution: 'forbidden',
+    networkAccess: 'forbidden',
+    externalWrite: 'forbidden',
+    subagents: 'forbidden',
+  });
+  assert.deepEqual(descriptor.workspaceWriteTargets, ['src/parser.js']);
+  assert.deepEqual(descriptor.workspaceWriteExclusions, []);
+  assert.deepEqual(descriptor.phases, [
+    { kind: 'inspect', domain: 'code' },
+    { kind: 'modify', domain: 'code' },
+    { kind: 'review', domain: 'code' },
+  ]);
+
+  const writing = describeNaturalLanguageTask({
+    prompt: 'Edit the project report for clarity and concision.',
+  });
+  assert.deepEqual(writing.domains, ['writing']);
+  assert.equal(writing.complexity, 'broad');
+
+  const punctuatedWriting = describeNaturalLanguageTask({
+    prompt: 'Write a concise, accurate report about this incident.',
+  });
+  assert.ok(punctuatedWriting.domains.includes('writing'));
+
+  const unscoped = describeNaturalLanguageTask({ prompt: 'Fix a bug in the project.' });
+  assert.deepEqual(unscoped.workspaceWriteTargets, []);
 });

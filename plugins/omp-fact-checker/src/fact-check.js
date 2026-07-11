@@ -43,13 +43,19 @@ export function extractFactClaims({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } 
 }
 
 export function buildFactCheckPlan({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } = {}) {
-  const claims = extractFactClaims({ text, maxClaims });
-  const highPriority = claims.filter((claim) => claim.priority === 'high').length;
+  const allClaims = extractFactClaims({ text, maxClaims: Number.POSITIVE_INFINITY });
+  const claims = allClaims.slice(0, normalizeMaxClaims(maxClaims));
+  const highPriority = allClaims.filter((claim) => claim.priority === 'high').length;
   return {
     claims,
-    riskLevel: highPriority > 0 ? 'high' : claims.length > 2 ? 'standard' : 'low',
-    requiredStages: requiredStagesFor({ claims }),
+    riskLevel: highPriority > 0 ? 'high' : allClaims.length > 2 ? 'standard' : 'low',
+    requiredStages: requiredStagesFor({ claims: allClaims }),
   };
+}
+
+function normalizeMaxClaims(value) {
+  if (!Number.isFinite(value)) return DEFAULT_MAX_CLAIMS;
+  return Math.max(1, Math.min(DEFAULT_MAX_CLAIMS, Math.trunc(value)));
 }
 
 export function formatFactCheckPlan(plan = {}) {

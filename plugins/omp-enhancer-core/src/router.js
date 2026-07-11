@@ -164,6 +164,8 @@ export function routeNaturalLanguageTask(input = {}) {
   const canonicalReleaseOperation = described.operation === 'release';
   const canonicalConfigDiagnosis = described.operation === 'diagnose'
     && described.domains?.includes('config');
+  const canonicalExclusiveRouteProbe = (described.provenance?.reasons ?? [])
+    .includes('exclusive route task diagnostic probe');
   const canonicalPrimaryTestAuthoring = (described.provenance?.reasons ?? [])
     .includes('primary direct test authoring requested');
   const canonicalScopedCodeModification = canonicalCodeModification
@@ -217,7 +219,7 @@ export function routeNaturalLanguageTask(input = {}) {
     && (canonicalObserveCodeModification
       || canonicalTestExecution || canonicalPureWriting || canonicalPureSecurity || canonicalPureFact || canonicalSecurityWriting
       || canonicalSecurityRemediation || canonicalFactWriting || canonicalWritingTestRelease || canonicalCompoundCodeWriting
-      || canonicalReleaseOperation || canonicalConfigDiagnosis || canonicalPrimaryTestAuthoring || canonicalResponseWriting
+      || canonicalReleaseOperation || canonicalConfigDiagnosis || canonicalExclusiveRouteProbe || canonicalPrimaryTestAuthoring || canonicalResponseWriting
       || canonicalWritingActions || canonicalVisualAction || canonicalFunctionalUiCorrection
       || alignedCanonicalDirectWriting
       || canonicalObservedSummary

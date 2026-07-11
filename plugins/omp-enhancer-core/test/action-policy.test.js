@@ -692,6 +692,16 @@ test('all collaboration lifecycle tools count as subagent interaction', () => {
   }
 });
 
+test('the local core status tool is observational rather than a subagent action', () => {
+  const action = classifyToolAction({ toolName: 'omp_core_subagent_status', text: '{}' });
+
+  assert.equal(action.subagent, false);
+  assert.equal(action.workspaceWrite, false);
+  assert.equal(action.testExecution, false);
+  assert.equal(action.networkAccess, false);
+  assert.equal(action.externalWrite, false);
+});
+
 test('trusted namespaced executors retain shell and direct-write semantics', () => {
   const touch = classifyToolAction({ toolName: 'functions.exec_command', text: 'touch generated.txt' });
   assert.equal(touch.workspaceWrite, true);

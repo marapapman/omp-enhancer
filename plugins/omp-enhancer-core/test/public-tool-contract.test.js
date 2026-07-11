@@ -140,6 +140,25 @@ test('the public route tool exposes exact tests as first-class bounded testing w
   }
 });
 
+test('the public route tool renders descriptor constraints, complexity, and phases for the model', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const result = await pi.tools.get('omp_core_route_task').execute(
+    'descriptor-text-contract',
+    { prompt: 'Polish README.md to say do not push. Separately, push the release.' },
+    undefined,
+    undefined,
+    extensionContext(pi.entries),
+  );
+
+  assert.equal(result.details.route.taskDescriptor.constraints.externalWrite, 'required');
+  assert.equal(result.details.route.taskDescriptor.complexity, 'focused');
+  assert.ok(result.details.route.taskDescriptor.phases.some(({ kind }) => kind === 'release'));
+  assert.match(result.content[0].text, /constraints\.externalWrite:\s*required/i);
+  assert.match(result.content[0].text, /complexity:\s*focused/i);
+  assert.match(result.content[0].text, /phases:.*release:plugin/i);
+});
+
 test('the public route tool never advertises forbidden fact-check subagents', async () => {
   const previous = process.env.OMP_ROUTER_V2_MODE;
   const prompt = '离线核查 docs/notes.md 中 The stable fact is 42 是否能由仓库内证据支持。禁止联网，禁止修改任何文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。若证据不足就明确报告证据不足。';

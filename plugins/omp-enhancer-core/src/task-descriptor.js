@@ -81,6 +81,31 @@ export function describeNaturalLanguageTask(input = {}) {
       },
     });
   }
+  if (isExclusiveRouteTaskDiagnosticProbe(text)) {
+    return normalizeTaskDescriptor({
+      version: 1,
+      operation: 'diagnose',
+      domains: ['plugin'],
+      constraints: {
+        workspaceWrite: 'forbidden',
+        testExecution: 'forbidden',
+        networkAccess: 'forbidden',
+        externalWrite: 'forbidden',
+        subagents: 'forbidden',
+      },
+      capabilities: ['fs.read'],
+      phases: [{ kind: 'inspect', domain: 'plugin' }, { kind: 'diagnose', domain: 'plugin' }],
+      risk: { level: 'low', flags: [] },
+      complexity: 'focused',
+      language: promptLanguage,
+      provenance: {
+        ruleConfidence: 0.99,
+        reasons: ['exclusive route task diagnostic probe'],
+        requiresPolicyRoute: true,
+        needsClassifier: false,
+      },
+    });
+  }
   if (isRouteStatusSkillDiagnosticProbe(text)) {
     return normalizeTaskDescriptor({
       version: 1,
@@ -395,16 +420,19 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
   const factSentenceText = text.replace(/((?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+)\.([a-z0-9]{1,10})\b/gi, '$1_fileext_$2');
   const factWork = !suppliedFindingsReport && !factReviewForbidden && (/(?:事实核查|事实审查|查证|核验事实|引用核验|引用真实性)|(?:核查|检查|核验).{0,24}(?:事实|声明|主张|引用)|\bfact[- ]?check\b|(?:verify|check)\s+(?:the\s+)?(?:facts?|claims?)/.test(text)
     || /\b(?:verify|review|check|inspect|assess)\b.{0,96}\b(?:citation authenticity|citation metadata|bibliograph(?:y|ic) metadata|factual errors?|stale numbers?|outdated (?:figures?|numbers?))\b/.test(text)
-    || /(?:核查|核验|查证|verify|check)[^。！？.!?\n]{0,120}(?:(?:证据|evidence)[^。！？.!?\n]{0,16}(?:支持|支撑|证明|supports?)|(?:支持|支撑|证明|supports?)[^。！？.!?\n]{0,40}(?:证据|evidence))/.test(factSentenceText)
+    || /(?:核查|核验|查证|verify|check)[^。！？.!?\n]{0,120}(?:(?:证据|evidence)[^。！？.!?\n]{0,16}(?:支持|支撑|证明|support(?:s|ed)?)|(?:支持|支撑|证明|support(?:s|ed)?)[^。！？.!?\n]{0,40}(?:证据|evidence))/.test(factSentenceText)
     || /(?:check|verify)[^。！？.!?\n]{0,80}(?:cited\s+source|citation(?:\s+source)?)[^。！？.!?\n]{0,80}supports?[^。！？.!?\n]{0,40}claims?/.test(factSentenceText)
     || /(?:check|verify)[^。！？.!?\n]{0,80}claims?[^。！？.!?\n]{0,80}supported\s+by[^。！？.!?\n]{0,40}(?:the\s+)?(?:cited\s+source|citation(?:\s+source)?)/.test(factSentenceText)
     || /\b(?:inspect|determine|assess)\b[^。！？.!?\n]{0,120}\blocal\s+evidence\b[^。！？.!?\n]{0,32}\bsupports?\b[^。！？.!?\n]{0,32}\bclaims?\b/.test(factSentenceText));
-  const factDocumentTargets = uniqueStrings([...String(scopePrompt).matchAll(/(?:^|[\s`'"])((?:\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?))(?=$|[\s`'"，。；、：;,:.!！])/gi)]
+  const explicitFactDocumentTargets = uniqueStrings([...String(scopePrompt).matchAll(/(?:^|[\s`'"])((?:\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?))(?=$|[\s`'"，。；、：;,:.!！])/gi)]
     .map((match) => match[1]));
+  const factDocumentTargets = explicitFactDocumentTargets.length
+    ? explicitFactDocumentTargets
+    : /\bREADME\b(?!\s*\.)/i.test(scopePrompt) ? ['README.md'] : [];
   const focusedLocalFactWork = factWork
     && noWorkspaceWrite && noNetworkAccess && noSubagents
     && factDocumentTargets.length === 1
-    && /(?:证据|evidence)[^。！？.!?\n]{0,20}(?:支持|支撑|证明|supports?)|(?:支持|支撑|证明|supports?)[^。！？.!?\n]{0,40}(?:证据|evidence)/.test(factSentenceText)
+    && /(?:证据|evidence)[^。！？.!?\n]{0,20}(?:支持|支撑|证明|support(?:s|ed)?)|(?:支持|支撑|证明|support(?:s|ed)?)[^。！？.!?\n]{0,40}(?:证据|evidence)/.test(factSentenceText)
     && !/(?:全部|所有|整个(?:仓库|项目|代码库)|全仓库|多条|引用)|\b(?:all|every|entire|repo[- ]wide|repository[- ]wide|multiple|citations?)\b/.test(text);
   const explicitDefectAudit = !suppliedFindingsReport && /\b(?:inspect|audit|review|check|find|hunt)\b.{0,80}\b(?:plugin|project|codebase|repository|repo|code|implementation|pull\s+request|pr)\b.{0,80}\b(?:bugs?|defects?)\b|\b(?:inspect|audit|review|check|find|hunt)\b.{0,40}\b(?:bugs?|defects?)\b|(?:检查|审查|审计|排查|查找).{0,64}(?:插件|项目|代码库|仓库|代码|实现).{0,64}(?:bug|缺陷|问题)|(?:检查|审查|审计|排查|查找).{0,40}(?:bug|缺陷)/.test(text);
   const bugReportArtifactRequested = /(?:写|撰写|起草|整理|总结|归纳|创建|准备|提交).{0,24}(?:英文|英语|english)?.{0,12}\bbug\s+report\b/.test(text)
@@ -759,7 +787,7 @@ function workspaceWriteScopesFor(value = '') {
   ], normalizeWorkspaceTarget), ...collectQuotedWorkspaceTargets(source, { negative: true })]);
   const positiveSource = maskScopedWorkspaceWriteNegatives(source);
   const targets = uniqueStrings([...collectScopedTargets(positiveSource, [
-    /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
+    /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:only\s+)?(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
     /(?:修复|更新|修改|编辑|调整|润色|改写)\s*[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
     /(?:只|仅)\s*改(?:动)?\s*[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
     /\b(?:polish|proofread|rewrite|revise|edit|improve)\b[^.;!\n]{0,80}?\b(?:in|inside|within)\s+(?:the\s+)?[`'"]?((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?/giu,
@@ -783,7 +811,7 @@ function workspaceWriteScopesFor(value = '') {
 function collectAffirmativeWorkspaceTargetLists(value = '') {
   const source = String(value);
   const targets = [];
-  const actions = /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:the\s+)?|(?:(?:只|仅)\s*改(?:动)?|修复|更新|修改|编辑|调整|润色|改写|校对|修订)(?:一下|下)?\s*/giu;
+  const actions = /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:only\s+)?(?:the\s+)?|(?:(?:只|仅)\s*改(?:动)?|修复|更新|修改|编辑|调整|润色|改写|校对|修订)(?:一下|下)?\s*/giu;
   for (const match of source.matchAll(actions)) {
     let remaining = source.slice((match.index ?? 0) + match[0].length).split(/[。；;\n]/u, 1)[0] ?? '';
     let next = consumeLeadingWorkspaceTarget(remaining);
@@ -921,13 +949,20 @@ function normalizeAffirmativeWorkspacePhrases(text) {
 }
 
 function positiveDomainSignalText(value = '') {
-  return normalizeAffirmativeExternalWritePhrases(String(value)
+  return normalizeAffirmativeExternalWritePhrases(maskIncidentalStatusReporting(value)
     .replace(/\b(?:do not|don't|dont|never)\s+(?:skip|omit|avoid)\s+(?:(?:running|doing)\s+)?(?:the\s+)?(?:tests?|testing)\b/gi, ' run tests ')
     .replace(/(?:不要|别|不能|不得|禁止)\s*(?:跳过|省略|略过|避免)\s*(?:运行|执行|做|进行)?\s*(?:这些?|所有|全部)?\s*测试/gi, ' 运行测试 '))
     .replace(/\b(?:do not|don't|dont|never|no need to)\s+[^,.;!\n]+/gi, ' ')
     .replace(/\bwithout\s+[^,.;!\n]+/gi, ' ')
     .replace(/(?:不要|别|无需|不用|禁止|不得)\s*[^，,。；;.!！\n]+/g, ' ')
     .replace(/(?:^|[，,。；;.!！\n]\s*|(?:但|并且|然后)\s*)不\s*(?:运行|执行|跑|重跑|提交|推送|发布|部署|上线)\s*[^，,。；;.!！\n]*/g, ' ');
+}
+
+function maskIncidentalStatusReporting(value = '') {
+  return String(value).replace(
+    /(?:,\s*)?\b(?:and|then)\s+report(?:\s+back)?(?:\s+(?:the\s+)?(?:result|outcome|change|changes))?\s+(?:briefly|concisely)(?=\s*[.!?]?(?:\s|$))/gi,
+    ' ',
+  );
 }
 
 function positiveSecurityDomainSignalText(value = '') {
@@ -1107,7 +1142,7 @@ function isSecurityConceptOnlyRequest(text = '') {
 }
 
 function operationFor(signals) {
-  if (signals.answerOnly) return 'answer';
+  if (signals.answerOnly && !signals.factWork) return 'answer';
   if (signals.conceptOnly && signals.noWorkspaceWrite && signals.codeWork) return 'inspect';
   if (signals.conceptOnly) return 'answer';
   if (signals.externalActionRequested && !signals.localCompanionModify) return 'execute';
@@ -1543,6 +1578,18 @@ function isRouteStatusSkillDiagnosticProbe(text = '') {
   const forbidsTestExecution = /(?:不|不要|禁止|不得).{0,16}(?:运行|执行|跑).{0,12}测试|(?:do not|don't|without).{0,18}(?:run|execute).{0,12}tests?/.test(text);
   return hasRouteAndStatusTools && asksForDiagnosticProbe
     && forbidsWorkspaceWrite && forbidsTestExecution;
+}
+
+function isExclusiveRouteTaskDiagnosticProbe(text = '') {
+  const value = String(text).toLowerCase();
+  if (!/\bomp_core_route_task\b/.test(value)) return false;
+  const oneShot = /\b(?:call|invoke|use)\s+(?:only\s+)?omp_core_route_task\s+exactly\s+once\b/.test(value)
+    || /\b(?:call|invoke|use)\s+omp_core_route_task\s+once\b/.test(value)
+    || /只\s*调用\s*一次\s*omp_core_route_task/.test(value);
+  if (!oneShot) return false;
+  return /\b(?:do\s+not|don't|without)\s+(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b/.test(value)
+    || /(?:不要|不得|禁止|不)\s*(?:使用|调用)\s*(?:任何)?\s*(?:其他|其它)\s*工具/.test(value)
+    || /只\s*调用\s*一次\s*omp_core_route_task/.test(value);
 }
 
 function orderedUnique(values, order) {

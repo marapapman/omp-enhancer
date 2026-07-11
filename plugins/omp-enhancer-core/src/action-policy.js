@@ -54,6 +54,7 @@ export function classifyToolAction({ toolName = '', text = '' } = {}) {
   const migrationExecution = shell && isMigrationAutomationInvocation(source);
   const devServerExecution = shell && isDevServerAutomationInvocation(source);
   const agentCliExecution = shell && isAgentCliExecution(source);
+  const observationalSubagentStatus = name.toLowerCase() === 'omp_core_subagent_status';
   const externalWrite = (remoteTool || mcpTool && !localFilesystemTool) && namedMutation
     || remoteFailClosedMutation
     || unknownNamedMutation
@@ -112,10 +113,10 @@ export function classifyToolAction({ toolName = '', text = '' } = {}) {
     unverifiableNetworkEffects,
     unverifiableWorkspaceEffects,
     irreversible,
-    subagent: agentCliExecution
+    subagent: !observationalSubagentStatus && (agentCliExecution
       || embeddedActions.some((action) => action.subagent)
       || SUBAGENT_TOOL.test(name)
-      || /(?:^|[_-])(?:spawn(?:_agent)?|delegate|subagent)(?:$|[_-])/i.test(name),
+      || /(?:^|[_-])(?:spawn(?:_agent)?|delegate|subagent)(?:$|[_-])/i.test(name)),
   };
 }
 

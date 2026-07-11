@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import registerCoreEnhancer from '../index.js';
 
@@ -10,6 +11,7 @@ const RELEASE_SHA_BEFORE = '0123456789abcdef0123456789abcdef01234567';
 const RELEASE_SHA_AFTER = '89abcdef0123456789abcdef0123456789abcdef';
 const RELEASE_REMOTE = 'https://github.com/org/repo.git';
 const RELEASE_AUTH_PROMPT = `Push commit ${RELEASE_SHA_AFTER} to ${RELEASE_REMOTE} at refs/heads/main.`;
+const CORE_PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 function exhaustCommandExpansion(command) {
   return `${'strace '.repeat(8)}${command}`;
@@ -1587,14 +1589,17 @@ test('scoped workspace write authorization blocks excluded and unmentioned files
   }, movedPatch.ctx);
   assert.equal(blockedMove?.reasonCode, 'workspace-target-authorization-required');
 
-  const anchored = await routedRuntime('Fix src/router.js and do not modify any other files.');
+  const anchored = await routedRuntime(
+    'Fix src/router.js and do not modify any other files.',
+    { cwd: CORE_PLUGIN_ROOT },
+  );
   anchored.pi.entries.push({
     type: 'message',
     message: {
       role: 'toolResult',
       toolName: 'read',
       content: [{ type: 'text', text: '[router.js#ABCD]\n1:export function route(value) {' }],
-      details: { meta: { source: { type: 'path', value: join(process.cwd(), 'src/router.js') } } },
+      details: { meta: { source: { type: 'path', value: join(CORE_PLUGIN_ROOT, 'src/router.js') } } },
     },
   });
   const anchoredEdit = await event(anchored.pi, 'tool_call')({
@@ -1635,6 +1640,28 @@ test('scoped workspace write authorization blocks excluded and unmentioned files
     input: { input: '[shared.js#D00D]\nSWAP 1.=1:\n+ambiguous' },
   }, ambiguous.ctx);
   assert.equal(ambiguousEdit?.reasonCode, 'workspace-target-authorization-required');
+});
+
+test('Fix only binds one exact workspace target through the lifecycle boundary', async () => {
+  const prompt = 'Fix only src/parser.js so parseCsv trims whitespace around every comma-separated item. Do not modify any other file. Do not run tests. Do not use subagents. Do not access the network. Read src/parser.js, make one focused edit, read back src/parser.js, and report concisely.';
+
+  const denied = await routedRuntime(prompt);
+  assert.deepEqual(
+    latestCoreState(denied.pi).lastRoute.taskDescriptor.workspaceWriteTargets,
+    ['src/parser.js'],
+  );
+  const deniedEdit = await event(denied.pi, 'tool_call')({
+    toolName: 'edit', input: { path: 'other.js' },
+  }, denied.ctx);
+  assert.equal(deniedEdit?.block, true);
+  assert.equal(deniedEdit?.reasonCode, 'workspace-target-authorization-required');
+
+  const allowed = await routedRuntime(prompt);
+  const allowedEdit = await event(allowed.pi, 'tool_call')({
+    toolName: 'edit', input: { path: 'src/parser.js' },
+  }, allowed.ctx);
+  assert.notEqual(allowedEdit?.block, true);
+  assert.notEqual(allowedEdit?.reasonCode, 'workspace-target-authorization-required');
 });
 
 test('primary direct test authoring permits only directly attributable test artifacts', async () => {
@@ -2310,6 +2337,30 @@ test('persisted action-boundary counters are clamped and fail closed', async () 
   }, runtime.ctx);
   assert.equal(blocked?.block, true);
   assert.match(blocked.reason, /OMP_GATE_TERMINAL/);
+});
+
+test('no-subagent exact-test routes allow the observational core status tool', async () => {
+  const runtime = await routedRuntime('Run exactly node --test test/parser.test.js. Do not edit files, use subagents, access the network, or publish.');
+  const statusCall = await event(runtime.pi, 'tool_call')({
+    toolName: 'omp_core_subagent_status', input: {},
+  }, runtime.ctx);
+  assert.notEqual(statusCall?.block, true, statusCall?.reason);
+
+  await event(runtime.pi, 'tool_result')({
+    type: 'tool_result',
+    toolCallId: 'exact-test-status-evidence',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+    output: 'ℹ tests 1\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0',
+    isError: false,
+  }, runtime.ctx);
+  const status = await runtime.pi.tools.get('omp_core_subagent_status').execute(
+    'exact-test-status', {}, undefined, undefined, runtime.ctx,
+  );
+  assert.deepEqual(status.details.status.required_tools, []);
+  assert.deepEqual(status.details.status.gate_requirements, [{ key: 'test-evidence', mode: 'required' }]);
+  assert.equal(status.details.status.testing_gate_satisfied, true);
+  assert.match(status.content[0].text, /Testing gate satisfied:\s*true/i);
 });
 
 function latestCoreState(pi) {

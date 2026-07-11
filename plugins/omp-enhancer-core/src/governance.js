@@ -236,7 +236,7 @@ function skillWorkflowLines(route) {
     return [
       `This is one exact test execution for the complete target list ${targets.join(', ')}; no broader verification scope is authorized.`,
       'Inspect package or runner configuration with the read tool. Do not use shell pipelines, redirections, aliases, or exploratory commands for that inspection.',
-      'Run one direct host test command that names every authorized test file once and in the requested order, then report the observed result. Do not omit or substitute targets, use an aggregate suite, or add runner preloads and extra flags.',
+      'Run one direct host test command that names every authorized test file once and in the requested order, then report the observed result. A successful matching host result closes this exact-test evidence directly; do not call omp_test_gate or omp_core_subagent_status to infer whether it is complete. Do not omit or substitute targets, use an aggregate suite, or add runner preloads and extra flags.',
     ];
   }
   if (isReadOnlySecurityReview(route)) {
@@ -366,6 +366,7 @@ export function buildMissingGateContexts({ route, state } = {}) {
   if (needsFactCheck(route) && !state?.evidence?.factCheckGate) {
     const focusedEvidenceKind = state?.evidence?.focusedFactEvidence?.matchKind;
     const hasReusableFocusedEvidence = ['no-match', 'claim-only', 'independent-hit'].includes(focusedEvidenceKind);
+    const focusedSearchStatus = state?.focusedFactSearch?.status;
     contexts.push(isFocusedLocalFactInspection(route)
       ? { key: 'fact-check', context: hasReusableFocusedEvidence ? [
         `OMP Enhancer Core already recorded host-observed local fact evidence (${focusedEvidenceKind}).`,
@@ -374,6 +375,18 @@ export function buildMissingGateContexts({ route, state } = {}) {
         focusedEvidenceKind === 'independent-hit'
           ? 'Keep the verdict consistent with the independent repository result already shown to you.'
           : 'A claim-only or no-match result cannot support or contradict the claim; report insufficient evidence without adding a positive or negative factual verdict.',
+      ].join('\n') : focusedSearchStatus === 'failed' ? [
+        'OMP Enhancer Core recorded that the route-scoped focused grep failed or returned no usable host evidence.',
+        'Do not run grep or another search method again. Report that verification is blocked by the failed search and that repository evidence is insufficient.',
+        'End the answer with exactly one machine-readable line: FACT_VERDICT: INSUFFICIENT.',
+      ].join('\n') : focusedSearchStatus === 'succeeded' ? [
+        'OMP Enhancer Core recorded the single route-scoped focused grep, but its result did not provide reusable claim-bound evidence.',
+        'Do not run grep or another search method again. Report that the available repository evidence is insufficient.',
+        'End the answer with exactly one machine-readable line: FACT_VERDICT: INSUFFICIENT.',
+      ].join('\n') : focusedSearchStatus === 'started' ? [
+        'OMP Enhancer Core already recorded the single route-scoped focused grep as started.',
+        'Do not launch grep or another search method. Wait for and use that host result; if it failed or returned no usable evidence, report the verification as blocked and the evidence as insufficient.',
+        'End the answer with exactly one machine-readable line consistent with the host result: FACT_VERDICT: INSUFFICIENT, FACT_VERDICT: SUPPORTED, or FACT_VERDICT: CONTRADICTED.',
       ].join('\n') : [
         'OMP Enhancer Core local fact-evidence gate is still open.',
         'Use one successful built-in grep over the repository root with a concrete claim-related pattern before concluding. Reading or repeating only the claim text is not independent evidence.',
@@ -584,19 +597,24 @@ function formatRecentToolFailures(state, toolNames = []) {
 }
 
 function workflowNextLines(route, parentTask = '') {
+  const exclusiveRouteProbe = (route.taskDescriptor?.provenance?.reasons ?? [])
+    .includes('exclusive route task diagnostic probe');
   const firstSkill = route.requiredSkills?.[0];
   const delegatesWork = Boolean(route.requiredSubagents?.length);
-  const nextAction = firstSkill && delegatesWork
+  const nextAction = exclusiveRouteProbe
+    ? 'Next action: call omp_core_route_task exactly once with the user-supplied prompt, then report only the requested route fields.'
+    : firstSkill && delegatesWork
     ? `Next action: load skill://${firstSkill} into the first routed subagent task assignment before acting.`
     : firstSkill
       ? `Next action: read skill://${firstSkill} before acting, then follow the route card.`
       : 'Next action: follow the route card using the selected tools.';
-  const constrainedProbe = isConstrainedRouteStatusSkillPrompt(parentTask);
+  const constrainedProbe = exclusiveRouteProbe || isConstrainedRouteStatusSkillPrompt(parentTask);
   return [
     'WORKFLOW_NEXT',
     nextAction,
     ...(constrainedProbe ? [
       'User constraint: route/status/skill checks only.',
+      ...(exclusiveRouteProbe ? ['Do not call any tool other than the single requested omp_core_route_task probe. Do not load routed skills or execute the probed workflow.'] : []),
       'Do not call eval, bash, task, edit, write, project QA tools, or test commands while this constraint is active.',
       'If compact JSON is requested, return one raw single JSON object with no Markdown fence, without Markdown fences, without a preface, and without trailing explanation.',
       'Do not repeat SKILL_USAGE, SUBAGENT_USAGE, or evidence blocks inside compact JSON route/status/skill check responses; encode only the compact fields the user requested.',

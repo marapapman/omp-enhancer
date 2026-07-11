@@ -50,6 +50,16 @@ test('buildFactCheckPlan extracts prioritized factual claims', () => {
   assert.deepEqual(plan.requiredStages.includes('fact-cross-checker'), true);
 });
 
+test('buildFactCheckPlan computes risk from the untruncated text', () => {
+  const text = 'The stable value is 42. The medical dose is 5 mg.';
+  const plan = buildFactCheckPlan({ text, maxClaims: 1 });
+
+  assert.equal(plan.claims.length, 1);
+  assert.equal(plan.riskLevel, 'high');
+  assert.ok(plan.requiredStages.includes('fact-researcher-a'));
+  assert.ok(plan.requiredStages.includes('fact-researcher-b'));
+});
+
 test('local evidence lanes cross-check to agreement and conflict', () => {
   const claims = buildFactCheckPlan({ text: 'The method improves accuracy by 12%.' }).claims;
   const supported = collectLocalEvidence({
@@ -85,6 +95,281 @@ test('fact gate requires plan, evidence, cross-check, review, report, and usage'
     ].join('\n'),
   });
   assert.equal(passed.ok, true);
+});
+
+test('the registered gate binds final claims to host-observed plan, evidence, and report tools', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+  const completeOutput = (verdict = 'SUPPORTED') => [
+    'FACT_CHECK_PLAN',
+    'FACT_EVIDENCE_A',
+    '- FC-001: SUPPORTED',
+    'FACT_EVIDENCE_B',
+    '- FC-001: SUPPORTED',
+    'FACT_CROSS_CHECK',
+    '- FC-001: AGREED',
+    'FACT_REVIEW',
+    'FACT_CHECK_REPORT',
+    `- FC-001: ${verdict}`,
+    'FACT_CHECK_USAGE',
+  ].join('\n');
+
+  const premature = await omp.tools.get('fact_check_gate').execute(
+    'premature-gate', { finalOutput: completeOutput(), riskLevel: 'low' }, undefined, undefined, ctx,
+  );
+  assert.equal(premature.isError, true);
+  assert.ok(premature.details.missingObserved.includes('host FACT_CHECK_PLAN'));
+
+  const analyzed = await omp.tools.get('fact_check_analyze').execute(
+    'observed-plan', { text: 'The stable fact is 42.' }, undefined, undefined, ctx,
+  );
+  const claims = analyzed.details.claims;
+  const evidenceA = await omp.tools.get('fact_check_evidence').execute(
+    'observed-evidence-a', {
+      claims,
+      lane: 'A',
+      allowNetwork: false,
+      evidenceRecords: [{ claimId: 'FC-001', lane: 'A', status: 'SUPPORTED', quote: '42', source: 'docs/evidence.md' }],
+    }, undefined, undefined, ctx,
+  );
+  const evidenceB = await omp.tools.get('fact_check_evidence').execute(
+    'observed-evidence-b', {
+      claims,
+      lane: 'B',
+      allowNetwork: false,
+      evidenceRecords: [{ claimId: 'FC-001', lane: 'B', status: 'SUPPORTED', quote: '42', source: 'spec.md' }],
+    }, undefined, undefined, ctx,
+  );
+  const evidenceRecords = [...evidenceA.details.records, ...evidenceB.details.records];
+  const mismatchedEvidence = await omp.tools.get('fact_check_report').execute(
+    'mismatched-evidence-report', {
+      claims,
+      evidenceRecords: evidenceRecords.map((record, index) => (
+        index === 0 ? { ...record, source: 'fabricated.md' } : record
+      )),
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(mismatchedEvidence.isError, true);
+  assert.match(mismatchedEvidence.content[0].text, /do not match host-observed/i);
+
+  const mismatchedCrossCheck = await omp.tools.get('fact_check_report').execute(
+    'mismatched-cross-check-report', {
+      claims,
+      evidenceRecords,
+      crossChecks: [{
+        claimId: 'FC-001',
+        status: 'CONFLICTED',
+        laneA: 'SUPPORTED',
+        laneB: 'CONTRADICTED',
+        conflicts: [],
+      }],
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(mismatchedCrossCheck.isError, true);
+  assert.match(mismatchedCrossCheck.content[0].text, /deterministic cross-check/i);
+
+  const report = await omp.tools.get('fact_check_report').execute(
+    'observed-report', { claims, evidenceRecords }, undefined, undefined, ctx,
+  );
+  assert.equal(report.isError, false);
+
+  const passed = await omp.tools.get('fact_check_gate').execute(
+    'observed-gate', { finalOutput: completeOutput(), riskLevel: 'low' }, undefined, undefined, ctx,
+  );
+  assert.equal(passed.isError, false);
+  assert.equal(passed.details.ok, true);
+  assert.deepEqual(passed.details.missingObserved, []);
+
+  const inconsistent = await omp.tools.get('fact_check_gate').execute(
+    'inconsistent-gate', { finalOutput: completeOutput('CONTRADICTED'), riskLevel: 'low' }, undefined, undefined, ctx,
+  );
+  assert.equal(inconsistent.isError, true);
+  assert.ok(inconsistent.details.missingObserved.includes('final verdicts matching host FACT_CHECK_REPORT'));
+
+  const conflicting = await omp.tools.get('fact_check_gate').execute(
+    'conflicting-gate', {
+      finalOutput: `${completeOutput()}\nFC-001: CONTRADICTED`,
+      riskLevel: 'low',
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(conflicting.isError, true);
+  assert.ok(conflicting.details.missingObserved.includes('final verdicts matching host FACT_CHECK_REPORT'));
+
+  const duplicated = await omp.tools.get('fact_check_gate').execute(
+    'duplicated-gate', {
+      finalOutput: `${completeOutput()}\nFC-001: SUPPORTED`,
+      riskLevel: 'low',
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(duplicated.isError, true);
+  assert.ok(duplicated.details.missingObserved.includes('final verdicts matching host FACT_CHECK_REPORT'));
+});
+
+test('registered workflow fails closed without identity and isolates distinct session managers', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const analyze = omp.tools.get('fact_check_analyze');
+  const gate = omp.tools.get('fact_check_gate');
+  const noIdentity = await analyze.execute(
+    'no-identity', { text: 'The stable fact is 42.' }, undefined, undefined, { cwd: process.cwd() },
+  );
+  assert.equal(noIdentity.isError, true);
+  assert.match(noIdentity.content[0].text, /stable fact-check session identity/i);
+
+  const managerA = {};
+  const managerB = {};
+  const ctxA = { cwd: process.cwd(), sessionManager: managerA };
+  const ctxB = { cwd: process.cwd(), sessionManager: managerB };
+  await analyze.execute('session-a-plan', { text: 'The stable fact is 42.' }, undefined, undefined, ctxA);
+  const isolated = await gate.execute(
+    'session-b-gate', {
+      finalOutput: [
+        'FACT_CHECK_PLAN',
+        'FACT_EVIDENCE_A',
+        'FACT_CROSS_CHECK',
+        'FACT_REVIEW',
+        'FACT_CHECK_REPORT',
+        'FC-001: SUPPORTED',
+        'FACT_CHECK_USAGE',
+      ].join('\n'),
+      riskLevel: 'low',
+    }, undefined, undefined, ctxB,
+  );
+  assert.equal(isolated.isError, true);
+  assert.ok(isolated.details.missingObserved.includes('host FACT_CHECK_PLAN'));
+});
+
+test('analyze rejects ambiguous path plus text and gate ignores a lower model risk', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+  const analyze = omp.tools.get('fact_check_analyze');
+  const ambiguous = await analyze.execute(
+    'ambiguous-input', {
+      path: 'README.md',
+      text: 'The stable fact is 42.',
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(ambiguous.isError, true);
+  assert.match(ambiguous.content[0].text, /exactly one of text or path/i);
+
+  const analyzed = await analyze.execute(
+    'high-risk-plan', {
+      text: 'The stable value is 42. The medical dose is 5 mg.',
+      maxClaims: 1,
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(analyzed.details.riskLevel, 'high');
+  const claims = analyzed.details.claims;
+  const evidenceA = await omp.tools.get('fact_check_evidence').execute(
+    'high-risk-evidence-a', {
+      claims,
+      lane: 'A',
+      allowNetwork: false,
+      evidenceRecords: [{
+        claimId: 'FC-001',
+        lane: 'A',
+        status: 'SUPPORTED',
+        quote: '42',
+        source: 'a.md',
+      }],
+    }, undefined, undefined, ctx,
+  );
+  const report = await omp.tools.get('fact_check_report').execute(
+    'high-risk-report', { claims, evidenceRecords: evidenceA.details.records }, undefined, undefined, ctx,
+  );
+  assert.equal(report.isError, false);
+  const gated = await omp.tools.get('fact_check_gate').execute(
+    'high-risk-gate', {
+      finalOutput: [
+        'FACT_CHECK_PLAN',
+        'FACT_EVIDENCE_A',
+        'FACT_CROSS_CHECK',
+        'FACT_REVIEW',
+        'FACT_CHECK_REPORT',
+        'FC-001: SUPPORTED',
+        'FACT_CHECK_USAGE',
+      ].join('\n'),
+      riskLevel: 'low',
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(gated.isError, true);
+  assert.ok(gated.details.missingObserved.includes('host FACT_EVIDENCE_B'));
+});
+
+test('evidence rejects non-canonical statuses and unsupported deterministic citations', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+  const analyzed = await omp.tools.get('fact_check_analyze').execute(
+    'evidence-plan', { text: 'The stable fact is 42.' }, undefined, undefined, ctx,
+  );
+  const claims = analyzed.details.claims;
+  const evidence = omp.tools.get('fact_check_evidence');
+
+  const aliasStatus = await evidence.execute(
+    'alias-status', {
+      claims,
+      lane: 'A',
+      evidenceRecords: [{
+        claimId: 'FC-001',
+        lane: 'A',
+        status: 'VERIFIED',
+        quote: '42',
+        source: 'a.md',
+      }],
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(aliasStatus.isError, true);
+
+  const emptyCitation = await evidence.execute(
+    'empty-citation', {
+      claims,
+      lane: 'A',
+      evidenceRecords: [{
+        claimId: 'FC-001',
+        lane: 'A',
+        status: 'SUPPORTED',
+        quote: '',
+        source: '',
+      }],
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(emptyCitation.isError, true);
+
+  const insufficient = await evidence.execute(
+    'insufficient-without-citation', {
+      claims,
+      lane: 'A',
+      evidenceRecords: [{
+        claimId: 'FC-001',
+        lane: 'A',
+        status: 'INSUFFICIENT',
+      }],
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(insufficient.isError, false);
+  assert.equal(insufficient.details.records[0].status, 'INSUFFICIENT');
+});
+
+test('fact report rejects malformed model-owned claim records instead of emitting undefined claims', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+  await omp.tools.get('fact_check_analyze').execute(
+    'valid-plan', { text: 'The stable fact is 42.' }, undefined, undefined, ctx,
+  );
+  const malformed = await omp.tools.get('fact_check_report').execute(
+    'malformed-report', {
+      claims: [{ id: 'FC-001', claim: 'The stable fact is 42.' }],
+      evidenceRecords: [],
+    }, undefined, undefined, ctx,
+  );
+
+  assert.equal(malformed.isError, true);
+  assert.match(malformed.content[0].text, /claims.*id.*text/i);
+  assert.doesNotMatch(malformed.content[0].text, /undefined/i);
 });
 
 test('provider evidence uses Crossref DOI endpoint with mock fetch', async () => {
