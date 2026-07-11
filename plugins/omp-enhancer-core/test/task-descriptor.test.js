@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 
 const fixtures = JSON.parse(await readFile(new URL('./fixtures/routing-adversarial.json', import.meta.url), 'utf8'));
 const descriptorModuleUrl = new URL('../src/task-descriptor.js', import.meta.url);
@@ -175,6 +176,48 @@ test('normalization removes phases and capabilities that exceed explicit constra
   assert.deepEqual(descriptor.domains, ['general']);
   assert.deepEqual(descriptor.capabilities, []);
   assert.deepEqual(descriptor.phases, [{ kind: 'answer', domain: 'general' }]);
+});
+
+test('normalization accepts only cross-field-valid exclusive tool contracts', async () => {
+  const { normalizeTaskDescriptor } = await loadDescriptorModule();
+  const command = 'node --test test/parser.test.js';
+  const digest = (value) => createHash('sha256').update(value).digest('hex');
+  const base = {
+    version: 1,
+    operation: 'execute',
+    domains: ['tests'],
+    constraints: { testExecution: 'required' },
+    testExecutionTargets: ['test/parser.test.js'],
+    testExecutionCommand: command,
+    phases: [{ kind: 'verify', domain: 'tests' }],
+  };
+  const contract = (allowedTools, input) => ({
+    schemaVersion: 1,
+    mode: 'exclusive',
+    allowedTools,
+    maxCalls: 1,
+    required: true,
+    input,
+    onFailure: 'stop',
+    alternatives: 'forbidden',
+  });
+
+  for (const exclusiveToolContract of [
+    contract(['bash'], null),
+    contract(['grep'], { kind: 'exact-command', digest: digest(command) }),
+    contract(['bash'], { kind: 'exact-command', digest: digest('npm test') }),
+    contract(['read'], { kind: 'exact-path', target: 'src/auth.js', digest: digest('src/auth.js') }),
+  ]) {
+    const normalized = normalizeTaskDescriptor({ ...base, exclusiveToolContract });
+    assert.equal(normalized.exclusiveToolContract, undefined);
+  }
+
+  const valid = normalizeTaskDescriptor({
+    ...base,
+    exclusiveToolContract: contract(['shell'], { kind: 'exact-command', digest: digest(command) }),
+  });
+  assert.deepEqual(valid.exclusiveToolContract?.allowedTools, ['bash']);
+  assert.equal(valid.exclusiveToolContract?.input?.digest, digest(command));
 });
 
 test('normalization preserves supported selective test exclusions without weakening a global prohibition', async () => {

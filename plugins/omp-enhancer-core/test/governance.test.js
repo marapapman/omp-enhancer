@@ -272,7 +272,7 @@ test('focused no-test modification governance keeps the edit target without sugg
   assert.match(fragment, /Agent route:\s*none/i);
   assert.match(fragment, /Edit only src\/parser\.js/i);
   assert.match(fragment, /test execution.*forbidden/i);
-  assert.match(fragment, /REVIEW_EVIDENCE.*Scope.*Findings.*OpenBlockers.*Verdict:\s*PASS/is);
+  assert.match(fragment, /REVIEW_EVIDENCE.*Scope.*Findings.*OpenBlockers.*Verdict:.*PASS only when the review actually passes/is);
   assert.doesNotMatch(fragment, /post-review testing|test generation contract|omp_test_|run .*tests?/i);
 });
 
@@ -317,7 +317,7 @@ test('a no-test modification with release authority keeps release and verificati
 
 test('an exact test file is presented as bounded testing rather than a bug audit', () => {
   const route = routeNaturalLanguageTask({
-    prompt: '只运行 test/router.test.js 并报告结果。禁止修改文件、联网、启动 subagent 或发布。',
+    prompt: '只运行 test/router.test.js 并报告结果。禁止修改文件、启动 subagent 或发布。',
     routerMode: 'enforce',
   });
   const fragment = buildGovernancePromptFragment({ route });
@@ -338,16 +338,29 @@ test('an exact test file is presented as bounded testing rather than a bug audit
 });
 
 test('a command-only exact test never asks for a configuration read', () => {
-  const prompt = 'Use the bash tool exactly once to run exactly `node --test test/parser.test.js`. Do not call any other tool, edit any file, use subagents, or access the network. A successful matching host result closes this exact-test route directly; do not call omp_test_gate or omp_core_subagent_status. If the host result passes, return exactly PASS; otherwise return exactly FAIL.';
+  const prompt = 'Use the bash tool exactly once to run exactly `node --test test/parser.test.js`. Do not call any other tool, edit any file, or use subagents. A successful matching host result closes this exact-test route directly; do not call omp_test_gate or omp_core_subagent_status. If the host result passes, return exactly PASS; otherwise return exactly FAIL.';
   const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
   const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
   const repair = buildMissingGateContexts({ route, state: { evidence: {} } });
 
   assert.equal(route.intent, 'testing');
   assert.ok(route.taskDescriptor.provenance.reasons.includes('exclusive command-only exact test requested'));
-  assert.match(fragment, /do not call read or any other tool/i);
+  assert.match(fragment, /do not call any other tool, read a skill/i);
   assert.doesNotMatch(fragment, /configuration (?:with|inspection).*read tool/i);
   assert.match(repair[0]?.context ?? '', /do not call read or any other tool/i);
+});
+
+test('an explicit no-network exact test fails closed before every workflow method', () => {
+  const prompt = 'Use the bash tool exactly once to run exactly `node --test test/parser.test.js`. Do not call any other tool, edit any file, use subagents, or access the network. Return exactly PASS if it succeeds; otherwise return exactly FAIL.';
+  const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+  const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
+  const repair = buildMissingGateContexts({ route, state: { evidence: {} } });
+
+  assert.match(fragment, /Execution boundary: blocked before tool use/i);
+  assert.match(fragment, /trusted host network sandbox/i);
+  assert.match(fragment, /Do not call any tool, load any skill, start a subagent/i);
+  assert.doesNotMatch(fragment, /skill:\/\/|SECURITY_REVIEW|omp_test_|configuration.*read|one direct host test command/i);
+  assert.deepEqual(repair, []);
 });
 
 test('a constrained read-only security review gets one satisfiable evidence contract', () => {
@@ -567,8 +580,8 @@ test('an exclusive route probe names the only allowed tool and adds no embedded 
 
   assert.equal(route.intent, 'diagnosis');
   assert.match(fragment, /call omp_core_route_task exactly once/i);
-  assert.match(fragment, /do not call any tool other than.*omp_core_route_task/i);
-  assert.match(fragment, /do not load routed skills or execute the probed workflow/i);
+  assert.match(fragment, /do not call any other tool, read a skill/i);
+  assert.match(fragment, /requested route fields.*explanation explicitly requested/i);
   assert.doesNotMatch(fragment, /writing-markdown-helper|verification-before-completion|Writing workflow/i);
 });
 

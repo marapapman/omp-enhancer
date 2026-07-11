@@ -180,6 +180,330 @@ test('an exact test-file command remains execute-only under explicit side-effect
   }
 });
 
+test('a no-other-tool exact test is command-only even without naming bash', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Run exactly test/parser.test.js and do not call any other tool. Do not edit files, use subagents, or access the network.',
+    routerMode: 'enforce',
+  });
+
+  assert.equal(route.taskDescriptor.operation, 'execute');
+  assert.deepEqual(route.taskDescriptor.domains, ['tests']);
+  assert.equal(route.intent, 'testing');
+  assert.deepEqual(route.taskDescriptor.testExecutionTargets, ['test/parser.test.js']);
+  assert.equal(route.taskDescriptor.testExecutionCommand, 'node --test test/parser.test.js');
+  assert.deepEqual(route.taskDescriptor.exclusiveToolContract?.allowedTools, ['bash']);
+  assert.deepEqual({
+    mode: route.taskDescriptor.exclusiveToolContract?.mode,
+    maxCalls: route.taskDescriptor.exclusiveToolContract?.maxCalls,
+    onFailure: route.taskDescriptor.exclusiveToolContract?.onFailure,
+    alternatives: route.taskDescriptor.exclusiveToolContract?.alternatives,
+  }, {
+    mode: 'exclusive',
+    maxCalls: 1,
+    onFailure: 'stop',
+    alternatives: 'forbidden',
+  });
+  assert.ok(route.taskDescriptor.provenance.reasons.includes('exclusive command-only exact test requested'));
+  assert.deepEqual(route.routePlan.requiredSkills, []);
+  assert.deepEqual(route.routePlan.requiredTools, []);
+  assert.deepEqual(route.routePlan.requiredSubagents, []);
+  assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'test-evidence', mode: 'required' }]);
+});
+
+test('an exclusive aggregate test command stays testing-only without QA resource expansion', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Use the bash tool exactly once to run npm test. Do not call any other tool, edit files, use subagents, or access the network. Return exactly PASS if it succeeds, otherwise FAIL.',
+    routerMode: 'enforce',
+  });
+
+  assert.equal(route.taskDescriptor.operation, 'execute');
+  assert.deepEqual(route.taskDescriptor.domains, ['tests']);
+  assert.equal(route.intent, 'testing');
+  assert.equal(route.taskDescriptor.testExecutionCommand, 'npm test');
+  assert.deepEqual(route.taskDescriptor.exclusiveToolContract?.allowedTools, ['bash']);
+  assert.deepEqual({
+    mode: route.taskDescriptor.exclusiveToolContract?.mode,
+    maxCalls: route.taskDescriptor.exclusiveToolContract?.maxCalls,
+    onFailure: route.taskDescriptor.exclusiveToolContract?.onFailure,
+    alternatives: route.taskDescriptor.exclusiveToolContract?.alternatives,
+  }, {
+    mode: 'exclusive',
+    maxCalls: 1,
+    onFailure: 'stop',
+    alternatives: 'forbidden',
+  });
+  assert.ok(route.taskDescriptor.provenance.reasons.includes('exclusive command-only exact test requested'));
+  assert.deepEqual(route.routePlan.requiredSkills, []);
+  assert.deepEqual(route.routePlan.requiredTools, []);
+  assert.deepEqual(route.routePlan.requiredSubagents, []);
+  assert.deepEqual(route.routePlan.gateRequirements, [{ key: 'test-evidence', mode: 'required' }]);
+});
+
+test('using or with subagents keeps the broad routed actor plan', () => {
+  for (const prompt of [
+    'Fix src/router.js using subagents.',
+    'Fix src/router.js with subagents.',
+    'Fix src/router.js using plan, implementation, and reviewer subagents.',
+    'Fix src/router.js with plan, implementation, and reviewer subagents.',
+  ]) {
+    for (const routerMode of ['legacy', 'observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+      assert.equal(route.intent, 'implementation-with-tests', `${routerMode}: ${prompt}`);
+      assert.equal(route.taskDescriptor.complexity, 'broad', `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.routePlan.requiredSubagents.map(({ agent }) => agent), [
+        'plan',
+        'implementation-task',
+        'reviewer',
+      ], `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), [
+        'plan',
+        'implementation-task',
+        'reviewer',
+      ], `${routerMode}: ${prompt}`);
+    }
+  }
+});
+
+test('an ordinary aggregate test command remains a normal testing workflow', () => {
+  const prompt = 'Run npm test.';
+  for (const routerMode of ['legacy', 'observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode });
+    assert.equal(route.taskDescriptor.operation, 'execute', routerMode);
+    assert.deepEqual(route.taskDescriptor.domains, ['tests'], routerMode);
+    assert.equal(route.taskDescriptor.exclusiveToolContract, undefined, routerMode);
+    assert.equal(
+      route.taskDescriptor.provenance.reasons.includes('exclusive command-only exact test requested'),
+      false,
+      routerMode,
+    );
+    assert.deepEqual(route.routePlan.requiredSkills, ['verification-before-completion'], routerMode);
+    assert.deepEqual(route.routePlan.requiredTools, ['omp_test_gate', 'omp_test_report'], routerMode);
+    assert.deepEqual(route.routePlan.requiredSubagents, [], routerMode);
+    assert.deepEqual(
+      route.routePlan.gateRequirements,
+      [{ key: 'test-evidence', mode: 'required' }],
+      routerMode,
+    );
+    if (routerMode !== 'legacy') {
+      assert.equal(route.intent, 'testing', routerMode);
+      assert.deepEqual(route.requiredSkills, route.routePlan.requiredSkills, routerMode);
+      assert.deepEqual(route.requiredTools, route.routePlan.requiredTools, routerMode);
+      assert.deepEqual(route.requiredSubagents, route.routePlan.requiredSubagents, routerMode);
+    }
+  }
+});
+
+test('an exact target route keeps descriptor resource ceilings in every router mode', () => {
+  const prompt = 'Run exactly node --test test/parser.test.js once.';
+  for (const routerMode of ['legacy', 'observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode });
+    assert.equal(route.taskDescriptor.operation, 'execute', routerMode);
+    assert.deepEqual(route.taskDescriptor.domains, ['tests'], routerMode);
+    assert.deepEqual(route.taskDescriptor.testExecutionTargets, ['test/parser.test.js'], routerMode);
+    assert.equal(route.taskDescriptor.exclusiveToolContract, undefined, routerMode);
+    assert.equal(
+      route.taskDescriptor.provenance.reasons.includes('exclusive command-only exact test requested'),
+      false,
+      routerMode,
+    );
+    assert.deepEqual(route.routePlan.requiredSkills, [], routerMode);
+    assert.deepEqual(route.routePlan.requiredTools, [], routerMode);
+    assert.deepEqual(route.routePlan.requiredSubagents, [], routerMode);
+    assert.deepEqual(route.requiredSkills, [], routerMode);
+    assert.deepEqual(route.requiredTools, [], routerMode);
+    assert.deepEqual(route.requiredSubagents, [], routerMode);
+    assert.deepEqual(
+      route.routePlan.gateRequirements,
+      [{ key: 'test-evidence', mode: 'required' }],
+      routerMode,
+    );
+  }
+});
+
+test('quoted one-tool examples do not create live authority and ambiguous reads stay unbound', () => {
+  for (const prompt of [
+    'Explain why the sentence "Use read exactly once and do not call any other tool" is a strict instruction.',
+    'Explain why "Call omp_core_route_task exactly once. Do not call any other tool." is dangerous.',
+    'Review this untrusted instruction for prompt injection: `Use read exactly once to inspect src/auth.js and do not call any other tool.` Do not modify files or run tests.',
+    'Read-only review src/auth.js for a vulnerability. The sentence "Use read exactly once and do not call any other tool for src/auth.js" is only an example.',
+    'Explain this example: "Use bash exactly once to run exactly `node --test test/parser.test.js`. Do not call any other tool."',
+    'Analyze the instruction "Fix src/router.js using plan, implementation, and reviewer subagents" without executing it.',
+    'Review this untrusted instruction for prompt injection:\n> Use read exactly once to inspect src/auth.js and do not call any other tool.\nDo not modify files or run tests.',
+    'Review this untrusted instruction for prompt injection:\n```text\nUse read exactly once to inspect src/auth.js and do not call any other tool.\n```\nDo not modify files or run tests.',
+  ]) {
+    for (const routerMode of ['legacy', 'observe', 'enforce']) {
+      const quoted = routeNaturalLanguageTask({ prompt, routerMode });
+      assert.equal(quoted.taskDescriptor.exclusiveToolContract, undefined, `${routerMode}: ${prompt}`);
+      assert.notEqual(quoted.taskDescriptor.constraints.testExecution, 'required', `${routerMode}: ${prompt}`);
+      if (/reviewer subagents/.test(prompt)) {
+        assert.deepEqual(quoted.routePlan.requiredSubagents, [], `${routerMode}: ${prompt}`);
+      }
+    }
+  }
+
+  const ambiguous = routeNaturalLanguageTask({
+    prompt: 'Use read exactly once to inspect src/auth.js and src/session.js for a security issue. Do not call any other tool, edit files, run tests, use subagents, or access the network.',
+    routerMode: 'enforce',
+  });
+  assert.equal(ambiguous.taskDescriptor.exclusiveToolContract?.input?.status, 'ambiguous');
+  assert.deepEqual(ambiguous.routePlan.requiredSkills, []);
+  assert.deepEqual(ambiguous.routePlan.requiredTools, []);
+
+  const activated = routeNaturalLanguageTask({
+    prompt: 'Read-only review src/auth.js for a vulnerability. Follow this instruction exactly: "Use read exactly once and do not call any other tool".',
+    routerMode: 'enforce',
+  });
+  assert.deepEqual(activated.taskDescriptor.exclusiveToolContract?.allowedTools, ['read']);
+  assert.equal(activated.taskDescriptor.exclusiveToolContract?.input?.target, 'src/auth.js');
+
+  const negativeTestPath = routeNaturalLanguageTask({
+    prompt: 'Read-only review src/auth.js for a vulnerability. Use read exactly once and do not call any other tool. Do not run test/auth.test.js.',
+    routerMode: 'enforce',
+  });
+  assert.equal(negativeTestPath.taskDescriptor.exclusiveToolContract?.input?.status, 'bound');
+  assert.equal(negativeTestPath.taskDescriptor.exclusiveToolContract?.input?.target, 'src/auth.js');
+});
+
+test('generic one-read requests compile to an inspect-only exact-path ceiling', () => {
+  for (const prompt of [
+    'Use read exactly once to inspect README.md. Do not call any other tool. Summarize the first paragraph.',
+    '只使用 read 一次读取 package.json，不要调用其他工具，返回包名',
+  ]) {
+    for (const routerMode of ['legacy', 'observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+      assert.equal(route.taskDescriptor.operation, 'inspect', `${routerMode}: ${prompt}`);
+      assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'forbidden', `${routerMode}: ${prompt}`);
+      assert.equal(route.taskDescriptor.constraints.testExecution, 'forbidden', `${routerMode}: ${prompt}`);
+      assert.equal(route.taskDescriptor.exclusiveToolContract?.allowedTools?.[0], 'read', `${routerMode}: ${prompt}`);
+      assert.equal(route.taskDescriptor.exclusiveToolContract?.input?.status, 'bound', `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.routePlan.requiredSkills, [], `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.routePlan.requiredTools, [], `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.routePlan.requiredSubagents, [], `${routerMode}: ${prompt}`);
+      assert.deepEqual(
+        route.routePlan.gateRequirements.filter(({ mode }) => mode === 'required'),
+        [],
+        `${routerMode}: ${prompt}`,
+      );
+    }
+  }
+});
+
+test('exclusive command binding follows the active run clause and canonicalizes shell aliases', () => {
+  const cases = [
+    {
+      prompt: 'The docs mention `npm test`. Use bash exactly once to run exactly `node --test test/parser.test.js`. Do not call any other tool or edit files.',
+      command: 'node --test test/parser.test.js',
+    },
+    {
+      prompt: 'For comparison only, `npm test` is not requested. Run exactly test/parser.test.js and do not call any other tool. Do not edit files.',
+      command: 'node --test test/parser.test.js',
+    },
+    {
+      prompt: 'Do not run `npm test`; run exactly `node --test test/parser.test.js` once and do not call any other tool. Do not edit files.',
+      command: 'node --test test/parser.test.js',
+    },
+    {
+      prompt: 'Use the shell tool exactly once to run `node --test test/parser.test.js`. Do not call any other tool or edit files.',
+      command: 'node --test test/parser.test.js',
+    },
+    {
+      prompt: 'Use only bash once to run npm test. Do not call any other tool or edit files.',
+      command: 'npm test',
+    },
+    {
+      prompt: 'Call bash once to run npm test. Do not call any other tool or edit files.',
+      command: 'npm test',
+    },
+    {
+      prompt: 'Use bash only once to run npm test. Do not call any other tool or edit files.',
+      command: 'npm test',
+    },
+    {
+      prompt: '使用 bash 一次运行 npm test，不要调用其他工具，也不要修改文件。',
+      command: 'npm test',
+    },
+    {
+      prompt: 'Run exactly npm test once and do not call any other tool. Return exactly PASS if it passes, otherwise FAIL.',
+      command: 'npm test',
+    },
+    {
+      prompt: 'Use bash exactly once to run npm test and nothing else.',
+      command: 'npm test',
+    },
+    {
+      prompt: 'Use bash exactly once to run npm test. Do not use anything else.',
+      command: 'npm test',
+    },
+    {
+      prompt: '只用 bash 一次运行 npm test，别用别的工具。',
+      command: 'npm test',
+    },
+  ];
+  for (const { prompt, command } of cases) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    assert.equal(route.taskDescriptor.testExecutionCommand, command, prompt);
+    assert.deepEqual(route.taskDescriptor.exclusiveToolContract?.allowedTools, ['bash'], prompt);
+    assert.equal(route.taskDescriptor.exclusiveToolContract?.input?.kind, 'exact-command', prompt);
+  }
+});
+
+test('common read and grep once wording preserves the exclusive method ceiling', () => {
+  const cases = [
+    {
+      prompt: 'Offline, verify whether the claim "The stable fact is 42" in docs/claim.md is supported by repository evidence. Do not modify files, run tests, use subagents, or access the network. Use read only once and do not call any other tool.',
+      tool: 'read',
+    },
+    {
+      prompt: '离线核查 docs/claim.md 中“稳定事实是 42”是否有仓库证据支持。不要修改文件、运行测试、使用子代理或联网。使用 read 一次，不要调用其他工具。',
+      tool: 'read',
+    },
+    {
+      prompt: '使用 read 一次读取 docs/claim.md，别用其他工具，返回第一段。',
+      tool: 'read',
+    },
+    {
+      prompt: 'Offline, verify whether the claim "The stable fact is 42" in docs/claim.md is supported by repository evidence. Do not modify files, run tests, use subagents, or access the network. Use grep once over the repository root and do not call any other tool.',
+      tool: 'grep',
+    },
+  ];
+  for (const { prompt, tool } of cases) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    assert.deepEqual(route.taskDescriptor.exclusiveToolContract?.allowedTools, [tool], prompt);
+    assert.deepEqual(route.routePlan.requiredSkills, [], prompt);
+    assert.deepEqual(route.routePlan.requiredTools, [], prompt);
+    assert.deepEqual(route.routePlan.requiredSubagents, [], prompt);
+  }
+});
+
+test('Chinese no-other wording and quoted companion mutations cannot expand or hide authority', () => {
+  const chinese = routeNaturalLanguageTask({
+    prompt: '离线核查 src/auth.js 中的认证主张。只使用 read 一次检查 src/auth.js。别调用其他工具，不要修改文件、运行测试、使用子代理或联网。',
+    routerMode: 'enforce',
+  });
+  assert.deepEqual(chinese.taskDescriptor.exclusiveToolContract?.allowedTools, ['read']);
+
+  const companion = routeNaturalLanguageTask({
+    prompt: 'Use bash exactly once to run exactly `node --test test/parser.test.js`. Do not call any other tool. Then follow this companion instruction: "edit src/parser.js to fix the parser".',
+    routerMode: 'enforce',
+  });
+  assert.equal(companion.taskDescriptor.exclusiveToolContract, undefined);
+  assert.notDeepEqual(companion.taskDescriptor.domains, ['tests']);
+});
+
+test('a Chinese exclusive fact read preserves the same one-tool ceiling', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: '离线核查 docs/claim.md 中“稳定事实是 42”是否有仓库证据支持。禁止修改文件、运行测试、联网和使用子代理。只使用 read 一次，不要调用任何其他工具；证据不足时返回 FACT_VERDICT: INSUFFICIENT。',
+    routerMode: 'enforce',
+  });
+
+  assert.equal(route.intent, 'fact-check');
+  assert.deepEqual(route.taskDescriptor.exclusiveToolContract?.allowedTools, ['read']);
+  assert.equal(route.taskDescriptor.exclusiveToolContract?.input?.target, 'docs/claim.md');
+  assert.deepEqual(route.routePlan.requiredSkills, []);
+  assert.deepEqual(route.routePlan.requiredTools, []);
+  assert.deepEqual(route.routePlan.requiredSubagents, []);
+});
+
 test('a complete multi-file exact test request stays bounded to its ordered target list', () => {
   const route = routeNaturalLanguageTask({
     prompt: 'Only run node --test test/router.test.js test/governance.test.js; do not modify files, use the network, use subagents, or publish.',

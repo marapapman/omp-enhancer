@@ -3,6 +3,7 @@ import {
   buildMissingGateContexts,
   buildSubagentPromptFragment,
   formatWorkflowGateBriefingForAssignment,
+  governanceRouteConflictReason,
 } from './src/governance.js';
 import { routeNaturalLanguageTask } from './src/router.js';
 import {
@@ -115,6 +116,8 @@ const USER_INPUT_ACTION_BLOCKERS = new Set([
   'release-target-confirmation-required',
   'release-verification-unsupported',
   'irreversible-approval-required',
+  'exclusive-tool-contract-unsatisfiable',
+  'network-access-unverifiable',
 ]);
 const REPAIRABLE_ACTION_BLOCKERS = new Set([
   'test-target-authorization-required',
@@ -177,6 +180,7 @@ export default function registerCoreEnhancer(pi) {
           probedAt: Date.now(),
         };
       }
+      recordDirectExclusiveToolSuccess(state, 'omp_core_route_task', _callId, params);
       await persistState(pi, state);
       const suffix = shouldActivate ? '' : '\nRoute probe only: active route state was not changed.';
       return okResult(`${formatRoute(route)}${suffix}${formatRouteProbeGuidance(route, { probeOnly })}`, {
@@ -394,7 +398,10 @@ export default function registerCoreEnhancer(pi) {
     parameters: z?.object ? z.object({}) : undefined,
     execute: async (_callId, _params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
-      return okResult(formatSubagentStatus(state), { status: buildSubagentStatus(state) });
+      const result = okResult(formatSubagentStatus(state), { status: buildSubagentStatus(state) });
+      recordDirectExclusiveToolSuccess(state, 'omp_core_subagent_status', _callId, _params);
+      await persistState(pi, state);
+      return result;
     },
   });
 
@@ -511,7 +518,11 @@ export default function registerCoreEnhancer(pi) {
     const route = inheritedContinuation
       ? inheritContinuationRoute(state.lastRoute)
       : routeNaturalLanguageTask({ prompt });
-    setRouteState(state, route, effectivePrompt);
+    const preserveExclusiveBudget = inheritedContinuation
+      && state.exclusiveToolState
+      && (state.exclusiveToolState.status !== 'unused'
+        || state.exclusiveToolState.finalCorrectionUsed === true);
+    setRouteState(state, route, effectivePrompt, { preserveExclusiveBudget });
     await writeDebugLog(ctx, 'routes', buildDebugRecord({
       kind: 'routes',
       prompt: effectivePrompt,
@@ -525,7 +536,10 @@ export default function registerCoreEnhancer(pi) {
     await persistState(pi, state);
     const fragment = buildRoutedGovernanceContext(state, { route, parentTask: effectivePrompt, visibility: 'automatic' });
     if (!fragment) return { route };
-    return { ...injectBeforeAgentSystemPrompt(event, fragment), route };
+    return {
+      ...injectBeforeAgentSystemPrompt(event, fragment, buildImmediateRouteContract(state)),
+      route,
+    };
   });
 
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
@@ -539,13 +553,22 @@ export default function registerCoreEnhancer(pi) {
       || state.actionBoundary?.awaitingUserReason) {
       return {
         block: true,
+        reasonCode: state.actionBoundary?.awaitingUserReason ?? 'protected-action-terminal',
         reason: state.actionBoundary?.awaitingUserReason
           ? formatAwaitingUserToolBlock(state.actionBoundary.awaitingUserReason)
           : 'OMP_GATE_TERMINAL is active. Do not call or run any more tools or commands; produce only the final degraded or blocked status for the user.',
       };
     }
-    const protectedBoundary = buildProtectedActionBoundaryBlock(state, name, event, ctx);
+    let protectedBoundary = buildProtectedActionBoundaryBlock(state, name, event, ctx);
     if (protectedBoundary) {
+      if (exclusiveToolCallMatchesAllowedTool(state, name)
+        && !/^(?:exclusive-tool-|focused-fact-search-)/.test(String(protectedBoundary.reasonCode))) {
+        markExclusiveToolBlocked(state, protectedBoundary.reasonCode);
+        protectedBoundary = protectedConstraintBlock(
+          'exclusive-tool-contract-unsatisfiable',
+          `${protectedBoundary.reason} The only user-authorized tool call cannot pass the protected route boundary. Do not inspect, substitute another tool, or retry; report the limitation and ask the user to restate the exact action and input without the conflicting constraint if they want execution.`,
+        );
+      }
       const denial = recordProtectedActionDenial(state, protectedBoundary, name, event);
       await persistState(pi, state);
       return denial;
@@ -588,6 +611,7 @@ export default function registerCoreEnhancer(pi) {
         return preworkBlock;
       }
     }
+    recordExclusiveToolCallStart(state, name, event);
     await persistState(pi, state);
     return undefined;
   });
@@ -651,13 +675,95 @@ export default function registerCoreEnhancer(pi) {
         evidenceRevision: state.gateController.evidenceRevision + 1,
       });
     }
+    const exclusiveDisposition = exclusiveToolResultDisposition(state, name, {
+      successful,
+      failed,
+      pending,
+    });
+    recordExclusiveToolResult(state, name, event, exclusiveDisposition);
     await persistState(pi, state);
     return undefined;
   });
 
   pi.on?.('session_stop', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
+    if (state.lastRoute?.taskDescriptor?.exclusiveToolContract
+      && state.exclusiveToolState?.status === 'succeeded'
+      && state.actionBoundary?.awaitingUserReason !== 'exclusive-tool-contract-unsatisfiable'
+      && !exclusiveSuccessfulTerminalOutputIsHonest(state, event)) {
+      if (state.exclusiveToolState.finalCorrectionUsed !== true) {
+        state.exclusiveToolState = {
+          ...state.exclusiveToolState,
+          finalCorrectionUsed: true,
+        };
+        const expected = exclusiveSuccessfulExpectedOutput(state.lastPrompt);
+        await persistState(pi, state);
+        return {
+          continue: true,
+          additionalContext: [
+            'OMP_GATE_TERMINAL: the single exclusive tool call already succeeded and no further tool call is authorized.',
+            expected
+              ? `Correct only the final text once and return exactly: ${expected}`
+              : 'Correct only the final text once so it reflects the successful host result without claiming failure or non-execution.',
+            'Do not call a tool, load a skill, inspect, retry, or substitute another method.',
+          ].join('\n'),
+          details: { reasonCode: 'exclusive-tool-success-output-correction' },
+        };
+      }
+      state.exclusiveToolState = {
+        ...state.exclusiveToolState,
+        reasonCode: 'exclusive-tool-success-output-correction-budget-exhausted',
+      };
+      await persistState(pi, state);
+      return undefined;
+    }
+    if (exclusiveToolStopsCompletionRepair(state)) {
+      const honestTerminalOutput = exclusiveToolTerminalOutputIsHonest(state, event);
+      if (!honestTerminalOutput && state.exclusiveToolState?.finalCorrectionUsed !== true) {
+        state.exclusiveToolState = {
+          ...state.exclusiveToolState,
+          finalCorrectionUsed: true,
+        };
+        await persistState(pi, state);
+        return {
+          continue: true,
+          additionalContext: [
+            'OMP_GATE_TERMINAL: the exclusive one-tool route cannot collect more evidence and no further tool call is authorized.',
+            'Do not call a tool, load a skill, inspect, retry, or substitute a method. Correct only the final text once: explicitly state that the requested action was not completed or that the sole observed call failed, and do not claim PASS, SAFE, release, or completion.',
+          ].join('\n'),
+          details: { reasonCode: 'exclusive-tool-terminal-output-correction' },
+        };
+      }
+      if (!honestTerminalOutput) {
+        state.exclusiveToolState = {
+          ...state.exclusiveToolState,
+          reasonCode: 'exclusive-tool-terminal-correction-budget-exhausted',
+        };
+        await persistState(pi, state);
+        return undefined;
+      }
+      await persistState(pi, state);
+      return undefined;
+    }
     if (state.actionBoundary?.awaitingUserReason) {
+      const output = extractFinalOutputText(event).trim();
+      const honestAwaitingUserOutput = terminalAwaitingUserOutputIsHonest(
+        output,
+        state.actionBoundary.awaitingUserReason,
+      );
+      if (!honestAwaitingUserOutput && state.actionBoundary.finalCorrectionUsed !== true) {
+        state.actionBoundary.finalCorrectionUsed = true;
+        await persistState(pi, state);
+        return {
+          continue: true,
+          additionalContext: [
+            'OMP_AWAITING_USER is active and no tool call is authorized.',
+            'Correct only the final text once. State that the requested action was not executed or completed, explain the conflicting authorization or missing trusted host capability, and ask the user to restate the exact action without the conflict. Do not claim PASS, success, verification, release, or completion.',
+          ].join('\n'),
+          details: { reasonCode: 'awaiting-user-terminal-output-correction' },
+        };
+      }
+      if (!honestAwaitingUserOutput) state.actionBoundary.terminal = true;
       await persistState(pi, state);
       return undefined;
     }
@@ -753,6 +859,7 @@ export function createState() {
     trustedApprovals: createTrustedApprovalState(),
     testingToolAvailability: 'unknown',
     actionBoundary: createActionBoundaryState(),
+    exclusiveToolState: null,
     // Ephemeral only: the path is authorized by the route and the raw read
     // result is consumed directly from the matching host event. Nothing from
     // this map is serialized into session state.
@@ -914,14 +1021,19 @@ function normalizeRoutePrompt(value = '') {
 function shouldInheritUserContinuation(state, prompt = '') {
   if (!isTerseUserContinuation(prompt) || !state?.lastRoute?.taskDescriptor) return false;
   const descriptor = state.lastRoute.taskDescriptor;
-  if (!['modify', 'create', 'execute'].includes(descriptor.operation)) return false;
+  const exclusiveContinuation = descriptor.exclusiveToolContract?.mode === 'exclusive';
+  if (!exclusiveContinuation && !['modify', 'create', 'execute'].includes(descriptor.operation)) return false;
   if (descriptor.constraints?.externalWrite === 'required') return false;
   if ((descriptor.risk?.flags ?? []).includes('irreversible-file-operation')) return false;
   return Boolean(state.lastPrompt && state.routeStartedAt);
 }
 
 function isTerseUserContinuation(prompt = '') {
-  const text = normalizeRoutePrompt(prompt).toLowerCase();
+  const text = normalizeRoutePrompt(prompt)
+    .replace(/[。！？.!?]+$/u, '')
+    .trim()
+    .toLowerCase()
+    .replace(/^(?:please\s+|请\s*|麻烦\s*)/u, '');
   return /^(?:继续(?:吧|执行|实现|修复|开发)?|开始吧|开始(?:执行|实现|修复|开发)(?:吧)?|按(?:照)?(?:这个|该|上述)?计划执行|照(?:这个|该|上述)?方案做|就(?:按)?这么做|执行吧|go ahead|continue|proceed(?: with (?:the|this) plan)?|start now|do it)$/i.test(text);
 }
 
@@ -940,9 +1052,14 @@ function inheritContinuationRoute(previousRoute) {
   };
 }
 
-function setRouteState(state, route, prompt = '', { classifierResolved = false, newTurn = true } = {}) {
+function setRouteState(state, route, prompt = '', {
+  classifierResolved = false,
+  newTurn = true,
+  preserveExclusiveBudget = false,
+} = {}) {
   const previousPreflight = state.classifierPreflight;
   const previousRouteStartedAt = Number.isFinite(state.routeStartedAt) ? state.routeStartedAt : 0;
+  const previousExclusiveToolState = preserveExclusiveBudget ? state.exclusiveToolState : null;
   if (!newTurn && state.routeStartedAt) {
     state.lastRoute = route;
     state.lastRouteProbe = null;
@@ -974,6 +1091,18 @@ function setRouteState(state, route, prompt = '', { classifierResolved = false, 
   });
   state.trustedApprovals = createTrustedApprovalState();
   state.actionBoundary = createActionBoundaryState();
+  state.exclusiveToolState = createExclusiveToolState(state.lastRoute, gateControllerRouteId(state));
+  if (previousExclusiveToolState && state.exclusiveToolState) {
+    state.exclusiveToolState = {
+      ...previousExclusiveToolState,
+      routeId: gateControllerRouteId(state),
+    };
+    state.actionBoundary.awaitingUserReason = 'exclusive-tool-contract-unsatisfiable';
+  }
+  const routeConflict = governanceRouteConflictReason(state.lastRoute);
+  if (routeConflict && !state.exclusiveToolState) {
+    state.actionBoundary.awaitingUserReason = 'network-access-unverifiable';
+  }
 }
 
 function resetState(state) {
@@ -996,6 +1125,7 @@ function resetState(state) {
   state.gateController = createGateControllerState();
   state.trustedApprovals = createTrustedApprovalState();
   state.actionBoundary = createActionBoundaryState();
+  state.exclusiveToolState = null;
 }
 
 async function persistState(pi, state) {
@@ -1070,6 +1200,7 @@ function replaceState(target, source) {
   const liveApprovals = target.trustedApprovals;
   const liveTestingToolAvailability = target.testingToolAvailability;
   const liveFocusedFactSearch = target.focusedFactSearch;
+  const liveExclusiveToolState = target.exclusiveToolState;
   target.lastRoute = source.lastRoute;
   target.lastPrompt = source.lastPrompt ?? '';
   target.routeStartedAt = source.routeStartedAt;
@@ -1090,6 +1221,11 @@ function replaceState(target, source) {
   target.trustedApprovals = liveApprovals ?? createTrustedApprovalState();
   target.testingToolAvailability = liveTestingToolAvailability ?? 'unknown';
   target.actionBoundary = source.actionBoundary ?? createActionBoundaryState();
+  target.exclusiveToolState = mergeExclusiveToolState(
+    liveExclusiveToolState,
+    source.exclusiveToolState,
+    gateControllerRouteId(source),
+  );
   target.focusedFactSearch = mergeLiveFocusedFactSearchState(
     liveFocusedFactSearch,
     source.focusedFactSearch,
@@ -1144,6 +1280,7 @@ function serializeState(state) {
     gateRecovery: serializeGateRecoveryState(state.gateRecovery),
     gateController: serializeGateControllerState(state.gateController),
     actionBoundary: state.actionBoundary,
+    exclusiveToolState: state.exclusiveToolState,
     focusedFactSearch: state.focusedFactSearch,
     evidence: {
       writingQuality: state.evidence.writingQuality,
@@ -1255,6 +1392,11 @@ function readStateSnapshot(value) {
       routeId: gateControllerRouteId(value),
     }),
     actionBoundary: readActionBoundaryState(value.actionBoundary),
+    exclusiveToolState: readExclusiveToolState(
+      value.exclusiveToolState,
+      gateControllerRouteId(value),
+      value.lastRoute?.taskDescriptor?.exclusiveToolContract,
+    ),
     focusedFactSearch,
     evidence,
   };
@@ -1280,15 +1422,19 @@ function readFocusedFactEvidenceRecord(value) {
   const claimSourceBound = record?.claimSourceBound === undefined
     ? true
     : record.claimSourceBound;
+  const grepRecord = record?.toolName === 'grep';
+  const readRecord = record?.toolName === 'read';
   if (!record
-    || record.toolName !== 'grep'
+    || !grepRecord && !readRecord
     || !/^[a-f0-9]{64}$/.test(String(record.resultDigest ?? ''))
-    || !digestArray(record.queryTermDigests, { required: true })
+    || !digestArray(record.queryTermDigests, { required: grepRecord })
     || typeof claimSourceBound !== 'boolean'
     || !digestArray(record.claimPathDigests, { required: claimSourceBound })
     || !claimSourceBound && record.claimPathDigests.length > 0
     || !digestArray(record.matchedPathDigests)
     || !['no-match', 'claim-only', 'independent-hit', 'unparseable-hit'].includes(record.matchKind)
+    || readRecord && (!['claim-only', 'unparseable-hit'].includes(record.matchKind)
+      || record.independentMatchObserved !== false)
     || typeof record.independentMatchObserved !== 'boolean'
     || !Number.isFinite(record.observedAt)) return null;
   return {
@@ -2254,12 +2400,12 @@ function buildSessionStopGateRecords(state, { loopRecoveryContext = null } = {})
       missingEvidenceCodes: ['review_gate'],
       protection: 'soft',
       context: [
-        'Required review evidence is still open. Complete the routed reviewer checkpoint, or for an explicitly focused main-agent task provide this exact multiline block:',
+        'Required review evidence is still open. Complete the routed reviewer checkpoint, or for an explicitly focused main-agent task provide concrete multiline evidence without copying instruction placeholders:',
         'REVIEW_EVIDENCE',
-        'Scope: <reviewed target and change>',
-        'Findings: <concrete static review findings>',
-        'OpenBlockers: none',
-        'Verdict: PASS',
+        'Scope: state the target and change actually reviewed',
+        'Findings: state the concrete findings actually observed',
+        'OpenBlockers: state none only when no blocker remains; otherwise list the blockers',
+        'Verdict: use PASS only when the review actually passes; otherwise report the blocking verdict',
       ].join('\n'),
     }, state));
   }
@@ -2737,6 +2883,26 @@ function buildRoutedGovernanceContext(state, { route, parentTask = '', visibilit
   const automatic = visibility !== 'explicit';
   if (automatic && route?.intent === 'unknown' && !state.classifierPreflight?.required) return null;
   const governedRoute = routeForRuntime(route);
+  if (governedRoute.taskDescriptor?.exclusiveToolContract?.mode === 'exclusive'
+    && state.actionBoundary?.awaitingUserReason === 'exclusive-tool-contract-unsatisfiable'
+    && state.exclusiveToolState?.status !== 'unused') {
+    return [
+      '## OMP Enhancer Core Exhausted Exclusive Tool Route',
+      '',
+      `The prior exclusive tool budget is already ${state.exclusiveToolState?.status ?? 'unavailable'}.`,
+      'Do not call any tool, reload a skill, inspect another source, retry the prior input, or substitute another method.',
+      'Report exactly that no additional action was performed and the prior result is unchanged; do not restate PASS, success, or completion.',
+      'A terse continuation does not authorize a second call. To request another execution, the user must restate the exact tool action and input as a new explicit instruction.',
+    ].join('\n');
+  }
+  if (governanceRouteConflictReason(governedRoute)
+    || governedRoute.taskDescriptor?.exclusiveToolContract?.mode === 'exclusive') {
+    return buildGovernancePromptFragment({
+      route: governedRoute,
+      parentTask,
+      includeModelWorkflowHints: false,
+    });
+  }
 
   return [
     buildModelRoutingCheckpointBlock({
@@ -2754,7 +2920,7 @@ function buildRoutedGovernanceContext(state, { route, parentTask = '', visibilit
   ].filter(Boolean).join('\n\n');
 }
 
-function injectBeforeAgentSystemPrompt(event = {}, fragment = '') {
+function injectBeforeAgentSystemPrompt(event = {}, fragment = '', immediateContract = '') {
   const existing = Array.isArray(event.systemPrompt)
     ? event.systemPrompt.filter((block) => typeof block === 'string' && block.length > 0)
     : typeof event.systemPrompt === 'string' && event.systemPrompt.length > 0
@@ -2766,7 +2932,143 @@ function injectBeforeAgentSystemPrompt(event = {}, fragment = '') {
   // additionalContext mirror for older hosts and the public test/debug shape.
   event.systemPrompt = systemPrompt;
   event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
-  return { systemPrompt, additionalContext: fragment };
+  return {
+    systemPrompt,
+    additionalContext: fragment,
+    ...(immediateContract ? {
+      message: {
+        customType: 'omp-enhancer-core.route-contract',
+        content: immediateContract,
+        display: false,
+        attribution: 'agent',
+      },
+    } : {}),
+  };
+}
+
+function buildImmediateRouteContract(state) {
+  const route = state.lastRoute;
+  if (!route) return '';
+  const reasons = new Set(route.taskDescriptor?.provenance?.reasons ?? []);
+  if (reasons.has('exclusive route task diagnostic probe')) {
+    return [
+      'OMP Enhancer Core immediate route contract:',
+      'Call omp_core_route_task exactly once with the user-supplied probe prompt. Do not call any other tool or execute the probed task. Return the route output and any explanation explicitly requested by the user in the first completion response.',
+    ].join('\n');
+  }
+  if (reasons.has('exclusive subagent status diagnostic probe')) {
+    return [
+      'OMP Enhancer Core immediate route contract:',
+      'Call omp_core_subagent_status exactly once. Do not call any other tool. Return only the user-requested status literal in the first completion response.',
+    ].join('\n');
+  }
+  const exclusiveContract = route.taskDescriptor?.exclusiveToolContract;
+  if (exclusiveContract?.mode === 'exclusive'
+    && state.actionBoundary?.awaitingUserReason === 'exclusive-tool-contract-unsatisfiable'
+    && state.exclusiveToolState?.status !== 'unused') {
+    return [
+      'OMP Enhancer Core exhausted exclusive-tool contract:',
+      `Do not call ${exclusiveContract.allowedTools?.[0] ?? 'the prior tool'} or any other tool. The one-call budget is already ${state.exclusiveToolState?.status ?? 'unavailable'}.`,
+      'Report exactly that no additional action was performed and the prior result is unchanged; do not restate PASS, success, or completion. A terse continuation cannot authorize a retry; the user must restate the exact action and input in a new explicit instruction.',
+    ].join('\n');
+  }
+  if (exclusiveContract?.mode !== 'exclusive' && governanceRouteConflictReason(route)) {
+    return [
+      'OMP Enhancer Core immediate execution boundary:',
+      'Do not call any tool. The requested repository-controlled test cannot prove the explicit no-network constraint without a real host network sandbox.',
+      'Do not inspect, load skills, call QA/status tools, substitute another method, or retry. Report once that execution did not occur and ask the user to restate the exact action and input without the conflicting constraint, or with the required trusted host capability explicitly available.',
+    ].join('\n');
+  }
+  if (exclusiveContract?.mode === 'exclusive') {
+    if (state.exclusiveToolState?.status === 'blocked') {
+      const networkConflict = state.exclusiveToolState.reasonCode === 'exclusive-tool-network-sandbox-required';
+      return [
+        'OMP Enhancer Core immediate exclusive-tool contract:',
+        networkConflict
+          ? `Do not call ${route.taskDescriptor?.testExecutionCommand ?? exclusiveContract.allowedTools[0]} or any other tool. A repository-controlled test cannot verify the explicit no-network constraint without a real host network sandbox.`
+          : 'Do not call any tool. The requested single-tool constraint conflicts with the protected evidence contract or does not bind one unambiguous input.',
+        'Do not inspect, load skills, call QA/status tools, substitute a method, or retry. In the first response, report that execution did not occur and ask the user to restate the exact action and input without the conflict if they want it performed.',
+      ].join('\n');
+    }
+    const allowedTool = exclusiveContract.allowedTools[0];
+    if (isExactTestExecutionRoute(route)) {
+      return [
+        'OMP Enhancer Core immediate exclusive-tool contract:',
+        `Use the ${allowedTool} tool exactly once with the exact authorized command: ${route.taskDescriptor.testExecutionCommand}.`,
+        'Do not read files, load skills, call QA/status tools, add flags or commands, substitute another method, or retry after failure. After the host result, follow the user-requested final response format in the first completion response.',
+      ].join('\n');
+    }
+    if (isFocusedLocalFactInspectionRoute(route) && allowedTool === 'read') {
+      return [
+        'OMP Enhancer Core immediate exclusive-tool contract:',
+        `Use read exactly once for ${exclusiveContract.input?.target}. Do not call grep, search, skills, fact_check_* tools, or any other method, and do not retry after failure.`,
+        'One bounded read cannot establish independent repository-wide support. You may explain the observed limitation, but end the first response with exactly one line: FACT_VERDICT: INSUFFICIENT.',
+      ].join('\n');
+    }
+    if (isFocusedLocalFactInspectionRoute(route) && allowedTool === 'grep') {
+      return [
+        'OMP Enhancer Core immediate exclusive-tool contract:',
+        'Use exactly one built-in repository grep for the claim. Do not retry, switch search methods, or call the heavyweight fact toolchain.',
+        'Explain the host-observed evidence as requested, then end the first response with exactly one evidence-consistent FACT_VERDICT line.',
+      ].join('\n');
+    }
+    return [
+      'OMP Enhancer Core immediate exclusive-tool contract:',
+      `Call only ${allowedTool} exactly once with the bound input. Do not load skills, call workflow/QA tools, delegate, substitute another method, or retry after failure. Then follow the user's requested output format in the first completion response.`,
+    ].join('\n');
+  }
+  if (isExactTestExecutionRoute(route)) {
+    const commandOnly = reasons.has('exclusive command-only exact test requested');
+    return commandOnly
+      ? [
+        'OMP Enhancer Core immediate route contract:',
+        'Run only the exact authorized test command once, using the single direct shell tool requested by the user. Do not read files, load skills, call QA/status tools, or add another command. Return the requested result literal in the first completion response.',
+      ].join('\n')
+      : [
+        'OMP Enhancer Core immediate route contract:',
+        'Read only the runner configuration needed for the exact target, load any routed direct-work skills, then run one direct command naming every authorized test target once and in order. Do not start a bug audit, generate tests, substitute an aggregate suite, or call unrelated QA/status tools.',
+      ].join('\n');
+  }
+  if (isFocusedLocalFactInspectionRoute(route)) {
+    return [
+      'OMP Enhancer Core immediate route contract:',
+      'Use exactly one built-in repository grep for the claim. Do not retry, switch search methods, or call the heavyweight fact toolchain. Explain the observed evidence as requested, then end the first completion response with exactly one evidence-consistent FACT_VERDICT line.',
+    ].join('\n');
+  }
+
+  const directMainAgent = routeRequiredSubagents(route).length === 0;
+  const missingSkills = directMainAgent ? missingReadSkills(state) : [];
+  const requiredTools = directMainAgent ? routeRequiredTools(route) : [];
+  const requiredGateKeys = new Set(
+    (route.routePlan?.gateRequirements ?? [])
+      .filter(({ mode }) => mode === 'required')
+      .map(({ key }) => key),
+  );
+  const needsDirectReview = directMainAgent && requiredGateKeys.has('review-evidence');
+  if (!missingSkills.length && !requiredTools.length && !needsDirectReview) return '';
+
+  const lines = ['OMP Enhancer Core immediate route contract:'];
+  if (missingSkills.length) {
+    lines.push(
+      `FIRST, before any repository read, edit, shell, QA, or workflow tool, read every required skill and wait for all results: ${missingSkills.map((skill) => `skill://${skill}`).join(', ')}.`,
+      'Do not defer these skill reads to session_stop or a completion repair.',
+    );
+  }
+  if (requiredTools.length) {
+    lines.push(`AFTER the skill reads, use the routed workflow tools as needed: ${requiredTools.join(', ')}.`);
+  }
+  if (needsDirectReview) {
+    lines.push(
+      'Only if the static review actually passes with no open blocker, include concrete review evidence in the FIRST completion response using this multiline shape:',
+      'REVIEW_EVIDENCE',
+      'Scope: write the target and change actually reviewed',
+      'Findings: write the concrete static review findings',
+      'OpenBlockers: write none only when no blocker remains; otherwise list the real blockers',
+      'Verdict: use PASS only when the review actually passes',
+      'If the review finds a blocker, report the real blockers and omit a PASS verdict; never copy placeholder text as evidence.',
+    );
+  }
+  return lines.join('\n');
 }
 
 function buildModelRoutingCheckpointBlock({
@@ -2885,6 +3187,8 @@ function isFocusedBugAuditRoute(route) {
 function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx = {}) {
   const descriptor = state.lastRoute?.taskDescriptor;
   if (!toolName) return null;
+  const exclusiveToolBlock = exclusiveToolBoundaryBlock(state, toolName, event);
+  if (exclusiveToolBlock) return exclusiveToolBlock;
   const text = toolActionText(event);
   const action = classifyToolAction({ toolName, text });
   if (isKnownFirstPartyNetworkAction(toolName, event)) action.networkAccess = true;
@@ -2990,8 +3294,7 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
     return protectedConstraintBlock('network-access-forbidden', 'The user explicitly forbade network access; web, fetch, remote shell, and provider calls are not authorized.');
   }
   if ((action.opaqueEffects || action.unverifiableNetworkEffects)
-    && constraints.networkAccess === 'forbidden'
-    && !exactLocalTestCommandAuthorized) {
+    && constraints.networkAccess === 'forbidden') {
     return protectedConstraintBlock('network-access-unverifiable', 'This opaque script or automation target can execute hidden network effects, so it cannot run while the user has explicitly forbidden network access. Inspect it or use a directly classifiable local command.');
   }
   if ((action.opaqueEffects || action.unverifiableTestEffects) && constraints.testExecution === 'forbidden') {
@@ -3080,6 +3383,22 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
       'The user explicitly forbade push, publish, deploy, or other external writes. This unclassified command can hide remote mutations, so use a directly classifiable local command or inspect the command implementation first.',
     );
   }
+  const implicitImplementationVerification = implicitlyAuthorizedImplementationVerification({
+    route: state.lastRoute,
+    toolName,
+    command: text,
+    action,
+    testScope,
+    ctx,
+  });
+  if (action.testExecution
+    && constraints.testExecution !== 'required'
+    && !implicitImplementationVerification) {
+    return protectedConstraintBlock(
+      'test-execution-not-authorized',
+      'The active trusted user route does not explicitly authorize test execution. Do not infer test authority from a model continuation, an unknown route, or a tool argument; wait for a new user instruction that requests the exact testing work.',
+    );
+  }
   if (action.irreversible) {
     if (!approvalToken) {
       if (hasTrustedApprovalForRouteTool(state, toolName)) {
@@ -3107,6 +3426,69 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
   const preservationBoundary = prepareDocumentPreservationToolCall(state, toolName, event, action, ctx);
   if (preservationBoundary) return preservationBoundary;
   return null;
+}
+
+function implicitlyAuthorizedImplementationVerification({
+  route,
+  toolName = '',
+  command = '',
+  action = {},
+  testScope = 'none',
+  ctx = {},
+} = {}) {
+  const descriptor = route?.taskDescriptor;
+  const capabilities = new Set(descriptor?.capabilities ?? []);
+  const targets = testExecutionTargetsInCommand(command);
+  return descriptor?.constraints?.testExecution === 'unspecified'
+    && route?.intent === 'implementation-with-tests'
+    && ['modify', 'create'].includes(descriptor.operation)
+    && descriptor.domains?.includes('code')
+    && descriptor.constraints?.workspaceWrite === 'required'
+    && capabilities.has('fs.write')
+    && capabilities.has('shell.execute')
+    && (descriptor.phases ?? []).some(({ kind, domain }) => (
+      ['modify', 'create'].includes(kind) && domain === 'code'
+    ))
+    && TRUSTED_HOST_TEST_EXECUTORS.has(String(toolName).toLowerCase())
+    && testScope === 'focused'
+    && targets.length > 0
+    && isDirectExactLocalTestCommand(command, targets)
+    && directTestTargetsWithinTrustedRoot(targets, ctx)
+    && !hasUnsafeResultMasking(command)
+    && !isDryRunAction(command)
+    && !action.networkAccess
+    && !action.externalWrite
+    && !action.workspaceWrite
+    && !action.irreversible
+    && !action.opaqueEffects;
+}
+
+function directTestTargetsWithinTrustedRoot(targets = [], ctx = {}) {
+  let root;
+  try {
+    root = realpathSync(resolve(typeof ctx.cwd === 'string' && isAbsolute(ctx.cwd)
+      ? ctx.cwd
+      : process.cwd()));
+  } catch {
+    return false;
+  }
+  return targets.length > 0 && targets.every((target) => {
+    const normalized = posix.normalize(String(target).trim().replace(/\\/g, '/').replace(/^\.\//, ''));
+    if (!normalized || normalized === '.' || normalized.startsWith('../') || isAbsolute(normalized)) return false;
+    const candidate = resolve(root, normalized);
+    const lexicalRelative = relative(root, candidate);
+    if (!lexicalRelative || lexicalRelative === '..' || lexicalRelative.startsWith('../') || isAbsolute(lexicalRelative)) return false;
+    try {
+      const actual = realpathSync(candidate);
+      const actualRelative = relative(root, actual);
+      return Boolean(actualRelative)
+        && actualRelative !== '..'
+        && !actualRelative.startsWith('../')
+        && !isAbsolute(actualRelative);
+    } catch {
+      return false;
+    }
+  });
 }
 
 function prepareDocumentPreservationToolCall(state, toolName = '', event = {}, action = {}, ctx = {}) {
@@ -3282,6 +3664,14 @@ function isDirectExactLocalTestCommand(command = '', allowedTargets = []) {
   if (observed.length !== allowedTargets.length
     || observed.some((target) => !/^(?:\.\/)?[a-z0-9_.\/-]+(?:\.test|\.spec)\.[cm]?[jt]sx?$/i.test(target))) return false;
   return observed.every((target, index) => exactTestPathMatches(target, allowedTargets[index]));
+}
+
+function isAuthorizedExactTestCommand(command = '', descriptor = {}) {
+  if (hasUnsafeResultMasking(command)) return false;
+  const authorized = String(descriptor.testExecutionCommand ?? '').trim().replace(/\s+/g, ' ');
+  const observed = String(command).trim().replace(/\s+/g, ' ');
+  if (authorized) return observed === authorized;
+  return isDirectExactLocalTestCommand(command, descriptor.testExecutionTargets ?? []);
 }
 
 function exactTestPathMatches(observed = '', allowed = '') {
@@ -3663,9 +4053,405 @@ function createActionBoundaryState() {
     denialCount: 0,
     terminal: false,
     awaitingUserReason: null,
+    finalCorrectionUsed: false,
     fingerprints: [],
     reasonCounts: {},
   };
+}
+
+function createExclusiveToolState(route, routeId = '') {
+  const contract = route?.taskDescriptor?.exclusiveToolContract;
+  if (contract?.mode !== 'exclusive') return null;
+  const blockedReason = exclusiveToolUnsatisfiableReason(route);
+  return {
+    schemaVersion: 1,
+    routeId,
+    status: blockedReason ? 'blocked' : 'unused',
+    toolName: null,
+    toolCallIdDigest: null,
+    inputDigest: null,
+    reasonCode: blockedReason,
+    finalCorrectionUsed: false,
+  };
+}
+
+function exclusiveToolUnsatisfiableReason(route) {
+  const descriptor = route?.taskDescriptor ?? {};
+  const contract = descriptor.exclusiveToolContract;
+  if (contract?.mode !== 'exclusive') return null;
+  if (contract.input?.status === 'ambiguous') return 'exclusive-tool-input-ambiguous';
+  const allowed = new Set(contract.allowedTools ?? []);
+  const requiredGates = new Set((route.routePlan?.gateRequirements ?? [])
+    .filter(({ mode }) => mode === 'required')
+    .map(({ key }) => key));
+  if (requiredGates.has('release-approval') || requiredGates.has('irreversible-approval')) {
+    return 'exclusive-tool-protected-action-unsatisfied';
+  }
+  if (requiredGates.has('security-evidence') || requiredGates.has('writing-quality')
+    || requiredGates.has('review-evidence')) return 'exclusive-tool-multi-evidence-unsatisfied';
+  if (requiredGates.has('test-evidence')) {
+    if (![...allowed].some((tool) => ['bash', 'shell', 'terminal', 'exec', 'exec_command', 'run', 'run_command'].includes(tool))
+      || !descriptor.testExecutionCommand) return 'exclusive-tool-test-command-unbound';
+    if (descriptor.constraints?.networkAccess === 'forbidden') {
+      return 'exclusive-tool-network-sandbox-required';
+    }
+  }
+  if (requiredGates.has('fact-evidence')
+    && (!isFocusedLocalFactInspectionRoute(route)
+      || !allowed.has('grep') && !(allowed.has('read') && contract.input?.kind === 'exact-path'))) {
+    return 'exclusive-tool-fact-method-unsatisfied';
+  }
+  return null;
+}
+
+function readExclusiveToolState(value, routeId = '', contract = null) {
+  if (contract?.mode !== 'exclusive') return null;
+  const unavailable = () => ({
+    schemaVersion: 1,
+    routeId,
+    status: 'blocked',
+    toolName: null,
+    toolCallIdDigest: null,
+    inputDigest: null,
+    reasonCode: 'exclusive-tool-state-unavailable',
+    finalCorrectionUsed: false,
+  });
+  if (!isRecord(value) || value.schemaVersion !== 1 || value.routeId !== routeId
+    || !['unused', 'pending', 'succeeded', 'failed', 'blocked'].includes(value.status)) {
+    return unavailable();
+  }
+  const digest = (candidate) => /^[a-f0-9]{64}$/.test(String(candidate ?? '')) ? String(candidate) : null;
+  const restored = {
+    schemaVersion: 1,
+    routeId,
+    status: value.status,
+    toolName: typeof value.toolName === 'string' ? canonicalExclusiveRuntimeToolName(value.toolName) : null,
+    toolCallIdDigest: digest(value.toolCallIdDigest),
+    inputDigest: digest(value.inputDigest),
+    reasonCode: typeof value.reasonCode === 'string' ? value.reasonCode : null,
+    finalCorrectionUsed: value.finalCorrectionUsed === true,
+  };
+  const allowedTool = contract.allowedTools?.[0] ?? null;
+  if (restored.status === 'unused'
+    && (restored.toolName || restored.toolCallIdDigest || restored.inputDigest || restored.reasonCode)) return unavailable();
+  if (['pending', 'succeeded', 'failed'].includes(restored.status)
+    && (restored.toolName !== allowedTool || !restored.toolCallIdDigest || !restored.inputDigest)) return unavailable();
+  if (['pending', 'succeeded'].includes(restored.status) && restored.reasonCode) return unavailable();
+  if (restored.status === 'failed'
+    && !['exclusive-tool-result-failed', 'exclusive-tool-terminal-correction-budget-exhausted']
+      .includes(restored.reasonCode)) return unavailable();
+  if (restored.status === 'blocked'
+    && (!restored.reasonCode
+      || restored.toolName && restored.toolName !== allowedTool
+      || Boolean(restored.toolCallIdDigest) !== Boolean(restored.inputDigest))) return unavailable();
+  return restored;
+}
+
+function mergeExclusiveToolState(live, restored, routeId = '') {
+  const current = live?.routeId === routeId ? live : null;
+  const snapshot = restored?.routeId === routeId ? restored : null;
+  if (!current) return snapshot;
+  if (!snapshot) return current;
+  const rank = { unused: 0, pending: 1, succeeded: 2, failed: 2, blocked: 3 };
+  return (rank[current.status] ?? 3) >= (rank[snapshot.status] ?? 3) ? current : snapshot;
+}
+
+function exclusiveToolBoundaryBlock(state, toolName = '', event = {}) {
+  const contract = state.lastRoute?.taskDescriptor?.exclusiveToolContract;
+  if (contract?.mode !== 'exclusive') return null;
+  const toolState = state.exclusiveToolState;
+  if (!toolState || toolState.routeId !== gateControllerRouteId(state)) {
+    markExclusiveToolBlocked(state, 'exclusive-tool-state-unavailable');
+    return protectedConstraintBlock('exclusive-tool-state-unavailable', 'The persisted one-tool budget is unavailable, so it cannot be safely reset or replayed. Do not call another tool.');
+  }
+  if (toolState.status === 'blocked') {
+    return protectedConstraintBlock('exclusive-tool-contract-unsatisfiable', `The one-tool contract is unavailable (${toolState.reasonCode ?? 'conflicting route requirements'}). Do not try another method.`);
+  }
+  if (toolState.finalCorrectionUsed === true) {
+    return protectedConstraintBlock('exclusive-tool-terminal', 'The route already used its only final-text correction. No tool call or alternate method is authorized.');
+  }
+  if (toolState.status !== 'unused') {
+    markExclusiveToolBlocked(state, 'exclusive-tool-budget-exhausted');
+    const reasonCode = isFocusedLocalFactInspectionRoute(state.lastRoute)
+      && contract.allowedTools?.[0] === 'grep'
+      ? 'focused-fact-search-budget-exhausted'
+      : 'exclusive-tool-budget-exhausted';
+    return protectedConstraintBlock(reasonCode, `The exclusive tool budget is already ${toolState.status}. Failure, pending execution, and successful execution all consume the single-call budget; do not retry or switch methods.`);
+  }
+  if (!exclusiveToolCallMatchesAllowedTool(state, toolName)) {
+    markExclusiveToolBlocked(state, 'exclusive-tool-not-authorized');
+    return protectedConstraintBlock('exclusive-tool-not-authorized', `The user authorized only ${(contract.allowedTools ?? []).join(', ')} exactly once and forbade every other tool. Do not substitute ${toolName || 'another tool'}.`);
+  }
+  if (!exclusiveToolInputMatches(state, event)) {
+    markExclusiveToolBlocked(state, 'exclusive-tool-input-mismatch');
+    return protectedConstraintBlock('exclusive-tool-input-mismatch', 'The proposed input does not match the trusted one-tool input binding. The single-call contract forbids a mechanical retry or alternate input.');
+  }
+  return null;
+}
+
+function exclusiveToolCallMatchesAllowedTool(state, toolName = '') {
+  const allowed = state.lastRoute?.taskDescriptor?.exclusiveToolContract?.allowedTools ?? [];
+  return allowed.includes(canonicalExclusiveRuntimeToolName(toolName));
+}
+
+function exclusiveToolInputMatches(state, event = {}) {
+  const input = state.lastRoute?.taskDescriptor?.exclusiveToolContract?.input;
+  if (!input || input.status === 'ambiguous') return false;
+  if (input.kind === 'exact-command') {
+    const command = String(toolActionText(event)).trim().replace(/\s+/g, ' ');
+    return digestEvidence(command) === input.digest;
+  }
+  if (input.kind === 'exact-path') {
+    const record = firstToolInputRecord(event);
+    const path = String(record.path ?? record.file ?? record.filename ?? event.path ?? '').trim()
+      .replace(/^\.\//, '').replace(/\\/g, '/');
+    return path === input.target && digestEvidence(path) === input.digest;
+  }
+  if (input.kind === 'focused-claim-search') {
+    return digestEvidence(state.lastPrompt) === input.digest
+      && exclusiveFocusedFactGrepInputMatches(state, event);
+  }
+  if (input.kind === 'route-probe') {
+    const record = firstToolInputRecord(event);
+    return digestEvidence(String(record.prompt ?? '').trim()) === input.digest;
+  }
+  if (input.kind === 'status-probe') {
+    const record = firstToolInputRecord(event);
+    return Object.keys(record).length === 0 && input.digest === digestEvidence('{}');
+  }
+  return false;
+}
+
+function exclusiveFocusedFactGrepInputMatches(state, event = {}) {
+  const record = firstToolInputRecord(event);
+  const pattern = String(record.pattern ?? record.query ?? record.search ?? '').trim();
+  const scope = String(record.path ?? record.cwd ?? '.').trim().replace(/\\/g, '/');
+  if (!pattern || !new Set(['', '.', './', '*', './*', '**/*', './**/*']).has(scope)) return false;
+  const claimPaths = extractFocusedFactClaimPaths(state.lastPrompt);
+  const claimTokens = new Set(focusedFactLexicalTokens(focusedFactClaimLexicalText(state.lastPrompt, claimPaths)));
+  return focusedFactLexicalTokens(pattern).some((term) => claimTokens.has(term));
+}
+
+function canonicalExclusiveRuntimeToolName(value = '') {
+  const name = String(value).trim().toLowerCase();
+  if (TRUSTED_HOST_TEST_EXECUTORS.has(name)) return 'bash';
+  return name;
+}
+
+function recordDirectExclusiveToolSuccess(state, toolName = '', callId = '', input = {}) {
+  const event = {
+    toolName,
+    toolCallId: String(callId ?? ''),
+    input,
+  };
+  if (state.exclusiveToolState?.status === 'unused') {
+    if (!exclusiveToolCallMatchesAllowedTool(state, toolName) || !exclusiveToolInputMatches(state, event)) return false;
+    recordExclusiveToolCallStart(state, toolName, event);
+  }
+  return recordExclusiveToolResult(state, toolName, event, { successful: true });
+}
+
+function recordExclusiveToolCallStart(state, toolName = '', event = {}) {
+  if (!exclusiveToolCallMatchesAllowedTool(state, toolName) || state.exclusiveToolState?.status !== 'unused') return false;
+  state.exclusiveToolState = {
+    ...state.exclusiveToolState,
+    status: 'pending',
+    toolName: canonicalExclusiveRuntimeToolName(toolName),
+    toolCallIdDigest: digestEvidence(toolEventCallId(event) || `${toolName}:${gateControllerRouteId(state)}`),
+    inputDigest: digestEvidence(toolActionText(event)),
+    reasonCode: null,
+  };
+  return true;
+}
+
+function exclusiveToolResultDisposition(state, toolName = '', {
+  successful = false,
+  failed = false,
+  pending = false,
+} = {}) {
+  if (pending) return { successful: false, failed: false, pending: true };
+  const contract = state.lastRoute?.taskDescriptor?.exclusiveToolContract;
+  if (['focused-claim-search', 'exact-path'].includes(contract?.input?.kind)
+    && isFocusedLocalFactInspectionRoute(state.lastRoute)) {
+    const acceptedFactEvidence = successful
+      && state.focusedFactSearch?.routeId === gateControllerRouteId(state)
+      && state.focusedFactSearch?.status === 'succeeded'
+      && state.evidence.focusedFactEvidence?.routeId === gateControllerRouteId(state);
+    return {
+      successful: acceptedFactEvidence,
+      failed: failed || !acceptedFactEvidence,
+      pending: false,
+    };
+  }
+  if (contract?.input?.kind !== 'exact-command'
+    || !contract.allowedTools?.includes(canonicalExclusiveRuntimeToolName(toolName))) {
+    return { successful, failed: failed || !successful, pending: false };
+  }
+  const acceptedTestEvidence = successful
+    && state.evidence.testingGate === true
+    && isAuthorizedExactTestCommand(
+      state.lastRoute?.taskDescriptor?.testExecutionCommand ?? '',
+      state.lastRoute?.taskDescriptor ?? {},
+    );
+  return {
+    successful: acceptedTestEvidence,
+    failed: failed || !acceptedTestEvidence,
+    pending: false,
+  };
+}
+
+function recordExclusiveToolResult(state, toolName = '', event = {}, { successful = false, failed = false, pending = false } = {}) {
+  const current = state.exclusiveToolState;
+  if (!current || pending) return false;
+  if (current.status === 'unused'
+    && exclusiveToolCallMatchesAllowedTool(state, toolName)
+    && exclusiveToolInputMatches(state, event)) {
+    markExclusiveToolBlocked(state, 'exclusive-tool-unpaired-result');
+    return true;
+  }
+  if (current.status !== 'pending') return false;
+  const normalizedTool = canonicalExclusiveRuntimeToolName(toolName);
+  if (current.toolName !== normalizedTool || !exclusiveToolInputMatches(state, event)) return false;
+  const callId = toolEventCallId(event);
+  if (!callId || current.toolCallIdDigest !== digestEvidence(callId)) return false;
+  state.exclusiveToolState = {
+    ...current,
+    status: successful ? 'succeeded' : failed ? 'failed' : 'failed',
+    toolName: normalizedTool,
+    toolCallIdDigest: current.toolCallIdDigest,
+    inputDigest: current.inputDigest,
+    reasonCode: successful ? null : 'exclusive-tool-result-failed',
+  };
+  return true;
+}
+
+function markExclusiveToolBlocked(state, reasonCode = 'exclusive-tool-contract-unsatisfiable') {
+  if (!state.lastRoute?.taskDescriptor?.exclusiveToolContract) return false;
+  state.exclusiveToolState = {
+    ...(state.exclusiveToolState ?? {
+      schemaVersion: 1,
+      routeId: gateControllerRouteId(state),
+      toolName: null,
+      toolCallIdDigest: null,
+      inputDigest: null,
+      finalCorrectionUsed: false,
+    }),
+    status: 'blocked',
+    reasonCode,
+  };
+  return true;
+}
+
+function exclusiveToolStopsCompletionRepair(state) {
+  if (!state.lastRoute?.taskDescriptor?.exclusiveToolContract) return false;
+  return state.exclusiveToolState?.status !== 'succeeded';
+}
+
+function exclusiveToolTerminalOutputIsHonest(state, event = {}) {
+  const output = extractFinalOutputText(event).trim();
+  if (!output) return false;
+  const status = state.exclusiveToolState?.status;
+  if (terminalOutputHasPositiveClaim(output)) return false;
+  const blocked = terminalOutputHasBlockedClaim(output);
+  if (status === 'blocked' || status === 'unused') return blocked;
+  if (status === 'failed') {
+    return blocked
+      || /^\s*FAIL\s*$/iu.test(output)
+      || /(?:^|\n)\s*FACT_VERDICT\s*:\s*INSUFFICIENT\s*$/iu.test(output)
+      || /\b(?:failed|failure|error)\b|(?:失败|出错|错误)/iu.test(output);
+  }
+  return status === 'pending' && (/\b(?:pending|still running|in progress)\b|(?:仍在运行|进行中|等待结果)/iu.test(output));
+}
+
+function exclusiveSuccessfulTerminalOutputIsHonest(state, event = {}) {
+  const contract = state.lastRoute?.taskDescriptor?.exclusiveToolContract;
+  const kind = contract?.input?.kind;
+  if (!['exact-command', 'status-probe'].includes(kind)) return true;
+  const output = extractFinalOutputText(event).trim();
+  if (!output) return false;
+  const expected = exclusiveSuccessfulExpectedOutput(state.lastPrompt);
+  if (expected) return output === expected;
+  return !terminalOutputHasBlockedClaim(output)
+    && !terminalOutputHasFalseFailureClaim(output);
+}
+
+function exclusiveSuccessfulExpectedOutput(prompt = '') {
+  const value = activeUnquotedTerminalInstructionText(prompt);
+  const literal = String.raw`([A-Z0-9_.-]{1,48}(?:\s*:\s*[A-Z0-9_.-]{1,48})?)`;
+  const conditionalFirst = value.match(new RegExp(
+    String.raw`\bif\b[^.;\n]{0,160}\b(?:passes|passed|succeeds|succeeded|is\s+successful)\b\s*,\s*(?:return|respond|output|report)\s+exactly\s+${literal}`,
+    'iu',
+  ))?.[1];
+  if (conditionalFirst) return conditionalFirst.replace(/\s*:\s*/g, ': ');
+  const literalFirst = value.match(new RegExp(
+    String.raw`\b(?:return|respond|output|report)\s+exactly\s+${literal}\s+if\b[^.;\n]{0,120}\b(?:passes|passed|succeeds|succeeded|is\s+successful)\b`,
+    'iu',
+  ))?.[1];
+  if (literalFirst) return literalFirst.replace(/\s*:\s*/g, ': ');
+  const chinese = value.match(/(?:如果|若)[^。；\n]{0,120}(?:通过|成功)[，,]\s*(?:只)?(?:返回|输出|报告)\s*([A-Z0-9_.-]{1,48}(?:\s*:\s*[A-Z0-9_.-]{1,48})?)/iu)?.[1];
+  return chinese ? chinese.replace(/\s*:\s*/g, ': ') : '';
+}
+
+function activeUnquotedTerminalInstructionText(prompt = '') {
+  return String(prompt).normalize('NFKC')
+    .replace(/(?:^|(?<=[.!?。！？]\s))(?:(?:please)\s+)?follow\s+(?:this|the\s+following)\s+instruction\s+exactly\s*:\s*(?:"([^"\n]+)"|“([^”\n]+)”|`([^`\n]+)`)/giu,
+      (_match, straight, curly, tick) => ` ${straight ?? curly ?? tick ?? ''} `)
+    .replace(/(?:^|(?<=[。！？]\s))请?\s*(?:严格)?(?:按照|遵循|执行)\s*(?:这条|以下|下面)?\s*(?:指令|要求)\s*[:：]\s*(?:“([^”\n]+)”|`([^`\n]+)`)/gu,
+      (_match, curly, tick) => ` ${curly ?? tick ?? ''} `)
+    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/gu, ' ')
+    .replace(/^[\t ]*>[^\n]*(?:\n|$)/gmu, ' ')
+    .replace(/“[^”\n]*”|‘[^’\n]*’|"[^"\n]*"|`[^`\n]*`/gu, ' ')
+    .replace(/(?<![\p{L}\p{N}])'[^'\n]+'(?![\p{L}\p{N}])/gu, ' ');
+}
+
+function terminalOutputHasFalseFailureClaim(output = '') {
+  const text = String(output)
+    .replace(/\b(?:no|zero)\s+(?:tests?\s+)?(?:failed|failures?|errors?)\b/giu, ' ')
+    .replace(/\b(?:0|zero)\s+(?:tests?\s+)?(?:failed|failures?|errors?)\b/giu, ' ')
+    .replace(/\b(?:tests?\s+)?(?:failed|failures?|errors?)\s*[:=]\s*(?:0|zero)\b/giu, ' ')
+    .replace(/\b(?:did\s+not|didn't|has\s+not|have\s+not|never|not)\s+fail(?:ed)?\b/giu, ' ')
+    .replace(/\bwithout\s+(?:any\s+)?(?:failures?|errors?)\b/giu, ' ')
+    .replace(/(?:没有|无|零|0\s*个?)\s*(?:测试)?(?:失败|错误)|(?:失败|错误)\s*[:：=]\s*0/gu, ' ');
+  return /^\s*(?:FAIL|FAILED|FAILURE|ERROR|NO)\s*[.!。！]?\s*$/iu.test(text)
+    || /\b(?:tests?|test\s+run|command|execution|run|tool(?:\s+call)?|result|outcome)\b[^.!?\n]{0,32}\b(?:failed|failure|errored|unsuccessful)\b/iu.test(text)
+    || /\b(?:a\s+)?(?:failure|error)\s+(?:occurred|was\s+(?:reported|observed)|prevented\s+completion)\b/iu.test(text)
+    || /(?:测试|命令|执行|运行|工具调用|结果).{0,16}(?:失败|出错|错误|未成功)|(?:失败|错误|出错)(?:了|发生)/u.test(text);
+}
+
+function terminalBlockedOutputIsHonest(output = '') {
+  const text = String(output).trim();
+  return Boolean(text) && !terminalOutputHasPositiveClaim(text) && terminalOutputHasBlockedClaim(text);
+}
+
+function terminalAwaitingUserOutputIsHonest(output = '', reasonCode = '') {
+  const text = String(output).trim();
+  if (!text || terminalOutputHasPositiveClaim(text)) return false;
+  if (terminalOutputHasBlockedClaim(text)) return true;
+  const patterns = {
+    'external-destructive-action-unsupported': /\b(?:unsupported|not\s+safely\s+supported|provider-native\s+(?:manual\s+)?workflow)\b/i,
+    'external-action-target-confirmation-required': /\b(?:provide|confirm|name|identify|split|sequence)\b[^.!?\n]{0,96}\b(?:exact|single|one)\b[^.!?\n]{0,64}\b(?:target|recipient|channel|folder|calendar|page|action)\b/i,
+    'document-preservation-multi-target-unsupported': /\b(?:provide|name|identify|choose|split)\b[^.!?\n]{0,96}\b(?:one|single|exact)\b[^.!?\n]{0,48}\b(?:document|file|target)\b/i,
+    'document-preservation-scope-confirmation-required': /\b(?:identify|provide|name|confirm)\b[^.!?\n]{0,96}\b(?:one|single|exact)\b[^.!?\n]{0,64}\b(?:editable\s+sentence|sentence|protected\s+literal|scope)\b/i,
+    'document-preservation-snapshot-too-large': /\b(?:need|provide|split|choose|use)\b[^.!?\n]{0,96}\b(?:smaller|narrower|one|single|exact)\b[^.!?\n]{0,64}\b(?:task|file|document|scope|section)\b/i,
+    'release-target-confirmation-required': /\b(?:provide|confirm|name|identify)\b[^.!?\n]{0,96}\b(?:exact|complete)\b[^.!?\n]{0,64}\b(?:repository|registry|cluster|target|revision|version|ref|tag|image)\b/i,
+    'release-verification-unsupported': /\b(?:unsupported|provide|confirm|need|requires?)\b[^.!?\n]{0,128}\b(?:verifiable|verification|exact|supported)\b[^.!?\n]{0,64}\b(?:target|contract|command|workflow)?\b/i,
+    'irreversible-approval-required': /\b(?:rerun|enable|provide|requires?)\b[^.!?\n]{0,96}\b(?:interactive|trusted|host)\b[^.!?\n]{0,48}\bapproval\b/i,
+    'exclusive-tool-contract-unsatisfiable': /\b(?:restate|provide|confirm|need|requires?)\b[^.!?\n]{0,128}\b(?:exact|authorized|conflict|constraint|capability|input|action)\b/i,
+    'network-access-unverifiable': /\b(?:restate|provide|confirm|need|requires?)\b[^.!?\n]{0,128}\b(?:network|sandbox|offline|exact|conflict|constraint)\b/i,
+  };
+  return patterns[reasonCode]?.test(text) === true;
+}
+
+function terminalOutputHasPositiveClaim(output = '') {
+  const positiveScope = String(output)
+    .replace(/\b(?:did|does|do|was|were|is|has|have|could|can)\s+not\s+(?:successfully\s+)?(?:execute|run|perform|complete|succeed|finish|verify|publish|release|deploy)(?:d|ed)?(?:\s+successfully)?\b/giu, ' ')
+    .replace(/\b(?:not|never|cannot|unable\s+to)\s+(?:be\s+)?(?:successfully\s+)?(?:executed|run|performed|completed|successful|succeeded|finished|verified|published|released|deployed)(?:\s+successfully)?\b/giu, ' ')
+    .replace(/(?:未|没有|无法|不能|不曾)\s*(?:能\s*)?(?:成功(?:地)?\s*)?(?:执行|运行|完成|验证|发布|部署)|(?:未|没有|无法|不能)\s*成功/gu, ' ');
+  return /\b(?:PASS|SAFE|SUCCESS(?:FUL(?:LY)?)?|SUCCEEDED|COMPLETED?|RELEASED|PUBLISHED|DEPLOYED|VERIFIED)\b|(?:已完成|成功|已发布|已部署|已验证|安全通过)/iu.test(positiveScope);
+}
+
+function terminalOutputHasBlockedClaim(output = '') {
+  return /\b(?:blocked|not\s+(?:executed|run|performed|completed|successful)|did\s+not\s+(?:execute|run|complete|succeed)|no\s+(?:additional|further)\s+(?:tool\s+call|action)\s+was\s+(?:performed|taken|executed)|cannot|unable|conflicting\s+constraint|requires?\s+(?:new\s+)?authorization)\b|(?:未执行|未运行|未完成|未成功|没有(?:执行|采取)更多(?:工具调用|操作)|受阻|无法|约束冲突|需要.{0,12}授权)/iu.test(String(output));
 }
 
 function readActionBoundaryState(value) {
@@ -3684,6 +4470,7 @@ function readActionBoundaryState(value) {
     awaitingUserReason: USER_INPUT_ACTION_BLOCKERS.has(value.awaitingUserReason)
       ? value.awaitingUserReason
       : null,
+    finalCorrectionUsed: value.finalCorrectionUsed === true,
     fingerprints: Array.isArray(value.fingerprints)
       ? value.fingerprints.filter((item) => /^[a-f0-9]{64}$/.test(String(item))).slice(-2)
       : [],
@@ -4238,25 +5025,41 @@ function recordAssistantReviewEvidence(state, event = {}) {
 
 function isStructuredReviewEvidence(output = '') {
   const text = String(output);
+  const scope = structuredEvidenceField(text, 'Scope');
+  const findings = structuredEvidenceField(text, 'Findings?');
   return /(?:^|\n)\s*REVIEW_EVIDENCE\s*(?:\n|$)/i.test(text)
-    && /(?:^|\n)\s*Scope:\s*\S/i.test(text)
-    && /(?:^|\n)\s*Findings?:\s*\S/i.test(text)
+    && isConcreteStructuredEvidenceValue(scope)
+    && isConcreteStructuredEvidenceValue(findings)
     && /(?:^|\n)\s*Verdict:\s*(?:PASS|READY|APPROVED)\b/i.test(text)
     && !hasContradictoryPassEvidence(text);
 }
 
 function isStructuredSecurityReview(output = '', { allowFindings = false, securitySignals = [] } = {}) {
   const text = String(output);
+  const scope = structuredEvidenceField(text, 'Scope');
+  const findings = structuredEvidenceField(text, 'Findings?');
+  const evidence = structuredEvidenceField(text, 'Evidence');
   const verdict = text.match(/(?:^|\n)\s*Verdict:\s*(PASS|READY|APPROVED|FINDINGS|COMPLETE)\b/i)?.[1]?.toUpperCase();
   const acceptedVerdict = ['PASS', 'READY', 'APPROVED'].includes(verdict)
     || allowFindings && ['FINDINGS', 'COMPLETE'].includes(verdict);
   return /(?:^|\n)\s*SECURITY_REVIEW\s*(?:\n|$)/i.test(text)
-    && /(?:^|\n)\s*Scope:\s*\S/i.test(text)
-    && /(?:^|\n)\s*Findings?:\s*\S/i.test(text)
-    && /(?:^|\n)\s*Evidence:\s*\S/i.test(text)
+    && isConcreteStructuredEvidenceValue(scope)
+    && isConcreteStructuredEvidenceValue(findings)
+    && isConcreteStructuredEvidenceValue(evidence)
     && acceptedVerdict
     && (!allowFindings || !hasUnsupportedSecurityClaims(text, securitySignals))
     && (['FINDINGS', 'COMPLETE'].includes(verdict) || !hasContradictoryPassEvidence(text));
+}
+
+function structuredEvidenceField(text = '', labelPattern = '') {
+  return String(text).match(new RegExp(`(?:^|\\n)\\s*${labelPattern}:\\s*([^\\n]+)`, 'i'))?.[1]?.trim() ?? '';
+}
+
+function isConcreteStructuredEvidenceValue(value = '') {
+  const text = String(value).trim();
+  if (!text || /<[^>\n]+>/.test(text)) return false;
+  return !/^(?:write|state|describe|list|provide|insert|replace|fill|enter)\b/i.test(text)
+    && !/^(?:reviewed target and change|reviewed file and any callers actually inspected|concrete static review findings|supported findings,? or none confirmed in the inspected scope|concrete boundary,? caller,? or sink evidence)\s*$/i.test(text);
 }
 
 function hasUnsupportedSecurityClaims(output = '', securitySignals = []) {
@@ -6056,8 +6859,8 @@ function recordObservedTestEvidence(state, toolName = '', event = {}, { successf
   const action = classifyToolAction({ toolName, text: command });
   if (!action.testExecution) return false;
   const exactTestRoute = isExactTestExecutionRoute(state.lastRoute);
-  const exactTargets = state.lastRoute?.taskDescriptor?.testExecutionTargets ?? [];
-  const exactCommand = exactTestRoute && isDirectExactLocalTestCommand(command, exactTargets);
+  const exactCommand = exactTestRoute
+    && isAuthorizedExactTestCommand(command, state.lastRoute?.taskDescriptor ?? {});
   const resultText = toolResultText(event);
   if (!successful
     || hasUnsafeResultMasking(command)
@@ -6087,10 +6890,12 @@ function recordObservedTestEvidence(state, toolName = '', event = {}, { successf
 
 function isExactTestExecutionRoute(route) {
   const descriptor = route?.taskDescriptor;
+  const commandOnlyExclusive = (descriptor?.provenance?.reasons ?? [])
+    .includes('exclusive command-only exact test requested');
   return descriptor?.operation === 'execute'
     && descriptor.constraints?.testExecution === 'required'
-    && Array.isArray(descriptor.testExecutionTargets)
-    && descriptor.testExecutionTargets.length > 0
+    && ((Array.isArray(descriptor.testExecutionTargets) && descriptor.testExecutionTargets.length > 0)
+      || commandOnlyExclusive && typeof descriptor.testExecutionCommand === 'string' && descriptor.testExecutionCommand.length > 0)
     && (descriptor.phases ?? []).every(({ kind }) => kind === 'verify');
 }
 
@@ -6157,6 +6962,9 @@ function isNonExecutingTestProbe(command = '') {
 
 function recordFocusedLocalFactEvidence(state, toolName = '', event = {}, { successful = false } = {}) {
   if (!successful || !isFocusedLocalFactInspectionRoute(state.lastRoute)) return false;
+  if (isExclusiveFocusedFactRead(state, toolName)) {
+    return recordExclusiveFocusedFactReadEvidence(state, event);
+  }
   if (classifyFocusedFactSearchAction(toolName, toolActionText(event)) !== 'trusted-grep') return false;
   const input = firstToolInputRecord(event);
   const pattern = String(input.pattern ?? input.query ?? input.search ?? '').trim();
@@ -6210,6 +7018,40 @@ function recordFocusedLocalFactEvidence(state, toolName = '', event = {}, { succ
   return changed;
 }
 
+function isExclusiveFocusedFactRead(state, toolName = '') {
+  return String(toolName).toLowerCase() === 'read'
+    && state.lastRoute?.taskDescriptor?.exclusiveToolContract?.allowedTools?.[0] === 'read';
+}
+
+function recordExclusiveFocusedFactReadEvidence(state, event = {}) {
+  const resultText = toolResultText(event).trim();
+  if (!resultText) return false;
+  const input = firstToolInputRecord(event);
+  const path = normalizeFocusedFactPath(input.path ?? input.file ?? input.filename ?? event.path ?? '');
+  const claimPaths = extractFocusedFactClaimPaths(state.lastPrompt);
+  const routeId = gateControllerRouteId(state);
+  const claimSourceBound = claimPaths.length > 0;
+  state.evidence.focusedFactEvidence = {
+    schemaVersion: 1,
+    source: 'host-focused-fact-inspection',
+    routeId,
+    toolName: 'read',
+    inputDigest: digestEvidence(path),
+    resultDigest: digestEvidence(resultText),
+    queryTermDigests: [],
+    claimPathDigests: claimPaths.map(digestEvidence),
+    claimSourceBound,
+    matchedPathDigests: path ? [digestEvidence(path)] : [],
+    matchKind: path && claimPaths.some((claimPath) => focusedFactPathsMatch(path, claimPath))
+      ? 'claim-only'
+      : 'unparseable-hit',
+    independentMatchObserved: false,
+    observedAt: Date.now(),
+  };
+  state.evidence.factCheckGate = false;
+  return true;
+}
+
 function recordFocusedFactSearchResult(
   state,
   toolName = '',
@@ -6217,7 +7059,9 @@ function recordFocusedFactSearchResult(
   { successful = false, pending = false, evidenceRecorded = false } = {},
 ) {
   if (pending || !isFocusedLocalFactInspectionRoute(state.lastRoute)) return false;
-  if (classifyFocusedFactSearchAction(toolName, toolActionText(event)) !== 'trusted-grep') return false;
+  const focusedGrep = classifyFocusedFactSearchAction(toolName, toolActionText(event)) === 'trusted-grep';
+  const focusedRead = isExclusiveFocusedFactRead(state, toolName);
+  if (!focusedGrep && !focusedRead) return false;
   const routeId = gateControllerRouteId(state);
   const next = {
     schemaVersion: 1,
@@ -6553,6 +7397,7 @@ function classifyFocusedFactConclusion(value = '') {
   let residual = text;
   const insufficientPatterns = [
     /\bnot\s+(?:independently\s+)?supported\b/giu,
+    /\b(?:did|does|do)\s+not\s+establish\s+(?:independent\s+)?(?:repository\s+)?support\b/giu,
     /\b(?:the|this)\s+(?:claim|statement|assertion)\s+(?:is|was|remains)\s+(?:currently\s+)?(?:unverified|unproven|unsupported|unresolved|inconclusive|not\s+(?:proven|verified|confirmed)|under\s+review)\b/giu,
     /\b(?:no|zero)\b[^.!?\n]{0,120}\b(?:can|could|is\s+able\s+to)\s+(?:independently\s+)?(?:support|confirm|verify|contradict|corroborate)\b/giu,
     /\b(?:unsupported|insufficient\s+(?:repository\s+)?evidence|(?:repository\s+)?evidence\s+(?:(?:is|was|remains)\s+)?insufficient|not\s+enough\s+evidence|no\s+independent\s+(?:repository\s+)?evidence|cannot\s+(?:confirm|support|verify|contradict)|unable\s+to\s+(?:confirm|support|verify|contradict))\b/giu,

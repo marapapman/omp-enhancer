@@ -194,7 +194,7 @@ test('a required-test route needs fresh host-observed test evidence in addition 
 
 test('one successful exact host test closes the exact-test gate without a bug-audit repair', async () => {
   await withEnforce(async () => {
-    const { pi, ctx } = await startRuntime('只运行 test/router.test.js 并报告结果。禁止修改任何文件，禁止联网，禁止启动 subagent，禁止提交或发布。');
+    const { pi, ctx } = await startRuntime('只运行 test/router.test.js 并报告结果。禁止修改任何文件，禁止启动 subagent，禁止提交或发布。');
     assert.deepEqual(latestState(pi).lastRoute.routePlan.requiredSkills, []);
     const command = 'node --test test/router.test.js';
     const call = await event(pi, 'tool_call')({ toolName: 'bash', input: { command } }, ctx);
@@ -218,7 +218,7 @@ test('one successful exact host test closes the exact-test gate without a bug-au
       ['empty', 'ℹ tests 0\nℹ pass 0\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0'],
       ['all-cancelled', 'ℹ tests 1\nℹ pass 0\nℹ fail 0\nℹ cancelled 1\nℹ skipped 0'],
     ]) {
-      const negative = await startRuntime('只运行 test/router.test.js 并报告结果。禁止修改任何文件，禁止联网，禁止启动 subagent，禁止提交或发布。');
+      const negative = await startRuntime('只运行 test/router.test.js 并报告结果。禁止修改任何文件，禁止启动 subagent，禁止提交或发布。');
       await event(negative.pi, 'tool_result')(successfulToolResult({
         toolCallId: `exact-host-test-${name}`,
         toolName: 'bash',
@@ -233,7 +233,7 @@ test('one successful exact host test closes the exact-test gate without a bug-au
 
 test('one direct command covering every exact target closes a multi-target route', async () => {
   await withEnforce(async () => {
-    const prompt = 'Only run node --test test/router.test.js test/governance.test.js; do not modify files, use the network, use subagents, or publish.';
+    const prompt = 'Only run node --test test/router.test.js test/governance.test.js; do not modify files, use subagents, or publish.';
     const { pi, ctx } = await startRuntime(prompt);
     assert.deepEqual(latestState(pi).lastRoute.taskDescriptor.testExecutionTargets, [
       'test/router.test.js',
@@ -967,6 +967,7 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
         pattern: 'moon.*green|green.*moon',
         output: 'No matches found',
         details: { matchCount: 0, fileCount: 0, files: [], fileMatches: [] },
+        paired: true,
       });
 
       assert.equal(latestState(pi).focusedFactSearch.status, 'succeeded');
@@ -3011,7 +3012,22 @@ function startFocusedFactRuntime() {
   return startRuntime(focusedFactPrompt());
 }
 
-async function recordFocusedFactGrep(pi, ctx, { id, output, pattern = 'stable fact|42', details }) {
+async function recordFocusedFactGrep(pi, ctx, {
+  id,
+  output,
+  pattern = 'stable fact|42',
+  details,
+  paired = false,
+}) {
+  if (paired) {
+    const boundary = await event(pi, 'tool_call')({
+      type: 'tool_call',
+      toolCallId: id,
+      toolName: 'grep',
+      input: { pattern, path: '.' },
+    }, ctx);
+    assert.notEqual(boundary?.block, true, boundary?.reason);
+  }
   await event(pi, 'tool_result')(successfulToolResult({
     toolCallId: id,
     toolName: 'grep',

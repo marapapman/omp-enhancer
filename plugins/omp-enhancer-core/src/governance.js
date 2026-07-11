@@ -31,6 +31,24 @@ export function buildGovernancePromptFragment({
     ].join('\n');
   }
 
+  const executionConflict = governanceRouteConflictReason(resolved);
+  if (executionConflict) {
+    return [
+      '## OMP Enhancer Core Routing',
+      '',
+      `Intent: ${resolved.intent}`,
+      'Execution boundary: blocked before tool use.',
+      `Reason: ${executionConflict}.`,
+      'Do not call any tool, load any skill, start a subagent, inspect the repository, run a command, or substitute another method.',
+      'Respond once that the requested action was not executed. Ask the user to restate the exact action and input in a new instruction without the conflicting constraint, or with the required trusted host capability explicitly available.',
+      'Do not claim PASS, success, verification, safety, release, or completion.',
+    ].join('\n');
+  }
+
+  if (resolved.taskDescriptor?.exclusiveToolContract?.mode === 'exclusive') {
+    return exclusiveToolGovernanceFragment(resolved);
+  }
+
   return [
     '## OMP Enhancer Core Routing',
     '',
@@ -105,6 +123,79 @@ export function buildGovernancePromptFragment({
     'Loaded:',
     '- skill-name',
   ].join('\n');
+}
+
+function exclusiveToolGovernanceFragment(route = {}) {
+  const descriptor = route.taskDescriptor ?? {};
+  const contract = descriptor.exclusiveToolContract;
+  const tool = contract.allowedTools?.[0] ?? 'the bound tool';
+  const input = contract.input ?? {};
+  const action = input.kind === 'exact-command'
+    ? `Call ${tool} exactly once with this exact command and no additions: ${descriptor.testExecutionCommand}.`
+    : input.kind === 'exact-path'
+      ? `Call ${tool} exactly once for this exact path: ${input.target}.`
+      : input.kind === 'route-probe'
+        ? 'Call omp_core_route_task exactly once for the user-supplied probe prompt.'
+        : input.kind === 'status-probe'
+          ? 'Call omp_core_subagent_status exactly once.'
+          : `Call ${tool} exactly once with the bound claim input.`;
+  const output = input.kind === 'exact-path'
+    ? 'Report the limitation of that one read and end with exactly FACT_VERDICT: INSUFFICIENT.'
+    : input.kind === 'focused-claim-search'
+      ? 'Report only the evidence observed from that one search and one evidence-consistent FACT_VERDICT line.'
+      : input.kind === 'route-probe'
+        ? 'Report the requested route fields and any explanation explicitly requested by the user.'
+        : input.kind === 'status-probe'
+          ? 'Return only the status result or literal requested by the user.'
+          : 'After the host result, follow only the final response format requested by the user.';
+  return [
+    '## OMP Enhancer Core Exclusive Tool Route',
+    '',
+    `Intent: ${route.intent}`,
+    action,
+    'Do not call any other tool, read a skill, inspect another source, start a subagent, invoke any other QA, status, or workflow tool, or substitute another method.',
+    'The single call consumes the method budget whether it succeeds or fails. Never retry after a failure or unusable result.',
+    output,
+    'Do not add SKILL_USAGE, SUBAGENT_USAGE, review templates, gate templates, or internal routing commentary unless the user explicitly requested that literal content.',
+  ].join('\n');
+}
+
+export function governanceRouteConflictReason(route = {}) {
+  const descriptor = route.taskDescriptor ?? {};
+  const constraints = descriptor.constraints ?? {};
+  const exactTestRequest = descriptor.operation === 'execute'
+    && constraints.testExecution === 'required'
+    && descriptor.domains?.includes('tests')
+    && (Boolean(descriptor.testExecutionCommand)
+      || Array.isArray(descriptor.testExecutionTargets) && descriptor.testExecutionTargets.length > 0);
+  if (exactTestRequest && constraints.networkAccess === 'forbidden') {
+    return 'a repository-controlled test cannot prove the explicit no-network constraint without a trusted host network sandbox';
+  }
+
+  const contract = descriptor.exclusiveToolContract;
+  if (contract?.mode !== 'exclusive') return null;
+  if (contract.input?.status === 'ambiguous') return 'the exclusive tool input is ambiguous';
+  const requiredGates = new Set((route.routePlan?.gateRequirements ?? [])
+    .filter(({ mode }) => mode === 'required')
+    .map(({ key }) => key));
+  if (requiredGates.has('release-approval') || requiredGates.has('irreversible-approval')) {
+    return 'the protected action requires approval evidence that one exclusive tool call cannot satisfy';
+  }
+  if (requiredGates.has('security-evidence') || requiredGates.has('writing-quality')
+    || requiredGates.has('review-evidence')) {
+    return 'the protected route requires multiple independent evidence methods that conflict with the exclusive one-tool request';
+  }
+  if (requiredGates.has('test-evidence')
+    && (!contract.allowedTools?.includes('bash') || !descriptor.testExecutionCommand)) {
+    return 'the exclusive test command is not bound to one supported host executor and exact command';
+  }
+  if (requiredGates.has('fact-evidence')
+    && (!isFocusedLocalFactInspection(route)
+      || !contract.allowedTools?.includes('grep')
+        && !(contract.allowedTools?.includes('read') && contract.input?.kind === 'exact-path'))) {
+    return 'the requested fact method cannot satisfy the bounded fact evidence contract';
+  }
+  return null;
 }
 
 function projectRouteForGovernance(route) {
@@ -224,6 +315,27 @@ function documentPreservationGuidanceLines(route, parentTask = '') {
 
 function skillWorkflowLines(route) {
   const hasSubagents = (route.requiredSubagents ?? []).length > 0;
+  const exclusiveTool = route.taskDescriptor?.exclusiveToolContract?.allowedTools?.[0];
+  if (exclusiveTool) {
+    if (isFocusedLocalFactInspection(route) && exclusiveTool === 'read') {
+      return [
+        `The user authorized exactly one read of ${route.taskDescriptor.exclusiveToolContract.input?.target}; no grep, skill read, QA tool, subagent, or alternate method is authorized.`,
+        'Treat this as method-limited evidence. Explain the observed limitation if requested and end with FACT_VERDICT: INSUFFICIENT; do not claim supported or contradicted from one bounded read.',
+      ];
+    }
+    if (isFocusedLocalFactInspection(route) && exclusiveTool === 'grep') {
+      return [
+        'The user authorized exactly one built-in focused grep. Do not read another file, load skills, call fact_check_* tools, delegate, or retry with another search method.',
+        'Explain only the host-observed repository evidence and end with one FACT_VERDICT line.',
+      ];
+    }
+    if (route.routePlan?.gateRequirements?.some(({ key, mode }) => mode === 'required'
+      && ['security-evidence', 'review-evidence', 'release-approval', 'irreversible-approval', 'writing-quality'].includes(key))) {
+      return [
+        'The exclusive one-tool request cannot satisfy this protected multi-evidence route. Do not call the tool, load skills, delegate, or try an alternate method; report the conflict and request one clarified authorization.',
+      ];
+    }
+  }
   if (isFocusedLocalFactInspection(route)) {
     return [
       'This is a focused offline repository-evidence check handled directly by the main agent; no network, subagent, edit, test, or heavyweight cross-source fact workflow is authorized.',
@@ -232,10 +344,10 @@ function skillWorkflowLines(route) {
     ];
   }
   if (isExactTestExecution(route)) {
-    const targets = route.taskDescriptor?.testExecutionTargets ?? [];
+    const scope = exactTestScope(route);
     const commandOnly = isCommandOnlyExactTestExecution(route);
     return [
-      `This is one exact test execution for the complete target list ${targets.join(', ')}; no broader verification scope is authorized.`,
+      `This is one exact test execution for ${scope}; no broader verification scope is authorized.`,
       commandOnly
         ? 'The user authorized only the single direct test command. Do not call read or any other tool before or after it.'
         : 'Inspect package or runner configuration with the read tool. Do not use shell pipelines, redirections, aliases, or exploratory commands for that inspection.',
@@ -363,6 +475,7 @@ export function buildMissingGateContext({ route, state } = {}) {
 
 export function buildMissingGateContexts({ route, state } = {}) {
   if (!route || route.intent === 'unknown') return [];
+  if (governanceRouteConflictReason(route)) return [];
 
   const contexts = [];
 
@@ -370,6 +483,7 @@ export function buildMissingGateContexts({ route, state } = {}) {
     const focusedEvidenceKind = state?.evidence?.focusedFactEvidence?.matchKind;
     const hasReusableFocusedEvidence = ['no-match', 'claim-only', 'independent-hit'].includes(focusedEvidenceKind);
     const focusedSearchStatus = state?.focusedFactSearch?.status;
+    const focusedExclusiveTool = route.taskDescriptor?.exclusiveToolContract?.allowedTools?.[0];
     contexts.push(isFocusedLocalFactInspection(route)
       ? { key: 'fact-check', context: hasReusableFocusedEvidence ? [
         `OMP Enhancer Core already recorded host-observed local fact evidence (${focusedEvidenceKind}).`,
@@ -390,6 +504,9 @@ export function buildMissingGateContexts({ route, state } = {}) {
         'OMP Enhancer Core already recorded the single route-scoped focused grep as started.',
         'Do not launch grep or another search method. Wait for and use that host result; if it failed or returned no usable evidence, report the verification as blocked and the evidence as insufficient.',
         'End the answer with exactly one machine-readable line consistent with the host result: FACT_VERDICT: INSUFFICIENT, FACT_VERDICT: SUPPORTED, or FACT_VERDICT: CONTRADICTED.',
+      ].join('\n') : focusedExclusiveTool === 'read' ? [
+        `OMP Enhancer Core is waiting for the one authorized read of ${route.taskDescriptor.exclusiveToolContract.input?.target}.`,
+        'Do not call grep, search, skills, fact_check_* tools, or another read. After the single host result, report the method limitation and end with FACT_VERDICT: INSUFFICIENT.',
       ].join('\n') : [
         'OMP Enhancer Core local fact-evidence gate is still open.',
         'Use one successful built-in grep over the repository root with a concrete claim-related pattern before concluding. Reading or repeating only the claim text is not independent evidence.',
@@ -418,8 +535,8 @@ export function buildMissingGateContexts({ route, state } = {}) {
       contexts.push({ key: 'testing', context: [
         'OMP Enhancer Core exact-test evidence is still open.',
         commandOnly
-          ? `Execute the one direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} and report the observed result; do not call read or any other tool.`
-          : `Use read to inspect runner configuration, then execute one direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} and report the observed result.`,
+          ? `Execute the one direct host command authorized by ${exactTestScope(route)} and report the observed result; do not call read or any other tool.`
+          : `Use read to inspect runner configuration, then execute one direct host command authorized by ${exactTestScope(route)} and report the observed result.`,
         'Do not run aggregate aliases, additional test targets, pipelines, redirections, runner preloads, or generated test cases.',
         formatRecentToolFailures(state, ['omp_test_gate']),
       ].filter(Boolean).join('\n') });
@@ -491,20 +608,20 @@ function completionGateChecklist(route) {
 
   if (routeRequiresGate(route, 'review-evidence')) {
     gates.push([
-      'Review evidence gate: complete the routed reviewer checkpoint, or for a focused main-agent change include this exact multiline block after the static review:',
+      'Review evidence gate: complete the routed reviewer checkpoint, or for a focused main-agent change include concrete multiline evidence after the static review. Do not copy instruction placeholders:',
       'REVIEW_EVIDENCE',
-      'Scope: <reviewed target and change>',
-      'Findings: <concrete static review findings>',
-      'OpenBlockers: none',
-      'Verdict: PASS',
+      'Scope: state the target and change actually reviewed',
+      'Findings: state the concrete findings actually observed',
+      'OpenBlockers: state none only when no blocker remains; otherwise list the blockers',
+      'Verdict: use PASS only when the review actually passes; otherwise report the blocking verdict',
     ].join('\n'));
   }
 
   if (needsTesting(route)) {
     gates.push(isExactTestExecution(route)
       ? isCommandOnlyExactTestExecution(route)
-        ? `Exact test evidence gate: execute the single direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')}, and report that observed result; do not call another tool, run additional targets, or use aggregate aliases.`
-        : `Exact test evidence gate: use read for runner configuration, execute one direct host command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')}, and report that observed result; do not run additional targets or aggregate aliases.`
+        ? `Exact test evidence gate: execute the single direct host command authorized by ${exactTestScope(route)}, and report that observed result; do not call another tool, run additional targets, or substitute an alias.`
+        : `Exact test evidence gate: use read for runner configuration, execute one direct host command authorized by ${exactTestScope(route)}, and report that observed result; do not run additional targets or substitute an alias.`
       : 'Testing gate: run relevant local test/build/lint commands through an explicit host tool call, then omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report before final claims. omp_test_gate only validates route-scoped host evidence and never executes its testCommand/config command. If omp_test_* tools are unavailable, provide an equivalent manual testing gate report with concrete local command evidence.');
   }
 
@@ -520,7 +637,9 @@ function completionGateChecklist(route) {
 
   if (route.intent === 'fact-check') {
     gates.push(isFocusedLocalFactInspection(route)
-      ? 'Local fact-evidence gate: run one built-in grep over the repository root with a concrete claim-related pattern, then report supported, contradicted, or insufficient evidence without external research.'
+      ? route.taskDescriptor?.exclusiveToolContract?.allowedTools?.[0] === 'read'
+        ? `Local fact-evidence gate: use the one authorized read of ${route.taskDescriptor.exclusiveToolContract.input?.target}, treat it as method-limited evidence, and conclude FACT_VERDICT: INSUFFICIENT without another method.`
+        : 'Local fact-evidence gate: run one built-in grep over the repository root with a concrete claim-related pattern, then report supported, contradicted, or insufficient evidence without external research.'
       : 'Fact-check gate: plan claims, collect independent evidence lanes when sources are available, cross-check agreement and conflicts, review overclaiming, then run fact_check_gate before final factual claims.');
   }
 
@@ -614,7 +733,7 @@ function workflowNextLines(route, parentTask = '') {
   const directSkills = route.requiredSkills ?? [];
   const delegatesWork = Boolean(route.requiredSubagents?.length);
   const nextAction = exclusiveRouteProbe
-    ? 'Next action: call omp_core_route_task exactly once with the user-supplied prompt, then report only the requested route fields.'
+    ? 'Next action: call omp_core_route_task exactly once with the user-supplied prompt, then report the requested route fields and any explanation explicitly requested by the user.'
     : exclusiveStatusProbe
       ? 'Next action: call omp_core_subagent_status exactly once, then report only the requested status result.'
     : firstSkill && delegatesWork
@@ -650,10 +769,12 @@ function isConstrainedRouteStatusSkillPrompt(prompt = '') {
 
 function workflowFor(route) {
   const intent = route.intent;
-  if (isFocusedLocalFactInspection(route)) return 'Focused local fact workflow: read the claim -> search repository evidence -> separate the claim from independent support -> report supported, contradicted, or insufficient evidence without external research.';
+  if (isFocusedLocalFactInspection(route)) return route.taskDescriptor?.exclusiveToolContract?.allowedTools?.[0] === 'read'
+    ? `Focused local fact workflow: read ${route.taskDescriptor.exclusiveToolContract.input?.target} exactly once -> report the method-limited evidence -> end with FACT_VERDICT: INSUFFICIENT without grep or another method.`
+    : 'Focused local fact workflow: read the claim -> search repository evidence -> separate the claim from independent support -> report supported, contradicted, or insufficient evidence without external research.';
   if (isExactTestExecution(route)) return isCommandOnlyExactTestExecution(route)
-    ? `Exact test target workflow: run the single direct command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} -> report the host-observed result without another tool call.`
-    : `Exact test target workflow: inspect runner configuration with read -> run one direct command naming only ${(route.taskDescriptor?.testExecutionTargets ?? []).join(', ')} -> report the host-observed result without generating additional tests.`;
+    ? `Exact test workflow: run the single direct command authorized by ${exactTestScope(route)} -> report the host-observed result without another tool call.`
+    : `Exact test workflow: inspect runner configuration with read -> run one direct command authorized by ${exactTestScope(route)} -> report the host-observed result without generating additional tests.`;
   if (isReadOnlySecurityReview(route)) return 'Focused read-only security workflow: load security-review and security-scan -> inspect the requested file and direct local callers -> separate code facts from unsupported threat assumptions -> emit SECURITY_REVIEW evidence without edits or tests.';
   if (isReadOnlyCodeReview(route)) return 'Read-only code review workflow: inspect the requested file and directly related code -> collect concrete file and symbol evidence -> report findings without test execution or test-evidence repair.';
   if (isCodeModificationWithoutTests(route)) {
@@ -686,7 +807,7 @@ function routeBoundaryFor(route) {
   const intent = route.intent;
   if (isExactTestExecution(route)) {
     const descriptor = route.taskDescriptor ?? {};
-    const targets = descriptor.testExecutionTargets ?? [];
+    const scope = exactTestScope(route);
     const constraints = descriptor.constraints ?? {};
     const extras = [
       constraints.workspaceWrite === 'forbidden' ? 'workspace writes' : null,
@@ -697,7 +818,7 @@ function routeBoundaryFor(route) {
     const commandSequence = isCommandOnlyExactTestExecution(route)
       ? 'Use only the single direct command naming every target once and in order; do not call read or any other tool'
       : 'Use read for configuration inspection and one direct command naming every target once and in order';
-    return `Route boundary: execute only the complete exact test target list ${targets.join(', ')}. ${commandSequence}; aggregate tests, omitted or substituted targets, pipelines, redirections, and runner preloads are outside scope.${extras.length ? ` ${extras.join(', ')} remain forbidden.` : ''}`;
+    return `Route boundary: execute only ${scope}. ${commandSequence}; omitted or substituted targets or commands, pipelines, redirections, and runner preloads are outside scope.${extras.length ? ` ${extras.join(', ')} remain forbidden.` : ''}`;
   }
   if (isReadOnlySecurityReview(route)) {
     return 'Route boundary: this is a read-only, local security review. Use read-only tools, inspect the requested source scope and direct callers, and report only supported findings; do not edit, run tests, use the network, delegate, or release.';
@@ -734,6 +855,9 @@ function routeBoundaryFor(route) {
     return 'Route boundary: this is a factual verification workflow. Read, search, cite, and report evidence; do not rewrite the source document or change project files unless the user explicitly asks for edits.';
   }
   if (isFocusedLocalFactInspection(route)) {
+    if (route.taskDescriptor?.exclusiveToolContract?.allowedTools?.[0] === 'read') {
+      return `Route boundary: read only ${route.taskDescriptor.exclusiveToolContract.input?.target} exactly once. Do not grep, search, edit, test, browse, delegate, release, load skills, or use another tool. The bounded method can conclude only FACT_VERDICT: INSUFFICIENT.`;
+    }
     return 'Route boundary: use only local read/search tools to evaluate repository evidence. Do not treat the claim itself as corroboration, and do not edit, test, browse, delegate, or release. End with exactly one line: FACT_VERDICT: INSUFFICIENT, FACT_VERDICT: SUPPORTED, or FACT_VERDICT: CONTRADICTED.';
   }
   if (intent === 'testing' || intent === 'implementation-with-tests') {
@@ -882,11 +1006,19 @@ function isFocusedLocalFactInspection(route) {
 
 function isExactTestExecution(route) {
   const descriptor = route?.taskDescriptor;
+  const commandOnlyExclusive = (descriptor?.provenance?.reasons ?? [])
+    .includes('exclusive command-only exact test requested');
   return descriptor?.operation === 'execute'
     && descriptor.constraints?.testExecution === 'required'
-    && Array.isArray(descriptor.testExecutionTargets)
-    && descriptor.testExecutionTargets.length > 0
+    && ((Array.isArray(descriptor.testExecutionTargets) && descriptor.testExecutionTargets.length > 0)
+      || commandOnlyExclusive && typeof descriptor.testExecutionCommand === 'string' && descriptor.testExecutionCommand.length > 0)
     && (descriptor.phases ?? []).every(({ kind }) => kind === 'verify');
+}
+
+function exactTestScope(route) {
+  const command = route?.taskDescriptor?.testExecutionCommand;
+  if (command) return `the exact command ${command}`;
+  return `the complete target list ${(route?.taskDescriptor?.testExecutionTargets ?? []).join(', ')}`;
 }
 
 function isCommandOnlyExactTestExecution(route) {

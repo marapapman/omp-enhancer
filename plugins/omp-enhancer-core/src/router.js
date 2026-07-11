@@ -96,7 +96,11 @@ export function routeNaturalLanguageTask(input = {}) {
   const prompt = String(input.prompt ?? input.text ?? '');
   const directivePrompt = writingDirectivePromptForSignals(prompt);
   const operationalPrompt = writingOperationalPromptForSignals(directivePrompt);
-  const described = describeNaturalLanguageTask({ prompt });
+  const explicitSubagentsRequested = hasExplicitSubagentRequest(prompt);
+  const described = promoteExplicitSubagentDescriptor(
+    describeNaturalLanguageTask({ prompt }),
+    explicitSubagentsRequested,
+  );
   const rawLegacyRoute = routeNaturalLanguageTaskLegacy({
     ...input,
     prompt: operationalPrompt,
@@ -197,10 +201,9 @@ export function routeNaturalLanguageTask(input = {}) {
     && described.constraints?.testExecution !== 'required';
   const canonicalObservedRerun = (described.provenance?.reasons ?? []).includes('observed test summary requested')
     && described.constraints?.testExecution === 'required';
-  const explicitSubagentsRequested = /\bagentically\b|(?:fork|spawn|use|delegate\s+to).{0,24}(?:subagents?|sub-agents?)|(?:并行|使用|启动|调用|委派).{0,24}(?:子代理|subagents?|sub-agents?)/i.test(prompt);
   const focusedEffectivePlan = described.complexity !== 'broad'
     && described.operation !== 'release'
-    && !explicitSubagentsRequested
+    && !(explicitSubagentsRequested && described.constraints?.subagents !== 'forbidden')
     && !canonicalFunctionalUiCreation
     && (legacyRoute.intent === policy.intent || policy.shouldOverrideLegacy);
   const payloadSanitized = directivePrompt !== prompt;
@@ -276,6 +279,27 @@ export function routeNaturalLanguageTask(input = {}) {
       ? buildRouteObservation(legacyRoute, policy, compiled.routePlan, { projectEffectivePlan })
       : null,
   };
+}
+
+function hasExplicitSubagentRequest(value = '') {
+  const directive = String(value)
+    .replace(/`[^`\n]*`/g, ' ')
+    .replace(/"[^"\n]*"/g, ' ')
+    .replace(/[“][^”\n]*[”]|[‘][^’\n]*[’]/gu, ' ');
+  return /\bagentically\b|\b(?:fork|spawn|use|using|with|delegate\s+to)\b[^.!?\n]{0,96}\b(?:subagents?|sub-agents?)\b/i.test(directive)
+    || /(?:并行|使用|启动|调用|委派)[^。！？\n]{0,96}(?:子代理|subagents?|sub-agents?)/i.test(directive);
+}
+
+function promoteExplicitSubagentDescriptor(descriptor = {}, explicitlyRequested = false) {
+  if (!explicitlyRequested
+    || descriptor.constraints?.subagents === 'forbidden'
+    || !['modify', 'create'].includes(descriptor.operation)
+    || !descriptor.domains?.includes('code')) return descriptor;
+  return normalizeTaskDescriptor({
+    ...descriptor,
+    complexity: 'broad',
+    capabilities: [...new Set([...(descriptor.capabilities ?? []), 'subagents'])],
+  });
 }
 
 function buildRouteObservation(legacyRoute, policy, routePlan, { projectEffectivePlan = false } = {}) {
@@ -380,6 +404,8 @@ function isCanonicalTestingProjection(descriptor, prompt = '') {
     || descriptor?.constraints?.testExecution !== 'required'
     || !descriptor?.domains?.includes('tests')) return false;
   if ((descriptor.testExecutionTargets ?? []).length > 0) return true;
+  if (descriptor.testExecutionCommand
+    && (descriptor.provenance?.reasons ?? []).includes('exclusive command-only exact test requested')) return true;
   const text = String(prompt).toLowerCase();
   const explicitDefectAudit = /(?:审计|检查|查找|排查).{0,32}(?:bug|缺陷|问题)|\b(?:audit|check|find|hunt)\b.{0,32}\b(?:bugs?|defects?)\b/.test(text);
   const primaryTestExecution = /^(?:(?:please)\s+)?(?:run|execute|rerun)\b.{0,48}\b(?:tests?|testing\s+workflow)\b|^(?:请\s*)?(?:运行|执行|跑|重跑).{0,32}(?:测试|test)/.test(text.trim());

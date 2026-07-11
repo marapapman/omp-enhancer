@@ -3,6 +3,7 @@ import {
   analyzeExternalActionPrompt,
   normalizeExternalActionContract,
 } from './external-action-policy.js';
+import { createHash } from 'node:crypto';
 
 const DOMAIN_ORDER = [
   'general',
@@ -82,6 +83,7 @@ export function describeNaturalLanguageTask(input = {}) {
     });
   }
   if (isExclusiveRouteTaskDiagnosticProbe(text)) {
+    const probePrompt = exclusiveRouteProbePrompt(prompt);
     return normalizeTaskDescriptor({
       version: 1,
       operation: 'diagnose',
@@ -98,6 +100,10 @@ export function describeNaturalLanguageTask(input = {}) {
       risk: { level: 'low', flags: [] },
       complexity: 'focused',
       language: promptLanguage,
+      exclusiveToolContract: makeExclusiveToolContract('omp_core_route_task', {
+        kind: 'route-probe',
+        ...(probePrompt ? { digest: descriptorDigest(probePrompt) } : { status: 'ambiguous' }),
+      }),
       provenance: {
         ruleConfidence: 0.99,
         reasons: ['exclusive route task diagnostic probe'],
@@ -123,6 +129,10 @@ export function describeNaturalLanguageTask(input = {}) {
       risk: { level: 'low', flags: [] },
       complexity: 'focused',
       language: promptLanguage,
+      exclusiveToolContract: makeExclusiveToolContract('omp_core_subagent_status', {
+        kind: 'status-probe',
+        digest: descriptorDigest('{}'),
+      }),
       provenance: {
         ruleConfidence: 0.99,
         reasons: ['exclusive subagent status diagnostic probe'],
@@ -150,7 +160,10 @@ export function describeNaturalLanguageTask(input = {}) {
       },
     });
   }
-  const signals = collectSignals(text, operationalPrompt, { scopePrompt: directivePrompt });
+  const signals = collectSignals(text, operationalPrompt, {
+    scopePrompt: directivePrompt,
+    rawPrompt: prompt,
+  });
   const language = signals.writingWork
     ? resolveWritingTargetLanguage(directivePrompt, promptLanguage)
     : promptLanguage;
@@ -177,6 +190,8 @@ export function describeNaturalLanguageTask(input = {}) {
     testAllowlist: signals.testAllowlist,
     testExclusions: signals.testExclusions,
     testExecutionTargets: signals.testExecutionTargets,
+    testExecutionCommand: signals.testExecutionCommand,
+    exclusiveToolContract: signals.exclusiveToolContract,
     capabilities,
     phases,
     risk,
@@ -300,9 +315,18 @@ export function normalizeTaskDescriptor(value = {}) {
   const testExecutionTargets = constraints.testExecution === 'required'
     ? normalizeTestExecutionTargets(value.testExecutionTargets)
     : [];
+  const testExecutionCommand = constraints.testExecution === 'required'
+    ? normalizeTestExecutionCommand(value.testExecutionCommand)
+    : '';
   const normalizedDomains = (value.domains?.length ? value.domains : ['general'])
     .filter((domain) => DOMAIN_VALUES.has(domain));
   const domains = orderedUnique(normalizedDomains.length ? normalizedDomains : ['general'], DOMAIN_ORDER);
+  const exclusiveToolContract = normalizeExclusiveToolContract(value.exclusiveToolContract, {
+    operation,
+    domains,
+    constraints,
+    testExecutionCommand,
+  });
   const complexity = ['simple', 'focused', 'broad'].includes(value.complexity) ? value.complexity : 'focused';
   const capabilityCeiling = new Set(capabilitiesFor({
     operation,
@@ -337,6 +361,8 @@ export function normalizeTaskDescriptor(value = {}) {
     testAllowlist,
     testExclusions,
     testExecutionTargets,
+    ...(testExecutionCommand ? { testExecutionCommand } : {}),
+    ...(exclusiveToolContract ? { exclusiveToolContract } : {}),
     capabilities,
     phases: phases.length ? phases : [defaultPhaseFor(operation, domains)],
     risk,
@@ -351,8 +377,9 @@ export function normalizeTaskDescriptor(value = {}) {
   };
 }
 
-function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
+function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt } = {}) {
   const positiveDomainText = positiveDomainSignalText(text);
+  const rawExclusiveCompanionMutation = hasExclusiveCompanionMutation(rawPrompt);
   const externalActionContract = analyzeExternalActionPrompt(prompt);
   const externalActionContracts = analyzeExternalActionContracts(prompt);
   const externalActionRequested = ['complete', 'incomplete', 'conflicting'].includes(externalActionContract?.state);
@@ -362,7 +389,12 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
   const testConstraintText = maskAffirmativeTestPhrases(text);
   const testAllowlist = testAllowlistFor(testConstraintText);
   const testExclusions = testExclusionsFor(testConstraintText);
-  const testExecutionTargets = testExecutionTargetsFor(prompt);
+  const testExecutionBinding = testExecutionBindingFor(prompt);
+  const testExecutionTargets = testExecutionBinding.ambiguous
+    ? []
+    : testExecutionBinding.targets.length
+    ? testExecutionBinding.targets
+    : testExecutionTargetsFor(prompt);
   const globalTestConstraintText = maskSelectiveTestExclusions(testConstraintText);
   const networkConstraintText = maskAffirmativeNetworkPhrases(text);
   const externalConstraintText = maskScopedExternalWriteNegatives(normalizeAffirmativeExternalWritePhrases(text));
@@ -402,11 +434,13 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
     || /^(?:请\s*)?(?:重新运行|重跑|运行|执行).{0,16}(?:失败)?测试/.test(text.trim())
     || /^(?:(?:please)\s+)?(?:rerun|run|execute)\b.{0,16}\b(?:failed\s+)?tests?\b/.test(text.trim())
   );
-  const noTestExecution = /(?:(?:不要|别|无需|不用|禁止|不得)[^，。；;,.!\n]{0,16}|不\s*(?:再|重新)?\s*)(?:运行|执行|跑|重跑)[^，。；;,.!\n]{0,12}(?:测试|test)|(?:测试|test)[^，。；;,.!\n]{0,16}(?:(?:不要|别|禁止|不得)[^，。；;,.!\n]{0,8}|不\s*(?:再|重新)?\s*)(?:运行|执行)|(?:do not|don't|without)[^,.;!\n]{0,18}(?:run|execute|rerun)[^,.;!\n]{0,12}(?:tests?|testing)|(?:command|命令).{0,24}(?:不要|不|别|禁止|不得|do not|don't).{0,8}(?:执行|运行|execute|run)/.test(globalTestConstraintText)
+  const laterExactTestExecution = /(?:^|[.;；。]\s*|\b(?:then|next)\s+)(?:(?:please)\s+)?(?:run|execute|rerun)\s+(?:exactly\s+)?(?:node\s+--test\s+)?[`'"]?(?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.[cm]?[jt]sx?/i.test(globalTestConstraintText)
+    || /(?:^|[；。]\s*|(?:然后|接着|再)\s*)(?:请)?(?:运行|执行|跑|重跑)\s*(?:node\s+--test\s+)?[`'"]?(?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.[cm]?[jt]sx?/i.test(globalTestConstraintText);
+  const noTestExecution = !testExecutionBinding.command && !laterExactTestExecution && (/(?:(?:不要|别|无需|不用|禁止|不得)[^，。；;,.!\n]{0,16}|不\s*(?:再|重新)?\s*)(?:运行|执行|跑|重跑)[^，。；;,.!\n]{0,12}(?:测试|test)|(?:测试|test)[^，。；;,.!\n]{0,16}(?:(?:不要|别|禁止|不得)[^，。；;,.!\n]{0,8}|不\s*(?:再|重新)?\s*)(?:运行|执行)|(?:do not|don't|without)[^,.;!\n]{0,18}(?:run|execute|rerun)[^,.;!\n]{0,12}(?:tests?|testing)|(?:command|命令).{0,24}(?:不要|不|别|禁止|不得|do not|don't).{0,8}(?:执行|运行|execute|run)/.test(globalTestConstraintText)
     || hasNaturalNoTestExecution(globalTestConstraintText)
     || chineseNegativeClauseIncludes(globalTestConstraintText, /(?:运行|执行|跑|重跑)?\s*(?:测试|test)/i)
     || englishNegativeClauseIncludes(globalTestConstraintText, /\b(?:(?:run|execute|rerun|do)\s+)?(?:the\s+)?(?:tests?|testing)\b/i)
-    || observedTestSummaryWriting && !observedSummaryRerunRequested;
+    || observedTestSummaryWriting && !observedSummaryRerunRequested);
   const noExternalWrite = hasExplicitNoExternalWrite(externalConstraintText)
     || chineseNegativeClauseIncludes(externalConstraintText, /(?:提交|推送|发布|部署|上线|升级\s*(?:插件|marketplace))/i)
     || englishNegativeClauseIncludes(externalConstraintText, /\b(?:push|publish|release|deploy)\b/i);
@@ -533,10 +567,12 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
     || /\b(?:audit|inspect|review|check|find|hunt)\b.{0,36}\b(?:the\s+)?(?:whole|entire|full|all)\s+(?:project|codebase|repository|repo|code)\b.{0,36}\b(?:bugs?|defects?)\b/.test(text)
   );
   const explicitTestTargetExecution = /(?:只|仅)?\s*(?:运行|执行|跑|重跑)\s+(?:node\s+--test\s+)?[`'"]?[^\s，。；;!！]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)\b/i.test(text)
-    || /\b(?:only\s+)?(?:run|execute|rerun)\s+(?:node\s+--test\s+)?[`'"]?[^\s,.;!]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)\b/i.test(text);
+    || /\b(?:only\s+)?(?:run|execute|rerun)\s+(?:exactly\s+)?(?:node\s+--test\s+)?[`'"]?[^\s,.;!]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)\b(?:\s+once\b)?/i.test(text);
   const directTestExecution = !noTestExecution && (testAllowlist.length > 0 || explicitTestTargetExecution || broadBugAudit || (
     testWork && !(writingWork && noTestAuthoring) && (
       /(?:运行|执行|跑|重跑).{0,32}(?:测试|test)|(?:测试|test).{0,32}(?:运行|执行|跑|重跑)|\b(?:run|execute|rerun)\b.{0,32}\b(?:tests?|testing\s+workflow)\b/.test(globalTestConstraintText)
+      || /\b(?:tests?|testing)\b[^.!?\n]{0,48}\band\s+(?:run|execute|rerun)\s+(?:them|it|these|those)\b/.test(globalTestConstraintText)
+      || /(?:测试|test)[^。！？\n]{0,32}(?:并|然后|再)[^。！？\n]{0,16}(?:运行|执行|跑|重跑)(?:它们|这些测试|该测试)?/.test(globalTestConstraintText)
       || /(?:进行|做).{0,16}(?:一次)?(?:端到端|e2e).{0,12}测试/.test(globalTestConstraintText)
       || /(?:全面|完整|系统性地?)?测试.{0,18}(?:整个|全|本)?(?:项目|插件|代码库|系统)|\btest\b.{0,18}\b(?:the\s+)?(?:entire|whole|full)\s+(?:project|plugin|codebase|system)\b/.test(globalTestConstraintText)
       || /(?:验证|verify).{0,12}(?:测试|test|代码|实现|修复)/.test(globalTestConstraintText)
@@ -635,6 +671,7 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
   const directModify = !advisory && !noActionExecution && releaseCompanionModify && (directDestructiveModify || localGitMetadata || implicitModify || dependencyUpgrade
     || narrowLineEdit || narrowScopedEdit
     || explicitModifyAction
+    || !noWorkspaceWrite && rawExclusiveCompanionMutation
     || documentTransformationRequested
     || visualModificationRequested
     || /(?:补充|补).{0,8}(?:测试|用例)/.test(effectiveActionText));
@@ -687,16 +724,35 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
     || (review && (nonTestCodeTarget || pluginWork || writingWork || documentWork
       || factWork || securityWork || configWork || visualWork))
     || (conceptOnly && nonTestCodeTarget);
+  const testExecutionCommand = directTestExecution
+    ? testExecutionBinding.command
+    : '';
+  const exclusiveToolContract = exclusiveToolContractFor({
+    text,
+    prompt,
+    rawPrompt,
+    directTestExecution,
+    testExecutionTargets,
+    testExecutionCommand,
+    factWork,
+    securityWork,
+    review,
+    noWorkspaceWrite,
+    directModify,
+    directCreate,
+    directTestAuthoring,
+    releaseRequested,
+    externalActionRequested,
+  });
+  const exclusiveToolOnly = exclusiveToolContract?.mode === 'exclusive';
   const pureExactTestExecution = directTestExecution && !directModify && !directTestAuthoring
     && testExecutionTargets.length > 0 && !secondaryPositiveAction;
   const exclusiveExactTestExecution = directTestExecution
-    && testExecutionTargets.length > 0
-    && /\b(?:bash|shell)\s+tool\s+exactly\s+once\b/.test(text)
-    && /\bdo\s+not\s+(?:call|use|invoke)\s+(?:any\s+)?other\s+tools?\b/.test(text)
-    && noWorkspaceWrite && noNetworkAccess && noSubagents
+    && exclusiveToolContract?.allowedTools?.includes('bash')
+    && Boolean(testExecutionCommand || testExecutionTargets.length > 0)
     && !directTestAuthoring && !releaseRequested && !externalActionRequested
     && !irreversibleFileOperation && !irreversibleExternalOperation
-    && !/(?:\b(?:then|after(?:wards)?|next)\b[^.!?\n]{0,32}\b(?:edit|modify|fix|write|implement|refactor)\b|(?:然后|接着|之后|再)[^。！？\n]{0,24}(?:编辑|修改|修复|写入|实现|重构))/.test(positiveDomainText);
+    && !hasExclusiveCompanionMutation(rawPrompt);
   const exactTestOnlyExecution = pureExactTestExecution || exclusiveExactTestExecution;
   const effectiveNonTestCodeTarget = codeReviewForbidden && writingWork ? false : nonTestCodeTarget;
   const codeDomainText = suppliedFindingsReport
@@ -720,6 +776,7 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
   if (testExclusions.length) reasons.push('test kind exclusions requested');
   if (testExecutionTargets.length) reasons.push('exact test execution targets requested');
   if (exclusiveExactTestExecution) reasons.push('exclusive command-only exact test requested');
+  if (exclusiveToolOnly) reasons.push('exclusive single-tool contract requested');
   if (explicitSingleRepositoryFactSearch) reasons.push('explicit single repository fact search requested');
   if (noExternalWrite) reasons.push('external write forbidden');
   if (externalScopes.targets.length || externalScopes.exclusions.length) reasons.push('scoped external write targets requested');
@@ -759,6 +816,8 @@ function collectSignals(text, prompt, { scopePrompt = prompt } = {}) {
     testAllowlist,
     testExclusions,
     testExecutionTargets,
+    testExecutionCommand,
+    exclusiveToolContract,
     noExternalWrite,
     externalWriteTargets: externalScopes.targets,
     externalWriteExclusions: externalScopes.exclusions,
@@ -926,13 +985,16 @@ function maskScopedWorkspaceWriteNegatives(value = '') {
 
 function stripQuotedConstraintMentions(value = '') {
   return String(value)
+    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/gu, ' ')
+    .replace(/^[\t ]*>[^\n]*(?:\n|$)/gmu, ' ')
     .replace(/[“‘]([^”’\n]*)[”’]/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ')
     .replace(/"([^"\n]*)"/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ')
-    .replace(/(?<![\p{L}\p{N}])'([^'\n]+)'(?![\p{L}\p{N}])/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ');
+    .replace(/(?<![\p{L}\p{N}])'([^'\n]+)'(?![\p{L}\p{N}])/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ')
+    .replace(/`([^`\n]*)`/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ');
 }
 
 function quotedPathMention(value = '') {
-  return /(?:^|[/\\])[^/\\\n]+\.[\p{L}\p{N}_.-]+$/u.test(String(value).trim());
+  return /^(?:\.\/)?(?:[\p{L}\p{N}_.-]+[/\\])*[\p{L}\p{N}_.-]+\.[\p{L}\p{N}_.-]+$/u.test(String(value).trim());
 }
 
 function externalWriteScopesFor(value = '') {
@@ -1092,6 +1154,142 @@ function testExecutionTargetsFor(value = '') {
   return normalizeTestExecutionTargets(targets);
 }
 
+function testExecutionBindingFor(value = '') {
+  const source = String(value).normalize('NFKC')
+    .replace(/\b(?:do\s+not|don't|dont|never)\s+(?:run|execute|rerun)\b[^.;!?\n]*/gi, ' ')
+    .replace(/(?:不要|别|禁止|不得|不)\s*(?:运行|执行|跑|重跑)[^；。！？\n]*/gu, ' ');
+  const candidates = [];
+  const commandPattern = /\b(?:run|execute|rerun)\s+(?:exactly\s+)?[`'"]?((?:node\s+--test\s+(?:\.\/)?[a-z0-9_.\/-]+(?:\.test|\.spec)\.[cm]?[jt]sx?(?:\s+(?:\.\/)?[a-z0-9_.\/-]+(?:\.test|\.spec)\.[cm]?[jt]sx?)*|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test))(?:[`'"])?(?:\s+(?:exactly\s+)?once\b)?/gi;
+  for (const match of source.matchAll(commandPattern)) {
+    const command = normalizeTestExecutionCommand(match[1]);
+    if (command) candidates.push(command);
+  }
+  const targetPattern = /\b(?:run|execute|rerun)\s+(?:exactly\s+)?[`'"]?((?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.[cm]?[jt]sx?(?:\s+(?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.[cm]?[jt]sx?)*)(?:[`'"])?(?:\s+(?:exactly\s+)?once\b)?/gi;
+  for (const match of source.matchAll(targetPattern)) {
+    const command = normalizeTestExecutionCommand(`node --test ${match[1]}`);
+    if (command) candidates.push(command);
+  }
+  const chineseCommandPattern = /(?:运行|执行|跑|重跑)\s*(?:恰好|准确|仅|只)?\s*[`'"]?((?:node\s+--test\s+(?:\.\/)?[a-z0-9_.\/-]+(?:\.test|\.spec)\.[cm]?[jt]sx?(?:\s+(?:\.\/)?[a-z0-9_.\/-]+(?:\.test|\.spec)\.[cm]?[jt]sx?)*|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test))(?:[`'"])?(?:\s*(?:一次))?/gi;
+  for (const match of source.matchAll(chineseCommandPattern)) {
+    const command = normalizeTestExecutionCommand(match[1]);
+    if (command) candidates.push(command);
+  }
+  const chineseTargetPattern = /(?:运行|执行|跑|重跑)\s*(?:恰好|准确|仅|只)?\s*[`'"]?((?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.[cm]?[jt]sx?(?:\s+(?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.[cm]?[jt]sx?)*)(?:[`'"])?(?:\s*(?:一次))?/gi;
+  for (const match of source.matchAll(chineseTargetPattern)) {
+    const command = normalizeTestExecutionCommand(`node --test ${match[1]}`);
+    if (command) candidates.push(command);
+  }
+  const unique = uniqueStrings(candidates);
+  if (unique.length !== 1) return { command: '', targets: [], ambiguous: unique.length > 1 };
+  const command = unique[0];
+  const targets = /^node\s+--test\b/i.test(command)
+    ? normalizeTestExecutionTargets([...command.matchAll(/(?:^|\s)((?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.[cm]?[jt]sx?)(?=$|\s)/gi)]
+      .map((match) => match[1]))
+    : [];
+  return { command, targets, ambiguous: false };
+}
+
+function exclusiveToolContractFor({
+  text = '',
+  prompt = '',
+  rawPrompt = prompt,
+  directTestExecution = false,
+  testExecutionTargets = [],
+  testExecutionCommand = '',
+  factWork = false,
+  securityWork = false,
+  review = false,
+  noWorkspaceWrite = false,
+  directModify = false,
+  directCreate = false,
+  directTestAuthoring = false,
+  releaseRequested = false,
+  externalActionRequested = false,
+} = {}) {
+  const directive = stripQuotedConstraintMentions(String(text).toLowerCase());
+  const noOtherTools = /\b(?:do\s+not|don't|never|without)\b[^.!?\n]{0,160}\b(?:use|call|invoke)\s+(?:any\s+)?(?:other|additional)\s+tools?\b/.test(directive)
+    || /\b(?:and\s+)?no\s+(?:other|additional)\s+tools?\b/.test(directive)
+    || /\b(?:and\s+)?nothing\s+else\b|\b(?:do\s+not|don't|never|without)\s+(?:use|call|invoke)?\s*anything\s+else\b/.test(directive)
+    || /(?:不要|不得|禁止|别|不)\s*(?:使用|调用|用)\s*(?:任何)?\s*(?:其他|其它|别的)\s*(?:工具)?/.test(directive);
+  if (!noOtherTools) return null;
+
+  let tool = '';
+  if (/\b(?:use|call|invoke)\s+(?:only\s+)?(?:the\s+)?(?:bash|shell|terminal|exec(?:_command)?|command)\s+(?:tool\s+)?(?:(?:exactly|only)\s+)?once\b/.test(directive)
+    || /\b(?:use|call|invoke)\s+(?:only\s+)?(?:the\s+)?(?:bash|shell|terminal|exec(?:_command)?|command)\s+tool\s+exactly\s+once\b/.test(directive)) tool = 'bash';
+  else if (/\b(?:use|call|invoke)\s+(?:only\s+|exactly\s+one\s+)?(?:the\s+)?read(?:\s+tool)?(?:\s+(?:(?:exactly|only)\s+)?once|\s+of\b)/.test(directive)) tool = 'read';
+  else if (/\bread\b[^.!?\n]{0,96}\bexactly\s+once\b/.test(directive)) tool = 'read';
+  else if (/\b(?:use|run|perform)\s+exactly\s+one\s+(?:built[- ]?in\s+)?(?:focused\s+)?grep\b/.test(directive)
+    || /\b(?:use|call|invoke)\s+(?:only\s+)?(?:the\s+)?grep(?:\s+tool)?\s+(?:(?:exactly|only)\s+)?once\b/.test(directive)) tool = 'grep';
+  else if (/(?:只|仅)?\s*(?:使用|调用|用)\s*(?:一次\s*)?(?:bash|shell|terminal|exec(?:_command)?|command)(?:\s*工具)?\s*(?:一次)/.test(directive)) tool = 'bash';
+  else if (/(?:只|仅)?\s*(?:使用|调用|用)\s*(?:一次\s*)?read(?:\s*工具)?\s*(?:一次)/.test(directive)) tool = 'read';
+  else if (/(?:只|仅)?\s*(?:使用|调用|用)\s*(?:一次\s*)?(?:内置)?grep(?:\s*工具)?\s*(?:一次)/.test(directive)) tool = 'grep';
+  else if (directTestExecution && testExecutionCommand) tool = 'bash';
+  if (!tool) return null;
+  if (hasExclusiveCompanionMutation(rawPrompt)) return null;
+
+  if (tool === 'bash'
+    && (!directTestExecution || !testExecutionCommand || directTestAuthoring
+      || releaseRequested || externalActionRequested)) return null;
+  if (tool === 'grep' && (!factWork || directModify || directCreate || releaseRequested || externalActionRequested)) return null;
+  if (tool === 'read' && (directTestExecution || directTestAuthoring
+    || releaseRequested || externalActionRequested)) return null;
+
+  if (tool === 'bash') {
+    return makeExclusiveToolContract(tool, {
+      kind: 'exact-command',
+      digest: descriptorDigest(testExecutionCommand),
+    });
+  }
+  if (tool === 'read') {
+    const targets = exclusiveReadTargets(prompt);
+    return makeExclusiveToolContract('read', targets.length === 1 ? {
+      kind: 'exact-path',
+      digest: descriptorDigest(targets[0]),
+      target: targets[0],
+    } : {
+      kind: 'exact-path',
+      status: 'ambiguous',
+    });
+  }
+  return makeExclusiveToolContract('grep', {
+    kind: 'focused-claim-search',
+    digest: descriptorDigest(prompt),
+  });
+}
+
+function hasExclusiveCompanionMutation(value = '') {
+  const source = String(value).normalize('NFKC').toLowerCase();
+  return /(?:\b(?:then|next|after(?:wards)?|also)\b|companion\s+instruction\s*:)[^.!?\n]{0,96}["'“‘`]?\s*\b(?:edit|modify|fix|write|implement|refactor|delete|publish|push|deploy|release)\b/.test(source)
+    || /(?:然后|接着|之后|随后|再|同时|附加指令\s*[:：])[^。！？\n]{0,72}["'“‘`]?\s*(?:编辑|修改|修复|写入|实现|重构|删除|发布|推送|部署)/.test(source);
+}
+
+function exclusiveReadTargets(value = '') {
+  const source = String(value)
+    .replace(/\b(?:do\s+not|don't|dont|never)\s+(?:run|execute|rerun|read|inspect)\s+(?:node\s+--test\s+)?[`'"]?(?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.[cm]?[jt]sx?[`'"]?/gi, ' ')
+    .replace(/(?:不要|别|禁止|不得|不)\s*(?:运行|执行|跑|重跑|读取|检查)\s*(?:node\s+--test\s+)?[`'"]?(?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.[cm]?[jt]sx?[`'"]?/giu, ' ')
+    .replace(/\b(?:do\s+not|don't|dont|never)\s+(?:run|execute|rerun|read|inspect)\b[^.;!?\n]*/gi, ' ')
+    .replace(/(?:不要|别|禁止|不得|不)\s*(?:运行|执行|跑|重跑|读取|检查)[^；。！？\n]*/gu, ' ');
+  return uniqueStrings([...source.matchAll(/(?:^|[\s`'"])((?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:[cm]?[jt]sx?|json|ya?ml|toml|md|mdx|rst|txt|tex))(?=$|[\s`'"，。；、：;,:.!！])/gi)]
+    .map((match) => String(match[1]).replace(/^\.\//, '').replace(/\\/g, '/')));
+}
+
+function makeExclusiveToolContract(tool, input = null) {
+  return {
+    schemaVersion: 1,
+    mode: 'exclusive',
+    allowedTools: [String(tool)],
+    maxCalls: 1,
+    required: true,
+    input,
+    onFailure: 'stop',
+    alternatives: 'forbidden',
+  };
+}
+
+function descriptorDigest(value = '') {
+  return createHash('sha256').update(String(value)).digest('hex');
+}
+
 function testExclusionsFor(text = '') {
   const source = String(text);
   const exclusions = [];
@@ -1184,6 +1382,7 @@ function isSecurityConceptOnlyRequest(text = '') {
 }
 
 function operationFor(signals) {
+  if (signals.exclusiveToolContract?.input?.kind === 'exact-path') return 'inspect';
   if (signals.answerOnly && !signals.factWork) return 'answer';
   if (signals.conceptOnly && signals.noWorkspaceWrite && signals.codeWork) return 'inspect';
   if (signals.conceptOnly) return 'answer';
@@ -1215,6 +1414,11 @@ function operationFor(signals) {
 
 function domainsFor(signals, operation) {
   if (signals.externalActionDestructive) return ['general'];
+  if (signals.exclusiveToolContract?.input?.kind === 'exact-path'
+    && !signals.factWork && !signals.securityWork) {
+    const target = signals.exclusiveToolContract.input.target ?? '';
+    return /\.(?:md|mdx|rst|txt|tex|docx?)$/iu.test(target) ? ['document'] : ['code'];
+  }
   const found = [];
   if (signals.externalActionRequested) found.push('general');
   if (signals.irreversibleExternalOperation) found.push(signals.externalActionDestructive ? 'general' : 'plugin');
@@ -1236,6 +1440,10 @@ function domainsFor(signals, operation) {
 }
 
 function constraintsFor(signals, operation, domains) {
+  const exclusiveLocalFactObservation = signals.factWork
+    && signals.exclusiveToolContract?.mode === 'exclusive'
+    && signals.exclusiveToolContract.allowedTools?.some((tool) => ['read', 'grep'].includes(tool));
+  const exclusiveReadObservation = signals.exclusiveToolContract?.input?.kind === 'exact-path';
   const explicitWritingFileEdit = signals.writingWork
     && signals.workspaceWriteTargets.length > 0
     && /(?:润色|改写|校对|修订|翻译|更新|编辑|修改)|\b(?:polish|rewrite|proofread|translate|update|revise|edit|improve)\b/.test(signals.text);
@@ -1257,25 +1465,28 @@ function constraintsFor(signals, operation, domains) {
           : 'forbidden';
   const testExecution = signals.noTestExecution
     ? 'forbidden'
+    : exclusiveReadObservation
+      ? 'forbidden'
     : signals.directTestExecution || signals.directTestAuthoring
       ? 'required'
       : 'unspecified';
   return {
     workspaceWrite,
     testExecution,
-    networkAccess: signals.noNetworkAccess
+    networkAccess: signals.noNetworkAccess || exclusiveLocalFactObservation || exclusiveReadObservation
       ? 'forbidden'
       : signals.externalActionRequested || signals.irreversibleExternalOperation || signals.dependencyInstallExecution || signals.factWork || signals.releaseRequested && ['modify', 'release'].includes(operation)
         ? 'required'
         : 'unspecified',
     externalWrite: signals.externalActionRequested || signals.irreversibleExternalOperation || signals.releaseRequested && ['modify', 'release'].includes(operation) ? 'required' : 'forbidden',
-    subagents: signals.noSubagents ? 'forbidden' : 'unspecified',
+    subagents: signals.noSubagents || exclusiveLocalFactObservation || exclusiveReadObservation ? 'forbidden' : 'unspecified',
   };
 }
 
 function complexityFor(signals, operation, domains) {
   const writingDirectiveText = signals.text.split('__writing_content__', 1)[0];
   if (signals.suppliedFindingsReport) return 'focused';
+  if (signals.factWork && signals.exclusiveToolContract?.allowedTools?.some((tool) => ['read', 'grep'].includes(tool))) return 'focused';
   if (signals.focusedLocalFactWork) return 'focused';
   if (signals.primaryDirectTestAuthoring) return 'focused';
   if (signals.securityProseWriting
@@ -1320,7 +1531,7 @@ function complexityFor(signals, operation, domains) {
     && /(?:看板|dashboard).{0,64}(?:包含|包括|with).{0,64}(?:和|及|以及|and)/.test(signals.text)) return 'broad';
   if (['modify', 'create'].includes(operation) && domains.includes('code')
     && !signals.noSubagents
-    && /\bagentically\b|(?:并行|使用|启动|调用|委派).{0,24}(?:子代理|subagents?|sub-agents?)|(?:fork|spawn|use|delegate\s+to).{0,24}(?:subagents?|sub-agents?)/.test(signals.text)) return 'broad';
+    && /\bagentically\b|(?:并行|使用|启动|调用|委派).{0,24}(?:子代理|subagents?|sub-agents?)|(?:fork|spawn|use|using|with|delegate\s+to).{0,24}(?:subagents?|sub-agents?)/.test(signals.text)) return 'broad';
   if (operation === 'inspect' && domains.includes('code') && domains.includes('tests')
     && !/(?:focused|直接|单个|一个|single|\bone\b|router\.js|\bfunction\b)/.test(signals.text)) return 'broad';
   if (/(?:找|检查|审计|测试).{0,20}(?:bug|缺陷)|\b(?:find|hunt|check|audit|test)\b.{0,24}\b(?:bugs?|defects?)\b/.test(signals.text)
@@ -1624,15 +1835,54 @@ function isRouteStatusSkillDiagnosticProbe(text = '') {
 }
 
 function isExclusiveRouteTaskDiagnosticProbe(text = '') {
-  const value = String(text).toLowerCase();
+  const value = String(text).trim().toLowerCase();
   if (!/\bomp_core_route_task\b/.test(value)) return false;
-  const oneShot = /\b(?:call|invoke|use)\s+(?:only\s+)?omp_core_route_task\s+exactly\s+once\b/.test(value)
-    || /\b(?:call|invoke|use)\s+omp_core_route_task\s+once\b/.test(value)
-    || /只\s*调用\s*一次\s*omp_core_route_task/.test(value);
+  if (exclusiveRouteProbeHasCompanionMutation(value)) return false;
+  const oneShot = /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:call|invoke|use)\s+(?:only\s+)?omp_core_route_task\s+(?:exactly\s+once|once)\b/.test(value)
+    || /^(?:请|帮我|麻烦)?\s*只\s*(?:调用|使用)\s*(?:一次\s*)?omp_core_route_task(?:\s*一次)?(?:[，,:：\s]|$)/.test(value);
   if (!oneShot) return false;
   return /\b(?:do\s+not|don't|without)\s+(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b/.test(value)
-    || /(?:不要|不得|禁止|不)\s*(?:使用|调用)\s*(?:任何)?\s*(?:其他|其它)\s*工具/.test(value)
+    || /(?:不要|不得|禁止|别|不)\s*(?:使用|调用)\s*(?:任何)?\s*(?:其他|其它)\s*工具/.test(value)
     || /只\s*调用\s*一次\s*omp_core_route_task/.test(value);
+}
+
+function exclusiveRouteProbeHasCompanionMutation(value = '') {
+  const source = String(value).normalize('NFKC');
+  const boundaries = [
+    ...source.matchAll(/\s+then\s+(?:report|return|respond)\b/gi),
+    ...source.matchAll(/(?:然后|接着|再)\s*(?:只|仅)?\s*(?:报告|返回|输出)/gi),
+  ].sort((left, right) => (left.index ?? -1) - (right.index ?? -1));
+  const last = boundaries.at(-1);
+  if (last?.index == null) return hasExclusiveCompanionMutation(source);
+  const outer = source.slice(last.index + last[0].length).replace(/^[^.!?。！？\n]*[.!?。！？]?/u, ' ');
+  return hasExclusiveCompanionMutation(outer);
+}
+
+function exclusiveRouteProbePrompt(value = '') {
+  const source = String(value).normalize('NFKC').trim();
+  const extractBeforeLast = (startPattern, explicitBoundaryPattern, fallbackBoundaryPattern) => {
+    const start = source.match(startPattern);
+    if (!start || start.index == null) return '';
+    const tail = source.slice(start.index + start[0].length);
+    const explicitBoundaries = [...tail.matchAll(explicitBoundaryPattern)];
+    const boundaries = explicitBoundaries.length
+      ? explicitBoundaries
+      : [...tail.matchAll(fallbackBoundaryPattern)];
+    const last = boundaries.at(-1);
+    if (last?.index == null) return '';
+    const payload = tail.slice(0, last.index).trim();
+    const quoted = payload.match(/^(?:"([\s\S]+)"|“([\s\S]+)”|'([\s\S]+)'|‘([\s\S]+)’|`([\s\S]+)`)$/u);
+    return String(quoted ? quoted.slice(1).find((part) => part != null) : payload).trim();
+  };
+  return extractBeforeLast(
+    /\bwith\s+(?:this\s+)?prompt\s*:\s*/i,
+    /\s+then\s+(?:report|return|respond)\b/gi,
+    /\s+(?:report|return|respond)\b/gi,
+  ) || extractBeforeLast(
+    /(?:参数\s*)?prompt\s*(?:为|是)?\s*[:：]\s*/i,
+    /(?:然后|接着|再)\s*(?:只|仅)?\s*(?:报告|返回|输出)/gi,
+    /(?:只|仅)?\s*(?:报告|返回|输出)/gi,
+  );
 }
 
 function isExclusiveSubagentStatusDiagnosticProbe(text = '') {
@@ -1743,14 +1993,112 @@ function normalizeTestExecutionTargets(values) {
     .filter((value) => /(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)$/i.test(value)));
 }
 
+function normalizeTestExecutionCommand(value = '') {
+  const command = String(value ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+  if (!command || command.length > 512 || /[\r\n;&|<>`]/.test(command)) return '';
+  if (/^node\s+--test\s+(?:\.\/)?[a-z0-9_.\/-]+(?:\.test|\.spec)\.[cm]?[jt]sx?(?:\s+(?:\.\/)?[a-z0-9_.\/-]+(?:\.test|\.spec)\.[cm]?[jt]sx?)*$/i.test(command)) return command;
+  if (/^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test$/i.test(command)) return command;
+  return '';
+}
+
+function normalizeExclusiveToolContract(value, {
+  operation = 'answer',
+  domains = [],
+  constraints = DEFAULT_CONSTRAINTS,
+  testExecutionCommand = '',
+} = {}) {
+  if (!value || value.schemaVersion !== 1 || value.mode !== 'exclusive'
+    || value.maxCalls !== 1 || value.required !== true
+    || value.onFailure !== 'stop' || value.alternatives !== 'forbidden') return null;
+  const allowedTools = uniqueStrings((Array.isArray(value.allowedTools) ? value.allowedTools : [])
+    .map(canonicalExclusiveToolName)
+    .filter((tool) => /^[a-z0-9_.:-]{1,64}$/.test(tool)));
+  if (allowedTools.length !== 1) return null;
+  const input = normalizeExclusiveToolInput(value.input);
+  if (!input) return null;
+  const tool = allowedTools[0];
+  const expectedToolByKind = {
+    'exact-command': 'bash',
+    'exact-path': 'read',
+    'focused-claim-search': 'grep',
+    'route-probe': 'omp_core_route_task',
+    'status-probe': 'omp_core_subagent_status',
+  };
+  if (expectedToolByKind[input.kind] !== tool) return null;
+  if (input.kind === 'exact-command') {
+    if (operation !== 'execute' || !domains.includes('tests')
+      || constraints.testExecution !== 'required' || !testExecutionCommand
+      || input.status !== 'bound' || input.digest !== descriptorDigest(testExecutionCommand)) return null;
+  } else if (input.kind === 'exact-path') {
+    if (operation !== 'inspect' || constraints.workspaceWrite !== 'forbidden'
+      || input.status === 'bound' && input.digest !== descriptorDigest(input.target)) return null;
+  } else if (input.kind === 'focused-claim-search') {
+    if (operation !== 'inspect' || !domains.includes('facts') || input.status !== 'bound') return null;
+  } else if (input.kind === 'route-probe' || input.kind === 'status-probe') {
+    if (operation !== 'diagnose' || !domains.includes('plugin') || input.status !== 'bound') return null;
+  }
+  return {
+    schemaVersion: 1,
+    mode: 'exclusive',
+    allowedTools,
+    maxCalls: 1,
+    required: true,
+    input,
+    onFailure: 'stop',
+    alternatives: 'forbidden',
+  };
+}
+
+function canonicalExclusiveToolName(value = '') {
+  const name = String(value ?? '').trim().toLowerCase();
+  if (['bash', 'shell', 'terminal', 'exec', 'exec_command', 'command', 'run', 'run_command'].includes(name)) return 'bash';
+  return name;
+}
+
+function normalizeExclusiveToolInput(value) {
+  if (!value || !['exact-command', 'exact-path', 'focused-claim-search', 'route-probe', 'status-probe'].includes(value.kind)) return null;
+  const status = value.status === 'ambiguous' ? 'ambiguous' : 'bound';
+  const digest = /^[a-f0-9]{64}$/.test(String(value.digest ?? '')) ? String(value.digest) : '';
+  if (status === 'bound' && !digest) return null;
+  const target = value.kind === 'exact-path'
+    && typeof value.target === 'string'
+    && /^(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.[a-z0-9_.-]+$/i.test(value.target)
+    ? value.target
+    : '';
+  if (status === 'bound' && value.kind === 'exact-path' && !target) return null;
+  return {
+    kind: value.kind,
+    status,
+    ...(digest ? { digest } : {}),
+    ...(target ? { target } : {}),
+  };
+}
+
 export function writingDirectivePromptForSignals(prompt = '') {
-  const source = String(prompt);
+  const source = activateExplicitQuotedInstruction(maskMetaQuotedInstructionPayload(String(prompt)));
   const withoutQuotedPayload = maskQuotedWritingPayload(source);
   const normalized = normalizeEnglishApostrophes(withoutQuotedPayload);
   if (isVisualEditingDirective(normalized)) return normalized;
   const withoutRelationalPayload = maskRelationalWritingPayload(normalized);
   const withoutColonPayload = maskColonWritingPayload(withoutRelationalPayload);
   return maskEmbeddedWritingAuthority(withoutColonPayload);
+}
+
+function activateExplicitQuotedInstruction(value = '') {
+  return String(value)
+    .replace(/(?:^|(?<=[.!?。！？]\s))(?:(?:please)\s+)?follow\s+(?:this|the\s+following)\s+instruction\s+exactly\s*:\s*(?:"([^"\n]+)"|“([^”\n]+)”|`([^`\n]+)`)/giu, (_match, straight, curly, tick) => ` ${straight ?? curly ?? tick ?? ''} `)
+    .replace(/(?:^|(?<=[。！？]\s))请?\s*(?:严格)?(?:按照|遵循|执行)\s*(?:这条|以下|下面)?\s*(?:指令|要求)\s*[:：]\s*(?:“([^”\n]+)”|`([^`\n]+)`)/gu, (_match, curly, tick) => ` ${curly ?? tick ?? ''} `);
+}
+
+function maskMetaQuotedInstructionPayload(value = '') {
+  const source = String(value);
+  const metaRequest = /^\s*(?:(?:please|can\s+you|could\s+you)\s+)?(?:explain|analy[sz]e|discuss|compare|assess|review)\b[^\n]{0,96}\b(?:sentence|instruction|phrase|prompt|wording|example|text)\b/i.test(source)
+    || /^\s*(?:请)?(?:解释|分析|讨论|比较|评估|审查).{0,48}(?:句子|指令|提示词|短语|措辞|示例|文本)/u.test(source);
+  if (!metaRequest) return source;
+  return source
+    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/gu, ' __quoted_instruction_example__ ')
+    .replace(/^[\t ]*>[^\n]*(?:\n|$)/gmu, ' __quoted_instruction_example__ ')
+    .replace(/"[^"\n]*"|“[^”\n]*”|'[^'\n]*'|‘[^’\n]*’|`[^`\n]*`/gu, ' __quoted_instruction_example__ ');
 }
 
 export function writingOperationalPromptForSignals(prompt = '') {

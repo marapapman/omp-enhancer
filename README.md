@@ -130,6 +130,10 @@ Short user follow-ups such as `继续`, `开始实现`, `开始修复`, `Go ahea
 
 The protected action boundary is fail-closed for explicitly offline work. Repository-controlled tests, builds, package scripts, and automation can execute arbitrary network code, so they cannot prove a no-network constraint without a host network sandbox. The core blocks those commands under an explicit offline route rather than claiming heuristic command classification is equivalent to OS isolation.
 
+An explicit one-tool instruction such as “call only this tool once” compiles to a bound exclusive-tool contract. The contract names one canonical host tool, a route-specific bound input contract, one call, and a stop-on-failure policy. Exact commands, paths, and route-probe prompts use exact digests; focused claim searches additionally require a repository-root scope and claim-related terms. A wrong tool or input, a second call, a failed or unusable result, and an unpaired or replayed tool result never authorize another method. Exact test success is derived from positive host-observed test evidence rather than the result envelope alone. If the requested single method conflicts with a protected multi-evidence gate or an explicit no-network constraint, core injects one minimal no-tool response contract and pauses for the user instead of expanding into skills, QA tools, subagents, or completion repairs.
+
+OMP's `session_stop` hook can request another text turn but cannot replace text that the model already emitted. For a dishonest or contradictory terminal claim, core therefore allows at most one tool-free final-text correction, blocks all further methods, and records correction-budget exhaustion instead of entering an unbounded retry loop.
+
 Evidence-sensitive fallback paths are tied to host-observed actions rather than final-answer assertions:
 
 - A manual testing fallback requires a successful test command result and a structured `MANUAL_TESTING_GATE_REPORT` whose `Command` exactly matches the observed command. Masked commands, dry runs, empty test suites, failure output, and command substitutions do not close the gate.

@@ -289,8 +289,8 @@ test('explicit no-network routes fail closed for repository-controlled automatio
   }
 });
 
-test('an exact local test target can run without granting hidden network or workspace authority', async () => {
-  const prompt = '只运行 test/router.test.js 并报告测试结果。禁止修改任何文件，禁止联网，禁止启动 subagent，禁止提交或发布。';
+test('an exact local test target stays bounded without granting extra workspace authority', async () => {
+  const prompt = '只运行 test/router.test.js 并报告测试结果。禁止修改任何文件，禁止启动 subagent，禁止提交或发布。';
   const runtime = await routedRuntime(prompt);
   const exact = await event(runtime.pi, 'tool_call')({
     toolName: 'bash', input: { command: 'node --test test/router.test.js' },
@@ -324,8 +324,107 @@ test('an exact local test target can run without granting hidden network or work
   }
 });
 
+test('an exclusive exact test consumes one bound tool call and forbids every alternative', async () => {
+  const prompt = 'Run exactly test/parser.test.js and do not call any other tool. Do not edit files or use subagents.';
+  const runtime = await routedRuntime(prompt);
+
+  const wrongTool = await event(runtime.pi, 'tool_call')({
+    toolCallId: 'exclusive-wrong-tool',
+    toolName: 'read',
+    input: { path: 'package.json' },
+  }, runtime.ctx);
+  assert.equal(wrongTool?.reasonCode, 'exclusive-tool-not-authorized');
+  assert.equal(await event(runtime.pi, 'session_stop')({ output: 'The authorized test was not executed.' }, runtime.ctx), undefined);
+
+  const allowed = await routedRuntime(prompt);
+  const first = await event(allowed.pi, 'tool_call')({
+    toolCallId: 'exclusive-test-once',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, allowed.ctx);
+  assert.notEqual(first?.block, true, first?.reason);
+  const second = await event(allowed.pi, 'tool_call')({
+    toolCallId: 'exclusive-test-twice',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, allowed.ctx);
+  assert.equal(second?.reasonCode, 'exclusive-tool-budget-exhausted');
+});
+
+test('unknown and conversational routes cannot mint test execution authority', async () => {
+  for (const prompt of ['Hello.', 'Keep going.', 'What time is it?', 'Explain how parser tests work.']) {
+    const runtime = await routedRuntime(prompt);
+    const blocked = await event(runtime.pi, 'tool_call')({
+      toolCallId: `unauthorized-test-${prompt.length}`,
+      toolName: 'bash',
+      input: { command: 'node --test test/parser.test.js' },
+    }, runtime.ctx);
+    assert.equal(blocked?.reasonCode, 'test-execution-not-authorized', prompt);
+  }
+});
+
+test('ordinary implementation routes retain discretionary local verification authority', async () => {
+  const previous = process.env.OMP_ROUTER_V2_MODE;
+  try {
+    for (const routerMode of ['observe', 'enforce']) {
+      process.env.OMP_ROUTER_V2_MODE = routerMode;
+      for (const prompt of ['Fix src/router.js locally.', 'Build a parser function in src/parser.js.']) {
+        const runtime = await routedRuntime(prompt);
+        const allowed = await event(runtime.pi, 'tool_call')({
+          toolCallId: `ordinary-implementation-verification-${routerMode}-${prompt.length}`,
+          toolName: 'bash',
+          input: { command: 'node --test test/router.test.js' },
+        }, runtime.ctx);
+        assert.notEqual(allowed?.block, true, `${routerMode}: ${prompt}: ${allowed?.reason ?? 'blocked'}`);
+      }
+    }
+  } finally {
+    if (previous === undefined) delete process.env.OMP_ROUTER_V2_MODE;
+    else process.env.OMP_ROUTER_V2_MODE = previous;
+  }
+});
+
+test('implicit implementation verification rejects traversal and symlink escapes', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'omp-core-implicit-test-root-'));
+  const root = join(parent, 'repo');
+  const outside = join(parent, 'outside.test.js');
+  try {
+    await mkdir(join(root, 'test'), { recursive: true });
+    await writeFile(outside, 'import test from "node:test"; test("outside", () => {});\n');
+    await symlink(outside, join(root, 'test', 'escape.test.js'));
+
+    for (const command of [
+      'node --test ../outside.test.js',
+      'node --test test/escape.test.js',
+    ]) {
+      const runtime = await routedRuntime('Fix src/router.js locally.', { cwd: root });
+      const blocked = await event(runtime.pi, 'tool_call')({
+        toolCallId: `escaped-implementation-test-${command.length}`,
+        toolName: 'bash',
+        input: { command },
+      }, runtime.ctx);
+      assert.equal(blocked?.reasonCode, 'test-execution-not-authorized', command);
+    }
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+
+test('an offline exclusive package test is rejected before execution without method repair', async () => {
+  const runtime = await routedRuntime('Use the bash tool exactly once to run npm test. Do not call any other tool, edit files, use subagents, or access the network. Return exactly PASS if it succeeds, otherwise FAIL.');
+  const blocked = await event(runtime.pi, 'tool_call')({
+    toolCallId: 'offline-exclusive-npm-test',
+    toolName: 'bash',
+    input: { command: 'npm test' },
+  }, runtime.ctx);
+
+  assert.equal(blocked?.reasonCode, 'exclusive-tool-contract-unsatisfiable');
+  assert.match(blocked?.reason ?? '', /network[- ]sandbox|no-network|protected route boundary/i);
+  assert.equal(await event(runtime.pi, 'session_stop')({ output: 'BLOCKED: npm test was not executed because network isolation is unavailable.' }, runtime.ctx), undefined);
+});
+
 test('multiple exact local test targets require one direct complete allowlist command', async () => {
-  const prompt = 'Only run node --test test/router.test.js test/governance.test.js; do not modify files, use the network, use subagents, or publish.';
+  const prompt = 'Only run node --test test/router.test.js test/governance.test.js; do not modify files, use subagents, or publish.';
   const allowed = await routedRuntime(prompt);
   const allowedCall = await event(allowed.pi, 'tool_call')({
     toolName: 'bash', input: { command: 'node --test test/router.test.js test/governance.test.js' },
@@ -389,7 +488,7 @@ test('an explicit local migration route pauses once for trusted irreversible app
   assert.equal(blocked?.block, true);
   assert.equal(blocked?.reasonCode, 'irreversible-approval-required');
   assert.match(blocked.reason, /yolo|interactive write approval/i);
-  assert.equal(await event(pi, 'session_stop')({ output: 'Please rerun with interactive write approval enabled.' }, ctx), undefined);
+  assert.equal(await event(pi, 'session_stop')({ output: 'The migration was not executed. Please rerun with interactive write approval enabled.' }, ctx), undefined);
 });
 
 test('an explicitly requested, independently verifiable release is authorized but remains completion-gated', async () => {
@@ -441,7 +540,7 @@ test('generic release intent requests one exact target confirmation before mutat
   }, ctx);
   assert.equal(furtherTool?.block, true);
   assert.match(furtherTool.reason, /OMP_AWAITING_USER/);
-  assert.equal(await event(pi, 'session_stop')({ output: 'Please confirm the exact repository, revision, and ref.' }, ctx), undefined);
+  assert.equal(await event(pi, 'session_stop')({ output: 'The push was not executed. Please confirm the exact repository, revision, and ref.' }, ctx), undefined);
 });
 
 test('an authorized but unverifiable external mutation is stopped before execution', async () => {
@@ -479,7 +578,7 @@ test('an opaque release script is stopped before it can create an impossible rel
   }, ctx);
   assert.equal(blocked?.block, true);
   assert.equal(blocked?.reasonCode, 'release-verification-unsupported');
-  assert.equal(await event(pi, 'session_stop')({ output: 'The release command needs an explicit verifiable target.' }, ctx), undefined);
+  assert.equal(await event(pi, 'session_stop')({ output: 'The release was not executed because the command needs an explicit verifiable target.' }, ctx), undefined);
 });
 
 test('successful current-route release evidence closes the protected release gate', async () => {
@@ -1971,6 +2070,7 @@ test('browser-check payloads cannot hide artifact writes, destructive server com
   assert.equal(artifactBlocked?.reasonCode, 'workspace-effects-unverifiable');
 
   const destructive = await routedRuntime('Fix the browser tests and run them locally.');
+  assert.equal(latestCoreState(destructive.pi).lastRoute.taskDescriptor.constraints.testExecution, 'required');
   const destructiveBlocked = await event(destructive.pi, 'tool_call')({
     toolName: 'omp_test_browser_check',
     input: { baseUrl: 'http://127.0.0.1:3000', serverCommand: 'rm -rf cache', scenarios: [] },
@@ -2340,7 +2440,7 @@ test('persisted action-boundary counters are clamped and fail closed', async () 
 });
 
 test('no-subagent exact-test routes allow the observational core status tool', async () => {
-  const runtime = await routedRuntime('Run exactly node --test test/parser.test.js. Do not edit files, use subagents, access the network, or publish.');
+  const runtime = await routedRuntime('Run exactly node --test test/parser.test.js. Do not edit files, use subagents, or publish.');
   const statusCall = await event(runtime.pi, 'tool_call')({
     toolName: 'omp_core_subagent_status', input: {},
   }, runtime.ctx);

@@ -168,6 +168,11 @@ test('an exclusive status observation finishes without opening workflow gates', 
   assert.equal(started.route.intent, 'diagnosis');
   assert.deepEqual(started.route.requiredSkills, []);
   assert.deepEqual(started.route.routePlan.gateRequirements, []);
+  assert.match(started.message.content, /omp_core_subagent_status exactly once/i);
+  assert.match(started.message.content, /Do not call any other tool/i);
+  assert.match(started.systemPrompt.join('\n'), /Exclusive Tool Route/i);
+  assert.doesNotMatch(started.systemPrompt.join('\n'), /SKILL_USAGE contract|Final evidence gate|Diagnosis gate|Mandatory Skill Workflow/i);
+  assert.doesNotMatch(started.systemPrompt.join('\n'), /invoke a QA or status workflow/i);
 
   const status = await tool(pi, 'omp_core_subagent_status').execute(
     'call-exclusive-status-observation',
@@ -178,6 +183,652 @@ test('an exclusive status observation finishes without opening workflow gates', 
   );
   assert.equal(status.isError, false);
   assert.equal(await event(pi, 'session_stop')({ output: 'STATUS_ALLOWED: YES' }, ctx), undefined);
+});
+
+test('a command-only exact test receives one immediate shell-only contract', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Use the bash tool exactly once to run exactly `node --test test/parser.test.js`. Do not call any other tool, edit any file, or use subagents. A successful matching host result closes this exact-test route directly; do not call omp_test_gate or omp_core_subagent_status. If the host result passes, return exactly PASS; otherwise return exactly FAIL.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const started = await event(pi, 'before_agent_start')({ prompt, systemPrompt: [] }, ctx);
+
+  assert.equal(started.route.intent, 'testing');
+  assert.ok(started.route.taskDescriptor.provenance.reasons.includes('exclusive command-only exact test requested'));
+  assert.match(started.message.content, /bash tool exactly once.*exact authorized command/is);
+  assert.match(started.message.content, /Do not read files, load skills/i);
+  assert.match(started.message.content, /first completion response/i);
+  assert.match(started.systemPrompt.join('\n'), /Exclusive Tool Route/i);
+  assert.doesNotMatch(started.systemPrompt.join('\n'), /SKILL_USAGE contract|Final evidence gate|Diagnosis gate|Mandatory Skill Workflow/i);
+});
+
+test('a target-only exclusive test never receives a configuration-read instruction', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Run exactly test/parser.test.js and do not call any other tool. Do not edit files or use subagents.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const started = await event(pi, 'before_agent_start')({ prompt, systemPrompt: [] }, ctx);
+
+  assert.equal(started.route.intent, 'testing');
+  assert.match(started.message.content, /bash tool exactly once/i);
+  assert.doesNotMatch(started.message.content, /read.*runner|runner configuration|load (?:any )?routed.*skills/i);
+});
+
+test('an offline aggregate command fails closed immediately instead of expanding to QA methods', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Use the bash tool exactly once to run npm test. Do not call any other tool, edit files, use subagents, or access the network. Return exactly PASS if it succeeds, otherwise FAIL.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const started = await event(pi, 'before_agent_start')({ prompt, systemPrompt: [] }, ctx);
+
+  assert.equal(started.route.intent, 'testing');
+  assert.match(started.message.content, /cannot verify.*no-network constraint/i);
+  assert.match(started.message.content, /do not call npm test or any other tool/i);
+  assert.doesNotMatch(started.message.content, /skill:\/\/|omp_test_/i);
+  assert.match(started.systemPrompt.join('\n'), /Execution boundary: blocked before tool use/i);
+  assert.doesNotMatch(started.systemPrompt.join('\n'), /skill:\/\/|SECURITY_REVIEW|omp_test_|one direct host test command/i);
+
+  const corrected = await event(pi, 'session_stop')({ output: 'PASS' }, ctx);
+  assert.equal(corrected?.continue, true);
+  assert.match(corrected.additionalContext, /Correct only the final text once/i);
+  assert.doesNotMatch(corrected.additionalContext, /run|call.*tool.*now|retry.*command/i);
+  assert.equal(await event(pi, 'session_stop')({
+    output: 'BLOCKED: npm test was not executed because the requested no-network isolation is unavailable.',
+  }, ctx), undefined);
+});
+
+test('a non-exclusive exact test with no-network also pauses without a gate repair loop', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Run exactly node --test test/parser.test.js once, but do not access the network.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const started = await event(pi, 'before_agent_start')({ prompt, systemPrompt: [] }, ctx);
+  assert.equal(started.route.taskDescriptor.exclusiveToolContract, undefined);
+  assert.match(started.message.content, /Do not call any tool/i);
+  assert.match(started.systemPrompt.join('\n'), /Execution boundary: blocked before tool use/i);
+  assert.doesNotMatch(started.systemPrompt.join('\n'), /skill:\/\/|omp_test_|runner configuration|one direct command/i);
+
+  const toolBlock = await event(pi, 'tool_call')({
+    toolCallId: 'non-exclusive-no-network-test',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx);
+  assert.equal(toolBlock?.block, true);
+  assert.match(toolBlock?.reason ?? '', /OMP_AWAITING_USER|no more tools|ask the user/i);
+  const correction = await event(pi, 'session_stop')({ output: 'PASS' }, ctx);
+  assert.equal(correction?.continue, true);
+  assert.equal(correction?.details?.reasonCode, 'awaiting-user-terminal-output-correction');
+  assert.equal(await event(pi, 'session_stop')({
+    output: 'BLOCKED: the requested test was not executed because trusted no-network isolation is unavailable.',
+  }, ctx), undefined);
+
+  const resumedPrompt = 'Run exactly node --test test/parser.test.js once. Do not call any other tool.';
+  const resumed = await event(pi, 'before_agent_start')({ prompt: resumedPrompt, systemPrompt: [] }, ctx);
+  assert.match(resumed.message.content, /bash tool exactly once/i);
+  const resumedCall = await event(pi, 'tool_call')({
+    toolCallId: 'restated-exact-test-without-conflict',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx);
+  assert.notEqual(resumedCall?.block, true, resumedCall?.reason);
+});
+
+test('honest negated completion wording does not trigger a terminal correction', async () => {
+  for (const output of [
+    'The command did not execute successfully because trusted network isolation is unavailable.',
+    'The requested action was not completed successfully because the constraints conflict.',
+    '命令未成功执行，因为缺少可信网络隔离。',
+  ]) {
+    const pi = new FakePi();
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext();
+    await event(pi, 'session_start')({}, ctx);
+    await event(pi, 'before_agent_start')({
+      prompt: 'Use bash exactly once to run npm test. Do not call any other tool or access the network.',
+    }, ctx);
+    assert.equal(await event(pi, 'session_stop')({ output }, ctx), undefined, output);
+  }
+});
+
+test('an exclusive one-read security request pauses before tools instead of forcing skills', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Use read exactly once to inspect src/auth.js for an authentication vulnerability. Do not call any other tool, edit files, run tests, use subagents, or access the network. Return exactly SAFE or UNSAFE.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const started = await event(pi, 'before_agent_start')({ prompt, systemPrompt: [] }, ctx);
+
+  assert.equal(started.route.intent, 'security-review');
+  assert.match(started.message.content, /Do not call any tool/i);
+  assert.match(started.message.content, /conflicts with the protected evidence contract/i);
+  assert.doesNotMatch(started.message.content, /skill:\/\/security|SECURITY_REVIEW/i);
+  assert.match(started.systemPrompt.join('\n'), /Execution boundary: blocked before tool use/i);
+  assert.doesNotMatch(started.systemPrompt.join('\n'), /skill:\/\/security|SECURITY_REVIEW|security-scan/i);
+  assert.equal(await event(pi, 'session_stop')({
+    output: 'BLOCKED: one read cannot satisfy the protected security evidence contract.',
+  }, ctx), undefined);
+});
+
+test('explicit using-subagents language does not receive a root direct-work nudge', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  const started = await event(pi, 'before_agent_start')({
+    prompt: 'Fix src/router.js using subagents.',
+    systemPrompt: [],
+  }, ctx);
+
+  assert.deepEqual(started.route.routePlan.requiredSubagents.map(({ agent }) => agent), [
+    'plan',
+    'implementation-task',
+    'reviewer',
+  ]);
+  assert.equal(started.message, undefined);
+});
+
+test('a focused fact route preserves an exclusive read method instead of injecting grep', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Offline, verify whether the claim "The stable fact is 42" in docs/claim.md is supported by repository-local evidence. Do not modify files, run tests, use subagents, or access the network. Use read exactly once and do not call any other tool. If the evidence is not independently sufficient, return exactly FACT_VERDICT: INSUFFICIENT.';
+
+  await event(pi, 'session_start')({}, ctx);
+  const started = await event(pi, 'before_agent_start')({ prompt, systemPrompt: [] }, ctx);
+
+  assert.equal(started.route.intent, 'fact-check');
+  assert.deepEqual(started.route.taskDescriptor.exclusiveToolContract?.allowedTools, ['read']);
+  assert.match(started.message.content, /Use read exactly once/i);
+  assert.match(started.message.content, /FACT_VERDICT: INSUFFICIENT/i);
+  assert.doesNotMatch(started.message.content, /Use (?:exactly one )?(?:built-in )?grep|fact_check_\* tools as needed/i);
+  assert.match(started.systemPrompt.join('\n'), /Exclusive Tool Route/i);
+  assert.doesNotMatch(started.systemPrompt.join('\n'), /SKILL_USAGE contract|Final evidence gate|Mandatory Skill Workflow/i);
+});
+
+test('one exclusive focused-fact read closes only an insufficient verdict without a grep repair', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Offline, verify whether the claim "The stable fact is 42" in docs/claim.md is supported by repository-local evidence. Do not modify files, run tests, use subagents, or access the network. Use read exactly once and do not call any other tool. If the evidence is not independently sufficient, return exactly FACT_VERDICT: INSUFFICIENT.';
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  assert.equal(await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-fact-read',
+    toolName: 'read',
+    input: { path: 'docs/claim.md' },
+  }, ctx), undefined);
+  await event(pi, 'tool_result')({
+    type: 'tool_result',
+    toolCallId: 'exclusive-fact-read',
+    toolName: 'read',
+    input: { path: 'docs/claim.md' },
+    output: 'The stable fact is 42.',
+    isError: false,
+  }, ctx);
+
+  assert.equal(await event(pi, 'session_stop')({
+    output: 'The one authorized read only repeated the claim and did not establish independent repository support.\nFACT_VERDICT: INSUFFICIENT',
+  }, ctx), undefined);
+
+  const retry = await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-fact-grep-after-read',
+    toolName: 'grep',
+    input: { pattern: 'stable fact', path: '.' },
+  }, ctx);
+  assert.equal(retry?.reasonCode, 'exclusive-tool-budget-exhausted');
+});
+
+test('exclusive tool failures and session restore cannot reset the one-call budget', async () => {
+  const prompt = 'Run exactly test/parser.test.js and do not call any other tool. Do not edit files or use subagents.';
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(pi.entries);
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  assert.equal(await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-failed-test',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx), undefined);
+  await event(pi, 'tool_result')({
+    type: 'tool_result',
+    toolCallId: 'exclusive-failed-test',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+    output: 'not ok 1 - parser',
+    isError: true,
+  }, ctx);
+
+  const restored = new FakePi([...pi.entries]);
+  registerCoreEnhancer(restored);
+  const restoredCtx = extensionContext(restored.entries);
+  await event(restored, 'session_start')({}, restoredCtx);
+  const retry = await event(restored, 'tool_call')({
+    toolCallId: 'exclusive-retry-after-restore',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, restoredCtx);
+  assert.equal(retry?.reasonCode, 'exclusive-tool-budget-exhausted');
+  assert.match(retry?.reason ?? '', /failure.*consume|already failed/is);
+});
+
+test('a terse continuation cannot reset an exhausted exclusive tool budget', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Run exactly test/parser.test.js and do not call any other tool. Do not edit files or use subagents.';
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-before-continuation',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx);
+  await event(pi, 'tool_result')({
+    type: 'tool_result',
+    toolCallId: 'exclusive-before-continuation',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+    output: 'not ok 1 - parser\n# tests 1\n# pass 0\n# fail 1',
+    isError: true,
+  }, ctx);
+  assert.equal(await event(pi, 'session_stop')({ output: 'FAIL' }, ctx), undefined);
+
+  for (const [index, continuation] of ['Continue.', 'Please continue.', '请继续。', '麻烦继续。'].entries()) {
+    const continued = await event(pi, 'before_agent_start')({ prompt: continuation, systemPrompt: [] }, ctx);
+    assert.match(continued.systemPrompt.join('\n'), /Exhausted Exclusive Tool Route/i, continuation);
+    assert.match(continued.message.content, /terse continuation cannot authorize a retry/i, continuation);
+    const retry = await event(pi, 'tool_call')({
+      toolCallId: `exclusive-after-terse-continuation-${index}`,
+      toolName: 'bash',
+      input: { command: 'node --test test/parser.test.js' },
+    }, ctx);
+    assert.equal(retry?.reasonCode, 'exclusive-tool-contract-unsatisfiable', continuation);
+  }
+  assert.equal(await event(pi, 'session_stop')({
+    output: 'No additional action was performed; the prior result is unchanged.',
+  }, ctx), undefined);
+});
+
+test('terse continuations preserve exhausted read and status observation budgets', async () => {
+  const cases = [
+    {
+      prompt: 'Use read exactly once to inspect README.md. Do not call any other tool. Summarize the first paragraph.',
+      toolName: 'read',
+      input: { path: 'README.md' },
+      output: '# OMP Enhancer',
+      final: 'The first paragraph introduces OMP Enhancer.',
+    },
+    {
+      prompt: 'Call omp_core_subagent_status exactly once only to inspect the current route status. If that tool succeeds, return exactly STATUS_ALLOWED: YES; otherwise return exactly STATUS_ALLOWED: NO. Do not start subagents, modify files, run tests, access the network, or call any other tool.',
+      toolName: 'omp_core_subagent_status',
+      input: {},
+      output: 'Route: diagnosis',
+      final: 'STATUS_ALLOWED: YES',
+    },
+  ];
+
+  for (const [index, scenario] of cases.entries()) {
+    const pi = new FakePi();
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext();
+    await event(pi, 'session_start')({}, ctx);
+    await event(pi, 'before_agent_start')({ prompt: scenario.prompt }, ctx);
+    await event(pi, 'tool_call')({
+      toolCallId: `exclusive-observation-${index}`,
+      toolName: scenario.toolName,
+      input: scenario.input,
+    }, ctx);
+    await event(pi, 'tool_result')({
+      type: 'tool_result',
+      toolCallId: `exclusive-observation-${index}`,
+      toolName: scenario.toolName,
+      input: scenario.input,
+      output: scenario.output,
+      isError: false,
+    }, ctx);
+    assert.equal(await event(pi, 'session_stop')({ output: scenario.final }, ctx), undefined);
+
+    const continued = await event(pi, 'before_agent_start')({ prompt: 'Continue.', systemPrompt: [] }, ctx);
+    assert.match(continued.systemPrompt.join('\n'), /Exhausted Exclusive Tool Route/i);
+    const replay = await event(pi, 'tool_call')({
+      toolCallId: `exclusive-observation-replay-${index}`,
+      toolName: scenario.toolName,
+      input: scenario.input,
+    }, ctx);
+    assert.equal(replay?.reasonCode, 'exclusive-tool-contract-unsatisfiable');
+  }
+});
+
+test('an exclusive exact command rejects a different shell input without mechanical repair', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({
+    prompt: 'Run exactly test/parser.test.js and do not call any other tool. Do not edit files or use subagents.',
+  }, ctx);
+  const blocked = await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-wrong-command',
+    toolName: 'bash',
+    input: { command: 'node --test test/router.test.js' },
+  }, ctx);
+  assert.equal(blocked?.reasonCode, 'exclusive-tool-input-mismatch');
+  assert.match(blocked?.reason ?? '', /forbids a mechanical retry/i);
+});
+
+test('an exclusive test uses semantic test evidence and never retries a failed sole method', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Use only bash once to run exactly `node --test test/parser.test.js`. Do not call any other tool, edit files, or use subagents. Return exactly PASS if it passes, otherwise FAIL.';
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  assert.equal(await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-semantic-failure',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx), undefined);
+  await event(pi, 'tool_result')({
+    type: 'tool_result',
+    toolCallId: 'exclusive-semantic-failure',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+    output: 'not ok 1 - parser\n1..1\n# tests 1\n# pass 0\n# fail 1',
+    isError: false,
+    details: { exitCode: 0 },
+  }, ctx);
+
+  assert.equal(await event(pi, 'session_stop')({ output: 'FAIL' }, ctx), undefined);
+  const retry = await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-semantic-retry',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx);
+  assert.equal(retry?.reasonCode, 'exclusive-tool-budget-exhausted');
+});
+
+test('an exclusive test accepts one paired positive host result', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Call bash once to run exactly `node --test test/parser.test.js`. Do not call any other tool, edit files, or use subagents. Return exactly PASS if it passes, otherwise FAIL.';
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  assert.equal(await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-semantic-pass',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx), undefined);
+  await event(pi, 'tool_result')({
+    type: 'tool_result',
+    toolCallId: 'exclusive-semantic-pass',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+    output: 'ok 1 - parser\n1..1\n# tests 1\n# pass 1\n# fail 0',
+    isError: false,
+    details: { exitCode: 0 },
+  }, ctx);
+
+  const correction = await event(pi, 'session_stop')({ output: 'FAIL' }, ctx);
+  assert.equal(correction?.continue, true);
+  assert.equal(correction?.details?.reasonCode, 'exclusive-tool-success-output-correction');
+  assert.match(correction.additionalContext, /return exactly: PASS/i);
+  assert.equal(await event(pi, 'session_stop')({ output: 'PASS' }, ctx), undefined);
+  const continued = await event(pi, 'before_agent_start')({ prompt: 'Continue.', systemPrompt: [] }, ctx);
+  assert.match(continued.systemPrompt.join('\n'), /Exhausted Exclusive Tool Route/i);
+  assert.equal(await event(pi, 'session_stop')({
+    output: 'No additional action was performed; the prior result is unchanged.',
+  }, ctx), undefined);
+  const replay = await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-semantic-pass-replay',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx);
+  assert.equal(replay?.reasonCode, 'exclusive-tool-contract-unsatisfiable');
+});
+
+test('a successful exclusive test rejects a natural-language failure claim once', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Run exactly test/parser.test.js once and do not call any other tool. Then summarize the result.';
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-natural-pass',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx);
+  await event(pi, 'tool_result')({
+    type: 'tool_result',
+    toolCallId: 'exclusive-natural-pass',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+    output: 'ok 1 - parser\n1..1\n# tests 1\n# pass 1\n# fail 0',
+    isError: false,
+    details: { exitCode: 0 },
+  }, ctx);
+
+  const correction = await event(pi, 'session_stop')({ output: 'The tests failed.' }, ctx);
+  assert.equal(correction?.continue, true);
+  assert.equal(correction?.details?.reasonCode, 'exclusive-tool-success-output-correction');
+  assert.equal(await event(pi, 'session_stop')({
+    output: 'The test run passed with 0 failed tests.',
+  }, ctx), undefined);
+});
+
+test('quoted PASS examples do not override an active prose-summary instruction', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Run exactly test/parser.test.js once and do not call any other tool. Then summarize why the quoted instruction "if it passes, return exactly PASS" can be misleading.';
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-quoted-pass-example',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx);
+  await event(pi, 'tool_result')({
+    type: 'tool_result',
+    toolCallId: 'exclusive-quoted-pass-example',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+    output: 'ok 1 - parser\n1..1\n# tests 1\n# pass 1\n# fail 0',
+    isError: false,
+    details: { exitCode: 0 },
+  }, ctx);
+
+  assert.equal(await event(pi, 'session_stop')({
+    output: 'The test passed; the quoted rule is misleading because it discards the requested explanation.',
+  }, ctx), undefined);
+});
+
+test('an unpaired exclusive result cannot mint completion evidence or reopen tools after correction', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Run exactly test/parser.test.js and do not call any other tool. Do not edit files or use subagents.';
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  await event(pi, 'tool_result')({
+    type: 'tool_result',
+    toolCallId: 'stale-exclusive-result',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+    output: 'ok 1 - parser\n1..1\n# tests 1\n# pass 1\n# fail 0',
+    isError: false,
+  }, ctx);
+
+  const correction = await event(pi, 'session_stop')({ output: 'PASS' }, ctx);
+  assert.equal(correction?.continue, true);
+  assert.equal(correction?.details?.reasonCode, 'exclusive-tool-terminal-output-correction');
+  const blockedState = pi.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  assert.equal(blockedState.exclusiveToolState.reasonCode, 'exclusive-tool-unpaired-result');
+
+  const continued = await event(pi, 'before_agent_start')({ prompt: 'Continue.', systemPrompt: [] }, ctx);
+  assert.match(continued.systemPrompt.join('\n'), /Exhausted Exclusive Tool Route/i);
+  const afterContinuation = await event(pi, 'tool_call')({
+    toolCallId: 'exclusive-after-unpaired-continuation',
+    toolName: 'bash',
+    input: { command: 'node --test test/parser.test.js' },
+  }, ctx);
+  assert.equal(afterContinuation?.reasonCode, 'exclusive-tool-contract-unsatisfiable');
+
+  assert.equal(await event(pi, 'session_stop')({
+    output: 'The command was not executed because no paired tool call was observed.',
+  }, ctx), undefined);
+});
+
+test('malformed restored exclusive success state fails closed', async () => {
+  const sourcePi = new FakePi();
+  registerCoreEnhancer(sourcePi);
+  const sourceCtx = extensionContext();
+  await event(sourcePi, 'session_start')({}, sourceCtx);
+  await event(sourcePi, 'before_agent_start')({
+    prompt: 'Use read exactly once to review src/router.js for a defect. Do not call any other tool.',
+  }, sourceCtx);
+  const snapshot = structuredClone(sourcePi.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data);
+  snapshot.exclusiveToolState = {
+    ...snapshot.exclusiveToolState,
+    status: 'succeeded',
+    toolName: null,
+    toolCallIdDigest: null,
+    inputDigest: null,
+  };
+
+  const restored = new FakePi([{
+    type: 'custom',
+    customType: 'omp-enhancer-core.state',
+    data: snapshot,
+  }]);
+  registerCoreEnhancer(restored);
+  const restoredCtx = extensionContext(restored.entries);
+  await event(restored, 'session_start')({}, restoredCtx);
+  const stopped = await event(restored, 'session_stop')({ output: 'No defect was found.' }, restoredCtx);
+  assert.equal(stopped?.continue, true);
+  assert.equal(stopped?.details?.reasonCode, 'exclusive-tool-terminal-output-correction');
+});
+
+test('a restored failed exclusive call cannot be relabeled succeeded', async () => {
+  const sourcePi = new FakePi();
+  registerCoreEnhancer(sourcePi);
+  const sourceCtx = extensionContext();
+  const prompt = 'Use read exactly once to review src/router.js for a defect. Do not call any other tool.';
+  await event(sourcePi, 'session_start')({}, sourceCtx);
+  await event(sourcePi, 'before_agent_start')({ prompt }, sourceCtx);
+  await event(sourcePi, 'tool_call')({
+    toolCallId: 'exclusive-read-failed-before-restore',
+    toolName: 'read',
+    input: { path: 'src/router.js' },
+  }, sourceCtx);
+  await event(sourcePi, 'tool_result')({
+    type: 'tool_result',
+    toolCallId: 'exclusive-read-failed-before-restore',
+    toolName: 'read',
+    input: { path: 'src/router.js' },
+    output: 'read failed',
+    isError: true,
+  }, sourceCtx);
+  const snapshot = structuredClone(sourcePi.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data);
+  assert.equal(snapshot.exclusiveToolState.status, 'failed');
+  snapshot.exclusiveToolState.status = 'succeeded';
+
+  const restored = new FakePi([{
+    type: 'custom',
+    customType: 'omp-enhancer-core.state',
+    data: snapshot,
+  }]);
+  registerCoreEnhancer(restored);
+  const restoredCtx = extensionContext(restored.entries);
+  await event(restored, 'session_start')({}, restoredCtx);
+  const stopped = await event(restored, 'session_stop')({ output: 'No defect was found.' }, restoredCtx);
+  assert.equal(stopped?.continue, true);
+  assert.equal(stopped?.details?.reasonCode, 'exclusive-tool-terminal-output-correction');
+});
+
+test('runtime shell aliases share the canonical exclusive bash contract', async () => {
+  for (const toolName of ['bash', 'shell', 'terminal', 'exec_command']) {
+    const pi = new FakePi();
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext();
+    await event(pi, 'session_start')({}, ctx);
+    await event(pi, 'before_agent_start')({
+      prompt: `Use ${toolName} only once to run npm test. Do not call any other tool.`,
+    }, ctx);
+    const call = await event(pi, 'tool_call')({
+      toolCallId: `exclusive-alias-${toolName}`,
+      toolName,
+      input: { command: 'npm test' },
+    }, ctx);
+    assert.notEqual(call?.block, true, `${toolName}: ${call?.reason}`);
+  }
+});
+
+test('exclusive focused grep binds repository scope and claim-related terms', async () => {
+  const prompt = 'Offline, verify whether the claim "The stable fact is 42" in docs/claim.md is supported by repository evidence. Do not modify files, run tests, use subagents, or access the network. Use grep once over the repository root and do not call any other tool.';
+  for (const input of [
+    { pattern: 'banana', path: '.' },
+    { pattern: 'stable fact', path: 'src' },
+  ]) {
+    const pi = new FakePi();
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext();
+    await event(pi, 'session_start')({}, ctx);
+    await event(pi, 'before_agent_start')({ prompt }, ctx);
+    const blocked = await event(pi, 'tool_call')({
+      toolCallId: `exclusive-grep-${input.pattern}-${input.path}`,
+      toolName: 'grep',
+      input,
+    }, ctx);
+    assert.equal(blocked?.reasonCode, 'exclusive-tool-input-mismatch');
+  }
+});
+
+test('an exclusive local fact method projects to the focused fallback without workflow expansion', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Verify whether the claim "The stable fact is 42" in docs/claim.md is supported by repository evidence. Use grep exactly once and do not call any other tool.';
+  await event(pi, 'session_start')({}, ctx);
+  const started = await event(pi, 'before_agent_start')({ prompt, systemPrompt: [] }, ctx);
+  assert.deepEqual(started.route.taskDescriptor.exclusiveToolContract?.allowedTools, ['grep']);
+  assert.equal(started.route.taskDescriptor.complexity, 'focused');
+  assert.equal(started.route.taskDescriptor.constraints.networkAccess, 'forbidden');
+  assert.equal(started.route.taskDescriptor.constraints.subagents, 'forbidden');
+  assert.match(started.systemPrompt.join('\n'), /Exclusive Tool Route/i);
+  assert.doesNotMatch(started.systemPrompt.join('\n'), /fact_check_|### SKILL_USAGE contract|### SUBAGENT_USAGE contract|Final routed outputs must include/i);
+  const call = await event(pi, 'tool_call')({
+    toolCallId: 'broad-exclusive-grep',
+    toolName: 'grep',
+    input: { pattern: 'stable fact', path: '.' },
+  }, ctx);
+  assert.notEqual(call?.block, true, call?.reason);
 });
 
 test('route task probe-only prompts do not activate a fresh session by default', async () => {
@@ -339,6 +990,9 @@ test('before_agent_start keeps an exclusive one-shot route probe free of embedde
   assert.deepEqual(start.route.requiredTools, []);
   assert.deepEqual(start.route.requiredSubagents, []);
   assert.deepEqual(start.route.routePlan.gateRequirements, []);
+  assert.match(start.systemPrompt.join('\n'), /Exclusive Tool Route/i);
+  assert.match(start.systemPrompt.join('\n'), /requested route fields.*explanation explicitly requested/i);
+  assert.doesNotMatch(start.systemPrompt.join('\n'), /SKILL_USAGE contract|Final evidence gate|Diagnosis gate|Mandatory Skill Workflow/i);
 
   const routeCall = await event(pi, 'tool_call')({
     type: 'tool_call',
@@ -347,6 +1001,58 @@ test('before_agent_start keeps an exclusive one-shot route probe free of embedde
     input: { prompt: 'Polish README.md to say do not push. Separately, push the release.' },
   }, ctx);
   assert.notEqual(routeCall?.block, true, routeCall?.reason);
+});
+
+test('an exclusive route probe binds the exact nested prompt instead of any route input', async () => {
+  const innerPrompt = 'Explain why developers then report metrics incorrectly. Do not publish anything.';
+  const prompt = `Call omp_core_route_task exactly once with this prompt: ${innerPrompt} Then report only intent. Do not use any other tools.`;
+
+  const wrongPi = new FakePi();
+  registerCoreEnhancer(wrongPi);
+  const wrongCtx = extensionContext();
+  await event(wrongPi, 'session_start')({}, wrongCtx);
+  await event(wrongPi, 'before_agent_start')({ prompt }, wrongCtx);
+  const wrong = await event(wrongPi, 'tool_call')({
+    toolCallId: 'exclusive-route-wrong-input',
+    toolName: 'omp_core_route_task',
+    input: { prompt: 'Publish the production release now.' },
+  }, wrongCtx);
+  assert.equal(wrong?.reasonCode, 'exclusive-tool-input-mismatch');
+
+  const correctPi = new FakePi();
+  registerCoreEnhancer(correctPi);
+  const correctCtx = extensionContext();
+  await event(correctPi, 'session_start')({}, correctCtx);
+  await event(correctPi, 'before_agent_start')({ prompt }, correctCtx);
+  const correct = await event(correctPi, 'tool_call')({
+    toolCallId: 'exclusive-route-correct-input',
+    toolName: 'omp_core_route_task',
+    input: { prompt: innerPrompt },
+  }, correctCtx);
+  assert.notEqual(correct?.block, true, correct?.reason);
+
+  for (const [index, { wrapper, inner }] of [
+    {
+      inner: 'Review src/auth.js for bugs.',
+      wrapper: 'Call omp_core_route_task exactly once with this prompt: "Review src/auth.js for bugs." Then report only intent. Do not use any other tools.',
+    },
+    {
+      inner: 'Implement foo and return JSON.',
+      wrapper: 'Call omp_core_route_task exactly once with this prompt: Implement foo and return JSON. Then report intent and return only JSON. Do not use any other tools.',
+    },
+  ].entries()) {
+    const pi = new FakePi();
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext();
+    await event(pi, 'session_start')({}, ctx);
+    await event(pi, 'before_agent_start')({ prompt: wrapper }, ctx);
+    const call = await event(pi, 'tool_call')({
+      toolCallId: `exclusive-route-natural-payload-${index}`,
+      toolName: 'omp_core_route_task',
+      input: { prompt: inner },
+    }, ctx);
+    assert.notEqual(call?.block, true, `${wrapper}: ${call?.reason}`);
+  }
 });
 
 test('before_agent_start keeps plain-text E2E workflow audits on diagnosis route', async () => {
@@ -573,6 +1279,15 @@ test('before_agent_start returns the current OMP system-prompt block contract', 
   assert.match(result.systemPrompt.at(-1), /skill:\/\/verification-before-completion/i);
   assert.deepEqual(agentEvent.systemPrompt, result.systemPrompt);
   assert.match(result.additionalContext, /pre-work skill bootstrap/i);
+  assert.equal(result.message.customType, 'omp-enhancer-core.route-contract');
+  assert.equal(result.message.display, false);
+  assert.equal(result.message.attribution, 'agent');
+  assert.match(result.message.content, /FIRST, before any repository read/i);
+  assert.match(result.message.content, /skill:\/\/verification-before-completion/i);
+  assert.match(result.message.content, /FIRST completion response/i);
+  assert.match(result.message.content, /REVIEW_EVIDENCE/i);
+  assert.match(result.message.content, /only if the static review actually passes/i);
+  assert.match(result.message.content, /report the real blockers and omit a PASS verdict/i);
 });
 
 test('classifier preflight observes ambiguous route work without rule blocking', async () => {
@@ -3970,6 +4685,37 @@ test('structured review evidence from an earlier assistant message survives a fi
   }, ctx);
 
   assert.equal(await event(pi, 'session_stop')({ output: 'Final summary only.' }, ctx), undefined);
+});
+
+test('copied review instruction templates never become passing review evidence', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')(
+    { prompt: 'Fix src/parser.js without running tests, using the network, using subagents, or publishing.' },
+    ctx,
+  );
+  await event(pi, 'message_end')({
+    message: {
+      role: 'assistant',
+      content: [{
+        type: 'text',
+        text: [
+          'REVIEW_EVIDENCE',
+          'Scope: <reviewed target and change>',
+          'Findings: <concrete static review findings>',
+          'OpenBlockers: none',
+          'Verdict: PASS',
+        ].join('\n'),
+      }],
+    },
+  }, ctx);
+
+  const stopped = await event(pi, 'session_stop')({ output: 'Final summary only.' }, ctx);
+  assert.equal(stopped?.continue, true);
+  assert.match(stopped.additionalContext, /review evidence is still open/i);
 });
 
 

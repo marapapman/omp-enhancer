@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { subagentPlans } from './subagent-plans.js';
 import { buildWorkflowRouteCard } from './workflow-routes.js';
 
@@ -89,6 +90,7 @@ export function buildRoutePlan(descriptor, route = {}) {
     && Array.isArray(descriptor?.testExecutionTargets)
     && descriptor.testExecutionTargets.length > 0
     && phases.every(({ kind }) => kind === 'verify');
+  const exclusiveToolContract = isValidatedExclusiveToolContract(descriptor);
   if (broadCodeAudit && testsAuthorized
     && !phases.some(({ kind, domain }) => kind === 'verify' && domain === 'tests')) {
     const reviewIndex = phases.findIndex(({ kind }) => kind === 'review');
@@ -234,12 +236,12 @@ export function buildRoutePlan(descriptor, route = {}) {
   return {
     version: 1,
     phases,
-    requiredSkills: unique(requiredSkills).filter((skill) => (
+    requiredSkills: exclusiveToolContract ? [] : unique(requiredSkills).filter((skill) => (
       (subagentsAuthorized || skill !== 'subagent-driven-development')
       && (testsAuthorized || !['test-driven-development', 'ai-regression-testing'].includes(skill))
     )),
-    requiredTools: unique(requiredTools).filter((tool) => testsAuthorized || !TESTING_TOOLS.includes(tool)),
-    requiredSubagents: subagentsAuthorized
+    requiredTools: exclusiveToolContract ? [] : unique(requiredTools).filter((tool) => testsAuthorized || !TESTING_TOOLS.includes(tool)),
+    requiredSubagents: !exclusiveToolContract && subagentsAuthorized
       ? sanitizeSubagents(uniqueSubagents(requiredSubagents), { testsAuthorized })
       : [],
     gateRequirements: uniqueGateRequirements(gateRequirements),
@@ -292,7 +294,13 @@ export function projectRouteResourceCeilings(route = {}) {
   const boundedTestKinds = (route.taskDescriptor?.testAllowlist ?? []).length > 0
     || (route.taskDescriptor?.testExclusions ?? []).length > 0;
   const focusedLocalFact = isFocusedLocalFactDescriptor(route.taskDescriptor);
-  if (!testsForbidden && !subagentsForbidden && !boundedTestKinds && !focusedLocalFact) return route;
+  const exclusiveToolContract = isValidatedExclusiveToolContract(route.taskDescriptor);
+  const exactTestExecution = route.taskDescriptor?.operation === 'execute'
+    && constraints.testExecution === 'required'
+    && (route.taskDescriptor?.testExecutionTargets ?? []).length > 0
+    && (route.taskDescriptor?.phases ?? []).every(({ kind }) => kind === 'verify');
+  if (!testsForbidden && !subagentsForbidden && !boundedTestKinds && !focusedLocalFact
+    && !exclusiveToolContract && !exactTestExecution) return route;
   return {
     ...route,
     routePlan: plan,
@@ -319,6 +327,50 @@ function isFocusedLocalFactDescriptor(descriptor = {}) {
     && descriptor.constraints?.networkAccess === 'forbidden'
     && descriptor.constraints?.externalWrite === 'forbidden'
     && descriptor.constraints?.subagents === 'forbidden';
+}
+
+function isValidatedExclusiveToolContract(descriptor = {}) {
+  const contract = descriptor.exclusiveToolContract;
+  const input = contract?.input;
+  if (contract?.schemaVersion !== 1 || contract.mode !== 'exclusive'
+    || contract.maxCalls !== 1 || contract.required !== true
+    || contract.onFailure !== 'stop' || contract.alternatives !== 'forbidden'
+    || !Array.isArray(contract.allowedTools) || contract.allowedTools.length !== 1
+    || !input || !['bound', 'ambiguous'].includes(input.status)) return false;
+  const tool = contract.allowedTools[0];
+  const expectedTool = {
+    'exact-command': 'bash',
+    'exact-path': 'read',
+    'focused-claim-search': 'grep',
+    'route-probe': 'omp_core_route_task',
+    'status-probe': 'omp_core_subagent_status',
+  }[input.kind];
+  if (!expectedTool || tool !== expectedTool) return false;
+  const digest = (value) => createHash('sha256').update(String(value)).digest('hex');
+  if (input.kind === 'exact-command') {
+    return descriptor.operation === 'execute'
+      && descriptor.constraints?.testExecution === 'required'
+      && descriptor.domains?.includes('tests')
+      && input.status === 'bound'
+      && Boolean(descriptor.testExecutionCommand)
+      && input.digest === digest(descriptor.testExecutionCommand);
+  }
+  if (input.kind === 'exact-path') {
+    return descriptor.operation === 'inspect'
+      && descriptor.constraints?.workspaceWrite === 'forbidden'
+      && (input.status === 'ambiguous'
+        || Boolean(input.target) && input.digest === digest(input.target));
+  }
+  if (input.kind === 'focused-claim-search') {
+    return descriptor.operation === 'inspect'
+      && descriptor.domains?.includes('facts')
+      && input.status === 'bound'
+      && /^[a-f0-9]{64}$/.test(String(input.digest ?? ''));
+  }
+  return descriptor.operation === 'diagnose'
+    && descriptor.domains?.includes('plugin')
+    && input.status === 'bound'
+    && /^[a-f0-9]{64}$/.test(String(input.digest ?? ''));
 }
 
 function legacyIntentForDescriptor(descriptor = {}) {
