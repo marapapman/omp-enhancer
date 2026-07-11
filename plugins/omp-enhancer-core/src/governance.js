@@ -277,10 +277,17 @@ function skillWorkflowLines(route) {
     ];
   }
   if (isFocusedBugAuditRoute(route)) {
+    if (!needsTesting(route) && !(route.requiredSkills ?? []).length) {
+      return [
+        'This is a focused direct bug-audit route. The main agent inspects the bounded failure path directly instead of forking the heavy audit subagent set.',
+        'No particular skill, test method, or QA gate is mandatory for this route. Use the smallest relevant evidence path once and do not invent extra method attempts.',
+        'Do not fork bug-audit subagents unless the user expands the task into a broad audit or asks for parallel delegation.',
+      ];
+    }
     return [
       'This is a focused direct bug-audit route. The main agent does the bounded audit directly instead of forking the heavy audit subagent set.',
-      'Before using edit, write, bash, route-specific QA, or omp_test_* gates, preload the focused audit skills with read calls and wait for the results.',
-      'Use the skills to build a compact local test matrix, inspect the concrete failure path, run the relevant checks, and finish with omp_test_gate plus SKILL_USAGE evidence.',
+      'Before using edit, write, bash, route-specific QA, or omp_test_* gates, preload only the listed focused audit skills with read calls and wait for the results.',
+      'Use the listed skills to build a compact local test matrix, inspect the concrete failure path, run the relevant checks, and finish with the listed test gate plus SKILL_USAGE evidence.',
       'Do not fork bug-audit subagents unless the user expands the task into a broad audit or asks for parallel delegation.',
     ];
   }
@@ -357,11 +364,21 @@ export function buildMissingGateContexts({ route, state } = {}) {
   const contexts = [];
 
   if (needsFactCheck(route) && !state?.evidence?.factCheckGate) {
+    const focusedEvidenceKind = state?.evidence?.focusedFactEvidence?.matchKind;
+    const hasReusableFocusedEvidence = ['no-match', 'claim-only', 'independent-hit'].includes(focusedEvidenceKind);
     contexts.push(isFocusedLocalFactInspection(route)
-      ? { key: 'fact-check', context: [
+      ? { key: 'fact-check', context: hasReusableFocusedEvidence ? [
+        `OMP Enhancer Core already recorded host-observed local fact evidence (${focusedEvidenceKind}).`,
+        'Do not run grep or another method again. Rewrite only the final conclusion so it explicitly says supported, contradicted, or insufficient repository evidence.',
+        'End the answer with exactly one machine-readable line: FACT_VERDICT: INSUFFICIENT, FACT_VERDICT: SUPPORTED, or FACT_VERDICT: CONTRADICTED.',
+        focusedEvidenceKind === 'independent-hit'
+          ? 'Keep the verdict consistent with the independent repository result already shown to you.'
+          : 'A claim-only or no-match result cannot support or contradict the claim; report insufficient evidence without adding a positive or negative factual verdict.',
+      ].join('\n') : [
         'OMP Enhancer Core local fact-evidence gate is still open.',
         'Use one successful built-in grep over the repository root with a concrete claim-related pattern before concluding. Reading or repeating only the claim text is not independent evidence.',
         'Then report supported, contradicted, or insufficient repository evidence explicitly. Do not use the network, subagents, tests, edits, or the heavyweight fact_check_* workflow.',
+        'End the answer with exactly one machine-readable line: FACT_VERDICT: INSUFFICIENT, FACT_VERDICT: SUPPORTED, or FACT_VERDICT: CONTRADICTED.',
       ].join('\n') }
       : { key: 'fact-check', context: [
         'OMP Enhancer Core gate is still open for this fact-checking task.',
@@ -616,7 +633,8 @@ function workflowFor(route) {
   }
   if (intent === 'writing.zh') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, zh-writer -> zh-checker -> writing_quality_check.';
   if (intent === 'writing.en') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, writer -> checker -> writing_quality_check.';
-  if (intent === 'bug-audit' && isFocusedBugAuditRoute(route)) return 'Focused bug audit workflow: preload focused audit skills -> inspect the bounded failure path directly -> generate and run the smallest high-signal local test matrix -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> focused BUG-AUDIT-REPORT.';
+  if (intent === 'bug-audit' && isFocusedBugAuditRoute(route) && !needsTesting(route)) return 'Focused bug audit workflow: inspect the bounded failure path once with the smallest relevant evidence path -> report concrete findings or no finding. No mandatory test method, QA gate, or subagent attempt applies.';
+  if (intent === 'bug-audit' && isFocusedBugAuditRoute(route)) return 'Focused bug audit workflow: preload only the listed skills -> inspect the bounded failure path directly -> generate and run the smallest high-signal local test matrix -> close the listed test and review evidence gates -> focused BUG-AUDIT-REPORT.';
   if (intent === 'bug-audit') return 'Bug audit workflow: ecc-tdd-guide generates a deduplicated multi-channel executable test matrix -> ecc-code-reviewer static audit -> ecc-silent-failure-hunter failure-path audit -> ecc-pr-test-analyzer checks generated tests, duplicate removal, execution results, and coverage gaps -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> BUG-AUDIT-REPORT or final bug report.';
   if (intent === 'fact-check') return 'Fact-check workflow: fact-planner -> fact-researcher-a and fact-researcher-b independent evidence lanes -> fact-cross-checker -> fact-reviewer -> fact_check_analyze -> fact_check_evidence as needed -> fact_check_report -> fact_check_gate -> FACT_CHECK_REPORT.';
   if (intent === 'testing') return 'Focused testing workflow: run only the authorized test target list once with a direct host command, then report the observed result.';
@@ -677,7 +695,7 @@ function routeBoundaryFor(route) {
     return 'Route boundary: this is a factual verification workflow. Read, search, cite, and report evidence; do not rewrite the source document or change project files unless the user explicitly asks for edits.';
   }
   if (isFocusedLocalFactInspection(route)) {
-    return 'Route boundary: use only local read/search tools to evaluate repository evidence. Do not treat the claim itself as corroboration, and do not edit, test, browse, delegate, or release.';
+    return 'Route boundary: use only local read/search tools to evaluate repository evidence. Do not treat the claim itself as corroboration, and do not edit, test, browse, delegate, or release. End with exactly one line: FACT_VERDICT: INSUFFICIENT, FACT_VERDICT: SUPPORTED, or FACT_VERDICT: CONTRADICTED.';
   }
   if (intent === 'testing' || intent === 'implementation-with-tests') {
     return 'Route boundary: this is a code/testing workflow. Use the omp-testing-enhancer tools only after routed test or implementation work has actually been performed.';
@@ -746,7 +764,7 @@ function subagentWorkflowLines(route, { parentTask = '', includeModelWorkflowHin
   if (!requiredSubagents.length) {
     return [
       ...common,
-      'No routed subagents are required for this route. The main agent should do the work directly after loading required skills.',
+      'No routed subagents are required for this route. The main agent should do the work directly after loading any listed required skills.',
       'Do not fork writer, checker, zh-writer, or zh-checker for lightweight writing edits unless the user explicitly expands the task into a larger writing job.',
       '',
       'Required subagents:',

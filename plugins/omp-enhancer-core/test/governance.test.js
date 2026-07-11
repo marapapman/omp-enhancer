@@ -230,7 +230,7 @@ test('focused bug audit governance preloads skills without heavy subagent delega
   });
 
   assert.match(fragment, /focused direct bug-audit route/i);
-  assert.match(fragment, /preload the focused audit skills/i);
+  assert.match(fragment, /preload only the listed focused audit skills/i);
   assert.match(fragment, /Focused Bug Audit Test Generation Contract/);
   assert.match(fragment, /No routed subagents are required/);
   assert.match(fragment, /Required subagents:\n- none/);
@@ -459,6 +459,25 @@ test('names the selected agent route and toolchain in the governance fragment', 
   assert.match(fragment, /plan:\s*decompose the task; skills: brainstorming, subagent-driven-development/);
   assert.match(fragment, /implementation-task:\s*implement the task; skills: test-driven-development, verification-before-completion/);
   assert.match(fragment, /reviewer:\s*review the diff; skills: verification-before-completion/);
+});
+
+test('default observe mode gives explicit code fixes implementation governance', () => {
+  for (const prompt of [
+    'Fix src/parser.js and run tests.',
+    '修复 parser 中的小 bug 并运行测试。',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+    const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
+
+    assert.equal(route.routerMode, 'observe', prompt);
+    assert.equal(route.intent, 'implementation-with-tests', prompt);
+    assert.equal(route.workflowRoute, 'code.dev', prompt);
+    assert.equal(route.routeObservation.legacyIntent, 'bug-audit', prompt);
+    assert.equal(route.routeObservation.plannedIntent, 'implementation-with-tests', prompt);
+    assert.match(fragment, /this is a code\/testing workflow/i, prompt);
+    assert.doesNotMatch(fragment, /this is a bug audit workflow/i, prompt);
+    assert.doesNotMatch(fragment, /production-code fixes require a separate user request/i, prompt);
+  }
 });
 
 test('adds soft WORKFLOW_NEXT guidance for routed implementation work', () => {

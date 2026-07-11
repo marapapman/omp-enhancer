@@ -38,7 +38,7 @@ class FakePi {
 
 test('e2e implementation route auto-attaches task contracts and releases after testing evidence', async () => {
   const { pi, ctx } = registeredCore();
-  const prompt = 'Fix the plugin gate bug and add regression tests.';
+  const prompt = 'Agentically update gate handling across all affected core files, add complete regression tests, and run the tests.';
 
   await event(pi, 'session_start')({}, ctx);
   const routed = await event(pi, 'before_agent_start')({ prompt }, ctx);
@@ -63,7 +63,7 @@ test('e2e implementation route auto-attaches task contracts and releases after t
   assert.equal(taskGate, undefined);
   for (const item of taskEvent.input.tasks) {
     assert.match(item.assignment, new RegExp(`OMP_REQUIRED_SUBAGENT:\\s*${escapeRegExp(item.role)}`));
-    assert.match(item.assignment, /OMP_PARENT_TASK:\s*Fix the plugin gate bug/);
+    assert.match(item.assignment, /OMP_PARENT_TASK:\s*Agentically update gate handling/);
     assert.match(item.assignment, /Required skills for this subagent:/);
   }
 

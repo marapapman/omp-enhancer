@@ -38,15 +38,11 @@ const routingCases = [
     prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。',
     expectedIntent: 'bug-audit',
     expectedAgent: 'tester',
-    requiredSkills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
-    requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report'],
-    requiredSubagents: ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'],
-    requiredSubagentSkills: {
-      'ecc-tdd-guide': ['test-driven-development', 'search-first', 'ai-regression-testing'],
-      'ecc-code-reviewer': ['verification-before-completion'],
-      'ecc-silent-failure-hunter': ['diagnose'],
-      'ecc-pr-test-analyzer': ['verification-before-completion'],
-    },
+    requiredSkills: ['test-driven-development', 'verification-before-completion'],
+    requiredTools: ['omp_test_gate'],
+    requiredSubagents: [],
+    requiredSubagentSkills: {},
+    auditMode: 'focused',
   },
   {
     name: 'bug audit request routes to bug audit profile',
@@ -68,8 +64,8 @@ const routingCases = [
     prompt: 'Do the bug investigation directly as a focused audit; report verified findings only.',
     expectedIntent: 'bug-audit',
     expectedAgent: 'tester',
-    requiredSkills: ['diagnose', 'test-driven-development', 'verification-before-completion', 'search-first'],
-    requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report'],
+    requiredSkills: [],
+    requiredTools: [],
     requiredSubagents: [],
     requiredSubagentSkills: {},
     auditMode: 'focused',
@@ -95,14 +91,10 @@ const routingCases = [
     prompt: '实现这个路由功能并补测试，先写失败用例，再完成实现。',
     expectedIntent: 'implementation-with-tests',
     expectedAgent: 'implementer',
-    requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-    requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report'],
-    requiredSubagents: ['plan', 'implementation-task', 'reviewer'],
-    requiredSubagentSkills: {
-      plan: ['brainstorming', 'subagent-driven-development'],
-      'implementation-task': ['test-driven-development', 'verification-before-completion'],
-      reviewer: ['verification-before-completion'],
-    },
+    requiredSkills: ['test-driven-development', 'verification-before-completion'],
+    requiredTools: ['omp_test_gate'],
+    requiredSubagents: [],
+    requiredSubagentSkills: {},
   },
   {
     name: 'Chinese sentence rewrite with coding words still routes to writing',
@@ -119,28 +111,20 @@ const routingCases = [
     prompt: '请写一个函数实现排序功能',
     expectedIntent: 'implementation-with-tests',
     expectedAgent: 'implementer',
-    requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-    requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report'],
-    requiredSubagents: ['plan', 'implementation-task', 'reviewer'],
-    requiredSubagentSkills: {
-      plan: ['brainstorming', 'subagent-driven-development'],
-      'implementation-task': ['test-driven-development', 'verification-before-completion'],
-      reviewer: ['verification-before-completion'],
-    },
+    requiredSkills: ['verification-before-completion'],
+    requiredTools: [],
+    requiredSubagents: [],
+    requiredSubagentSkills: {},
   },
   {
     name: 'explicit Chinese implementation with tests is not bug audit',
     prompt: '实现 router 的 workflowRoute 回退逻辑并补测试。',
     expectedIntent: 'implementation-with-tests',
     expectedAgent: 'implementer',
-    requiredSkills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-    requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report'],
-    requiredSubagents: ['plan', 'implementation-task', 'reviewer'],
-    requiredSubagentSkills: {
-      plan: ['brainstorming', 'subagent-driven-development'],
-      'implementation-task': ['test-driven-development', 'verification-before-completion'],
-      reviewer: ['verification-before-completion'],
-    },
+    requiredSkills: ['test-driven-development', 'verification-before-completion'],
+    requiredTools: ['omp_test_gate'],
+    requiredSubagents: [],
+    requiredSubagentSkills: {},
   },
   {
     name: 'Chinese write feature routes to implementation instead of writing',
@@ -227,11 +211,8 @@ const routingCases = [
     expectedAgent: 'config-assets',
     requiredSkills: ['omp-marketplace-plugin-activation'],
     requiredTools: ['omp_config_doctor', 'omp_config_assets', 'omp_config_plan'],
-    requiredSubagents: ['config-librarian', 'reviewer'],
-    requiredSubagentSkills: {
-      'config-librarian': [],
-      reviewer: [],
-    },
+    requiredSubagents: [],
+    requiredSubagentSkills: {},
   },
 ];
 
@@ -257,12 +238,12 @@ test('routes natural language tasks to required skill profiles without slash com
 test('routes mixed real-world workloads without false workflow gates', () => {
   const cases = [
     ['large agentic code writing', '请大规模重构这个插件的 subagent fork 逻辑，修改多个文件并补完整测试。', 'implementation-with-tests', ['plan', 'implementation-task', 'reviewer']],
-    ['direct audit context followed by workflow optimization', 'The OMP gate is blocking delegation. Let me do the bug investigation directly as a focused audit. 帮我优化插件的工作流，再事前准备好skills。', 'implementation-with-tests', ['plan', 'implementation-task', 'reviewer']],
-    ['precise scoped code edit', '只修改 plugins/omp-enhancer-core/src/router.js 里 routeNaturalLanguageTask 的一个判断，保持范围最小。', 'implementation-with-tests', ['plan', 'implementation-task', 'reviewer']],
+    ['direct audit context followed by workflow optimization', 'The OMP gate is blocking delegation. Let me do the bug investigation directly as a focused audit. 帮我优化插件的工作流，再事前准备好skills。', 'implementation-with-tests', []],
+    ['precise scoped code edit', '只修改 plugins/omp-enhancer-core/src/router.js 里 routeNaturalLanguageTask 的一个判断，保持范围最小。', 'implementation-with-tests', []],
     ['agentic code modification', 'Agentically update the codebase to improve gate handling and add regression tests.', 'implementation-with-tests', ['plan', 'implementation-task', 'reviewer']],
     ['read-only code bug finding', '帮我在代码里找 bug，只报告问题，不要修复。', 'bug-audit', ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer']],
     ['focused direct bug audit', '直接做 focused bug audit，只报告验证过的问题。', 'bug-audit', []],
-    ['code testing workload', '帮我为 subagent fork 逻辑生成测试并运行门禁，不要改实现。', 'bug-audit', ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer']],
+    ['code testing workload', '帮我为 subagent fork 逻辑生成测试并运行门禁，不要改实现。', 'bug-audit', []],
     ['fact-check workload', 'Verify citation authenticity and factual claims in this paragraph.', 'fact-check', ['fact-planner', 'fact-researcher-a', 'fact-researcher-b', 'fact-cross-checker', 'fact-reviewer']],
     ['large Chinese writing', '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。', 'writing.zh', ['zh-writer', 'zh-checker']],
     ['chapter writing polish with logic wording', '帮我优化第一章的中文写作，让整体行文更顺滑，逻辑更通畅。', 'writing.zh', ['zh-writer', 'zh-checker']],
@@ -333,7 +314,7 @@ test('routes common work situations without unreasonable workflow escalation', (
     ['write tests without implementation changes', '写测试但不要改实现。', 'bug-audit'],
     ['write test report without running tests', '写测试报告，不要运行测试。', 'writing.zh'],
     ['find bugs without fixing', '查 bug，只报告，不修。', 'bug-audit'],
-    ['one-line code edit', '只改一行代码，但不要跑全量测试。', 'implementation-with-tests'],
+    ['one-line code edit', '只改一行代码，但不要跑全量测试。', 'implementation-with-tests', { direct: true }],
     ['push and upgrade only', '推送并升级插件，但不要改代码。', 'release'],
     ['release notes without publish', '写 release notes，但不要发布。', 'writing.zh'],
     ['research implementation plan only', '调研方案，并生成实现计划，但先不要实现。', 'unknown'],
@@ -345,7 +326,12 @@ test('routes common work situations without unreasonable workflow escalation', (
     const route = routeNaturalLanguageTask({ prompt });
 
     assert.equal(route.intent, expectedIntent, name);
-    if (options.focused) {
+    if (options.direct) {
+      assert.equal(route.workflowRoute, 'code.dev', `${name} workflow`);
+      assert.deepEqual(route.requiredSubagents, [], `${name} subagents`);
+      assert.equal(route.shouldForkSubagents, false, `${name} should not force delegation`);
+      assert.deepEqual(route.taskDescriptor.testExclusions, ['full-suite'], `${name} test ceiling`);
+    } else if (options.focused) {
       assert.equal(route.auditMode, 'focused', `${name} audit mode`);
       assert.deepEqual(route.requiredSubagents, [], `${name} subagents`);
     } else if (nonGated.has(expectedIntent)) {
@@ -355,6 +341,9 @@ test('routes common work situations without unreasonable workflow escalation', (
     } else if (expectedIntent === 'diagnosis') {
       assert.deepEqual(route.requiredTools, [], `${name} tools`);
       assert.deepEqual(route.requiredSubagents, [], `${name} subagents`);
+    } else if (route.taskDescriptor.complexity === 'focused'
+      && !route.shouldForkSubagents) {
+      assert.deepEqual(route.requiredSubagents, [], `${name} focused direct workflow`);
     } else {
       assert.equal(route.requiredSubagents.length > 0, true, `${name} should route to a concrete workflow`);
     }
@@ -534,13 +523,16 @@ test('routes observed gate workflow regressions before classifier or smart-gate 
     prompt: '去修复这些问题，但是先给我一个计划。对于门禁有关的问题，你的思路应该是尽量在事前做好工作，而不是事后阻止，不要给用户反复尝试的感觉。',
   });
   assert.equal(repairPlan.intent, 'implementation-with-tests');
-  assert.deepEqual(repairPlan.requiredSubagents.map(({ agent }) => agent), ['plan', 'implementation-task', 'reviewer']);
+  assert.equal(repairPlan.taskDescriptor.operation, 'modify');
+  assert.equal(repairPlan.taskDescriptor.constraints.workspaceWrite, 'required');
+  assert.ok(repairPlan.taskDescriptor.phases.some(({ kind, domain }) => kind === 'modify' && domain === 'code'));
+  assert.deepEqual(repairPlan.requiredSubagents, []);
 
   const configAssets = routeNaturalLanguageTask({
     prompt: '检查 omp-config marketplace 插件打包出来的 assets 和 hooks 是否齐全。',
   });
   assert.equal(configAssets.intent, 'config-assets');
-  assert.deepEqual(configAssets.requiredSubagents.map(({ agent }) => agent), ['config-librarian', 'reviewer']);
+  assert.deepEqual(configAssets.requiredSubagents, []);
 
   const configAssetsWithCodeNegation = routeNaturalLanguageTask({
     prompt: '不要修改代码，检查 config assets 是否齐全。',
@@ -622,7 +614,7 @@ test('routes workflow compliance report prose editing to English writing profile
 
     assert.equal(route.intent, 'writing.en', prompt);
     assert.equal(route.agent, 'writing-helper.writer', prompt);
-    assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), ['writer', 'checker'], prompt);
+    assert.deepEqual(route.requiredSubagents, [], prompt);
   }
 });
 
@@ -659,7 +651,7 @@ test('routes extended boundary work situations without workflow confusion', () =
     ['add package script', '给 package.json 增加一个 npm script 并验证能运行。', 'implementation-with-tests'],
     ['edit yaml config', '修改 config.yml 的 modelRoles 默认值并更新测试。', 'implementation-with-tests'],
     ['summarize CI logs', '总结这段 CI 日志失败原因，不要修。', 'diagnosis'],
-    ['rerun failed CI tests', '重跑失败的 CI 测试并报告结果，不改实现。', 'bug-audit'],
+    ['rerun failed CI tests', '重跑失败的 CI 测试并报告结果，不改实现。', 'testing'],
     ['update snapshot tests', '更新 snapshot 测试并确认 diff 合理。', 'bug-audit'],
     ['review weak assertions', '检查现有测试有没有弱断言和重复断言。', 'bug-audit'],
     ['write coverage plan', '写一份提升覆盖率的测试计划，不运行测试。', 'writing.zh'],
@@ -867,7 +859,7 @@ test('routes command data notebook and publication workloads without workflow co
     ['bug reproduction test', '为这个 bug 写复现测试，不修实现。', 'bug-audit'],
     ['regression test file', '新增 regression test 文件覆盖这个边界。', 'bug-audit'],
     ['failing test assertion fix', '修复失败的测试断言，并确认实现没有被误改。', 'bug-audit'],
-    ['mutation rerun', '重跑 mutation testing，报告 survived mutants。', 'bug-audit'],
+    ['mutation rerun', '重跑 mutation testing，报告 survived mutants。', 'testing'],
     ['screenshot review', '审查 Playwright screenshots，找布局重叠问题，不改代码。', 'bug-audit'],
     ['image generation', '生成一张透明背景 logo 图片，不改代码。', 'unknown'],
     ['dataset download', '下载这个公开数据集并整理文件名。', 'unknown'],
@@ -966,12 +958,12 @@ test('routes writing workflow edge cases with correct complexity gates', () => {
     ['zh complex report', '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。', 'writing.zh', 'complex', ['zh-writer', 'zh-checker']],
     ['zh review response', '帮我起草中文审稿回复，要求语气克制、逻辑清楚。', 'writing.zh', 'complex', ['zh-writer', 'zh-checker']],
     ['zh test report without running tests', '请写测试报告，重点说明当前验证风险，不要运行测试。', 'writing.zh', 'complex', ['zh-writer', 'zh-checker']],
-    ['test report with verification', '检查测试报告里的结论是否准确，并运行相关测试验证。', 'bug-audit', null, ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer']],
+    ['test report with verification', '检查测试报告里的结论是否准确，并运行相关测试验证。', 'bug-audit', null, []],
     ['zh security announcement writing', '起草一份中文安全公告，不做代码安全审计。', 'writing.zh', 'complex', ['zh-writer', 'zh-checker']],
     ['zh license memo writing', '写一份 license 合规说明给法务，不审代码。', 'writing.zh', 'complex', ['zh-writer', 'zh-checker']],
     ['security audit remains security', '审查当前 GitHub Actions permissions 是否过宽，只报告。', 'security-review', null, ['ecc-security-reviewer', 'reviewer']],
     ['security docs lookup remains unknown', '查 GitHub Actions permissions 官方文档，不改代码。', 'unknown', null, []],
-    ['copy file edit remains implementation', '修改 src/i18n/zh.json 里的空状态文案并跑测试。', 'implementation-with-tests', null, ['plan', 'implementation-task', 'reviewer']],
+    ['copy file edit remains implementation', '修改 src/i18n/zh.json 里的空状态文案并跑测试。', 'implementation-with-tests', null, []],
     ['latex text file edit remains implementation', '润色 main.tex 里的 related work 段落并重新编译。', 'implementation-with-tests', null, ['plan', 'implementation-task', 'reviewer']],
     ['latex text snippet remains simple writing', '润色下面这段 related work，不改文件。', 'writing.zh', 'simple', []],
     ['research links remain unknown', '调研竞品 roadmap 写法，列出链接，不写正文。', 'unknown', null, []],
@@ -992,12 +984,12 @@ test('routes writing workflow edge cases with correct complexity gates', () => {
     ['en security audit remains security', 'Audit the Makefile target for dangerous commands and report risks.', 'security-review', null, ['ecc-security-reviewer', 'reviewer']],
     ['en docs lookup remains unknown', 'Look up the official OpenAPI docs and list relevant links; do not write prose.', 'unknown', null, []],
     ['pure readme wording edit remains writing', 'Polish README.md installation wording and save the changes.', 'writing.en', 'simple', []],
-    ['comment file translation remains implementation', 'Translate comments in src/router.js to English and run tests.', 'implementation-with-tests', null, ['plan', 'implementation-task', 'reviewer']],
+    ['comment file translation remains implementation', 'Translate comments in src/router.js to English and run tests.', 'implementation-with-tests', null, []],
     ['en paper paragraph remains simple', 'Review the logic of this paper paragraph and improve the wording.', 'writing.en', 'simple', []],
     ['en linkedin post', 'Write an English LinkedIn post announcing the plugin update.', 'writing.en', 'complex', ['writer', 'checker']],
     ['en changelog entry', 'Draft a changelog entry for the route workflow fixes.', 'writing.en', 'complex', ['writer', 'checker']],
-    ['writing tool failure remains implementation', 'Fix the writing_quality_check tool failure and add regression tests.', 'implementation-with-tests', null, ['plan', 'implementation-task', 'reviewer']],
-    ['plugin workflow logic optimization remains implementation', '帮我优化插件的工作流逻辑，并补测试。', 'implementation-with-tests', null, ['plan', 'implementation-task', 'reviewer']],
+    ['writing tool failure remains implementation', 'Fix the writing_quality_check tool failure and add regression tests.', 'implementation-with-tests', null, []],
+    ['plugin workflow logic optimization remains implementation', '帮我优化插件的工作流逻辑，并补测试。', 'implementation-with-tests', null, []],
   ];
 
   for (const [name, prompt, expectedIntent, expectedComplexity, expectedSubagents] of writingCases) {
@@ -1009,6 +1001,87 @@ test('routes writing workflow edge cases with correct complexity gates', () => {
       assert.equal(route.writingComplexity, expectedComplexity, `${name} complexity`);
       assert.deepEqual(route.requiredTools, expectedComplexity === 'complex' ? writingTools : [], `${name} tools`);
     }
+  }
+});
+
+test('routes bug-report artifacts without confusing their subject with implementation', () => {
+  const cases = [
+    ['Write a bug report for the parser bug; do not run tests.', 'writing.en'],
+    ['写一份英文 bug report，描述 parser 的 bug，不运行测试。', 'writing.en'],
+    ['Summarize the existing bug report without inspecting code or running tests.', 'writing.en'],
+    ['Create a bug report for the parser issue.', 'writing.en'],
+    ['Prepare a bug report for the parser issue.', 'writing.en'],
+    ['File a bug report for the parser issue.', 'writing.en'],
+    ['Fix the bug described in the bug report.', 'implementation-with-tests'],
+    ['Write a bug report generator in src/report.js.', 'implementation-with-tests'],
+    ['Revise the bug report parser implementation.', 'implementation-with-tests'],
+    ['Write tests from this bug report.', 'implementation-with-tests'],
+    ['Write a bug report and fix the parser bug.', 'implementation-with-tests'],
+    ['Create a bug report; repair the parser.', 'implementation-with-tests'],
+    ['Prepare a bug report. Resolve the parser issue.', 'implementation-with-tests'],
+    ['写一份 bug report，修一下 parser。', 'implementation-with-tests'],
+    ['Write a complete troubleshooting guide.', 'writing.en'],
+  ];
+
+  for (const mode of ['observe', 'enforce']) {
+    for (const [prompt, intent] of cases) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode: mode });
+      assert.equal(route.intent, intent, `${mode}: ${prompt}`);
+      assert.deepEqual(route.requiredSkills, mode === 'enforce' ? route.routePlan.requiredSkills : route.requiredSkills);
+    }
+  }
+});
+
+test('routes observed E2E summaries without turning a no-rerun clause into test authority', () => {
+  for (const mode of ['observe', 'enforce']) {
+    for (const [prompt, intent] of [
+      ['总结本轮 E2E 测试结果，不重新运行测试。', 'writing.zh'],
+      ['总结本轮 E2E 测试结果，不再运行测试。', 'writing.zh'],
+      ['整理已观测到的测试问题，不做任何新测试。', 'writing.zh'],
+      ['总结本轮 E2E 测试结果。', 'writing.zh'],
+      ['Summarize the observed E2E results; do not run new tests.', 'writing.en'],
+    ]) {
+      const summary = routeNaturalLanguageTask({ prompt, routerMode: mode });
+      assert.equal(summary.intent, intent, `${mode}: ${prompt}`);
+      assert.equal(summary.taskDescriptor.constraints.testExecution, 'forbidden', `${mode}: ${prompt}`);
+    }
+
+    const rerun = routeNaturalLanguageTask({
+      prompt: '总结本轮 E2E 测试结果，然后重新运行失败测试。',
+      routerMode: mode,
+    });
+    assert.equal(rerun.intent, mode === 'enforce' ? 'testing' : 'bug-audit', mode);
+    assert.equal(rerun.taskDescriptor.constraints.testExecution, 'required', mode);
+  }
+});
+
+test('routes a primary testing workflow run directly without writing or audit escalation', () => {
+  const prompt = 'Run the testing workflow and summarize the gate result.';
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode });
+    assert.equal(route.intent, 'testing', routerMode);
+    assert.equal(route.workflowRoute, 'code.test', routerMode);
+    assert.equal(route.taskDescriptor.operation, 'execute', routerMode);
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'required', routerMode);
+    assert.deepEqual(route.requiredSkills, ['verification-before-completion'], routerMode);
+    assert.deepEqual(route.requiredTools, ['omp_test_gate', 'omp_test_report'], routerMode);
+    assert.deepEqual(route.requiredSubagents, [], routerMode);
+    assert.deepEqual(route.requiredSkills, route.routePlan.requiredSkills, routerMode);
+    assert.deepEqual(route.requiredTools, route.routePlan.requiredTools, routerMode);
+  }
+});
+
+test('routes one requested regression test as a focused direct audit contract', () => {
+  const prompt = 'Write one regression test for routeNaturalLanguageTask.';
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode });
+    assert.equal(route.intent, 'bug-audit', routerMode);
+    assert.equal(route.auditMode, 'focused', routerMode);
+    assert.equal(route.taskDescriptor.complexity, 'focused', routerMode);
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'required', routerMode);
+    assert.deepEqual(route.requiredSkills, ['test-driven-development', 'verification-before-completion'], routerMode);
+    assert.deepEqual(route.requiredTools, ['omp_test_gate'], routerMode);
+    assert.deepEqual(route.requiredSubagents, [], routerMode);
   }
 });
 
@@ -1173,6 +1246,7 @@ test('routes simple English writing edits without writer checker subagents', () 
   assert.deepEqual(route.requiredSkills, ['writing-markdown-helper']);
   assert.deepEqual(route.requiredTools, []);
   assert.deepEqual(route.requiredSubagents, []);
+  assert.doesNotMatch(route.routeCard, /writing-checkers/);
 });
 
 test('leaves unrelated prompts unclaimed instead of inventing a plugin workflow', () => {

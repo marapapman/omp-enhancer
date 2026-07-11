@@ -151,10 +151,12 @@ export function decorateWorkflowRoute(route, { workflowRoute = null } = {}) {
   };
 }
 
-export function buildWorkflowRouteCard({ route = 'agentic.simple', requiredSkills = [] } = {}) {
+export function buildWorkflowRouteCard({ route = 'agentic.simple', requiredSkills = [], includeCatalogSkills = true } = {}) {
   const workflowRoute = workflowRouteNames.includes(route) ? route : 'agentic.simple';
   const meta = workflowRouteCatalog[workflowRoute];
-  const skills = unique([...(requiredSkills ?? []), ...meta.skills]);
+  const skills = includeCatalogSkills
+    ? unique([...(requiredSkills ?? []), ...meta.skills])
+    : unique(requiredSkills ?? []);
   return [
     'WORKFLOW_CARD',
     `Task type: ${workflowRoute}`,

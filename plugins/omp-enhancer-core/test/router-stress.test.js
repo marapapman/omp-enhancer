@@ -49,16 +49,12 @@ const routeSuites = {
     'Write tests for src/router.js around fallback behavior.',
     'Add tests for classifier routing confidence thresholds.',
     'Create regression tests for the skill gate parser.',
-    'Run unit tests for the marketplace release script.',
-    'Execute the browser smoke tests and report failures.',
     'Review test flakiness around the browser smoke suite.',
     'Check coverage gaps in the router tests.',
     'Analyze flaky e2e failures in Playwright.',
-    'Run the testing workflow and summarize the gate result.',
     '为 src/router.js 写高信号单元测试。',
     '补测试覆盖 skill usage 的错误路径。',
     '检查浏览器回归测试为什么失败。',
-    '运行测试门禁并报告结果。',
     '分析覆盖率缺口，不要改实现。',
     '审查测试是否覆盖 marketplace upgrade。',
     '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
@@ -68,6 +64,12 @@ const routeSuites = {
     'Inspect the plugin for defects and summarize concrete file-line findings.',
     '帮我在代码里找 bug，只报告问题，不要修复。',
     '帮我为 subagent fork 逻辑生成测试并运行门禁，不要改实现。',
+  ],
+  testing: [
+    'Run unit tests for the marketplace release script.',
+    'Execute the browser smoke tests and report failures.',
+    'Run the testing workflow and summarize the gate result.',
+    '运行测试门禁并报告结果。',
   ],
   'implementation-with-tests': [
     'Implement classifier fallback handling and add tests.',
@@ -207,7 +209,7 @@ test('router stress matrix covers at least 100 natural-language cases without wr
     } else if (intent === 'diagnosis') {
       assert.deepEqual(route.requiredTools, [], name);
       assert.deepEqual(route.requiredSubagents, [], name);
-    } else if (route.writingComplexity !== 'simple') {
+    } else if (route.taskDescriptor?.complexity === 'broad') {
       assert.equal(route.requiredSubagents.length > 0, true, name);
     } else {
       assert.deepEqual(route.requiredSubagents, [], name);

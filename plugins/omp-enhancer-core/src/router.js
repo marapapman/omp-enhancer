@@ -1,4 +1,4 @@
-import { decorateWorkflowRoute } from './workflow-routes.js';
+import { buildWorkflowRouteCard, decorateWorkflowRoute } from './workflow-routes.js';
 import {
   describeNaturalLanguageTask,
   descriptorFromLegacyIntent,
@@ -37,8 +37,8 @@ const strongZhWritingTerms = [
   '改得',
   '翻译',
 ];
-const enWritingActionTerms = ['draft', 'write', 'revise', 'polish', 'edit', 'improve', 'proofread', 'copyedit'];
-const enWritingObjectTerms = ['paper', 'report', 'manuscript', 'abstract', 'related work', 'paragraph', 'sentence', 'wording', 'grammar', 'release notes', 'changelog', 'commit message', 'letter', 'email', 'proposal', 'summary', 'guide', 'manual', 'section', 'policy', 'memo', 'announcement', 'troubleshooting guide'];
+const enWritingActionTerms = ['draft', 'write', 'revise', 'polish', 'edit', 'improve', 'proofread', 'copyedit', 'summarize', 'summarise', 'condense'];
+const enWritingObjectTerms = ['paper', 'report', 'bug report', 'manuscript', 'abstract', 'related work', 'paragraph', 'sentence', 'wording', 'grammar', 'release notes', 'changelog', 'commit message', 'letter', 'email', 'proposal', 'summary', 'guide', 'manual', 'section', 'policy', 'memo', 'announcement', 'troubleshooting guide'];
 const testingTerms = ['tests', 'testing', 'unit test', 'coverage', 'mutation', 'e2e', 'playwright', 'regression', 'flaky', 'flakiness', 'test flakiness', 'lint', 'eslint', 'prettier', 'benchmark', 'smoke', 'screenshot', '测试', '测试用例', '覆盖率', '门禁', '浏览器', '截图'];
 const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', 'code', 'component', 'migrate', 'migration', 'dependency', 'dependencies', '实现', '重构', '修复', '报错', '功能', '代码', '接口', '迁移', '依赖'];
 const configTerms = ['omp-config', 'config asset', 'config assets', 'asset paths', 'config templates', 'config doctor', 'assets', 'hooks', 'templates', 'modelroles', 'model roles', 'agents', 'skills', 'subagent', 'subagents', '配置资产', '配置模板', '技能清单'];
@@ -97,36 +97,141 @@ export function routeNaturalLanguageTask(input = {}) {
   const directivePrompt = writingDirectivePromptForSignals(prompt);
   const operationalPrompt = writingOperationalPromptForSignals(directivePrompt);
   const described = describeNaturalLanguageTask({ prompt });
-  const legacyRoute = routeNaturalLanguageTaskLegacy({
+  const rawLegacyRoute = routeNaturalLanguageTaskLegacy({
     ...input,
     prompt: operationalPrompt,
     text: operationalPrompt,
   });
+  const specializedPrompt = stripSpecializedRouteConstraints(operationalPrompt);
+  const specializedLegacyRoute = specializedPrompt === operationalPrompt ? rawLegacyRoute : routeNaturalLanguageTaskLegacy({
+    ...input,
+    prompt: specializedPrompt,
+    text: specializedPrompt,
+  });
+  const legacyRoute = described.domains.some((domain) => domain === 'document' || domain === 'visual')
+    && isSpecializedDocumentRoute(specializedLegacyRoute)
+    ? specializedLegacyRoute
+    : rawLegacyRoute;
   const policy = compileTaskRoutePolicy(described, { legacyRoute });
   const routerMode = resolveRouterMode(input.routerMode ?? input.mode);
   const gateRecoveryMode = resolveGateMode(input.gateRecoveryMode);
   const canonicalTestExecution = isCanonicalTestingProjection(described, prompt);
   const canonicalPureWriting = isCanonicalPureWritingProjection(described, legacyRoute, prompt);
   const canonicalPureSecurity = isCanonicalPureSecurityProjection(described);
+  const canonicalPureFact = described.operation === 'inspect'
+    && described.domains?.includes('facts');
   const canonicalSecurityWriting = isCanonicalSecurityWritingProjection(described);
   const canonicalWritingActions = isCanonicalWritingActionProjection(described);
+  const canonicalCodeModification = described.operation === 'modify'
+    && described.domains?.includes('code');
+  const canonicalCodeCreation = described.operation === 'create'
+    && described.domains?.includes('code')
+    && !described.domains?.includes('visual');
+  const canonicalFunctionalUiCreation = canonicalCodeCreation && (
+    /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:create|build|implement|write)\b.{0,96}\b(?:dashboard|landing\s+page|page|ui\s+component|react\s+component)\b/i.test(prompt.trim())
+    || /^(?:(?:请|帮我|麻烦)\s*)?(?:写|创建|新建|构建|实现|开发|搭建)\s*(?:一个|一套|个)?[^。！？.!?\n]{0,64}(?:页面|看板|界面|ui\s*组件|react\s*组件)/i.test(prompt.trim())
+  );
+  const canonicalFunctionalUiCorrection = canonicalFunctionalUiCreation
+    && legacyRoute.intent !== policy.intent;
+  const canonicalVisualAction = described.domains?.includes('visual') && (
+    described.operation === 'create'
+    || described.operation === 'modify'
+      && described.phases?.some(({ kind, domain }) => kind === 'modify' && domain === 'visual')
+  );
+  const canonicalSecurityRemediation = canonicalCodeModification
+    && described.domains?.includes('security');
+  const canonicalFactWriting = described.operation === 'modify'
+    && described.domains?.includes('facts')
+    && described.domains?.includes('writing');
+  const canonicalWritingTestRelease = described.operation === 'modify'
+    && described.domains?.includes('writing')
+    && described.domains?.includes('tests')
+    && described.domains?.includes('plugin')
+    && described.constraints?.testExecution === 'required'
+    && described.constraints?.externalWrite === 'required';
+  const canonicalCompoundCodeWriting = canonicalCodeModification
+    && described.domains?.includes('writing')
+    && described.constraints?.workspaceWrite === 'required'
+    && (described.provenance?.reasons ?? []).includes('bug report companion code action');
+  const canonicalResponseWriting = described.operation === 'modify'
+    && described.domains?.includes('writing')
+    && described.constraints?.workspaceWrite === 'forbidden'
+    && (described.provenance?.reasons ?? []).some((reason) => [
+      'supplied findings report requested',
+      'fact re-verification forbidden',
+      'security re-review forbidden',
+    ].includes(reason));
+  const canonicalReleaseOperation = described.operation === 'release';
+  const canonicalConfigDiagnosis = described.operation === 'diagnose'
+    && described.domains?.includes('config');
+  const canonicalPrimaryTestAuthoring = (described.provenance?.reasons ?? [])
+    .includes('primary direct test authoring requested');
+  const canonicalScopedCodeModification = canonicalCodeModification
+    && !described.domains.some((domain) => ['writing', 'security'].includes(domain))
+    && (described.workspaceWriteTargets ?? []).some((target) => (
+      !/(?:^|\/)(?:tests?|__tests__|spec)(?:\/|$)|(?:\.test|\.spec)\.[^/]+$/i.test(target)
+    ));
+  const canonicalExplicitCodeModification = canonicalCodeModification
+    && !described.domains.some((domain) => ['writing', 'security'].includes(domain))
+    && ['bug-audit', 'unknown'].includes(legacyRoute.intent)
+    && policy.intent === 'implementation-with-tests'
+    && described.provenance?.requiresPolicyRoute === true
+    && /(?:修复|修正|实现|重构|修改)|\b(?:fix|repair|resolve|implement|refactor|modify)\b/i.test(prompt)
+    && !/(?:不|不要|别|无需|不用)\s*(?:再)?(?:修(?:复)?|修正|实现)|\b(?:do\s+not|don't|without)\s+(?:fix(?:ing)?|implement(?:ing)?)\b/i.test(prompt)
+    && !/(?:修复|修正|修改|重构)\s*(?:测试|用例|快照|snapshot)|\b(?:fix|repair|modify|refactor)\s+(?:the\s+)?(?:tests?|test\s+cases?|specs?|snapshots?)\b/i.test(prompt);
+  const canonicalObserveCodeModification = canonicalScopedCodeModification
+    || canonicalExplicitCodeModification;
+  const canonicalDirectWriting = described.operation === 'modify'
+    && described.domains?.includes('writing')
+    && !described.domains.some((domain) => ['code', 'security'].includes(domain))
+    && described.constraints?.testExecution !== 'required';
+  const alignedCanonicalDirectWriting = canonicalDirectWriting
+    && legacyRoute.intent === policy.intent;
+  const canonicalBoundedTestModification = described.operation === 'modify'
+    && (described.testExclusions ?? []).length > 0;
+  const canonicalObservedSummary = (described.provenance?.reasons ?? []).includes('observed test summary requested')
+    && described.constraints?.testExecution !== 'required';
+  const canonicalObservedRerun = (described.provenance?.reasons ?? []).includes('observed test summary requested')
+    && described.constraints?.testExecution === 'required';
+  const explicitSubagentsRequested = /\bagentically\b|(?:fork|spawn|use|delegate\s+to).{0,24}(?:subagents?|sub-agents?)|(?:并行|使用|启动|调用|委派).{0,24}(?:子代理|subagents?|sub-agents?)/i.test(prompt);
+  const focusedEffectivePlan = described.complexity !== 'broad'
+    && described.operation !== 'release'
+    && !explicitSubagentsRequested
+    && !canonicalFunctionalUiCreation
+    && (legacyRoute.intent === policy.intent || policy.shouldOverrideLegacy);
   const payloadSanitized = directivePrompt !== prompt;
   const alignedPayloadProjection = payloadSanitized && (
     legacyRoute.intent === policy.intent && legacyRoute.workflowRoute === policy.workflowRoute
     || ['writing.zh', 'writing.en'].includes(policy.intent) && legacyRoute.intent !== 'design.visual'
   );
   const authorityBearingTargetNeutralized = writingTargetAuthorityNeutralized(directivePrompt, operationalPrompt);
-  const usePolicyRoute = (routerMode !== 'legacy'
-    && (canonicalTestExecution || canonicalPureWriting || canonicalPureSecurity || canonicalSecurityWriting
-      || canonicalWritingActions
+  const compatibleSpecializedWorkflow = isSpecializedDocumentRoute(legacyRoute)
+    ? legacyRoute.workflowRoute
+    : policy.workflowRoute;
+  const preserveSpecializedLegacyRoute = isSpecializedDocumentRoute(legacyRoute)
+    && (policy.intent === 'unknown' && described.operation === 'answer'
+      || legacyRoute.workflowRoute === 'doc.convert.word'
+        && described.operation === 'create'
+        && described.domains?.includes('document'));
+  const usePolicyRoute = !preserveSpecializedLegacyRoute && ((routerMode !== 'legacy'
+    && (canonicalObserveCodeModification
+      || canonicalTestExecution || canonicalPureWriting || canonicalPureSecurity || canonicalPureFact || canonicalSecurityWriting
+      || canonicalSecurityRemediation || canonicalFactWriting || canonicalWritingTestRelease || canonicalCompoundCodeWriting
+      || canonicalReleaseOperation || canonicalConfigDiagnosis || canonicalPrimaryTestAuthoring || canonicalResponseWriting
+      || canonicalWritingActions || canonicalVisualAction || canonicalFunctionalUiCorrection
+      || alignedCanonicalDirectWriting
+      || canonicalObservedSummary
+      || canonicalBoundedTestModification
       || alignedPayloadProjection || authorityBearingTargetNeutralized))
     || (routerMode === 'enforce'
-      && (policy.shouldOverrideLegacy || shouldOverrideLegacyRoute(described, legacyRoute, prompt)));
+      && (policy.shouldOverrideLegacy || canonicalCodeModification || canonicalFunctionalUiCreation || canonicalVisualAction || canonicalDirectWriting
+        || canonicalObservedSummary || canonicalObservedRerun
+        || shouldOverrideLegacyRoute(described, legacyRoute, prompt))));
   const routed = usePolicyRoute
     ? routeByLegacyIntent(policy.intent, {
       prompt,
       source: 'natural-language',
-      workflowRoute: policy.workflowRoute,
+      workflowRoute: compatibleSpecializedWorkflow,
       auditMode: policy.auditMode,
       writingComplexity: policy.writingComplexity,
       hardBlock: policy.hardBlock,
@@ -134,25 +239,82 @@ export function routeNaturalLanguageTask(input = {}) {
     })
     : legacyRoute;
   const compiled = attachCompiledTaskRoute(routed, described);
-  const projected = routerMode !== 'legacy'
-    && (isCanonicalFocusedSafeWritingProjection(described) || canonicalSecurityWriting || canonicalWritingActions)
+  const projectEffectivePlan = routerMode === 'enforce'
+    || routerMode !== 'legacy' && (
+      usePolicyRoute
+      || focusedEffectivePlan
+      || isCanonicalFocusedSafeWritingProjection(described)
+      || canonicalSecurityWriting
+      || canonicalWritingActions
+    );
+  const projected = projectEffectivePlan
     ? {
       ...compiled,
       requiredSkills: compiled.routePlan.requiredSkills,
       requiredTools: compiled.routePlan.requiredTools,
       requiredSubagents: compiled.routePlan.requiredSubagents,
+      shouldForkSubagents: compiled.routePlan.requiredSubagents.length > 0,
+      ...(compiled.intent === 'writing.zh' || compiled.intent === 'writing.en'
+        ? { writingComplexity: described.complexity === 'broad' ? 'complex' : 'simple' }
+        : {}),
+      routeCard: buildWorkflowRouteCard({
+        route: compiled.workflowRoute,
+        requiredSkills: compiled.routePlan.requiredSkills,
+        includeCatalogSkills: false,
+      }),
     }
     : compiled;
   return {
     ...projected,
     routerMode,
     gateRecoveryMode,
-    routeObservation: routerMode === 'observe' ? {
-      legacyIntent: legacyRoute.intent,
-      plannedIntent: policy.intent,
-      disagrees: legacyRoute.intent !== policy.intent,
-    } : null,
+    routeObservation: routerMode === 'observe'
+      ? buildRouteObservation(legacyRoute, policy, compiled.routePlan, { projectEffectivePlan })
+      : null,
   };
+}
+
+function buildRouteObservation(legacyRoute, policy, routePlan, { projectEffectivePlan = false } = {}) {
+  const legacyResources = routeResourceSummary(legacyRoute);
+  const plannedResources = routeResourceSummary({
+    workflowRoute: routePlan?.workflowRoute ?? policy.workflowRoute,
+    requiredSkills: routePlan?.requiredSkills ?? [],
+    requiredTools: routePlan?.requiredTools ?? [],
+    requiredSubagents: routePlan?.requiredSubagents ?? [],
+  });
+  const intentDisagrees = legacyRoute.intent !== policy.intent;
+  const resourceDisagrees = JSON.stringify(legacyResources) !== JSON.stringify(plannedResources);
+  return {
+    legacyIntent: legacyRoute.intent,
+    plannedIntent: policy.intent,
+    intentDisagrees,
+    resourceDisagrees,
+    disagrees: intentDisagrees || resourceDisagrees,
+    effectiveResourceSource: projectEffectivePlan ? 'descriptor-policy' : 'legacy-compatible',
+  };
+}
+
+function routeResourceSummary(route = {}) {
+  return {
+    workflowRoute: route.workflowRoute ?? null,
+    requiredSkills: [...(route.requiredSkills ?? [])],
+    requiredTools: [...(route.requiredTools ?? [])],
+    requiredSubagents: (route.requiredSubagents ?? []).map(({ agent }) => agent),
+  };
+}
+
+function stripSpecializedRouteConstraints(value = '') {
+  return String(value)
+    .replace(/(?:不要|不得|禁止|别|无需|不用|不(?=\s*(?:运行|执行|跑|重跑)?\s*(?:任何)?\s*(?:测试|回归测试|单元测试)))\s*(?:运行|执行|跑|重跑)?\s*(?:任何)?\s*(?:测试|回归测试|单元测试)/gu, ' ')
+    .replace(/(?:不要|不得|禁止|别|无需|不用)\s*(?:使用|启动|调用|委派)?\s*(?:任何)?\s*(?:subagents?|sub-agents?|子代理)/giu, ' ')
+    .replace(/\b(?:do\s+not|don't|without)\s+(?:run|execute|use|start|launch|delegate\s+to)\s+(?:any\s+)?(?:tests?|subagents?|sub-agents?)\b/giu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isSpecializedDocumentRoute(route = {}) {
+  return ['writing.latex', 'writing.markdown', 'doc.convert.word', 'design.visual']
+    .includes(route.workflowRoute);
 }
 
 function isCanonicalFocusedSafeWritingProjection(descriptor) {
@@ -215,7 +377,10 @@ function isCanonicalTestingProjection(descriptor, prompt = '') {
     || !descriptor?.domains?.includes('tests')) return false;
   if ((descriptor.testExecutionTargets ?? []).length > 0) return true;
   const text = String(prompt).toLowerCase();
-  return /(?:只|仅)\s*(?:运行|执行|跑|重跑)\s*(?:npm\s+test|pnpm\s+test|yarn\s+test|bun\s+test|pytest|vitest)|\bonly\s+(?:run|execute|rerun)\s+(?:npm\s+test|pnpm\s+test|yarn\s+test|bun\s+test|pytest|vitest)\b/.test(text);
+  const explicitDefectAudit = /(?:审计|检查|查找|排查).{0,32}(?:bug|缺陷|问题)|\b(?:audit|check|find|hunt)\b.{0,32}\b(?:bugs?|defects?)\b/.test(text);
+  const primaryTestExecution = /^(?:(?:please)\s+)?(?:run|execute|rerun)\b.{0,48}\b(?:tests?|testing\s+workflow)\b|^(?:请\s*)?(?:运行|执行|跑|重跑).{0,32}(?:测试|test)/.test(text.trim());
+  return /(?:只|仅)\s*(?:运行|执行|跑|重跑)\s*(?:npm\s+test|pnpm\s+test|yarn\s+test|bun\s+test|pytest|vitest)|\bonly\s+(?:run|execute|rerun)\s+(?:npm\s+test|pnpm\s+test|yarn\s+test|bun\s+test|pytest|vitest)\b/.test(text)
+    || primaryTestExecution && !explicitDefectAudit;
 }
 
 function shouldOverrideLegacyRoute(descriptor, legacyRoute, prompt = '') {
@@ -246,6 +411,7 @@ function routeNaturalLanguageTaskLegacy(input = {}) {
   const isPlanForCodeChange = isImplementationPlanForCodeChange(normalized);
   const hasTesting = isTestingRequest(normalized);
   const hasDirectTestAuthoring = isDirectTestAuthoring(normalized);
+  const hasPrimaryDirectTestAuthoring = isPrimaryDirectTestAuthoring(normalized);
   const hasTestAnalysis = isTestAnalysisRequest(normalized);
   const hasTestReportWriting = isTestReportWritingRequest(normalized);
   const hasBugReportWriting = isBugReportWritingRequest(normalized);
@@ -335,6 +501,12 @@ function routeNaturalLanguageTaskLegacy(input = {}) {
     return routed('bug-audit', { auditMode: 'focused' });
   }
 
+  if (hasBugReportWriting) {
+    return routed(hasEnglishWriting || !/[\u4e00-\u9fff]/.test(prompt) ? 'writing.en' : 'writing.zh', {
+      writingComplexity: writingComplexityFor(normalized),
+    });
+  }
+
   if (hasSummaryWriting && !hasCodeChange) {
     return routed(hasEnglishWriting ? 'writing.en' : 'writing.zh', { writingComplexity: 'simple' });
   }
@@ -353,6 +525,14 @@ function routeNaturalLanguageTaskLegacy(input = {}) {
 
   if (hasTestReportWriting) {
     return routed(hasEnglishWriting ? 'writing.en' : 'writing.zh', { writingComplexity: isObservedTestSummary(normalized) ? 'simple' : writingComplexityFor(normalized) });
+  }
+
+  if (hasPrimaryDirectTestAuthoring && /\bbug\s+report\b/.test(normalized)) {
+    return routed('implementation-with-tests');
+  }
+
+  if (hasPrimaryDirectTestAuthoring) {
+    return routed('bug-audit');
   }
 
   if (hasCodeChange && hasTesting) {
@@ -790,6 +970,12 @@ function isChineseWriting(normalized, original) {
 }
 
 function isEnglishWriting(text) {
+  if (/\bbug\s+report\b/.test(text) && (
+    /\b(?:fix|implement|refactor|patch)\b[^.!?\n]{0,80}\b(?:bug|parser|implementation|code)\b/.test(text)
+    || /\bbug\s+report\s+(?:generator|parser|implementation|component|function|class|module|tool)\b/.test(text)
+    || /\b(?:write|add|create|generate)\s+(?:the\s+)?tests?\b/.test(text)
+    || /\b(?:and|then|also)\s+(?:fix|implement|refactor|modify|update|patch)\b/.test(text)
+  )) return false;
   if (includesAny(text, enWritingActionTerms) && includesAny(text, enWritingObjectTerms)) return true;
   return /(?:check|review|improve|edit|fix|proofread|copyedit)\s+.*(?:logic|style|grammar|typos?|wording|paragraph|abstract|paper|manuscript|report|release notes|changelog|letter|email|proposal|summary)/.test(text);
 }
@@ -833,12 +1019,18 @@ function isLocalOperationalExecutionRequest(text) {
 
 function isDirectTestAuthoring(text) {
   if (isTestReportWritingRequest(text)) return false;
-  return /(?:write|add|create)\s+tests?\b/.test(text)
+  return /(?:write|add|create)\s+(?:(?:an?|one)\s+)?(?:(?:high[- ]signal|focused|new|additional|security|unit|regression|integration|e2e|boundary)\s+)*tests?\b/.test(text)
     || /(?:生成|创建|编写|补充).*(?:测试用例|测试矩阵|边界测试|压力测试)/.test(text)
     || /(?:测试用例).*(?:写成|生成|加入|保存到).*(?:测试文件|test|tests)/.test(text)
     || text.includes('写高信号单元测试')
     || text.includes('写测试')
     || text.includes('补测试');
+}
+
+function isPrimaryDirectTestAuthoring(text) {
+  if (!isDirectTestAuthoring(text)) return false;
+  return /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:write|add|create)\s+(?:(?:an?|one)\s+)?(?:(?:high[- ]signal|focused|new|additional|security|unit|regression|integration|e2e|boundary)\s+)*(?:tests?|test cases?)\b/.test(text.trim())
+    || /^(?:(?:请|帮我|麻烦)\s*)?(?:为.{1,64})?(?:补充|补|添加|新增|编写|写)\s*(?:一些|一组)?\s*(?:(?:高信号|聚焦|安全|单元|回归|集成|端到端|e2e|边界|错误路径)\s*)*(?:测试(?!报告|总结|说明|结果|覆盖率|计划|文档)|用例)/.test(text.trim());
 }
 
 function isRouteToolDiagnosticRequest(text) {
@@ -871,10 +1063,11 @@ function isSummaryWritingRequest(text) {
 function isTestReportWritingRequest(text) {
   if (asksToRunTestVerification(text)) return false;
   if (isImplementationPlanForCodeChange(text)) return false;
+  if (/\b(?:write|add|create|generate)\s+(?:the\s+)?tests?\b[^.!?\n]{0,48}\bbug\s+report\b/.test(text)) return false;
   if (isReportOnlyAudit(text) && !/(?:写|起草|撰写|润色|改写|整理|总结|归纳|draft|write|revise|polish|edit|improve)/.test(text)) return false;
-  return /(?:写|起草|撰写|润色|改写|整理|总结|归纳)(?:一份|一个|这份|这段|当前|一下|统一)?(?:测试|覆盖率|门禁|回归|e2e|playwright)?(?:报告|总结|说明|文档|记录|复盘|计划|问题|观察|现象|结论)/.test(text)
+  return /(?:写|起草|撰写|润色|改写|整理|总结|归纳)(?:一份|一个|这份|这段|当前|本轮|这一轮|一下|统一)?(?:测试|覆盖率|门禁|回归|e2e|playwright)?(?:报告|总结|说明|文档|记录|复盘|计划|结果|问题|观察|现象|结论)/.test(text)
     || /(?:写|起草|撰写|整理|总结|归纳).*(?:测试|覆盖率|门禁|回归|e2e|playwright).*(?:计划|报告|总结|说明|文档|记录|复盘|问题|观察|现象|结论)/.test(text)
-    || /(?:总结|归纳|整理).*(?:这一轮|本轮|当前).*(?:测试|验证|e2e).*(?:问题|观察|现象|结论)/.test(text)
+    || /(?:总结|归纳|整理).*(?:这一轮|本轮|当前).*(?:测试|验证|e2e).*(?:结果|问题|观察|现象|结论)/.test(text)
     || /(?:检查|审查|核对|修复|修改).*(?:测试|覆盖率|门禁|回归|e2e|playwright).*(?:报告|章节|结论|措辞|表述|计划)/.test(text)
     || /(?:检查|审查|核对|修复|修改).*(?:报告|章节|结论|措辞|表述|计划).*(?:测试|覆盖率|门禁|回归|e2e|playwright)/.test(text)
     || /(?:draft|write|revise|polish|edit|improve|summarize|summarise)\s+.*(?:test|testing|coverage|gate|regression|e2e|playwright).*(?:report|summary|notes|document|doc|writeup|postmortem|observations?|findings?)/.test(text)
@@ -882,8 +1075,8 @@ function isTestReportWritingRequest(text) {
 }
 
 function isObservedTestSummary(text) {
-  return /(?:总结|归纳|整理).*(?:这一轮|本轮|当前).*(?:测试|验证|e2e).*(?:问题|观察|现象|结论)/.test(text)
-    || /(?:统一总结).*(?:测试|验证|e2e).*(?:问题|观察|现象|结论)/.test(text)
+  return /(?:总结|归纳|整理).*(?:这一轮|本轮|当前).*(?:测试|验证|e2e).*(?:结果|问题|观察|现象|结论)/.test(text)
+    || /(?:统一总结).*(?:测试|验证|e2e).*(?:结果|问题|观察|现象|结论)/.test(text)
     || /(?:summarize|summarise)\s+.*(?:observed|completed|previous).*(?:test|testing|e2e|gate|workflow).*(?:issues?|observations?|findings?)/.test(text);
 }
 
@@ -967,7 +1160,7 @@ function isAgenticImplementationCoordinationRequest(text) {
 }
 
 function asksToRunTestVerification(text) {
-  if (/(?:不|不要|无需|不用)\s*(?:运行|执行|重跑).*(?:测试|e2e|playwright)/.test(text)) return false;
+  if (/(?:不|不要|无需|不用)\s*(?:再\s*)?(?:运行|执行|重跑|重新运行|重新执行).*(?:测试|e2e|playwright)/.test(text)) return false;
   if (/(?:do not|don't|without|no need to)\s+(?:run|execute|rerun).*(?:tests?|e2e|playwright)/.test(text)) return false;
   return /(?:运行|执行|重跑|重新运行).*(?:测试|e2e|playwright)/.test(text)
     || /(?:run|execute|rerun)\s+.*(?:tests?|e2e|playwright)/.test(text);
@@ -1016,9 +1209,13 @@ function isFocusedDirectAuditRequest(text) {
 }
 
 function isBugReportWritingRequest(text) {
-  const writesBugReport = /(?:写|起草|撰写).*(?:bug\s*report|bug.*报告|问题报告|缺陷报告)/.test(text)
-    || /(?:draft|write|revise|polish|edit|improve)\s+.*(?:bug report|defect report)/.test(text);
+  const writesBugReport = /(?:写|起草|撰写|创建|准备|提交|整理|总结).*(?:bug\s*report|bug.*报告|问题报告|缺陷报告)/.test(text)
+    || /(?:draft|write|revise|polish|edit|improve|create|prepare|file|summarize|summarise)\s+.*(?:bug report|defect report)/.test(text);
   if (!writesBugReport) return false;
+  if (/\bbug\s+report\s+(?:generator|parser|implementation|component|function|class|module|tool)\b/.test(text)
+    || /\b(?:write|add|create|generate)\s+(?:the\s+)?tests?\b[^.!?\n]{0,48}\bbug\s+report\b/.test(text)
+    || /\b(?:and|then|also)\s+(?:fix|implement|refactor|modify|update|patch)\b/.test(text)
+    || /(?:并且|然后|同时|再).{0,12}(?:修复|实现|重构|修改|更新|补丁)/.test(text)) return false;
   const cleaned = text
     .replace(/(?:不|不要|无需|不用)\s*(?:运行|执行|跑).*(?:测试|test|tests)/g, '')
     .replace(/(?:do not|don't|without|no need to)\s+(?:run|execute).*(?:tests?|testing)/g, '');
@@ -1036,7 +1233,11 @@ function isCodeChangeRequest(text) {
   const explicitCreatedCodeTarget = /(?:逻辑|代码|功能|接口|模块|实现|handling|logic|feature)/.test(withoutNegatedCodeWriting);
   if (/(?:api reference|api.*文档|api.*document|api.*docs?)/.test(text) && isExplicitWritingAction(text)) return false;
   if (isProseWritingOptimizationRequest(text)) return false;
-  return /(?:修改|修复|修正|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本|这些|上述)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|gate|路由|提示词|页面|ui|router|route|workflowroute|fallback|回退逻辑|问题)/.test(withoutNegatedCodeWriting)
+  return /\b(?:fix|repair|resolve)\b[^.!?\n]{0,64}\bbugs?\b/.test(withoutNegatedCodeWriting)
+    || /\b(?:write|add|create|generate)\s+(?:the\s+)?tests?\b[^.!?\n]{0,48}\bbug\s+report\b/.test(withoutNegatedCodeWriting)
+    || /\b(?:write|create|build|implement|add)\b[^.!?\n]{0,64}\b(?:generator|parser|implementation|module|function|class|tool)\b/.test(withoutNegatedCodeWriting)
+    || /\b(?:revise|edit|modify|update)\b[^.!?\n]{0,64}\b(?:parser|generator|implementation|code|module|function)\b/.test(withoutNegatedCodeWriting)
+    || /(?:修改|修复|修正|实现|重构|开发|优化|改)\s*(?:这个|当前|一下|本|这些|上述)?(?:插件|配置|逻辑|代码|功能|接口|hook|hooks|marketplace|workflow|工作流|门禁|gate|路由|提示词|页面|ui|router|route|workflowroute|fallback|回退逻辑|问题)/.test(withoutNegatedCodeWriting)
     || /(?:重构|优化|修改|修复|修正|调整).*(?:逻辑|代码|模块|函数|router|route|workflow|工作流|门禁|gate|路由|fork|subagent|误判|误挡|反复|运行失败|启动失败|warning|dev server|问题)/.test(withoutNegatedCodeWriting)
     || /(?:只改|只修改|改动|修改).*(?:一行|一处|少量|代码|文件)/.test(withoutNegatedCodeWriting)
     || /写.*(?:函数|代码|接口|功能|页面|模块|看板|dashboard|api|component|组件)/.test(withoutNegatedCodeWriting)

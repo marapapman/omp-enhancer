@@ -105,6 +105,37 @@ test('explicit no-subagent authorization dominates broad fact-check routing', ()
   assert.deepEqual(route.routePlan.requiredSubagents, []);
 });
 
+test('no-subagent ceilings preserve direct config and visual resources', () => {
+  const config = enforcedRoute('Inspect OMP config assets, templates, and hooks, but do not use subagents.');
+  assert.equal(config.intent, 'config-assets');
+  assert.deepEqual(config.requiredTools, ['omp_config_doctor', 'omp_config_assets', 'omp_config_plan']);
+  assert.deepEqual(config.routePlan.requiredTools, config.requiredTools);
+  assert.deepEqual(config.requiredSubagents, []);
+  assert.equal(config.shouldForkSubagents, false);
+
+  const visual = enforcedRoute('Create a polished poster design with a modern visual system and exportable layout; do not use subagents.');
+  assert.equal(visual.intent, 'design.visual');
+  assert.ok(visual.requiredSkills.length > 0);
+  assert.deepEqual(visual.routePlan.requiredSkills, visual.requiredSkills);
+  assert.deepEqual(visual.requiredSubagents, []);
+  assert.equal(visual.shouldForkSubagents, false);
+});
+
+test('strict direct ceilings preserve specialized document skills', () => {
+  for (const [prompt, workflowRoute, skill] of [
+    ['根据这些要点生成一个 Word docx 报告，带标题和目录；不要运行测试，不要使用 subagent。', 'doc.convert.word', 'docx'],
+    ['把 paper.md 转成 LaTeX，保留公式、引用和图表占位；不要运行测试，不要使用 subagent。', 'writing.latex', 'format-markdown2latex'],
+    ['把这些要点整理成 Markdown 文档，保留标题层级和代码块；不要运行测试，不要使用 subagent。', 'writing.markdown', 'writing-markdown-helper'],
+  ]) {
+    const route = enforcedRoute(prompt);
+    assert.equal(route.workflowRoute, workflowRoute, prompt);
+    assert.ok(route.requiredSkills.includes(skill), prompt);
+    assert.ok(route.routePlan.requiredSkills.includes(skill), prompt);
+    assert.deepEqual(route.requiredSubagents, [], prompt);
+    assert.equal(route.shouldForkSubagents, false, prompt);
+  }
+});
+
 test('enforce uses descriptor policy for ordinary modify-and-test requests', () => {
   for (const prompt of [
     '修复 parser 中的小 bug 并运行测试。',
@@ -114,7 +145,26 @@ test('enforce uses descriptor policy for ordinary modify-and-test requests', () 
     assert.equal(route.taskDescriptor.operation, 'modify', prompt);
     assert.equal(route.intent, 'implementation-with-tests', prompt);
     assert.equal(route.workflowRoute, 'code.dev', prompt);
+    assert.deepEqual(route.requiredSkills, route.routePlan.requiredSkills, prompt);
+    assert.deepEqual(route.requiredTools, route.routePlan.requiredTools, prompt);
+    assert.deepEqual(route.requiredSubagents, route.routePlan.requiredSubagents, prompt);
+    assert.equal(route.shouldForkSubagents, route.routePlan.requiredSubagents.length > 0, prompt);
     assert.ok(route.routePlan.gateRequirements.some(({ key, mode }) => key === 'test-evidence' && mode === 'required'), prompt);
+  }
+});
+
+test('full-suite exclusions keep modification routing and expose the effective direct plan', () => {
+  for (const prompt of [
+    'Fix src/router.js, but do not run the full test suite.',
+    '只改一行代码，但不要跑全量测试。',
+  ]) {
+    const route = enforcedRoute(prompt);
+    assert.equal(route.intent, 'implementation-with-tests', prompt);
+    assert.equal(route.workflowRoute, 'code.dev', prompt);
+    assert.deepEqual(route.taskDescriptor.testExclusions, ['full-suite'], prompt);
+    assert.deepEqual(route.requiredSkills, route.routePlan.requiredSkills, prompt);
+    assert.deepEqual(route.requiredTools, route.routePlan.requiredTools, prompt);
+    assert.deepEqual(route.requiredSubagents, route.routePlan.requiredSubagents, prompt);
   }
 });
 

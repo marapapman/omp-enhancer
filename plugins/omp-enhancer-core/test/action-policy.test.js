@@ -1,10 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { classifyToolAction, hasUnsafeResultMasking, isDryRunAction } from '../src/action-policy.js';
+import {
+  classifyTestExecutionScope,
+  classifyToolAction,
+  hasUnsafeResultMasking,
+  isDryRunAction,
+} from '../src/action-policy.js';
 
 function classify(command, toolName = 'bash') {
   return classifyToolAction({ toolName, text: command });
+}
+
+function exhaustCommandExpansion(command) {
+  return `${'strace '.repeat(8)}${command}`;
+}
+
+function escapeShellSpaces(value) {
+  return String(value).replaceAll(' ', '\\ ');
+}
+
+function concatenateShellFragments(value) {
+  return String(value).split(' ').join('" "');
 }
 
 test('classifies common shell and direct file writes', () => {
@@ -23,10 +40,78 @@ test('classifies common shell and direct file writes', () => {
   assert.equal(classifyToolAction({ toolName: 'edit', text: 'src/router.js' }).workspaceWrite, true);
 });
 
+test('filesystem MCP tools fail closed except for explicit read operations', () => {
+  for (const toolName of [
+    'mcp__filesystem__append_file',
+    'mcp__filesystem__replace_file',
+    'mcp__filesystem__touch',
+    'mcp__filesystem__chmod',
+    'mcp__filesystem__chown',
+    'mcp__filesystem__truncate',
+    'mcp__filesystem__mkdir',
+    'mcp__filesystem__set_permissions',
+    'mcp__filesystem__unknown_operation',
+  ]) {
+    const action = classifyToolAction({ toolName, text: '{}' });
+    assert.equal(action.workspaceWrite, true, toolName);
+    assert.equal(action.definiteWorkspaceMutation, true, toolName);
+  }
+  for (const toolName of [
+    'mcp__filesystem__read_file',
+    'mcp__filesystem__read_multiple_files',
+    'mcp__filesystem__list_directory',
+    'mcp__filesystem__search_files',
+    'mcp__filesystem__get_file_info',
+  ]) {
+    assert.equal(classifyToolAction({ toolName, text: '{}' }).workspaceWrite, false, toolName);
+  }
+});
+
+test('remote MCP tools fail closed unless their operation is explicitly read-only', () => {
+  for (const toolName of [
+    'mcp__github__add_issue_comment',
+    'mcp__jira__add_comment',
+    'mcp__slack__add_reaction',
+    'mcp__google_drive__share_file',
+    'mcp__calendar__rsvp',
+    'mcp__notion__archive_page',
+    'mcp__github__set_labels',
+    'mcp__github__get_and_approve_pull_request',
+    'mcp__github__check_run_rerequest',
+    'mcp__github__mark_notification_as_read',
+    'mcp__github__rerequest_check_run',
+    'mcp__github__approve_check_run',
+    'mcp__slack__search_and_join',
+    'mcp__browser__click',
+    'mcp__github__unknown_operation',
+  ]) {
+    const action = classifyToolAction({ toolName, text: toolName.endsWith('__click') ? '{"text":"Like"}' : '{}' });
+    assert.equal(action.networkAccess, true, toolName);
+    assert.equal(action.externalWrite, true, toolName);
+  }
+  for (const toolName of [
+    'mcp__github__get_issue',
+    'mcp__jira__list_issues',
+    'mcp__slack__search_messages',
+    'mcp__notion__read_page',
+    'mcp__github__get_issue_comments',
+    'mcp__github__list_labels',
+    'mcp__slack__search_reactions',
+    'mcp__browser__open',
+    'mcp__browser__navigate',
+    'mcp__browser__screenshot',
+  ]) {
+    const action = classifyToolAction({ toolName, text: '{}' });
+    assert.equal(action.networkAccess, true, toolName);
+    assert.equal(action.externalWrite, false, toolName);
+  }
+});
+
 test('recognizes provably read-only shell commands', () => {
   for (const command of [
     'git diff --stat',
     'git status --short',
+    'cd /tmp/model-v182-e2e-content-fact && git log --all --oneline --notes',
     'rg -n route src',
     'sed -n 1,80p src/router.js',
     'ls -la',
@@ -34,6 +119,19 @@ test('recognizes provably read-only shell commands', () => {
     'npm run lint',
   ]) {
     assert.equal(classify(command).workspaceWrite, false, command);
+  }
+});
+
+test('a read-only cwd change cannot hide a later workspace mutation', () => {
+  for (const command of [
+    'cd /tmp && touch x',
+    'cd /tmp && git log > history.txt',
+    'cd "$(touch /tmp/x)" && git log',
+    'cd <(touch /tmp/x)',
+    'cd <(curl https://example.com)',
+    'cd >(touch /tmp/x)',
+  ]) {
+    assert.equal(classify(command).workspaceWrite, true, command);
   }
 });
 
@@ -62,6 +160,362 @@ test('classifies common test runners without treating lint as tests', () => {
   }
   assert.equal(classify('npm run lint').testExecution, false);
   assert.equal(classify('node --check src/router.js').testExecution, false);
+});
+
+test('classifies package-manager fanout and transparent launchers as aggregate tests', () => {
+  for (const command of [
+    'npm --workspaces test',
+    'npm --include-workspace-root test',
+    'npm --if-present test',
+    'npm --workspaces --include-workspace-root --if-present run test',
+    'npm run --workspaces --include-workspace-root --if-present test',
+    'npm --workspaces=true --include-workspace-root=true --if-present=true test',
+    'npm --workspaces --if-present run test:unit',
+    'pnpm --recursive test',
+    'pnpm --recursive=true test',
+    'pnpm -r test',
+    'pnpm -r run test:unit',
+    'yarn workspaces run test',
+    'yarn workspaces foreach test',
+    'yarn workspaces foreach -A run test',
+    'yarn workspaces foreach -A run test:unit',
+    'corepack npm test',
+    'corepack npm --workspaces test',
+    'mise exec -- npm test',
+    'mise exec -- pnpm -r test',
+    'mise exec -- yarn workspaces foreach test',
+    'setsid npm test',
+    'stdbuf -oL npm test',
+    'ionice -c 3 npm test',
+    'taskset -c 0 npm test',
+    'docker run local-image npm test',
+    'podman run --rm local-image npm test',
+    'docker run --rm -e CI=1 -v "$PWD:/app" -w /app local-image sh -c "npm test"',
+    'podman run --entrypoint npm local-image test',
+    'setsid stdbuf -oL docker run local-image npm test',
+    'docker exec container npm test',
+    'podman exec container npm test',
+    'docker compose run --rm service npm test',
+    'docker compose exec service npm test',
+    'podman compose run service npm test',
+    'docker-compose run --rm service sh -c "npm test"',
+    'systemd-run --user npm test',
+    'chronic npm test',
+    'watch -n 1 npm test',
+    'sudo -u runner npm test',
+    'sudo --preserve-env=CI npm test',
+    'doas npm test',
+    'runuser -u runner -- npm test',
+    'chroot / npm test',
+    'unshare --net npm test',
+    'prlimit --nproc=100 npm test',
+    '/bin/bash -c "npm run unit"',
+    '/usr/bin/flock /tmp/l npm run unit',
+    '/usr/bin/docker run --rm image npm run unit',
+    'command -- npm test',
+    'env -i PATH=/usr/bin npm test',
+    'env -u NODE_ENV npm test',
+    'docker --context remote run --rm image npm test',
+    'docker container exec ctr npm test',
+    'docker --context remote compose run --rm svc npm test',
+    'podman --connection dev run image npm test',
+    'kubectl exec pod -- npm test',
+    'kubectl exec -c app pod -- sh -lc "npm test"',
+    'kubectl run test-pod --image=node -- npm test',
+    'uv run pytest',
+    'poetry run pytest',
+    'npm t',
+    'npm --silent t',
+    'corepack npm t',
+    'mise exec -- npm t',
+    'npm run-script test',
+    'yarn run-script test',
+    'pnpm run-script test',
+    'npx --package=vitest vitest run',
+    'npm exec --package=vitest -- vitest run',
+    'cargo +nightly test',
+    'bazel --output_base=/tmp/b test //...',
+    'node --experimental-test-coverage --test',
+    'task test',
+    'nx test app',
+    'turbo run test',
+    'bash --noprofile --norc -c "npm test"',
+    'bash -o pipefail -c "npm test"',
+    'sh -o errexit -c "npm test"',
+    'bash -c "npm test" runner0',
+    'bash -lc "npm test" --',
+    'dash -c "npm test"',
+    'fish -c "npm test"',
+    'nohup command timeout 30 env CI=1 npm test &',
+    '(npm test) &',
+    'make -C . test',
+    'just test',
+    'NODE_OPTIONS="--max-old-space-size=4096 --trace-warnings" npm test',
+    "TEST_FLAGS='--runInBand --detectOpenHandles' npm test",
+    'cross-env-shell NODE_OPTIONS="--trace-warnings --no-deprecation" "npm test"',
+    'env --split-string="npm test"',
+    'pnpm vitest',
+    'yarn jest',
+    'pnpm playwright test',
+    'coverage run -m pytest',
+    'conda run pytest',
+    'bundle exec rake test',
+    'rake test',
+    'composer test',
+    'php artisan test',
+    'php vendor/bin/phpunit',
+    'ant test',
+    'mise run test',
+    'lerna run test',
+    'rush test',
+    'xvfb-run npm test',
+    'cross-env CI=1 npm test',
+    'flock /tmp/t.lock npm test',
+    'sbt -batch test',
+    'meson test -C build',
+    'ninja -C build test',
+    'pdm run pytest',
+    'bazel --output_base /tmp/b test //...',
+    'bazel --bazelrc .bazelrc test //...',
+    'cargo --manifest-path Cargo.toml test',
+    'cargo --color always test',
+    'deno --config deno.json test',
+    'npm tst',
+    'bunx --bun vitest run',
+    'gotestsum -- ./...',
+    'go tool gotestsum -- ./...',
+    'sbt "testOnly foo.BarSpec"',
+    'lein with-profile test test',
+    'echo --dry-run && npm test',
+    'make --dry-run lint && npm test',
+    'npm test && echo --dry-run',
+    'npm test -- --dry-run',
+    'sudo --non-interactive npm test',
+    'sudo --preserve-env CI=1 npm test',
+    'env --ignore-environment npm test',
+    'npx -c "npm test"',
+    'npm exec -c "npm test"',
+    'flock --verbose /tmp/t.lock npm test',
+    'docker compose --ansi never run --rm svc npm test',
+    'parallel npm test ::: one',
+    'find . -type f -name package.json -exec npm test {} +',
+    'nice -5 npm test',
+  ]) {
+    assert.equal(classify(command).testExecution, true, command);
+    assert.equal(classifyTestExecutionScope({ toolName: 'bash', text: command }), 'aggregate-or-unknown', command);
+  }
+});
+
+test('corepack and mise preserve explicit focused test kinds', () => {
+  for (const command of [
+    'corepack npm run test:unit',
+    'mise exec -- npm run test:unit',
+  ]) {
+    assert.equal(classify(command).testExecution, true, command);
+    assert.equal(classifyTestExecutionScope({ toolName: 'bash', text: command }), 'focused', command);
+  }
+});
+
+test('transparent launchers preserve a single exact focused test target', () => {
+  for (const command of [
+    '/usr/bin/sudo npm run unit',
+    '/usr/bin/env npm run unit',
+    'timeout 30 node --test test/router.test.js',
+    'env CI=1 node --test test/router.test.js',
+    'command node --test test/router.test.js',
+  ]) {
+    assert.equal(classify(command).testExecution, true, command);
+    assert.equal(classifyTestExecutionScope({ toolName: 'bash', text: command }), 'focused', command);
+  }
+});
+
+test('shell, container, and unknown wrappers keep exact test targets aggregate-or-unknown', () => {
+  for (const command of [
+    'bash -c "node --test test/router.test.js"',
+    'docker run local-image node --test test/router.test.js',
+    'mystery-wrapper node --test test/router.test.js',
+    'script -q -c "node --test test/router.test.js" /dev/null',
+    'setsid --wait /usr/bin/script --return -q --command "node --test test/router.test.js" /dev/null',
+    'mystery-wrapper "node --test test/router.test.js"',
+  ]) {
+    assert.equal(classify(command).testExecution, true, command);
+    assert.equal(classifyTestExecutionScope({ toolName: 'bash', text: command }), 'aggregate-or-unknown', command);
+  }
+});
+
+test('canonical single-target runners remain focused across package-manager frontends', () => {
+  for (const command of [
+    'pnpm vitest run test/router.test.js',
+    'yarn jest test/router.test.js',
+    'pnpm playwright test test/ui.spec.ts',
+    'node --no-warnings --test test/router.test.js',
+    'pytest test/test_router.py::test_one',
+  ]) {
+    assert.equal(classify(command).testExecution, true, command);
+    assert.equal(classifyTestExecutionScope({ toolName: 'bash', text: command }), 'focused', command);
+  }
+});
+
+test('wrapper parsing requires a real test runner instead of a test-shaped argument', () => {
+  for (const command of [
+    'env rg test src',
+    'time rg test src',
+    'exec grep test README.md',
+    'xargs rg test',
+    'for f in test/*.js; do echo "$f"; done',
+    'if test -f package.json; then git status; fi',
+    'case "$mode" in test) echo testing;; esac',
+    'nohup echo testing',
+    'command cat test/router.test.js',
+    'setsid rg test src',
+    'stdbuf -oL grep test README.md',
+    'docker run local-image rg test src',
+    'make -C . lint',
+    'just lint',
+    'docker exec container rg test src',
+    'docker compose run --rm service rg test src',
+    'systemd-run --user rg test src',
+    'chronic rg test src',
+    'watch -n 1 rg test src',
+    'sudo -u runner rg test src',
+    'command -- rg test src',
+    'env -i PATH=/usr/bin rg test src',
+    'kubectl exec pod -- rg test src',
+    'uv run ruff check src',
+    'poetry run ruff check src',
+    'make check-format',
+    'make -C . check-docs',
+    'just check-types',
+    'logger "npm test"',
+    'logger --message="npm test"',
+    'printf "%s\\n" "npm test"',
+    'mystery-wrapper "the command npm test is documented"',
+    'mystery-wrapper --description="npm test"',
+    'mystery-wrapper --command="the command npm test is documented"',
+    'script -q README.md',
+    'script -q -c "rg test src" /dev/null',
+  ]) {
+    assert.equal(classify(command).testExecution, false, command);
+    assert.equal(classifyTestExecutionScope({ toolName: 'bash', text: command }), 'none', command);
+  }
+});
+
+test('opaque and unknown execution wrappers expose the nested command effects', () => {
+  const wrappers = [
+    (command) => `strace ${command}`,
+    (command) => `perf stat ${command}`,
+    (command) => `valgrind ${command}`,
+    (command) => `gdb --args ${command}`,
+    (command) => `nsenter --target 1 --mount ${command}`,
+    (command) => `bwrap --ro-bind / / ${command}`,
+    (command) => `su runner -c "${command}"`,
+    (command) => `mystery-wrapper ${command}`,
+    (command) => `script -q -c "${command}" /dev/null`,
+    (command) => `setsid --wait /usr/bin/script --return -q --command "${command}" /dev/null`,
+    (command) => `script -q -c"${command}" /dev/null`,
+    (command) => `script -qec"${command}" /dev/null`,
+    (command) => `script -q -c${escapeShellSpaces(command)} /dev/null`,
+    (command) => `script -q -c${concatenateShellFragments(command)} /dev/null`,
+    (command) => `script -q -c$'${command}' /dev/null`,
+    (command) => `mystery-wrapper "${command}"`,
+    (command) => `mystery-wrapper --command="${command}"`,
+    (command) => `mystery-runner --cmd='${command}'`,
+    (command) => `mystery-wrapper --command=${escapeShellSpaces(command)}`,
+    (command) => `mystery-runner --cmd=${concatenateShellFragments(command)}`,
+    (command) => `mystery-launcher --exec=$'${command}'`,
+    (command) => `mystery-executor --run=$'${command}'`,
+    (command) => `mystery-wrapper -c ${escapeShellSpaces(command)}`,
+    (command) => `mystery-wrapper -c${escapeShellSpaces(command)}`,
+  ];
+  for (const wrap of wrappers) {
+    const testCommand = wrap('npm test');
+    assert.equal(classify(testCommand).testExecution, true, testCommand);
+    assert.equal(classifyTestExecutionScope({ toolName: 'bash', text: testCommand }), 'aggregate-or-unknown', testCommand);
+
+    const removal = wrap('rm -rf cache');
+    assert.equal(classify(removal).definiteWorkspaceMutation, true, removal);
+    assert.equal(classify(removal).irreversible, true, removal);
+
+    const workspaceWrite = wrap('touch marker');
+    assert.equal(classify(workspaceWrite).definiteWorkspaceMutation, true, workspaceWrite);
+
+    const push = wrap('git push origin main');
+    assert.equal(classify(push).networkAccess, true, push);
+    assert.equal(classify(push).externalWrite, true, push);
+
+    const clusterDelete = wrap('kubectl delete pod web');
+    assert.equal(classify(clusterDelete).networkAccess, true, clusterDelete);
+    assert.equal(classify(clusterDelete).externalWrite, true, clusterDelete);
+    assert.equal(classify(clusterDelete).irreversible, true, clusterDelete);
+
+    const post = wrap('curl -X POST https://example.com/api');
+    assert.equal(classify(post).networkAccess, true, post);
+    assert.equal(classify(post).externalWrite, true, post);
+  }
+});
+
+test('command expansion depth exhaustion propagates every protected effect fail closed', () => {
+  const command = exhaustCommandExpansion('rg parser src');
+  const action = classify(command);
+  assert.equal(action.opaqueEffects, true);
+  assert.equal(action.testExecution, true);
+  assert.equal(action.networkAccess, true);
+  assert.equal(action.externalWrite, true);
+  assert.equal(action.workspaceWrite, true);
+  assert.equal(action.definiteWorkspaceMutation, true);
+  assert.equal(action.irreversible, true);
+  assert.equal(classifyTestExecutionScope({ toolName: 'bash', text: command }), 'aggregate-or-unknown');
+});
+
+test('unreliable command-bearing argv fails closed without treating logger prose as execution', () => {
+  for (const command of [
+    'script -q -c "$RUNNER" /dev/null',
+    'script -q -c "npm test /dev/null',
+    "script -q -c$'npm\\qtest' /dev/null",
+    'mystery-wrapper --command="$RUNNER"',
+    'mystery-runner --cmd="npm test',
+    "mystery-launcher --exec=$'npm\\qtest'",
+    'mystery-executor --run=',
+    'mystery-wrapper -c',
+  ]) {
+    const action = classify(command);
+    assert.equal(action.opaqueEffects, true, command);
+    assert.equal(action.testExecution, true, command);
+    assert.equal(action.networkAccess, true, command);
+    assert.equal(action.externalWrite, true, command);
+    assert.equal(action.workspaceWrite, true, command);
+    assert.equal(action.irreversible, true, command);
+  }
+
+  for (const command of [
+    'logger npm test',
+    'logger git push origin main',
+    'logger rm -rf cache',
+    'logger "npm test"',
+    'logger --message="git push origin main"',
+  ]) {
+    const action = classify(command);
+    assert.equal(action.testExecution, false, command);
+    assert.equal(action.externalWrite, false, command);
+    assert.equal(action.irreversible, false, command);
+  }
+});
+
+test('opaque shell controls fail closed only when their body contains a runner', () => {
+  for (const command of [
+    'eval "npm test"',
+    'source ./test.sh',
+    'xargs npm test',
+    'xargs -n 1 npm test',
+    'if npm test; then echo passed; fi',
+    'if test -f package.json; then command npm test; fi',
+    'while npm test; do echo retry; done',
+    'for f in test/*.test.js; do node --test "$f"; done',
+    'case "$mode" in test) npm test;; esac',
+  ]) {
+    assert.equal(classify(command).testExecution, true, command);
+    assert.equal(classifyTestExecutionScope({ toolName: 'bash', text: command }), 'aggregate-or-unknown', command);
+  }
 });
 
 test('only browser checks execute tests among omp test QA and evidence tools', () => {
@@ -193,7 +647,8 @@ test('classifies MCP filesystem and remote-provider tools by capability-bearing 
   assert.equal(classifyToolAction({ toolName: 'mcp__github__get_issue' }).networkAccess, true);
   assert.equal(classifyToolAction({ toolName: 'mcp__filesystem__read_file' }).networkAccess, false);
   assert.equal(classifyToolAction({ toolName: 'mcp__linear__create_issue' }).externalWrite, true);
-  assert.equal(classifyToolAction({ toolName: 'mcp__browser__click', text: 'Open documentation link' }).externalWrite, false);
+  assert.equal(classifyToolAction({ toolName: 'mcp__browser__open', text: 'Open documentation link' }).externalWrite, false);
+  assert.equal(classifyToolAction({ toolName: 'mcp__browser__click', text: 'Like' }).externalWrite, true);
   assert.equal(classifyToolAction({ toolName: 'mcp__browser__submit', text: 'Submit account form' }).externalWrite, true);
   assert.equal(classifyToolAction({ toolName: 'mcp__database__execute_query', text: 'SELECT * FROM users' }).externalWrite, false);
   assert.equal(classifyToolAction({ toolName: 'mcp__database__execute_query', text: 'DELETE FROM users' }).externalWrite, true);
@@ -411,7 +866,7 @@ test('generic remote API payloads classify mutations and fail closed when effect
   ]) {
     const action = classifyToolAction(input);
     assert.equal(action.networkAccess, true, input.toolName);
-    assert.equal(action.externalWrite, false, input.toolName);
+    assert.equal(action.externalWrite, true, input.toolName);
     assert.equal(action.opaqueEffects, true, input.toolName);
   }
 });
@@ -448,6 +903,26 @@ test('detects commands that mask exit status or request dry-run semantics', () =
   assert.equal(hasUnsafeResultMasking('npm test'), false);
   assert.equal(isDryRunAction('git push --dry-run origin main'), true);
   assert.equal(isDryRunAction('npm publish --dry-run'), true);
+  for (const command of [
+    'make -n test',
+    'make --dry-run test',
+    'make --question test',
+    'just --dry-run test',
+    'task --dry test',
+    'task --summary test',
+    'turbo run test --dry-run',
+    'ctest -N',
+    'ninja -n test',
+    './gradlew test --dry-run',
+    'ctest --show-only',
+    'ninja --dry-run test',
+    'turbo run test --dry',
+    'turbo run test --dry=json',
+    'cargo test --no-run',
+  ]) {
+    assert.equal(isDryRunAction(command), true, command);
+    assert.equal(classifyTestExecutionScope({ toolName: 'bash', text: command }), 'none', command);
+  }
   assert.equal(isDryRunAction('git push origin main'), false);
 });
 
@@ -696,6 +1171,69 @@ test('opaque script execution is surfaced when side effects cannot be proven fro
     'npm run migrate',
     'git status --short',
   ]) assert.equal(classify(command).opaqueEffects, false, command);
+});
+
+test('command-bearing programs and unknown shell actions expose unverifiable test effects', () => {
+  for (const command of [
+    "awk 'BEGIN { system(\"npm test\") }'",
+    "rg --pre 'npm test' parser .",
+    "rg --pre='npm test' parser .",
+    "php -r 'system(\"npm test\");'",
+    "lua -e 'os.execute(\"npm test\")'",
+    "tar --checkpoint=1 --checkpoint-action=exec='npm test' -cf out.tar src",
+    "git -c alias.verify='!npm test' verify",
+    "git -c diff.external='npm test' diff",
+    "GIT_EXTERNAL_DIFF='npm test' git diff",
+    "GIT_SSH_COMMAND='npm test' git ls-remote origin",
+    "NODE_OPTIONS='--require ./test-hook.js' node --check src/index.js",
+    "env -i GIT_EXTERNAL_DIFF='npm test' git diff",
+    "env -u CI GIT_EXTERNAL_DIFF='npm test' git diff",
+    "sudo -u runner GIT_EXTERNAL_DIFF='npm test' git diff",
+    "command GIT_EXTERNAL_DIFF='npm test' git diff",
+    "env 'GIT_EXTERNAL_DIFF=npm test' git diff",
+    "sudo -u runner 'GIT_EXTERNAL_DIFF=npm test' git diff",
+    'rg -n parser *',
+    'rg -n parser src/{a,b}.js',
+    'git ls-remote origin refs/heads/*',
+    "sh -c 'rg -n parser *'",
+    "eval 'rg -n parser *'",
+    'rg -n parser @(src)',
+    'rg -n parser +(src)',
+    'rg -n parser !(vendor)',
+    'rg -n parser <(printf src)',
+    "sh -c 'rg -n parser <(printf src)'",
+    "sed 's/x/npm test/e' file",
+    "sed -n '1e npm test' file",
+    "awk -v cmd='npm test' 'BEGIN { cmd | getline }'",
+    "awk 'BEGIN { cmd=\"npm test\"; print \"x\" | cmd }'",
+    'npm run lint',
+    'npm run typecheck',
+    'pnpm lint',
+    'yarn typecheck',
+    'bun run lint',
+    'make lint',
+  ]) {
+    const action = classify(command);
+    assert.equal(action.unverifiableTestEffects, true, command);
+  }
+
+  for (const command of [
+    "rg 'parser' src",
+    "rg -n parser '*.js'",
+    'rg -n parser \\*.js',
+    'git status --short',
+    'cp README.md README.copy.md',
+    'git ls-remote origin refs/heads/main',
+    "sh -c 'rg -n parser src'",
+    "sh -c \"rg -n parser '*.js'\"",
+    "rg -n parser 'a<(b'",
+    'rg -n parser \\<\\(literal',
+  ]) assert.equal(classify(command).unverifiableTestEffects, false, command);
+
+  assert.equal(classify("awk '{ print $1 }' data.txt").unverifiableTestEffects, true);
+
+  assert.equal(classify('custom-local-cli --check').unverifiableTestEffects, true);
+  assert.equal(classify('CI=1 rg parser src').unverifiableTestEffects, true);
 });
 
 test('common network and database clients always require network authority', () => {

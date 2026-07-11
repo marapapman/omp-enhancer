@@ -48,6 +48,7 @@ import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import {
   classifyToolAction,
+  classifyTestExecutionScope,
   hasUnsafeResultMasking,
   isDryRunAction,
 } from './src/action-policy.js';
@@ -115,6 +116,7 @@ const USER_INPUT_ACTION_BLOCKERS = new Set([
 ]);
 const REPAIRABLE_ACTION_BLOCKERS = new Set([
   'test-target-authorization-required',
+  'workspace-test-artifact-authorization-required',
   'document-preservation-baseline-required',
   'external-action-repair-required',
   'external-target-excluded',
@@ -900,7 +902,7 @@ function shouldInheritUserContinuation(state, prompt = '') {
 
 function isTerseUserContinuation(prompt = '') {
   const text = normalizeRoutePrompt(prompt).toLowerCase();
-  return /^(?:继续(?:吧|执行|实现)?|开始吧|开始执行(?:吧)?|按(?:照)?(?:这个|该|上述)?计划执行|照(?:这个|该|上述)?方案做|就(?:按)?这么做|执行吧|go ahead|continue|proceed(?: with (?:the|this) plan)?|start now|do it)$/i.test(text);
+  return /^(?:继续(?:吧|执行|实现|修复|开发)?|开始吧|开始(?:执行|实现|修复|开发)(?:吧)?|按(?:照)?(?:这个|该|上述)?计划执行|照(?:这个|该|上述)?方案做|就(?:按)?这么做|执行吧|go ahead|continue|proceed(?: with (?:the|this) plan)?|start now|do it)$/i.test(text);
 }
 
 function inheritContinuationRoute(previousRoute) {
@@ -1444,11 +1446,13 @@ function useDescriptorCeilingProjection(route) {
 
 function routeForRuntime(route) {
   if (!route) return route;
+  const requiredSubagents = routeRequiredSubagents(route);
   return {
     ...route,
     requiredSkills: routeRequiredSkills(route),
     requiredTools: routeRequiredTools(route),
-    requiredSubagents: routeRequiredSubagents(route),
+    requiredSubagents,
+    shouldForkSubagents: requiredSubagents.length > 0,
   };
 }
 
@@ -2731,18 +2735,28 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
   if (action.subagent && constraints.subagents === 'forbidden') {
     return protectedConstraintBlock('subagents-forbidden', 'The user explicitly forbade subagents; route plans and classifier hints cannot delegate this task.');
   }
-  const testKind = action.testExecution
+  const testScope = classifyTestExecutionScope({ toolName, text });
+  const testAttempt = testScope !== 'none';
+  const fullSuiteExcluded = (descriptor.testExclusions ?? []).includes('full-suite');
+  if (fullSuiteExcluded && testAttempt && testScope !== 'focused') {
+    return protectedConstraintBlock(
+      'test-kind-forbidden',
+      'The user excluded the full test suite. Only one directly classifiable focused test target or an explicitly named unit, integration, e2e, or smoke suite is authorized; aggregate, wrapped, generic, or opaque runners are forbidden.',
+    );
+  }
+  const testKind = testAttempt
     ? toolName === 'omp_test_browser_check' ? 'e2e' : testKindForCommand(text)
     : null;
   const testAllowlist = Array.isArray(descriptor.testAllowlist) ? descriptor.testAllowlist : [];
-  if (action.testExecution && testAllowlist.length && (!testKind || !testAllowlist.includes(testKind))) {
+  if (testAttempt && testAllowlist.length
+    && (testScope !== 'focused' || !testKind || !testAllowlist.includes(testKind))) {
     return protectedConstraintBlock(
       'test-kind-authorization-required',
       `The user authorized only ${testAllowlist.join(', ')} tests. ${testKind ? `${testKind} is outside that allowlist.` : 'This generic test command does not prove which test kind it will execute.'} Use an explicitly named allowed test target; do not retry with an alias or aggregate suite.`,
     );
   }
   const exactTestTargets = Array.isArray(descriptor.testExecutionTargets) ? descriptor.testExecutionTargets : [];
-  if (action.testExecution && exactTestTargets.length) {
+  if (testAttempt && exactTestTargets.length) {
     const observedTestTargets = testExecutionTargetsInCommand(text);
     const outsideTarget = observedTestTargets.find((target) => !exactTestTargets.some((allowed) => exactTestPathMatches(target, allowed)));
     const incompleteOrReorderedTargets = observedTestTargets.length !== exactTestTargets.length
@@ -2771,10 +2785,9 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
       `The user authorized selected tests but explicitly excluded ${excludedTestKind} tests. Choose an authorized test kind; do not retry with an equivalent ${excludedTestKind} runner.`,
     );
   }
-  if (action.testExecution && constraints.testExecution === 'forbidden') {
+  if (testAttempt && constraints.testExecution === 'forbidden') {
     return protectedConstraintBlock('test-execution-forbidden', 'The user explicitly forbade test execution; classifier or workflow hints cannot override that constraint.');
   }
-
   if (action.networkAccess && constraints.networkAccess === 'forbidden') {
     return protectedConstraintBlock('network-access-forbidden', 'The user explicitly forbade network access; web, fetch, remote shell, and provider calls are not authorized.');
   }
@@ -2783,8 +2796,22 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
     && !exactLocalTestCommandAuthorized) {
     return protectedConstraintBlock('network-access-unverifiable', 'This opaque script or automation target can execute hidden network effects, so it cannot run while the user has explicitly forbidden network access. Inspect it or use a directly classifiable local command.');
   }
+  if ((action.opaqueEffects || action.unverifiableTestEffects) && constraints.testExecution === 'forbidden') {
+    return protectedConstraintBlock(
+      'test-execution-unverifiable',
+      'The user explicitly forbade test execution. This opaque command can hide a test runner, so it cannot run even when another external or workspace action is authorized. Use a directly classifiable non-test command; do not retry through an interpreter, pipe, or wrapper.',
+    );
+  }
+  if (action.opaqueEffects && constraints.subagents === 'forbidden') {
+    return protectedConstraintBlock(
+      'subagent-effects-unverifiable',
+      'The user explicitly forbade subagents. This opaque command can hide an agent CLI or delegated process, so it cannot run even when another action is authorized. Use a directly classifiable main-agent command; do not retry through an interpreter, pipe, or wrapper.',
+    );
+  }
   const workspaceScopeBlock = scopedWorkspaceActionBlock(descriptor, action, event, text, ctx);
   if (workspaceScopeBlock) return workspaceScopeBlock;
+  const testArtifactScopeBlock = primaryTestAuthoringWorkspaceActionBlock(descriptor, action, event, text, ctx);
+  if (testArtifactScopeBlock) return testArtifactScopeBlock;
   const externalScopeBlock = scopedExternalActionBlock(descriptor, action, text);
   if (externalScopeBlock) return externalScopeBlock;
   if (action.externalWrite
@@ -2872,6 +2899,12 @@ function buildProtectedActionBoundaryBlock(state, toolName = '', event = {}, ctx
   }
   if (action.opaqueEffects && !action.externalWrite && constraints.externalWrite !== 'required') {
     return protectedConstraintBlock('external-effects-unverifiable', 'This opaque script or automation target can hide remote mutations, so it cannot run without explicit external-write authorization. Inspect it or use a directly classifiable local command.');
+  }
+  if (action.opaqueEffects && !action.externalWrite) {
+    return protectedConstraintBlock(
+      'protected-effects-unverifiable',
+      'This opaque command can hide destructive, delegated, test, workspace, network, or external effects that the host cannot bind to the active route and approval chain. Use directly classifiable commands or inspect the implementation first; external-write authorization for one target does not authorize hidden side effects.',
+    );
   }
   const preservationBoundary = prepareDocumentPreservationToolCall(state, toolName, event, action, ctx);
   if (preservationBoundary) return preservationBoundary;
@@ -3017,7 +3050,13 @@ function testKindForCommand(command = '') {
     e2e: /(?:^|[\s:_./-])(?:e2e|end-to-end|playwright|cypress|webdriver|selenium|browser-smoke)(?:$|[\s:_./-])/,
     smoke: /(?:^|[\s:_./-])smoke(?:$|[\s:_./-])/,
   };
-  return ['unit', 'integration', 'e2e', 'smoke'].find((kind) => patterns[kind].test(text)) ?? null;
+  const namedKind = ['unit', 'integration', 'e2e', 'smoke'].find((kind) => patterns[kind].test(text));
+  if (namedKind) return namedKind;
+  const aggregateSuite = /^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test(?:\s|$)/.test(text.trim())
+    || /^node\s+--test\s*$/.test(text.trim())
+    || /^go\s+test\s+\.\/\.\.\.\s*$/.test(text.trim())
+    || /^(?:python\s+-m\s+)?pytest\s*(?:\.|\.\/)?\s*$/.test(text.trim());
+  return aggregateSuite ? 'full-suite' : null;
 }
 
 function testExecutionTargetsInCommand(command = '') {
@@ -3075,6 +3114,43 @@ function scopedWorkspaceActionBlock(descriptor, action, event = {}, actionText =
     );
   }
   return null;
+}
+
+function primaryTestAuthoringWorkspaceActionBlock(descriptor, action, event = {}, actionText = '', ctx = {}) {
+  const primaryTestAuthoring = (descriptor?.provenance?.reasons ?? [])
+    .includes('primary direct test authoring requested');
+  if (!primaryTestAuthoring || (!action.workspaceWrite && !action.definiteWorkspaceMutation)) return null;
+
+  if (action.opaqueEffects || action.unverifiableWorkspaceEffects) {
+    return protectedConstraintBlock(
+      'workspace-test-artifact-authorization-required',
+      'This test-authoring route permits writes only to directly attributable test artifacts. Opaque scripts and automation do not prove their mutation targets; use a direct edit, write, or patch whose every target is a test artifact.',
+    );
+  }
+
+  const observed = workspaceActionTargets(event, actionText, ctx);
+  const outsideTestArtifacts = observed.filter((target) => !isTestArtifactWorkspacePath(target));
+  if (!observed.length || outsideTestArtifacts.length) {
+    const targetSummary = outsideTestArtifacts.length
+      ? outsideTestArtifacts.join(', ')
+      : 'no verifiable workspace target';
+    return protectedConstraintBlock(
+      'workspace-test-artifact-authorization-required',
+      `The user authorized test authoring, not production-code changes. This mutation resolves to ${targetSummary}. Use one directly attributable target below test/, tests/, __tests__, or another conventional *.test.*, *.spec.*, test_*.py, or *_test.go test artifact; do not modify production files or retry through a script.`,
+    );
+  }
+  return null;
+}
+
+function isTestArtifactWorkspacePath(value = '') {
+  const normalized = posix.normalize(String(value).trim().replace(/\\/g, '/').replace(/^\.\//, ''));
+  if (!normalized || normalized === '.' || normalized === '..' || normalized.startsWith('../')) return false;
+  const lower = normalized.toLowerCase();
+  const name = basename(lower);
+  return /(?:^|\/)(?:tests?|__tests__|__snapshots__)(?:\/|$)/u.test(lower)
+    || /\.(?:test|spec)\.[^/]+$/u.test(name)
+    || /^test_[^/]+\.(?:py|rb|php)$/u.test(name)
+    || /_test\.go$/u.test(name);
 }
 
 function directWorkspaceActionTargetOutsideRoot(event = {}, ctx = {}) {
@@ -3395,7 +3471,7 @@ function readActionBoundaryState(value) {
   return {
     schemaVersion: 1,
     denialCount,
-    terminal: value.terminal === true || Object.values(reasonCounts).some((count) => count >= 2),
+    terminal: value.terminal === true || denialCount >= 2 || Object.values(reasonCounts).some((count) => count >= 2),
     awaitingUserReason: USER_INPUT_ACTION_BLOCKERS.has(value.awaitingUserReason)
       ? value.awaitingUserReason
       : null,
@@ -3413,7 +3489,7 @@ function recordProtectedActionDenial(state, boundary, toolName = '', event = {})
   current.reasonCounts[boundary.reasonCode] = Math.min(2, (current.reasonCounts[boundary.reasonCode] ?? 0) + 1);
   current.fingerprints = [...new Set([...current.fingerprints, fingerprint])].slice(-2);
   if (REPAIRABLE_ACTION_BLOCKERS.has(boundary.reasonCode)) {
-    current.terminal = current.reasonCounts[boundary.reasonCode] >= 2;
+    current.terminal = current.denialCount >= 2 || current.reasonCounts[boundary.reasonCode] >= 2;
     state.actionBoundary = current;
     if (!current.terminal) {
       return {
@@ -3439,7 +3515,7 @@ function recordProtectedActionDenial(state, boundary, toolName = '', event = {})
       reason: `${boundary.reason} Stop tool use now and ask the user once; the completion gate will allow that clarification message without a repair loop.`,
     };
   }
-  current.terminal = current.reasonCounts[boundary.reasonCode] >= 2;
+  current.terminal = current.denialCount >= 2 || current.reasonCounts[boundary.reasonCode] >= 2;
   state.actionBoundary = current;
   if (!current.terminal) {
     return {
@@ -5850,7 +5926,7 @@ function parseNodeTestSummary(value = '') {
 }
 
 function isNonExecutingTestProbe(command = '') {
-  return /(?:^|\s)(?:--help|-h|--listtests|--list-tests|--collect-only|--passwithnotests)(?:\s|$)/i.test(String(command));
+  return /(?:^|\s)(?:--help|-h|--listtests|--list-tests|--collect-only|--passwithnotests|-list(?:=\S+)?)(?:\s|$)/i.test(String(command));
 }
 
 function recordFocusedLocalFactEvidence(state, toolName = '', event = {}, { successful = false } = {}) {
@@ -6115,10 +6191,64 @@ function focusedFactPathsMatch(observedPath = '', claimPath = '') {
 function focusedFactConclusionMatchesEvidence(state, output = '') {
   const evidence = readFocusedFactEvidenceRecord(state.evidence.focusedFactEvidence);
   if (!evidence || evidence.routeId !== gateControllerRouteId(state)) return false;
-  const conclusion = classifyFocusedFactConclusion(output);
-  if (conclusion.kind === 'insufficient') return true;
+  const verdict = extractFocusedFactVerdict(output);
+  if (!verdict) return false;
+  const prose = String(output).replace(/(?:^|\n)\s*FACT_VERDICT\s*:\s*(?:INSUFFICIENT|SUPPORTED|CONTRADICTED)\s*(?=\n|$)/giu, '\n');
+  const conclusion = classifyFocusedFactConclusion(prose);
+  if (conclusion.kind !== verdict) return false;
+  if (verdict === 'insufficient') {
+    const claimPaths = extractFocusedFactClaimPaths(state.lastPrompt);
+    const claimText = focusedFactRestatementClaimText(state.lastPrompt, claimPaths);
+    return !hasAffirmativeFocusedFactRestatement(prose, claimText);
+  }
   return evidence.independentMatchObserved === true
-    && (conclusion.kind === 'supported' || conclusion.kind === 'contradicted');
+    && (verdict === 'supported' || verdict === 'contradicted');
+}
+
+function hasAffirmativeFocusedFactRestatement(value = '', claimText = '') {
+  const claimTokens = focusedFactLexicalTokens(claimText);
+  if (!claimTokens.length) return false;
+  return String(value).split(/[.!?。！？\n;；]+/u).some((clause) => {
+    if (/\b(?:insufficient|unverified|unproven|unsupported|unconfirmed|unresolved|inconclusive|cannot|unable|not)\b|(?:证据不足|未验证|未证实|未确认|不受支持|无法|不能|不足以|没有|未找到)/iu.test(clause)) return false;
+    if (!/\b(?:is|are|was|were|equals?|remains?|holds?)\b|(?:为|是|等于|成立|属实|正确|准确)/iu.test(clause)) return false;
+    const normalized = focusedFactLexicalText(clause);
+    const tokens = new Set(focusedFactLexicalTokens(normalized));
+    const exactRestatement = claimTokens.every((token) => /^[\u3400-\u9fff]+$/u.test(token)
+      ? normalized.includes(token)
+      : tokens.has(token));
+    const numericClaimTokens = claimTokens.filter((token) => /\d/u.test(token));
+    return exactRestatement || numericClaimTokens.length > 0
+      && numericClaimTokens.every((token) => tokens.has(token));
+  });
+}
+
+function focusedFactRestatementClaimText(value = '', claimPaths = []) {
+  const source = String(value).normalize('NFKC');
+  const afterPath = source.match(/(?:^|[\s"'`(])(?:\.\.?\/)?(?:[a-z0-9_.@-]+\/)*[a-z0-9_.@-]+\.[a-z0-9]{1,12}\s*(?:中|里|内)\s*([^。！？!?\n]{1,240}?)(?=\s*(?:是否|能否).{0,32}(?:证据|支持|支撑))/iu);
+  if (afterPath?.[1]) {
+    const lexical = focusedFactLexicalText(afterPath[1]);
+    if (lexical) return lexical;
+  }
+  const explicitClaim = source.match(/\bclaim\s+(?:that\s+)?([^.!?\n]{1,160}?)(?=\s*(?:is\s+supported|has\s+support|$|[.;!?]))/iu);
+  if (explicitClaim?.[1]) {
+    const lexical = focusedFactLexicalText(explicitClaim[1]);
+    if (lexical) return lexical;
+  }
+  return focusedFactClaimLexicalText(source, claimPaths);
+}
+
+function extractFocusedFactVerdict(value = '') {
+  const text = String(value).trimEnd();
+  const controlLines = [...text.matchAll(/(?:^|\n)\s*FACT_VERDICT\s*:[^\n]*(?=\n|$)/giu)];
+  if (controlLines.length !== 1) return null;
+  const match = controlLines[0];
+  const valid = match[0].trim().match(/^FACT_VERDICT\s*:\s*(INSUFFICIENT|SUPPORTED|CONTRADICTED)$/iu);
+  if (!valid) return null;
+  if ((match.index ?? -1) + match[0].length !== text.length) return null;
+  const prefix = text.slice(0, match.index ?? 0);
+  const openFences = [...prefix.matchAll(/^\s*(?:```|~~~)/gmu)].length;
+  if (openFences % 2 !== 0) return null;
+  return valid[1].toLowerCase();
 }
 
 function classifyFocusedFactConclusion(value = '') {
@@ -6127,21 +6257,13 @@ function classifyFocusedFactConclusion(value = '') {
     || /(?:并非|不是|非)\s*(?:证据不足|没有独立证据|无独立证据|未找到独立证据|不属实|不正确|不准确|错误)/u.test(text)) {
     return { kind: 'mixed' };
   }
-  const decisiveNegativePatterns = [
-    /\bnot\s+(?:true|accurate|correct|valid)\b/giu,
-    /(?:不属实|不正确|不准确|不真实)/gu,
-  ];
   let residual = text;
-  const decisiveNegative = decisiveNegativePatterns.some((pattern) => {
-    pattern.lastIndex = 0;
-    const matched = pattern.test(residual);
-    pattern.lastIndex = 0;
-    if (matched) residual = residual.replace(pattern, ' ');
-    return matched;
-  });
   const insufficientPatterns = [
     /\bnot\s+(?:independently\s+)?supported\b/giu,
-    /\b(?:unsupported|insufficient\s+(?:repository\s+)?evidence|(?:repository\s+)?evidence\s+(?:is|was|remains)\s+insufficient|not\s+enough\s+evidence|no\s+independent\s+(?:repository\s+)?evidence|cannot\s+(?:confirm|support|verify|contradict)|unable\s+to\s+(?:confirm|support|verify|contradict))\b/giu,
+    /\b(?:the|this)\s+(?:claim|statement|assertion)\s+(?:is|was|remains)\s+(?:currently\s+)?(?:unverified|unproven|unsupported|unresolved|inconclusive|not\s+(?:proven|verified|confirmed)|under\s+review)\b/giu,
+    /\b(?:no|zero)\b[^.!?\n]{0,120}\b(?:can|could|is\s+able\s+to)\s+(?:independently\s+)?(?:support|confirm|verify|contradict|corroborate)\b/giu,
+    /\b(?:unsupported|insufficient\s+(?:repository\s+)?evidence|(?:repository\s+)?evidence\s+(?:(?:is|was|remains)\s+)?insufficient|not\s+enough\s+evidence|no\s+independent\s+(?:repository\s+)?evidence|cannot\s+(?:confirm|support|verify|contradict)|unable\s+to\s+(?:confirm|support|verify|contradict))\b/giu,
+    /(?:没有|无|未找到|不存在)[^。！？\n]{0,120}(?:能|能够|可以|足以)(?:独立)?(?:支持|证实|确认|验证|反驳)/gu,
     /(?:证据不足|没有|未找到|无)独立证据/gu,
     /(?:证据不足|不足以支持|无法支持|不能支持|未得到支持|无法证实|不能确认|无法确认|无法反驳|不能反驳)/gu,
   ];
@@ -6149,14 +6271,64 @@ function classifyFocusedFactConclusion(value = '') {
     pattern.lastIndex = 0;
     return pattern.test(residual);
   });
+  if (insufficient && hasConflictingFocusedFactAssertion(text, insufficientPatterns)) return { kind: 'mixed' };
   for (const pattern of insufficientPatterns) residual = residual.replace(pattern, ' ');
-  const supported = /\b(?:support(?:ed|s)?|confirm(?:ed|s)?|corroborat(?:ed|es?)|substantiat(?:ed|es?)|validat(?:ed|es?)|true|accurate|correct|valid)\b|(?:得到|获得|有|证据)支持|证实|证据充分|属实|正确|准确|真实/iu.test(residual);
-  const contradicted = decisiveNegative
-    || /\b(?:contradict(?:ed|s)?|refut(?:ed|es?)|disprov(?:ed|es?)|false|incorrect|inaccurate|wrong)\b|(?:反驳|矛盾|并非事实|证明为假|错误)/iu.test(residual);
+  const { supported, contradicted } = classifyExplicitFocusedFactVerdict(residual);
   if (insufficient && !supported && !contradicted) return { kind: 'insufficient' };
   if (!insufficient && supported && !contradicted) return { kind: 'supported' };
   if (!insufficient && contradicted && !supported) return { kind: 'contradicted' };
   return { kind: supported || contradicted || insufficient ? 'mixed' : 'unknown' };
+}
+
+function hasConflictingFocusedFactAssertion(value = '', insufficientPatterns = []) {
+  const clauses = String(value).split(/[.!?。！？\n;；]+/u).map((clause) => clause.trim()).filter(Boolean);
+  return clauses.some((clause) => {
+    const containsInsufficient = insufficientPatterns.some((pattern) => {
+      pattern.lastIndex = 0;
+      return pattern.test(clause);
+    });
+    if (containsInsufficient) return false;
+    const englishClaimAssertion = /\b(?:(?:the|this)\s+)?(?:claim|statement|assertion|proposition)\b[^.!?\n]{0,48}(?:(?:is|was|remains|appears\s+to\s+be)\s+(?:proven|proved|verified|established|supported|confirmed|corroborated|substantiated|validated|true|accurate|correct|valid|false|incorrect|inaccurate|wrong|refuted|disproved|disproven|invalid)|holds?\b)/iu.test(clause);
+    const englishFirstPersonAssertion = /\bi\s+(?:still\s+)?(?:accept|consider|regard|believe|treat)\s+(?:it|the\s+(?:claim|statement|assertion|proposition))\s+(?:as\s+)?(?:a\s+)?(?:fact|true|proven|proved|verified|established|supported|false|wrong|invalid)\b/iu.test(clause);
+    const englishPronounAssertion = /\b(?:(?:it|this|that)\s+(?:is|remains)\s+(?:true|false|correct|incorrect|accurate|inaccurate|proven|proved|established|supported|confirmed|refuted|wrong|invalid)|(?:but|still|nevertheless|however)\s+(?:(?:it|this|that)\s+(?:is|remains)\s+)?(?:true|false|correct|incorrect|accurate|inaccurate|proven|proved|established|supported|confirmed|refuted|wrong|invalid))\b/iu.test(clause);
+    const chineseClaimAssertion = /(?:该|此|这个)?(?:陈述|声明|断言|结论|说法|命题)[^。！？\n]{0,48}(?:为真|为假|是真的|是假的|成立|不成立|属实|不属实|正确|不正确|准确|不准确|真实|不真实|可信|不可信|可靠|不可靠|错误|得到支持|被反驳|证实|确认|证明)/u.test(clause);
+    const chineseFirstPersonAssertion = /我[^。！？\n]{0,16}(?:仍然|还是)?(?:认为|认定|接受|相信)[^。！？\n]{0,16}(?:它|其|该(?:陈述|声明|断言|结论)|这个(?:陈述|声明|断言|结论))[^。！？\n]{0,16}(?:为真|是真的|成立|属实|正确|错误|为假|不成立)/u.test(clause);
+    const chinesePronounAssertion = /(?:(?:这|它|这个)\s*(?:是真的|是假的|为真|为假|成立|不成立|属实|不属实|正确|不正确|错误)|(?:但|不过|仍然|还是)\s*(?:(?:这|它|这个)\s*)?(?:是真的|是假的|为真|为假|成立|不成立|属实|不属实|正确|不正确|错误))/u.test(clause);
+    return englishClaimAssertion || englishFirstPersonAssertion
+      || englishPronounAssertion || chineseClaimAssertion || chineseFirstPersonAssertion
+      || chinesePronounAssertion;
+  });
+}
+
+function classifyExplicitFocusedFactVerdict(value = '') {
+  const text = String(value);
+  const claim = String.raw`(?:the|this)\s+(?:claim|statement|assertion)`;
+  const evidence = String.raw`(?:independent\s+)?(?:repository\s+)?evidence`;
+  const supportedPatterns = [
+    new RegExp(String.raw`\b${claim}\s+(?:is|was|remains|appears\s+to\s+be)\s+(?:independently\s+)?(?:supported|confirmed|corroborated|substantiated|validated|proven|proved|verified|established|true|accurate|correct|valid)\b`, 'iu'),
+    new RegExp(String.raw`\b${evidence}\s+(?:supports?|confirms?|corroborates?|substantiates?|validates?)\s+${claim}\b`, 'iu'),
+    new RegExp(String.raw`\b${evidence}\s+(?:shows?|demonstrates?|indicates?)\s+that\s+${claim}\s+(?:is|was)\s+(?:true|accurate|correct|valid)\b`, 'iu'),
+    /(?:该|此|这个)?(?:陈述|声明|断言|结论)[^。！？\n]{0,24}(?:(?:得到|获得|受到)[^。！？\n]{0,12}支持|(?<!不)(?:为真|成立|属实|正确|准确|真实|可信|可靠))/u,
+    /(?:独立的?)?(?:仓库内?)?证据[^。！？\n]{0,12}(?:支持|证实|确认)(?:了)?(?:该|此|这个)?(?:陈述|声明|断言|结论)/u,
+    /(?:独立的?)?(?:仓库内?)?证据[^。！？\n]{0,12}(?:表明|显示|证明)(?:了)?(?:该|此|这个)?(?:陈述|声明|断言|结论)[^。！？\n]{0,8}(?<!不)(?:属实|正确|准确|真实)/u,
+    /(?:^|\n)\s*(?:verdict|conclusion|status)\s*:\s*(?:supported|confirmed|corroborated|substantiated|validated|true|accurate|correct|valid)\b/iu,
+    /(?:^|\n)\s*(?:判定|结论|状态)\s*[：:]\s*(?:得到支持|支持|属实|正确|准确|真实)(?:\s|$)/u,
+  ];
+  const contradictedPatterns = [
+    new RegExp(String.raw`\b${claim}\s+(?:is|was|remains|appears\s+to\s+be)\s+(?:contradicted|refuted|disproved|disproven|not\s+true|false|incorrect|inaccurate|wrong|invalid)\b`, 'iu'),
+    new RegExp(String.raw`\b${evidence}\s+(?:contradicts?|refutes?|disproves?)\s+${claim}\b`, 'iu'),
+    new RegExp(String.raw`\b${evidence}\s+(?:shows?|demonstrates?|indicates?)\s+that\s+${claim}\s+(?:is|was)\s+(?:not\s+true|false|incorrect|inaccurate|wrong)\b`, 'iu'),
+    /(?:该|此|这个)?(?:陈述|声明|断言|结论)[^。！？\n]{0,24}(?:被反驳|为假|不成立|不属实|不正确|不准确|不真实|不可信|不可靠|错误)/u,
+    /(?:独立的?)?(?:仓库内?)?证据[^。！？\n]{0,12}(?:反驳)(?:了)?(?:该|此|这个)?(?:陈述|声明|断言|结论)/u,
+    /(?:独立的?)?(?:仓库内?)?证据[^。！？\n]{0,12}(?:与)?(?:该|此|这个)?(?:陈述|声明|断言|结论)[^。！？\n]{0,8}(?:矛盾)/u,
+    /(?:独立的?)?(?:仓库内?)?证据[^。！？\n]{0,12}(?:表明|显示|证明)(?:了)?(?:该|此|这个)?(?:陈述|声明|断言|结论)[^。！？\n]{0,8}(?:错误|不属实|不正确|不准确|不真实)/u,
+    /(?:^|\n)\s*(?:verdict|conclusion|status)\s*:\s*(?:contradicted|refuted|disproved|false|incorrect|inaccurate|wrong)\b/iu,
+    /(?:^|\n)\s*(?:判定|结论|状态)\s*[：:]\s*(?:被反驳|不属实|不正确|不准确|不真实|错误)(?:\s|$)/u,
+  ];
+  return {
+    supported: supportedPatterns.some((pattern) => pattern.test(text)),
+    contradicted: contradictedPatterns.some((pattern) => pattern.test(text)),
+  };
 }
 
 function recordSecurityInspectionEvidence(state, toolName = '', event = {}, { successful = false } = {}) {

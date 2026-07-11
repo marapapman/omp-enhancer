@@ -65,9 +65,9 @@ const profiles = {
   },
   writingZh: {
     prompts: [
-      '请把这段中文论文摘要改得更平实。',
-      '帮我润色博士论文引言，去掉翻译腔。',
       '请起草一份中文项目报告。',
+      '帮我润色博士论文引言，去掉翻译腔。',
+      '请把这段中文论文摘要改得更平实。',
       '请检查这段中文相关工作的逻辑表达。',
       '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。',
       '请写一份中文科研调研报告，分析最近论文里的方法路线。',
@@ -92,14 +92,14 @@ const profiles = {
   },
   bugAudit: {
     prompts: [
+      '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
+      'Run tests and audit for bugs; write a bug report without fixing code.',
       'Write tests for src/router.js around fallback behavior.',
       'Add tests for classifier routing confidence thresholds.',
       'Create regression tests for the skill gate parser.',
       'Run unit tests for the marketplace release script.',
       'Review test flakiness around the browser smoke suite.',
-      '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
       '测试整个项目并检查 bug，输出已验证的问题清单。',
-      'Run tests and audit for bugs; write a bug report without fixing code.',
       'Find bugs in the project and report verified findings only.',
       'Inspect the plugin for defects and summarize concrete file-line findings.',
       '帮我在代码里找 bug，只报告问题，不要修复。',
@@ -122,20 +122,18 @@ const profiles = {
       'Run a direct focused bug investigation for this plugin without fixing code.',
     ],
     subagents: {},
-    skills: ['diagnose', 'test-driven-development', 'verification-before-completion', 'search-first'],
-    gateTool: 'omp_test_gate',
-    missingGate: /omp_test_gate/,
+    skills: [],
   },
   implementation: {
     prompts: [
+      '请大规模重构这个插件的 subagent fork 逻辑，修改多个文件并补完整测试。',
+      'Agentically update the codebase to improve gate handling and add regression tests.',
       'Implement classifier fallback handling and add tests.',
       'Fix the plugin gate bug and add regression tests.',
       'Modify the marketplace release logic and test it.',
       'Refactor the router code with focused unit tests.',
       'Build the config workflow and cover error paths.',
-      '请大规模重构这个插件的 subagent fork 逻辑，修改多个文件并补完整测试。',
       '只修改 plugins/omp-enhancer-core/src/router.js 里 routeNaturalLanguageTask 的一个判断，保持范围最小。',
-      'Agentically update the codebase to improve gate handling and add regression tests.',
     ],
     subagents: {
       plan: ['brainstorming', 'subagent-driven-development'],
@@ -168,11 +166,9 @@ const profiles = {
       'Show marketplace config asset paths.',
       'Review bundled hooks and templates in omp-config.',
     ],
-    subagents: {
-      'config-librarian': [],
-      reviewer: [],
-    },
-    skills: [],
+    subagents: {},
+    skills: ['omp-marketplace-plugin-activation'],
+    hardSkillGate: false,
   },
 };
 
@@ -296,7 +292,7 @@ function missingSkillCases() {
     const blocked = await event(pi, 'session_stop')({}, ctx);
     assert.equal(blocked?.continue, true);
     assert.match(blocked.additionalContext, /SKILL_USAGE/);
-  }, (profile) => profile.skills.length > 0);
+  }, (profile) => profile.skills.length > 0 && profile.hardSkillGate !== false);
 }
 
 function recoveryCases() {
@@ -495,7 +491,7 @@ function fakeZod() {
 }
 
 const LIFECYCLE_IMPLEMENTATION_PROMPT =
-  'Modify src/router.js to add deterministic fallback, add tests, and review the diff.';
+  'Refactor the routing implementation across multiple files, add regression tests, and review the diff.';
 const LIFECYCLE_SOFT_PROMPT =
   'Please draft a full English research proposal with background, methods, risks, and timeline.';
 const LIFECYCLE_PROTECTED_PROMPT =

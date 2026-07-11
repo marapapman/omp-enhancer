@@ -202,7 +202,52 @@ test('workload matrix routes to the expected agent, tools, skills, and subagents
 });
 
 function expectedForRoute(expectedIntent, route) {
+  const primaryTestAuthoring = (route.taskDescriptor?.provenance?.reasons ?? [])
+    .includes('primary direct test authoring requested');
+  if (expectedIntent === 'bug-audit' && primaryTestAuthoring) {
+    return {
+      agent: 'tester',
+      requiredSkills: ['test-driven-development', 'verification-before-completion'],
+      requiredTools: ['omp_test_gate'],
+      subagents: {},
+    };
+  }
+  if (expectedIntent === 'bug-audit' && route.taskDescriptor?.complexity === 'focused') {
+    return {
+      agent: 'tester',
+      requiredSkills: route.routePlan.requiredSkills,
+      requiredTools: route.routePlan.requiredTools,
+      subagents: Object.fromEntries(route.routePlan.requiredSubagents.map(({ agent, requiredSkills }) => [agent, requiredSkills])),
+    };
+  }
   if (expectedIntent === 'bug-audit' && route.auditMode === 'focused') return focusedBugAuditExpected;
+  if (expectedIntent === 'implementation-with-tests' && route.taskDescriptor?.complexity === 'focused') {
+    const testsRequired = route.taskDescriptor.constraints.testExecution === 'required';
+    return {
+      agent: 'implementer',
+      requiredSkills: testsRequired
+        ? ['test-driven-development', 'verification-before-completion']
+        : ['verification-before-completion'],
+      requiredTools: testsRequired ? ['omp_test_gate'] : [],
+      subagents: {},
+    };
+  }
+  if (expectedIntent === 'config-assets' && route.taskDescriptor?.complexity === 'focused') {
+    return {
+      agent: 'config-assets',
+      requiredSkills: ['omp-marketplace-plugin-activation'],
+      requiredTools: ['omp_config_doctor', 'omp_config_assets', 'omp_config_plan'],
+      subagents: {},
+    };
+  }
+  if (expectedIntent === 'diagnosis' && route.taskDescriptor?.complexity === 'focused') {
+    return {
+      agent: null,
+      requiredSkills: [],
+      requiredTools: [],
+      subagents: {},
+    };
+  }
   if (route.writingComplexity === 'simple') return simpleWritingExpectedByIntent[expectedIntent];
   return expectedByIntent[expectedIntent];
 }

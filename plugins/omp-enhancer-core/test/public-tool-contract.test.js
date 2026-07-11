@@ -140,6 +140,34 @@ test('the public route tool exposes exact tests as first-class bounded testing w
   }
 });
 
+test('the public route tool never advertises forbidden fact-check subagents', async () => {
+  const previous = process.env.OMP_ROUTER_V2_MODE;
+  const prompt = '离线核查 docs/notes.md 中 The stable fact is 42 是否能由仓库内证据支持。禁止联网，禁止修改任何文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。若证据不足就明确报告证据不足。';
+  try {
+    for (const mode of ['observe', 'enforce']) {
+      process.env.OMP_ROUTER_V2_MODE = mode;
+      const pi = new FakePi();
+      registerCoreEnhancer(pi);
+      const result = await pi.tools.get('omp_core_route_task').execute(
+        `focused-fact-${mode}`,
+        { prompt },
+        undefined,
+        undefined,
+        extensionContext(pi.entries),
+      );
+      assert.deepEqual(result.details.route.requiredSkills, [], mode);
+      assert.deepEqual(result.details.route.requiredTools, [], mode);
+      assert.deepEqual(result.details.route.requiredSubagents, [], mode);
+      assert.equal(result.details.route.shouldForkSubagents, false, mode);
+      assert.match(result.content[0].text, /Required subagents: none/i, mode);
+      assert.doesNotMatch(result.content[0].text, /fact-planner|fact-researcher|fact-reviewer/i, mode);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.OMP_ROUTER_V2_MODE;
+    else process.env.OMP_ROUTER_V2_MODE = previous;
+  }
+});
+
 test('the public route tool isolates writing payload authority in observe and enforce modes', async () => {
   const previous = process.env.OMP_ROUTER_V2_MODE;
   try {

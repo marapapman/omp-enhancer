@@ -560,9 +560,9 @@
         ]
       },
       "legacy": {
-        "intent": "implementation-with-tests",
-        "workflowRoute": "code.dev",
-        "gateMode": "test-review-gate"
+        "intent": "security-review",
+        "workflowRoute": "security.review",
+        "gateMode": "security-gate"
       }
     }
   },
@@ -614,9 +614,9 @@
         ]
       },
       "legacy": {
-        "intent": "implementation-with-tests",
-        "workflowRoute": "code.dev",
-        "gateMode": "test-review-gate"
+        "intent": "security-review",
+        "workflowRoute": "security.review",
+        "gateMode": "security-gate"
       }
     }
   },

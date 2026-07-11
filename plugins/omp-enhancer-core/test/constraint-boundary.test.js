@@ -11,6 +11,60 @@ const RELEASE_SHA_AFTER = '89abcdef0123456789abcdef0123456789abcdef';
 const RELEASE_REMOTE = 'https://github.com/org/repo.git';
 const RELEASE_AUTH_PROMPT = `Push commit ${RELEASE_SHA_AFTER} to ${RELEASE_REMOTE} at refs/heads/main.`;
 
+function exhaustCommandExpansion(command) {
+  return `${'strace '.repeat(8)}${command}`;
+}
+
+const EXTENDED_AGGREGATE_TEST_COMMANDS = [
+  'sudo -u runner npm test', 'sudo --preserve-env=CI npm test',
+  'command -- npm test', 'env -i PATH=/usr/bin npm test', 'env -u NODE_ENV npm test',
+  'docker --context remote run --rm image npm test', 'docker container exec ctr npm test',
+  'docker --context remote compose run --rm svc npm test', 'podman --connection dev run image npm test',
+  'kubectl exec pod -- npm test', 'kubectl exec -c app pod -- sh -lc "npm test"',
+  'kubectl run test-pod --image=node -- npm test',
+  'uv run pytest', 'poetry run pytest',
+  'npm t', 'npm --silent t', 'corepack npm t', 'mise exec -- npm t',
+  'npm run-script test', 'yarn run-script test', 'pnpm run-script test',
+  'npx --package=vitest vitest run', 'npm exec --package=vitest -- vitest run',
+  'cargo +nightly test', 'bazel --output_base=/tmp/b test //...',
+  'node --experimental-test-coverage --test', 'task test', 'nx test app', 'turbo run test',
+  'bash --noprofile --norc -c "npm test"', 'bash -o pipefail -c "npm test"',
+  'sh -o errexit -c "npm test"', 'bash -c "npm test" runner0', 'bash -lc "npm test" --',
+  'dash -c "npm test"', 'fish -c "npm test"',
+  'nohup command timeout 30 env CI=1 npm test &', '(npm test) &',
+  'NODE_OPTIONS="--max-old-space-size=4096 --trace-warnings" npm test',
+  "TEST_FLAGS='--runInBand --detectOpenHandles' npm test",
+  'cross-env-shell NODE_OPTIONS="--trace-warnings --no-deprecation" "npm test"',
+  'env --split-string="npm test"',
+  'pnpm vitest', 'yarn jest', 'pnpm playwright test',
+  'coverage run -m pytest', 'conda run pytest', 'bundle exec rake test', 'rake test',
+  'composer test', 'php artisan test', 'php vendor/bin/phpunit', 'ant test',
+  'mise run test', 'lerna run test', 'rush test', 'xvfb-run npm test',
+  'cross-env CI=1 npm test', 'flock /tmp/t.lock npm test', 'sbt -batch test',
+  'meson test -C build', 'ninja -C build test', 'pdm run pytest',
+  'bazel --output_base /tmp/b test //...', 'bazel --bazelrc .bazelrc test //...',
+  'cargo --manifest-path Cargo.toml test', 'cargo --color always test',
+  'deno --config deno.json test',
+  'npm tst', 'bunx --bun vitest run',
+  'gotestsum -- ./...', 'go tool gotestsum -- ./...',
+  'sbt "testOnly foo.BarSpec"', 'lein with-profile test test',
+  'echo --dry-run && npm test', 'make --dry-run lint && npm test',
+  'npm test && echo --dry-run', 'git push --dry-run origin main; npm test',
+  'make -n lint && npm test', 'ctest -N && npm test',
+  'ninja -n build && npm test', 'npm test -- --dry-run',
+  'sudo --non-interactive npm test', 'sudo --preserve-env CI=1 npm test',
+  'env --ignore-environment npm test', 'npx -c "npm test"', 'npm exec -c "npm test"',
+  'flock --verbose /tmp/t.lock npm test', 'docker compose --ansi never run --rm svc npm test',
+  'parallel npm test ::: one', 'find . -type f -name package.json -exec npm test {} +',
+  'nice -5 npm test',
+];
+
+const EXTENDED_HARMLESS_TEST_ARGUMENT_COMMANDS = [
+  'sudo -u runner rg test src', 'command -- rg test src', 'env -i PATH=/usr/bin rg test src',
+  'kubectl exec pod -- rg test src', 'uv run ruff check src', 'poetry run ruff check src',
+  'make check-format', 'make -C . check-docs', 'just check-types',
+];
+
 test('default observe rollout still applies the immediate protected action boundary', async () => {
   const previousRouterMode = process.env.OMP_ROUTER_V2_MODE;
   const previousGateMode = process.env.OMP_GATE_RECOVERY_MODE;
@@ -110,6 +164,63 @@ test('opaque scripts cannot bypass explicit no-network or no-external-write cons
   }, localOnly.ctx);
   assert.equal(externalBlocked?.block, true);
   assert.equal(externalBlocked?.reasonCode, 'external-effects-unverifiable');
+});
+
+test('external-write authorization cannot make opaque hidden capabilities executable', async () => {
+  const connectorTarget = 'post the message done to Slack channel ID C123456';
+  for (const command of [
+    'node -e "require(\'child_process\').execSync(\'npm test\')"',
+    'printf npm\\ test | sh',
+    'awk \'BEGIN { system("npm test") }\'',
+    'rg --pre \'npm test\' parser .',
+    'php -r \'system("npm test");\'',
+    'lua -e \'os.execute("npm test")\'',
+    'custom-local-cli --check',
+    'npm run lint',
+    'npm run typecheck',
+    'pnpm lint',
+    'yarn typecheck',
+    'bun run lint',
+    'make lint',
+    'sed \'s/x/npm test/e\' file',
+    'sed -n \'1e npm test\' file',
+    'awk -v cmd=\'npm test\' \'BEGIN { cmd | getline }\'',
+    'GIT_EXTERNAL_DIFF=\'npm test\' git diff',
+    'GIT_SSH_COMMAND=\'npm test\' git ls-remote origin',
+    'NODE_OPTIONS=\'--require ./test-hook.js\' node --check src/index.js',
+    'git -c diff.external=\'npm test\' diff',
+    'env -u CI GIT_EXTERNAL_DIFF=\'npm test\' git diff',
+    'sudo -u runner GIT_EXTERNAL_DIFF=\'npm test\' git diff',
+    'env \'GIT_EXTERNAL_DIFF=npm test\' git diff',
+    'sudo -u runner \'GIT_EXTERNAL_DIFF=npm test\' git diff',
+    'rg -n parser *',
+    'rg -n parser src/{a,b}.js',
+    'sh -c \'rg -n parser *\'',
+    'eval \'rg -n parser *\'',
+    'sh -c \'rg -n parser <(printf src)\'',
+  ]) {
+    const runtime = await routedRuntime(`Update README.md, then ${connectorTarget}. Do not run tests or use subagents.`);
+    const blocked = await event(runtime.pi, 'tool_call')({
+      toolName: 'bash', input: { command },
+    }, runtime.ctx);
+    assert.equal(blocked?.reasonCode, 'test-execution-unverifiable', command);
+  }
+
+  const hiddenSubagent = await routedRuntime(`Update README.md, run npm test, then ${connectorTarget}. Do not use subagents.`);
+  const subagentBlocked = await event(hiddenSubagent.pi, 'tool_call')({
+    toolName: 'bash', input: {
+      command: 'node -e "require(\'child_process\').execSync(\'codex exec hello\')"',
+    },
+  }, hiddenSubagent.ctx);
+  assert.equal(subagentBlocked?.reasonCode, 'subagent-effects-unverifiable');
+
+  const hiddenDestructive = await routedRuntime(`Update README.md, run npm test, then ${connectorTarget}.`);
+  const destructiveBlocked = await event(hiddenDestructive.pi, 'tool_call')({
+    toolName: 'bash', input: {
+      command: 'node -e "require(\'child_process\').execSync(\'rm -rf cache\')"',
+    },
+  }, hiddenDestructive.ctx);
+  assert.equal(destructiveBlocked?.reasonCode, 'protected-effects-unverifiable');
 });
 
 test('explicit no-external language blocks classified deployment CLIs without blocking ordinary routes by default', async () => {
@@ -573,6 +684,23 @@ test('model-callable route activation cannot replace active user authorization',
   assert.equal(blocked?.reasonCode, 'workspace-write-forbidden');
 });
 
+test('review-subject nouns cannot grant model attempts workspace-write authority', async () => {
+  for (const prompt of [
+    'Verify the bibliography metadata for this draft.',
+    'Review this draft for factual errors.',
+    'Inspect the update plan for risks.',
+  ]) {
+    const { pi, ctx } = await routedRuntime(prompt);
+    const state = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')?.data;
+    assert.equal(state.lastRoute.taskDescriptor.constraints.workspaceWrite, 'forbidden', prompt);
+    const blocked = await event(pi, 'tool_call')({
+      toolName: 'edit',
+      input: { file: 'draft.md' },
+    }, ctx);
+    assert.equal(blocked?.reasonCode, 'workspace-write-forbidden', prompt);
+  }
+});
+
 test('classifier resolution is pinned to the active user prompt authorization', async () => {
   const { pi, ctx } = await routedRuntime('Review src/router.js and report defects only; do not modify files.');
   const classifierTool = pi.tools.get('omp_core_resolve_classification');
@@ -752,7 +880,7 @@ test('model-callable routing tools cannot bootstrap authorization without before
 });
 
 test('trusted terse continuations inherit a prior executable route without weakening its constraints', async () => {
-  for (const continuation of ['继续', '开始吧', '按计划执行', '照这个方案做', 'Proceed with the plan', 'Go ahead', 'Continue']) {
+  for (const continuation of ['继续', '开始吧', '开始实现', '开始修复', '继续修复', '按计划执行', '照这个方案做', 'Proceed with the plan', 'Go ahead', 'Continue']) {
     const runtime = await routedRuntime('Fix src/router.js locally, but do not use the network and do not push.');
     await event(runtime.pi, 'before_agent_start')({ prompt: continuation }, runtime.ctx);
     const state = latestCoreState(runtime.pi);
@@ -855,20 +983,244 @@ test('read-only routes block shell write variants while allowing proven inspecti
   }
   const { pi, ctx } = await routedRuntime('Review src/router.js and report defects only; do not modify files.');
   assert.notEqual((await event(pi, 'tool_call')({ toolName: 'bash', input: { command: 'git diff --stat' } }, ctx))?.block, true);
+
+  for (const toolName of [
+    'mcp__filesystem__append_file',
+    'mcp__filesystem__replace_file',
+    'mcp__filesystem__touch',
+    'mcp__filesystem__chmod',
+    'mcp__filesystem__truncate',
+    'mcp__filesystem__mkdir',
+    'mcp__filesystem__set_permissions',
+  ]) {
+    const runtime = await routedRuntime('Review src/router.js and report defects only; do not modify files.');
+    const blocked = await event(runtime.pi, 'tool_call')({ toolName, input: { path: 'src/router.js' } }, runtime.ctx);
+    assert.equal(blocked?.reasonCode, 'workspace-write-forbidden', toolName);
+  }
+
+  const fact = await routedRuntime('离线核查 docs/notes.md 中 The stable fact is 42 是否能由仓库内证据支持。禁止联网，禁止修改任何文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。若证据不足就明确报告证据不足。');
+  assert.notEqual((await event(fact.pi, 'tool_call')({
+    toolName: 'bash',
+    input: { command: 'cd /tmp/model-v182-e2e-content-fact && git log --all --oneline --notes' },
+  }, fact.ctx))?.block, true);
+  assert.equal((await event(fact.pi, 'tool_call')({
+    toolName: 'bash',
+    input: { command: 'cd /tmp/model-v182-e2e-content-fact && touch unauthorized' },
+  }, fact.ctx))?.reasonCode, 'workspace-write-forbidden');
+  const factProcess = await routedRuntime('离线核查 docs/notes.md 中 The stable fact is 42 是否能由仓库内证据支持。禁止联网，禁止修改任何文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。若证据不足就明确报告证据不足。');
+  assert.equal((await event(factProcess.pi, 'tool_call')({
+    toolName: 'bash',
+    input: { command: 'cd <(touch /tmp/process-substitution-write)' },
+  }, factProcess.ctx))?.reasonCode, 'network-access-unverifiable');
 });
 
-test('no-test routes block common runners but allow lint-only checks', async () => {
+test('no-test routes block common runners and unverifiable project scripts', async () => {
   for (const command of [
     'node --test', 'make test', 'ctest', 'npm run unit', 'pnpm run check:test', './test.sh',
     'npx jest', 'pnpm exec vitest run', 'python -m pytest', './gradlew test',
     'tox', 'bundle exec rspec', 'playwright test',
+    'eval npm test', 'source ./test.sh', 'xargs npm test',
+    'npm --prefix . test', 'npm --workspace foo test', 'pnpm --dir . test',
+    'bun --cwd . test', 'exec npm test', 'nohup npm test', 'time npm test',
+    'npm --workspaces test', 'npm --include-workspace-root test', 'npm --if-present test',
+    'npm --workspaces --include-workspace-root --if-present run test',
+    'npm run --workspaces --include-workspace-root --if-present test',
+    'npm --workspaces=true --include-workspace-root=true --if-present=true test',
+    'npm --workspaces --if-present run test:unit',
+    'pnpm --recursive test', 'pnpm -r test',
+    'pnpm --recursive=true test',
+    'pnpm -r run test:unit',
+    'yarn workspaces run test', 'yarn workspaces foreach test', 'yarn workspaces foreach -A run test',
+    'yarn workspaces foreach -A run test:unit',
+    'corepack npm test', 'mise exec -- npm test',
+    'corepack npm --workspaces test', 'mise exec -- pnpm -r test',
+    'mise exec -- yarn workspaces foreach test',
+    'setsid npm test', 'stdbuf -oL npm test',
+    'ionice -c 3 npm test', 'taskset -c 0 npm test',
+    'docker run local-image npm test', 'podman run --rm local-image npm test',
+    'docker run --rm -e CI=1 -v "$PWD:/app" -w /app local-image sh -c "npm test"',
+    'podman run --entrypoint npm local-image test',
+    'setsid stdbuf -oL docker run local-image npm test',
+    'docker exec container npm test', 'podman exec container npm test',
+    'docker compose run --rm service npm test', 'docker compose exec service npm test',
+    'podman compose run service npm test', 'docker-compose run --rm service sh -c "npm test"',
+    'systemd-run --user npm test', 'chronic npm test', 'watch -n 1 npm test',
+    'doas npm test', 'runuser -u runner -- npm test', 'chroot / npm test',
+    'unshare --net npm test', 'prlimit --nproc=100 npm test',
+    'make -C . test', 'just test',
+    'if npm test; then echo passed; fi',
+    'if test -f package.json; then command npm test; fi',
+    'while npm test; do echo retry; done',
+    'for f in test/*.test.js; do node --test "$f"; done',
+    'xargs -n 1 npm test', 'case "$mode" in test) npm test;; esac',
+    ...EXTENDED_AGGREGATE_TEST_COMMANDS,
   ]) {
     const { pi, ctx } = await routedRuntime('Fix the parser but do not run tests.');
     const blocked = await event(pi, 'tool_call')({ toolName: 'bash', input: { command } }, ctx);
     assert.equal(blocked?.reasonCode, 'test-execution-forbidden', command);
   }
   const { pi, ctx } = await routedRuntime('Fix the parser but do not run tests.');
-  assert.notEqual((await event(pi, 'tool_call')({ toolName: 'bash', input: { command: 'npm run lint' } }, ctx))?.block, true);
+  assert.equal((await event(pi, 'tool_call')({ toolName: 'bash', input: { command: 'npm run lint' } }, ctx))?.reasonCode,
+    'test-execution-unverifiable');
+  assert.notEqual((await event(pi, 'tool_call')({ toolName: 'bash', input: { command: 'rg -n parser src' } }, ctx))?.block, true);
+
+  for (const command of [
+    'env rg test src',
+    'time rg test src',
+    'exec grep test README.md',
+    'xargs rg test',
+    'for f in test/*.js; do echo "$f"; done',
+    'if test -f package.json; then git status; fi',
+    'case "$mode" in test) echo testing;; esac',
+    'nohup echo testing',
+    'command cat test/router.test.js',
+    'setsid rg test src',
+    'stdbuf -oL grep test README.md',
+    'docker run local-image rg test src',
+    'make -C . lint',
+    'just lint',
+    'docker exec container rg test src',
+    'docker compose run --rm service rg test src',
+    'systemd-run --user rg test src',
+    'chronic rg test src',
+    'watch -n 1 rg test src',
+    'logger "npm test"',
+    'logger --message="npm test"',
+    'mystery-wrapper "the command npm test is documented"',
+    'mystery-wrapper --description="npm test"',
+    'mystery-wrapper --command="the command npm test is documented"',
+    'script -q -c "rg test src" /dev/null',
+    ...EXTENDED_HARMLESS_TEST_ARGUMENT_COMMANDS,
+  ]) {
+    const runtime = await routedRuntime('Fix the parser but do not run tests.');
+    const allowed = await event(runtime.pi, 'tool_call')({ toolName: 'bash', input: { command } }, runtime.ctx);
+    assert.notEqual(allowed?.reasonCode, 'test-execution-forbidden', command);
+  }
+});
+
+test('execution wrappers cannot bypass route-level test, external-write, or irreversible gates', async () => {
+  for (const command of [
+    'strace npm test',
+    'perf stat npm test',
+    'valgrind npm test',
+    'gdb --args npm test',
+    'nsenter --target 1 --mount npm test',
+    'bwrap --ro-bind / / npm test',
+    'su runner -c "npm test"',
+    'mystery-wrapper npm test',
+    'script -q -c "npm test" /dev/null',
+    'setsid --wait /usr/bin/script --return -q --command "npm test" /dev/null',
+    'script -q -c"npm test" /dev/null',
+    'script -qec"npm test" /dev/null',
+    'script -q -c npm\\ test /dev/null',
+    'script -q --command=npm\\ test /dev/null',
+    'script -q -cnpm\\ test /dev/null',
+    'script -q --command=npm" "test /dev/null',
+    "script -q -c $'npm test' /dev/null",
+    'mystery-wrapper "npm test"',
+    'mystery-wrapper --command="npm test"',
+    'mystery-wrapper --command=npm\\ test',
+    'mystery-wrapper --cmd=npm" "test',
+    'mystery-runner --cmd="npm test"',
+  ]) {
+    const runtime = await routedRuntime('Fix the parser but do not run tests.');
+    const blocked = await event(runtime.pi, 'tool_call')({ toolName: 'bash', input: { command } }, runtime.ctx);
+    assert.equal(blocked?.reasonCode, 'test-execution-forbidden', command);
+  }
+
+  for (const command of [
+    'strace git push origin main',
+    'gdb --args kubectl delete pod web',
+    'mystery-wrapper curl -X POST https://example.com/api',
+    'script -q -c "git push origin main" /dev/null',
+    'setsid --wait script -q --command "git push origin main" /dev/null',
+    'script -qec"git push origin main" /dev/null',
+    'script -q --command=git\\ push\\ origin\\ main /dev/null',
+    'mystery-wrapper "curl -X POST https://example.com/api"',
+    'mystery-wrapper --command="curl -X POST https://example.com/api"',
+    'mystery-wrapper --exec=git\\ push\\ origin\\ main',
+  ]) {
+    const runtime = await routedRuntime('Fix the parser locally, but do not push, publish, deploy, or write to external services.');
+    const blocked = await event(runtime.pi, 'tool_call')({ toolName: 'bash', input: { command } }, runtime.ctx);
+    assert.equal(blocked?.reasonCode, 'external-write-forbidden', command);
+  }
+
+  for (const tool of [
+    { toolName: 'mcp__github__get_and_approve_pull_request', input: { pull_request: 7 } },
+    { toolName: 'mcp__github__check_run_rerequest', input: { check_run: 9 } },
+    { toolName: 'mcp__slack__search_and_join', input: { query: 'release' } },
+    { toolName: 'mcp__browser__click', input: { text: 'Like' } },
+  ]) {
+    const runtime = await routedRuntime('Fix the parser locally, but do not push, publish, deploy, or write to external services.');
+    const blocked = await event(runtime.pi, 'tool_call')(tool, runtime.ctx);
+    assert.equal(blocked?.reasonCode, 'external-write-forbidden', tool.toolName);
+  }
+
+  for (const command of [
+    'valgrind rm -rf cache',
+    'bwrap --ro-bind / / rm -rf cache',
+    'su runner -c "rm -rf cache"',
+    'mystery-wrapper rm -rf cache',
+    'script -q -c "rm -rf cache" /dev/null',
+    'setsid --wait script -q --command "rm -rf cache" /dev/null',
+    'script -qec"rm -rf cache" /dev/null',
+    'script -q -c rm\\ -rf\\ cache /dev/null',
+    'mystery-wrapper "rm -rf cache"',
+    'mystery-runner --cmd="rm -rf cache"',
+    'mystery-runner --run=rm\\ -rf\\ cache',
+  ]) {
+    const runtime = await routedRuntime('Remove all files in the cache directory.');
+    const blocked = await event(runtime.pi, 'tool_call')({ toolName: 'bash', input: { command } }, runtime.ctx);
+    assert.equal(blocked?.reasonCode, 'irreversible-approval-required', command);
+  }
+
+  for (const { prompt, command, forbiddenReason } of [
+    { prompt: 'Fix the parser but do not run tests.', command: 'logger npm test', forbiddenReason: 'test-execution-forbidden' },
+    { prompt: 'Fix the parser locally, but do not push or publish.', command: 'logger git push origin main', forbiddenReason: 'external-write-forbidden' },
+    { prompt: 'Fix the parser locally.', command: 'logger rm -rf cache', forbiddenReason: 'irreversible-approval-required' },
+  ]) {
+    const runtime = await routedRuntime(prompt);
+    const result = await event(runtime.pi, 'tool_call')({ toolName: 'bash', input: { command } }, runtime.ctx);
+    assert.notEqual(result?.reasonCode, forbiddenReason, command);
+  }
+});
+
+test('command expansion exhaustion fails closed across lifecycle action boundaries', async () => {
+  const cases = [
+    {
+      prompt: 'Fix the parser but do not run tests.',
+      command: exhaustCommandExpansion('rg parser src'),
+      reasons: ['test-execution-forbidden'],
+    },
+    {
+      prompt: 'Inspect src/router.js locally without network access.',
+      command: exhaustCommandExpansion('rg parser src'),
+      reasons: ['network-access-forbidden'],
+    },
+    {
+      prompt: 'Review src/router.js and report defects only; do not modify files.',
+      command: exhaustCommandExpansion('rg parser src'),
+      reasons: ['workspace-effects-unverifiable', 'workspace-write-forbidden'],
+    },
+    {
+      prompt: 'Fix the parser locally, but do not push, publish, deploy, or write to external services.',
+      command: exhaustCommandExpansion('rg parser src'),
+      reasons: ['external-write-forbidden'],
+    },
+    {
+      prompt: 'Remove all files in the cache directory.',
+      command: exhaustCommandExpansion('rm -rf cache'),
+      reasons: ['external-write-forbidden', 'irreversible-approval-required'],
+    },
+  ];
+  for (const item of cases) {
+    const runtime = await routedRuntime(item.prompt);
+    const blocked = await event(runtime.pi, 'tool_call')({
+      toolName: 'bash', input: { command: item.command },
+    }, runtime.ctx);
+    assert.equal(blocked?.block, true, item.prompt);
+    assert.ok(item.reasons.includes(blocked.reasonCode), `${item.prompt}: ${blocked.reasonCode}`);
+  }
 });
 
 test('selective test constraints allow the requested kind and block only excluded kinds', async () => {
@@ -886,10 +1238,215 @@ test('selective test constraints allow the requested kind and block only exclude
   }, e2e.ctx);
   assert.ok(['test-kind-forbidden', 'test-kind-authorization-required'].includes(e2eCall?.reasonCode));
 
-  for (const command of ['npm test', 'npm run test:integration', 'npm run test:smoke']) {
+  for (const command of [
+    'npm test', 'npm run test:integration', 'npm run test:smoke',
+    'npm --workspaces test', 'npm --include-workspace-root test', 'npm --if-present test',
+    'npm run --workspaces --include-workspace-root --if-present test',
+    'npm --workspaces=true --include-workspace-root=true --if-present=true test',
+    'npm --workspaces --if-present run test:unit',
+    'pnpm --recursive test', 'pnpm -r test',
+    'pnpm --recursive=true test',
+    'pnpm -r run test:unit',
+    'yarn workspaces run test', 'yarn workspaces foreach test',
+    'yarn workspaces foreach -A run test:unit',
+    'corepack npm test', 'mise exec -- npm test',
+    'corepack npm --workspaces test', 'mise exec -- pnpm -r test',
+    'mise exec -- yarn workspaces foreach test',
+    'setsid npm test', 'stdbuf -oL npm test',
+    'ionice -c 3 npm test', 'taskset -c 0 npm test',
+    'docker run local-image npm test', 'podman run --rm local-image npm test',
+    'docker run --rm -e CI=1 -v "$PWD:/app" -w /app local-image sh -c "npm test"',
+    'podman run --entrypoint npm local-image test',
+    'setsid stdbuf -oL docker run local-image npm test',
+    'docker exec container npm test', 'podman exec container npm test',
+    'docker compose run --rm service npm test', 'docker compose exec service npm test',
+    'podman compose run service npm test', 'docker-compose run --rm service sh -c "npm test"',
+    'systemd-run --user npm test', 'chronic npm test', 'watch -n 1 npm test',
+    'make -C . test', 'just test',
+    'if npm test; then echo passed; fi',
+    'if test -f package.json; then command npm test; fi',
+    'for f in test/*.test.js; do node --test "$f"; done',
+    'xargs -n 1 npm test', 'case "$mode" in test) npm test;; esac',
+    ...EXTENDED_AGGREGATE_TEST_COMMANDS,
+  ]) {
     const disallowed = await routedRuntime(prompt);
     const blocked = await event(disallowed.pi, 'tool_call')({ toolName: 'bash', input: { command } }, disallowed.ctx);
     assert.equal(blocked?.reasonCode, 'test-kind-authorization-required', command);
+  }
+
+  for (const command of ['corepack npm run test:unit', 'mise exec -- npm run test:unit']) {
+    const allowed = await routedRuntime(prompt);
+    const result = await event(allowed.pi, 'tool_call')({ toolName: 'bash', input: { command } }, allowed.ctx);
+    assert.notEqual(result?.reasonCode, 'test-kind-authorization-required', command);
+    assert.notEqual(result?.reasonCode, 'test-kind-forbidden', command);
+  }
+
+  for (const command of [
+    'pnpm vitest run test/router.test.js',
+    'yarn jest test/router.test.js',
+    'pnpm playwright test test/ui.spec.ts',
+    'node --no-warnings --test test/router.test.js',
+    'pytest test/test_router.py::test_one',
+  ]) {
+    const focusedTarget = await routedRuntime(prompt);
+    const result = await event(focusedTarget.pi, 'tool_call')({ toolName: 'bash', input: { command } }, focusedTarget.ctx);
+    assert.notEqual(result?.reasonCode, 'test-kind-forbidden', command);
+  }
+});
+
+test('non-executing test plans remain available under test exclusions', async () => {
+  const commands = [
+    'make -n test',
+    'make --dry-run test',
+    'make --question test',
+    'just --dry-run test',
+    'task --dry test',
+    'task --summary test',
+    'turbo run test --dry-run',
+    'ctest -N',
+    'ninja -n test',
+    './gradlew test --dry-run',
+    'ctest --show-only',
+    'ninja --dry-run test',
+    'turbo run test --dry',
+    'turbo run test --dry=json',
+    'cargo test --no-run',
+  ];
+  for (const prompt of [
+    'Fix the parser but do not run tests.',
+    'Fix src/router.js, but do not run the full test suite.',
+  ]) {
+    for (const command of commands) {
+      const runtime = await routedRuntime(prompt);
+      const result = await event(runtime.pi, 'tool_call')({ toolName: 'bash', input: { command } }, runtime.ctx);
+      assert.notEqual(result?.reasonCode, 'test-execution-forbidden', `${prompt}: ${command}`);
+      assert.notEqual(result?.reasonCode, 'test-kind-forbidden', `${prompt}: ${command}`);
+      assert.notEqual(result?.reasonCode, 'test-kind-authorization-required', `${prompt}: ${command}`);
+    }
+  }
+});
+
+test('full-suite exclusions block aggregate runners without forbidding focused tests', async () => {
+  const prompt = 'Fix src/router.js, but do not run the full test suite.';
+
+  for (const command of [
+    'npm test',
+    'pnpm test',
+    'CI=1 npm test',
+    'env CI=1 npm test',
+    '/usr/bin/npm test',
+    'command npm test',
+    'timeout 30 npm test',
+    'bash -c "npm test"',
+    'npm run test:all',
+    'npm run test:ci',
+    'npm run check:test',
+    'node --test',
+    'node --test --test-reporter spec',
+    'pytest -q',
+    'vitest',
+    'jest',
+    'cargo test',
+    'go test ./... -count=1',
+    'make test',
+    'npm --silent test',
+    'npm -s test',
+    'pnpm --silent test',
+    'yarn --silent test',
+    'bun --silent test',
+    'eval npm test',
+    'source ./test.sh',
+    '. ./test.sh',
+    'xargs npm test',
+    'node --test test/a.test.js test/b.test.js',
+    'sh -c "node --test test/a.test.js"',
+    'npm --prefix . test',
+    'npm --workspace foo test',
+    'pnpm --dir . test',
+    'bun --cwd . test',
+    'exec npm test',
+    'nohup npm test',
+    'time npm test',
+    'npm --workspaces test',
+    'npm --include-workspace-root test',
+    'npm --if-present test',
+    'npm --workspaces --include-workspace-root --if-present run test',
+    'npm run --workspaces --include-workspace-root --if-present test',
+    'npm --workspaces=true --include-workspace-root=true --if-present=true test',
+    'npm --workspaces --if-present run test:unit',
+    'pnpm --recursive test',
+    'pnpm --recursive=true test',
+    'pnpm -r test',
+    'pnpm -r run test:unit',
+    'yarn workspaces run test',
+    'yarn workspaces foreach test',
+    'yarn workspaces foreach -A run test',
+    'yarn workspaces foreach -A run test:unit',
+    'corepack npm test',
+    'corepack npm --workspaces test',
+    'mise exec -- npm test',
+    'mise exec -- pnpm -r test',
+    'mise exec -- yarn workspaces foreach test',
+    'setsid npm test',
+    'stdbuf -oL npm test',
+    'ionice -c 3 npm test',
+    'taskset -c 0 npm test',
+    'docker run local-image npm test',
+    'podman run --rm local-image npm test',
+    'docker run --rm -e CI=1 -v "$PWD:/app" -w /app local-image sh -c "npm test"',
+    'podman run --entrypoint npm local-image test',
+    'setsid stdbuf -oL docker run local-image npm test',
+    'docker exec container npm test',
+    'podman exec container npm test',
+    'docker compose run --rm service npm test',
+    'docker compose exec service npm test',
+    'podman compose run service npm test',
+    'docker-compose run --rm service sh -c "npm test"',
+    'systemd-run --user npm test',
+    'chronic npm test',
+    'watch -n 1 npm test',
+    'make -C . test',
+    'just test',
+    ...EXTENDED_AGGREGATE_TEST_COMMANDS,
+    'if npm test; then echo passed; fi',
+    'if test -f package.json; then command npm test; fi',
+    'while npm test; do echo retry; done',
+    'for f in test/*.test.js; do node --test "$f"; done',
+    'xargs -n 1 npm test', 'case "$mode" in test) npm test;; esac',
+  ]) {
+    const runtime = await routedRuntime(prompt);
+    const blocked = await event(runtime.pi, 'tool_call')({ toolName: 'bash', input: { command } }, runtime.ctx);
+    assert.equal(blocked?.reasonCode, 'test-kind-forbidden', command);
+  }
+
+  const focused = await routedRuntime(prompt);
+  const focusedCall = await event(focused.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'node --test test/router.test.js' },
+  }, focused.ctx);
+  assert.notEqual(focusedCall?.reasonCode, 'test-kind-forbidden');
+  assert.notEqual(focusedCall?.reasonCode, 'test-execution-forbidden');
+
+  const unit = await routedRuntime(prompt);
+  assert.notEqual((await event(unit.pi, 'tool_call')({
+    toolName: 'bash', input: { command: 'npm run test:unit' },
+  }, unit.ctx))?.reasonCode, 'test-kind-forbidden');
+
+  for (const command of ['corepack npm run test:unit', 'mise exec -- npm run test:unit']) {
+    const wrappedUnit = await routedRuntime(prompt);
+    const result = await event(wrappedUnit.pi, 'tool_call')({ toolName: 'bash', input: { command } }, wrappedUnit.ctx);
+    assert.notEqual(result?.reasonCode, 'test-kind-forbidden', command);
+  }
+
+  for (const command of [
+    'pnpm vitest run test/router.test.js',
+    'yarn jest test/router.test.js',
+    'pnpm playwright test test/ui.spec.ts',
+    'node --no-warnings --test test/router.test.js',
+    'pytest test/test_router.py::test_one',
+  ]) {
+    const focusedTarget = await routedRuntime(prompt);
+    const result = await event(focusedTarget.pi, 'tool_call')({ toolName: 'bash', input: { command } }, focusedTarget.ctx);
+    assert.notEqual(result?.reasonCode, 'test-kind-forbidden', command);
   }
 });
 
@@ -1078,6 +1635,70 @@ test('scoped workspace write authorization blocks excluded and unmentioned files
     input: { input: '[shared.js#D00D]\nSWAP 1.=1:\n+ambiguous' },
   }, ambiguous.ctx);
   assert.equal(ambiguousEdit?.reasonCode, 'workspace-target-authorization-required');
+});
+
+test('primary direct test authoring permits only directly attributable test artifacts', async () => {
+  const prompt = 'Add exactly one regression test for routeNaturalLanguageTask; do not modify production code.';
+  const readyRuntime = async () => {
+    const runtime = await routedRuntime(prompt);
+    for (const skill of ['test-driven-development', 'verification-before-completion']) {
+      await event(runtime.pi, 'tool_result')({
+        name: 'read',
+        params: { uri: `skill://${skill}` },
+        content: [{ type: 'text', text: `Loaded ${skill}` }],
+      }, runtime.ctx);
+    }
+    return runtime;
+  };
+
+  for (const tool of [
+    { toolName: 'edit', input: { path: 'test/router.test.js' } },
+    { toolName: 'write', input: { path: 'tests/router.spec.ts', content: 'test' } },
+    { toolName: 'edit', input: { path: 'src/__tests__/router.ts' } },
+  ]) {
+    const allowed = await readyRuntime();
+    const result = await event(allowed.pi, 'tool_call')(tool, allowed.ctx);
+    assert.notEqual(result?.block, true, JSON.stringify(tool));
+    assert.notEqual(result?.reasonCode, 'workspace-test-artifact-authorization-required', JSON.stringify(tool));
+  }
+
+  for (const tool of [
+    { toolName: 'edit', input: { path: 'src/router.js' } },
+    { toolName: 'write', input: { content: 'unscoped write' } },
+    { toolName: 'bash', input: { command: 'node scripts/rewrite-tests.js' } },
+    {
+      toolName: 'apply_patch',
+      input: {
+        patch: [
+          '*** Begin Patch',
+          '*** Update File: test/router.test.js',
+          '@@',
+          '-old',
+          '+new',
+          '*** Update File: src/router.js',
+          '@@',
+          '-old',
+          '+new',
+          '*** End Patch',
+        ].join('\n'),
+      },
+    },
+  ]) {
+    const denied = await readyRuntime();
+    const result = await event(denied.pi, 'tool_call')(tool, denied.ctx);
+    assert.equal(result?.block, true, JSON.stringify(tool));
+    assert.equal(result?.reasonCode, 'workspace-test-artifact-authorization-required', JSON.stringify(tool));
+  }
+
+  const repaired = await readyRuntime();
+  const deniedProductionEdit = await event(repaired.pi, 'tool_call')({
+    toolName: 'edit', input: { path: 'src/router.js' },
+  }, repaired.ctx);
+  assert.equal(deniedProductionEdit?.reasonCode, 'workspace-test-artifact-authorization-required');
+  const allowedTestEdit = await event(repaired.pi, 'tool_call')({
+    toolName: 'edit', input: { path: 'test/router.test.js' },
+  }, repaired.ctx);
+  assert.notEqual(allowedTestEdit?.block, true);
 });
 
 test('direct and read-bound edits reject symlink targets outside the workspace', async (t) => {
@@ -1448,6 +2069,20 @@ test('no-external-write routes block provider and HTTP mutations', async () => {
     const blocked = await event(pi, 'tool_call')({ toolName: 'bash', input: { command } }, ctx);
     assert.equal(blocked?.reasonCode, 'external-write-forbidden', command);
   }
+
+  for (const toolName of [
+    'mcp__github__add_issue_comment',
+    'mcp__jira__add_comment',
+    'mcp__slack__add_reaction',
+    'mcp__google_drive__share_file',
+    'mcp__calendar__rsvp',
+    'mcp__notion__archive_page',
+    'mcp__github__set_labels',
+  ]) {
+    const runtime = await routedRuntime('Fix the parser and test it, but do not push, publish, or deploy.');
+    const blocked = await event(runtime.pi, 'tool_call')({ toolName, input: { target: 'other' } }, runtime.ctx);
+    assert.equal(blocked?.reasonCode, 'external-write-forbidden', toolName);
+  }
 });
 
 test('connector implementation meta-work cannot mint authority for a real provider mutation', async () => {
@@ -1619,7 +2254,7 @@ test('failed core registration does not leave a false live gate-owner lease', ()
   assert.equal(Reflect.get(events, Symbol.for('omp-enhancer.core.gate-owner')), undefined);
 });
 
-test('repeated protected-action denials terminalize per constraint while distinct reasons do not', async () => {
+test('two protected-action denials terminalize globally instead of allowing cross-method shopping', async () => {
   const prompt = '只审查本地代码，不要联网，不要运行测试，也不要修改文件。';
   const repeated = await routedRuntime(prompt);
   const first = await event(repeated.pi, 'tool_call')({
@@ -1647,10 +2282,12 @@ test('repeated protected-action denials terminalize per constraint while distinc
   }, distinct.ctx))?.reasonCode, 'network-access-forbidden');
   assert.equal((await event(distinct.pi, 'tool_call')({
     toolName: 'bash', input: { command: 'npm test' },
-  }, distinct.ctx))?.reasonCode, 'test-execution-forbidden');
-  assert.notEqual((await event(distinct.pi, 'tool_call')({
+  }, distinct.ctx))?.reasonCode, 'protected-action-terminal');
+  const distinctSafeCall = await event(distinct.pi, 'tool_call')({
     toolName: 'bash', input: { command: 'git status --short' },
-  }, distinct.ctx))?.block, true);
+  }, distinct.ctx);
+  assert.equal(distinctSafeCall?.block, true);
+  assert.match(distinctSafeCall.reason, /OMP_GATE_TERMINAL/);
 
   await event(repeated.pi, 'before_agent_start')({ prompt }, repeated.ctx);
   assert.notEqual((await event(repeated.pi, 'tool_call')({

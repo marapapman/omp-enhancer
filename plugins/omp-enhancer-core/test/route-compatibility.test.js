@@ -107,4 +107,8 @@ test('routeByIntent normalizes an externally supplied TaskDescriptor before comp
   assert.deepEqual(route.taskDescriptor.phases, [{ kind: 'answer', domain: 'general' }]);
   assert.deepEqual(route.routePlan.phases, route.taskDescriptor.phases);
   assert.deepEqual(route.routePlan.requiredSubagents, []);
+  assert.deepEqual(route.requiredSkills, route.routePlan.requiredSkills);
+  assert.deepEqual(route.requiredTools, route.routePlan.requiredTools);
+  assert.deepEqual(route.requiredSubagents, []);
+  assert.equal(route.shouldForkSubagents, false);
 });

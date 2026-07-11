@@ -102,14 +102,19 @@ test('descriptorFromLegacyIntent applies safe canonical defaults instead of gran
 
 test('plugin identifier upgrades remain protected release operations', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
-  const descriptor = describeNaturalLanguageTask({
-    prompt: 'Upgrade omp-enhancer-core@omp-enhancer after pushing main.',
-  });
-
-  assert.equal(descriptor.operation, 'release');
-  assert.equal(descriptor.constraints.externalWrite, 'required');
-  assert.ok(descriptor.phases.some((phase) => phase.kind === 'release'));
-  assert.ok(descriptor.risk.flags.includes('external-write'));
+  for (const prompt of [
+    'Upgrade omp-enhancer-core@omp-enhancer after pushing main.',
+    'Upgrade the installed plugin from marketplace.',
+    '升级 omp-config@omp-enhancer 到最新版本。',
+    '刷新插件 marketplace 并升级用户安装。',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.equal(descriptor.operation, 'release', prompt);
+    assert.equal(descriptor.constraints.networkAccess, 'required', prompt);
+    assert.equal(descriptor.constraints.externalWrite, 'required', prompt);
+    assert.ok(descriptor.phases.some((phase) => phase.kind === 'release'), prompt);
+    assert.ok(descriptor.risk.flags.includes('external-write'), prompt);
+  }
 });
 
 test('explicit no-subagent constraints remove subagent authority', async () => {
@@ -237,11 +242,15 @@ test('natural bilingual no-test phrases forbid test execution', async () => {
     '修复 src/router.js，但不要测试。',
     '修复 src/router.js，跳过测试。',
     '修复 src/router.js，不用测试。',
+    'Fix src/router.js, but do not run all tests.',
+    '修复 src/router.js，但不要运行全部测试。',
+    '修复 src/router.js，但不要运行所有测试。',
   ]) {
     const descriptor = describeNaturalLanguageTask({ prompt });
     assert.equal(descriptor.constraints.testExecution, 'forbidden', prompt);
     assert.ok(!descriptor.capabilities.includes('tests.execute'), prompt);
     assert.ok(!descriptor.phases.some(({ kind, domain }) => kind === 'verify' && domain === 'tests'), prompt);
+    assert.deepEqual(descriptor.testExclusions, [], prompt);
   }
 });
 
@@ -280,6 +289,102 @@ test('selective test exclusions authorize requested test kinds without global no
     assert.deepEqual(descriptor.testExclusions, [prompt.startsWith('Do') ? 'unit' : 'integration'], prompt);
     assert.ok(!descriptor.capabilities.includes('tests.execute'), prompt);
   }
+
+  for (const prompt of [
+    'Fix src/router.js, but do not run the full test suite.',
+    'Fix src/router.js, but do not run the whole test suite.',
+    'Fix src/router.js, but do not run the entire test suite.',
+    'Fix src/router.js, but do not run the complete test suite.',
+    'Fix src/router.js, but avoid the full test suite.',
+    '只改 src/router.js，但不要跑全量测试。',
+    '只改 src/router.js，但不要运行完整测试套件。',
+    '只改 src/router.js，但不要跑整个测试套件。',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.equal(descriptor.operation, 'modify', prompt);
+    assert.equal(descriptor.constraints.testExecution, 'unspecified', prompt);
+    assert.deepEqual(descriptor.testExclusions, ['full-suite'], prompt);
+    assert.ok(descriptor.capabilities.includes('fs.write'), prompt);
+    assert.ok(!descriptor.provenance.reasons.includes('test execution forbidden'), prompt);
+  }
+});
+
+test('writing artifacts and narrow Chinese edit imperatives retain their positive task authority', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+
+  const bugReport = describeNaturalLanguageTask({
+    prompt: '写一份英文 bug report，包含复现步骤和影响范围，不运行测试。',
+  });
+  assert.equal(bugReport.operation, 'modify');
+  assert.deepEqual(bugReport.domains, ['writing']);
+  assert.equal(bugReport.language, 'en');
+  assert.equal(bugReport.complexity, 'broad');
+  assert.equal(bugReport.constraints.testExecution, 'forbidden');
+
+  const narrowEdit = describeNaturalLanguageTask({
+    prompt: '只改一行代码，但不要跑全量测试。',
+  });
+  assert.equal(narrowEdit.operation, 'modify');
+  assert.deepEqual(narrowEdit.domains, ['code']);
+  assert.equal(narrowEdit.constraints.workspaceWrite, 'required');
+  assert.equal(narrowEdit.constraints.testExecution, 'unspecified');
+  assert.deepEqual(narrowEdit.testExclusions, ['full-suite']);
+
+  for (const prompt of [
+    'Write a bug report for the parser bug; do not run tests.',
+    '写一份英文 bug report，描述 parser 的 bug，不运行测试。',
+    'Summarize the existing bug report without inspecting code or running tests.',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.equal(descriptor.operation, 'modify', prompt);
+    assert.deepEqual(descriptor.domains, ['writing'], prompt);
+  }
+
+  for (const prompt of [
+    'Fix the bug described in the bug report.',
+    'Write a bug report generator in src/report.js.',
+    'Revise the bug report parser implementation.',
+    'Write tests from this bug report.',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.ok(descriptor.domains.includes('code') || descriptor.domains.includes('tests'), prompt);
+    assert.notEqual(descriptor.domains.length === 1 && descriptor.domains[0] === 'writing', true, prompt);
+  }
+
+  const compound = describeNaturalLanguageTask({ prompt: 'Write a bug report and fix the parser bug.' });
+  assert.equal(compound.operation, 'modify');
+  assert.ok(compound.domains.includes('code'));
+  assert.ok(compound.domains.includes('writing'));
+
+  const guide = describeNaturalLanguageTask({ prompt: 'Write a complete troubleshooting guide.' });
+  assert.equal(guide.operation, 'modify');
+  assert.deepEqual(guide.domains, ['writing']);
+  assert.equal(guide.complexity, 'broad');
+});
+
+test('observed summaries distinguish a no-rerun ceiling from a new test action', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  for (const prompt of [
+    '总结本轮 E2E 测试结果，不重新运行测试。',
+    '总结本轮 E2E 测试结果，不再运行测试。',
+    '整理已观测到的测试问题，不做任何新测试。',
+    '总结本轮 E2E 测试结果。',
+  ]) {
+    const summary = describeNaturalLanguageTask({ prompt });
+    assert.equal(summary.operation, 'modify', prompt);
+    assert.ok(summary.domains.includes('writing'), prompt);
+    assert.equal(summary.constraints.testExecution, 'forbidden', prompt);
+  }
+
+  for (const prompt of [
+    '总结本轮 E2E 测试结果，然后重新运行失败测试。',
+    '重跑失败测试，然后总结已观测结果。',
+    'Rerun the failed tests and then summarize the observed results.',
+  ]) {
+    const rerun = describeNaturalLanguageTask({ prompt });
+    assert.equal(rerun.operation, 'execute', prompt);
+    assert.equal(rerun.constraints.testExecution, 'required', prompt);
+  }
 });
 
 test('natural bilingual no-network phrases forbid network access', async () => {
@@ -294,6 +399,39 @@ test('natural bilingual no-network phrases forbid network access', async () => {
     const descriptor = describeNaturalLanguageTask({ prompt });
     assert.equal(descriptor.constraints.networkAccess, 'forbidden', prompt);
     assert.ok(!descriptor.capabilities.includes('network.read'), prompt);
+  }
+});
+
+test('bare negative clauses override earlier write, test, network, and release requests', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  for (const prompt of [
+    'Fix parser.js. No edits.',
+    'Fix parser.js. No changes.',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.equal(descriptor.constraints.workspaceWrite, 'forbidden', prompt);
+    assert.equal(descriptor.capabilities.includes('fs.write'), false, prompt);
+  }
+
+  for (const prompt of [
+    'Fix src/auth.js. No tests, no network, no subagents.',
+    'Fix src/auth.js; no testing, no internet, and no subagents.',
+    '修复 src/auth.js，不测试，不联网，不用子代理。',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.equal(descriptor.constraints.testExecution, 'forbidden', prompt);
+    assert.equal(descriptor.constraints.networkAccess, 'forbidden', prompt);
+    assert.equal(descriptor.constraints.subagents, 'forbidden', prompt);
+  }
+
+  for (const prompt of [
+    'Fix parser.js and push it. No push.',
+    'Fix parser.js and publish it. No publishing.',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.equal(descriptor.constraints.externalWrite, 'forbidden', prompt);
+    assert.equal(descriptor.capabilities.includes('external.write'), false, prompt);
+    assert.equal(descriptor.phases.some(({ kind }) => kind === 'release'), false, prompt);
   }
 });
 
@@ -466,6 +604,57 @@ test('common implicit code-change imperatives deterministically authorize a focu
     assert.equal(descriptor.provenance.needsClassifier, false, prompt);
     assert.equal(descriptor.provenance.requiresPolicyRoute, true, prompt);
   }
+});
+
+test('Chinese repair prefixes preserve executable modification authority', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  for (const prompt of [
+    '去修复这些问题，但是先给我一个计划。对于门禁有关的问题，应该事前做好工作。',
+    '继续修复 router.js 的路由问题。',
+    '开始实现 classifier fallback。',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.equal(descriptor.operation, 'modify', prompt);
+    assert.equal(descriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.ok(descriptor.phases.some(({ kind, domain }) => kind === 'modify' && domain === 'code'), prompt);
+  }
+});
+
+test('security concepts with an explicit no-audit clause remain answer-only', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  for (const prompt of [
+    '解释一下 XSS 是什么，先不要审查项目代码。',
+    'Explain SSRF. No code review.',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.equal(descriptor.operation, 'answer', prompt);
+    assert.equal(descriptor.capabilities.length, 0, prompt);
+    assert.equal(descriptor.phases.some(({ kind }) => kind === 'review'), false, prompt);
+  }
+});
+
+test('one explicitly bounded test file review stays focused', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const descriptor = describeNaturalLanguageTask({
+    prompt: 'Review one test file for defects without running tests and without subagents.',
+  });
+  assert.equal(descriptor.operation, 'inspect');
+  assert.equal(descriptor.complexity, 'focused');
+  assert.equal(descriptor.constraints.testExecution, 'forbidden');
+  assert.equal(descriptor.constraints.subagents, 'forbidden');
+});
+
+test('explicit cross-file English refactors remain broad while a single function stays focused', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const broad = describeNaturalLanguageTask({
+    prompt: 'Refactor the whole routing module across multiple files and add regression tests.',
+  });
+  assert.equal(broad.complexity, 'broad');
+
+  const focused = describeNaturalLanguageTask({
+    prompt: 'Refactor the routeNaturalLanguageTask function and add one regression test.',
+  });
+  assert.equal(focused.complexity, 'focused');
 });
 
 test('weak code-target imperatives request classification without pre-authorizing writes', async () => {
@@ -756,5 +945,19 @@ test('scoped workspace and external denials do not erase explicitly authorized t
     assert.equal(descriptor.constraints.externalWrite, 'required', prompt);
     assert.deepEqual(descriptor.externalWriteTargets, ['staging'], prompt);
     assert.deepEqual(descriptor.externalWriteExclusions, ['production'], prompt);
+  }
+});
+
+test('review nouns cannot be mistaken for workspace modification verbs', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  for (const prompt of [
+    'Verify the bibliography metadata for this draft.',
+    'Review this draft for factual errors.',
+    'Inspect the update plan for risks.',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.equal(descriptor.constraints.workspaceWrite, 'forbidden', prompt);
+    assert.equal(descriptor.capabilities.includes('fs.write'), false, prompt);
+    assert.equal(descriptor.phases.some(({ kind }) => ['modify', 'create'].includes(kind)), false, prompt);
   }
 });

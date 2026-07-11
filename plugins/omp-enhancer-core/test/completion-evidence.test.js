@@ -483,6 +483,12 @@ test('manual testing fallback rejects masked commands, empty suites, failed outp
       reportedCommand: 'pytest --collect-only',
       output: '5 tests passed, 0 failed',
     },
+    {
+      name: 'Go list probe cannot forge a pass',
+      actualCommand: 'go test -list . ./pkg',
+      reportedCommand: 'go test -list . ./pkg',
+      output: 'TestParser\nok example.com/project/pkg 0.003s',
+    },
   ];
 
   for (const item of cases) {
@@ -684,7 +690,7 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
       assert.deepEqual(route.routePlan.requiredTools, []);
       assert.deepEqual(route.routePlan.requiredSubagents, []);
 
-      const unsupported = await event(pi, 'session_stop')({ output: '该陈述得到仓库内证据支持。' }, ctx);
+      const unsupported = await event(pi, 'session_stop')({ output: factVerdictOutput('该陈述得到仓库内证据支持。', 'SUPPORTED') }, ctx);
       assert.equal(unsupported?.continue, true);
       assert.match(unsupported.additionalContext, /local fact-evidence gate.*built-in grep.*repository root/is);
 
@@ -708,7 +714,7 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
       assert.equal(latestState(pi).evidence.focusedFactEvidence.matchKind, 'no-match');
       assert.equal(latestState(pi).evidence.factCheckGate, false);
       assert.equal(await event(pi, 'session_stop')({
-        output: '没有找到独立证据，因此当前仓库证据不足，无法支持该陈述。',
+        output: factVerdictOutput('没有找到独立证据，因此当前仓库证据不足，无法支持该陈述。'),
       }, ctx), undefined);
       assert.equal(latestState(pi).evidence.factCheckGate, true);
     });
@@ -729,7 +735,8 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
           const { pi, ctx } = await startFocusedFactRuntime();
           await recordFocusedFactGrep(pi, ctx, { id: `${observation.kind}-${conclusion.length}`, output: observation.output });
           assert.equal(latestState(pi).evidence.focusedFactEvidence.matchKind, observation.kind);
-          const blocked = await event(pi, 'session_stop')({ output: conclusion }, ctx);
+          const verdict = conclusion === '该陈述得到仓库内证据支持。' ? 'SUPPORTED' : 'CONTRADICTED';
+          const blocked = await event(pi, 'session_stop')({ output: factVerdictOutput(conclusion, verdict) }, ctx);
           assert.equal(blocked?.continue, true, conclusion);
           assert.equal(latestState(pi).evidence.factCheckGate, false, conclusion);
         });
@@ -739,11 +746,114 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
         const { pi, ctx } = await startFocusedFactRuntime();
         await recordFocusedFactGrep(pi, ctx, { id: `${observation.kind}-not-supported`, output: observation.output });
         assert.equal(await event(pi, 'session_stop')({
-          output: 'The claim is not supported by independent repository evidence.',
+          output: factVerdictOutput('The claim is not supported by independent repository evidence.'),
         }, ctx), undefined);
       });
+
+      for (const [label, report] of [
+        ['chinese', [
+          '## 核查结果：证据不足',
+          '仓库内没有任何源文件、测试或配置能独立证实该陈述。',
+          '该声明只是 unsupported assertion；当前证据不足，无法支持该陈述。',
+          '若需要证实，必须补充证据链，例如权威规格或可复现测试。',
+        ].join('\n')],
+        ['english', [
+          'Status: evidence insufficient.',
+          'No independent evidence supports this claim; the local logs confirm the evidentiary gap.',
+          'The claim is an unsupported assertion and cannot be verified from this repository.',
+        ].join('\n')],
+        ['bare', 'Terminal verdict: evidence insufficient.'],
+        ['unverified', 'Evidence is insufficient. The claim is currently unverified.'],
+        ['unresolved', 'Evidence is insufficient. The claim remains unresolved.'],
+        ['under-review', 'Evidence is insufficient. This statement is under review.'],
+        ['not-proven', 'No independent repository evidence supports the claim. The claim is not proven.'],
+      ]) {
+        await withEnforce(async () => {
+          const { pi, ctx } = await startFocusedFactRuntime();
+          await recordFocusedFactGrep(pi, ctx, {
+            id: `${observation.kind}-verbose-insufficient-${label}`,
+            output: observation.output,
+          });
+          const finalReport = factVerdictOutput(report);
+          const stopEvent = label === 'english'
+            ? { last_assistant_message: { role: 'assistant', content: [{ type: 'text', text: finalReport }] } }
+            : { output: finalReport };
+          assert.equal(await event(pi, 'session_stop')(stopEvent, ctx), undefined, label);
+          assert.equal(latestState(pi).gateController.budget.repairUsed, 0, label);
+        });
+      }
     });
   }
+
+  await t.test('an unclear verdict repairs wording without asking for another method attempt', async () => {
+    await withEnforce(async () => {
+      const { pi, ctx } = await startFocusedFactRuntime();
+      await recordFocusedFactGrep(pi, ctx, {
+        id: 'claim-only-before-wording-repair',
+        output: 'docs/notes.md:3:The stable fact is 42.',
+      });
+      const repair = await event(pi, 'session_stop')({ output: 'Repository inspection complete.' }, ctx);
+      assert.equal(repair?.continue, true);
+      assert.match(repair.additionalContext, /already recorded host-observed local fact evidence/i);
+      assert.match(repair.additionalContext, /do not run grep or another method again/i);
+      assert.doesNotMatch(repair.additionalContext, /use one successful built-in grep/i);
+      assert.equal(await event(pi, 'session_stop')({
+        output: factVerdictOutput('No independent repository evidence supports the claim; evidence is insufficient.'),
+      }, ctx), undefined);
+      assert.equal(latestState(pi).gateController.budget.repairUsed, 1);
+    });
+  });
+
+  await t.test('the terminal verdict is singular, mandatory, and consistent with the prose', async () => {
+    for (const output of [
+      'Evidence is insufficient. The claim remains unverified.',
+      'Evidence is insufficient.\nFACT_VERDICT: INSUFFICIENT\nFACT_VERDICT: INSUFFICIENT',
+      'Evidence is insufficient.\nFACT_VERDICT: INSUFFICIENT\nFACT_VERDICT: SUPPORTED',
+      'Evidence is insufficient.\nFACT_VERDICT: UNKNOWN',
+      'FACT_VERDICT: INSUFFICIENT\nThe proposition is true.',
+      '```text\nFACT_VERDICT: INSUFFICIENT\n```',
+      'The proposition is true.\nFACT_VERDICT: INSUFFICIENT',
+      '证据不足。这个说法是真的。\nFACT_VERDICT: INSUFFICIENT',
+      'Evidence is insufficient.\nFACT_VERDICT: UNKNOWN\nFACT_VERDICT: INSUFFICIENT',
+      'Evidence is insufficient.\nFACT_VERDICT: GARBAGE\nFACT_VERDICT: INSUFFICIENT',
+      'Evidence is insufficient.\nFACT_VERDICT:\nFACT_VERDICT: INSUFFICIENT',
+      'Evidence is insufficient.\nFACT_VERDICT: SUPPORTED extra\nFACT_VERDICT: INSUFFICIENT',
+      'Evidence is insufficient. But it is true.\nFACT_VERDICT: INSUFFICIENT',
+      'Evidence is insufficient. This is correct.\nFACT_VERDICT: INSUFFICIENT',
+      'Evidence is insufficient. Still true.\nFACT_VERDICT: INSUFFICIENT',
+      '证据不足。但这是真的。\nFACT_VERDICT: INSUFFICIENT',
+      '证据不足。但它成立。\nFACT_VERDICT: INSUFFICIENT',
+      'Evidence is insufficient. The stable fact is 42.\nFACT_VERDICT: INSUFFICIENT',
+      '证据不足。稳定事实是 42。\nFACT_VERDICT: INSUFFICIENT',
+    ]) {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startFocusedFactRuntime();
+        await recordFocusedFactGrep(pi, ctx, { id: `invalid-terminal-${output.length}`, output: 'No matches found' });
+        const blocked = await event(pi, 'session_stop')({ output }, ctx);
+        assert.equal(blocked?.continue, true, output);
+        assert.equal(latestState(pi).evidence.factCheckGate, false, output);
+      });
+    }
+
+    for (const prose of [
+      'Evidence is insufficient. However, it cannot be verified.',
+      'Evidence is insufficient. Still, it remains unconfirmed.',
+      'Evidence is insufficient. The inspected path is correct.',
+      'Evidence is insufficient. The search command is supported by this runtime.',
+      'Evidence is insufficient. The grep completed and the result is accurate.',
+      '证据不足。不过它无法被验证。',
+      '证据不足。检索路径正确。',
+      '证据不足。命令成立并正常执行。',
+      '证据不足。格式正确。',
+    ]) {
+      await withEnforce(async () => {
+        const { pi, ctx } = await startFocusedFactRuntime();
+        await recordFocusedFactGrep(pi, ctx, { id: `valid-terminal-${prose.length}`, output: 'No matches found' });
+        assert.equal(await event(pi, 'session_stop')({ output: factVerdictOutput(prose) }, ctx), undefined, prose);
+        assert.equal(latestState(pi).gateController.budget.repairUsed, 0, prose);
+      });
+    }
+  });
 
   await t.test('an independent file hit permits an explicit supported or contradicted conclusion', async () => {
     for (const conclusion of [
@@ -768,7 +878,8 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
         assert.equal(evidence.matchKind, 'independent-hit');
         assert.equal(evidence.independentMatchObserved, true);
         assert.equal(latestState(pi).evidence.factCheckGate, false);
-        assert.equal(await event(pi, 'session_stop')({ output: conclusion }, ctx), undefined);
+        const verdict = conclusion === '独立的仓库证据支持该陈述。' ? 'SUPPORTED' : 'CONTRADICTED';
+        assert.equal(await event(pi, 'session_stop')({ output: factVerdictOutput(conclusion, verdict) }, ctx), undefined, conclusion);
         assert.equal(latestState(pi).evidence.factCheckGate, true);
       });
     }
@@ -779,11 +890,18 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
       '证据不足，但该陈述仍然得到支持。',
       'evidence is insufficient. Nevertheless, the claim is true and accurate.',
       '证据不足；不过该陈述属实且正确。',
+      'Evidence is insufficient. Nevertheless, the claim is proven.',
+      'No independent repository evidence supports the claim. The claim is established as a fact.',
+      '证据不足，但该陈述为真。',
+      '证据不足，但我认定该断言成立。',
+      'Evidence is insufficient. I accept it as fact.',
+      'Evidence is insufficient. I consider the proposition proven.',
+      '证据不足。我还是认为它是真的。',
     ]) {
       await withEnforce(async () => {
         const { pi, ctx } = await startFocusedFactRuntime();
         await recordFocusedFactGrep(pi, ctx, { id: `mixed-conclusion-${conclusion.length}`, output: 'No matches found' });
-        const blocked = await event(pi, 'session_stop')({ output: conclusion }, ctx);
+        const blocked = await event(pi, 'session_stop')({ output: factVerdictOutput(conclusion) }, ctx);
         assert.equal(blocked?.continue, true, conclusion);
         assert.equal(latestState(pi).evidence.factCheckGate, false, conclusion);
       });
@@ -800,7 +918,7 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
       await withEnforce(async () => {
         const { pi, ctx } = await startFocusedFactRuntime();
         await recordFocusedFactGrep(pi, ctx, { id: `double-negative-${conclusion.length}`, output: 'No matches found' });
-        const blocked = await event(pi, 'session_stop')({ output: conclusion }, ctx);
+        const blocked = await event(pi, 'session_stop')({ output: factVerdictOutput(conclusion) }, ctx);
         assert.equal(blocked?.continue, true, conclusion);
         assert.equal(latestState(pi).evidence.factCheckGate, false, conclusion);
       });
@@ -820,7 +938,7 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
         const evidence = latestState(pi).evidence.focusedFactEvidence;
         assert.equal(evidence.matchKind, 'unparseable-hit', pattern);
         assert.equal(evidence.independentMatchObserved, false, pattern);
-        const blocked = await event(pi, 'session_stop')({ output: '独立仓库证据支持该陈述。' }, ctx);
+        const blocked = await event(pi, 'session_stop')({ output: factVerdictOutput('独立仓库证据支持该陈述。', 'SUPPORTED') }, ctx);
         assert.equal(blocked?.continue, true, pattern);
       });
     }
@@ -850,7 +968,7 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
       const evidence = latestState(pi).evidence.focusedFactEvidence;
       assert.equal(evidence.matchKind, 'independent-hit');
       assert.equal(evidence.independentMatchObserved, true);
-      assert.equal(await event(pi, 'session_stop')({ output: '独立仓库证据支持该陈述。' }, ctx), undefined);
+      assert.equal(await event(pi, 'session_stop')({ output: factVerdictOutput('独立仓库证据支持该陈述。', 'SUPPORTED') }, ctx), undefined);
     });
 
     await withEnforce(async () => {
@@ -902,7 +1020,7 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
           details: { matchCount: 0, fileCount: 0, files: [], fileMatches: [] },
         });
         assert.equal(latestState(pi).evidence.focusedFactEvidence.matchKind, 'no-match', fact.path);
-        assert.equal(await event(pi, 'session_stop')({ output: '没有找到独立证据，因此证据不足。' }, ctx), undefined);
+        assert.equal(await event(pi, 'session_stop')({ output: factVerdictOutput('没有找到独立证据，因此证据不足。') }, ctx), undefined);
       });
     }
   });
@@ -922,7 +1040,7 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
           details: { matchCount: 0, fileCount: 0, files: [], fileMatches: [] },
         });
         assert.equal(latestState(pi).evidence.focusedFactEvidence.matchKind, 'no-match', prompt);
-        assert.equal(await event(pi, 'session_stop')({ output: 'No independent repository evidence was found; evidence is insufficient.' }, ctx), undefined);
+        assert.equal(await event(pi, 'session_stop')({ output: factVerdictOutput('No independent repository evidence was found; evidence is insufficient.') }, ctx), undefined);
       });
     }
   });
@@ -936,7 +1054,7 @@ test('focused offline fact evidence is claim-bound and conclusion-consistent', a
       const restored = await restartRuntime(first.pi.entries);
       assert.equal(latestState(restored.pi).evidence.focusedFactEvidence.routeId, routeId);
       assert.equal(await event(restored.pi, 'session_stop')({
-        output: '仓库中没有独立证据，当前结论是证据不足。',
+        output: factVerdictOutput('仓库中没有独立证据，当前结论是证据不足。'),
       }, restored.ctx), undefined);
 
       await event(restored.pi, 'before_agent_start')({
@@ -2578,6 +2696,10 @@ async function startRuntime(prompt, { testingToolAvailable = false } = {}) {
 
 function focusedFactPrompt(path = 'docs/notes.md', claim = 'The stable fact is 42') {
   return `离线核查 ${path} 中 ${claim} 是否能由仓库内证据支持。禁止联网，禁止修改任何文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。若证据不足就明确报告证据不足。`;
+}
+
+function factVerdictOutput(output, verdict = 'INSUFFICIENT') {
+  return `${output}\nFACT_VERDICT: ${verdict}`;
 }
 
 function startFocusedFactRuntime() {

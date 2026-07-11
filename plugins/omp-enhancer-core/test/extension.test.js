@@ -1247,7 +1247,7 @@ test('task tool_call accepts marker-only bug-audit assignments and descriptive r
 
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')(
-    { prompt: '帮我测试整个 subagent fork 逻辑，检查是 LLM 的错误还是门禁的错误。' },
+    { prompt: '帮我测试整个项目的 subagent fork、门禁和路由逻辑，跨多个文件检查 bug，只报告问题，不要修复。' },
     ctx,
   );
 
@@ -1323,7 +1323,7 @@ test('bug-audit task tool_call auto-attaches missing parent task context for exa
 
   await event(pi, 'session_start')({}, ctx);
   await event(pi, 'before_agent_start')(
-    { prompt: '帮我测试整个 subagent fork 逻辑，检查是 LLM 的错误还是门禁的错误。' },
+    { prompt: '帮我测试整个项目的 subagent fork、门禁和路由逻辑，跨多个文件检查 bug，只报告问题，不要修复。' },
     ctx,
   );
 
@@ -1348,7 +1348,7 @@ test('bug-audit task tool_call auto-attaches missing parent task context for exa
 
   assert.equal(allowed, undefined);
   assert.match(taskEvent.input.tasks[0].assignment, /OMP_REQUIRED_SUBAGENT:\s*ecc-tdd-guide/);
-  assert.match(taskEvent.input.tasks[0].assignment, /OMP_PARENT_TASK:\s*帮我测试整个 subagent fork 逻辑/);
+  assert.match(taskEvent.input.tasks[0].assignment, /OMP_PARENT_TASK:\s*帮我测试整个项目的 subagent fork/);
   assert.match(taskEvent.input.tasks[0].assignment, /Required skills for this subagent:\n- test-driven-development\n- search-first\n- ai-regression-testing/);
 });
 
@@ -1672,7 +1672,7 @@ test('smart gate resolve requires a current pending gate and cannot release prot
   assert.doesNotMatch(blocked.reason, /Rule gate key: writing\.zh:prework:edit/);
 });
 
-test('focused bug audit preloads main-agent skills instead of blocking on subagent delegation', async () => {
+test('focused bug audit does not force skills, test methods, or subagent delegation', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
@@ -1684,38 +1684,16 @@ test('focused bug audit preloads main-agent skills instead of blocking on subage
   );
   const startFragment = governanceText(startResult, {});
 
-  assert.match(startFragment, /focused audit skill preflight/i);
-  assert.match(startFragment, /Do not fork the heavy bug-audit subagent set/i);
-  assert.match(startFragment, /read skill:\/\/diagnose/);
-  assert.match(startFragment, /read skill:\/\/test-driven-development/);
-  assert.match(startFragment, /read skill:\/\/verification-before-completion/);
-  assert.match(startFragment, /read skill:\/\/search-first/);
-  assert.match(startFragment, /Focused Bug Audit Test Generation Contract/);
+  assert.match(startFragment, /No particular skill, test method, or QA gate is mandatory/i);
+  assert.match(startFragment, /No mandatory test method, QA gate, or subagent attempt applies/i);
+  assert.match(startFragment, /Required skills:\n- none/);
+  assert.match(startFragment, /Toolchain:\n- none/);
+  assert.doesNotMatch(startFragment, /read skill:\/\//);
+  assert.doesNotMatch(startFragment, /Focused Bug Audit Test Generation Contract/);
   assert.doesNotMatch(startFragment, /OMP_REQUIRED_SUBAGENT:\s*ecc-tdd-guide/);
 
-  const noSubagentBlock = await event(pi, 'session_stop')({}, ctx);
-  assert.equal(noSubagentBlock?.continue, true);
-  assert.doesNotMatch(noSubagentBlock.additionalContext, /subagent gate/i);
-  assert.match(noSubagentBlock.additionalContext, /omp_test_gate/);
-
-  const blockedTool = await event(pi, 'tool_call')(
-    { toolName: 'omp_test_gate', input: { passed: true } },
-    ctx,
-  );
-
-  assert.equal(blockedTool?.block, false);
-  assert.match(blockedTool.reason, /^RECOVERY\nReason: missing_skill_read/);
-  assert.match(blockedTool.reason, /diagnose/);
-  assert.match(blockedTool.reason, /search-first/);
-
-  await readSkills(pi, ctx, ['diagnose', 'test-driven-development', 'verification-before-completion', 'search-first']);
-
-  const allowedTool = await event(pi, 'tool_call')(
-    { toolName: 'omp_test_gate', input: { passed: true } },
-    ctx,
-  );
-
-  assert.equal(allowedTool, undefined);
+  const stop = await event(pi, 'session_stop')({ output: 'No verified defect found in the bounded path.' }, ctx);
+  assert.equal(stop, undefined);
 });
 
 test('local smoke verification stays out of bug-audit subagent gates', async () => {
@@ -2230,7 +2208,7 @@ test('session_stop continues when a routed task has not forked required subagent
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await establishTrustedRoute(pi, ctx, '实现自然语言路由并补测试。');
+  await establishTrustedRoute(pi, ctx, '请大规模重构这个插件的路由逻辑，修改多个文件，补完整回归测试并运行测试。');
 
   const blocked = await event(pi, 'session_stop')({}, ctx);
 
@@ -2252,7 +2230,7 @@ test('failed task tool results do not count as forked subagents', async () => {
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await establishTrustedRoute(pi, ctx, '实现自然语言路由并补测试。');
+  await establishTrustedRoute(pi, ctx, '请大规模重构这个插件的路由逻辑，修改多个文件，补完整回归测试并运行测试。');
   await event(pi, 'tool_result')(
     {
       name: 'task',
@@ -2285,7 +2263,7 @@ test('failed task results keep subagent gate blocked even after prior task tool_
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await establishTrustedRoute(pi, ctx, '实现自然语言路由并补测试。');
+  await establishTrustedRoute(pi, ctx, '请大规模重构这个插件的路由逻辑，修改多个文件，补完整回归测试并运行测试。');
   await event(pi, 'tool_call')(
     {
       toolName: 'task',
@@ -2328,7 +2306,7 @@ test('session_stop continues when forked subagents lack required skill assignmen
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await establishTrustedRoute(pi, ctx, '实现自然语言路由并补测试。');
+  await establishTrustedRoute(pi, ctx, '请大规模重构这个插件的路由逻辑，修改多个文件，补完整回归测试并运行测试。');
   for (const agent of ['plan', 'implementation-task', 'reviewer']) {
     await event(pi, 'tool_result')({ name: 'task', params: { agent, prompt: 'Do the assigned work.' } }, ctx);
   }
@@ -2415,7 +2393,7 @@ test('stale pending task calls are reported as potentially stuck', async () => {
   const ctx = extensionContext();
 
   await event(pi, 'session_start')({}, ctx);
-  await establishTrustedRoute(pi, ctx, '实现自然语言路由并补测试。');
+  await establishTrustedRoute(pi, ctx, '请大规模重构这个插件的路由逻辑，修改多个文件，补完整回归测试并运行测试。');
   await readSkills(pi, ctx, [
     'brainstorming',
     'test-driven-development',
@@ -3805,19 +3783,18 @@ test('writing gate releases after complete evidence and does not reblock repeate
   await assertReleasedStops(restoredPi, extensionContext(entries), [{}, {}]);
 });
 
-test('bug-audit testing gate releases after test gate and skill evidence without requiring another stop loop', async () => {
+test('focused test authoring releases after test, skill, and direct review evidence without subagents', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
-  const agents = ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'];
-  const skills = ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'];
+  const skills = ['test-driven-development', 'verification-before-completion'];
 
   await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')(
+  const started = await event(pi, 'before_agent_start')(
     { prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。' },
     ctx,
   );
-  await forkSubagents(pi, ctx, agents);
+  assert.deepEqual(started.route.requiredSubagents, []);
 
   const blocked = await event(pi, 'session_stop')({}, ctx);
   assert.equal(blocked?.continue, true);
@@ -3835,21 +3812,29 @@ test('bug-audit testing gate releases after test gate and skill evidence without
     ctx,
   );
 
-  await assertReleasedStops(pi, ctx, [{}, {}, { output: 'Final summary only.' }]);
+  const finalEvidence = [
+    skillUsageBlock(skills),
+    'REVIEW_EVIDENCE',
+    'Scope: focused test change in src/router.js',
+    'Findings: the regression test covers the requested boundary without production edits',
+    'OpenBlockers: none',
+    'Verdict: PASS',
+  ].join('\n');
+  await assertReleasedStops(pi, ctx, [{ output: finalEvidence }, {}, { output: 'Final summary only.' }]);
 });
 
-test('bug-audit route accepts complete final subagent evidence when task telemetry is unavailable', async () => {
+test('focused test authoring accepts complete final direct review evidence when task telemetry is unavailable', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
   const ctx = extensionContext();
-  const agents = ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'];
-  const skills = ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'];
+  const skills = ['test-driven-development', 'verification-before-completion'];
 
   await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')(
+  const started = await event(pi, 'before_agent_start')(
     { prompt: '为 src/router.js 写高信号单元测试，覆盖边界和错误路径。' },
     ctx,
   );
+  assert.deepEqual(started.route.requiredSubagents, []);
   await event(pi, 'tool_result')({ name: 'omp_test_gate', details: { passed: true } }, ctx);
   await recordPassingHostTest(pi, ctx);
   await tool(pi, 'omp_core_validate_skill_usage').execute(
@@ -3864,15 +3849,14 @@ test('bug-audit route accepts complete final subagent evidence when task telemet
 
   const finalOnly = await event(pi, 'session_stop')(
     {
-      output: usageEvidence({
-        subagents: {
-          'ecc-tdd-guide': ['test-driven-development', 'search-first', 'ai-regression-testing'],
-          'ecc-code-reviewer': ['verification-before-completion'],
-          'ecc-silent-failure-hunter': ['diagnose'],
-          'ecc-pr-test-analyzer': ['verification-before-completion'],
-        },
-        skills,
-      }),
+      output: [
+        skillUsageBlock(skills),
+        'REVIEW_EVIDENCE',
+        'Scope: focused test change in src/router.js',
+        'Findings: the requested boundary is covered and production code is unchanged',
+        'OpenBlockers: none',
+        'Verdict: PASS',
+      ].join('\n'),
     },
     ctx,
   );
@@ -3933,6 +3917,23 @@ test('unknown routes enforce read-only boundaries without blocking final output'
   assert.equal(toolResult?.reasonCode, 'workspace-write-forbidden');
 
   await assertReleasedStops(pi, ctx, [{ output: 'Paris.' }, {}, { output: 'Done.' }]);
+});
+
+test('security concept explanations with no code audit never open a security completion gate', async () => {
+  for (const prompt of [
+    '解释一下 XSS 是什么，先不要审查项目代码。',
+    'Explain SSRF. No code review.',
+  ]) {
+    const pi = new FakePi();
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext();
+    await event(pi, 'session_start')({}, ctx);
+    const start = await event(pi, 'before_agent_start')({ prompt }, ctx);
+    assert.equal(start.route.intent, 'unknown', prompt);
+    assert.equal(start.route.taskDescriptor.operation, 'answer', prompt);
+    assert.equal(start.route.routePlan.gateRequirements.some(({ key }) => key === 'security-evidence'), false, prompt);
+    assert.equal(await event(pi, 'session_stop')({ output: 'Concept explanation only.' }, ctx), undefined, prompt);
+  }
 });
 
 test('unknown route classifier observations accumulate across follow-up prompts', async () => {

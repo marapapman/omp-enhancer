@@ -677,7 +677,7 @@
     ],
     "expectedGateMode": "test-review-gate",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
+    "shouldForkSubagents": false,
     "expectedSkills": [
       "test-driven-development",
       "verification-before-completion"
@@ -705,7 +705,7 @@
     ],
     "expectedGateMode": "test-review-gate",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
+    "shouldForkSubagents": false,
     "expectedSkills": [
       "test-driven-development"
     ],
@@ -732,7 +732,7 @@
     ],
     "expectedGateMode": "test-review-gate",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
+    "shouldForkSubagents": false,
     "expectedSkills": [
       "verification-before-completion"
     ],
@@ -915,10 +915,8 @@
     ],
     "expectedGateMode": "review-gate",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
-    "expectedSkills": [
-      "ai-regression-testing"
-    ],
+    "shouldForkSubagents": false,
+    "expectedSkills": [],
     "expectedRouteCardSections": [
       "WORKFLOW_CARD",
       "Task type",
@@ -942,10 +940,8 @@
     ],
     "expectedGateMode": "review-gate",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
-    "expectedSkills": [
-      "verification-before-completion"
-    ],
+    "shouldForkSubagents": false,
+    "expectedSkills": [],
     "expectedRouteCardSections": [
       "WORKFLOW_CARD",
       "Task type",
@@ -969,10 +965,8 @@
     ],
     "expectedGateMode": "review-gate",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
-    "expectedSkills": [
-      "diagnose"
-    ],
+    "shouldForkSubagents": false,
+    "expectedSkills": [],
     "expectedRouteCardSections": [
       "WORKFLOW_CARD",
       "Task type",
@@ -996,7 +990,7 @@
     ],
     "expectedGateMode": "hidden-coach",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
+    "shouldForkSubagents": false,
     "expectedSkills": [],
     "expectedRouteCardSections": [
       "WORKFLOW_CARD",
@@ -1021,7 +1015,7 @@
     ],
     "expectedGateMode": "hidden-coach",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
+    "shouldForkSubagents": false,
     "expectedSkills": [],
     "expectedRouteCardSections": [
       "WORKFLOW_CARD",
@@ -1046,7 +1040,7 @@
     ],
     "expectedGateMode": "hidden-coach",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
+    "shouldForkSubagents": false,
     "expectedSkills": [],
     "expectedRouteCardSections": [
       "WORKFLOW_CARD",
@@ -1336,9 +1330,9 @@
     ],
     "expectedGateMode": "test-review-gate",
     "shouldUseClassifier": true,
-    "shouldForkSubagents": true,
+    "shouldForkSubagents": false,
     "expectedSkills": [
-      "subagent-driven-development"
+      "verification-before-completion"
     ],
     "expectedRouteCardSections": [
       "WORKFLOW_CARD",
@@ -1446,7 +1440,7 @@
     ],
     "expectedGateMode": "hidden-coach",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
+    "shouldForkSubagents": false,
     "expectedSkills": [
       "omp-marketplace-plugin-activation"
     ],
@@ -1473,7 +1467,7 @@
     ],
     "expectedGateMode": "hidden-coach",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
+    "shouldForkSubagents": false,
     "expectedSkills": [
       "omp-marketplace-plugin-activation"
     ],
@@ -1607,7 +1601,7 @@
     "expectedGateMode": "review-gate",
     "shouldUseClassifier": false,
     "shouldForkSubagents": false,
-    "expectedSkills": ["diagnose", "test-driven-development"],
+    "expectedSkills": ["verification-before-completion"],
     "expectedRouteCardSections": ["WORKFLOW_CARD", "Task type", "Do", "Do not", "Skills", "Gate"],
     "expectedHardBlockReason": null,
     "expectedLoopAction": null,
@@ -1634,8 +1628,8 @@
     "notRoute": ["writing.zh"],
     "expectedGateMode": "test-review-gate",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
-    "expectedSkills": ["test-driven-development", "verification-before-completion"],
+    "shouldForkSubagents": false,
+    "expectedSkills": [],
     "expectedRouteCardSections": ["WORKFLOW_CARD", "Task type", "Do", "Do not", "Skills", "Gate"],
     "expectedHardBlockReason": null,
     "expectedLoopAction": null,
@@ -1648,7 +1642,7 @@
     "notRoute": ["code.review"],
     "expectedGateMode": "hidden-coach",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
+    "shouldForkSubagents": false,
     "expectedSkills": ["omp-marketplace-plugin-activation"],
     "expectedRouteCardSections": ["WORKFLOW_CARD", "Task type", "Do", "Do not", "Skills", "Gate"],
     "expectedHardBlockReason": null,
@@ -1719,7 +1713,7 @@
     "expectedGateMode": "review-gate",
     "shouldUseClassifier": false,
     "shouldForkSubagents": false,
-    "expectedSkills": ["diagnose", "test-driven-development", "verification-before-completion", "search-first"],
+    "expectedSkills": [],
     "expectedRouteCardSections": ["WORKFLOW_CARD", "Task type", "Do", "Do not", "Skills", "Gate"],
     "expectedHardBlockReason": null,
     "expectedLoopAction": null,
@@ -1732,7 +1726,7 @@
     "notRoute": ["code.review"],
     "expectedGateMode": "test-review-gate",
     "shouldUseClassifier": false,
-    "shouldForkSubagents": true,
+    "shouldForkSubagents": false,
     "expectedSkills": ["test-driven-development", "verification-before-completion"],
     "expectedRouteCardSections": ["WORKFLOW_CARD", "Task type", "Do", "Do not", "Skills", "Gate"],
     "expectedHardBlockReason": null,

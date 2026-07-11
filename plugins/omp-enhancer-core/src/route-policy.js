@@ -1,4 +1,5 @@
 import { subagentPlans } from './subagent-plans.js';
+import { buildWorkflowRouteCard } from './workflow-routes.js';
 
 export const PUBLIC_INTENT_ALIASES = Object.freeze({
   'agentic.simple': 'unknown',
@@ -56,9 +57,12 @@ export function buildRoutePlan(descriptor, route = {}) {
   let phases = (descriptor?.phases ?? []).map(({ kind, domain }) => ({ kind, domain }));
   const domains = new Set(descriptor?.domains ?? []);
   const capabilities = new Set(descriptor?.capabilities ?? []);
+  const primaryDirectTestAuthoring = (descriptor?.provenance?.reasons ?? [])
+    .includes('primary direct test authoring requested');
   const testsAuthorized = descriptor?.constraints?.testExecution === 'required'
     && capabilities.has('tests.execute');
-  const subagentsAuthorized = descriptor?.constraints?.subagents !== 'forbidden'
+  const subagentsAuthorized = !primaryDirectTestAuthoring
+    && descriptor?.constraints?.subagents !== 'forbidden'
     && capabilities.has('subagents');
   const externalWriteAuthorized = descriptor?.constraints?.externalWrite === 'required'
     && capabilities.has('external.write');
@@ -70,7 +74,9 @@ export function buildRoutePlan(descriptor, route = {}) {
   const broadCodeAudit = descriptor?.operation === 'inspect'
     && domains.has('code')
     && descriptor?.complexity === 'broad'
-    && !domains.has('security');
+    && !domains.has('security')
+    && route.intent === 'bug-audit'
+    && route.auditMode !== 'focused';
   const focusedLocalFactInspection = descriptor?.operation === 'inspect'
     && domains.has('facts')
     && descriptor?.complexity === 'focused'
@@ -101,6 +107,8 @@ export function buildRoutePlan(descriptor, route = {}) {
   const codeModification = phases.some(({ kind, domain }) => (
     ['modify', 'create'].includes(kind) && domain === 'code'
   ));
+  const testArtifactModification = primaryDirectTestAuthoring
+    && phases.some(({ kind, domain }) => kind === 'modify' && domain === 'tests');
 
   if (domains.has('facts')) {
     if (!focusedLocalFactInspection) {
@@ -111,17 +119,28 @@ export function buildRoutePlan(descriptor, route = {}) {
     gateRequirements.push(gateRequirement('fact-evidence', 'required'));
   }
 
-  if (domains.has('writing') && !focusedLocalFactInspection) {
-    if (descriptor?.language === 'zh') {
+  const selectedWritingRoute = ['writing.zh', 'writing.en'].includes(route.intent);
+  const selectedWritingWorkflow = selectedWritingRoute
+    || domains.has('writing') && descriptor?.operation !== 'execute';
+  if (selectedWritingWorkflow && !focusedLocalFactInspection) {
+    const writingLanguage = selectedWritingRoute
+      ? route.intent === 'writing.zh' ? 'zh' : 'en'
+      : descriptor?.language;
+    const complexWriting = selectedWritingRoute
+      ? descriptor?.complexity === 'broad' && route.writingComplexity === 'complex'
+      : domains.has('writing')
+        ? domains.has('facts') || descriptor?.complexity === 'broad'
+      : route.writingComplexity === 'complex';
+    if (writingLanguage === 'zh') {
       requiredSkills.push('plain-chinese-writing', 'zh-writing-polish');
-      if (domains.has('facts') || descriptor?.complexity === 'broad') requiredSkills.push('zh-writing-checkers');
-      if (domains.has('facts') || descriptor?.complexity === 'broad') requiredSubagents.push(...subagentPlans.writingZh);
+      if (complexWriting) requiredSkills.push('zh-writing-checkers');
+      if (complexWriting) requiredSubagents.push(...subagentPlans.writingZh);
     } else {
       requiredSkills.push('writing-markdown-helper');
-      if (domains.has('facts') || descriptor?.complexity === 'broad') requiredSkills.push('writing-checkers');
-      if (domains.has('facts') || descriptor?.complexity === 'broad') requiredSubagents.push(...subagentPlans.writingEn);
+      if (complexWriting) requiredSkills.push('writing-checkers');
+      if (complexWriting) requiredSubagents.push(...subagentPlans.writingEn);
     }
-    if (phaseKinds.has('review') && (domains.has('facts') || descriptor?.complexity === 'broad')) {
+    if (complexWriting) {
       requiredTools.push('writing_logic_check', 'writing_quality_check');
       gateRequirements.push(gateRequirement('writing-quality', 'required'));
     }
@@ -135,7 +154,10 @@ export function buildRoutePlan(descriptor, route = {}) {
     }
   }
 
-  if (codeModification) {
+  if (testArtifactModification) {
+    requiredSkills.push('test-driven-development', 'verification-before-completion');
+    if (testsAuthorized) requiredTools.push('omp_test_gate');
+  } else if (codeModification) {
     if (descriptor?.complexity === 'broad') requiredSkills.push(...IMPLEMENTATION_SKILLS);
     else {
       if (descriptor?.constraints?.testExecution === 'required') requiredSkills.push('test-driven-development');
@@ -171,6 +193,15 @@ export function buildRoutePlan(descriptor, route = {}) {
     requiredSubagents.push(...subagentPlans.configAssets);
   }
 
+  if (route.intent === 'config-assets') {
+    requiredSkills.push(...(route.requiredSkills ?? []));
+    requiredTools.push(...(route.requiredTools ?? []));
+  }
+
+  if (['writing.latex', 'writing.markdown', 'doc.convert.word', 'design.visual'].includes(route.workflowRoute)) {
+    requiredSkills.push(...(route.requiredSkills ?? []));
+  }
+
   if (descriptor?.operation === 'modify' && domains.has('document')) {
     requiredSkills.push('verification-before-completion');
   }
@@ -184,9 +215,11 @@ export function buildRoutePlan(descriptor, route = {}) {
     gateRequirements.push(gateRequirement('test-evidence', 'required'));
   }
 
-  if (phaseKinds.has('review') && (codeModification || domains.has('document')) && !securityProseRefinement) {
+  if (phaseKinds.has('review')
+    && (codeModification || testArtifactModification || domains.has('document'))
+    && !securityProseRefinement) {
     gateRequirements.push(gateRequirement('review-evidence', 'required'));
-  } else if (descriptor?.operation === 'inspect' && domains.has('code')) {
+  } else if (descriptor?.operation === 'inspect' && domains.has('code') && route.intent === 'bug-audit') {
     gateRequirements.push(gateRequirement('review-evidence', 'advisory'));
   }
 
@@ -219,7 +252,7 @@ function phaseAllowedByDescriptor(phase, descriptor, { testsAuthorized, external
   if (phase.kind === 'verify' && phase.domain === 'tests') return testsAuthorized;
   if (phase.kind === 'release') return externalWriteAuthorized;
   if ((phase.kind === 'modify' || phase.kind === 'create')
-    && ['code', 'document', 'plugin', 'config', 'visual'].includes(phase.domain)) {
+    && ['code', 'tests', 'document', 'plugin', 'config', 'visual'].includes(phase.domain)) {
     return descriptor?.constraints?.workspaceWrite === 'required'
       && (descriptor?.capabilities ?? []).includes('fs.write');
   }
@@ -243,24 +276,69 @@ function sanitizeSubagents(values, { testsAuthorized }) {
 }
 
 export function attachCompiledTaskRoute(route, descriptor) {
-  return {
+  const compiled = {
     ...route,
     taskDescriptor: descriptor,
     routePlan: buildRoutePlan(descriptor, route),
   };
+  return projectRouteResourceCeilings(compiled);
+}
+
+export function projectRouteResourceCeilings(route = {}) {
+  const constraints = route.taskDescriptor?.constraints ?? {};
+  const plan = route.routePlan ?? buildRoutePlan(route.taskDescriptor, route);
+  const testsForbidden = constraints.testExecution === 'forbidden';
+  const subagentsForbidden = constraints.subagents === 'forbidden';
+  const boundedTestKinds = (route.taskDescriptor?.testAllowlist ?? []).length > 0
+    || (route.taskDescriptor?.testExclusions ?? []).length > 0;
+  const focusedLocalFact = isFocusedLocalFactDescriptor(route.taskDescriptor);
+  if (!testsForbidden && !subagentsForbidden && !boundedTestKinds && !focusedLocalFact) return route;
+  return {
+    ...route,
+    routePlan: plan,
+    requiredSkills: plan.requiredSkills,
+    requiredTools: plan.requiredTools,
+    requiredSubagents: plan.requiredSubagents,
+    shouldForkSubagents: plan.requiredSubagents.length > 0,
+    ...(route.intent === 'writing.zh' || route.intent === 'writing.en'
+      ? { writingComplexity: route.taskDescriptor?.complexity === 'broad' ? 'complex' : 'simple' }
+      : {}),
+    routeCard: buildWorkflowRouteCard({
+      route: route.workflowRoute,
+      requiredSkills: plan.requiredSkills,
+      includeCatalogSkills: false,
+    }),
+  };
+}
+
+function isFocusedLocalFactDescriptor(descriptor = {}) {
+  return descriptor.operation === 'inspect'
+    && descriptor.domains?.includes('facts')
+    && descriptor.complexity === 'focused'
+    && descriptor.constraints?.workspaceWrite === 'forbidden'
+    && descriptor.constraints?.networkAccess === 'forbidden'
+    && descriptor.constraints?.externalWrite === 'forbidden'
+    && descriptor.constraints?.subagents === 'forbidden';
 }
 
 function legacyIntentForDescriptor(descriptor = {}) {
   const domains = new Set(descriptor.domains ?? []);
+  const primaryDirectTestAuthoring = (descriptor?.provenance?.reasons ?? [])
+    .includes('primary direct test authoring requested');
   const explicitSecurityAudit = (descriptor?.provenance?.reasons ?? [])
     .includes('explicit security audit requested');
   if (descriptor.operation === 'answer') return 'unknown';
   if (descriptor.operation === 'execute' && domains.has('tests')) return 'testing';
   if (descriptor.operation === 'execute') return 'unknown';
+  if (descriptor.operation === 'diagnose' && domains.has('config')) return 'config-assets';
   if (descriptor.operation === 'diagnose') return 'diagnosis';
   if (descriptor.operation === 'release') return 'release';
   if (descriptor.operation === 'create' && domains.has('visual')) return 'design.visual';
+  if (descriptor.operation === 'modify' && domains.has('visual')) return 'design.visual';
+  if (descriptor.operation === 'create' && domains.has('code')) return 'implementation-with-tests';
+  if (primaryDirectTestAuthoring && descriptor.operation === 'modify' && domains.has('tests')) return 'bug-audit';
   if (domains.has('facts')) return 'fact-check';
+  if (domains.has('security') && domains.has('code') && descriptor.operation === 'modify') return 'security-review';
   if (explicitSecurityAudit && domains.has('security') && domains.has('writing')) return 'security-review';
   if (domains.has('security') && descriptor.operation !== 'modify') return 'security-review';
   if (descriptor.operation === 'modify' && (domains.has('code') || domains.has('security')
@@ -269,7 +347,7 @@ function legacyIntentForDescriptor(descriptor = {}) {
   }
   if (domains.has('writing')) return descriptor.language === 'zh' ? 'writing.zh' : 'writing.en';
   if (domains.has('config') || domains.has('plugin') && !domains.has('code')) return 'config-assets';
-  if (descriptor.operation === 'inspect' && domains.has('code')) return 'bug-audit';
+  if (descriptor.operation === 'inspect' && (domains.has('code') || domains.has('tests'))) return 'bug-audit';
   return 'unknown';
 }
 

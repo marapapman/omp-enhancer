@@ -100,6 +100,22 @@ test('writing hint cannot remove security risk or its required evidence', () => 
   assert.equal(gateKeys(result.route).includes('security-evidence'), true);
 });
 
+test('classifier writing QA hints cannot create a gate without matching focused-route resources', () => {
+  const result = resolveLegacy({
+    prompt: 'Polish this sentence: Hello world.',
+    intent: 'writing.en',
+    confidence: 0.99,
+    riskFlags: ['needs-writing-qa'],
+    language: 'en',
+  });
+
+  assert.equal(result.route.intent, 'writing.en');
+  assert.equal(result.route.taskDescriptor.complexity, 'focused');
+  assert.equal(requiredGateKeys(result.route).includes('writing-quality'), false);
+  assert.equal(result.route.requiredTools.includes('writing_quality_check'), false);
+  assert.deepEqual(result.route.requiredSubagents, []);
+});
+
 test('unknown classifier output cannot downgrade a release route or hard gate', () => {
   const result = resolveLegacy({
     prompt: '发布当前插件版本。',
@@ -151,6 +167,26 @@ test('classifier RoutePlan merging deduplicates subagents by actor identity', ()
   assert.equal(names.length, 5);
   assert.equal(new Set(names).size, names.length);
   assert.ok(subagents.every((entry) => typeof entry === 'object' && entry.requiredSkills.length > 0));
+});
+
+test('classifier cannot add unrelated domains or gates to a focused local fact route', () => {
+  const prompt = '离线核查 docs/notes.md 中 The stable fact is 42 是否能由仓库内证据支持。禁止联网，禁止修改任何文件，禁止运行测试，禁止启动 subagent，禁止提交或发布。若证据不足就明确报告证据不足。';
+  const result = resolveLegacy({
+    prompt,
+    intent: 'security-review',
+    secondaryIntents: ['fact-check'],
+    confidence: 0.99,
+    riskFlags: ['needs-security-review', 'needs-review'],
+  });
+
+  assert.equal(result.route.intent, 'fact-check');
+  assert.equal(result.route.taskDescriptor.domains.includes('facts'), true);
+  assert.equal(result.route.taskDescriptor.domains.includes('security'), false);
+  assert.deepEqual(result.route.requiredSkills, []);
+  assert.deepEqual(result.route.requiredTools, []);
+  assert.deepEqual(result.route.requiredSubagents, []);
+  assert.deepEqual(result.route.routePlan, result.fallbackRoute.routePlan);
+  assert.equal(gateKeys(result.route).includes('security-evidence'), false);
 });
 
 test('descriptor-hint schema adds risk requirements without granting authority or deleting rule phases', () => {

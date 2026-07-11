@@ -1,5 +1,5 @@
 import { routeByIntent, routedIntents, routeNaturalLanguageTask } from './router.js';
-import { buildRoutePlan } from './route-policy.js';
+import { buildRoutePlan, projectRouteResourceCeilings } from './route-policy.js';
 import { normalizeTaskDescriptor } from './task-descriptor.js';
 
 export const classifierDefaults = {
@@ -418,6 +418,7 @@ function isCanonicalTestingRoute(route = {}) {
 function applyMonotonicClassifierHints(route, fallbackRoute, classification) {
   const fallbackDescriptor = fallbackRoute.taskDescriptor;
   if (!fallbackDescriptor) return preserveLegacyRequirements(route, fallbackRoute);
+  if (isFocusedLocalFactRoute(fallbackRoute)) return fallbackRoute;
 
   const useHints = classification.confidence >= classifierDefaults.minResolvedConfidence;
   const additions = useHints
@@ -434,6 +435,18 @@ function applyMonotonicClassifierHints(route, fallbackRoute, classification) {
     taskDescriptor: descriptor,
     routePlan,
   }, fallbackRoute);
+}
+
+function isFocusedLocalFactRoute(route = {}) {
+  const descriptor = route.taskDescriptor;
+  return route.intent === 'fact-check'
+    && descriptor?.operation === 'inspect'
+    && descriptor.domains?.includes('facts')
+    && descriptor.complexity === 'focused'
+    && descriptor.constraints?.workspaceWrite === 'forbidden'
+    && descriptor.constraints?.networkAccess === 'forbidden'
+    && descriptor.constraints?.externalWrite === 'forbidden'
+    && descriptor.constraints?.subagents === 'forbidden';
 }
 
 function classifierDescriptorAdditions(classification, fallbackRoute) {
@@ -588,7 +601,12 @@ function classifierGateRequirements(classification, descriptor, useHints) {
   if (flags.has('needs-review') && descriptor.phases.some(({ kind }) => kind === 'review')) {
     gates.push({ key: 'review-evidence', mode: 'required' });
   }
-  if (flags.has('needs-writing-qa') && domains.has('writing')) gates.push({ key: 'writing-quality', mode: 'required' });
+  if (flags.has('needs-writing-qa')
+    && domains.has('writing')
+    && descriptor.complexity === 'broad'
+    && descriptor.phases.some(({ kind, domain }) => kind === 'review' && domain === 'writing')) {
+    gates.push({ key: 'writing-quality', mode: 'required' });
+  }
   if (flags.has('needs-fact-check') && domains.has('facts')) gates.push({ key: 'fact-evidence', mode: 'required' });
   if (flags.has('release-or-push') && constraints.externalWrite === 'required') gates.push({ key: 'release-approval', mode: 'required' });
   return gates;
@@ -639,14 +657,14 @@ function requiredGateKeys(routePlan) {
 }
 
 function preserveLegacyRequirements(route, fallbackRoute) {
-  return {
+  return projectRouteResourceCeilings({
     ...route,
     requiredSkills: unique([...(fallbackRoute.requiredSkills ?? []), ...(route.requiredSkills ?? [])]),
     requiredTools: unique([...(fallbackRoute.requiredTools ?? []), ...(route.requiredTools ?? [])]),
     requiredSubagents: uniqueSubagents([...(fallbackRoute.requiredSubagents ?? []), ...(route.requiredSubagents ?? [])]),
     shouldForkSubagents: Boolean(fallbackRoute.shouldForkSubagents || route.shouldForkSubagents),
     hardBlockReasons: unique([...(fallbackRoute.hardBlockReasons ?? []), ...(route.hardBlockReasons ?? [])]),
-  };
+  });
 }
 
 function mergeRoutePlans(...values) {
