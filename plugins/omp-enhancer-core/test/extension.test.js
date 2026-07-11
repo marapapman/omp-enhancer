@@ -1144,7 +1144,7 @@ test('an exclusive route probe binds the exact nested prompt instead of any rout
 
 test('prompt exactly route probes bind terminal punctuation byte-for-byte', async () => {
   const innerPrompt = 'Run npm test.';
-  const wrapper = `Use omp_core_route_task exactly once with prompt exactly: ${innerPrompt} Do not call any other tool.`;
+  const wrapper = `Call omp_core_route_task exactly once with prompt exactly: ${innerPrompt} Then report only whether exclusiveToolContract exists, requiredSkills, and requiredTools. Do not execute tests and do not use any other tools.`;
 
   const wrongPi = new FakePi();
   registerCoreEnhancer(wrongPi);

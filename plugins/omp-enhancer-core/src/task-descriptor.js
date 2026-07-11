@@ -1860,7 +1860,7 @@ function exclusiveRouteProbeHasCompanionMutation(value = '') {
 
 function exclusiveRouteProbePrompt(value = '') {
   const source = String(value).normalize('NFKC').trim();
-  const extractBeforeLast = (startPattern, explicitBoundaryPattern, fallbackBoundaryPattern) => {
+  const extractBeforeBoundary = (startPattern, explicitBoundaryPattern, fallbackBoundaryPattern, { first = false } = {}) => {
     const start = source.match(startPattern);
     if (!start || start.index == null) return '';
     const tail = source.slice(start.index + start[0].length);
@@ -1868,21 +1868,22 @@ function exclusiveRouteProbePrompt(value = '') {
     const boundaries = explicitBoundaries.length
       ? explicitBoundaries
       : [...tail.matchAll(fallbackBoundaryPattern)];
-    const last = boundaries.at(-1);
-    if (last?.index == null) return '';
-    const payload = tail.slice(0, last.index).trim();
+    const boundary = first ? boundaries[0] : boundaries.at(-1);
+    if (boundary?.index == null) return '';
+    const payload = tail.slice(0, boundary.index).trim();
     const quoted = payload.match(/^(?:"([\s\S]+)"|“([\s\S]+)”|'([\s\S]+)'|‘([\s\S]+)’|`([\s\S]+)`)$/u);
     return String(quoted ? quoted.slice(1).find((part) => part != null) : payload).trim();
   };
-  return extractBeforeLast(
+  return extractBeforeBoundary(
     /\b(?:with\s+)?prompt\s+exactly\s*:\s*/i,
     /\s+(?:(?:then|next)\s+(?:report|return|respond)\b|(?:do\s+not|don't|never)\s+(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b)/gi,
     /\s+(?:(?:report|return|respond)\b|(?:do\s+not|don't|never)\s+(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b)/gi,
-  ) || extractBeforeLast(
+    { first: true },
+  ) || extractBeforeBoundary(
     /\bwith\s+(?:this\s+)?prompt\s*:\s*/i,
     /\s+then\s+(?:report|return|respond)\b/gi,
     /\s+(?:report|return|respond)\b/gi,
-  ) || extractBeforeLast(
+  ) || extractBeforeBoundary(
     /(?:参数\s*)?prompt\s*(?:为|是)?\s*[:：]\s*/i,
     /(?:然后|接着|再)\s*(?:只|仅)?\s*(?:报告|返回|输出)/gi,
     /(?:只|仅)?\s*(?:报告|返回|输出)/gi,
