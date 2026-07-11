@@ -185,6 +185,34 @@ test('an exclusive status observation finishes without opening workflow gates', 
   assert.equal(await event(pi, 'session_stop')({ output: 'STATUS_ALLOWED: YES' }, ctx), undefined);
 });
 
+test('exclusive status handler rejects a direct duplicate when tool_call hooks are absent', async () => {
+  const pi = new FakePi();
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext();
+  const prompt = 'Call omp_core_subagent_status exactly once only to inspect the current route status. If that tool succeeds, return exactly STATUS_ALLOWED: YES; otherwise return exactly STATUS_ALLOWED: NO. Do not start subagents, modify files, run tests, access the network, or call any other tool.';
+
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt }, ctx);
+  const first = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-exclusive-status-direct-first',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+  const duplicate = await tool(pi, 'omp_core_subagent_status').execute(
+    'call-exclusive-status-direct-duplicate',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(first.isError, false);
+  assert.equal(duplicate.isError, true);
+  assert.equal(duplicate.details.reasonCode, 'exclusive-tool-budget-exhausted');
+});
+
 test('a command-only exact test receives one immediate shell-only contract', async () => {
   const pi = new FakePi();
   registerCoreEnhancer(pi);
@@ -1171,6 +1199,119 @@ test('prompt exactly route probes bind terminal punctuation byte-for-byte', asyn
     input: { prompt: innerPrompt },
   }, correctCtx);
   assert.notEqual(correct?.block, true, correct?.reason);
+});
+
+test('route tool handler fails closed when the host skips the tool_call hook', async () => {
+  const innerPrompt = 'Fix src/router.js using plan, implementation, and reviewer subagents.';
+  const wrapper = `Call omp_core_route_task exactly once with prompt exactly: ${innerPrompt} Then report only complexity and requiredSubagents. Do not modify files, start subagents, run tests, or use any other tools.`;
+
+  const wrongPi = new FakePi();
+  registerCoreEnhancer(wrongPi);
+  const wrongCtx = extensionContext();
+  await event(wrongPi, 'session_start')({}, wrongCtx);
+  const wrongStart = await event(wrongPi, 'before_agent_start')({ prompt: wrapper }, wrongCtx);
+  assert.equal(wrongStart.route.taskDescriptor.exclusiveToolContract?.input?.status, 'bound');
+  const wrong = await tool(wrongPi, 'omp_core_route_task').execute(
+    'exclusive-route-direct-punctuation-mismatch',
+    { prompt: innerPrompt.slice(0, -1) },
+    undefined,
+    undefined,
+    wrongCtx,
+  );
+  assert.equal(wrong.isError, true);
+  assert.equal(wrong.details.reasonCode, 'exclusive-tool-input-mismatch');
+  assert.equal(wrong.details.blocked, true);
+  assert.equal(wrong.details.route, undefined);
+  assert.match(wrong.content[0].text, /byte-for-byte one-tool binding/i);
+
+  const correctPi = new FakePi();
+  registerCoreEnhancer(correctPi);
+  const correctCtx = extensionContext();
+  await event(correctPi, 'session_start')({}, correctCtx);
+  await event(correctPi, 'before_agent_start')({ prompt: wrapper }, correctCtx);
+  const correct = await tool(correctPi, 'omp_core_route_task').execute(
+    'exclusive-route-direct-punctuation-match',
+    { prompt: innerPrompt },
+    undefined,
+    undefined,
+    correctCtx,
+  );
+  assert.equal(correct.isError, false);
+  assert.equal(correct.details.route.taskDescriptor.complexity, 'broad');
+  assert.deepEqual(
+    correct.details.route.requiredSubagents.map(({ agent }) => agent),
+    ['plan', 'implementation-task', 'reviewer'],
+  );
+
+  const duplicate = await tool(correctPi, 'omp_core_route_task').execute(
+    'exclusive-route-direct-duplicate',
+    { prompt: innerPrompt },
+    undefined,
+    undefined,
+    correctCtx,
+  );
+  assert.equal(duplicate.isError, true);
+  assert.equal(duplicate.details.reasonCode, 'exclusive-tool-budget-exhausted');
+  assert.equal(duplicate.details.route, undefined);
+});
+
+test('exclusive route handler binds a pending hook call and rejects prose false positives', async () => {
+  const innerPrompt = 'Fix src/router.js using plan, implementation, and reviewer subagents.';
+  const wrapper = `Call omp_core_route_task exactly once with prompt exactly: ${innerPrompt} Then report only complexity and requiredSubagents. Do not modify files, start subagents, run tests, or use any other tools.`;
+
+  const pendingPi = new FakePi();
+  registerCoreEnhancer(pendingPi);
+  const pendingCtx = extensionContext();
+  await event(pendingPi, 'session_start')({}, pendingCtx);
+  await event(pendingPi, 'before_agent_start')({ prompt: wrapper }, pendingCtx);
+  await event(pendingPi, 'tool_call')({
+    toolCallId: 'exclusive-route-pending-owner',
+    toolName: 'omp_core_route_task',
+    input: { prompt: innerPrompt },
+  }, pendingCtx);
+  const matching = await tool(pendingPi, 'omp_core_route_task').execute(
+    'exclusive-route-pending-owner',
+    { prompt: innerPrompt },
+    undefined,
+    undefined,
+    pendingCtx,
+  );
+  assert.equal(matching.isError, false);
+
+  const mismatchPi = new FakePi();
+  registerCoreEnhancer(mismatchPi);
+  const mismatchCtx = extensionContext();
+  await event(mismatchPi, 'session_start')({}, mismatchCtx);
+  await event(mismatchPi, 'before_agent_start')({ prompt: wrapper }, mismatchCtx);
+  await event(mismatchPi, 'tool_call')({
+    toolCallId: 'exclusive-route-pending-first',
+    toolName: 'omp_core_route_task',
+    input: { prompt: innerPrompt },
+  }, mismatchCtx);
+  const mismatched = await tool(mismatchPi, 'omp_core_route_task').execute(
+    'exclusive-route-pending-second',
+    { prompt: innerPrompt },
+    undefined,
+    undefined,
+    mismatchCtx,
+  );
+  assert.equal(mismatched.isError, true);
+  assert.equal(mismatched.details.reasonCode, 'exclusive-tool-budget-exhausted');
+  assert.equal(mismatched.details.route, undefined);
+
+  for (const suffix of [
+    'Do not modify files; explain how to use any other tools.',
+    'Do not modify files but explain how to use any other tools.',
+  ]) {
+    const pi = new FakePi();
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext();
+    await event(pi, 'session_start')({}, ctx);
+    const start = await event(pi, 'before_agent_start')({
+      prompt: `Call omp_core_route_task exactly once with prompt exactly: ${innerPrompt} Then report only complexity. ${suffix}`,
+    }, ctx);
+    assert.equal(start.route.taskDescriptor.exclusiveToolContract, undefined, suffix);
+  }
 });
 
 test('before_agent_start keeps plain-text E2E workflow audits on diagnosis route', async () => {

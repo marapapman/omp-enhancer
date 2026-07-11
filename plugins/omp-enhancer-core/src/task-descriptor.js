@@ -1841,7 +1841,8 @@ function isExclusiveRouteTaskDiagnosticProbe(text = '') {
   const oneShot = /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:call|invoke|use)\s+(?:only\s+)?omp_core_route_task\s+(?:exactly\s+once|once)\b/.test(value)
     || /^(?:请|帮我|麻烦)?\s*只\s*(?:调用|使用)\s*(?:一次\s*)?omp_core_route_task(?:\s*一次)?(?:[，,:：\s]|$)/.test(value);
   if (!oneShot) return false;
-  return /\b(?:do\s+not|don't|without)\s+(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b/.test(value)
+  return /\b(?:do\s+not|don't|without)\s+(?:use|call|invoke|using|calling|invoking)\s+(?:any\s+)?other\s+tools?\b/.test(value)
+    || /\b(?:do\s+not|don't|without)\b[^.!?;\n]{0,160}(?:,\s*)?\b(?:and|or)\s+(?:use|call|invoke|using|calling|invoking)\s+(?:any\s+)?other\s+tools?\b/.test(value)
     || /(?:不要|不得|禁止|别|不)\s*(?:使用|调用)\s*(?:任何)?\s*(?:其他|其它)\s*工具/.test(value)
     || /只\s*调用\s*一次\s*omp_core_route_task/.test(value);
 }

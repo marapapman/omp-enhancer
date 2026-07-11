@@ -163,7 +163,37 @@ export default function registerCoreEnhancer(pi) {
     parameters: z?.object ? z.object({ prompt: z.string(), activate: z.boolean().optional() }) : undefined,
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
+      const directExclusiveBlock = directExclusiveToolExecutionBlock(
+        state,
+        'omp_core_route_task',
+        _callId,
+        params,
+        ctx,
+      );
+      if (directExclusiveBlock) {
+        await persistState(pi, state);
+        return errorResult(directExclusiveBlock.reason, {
+          reasonCode: directExclusiveBlock.reasonCode,
+          blocked: true,
+          probe_only: true,
+          state_changed: false,
+        });
+      }
       const route = routeNaturalLanguageTask({ prompt: params.prompt });
+      if (state.lastRoute?.taskDescriptor?.exclusiveToolContract?.mode === 'exclusive'
+        && !recordDirectExclusiveToolSuccess(state, 'omp_core_route_task', _callId, params, ctx)) {
+        markExclusiveToolBlocked(state, 'exclusive-tool-state-unavailable');
+        await persistState(pi, state);
+        return errorResult(
+          'OMP protected action boundary blocked this tool call. The registered tool handler could not bind its successful result to the active one-tool state, so no route was returned.',
+          {
+            reasonCode: 'exclusive-tool-state-unavailable',
+            blocked: true,
+            probe_only: true,
+            state_changed: false,
+          },
+        );
+      }
       const shouldActivate = false;
       const probeOnly = !shouldActivate;
       if (shouldActivate) {
@@ -180,7 +210,6 @@ export default function registerCoreEnhancer(pi) {
           probedAt: Date.now(),
         };
       }
-      recordDirectExclusiveToolSuccess(state, 'omp_core_route_task', _callId, params, ctx);
       await persistState(pi, state);
       const suffix = shouldActivate ? '' : '\nRoute probe only: active route state was not changed.';
       return okResult(`${formatRoute(route)}${suffix}${formatRouteProbeGuidance(route, { probeOnly })}`, {
@@ -398,8 +427,35 @@ export default function registerCoreEnhancer(pi) {
     parameters: z?.object ? z.object({}) : undefined,
     execute: async (_callId, _params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
+      const directExclusiveBlock = directExclusiveToolExecutionBlock(
+        state,
+        'omp_core_subagent_status',
+        _callId,
+        _params,
+        ctx,
+      );
+      if (directExclusiveBlock) {
+        await persistState(pi, state);
+        return errorResult(directExclusiveBlock.reason, {
+          reasonCode: directExclusiveBlock.reasonCode,
+          blocked: true,
+          state_changed: false,
+        });
+      }
       const result = okResult(formatSubagentStatus(state), { status: buildSubagentStatus(state) });
-      recordDirectExclusiveToolSuccess(state, 'omp_core_subagent_status', _callId, _params, ctx);
+      if (state.lastRoute?.taskDescriptor?.exclusiveToolContract?.mode === 'exclusive'
+        && !recordDirectExclusiveToolSuccess(state, 'omp_core_subagent_status', _callId, _params, ctx)) {
+        markExclusiveToolBlocked(state, 'exclusive-tool-state-unavailable');
+        await persistState(pi, state);
+        return errorResult(
+          'OMP protected action boundary blocked this tool call. The registered tool handler could not bind its successful result to the active one-tool state, so no status was returned.',
+          {
+            reasonCode: 'exclusive-tool-state-unavailable',
+            blocked: true,
+            state_changed: false,
+          },
+        );
+      }
       await persistState(pi, state);
       return result;
     },
@@ -960,6 +1016,14 @@ function okResult(text, details = {}) {
     content: [{ type: 'text', text }],
     details,
     isError: false,
+  };
+}
+
+function errorResult(text, details = {}) {
+  return {
+    content: [{ type: 'text', text }],
+    details,
+    isError: true,
   };
 }
 
@@ -4350,6 +4414,65 @@ function canonicalExclusiveRuntimeToolName(value = '') {
   return name;
 }
 
+function directExclusiveToolExecutionBlock(state, toolName = '', callId = '', input = {}, ctx = {}) {
+  const contract = state.lastRoute?.taskDescriptor?.exclusiveToolContract;
+  if (contract?.mode !== 'exclusive') return null;
+  const event = {
+    toolName,
+    toolCallId: String(callId ?? ''),
+    input,
+  };
+  const toolState = state.exclusiveToolState;
+  if (!toolState || toolState.routeId !== gateControllerRouteId(state)) {
+    markExclusiveToolBlocked(state, 'exclusive-tool-state-unavailable');
+    return protectedConstraintBlock(
+      'exclusive-tool-state-unavailable',
+      'The persisted one-tool budget is unavailable, so the registered tool handler refused to execute.',
+    );
+  }
+  if (toolState.finalCorrectionUsed === true || !['unused', 'pending'].includes(toolState.status)) {
+    markExclusiveToolBlocked(state, 'exclusive-tool-budget-exhausted');
+    return protectedConstraintBlock(
+      'exclusive-tool-budget-exhausted',
+      `The exclusive tool budget is already ${toolState.status}; the registered tool handler refused to retry or substitute an input.`,
+    );
+  }
+  if (toolState.status === 'pending'
+    && (toolState.toolName !== canonicalExclusiveRuntimeToolName(toolName)
+      || !callId
+      || toolState.toolCallIdDigest !== digestEvidence(callId)
+      || toolState.inputDigest !== exclusiveToolPendingInputDigest(state, event))) {
+    markExclusiveToolBlocked(state, 'exclusive-tool-budget-exhausted');
+    return protectedConstraintBlock(
+      'exclusive-tool-budget-exhausted',
+      'A different invocation already owns the one-tool pending budget, so the registered tool handler refused this call.',
+    );
+  }
+  if (!exclusiveToolCallMatchesAllowedTool(state, toolName)) {
+    markExclusiveToolBlocked(state, 'exclusive-tool-not-authorized');
+    return protectedConstraintBlock(
+      'exclusive-tool-not-authorized',
+      `The user authorized only ${(contract.allowedTools ?? []).join(', ')} exactly once; the registered tool handler refused ${toolName || 'another tool'}.`,
+    );
+  }
+  if (!exclusiveToolInputMatches(state, event, ctx)) {
+    markExclusiveToolBlocked(state, 'exclusive-tool-input-mismatch');
+    return protectedConstraintBlock(
+      'exclusive-tool-input-mismatch',
+      'The supplied input does not match the trusted byte-for-byte one-tool binding, so no route was computed and no retry is authorized.',
+    );
+  }
+  return null;
+}
+
+function exclusiveToolPendingInputDigest(state, event = {}) {
+  const kind = state.lastRoute?.taskDescriptor?.exclusiveToolContract?.input?.kind;
+  const record = firstToolInputRecord(event);
+  if (kind === 'route-probe') return digestEvidence(String(record.prompt ?? '').trim());
+  if (kind === 'status-probe') return digestEvidence('{}');
+  return digestEvidence(toolActionText(event));
+}
+
 function recordDirectExclusiveToolSuccess(state, toolName = '', callId = '', input = {}, ctx = {}) {
   const event = {
     toolName,
@@ -4371,7 +4494,7 @@ function recordExclusiveToolCallStart(state, toolName = '', event = {}, ctx = {}
     status: 'pending',
     toolName: canonicalExclusiveRuntimeToolName(toolName),
     toolCallIdDigest: digestEvidence(toolEventCallId(event) || `${toolName}:${gateControllerRouteId(state)}`),
-    inputDigest: digestEvidence(toolActionText(event)),
+    inputDigest: exclusiveToolPendingInputDigest(state, event),
     reasonCode: null,
   };
   return true;
