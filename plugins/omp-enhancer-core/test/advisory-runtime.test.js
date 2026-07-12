@@ -100,6 +100,8 @@ test('inspection budgets add per-result model guidance without blocking tools', 
     result: { content: [{ type: 'text', text: '---\nname: writing-plans\ndescription: Planning\n---\n' }] },
   }, ctx);
   assert.match(first.content.at(-1).text, /1\/3 read\/search calls used; 2 remaining/i);
+  assert.match(first.content.at(-1).text, /NEXT MESSAGE LIMIT:[\s\S]*at most ONE individual read\/search tool call/i);
+  assert.doesNotMatch(first.content.at(-1).text, /issue at most 2 individual read\/search tool calls/i);
   assert.doesNotMatch(first.content.at(-1).text, /No routed primary skill read is observed/i);
 
   const second = await toolResult({
@@ -112,8 +114,8 @@ test('inspection budgets add per-result model guidance without blocking tools', 
   assert.match(second.content.at(-1).text, /FINAL-BUDGET MODE:[\s\S]*at most ONE read\/search tool call/i);
   assert.match(second.content.at(-1).text, /delete any second read\/grep\/glob call/i);
   assert.match(second.content.at(-1).text, /LAST-SLOT RULE:[\s\S]*fails[\s\S]*do not repair it/i);
-  assert.match(second.content.at(-1).text, /NEXT BATCH LIMIT: issue at most 1 individual read\/search tool call/i);
-  assert.match(second.content.at(-1).text, /choose only the 1 highest-value target, then finalize/i);
+  assert.match(second.content.at(-1).text, /NEXT MESSAGE LIMIT: issue at most ONE individual read\/search tool call/i);
+  assert.match(second.content.at(-1).text, /choose only the single highest-value target for this message/i);
   assert.match(second.content.at(-1).text, /do not queue more read\/search calls than the remaining count/i);
 
   const third = await toolResult({
@@ -171,6 +173,8 @@ test('natural fact and broad-audit routes expose soft route-aware inspection pro
     result: { content: [{ type: 'text', text: '---\nname: fact-checking\ndescription: Local fact check\n---\n' }] },
   }, fact.ctx);
   assert.match(factResult.content.at(-1).text, /1\/8 read\/search calls used; 7 remaining/i);
+  assert.match(factResult.content.at(-1).text, /NEXT MESSAGE LIMIT:[\s\S]*at most ONE individual read\/search tool call/i);
+  assert.doesNotMatch(factResult.content.at(-1).text, /issue at most 7 individual read\/search tool calls/i);
   assert.notEqual(factResult.block, true);
 
   const audit = await routedRuntime('只读审计 extensions/agent-fleet 的任务路由与失败收敛逻辑，读取 exact debugging skill，不修改文件、不运行测试。');
