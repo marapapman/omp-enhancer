@@ -37,6 +37,7 @@ export async function runInstalledMatrix(options = {}) {
   await mkdir(outputRoot, { recursive: true });
 
   const beforeConfig = readAutolearnConfig();
+  const beforeAdvisorConfig = readAdvisorConfig();
   const results = [];
   for (const scenario of scenarios) {
     const repetitions = options.repeat ?? scenario.repeat ?? matrix.defaults?.repeat ?? 1;
@@ -51,14 +52,17 @@ export async function runInstalledMatrix(options = {}) {
     }
   }
   const afterConfig = readAutolearnConfig();
+  const afterAdvisorConfig = readAdvisorConfig();
   const configStable = JSON.stringify(beforeConfig) === JSON.stringify(afterConfig);
+  const advisorConfigStable = JSON.stringify(beforeAdvisorConfig) === JSON.stringify(afterAdvisorConfig);
   const report = {
     version: 1,
     runId,
     matrix: path.relative(REPO_ROOT, matrixPath),
     startedFrom: process.cwd(),
     autolearn: { before: beforeConfig, after: afterConfig, stable: configStable },
-    passed: configStable && results.every(({ evaluation }) => evaluation.pass),
+    advisor: { before: beforeAdvisorConfig, after: afterAdvisorConfig, stable: advisorConfigStable },
+    passed: configStable && advisorConfigStable && results.every(({ evaluation }) => evaluation.pass),
     results,
   };
   await writeFile(path.join(outputRoot, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
@@ -156,7 +160,7 @@ function buildOmpArgs({ matrix, scenario, prepared, sessionDir, timeoutSeconds, 
   return args;
 }
 
-async function prepareScenario(scenario) {
+export async function prepareScenario(scenario) {
   if (!scenario.fixture) {
     const cwd = path.resolve(scenario.cwd);
     const info = await stat(cwd);
@@ -172,7 +176,7 @@ async function prepareScenario(scenario) {
   } else if (scenario.fixture === 'semantic-edit-en') {
     await writeFile(
       path.join(cwd, 'paper.tex'),
-      'Our analysis typically finds a significantly lower failure rate, but it may only reduce errors from 37.5% to 12.5% and cannot eliminate them \\cite{smith2025}.\n',
+      'Our analysis typically finds a significantly lower failure rate, but it may only reduce errors from 37.5\\% to 12.5\\% and cannot eliminate them \\cite{smith2025}.\n',
     );
   } else if (scenario.fixture === 'semantic-edit-zh') {
     await writeFile(
@@ -391,11 +395,23 @@ function spawnRpcCaptured(command, args, {
 }
 
 function readAutolearnConfig() {
-  return Object.fromEntries([
+  return readOmpConfig([
     'autolearn.enabled',
     'autolearn.autoContinue',
     'autolearn.minToolCalls',
-  ].map((key) => {
+  ]);
+}
+
+function readAdvisorConfig() {
+  return readOmpConfig([
+    'advisor.enabled',
+    'advisor.syncBacklog',
+    'advisor.immuneTurns',
+  ]);
+}
+
+function readOmpConfig(keys) {
+  return Object.fromEntries(keys.map((key) => {
     const result = spawnSync('omp', ['config', 'get', key], { encoding: 'utf8' });
     return [key, result.status === 0 ? result.stdout.trim() : `ERROR:${result.stderr.trim()}`];
   }));
@@ -428,7 +444,9 @@ async function main() {
   if (!report.passed) process.exitCode = 1;
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error.stack ?? error.message}\n`);
-  process.exitCode = 1;
-});
+if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    process.stderr.write(`${error.stack ?? error.message}\n`);
+    process.exitCode = 1;
+  });
+}

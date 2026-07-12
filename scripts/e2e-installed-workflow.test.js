@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import {
   evaluateWorkflowSummary,
@@ -7,6 +9,7 @@ import {
   parseNdjson,
   summarizeWorkflowEvents,
 } from './e2e/workflow-events.mjs';
+import { prepareScenario } from './e2e/run-installed-deepseek-workflow.mjs';
 
 test('installed workflow summary distinguishes observed skill reads from claims', () => {
   const events = [
@@ -51,6 +54,95 @@ test('installed workflow summary distinguishes observed skill reads from claims'
   });
   assert.equal(evaluation.pass, false);
   assert.match(evaluation.failures.join('\n'), /writing-checkers/);
+});
+
+test('skill equivalence never treats zh-writing-review as writing-review', () => {
+  const summary = summarizeWorkflowEvents([
+    {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'read-zh-review', name: 'read', arguments: { path: 'skill://zh-writing-review/SKILL.md' } }],
+      },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'read-zh-review',
+      toolName: 'read',
+      result: { isError: false, content: [{ type: 'text', text: '---\nname: zh-writing-review\n---' }] },
+    },
+  ]);
+
+  const required = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredSkills: ['writing-review'],
+  });
+  assert.equal(required.pass, false);
+  assert.match(required.failures.join('\n'), /required skill was not observed: writing-review/);
+
+  const forbidden = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    forbiddenSkills: ['writing-review'],
+  });
+  assert.equal(forbidden.pass, true);
+});
+
+test('skill equivalence accepts only an explicit superpowers namespace alias', () => {
+  const namespaced = {
+    observedSkills: ['superpowers-writing-plans'],
+    primaryFinalCount: 0,
+  };
+  assert.equal(evaluateWorkflowSummary(namespaced, {
+    requireFinal: false,
+    requiredSkills: ['writing-plans'],
+  }).pass, true);
+
+  const unnamespaced = {
+    observedSkills: ['writing-plans'],
+    primaryFinalCount: 0,
+  };
+  assert.equal(evaluateWorkflowSummary(unnamespaced, {
+    requireFinal: false,
+    requiredSkills: ['superpowers-writing-plans'],
+  }).pass, true);
+
+  const unknownNamespace = {
+    observedSkills: ['project-writing-plans'],
+    primaryFinalCount: 0,
+  };
+  assert.equal(evaluateWorkflowSummary(unknownNamespace, {
+    requireFinal: false,
+    requiredSkills: ['writing-plans'],
+  }).pass, false);
+});
+
+test('semantic-edit-en fixture and sentinels require legal escaped LaTeX percentages', async () => {
+  const prepared = await prepareScenario({
+    id: 'semantic-edit-en-regression',
+    fixture: 'semantic-edit-en',
+    prompt: 'Polish paper.tex.',
+  });
+  try {
+    const text = await readFile(path.join(prepared.cwd, 'paper.tex'), 'utf8');
+    assert.match(text, /37\.5\\%/u);
+    assert.match(text, /12\.5\\%/u);
+
+    const matrix = JSON.parse(await readFile(
+      new URL('./e2e/fixtures/deepseek-installed-matrix.json', import.meta.url),
+      'utf8',
+    ));
+    const scenario = matrix.scenarios.find(({ id }) => id === 'semantic-edit-en');
+    const percentagePatterns = scenario.fixtureExpectations.requiredPatterns['paper.tex']
+      .filter((pattern) => pattern.includes('37') || pattern.includes('12'));
+    assert.equal(percentagePatterns.length, 2);
+    for (const pattern of percentagePatterns) {
+      const sentinel = new RegExp(pattern, 'u');
+      assert.match(text, sentinel);
+      assert.doesNotMatch(text.replaceAll('\\%', '%'), sentinel);
+    }
+  } finally {
+    await prepared.cleanup();
+  }
 });
 
 test('installed workflow summary separates advisor, autolearn, and plugin continuation', () => {

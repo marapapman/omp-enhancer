@@ -154,7 +154,7 @@
         "allowedChangedFiles": ["paper.tex"],
         "requiredChangedFiles": ["paper.tex"],
         "requiredPatterns": {
-          "paper.tex": ["\\btypically\\b", "\\bsignificantly\\b", "\\bmay\\b", "\\bonly\\b", "37\\.5%", "12\\.5%", "(?:cannot|can\\s+not)", "\\\\cite\\{smith2025\\}"]
+          "paper.tex": ["\\btypically\\b", "\\bsignificantly\\b", "\\bmay\\b", "\\bonly\\b", "37\\.5\\\\%", "12\\.5\\\\%", "(?:cannot|can\\s+not)", "\\\\cite\\{smith2025\\}"]
         }
       }
     },

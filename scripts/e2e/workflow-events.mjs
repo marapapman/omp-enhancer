@@ -7,6 +7,7 @@ const PLUGIN_CONTINUATION_TYPES = new Set([
   'omp-enhancer-continuation',
   'session-stop-continuation',
 ]);
+const EQUIVALENT_SKILL_NAMESPACE_PREFIXES = ['superpowers-'];
 
 export function parseNdjson(text = '') {
   const events = [];
@@ -346,7 +347,10 @@ function hasEquivalentSkill(values, expected) {
   const wanted = normalizeSkillName(expected);
   return [...values].some((value) => {
     const actual = normalizeSkillName(value);
-    return actual === wanted || actual.endsWith(`-${wanted}`) || actual.endsWith(`/${wanted}`);
+    if (actual === wanted) return true;
+    return EQUIVALENT_SKILL_NAMESPACE_PREFIXES.some((prefix) => (
+      actual === `${prefix}${wanted}` || wanted === `${prefix}${actual}`
+    ));
   });
 }
 
