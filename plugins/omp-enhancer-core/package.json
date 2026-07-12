@@ -1,6 +1,6 @@
 {
   "name": "omp-enhancer-core",
-  "version": "0.1.113",
+  "version": "0.1.114",
   "private": true,
   "type": "module",
   "description": "Advisory OMP task routing, skill selection, roles, and workflow guidance.",
