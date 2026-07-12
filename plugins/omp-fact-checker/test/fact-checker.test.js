@@ -53,6 +53,9 @@ test('fact-check skills prescribe one bounded local pass without automatic lane 
 
   assert.match(workflow, /one bounded pass/i);
   assert.match(workflow, /LOCAL_UNVERIFIED/);
+  assert.match(workflow, /plan for no more than six calls/i);
+  assert.match(workflow, /Do not repeat equivalent glob patterns/i);
+  assert.match(workflow, /failed or empty\s+last lookup ends the local pass/i);
   assert.match(workflow, /do not (?:automatically )?(?:retry|start another|add another)/i);
   assert.match(workflow, /broad|high-risk|explicitly requests/i);
   assert.match(claims, /focused|bounded/i);
