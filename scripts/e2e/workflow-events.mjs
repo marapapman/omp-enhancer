@@ -41,11 +41,18 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
   let activeTurnKind = 'user';
   let agentStarts = 0;
   let agentEnds = 0;
+  let sawPrimaryFinal = false;
+  let postFinalAdvisorMessageCount = 0;
 
   for (const event of events) {
     const custom = customMessageFromEvent(event);
     if (custom) {
       customMessages.push(custom);
+      if (custom.customType === 'advisor'
+        && sawPrimaryFinal
+        && event?.type === 'message_end') {
+        postFinalAdvisorMessageCount += 1;
+      }
       for (const evidence of custom.providedSkillEvidence) {
         providedSkills.add(evidence.name);
         providedSkillEvidence.set(skillEvidenceIdentity(evidence), evidence);
@@ -88,7 +95,10 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
       if (text) {
         assistantTexts.push(text);
         for (const name of claimedSkillNames(text)) claimedSkills.add(name);
-        if (!messageCalls.length) finals.push({ text, turnKind: activeTurnKind });
+        if (!messageCalls.length) {
+          finals.push({ text, turnKind: activeTurnKind });
+          if (activeTurnKind !== 'autolearn-capture') sawPrimaryFinal = true;
+        }
       }
     }
 
@@ -173,6 +183,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
     autolearnToolCallCount: calls.filter(({ turnKind }) => turnKind === 'autolearn-capture').length,
     autolearnCaptureCount: customMessages.filter(({ customType }) => customType === 'autolearn-nudge').length,
     advisorMessageCount: customMessages.filter(({ customType }) => customType === 'advisor').length,
+    postFinalAdvisorMessageCount,
     pluginContinuationCount: customMessages.filter(({ customType }) => PLUGIN_CONTINUATION_TYPES.has(customType)).length,
     customMessages,
     duplicateFailedCalls: [...failedFingerprints.entries()]
@@ -221,6 +232,10 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   if (Number.isFinite(expectations.maxAdvisorMessages)
     && summary.advisorMessageCount > expectations.maxAdvisorMessages) {
     failures.push(`advisor messages ${summary.advisorMessageCount} exceeded ${expectations.maxAdvisorMessages}`);
+  }
+  if (Number.isFinite(expectations.maxPostFinalAdvisorMessages)
+    && summary.postFinalAdvisorMessageCount > expectations.maxPostFinalAdvisorMessages) {
+    failures.push(`post-final advisor messages ${summary.postFinalAdvisorMessageCount} exceeded ${expectations.maxPostFinalAdvisorMessages}`);
   }
   if (expectations.noUnobservedSkillClaims === true && summary.unobservedClaims.length) {
     failures.push(`unobserved skill claims: ${summary.unobservedClaims.join(', ')}`);

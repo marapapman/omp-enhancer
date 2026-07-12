@@ -184,7 +184,7 @@ export async function prepareScenario(scenario) {
   } else if (scenario.fixture === 'semantic-edit-en') {
     await writeFile(
       path.join(cwd, 'paper.tex'),
-      'Our analysis typically finds a significantly lower failure rate, but it may only reduce errors from 37.5\\% to 12.5\\% and cannot eliminate them \\cite{smith2025}.\n',
+      'Our analysis typically finds a significantly lower lower failure rate, but it may only reduce errors from 37.5\\% to 12.5\\% and cannot eliminate them \\cite{smith2025}.\n',
     );
   } else if (scenario.fixture === 'semantic-edit-zh') {
     await writeFile(

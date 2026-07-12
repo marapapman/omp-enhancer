@@ -301,6 +301,7 @@ test('semantic-edit-en fixture and sentinels require legal escaped LaTeX percent
   });
   try {
     const text = await readFile(path.join(prepared.cwd, 'paper.tex'), 'utf8');
+    assert.match(text, /lower lower/u);
     assert.match(text, /37\.5\\%/u);
     assert.match(text, /12\.5\\%/u);
 
@@ -309,6 +310,8 @@ test('semantic-edit-en fixture and sentinels require legal escaped LaTeX percent
       'utf8',
     ));
     const scenario = matrix.scenarios.find(({ id }) => id === 'semantic-edit-en');
+    assert.deepEqual(scenario.fixtureExpectations.forbiddenPatterns['paper.tex'], ['lower\\s+lower']);
+    assert.ok(scenario.fixtureExpectations.requiredPatterns['paper.tex'].includes('\\blower\\b'));
     const percentagePatterns = scenario.fixtureExpectations.requiredPatterns['paper.tex']
       .filter((pattern) => pattern.includes('37') || pattern.includes('12'));
     assert.equal(percentagePatterns.length, 2);
@@ -365,7 +368,11 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
     assert.equal(stress.defaults.advisor, true);
     assert.equal(stress.defaults.executionMode, 'rpc');
     assert.equal(stress.defaults.expectations.maxPrimaryFinals, 1);
-    assert.equal(stress.defaults.expectations.minAdvisorMessages, 1);
+    assert.equal(Object.hasOwn(stress.defaults.expectations, 'minAdvisorMessages'), false);
+    assert.equal(stress.defaults.expectations.maxAdvisorMessages, 1);
+    assert.equal(stress.defaults.expectations.maxPostFinalAdvisorMessages, 0);
+    assert.equal(stress.defaults.expectations.maxAbortedAssistants, 0);
+    assert.equal(stress.defaults.expectations.pluginContinuationCount, 0);
     assert.equal(matrix.defaults.expectations.maxAdvisorMessages, 0);
     assert.ok(stress.scenarios.some(({ id }) => id === 'advisor-english-review'));
     assert.ok(stress.scenarios.some(({ id }) => id === 'advisor-semantic-edit-en'));
@@ -449,6 +456,23 @@ test('installed workflow evaluation checks advisor isolation in both directions'
     { ...base, advisorMessageCount: 0 },
     { minAdvisorMessages: 1 },
   ).pass, false);
+});
+
+test('installed workflow summary rejects advisor messages after the primary final', () => {
+  const events = [
+    { type: 'agent_start' },
+    { type: 'message_end', message: { role: 'custom', customType: 'advisor', content: 'One useful note.', display: true } },
+    { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'Primary result.' }] } },
+    { type: 'message_end', message: { role: 'custom', customType: 'advisor', content: 'Late duplicate note.', display: true } },
+    { type: 'agent_end' },
+  ];
+  const summary = summarizeWorkflowEvents(events, { exitCode: 0 });
+
+  assert.equal(summary.advisorMessageCount, 2);
+  assert.equal(summary.postFinalAdvisorMessageCount, 1);
+  const evaluation = evaluateWorkflowSummary(summary, { maxPostFinalAdvisorMessages: 0 });
+  assert.equal(evaluation.pass, false);
+  assert.match(evaluation.failures.join('\n'), /post-final advisor messages 1 exceeded 0/);
 });
 
 test('installed workflow summary preserves repeated real custom events while removing session mirrors', () => {
