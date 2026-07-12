@@ -255,6 +255,7 @@ function turnConstraintLines(route, parentTask = '') {
   if (budget) {
     lines.push(`The user set a total inspection budget of ${budget} read/search calls, including skill reads. At that point, stop inspecting and deliver the best scoped evidence-backed result; do not reread the same file or region.`);
     lines.push('Each failed call and each call inside a parallel batch counts separately. Never queue a batch larger than the remaining budget; a clearly scoped partial result is successful completion.');
+    lines.push('SERIAL INSPECTION MODE: for this entire budgeted turn, put at most ONE read/search tool call in each assistant message and wait for its result before choosing the next call. Do not issue parallel read, grep, or glob calls; use the newest progress count after every result.');
   }
   const readOnly = constraints.workspaceWrite === 'forbidden';
   const noTests = constraints.testExecution === 'forbidden';

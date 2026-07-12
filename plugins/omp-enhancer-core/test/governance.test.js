@@ -141,6 +141,8 @@ test('turn-local planning and diagnosis guidance preserves user read-only budget
   assert.match(planning, /total inspection budget of 8 read\/search calls/i);
   assert.match(planning, /each call inside a parallel batch counts separately/i);
   assert.match(planning, /never queue a batch larger than the remaining budget/i);
+  assert.match(planning, /SERIAL INSPECTION MODE:[\s\S]*at most ONE read\/search tool call in each assistant message/i);
+  assert.match(planning, /Do not issue parallel read, grep, or glob calls/i);
   assert.match(planning, /response-only plan/i);
   assert.match(planning, /do not reopen a root-cause investigation[\s\S]*search \.pi\/specs[\s\S]*load a diagnosis skill/i);
   assert.match(planning, /do not encode shell, git, test, or task commands as read selectors/i);
@@ -152,6 +154,7 @@ test('turn-local planning and diagnosis guidance preserves user read-only budget
   assert.match(diagnosis, /static diagnosis only/i);
   assert.match(diagnosis, /overrides generic debugging steps/i);
   assert.match(diagnosis, /total inspection budget of 8 read\/search calls/i);
+  assert.match(diagnosis, /SERIAL INSPECTION MODE/i);
 });
 
 test('document preservation is a quality suggestion rather than an execution boundary', () => {
