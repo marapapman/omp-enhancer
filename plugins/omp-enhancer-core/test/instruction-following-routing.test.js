@@ -1798,3 +1798,19 @@ test('evidence wording in a later sentence does not turn a grammar check into fa
     assert.equal(route.routePlan.qualityChecks.includes('fact-evidence'), false, routerMode);
   }
 });
+
+test('generic evidence wording keeps code defect inspection on the bug-audit route', () => {
+  for (const prompt of [
+    '检查整个代码库的潜在 bug，并给出证据。',
+    'Inspect the whole codebase for potential bugs and provide evidence for each finding.',
+  ]) {
+    for (const routerMode of ['legacy', 'observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+
+      assert.equal(route.intent, 'bug-audit', `${routerMode}: ${prompt}`);
+      assert.equal(route.taskDescriptor.domains.includes('code'), true, `${routerMode}: ${prompt}`);
+      assert.equal(route.taskDescriptor.domains.includes('facts'), false, `${routerMode}: ${prompt}`);
+      assert.equal(route.routePlan.qualityChecks.includes('fact-evidence'), false, `${routerMode}: ${prompt}`);
+    }
+  }
+});

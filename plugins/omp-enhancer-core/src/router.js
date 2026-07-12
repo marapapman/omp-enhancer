@@ -528,7 +528,11 @@ function routeNaturalLanguageTaskLegacy(input = {}) {
     return routed('security-review');
   }
 
-  if (hasFactCheck) {
+  // Generic evidence wording describes the expected support for code-audit
+  // findings; it is not a factual-verification request by itself. Keep an
+  // explicit defect inspection on the bug-audit workflow when both heuristics
+  // match, while dedicated claim/citation/source checks remain fact-checks.
+  if (hasFactCheck && !hasBugAudit) {
     return routed('fact-check');
   }
 

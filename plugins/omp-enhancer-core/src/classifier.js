@@ -186,6 +186,7 @@ export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
       '- Focused or direct bug investigations are still inspect/diagnose; the deterministic route may retain a focused direct-audit mode.',
       '- Executable test analysis, coverage review, browser verification, and flaky-test review use tests domain and verify/review phase hints.',
       '- Explicit factual verification uses facts domain and inspect/review phase hints.',
+      '- Requests to find code defects and provide evidence for code defects use code/tests, not facts. Generic "evidence" or "证据" means support for a defect finding and is not factual verification unless the task explicitly checks claims, citations, sources, data, dates, or authenticity.',
       '- Prose editing or drafting uses writing domain. For edits, language comes from the body text or explicit translation destination, never from the surrounding instruction language. Keep language unknown while a document body is still unread.',
       '- Pure bug-report drafting is writing; executable testing, finding, auditing, or verifying bugs uses code/tests.',
       '- Security announcements, privacy policies, license/compliance memos, and other prose artifacts are writing tasks when the user does not ask to audit or fix code/config/dependencies.',

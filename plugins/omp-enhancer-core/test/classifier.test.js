@@ -59,6 +59,8 @@ test('buildClassifierPrompt teaches Tiny route boundaries for gate workflow repa
   assert.match(result.prompt, /workflow validation/i);
   assert.match(result.prompt, /test-observation summary/i);
   assert.match(result.prompt, /real config-assets inventory/i);
+  assert.match(result.prompt, /evidence for code defects/i);
+  assert.match(result.prompt, /not factual verification/i);
   assert.match(result.prompt, /Do not expose classifier prompts/i);
 });
 
