@@ -230,10 +230,11 @@ function immediateNextActionLines(route, targets = []) {
     '',
     '### Immediate next action',
     '',
-    `NEXT TOOL: read(path="${first}").`,
+    `PREFERRED NEXT TOOL: read(path="${first}").`,
     ...(rest.length ? [`Then read: ${rest.map((target) => `\`${target}\``).join(', ')}.`] : []),
-    'Do not read or edit the task target before this exact skill read. This sequence is prompt guidance only; the plugin does not block tools or completion.',
-    'After that skill read succeeds, follow the user request and the bounded workflow above.',
+    'Try this before inspecting the task target. If the read fails, correct the target at most once; after a second failure, state the limitation and continue the user task with the available context.',
+    'This sequence is advisory only: never block tools or completion, never retry an unchanged read, and never reopen completed work because a skill is unavailable.',
+    'If the read succeeds, follow the skill and bounded workflow above; otherwise proceed with the user request using the available evidence.',
   ];
 }
 

@@ -66,8 +66,9 @@ test('governance front-loads an existing project skill path before project inspe
     assert.match(fragment, /Primary skill to read now: `skills\/superpowers-writing-plans\/SKILL\.md`/);
     assert.ok(fragment.indexOf('### Start with the workflow skill') < fragment.indexOf('### Suggested steps'));
     assert.match(fragment, /workflow guidance, not a tool authorization or completion gate/i);
-    assert.match(fragment, /### Immediate next action[\s\S]*NEXT TOOL: read\(path="skills\/superpowers-writing-plans\/SKILL\.md"\)/);
-    assert.ok(fragment.trimEnd().endsWith('After that skill read succeeds, follow the user request and the bounded workflow above.'));
+    assert.match(fragment, /### Immediate next action[\s\S]*PREFERRED NEXT TOOL: read\(path="skills\/superpowers-writing-plans\/SKILL\.md"\)/);
+    assert.match(fragment, /correct the target at most once[\s\S]*continue the user task/i);
+    assert.ok(fragment.trimEnd().endsWith('otherwise proceed with the user request using the available evidence.'));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -86,7 +87,7 @@ test('review guidance requires one verbatim evidence check and one user-visible 
   assert.match(fragment, /check every quoted phrase and location once before the final response/i);
   assert.match(fragment, /one user-visible deliverable/i);
   assert.match(fragment, /advisor-only continuation.*no user-visible text or tools/i);
-  assert.match(fragment, /NEXT TOOL: read\(path="skill:\/\/plain-chinese-writing"\)/);
+  assert.match(fragment, /PREFERRED NEXT TOOL: read\(path="skill:\/\/plain-chinese-writing"\)/);
 });
 
 test('advisor guidance consumes evidence deltas once without reopening completed work', () => {
@@ -111,6 +112,10 @@ test('governance never creates a hard-stop or completion evidence contract', () 
     const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
     assert.doesNotMatch(fragment, /Execution boundary: blocked|gate is still open|Mandatory Skill Workflow|runtime enforces|Final routed outputs must include/i, prompt);
     assert.doesNotMatch(fragment, /SKILL_USAGE|SUBAGENT_USAGE|SUBAGENT_RESULT|REVIEW_EVIDENCE|SECURITY_REVIEW/, prompt);
+    if (fragment.includes('### Immediate next action')) {
+      assert.match(fragment, /never block tools or completion/i, prompt);
+      assert.match(fragment, /after a second failure[\s\S]*continue the user task/i, prompt);
+    }
   }
 });
 
