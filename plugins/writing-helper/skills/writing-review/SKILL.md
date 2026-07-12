@@ -5,12 +5,15 @@ description: Bounded English writing review that returns evidence-backed finding
 
 # Writing Review
 
-Use `.pi/research/checker_report.md` when available. If it is absent, review the
-user-specified text directly and state that no prior checker report was used.
+When the user identifies a target file or passage, review that target directly.
+Use `.pi/research/checker_report.md` only when the user supplies or references
+it, or the active workflow already exposes it. Do not probe `.pi` merely to
+discover whether a prior report exists.
 
 ## Default One-Pass Workflow
 
-1. Record semantic anchors in the source: qualifiers, modality, scope,
+1. Read the exact target once and record semantic anchors in the source:
+   qualifiers, modality, scope,
    negation, direction, numbers and units, citations and identifiers, and
    LaTeX math, cross-references, commands, and structure.
 2. Sort findings as critical, important, or minor while preserving their order
@@ -45,6 +48,13 @@ replacement suggestions only where they help explain a finding. Do not append
 a complete rewritten passage or document unless the user explicitly asks for
 one. Do not create `.pi` files or request write access solely to satisfy the
 workflow template.
+
+A successful read that reaches the end of the requested file is enough for a
+bounded writing review. Do not repeat it with a different selector unless the
+result contains an explicit truncation marker or an incomplete requested
+range. Do not search for macro definitions or unrelated repository context
+unless that context is necessary to avoid a concrete false finding about the
+visible prose.
 
 ## Optional Interactive Mode
 

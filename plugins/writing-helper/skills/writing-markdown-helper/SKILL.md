@@ -16,7 +16,9 @@ Draft or revise academic-style markdown directly within the scope the user autho
 
 For ordinary requests such as "polish the abstract" or "revise this section":
 
-1. Read the exact target text and nearby context.
+1. Read the exact target text and only the nearby context required for the edit.
+   Do not repeat a successful complete read before editing unless it contains
+   an explicit truncation marker or an incomplete requested range.
 2. Apply the requested revision directly under the existing user authorization.
 3. Review meaning, structure, citations, and formatting once.
 4. Report material limitations. Do not require a new confirmation merely because this skill was loaded.
@@ -28,6 +30,14 @@ structure. Preserve them unless the user or evidence explicitly authorizes a
 change. Compare source and result once. Report drift without starting another
 rewrite automatically. For a read-only task, return the proposed revision in
 the final response and do not create workflow files.
+
+An explicit edit request normally calls for at least one concrete,
+meaning-preserving improvement when the source contains a correctable defect.
+Semantic anchors protect their meaning; they do not freeze all surrounding
+wording. If one candidate would alter an anchor, discard that candidate and
+look for a safe lexical or structural edit outside the anchors. Leave the file
+unchanged only when no such improvement exists, and report that limitation
+without performing extra verification reads.
 
 For a `.tex` target, preserve valid LaTeX escaping as part of the anchor. A
 percentage is written as `\%`; never turn it into a bare `%` comment marker.

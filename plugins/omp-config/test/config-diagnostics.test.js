@@ -211,6 +211,8 @@ test('packaged advisor guidance recognizes native skills and converges before on
   assert.match(watchdog, /Routed workflow skills already loaded/);
   assert.match(watchdog, /Do not advise a skill read or `omp_core_route_task`/);
   assert.match(watchdog, /Once the main agent has emitted a complete final response, do not call `advise`/);
+  assert.match(watchdog, /at most one advisor note for a primary task/);
+  assert.match(watchdog, /judge the concrete candidate rather than freezing the whole task/);
   assert.match(watchdog, /suggestions, not execution or completion gates/);
   assert.doesNotMatch(watchdog, /block:\s*true|continue:\s*true|triggerTurn/);
 });

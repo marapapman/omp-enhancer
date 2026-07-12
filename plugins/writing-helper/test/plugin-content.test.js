@@ -112,9 +112,17 @@ describe('bundled frugal-pi writing content', () => {
     const englishReview = readFileSync(join(rootDir, 'skills/writing-review/SKILL.md'), 'utf8');
     assert.match(englishReview, /review-only\s+request produces findings rather than a rewritten document/i);
     assert.match(englishReview, /Do not append\s+a complete rewritten passage or document/i);
+    assert.match(englishReview, /Do not probe `.pi` merely to\s+discover whether a prior report exists/i);
+    assert.match(englishReview, /Do not repeat it with a different selector/i);
 
     const chineseReview = readFileSync(join(rootDir, 'skills/zh-writing-review/SKILL.md'), 'utf8');
     assert.match(chineseReview, /仅审查任务只返回问题，不改写整篇正文/);
     assert.match(chineseReview, /不附整段或整篇改写稿/);
+    assert.match(chineseReview, /不要为了判断报告是否存在而主动探测 `.pi` 目录/);
+
+    const englishEditor = readFileSync(join(rootDir, 'skills/writing-markdown-helper/SKILL.md'), 'utf8');
+    assert.match(englishEditor, /Semantic anchors protect their meaning; they do not freeze all surrounding\s+wording/i);
+    const chineseEditor = readFileSync(join(rootDir, 'skills/zh-writing-markdown-helper/SKILL.md'), 'utf8');
+    assert.match(chineseEditor, /保留这些锚点不等于冻结其余措辞/);
   });
 });
