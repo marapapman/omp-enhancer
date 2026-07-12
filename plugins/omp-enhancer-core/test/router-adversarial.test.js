@@ -6,6 +6,38 @@ import { routeNaturalLanguageTask } from '../src/router.js';
 
 const fixtures = JSON.parse(await readFile(new URL('./fixtures/routing-adversarial.json', import.meta.url), 'utf8'));
 
+const advisoryQualityChecks = {
+  gate_review_read_only_zh: ['review-evidence'],
+  gate_review_read_only_en: ['review-evidence'],
+  optimization_suggestions_no_write_zh: ['review-evidence'],
+  router_file_review_no_write_zh: ['review-evidence'],
+  run_single_test_command_zh: ['test-evidence'],
+  provide_test_command_no_execute_zh: [],
+  fix_test_push_zh: ['test-evidence', 'review-evidence', 'post-action-verification'],
+  fix_test_push_en: ['test-evidence', 'review-evidence', 'post-action-verification'],
+  readme_update_push_zh: ['detect-source-language', 'review-evidence', 'post-action-verification'],
+  factcheck_polish_zh: ['fact-evidence', 'detect-source-language', 'review-evidence'],
+  factcheck_polish_en: ['fact-evidence', 'writing-quality', 'review-evidence'],
+  security_fix_test_release_zh: ['security-evidence', 'test-evidence', 'review-evidence', 'post-action-verification'],
+  security_fix_test_release_en: ['security-evidence', 'test-evidence', 'review-evidence', 'post-action-verification'],
+  fix_without_test_execution_zh: ['review-evidence'],
+  fix_test_without_push_zh: ['test-evidence', 'review-evidence'],
+  single_function_review_en: ['review-evidence'],
+};
+
+const advisoryResourceOverrides = {
+  readme_update_push_zh: {
+    skills: ['verification-before-completion'],
+    tools: [],
+    roles: [],
+  },
+  factcheck_polish_zh: {
+    skills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
+    tools: ['fact_check_analyze', 'fact_check_evidence', 'fact_check_report'],
+    roles: ['fact-planner', 'fact-researcher-a', 'fact-researcher-b', 'fact-cross-checker', 'fact-reviewer'],
+  },
+};
+
 function descriptorContract(descriptor, caseId) {
   assert.ok(
     descriptor && typeof descriptor === 'object',
@@ -29,14 +61,76 @@ function routePlanContract(plan, caseId) {
     plan && typeof plan === 'object',
     `${caseId}: routeNaturalLanguageTask() must return routePlan with ordered phases and one compiled policy`,
   );
-  assert.ok(Array.isArray(plan.requiredSubagents), `${caseId}: routePlan.requiredSubagents must be an array`);
+  assert.equal(plan.version, 2, `${caseId}: RoutePlan must use the advisory v2 contract`);
+  assert.equal(plan.mode, 'advisory', `${caseId}: RoutePlan must be advisory`);
+  assert.equal(plan.autoContinue, false, `${caseId}: RoutePlan must not auto-continue`);
+  for (const field of ['steps', 'skills', 'tools', 'roles', 'qualityChecks', 'riskNotes']) {
+    assert.ok(Array.isArray(plan[field]), `${caseId}: routePlan.${field} must be an array`);
+  }
+  for (const role of plan.roles) {
+    assert.equal(typeof role.agent, 'string', `${caseId}: advisory role must name an agent`);
+    assert.ok(Array.isArray(role.skills), `${caseId}: advisory role skills must be an array`);
+  }
+  assert.equal('gateRequirements' in plan, false, `${caseId}: advisory RoutePlan must not expose gate requirements`);
+  assert.equal('hardBlock' in plan, false, `${caseId}: advisory RoutePlan must not hard-block execution`);
   return {
     version: plan.version,
-    phases: plan.phases,
-    requiredSkills: plan.requiredSkills,
-    requiredTools: plan.requiredTools,
-    requiredSubagents: plan.requiredSubagents.map((entry) => typeof entry === 'string' ? entry : entry.agent),
-    gateRequirements: plan.gateRequirements,
+    mode: plan.mode,
+    autoContinue: plan.autoContinue,
+    steps: plan.steps,
+    skills: plan.skills,
+    tools: plan.tools,
+    roles: plan.roles.map(({ agent }) => agent),
+    qualityChecks: plan.qualityChecks,
+  };
+}
+
+function expectedAdvisoryRoutePlan(fixture) {
+  const legacyPlan = fixture.expected.routePlan;
+  const resources = advisoryResourceOverrides[fixture.id] ?? {
+    skills: legacyPlan.requiredSkills,
+    tools: legacyPlan.requiredTools,
+    roles: legacyPlan.requiredSubagents,
+  };
+  const hadTestGate = resources.tools.includes('omp_test_gate');
+  const nonGateTools = resources.tools.filter((tool) => !['omp_test_gate', 'fact_check_gate'].includes(tool));
+  const tools = hadTestGate && nonGateTools.length === 0
+    ? fixture.expected.taskDescriptor.operation === 'execute'
+      ? ['omp_test_report']
+      : ['omp_test_analyze', 'omp_test_report']
+    : nonGateTools;
+  return {
+    version: 2,
+    mode: 'advisory',
+    autoContinue: false,
+    steps: legacyPlan.phases,
+    skills: resources.skills,
+    tools,
+    roles: resources.roles,
+    qualityChecks: advisoryQualityChecks[fixture.id],
+  };
+}
+
+function expectedTaskDescriptor(fixture) {
+  if (!['readme_update_push_zh', 'factcheck_polish_zh'].includes(fixture.id)) {
+    return fixture.expected.taskDescriptor;
+  }
+  return {
+    ...fixture.expected.taskDescriptor,
+    language: 'unknown',
+  };
+}
+
+function expectedIntentProjection(fixture) {
+  if (fixture.id === 'readme_update_push_zh') {
+    return {
+      intent: 'writing.pending',
+      workflowRoute: 'writing.pending',
+    };
+  }
+  return {
+    intent: fixture.expected.legacy.intent,
+    workflowRoute: fixture.expected.legacy.workflowRoute,
   };
 }
 
@@ -62,23 +156,22 @@ function assertForbiddenCapabilities(descriptor, caseId) {
   }
 }
 
-test('adversarial prompts compile to exact descriptors, route plans, and legacy projections', async (t) => {
+test('adversarial prompts compile to exact descriptors and advisory route plans', async (t) => {
   for (const fixture of fixtures) {
     await t.test(fixture.id, () => {
       const route = routeNaturalLanguageTask({ prompt: fixture.prompt, routerMode: 'enforce' });
       const descriptor = descriptorContract(route.taskDescriptor, fixture.id);
       const routePlan = routePlanContract(route.routePlan, fixture.id);
 
-      assert.deepEqual(descriptor, fixture.expected.taskDescriptor, `${fixture.id}: unexpected TaskDescriptor`);
-      assert.deepEqual(routePlan, fixture.expected.routePlan, `${fixture.id}: unexpected RoutePlan`);
+      assert.deepEqual(descriptor, expectedTaskDescriptor(fixture), `${fixture.id}: unexpected TaskDescriptor`);
+      assert.deepEqual(routePlan, expectedAdvisoryRoutePlan(fixture), `${fixture.id}: unexpected advisory RoutePlan`);
       assert.deepEqual(
         {
           intent: route.intent,
           workflowRoute: route.workflowRoute,
-          gateMode: route.gateMode,
         },
-        fixture.expected.legacy,
-        `${fixture.id}: v2 route changed or lost the legacy compatibility projection`,
+        expectedIntentProjection(fixture),
+        `${fixture.id}: v2 route changed or lost the intent compatibility projection`,
       );
       assertForbiddenCapabilities(descriptor, fixture.id);
     });
@@ -100,7 +193,7 @@ test('explicit negative constraints dominate distracting filenames and action wo
     assert.equal(descriptor.constraints.workspaceWrite, 'forbidden', prompt);
     assertForbiddenCapabilities(descriptor, prompt);
     assert.equal(route.workflowRoute, 'code.review', prompt);
-    assert.equal(route.routePlan.requiredSubagents.length, 0, `${prompt}: focused review must not fork a broad audit fleet`);
+    assert.equal(route.routePlan.roles.length, 0, `${prompt}: focused review must not suggest a broad audit fleet`);
   }
 });
 
@@ -114,7 +207,7 @@ test('single-file, single-function, and single-command requests remain focused',
   for (const prompt of prompts) {
     const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
     assert.equal(route.taskDescriptor?.complexity, 'focused', prompt);
-    assert.equal(route.routePlan?.requiredSubagents?.length, 0, `${prompt}: focused request escalated to subagents`);
+    assert.equal(route.routePlan?.roles?.length, 0, `${prompt}: focused request escalated to advisory roles`);
   }
 });
 
@@ -132,7 +225,7 @@ test('implicit code-change imperatives route to focused implementation without c
     assert.equal(route.taskDescriptor.provenance.needsClassifier, false, prompt);
     assert.equal(route.intent, 'implementation-with-tests', prompt);
     assert.equal(route.workflowRoute, 'code.dev', prompt);
-    assert.ok(route.routePlan.phases.some(({ kind, domain }) => kind === 'modify' && domain === 'code'), prompt);
+    assert.ok(route.routePlan.steps.some(({ kind, domain }) => kind === 'modify' && domain === 'code'), prompt);
   }
 });
 
@@ -164,7 +257,7 @@ test('explanation and review phrasing cannot inherit implicit modification autho
   }
 });
 
-test('answer-only side-effect advice has no action authority or approval gate', () => {
+test('answer-only side-effect advice has no action authority or protected-action workflow', () => {
   for (const prompt of [
     'How do I delete all cache files safely? Do not execute anything.',
     '请告诉我如何删除缓存里的所有文件，不要执行。',
@@ -177,8 +270,10 @@ test('answer-only side-effect advice has no action authority or approval gate', 
     assert.notEqual(route.taskDescriptor.constraints.networkAccess, 'required', prompt);
     assert.ok(!route.taskDescriptor.capabilities.includes('external.write'), prompt);
     assert.ok(!route.taskDescriptor.risk.flags.includes('irreversible-file-operation'), prompt);
-    assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'irreversible-approval'), prompt);
-    assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'), prompt);
+    assert.equal(route.routePlan.mode, 'advisory', prompt);
+    assert.equal(route.routePlan.autoContinue, false, prompt);
+    assert.ok(!route.routePlan.qualityChecks.includes('post-action-verification'), prompt);
+    assert.equal('gateRequirements' in route.routePlan, false, prompt);
   }
 });
 
@@ -199,11 +294,12 @@ test('local development and migration commands route as operational execution, n
     assert.equal(route.taskDescriptor.constraints.networkAccess, 'unspecified', prompt);
     assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden', prompt);
     assert.ok(route.taskDescriptor.capabilities.includes('shell.execute'), prompt);
-    assert.ok(route.routePlan.phases.some(({ kind, domain: phaseDomain }) => kind === 'execute' && phaseDomain === domain), prompt);
+    assert.ok(route.routePlan.steps.some(({ kind, domain: phaseDomain }) => kind === 'execute' && phaseDomain === domain), prompt);
     assert.equal(route.intent, 'unknown', prompt);
     assert.equal(route.workflowRoute, 'agentic.simple', prompt);
-    assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'test-evidence'), prompt);
-    assert.ok(!route.routePlan.gateRequirements.some(({ key }) => key === 'release-approval'), prompt);
+    assert.ok(!route.routePlan.qualityChecks.includes('test-evidence'), prompt);
+    assert.ok(!route.routePlan.qualityChecks.includes('post-action-verification'), prompt);
+    assert.equal('gateRequirements' in route.routePlan, false, prompt);
   }
 });
 
@@ -236,11 +332,10 @@ test('observe mode does not retain legacy bug-audit resources for local operatio
     assert.equal(route.taskDescriptor.operation, 'execute', prompt);
     assert.equal(route.intent, 'unknown', prompt);
     assert.equal(route.workflowRoute, 'agentic.simple', prompt);
-    assert.deepEqual(route.requiredSkills, [], prompt);
-    assert.deepEqual(route.requiredTools, [], prompt);
-    assert.deepEqual(route.requiredSubagents, [], prompt);
-    assert.deepEqual(route.routePlan.requiredSkills, [], prompt);
-    assert.deepEqual(route.routePlan.requiredTools, [], prompt);
-    assert.deepEqual(route.routePlan.requiredSubagents, [], prompt);
+    assert.equal(route.routePlan.mode, 'advisory', prompt);
+    assert.equal(route.routePlan.autoContinue, false, prompt);
+    assert.deepEqual(route.routePlan.skills, [], prompt);
+    assert.deepEqual(route.routePlan.tools, [], prompt);
+    assert.deepEqual(route.routePlan.roles, [], prompt);
   }
 });

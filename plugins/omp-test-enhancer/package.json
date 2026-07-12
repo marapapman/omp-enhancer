@@ -1,7 +1,7 @@
 {
   "name": "omp-testing-enhancer",
   "version": "0.1.12",
-  "description": "OMP plugin for test generation guidance, quality gates, and reports.",
+  "description": "OMP plugin for test generation guidance, advisory quality reviews, and reports.",
   "type": "module",
   "main": "./dist/extension.js",
   "exports": {
@@ -40,6 +40,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/marapapman/omp-test-enhancer.git"
+    "url": "git+https://github.com/marapapman/omp-enhancer.git",
+    "directory": "plugins/omp-test-enhancer"
   }
 }

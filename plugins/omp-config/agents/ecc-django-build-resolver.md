@@ -242,9 +242,9 @@ python manage.py runserver --verbosity=2 2>&1
 - Use `--fake` sparingly and only when DB state is known
 - Prefer `pip install --upgrade` over manual `requirements.txt` edits when resolving conflicts
 
-## Stop Conditions
+## Resolver Exit Conditions
 
-Stop and report if:
+Conclude this bounded resolver run and report the remaining limitation if:
 - Migration conflict requires destructive DB changes (data loss risk)
 - Same error persists after 3 fix attempts
 - Fix requires changes to production data or irreversible DB operations

@@ -89,7 +89,7 @@ You are a clinical informatics reviewer for healthcare software. Patient safety 
    - Impact: [potential harm or exposure]
    - Fix: [required change]
 
-### Verdict: [SAFE TO DEPLOY / NEEDS FIXES / BLOCK — PATIENT SAFETY RISK]
+### Verdict: [SAFE TO DEPLOY / NEEDS FIXES / RECOMMEND AGAINST DEPLOYMENT — PATIENT SAFETY RISK]
 ```
 
 ## Rules

@@ -1,16 +1,16 @@
 ---
 name: plan-execute-review-commit
-description: "Autonomous 4-stage workflow: Plan → Execute → Review → Commit"
+description: "Advisory Plan → Execute → Review workflow, with Commit only when explicitly authorized"
 ---
 
 # Plan → Execute → Review → Commit
 
-Strict 4-stage workflow for every implementation task. Do NOT merge or skip stages.
+Use the relevant stages at a depth proportional to the task. A commit is an optional final action, not an automatic stage.
 
 ## Stage 1: Plan 🔍
 - Understand the request, read relevant files, analyze codebase
 - Present a clear step-by-step plan to the user
-- **Wait for approval** before proceeding to Stage 2
+- Request approval only when the plan contains a material unresolved choice; otherwise continue under the user's existing implementation authorization
 
 ## Stage 2: Execute 🛠️
 - Implement changes one step at a time in order
@@ -23,7 +23,8 @@ Strict 4-stage workflow for every implementation task. Do NOT merge or skip stag
 - Fix any issues found
 - Present review summary
 
-## Stage 4: Commit ✅
+## Stage 4: Commit when requested ✅
+- Enter this stage only when the user explicitly requested a commit or the active workflow already authorizes it
 - `git add` relevant files
 - `git diff --cached` to verify
 - Commit with structured message:
@@ -36,7 +37,7 @@ Strict 4-stage workflow for every implementation task. Do NOT merge or skip stag
 - Push if requested
 
 ## Constraints
-- Always present plan before implementing (Stage 1 → user approval gate)
+- For non-trivial work, present or persist a concise plan; do not manufacture a separate approval gate for a concrete authorized change
 - No changes outside the approved plan's scope
-- If something unexpected comes up, stop and inform user
+- If something materially changes scope or authority, inform the user; otherwise adapt and continue
 - Commit messages in the language of the codebase

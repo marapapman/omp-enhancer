@@ -1,75 +1,33 @@
 ---
 name: safety-guard
-description: Use this skill to prevent destructive operations when working on production systems or running agents autonomously.
+description: Advisory risk review for destructive, production, deployment, migration, and tightly scoped file operations
 origin: ECC
 ---
 
-# Safety Guard — Prevent Destructive Operations
+# Safety Guard Advisory
 
-## When to Use
+Use this skill to make execution risk visible without creating a plugin-level
+permission system. It provides guidance only; it does not intercept Bash,
+Write, Edit, or other tools.
 
-- When working on production systems
-- When agents are running autonomously (full-auto mode)
-- When you want to restrict edits to a specific directory
-- During sensitive operations (migrations, deploys, data changes)
+## Suggested Review
 
-## How It Works
+For a risky operation, check the smallest relevant set of questions:
 
-Three modes of protection:
+- What exact file, repository, environment, service, or data set is targeted?
+- Is the action reversible, and what recovery path actually exists?
+- Does the current user request include this mutation or external action?
+- Can a narrower command or target achieve the same result?
+- What independent observation would verify the result?
 
-### Mode 1: Careful Mode
+Examples deserving extra attention include recursive deletion, force push,
+hard reset, destructive database statements, production deployment, package
+publication, cluster deletion, broad permission changes, and edits outside an
+explicitly named directory.
 
-Intercepts destructive commands before execution and warns:
+## Workflow Behavior
 
-```
-Watched patterns:
-- rm -rf (especially /, ~, or project root)
-- git push --force
-- git reset --hard
-- git checkout . (discard all changes)
-- DROP TABLE / DROP DATABASE
-- docker system prune
-- kubectl delete
-- chmod 777
-- sudo rm
-- npm publish (accidental publishes)
-- Any command with --no-verify
-```
-
-When detected: shows what the command does, asks for confirmation, suggests safer alternative.
-
-### Mode 2: Freeze Mode
-
-Locks file edits to a specific directory tree:
-
-```
-/safety-guard freeze src/components/
-```
-
-Any Write/Edit outside `src/components/` is blocked with an explanation. Useful when you want an agent to focus on one area without touching unrelated code.
-
-### Mode 3: Guard Mode (Careful + Freeze combined)
-
-Both protections active. Maximum safety for autonomous agents.
-
-```
-/safety-guard guard --dir src/api/ --allow-read-all
-```
-
-Agents can read anything but only write to `src/api/`. Destructive commands are blocked everywhere.
-
-### Unlock
-
-```
-/safety-guard off
-```
-
-## Implementation
-
-Uses PreToolUse hooks to intercept Bash, Write, Edit, and MultiEdit tool calls. Checks the command/path against the active rules before allowing execution.
-
-## Integration
-
-- Enable by default for `codex -a never` sessions
-- Pair with observability risk scoring in ECC 2.0
-- Logs all blocked actions to `~/.claude/safety-guard.log`
+Report unresolved target or authority questions once. Continue any safe,
+authorized work that does not depend on them. Do not repeatedly attempt a
+denied operation. The host sandbox, approval UI, and system policy decide
+whether an action may execute.

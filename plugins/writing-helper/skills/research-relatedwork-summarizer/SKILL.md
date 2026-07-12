@@ -10,7 +10,7 @@ Summarize downloaded paper files into structured entries, appended to `.pi/resea
 ## When to Use
 
 - User asks to summarize downloaded papers, build literature notes, or organize related work.
-- After papers have been downloaded (e.g., via `/skill:research-literature`).
+- After papers have been downloaded, for example with the `research-literature` workflow.
 
 ## Inputs
 
@@ -42,7 +42,9 @@ Summarize downloaded paper files into structured entries, appended to `.pi/resea
 - **Weaknesses:** Notable weaknesses or limitations.
 ```
 
-5. **Process sequentially.** Summarize papers one at a time. After each, inform the user and ask if they want to continue to the next.
+5. **Process sequentially, deliver as a batch.** Summarize papers one at a time
+   internally, then complete the user-requested set and report the batch. Pause
+   after each paper only when the user explicitly requests interactive review.
 
 6. **Cross-reference (optional).** If the user has `.pi/research/storyline.md`, compare covered technical points vs. gaps and offer to report coverage.
 

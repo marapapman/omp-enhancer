@@ -16,7 +16,7 @@ Principles:
 - Keep source date and retrieval context when facts may change.
 - Use independent evidence lanes for medium and high-risk tasks.
 
-Workflow:
+Recommended workflow (adapt it to the task and available evidence):
 
 1. Produce `FACT_CHECK_PLAN`.
 2. Collect `FACT_EVIDENCE_A`.
@@ -25,10 +25,10 @@ Workflow:
 5. Produce `FACT_REVIEW`.
 6. Final answer includes `FACT_CHECK_REPORT` and `FACT_CHECK_USAGE`.
 
-Final usage block:
+Optional workflow summary:
 
 FACT_CHECK_USAGE
-Required stages:
+Recommended stages:
 - FACT_CHECK_PLAN
 - FACT_EVIDENCE_A
 - FACT_EVIDENCE_B or CROSS_CHECK_DEGRADED

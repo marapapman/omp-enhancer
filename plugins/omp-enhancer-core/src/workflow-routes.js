@@ -1,5 +1,6 @@
 export const workflowRouteNames = [
   'agentic.simple',
+  'writing.pending',
   'writing.zh',
   'writing.en',
   'writing.latex',
@@ -15,104 +16,100 @@ export const workflowRouteNames = [
   'design.visual',
 ];
 
-const hardBlockReasons = [
-  'external_credential_missing',
-  'irreversible_file_operation',
-  'release_or_deploy',
-  'real_high_security_risk',
-  'network_or_service_unavailable',
-  'user_required_approval',
-];
-
 export const workflowRouteCatalog = {
   'agentic.simple': routeMeta({
-    do: ['Answer or inspect only the requested local context.', 'Use the smallest tool path that resolves the request.'],
-    doNot: ['Do not force coding, writing, testing, or security workflows.', 'Do not fork subagents unless the user asks for parallel work.'],
+    steps: ['Understand the request and inspect the smallest relevant context.', 'Respond with the requested result.'],
+    scopeNotes: ['No specialized workflow is inferred.'],
     skills: [],
-    gate: ['No pre-work skill gate.', `Hard block only for ${hardBlockReasons.join(', ')}.`],
-    shouldForkSubagents: false,
+  }),
+  'writing.pending': routeMeta({
+    steps: ['Read the text or exact document section that will be revised.', 'Detect the body language from that content.', 'Select the matching language skills, revise, and review.'],
+    scopeNotes: ['The instruction language is not evidence of the document language.', 'Language-specific skills remain undecided until source text is available.'],
+    skills: [],
+    qualityChecks: ['preserve meaning and document structure'],
   }),
   'writing.zh': routeMeta({
-    do: ['Write or revise Chinese prose with plain, natural wording.', 'Run writing checks when the deliverable is substantive.'],
-    doNot: ['Do not treat prose about risk or safety as a security audit.', 'Do not edit code for a prose request.'],
-    skills: ['plain-chinese-writing'],
-    gate: ['Missing writing skills produce hidden coaching, not a hard block.', 'Writing QA gates apply to substantive drafts.'],
+    steps: ['Revise Chinese prose with plain, natural wording.', 'Review logic, tone, and readability.'],
+    scopeNotes: ['This route concerns prose rather than code implementation.'],
+    skills: ['plain-chinese-writing', 'zh-writing-polish'],
+    qualityChecks: ['Chinese logic and style review'],
   }),
   'writing.en': routeMeta({
-    do: ['Draft or revise English prose.', 'Run writing checks when the deliverable is substantive.'],
-    doNot: ['Do not convert prose drafting into testing or security workflows.', 'Do not edit code for a prose request.'],
+    steps: ['Draft or revise English prose.', 'Review logic, tone, formatting, and readability.'],
+    scopeNotes: ['This route concerns prose rather than code implementation.'],
     skills: ['writing-markdown-helper'],
-    gate: ['Missing writing skills produce hidden coaching, not a hard block.', 'Writing QA gates apply to substantive drafts.'],
+    qualityChecks: ['English logic and style review'],
   }),
   'writing.latex': routeMeta({
-    do: ['Convert, repair, or prepare LaTeX writing artifacts.', 'Preserve citations, math, figures, and section structure.'],
-    doNot: ['Do not compile or publish unless requested.', 'Do not rewrite content beyond the requested conversion or formatting.'],
+    steps: ['Read the relevant LaTeX source.', 'Apply the requested content or formatting change.', 'Review citations, math, figures, and section structure.'],
+    scopeNotes: ['Compilation and publication are separate workflow steps when requested.'],
     skills: ['format-markdown2latex', 'format-latex2markdown', 'format-template-latex'],
-    gate: ['Missing format skills produce hidden coaching, not a hard block.', 'Hard block only before publish or irreversible overwrite.'],
+    qualityChecks: ['LaTeX structure preservation'],
   }),
   'writing.markdown': routeMeta({
-    do: ['Draft, revise, or convert Markdown documents.', 'Preserve headings, lists, citations, and code fences.'],
-    doNot: ['Do not switch into code implementation because Markdown mentions code.', 'Do not publish generated docs unless requested.'],
-    skills: ['writing-markdown-helper'],
-    gate: ['Missing Markdown writing skills produce hidden coaching, not a hard block.'],
+    steps: ['Read the Markdown source.', 'Apply the requested revision or conversion.', 'Review headings, lists, citations, and code fences.'],
+    scopeNotes: ['Code mentioned inside prose does not by itself make this a code implementation task.'],
+    skills: [],
+    qualityChecks: ['Markdown structure preservation'],
   }),
   'doc.convert.word': routeMeta({
-    do: ['Read, create, or convert Word documents.', 'Preserve document structure, headings, tables, and tracked content where relevant.'],
-    doNot: ['Do not treat a Word conversion as generic prose unless no file operation is requested.', 'Do not overwrite source documents irreversibly without approval.'],
+    steps: ['Inspect the source document and target format.', 'Create or convert the Word document.', 'Review headings, tables, and document structure.'],
+    scopeNotes: ['Source preservation and overwrite risk deserve explicit attention.'],
     skills: ['docx'],
-    gate: ['Missing docx skill produces hidden coaching, not a hard block.', 'Irreversible overwrite requires hard block approval.'],
+    riskNotes: ['Confirm the intended output path before replacing an existing document.'],
   }),
   'factcheck.document': routeMeta({
-    do: ['Extract checkable claims before evidence collection.', 'Use independent evidence lanes when sources are available.'],
-    doNot: ['Do not answer from memory as if claims were verified.', 'Do not blur supported, contradicted, stale, and insufficient evidence.'],
+    steps: ['Extract checkable claims.', 'Collect relevant evidence from independent sources when available.', 'Cross-check conflicts and report support, contradiction, staleness, or insufficiency.'],
+    scopeNotes: ['Unverified memory is not equivalent to sourced evidence.'],
     skills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
-    gate: ['Fact-check gate applies before final factual verdicts.', 'Missing skills produce hidden coaching, not a hard block.'],
-    shouldForkSubagents: true,
+    qualityChecks: ['claim-to-evidence consistency'],
+    roles: ['fact-planner', 'fact-researcher-a', 'fact-researcher-b', 'fact-cross-checker', 'fact-reviewer'],
   }),
   'code.dev': routeMeta({
-    do: ['Implement requested code changes and update affected tests.', 'Use existing patterns and verify the changed behavior.'],
-    doNot: ['Do not shrink scope to scaffolding or TODOs.', 'Do not run release or deploy steps.'],
+    steps: ['Inspect the affected code and existing patterns.', 'Plan the smallest coherent change.', 'Implement the change.', 'Run relevant verification and review the diff.'],
+    scopeNotes: ['Release or deployment is a separate step when the user requests it.'],
     skills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-    gate: ['Testing and review gates apply before final completion claims.', 'Skill gaps are coached or recovered, not hard-blocked.'],
-    shouldForkSubagents: true,
+    qualityChecks: ['focused tests', 'semantic diff review'],
+    roles: ['plan', 'implementation-task', 'reviewer'],
   }),
   'code.debug': routeMeta({
-    do: ['Reproduce or localize the reported failure before changing code.', 'Return root cause and verification evidence.'],
-    doNot: ['Do not patch symptoms without evidence.', 'Do not broaden into implementation unless the user asks for a fix.'],
+    steps: ['Reproduce or localize the reported failure.', 'Trace the concrete failure path.', 'Explain the root cause and relevant evidence.'],
+    scopeNotes: ['Implementation is a follow-on step when a fix is in scope.'],
     skills: ['diagnose', 'systematic-debugging'],
-    gate: ['Debugging may stop at diagnosis when the user requested read-only analysis.', 'Missing skills produce hidden coaching, not a hard block.'],
+    qualityChecks: ['root-cause evidence'],
   }),
   'code.test': routeMeta({
-    do: ['Run only the explicitly authorized local test target or target list.', 'Report the host-observed result without generating or broadening tests.'],
-    doNot: ['Do not turn bounded test execution into implementation or bug-audit work.', 'Do not add aggregate suites, redirects, preloads, pipelines, or substituted targets.'],
+    steps: ['Identify the requested test targets.', 'Run the relevant test command.', 'Report the host-observed result.'],
+    scopeNotes: ['The user-provided target list defines the intended testing scope.'],
     skills: [],
-    gate: ['Exact host-observed test evidence closes the route.', 'A rejected non-exact command receives one bounded mechanical correction.'],
+    qualityChecks: ['test result and target correspondence'],
   }),
   'code.review': routeMeta({
-    do: ['Review code paths for concrete defects, maintainability, and regressions.', 'Report file, symbol, and evidence for each finding.'],
-    doNot: ['Do not edit production code in a read-only review.', 'Do not report speculative issues as confirmed bugs.'],
-    skills: [],
-    gate: ['Review evidence gate applies before final findings.', 'Missing skills produce hidden coaching, not a hard block.'],
+    steps: ['Inspect the requested code paths.', 'Trace concrete failure and regression risks.', 'Report findings with file and symbol evidence.'],
+    scopeNotes: ['Speculative concerns should be labeled as hypotheses.'],
+    skills: ['diagnose', 'verification-before-completion'],
+    qualityChecks: ['finding-to-code evidence'],
   }),
   'omp.plugin': routeMeta({
-    do: ['Inspect OMP plugin assets, routes, skills, hooks, and templates.', 'Use packaged OMP config tools for asset inventory and portability checks.'],
-    doNot: ['Do not publish marketplace changes unless explicitly requested.', 'Do not edit user-authored skills.'],
+    steps: ['Inventory plugin assets, routes, skills, hooks, and templates.', 'Apply or propose the requested change.', 'Run relevant package and marketplace checks.'],
+    scopeNotes: ['Publishing is a separate externally visible action.'],
     skills: ['omp-marketplace-plugin-activation'],
-    gate: ['OMP plugin checks apply when modifying packaged assets.', 'Release or marketplace publish remains a hard block.'],
-    shouldForkSubagents: true,
+    qualityChecks: ['package and marketplace consistency'],
+    roles: ['config-librarian', 'reviewer'],
   }),
   'security.review': routeMeta({
-    do: ['Audit concrete code, config, auth, secret, file, network, or dependency risks.', 'Separate real exploitable risk from wording that only mentions safety.'],
-    doNot: ['Do not route general security explanations here.', 'Do not treat prose editing about risk as a security audit.'],
+    steps: ['Inspect concrete trust boundaries, callers, and sinks.', 'Separate supported impact from hypothetical risk.', 'Report evidence, severity rationale, and remediation options.'],
+    scopeNotes: ['General security prose is not automatically a code security audit.'],
     skills: ['security-review', 'security-scan'],
-    gate: ['Real high security risk can hard block unsafe continuation.', 'Missing security skills produce hidden coaching, not a hard block.'],
-    shouldForkSubagents: true,
+    qualityChecks: ['caller and sink evidence'],
+    riskNotes: ['High-impact findings benefit from independent review before remediation or disclosure.'],
+    roles: ['ecc-security-reviewer', 'reviewer'],
   }),
   'design.visual': routeMeta({
-    do: ['Design or refine visual interfaces, artifacts, or component presentation.', 'Apply frontend or artifact design skills before implementation.'],
-    doNot: ['Do not default to generic styling.', 'Do not publish or deploy designs unless requested.'],
+    steps: ['Inspect the visual context and constraints.', 'Create or refine the design.', 'Review hierarchy, spacing, typography, responsiveness, and interaction states.'],
+    scopeNotes: ['Publication and deployment are separate workflow steps.'],
     skills: ['frontend-design'],
-    gate: ['Design review or visual QA applies when appearance is the deliverable.', 'Missing design skills produce hidden coaching, not a hard block.'],
+    qualityChecks: ['visual and interaction review'],
   }),
 };
 
@@ -124,6 +121,7 @@ export function workflowRouteForLegacyIntent(intent, { auditMode = null } = {}) 
   if (intent === 'fact-check') return 'factcheck.document';
   if (intent === 'security-review') return 'security.review';
   if (intent === 'config-assets') return 'omp.plugin';
+  if (intent === 'writing.pending') return 'writing.pending';
   if (intent === 'writing.zh') return 'writing.zh';
   if (intent === 'writing.en') return 'writing.en';
   return 'agentic.simple';
@@ -134,67 +132,116 @@ export function decorateWorkflowRoute(route, { workflowRoute = null } = {}) {
     ? workflowRoute
     : workflowRouteForLegacyIntent(route.intent, route);
   const meta = workflowRouteCatalog[resolvedWorkflowRoute] ?? workflowRouteCatalog['agentic.simple'];
-  const requiredSkills = unique([...(route.requiredSkills ?? []), ...meta.skills]);
+  const skills = unique([...(route.skills ?? route.requiredSkills ?? []), ...meta.skills]);
+  const tools = unique(route.tools ?? route.requiredTools ?? []);
+  const roles = normalizeRoles(route.roles ?? route.requiredSubagents ?? []);
   return {
-    ...route,
-    requiredSkills,
+    ...withoutLegacyRouteFields(route),
+    skills,
+    tools,
+    roles,
     workflowRoute: resolvedWorkflowRoute,
     workflowTaskType: resolvedWorkflowRoute,
-    routeCard: buildWorkflowRouteCard({ route: resolvedWorkflowRoute, requiredSkills }),
+    routeCard: buildWorkflowRouteCard({ route: resolvedWorkflowRoute, skills, roles }),
     routeCardSections: workflowRouteCardSections(),
-    gateMode: gateModeForRoute(resolvedWorkflowRoute, route),
-    skillGateMode: 'hidden-coach',
+    workflowMode: 'advisory',
+    advisoryOnly: true,
+    autoContinue: false,
     classifierMode: 'route-hint-only',
     shouldUseClassifier: false,
-    shouldForkSubagents: Boolean((route.requiredSubagents ?? []).length || meta.shouldForkSubagents),
-    hardBlockReasons,
+    qualityChecks: unique(meta.qualityChecks),
+    riskNotes: unique(meta.riskNotes),
+    // One-release compatibility aliases. Runtime and prompt generation use the
+    // advisory fields above; these aliases never imply enforcement.
+    requiredSkills: skills,
+    requiredTools: tools,
+    requiredSubagents: roles.map(toLegacyRoleAlias),
+    deprecatedAliases: ['requiredSkills', 'requiredTools', 'requiredSubagents'],
   };
 }
 
-export function buildWorkflowRouteCard({ route = 'agentic.simple', requiredSkills = [], includeCatalogSkills = true } = {}) {
+export function buildWorkflowRouteCard({
+  route = 'agentic.simple',
+  skills = [],
+  roles = [],
+  requiredSkills = [],
+  includeCatalogSkills = true,
+} = {}) {
   const workflowRoute = workflowRouteNames.includes(route) ? route : 'agentic.simple';
   const meta = workflowRouteCatalog[workflowRoute];
-  const skills = includeCatalogSkills
-    ? unique([...(requiredSkills ?? []), ...meta.skills])
-    : unique(requiredSkills ?? []);
+  const selectedSkills = includeCatalogSkills
+    ? unique([...(skills ?? []), ...(requiredSkills ?? []), ...meta.skills])
+    : unique([...(skills ?? []), ...(requiredSkills ?? [])]);
+  const selectedRoles = unique([
+    ...normalizeRoles(roles).map(({ agent }) => agent),
+    ...meta.roles,
+  ]);
   return [
-    'WORKFLOW_CARD',
+    'WORKFLOW_GUIDE',
     `Task type: ${workflowRoute}`,
     '',
-    'Do:',
-    ...meta.do.map((line) => `- ${line}`),
-    '',
-    'Do not:',
-    ...meta.doNot.map((line) => `- ${line}`),
+    'Suggested steps:',
+    ...meta.steps.map((line) => `- ${line}`),
     '',
     'Skills:',
-    ...(skills.length ? skills.map((skill) => `- ${skill}`) : ['- none']),
+    ...(selectedSkills.length ? selectedSkills.map((skill) => `- ${skill}`) : ['- none yet']),
     '',
-    'Gate:',
-    ...meta.gate.map((line) => `- ${line}`),
+    'Optional roles:',
+    ...(selectedRoles.length ? selectedRoles.map((role) => `- ${role}`) : ['- none']),
+    '',
+    'Quality checks:',
+    ...(meta.qualityChecks.length ? meta.qualityChecks.map((line) => `- ${line}`) : ['- use task-appropriate judgment']),
+    '',
+    'Scope and risk notes:',
+    ...[...meta.scopeNotes, ...meta.riskNotes].map((line) => `- ${line}`),
   ].join('\n');
 }
 
 export function workflowRouteCardSections() {
-  return ['WORKFLOW_CARD', 'Task type', 'Do', 'Do not', 'Skills', 'Gate'];
+  return ['WORKFLOW_GUIDE', 'Task type', 'Suggested steps', 'Skills', 'Optional roles', 'Quality checks', 'Scope and risk notes'];
 }
 
-export function gateModeForRoute(workflowRoute, route = {}) {
-  if (route.intent === 'release') return 'hard-block';
-  if (workflowRoute === 'agentic.simple') return 'none';
-  if (workflowRoute === 'factcheck.document') return 'fact-check-gate';
-  if (workflowRoute === 'code.dev') return 'test-review-gate';
-  if (workflowRoute === 'code.test') return 'test-gate';
-  if (workflowRoute === 'code.review') return 'review-gate';
-  if (workflowRoute === 'security.review') return 'security-gate';
-  if (workflowRoute === 'writing.zh' || workflowRoute === 'writing.en' || workflowRoute === 'writing.latex' || workflowRoute === 'writing.markdown' || workflowRoute === 'doc.convert.word') return 'quality-gate';
-  return 'hidden-coach';
+function routeMeta({
+  steps = [],
+  scopeNotes = [],
+  skills = [],
+  qualityChecks = [],
+  riskNotes = [],
+  roles = [],
+}) {
+  return { steps, scopeNotes, skills, qualityChecks, riskNotes, roles };
 }
 
-function routeMeta({ do: doLines, doNot, skills, gate, shouldForkSubagents = false }) {
-  return { do: doLines, doNot, skills, gate, shouldForkSubagents };
+function withoutLegacyRouteFields(route = {}) {
+  const {
+    requiredSkills: _requiredSkills,
+    requiredTools: _requiredTools,
+    requiredSubagents: _requiredSubagents,
+    hardBlock: _hardBlock,
+    hardBlockReasons: _hardBlockReasons,
+    gateMode: _gateMode,
+    skillGateMode: _skillGateMode,
+    shouldForkSubagents: _shouldForkSubagents,
+    ...rest
+  } = route;
+  return rest;
 }
 
-function unique(values) {
+function normalizeRoles(values = []) {
+  return (values ?? []).map((value) => {
+    if (typeof value === 'string') return { agent: value, duty: '', skills: [] };
+    return {
+      ...value,
+      skills: unique(value?.skills ?? value?.requiredSkills ?? []),
+    };
+  }).filter(({ agent }) => agent);
+}
+
+function toLegacyRoleAlias(value) {
+  const { skills = [], ...rest } = value;
+  return { ...rest, requiredSkills: [...skills] };
+}
+
+function unique(values = []) {
   return [...new Set((values ?? []).filter(Boolean))];
 }

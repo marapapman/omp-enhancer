@@ -1,35 +1,35 @@
 ---
 name: brainstorming
-description: "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation."
+description: "Use for genuinely ambiguous, high-impact, or design-heavy work to clarify intent and compare approaches before implementation."
 ---
 
 # Brainstorming Ideas Into Designs
 
 Help turn ideas into fully formed designs and specs through natural collaborative dialogue.
 
-Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design and get user approval.
+Start by understanding the current project context, then clarify only the decisions that materially change the result. Once the design is clear enough, present it at a depth proportional to the task.
 
-<HARD-GATE>
-Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it. This applies to EVERY project regardless of perceived simplicity.
-</HARD-GATE>
+<WORKFLOW-GUIDANCE>
+Use explicit user approval when the task contains a meaningful product, architecture, UX, data, or compatibility choice. For a concrete, reversible, well-scoped implementation request, a short inline design check is enough and work may continue without manufacturing a separate approval round. Never let this skill override the user's existing authorization to implement.
+</WORKFLOW-GUIDANCE>
 
-## Anti-Pattern: "This Is Too Simple To Need A Design"
+## Scale Design Work to the Decision
 
-Every project goes through this process. A todo list, a single-function utility, a config change — all of them. "Simple" projects are where unexamined assumptions cause the most wasted work. The design can be short (a few sentences for truly simple projects), but you MUST present it and get approval.
+Every change benefits from understanding the intended behavior, but not every change needs a separate design ceremony. Use a few sentences for a straightforward change. Use the full collaborative process for ambiguous or consequential decisions.
 
 ## Checklist
 
-You MUST create a task for each of these items and complete them in order:
+For a full design exercise, use the relevant items below and adapt their depth:
 
 1. **Explore project context** — check files, docs, recent commits
 2. **Offer visual companion** (if topic will involve visual questions) — this is its own message, not combined with a clarifying question. See the Visual Companion section below.
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
-5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+5. **Present design** — in sections scaled to their complexity; request approval for material choices
+6. **Write design doc when useful** — save it where the repository or user expects it
 7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **User reviews written spec** — ask user to review the spec file before proceeding
-9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+8. **User reviews written spec when needed** — use this for unresolved or high-impact choices
+9. **Transition to implementation** — use a written plan for non-trivial execution
 
 ## Process Flow
 
@@ -63,7 +63,7 @@ digraph brainstorming {
 }
 ```
 
-**The terminal state is invoking writing-plans.** Do NOT invoke frontend-design, mcp-builder, or any other implementation skill. The ONLY skill you invoke after brainstorming is writing-plans.
+For non-trivial work, transition to a written plan. For a small, already-authorized change, continue directly with the relevant implementation guidance.
 
 ## The Process
 
@@ -111,7 +111,7 @@ digraph brainstorming {
 - Write the validated design (spec) to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
   - (User preferences for spec location override this default)
 - Use elements-of-style:writing-clearly-and-concisely skill if available
-- Commit the design document to git
+- Commit the design document only when the user requested a commit or the active repository workflow already authorizes it
 
 **Spec Self-Review:**
 After writing the spec document, look at it with fresh eyes:
@@ -123,17 +123,18 @@ After writing the spec document, look at it with fresh eyes:
 
 Fix any issues inline. No need to re-review — just fix and move on.
 
-**User Review Gate:**
-After the spec review loop passes, ask the user to review the written spec before proceeding:
+**Optional user review checkpoint:**
+After one bounded spec review pass, ask the user only when the design still
+contains a material unresolved choice:
 
-> "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
+> "Spec written to `<path>`. One material choice remains: [choice]. Which direction should the implementation use?"
 
-Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once the user approves.
+Wait when the design contains an unresolved material choice. Otherwise continue under the user's existing implementation request and note the assumption.
 
 **Implementation:**
 
-- Invoke the writing-plans skill to create a detailed implementation plan
-- Do NOT invoke any other skill. writing-plans is the next step.
+- Use the writing-plans skill for a detailed multi-step implementation plan when it adds value
+- Then use the relevant implementation skills; skill order is guidance, not a completion permit
 
 ## Key Principles
 
@@ -141,7 +142,7 @@ Wait for the user's response. If they request changes, make them and re-run the 
 - **Multiple choice preferred** - Easier to answer than open-ended when possible
 - **YAGNI ruthlessly** - Remove unnecessary features from all designs
 - **Explore alternatives** - Always propose 2-3 approaches before settling
-- **Incremental validation** - Present design, get approval before moving on
+- **Incremental validation** - Validate material choices without creating unnecessary approval rounds
 - **Be flexible** - Go back and clarify when something doesn't make sense
 
 ## Visual Companion
@@ -151,7 +152,10 @@ A browser-based companion for showing mockups, diagrams, and visual options duri
 **Offering the companion:** When you anticipate that upcoming questions will involve visual content (mockups, layouts, diagrams), offer it once for consent:
 > "Some of what we're working on might be easier to explain if I can show it to you in a web browser. I can put together mockups, diagrams, comparisons, and other visuals as we go. This feature is still new and can be token-intensive. Want to try it? (Requires opening a local URL)"
 
-**This offer MUST be its own message.** Do not combine it with clarifying questions, context summaries, or any other content. The message should contain ONLY the offer above and nothing else. Wait for the user's response before continuing. If they decline, proceed with text-only brainstorming.
+The companion offer is optional and may be included in a normal progress update.
+Continue with text while waiting unless a genuinely material visual choice
+requires the user's answer. Do not turn the offer into a separate workflow
+pause.
 
 **Per-question decision:** Even after the user accepts, decide FOR EACH QUESTION whether to use the browser or the terminal. The test: **would the user understand this better by seeing it than reading it?**
 

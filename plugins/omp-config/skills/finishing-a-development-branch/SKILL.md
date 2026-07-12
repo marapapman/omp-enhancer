@@ -17,7 +17,7 @@ Guide completion of development work by presenting clear options and handling ch
 
 ### Step 1: Verify Tests
 
-**Before presenting options, verify tests pass:**
+Run the relevant test suite before making a readiness claim when it is available:
 
 ```bash
 # Run project's test suite
@@ -26,14 +26,14 @@ npm test / cargo test / pytest / go test ./...
 
 **If tests fail:**
 ```
-Tests failing (<N> failures). Must fix before completing:
+Tests failing (<N> failures):
 
 [Show failures]
-
-Cannot proceed with merge/PR until tests pass.
 ```
 
-Stop. Don't proceed to Step 2.
+Report that the branch is not verified. Make one focused repair when requested
+or ask whether the user wants to keep the branch without integration. Do not
+repeat unchanged tests or merge automatically merely to finish the workflow.
 
 **If tests pass:** Continue to Step 2.
 

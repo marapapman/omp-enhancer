@@ -47,7 +47,7 @@ function summarize(issues, returnedIssues) {
     fatalOrCritical,
     warningsOrImportant,
     minor,
-    verdict: fatalOrCritical > 0 ? 'blocked' : warningsOrImportant > 0 ? 'needs_revision' : 'pass',
+    verdict: fatalOrCritical > 0 ? 'critical_findings' : warningsOrImportant > 0 ? 'needs_revision' : 'pass',
   };
 }
 

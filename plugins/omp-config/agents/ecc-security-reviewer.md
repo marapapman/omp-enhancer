@@ -1,6 +1,6 @@
 ---
 name: ecc-security-reviewer
-description: Security vulnerability detection and remediation specialist. Use PROACTIVELY
+description: Security vulnerability detection and remediation specialist. Useful
   after writing code that handles user input, authentication, API endpoints, or sensitive
   data. Flags secrets, SSRF, injection, unsafe crypto, and OWASP Top 10 vulnerabilities.
 tools:
@@ -16,7 +16,6 @@ spawns: []
 model:
 - pi/plan
 thinkingLevel: high
-blocking: true
 ---
 ## Prompt Defense Baseline
 
@@ -109,9 +108,9 @@ If you find a CRITICAL vulnerability:
 
 ## When to Run
 
-**ALWAYS:** New API endpoints, auth code changes, user input handling, DB query changes, file uploads, payment code, external API integrations, dependency updates.
+**Recommended:** New API endpoints, auth code changes, user input handling, DB query changes, file uploads, payment code, external API integrations, and dependency updates.
 
-**IMMEDIATELY:** Production incidents, dependency CVEs, user security reports, before major releases.
+**Prioritize:** Production incidents, dependency CVEs, user security reports, and major-release reviews.
 
 ## Success Metrics
 

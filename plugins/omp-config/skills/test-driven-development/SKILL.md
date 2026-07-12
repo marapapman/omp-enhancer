@@ -1,6 +1,6 @@
 ---
 name: test-driven-development
-description: Use when implementing any feature or bugfix, before writing implementation code
+description: Use for behavior-changing implementation when a meaningful automated test seam exists; adapt the red-green-refactor depth to the task and repository
 ---
 
 # Test-Driven Development (TDD)
@@ -11,38 +11,29 @@ Write the test first. Watch it fail. Write minimal code to pass.
 
 **Core principle:** If you didn't watch the test fail, you don't know if it tests the right thing.
 
-**Violating the letter of the rules is violating the spirit of the rules.**
+Preserve the evidence-seeking intent while adapting to the user request and available test infrastructure.
 
 ## When to Use
 
-**Always:**
+**Usually valuable for:**
 - New features
 - Bug fixes
 - Refactoring
 - Behavior changes
 
-**Exceptions (ask your human partner):**
+**Common exceptions or adaptations:**
 - Throwaway prototypes
 - Generated code
 - Configuration files
 
-Thinking "skip TDD just this once"? Stop. That's rationalization.
+When test-first is impractical, explain why and use the strongest available verification instead of fabricating a red-green cycle.
 
-## The Iron Law
+## Preferred Test-First Rule
 
-```
-NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
-```
+Prefer a failing regression test before behavior-changing production code when
+the repository exposes a meaningful, runnable test seam.
 
-Write code before the test? Delete it. Start over.
-
-**No exceptions:**
-- Don't keep it as "reference"
-- Don't "adapt" it while writing tests
-- Don't look at it
-- Delete means delete
-
-Implement fresh from tests. Period.
+If implementation already exists, do not delete valid user work merely to recreate ritual order. Add a regression test that would fail against the faulty behavior when practical, then verify the fix.
 
 ## Red-Green-Refactor
 
@@ -112,7 +103,7 @@ Vague name, tests mock not code
 
 ### Verify RED - Watch It Fail
 
-**MANDATORY. Never skip.**
+**Recommended when the test seam supports it.**
 
 ```bash
 npm test path/to/test.test.ts
@@ -125,7 +116,9 @@ Confirm:
 
 **Test passes?** You're testing existing behavior. Fix test.
 
-**Test errors?** Fix error, re-run until it fails correctly.
+**Test errors?** Make one focused correction when obvious. If the harness still
+cannot reach the intended red state, report that limitation and continue with
+the strongest available verification.
 
 ### GREEN - Minimal Code
 
@@ -167,7 +160,7 @@ Don't add features, refactor other code, or "improve" beyond the test.
 
 ### Verify GREEN - Watch It Pass
 
-**MANDATORY.**
+**Expected evidence when this test can run.**
 
 ```bash
 npm test path/to/test.test.ts
@@ -178,9 +171,10 @@ Confirm:
 - Other tests still pass
 - Output pristine (no errors, warnings)
 
-**Test fails?** Fix code, not test.
+**Test fails?** Inspect whether code or the expectation is wrong; make a focused
+repair without repeatedly changing the test merely to obtain green output.
 
-**Other tests fail?** Fix now.
+**Other tests fail?** Record the regression and repair it when it is in scope.
 
 ### REFACTOR - Clean Up
 
@@ -225,13 +219,10 @@ Manual testing is ad-hoc. You think you tested everything but:
 
 Automated tests are systematic. They run the same way every time.
 
-**"Deleting X hours of work is wasteful"**
+**"The implementation already exists"**
 
-Sunk cost fallacy. The time is already gone. Your choice now:
-- Delete and rewrite with TDD (X more hours, high confidence)
-- Keep it and add tests after (30 min, low confidence, likely bugs)
-
-The "waste" is keeping code you can't trust. Working code without real tests is technical debt.
+Preserve valid user work. Add a regression test around the observed behavior
+when practical, then use the result to assess or refine the implementation.
 
 **"TDD is dogmatic, being pragmatic means adapting"**
 
@@ -269,7 +260,7 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 | "Manual test faster" | Manual doesn't prove edge cases. You'll re-test every change. |
 | "Existing code has no tests" | You're improving it. Add tests for existing code. |
 
-## Red Flags - STOP and Start Over
+## Warning Signs
 
 - Code before test
 - Test after implementation
@@ -285,7 +276,7 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 - "TDD is dogmatic, I'm being pragmatic"
 - "This is different because..."
 
-**All of these mean: Delete code. Start over with TDD.**
+These signs mean the evidence may be weak. Improve the test or verification where practical, and report any remaining limitation; do not automatically delete working code or restart the whole task.
 
 ## Example: Bug Fix
 
@@ -337,7 +328,7 @@ Before marking work complete:
 - [ ] Tests use real code (mocks only if unavoidable)
 - [ ] Edge cases and errors covered
 
-Can't check all boxes? You skipped TDD. Start over.
+If some boxes cannot be checked, state which ones and why. Continue with the strongest practical verification rather than looping back automatically.
 
 ## When Stuck
 
@@ -352,7 +343,8 @@ Can't check all boxes? You skipped TDD. Start over.
 
 Bug found? Write failing test reproducing it. Follow TDD cycle. Test proves fix and prevents regression.
 
-Never fix bugs without a test.
+Prefer a regression test for each concrete bug. When that is impossible, state
+why and preserve other reproducible evidence for the fix.
 
 ## Testing Anti-Patterns
 
@@ -364,8 +356,8 @@ When adding mocks or test utilities, read @testing-anti-patterns.md to avoid com
 ## Final Rule
 
 ```
-Production code → test exists and failed first
-Otherwise → not TDD
+Best case: production behavior → meaningful test failed first
+Fallback: document why the red phase was unavailable and verify another way
 ```
 
-No exceptions without your human partner's permission.
+Adapt the depth to the requested scope and report the evidence actually obtained.

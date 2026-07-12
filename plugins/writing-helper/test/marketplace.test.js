@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -68,6 +68,26 @@ describe('marketplace install metadata', () => {
     assert.match(readme, /omp plugin marketplace update omp-enhancer/);
     assert.match(readme, /omp plugin upgrade writing-helper@omp-enhancer/);
     assert.match(readme, /omp plugin link --dry-run --json \/absolute\/path\/to\/omp-enhancer\/plugins\/writing-helper/);
+    assert.match(readme, /npm run coverage --workspace writing-helper/);
+    assert.match(readme, /npm pack --dry-run --workspace plugins\/writing-helper/);
+  });
+
+  it('keeps writing workflows direct by default and free of invented slash commands', async () => {
+    const root = process.cwd();
+    const files = [
+      'skills/writing-markdown-helper/SKILL.md',
+      'skills/zh-writing-markdown-helper/SKILL.md',
+      'skills/writing-review/SKILL.md',
+      'skills/zh-writing-review/SKILL.md',
+      'skills/writing-state-machine/SKILL.md',
+      'skills/zh-writing-state-machine/SKILL.md',
+    ];
+    for (const relative of files) {
+      const content = await readText(join(root, relative));
+      assert.doesNotMatch(content, /\/skill:/, relative);
+    }
+    assert.match(await readText(join(root, 'skills/writing-review/SKILL.md')), /Default One-Pass Workflow/);
+    assert.match(await readText(join(root, 'skills/zh-writing-review/SKILL.md')), /默认单轮流程/);
   });
 
   it('derives release tags from package versions', () => {
@@ -117,6 +137,19 @@ describe('marketplace install metadata', () => {
     assert.equal(synced.plugins[1].source.ref, 'v0.2.0');
   });
 
+  it('stores a top-level ref when a legacy source value is an array', () => {
+    const synced = syncMarketplaceCatalogRelease({
+      plugins: [{ name: 'writing-helper', version: '0.1.0', source: ['./writing-helper'] }],
+    }, { name: 'writing-helper', version: '0.2.0' });
+
+    assert.deepEqual(synced.plugins[0], {
+      name: 'writing-helper',
+      version: '0.2.0',
+      source: ['./writing-helper'],
+      ref: 'v0.2.0',
+    });
+  });
+
   it('fails release sync when the package plugin is absent from the catalog', () => {
     const catalog = {
       name: 'omp-writing-helper',
@@ -128,6 +161,29 @@ describe('marketplace install metadata', () => {
       () => syncMarketplaceCatalogRelease(catalog, { name: 'writing-helper', version: '0.2.0' }),
       /marketplace plugin writing-helper was not found/,
     );
+  });
+
+  it('reports a missing marketplace catalog after searching to the filesystem root', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'writing-helper-no-marketplace-'));
+    try {
+      await assert.rejects(
+        () => syncMarketplaceRelease(root),
+        /marketplace catalog \.omp-plugin\/marketplace\.json was not found/,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('propagates non-missing filesystem errors while locating the catalog', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'writing-helper-invalid-marketplace-'));
+    try {
+      await mkdir(join(root, '.omp-plugin'));
+      await symlink('marketplace.json', join(root, '.omp-plugin', 'marketplace.json'));
+      await assert.rejects(() => syncMarketplaceRelease(root), (error) => error?.code === 'ELOOP');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('syncs the root monorepo marketplace catalog from the plugin workspace', async () => {

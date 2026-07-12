@@ -2,33 +2,32 @@ import { createHash } from 'node:crypto';
 import { buildTestHelpText, parseTestCommandMode } from './commands/testCommand.js';
 import { defaultTestingEnhancerConfig, readTestingEnhancerConfig, writeTestingEnhancerConfig } from './config/testingConfig.js';
 import { detectPackageManager } from './repo/repoScanner.js';
-import { TESTING_EVIDENCE_ENTRY, TESTING_STATE_ENTRY, bindTestingStateToRoute, buildTestingGateEvidence, createInitialTestingState, evaluateStandaloneTestingGate, hasTestingGateEvidence, invalidateObservedTestCommand, isStandaloneTerminalOnlyState, markGateFinished, markGatePending, markObservedTestCommand, markReportGenerated, restoreTestingStateFromEntries } from './session/testingState.js';
-import { hasCoreGateOwner, readCoreRouteIdFromEntries } from './session/gateOwnership.js';
+import { TESTING_EVIDENCE_ENTRY, TESTING_STATE_ENTRY, buildTestingReviewEvidence, completeTestingReview, createInitialTestingReviewState, hasTestingReviewData, invalidateObservedTestCommand, recordObservedTestCommand, recordTestingReport, restoreTestingReviewStateFromEntries, scopeTestingReviewToRoute, startTestingReview } from './session/testingState.js';
+import { readCoreRouteIdentityFromEntries } from './session/routeIdentity.js';
 import { createTestingEnhancerTools } from './tools/testingTools.js';
 import { isRecord } from './utils.js';
 export function registerTestingEnhancer(pi) {
-    let currentState = createInitialTestingState();
+    let currentState = createInitialTestingReviewState();
     const branchEntries = (ctx) => ctx.sessionManager?.getBranch?.() ?? [];
     const prepareStateForContext = (ctx) => {
-        const routeId = readCoreRouteIdFromEntries(branchEntries(ctx));
-        if (!routeId || currentState.routeId === routeId)
+        const routeIdentity = readCoreRouteIdentityFromEntries(branchEntries(ctx));
+        if (!routeIdentity || currentState.routeIdentity === routeIdentity)
             return;
-        currentState = bindTestingStateToRoute(currentState, routeId);
+        currentState = scopeTestingReviewToRoute(currentState, routeIdentity);
     };
-    const persistTestingEvidence = async (ctx) => {
+    const persistTestingReview = async (ctx) => {
         prepareStateForContext(ctx);
         await pi.appendEntry(TESTING_STATE_ENTRY, currentState);
-        if (!hasTestingGateEvidence(currentState))
+        if (!hasTestingReviewData(currentState))
             return;
-        await pi.appendEntry(TESTING_EVIDENCE_ENTRY, buildTestingGateEvidence(currentState));
+        await pi.appendEntry(TESTING_EVIDENCE_ENTRY, buildTestingReviewEvidence(currentState));
     };
-    const restoreTestingState = (_event, ctx) => {
+    const restoreTestingReview = (_event, ctx) => {
         const entries = branchEntries(ctx);
-        const routeId = readCoreRouteIdFromEntries(entries);
-        const requireCurrentRouteEvidence = routeId !== undefined || hasCoreGateOwner(pi, entries);
-        currentState = restoreTestingStateFromEntries(entries, {
-            ...(routeId !== undefined ? { routeId } : {}),
-            requireCurrentRouteEvidence
+        const routeIdentity = readCoreRouteIdentityFromEntries(entries);
+        currentState = restoreTestingReviewStateFromEntries(entries, {
+            ...(routeIdentity !== undefined ? { routeIdentity } : {}),
+            requireCurrentRoute: routeIdentity !== undefined
         });
     };
     const recordTestingToolResult = async (event, ctx) => {
@@ -36,104 +35,67 @@ export function registerTestingEnhancer(pi) {
             return;
         prepareStateForContext(ctx);
         const entries = branchEntries(ctx);
-        const standaloneOwner = !hasCoreGateOwner(pi, entries);
-        const routeId = readCoreRouteIdFromEntries(entries) ?? currentState.routeId;
-        const observed = routeId ? observedTestCommandFromHostEvent(event, routeId) : undefined;
+        const routeIdentity = readCoreRouteIdentityFromEntries(entries) ?? currentState.routeIdentity;
+        const observed = routeIdentity ? observedTestCommandFromHostEvent(event, routeIdentity) : undefined;
         let stateChanged = false;
-        if (standaloneOwner
-            && currentState.lastObservedTestCommand
+        if (currentState.lastObservedTestCommand
             && (isDefiniteWorkspaceMutationHostEvent(event)
                 || isTrustedExplicitTestAttempt(event) && !observed)) {
             currentState = invalidateObservedTestCommand(currentState);
             stateChanged = true;
         }
         if (observed) {
-            currentState = markObservedTestCommand(currentState, observed);
+            currentState = recordObservedTestCommand(currentState, observed);
             stateChanged = true;
         }
         if (stateChanged)
-            await persistTestingEvidence(ctx);
+            await persistTestingReview(ctx);
         if (event.name === 'omp_test_report' && isRecord(event.details) && typeof event.details.markdown === 'string') {
-            currentState = markReportGenerated(currentState, event.details.markdown);
-            await persistTestingEvidence(ctx);
+            currentState = recordTestingReport(currentState, event.details.markdown);
+            await persistTestingReview(ctx);
         }
-    };
-    const enforcePendingTestGate = async (_event, ctx) => {
-        prepareStateForContext(ctx);
-        const entries = branchEntries(ctx);
-        if (hasCoreGateOwner(pi, entries)) {
-            await persistTestingEvidence(ctx);
-            return undefined;
-        }
-        const evaluation = evaluateStandaloneTestingGate(currentState);
-        currentState = evaluation.state;
-        if (evaluation.kind === 'release' || evaluation.kind === 'stop') {
-            await persistTestingEvidence(ctx);
-            return undefined;
-        }
-        await persistTestingEvidence(ctx);
-        if (evaluation.kind === 'terminal') {
-            return {
-                continue: true,
-                additionalContext: formatStandaloneTerminalContext(currentState)
-            };
-        }
-        return {
-            continue: true,
-            additionalContext: formatStandaloneRepairContext(currentState)
-        };
-    };
-    const enforceStandaloneTerminalToolBoundary = (_event, ctx) => {
-        prepareStateForContext(ctx);
-        const entries = branchEntries(ctx);
-        if (hasCoreGateOwner(pi, entries))
-            return undefined;
-        if (!isStandaloneTerminalOnlyState(currentState))
-            return undefined;
-        return {
-            block: true,
-            reason: 'OMP_TEST_GATE_TERMINAL is active. Standalone recovery is exhausted; do not call or run any more tools or commands. Return only the explicit blocked testing status and missing evidence.'
-        };
     };
     const recordAnalyzeOutput = async (output, ctx) => {
         if (output.targets.length === 0)
             return;
         prepareStateForContext(ctx);
-        const routeId = readCoreRouteIdFromEntries(branchEntries(ctx)) ?? currentState.routeId ?? `testing:${output.runId}`;
-        currentState = markGatePending(currentState, output.targets, { routeId, runId: output.runId });
-        await persistTestingEvidence(ctx);
+        const routeIdentity = readCoreRouteIdentityFromEntries(branchEntries(ctx))
+            ?? currentState.routeIdentity
+            ?? `testing:${output.runId}`;
+        currentState = startTestingReview(currentState, output.targets, { routeIdentity, runId: output.runId });
+        await persistTestingReview(ctx);
     };
-    const recordGateOutput = async (output, ctx) => {
+    const recordReviewOutput = async (output, ctx) => {
         prepareStateForContext(ctx);
-        const routeId = readCoreRouteIdFromEntries(branchEntries(ctx)) ?? currentState.routeId ?? 'testing:testing-unscoped';
-        currentState = markGateFinished(bindTestingStateToRoute(currentState, routeId), output.results);
-        await persistTestingEvidence(ctx);
+        const routeIdentity = readCoreRouteIdentityFromEntries(branchEntries(ctx))
+            ?? currentState.routeIdentity
+            ?? 'testing:testing-unscoped';
+        currentState = completeTestingReview(scopeTestingReviewToRoute(currentState, routeIdentity), output.results);
+        await persistTestingReview(ctx);
     };
     const recordReportOutput = async (output, ctx) => {
         prepareStateForContext(ctx);
-        currentState = markReportGenerated(currentState, output.markdown);
-        await persistTestingEvidence(ctx);
+        currentState = recordTestingReport(currentState, output.markdown);
+        await persistTestingReview(ctx);
     };
     pi.setLabel('OMP Testing Enhancer');
     pi.registerCommand('test', {
-        description: '增强测试生成、门禁和报告',
+        description: '增强测试生成、建议型审查和报告',
         handler: (args, ctx) => handleTestCommand(pi, args, ctx)
     });
     for (const tool of createTestingEnhancerTools(pi.zod.z, {
         onAnalyze: recordAnalyzeOutput,
-        onGate: recordGateOutput,
+        onReview: recordReviewOutput,
         onReport: recordReportOutput,
-        getRecentGateResults: () => currentState.lastGateResults,
+        getRecentReviewResults: () => currentState.lastReviewResults,
         getObservedTestCommandEvidence: () => currentState.lastObservedTestCommand
     })) {
         pi.registerTool(tool);
     }
-    pi.on('session_start', restoreTestingState);
-    pi.on('tool_call', enforceStandaloneTerminalToolBoundary);
+    pi.on('session_start', restoreTestingReview);
     pi.on('tool_result', recordTestingToolResult);
-    pi.on('session_stop', enforcePendingTestGate);
 }
-function observedTestCommandFromHostEvent(event, routeId) {
+function observedTestCommandFromHostEvent(event, routeIdentity) {
     const command = trustedHostCommand(event);
     if (!command)
         return undefined;
@@ -150,7 +112,7 @@ function observedTestCommandFromHostEvent(event, routeId) {
         return undefined;
     return {
         schemaVersion: 1,
-        routeId,
+        routeIdentity,
         commandDigest: createHash('sha256').update(command).digest('hex'),
         exitCode,
         observedAt: Date.now()
@@ -394,45 +356,19 @@ async function initializeConfig(pi, ctx) {
     await ctx.ui.notify(`Created ${configPath}`, 'info');
     await pi.appendEntry('omp-testing-enhancer.message', { kind: 'init', path: configPath });
 }
-function formatStandaloneRepairContext(state) {
-    const failedBlockers = state.lastGateResults.filter(result => !result.passed && result.severity === 'blocker');
-    if (failedBlockers.length > 0) {
-        return [
-            'OMP Testing Enhancer: omp_test_gate failed and the test gate is still open.',
-            `Failed gates: ${failedBlockers.map(result => result.gate).join(', ')}.`,
-            ...failedBlockers.map(result => {
-                const repair = result.repairHint ? ` Repair: ${result.repairHint}` : '';
-                return `- ${result.gate}: ${result.summary}.${repair}`;
-            }),
-            'Fix the reported repairHint items, then rerun omp_test_gate before ending the turn.'
-        ].join('\n');
-    }
-    return 'OMP Testing Enhancer: tests were requested but omp_test_gate has not run yet. Run omp_test_gate before ending the turn.';
-}
-function formatStandaloneTerminalContext(state) {
-    const blockers = state.lastGateResults
-        .filter(result => !result.passed && result.severity === 'blocker')
-        .map(result => result.gate);
-    return [
-        'OMP_TEST_GATE_TERMINAL: standalone testing gate continuation is exhausted or the same failure repeated without new evidence.',
-        `Open gates: ${blockers.length > 0 ? blockers.join(', ') : 'omp_test_gate-not-run'}.`,
-        'Do not call tools or rerun the same gate in this continuation.',
-        'Return an explicit blocked testing status and list the missing evidence for the user.'
-    ].join('\n');
-}
 function buildAgentInstruction(mode) {
     if (mode.kind === 'check') {
         return [
-            '请运行测试门禁。',
+            '请运行一次建议型测试审查。',
             '先通过宿主 shell 显式运行 .omp/testing-enhancer.yml 中的期望测试命令，并确认真实成功结果。',
-            '再调用 omp_test_gate 消费当前 route 的宿主测试证据，确认候选测试验证公开行为、只修改测试文件，并检查浏览器证据；gate 本身不会执行命令。',
-            '门禁失败时按 repairHint 修复，不要绕过门禁。'
+            '再调用兼容工具 omp_test_gate 汇总当前 route 的宿主测试证据，检查候选测试是否验证公开行为、是否包含生产代码修改，以及浏览器证据是否充分；该工具本身不会执行命令或阻止会话。',
+            '把 critical findings 和 repairHint 作为修复建议；是否继续修复由当前任务和用户要求决定。'
         ].join('\n');
     }
     if (mode.kind === 'report') {
         return [
             '请读取最近一次测试增强结果。',
-            '只调用 omp_test_report，汇总通过项、失败门禁和后续修复建议。'
+            '只调用 omp_test_report，汇总通过项、critical findings 和后续修复建议。'
         ].join('\n');
     }
     const targetLine = mode.files.length > 0
@@ -448,8 +384,8 @@ function buildAgentInstruction(mode) {
         '如果有 mutation 报告，请调用 omp_test_mutation_context 读取 survived mutants，并据此补能杀死 mutant 的断言。',
         '只修改必要的测试文件，优先验证公开行为。',
         '写完测试后，通过宿主 shell 显式运行 .omp/testing-enhancer.yml 中的期望测试命令并确认真实成功结果。',
-        '写完测试并采集可用证据后调用 omp_test_gate，检查 indirect-test、test-file-scope、browser-interaction、browser-visual 和 test-command 门禁。',
-        '门禁通过后调用 omp_test_report 生成简短报告。',
-        '必须使用这些工具：omp_test_analyze、omp_test_context、omp_test_gate、omp_test_report。按需使用 omp_test_browser_check、omp_test_coverage_analyze、omp_test_mutation_context。'
+        '写完测试并采集可用证据后，可以调用兼容工具 omp_test_gate 做建议型审查，检查 indirect-test、test-file-scope、browser-interaction、browser-visual 和 test-command findings。',
+        '最后可调用 omp_test_report 生成简短报告。',
+        '建议使用 omp_test_analyze、omp_test_context、omp_test_gate 和 omp_test_report；按需使用 omp_test_browser_check、omp_test_coverage_analyze、omp_test_mutation_context。缺少某项证据时报告 limitation，不要自动重试或阻止会话结束。'
     ].join('\n');
 }

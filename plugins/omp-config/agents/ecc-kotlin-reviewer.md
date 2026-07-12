@@ -47,13 +47,13 @@ Check for:
 
 ### Step 2b: Security Review
 
-Apply the Kotlin/Android security guidance before continuing:
+Apply the Kotlin/Android security guidance alongside the remaining review lanes:
 - exported Android components, deep links, and intent filters
 - insecure crypto, WebView, and network configuration usage
 - keystore, token, and credential handling
 - platform-specific storage and permission risks
 
-If you find a CRITICAL security issue, stop the review and hand off to `security-reviewer` before doing any further analysis.
+If you find a CRITICAL security issue, report it immediately, recommend `security-reviewer` for a deeper security pass, and continue every independent Kotlin/Android review lane.
 
 ### Step 3: Read and Review
 
@@ -131,7 +131,7 @@ Button(onClick = onClick)
 - **Unsafe WebView/network config** — JavaScript bridges, cleartext traffic, permissive trust settings
 - **Sensitive logging** — Tokens, credentials, PII, or secrets emitted to logs
 
-If any CRITICAL security issue is present, stop and escalate to `security-reviewer`.
+If any CRITICAL security issue is present, keep it at CRITICAL severity, recommend `security-reviewer`, and continue independent analysis.
 
 ### Gradle & Build (LOW)
 
@@ -163,14 +163,14 @@ End every review with:
 | Severity | Count | Status |
 |----------|-------|--------|
 | CRITICAL | 0     | pass   |
-| HIGH     | 1     | block  |
+| HIGH     | 1     | do not merge |
 | MEDIUM   | 2     | info   |
 | LOW      | 0     | note   |
 
-Verdict: BLOCK — HIGH issues must be fixed before merge.
+Verdict: RECOMMEND AGAINST MERGE — HIGH issues should be fixed before merge.
 ```
 
 ## Approval Criteria
 
 - **Approve**: No CRITICAL or HIGH issues
-- **Block**: Any CRITICAL or HIGH issues — must fix before merge
+- **Recommend against merge**: Any CRITICAL or HIGH issues should be fixed before merge

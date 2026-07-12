@@ -15,8 +15,6 @@ import { fetchProviderEvidence } from './src/providers.js';
 
 const EVIDENCE_STATUSES = ['SUPPORTED', 'CONTRADICTED', 'INSUFFICIENT', 'UNVERIFIABLE'];
 const FINAL_VERDICTS = [...EVIDENCE_STATUSES, 'CONFLICTED'];
-const SESSION_IDENTITY_ERROR = 'A stable fact-check session identity is unavailable; workflow evidence cannot be recorded safely.';
-
 function textContent(text) {
   return { type: 'text', text };
 }
@@ -147,21 +145,27 @@ export default function factCheckerExtension(omp) {
   omp.registerTool({
     name: 'fact_check_analyze',
     label: 'Fact Check Analyze',
-    description: 'Extract checkable factual claims and produce a FACT_CHECK_PLAN before evidence collection.',
+    description: 'Extract checkable factual claims and suggest a FACT_CHECK_PLAN. Workflow telemetry is optional and never blocks later tools.',
     parameters: buildAnalyzeParameters(z),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = paramsOrEmpty(params);
       const workflow = workflowStateFor(ctx);
-      if (!workflow) return errorResult(SESSION_IDENTITY_ERROR);
       const loaded = loadInputText(input, cwdFromContext(ctx));
       if (!loaded.ok) return { content: [textContent(loaded.error)], details: { error: loaded.error }, isError: true };
       const plan = buildFactCheckPlan({ text: loaded.text, maxClaims: input.maxClaims });
-      workflow.plan = structuredClone(plan);
-      workflow.evidenceByLane = new Map();
-      workflow.report = null;
+      if (workflow) {
+        workflow.plan = structuredClone(plan);
+        workflow.evidenceByLane = new Map();
+        workflow.report = null;
+      }
       return {
         content: [textContent(formatFactCheckPlan(plan))],
-        details: { ...plan, source: loaded.source },
+        details: {
+          ...plan,
+          source: loaded.source,
+          advisoryOnly: true,
+          telemetry: workflow ? 'session' : 'stateless',
+        },
         isError: false,
       };
     },
@@ -175,7 +179,7 @@ export default function factCheckerExtension(omp) {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = paramsOrEmpty(params);
       const workflow = workflowStateFor(ctx);
-      if (!workflow) return errorResult(SESSION_IDENTITY_ERROR);
+      const warnings = [];
       let claims = Array.isArray(input.claims) ? input.claims : [];
       if (claims.length && !isValidClaimList(claims)) {
         return errorResult('Fact-check claims must contain non-empty id and text fields.');
@@ -188,8 +192,8 @@ export default function factCheckerExtension(omp) {
         if (!loaded.ok) return { content: [textContent(loaded.error)], details: { error: loaded.error }, isError: true };
         claims = buildFactCheckPlan({ text: loaded.text }).claims;
       }
-      if (workflow.plan && !sameClaims(workflow.plan.claims, claims)) {
-        return errorResult('Evidence claims do not match the host-observed FACT_CHECK_PLAN for this session.');
+      if (workflow?.plan && !sameClaims(workflow.plan.claims, claims)) {
+        warnings.push('Evidence claims differ from the earlier session plan; the supplied claims were reviewed as a new advisory scope.');
       }
       const lane = input.lane ?? 'A';
       if (Array.isArray(input.evidenceRecords)
@@ -208,10 +212,18 @@ export default function factCheckerExtension(omp) {
         providers: input.providers,
       });
       const records = mergeEvidence(localEvidence, providerEvidence);
-      if (workflow.plan) workflow.evidenceByLane.set(lane, structuredClone(records));
+      if (workflow?.plan && sameClaims(workflow.plan.claims, claims)) {
+        workflow.evidenceByLane.set(lane, structuredClone(records));
+      }
       return {
         content: [textContent(formatEvidenceBlock(lane, records))],
-        details: { lane, records },
+        details: {
+          lane,
+          records,
+          warnings,
+          advisoryOnly: true,
+          telemetry: workflow ? 'session' : 'stateless',
+        },
         isError: false,
       };
     },
@@ -220,12 +232,12 @@ export default function factCheckerExtension(omp) {
   omp.registerTool({
     name: 'fact_check_report',
     label: 'Fact Check Report',
-    description: 'Build a source-aware FACT_CHECK_REPORT from claims, evidence lanes, and cross-check results.',
+    description: 'Build an advisory source-aware FACT_CHECK_REPORT from supplied claims and evidence. Earlier workflow telemetry is helpful but optional.',
     parameters: buildReportParameters(z),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = paramsOrEmpty(params);
       const workflow = workflowStateFor(ctx);
-      if (!workflow) return errorResult(SESSION_IDENTITY_ERROR);
+      const warnings = [];
       const claims = Array.isArray(input.claims) ? input.claims : [];
       const evidenceRecords = Array.isArray(input.evidenceRecords) ? input.evidenceRecords : [];
       if (!isValidClaimList(claims)) {
@@ -234,26 +246,32 @@ export default function factCheckerExtension(omp) {
       if (!isValidEvidenceRecordList(evidenceRecords, claims)) {
         return errorResult('Fact-check report evidenceRecords must contain valid claimId, lane, canonical status, and required source/quote fields for planned claims.');
       }
-      if (!workflow.plan || !sameClaims(workflow.plan.claims, claims)) {
-        return errorResult('Fact-check report claims do not match a host-observed FACT_CHECK_PLAN for this session.');
+      if (!workflow?.plan || !sameClaims(workflow.plan.claims, claims)) {
+        warnings.push('No matching session plan was observed; the report was built from the supplied structured claims.');
       }
-      const observedEvidenceRecords = [...workflow.evidenceByLane.values()].flat();
-      if (!sameEvidenceRecords(observedEvidenceRecords, evidenceRecords)) {
-        return errorResult('Fact-check report evidenceRecords do not match host-observed FACT_CHECK_EVIDENCE tool results for this session.');
+      const observedEvidenceRecords = workflow ? [...workflow.evidenceByLane.values()].flat() : [];
+      if (observedEvidenceRecords.length && !sameEvidenceRecords(observedEvidenceRecords, evidenceRecords)) {
+        warnings.push('Supplied evidence differs from earlier session telemetry; the supplied structured records were used for this advisory report.');
       }
       const crossChecks = crossCheckEvidence({ claims, evidenceRecords });
       if (Array.isArray(input.crossChecks) && input.crossChecks.length
         && !sameCrossChecks(input.crossChecks, crossChecks)) {
-        return errorResult('Model-supplied crossChecks do not match the deterministic cross-check of host-observed evidence.');
+        warnings.push('Supplied crossChecks differed from the deterministic result and were ignored.');
       }
       if (!isValidCrossCheckList(crossChecks, claims)) {
         return errorResult('Fact-check crossChecks must contain one valid structured result for every planned claim.');
       }
       const report = buildFactCheckReport({ claims, evidenceRecords, crossChecks });
-      workflow.report = structuredClone({ report, crossChecks, evidenceRecords });
+      if (workflow) workflow.report = structuredClone({ report, crossChecks, evidenceRecords });
       return {
         content: [textContent(`${formatCrossCheckBlock(crossChecks)}\n\n${formatFactCheckReport(report)}`)],
-        details: { ...report, crossChecks },
+        details: {
+          ...report,
+          crossChecks,
+          warnings,
+          advisoryOnly: true,
+          telemetry: workflow ? 'session' : 'stateless',
+        },
         isError: false,
       };
     },
@@ -261,29 +279,36 @@ export default function factCheckerExtension(omp) {
 
   omp.registerTool({
     name: 'fact_check_gate',
-    label: 'Fact Check Gate',
-    description: 'Validate host-observed plan, evidence, cross-check, report, and usage. finalOutput must contain exactly one canonical "- FC-NNN: VERDICT" report line per claim; duplicate or conflicting final verdicts fail.',
+    label: 'Fact Check Review',
+    description: 'Compatibility alias for an advisory completeness review. It reports missing or inconsistent evidence but never blocks tools or session completion.',
     parameters: buildGateParameters(z),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = paramsOrEmpty(params);
       const workflow = workflowStateFor(ctx);
-      if (!workflow) return errorResult(SESSION_IDENTITY_ERROR);
-      const riskLevel = workflow.plan?.riskLevel ?? input.riskLevel ?? 'standard';
+      const riskLevel = workflow?.plan?.riskLevel ?? input.riskLevel ?? 'standard';
       const textual = validateFactCheckGate({ ...input, riskLevel });
-      const observed = validateObservedWorkflow({ workflow, finalOutput: input.finalOutput, riskLevel });
+      const observed = workflow
+        ? validateObservedWorkflow({ workflow, finalOutput: input.finalOutput, riskLevel })
+        : {
+          missingObserved: ['session workflow telemetry unavailable'],
+          summary: { telemetry: 'stateless' },
+        };
+      const complete = textual.ok && observed.missingObserved.length === 0;
       const result = {
         ...textual,
-        ok: textual.ok && observed.missingObserved.length === 0,
+        ok: complete,
+        complete,
+        advisoryOnly: true,
         missingObserved: observed.missingObserved,
         observed: observed.summary,
       };
-      const report = result.ok
-        ? 'fact_check_gate passed'
-        : `fact_check_gate failed: missing ${[...result.missing, ...result.missingObserved].join(', ')}`;
+      const report = complete
+        ? 'Fact-check advisory review: ready.'
+        : `Fact-check advisory review: needs attention (${[...result.missing, ...result.missingObserved].join(', ')}).`;
       return {
         content: [textContent(report)],
         details: result,
-        isError: !result.ok,
+        isError: false,
       };
     },
   });

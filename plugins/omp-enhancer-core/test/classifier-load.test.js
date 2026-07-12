@@ -33,7 +33,7 @@ const validRouteCases = [
     language: 'zh',
     riskFlags: ['needs-tests', 'needs-review', 'needs-subagents'],
     expectedAgent: 'implementer',
-    expectedSubagents: [],
+    expectedSubagents: ['plan', 'implementation-task', 'reviewer'],
   }),
   caseFor({
     name: 'legacy testing classifier',
@@ -79,7 +79,7 @@ const validRouteCases = [
     language: 'zh',
     riskFlags: ['needs-marketplace-check', 'needs-subagents'],
     expectedAgent: 'config-assets',
-    expectedSubagents: [],
+    expectedSubagents: ['config-librarian', 'reviewer'],
   }),
   caseFor({
     name: 'diagnosis only',
@@ -151,14 +151,14 @@ const fallbackCases = [
 const deterministicAuditCases = [
   ['zh writing polish', '请帮我润色这段中文论文摘要，要求语气自然，不要有翻译腔。', 'writing.zh'],
   ['zh rewrite sentence', '把下面这句话改成朴素直接的中文：我们需要进一步推动配置层面的优化。', 'writing.zh'],
-  ['zh write report', '请写一份项目报告，语气正式但不要 AI 味。', 'writing.zh'],
-  ['zh write test report', '请写测试报告，重点说明当前验证风险，不要生成测试代码。', 'writing.zh'],
-  ['zh write coverage report', '请写一份测试覆盖率报告，说明当前风险。', 'writing.zh'],
+  ['zh write report', '请写一份项目报告，语气正式但不要 AI 味。', 'writing.pending'],
+  ['zh write test report', '请写测试报告，重点说明当前验证风险，不要生成测试代码。', 'writing.pending'],
+  ['zh write coverage report', '请写一份测试覆盖率报告，说明当前风险。', 'writing.pending'],
   ['zh large workload writing', '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。', 'writing.zh'],
   ['zh scientific report writing', '请写一份中文科研调研报告，分析最近论文里的方法路线。', 'writing.zh'],
   ['en draft', 'Draft an English related work paragraph for a systems paper.', 'writing.en'],
-  ['en revise', 'Revise this abstract and check the logic.', 'writing.en'],
-  ['en write coverage report', 'Write a test coverage report for the release notes; do not run tests.', 'writing.en'],
+  ['en revise', 'Revise this abstract and check the logic.', 'writing.pending'],
+  ['en write coverage report', 'Write a test coverage report for the release notes; do not run tests.', 'writing.pending'],
   ['en large workload writing', 'Draft a full English research proposal with background, methods, risks, and timeline.', 'writing.en'],
   ['en write tests', 'Write tests for src/router.js around fallback behavior.', 'bug-audit'],
   ['bug audit zh', '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。', 'bug-audit'],
@@ -216,7 +216,7 @@ test('classifier prompt builder remains stable under parallel load profiles', as
       assert.equal(built.maxOutputTokens, 500);
       assert.match(built.prompt, /Return only JSON/);
       assert.match(built.prompt, /descriptor hints only/);
-      assert.match(built.prompt, /capability ceiling/);
+      assert.match(built.prompt, /scope-preserving baseline/);
       assert.match(built.prompt, /JSON Schema:/);
     }
   }

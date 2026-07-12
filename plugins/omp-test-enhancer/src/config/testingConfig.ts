@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export interface TestingEnhancerConfig {
-  version: 1
+  version: 2
   test: { command?: string }
   coverage: { command?: string }
   browser: {
@@ -13,11 +13,11 @@ export interface TestingEnhancerConfig {
     screenshot: 'off' | 'only-on-failure'
     serviceWorkers: 'allow' | 'block'
   }
-  gates: {
-    indirectTest: 'block' | 'warn'
-    productionEdits: 'block' | 'warn'
-    testCommand: 'block' | 'warn'
-    browserEvidence: 'block' | 'warn'
+  review: {
+    indirectTest: 'critical' | 'warning'
+    productionEdits: 'critical' | 'warning'
+    testCommand: 'critical' | 'warning'
+    browserEvidence: 'critical' | 'warning'
   }
 }
 
@@ -35,7 +35,7 @@ export function defaultTestingEnhancerConfig(packageManager: 'bun' | 'pnpm' | 'n
   const test = command ? { command } : {}
 
   return {
-    version: 1,
+    version: 2,
     test,
     coverage: {},
     browser: {
@@ -44,20 +44,20 @@ export function defaultTestingEnhancerConfig(packageManager: 'bun' | 'pnpm' | 'n
       screenshot: 'only-on-failure',
       serviceWorkers: 'block'
     },
-    gates: {
-      indirectTest: 'block',
-      productionEdits: 'block',
-      testCommand: 'block',
-      browserEvidence: 'block'
+    review: {
+      indirectTest: 'critical',
+      productionEdits: 'critical',
+      testCommand: 'critical',
+      browserEvidence: 'critical'
     }
   }
 }
 
 export function renderTestingEnhancerConfig(config: TestingEnhancerConfig): string {
   return [
-    'version: 1',
+    'version: 2',
     'test:',
-    '  # Expected host-observed command; omp_test_gate never executes it.',
+    '  # Expected host-observed command; advisory omp_test_gate never executes it.',
     `  command: ${config.test.command ?? ''}`,
     'coverage:',
     `  command: ${config.coverage.command ?? ''}`,
@@ -68,18 +68,18 @@ export function renderTestingEnhancerConfig(config: TestingEnhancerConfig): stri
     `  trace: ${config.browser.trace}`,
     `  screenshot: ${config.browser.screenshot}`,
     `  serviceWorkers: ${config.browser.serviceWorkers}`,
-    'gates:',
-    `  indirectTest: ${config.gates.indirectTest}`,
-    `  productionEdits: ${config.gates.productionEdits}`,
-    `  testCommand: ${config.gates.testCommand}`,
-    `  browserEvidence: ${config.gates.browserEvidence}`,
+    'review:',
+    `  indirectTest: ${config.review.indirectTest}`,
+    `  productionEdits: ${config.review.productionEdits}`,
+    `  testCommand: ${config.review.testCommand}`,
+    `  browserEvidence: ${config.review.browserEvidence}`,
     ''
   ].join('\n')
 }
 
 export function parseTestingEnhancerConfig(text: string): TestingEnhancerConfig {
   const config = defaultTestingEnhancerConfig('unknown')
-  let section: 'test' | 'coverage' | 'browser' | 'gates' | undefined
+  let section: 'test' | 'coverage' | 'browser' | 'review' | undefined
 
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trimEnd()
@@ -88,8 +88,8 @@ export function parseTestingEnhancerConfig(text: string): TestingEnhancerConfig 
       const separator = line.indexOf(':')
       const key = separator === -1 ? line : line.slice(0, separator)
       const rawValue = separator === -1 ? '' : line.slice(separator + 1)
-      if (key === 'version' && rawValue.trim() === '1') config.version = 1
-      section = key === 'test' || key === 'coverage' || key === 'browser' || key === 'gates' ? key : undefined
+      if (key === 'version' && rawValue.trim() === '2') config.version = 2
+      section = key === 'test' || key === 'coverage' || key === 'browser' || key === 'review' ? key : undefined
       continue
     }
 
@@ -123,9 +123,9 @@ export function parseTestingEnhancerConfig(text: string): TestingEnhancerConfig 
       if (key === 'screenshot' && (value === 'off' || value === 'only-on-failure')) config.browser.screenshot = value
       if (key === 'serviceWorkers' && (value === 'allow' || value === 'block')) config.browser.serviceWorkers = value
     }
-    if (section === 'gates') {
-      if ((key === 'indirectTest' || key === 'productionEdits' || key === 'testCommand' || key === 'browserEvidence') && (value === 'block' || value === 'warn')) {
-        config.gates[key] = value
+    if (section === 'review') {
+      if ((key === 'indirectTest' || key === 'productionEdits' || key === 'testCommand' || key === 'browserEvidence') && (value === 'critical' || value === 'warning')) {
+        config.review[key] = value
       }
     }
   }

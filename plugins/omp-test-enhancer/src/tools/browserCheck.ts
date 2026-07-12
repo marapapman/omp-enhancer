@@ -45,7 +45,7 @@ export async function executeBrowserCheck(params: BrowserCheckParams, ctx: Exten
     findings.push({
       gate: 'browser-interaction',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       category: 'setup',
       summary: 'Browser artifact directory escapes the trusted artifact root or crosses a symbolic link.',
       evidence: {},
@@ -76,7 +76,7 @@ export async function executeBrowserCheck(params: BrowserCheckParams, ctx: Exten
         findings.push({
           gate: 'browser-interaction',
           passed: false,
-          severity: 'blocker',
+          severity: 'critical',
           category: 'setup',
           summary: 'Browser serverCommand is not an allowed local package-manager dev-server command.',
           evidence: {},
@@ -111,11 +111,11 @@ export async function executeBrowserCheck(params: BrowserCheckParams, ctx: Exten
       findings.push({
         gate: 'browser-interaction',
         passed: false,
-        severity: 'blocker',
+        severity: 'critical',
         category: 'network-failure',
         summary: 'Browser base URL was not reachable.',
         evidence: { baseUrl: params.baseUrl },
-        repairHint: 'Start the dev server or pass serverCommand before running omp_test_browser_check.'
+        repairHint: 'Report that no reachable server was available; start one only when server execution is already in scope.'
       })
       return buildEvidence(params, runId, headless, viewport, findings, artifacts)
     }
@@ -136,7 +136,7 @@ export async function executeBrowserCheck(params: BrowserCheckParams, ctx: Exten
           category: 'setup',
           summary: 'Playwright Chromium could not be launched.',
           evidence: { message: error instanceof Error ? error.message : String(error) },
-          repairHint: 'Install Playwright browsers with the target package manager before running omp_test_browser_check.'
+          repairHint: 'Report the missing Playwright browser; install it only when dependency installation is already in scope.'
         }]
       }
     }
@@ -172,7 +172,7 @@ export async function executeBrowserCheck(params: BrowserCheckParams, ctx: Exten
           findings.push({
             gate: 'browser-interaction',
             passed: false,
-            severity: 'blocker',
+            severity: 'critical',
             category: /timeout/i.test(message) ? 'timeout' : 'actionability',
             summary: `Browser step failed: ${step.description}`,
             evidence: { action: step.action, message },
@@ -194,9 +194,9 @@ export async function executeBrowserCheck(params: BrowserCheckParams, ctx: Exten
     findings.push(...normalizeBrowserFindings({ consoleErrors, consoleWarnings, pageErrors, failedRequests, badResponses }))
     return buildEvidence(params, runId, headless, viewport, findings, artifacts)
   } finally {
-    const hasBlocker = findings.some(finding => !finding.passed && finding.severity === 'blocker')
+    const hasCriticalFinding = findings.some(finding => !finding.passed && finding.severity === 'critical')
     if (context && tracingStarted) {
-      if (hasBlocker) {
+      if (hasCriticalFinding) {
         const tracePath = join(artifactDir, 'trace.zip')
         await context.tracing.stop({ path: tracePath }).catch(() => undefined)
         artifacts.tracePath = tracePath
@@ -266,14 +266,14 @@ function serverCommandFailureFinding(command: string, error: unknown): BrowserFi
   return {
     gate: 'browser-interaction',
     passed: false,
-    severity: 'blocker',
+    severity: 'critical',
     category: 'setup',
     summary: 'Browser server command could not be started.',
     evidence: {
       command,
       message: error instanceof Error ? error.message : String(error)
     },
-    repairHint: 'Fix the browser serverCommand or start the dev server before running omp_test_browser_check.'
+    repairHint: 'Report the server startup failure and correct it only when server execution is already in scope.'
   }
 }
 
@@ -306,23 +306,23 @@ export function splitCommandLine(command: string): string[] {
 export function normalizeBrowserFindings(input: BrowserSignalInput): BrowserFinding[] {
   const findings: BrowserFinding[] = []
   for (const item of input.consoleErrors) {
-    findings.push({ gate: 'browser-interaction', passed: false, severity: 'blocker', category: 'console-error', summary: 'Browser console error was emitted.', evidence: item, repairHint: 'Fix the runtime error reported in the browser console.' })
+    findings.push({ gate: 'browser-interaction', passed: false, severity: 'critical', category: 'console-error', summary: 'Browser console error was emitted.', evidence: item, repairHint: 'Fix the runtime error reported in the browser console.' })
   }
   for (const item of input.consoleWarnings) {
     findings.push({ gate: 'browser-interaction', passed: false, severity: 'warning', category: 'console-error', summary: 'Browser console warning was emitted.', evidence: item, repairHint: 'Review whether the warning indicates broken frontend behavior.' })
   }
   for (const item of input.pageErrors) {
-    findings.push({ gate: 'browser-interaction', passed: false, severity: 'blocker', category: 'page-error', summary: 'Browser page error was emitted.', evidence: item, repairHint: 'Fix the uncaught browser exception.' })
+    findings.push({ gate: 'browser-interaction', passed: false, severity: 'critical', category: 'page-error', summary: 'Browser page error was emitted.', evidence: item, repairHint: 'Fix the uncaught browser exception.' })
   }
   for (const item of input.failedRequests) {
-    findings.push({ gate: 'browser-interaction', passed: false, severity: 'blocker', category: 'network-failure', summary: 'Browser request failed.', evidence: item, repairHint: 'Fix or mock the failed network dependency through the tested public behavior.' })
+    findings.push({ gate: 'browser-interaction', passed: false, severity: 'critical', category: 'network-failure', summary: 'Browser request failed.', evidence: item, repairHint: 'Fix or mock the failed network dependency through the tested public behavior.' })
   }
   for (const item of input.badResponses) {
     const status = isRecord(item) && typeof item.status === 'number' ? item.status : 0
     findings.push({
       gate: 'browser-interaction',
       passed: false,
-      severity: status >= 500 ? 'blocker' : 'warning',
+      severity: status >= 500 ? 'critical' : 'warning',
       category: 'network-failure',
       summary: `Browser response returned HTTP ${status}.`,
       evidence: item,
@@ -377,7 +377,7 @@ async function executeVisualCheck(page: Page, visualCheck: BrowserVisualCheck, a
     findings.push({
       gate: 'browser-visual',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       category: 'visual-diff',
       summary: `${visualCheck.name} visual diff exceeded threshold.`,
       evidence: result,
@@ -432,10 +432,10 @@ async function waitForReachable(baseUrl: string, timeoutMs: number): Promise<boo
 }
 
 function buildEvidence(params: BrowserCheckParams, runId: string, headless: boolean, viewport: { width: number; height: number }, findings: BrowserFinding[], artifacts: BrowserArtifactRefs): BrowserEvidence {
-  const hasBlocker = findings.some(finding => !finding.passed && finding.severity === 'blocker')
+  const hasCriticalFinding = findings.some(finding => !finding.passed && finding.severity === 'critical')
   return {
     framework: 'playwright',
-    status: hasBlocker ? 'failed' : 'passed',
+    status: hasCriticalFinding ? 'failed' : 'passed',
     runId,
     baseUrl: params.baseUrl,
     browser: 'chromium',

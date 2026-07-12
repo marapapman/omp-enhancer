@@ -77,7 +77,7 @@ Required structure:
 
 ### 5. Enforce Viewport Fit
 
-Treat this as a hard gate.
+Treat this as a high-priority quality checkpoint. Report unresolved overflow clearly; the skill does not block unrelated work or session completion.
 
 Rules:
 - every `.slide` must use `height: 100vh; height: 100dvh; overflow: hidden;`

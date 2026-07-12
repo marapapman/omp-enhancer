@@ -15,33 +15,26 @@ async function tempDir(): Promise<string> {
 }
 
 describe('testingConfig', () => {
-  it('renders and parses the default bun config', () => {
+  it('renders and parses the default advisory review config', () => {
     const config = defaultTestingEnhancerConfig('bun')
     const rendered = renderTestingEnhancerConfig(config)
 
-    expect(rendered).toContain('version: 1')
-    expect(rendered).toContain('# Expected host-observed command; omp_test_gate never executes it.')
+    expect(rendered).toContain('version: 2')
+    expect(rendered).toContain('# Expected host-observed command; advisory omp_test_gate never executes it.')
     expect(rendered).toContain('command: bunx vitest run')
     expect(rendered).toContain('browser:')
     expect(rendered).toContain('  headless: true')
     expect(rendered).toContain('  trace: retain-on-failure')
     expect(rendered).toContain('  screenshot: only-on-failure')
     expect(rendered).toContain('  serviceWorkers: block')
-    expect(rendered).toContain('  browserEvidence: block')
-    expect(parseTestingEnhancerConfig(rendered)).toEqual({
-      ...config,
-      browser: {
-        headless: true,
-        trace: 'retain-on-failure',
-        screenshot: 'only-on-failure',
-        serviceWorkers: 'block'
-      }
-    })
+    expect(rendered).toContain('review:')
+    expect(rendered).toContain('  browserEvidence: critical')
+    expect(parseTestingEnhancerConfig(rendered)).toEqual(config)
   })
 
-  it('round-trips browser config values', () => {
+  it('round-trips browser and review values', () => {
     const rendered = [
-      'version: 1',
+      'version: 2',
       'test:',
       '  command: bunx vitest run',
       'coverage:',
@@ -53,15 +46,16 @@ describe('testingConfig', () => {
       '  trace: off',
       '  screenshot: off',
       '  serviceWorkers: allow',
-      'gates:',
-      '  indirectTest: block',
-      '  productionEdits: block',
-      '  testCommand: block',
-      '  browserEvidence: warn',
+      'review:',
+      '  indirectTest: critical',
+      '  productionEdits: critical',
+      '  testCommand: critical',
+      '  browserEvidence: warning',
       ''
     ].join('\n')
 
     expect(parseTestingEnhancerConfig(rendered)).toMatchObject({
+      version: 2,
       test: { command: 'bunx vitest run' },
       browser: {
         baseUrl: 'http://localhost:5173',
@@ -71,11 +65,11 @@ describe('testingConfig', () => {
         screenshot: 'off',
         serviceWorkers: 'allow'
       },
-      gates: expect.objectContaining({ browserEvidence: 'warn' })
+      review: expect.objectContaining({ browserEvidence: 'warning' })
     })
   })
 
-  it('ignores malformed values and keeps safe defaults', () => {
+  it('ignores malformed values and keeps advisory defaults', () => {
     const parsed = parseTestingEnhancerConfig([
       'version: 999',
       'test:',
@@ -89,18 +83,18 @@ describe('testingConfig', () => {
       '  trace: always',
       '  screenshot: yes',
       '  serviceWorkers: proxy',
-      'gates:',
+      'review:',
       '  indirectTest: ignore',
-      '  productionEdits: warn',
+      '  productionEdits: warning',
       '  testCommand: ignore',
-      '  browserEvidence: warn',
+      '  browserEvidence: warning',
       'unknown:',
       '  key: value',
       ''
     ].join('\n'))
 
     expect(parsed).toEqual({
-      version: 1,
+      version: 2,
       test: {},
       coverage: {},
       browser: {
@@ -109,11 +103,11 @@ describe('testingConfig', () => {
         screenshot: 'only-on-failure',
         serviceWorkers: 'block'
       },
-      gates: {
-        indirectTest: 'block',
-        productionEdits: 'warn',
-        testCommand: 'block',
-        browserEvidence: 'warn'
+      review: {
+        indirectTest: 'critical',
+        productionEdits: 'warning',
+        testCommand: 'critical',
+        browserEvidence: 'warning'
       }
     })
   })
@@ -121,7 +115,7 @@ describe('testingConfig', () => {
   it('writes config once and never overwrites existing content', async () => {
     const cwd = await tempDir()
     const path = await writeTestingEnhancerConfig(cwd, defaultTestingEnhancerConfig('unknown'))
-    await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), 'version: 1\ntest:\n  command: custom\ncoverage:\n  command: \ngates:\n  indirectTest: warn\n  productionEdits: warn\n  testCommand: warn\n')
+    await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), 'version: 2\ntest:\n  command: custom\ncoverage:\n  command: \nreview:\n  indirectTest: warning\n  productionEdits: warning\n  testCommand: warning\n')
 
     const secondPath = await writeTestingEnhancerConfig(cwd, defaultTestingEnhancerConfig('bun'))
 

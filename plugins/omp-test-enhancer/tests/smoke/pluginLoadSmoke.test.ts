@@ -38,8 +38,12 @@ describe('plugin load smoke', () => {
       candidate: { id: 'candidate', targetId: 'src/user/UserService.ts#UserService', files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: "import { helper } from '../internal/helper'" }] }
     }, undefined, undefined, toolContext())
 
-    expect(result.content[0]?.text).toContain('failed')
-    expect(result.details).toMatchObject({ passed: false })
+    expect(result.content[0]?.text).toContain('critical findings')
+    expect(result.details).toMatchObject({
+      passed: false,
+      status: 'findings',
+      advisory: true
+    })
   })
 
   it('does not import browser check implementation during extension load', () => {

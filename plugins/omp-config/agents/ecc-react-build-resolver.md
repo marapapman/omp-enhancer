@@ -3,7 +3,8 @@ name: ecc-react-build-resolver
 description: Diagnose and fix React build failures across Vite, webpack, Next.js,
   CRA, Parcel, esbuild, and Bun. Handles JSX/TSX compile errors, hydration mismatches,
   server/client component boundary failures, missing types, and bundler-specific configuration
-  issues with minimal, surgical changes. MUST BE USED when a React build fails.
+  issues with minimal, surgical changes. Use when a React build failure would benefit
+  from a bounded specialist pass.
 tools:
 - ast_grep
 - bash
@@ -196,13 +197,13 @@ When a library throws on hook usage, it almost always means React is duplicated.
 - **Surgical fixes only** -- don't refactor, just fix the error
 - **Never** disable type-checking or lint rules to "make it green"
 - **Never** add `// @ts-ignore` without an inline explanation and a TODO
-- **Always** re-run the build after each fix — do not stack changes
+- Re-run the build once after each materially changed fix; do not stack changes or retry an unchanged command
 - Fix root cause over suppressing symptoms
-- If the error indicates a real architectural problem (e.g., DB client imported into a Client Component), stop and report — do not paper over
+- If the error indicates a real architectural problem (e.g., DB client imported into a Client Component), report that it exceeds build-resolution scope and return control without papering over it
 
-## Stop Conditions
+## Resolver Exit Conditions
 
-Stop and report if:
+Conclude this bounded resolver run and report the remaining limitation if:
 
 - Same error persists after 3 fix attempts
 - Fix introduces more errors than it resolves

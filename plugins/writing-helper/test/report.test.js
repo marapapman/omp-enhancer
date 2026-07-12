@@ -38,7 +38,7 @@ describe('formatWritingLogicReport', () => {
           fatalOrCritical: 1,
           warningsOrImportant: 0,
           minor: 0,
-          verdict: 'blocked',
+          verdict: 'critical_findings',
         },
         issues: [
           {

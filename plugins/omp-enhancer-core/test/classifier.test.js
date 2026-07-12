@@ -43,10 +43,11 @@ test('buildClassifierPrompt uses OMP Tiny and the strict schema', () => {
   assert.match(result.prompt, /opencode-go\/deepseek-v4-flash:medium/);
   assert.match(result.prompt, /Return only JSON/);
   assert.match(result.prompt, /descriptor hints only/);
-  assert.match(result.prompt, /deterministic rule route is the capability ceiling/i);
+  assert.match(result.prompt, /deterministic rule route is the scope-preserving baseline/i);
   assert.match(result.prompt, /all low-confidence hints fall back/);
-  assert.match(result.prompt, /cannot exceed the deterministic capability ceiling/);
-  assert.match(result.prompt, /cannot remove deterministic release, security, or irreversible-operation requirements/);
+  assert.match(result.prompt, /cannot erase deterministic user-scope preferences/);
+  assert.match(result.prompt, /cannot remove deterministic release, security, or irreversible-operation risk notes/);
+  assert.match(result.prompt, /Do not retry or schedule another model turn/);
 });
 
 test('buildClassifierPrompt teaches Tiny route boundaries for gate workflow repair cases', () => {
@@ -58,7 +59,7 @@ test('buildClassifierPrompt teaches Tiny route boundaries for gate workflow repa
   assert.match(result.prompt, /workflow validation/i);
   assert.match(result.prompt, /test-observation summary/i);
   assert.match(result.prompt, /real config-assets inventory/i);
-  assert.match(result.prompt, /Do not expose classifier or smart-gate prompts/i);
+  assert.match(result.prompt, /Do not expose classifier prompts/i);
 });
 
 test('buildClassifierPrompt includes observed uncertain context when provided', () => {
@@ -151,7 +152,7 @@ test('resolveClassificationRoute maps fact-check classifier output to cross-vali
   assert.equal(result.route.intent, 'fact-check');
   assert.equal(result.route.source, 'llm-classifier');
   assert.deepEqual(result.route.requiredSkills, ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity']);
-  assert.deepEqual(result.route.requiredTools, ['fact_check_analyze', 'fact_check_evidence', 'fact_check_report', 'fact_check_gate']);
+  assert.deepEqual(result.route.requiredTools, ['fact_check_analyze', 'fact_check_evidence', 'fact_check_report']);
   assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), [
     'fact-planner',
     'fact-researcher-a',
@@ -265,7 +266,7 @@ test('resolveClassificationRoute keeps product feature prompts on implementation
   assert.equal(result.route.agent, 'implementer');
   assert.equal(result.route.source, 'llm-classifier');
   assert.equal(result.route.classifier.authority, 'advisory');
-  assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), ['plan', 'implementation-task', 'reviewer']);
+  assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), []);
 });
 
 test('resolveClassificationRoute no longer depends on classifier override for product feature prompts', () => {
@@ -304,10 +305,10 @@ test('resolveClassificationRoute preserves Chinese writing when classifier self-
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.fallbackRoute.intent, 'writing.zh');
-  assert.equal(result.route.intent, 'writing.zh');
-  assert.equal(result.route.agent, 'writing-helper.zh-writer');
-  assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), ['zh-writer', 'zh-checker']);
+  assert.equal(result.fallbackRoute.intent, 'writing.pending');
+  assert.equal(result.route.intent, 'writing.pending');
+  assert.equal(result.route.agent, null);
+  assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), []);
   assert.equal(result.route.requiredSubagents.some(({ agent }) => agent === 'ecc-security-reviewer'), false);
   assert.equal(result.route.classifier.classification.intent, 'security-review');
   assert.equal(result.route.classifier.authority, 'fallback');
@@ -315,15 +316,15 @@ test('resolveClassificationRoute preserves Chinese writing when classifier self-
 
 test('resolveClassificationRoute blocks security-review override for writing fallback even without secondary intent', () => {
   for (const [prompt, expectedIntent] of [
-    ['请帮我润色这段中文风险提示，写得安全、克制、直接。', 'writing.zh'],
-    ['Polish this paragraph about authentication risk for a product memo.', 'writing.en'],
+    ['请帮我润色这段中文风险提示，写得安全、克制、直接。', 'writing.pending'],
+    ['Polish this paragraph about authentication risk for a product memo.', 'writing.pending'],
   ]) {
     const result = resolveClassificationRoute({
       prompt,
       output: JSON.stringify({
         intent: 'security-review',
         secondaryIntents: [],
-        language: expectedIntent === 'writing.zh' ? 'zh' : 'en',
+        language: /[一-鿿]/.test(prompt) ? 'zh' : 'en',
         confidence: 0.96,
         riskFlags: ['needs-security-review'],
         domainHints: ['risk wording'],
@@ -341,15 +342,15 @@ test('resolveClassificationRoute blocks security-review override for writing fal
 
 test('resolveClassificationRoute preserves writing reports when classifier self-identifies report writing', () => {
   for (const [prompt, classifierIntent, expectedIntent] of [
-    ['请写测试报告，重点说明当前验证风险，不要生成测试代码。', 'testing', 'writing.zh'],
-    ['Write a test coverage report for the release notes; do not run tests.', 'implementation-with-tests', 'writing.en'],
+    ['请写测试报告，重点说明当前验证风险，不要生成测试代码。', 'testing', 'writing.pending'],
+    ['Write a test coverage report for the release notes; do not run tests.', 'implementation-with-tests', 'writing.pending'],
   ]) {
     const result = resolveClassificationRoute({
       prompt,
       output: JSON.stringify({
         intent: classifierIntent,
-        secondaryIntents: [expectedIntent],
-        language: expectedIntent === 'writing.zh' ? 'zh' : 'en',
+        secondaryIntents: [],
+        language: /[一-鿿]/.test(prompt) ? 'zh' : 'en',
         confidence: 0.96,
         riskFlags: ['needs-tests', 'needs-subagents'],
         domainHints: ['coverage report'],

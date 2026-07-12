@@ -9,9 +9,7 @@ A structured questioning engine for stress-testing research claims through a sys
 
 ## Usage
 
-The main agent invokes this skill via:
-
-> `/skill:research-socratic`
+The main agent loads `research-socratic` through the runtime's normal skill mechanism.
 
 When the user makes a claim or asks to "probe this claim", "stress-test this", "play socratic", "challenge this", or similar.
 
@@ -113,5 +111,5 @@ At the end of a session (max 5 claims or user says "done"), append:
 
 ## Coordination with Other Skills
 
-- For literature retrieval, use `/skill:research-literature` to find supporting/contradicting sources for evidence questions.
-- For structured debates, use `/skill:superpowers-brainstorming` to generate counter-arguments.
+- For literature retrieval, load `research-literature` to find supporting or contradicting sources for evidence questions.
+- For structured debates, load the available brainstorming skill to generate counter-arguments.

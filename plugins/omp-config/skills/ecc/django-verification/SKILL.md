@@ -30,7 +30,8 @@ pip list --outdated
 python -c "import os; import environ; print('DJANGO_SECRET_KEY set' if os.environ.get('DJANGO_SECRET_KEY') else 'MISSING: DJANGO_SECRET_KEY')"
 ```
 
-If environment is misconfigured, stop and fix.
+If the environment is misconfigured, report it and continue checks that do not
+depend on that configuration. Repair it only when environment changes are in scope.
 
 ## Phase 2: Code Quality & Formatting
 

@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { registerTestingEnhancer } from '../../src/extension.js'
-import { CORE_GATE_OWNER_ENTRY, CORE_GATE_OWNER_SYMBOL, CORE_STATE_ENTRY } from '../../src/session/gateOwnership.js'
-import { TESTING_EVIDENCE_ENTRY, TESTING_STATE_ENTRY } from '../../src/session/testingState.js'
+import { CORE_STATE_ENTRY } from '../../src/session/routeIdentity.js'
+import { TESTING_EVIDENCE_ENTRY } from '../../src/session/testingState.js'
 import type { CommandDefinition, ExtensionAPI, ExtensionCommandContext, ExtensionEventHandler, ExtensionToolContext, ToolDefinition } from '../../src/ompApi.js'
 
 class FakePi implements ExtensionAPI {
@@ -29,7 +29,7 @@ describe('extension session state', () => {
     const pi = new FakePi()
     registerTestingEnhancer(pi)
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-observed-test-')))
-    pi.entries.push(coreRouteEntry('route-observed'))
+    pi.entries.push(coreRouteEntry(101))
     await event(pi, 'session_start')({}, ctx)
     await event(pi, 'tool_result')({
       name: 'functions.exec_command',
@@ -52,7 +52,7 @@ describe('extension session state', () => {
       ])
     })
 
-    pi.entries.push(coreRouteEntry('route-new'))
+    pi.entries.push(coreRouteEntry(102))
     await event(pi, 'session_start')({}, ctx)
     const stale = await gate.execute('gate-stale', {
       ...passingGateParams(),
@@ -95,7 +95,7 @@ describe('extension session state', () => {
       const pi = new FakePi()
       registerTestingEnhancer(pi)
       const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), `omp-testing-enhancer-rejected-${item.name.replaceAll(' ', '-')}-`)))
-      pi.entries.push(coreRouteEntry(`route-rejected-${item.name}`))
+      pi.entries.push(coreRouteEntry(1000 + cases.indexOf(item)))
       await event(pi, 'session_start')({}, ctx)
       await event(pi, 'tool_result')({
         name: item.toolName,
@@ -169,7 +169,7 @@ describe('extension session state', () => {
       const pi = new FakePi()
       registerTestingEnhancer(pi)
       const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), `omp-testing-enhancer-framework-${index}-`)))
-      pi.entries.push(coreRouteEntry(`route-framework-${index}`))
+      pi.entries.push(coreRouteEntry(2000 + index))
       await event(pi, 'session_start')({}, ctx)
       await event(pi, 'tool_result')({
         name: 'bash', input: { command }, exitCode: 0,
@@ -188,7 +188,7 @@ describe('extension session state', () => {
     }
   })
 
-  it('invalidates standalone observed test evidence after a later definite workspace mutation', async () => {
+  it('invalidates observed test evidence after a later definite workspace mutation', async () => {
     const pi = new FakePi()
     registerTestingEnhancer(pi)
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-mutation-invalidation-')))
@@ -222,10 +222,6 @@ describe('extension session state', () => {
       isError: false,
       content: [{ type: 'text', text: 'updated file' }]
     }, ctx)
-    expect(await event(pi, 'session_stop')({}, ctx)).toMatchObject({
-      continue: true,
-      additionalContext: expect.stringContaining('omp_test_gate')
-    })
     const afterMutation = await gate.execute('gate-after-mutation', {
       ...passingGateParams(),
       testCommand: 'npm test'
@@ -295,7 +291,7 @@ describe('extension session state', () => {
     })
   })
 
-  it('invalidates stale standalone evidence for opaque and compound writes but preserves read-only commands', async () => {
+  it('invalidates stale observations for opaque and compound writes but preserves read-only commands', async () => {
     const mutations = [
       'printf x > src/generated.ts',
       'cat input.txt > src/generated.ts',
@@ -361,7 +357,7 @@ describe('extension session state', () => {
     })
   })
 
-  it('continues session after analyze until gate runs', async () => {
+  it('records collecting advisory evidence after analysis', async () => {
     const pi = new FakePi()
     registerTestingEnhancer(pi)
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
@@ -373,22 +369,14 @@ describe('extension session state', () => {
       changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
     }, undefined, undefined, ctx)
 
-    expect(await event(pi, 'session_stop')({}, ctx)).toMatchObject({
-      continue: true,
-      additionalContext: expect.stringContaining('omp_test_gate')
+    expect(pi.eventHandlers.map(item => item.event)).toEqual(['session_start', 'tool_result'])
+    expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data).toMatchObject({
+      reviewStatus: 'collecting',
+      advisory: true
     })
-
-    const gate = pi.tools.get('omp_test_gate')
-    if (!gate) throw new Error('Missing gate')
-    await gate.execute('call', {
-      targets: [{ id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }],
-      candidate: { id: 'candidate', targetId: 'src/user/UserService.ts#UserService', files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: 'expect(result).toBe(true)' }] }
-    }, undefined, undefined, ctx)
-
-    expect(await event(pi, 'session_stop')({}, ctx)).toBeUndefined()
   })
 
-  it('keeps the session gate open after a failed omp_test_gate result until a passing rerun', async () => {
+  it('reports critical findings and later ready advisory evidence', async () => {
     const pi = new FakePi()
     registerTestingEnhancer(pi)
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
@@ -402,33 +390,30 @@ describe('extension session state', () => {
 
     const gate = pi.tools.get('omp_test_gate')
     if (!gate) throw new Error('Missing gate')
-    await gate.execute('call', {
+    const findings = await gate.execute('call', {
       targets: [{ id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }],
       candidate: { id: 'candidate', targetId: 'src/user/UserService.ts#UserService', files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: "import { helper } from '../internal/helper'\nexpect(helper()).toBe(true)" }] }
     }, undefined, undefined, ctx)
 
-    expect(await event(pi, 'session_stop')({}, ctx)).toMatchObject({
-      continue: true,
-      additionalContext: expect.stringContaining('omp_test_gate failed')
+    expect(findings.details).toMatchObject({
+      passed: false,
+      status: 'findings',
+      advisory: true
     })
-    const repeatedStop = await event(pi, 'session_stop')({}, ctx)
-    expect(repeatedStop).toMatchObject({
-      continue: true,
-      additionalContext: expect.stringContaining('OMP_TEST_GATE_TERMINAL')
-    })
-    expect(repeatedStop?.additionalContext).toContain('Do not call tools')
 
-    expect(await event(pi, 'session_stop')({}, ctx)).toBeUndefined()
-
-    await gate.execute('call', {
+    const ready = await gate.execute('call', {
       targets: [{ id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }],
       candidate: { id: 'candidate', targetId: 'src/user/UserService.ts#UserService', files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: 'expect(result).toBe(true)' }] }
     }, undefined, undefined, ctx)
 
-    expect(await event(pi, 'session_stop')({}, ctx)).toBeUndefined()
+    expect(ready.details).toMatchObject({
+      passed: true,
+      status: 'ready',
+      advisory: true
+    })
   })
 
-  it('uses a shared repair budget across distinct standalone failures', async () => {
+  it('reports distinct advisory findings without creating a repair budget', async () => {
     const pi = new FakePi()
     registerTestingEnhancer(pi)
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
@@ -441,28 +426,20 @@ describe('extension session state', () => {
       changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
     }, undefined, undefined, ctx)
 
-    expect(await event(pi, 'session_stop')({}, ctx)).toMatchObject({ continue: true })
-    await gate.execute('call', {
+    const internalImport = await gate.execute('call', {
       targets: [{ id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }],
       candidate: { id: 'candidate', targetId: 'src/user/UserService.ts#UserService', files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: "import { helper } from '../internal/helper'" }] }
     }, undefined, undefined, ctx)
-    expect(await event(pi, 'session_stop')({}, ctx)).toMatchObject({
-      continue: true,
-      additionalContext: expect.stringContaining('omp_test_gate failed')
-    })
+    expect(internalImport.details).toMatchObject({ status: 'findings', advisory: true })
 
-    await gate.execute('call', {
+    const productionEdit = await gate.execute('call', {
       targets: [{ id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }],
       candidate: { id: 'candidate', targetId: 'src/user/UserService.ts#UserService', files: [{ path: 'src/user/UserService.ts', action: 'modify', content: 'export class UserService {}' }] }
     }, undefined, undefined, ctx)
-    expect(await event(pi, 'session_stop')({}, ctx)).toMatchObject({
-      continue: true,
-      additionalContext: expect.stringContaining('OMP_TEST_GATE_TERMINAL')
-    })
-    expect(await event(pi, 'session_stop')({}, ctx)).toBeUndefined()
+    expect(productionEdit.details).toMatchObject({ status: 'findings', advisory: true })
   })
 
-  it('does not reset the standalone recovery budget when analyze creates a new run id', async () => {
+  it('updates advisory analysis state without scheduling retries across repeated analyze calls', async () => {
     const pi = new FakePi()
     registerTestingEnhancer(pi)
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
@@ -475,98 +452,18 @@ describe('extension session state', () => {
     }
 
     await analyze.execute('call-1', analyzeParams, undefined, undefined, ctx)
-    expect(await event(pi, 'session_stop')({}, ctx)).toMatchObject({
-      continue: true,
-      additionalContext: expect.stringContaining('omp_test_gate')
-    })
-
     await analyze.execute('call-2', analyzeParams, undefined, undefined, ctx)
-    expect(await event(pi, 'session_stop')({}, ctx)).toMatchObject({
-      continue: true,
-      additionalContext: expect.stringContaining('omp_test_gate')
-    })
-
     await analyze.execute('call-3', analyzeParams, undefined, undefined, ctx)
-    expect(await event(pi, 'session_stop')({}, ctx)).toMatchObject({
-      continue: true,
-      additionalContext: expect.stringContaining('OMP_TEST_GATE_TERMINAL')
+    expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data).toMatchObject({
+      reviewStatus: 'collecting',
+      advisory: true,
+      evidenceRevision: 3
     })
-    expect(await event(pi, 'session_stop')({}, ctx)).toBeUndefined()
-  })
-
-  it('blocks every tool call after standalone recovery enters terminal-only state', async () => {
-    const pi = new FakePi()
-    pi.entries.push({
-      type: 'custom',
-      customType: TESTING_STATE_ENTRY,
-      data: {
-        schemaVersion: 2,
-        pendingGate: true,
-        routeId: 'testing:terminal',
-        lastAnalyzeRunId: 'terminal-run',
-        lastTargets: [],
-        lastGateResults: [],
-        evidenceRevision: 3,
-        standaloneRecovery: {
-          repairUsed: 2,
-          repairMax: 2,
-          terminalUsed: 1,
-          terminalMax: 1,
-          lastRepairFingerprint: 'repair',
-          terminalFingerprint: 'terminal'
-        }
-      }
-    })
-    registerTestingEnhancer(pi)
-    const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
-
-    await event(pi, 'session_start')({}, ctx)
-    expect(await event(pi, 'tool_call')({ toolName: 'read', input: { path: 'src/index.ts' } }, ctx)).toMatchObject({
-      block: true,
-      reason: expect.stringContaining('OMP_TEST_GATE_TERMINAL')
-    })
-  })
-
-  it('leaves terminal tool-call ownership to a live core owner', async () => {
-    const pi = new FakePi()
-    Object.defineProperty(pi, CORE_GATE_OWNER_SYMBOL, {
-      value: { schemaVersion: 1, owner: 'omp-enhancer-core', controllerSchemaVersion: 2 }
-    })
-    pi.entries.push(coreRouteEntry('route:terminal:1'))
-    pi.entries.push({
-      type: 'custom',
-      customType: TESTING_STATE_ENTRY,
-      data: {
-        schemaVersion: 2,
-        pendingGate: true,
-        routeId: 'route:terminal:1',
-        lastAnalyzeRunId: 'terminal-run',
-        lastTargets: [],
-        lastGateResults: [],
-        evidenceRevision: 3,
-        standaloneRecovery: {
-          repairUsed: 2,
-          repairMax: 2,
-          terminalUsed: 1,
-          terminalMax: 1,
-          lastRepairFingerprint: 'repair',
-          terminalFingerprint: 'terminal'
-        }
-      }
-    })
-    registerTestingEnhancer(pi)
-    const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
-
-    await event(pi, 'session_start')({}, ctx)
-    expect(await event(pi, 'tool_call')({ toolName: 'read', input: { path: 'src/index.ts' } }, ctx)).toBeUndefined()
   })
 
   it('does not replay passed evidence when the core route changes after a testing tool was observed', async () => {
     const pi = new FakePi()
-    Object.defineProperty(pi, CORE_GATE_OWNER_SYMBOL, {
-      value: { schemaVersion: 1, owner: 'omp-enhancer-core', controllerSchemaVersion: 2 }
-    })
-    pi.entries.push(coreRouteEntry('route:old:1'))
+    pi.entries.push(coreRouteEntry(3001))
     registerTestingEnhancer(pi)
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
 
@@ -580,79 +477,26 @@ describe('extension session state', () => {
     await gate.execute('old-gate', passingGateParams(), undefined, undefined, ctx)
 
     const oldEvidence = pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data
-    expect(oldEvidence).toMatchObject({ routeId: 'route:old:1', status: 'passed', passed: true })
+    expect(oldEvidence).toMatchObject({ routeIdentity: 'route:3001', reviewStatus: 'ready' })
     const evidenceCount = pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).length
 
-    pi.entries.push(coreRouteEntry('route:new:2'))
-    expect(await event(pi, 'session_stop')({}, ctx)).toBeUndefined()
+    pi.entries.push(coreRouteEntry(3002))
     expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY)).toHaveLength(evidenceCount)
-    expect(pi.entries.filter(entry => entry.customType === TESTING_STATE_ENTRY).at(-1)?.data).toMatchObject({
-      routeId: 'route:new:2',
-      pendingGate: false,
-      lastTargets: [],
-      lastGateResults: [],
-      evidenceRevision: 0
-    })
 
     await analyze.execute('new-analyze', {
       changedFiles: [{ path: 'src/order/OrderService.ts', content: 'export class OrderService {}' }]
     }, undefined, undefined, ctx)
     expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data).toMatchObject({
-      routeId: 'route:new:2',
-      status: 'pending',
-      pending: true,
-      passed: false
+      routeIdentity: 'route:3002',
+      reviewStatus: 'collecting',
+      advisory: true
     })
 
     await gate.execute('new-gate', passingGateParams('src/order/OrderService.ts', 'OrderService'), undefined, undefined, ctx)
     expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data).toMatchObject({
-      routeId: 'route:new:2',
-      status: 'passed',
-      passed: true
+      routeIdentity: 'route:3002',
+      reviewStatus: 'ready'
     })
-  })
-
-  it('delegates continuation ownership to a symbol-marked core while preserving evidence', async () => {
-    const pi = new FakePi()
-    Object.defineProperty(pi, CORE_GATE_OWNER_SYMBOL, {
-      value: { schemaVersion: 1, owner: 'omp-enhancer-core', controllerSchemaVersion: 2 }
-    })
-    registerTestingEnhancer(pi)
-    const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
-
-    await event(pi, 'session_start')({}, ctx)
-    const analyze = pi.tools.get('omp_test_analyze')
-    if (!analyze) throw new Error('Missing analyze')
-    await analyze.execute('call', {
-      changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
-    }, undefined, undefined, ctx)
-
-    expect(await event(pi, 'session_stop')({}, ctx)).toBeUndefined()
-    expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data).toMatchObject({
-      schemaVersion: 1,
-      status: 'pending',
-      pending: true
-    })
-  })
-
-  it('does not surrender continuation ownership to a stale branch-only core marker', async () => {
-    const pi = new FakePi()
-    registerTestingEnhancer(pi)
-    const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
-    pi.entries.push({
-      type: 'custom',
-      customType: CORE_GATE_OWNER_ENTRY,
-      data: { schemaVersion: 1, owner: 'omp-enhancer-core', controllerSchemaVersion: 2 }
-    })
-
-    await event(pi, 'session_start')({}, ctx)
-    const analyze = pi.tools.get('omp_test_analyze')
-    if (!analyze) throw new Error('Missing analyze')
-    await analyze.execute('call', {
-      changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
-    }, undefined, undefined, ctx)
-
-    expect(await event(pi, 'session_stop')({}, ctx)).toMatchObject({ continue: true })
   })
 
   it('isolates session state between independently registered plugin instances', async () => {
@@ -671,8 +515,8 @@ describe('extension session state', () => {
       changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
     }, undefined, undefined, firstCtx)
 
-    expect(await event(first, 'session_stop')({}, firstCtx)).toMatchObject({ continue: true })
-    expect(await event(second, 'session_stop')({}, secondCtx)).toBeUndefined()
+    expect(first.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY)).toHaveLength(1)
+    expect(second.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY)).toHaveLength(0)
   })
 })
 
@@ -691,11 +535,15 @@ function toolContext(pi: FakePi, cwd: string): ExtensionToolContext {
   }
 }
 
-function coreRouteEntry(routeId: string): { type: 'custom'; customType: string; data: unknown } {
+function coreRouteEntry(routeStartedAt: number): { type: 'custom'; customType: string; data: unknown } {
   return {
     type: 'custom',
     customType: CORE_STATE_ENTRY,
-    data: { routeId, gateController: { routeId } }
+    data: {
+      schemaVersion: 2,
+      routeStartedAt,
+      lastRoute: { intent: 'code.dev' }
+    }
   }
 }
 

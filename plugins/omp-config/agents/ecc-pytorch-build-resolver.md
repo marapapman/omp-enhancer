@@ -118,9 +118,9 @@ Common memory fixes:
 - **Always** test with a small batch first (`batch_size=2`)
 - Fix root cause over suppressing symptoms
 
-## Stop Conditions
+## Resolver Exit Conditions
 
-Stop and report if:
+Conclude this bounded resolver run and report the remaining limitation if:
 - Same error persists after 3 fix attempts
 - Fix requires changing the model architecture fundamentally
 - Error is caused by hardware/driver incompatibility (recommend driver update)

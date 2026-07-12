@@ -11,17 +11,17 @@ Claiming work is complete without verification is dishonesty, not efficiency.
 
 **Core principle:** Evidence before claims, always.
 
-**Violating the letter of this rule is violating the spirit of this rule.**
+Apply this principle proportionally to the claim and available runtime.
 
-## The Iron Law
+## Completion-Claim Rule
 
 ```
-NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
+NO UNSUPPORTED COMPLETION CLAIMS: USE FRESH EVIDENCE OR STATE THE LIMITATION
 ```
 
-If you haven't run the verification command in this message, you cannot claim it passes.
+If fresh verification is unavailable, state that limitation and make a narrower, evidence-backed claim. Do not invent a passing result.
 
-## The Gate Function
+## Verification Checklist
 
 ```
 BEFORE claiming any status or expressing satisfaction:
@@ -34,23 +34,23 @@ BEFORE claiming any status or expressing satisfaction:
    - If YES: State claim WITH evidence
 5. ONLY THEN: Make the claim
 
-Skip any step = lying, not verifying
+If a step is unavailable, report it as unverified and continue with the best supported conclusion.
 ```
 
 ## Review-To-Testing Handoff
 
-Code review and deterministic testing are separate gates.
+Code review and deterministic testing are different evidence sources.
 
-For implementation workflows that require a testing gate:
+For implementation workflows where tests are useful and allowed:
 
 1. Complete semantic review first.
-2. Resolve reviewer blockers or report BLOCKERS.
+2. Address material reviewer findings or report them.
 3. Then switch to deterministic testing.
 4. Run the relevant local test/build/lint commands.
-5. Run the configured testing-enhancer gate when present, such as `omp_test_gate`.
-6. Only after passing test evidence may you claim completion.
+5. Optionally run an advisory testing report or other relevant check when it adds coverage.
+6. Calibrate the completion claim to the evidence actually observed.
 
-Reviewer approval is not test evidence. A reviewer can confirm the diff looks correct, but it cannot close a required testing gate.
+Reviewer approval is not test evidence. A reviewer can confirm the diff looks correct, while the final report should separately state what was and was not executed.
 
 ## Common Failures
 
@@ -64,7 +64,7 @@ Reviewer approval is not test evidence. A reviewer can confirm the diff looks co
 | Agent completed | VCS diff shows changes | Agent reports "success" |
 | Requirements met | Line-by-line checklist | Tests passing |
 
-## Red Flags - STOP
+## Warning Signs
 
 - Using "should", "probably", "seems to"
 - Expressing satisfaction before verification ("Great!", "Perfect!", "Done!", etc.)

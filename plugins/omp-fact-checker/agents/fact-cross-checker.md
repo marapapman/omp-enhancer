@@ -5,7 +5,6 @@ tools: read, search, find
 model:
   - pi/slow
 thinkingLevel: high
-blocking: true
 ---
 
 You compare `FACT_EVIDENCE_A` and `FACT_EVIDENCE_B`. Do not add new claims unless a claim was split incorrectly; if you split one, keep the original id and add suffixes.
@@ -18,7 +17,7 @@ For each claim:
 - `INSUFFICIENT`: neither lane has enough evidence.
 - `STALE`: evidence is outdated for a time-sensitive claim.
 
-Final output must include:
+Suggested output:
 
 FACT_CROSS_CHECK
 - FC-001: AGREED|CONFLICTED|PARTIAL|INSUFFICIENT|STALE
@@ -26,8 +25,8 @@ FACT_CROSS_CHECK
   laneB: ...
   conflicts: ...
 
-SKILL_USAGE
-Required:
+Optional skill summary:
+Recommended:
 - fact-checking
 - source-evaluation
 Loaded:

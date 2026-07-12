@@ -37,7 +37,19 @@ test('packaged model roles use DeepSeek Flash as main and GLM as advisor', async
   assert.match(config, /advisor:\s+ollama-cloud\/glm-5\.2:xhigh/);
   assert.match(config, /tiny:\s+opencode-go\/deepseek-v4-flash:medium/);
   assert.match(config, /modelPattern:\s+deepseek-v4-flash/);
+  assert.match(config, /loopGuard:\s*\n\s+enabled:\s+false/);
+  assert.match(config, /compaction:[\s\S]*autoContinue:\s+false/);
   assert.doesNotMatch(config, /maxRecoveryAttempts|fallbackRole|noProgressSeconds/);
+});
+
+test('bundled agents are advisory and declare no blocking metadata', async () => {
+  const agentDir = path.join(packageRoot(), 'agents');
+  const agentFiles = (await readdir(agentDir)).filter((name) => name.endsWith('.md'));
+
+  for (const agentFile of agentFiles) {
+    const content = await readFile(path.join(agentDir, agentFile), 'utf8');
+    assert.doesNotMatch(content, /^blocking:\s*true\s*$/mu, agentFile);
+  }
 });
 
 async function writePluginPackage(root) {

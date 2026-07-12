@@ -8,14 +8,14 @@ function tool(tools: ToolDefinition[], name: string): ToolDefinition {
   return found
 }
 
-describe('omp_test_gate execution order', () => {
-  it('does not run the test command when static blocker gates already fail', async () => {
+describe('advisory review order for omp_test_gate', () => {
+  it('does not evaluate command evidence when static critical findings already exist', async () => {
     let testCommandCalls = 0
     const ctx: ExtensionToolContext = {
       cwd: process.cwd(),
       hasUI: false,
       ui: { notify: () => undefined },
-      exec: async (program, args) => {
+      exec: async (program) => {
         if (program !== 'git') testCommandCalls += 1
         return { exitCode: 0, stdout: '', stderr: '' }
       }
@@ -32,7 +32,7 @@ describe('omp_test_gate execution order', () => {
       passed: false,
       results: expect.arrayContaining([
         expect.objectContaining({ gate: 'test-file-scope', passed: false }),
-        expect.objectContaining({ gate: 'test-command', severity: 'warning', summary: 'Host-observed test evidence was not evaluated because static blockers remain.' })
+        expect.objectContaining({ gate: 'test-command', severity: 'warning', summary: 'Host-observed test evidence was not evaluated because static critical findings remain.' })
       ])
     })
   })

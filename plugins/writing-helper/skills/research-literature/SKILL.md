@@ -75,7 +75,7 @@ Add new papers above existing ones (newest-first). Regenerate the cross-index ta
 
 ## Pi Integration
 
-- **Trigger:** `/skill:research-literature`
+- **Use:** load `research-literature` through the runtime's normal skill mechanism.
 - **Tools:** `web_search_exa` (find papers), `web_fetch_exa` (retrieve abstracts), `research_paper_search` (academic paper search)
 - **Input:** `.pi/research/storyline.md` (optional — provides keywords)
 - **Output:** `.pi/research/literature.md` (append-only, incremental)
@@ -84,7 +84,7 @@ Add new papers above existing ones (newest-first). Regenerate the cross-index ta
 ## Example Session
 
 ```
-User: /skill:research-literature
+User: Find and organize the most relevant literature for this storyline.
 Agent:
 1. Read .pi/research/storyline.md → keywords: ["zero-shot classification", "vision-language models"]
 2. web_search_exa("zero-shot vision-language models site:arxiv.org") → 5 results

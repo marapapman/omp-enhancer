@@ -188,10 +188,10 @@ If you are developing locally, keep using `omp plugin link` instead of the marke
 From the repository root:
 
 ```bash
-npm test
-npm run coverage
+npm test --workspace writing-helper
+npm run coverage --workspace writing-helper
 omp plugin link --dry-run --json /absolute/path/to/omp-enhancer/plugins/writing-helper
-npm pack --dry-run
+npm pack --dry-run --workspace plugins/writing-helper
 ```
 
 ## Package layout

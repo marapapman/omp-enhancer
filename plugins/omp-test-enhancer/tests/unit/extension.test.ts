@@ -66,9 +66,7 @@ describe('registerTestingEnhancer', () => {
     expect([...pi.tools.values()].every(tool => typeof tool.execute === 'function')).toBe(true)
     expect(pi.eventHandlers.map(handler => handler.event)).toEqual([
       'session_start',
-      'tool_call',
-      'tool_result',
-      'session_stop'
+      'tool_result'
     ])
   })
 
@@ -145,7 +143,7 @@ describe('registerTestingEnhancer', () => {
     await runCommand(pi, 'init', cwd)
     const first = await readFile(join(cwd, '.omp', 'testing-enhancer.yml'), 'utf8')
     await mkdir(join(cwd, '.omp'), { recursive: true })
-    await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), 'version: 1\ntest:\n  command: custom\ncoverage:\n  command: \ngates:\n  indirectTest: block\n  productionEdits: block\n  testCommand: block\n')
+    await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), 'version: 2\ntest:\n  command: custom\ncoverage:\n  command: \nreview:\n  indirectTest: critical\n  productionEdits: critical\n  testCommand: critical\n')
     await runCommand(pi, 'init', cwd)
 
     expect(first).toContain('bunx vitest run')

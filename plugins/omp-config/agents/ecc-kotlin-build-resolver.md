@@ -117,9 +117,9 @@ kotlin {
 - Fix root cause over suppressing symptoms
 - Prefer adding missing imports over wildcard imports
 
-## Stop Conditions
+## Resolver Exit Conditions
 
-Stop and report if:
+Conclude this bounded resolver run and report the remaining limitation if:
 - Same error persists after 3 fix attempts
 - Fix introduces more errors than it resolves
 - Error requires architectural changes beyond scope

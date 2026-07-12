@@ -10,9 +10,11 @@ This command explains the marketplace workflow. It is not the extension-register
 4. If a coverage report exists, call `omp_test_coverage_analyze` to extract uncovered statements, branches, and functions.
 5. If a mutation report exists, call `omp_test_mutation_context` to extract surviving mutants and repair hints.
 6. Update or add tests.
-7. Run the expected test command through an explicit host shell tool call and confirm its real successful result. `omp_test_gate` never executes a command from arguments or config.
-8. Run `omp_test_gate` to consume the current-route host evidence and check indirect-test, test-file-scope, browser-interaction, browser-visual, and test-command gates.
-9. Finish with `omp_test_report` to summarize the gate results.
+7. Run the expected test command through an explicit host shell tool call and record its real result. `omp_test_gate` never executes a command from arguments or config.
+8. Optionally run the compatibility tool `omp_test_gate` for an advisory review of current-route host evidence, indirect-test, test-file-scope, browser-interaction, browser-visual, and test-command findings.
+9. Finish with `omp_test_report` to summarize the findings when a report is useful.
+
+This workflow is advisory-only. Review findings are guidance for the agent, and route-scoped state exists only to keep observations from different user turns separate.
 
 Suggested loop:
 

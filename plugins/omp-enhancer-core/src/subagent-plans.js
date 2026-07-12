@@ -1,12 +1,12 @@
 export const subagentPlans = Object.freeze({
   configAssets: Object.freeze([
-    subagent('config-librarian', 'inventory packaged assets, agents, skills, hooks, and config templates before edits'),
-    subagent('reviewer', 'review the final config or marketplace diff before release'),
+    subagent('config-librarian', 'inventory packaged assets, agents, skills, hooks, and config templates'),
+    subagent('reviewer', 'review the config or marketplace diff and summarize portability risks'),
   ]),
   implementation: Object.freeze([
     subagent('plan', 'decompose non-trivial or multi-file changes into an executable plan', ['brainstorming', 'subagent-driven-development']),
     subagent('implementation-task', 'implement the planned code and test changes in the smallest coherent batch', ['test-driven-development', 'verification-before-completion']),
-    subagent('reviewer', 'review the resulting diff before final claims, commit, or push', ['verification-before-completion']),
+    subagent('reviewer', 'review the resulting diff and report correctness or regression concerns', ['verification-before-completion']),
   ]),
   securityRemediation: Object.freeze([
     subagent('ecc-security-reviewer', 'audit user-input, auth, file, network, secrets, and dependency risks', ['security-review', 'security-scan']),
@@ -15,12 +15,12 @@ export const subagentPlans = Object.freeze({
   ]),
   securityReview: Object.freeze([
     subagent('ecc-security-reviewer', 'audit user-input, auth, file, network, secrets, and dependency risks', ['security-review', 'security-scan']),
-    subagent('reviewer', 'check the remediation diff for behavior regressions', ['security-review']),
+    subagent('reviewer', 'independently review the findings and false-positive risk', ['security-review']),
   ]),
   bugAudit: Object.freeze([
     subagent(
       'ecc-tdd-guide',
-      'generate a deduplicated multi-channel boundary, load, mode, and input test matrix before audit verification',
+      'generate a deduplicated multi-channel boundary, load, mode, and input test matrix for audit verification',
       ['test-driven-development', 'search-first', 'ai-regression-testing'],
     ),
     subagent('ecc-code-reviewer', 'audit code paths for concrete bugs with file and line evidence', ['verification-before-completion']),
@@ -50,17 +50,17 @@ export const subagentPlans = Object.freeze({
     ),
   ]),
   writingZh: Object.freeze([
-    subagent('zh-writer', 'draft or rewrite Chinese text after required writing skills are loaded', ['plain-chinese-writing', 'zh-writing-polish']),
-    subagent('zh-checker', 'review Chinese logic, style, and plain-writing compliance before final output', ['plain-chinese-writing', 'zh-writing-checkers']),
+    subagent('zh-writer', 'draft or rewrite Chinese text using the relevant writing guidance', ['plain-chinese-writing', 'zh-writing-polish']),
+    subagent('zh-checker', 'review Chinese logic, style, and plain-writing quality', ['plain-chinese-writing', 'zh-writing-checkers']),
   ]),
   writingEn: Object.freeze([
-    subagent('writer', 'draft or revise English writing after required writing skills are loaded', ['writing-markdown-helper']),
-    subagent('checker', 'review English logic, style, formatting, and citation quality before final output', ['writing-checkers']),
+    subagent('writer', 'draft or revise English writing using the relevant writing guidance', ['writing-markdown-helper']),
+    subagent('checker', 'review English logic, style, formatting, and citation quality', ['writing-checkers']),
   ]),
 });
 
 function subagent(agent, duty, requiredSkills = [], options = {}) {
-  const routed = { agent, duty, requiredSkills: [...requiredSkills] };
+  const routed = { agent, duty, skills: [...requiredSkills] };
   if (Array.isArray(options.modelRoles) && options.modelRoles.length) {
     routed.modelRoles = [...options.modelRoles];
   }

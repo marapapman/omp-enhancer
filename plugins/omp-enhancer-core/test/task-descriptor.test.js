@@ -70,17 +70,28 @@ test('an exclusive single route-tool probe describes the envelope instead of its
   assert.equal(quoted.provenance.reasons.includes('exclusive route task diagnostic probe'), false);
 });
 
-test('describeNaturalLanguageTask returns exact safety descriptors for the adversarial matrix', async (t) => {
+test('describeNaturalLanguageTask returns exact advisory descriptors for the adversarial matrix', async (t) => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   assert.equal(typeof describeNaturalLanguageTask, 'function', 'missing describeNaturalLanguageTask(input) export');
 
   for (const fixture of fixtures) {
     await t.test(fixture.id, () => {
-      const actual = describeNaturalLanguageTask({ prompt: fixture.prompt });
+      const actual = descriptorContract(
+        describeNaturalLanguageTask({ prompt: fixture.prompt }),
+        fixture.id,
+      );
+      const expected = structuredClone(fixture.expected.taskDescriptor);
+      // Writing language comes from the source prose, not the language used to
+      // ask for the edit. The fixture matrix predates sourceText and continues
+      // to verify every language-independent descriptor field.
+      if (actual.domains.includes('writing')) {
+        delete actual.language;
+        delete expected.language;
+      }
       assert.deepEqual(
-        descriptorContract(actual, fixture.id),
-        fixture.expected.taskDescriptor,
-        `${fixture.id}: descriptor must preserve authorization, all phases, and protected risk exactly`,
+        actual,
+        expected,
+        `${fixture.id}: descriptor must preserve task scope, workflow phases, and risk notes exactly`,
       );
     });
   }
@@ -106,7 +117,39 @@ test('Chinese and English equivalents have identical semantics except language-s
   }
 });
 
-test('descriptorFromLegacyIntent applies safe canonical defaults instead of granting extra capabilities', async () => {
+test('writing language follows source prose instead of the instruction language', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+
+  for (const { prompt, sourceText, language } of [
+    {
+      prompt: '请润色这篇论文的摘要。',
+      sourceText: 'This paper presents a compact routing architecture and evaluates its reliability.',
+      language: 'en',
+    },
+    {
+      prompt: 'Please polish the abstract.',
+      sourceText: '本文提出一种紧凑的路由架构，并评估其可靠性。',
+      language: 'zh',
+    },
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt, sourceText });
+    assert.equal(descriptor.language, language, prompt);
+    assert.equal(descriptor.writingLanguageSource, 'provided-source', prompt);
+    assert.equal(descriptor.writingSourcePending, false, prompt);
+  }
+
+  for (const prompt of [
+    '请润色这篇论文的摘要。',
+    'Please polish the abstract.',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.equal(descriptor.language, 'unknown', prompt);
+    assert.equal(descriptor.writingLanguageSource, 'pending-source', prompt);
+    assert.equal(descriptor.writingSourcePending, true, prompt);
+  }
+});
+
+test('descriptorFromLegacyIntent applies conservative canonical advisory defaults', async () => {
   const { descriptorFromLegacyIntent } = await loadDescriptorModule();
   const review = descriptorFromLegacyIntent('code.review');
   const development = descriptorFromLegacyIntent('code.dev');
@@ -126,7 +169,7 @@ test('descriptorFromLegacyIntent applies safe canonical defaults instead of gran
   assert.ok(release.capabilities.includes('external.write'));
 });
 
-test('plugin identifier upgrades remain protected release operations', async () => {
+test('plugin identifier upgrades remain high-risk release workflows', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Upgrade omp-enhancer-core@omp-enhancer after pushing main.',
@@ -143,7 +186,7 @@ test('plugin identifier upgrades remain protected release operations', async () 
   }
 });
 
-test('explicit no-subagent constraints remove subagent authority', async () => {
+test('explicit no-subagent constraints suppress the subagent recommendation', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   const descriptor = describeNaturalLanguageTask({
     prompt: '事实核查这份文档，但不要使用子代理，只由主代理完成。',
@@ -153,7 +196,7 @@ test('explicit no-subagent constraints remove subagent authority', async () => {
   assert.ok(!descriptor.capabilities.includes('subagents'));
 });
 
-test('normalization removes phases and capabilities that exceed explicit constraints', async () => {
+test('normalization filters capability recommendations without erasing advisory workflow phases', async () => {
   const { normalizeTaskDescriptor } = await loadDescriptorModule();
   const descriptor = normalizeTaskDescriptor({
     operation: 'answer',
@@ -175,10 +218,14 @@ test('normalization removes phases and capabilities that exceed explicit constra
 
   assert.deepEqual(descriptor.domains, ['general']);
   assert.deepEqual(descriptor.capabilities, []);
-  assert.deepEqual(descriptor.phases, [{ kind: 'answer', domain: 'general' }]);
+  assert.deepEqual(descriptor.phases, [
+    { kind: 'modify', domain: 'code' },
+    { kind: 'verify', domain: 'tests' },
+    { kind: 'release', domain: 'plugin' },
+  ]);
 });
 
-test('normalization accepts only cross-field-valid exclusive tool contracts', async () => {
+test('normalization retains only coherent legacy method metadata for advisory compatibility', async () => {
   const { normalizeTaskDescriptor } = await loadDescriptorModule();
   const command = 'node --test test/parser.test.js';
   const digest = (value) => createHash('sha256').update(value).digest('hex');
@@ -220,7 +267,7 @@ test('normalization accepts only cross-field-valid exclusive tool contracts', as
   assert.equal(valid.exclusiveToolContract?.input?.digest, digest(command));
 });
 
-test('normalization preserves supported selective test exclusions without weakening a global prohibition', async () => {
+test('normalization preserves selective test preferences and a global skip preference', async () => {
   const { normalizeTaskDescriptor } = await loadDescriptorModule();
   const selective = normalizeTaskDescriptor({
     operation: 'execute',
@@ -272,7 +319,7 @@ test('normalization preserves bounded scoped write targets and exclusions', asyn
   );
 });
 
-test('normalization never grants external-write authority to answer or inspect descriptors', async () => {
+test('normalization records non-mutating scope while preserving advisory phase context', async () => {
   const { normalizeTaskDescriptor } = await loadDescriptorModule();
   for (const operation of ['answer', 'inspect']) {
     const descriptor = normalizeTaskDescriptor({
@@ -285,11 +332,11 @@ test('normalization never grants external-write authority to answer or inspect d
     assert.equal(descriptor.constraints.externalWrite, 'forbidden', operation);
     assert.ok(!descriptor.capabilities.includes('external.write'), operation);
     assert.ok(!descriptor.capabilities.includes('credentials'), operation);
-    assert.ok(!descriptor.phases.some(({ kind }) => kind === 'release'), operation);
+    assert.ok(descriptor.phases.some(({ kind }) => kind === 'release'), operation);
   }
 });
 
-test('explicit no-network language creates a protected network constraint', async () => {
+test('explicit no-network language records a network workflow preference', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     '只审查本地代码，不要联网，也不要修改文件。',
@@ -301,7 +348,7 @@ test('explicit no-network language creates a protected network constraint', asyn
   }
 });
 
-test('natural bilingual no-test phrases forbid test execution', async () => {
+test('natural bilingual no-test phrases record a test-execution preference', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Fix src/router.js, but skip the tests.',
@@ -322,7 +369,7 @@ test('natural bilingual no-test phrases forbid test execution', async () => {
   }
 });
 
-test('selective test exclusions authorize requested test kinds without global no-test deadlock', async () => {
+test('selective test exclusions describe requested test kinds without a global skip conflict', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Run unit tests only, do not run end-to-end tests.',
@@ -377,7 +424,7 @@ test('selective test exclusions authorize requested test kinds without global no
   }
 });
 
-test('writing artifacts and narrow Chinese edit imperatives retain their positive task authority', async () => {
+test('writing artifacts and narrow Chinese edit imperatives retain their positive task intent', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
 
   const bugReport = describeNaturalLanguageTask({
@@ -430,7 +477,7 @@ test('writing artifacts and narrow Chinese edit imperatives retain their positiv
   assert.equal(guide.complexity, 'broad');
 });
 
-test('observed summaries distinguish a no-rerun ceiling from a new test action', async () => {
+test('observed summaries distinguish a no-rerun preference from a new test action', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     '总结本轮 E2E 测试结果，不重新运行测试。',
@@ -455,7 +502,7 @@ test('observed summaries distinguish a no-rerun ceiling from a new test action',
   }
 });
 
-test('natural bilingual no-network phrases forbid network access', async () => {
+test('natural bilingual no-network phrases record a network-access preference', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Fact-check this document, but do not browse the web.',
@@ -599,7 +646,7 @@ test('affirmative subagent clauses are not mistaken for no-subagent constraints'
   }
 });
 
-test('local git metadata commands authorize workspace mutation without external write', async () => {
+test('local git metadata commands describe workspace mutation without external write', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Commit the current changes.',
@@ -625,7 +672,7 @@ test('local git metadata commands authorize workspace mutation without external 
   assert.ok(!explanation.capabilities.includes('fs.write'));
 });
 
-test('bilingual whole-codebase bug audits explicitly authorize verification unless tests are forbidden', async () => {
+test('bilingual whole-codebase bug audits recommend verification unless tests are declined', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     '检查项目代码所有 bug。',
@@ -654,7 +701,7 @@ test('bilingual whole-codebase bug audits explicitly authorize verification unle
   }
 });
 
-test('common implicit code-change imperatives deterministically authorize a focused modification', async () => {
+test('common implicit code-change imperatives describe a focused modification', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Take care of the TODO in src/router.js.',
@@ -674,7 +721,7 @@ test('common implicit code-change imperatives deterministically authorize a focu
   }
 });
 
-test('Chinese repair prefixes preserve executable modification authority', async () => {
+test('Chinese repair prefixes preserve modification intent', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     '去修复这些问题，但是先给我一个计划。对于门禁有关的问题，应该事前做好工作。',
@@ -725,7 +772,7 @@ test('explicit cross-file English refactors remain broad while a single function
   assert.equal(focused.complexity, 'focused');
 });
 
-test('weak code-target imperatives request classification without pre-authorizing writes', async () => {
+test('weak code-target imperatives request classification without preselecting a write workflow', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Look into src/router.js.',
@@ -758,7 +805,7 @@ test('code explanations and explicit reviews remain read-only', async () => {
   assert.equal(review.provenance.needsClassifier, false);
 });
 
-test('answer-only side-effect advice does not authorize or gate the described action', async () => {
+test('answer-only side-effect advice remains a non-mutating advisory workflow', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'How do I delete all cache files safely? Do not execute anything.',
@@ -862,7 +909,7 @@ test('operational explanations and reviews are not mistaken for execution', asyn
   }
 });
 
-test('local build and format commands compile as write-capable execution without external authority', async () => {
+test('local build and format commands recommend local execution without external writes', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Run npm run build.',
@@ -884,7 +931,7 @@ test('local build and format commands compile as write-capable execution without
   }
 });
 
-test('dependency installation and setup scripts compile with bounded local automation authority', async () => {
+test('dependency installation and setup scripts produce scoped local automation recommendations', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Install project dependencies.',
@@ -930,7 +977,7 @@ test('automation wording does not turn explanations into execution or build subs
   assert.ok(visual.domains.includes('visual'));
 });
 
-test('explicit destructive workspace imperatives reach the irreversible approval contract', async () => {
+test('explicit destructive workspace imperatives surface high-risk advisory metadata', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Delete all files in cache.',
@@ -944,7 +991,7 @@ test('explicit destructive workspace imperatives reach the irreversible approval
     assert.ok(descriptor.capabilities.includes('fs.write'), prompt);
     assert.equal(descriptor.risk.level, 'critical', prompt);
     assert.ok(descriptor.risk.flags.includes('irreversible-file-operation'), prompt);
-    assert.ok(descriptor.risk.flags.includes('user-approval-required'), prompt);
+    assert.equal(descriptor.risk.flags.includes('user-approval-required'), false, prompt);
   }
 
   for (const prompt of [
@@ -958,7 +1005,7 @@ test('explicit destructive workspace imperatives reach the irreversible approval
   }
 });
 
-test('explicit destructive external requests are recognized but require a supported protected contract', async () => {
+test('explicit destructive external requests surface high-risk advisory metadata', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Delete GitHub issue 123.',
@@ -973,7 +1020,7 @@ test('explicit destructive external requests are recognized but require a suppor
     assert.equal(descriptor.constraints.externalWrite, 'required', prompt);
     assert.equal(descriptor.risk.level, 'critical', prompt);
     assert.ok(descriptor.risk.flags.includes('irreversible-file-operation'), prompt);
-    assert.ok(descriptor.risk.flags.includes('user-approval-required'), prompt);
+    assert.equal(descriptor.risk.flags.includes('user-approval-required'), false, prompt);
     assert.ok(descriptor.provenance.reasons.includes('irreversible external operation requested'), prompt);
   }
 
@@ -989,7 +1036,7 @@ test('explicit destructive external requests are recognized but require a suppor
   }
 });
 
-test('scoped workspace and external denials do not erase explicitly authorized targets', async () => {
+test('scoped workspace and external denials do not erase explicitly requested targets', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const { prompt, target, exclusion } of [
     { prompt: 'Fix src/router.js, but do not modify package-lock.json.', target: 'src/router.js', exclusion: 'package-lock.json' },

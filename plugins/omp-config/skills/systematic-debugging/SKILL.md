@@ -1,6 +1,6 @@
 ---
 name: systematic-debugging
-description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes
+description: Use when a bug, test failure, or unexpected behavior has an unclear cause and benefits from structured evidence gathering
 ---
 
 # Systematic Debugging
@@ -9,21 +9,19 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 
 Random fixes waste time and create new bugs. Quick patches mask underlying issues.
 
-**Core principle:** ALWAYS find root cause before attempting fixes. Symptom fixes are failure.
+**Core principle:** Gather enough evidence to address the cause rather than guessing at symptoms.
 
-**Violating the letter of this process is violating the spirit of debugging.**
+Adapt the depth to the risk and clarity of the failure.
 
-## The Iron Law
+## Investigation Rule
 
-```
-NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST
-```
+Prefer a proportionate root-cause investigation before changing behavior.
 
-If you haven't completed Phase 1, you cannot propose fixes.
+Before changing code, perform a proportionate cause investigation. For an obvious, low-risk defect this may be a short trace plus a focused regression check.
 
 ## When to Use
 
-Use for ANY technical issue:
+Use for technical issues whose cause is not already established:
 - Test failures
 - Bugs in production
 - Unexpected behavior
@@ -45,11 +43,14 @@ Use for ANY technical issue:
 
 ## The Four Phases
 
-You MUST complete each phase before proceeding to the next.
+Use the phases in order when each adds evidence. Compress or skip a phase whose
+answer is already established, and report any important evidence gap rather
+than turning the sequence into a workflow stop.
 
 ### Phase 1: Root Cause Investigation
 
-**BEFORE attempting ANY fix:**
+Before a fix whose cause is not already established, gather the smallest useful
+set of evidence:
 
 1. **Read Error Messages Carefully**
    - Don't skip past errors or warnings
@@ -116,7 +117,8 @@ You MUST complete each phase before proceeding to the next.
    **Quick version:**
    - Where does bad value originate?
    - What called this with bad value?
-   - Keep tracing up until you find the source
+   - Trace toward the source while each hop adds evidence; stop and label the
+     remaining hypothesis when the observable chain ends
    - Fix at source, not at symptom
 
 ### Phase 2: Pattern Analysis
@@ -175,7 +177,7 @@ You MUST complete each phase before proceeding to the next.
    - Simplest possible reproduction
    - Automated test if possible
    - One-off test script if no framework
-   - MUST have before fixing
+   - Prefer before fixing when the repository offers a meaningful test seam
    - Use the `superpowers:test-driven-development` skill for writing proper failing tests
 
 2. **Implement Single Fix**
@@ -190,10 +192,10 @@ You MUST complete each phase before proceeding to the next.
    - Issue actually resolved?
 
 4. **If Fix Doesn't Work**
-   - STOP
+   - Reassess the evidence and attempted change
    - Count: How many fixes have you tried?
    - If < 3: Return to Phase 1, re-analyze with new information
-   - **If ≥ 3: STOP and question the architecture (step 5 below)**
+   - **If ≥ 3: stop repeating the same class of repair and question the architecture (step 5 below)**
    - DON'T attempt Fix #4 without architectural discussion
 
 5. **If 3+ Fixes Failed: Question Architecture**
@@ -203,7 +205,7 @@ You MUST complete each phase before proceeding to the next.
    - Fixes require "massive refactoring" to implement
    - Each fix creates new symptoms elsewhere
 
-   **STOP and question fundamentals:**
+   **Question fundamentals:**
    - Is this pattern fundamentally sound?
    - Are we "sticking with it through sheer inertia"?
    - Should we refactor architecture vs. continue fixing symptoms?
@@ -212,7 +214,7 @@ You MUST complete each phase before proceeding to the next.
 
    This is NOT a failed hypothesis - this is a wrong architecture.
 
-## Red Flags - STOP and Follow Process
+## Warning Signs
 
 If you catch yourself thinking:
 - "Quick fix for now, investigate later"
@@ -227,7 +229,7 @@ If you catch yourself thinking:
 - **"One more fix attempt" (when already tried 2+)**
 - **Each fix reveals new problem in different place**
 
-**ALL of these mean: STOP. Return to Phase 1.**
+These mean the current evidence is weak. Return to the relevant investigation step instead of repeating another speculative edit.
 
 **If 3+ fixes failed:** Question the architecture (see Phase 4.5)
 
@@ -240,7 +242,7 @@ If you catch yourself thinking:
 - "Ultrathink this" - Question fundamentals, not just symptoms
 - "We're stuck?" (frustrated) - Your approach isn't working
 
-**When you see these:** STOP. Return to Phase 1.
+When you see these, return to evidence gathering and change the approach.
 
 ## Common Rationalizations
 

@@ -1,6 +1,6 @@
 export function evaluateTestFileScopeGate(input) {
-    const blockers = [];
-    const severity = input.severity ?? 'blocker';
+    const findings = [];
+    const severity = input.severity ?? 'critical';
     if (input.candidate.files.length === 0) {
         return [{
                 gate: 'test-file-scope',
@@ -8,34 +8,34 @@ export function evaluateTestFileScopeGate(input) {
                 severity,
                 summary: 'Candidate includes no test files.',
                 evidence: { candidateId: input.candidate.id },
-                repairHint: 'Provide the test files changed by this workflow before running the gate.'
+                repairHint: 'Report that no changed test files were observed; provide them only if another advisory review is useful.'
             }];
     }
     for (const file of input.candidate.files) {
         if (file.missingFromWorkspace) {
-            blockers.push({
+            findings.push({
                 gate: 'test-file-scope',
                 passed: false,
                 severity,
                 summary: 'Candidate file is missing from the workspace.',
                 evidence: { file: file.path },
-                repairHint: 'Write the candidate test file to disk before running the gate.'
+                repairHint: 'Report the missing candidate file and create it only when that change is already in scope.'
             });
             continue;
         }
         if (isTestFilePath(file.path))
             continue;
-        blockers.push({
+        findings.push({
             gate: 'test-file-scope',
             passed: false,
             severity,
             summary: 'Candidate modifies non-test files.',
             evidence: { file: file.path },
-            repairHint: 'Only change test files in this workflow. If production code must change, stop and ask for a separate implementation task.'
+            repairHint: 'Report the non-test file and suggest separating implementation changes from candidate test files.'
         });
     }
-    if (blockers.length > 0)
-        return blockers;
+    if (findings.length > 0)
+        return findings;
     return [{
             gate: 'test-file-scope',
             passed: true,

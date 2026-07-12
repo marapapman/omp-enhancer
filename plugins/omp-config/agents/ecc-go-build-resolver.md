@@ -94,9 +94,9 @@ go clean -modcache && go mod download  # Fix checksum issues
 - **Always** run `go mod tidy` after adding/removing imports
 - Fix root cause over suppressing symptoms
 
-## Stop Conditions
+## Resolver Exit Conditions
 
-Stop and report if:
+Conclude this bounded resolver run and report the remaining limitation if:
 - Same error persists after 3 fix attempts
 - Fix introduces more errors than it resolves
 - Error requires architectural changes beyond scope

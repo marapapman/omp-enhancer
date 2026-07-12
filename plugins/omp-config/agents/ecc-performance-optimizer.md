@@ -1,6 +1,6 @@
 ---
 name: ecc-performance-optimizer
-description: Performance analysis and optimization specialist. Use PROACTIVELY for
+description: Performance analysis and optimization specialist. Use when
   identifying bottlenecks, optimizing slow code, reducing bundle sizes, and improving
   runtime performance. Profiling, memory leaks, render optimization, and algorithmic
   improvements.

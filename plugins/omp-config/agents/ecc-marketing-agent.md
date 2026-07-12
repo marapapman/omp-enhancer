@@ -30,7 +30,7 @@ When invoked:
 2. Research the audience and map competitors before writing anything. Use `market-research` for depth when the brief is thin. Never assume you know the audience's language.
 3. Define positioning and the campaign angle before producing any copy. Lock the angle first — all downstream copy flows from it.
 4. Produce deliverables in order: positioning → landing page → email sequence → social posts → ad variants → video scripts → content calendar.
-5. Gate every output through the copy review checklist before delivering.
+5. Review every output with the copy review checklist before delivering, and report any unresolved concern as advisory feedback.
 
 ## Campaign Workflow
 

@@ -27,7 +27,7 @@ function candidate(content: string): CandidateTest {
 }
 
 describe('evaluateIndirectTestGate', () => {
-  it('blocks when no changed targets are supplied', () => {
+  it('reports missing changed targets as an advisory finding', () => {
     const result = evaluateIndirectTestGate({
       targets: [],
       candidate: candidate("expect(result).toBe('ok')")
@@ -36,10 +36,10 @@ describe('evaluateIndirectTestGate', () => {
     expect(result).toEqual([{
       gate: 'indirect-test',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'No changed targets supplied for indirect-test gate.',
       evidence: { candidateId: 'candidate-1' },
-      repairHint: 'Run omp_test_analyze and pass the changed targets into omp_test_gate before accepting the tests.'
+      repairHint: 'Report that target analysis was not observed; use omp_test_analyze once when that evidence would improve the review.'
     }])
   })
 
@@ -76,7 +76,7 @@ describe('evaluateIndirectTestGate', () => {
     expect(result[0]).toEqual(expect.objectContaining({
       gate: 'indirect-test',
       passed: false,
-      severity: 'blocker'
+      severity: 'critical'
     }))
   })
 

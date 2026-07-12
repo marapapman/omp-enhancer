@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { evaluateTestFileScopeGate } from '../../../src/gates/testFileScopeGate.js'
 
 describe('evaluateTestFileScopeGate', () => {
-  it('blocks an empty candidate instead of passing a no-op gate', () => {
+  it('reports an empty candidate as an advisory finding', () => {
     expect(evaluateTestFileScopeGate({
       candidate: {
         id: 'candidate',
@@ -12,14 +12,14 @@ describe('evaluateTestFileScopeGate', () => {
     })).toEqual([{
       gate: 'test-file-scope',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Candidate includes no test files.',
       evidence: { candidateId: 'candidate' },
-      repairHint: 'Provide the test files changed by this workflow before running the gate.'
+      repairHint: 'Report that no changed test files were observed; provide them only if another advisory review is useful.'
     }])
   })
 
-  it('blocks candidate changes outside test paths', () => {
+  it('reports candidate changes outside test paths', () => {
     expect(evaluateTestFileScopeGate({
       candidate: {
         id: 'candidate',
@@ -29,14 +29,14 @@ describe('evaluateTestFileScopeGate', () => {
     })).toEqual([{
       gate: 'test-file-scope',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Candidate modifies non-test files.',
       evidence: { file: 'src/user/UserService.ts' },
-      repairHint: 'Only change test files in this workflow. If production code must change, stop and ask for a separate implementation task.'
+      repairHint: 'Report the non-test file and suggest separating implementation changes from candidate test files.'
     }])
   })
 
-  it('blocks candidate test paths that were not written to the workspace', () => {
+  it('reports candidate test paths that were not written to the workspace', () => {
     expect(evaluateTestFileScopeGate({
       candidate: {
         id: 'candidate',
@@ -46,10 +46,10 @@ describe('evaluateTestFileScopeGate', () => {
     })).toEqual([{
       gate: 'test-file-scope',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Candidate file is missing from the workspace.',
       evidence: { file: 'src/user/UserService.test.ts' },
-      repairHint: 'Write the candidate test file to disk before running the gate.'
+      repairHint: 'Report the missing candidate file and create it only when that change is already in scope.'
     }])
   })
 
@@ -71,7 +71,7 @@ describe('evaluateTestFileScopeGate', () => {
     })).toEqual([{
       gate: 'test-file-scope',
       passed: true,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Candidate changes are limited to test files.',
       evidence: {}
     }])

@@ -6,7 +6,7 @@
 // 解决:
 // 1. 验证锚点格式是否匹配 /^\d+[a-z0-9]{2}$/i（行号 + 2 位 hash）
 // 2. 如果锚点仅为行号（缺少 hash 后缀），给出明确的修复指引
-// 3. 锚点格式错误时阻塞调用，并提示模型重新读取文件
+// 3. 锚点格式错误时显示 warning，但不改变工具执行
 //
 // 锚点格式: 行号 + 2 位 hash（如 "9yf", "123ab"）
 
@@ -83,7 +83,7 @@ function validateAnchors(anchors: { line: number; raw: string }[]): string[] {
 }
 
 export default function (pi: HookAPI): void {
-  pi.on("tool_call", (event) => {
+  pi.on("tool_call", (event, ctx) => {
     if (event.toolName !== "edit") return;
 
     const rawInput = (event.input as any)?.input;
@@ -94,13 +94,14 @@ export default function (pi: HookAPI): void {
 
     const errors = validateAnchors(anchors);
     if (errors.length > 0) {
-      return {
-        block: true,
-        reason:
+      ctx.ui.notify(
+        (
           `Edit 锚点格式错误:\n${errors.join("\n")}\n\n` +
           `提示: 先用 read <文件>:raw 获取完整锚点，` +
-          `然后直接复制使用，不要手动编写 hash 后缀。`,
-      };
+          `然后直接复制使用，不要手动编写 hash 后缀。此提示仅供参考，不会阻止工具调用。`
+        ),
+        "warning",
+      );
     }
   });
 }

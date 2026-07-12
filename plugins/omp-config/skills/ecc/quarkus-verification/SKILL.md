@@ -27,7 +27,8 @@ mvn clean verify -DskipTests
 ./gradlew clean assemble -x test
 ```
 
-If build fails, stop and fix compilation errors.
+If the build fails, preserve the compilation evidence and continue independent
+static checks. Make one focused repair when build repair is in scope.
 
 ## Phase 2: Static Analysis
 

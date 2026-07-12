@@ -65,4 +65,4 @@ Separate sections with a blank line. The file accumulates each section as the us
 
 ## Pi Compatibility
 
-This skill uses only `read` and `write` tools — no subagent spawning, no `.pi/research/state.md`, and no file editing outside `.pi/research/`. Invocation: `/skill:research-storyline` by the main agent.
+This skill uses only `read` and `write` tools — no subagent spawning, no `.pi/research/state.md`, and no file editing outside `.pi/research/`. Load `research-storyline` through the runtime's normal skill mechanism.

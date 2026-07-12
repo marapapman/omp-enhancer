@@ -40,6 +40,6 @@ describe('executeBrowserCheck', () => {
     }
 
     expect(evidence.status).toBe('passed')
-    expect(evidence.findings.filter(finding => !finding.passed && finding.severity === 'blocker')).toEqual([])
+    expect(evidence.findings.filter(finding => !finding.passed && finding.severity === 'critical')).toEqual([])
   })
 })

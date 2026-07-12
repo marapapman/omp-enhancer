@@ -3,7 +3,7 @@
   "version": "0.1.91",
   "private": true,
   "type": "module",
-  "description": "Core OMP Enhancer routing, governance, and session gates.",
+  "description": "Advisory OMP task routing, skill selection, roles, and workflow guidance.",
   "main": "index.js",
   "exports": {
     ".": "./index.js"

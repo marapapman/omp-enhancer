@@ -102,4 +102,4 @@ Write results to `.pi/research/experiment_design.md` (create the directory and f
 
 ## Trigger
 
-This skill is invoked by the `/skill:research-experiment` command in pi.
+Load `research-experiment` through the runtime's normal skill mechanism.

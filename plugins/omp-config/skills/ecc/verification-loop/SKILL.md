@@ -1,126 +1,37 @@
 ---
 name: verification-loop
-description: "A comprehensive verification system for Claude Code sessions."
+description: Advisory bounded verification checklist for builds, types, lint, tests, security signals, and diff review
 origin: ECC
 ---
 
-# Verification Loop Skill
+# Bounded Verification Review
 
-A comprehensive verification system for Claude Code sessions.
+This compatibility-named skill recommends one proportionate verification pass.
+It does not control session completion or require repeated repairs.
 
-## When to Use
+## Choose Relevant Checks
 
-Invoke this skill:
-- After completing a feature or significant code change
-- Before creating a PR
-- When you want to ensure quality gates pass
-- After refactoring
+Use only checks supported by the repository and requested scope:
 
-## Verification Phases
+1. Build or compile the affected target.
+2. Run the relevant type checker or static analyzer.
+3. Run the narrowest useful lint and test commands.
+4. Inspect security-sensitive changes and accidental secret exposure.
+5. Review the semantic diff for unintended files or behavior.
 
-### Phase 1: Build Verification
-```bash
-# Check if project builds
-npm run build 2>&1 | tail -20
-# OR
-pnpm build 2>&1 | tail -20
-```
+Do not invent commands. Discover scripts and project conventions first. Avoid
+masked failures, empty suites, and dry runs when claiming successful evidence.
 
-If build fails, STOP and fix before continuing.
+## Bounded Failure Handling
 
-### Phase 2: Type Check
-```bash
-# TypeScript projects
-npx tsc --noEmit 2>&1 | head -30
+If a check fails, preserve the observed output, make at most one focused repair
+when repair is in scope, and rerun the affected check once. If it remains
+unresolved, report the result and continue any independent checks. Do not loop
+until a preferred status appears.
 
-# Python projects
-pyright . 2>&1 | head -30
-```
+## Report
 
-Report all type errors. Fix critical ones before continuing.
-
-### Phase 3: Lint Check
-```bash
-# JavaScript/TypeScript
-npm run lint 2>&1 | head -30
-
-# Python
-ruff check . 2>&1 | head -30
-```
-
-### Phase 4: Test Suite
-```bash
-# Run tests with coverage
-npm run test -- --coverage 2>&1 | tail -50
-
-# Check coverage threshold
-# Target: 80% minimum
-```
-
-Report:
-- Total tests: X
-- Passed: X
-- Failed: X
-- Coverage: X%
-
-### Phase 5: Security Scan
-```bash
-# Check for secrets
-grep -rn "sk-" --include="*.ts" --include="*.js" . 2>/dev/null | head -10
-grep -rn "api_key" --include="*.ts" --include="*.js" . 2>/dev/null | head -10
-
-# Check for console.log
-grep -rn "console.log" --include="*.ts" --include="*.tsx" src/ 2>/dev/null | head -10
-```
-
-### Phase 6: Diff Review
-```bash
-# Show what changed
-git diff --stat
-git diff HEAD~1 --name-only
-```
-
-Review each changed file for:
-- Unintended changes
-- Missing error handling
-- Potential edge cases
-
-## Output Format
-
-After running all phases, produce a verification report:
-
-```
-VERIFICATION REPORT
-==================
-
-Build:     [PASS/FAIL]
-Types:     [PASS/FAIL] (X errors)
-Lint:      [PASS/FAIL] (X warnings)
-Tests:     [PASS/FAIL] (X/Y passed, Z% coverage)
-Security:  [PASS/FAIL] (X issues)
-Diff:      [X files changed]
-
-Overall:   [READY/NOT READY] for PR
-
-Issues to Fix:
-1. ...
-2. ...
-```
-
-## Continuous Mode
-
-For long sessions, run verification every 15 minutes or after major changes:
-
-```markdown
-Set a mental checkpoint:
-- After completing each function
-- After finishing a component
-- Before moving to next task
-
-Run: /verify
-```
-
-## Integration with Hooks
-
-This skill complements PostToolUse hooks but provides deeper verification.
-Hooks catch issues immediately; this skill provides comprehensive review.
+Summarize each attempted check as passed, failed, or unavailable, including the
+observed command or evidence source. State limitations directly. Readiness is a
+reporting judgment, not a plugin permission or a reason to prevent the host
+session from ending.

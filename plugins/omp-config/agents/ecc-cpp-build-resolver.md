@@ -90,9 +90,9 @@ cmake --build build --clean-first
 - Fix root cause over suppressing symptoms
 - One fix at a time, verify after each
 
-## Stop Conditions
+## Resolver Exit Conditions
 
-Stop and report if:
+Conclude this bounded resolver run and report the remaining limitation if:
 - Same error persists after 3 fix attempts
 - Fix introduces more errors than it resolves
 - Error requires architectural changes beyond scope

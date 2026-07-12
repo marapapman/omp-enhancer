@@ -3,7 +3,7 @@
   "version": "0.1.3",
   "private": true,
   "type": "module",
-  "description": "OMP fact-checking workflow plugin with claim planning, evidence collection, cross-checking, review, and workflow gates.",
+  "description": "OMP fact-checking workflow with claim planning, evidence collection, cross-checking, reports, and advisory review.",
   "main": "index.js",
   "exports": {
     ".": "./index.js"

@@ -27,13 +27,13 @@ interface MarketplaceTool extends Omit<ToolDefinition, 'execute'> {
 }
 
 export default function createMarketplaceTestingTools(pi: MarketplacePi): MarketplaceTool[] {
-  let recentGateResults: GateResult[] = []
+  let recentReviewResults: GateResult[] = []
   const tools = createTestingEnhancerTools(pi.zod, {
-    onGate(output) {
-      recentGateResults = output.results
+    onReview(output) {
+      recentReviewResults = output.results
     },
-    getRecentGateResults() {
-      return recentGateResults
+    getRecentReviewResults() {
+      return recentReviewResults
     }
   })
 

@@ -379,7 +379,7 @@ NO SKILL WITHOUT A FAILING TEST FIRST
 
 This applies to NEW skills AND EDITS to existing skills.
 
-Write skill before testing? Delete it. Start over.
+If the skill was written before its test scenario, keep the useful draft, add a representative scenario, and revise from observed gaps.
 Edit skill without testing? Same violation.
 
 **No exceptions:**
@@ -474,7 +474,7 @@ Write code before test? Delete it.
 
 <Good>
 ```markdown
-Write code before test? Delete it. Start over.
+If code exists before the test, preserve valid work, add the strongest meaningful regression check, and document any missing red-phase evidence.
 
 **No exceptions:**
 - Don't keep it as "reference"
@@ -511,7 +511,7 @@ Capture rationalizations from baseline testing (see Testing section below). Ever
 Make it easy for agents to self-check when rationalizing:
 
 ```markdown
-## Red Flags - STOP and Start Over
+## Warning Signs
 
 - Code before test
 - "I already manually tested it"
@@ -519,7 +519,7 @@ Make it easy for agents to self-check when rationalizing:
 - "It's about spirit not ritual"
 - "This is different because..."
 
-**All of these mean: Delete code. Start over with TDD.**
+**These indicate weak evidence. Improve the test where practical and report any limitation.**
 ```
 
 ### Update CSO for Violation Symptoms
@@ -541,7 +541,7 @@ Run pressure scenario with subagent WITHOUT the skill. Document exact behavior:
 - What rationalizations did they use (verbatim)?
 - Which pressures triggered violations?
 
-This is "watch the test fail" - you must see what agents naturally do before writing the skill.
+This is the preferred baseline: observe what agents naturally do before writing the skill when a representative run is practical.
 
 ### GREEN: Write Minimal Skill
 
@@ -551,7 +551,7 @@ Run same scenarios WITH skill. Agent should now comply.
 
 ### REFACTOR: Close Loopholes
 
-Agent found new rationalization? Add explicit counter. Re-test until bulletproof.
+If an agent finds a new rationalization, add a focused counter and run one bounded re-check. Report remaining uncertainty rather than looping until “bulletproof.”
 
 **Testing methodology:** See @testing-skills-with-subagents.md for the complete testing methodology:
 - How to write pressure scenarios
@@ -580,16 +580,16 @@ step2 [label="read file"];
 helper1, helper2, step3, pattern4
 **Why bad:** Labels should have semantic meaning
 
-## STOP: Before Moving to Next Skill
+## Checkpoint Before Moving to the Next Skill
 
-**After writing ANY skill, you MUST STOP and complete the deployment process.**
+After writing a skill, perform a proportionate validation before treating it as ready.
 
 **Do NOT:**
-- Create multiple skills in batch without testing each
-- Move to next skill before current one is verified
+- Batch unrelated skills without any per-skill inspection
+- Treat an unreviewed skill as verified
 - Skip testing because "batching is more efficient"
 
-**The deployment checklist below is MANDATORY for EACH skill.**
+Use the relevant parts of the checklist below for each skill. Batch mechanical checks when that is more efficient.
 
 Deploying untested skills = deploying untested code. It's a violation of quality standards.
 

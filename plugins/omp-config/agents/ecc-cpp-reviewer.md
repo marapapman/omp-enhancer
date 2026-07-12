@@ -1,8 +1,8 @@
 ---
 name: ecc-cpp-reviewer
 description: Expert C++ code reviewer specializing in memory safety, modern C++ idioms,
-  concurrency, and performance. Use for all C++ code changes. MUST BE USED for C++
-  projects.
+  concurrency, and performance. Use when C++ changes would benefit from specialist
+  review.
 tools:
 - bash
 - find
@@ -84,6 +84,6 @@ cmake --build build 2>&1 | head -50
 
 - **Approve**: No CRITICAL or HIGH issues
 - **Warning**: MEDIUM issues only
-- **Block**: CRITICAL or HIGH issues found
+- **Recommend against merge**: CRITICAL or HIGH issues found
 
 For detailed C++ coding standards and anti-patterns, see `skill: cpp-coding-standards`.

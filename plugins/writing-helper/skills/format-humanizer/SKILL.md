@@ -5,7 +5,10 @@ description: "Remove AI writing traces — identify and replace overused AI phra
 
 # Format Humanizer
 
-Scan a document for AI-generated writing patterns and suggest natural replacements. Work through findings one at a time with user confirmation. End with a before/after comparison.
+Scan a document for AI-generated writing patterns and apply authorized,
+meaning-preserving replacements in one focused pass. Use one-at-a-time
+confirmation only when the user explicitly requests interactive review or a
+replacement would alter meaning.
 
 ## Trigger
 
@@ -33,13 +36,14 @@ Use when the user asks to "humanize", "de-AI", "remove AI traces", "make this so
 
 1. **Scan.** Read the full document. Identify every instance of the patterns above. Collect into a list of findings with exact quotes.
 
-2. **Present findings.** For each finding, show:
+2. **Assess findings.** For each finding, record:
    - Pattern name
    - Original text (with context, ~2 lines around if needed)
    - Suggested replacement
-   - Ask: "Replace? (y/n)"
+   - Whether it is a safe expression-only replacement or needs an author decision
 
-3. **Apply.** On confirmation, apply the replacement.
+3. **Apply.** Apply safe replacements within existing edit authorization.
+   Present only substantive decisions to the user.
 
 4. **Output comparison.** After all findings are processed, show:
    - **Before** — full original text
@@ -50,7 +54,9 @@ Use when the user asks to "humanize", "de-AI", "remove AI traces", "make this so
 
 Favor shorter sentences, is/are/has over substitutes, specific details over vague claims. Eliminate padding.
 
-## Output Format
+## Optional Interactive Output
+
+Use this format only when the user requested issue-by-issue confirmation:
 
 ```
 --- Finding 1 / N ---

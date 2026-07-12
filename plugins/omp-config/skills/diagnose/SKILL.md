@@ -6,7 +6,7 @@ tags: [debugging, testing, performance]
 
 # Diagnose
 
-A discipline for hard bugs. Skip phases only when explicitly justified.
+A disciplined workflow for hard bugs. Adapt phases to the evidence and explain material omissions.
 
 When exploring the codebase, use the project's domain glossary to get a clear mental model of the relevant modules, and check ADRs in the area you're touching.
 
@@ -14,7 +14,7 @@ When exploring the codebase, use the project's domain glossary to get a clear me
 
 **This is the skill.** Everything else is mechanical. If you have a fast, deterministic, agent-runnable pass/fail signal for the bug, you will find the cause — bisection, hypothesis-testing, and instrumentation all just consume that signal. If you don't have one, no amount of staring at code will save you.
 
-Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give up.**
+Spend proportionate effort here. Be creative, but stop low-value repetition when the signal is not improving.
 
 ### Ways to construct one — try them in roughly this order
 
@@ -43,13 +43,11 @@ A 30-second flaky loop is barely better than no loop. A 2-second deterministic l
 
 ### Non-deterministic bugs
 
-The goal is not a clean repro but a **higher reproduction rate**. Loop the trigger 100×, parallelise, add stress, narrow timing windows, inject sleeps. A 50%-flake bug is debuggable; 1% is not — keep raising the rate until it's debuggable.
+The goal is not necessarily a clean repro but a **higher reproduction rate**. Use a small bounded sample first, then increase it only when the expected information gain justifies the cost. Record the observed rate and avoid endless attempts.
 
 ### When you genuinely cannot build a loop
 
-Stop and say so explicitly. List what you tried. Ask the user for: (a) access to whatever environment reproduces it, (b) a captured artifact (HAR file, log dump, core dump, screen recording with timestamps), or (c) permission to add temporary production instrumentation. Do **not** proceed to hypothesise without a loop.
-
-Do not proceed to Phase 2 until you have a loop you believe in.
+Say so explicitly and list what you tried. Ask for: (a) access to the reproducing environment, (b) a captured artifact, or (c) permission for temporary instrumentation when that input is genuinely necessary. Static hypotheses may still be investigated if they are clearly labeled as unconfirmed; a missing loop is a confidence limitation, not an automatic workflow halt.
 
 ## Phase 2 — Reproduce
 
@@ -61,7 +59,7 @@ Confirm:
 - [ ] The failure is reproducible across multiple runs (or, for non-deterministic bugs, reproducible at a high enough rate to debug against).
 - [ ] You have captured the exact symptom (error message, wrong output, slow timing) so later phases can verify the fix actually addresses it.
 
-Do not proceed until you reproduce the bug.
+If reproduction remains unavailable after bounded attempts, continue with evidence-backed static diagnosis where useful and report the reduced confidence.
 
 ## Phase 3 — Hypothesise
 
@@ -107,7 +105,7 @@ If a correct seam exists:
 
 ## Phase 6 — Cleanup + post-mortem
 
-Required before declaring done:
+Useful before making a strong completion claim:
 
 - [ ] Original repro no longer reproduces (re-run the Phase 1 loop)
 - [ ] Regression test passes (or absence of seam is documented)

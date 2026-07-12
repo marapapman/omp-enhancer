@@ -1,7 +1,7 @@
 ---
 name: ecc-e2e-runner
 description: End-to-end testing specialist using Vercel Agent Browser (preferred)
-  with Playwright fallback. Use PROACTIVELY for generating, maintaining, and running
+  with Playwright fallback. Use when generating, maintaining, or running
   E2E tests. Manages test journeys, quarantines flaky tests, uploads artifacts (screenshots,
   videos, traces), and ensures critical user flows work.
 tools:

@@ -3,10 +3,10 @@
 This file configures agent behavior for the omp environment.
 Skills are installed at `~/.omp/skills/` and loaded via `skill://<name>`.
 
-## Workflow: always work in this order
+## Recommended workflow
 
-For any non-trivial task, progress through these phases.
-Use `/skill:<name>` or `read skill://<name>` to load the full skill.
+For non-trivial work, use the relevant phases below. Adapt their depth and order to the explicit user request, repository state, and available runtime. Missing skills are limitations, not completion gates.
+Use the runtime's supported skill loader or read the referenced `SKILL.md` to load the full skill. Do not invent a slash command.
 
 ```
 Brainstorm → Plan → Implement/Execute → Verify → Review → Finish
@@ -52,7 +52,7 @@ Brainstorm → Plan → Implement/Execute → Verify → Review → Finish
 
 ## Tool Priority (OMP convention)
 
-Always prefer OMP's dedicated tools over shell commands:
+Prefer OMP's dedicated tools when available and suitable; otherwise use the safest available equivalent:
 
 | Task | Tool | Not |
 |---|---|---|
@@ -150,8 +150,8 @@ After any edit, run `lsp diagnostics` + `lsp code_actions` to catch errors and a
 
 ### Safety
 - `guard-destructive.ts` hook installed at `~/.omp/agent/hooks/pre/`
-- Blocks `rm -rf /`, `dd to /dev`, `mkfs`, pipe-from-web to shell
-- If a legitimate operation is blocked, retry with explicit path safety guards
+- Warns about `rm -rf /`, `dd to /dev`, `mkfs`, and pipe-from-web to shell
+- The hook is advisory-only and never blocks the tool call; verify exact targets, backups, and host approval before proceeding
 
 ## Round 3: Context, Templates, MCP
 

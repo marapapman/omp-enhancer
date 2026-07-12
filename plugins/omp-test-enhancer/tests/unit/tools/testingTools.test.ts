@@ -3,7 +3,7 @@ import { access, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { analyzeCoverageReport, analyzeMutationReport, analyzeTestTargets, buildTestContext, createTestingEnhancerTools, runTestGate } from '../../../src/tools/testingTools.js'
+import { analyzeCoverageReport, analyzeMutationReport, analyzeTestTargets, buildTestContext, createTestingEnhancerTools, runTestReview } from '../../../src/tools/testingTools.js'
 import type { ExtensionToolContext, ToolDefinition } from '../../../src/ompApi.js'
 import type { ChangedTarget } from '../../../src/types.js'
 
@@ -245,7 +245,7 @@ describe('pure testing tools', () => {
       risk: 'high'
     }
 
-    expect(runTestGate({
+    expect(runTestReview({
       targets: [target],
       candidate: {
         id: 'candidate',
@@ -271,7 +271,7 @@ describe('pure testing tools', () => {
       risk: 'high'
     }
 
-    expect(runTestGate({
+    expect(runTestReview({
       targets: [target],
       candidate: {
         id: 'candidate',
@@ -287,7 +287,7 @@ describe('pure testing tools', () => {
   })
 
   it('blocks gate execution when changed targets are missing', () => {
-    expect(runTestGate({
+    expect(runTestReview({
       targets: [],
       candidate: {
         id: 'candidate',
@@ -322,7 +322,7 @@ describe('pure testing tools', () => {
       findings: [{
         gate: 'browser-visual',
         passed: false,
-        severity: 'blocker',
+        severity: 'critical',
         category: 'visual-diff',
         summary: 'Login form visual diff exceeded threshold.',
         evidence: { diffRatio: 0.02, threshold: 0.01 },
@@ -331,7 +331,7 @@ describe('pure testing tools', () => {
       }]
     }
 
-    expect(runTestGate({ targets: [target], candidate, browserEvidence })).toMatchObject({
+    expect(runTestReview({ targets: [target], candidate, browserEvidence })).toMatchObject({
       passed: false,
       results: expect.arrayContaining([
         expect.objectContaining({ gate: 'test-file-scope', passed: true }),
@@ -351,7 +351,7 @@ describe('pure testing tools', () => {
       risk: 'medium'
     }
 
-    expect(runTestGate({
+    expect(runTestReview({
       targets: [target],
       candidate: {
         id: 'candidate',
@@ -364,7 +364,7 @@ describe('pure testing tools', () => {
         expect.objectContaining({
           gate: 'browser-interaction',
           passed: false,
-          severity: 'blocker',
+          severity: 'critical',
           summary: 'Browser evidence is required for frontend targets.'
         })
       ])
@@ -379,7 +379,7 @@ describe('pure testing tools', () => {
       kind: 'react-component',
       risk: 'medium'
     }
-    const output = runTestGate({
+    const output = runTestReview({
       targets: [target],
       candidate: {
         id: 'candidate',
@@ -569,15 +569,15 @@ describe('createTestingEnhancerTools execute layer', () => {
     expect(result.content[0]?.type).toBe('text')
     expect(result.details).toMatchObject({
       passed: false,
-      results: expect.arrayContaining([expect.objectContaining({ gate: 'indirect-test', severity: 'blocker' })])
+      results: expect.arrayContaining([expect.objectContaining({ gate: 'indirect-test', severity: 'critical' })])
     })
   })
 
-  it('applies gate severity settings from .omp/testing-enhancer.yml', async () => {
+  it('applies review severity settings from .omp/testing-enhancer.yml', async () => {
     const cwd = await tempRepo()
     await mkdir(join(cwd, '.omp'), { recursive: true })
     await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), [
-      'version: 1',
+      'version: 2',
       'test:',
       '  command:',
       'coverage:',
@@ -587,11 +587,11 @@ describe('createTestingEnhancerTools execute layer', () => {
       '  trace: retain-on-failure',
       '  screenshot: only-on-failure',
       '  serviceWorkers: block',
-      'gates:',
-      '  indirectTest: warn',
-      '  productionEdits: warn',
-      '  testCommand: warn',
-      '  browserEvidence: warn',
+      'review:',
+      '  indirectTest: warning',
+      '  productionEdits: warning',
+      '  testCommand: warning',
+      '  browserEvidence: warning',
       ''
     ].join('\n'))
 
@@ -709,7 +709,7 @@ describe('createTestingEnhancerTools execute layer', () => {
     const tools = createTestingEnhancerTools(fakeZod(), {
       getObservedTestCommandEvidence: () => ({
         schemaVersion: 1,
-        routeId: 'route-1',
+        routeIdentity: 'route-1',
         commandDigest: createHash('sha256').update(command).digest('hex'),
         exitCode: 0,
         observedAt: Date.now()
@@ -749,15 +749,15 @@ describe('createTestingEnhancerTools execute layer', () => {
     const malicious = `${process.execPath} -e "require('fs').writeFileSync('${marker}', 'bad')"`
     await mkdir(join(cwd, '.omp'), { recursive: true })
     await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), [
-      'version: 1',
+      'version: 2',
       'test:',
       `  command: ${malicious}`,
       'coverage:',
       '  command:',
-      'gates:',
-      '  indirectTest: block',
-      '  productionEdits: block',
-      '  testCommand: block',
+      'review:',
+      '  indirectTest: critical',
+      '  productionEdits: critical',
+      '  testCommand: critical',
       ''
     ].join('\n'))
     const target: ChangedTarget = {

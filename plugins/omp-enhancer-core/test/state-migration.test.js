@@ -8,10 +8,43 @@ const LEGACY_STATE = JSON.parse(
   readFileSync(new URL('./fixtures/state-v0.1.74.json', import.meta.url), 'utf8'),
 );
 
-test('restores and reserializes the v0.1.74 golden state without losing safety state', async () => {
+const ADVISORY_STATE_KEYS = [
+  'classifierAttempted',
+  'completedRoles',
+  'lastPrompt',
+  'lastRoute',
+  'lastRouteProbe',
+  'lastSkillUsage',
+  'lastSubagentUsage',
+  'loadedSkills',
+  'routeStartedAt',
+  'schemaVersion',
+  'tasks',
+  'taskSequence',
+].sort();
+
+const LEGACY_ENFORCEMENT_FIELDS = [
+  'evidence',
+  'gates',
+  'gateController',
+  'gateRecovery',
+  'pendingSmartGate',
+  'smartGate',
+  'smartGateCompletionBypasses',
+  'actionBoundary',
+  'exclusiveToolState',
+  'loopGuard',
+  'classifierPreflight',
+];
+
+test('migrates v0.1.74 route, skill, and task diagnostics into advisory schema v2', async () => {
   const fixtureWithUnknownFields = structuredClone(LEGACY_STATE);
   fixtureWithUnknownFields.futureControllerState = { mode: 'future-only' };
   fixtureWithUnknownFields.evidence.futureEvidence = { ignored: true };
+  fixtureWithUnknownFields.gates = { release: { open: true } };
+  fixtureWithUnknownFields.gateController = { schemaVersion: 2, continuationCount: 3 };
+  fixtureWithUnknownFields.actionBoundary = { denialCount: 2, terminal: true };
+  fixtureWithUnknownFields.exclusiveToolState = { exhausted: true };
   const entries = [coreStateEntry(fixtureWithUnknownFields)];
   const pi = new FakePi(entries);
   registerCoreEnhancer(pi);
@@ -24,50 +57,44 @@ test('restores and reserializes the v0.1.74 golden state without losing safety s
     undefined,
     ctx,
   );
-
-  assert.equal(status.details.status.route, 'bug-audit');
-  assert.equal(status.details.status.tasks.length, 1);
-  assert.equal(status.details.status.tasks[0].id, 'call-legacy-subagent');
-
-  await tool(pi, 'omp_core_validate_skill_usage').execute(
-    'legacy-reserialize',
-    { output: '', requiredSkills: [] },
-    undefined,
-    undefined,
-    ctx,
-  );
   const migrated = latestCoreState(pi.entries);
 
+  assert.equal(status.details.status.route, 'bug-audit');
+  assert.equal(status.details.status.mode, 'advisory');
+  assert.equal(status.details.status.auto_continue, false);
+  assert.deepEqual(status.details.status.suggested_skills, migrated.lastRoute.routePlan.skills);
+  assert.deepEqual(status.details.status.suggested_tools, migrated.lastRoute.routePlan.tools);
+  assert.deepEqual(
+    status.details.status.suggested_roles.map(({ agent }) => agent),
+    migrated.lastRoute.routePlan.roles.map(({ agent }) => agent),
+  );
+  assert.deepEqual(status.details.status.loaded_skills, LEGACY_STATE.evidence.loadedSkills);
+  assert.deepEqual(status.details.status.completed_roles, LEGACY_STATE.evidence.taskSubagents);
+  assert.equal(status.details.status.tasks.length, 1);
+  assert.equal(status.details.status.tasks[0].id, 'call-legacy-subagent');
+  assert.equal(status.details.status.tasks[0].status, 'completed');
+
+  assertAdvisorySnapshot(migrated);
   assert.equal(migrated.lastRoute.intent, LEGACY_STATE.lastRoute.intent);
+  assert.equal(migrated.lastRoute.advisoryOnly, true);
+  assert.equal(migrated.lastRoute.autoContinue, false);
+  assert.equal(migrated.lastRoute.routePlan.version, 2);
+  assert.equal(migrated.lastRoute.routePlan.mode, 'advisory');
+  assert.equal(migrated.lastRoute.routePlan.autoContinue, false);
+  assert.ok(migrated.lastRoute.routePlan.skills.length > 0);
   assert.equal(migrated.lastPrompt, LEGACY_STATE.lastPrompt);
-  assert.equal(migrated.pendingSmartGate.gateKey, LEGACY_STATE.pendingSmartGate.gateKey);
-  assert.equal(migrated.evidence.testingGate, true);
-  assert.equal(migrated.evidence.testingReport, true);
-  assert.deepEqual(migrated.evidence.loadedSkills, LEGACY_STATE.evidence.loadedSkills);
-  assert.deepEqual(migrated.evidence.forkedSubagents, LEGACY_STATE.evidence.forkedSubagents);
-  assert.equal(migrated.loopGuard?.enabled, true, 'v0.1.74 loop protection must survive state migration');
-  assert.equal(migrated.loopGuard?.currentRunId, LEGACY_STATE.loopGuard.currentRunId);
-  assert.equal(migrated.gateController?.schemaVersion, 2);
-  assert.equal(migrated.gateController?.budget.repairMax, 2);
-  assert.equal(migrated.gateController?.budget.terminalMax, 1);
-  assert.equal(migrated.gateController?.openGates['bug-audit:subagent']?.protection, 'soft');
-  assert.equal(JSON.stringify(migrated.gateController).includes('OMP Enhancer Core subagent gate'), false);
+  assert.deepEqual(migrated.loadedSkills, LEGACY_STATE.evidence.loadedSkills);
+  assert.deepEqual(migrated.completedRoles, LEGACY_STATE.evidence.taskSubagents);
+  assert.equal(migrated.tasks.length, 1);
+  assert.deepEqual(
+    { id: migrated.tasks[0].id, status: migrated.tasks[0].status },
+    { id: 'call-legacy-subagent', status: 'completed' },
+  );
   assert.equal('futureControllerState' in migrated, false, 'unknown top-level state must not be persisted');
-  assert.equal('futureEvidence' in migrated.evidence, false, 'unknown evidence fields must not be persisted');
 });
 
-test('fills safe defaults when legacy snapshots omit optional fields', async () => {
-  const entries = [coreStateEntry({
-    lastRoute: {
-      intent: 'unknown',
-      agent: null,
-      requiredSkills: [],
-      requiredTools: [],
-      requiredSubagents: [],
-      source: 'natural-language',
-    },
-    evidence: {},
-  })];
+test('new snapshots default to an empty advisory workflow state', async () => {
+  const entries = [];
   const pi = new FakePi(entries);
   registerCoreEnhancer(pi);
   const ctx = extensionContext(entries);
@@ -79,34 +106,41 @@ test('fills safe defaults when legacy snapshots omit optional fields', async () 
     undefined,
     ctx,
   );
-  assert.equal(status.details.status.route, 'unknown');
-  assert.deepEqual(status.details.status.pending, []);
+  assert.equal(status.details.status.mode, 'advisory');
+  assert.equal(status.details.status.auto_continue, false);
+  assert.equal(status.details.status.route, 'none');
+  assert.equal(status.details.status.active_route, 'none');
+  assert.deepEqual(status.details.status.suggested_skills, []);
+  assert.deepEqual(status.details.status.suggested_tools, []);
+  assert.deepEqual(status.details.status.suggested_roles, []);
+  assert.deepEqual(status.details.status.loaded_skills, []);
+  assert.deepEqual(status.details.status.completed_roles, []);
   assert.deepEqual(status.details.status.tasks, []);
 
-  await tool(pi, 'omp_core_validate_skill_usage').execute(
-    'minimal-legacy-reserialize',
-    { output: '', requiredSkills: [] },
-    undefined,
-    undefined,
-    ctx,
-  );
   const migrated = latestCoreState(pi.entries);
 
+  assertAdvisorySnapshot(migrated);
+  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.lastRoute, null);
   assert.equal(migrated.lastPrompt, '');
   assert.equal(migrated.routeStartedAt, 0);
-  assert.equal(migrated.pendingSmartGate, null);
-  assert.equal(migrated.smartGate, null);
-  assert.deepEqual(migrated.smartGateCompletionBypasses, []);
-  assert.deepEqual(migrated.gateRecovery, { attempts: [] });
-  assert.equal(migrated.gateController?.schemaVersion, 2);
-  assert.deepEqual(migrated.gateController?.openGates, {});
-  assert.equal(migrated.loopGuard?.enabled, true, 'missing loop state must default to enabled protection');
-  assert.equal(migrated.evidence.testingGate, false);
-  assert.equal(migrated.evidence.testingReport, false);
-  assert.deepEqual(migrated.evidence.loadedSkills, []);
-  assert.deepEqual(migrated.evidence.pendingSubagents, []);
-  assert.deepEqual(migrated.evidence.taskProgress, []);
+  assert.equal(migrated.lastRouteProbe, null);
+  assert.equal(migrated.lastSkillUsage, null);
+  assert.equal(migrated.lastSubagentUsage, null);
+  assert.equal(migrated.classifierAttempted, false);
+  assert.deepEqual(migrated.loadedSkills, []);
+  assert.deepEqual(migrated.tasks, []);
+  assert.deepEqual(migrated.completedRoles, []);
+  assert.equal(migrated.taskSequence, 0);
 });
+
+function assertAdvisorySnapshot(snapshot) {
+  assert.equal(snapshot.schemaVersion, 2);
+  assert.deepEqual(Object.keys(snapshot).sort(), ADVISORY_STATE_KEYS);
+  for (const field of LEGACY_ENFORCEMENT_FIELDS) {
+    assert.equal(field in snapshot, false, `${field} must not be serialized in advisory schema v2`);
+  }
+}
 
 function coreStateEntry(data) {
   return { type: 'custom', customType: 'omp-enhancer-core.state', data };

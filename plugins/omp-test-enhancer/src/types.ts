@@ -43,7 +43,7 @@ export type GateName = 'indirect-test' | 'test-file-scope' | 'test-command' | Br
 export interface GateResult {
   gate: GateName
   passed: boolean
-  severity: 'blocker' | 'warning'
+  severity: 'critical' | 'warning'
   summary: string
   evidence: unknown
   repairHint?: string
@@ -109,7 +109,7 @@ export interface BrowserArtifactRefs {
 export interface BrowserFinding {
   gate: BrowserGateName
   passed: boolean
-  severity: 'blocker' | 'warning'
+  severity: 'critical' | 'warning'
   category: 'actionability' | 'console-error' | 'page-error' | 'network-failure' | 'accessibility' | 'visual-diff' | 'timeout' | 'setup'
   summary: string
   evidence: unknown

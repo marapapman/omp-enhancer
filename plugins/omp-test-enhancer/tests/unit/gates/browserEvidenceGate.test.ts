@@ -16,10 +16,10 @@ describe('evaluateBrowserEvidenceGate', () => {
   })
 
   it('blocks missing browser evidence when frontend evidence is required', () => {
-    expect(evaluateBrowserEvidenceGate(undefined, { required: true, severity: 'blocker', targetIds: ['src/ui/LoginForm.tsx#LoginForm'] })).toEqual([{
+    expect(evaluateBrowserEvidenceGate(undefined, { required: true, severity: 'critical', targetIds: ['src/ui/LoginForm.tsx#LoginForm'] })).toEqual([{
       gate: 'browser-interaction',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Browser evidence is required for frontend targets.',
       evidence: { targetIds: ['src/ui/LoginForm.tsx#LoginForm'] },
       repairHint: 'Run omp_test_browser_check and pass its browserEvidence into omp_test_gate for frontend targets.'
@@ -42,7 +42,7 @@ describe('evaluateBrowserEvidenceGate', () => {
       {
         gate: 'browser-interaction',
         passed: true,
-        severity: 'blocker',
+        severity: 'critical',
         summary: 'Browser interactions passed.',
         evidence: passedEvidence
       },
@@ -56,7 +56,7 @@ describe('evaluateBrowserEvidenceGate', () => {
     ])
   })
 
-  it('warns but does not block when browser evidence was explicitly skipped', () => {
+  it('reports a warning when browser evidence was explicitly skipped', () => {
     const skipped: BrowserEvidence = {
       ...passedEvidence,
       status: 'skipped'
@@ -72,16 +72,16 @@ describe('evaluateBrowserEvidenceGate', () => {
     }])
   })
 
-  it('blocks skipped browser evidence when frontend evidence is required as blocker', () => {
+  it('reports skipped browser evidence as critical when frontend evidence is required', () => {
     const skipped: BrowserEvidence = {
       ...passedEvidence,
       status: 'skipped'
     }
 
-    expect(evaluateBrowserEvidenceGate(skipped, { required: true, severity: 'blocker' })).toEqual([{
+    expect(evaluateBrowserEvidenceGate(skipped, { required: true, severity: 'critical' })).toEqual([{
       gate: 'browser-interaction',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Browser check was skipped.',
       evidence: skipped,
       repairHint: 'Run browser evidence collection for frontend targets when browser behavior changed.'
@@ -102,17 +102,17 @@ describe('evaluateBrowserEvidenceGate', () => {
       }]
     }
 
-    expect(evaluateBrowserEvidenceGate(skipped, { required: true, severity: 'blocker' })).toEqual([{
+    expect(evaluateBrowserEvidenceGate(skipped, { required: true, severity: 'critical' })).toEqual([{
       gate: 'browser-interaction',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Browser check was skipped.',
       evidence: skipped,
       repairHint: 'Run browser evidence collection for frontend targets when browser behavior changed.'
     }])
   })
 
-  it('blocks failed browser evidence when no structured finding was supplied', () => {
+  it('reports failed browser evidence when no structured finding was supplied', () => {
     const failed: BrowserEvidence = {
       ...passedEvidence,
       status: 'failed'
@@ -121,10 +121,10 @@ describe('evaluateBrowserEvidenceGate', () => {
     expect(evaluateBrowserEvidenceGate(failed)).toEqual([{
       gate: 'browser-interaction',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Browser check failed without structured findings.',
       evidence: failed,
-      repairHint: 'Re-run browser evidence collection and include action, console, network, or visual findings.'
+      repairHint: 'Report the browser-evidence gap; collect one additional observation only when it would materially improve the review.'
     }])
   })
 
@@ -134,7 +134,7 @@ describe('evaluateBrowserEvidenceGate', () => {
       findings: [{
         gate: 'browser-visual',
         passed: false,
-        severity: 'blocker',
+        severity: 'critical',
         category: 'visual-diff',
         summary: 'Diff exceeded threshold.',
         evidence: { diffRatio: 0.04, threshold: 0.01 },
@@ -146,7 +146,7 @@ describe('evaluateBrowserEvidenceGate', () => {
     expect(evaluateBrowserEvidenceGate(evidence)).toEqual([{
       gate: 'browser-visual',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Diff exceeded threshold.',
       evidence: {
         category: 'visual-diff',

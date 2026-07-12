@@ -2,228 +2,162 @@ import { createHash } from 'node:crypto';
 import { isRecord } from '../utils.js';
 export const TESTING_STATE_ENTRY = 'omp-testing-enhancer.state';
 export const TESTING_EVIDENCE_ENTRY = 'omp-testing-enhancer.evidence';
-export const TESTING_STATE_SCHEMA_VERSION = 2;
-export const TESTING_EVIDENCE_SCHEMA_VERSION = 1;
-const STANDALONE_REPAIR_MAX = 2;
-const STANDALONE_TERMINAL_MAX = 1;
-export function createInitialTestingState() {
+export const TESTING_STATE_SCHEMA_VERSION = 4;
+export const TESTING_EVIDENCE_SCHEMA_VERSION = 2;
+export function createInitialTestingReviewState() {
     return {
         schemaVersion: TESTING_STATE_SCHEMA_VERSION,
-        pendingGate: false,
+        reviewStatus: 'idle',
         lastTargets: [],
-        lastGateResults: [],
-        evidenceRevision: 0,
-        standaloneRecovery: createStandaloneRecoveryState()
+        lastReviewResults: [],
+        evidenceRevision: 0
     };
 }
-export function restoreTestingStateFromEntries(entries, options = {}) {
-    let restored = createInitialTestingState();
+export function restoreTestingReviewStateFromEntries(entries, options = {}) {
+    let restored = createInitialTestingReviewState();
     for (const entry of entries) {
         if (entry.type !== 'custom')
             continue;
         if (entry.customType !== TESTING_STATE_ENTRY)
             continue;
-        const state = readTestingState(entry.data);
+        const state = readTestingReviewState(entry.data);
         if (!state)
             continue;
-        if (options.requireCurrentRouteEvidence) {
-            const hasObservedToolEvent = state.lastAnalyzeRunId !== undefined || state.lastGateResults.length > 0;
-            if (!options.routeId || state.routeId !== options.routeId || !hasObservedToolEvent)
+        if (options.requireCurrentRoute) {
+            const hasObservedReview = state.reviewRunId !== undefined || state.lastReviewResults.length > 0;
+            if (!options.routeIdentity || state.routeIdentity !== options.routeIdentity || !hasObservedReview)
                 continue;
         }
         restored = state;
     }
     return restored;
 }
-export function markGatePending(state, targets, scope = {}) {
-    const routeChanged = scope.routeId !== undefined && scope.routeId !== state.routeId;
-    const standaloneRecovery = routeChanged
-        ? createStandaloneRecoveryState()
-        : state.standaloneRecovery;
+export function startTestingReview(state, targets, scope = {}) {
     return {
         ...state,
-        pendingGate: true,
+        reviewStatus: 'collecting',
         lastTargets: targets,
-        lastGateResults: [],
+        lastReviewResults: [],
         evidenceRevision: state.evidenceRevision + 1,
-        standaloneRecovery,
-        ...(scope.routeId !== undefined ? { routeId: scope.routeId } : {}),
-        ...(scope.runId !== undefined ? { lastAnalyzeRunId: scope.runId } : {})
+        ...(scope.routeIdentity !== undefined ? { routeIdentity: scope.routeIdentity } : {}),
+        ...(scope.runId !== undefined ? { reviewRunId: scope.runId } : {})
     };
 }
-export function markGateFinished(state, gateResults) {
-    const hasFailedBlocker = gateResults.some(result => !result.passed && result.severity === 'blocker');
+export function completeTestingReview(state, reviewResults) {
+    const hasCriticalFinding = reviewResults.some(result => !result.passed && result.severity === 'critical');
     return {
         ...state,
-        pendingGate: hasFailedBlocker,
-        lastGateResults: gateResults,
+        reviewStatus: hasCriticalFinding ? 'findings' : 'ready',
+        lastReviewResults: reviewResults,
         evidenceRevision: state.evidenceRevision + 1
     };
 }
-export function markReportGenerated(state, markdown) {
+export function recordTestingReport(state, markdown) {
     return {
         ...state,
         lastReportMarkdown: markdown
     };
 }
-export function markObservedTestCommand(state, evidence) {
-    if (state.routeId && evidence.routeId !== state.routeId)
+export function recordObservedTestCommand(state, evidence) {
+    if (state.routeIdentity && evidence.routeIdentity !== state.routeIdentity)
         return state;
     return {
         ...state,
         lastObservedTestCommand: evidence,
         evidenceRevision: state.evidenceRevision + 1,
-        ...(state.routeId ? {} : { routeId: evidence.routeId })
+        ...(state.routeIdentity ? {} : { routeIdentity: evidence.routeIdentity })
     };
 }
 export function invalidateObservedTestCommand(state) {
     if (!state.lastObservedTestCommand)
         return state;
     const { lastObservedTestCommand: _discarded, ...rest } = state;
-    const hasActiveTestingRun = state.lastAnalyzeRunId !== undefined
+    const hasActiveReview = state.reviewRunId !== undefined
         || state.lastTargets.length > 0
-        || state.lastGateResults.length > 0;
+        || state.lastReviewResults.length > 0;
     return {
         ...rest,
-        pendingGate: hasActiveTestingRun ? true : state.pendingGate,
+        reviewStatus: hasActiveReview ? 'collecting' : state.reviewStatus,
         evidenceRevision: state.evidenceRevision + 1
     };
 }
-export function bindTestingStateToRoute(state, routeId) {
-    if (state.routeId === routeId)
+export function scopeTestingReviewToRoute(state, routeIdentity) {
+    if (state.routeIdentity === routeIdentity)
         return state;
-    return { ...createInitialTestingState(), routeId };
+    return { ...createInitialTestingReviewState(), routeIdentity };
 }
-export function hasTestingGateEvidence(state) {
-    return state.pendingGate || state.lastTargets.length > 0 || state.lastGateResults.length > 0 || state.lastAnalyzeRunId !== undefined;
+export function hasTestingReviewData(state) {
+    return state.reviewStatus !== 'idle'
+        || state.lastTargets.length > 0
+        || state.lastReviewResults.length > 0
+        || state.reviewRunId !== undefined;
 }
-export function buildTestingGateEvidence(state, updatedAt = Date.now()) {
-    const runId = state.lastAnalyzeRunId ?? 'testing-unscoped';
-    const routeId = state.routeId ?? `testing:${runId}`;
-    const blockers = [...new Set(state.lastGateResults
-            .filter(result => !result.passed && result.severity === 'blocker')
+export function buildTestingReviewEvidence(state, updatedAt = Date.now()) {
+    const runId = state.reviewRunId ?? 'testing-unscoped';
+    const routeIdentity = state.routeIdentity ?? `testing:${runId}`;
+    const reviewStatus = state.reviewStatus === 'idle' ? 'collecting' : state.reviewStatus;
+    const criticalFindings = [...new Set(state.lastReviewResults
+            .filter(result => !result.passed && result.severity === 'critical')
             .map(result => result.gate))].sort();
-    const status = state.pendingGate
-        ? blockers.length > 0 ? 'failed' : 'pending'
-        : state.lastGateResults.length > 0 ? 'passed' : 'pending';
-    const normalizedResults = state.lastGateResults
+    const normalizedResults = state.lastReviewResults
         .map(result => ({ gate: result.gate, passed: result.passed, severity: result.severity }))
         .sort((left, right) => left.gate.localeCompare(right.gate));
     const evidenceDigest = digest({
         schemaVersion: TESTING_EVIDENCE_SCHEMA_VERSION,
-        routeId,
+        routeIdentity,
         runId,
-        status,
-        blockers,
+        reviewStatus,
+        criticalFindings,
         normalizedResults
     });
     return {
         schemaVersion: TESTING_EVIDENCE_SCHEMA_VERSION,
-        routeId,
+        routeIdentity,
         runId,
-        status,
-        pending: state.pendingGate,
-        passed: status === 'passed',
-        failed: status === 'failed',
-        blockers,
+        reviewStatus,
+        criticalFindings,
+        advisory: true,
         evidenceDigest,
         evidenceRevision: state.evidenceRevision,
         updatedAt
     };
 }
-export function evaluateStandaloneTestingGate(state) {
-    if (!state.pendingGate)
-        return { kind: 'release', state, fingerprint: null };
-    const evidence = buildTestingGateEvidence(state, 0);
-    const fingerprint = digest({
-        routeId: evidence.routeId,
-        runId: evidence.runId,
-        status: evidence.status,
-        blockers: evidence.blockers,
-        evidenceDigest: evidence.evidenceDigest
-    });
-    const recovery = state.standaloneRecovery;
-    if (recovery.terminalFingerprint === fingerprint || recovery.terminalUsed >= recovery.terminalMax) {
-        return { kind: 'stop', state, fingerprint };
-    }
-    if (recovery.lastRepairFingerprint !== fingerprint && recovery.repairUsed < recovery.repairMax) {
-        return {
-            kind: 'repair',
-            fingerprint,
-            state: {
-                ...state,
-                standaloneRecovery: {
-                    ...recovery,
-                    repairUsed: recovery.repairUsed + 1,
-                    lastRepairFingerprint: fingerprint
-                }
-            }
-        };
-    }
-    return {
-        kind: 'terminal',
-        fingerprint,
-        state: {
-            ...state,
-            standaloneRecovery: {
-                ...recovery,
-                terminalUsed: recovery.terminalUsed + 1,
-                terminalFingerprint: fingerprint
-            }
-        }
-    };
-}
-export function isStandaloneTerminalOnlyState(state) {
-    if (!state.pendingGate)
-        return false;
-    const recovery = state.standaloneRecovery;
-    return recovery.terminalFingerprint !== null || recovery.terminalUsed >= recovery.terminalMax;
-}
-function readTestingState(value) {
-    if (!isRecord(value))
+function readTestingReviewState(value) {
+    if (!isRecord(value) || value.schemaVersion !== TESTING_STATE_SCHEMA_VERSION)
         return undefined;
-    if (value.schemaVersion !== undefined && value.schemaVersion !== TESTING_STATE_SCHEMA_VERSION) {
-        if (isUnsupportedFutureSchema(value.schemaVersion) && hasPendingSignal(value)) {
-            return readUnsupportedFuturePendingState(value);
-        }
+    if (!isTestingReviewStatus(value.reviewStatus))
         return undefined;
-    }
-    if (typeof value.pendingGate !== 'boolean')
-        return undefined;
-    if (!Array.isArray(value.lastTargets))
-        return undefined;
-    if (!Array.isArray(value.lastGateResults))
+    if (!Array.isArray(value.lastTargets) || !Array.isArray(value.lastReviewResults))
         return undefined;
     const state = {
         schemaVersion: TESTING_STATE_SCHEMA_VERSION,
-        pendingGate: value.pendingGate,
+        reviewStatus: value.reviewStatus,
         lastTargets: value.lastTargets.flatMap(readChangedTarget),
-        lastGateResults: value.lastGateResults.flatMap(readGateResult),
+        lastReviewResults: value.lastReviewResults.flatMap(readReviewResult),
         evidenceRevision: Number.isInteger(value.evidenceRevision) && Number(value.evidenceRevision) >= 0
             ? Number(value.evidenceRevision)
-            : 0,
-        standaloneRecovery: readStandaloneRecoveryState(value.standaloneRecovery) ?? createStandaloneRecoveryState()
+            : 0
     };
-    if (typeof value.routeId === 'string' && value.routeId.trim() !== '')
-        state.routeId = value.routeId;
-    if (typeof value.lastAnalyzeRunId === 'string')
-        state.lastAnalyzeRunId = value.lastAnalyzeRunId;
+    if (typeof value.routeIdentity === 'string' && value.routeIdentity.trim() !== '')
+        state.routeIdentity = value.routeIdentity;
+    if (typeof value.reviewRunId === 'string')
+        state.reviewRunId = value.reviewRunId;
     if (typeof value.lastReportMarkdown === 'string')
         state.lastReportMarkdown = value.lastReportMarkdown;
     const observedTestCommand = readObservedTestCommandEvidence(value.lastObservedTestCommand);
-    if (observedTestCommand && (!state.routeId || observedTestCommand.routeId === state.routeId)) {
+    if (observedTestCommand && (!state.routeIdentity || observedTestCommand.routeIdentity === state.routeIdentity)) {
         state.lastObservedTestCommand = observedTestCommand;
     }
     if (state.lastTargets.length !== value.lastTargets.length)
         return undefined;
-    if (state.lastGateResults.length !== value.lastGateResults.length)
+    if (state.lastReviewResults.length !== value.lastReviewResults.length)
         return undefined;
     return state;
 }
 function readObservedTestCommandEvidence(value) {
     if (!isRecord(value) || value.schemaVersion !== 1)
         return undefined;
-    if (typeof value.routeId !== 'string' || !value.routeId.trim())
+    if (typeof value.routeIdentity !== 'string' || !value.routeIdentity.trim())
         return undefined;
     if (typeof value.commandDigest !== 'string' || !/^[0-9a-f]{64}$/.test(value.commandDigest))
         return undefined;
@@ -233,75 +167,14 @@ function readObservedTestCommandEvidence(value) {
         return undefined;
     return {
         schemaVersion: 1,
-        routeId: value.routeId,
+        routeIdentity: value.routeIdentity,
         commandDigest: value.commandDigest,
         exitCode: Number(value.exitCode),
         observedAt: Number(value.observedAt)
     };
 }
-function createStandaloneRecoveryState() {
-    return {
-        repairUsed: 0,
-        repairMax: STANDALONE_REPAIR_MAX,
-        terminalUsed: 0,
-        terminalMax: STANDALONE_TERMINAL_MAX,
-        lastRepairFingerprint: null,
-        terminalFingerprint: null
-    };
-}
-function readStandaloneRecoveryState(value) {
-    if (!isRecord(value))
-        return undefined;
-    return {
-        repairUsed: clampRecoveryCount(value.repairUsed, STANDALONE_REPAIR_MAX),
-        repairMax: STANDALONE_REPAIR_MAX,
-        terminalUsed: clampRecoveryCount(value.terminalUsed, STANDALONE_TERMINAL_MAX),
-        terminalMax: STANDALONE_TERMINAL_MAX,
-        lastRepairFingerprint: typeof value.lastRepairFingerprint === 'string' ? value.lastRepairFingerprint : null,
-        terminalFingerprint: typeof value.terminalFingerprint === 'string' ? value.terminalFingerprint : null
-    };
-}
-function readUnsupportedFuturePendingState(value) {
-    const state = {
-        ...createInitialTestingState(),
-        pendingGate: true,
-        lastTargets: Array.isArray(value.lastTargets) ? value.lastTargets.flatMap(readChangedTarget) : [],
-        lastGateResults: Array.isArray(value.lastGateResults) ? value.lastGateResults.flatMap(readGateResult) : [],
-        evidenceRevision: isNonNegativeInteger(value.evidenceRevision) ? Number(value.evidenceRevision) : 0,
-        standaloneRecovery: {
-            ...createStandaloneRecoveryState(),
-            repairUsed: STANDALONE_REPAIR_MAX
-        }
-    };
-    if (typeof value.routeId === 'string' && value.routeId.trim() !== '')
-        state.routeId = value.routeId;
-    state.lastAnalyzeRunId = typeof value.lastAnalyzeRunId === 'string' && value.lastAnalyzeRunId.trim() !== ''
-        ? value.lastAnalyzeRunId
-        : `unsupported-schema-${String(value.schemaVersion)}`;
-    return state;
-}
-function isUnsupportedFutureSchema(value) {
-    return Number.isInteger(value) && Number(value) > TESTING_STATE_SCHEMA_VERSION;
-}
-function hasPendingSignal(value) {
-    if (value.pendingGate === true || value.pending === true)
-        return true;
-    if (value.status === 'pending' || value.status === 'failed')
-        return true;
-    if (!Array.isArray(value.lastGateResults))
-        return false;
-    return value.lastGateResults.some(result => (isRecord(result) && result.passed === false && result.severity === 'blocker'));
-}
-function clampRecoveryCount(value, max) {
-    if (!isNonNegativeInteger(value))
-        return 0;
-    return Math.min(Number(value), max);
-}
 function digest(value) {
     return createHash('sha256').update(JSON.stringify(value)).digest('hex');
-}
-function isNonNegativeInteger(value) {
-    return Number.isInteger(value) && Number(value) >= 0;
 }
 function readChangedTarget(value) {
     if (!isRecord(value))
@@ -329,14 +202,14 @@ function readChangedTarget(value) {
         target.publicEntryHints = value.publicEntryHints.filter((item) => typeof item === 'string');
     return [target];
 }
-function readGateResult(value) {
+function readReviewResult(value) {
     if (!isRecord(value))
         return [];
     if (!isGateName(value.gate))
         return [];
     if (typeof value.passed !== 'boolean')
         return [];
-    if (value.severity !== 'blocker' && value.severity !== 'warning')
+    if (value.severity !== 'critical' && value.severity !== 'warning')
         return [];
     if (typeof value.summary !== 'string')
         return [];
@@ -350,6 +223,9 @@ function readGateResult(value) {
     if (typeof value.repairHint === 'string')
         result.repairHint = value.repairHint;
     return [result];
+}
+function isTestingReviewStatus(value) {
+    return value === 'idle' || value === 'collecting' || value === 'ready' || value === 'findings';
 }
 function isTargetKind(value) {
     return value === 'pure-function' ||

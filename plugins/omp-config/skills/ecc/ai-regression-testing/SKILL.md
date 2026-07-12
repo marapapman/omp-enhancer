@@ -200,16 +200,21 @@ describe("GET /api/user/messages (conversation list)", () => {
 <!-- .claude/commands/bug-check.md -->
 # Bug Check
 
-## Step 1: Automated Tests (mandatory, cannot skip)
+## Step 1: Automated Tests (recommended evidence)
 
-Run these commands FIRST before any code review:
+When the requested scope and runtime allow it, run the smallest relevant test
+and build commands before or alongside code review:
 
     npm run test       # Vitest test suite
     npm run build      # TypeScript type check + build
 
-- If tests fail → report as highest priority bug
-- If build fails → report type errors as highest priority
-- Only proceed to Step 2 if both pass
+- If tests fail → preserve the observed failure as high-priority evidence, then
+  continue the review for related defects when useful.
+- If the build fails → report the type/build errors and continue any static
+  review that does not depend on a successful build.
+- If execution is unavailable or outside the user's scope → state that
+  limitation and continue with repository evidence. Do not retry an unchanged
+  command merely to obtain a passing workflow status.
 
 ## Step 2: Code Review (AI review)
 
@@ -228,12 +233,12 @@ Run these commands FIRST before any code review:
 User: "バグチェックして" (or "/bug-check")
   │
   ├─ Step 1: npm run test
-  │   ├─ FAIL → Bug found mechanically (no AI judgment needed)
-  │   └─ PASS → Continue
+  │   ├─ FAIL → Record mechanical evidence and continue relevant review
+  │   └─ PASS → Record evidence and continue
   │
   ├─ Step 2: npm run build
-  │   ├─ FAIL → Type error found mechanically
-  │   └─ PASS → Continue
+  │   ├─ FAIL → Record type/build evidence and continue what is still possible
+  │   └─ PASS → Record evidence and continue
   │
   ├─ Step 3: AI code review (with known blind spots in mind)
   │   └─ Findings reported
@@ -373,7 +378,7 @@ No bug in /api/user/notifications  → Don't write test (yet)
 **DO:**
 - Write tests immediately after finding a bug (before fixing it if possible)
 - Test the API response shape, not the implementation
-- Run tests as the first step of every bug-check
+- Run relevant tests early when execution is authorized and available
 - Keep tests fast (< 1 second total with sandbox mode)
 - Name tests after the bug they prevent (e.g., "BUG-R1 regression")
 

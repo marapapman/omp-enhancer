@@ -105,7 +105,7 @@ describe('marketplace catalog', () => {
 
     const result = await report.execute('call', {}, undefined, baseContext, undefined)
 
-    expect(result.content[0]?.text).not.toBe('No test gate result found.')
+    expect(result.content[0]?.text).not.toBe('No test review result found.')
     expect(result.content[0]?.text).toContain('# OMP Testing Enhancer report')
     expect(result.details).toMatchObject({
       markdown: expect.stringContaining('# OMP Testing Enhancer report')

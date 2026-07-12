@@ -6,28 +6,33 @@ import { routeNaturalLanguageTask } from '../src/router.js';
 const routeSuites = {
   'writing.zh': [
     '请把这段中文论文摘要改得更平实。',
-    '帮我润色博士论文引言，去掉翻译腔。',
     '请起草一份中文项目报告。',
-    '请写测试报告，重点说明当前验证风险，不要生成测试代码。',
-    '请写一份测试覆盖率报告，说明当前风险。',
     '把这句话改成朴素直接的中文。',
     '请检查这段中文相关工作的逻辑表达。',
-    '帮我写一段中文审稿回复。',
     '请润色下面的中文段落。',
-    '把这段话改得少一点 AI 味。',
-    '请起草中文文档的开头。',
     '帮我改写中文摘要，让它更自然。',
     '请写一份中文实验报告。',
     '润色中文申请材料里的研究计划段落。',
-    '把下面文字改成博士论文风格但更平直。',
     '请检查中文论文段落是否有翻译腔。',
-    '帮我起草中文相关工作小节。',
     '请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。',
     '请写一份中文科研调研报告，分析最近论文里的方法路线。',
+    '请起草中文文档的开头。',
   ],
   'writing.en': [
     'Draft an English related work paragraph for a systems paper.',
+    'Draft a full English research proposal with background, methods, risks, and timeline.',
+    'Polish this sentence for clarity: The workflow blocks unexpectedly.',
     'Write a concise project report in English.',
+    'Draft an English letter explaining the release.',
+  ],
+  'writing.pending': [
+    '帮我润色博士论文引言，去掉翻译腔。',
+    '请写测试报告，重点说明当前验证风险，不要生成测试代码。',
+    '请写一份测试覆盖率报告，说明当前风险。',
+    '帮我写一段中文审稿回复。',
+    '把这段话改得少一点 AI 味。',
+    '把下面文字改成博士论文风格但更平直。',
+    '帮我起草中文相关工作小节。',
     'Revise this manuscript abstract for clarity.',
     'Polish the paragraph and check the wording.',
     'Edit the proposal summary for a technical audience.',
@@ -37,13 +42,10 @@ const routeSuites = {
     'Write a test coverage report for the release notes; do not run tests.',
     'Revise the paper introduction and improve style.',
     'Polish the report conclusion for readability.',
-    'Draft an English letter explaining the release.',
     'Edit this abstract for logic and flow.',
     'Improve the manuscript paragraph without changing claims.',
     'Write a short proposal summary.',
     'Draft release notes for the plugin changelog without publishing anything.',
-    'Draft a full English research proposal with background, methods, risks, and timeline.',
-    'Polish this sentence for clarity: The workflow blocks unexpectedly.',
   ],
   'bug-audit': [
     'Write tests for src/router.js around fallback behavior.',
@@ -202,17 +204,31 @@ test('router stress matrix covers at least 100 natural-language cases without wr
       mismatches.push(`${name}: expected ${intent}, got ${route.intent}: ${prompt}`);
       continue;
     }
-    if (intent === 'unknown' || intent === 'release') {
-      assert.deepEqual(route.requiredSkills, [], name);
-      assert.deepEqual(route.requiredTools, [], name);
-      assert.deepEqual(route.requiredSubagents, [], name);
-    } else if (intent === 'diagnosis') {
-      assert.deepEqual(route.requiredTools, [], name);
-      assert.deepEqual(route.requiredSubagents, [], name);
-    } else if (route.taskDescriptor?.complexity === 'broad') {
-      assert.equal(route.requiredSubagents.length > 0, true, name);
-    } else {
-      assert.deepEqual(route.requiredSubagents, [], name);
+    assert.equal(route.routePlan.mode, 'advisory', name);
+    assert.equal(route.routePlan.autoContinue, false, name);
+    for (const field of ['steps', 'skills', 'tools', 'roles', 'qualityChecks', 'riskNotes']) {
+      assert.ok(Array.isArray(route.routePlan[field]), `${name}: routePlan.${field}`);
+    }
+    assert.equal('gateRequirements' in route.routePlan, false, name);
+    assert.equal('hardBlock' in route.routePlan, false, name);
+    for (const role of route.routePlan.roles) {
+      assert.equal(typeof role.agent, 'string', `${name}: advisory role agent`);
+      assert.ok(Array.isArray(role.skills), `${name}: advisory role skills`);
+    }
+    if (intent === 'writing.pending') {
+      assert.equal(route.taskDescriptor.language, 'unknown', `${name}: pending source language`);
+      assert.equal(route.taskDescriptor.writingSourcePending, true, `${name}: source text must be requested`);
+      assert.ok(route.routePlan.qualityChecks.includes('detect-source-language'), `${name}: source-language guidance`);
+      assert.equal(
+        route.routePlan.skills.some((skill) => [
+          'plain-chinese-writing',
+          'zh-writing-polish',
+          'writing-markdown-helper',
+          'writing-checkers',
+        ].includes(skill)),
+        false,
+        `${name}: language-specific skill selected without source text`,
+      );
     }
   }
 

@@ -12,8 +12,8 @@ const baseContext: ExtensionToolContext = {
 const passed: GateResult = {
   gate: 'indirect-test',
   passed: true,
-  severity: 'blocker',
-  summary: 'Tests do not rely on blocked implementation details.',
+  severity: 'critical',
+  summary: 'Tests do not rely on private implementation details.',
   evidence: {}
 }
 
@@ -28,7 +28,7 @@ const warning: GateResult = {
 const failed: GateResult = {
   gate: 'indirect-test',
   passed: false,
-  severity: 'blocker',
+  severity: 'critical',
   summary: 'Test imports private or internal implementation details.',
   evidence: {},
   repairHint: 'Test through public behavior.'
@@ -37,7 +37,7 @@ const failed: GateResult = {
 const browserGate: GateResult = {
   gate: 'browser-interaction',
   passed: false,
-  severity: 'blocker',
+  severity: 'critical',
   summary: 'Click could not reach the submit button.',
   evidence: {
     framework: 'playwright',
@@ -52,7 +52,9 @@ describe('buildTestReport', () => {
     expect(buildTestReport({ gateResults: [passed, warning] }).markdown).toBe([
       '# OMP Testing Enhancer report',
       '',
-      'Result: passed',
+      'Mode: advisory-only',
+      'Review: ready',
+      'Review effect: advisory guidance only',
       '',
       '* indirect-test: passed',
       '* test-command: warning, No matching host-observed test command evidence.'
@@ -61,9 +63,11 @@ describe('buildTestReport', () => {
     expect(buildTestReport({ gateResults: [failed] }).markdown).toBe([
       '# OMP Testing Enhancer report',
       '',
-      'Result: failed',
+      'Mode: advisory-only',
+      'Review: findings',
+      'Review effect: advisory guidance only',
       '',
-      '* indirect-test: failed, Test imports private or internal implementation details.',
+      '* indirect-test: critical finding, Test imports private or internal implementation details.',
       '  * Repair: Test through public behavior.'
     ].join('\n'))
   })
@@ -72,9 +76,11 @@ describe('buildTestReport', () => {
     expect(buildTestReport({ gateResults: [browserGate] }).markdown).toBe([
       '# OMP Testing Enhancer report',
       '',
-      'Result: failed',
+      'Mode: advisory-only',
+      'Review: findings',
+      'Review effect: advisory guidance only',
       '',
-      '* browser-interaction: failed, Click could not reach the submit button.',
+      '* browser-interaction: critical finding, Click could not reach the submit button.',
       '  * Repair: Check the overlay that blocks the submit button.'
     ].join('\n'))
   })
@@ -84,7 +90,7 @@ describe('buildTestReport', () => {
       gateResults: [{
         gate: 'browser-visual',
         passed: false,
-        severity: 'blocker',
+        severity: 'critical',
         summary: 'Login form visual diff exceeded threshold.',
         evidence: {
           category: 'visual-diff',
@@ -96,9 +102,11 @@ describe('buildTestReport', () => {
     }).markdown).toBe([
       '# OMP Testing Enhancer report',
       '',
-      'Result: failed',
+      'Mode: advisory-only',
+      'Review: findings',
+      'Review effect: advisory guidance only',
       '',
-      '* browser-visual: failed, Login form visual diff exceeded threshold.',
+      '* browser-visual: critical finding, Login form visual diff exceeded threshold.',
       '  * Repair: Review the diff image before updating the baseline.',
       '  * Evidence: visual-diff',
       '  * Diff ratio: 0.02',
@@ -113,7 +121,7 @@ describe('buildTestReport', () => {
 
     const result = await report.execute('call', {}, undefined, undefined, baseContext)
 
-    expect(result.content[0]?.text).toBe('No test gate result found.')
+    expect(result.content[0]?.text).toBe('No test review result found.')
     expect(result.details).toEqual({ found: false })
   })
 })

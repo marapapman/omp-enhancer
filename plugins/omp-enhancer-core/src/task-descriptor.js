@@ -45,7 +45,6 @@ const RISK_FLAG_ORDER = [
   'network-read',
   'irreversible-file-operation',
   'credential-dependent',
-  'user-approval-required',
   'ambiguous',
 ];
 
@@ -59,6 +58,10 @@ const DEFAULT_CONSTRAINTS = Object.freeze({
 
 export function describeNaturalLanguageTask(input = {}) {
   const prompt = String(input.prompt ?? input.text ?? '');
+  const providedWritingSource = normalizeWritingSourceInput(input.sourceText);
+  const inlineWritingSource = extractInlineWritingSource(prompt);
+  const hasProvidedWritingSource = hasWritingSourceInput(providedWritingSource);
+  const writingSourceText = hasProvidedWritingSource ? providedWritingSource : inlineWritingSource;
   const directivePrompt = writingDirectivePromptForSignals(prompt);
   const operationalPrompt = writingOperationalPromptForSignals(directivePrompt);
   const text = operationalPrompt.toLowerCase();
@@ -164,9 +167,14 @@ export function describeNaturalLanguageTask(input = {}) {
     scopePrompt: directivePrompt,
     rawPrompt: directivePrompt,
   });
-  const language = signals.writingWork
-    ? resolveWritingTargetLanguage(directivePrompt, promptLanguage)
-    : promptLanguage;
+  const writingLanguage = signals.writingWork
+    ? resolveWritingLanguage({
+      prompt: directivePrompt,
+      sourceText: writingSourceText,
+      sourceKind: hasProvidedWritingSource ? 'provided-source' : inlineWritingSource ? 'inline-source' : 'pending-source',
+    })
+    : null;
+  const language = writingLanguage?.language ?? promptLanguage;
   const operation = operationFor(signals);
   const domains = domainsFor(signals, operation);
   const constraints = constraintsFor(signals, operation, domains);
@@ -197,6 +205,8 @@ export function describeNaturalLanguageTask(input = {}) {
     risk,
     complexity,
     language,
+    writingLanguageSource: writingLanguage?.source ?? null,
+    writingSourcePending: signals.writingWork && !['zh', 'en'].includes(language),
     provenance: {
       ruleConfidence: requiresPolicyRoute ? 0.94 : 0.72,
       reasons: signals.reasons,
@@ -228,6 +238,7 @@ export function descriptorFromLegacyIntent(intent = 'unknown', options = {}) {
     'agentic.simple': {
       operation: 'answer', domains: ['general'], phases: [{ kind: 'answer', domain: 'general' }],
     },
+    'writing.pending': writingLegacyTemplate('unknown'),
     'writing.zh': writingLegacyTemplate('zh'),
     'writing.en': writingLegacyTemplate('en'),
     'writing.latex': writingLegacyTemplate(language, 'document'),
@@ -341,8 +352,10 @@ export function normalizeTaskDescriptor(value = {}) {
     requestedCapabilities.filter((capability) => capabilityCeiling.has(capability)),
     CAPABILITY_ORDER,
   );
-  const phases = uniquePhases(value.phases ?? [])
-    .filter((phase) => phaseAllowedByConstraints(phase, constraints));
+  // Constraints describe the user's stated scope. They are routing signals,
+  // not an execution authority layer, so they must not erase requested work
+  // from the advisory phase plan.
+  const phases = uniquePhases(value.phases ?? []);
   const risk = {
     level: ['low', 'medium', 'high', 'critical'].includes(value.risk?.level) ? value.risk.level : 'low',
     flags: orderedUnique(value.risk?.flags ?? [], RISK_FLAG_ORDER),
@@ -368,6 +381,10 @@ export function normalizeTaskDescriptor(value = {}) {
     risk,
     complexity,
     language: ['zh', 'en', 'mixed', 'unknown'].includes(value.language) ? value.language : 'unknown',
+    writingLanguageSource: typeof value.writingLanguageSource === 'string'
+      ? value.writingLanguageSource
+      : null,
+    writingSourcePending: value.writingSourcePending === true,
     provenance: {
       ruleConfidence: clamp(value.provenance?.ruleConfidence ?? 1),
       reasons: uniqueStrings(value.provenance?.reasons ?? []),
@@ -1713,7 +1730,7 @@ function riskFor({ operation, domains, constraints, signals = {} }) {
   if (constraints.workspaceWrite === 'required') flags.push('workspace-write');
   if (domains.includes('facts')) flags.push('factual-claims');
   if (domains.includes('facts') && constraints.networkAccess === 'required') flags.push('network-read');
-  if (executesIrreversibleAction) flags.push('irreversible-file-operation', 'user-approval-required');
+  if (executesIrreversibleAction) flags.push('irreversible-file-operation');
   const ordered = orderedUnique(flags, RISK_FLAG_ORDER);
   const level = executesIrreversibleAction
     ? 'critical'
@@ -1761,6 +1778,7 @@ function canonicalLegacyIntent(intent) {
   const aliases = {
     'agentic.simple': 'agentic.simple',
     unknown: 'unknown',
+    'writing.pending': 'writing.pending',
     'writing.zh': 'writing.zh',
     'writing.en': 'writing.en',
     'writing.latex': 'writing.latex',
@@ -2087,7 +2105,8 @@ export function writingDirectivePromptForSignals(prompt = '') {
   if (isVisualEditingDirective(normalized)) return normalized;
   const withoutRelationalPayload = maskRelationalWritingPayload(normalized);
   const withoutColonPayload = maskColonWritingPayload(withoutRelationalPayload);
-  return maskEmbeddedWritingAuthority(withoutColonPayload);
+  const withoutMultilinePayload = maskLabeledMultilineWritingPayload(withoutColonPayload);
+  return maskEmbeddedWritingAuthority(withoutMultilinePayload);
 }
 
 function activateExplicitQuotedInstruction(value = '') {
@@ -2296,6 +2315,28 @@ function maskColonWritingPayload(source = '') {
   return value;
 }
 
+function maskLabeledMultilineWritingPayload(source = '') {
+  const match = labeledMultilineWritingPayload(source);
+  if (!match) return String(source);
+  return `${String(source).slice(0, match.start)} __payload__${String(source).slice(match.end)}`;
+}
+
+function labeledMultilineWritingPayload(source = '') {
+  const value = String(source);
+  const newline = value.search(/\r?\n/u);
+  if (newline < 0) return null;
+  const directive = value.slice(0, newline).trim();
+  if (!isWritingTransformationDirective(directive)) return null;
+  const labeled = /\b(?:following|below|this)\s+(?:text|passage|paragraph|abstract|content|copy|prose)\b|\b(?:text|passage|paragraph|abstract|content|copy|prose)\s+(?:below|that\s+follows)\b/i.test(directive)
+    || /(?:以下|下面|下方|后面)(?:这|的)?(?:段|些|一段)?\s*(?:文字|文本|内容|段落|摘要|正文|文案)|(?:这|该)(?:段|份)?(?:文字|文本|内容|段落|摘要|正文|文案)/u.test(directive);
+  if (!labeled) return null;
+  const tailWhitespace = value.slice(newline).match(/^\s*/u)?.[0]?.length ?? 0;
+  const start = newline + tailWhitespace;
+  const end = independentWritingContinuationBoundary(value, start);
+  const payload = value.slice(start, end).trim();
+  return payload ? { start, end, payload } : null;
+}
+
 function isPathOrUrlColon(value, index) {
   const before = value[index - 1] ?? '';
   const after = value[index + 1] ?? '';
@@ -2332,7 +2373,8 @@ function isWritingTransformationDirective(value = '') {
     || /(?:修改|编辑|更新|改善|优化)[^。！？.!?\n]{0,64}(?:readme|(?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.(?:md|mdx|rst|txt|tex|docx?|pdf))/u.test(text)
     || /(?:把|请把)\s*(?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.(?:md|mdx|rst|txt|tex|docx?|pdf)[^。！？.!?\n]{0,32}(?:润色|改写|修改|改为|改成|校对|修订|编辑|改善|优化)/u.test(text)
     || /(?:修改|编辑|写|撰写|起草|改善|优化).{0,48}(?:句子|段落|文字|文案|措辞|标题|摘要|邮件|说明|正文)/.test(text)
-    || /\b(?:edit|revise|write|draft|improve)\b.{0,48}\b(?:sentence|paragraph|text|wording|copy|title|abstract|email|prose)\b/.test(text);
+    || /\b(?:edit|revise|write|draft|improve)\b.{0,48}\b(?:sentence|paragraph|text|wording|copy|title|abstract|section|email|prose)\b/.test(text)
+    || /\b(?:edit|revise|write|draft|improve)\b.{0,48}(?:句子|段落|文字|文案|措辞|标题|摘要|章节|邮件|说明|正文)/u.test(text);
 }
 
 function languageFor(prompt) {
@@ -2342,7 +2384,76 @@ function languageFor(prompt) {
   return 'unknown';
 }
 
-export function resolveWritingTargetLanguage(prompt, fallback = 'unknown') {
+export function extractInlineWritingSource(prompt = '') {
+  const source = String(prompt);
+  if (!isWritingTransformationDirective(source)) return '';
+
+  const quoted = [];
+  const collectQuoted = (pattern) => {
+    for (const match of source.matchAll(pattern)) {
+      const value = String(match[1] ?? '').trim();
+      if (value && !isStructuredWritingTargetReference(value)) quoted.push(value);
+    }
+  };
+  collectQuoted(/“([^”\n]{1,4000})”/gu);
+  collectQuoted(/‘([^’\n]{1,4000})’/gu);
+  collectQuoted(/"((?:\\.|[^"\\\n]){1,4000})"/gu);
+  collectQuoted(/`([^`\n]{1,4000})`/gu);
+  collectQuoted(/'((?:\\.|[^'\\\n]){1,4000})'/gu);
+  const candidates = [...quoted];
+
+  for (let index = 0; index < source.length; index += 1) {
+    if (source[index] !== ':' && source[index] !== '：') continue;
+    if (source[index] === ':' && isPathOrUrlColon(source, index)) continue;
+    const directive = source.slice(0, index);
+    if (!isWritingTransformationDirective(directive)) continue;
+    const end = independentWritingContinuationBoundary(source, index + 1);
+    const payload = source.slice(index + 1, end).trim();
+    if (payload && !isStructuredWritingTargetReference(payload)) candidates.push(payload);
+  }
+  const multiline = labeledMultilineWritingPayload(source);
+  if (multiline?.payload) candidates.push(multiline.payload);
+  return candidates.sort((left, right) => writingSourceCandidateScore(right) - writingSourceCandidateScore(left))[0] ?? '';
+}
+
+export function detectWritingSourceLanguage(sourceText = '') {
+  if (Array.isArray(sourceText)) {
+    const languages = new Set(sourceText
+      .map((value) => detectWritingSourceLanguage(String(value ?? '')))
+      .filter((language) => language !== 'unknown'));
+    if (languages.has('mixed') || languages.has('zh') && languages.has('en')) return 'mixed';
+    return languages.values().next().value ?? 'unknown';
+  }
+  const rawText = String(sourceText);
+  const outerProseFence = rawText.trim().match(/^(```|~~~)(?:text|plaintext|plain|markdown|md|latex|tex|rst)?[^\S\r\n]*\r?\n([\s\S]*?)\r?\n\1$/iu);
+  const text = String(outerProseFence?.[2] ?? rawText)
+    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/gu, ' ')
+    .replace(/\\(?:begin|end)\{[^}]+\}|\\[A-Za-z@]+\*?(?:\[[^\]]*\])?/gu, ' ')
+    .replace(/\$\$[\s\S]*?\$\$|\$[^$\n]*\$/gu, ' ')
+    .replace(/https?:\/\/\S+|(?:\/?[\p{L}\p{N}_.-]+\/)+[\p{L}\p{N}_.-]+/giu, ' ')
+    .replace(/\[[^\]]*\]\([^)]*\)|\[@[^\]]+\]/gu, ' ');
+  const hanCount = text.match(/\p{Script=Han}/gu)?.length ?? 0;
+  const latinCount = text.match(/[A-Za-z]/g)?.length ?? 0;
+  if (!hanCount && !latinCount) return 'unknown';
+  if (!hanCount) return latinCount >= 2 ? 'en' : 'unknown';
+  if (!latinCount) return hanCount >= 1 ? 'zh' : 'unknown';
+
+  // Han characters carry more lexical information per character than Latin
+  // letters. Weighting them avoids classifying ordinary Chinese prose with a
+  // few English identifiers as English.
+  const weightedHan = hanCount * 2.5;
+  const total = weightedHan + latinCount;
+  const hanRatio = weightedHan / total;
+  if (hanCount >= 8 && latinCount >= 24 && hanRatio >= 0.4 && hanRatio <= 0.6) return 'mixed';
+  return hanRatio > 0.45 ? 'zh' : 'en';
+}
+
+export function resolveWritingLanguage({
+  prompt = '',
+  sourceText = '',
+  sourceKind = 'provided-source',
+  fallback = 'unknown',
+} = {}) {
   const clauses = positiveWritingLanguageClauses(prompt);
   const explicitEnglishTranslation = clauses.some((text) => (
     /(?:翻译|译)(?:成|为)\s*(?:英文|英语|english)/.test(text)
@@ -2353,22 +2464,51 @@ export function resolveWritingTargetLanguage(prompt, fallback = 'unknown') {
     || /\btranslate\b[^。！？.!?\n]{0,96}\b(?:into|to)\s+chinese\b/.test(text)
   ));
   if (explicitEnglishTranslation !== explicitChineseTranslation) {
-    return explicitEnglishTranslation ? 'en' : 'zh';
+    return {
+      language: explicitEnglishTranslation ? 'en' : 'zh',
+      source: 'translation-target',
+    };
   }
+  const explicitEnglishOutput = clauses.some((text) => (
+    /(?:改写|修改|转换|整理|写|撰写|起草)(?:成|为)\s*(?:英文|英语|english)/.test(text)
+    || /(?:用|以)\s*(?:英文|英语|english).{0,24}(?:改写|修改|写|撰写|起草)/.test(text)
+    || /\b(?:rewrite|revise|edit|convert|render|write|draft)\b[^。！？.!?\n]{0,96}\b(?:into|to|as|in)\s+english\b/.test(text)
+  ));
+  const explicitChineseOutput = clauses.some((text) => (
+    /(?:改写|修改|转换|整理|写|撰写|起草)(?:成|为)\s*(?:中文|汉语|chinese)/.test(text)
+    || /(?:用|以)\s*(?:中文|汉语|chinese).{0,24}(?:改写|修改|写|撰写|起草)/.test(text)
+    || /\b(?:rewrite|revise|edit|convert|render|write|draft)\b[^。！？.!?\n]{0,96}\b(?:into|to|as|in)\s+chinese\b/.test(text)
+  ));
+  if (explicitEnglishOutput !== explicitChineseOutput) {
+    return {
+      language: explicitEnglishOutput ? 'en' : 'zh',
+      source: 'explicit-output',
+    };
+  }
+  const sourceLanguage = detectWritingSourceLanguage(sourceText);
+  if (sourceLanguage !== 'unknown') return { language: sourceLanguage, source: sourceKind };
+
   const englishTarget = clauses.some((text) => (
     /(?:翻译成|改成|写成|整理成).{0,12}(?:英文|英语|english)/.test(text)
     || /(?:润色|改写|修订|修改).{0,48}(?:英文|英语|english)\s*(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|copy|正文|prose|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)/.test(text)
     || /(?:英文|英语|english)\s*(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|copy|正文|prose|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)/.test(text)
+    || /(?:英文|英语|english).{0,32}(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|信件|letter|文档|document|文章|article|简历|resume|bullet|文案|copy|正文|prose|report|paper|manuscript|section|proposal|commit message|changelog|release notes|bug report)/.test(text)
     || /(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|copy|正文|prose|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)\s+(?:in|into|as)\s+(?:英文|英语|english)/.test(text)
   ));
-  if (englishTarget) return 'en';
+  if (englishTarget) return { language: 'en', source: 'explicit-output' };
   const chineseTarget = clauses.some((text) => (
     /(?:翻译成|改成|写成|整理成).{0,12}(?:中文|汉语|chinese)/.test(text)
     || /(?:润色|改写|修订|修改).{0,48}(?:中文|汉语|chinese)\s*(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|正文|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)/.test(text)
     || /(?:中文|汉语|chinese)\s*(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|正文|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)/.test(text)
+    || /(?:中文|汉语|chinese).{0,32}(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|信件|letter|文档|document|文章|article|简历|resume|bullet|文案|正文|报告|论文|稿件|章节|report|paper|manuscript|section|commit message|changelog|release notes|bug report)/.test(text)
     || /(?:句子|sentence|标题|title|段落|paragraph|摘要|abstract|邮件|email|简历|resume|bullet|文案|正文|commit message|conventional commit|changelog|release notes|bug report|linkedin post|post)\s+(?:in|into|as)\s+(?:中文|汉语|chinese)/.test(text)
   ));
-  return chineseTarget ? 'zh' : fallback;
+  if (chineseTarget) return { language: 'zh', source: 'explicit-output' };
+  return { language: fallback, source: fallback === 'unknown' ? 'pending-source' : 'fallback' };
+}
+
+export function resolveWritingTargetLanguage(prompt, fallback = 'unknown', options = {}) {
+  return resolveWritingLanguage({ prompt, fallback, ...options }).language;
 }
 
 function positiveWritingLanguageClauses(prompt = '') {
@@ -2376,6 +2516,23 @@ function positiveWritingLanguageClauses(prompt = '') {
     .map((value) => value.trim())
     .filter(Boolean)
     .filter((value) => !/(?:不要|别|禁止|不得|无需|不用|不\s*(?:改|修改|润色|翻译|写)|do not|don't|never|without)/i.test(value));
+}
+
+function normalizeWritingSourceInput(value) {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value.filter((item) => typeof item === 'string' && item.trim());
+}
+
+function hasWritingSourceInput(value) {
+  return typeof value === 'string' ? Boolean(value.trim()) : Array.isArray(value) && value.length > 0;
+}
+
+function writingSourceCandidateScore(value = '') {
+  const text = String(value).replace(/\\[A-Za-z@]+\*?(?:\[[^\]]*\])?|[`*_#{}\[\]()]/gu, ' ');
+  const lexical = text.match(/[A-Za-z\p{Script=Han}]/gu)?.length ?? 0;
+  const words = text.trim().split(/\s+/u).filter(Boolean).length;
+  return lexical * 10 + words;
 }
 
 function clamp(value) {

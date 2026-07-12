@@ -344,7 +344,7 @@
     },
     {
       "name": "omp-testing-enhancer",
-      "description": "Help OMP agents write and check tests with target analysis, public API context, browser evidence, coverage and mutation analyzers, quality gates, and reports.",
+      "description": "Help OMP agents write and check tests with target analysis, public API context, browser evidence, coverage and mutation analyzers, advisory review, and reports.",
       "version": "0.1.12",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
@@ -353,7 +353,7 @@
     },
     {
       "name": "omp-fact-checker",
-      "description": "Fact-checking workflow with claim planning, evidence collection, cross-agent validation, review, and low-noise gates.",
+      "description": "Fact-checking workflow with claim planning, evidence collection, cross-agent validation, reports, and advisory completeness review.",
       "version": "0.1.3",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-fact-checker",
@@ -368,7 +368,7 @@
     },
     {
       "name": "omp-enhancer-core",
-      "description": "Unified OMP enhancer runtime router for coding, writing, testing, and config tasks.",
+      "description": "Advisory OMP runtime router for coding, writing, testing, and config workflows with content-driven writing-language selection.",
       "version": "0.1.91",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",

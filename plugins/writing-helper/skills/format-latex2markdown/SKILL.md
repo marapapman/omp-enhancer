@@ -22,7 +22,7 @@ Run pandoc, writing output next to the source:
 pandoc -f latex -t markdown "input.tex" -o "input.md"
 ```
 
-If pandoc is not installed, tell the user to install it (`apt install pandoc` or `brew install pandoc`) and stop.
+If pandoc is not installed, report the limitation and either use a safe available conversion method or provide the exact install command; do not turn the missing optional tool into a plugin-level hard stop.
 
 ### Step 2 — Check for Three Common Problems
 

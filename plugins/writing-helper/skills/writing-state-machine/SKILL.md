@@ -1,11 +1,13 @@
 ---
 name: writing-state-machine
-description: "Strict-mode writing — isolated context per paragraph, each independently verified before proceeding"
+description: "Strict writing evidence matrix, with paragraph context isolation only when the user explicitly requests it"
 ---
 
 # Writing State Machine Skill
 
-Strict state-machine writing with full context isolation between paragraphs. Each paragraph is produced in a **fresh, isolated session**: Read source → Write → Self-check → Save → Reset. No context carries to the next paragraph. Best for hallucination-sensitive content where every citation, number, and claim must be independently verifiable.
+Use a Read → Write → Self-check → Save matrix for hallucination-sensitive
+content. Fresh isolated sessions are an optional mode only when the user
+explicitly requests paragraph context isolation.
 
 ## When to Use
 
@@ -15,7 +17,7 @@ Strict state-machine writing with full context isolation between paragraphs. Eac
 
 ## Core Workflow: One Paragraph Per Isolated Cycle
 
-For EACH paragraph, process one paragraph independently, then ask the user to continue.
+When the user explicitly requests strict paragraph isolation, process one paragraph independently. Otherwise use this matrix as quality guidance without forcing a new session per paragraph.
 
 ### 1. Read — Only What You Need
 
@@ -40,7 +42,7 @@ Constraints:
 - **Citations** must be exact — copy from source, do not paraphrase reference tags
 - **Metadata** — record source provenance in `.pi/research/review_log.md`, not as HTML comments in the document
 
-### 3. Self-Check — Mandatory Verification Matrix
+### 3. Self-Check — Recommended Verification Matrix
 
 | Check | Pass/Fail |
 |-------|-----------|
@@ -50,7 +52,7 @@ Constraints:
 | Source recorded in `.pi/research/review_log.md` with real path | — |
 | No claims beyond what source data supports | — |
 
-If ANY check fails, **rewrite the paragraph**. Do not proceed.
+Fix failed checks that can be resolved from available evidence. Report unresolved checks as limitations and continue only within the user's requested scope.
 
 ### 4. Save — Insert Into Document
 
@@ -58,13 +60,15 @@ Use a precise edit to insert the new paragraph under the correct section heading
 
 ### 5. Reset — Destroy All Context
 
-**Do not proceed to the next paragraph in this session.** Output:
+In explicitly requested strict mode, offer this handoff before the next paragraph:
 > ✅ Paragraph inserted. To continue, ask the user to say "Continue writing from [section name]."
 
 ## Anti-Patterns
 
-- **Never** write two paragraphs in one session
-- **Never** carry a citation or source reference from a previous paragraph
-- **Never** guess a citation tag — if you cannot find it in the source, omit the claim
-- **Never** skip the self-check matrix
-- **Never** reuse context from a prior paragraph's reads
+In explicitly requested strict-isolation mode:
+
+- Process one paragraph per isolated cycle.
+- Do not treat a previous paragraph's citation or source as evidence for the current one.
+- Omit a claim whose citation tag cannot be verified from the current source.
+- Use the self-check matrix once for the current paragraph.
+- Start the next cycle with only the context needed for that paragraph.

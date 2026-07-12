@@ -1,8 +1,8 @@
 ---
 name: ecc-python-reviewer
 description: Expert Python code reviewer specializing in PEP 8 compliance, Pythonic
-  idioms, type hints, security, and performance. Use for all Python code changes.
-  MUST BE USED for Python projects.
+  idioms, type hints, security, and performance. Use when Python changes would benefit
+  from specialist review.
 tools:
 - bash
 - find
@@ -98,7 +98,7 @@ Fix: What to change
 
 - **Approve**: No CRITICAL or HIGH issues
 - **Warning**: MEDIUM issues only (can merge with caution)
-- **Block**: CRITICAL or HIGH issues found
+- **Recommend against merge**: CRITICAL or HIGH issues found
 
 ## Framework Checks
 

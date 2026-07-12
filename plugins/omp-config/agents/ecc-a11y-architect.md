@@ -1,7 +1,7 @@
 ---
 name: ecc-a11y-architect
 description: Accessibility Architect specializing in WCAG 2.2 compliance for Web and
-  Native platforms. Use PROACTIVELY when designing UI components, establishing design
+  Native platforms. Use when designing UI components, establishing design
   systems, or auditing code for inclusive user experiences.
 tools:
 - ast_grep

@@ -37,8 +37,11 @@ export interface ContextOutput {
   apiPlan?: ApiPlan
 }
 
-export interface GateOutput {
+export interface ReviewOutput {
   passed: boolean
+  status: 'ready' | 'findings'
+  advisory: true
+  criticalFindings: GateResult['gate'][]
   results: GateResult[]
 }
 
@@ -48,9 +51,9 @@ export interface ReportOutput {
 
 export interface TestingToolCallbacks {
   onAnalyze?(output: AnalyzeOutput, ctx: ExtensionToolContext): Promise<void> | void
-  onGate?(output: GateOutput, ctx: ExtensionToolContext): Promise<void> | void
+  onReview?(output: ReviewOutput, ctx: ExtensionToolContext): Promise<void> | void
   onReport?(output: ReportOutput, ctx: ExtensionToolContext): Promise<void> | void
-  getRecentGateResults?(): GateResult[]
+  getRecentReviewResults?(): GateResult[]
   getObservedTestCommandEvidence?(): ObservedTestCommandEvidence | undefined
   runBrowserCheck?(params: BrowserCheckParams, ctx: ExtensionToolContext): Promise<BrowserEvidence>
 }
@@ -73,23 +76,23 @@ interface AnalyzeParams {
 interface ContextParams {
   target: ChangedTarget
 }
-interface GateParams {
+interface ReviewParams {
   targets: ChangedTarget[]
   candidate: CandidateTest
   testCommand?: string
   browserEvidence?: BrowserEvidence
 }
 
-interface GateSeverityConfig {
+interface ReviewSeverityConfig {
   indirectTest: GateResult['severity']
   productionEdits: GateResult['severity']
   testCommand: GateResult['severity']
   browserEvidence: GateResult['severity']
 }
 
-interface RunTestGateOptions {
-  gateSeverities?: Partial<GateSeverityConfig>
-  commandSkippedDueToStaticBlocker?: boolean
+interface RunTestReviewOptions {
+  reviewSeverities?: Partial<ReviewSeverityConfig>
+  commandNotEvaluatedDueToStaticFindings?: boolean
 }
 
 interface CoverageParams {
@@ -212,8 +215,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
     },
     {
       name: 'omp_test_gate',
-      label: 'Run test gate',
-      description: '运行测试质量门禁，包含间接测试、测试文件范围和测试命令门禁',
+      label: 'Review test evidence',
+      description: '兼容名称：运行建议型测试审查，报告间接测试、测试文件范围、浏览器证据和测试命令 findings；不会执行命令或阻止工具与会话',
       parameters: z.object({
         targets: z.array(targetSchema),
         candidate: candidateSchema,
@@ -221,9 +224,9 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
         browserEvidence: z.optional(z.unknown())
       }),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-        const output = await executeGate(params as GateParams, ctx, callbacks.getObservedTestCommandEvidence?.())
-        await callbacks.onGate?.(output, ctx)
-        return textResult(output.passed ? 'Test gate passed.' : 'Test gate failed.', output)
+        const output = await executeReview(params as ReviewParams, ctx, callbacks.getObservedTestCommandEvidence?.())
+        await callbacks.onReview?.(output, ctx)
+        return textResult(output.passed ? 'Test review is ready.' : 'Test review found critical findings.', output)
       }
     },
     {
@@ -237,10 +240,10 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
         const reportParams = params as ReportParams
         const explicitResults = Array.isArray(reportParams.gateResults) ? reportParams.gateResults : undefined
-        const stateResults = explicitResults ?? callbacks.getRecentGateResults?.()
+        const stateResults = explicitResults ?? callbacks.getRecentReviewResults?.()
 
         if (!stateResults || stateResults.length === 0) {
-          return textResult('No test gate result found.', { found: false })
+          return textResult('No test review result found.', { found: false })
         }
 
         const output = buildTestReport({ gateResults: stateResults })
@@ -271,7 +274,7 @@ async function runDefaultBrowserCheck(params: BrowserCheckParams, ctx: Extension
         category: 'setup',
         summary: 'Playwright is not installed.',
         evidence: { message: error instanceof Error ? error.message : String(error) },
-        repairHint: 'Install Playwright before running omp_test_browser_check, or skip browser interaction checks when no browser plan exists.'
+        repairHint: 'Report missing Playwright as a coverage limitation; install it only when dependency installation is already in scope.'
       }]
     }
   }
@@ -306,10 +309,10 @@ export function analyzeMutationReport(input: unknown): MutationAnalysis {
   return { status: 'available', survivedMutants: collectMutationSurvivors(params.mutationReport), ...(params.reportPath ? { reportPath: params.reportPath } : {}) }
 }
 
-export function runTestGate(input: unknown, testCommandResult?: TestCommandResult, options: RunTestGateOptions = {}): GateOutput {
+export function runTestReview(input: unknown, testCommandResult?: TestCommandResult, options: RunTestReviewOptions = {}): ReviewOutput {
   const candidate = readCandidate(input)
   const targets = readTargets(input)
-  const severities = normalizeGateSeverities(options.gateSeverities)
+  const severities = normalizeReviewSeverities(options.reviewSeverities)
   const browserTargets = targets.filter(requiresBrowserEvidence)
   const results = [
     ...evaluateTestFileScopeGate({ candidate, severity: severities.productionEdits }),
@@ -320,21 +323,25 @@ export function runTestGate(input: unknown, testCommandResult?: TestCommandResul
       targetIds: browserTargets.map(target => target.id)
     }),
     ...evaluateTestCommandGate(testCommandResult, {
-      severity: options.gateSeverities?.testCommand ?? (testCommandResult ? 'blocker' : 'warning'),
-      skippedDueToStaticBlocker: Boolean(options.commandSkippedDueToStaticBlocker)
+      severity: options.reviewSeverities?.testCommand ?? (testCommandResult ? 'critical' : 'warning'),
+      notEvaluatedDueToStaticFindings: Boolean(options.commandNotEvaluatedDueToStaticFindings)
     })
   ]
 
-  return {
-    passed: results.every(result => result.passed || result.severity === 'warning'),
-    results
-  }
+  return buildAdvisoryGateOutput(results)
 }
 
 export function buildTestReport(input: unknown): ReportOutput {
   const gateResults = readGateResults(input)
-  const failedResults = gateResults.filter(result => !result.passed && result.severity === 'blocker')
-  const lines: string[] = ['# OMP Testing Enhancer report', '', `Result: ${failedResults.length === 0 ? 'passed' : 'failed'}`, '']
+  const criticalFindings = gateResults.filter(result => !result.passed && result.severity === 'critical')
+  const lines: string[] = [
+    '# OMP Testing Enhancer report',
+    '',
+    'Mode: advisory-only',
+    `Review: ${criticalFindings.length === 0 ? 'ready' : 'findings'}`,
+    'Review effect: advisory guidance only',
+    ''
+  ]
 
   for (const result of gateResults) {
     if (result.severity === 'warning') {
@@ -348,7 +355,7 @@ export function buildTestReport(input: unknown): ReportOutput {
       continue
     }
 
-    lines.push(`* ${result.gate}: failed, ${result.summary}`)
+    lines.push(`* ${result.gate}: critical finding, ${result.summary}`)
     if (result.repairHint) lines.push(`  * Repair: ${result.repairHint}`)
     lines.push(...evidenceLines(result.evidence))
   }
@@ -435,10 +442,10 @@ async function readJsonReport(cwd: string, reportPath: string | undefined): Prom
   }
 }
 
-async function executeGate(params: GateParams, ctx: ExtensionToolContext, observedTestCommand?: ObservedTestCommandEvidence): Promise<GateOutput> {
+async function executeReview(params: ReviewParams, ctx: ExtensionToolContext, observedTestCommand?: ObservedTestCommandEvidence): Promise<ReviewOutput> {
   const config = await readTestingEnhancerConfig(contextCwd(ctx))
-  const severities = gateSeveritiesFromConfig(config)
-  const candidate = await readCandidateForGate(params, ctx)
+  const severities = reviewSeveritiesFromConfig(config)
+  const candidate = await readCandidateForReview(params, ctx)
   const targets = readTargets(params)
   const browserTargets = targets.filter(requiresBrowserEvidence)
   const staticResults = [
@@ -450,9 +457,9 @@ async function executeGate(params: GateParams, ctx: ExtensionToolContext, observ
     severity: severities.browserEvidence,
     targetIds: browserTargets.map(target => target.id)
   })
-  const hasStaticBlocker = staticResults.some(result => !result.passed && result.severity === 'blocker')
+  const hasStaticCriticalFinding = staticResults.some(result => !result.passed && result.severity === 'critical')
   const expectedCommand = params.testCommand ?? config?.test.command
-  const commandResult = !hasStaticBlocker
+  const commandResult = !hasStaticCriticalFinding
     ? observedTestCommandResult(observedTestCommand, expectedCommand)
     : undefined
   const commandSeverity = expectedCommand || observedTestCommand || config ? severities.testCommand : 'warning'
@@ -461,17 +468,27 @@ async function executeGate(params: GateParams, ctx: ExtensionToolContext, observ
     ...browserResults,
     ...evaluateTestCommandGate(commandResult, {
       severity: commandSeverity,
-      skippedDueToStaticBlocker: Boolean((expectedCommand || observedTestCommand) && hasStaticBlocker)
+      notEvaluatedDueToStaticFindings: Boolean((expectedCommand || observedTestCommand) && hasStaticCriticalFinding)
     })
   ]
 
+  return buildAdvisoryGateOutput(results)
+}
+
+function buildAdvisoryGateOutput(results: GateResult[]): ReviewOutput {
+  const criticalFindings = [...new Set(results
+    .filter(result => !result.passed && result.severity === 'critical')
+    .map(result => result.gate))]
   return {
-    passed: results.every(result => result.passed || result.severity === 'warning'),
+    passed: criticalFindings.length === 0,
+    status: criticalFindings.length === 0 ? 'ready' : 'findings',
+    advisory: true,
+    criticalFindings,
     results
   }
 }
 
-async function readCandidateForGate(params: GateParams, ctx: ExtensionToolContext): Promise<CandidateTest> {
+async function readCandidateForReview(params: ReviewParams, ctx: ExtensionToolContext): Promise<CandidateTest> {
   const candidate = readCandidate(params)
   if (!ctx.exec) return candidate
 
@@ -507,30 +524,26 @@ async function readCandidateForGate(params: GateParams, ctx: ExtensionToolContex
   }
 }
 
-function gateSeveritiesFromConfig(config: TestingEnhancerConfig | undefined): GateSeverityConfig {
+function reviewSeveritiesFromConfig(config: TestingEnhancerConfig | undefined): ReviewSeverityConfig {
   if (!config) {
-    return normalizeGateSeverities({ testCommand: 'warning' })
+    return normalizeReviewSeverities({ testCommand: 'warning' })
   }
 
-  return normalizeGateSeverities({
-    indirectTest: toGateSeverity(config.gates.indirectTest),
-    productionEdits: toGateSeverity(config.gates.productionEdits),
-    testCommand: toGateSeverity(config.gates.testCommand),
-    browserEvidence: toGateSeverity(config.gates.browserEvidence)
+  return normalizeReviewSeverities({
+    indirectTest: config.review.indirectTest,
+    productionEdits: config.review.productionEdits,
+    testCommand: config.review.testCommand,
+    browserEvidence: config.review.browserEvidence
   })
 }
 
-function normalizeGateSeverities(config: Partial<GateSeverityConfig> = {}): GateSeverityConfig {
+function normalizeReviewSeverities(config: Partial<ReviewSeverityConfig> = {}): ReviewSeverityConfig {
   return {
-    indirectTest: config.indirectTest ?? 'blocker',
-    productionEdits: config.productionEdits ?? 'blocker',
-    testCommand: config.testCommand ?? 'blocker',
-    browserEvidence: config.browserEvidence ?? 'blocker'
+    indirectTest: config.indirectTest ?? 'critical',
+    productionEdits: config.productionEdits ?? 'critical',
+    testCommand: config.testCommand ?? 'critical',
+    browserEvidence: config.browserEvidence ?? 'critical'
   }
-}
-
-function toGateSeverity(value: 'block' | 'warn'): GateResult['severity'] {
-  return value === 'warn' ? 'warning' : 'blocker'
 }
 
 async function enrichTargets(cwd: string, targets: ChangedTarget[]): Promise<ChangedTarget[]> {
@@ -1254,7 +1267,7 @@ function isBrowserFindingValue(value: unknown): value is BrowserFinding {
   if (!isRecord(value)) return false
   if (value.gate !== 'browser-interaction' && value.gate !== 'browser-visual') return false
   if (typeof value.passed !== 'boolean') return false
-  if (value.severity !== 'blocker' && value.severity !== 'warning') return false
+  if (value.severity !== 'critical' && value.severity !== 'warning') return false
   if (value.category !== 'actionability' &&
     value.category !== 'console-error' &&
     value.category !== 'page-error' &&
@@ -1317,7 +1330,7 @@ function readGateResults(input: unknown): GateResult[] {
     if (!isRecord(item)) continue
     if (!isGateNameValue(item.gate)) continue
     if (typeof item.passed !== 'boolean') continue
-    if (item.severity !== 'blocker' && item.severity !== 'warning') continue
+    if (item.severity !== 'critical' && item.severity !== 'warning') continue
     if (typeof item.summary !== 'string') continue
 
     const result: GateResult = {

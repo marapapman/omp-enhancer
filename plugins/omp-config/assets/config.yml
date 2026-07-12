@@ -18,7 +18,7 @@ modelRoles:
   tiny: opencode-go/deepseek-v4-flash:medium
   vision: ollama-cloud/kimi-k2.6:medium
 loopGuard:
-  enabled: true
+  enabled: false
   mainAgent:
     modelPattern: deepseek-v4-flash
     maxRepeatedSentence: 3
@@ -30,7 +30,7 @@ compaction:
   enabled: true
   reserveTokens: 32768
   keepRecentTokens: 20000
-  autoContinue: true
+  autoContinue: false
 debug: 
   enabled: true
 steeringMode: one-at-a-time

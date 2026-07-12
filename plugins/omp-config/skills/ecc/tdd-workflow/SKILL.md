@@ -100,7 +100,9 @@ npm test
 # Tests should fail - we haven't implemented yet
 ```
 
-This step is mandatory and is the RED gate for all production changes.
+This is the preferred RED evidence when the repository has a meaningful,
+runnable test seam. If it is unavailable, document the limitation and use the
+strongest practical regression evidence without restarting the workflow.
 
 Before modifying business logic or other production code, you must verify a valid RED state via one of these paths:
 - Runtime RED:

@@ -1,8 +1,8 @@
 ---
 name: ecc-csharp-reviewer
 description: Expert C# code reviewer specializing in .NET conventions, async patterns,
-  security, nullable reference types, and performance. Use for all C# code changes.
-  MUST BE USED for C# projects.
+  security, nullable reference types, and performance. Use when C# changes would
+  benefit from specialist review.
 tools:
 - bash
 - find
@@ -99,7 +99,7 @@ Fix: What to change
 
 - **Approve**: No CRITICAL or HIGH issues
 - **Warning**: MEDIUM issues only (can merge with caution)
-- **Block**: CRITICAL or HIGH issues found
+- **Recommend against merge**: CRITICAL or HIGH issues found
 
 ## Framework Checks
 

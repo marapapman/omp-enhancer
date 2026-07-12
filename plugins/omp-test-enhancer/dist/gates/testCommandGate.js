@@ -1,14 +1,14 @@
 export function evaluateTestCommandGate(result, options = {}) {
-    if (options.skippedDueToStaticBlocker) {
+    if (options.notEvaluatedDueToStaticFindings) {
         return [{
                 gate: 'test-command',
                 passed: true,
                 severity: 'warning',
-                summary: 'Host-observed test evidence was not evaluated because static blockers remain.',
+                summary: 'Host-observed test evidence was not evaluated because static critical findings remain.',
                 evidence: {}
             }];
     }
-    const severity = options.severity ?? (result ? 'blocker' : 'warning');
+    const severity = options.severity ?? (result ? 'critical' : 'warning');
     if (!result) {
         return [{
                 gate: 'test-command',

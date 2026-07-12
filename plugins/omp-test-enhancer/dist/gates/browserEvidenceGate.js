@@ -1,5 +1,5 @@
 export function evaluateBrowserEvidenceGate(evidence, options = {}) {
-    const severity = options.severity ?? 'blocker';
+    const severity = options.severity ?? 'critical';
     if (!evidence) {
         if (!options.required)
             return [];
@@ -28,17 +28,17 @@ export function evaluateBrowserEvidenceGate(evidence, options = {}) {
     }
     if (evidence.status === 'passed') {
         return [
-            { gate: 'browser-interaction', passed: true, severity: 'blocker', summary: 'Browser interactions passed.', evidence },
+            { gate: 'browser-interaction', passed: true, severity: 'critical', summary: 'Browser interactions passed.', evidence },
             { gate: 'browser-visual', passed: true, severity: 'warning', summary: 'Browser visual checks passed.', evidence }
         ];
     }
     return [{
             gate: 'browser-interaction',
             passed: false,
-            severity: 'blocker',
+            severity: 'critical',
             summary: 'Browser check failed without structured findings.',
             evidence,
-            repairHint: 'Re-run browser evidence collection and include action, console, network, or visual findings.'
+            repairHint: 'Report the browser-evidence gap; collect one additional observation only when it would materially improve the review.'
         }];
 }
 function findingToGateResult(finding) {

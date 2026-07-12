@@ -207,7 +207,7 @@ function summarize(issues) {
   const fatalOrCritical = issues.filter((issue) => issue.severity === 'FATAL' || issue.severity === 'CRITICAL').length;
   const warningsOrImportant = issues.filter((issue) => issue.severity === 'WARNING' || issue.severity === 'IMPORTANT').length;
   const minor = issues.filter((issue) => issue.severity === 'INFO' || issue.severity === 'MINOR').length;
-  const verdict = fatalOrCritical > 0 ? 'blocked' : warningsOrImportant > 0 ? 'needs_revision' : 'pass';
+  const verdict = fatalOrCritical > 0 ? 'critical_findings' : warningsOrImportant > 0 ? 'needs_revision' : 'pass';
   return { total: issues.length, fatalOrCritical, warningsOrImportant, minor, verdict };
 }
 

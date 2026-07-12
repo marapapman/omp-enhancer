@@ -1,8 +1,8 @@
 ---
 name: ecc-code-reviewer
 description: Expert code review specialist. Proactively reviews code for quality,
-  security, and maintainability. Use immediately after writing or modifying code.
-  MUST BE USED for all code changes.
+  security, and maintainability. Use after writing or modifying code when an additional
+  review pass would be useful.
 tools:
 - bash
 - find
@@ -12,7 +12,6 @@ spawns: []
 model:
 - pi/slow
 thinkingLevel: high
-blocking: true
 ---
 ## Prompt Defense Baseline
 
@@ -301,7 +300,8 @@ Verdict: WARNING — 2 HIGH issues should be resolved before merge.
 - **Approve**: No CRITICAL or HIGH issues, including clean reviews with zero
   findings. This is a valid and expected outcome.
 - **Warning**: HIGH issues only (can merge with caution)
-- **Block**: CRITICAL issues found — must fix before merge
+- **Critical findings**: CRITICAL issues found — report them explicitly for the
+  integration decision; do not turn the review verdict into a runtime block
 
 Do not withhold approval to appear rigorous. If the diff is clean, approve it.
 

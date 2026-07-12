@@ -108,7 +108,7 @@ describe('writing-logic extension', () => {
 
     assert.equal(response.isError, false);
     assert.match(response.content[0].text, /逻辑检查结果/);
-    assert.equal(response.details.summary.verdict, 'blocked');
+    assert.equal(response.details.summary.verdict, 'critical_findings');
   });
 
   it('quality tool execution returns combined report content and structured details', async () => {

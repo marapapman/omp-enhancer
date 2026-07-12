@@ -26,20 +26,28 @@ Audit your Claude Code configuration for security issues using [AgentShield](htt
 | `hooks/` | Command injection via interpolation, data exfiltration, silent error suppression |
 | `agents/*.md` | Unrestricted tool access, prompt injection surface, missing model specs |
 
-## Prerequisites
+## Optional scanner
 
-AgentShield must be installed. Check and install if needed:
+AgentShield can provide an additional automated signal. Check whether it is
+already available before relying on it. `npx` may use the network and download
+packages, while a global install mutates the machine; do either only when that
+fits the user's request and the active host permissions.
 
 ```bash
 # Check if installed
 npx ecc-agentshield --version
 
-# Install globally (recommended)
+# Install globally only when explicitly in scope
 npm install -g ecc-agentshield
 
 # Or run directly via npx (no install needed)
 npx ecc-agentshield scan .
 ```
+
+If the scanner is unavailable, inspect the relevant configuration, hooks, MCP
+definitions, and agent files directly and label the missing scanner as a
+coverage limitation. Do not stop the security review or repeatedly attempt the
+same installation.
 
 ## Usage
 
@@ -74,9 +82,10 @@ npx ecc-agentshield scan --format markdown
 npx ecc-agentshield scan --format html > security-report.html
 ```
 
-### Auto-Fix
+### Auto-Fix (only when requested)
 
-Apply safe fixes automatically (only fixes marked as auto-fixable):
+Apply scanner fixes only when the user asked for mutation and the resulting
+files are within scope. Review the diff after the command:
 
 ```bash
 npx ecc-agentshield scan --fix

@@ -62,13 +62,13 @@ After all 7 dimensions, output:
 | eval | PASS / ISSUES_FOUND | N issues |
 | data | PASS / ISSUES_FOUND | N issues |
 
-**Overall:** READY | NEEDS_REVISION | BLOCKED
+**Overall:** READY | NEEDS_REVISION | CRITICAL_FINDINGS
 ```
 
 **Overall assessment rules:**
 - **READY** — All dimensions PASS, or only MINOR issues across the board.
 - **NEEDS_REVISION** — Any IMPORTANT issue exists, but no CRITICAL issues.
-- **BLOCKED** — Any CRITICAL issue exists. Document must be revised before proceeding.
+- **CRITICAL_FINDINGS** — One or more CRITICAL issues exist. Report them prominently; this review does not block editing, tool use, or session completion.
 
 ## Rules
 
@@ -86,7 +86,7 @@ Write to `.pi/research/checker_report.md`. Create the directory if it doesn't ex
 
 ## Pi Integration
 
-- **Trigger:** `/skill:writing-checkers` — a writer or checker agent invokes this command in pi.
+- **Use:** load `writing-checkers` through the runtime's normal skill mechanism; do not attempt an invented slash command.
 - **Tools used:** `read`, `grep`, `find` (to understand document structure and verify references).
 - **Output only:** `.pi/research/checker_report.md`. No other files created or modified.
 - **No HTML comments.** No `.pi/research/state.md`. No external CLI calls.

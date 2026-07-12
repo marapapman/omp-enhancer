@@ -20,7 +20,11 @@ Use this skill when the user has an environment management problem — even if t
 
 If the user just needs a single language runtime with no system dependencies, standard tooling (nvm, pyenv, rustup alone) may suffice. If they need full OS-level isolation, containers might be more appropriate. Flox sits in the sweet spot: declarative, reproducible environments without container overhead.
 
-**Prerequisite:** Flox must be installed first — see [flox.dev/docs](https://flox.dev/docs/install-flox/install/) for macOS, Linux, and Docker.
+**Optional prerequisite:** Use Flox commands only when Flox is already available
+or installation is explicitly in scope. Otherwise report the missing tool and
+continue with repository evidence. Installation guidance is at
+[flox.dev/docs](https://flox.dev/docs/install-flox/install/) for macOS, Linux,
+and Docker.
 
 ## Core Concepts
 

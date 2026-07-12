@@ -11,7 +11,7 @@ Dispatch a code reviewer subagent to catch issues before they cascade. The revie
 
 ## When to Request Review
 
-**Mandatory:**
+**Usually valuable:**
 - After each task in subagent-driven development
 - After completing major feature
 - Before merge to main
@@ -40,8 +40,8 @@ Use Task tool with `general-purpose` type, fill template at `code-reviewer.md`
 - `{HEAD_SHA}` - Ending commit
 
 **3. Act on feedback:**
-- Fix Critical issues immediately
-- Fix Important issues before proceeding
+- Fix supported Critical issues when they are in scope, or report them clearly
+- Address Important issues in the current pass when practical
 - Note Minor issues for later
 - Push back if reviewer is wrong (with reasoning)
 
@@ -75,9 +75,9 @@ You: [Fix progress indicators]
 ## Integration with Workflows
 
 **Subagent-Driven Development:**
-- Review after EACH task
+- Review at useful task or batch boundaries
 - Catch issues before they compound
-- Fix before moving to next task
+- Apply one focused repair pass, then use parent judgment or report remaining findings
 
 **Executing Plans:**
 - Review after each task or at natural checkpoints

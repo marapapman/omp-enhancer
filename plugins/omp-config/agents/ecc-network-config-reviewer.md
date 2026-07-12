@@ -93,12 +93,12 @@ Fix: <safe remediation or change-window prerequisite>
 | Medium | 0 |
 | Low | 0 |
 
-Verdict: PASS | WARNING | BLOCK
+Verdict: PASS | WARNING | RECOMMEND AGAINST CHANGE
 Tests checked: <what was inspected>
 Residual risk: <what could not be verified>
 ```
 
-Use `BLOCK` for any Critical finding or proposed destructive change without a
+Use `RECOMMEND AGAINST CHANGE` for any Critical finding or proposed destructive change without a
 rollback plan. Use `WARNING` for High or Medium findings that do not block a
 maintenance window by themselves. Use `PASS` only when no actionable findings are
 present.

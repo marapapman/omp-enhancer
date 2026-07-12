@@ -15,6 +15,15 @@
 
 This package does not automatically overwrite `~/.omp`. Treat the packaged files as templates and review any patch plan before applying changes to a live OMP home.
 
+The destructive-command and malformed edit-anchor guard hooks are advisory-only:
+they produce UI warnings but never return `block: true`. Other packaged
+DeepSeek compatibility hooks can format results or repair malformed tool input
+only after a user explicitly copies and enables those templates; the plugin
+does not activate them automatically, and they are not permission gates.
+Bundled agents do not declare `blocking: true`, and the config template disables
+`loopGuard` plus compaction `autoContinue` by default. Host sandboxing, approval,
+and system safety policy remain independent of this plugin.
+
 The LLM classifier does not use a separate classifier role. It reuses OMP Tiny:
 
 ```yaml

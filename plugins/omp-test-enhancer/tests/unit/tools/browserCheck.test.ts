@@ -48,12 +48,12 @@ describe('browserCheck helpers', () => {
     })
 
     expect(findings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'blocker', category: 'console-error' }),
+      expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'critical', category: 'console-error' }),
       expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'warning', category: 'console-error' }),
-      expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'blocker', category: 'page-error' }),
-      expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'blocker', category: 'network-failure', summary: 'Browser request failed.' }),
+      expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'critical', category: 'page-error' }),
+      expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'critical', category: 'network-failure', summary: 'Browser request failed.' }),
       expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'warning', category: 'network-failure', summary: 'Browser response returned HTTP 404.' }),
-      expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'blocker', category: 'network-failure', summary: 'Browser response returned HTTP 500.' })
+      expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'critical', category: 'network-failure', summary: 'Browser response returned HTTP 500.' })
     ]))
   })
 
@@ -71,7 +71,7 @@ describe('browserCheck helpers', () => {
     expect(evidence).toMatchObject({
       framework: 'playwright',
       status: 'failed',
-      findings: [expect.objectContaining({ gate: 'browser-interaction', severity: 'blocker', category: 'setup' })]
+      findings: [expect.objectContaining({ gate: 'browser-interaction', severity: 'critical', category: 'setup' })]
     })
   })
 

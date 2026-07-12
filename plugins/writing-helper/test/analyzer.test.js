@@ -35,7 +35,7 @@ describe('analyzeWritingLogic', () => {
       mode: 'redline',
     });
 
-    assert.equal(result.summary.verdict, 'blocked');
+    assert.equal(result.summary.verdict, 'critical_findings');
     assert.equal(result.issues[0].dimension, 'data');
     assert.equal(result.issues[0].severity, 'FATAL');
   });
@@ -85,7 +85,7 @@ describe('analyzeWritingLogic', () => {
       mode: 'redline',
     });
 
-    assert.equal(result.summary.verdict, 'blocked');
+    assert.equal(result.summary.verdict, 'critical_findings');
     assert.equal(result.issues[0].location, 'paragraph 1');
   });
 

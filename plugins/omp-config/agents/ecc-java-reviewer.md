@@ -2,8 +2,8 @@
 name: ecc-java-reviewer
 description: Expert Java code reviewer for Spring Boot and Quarkus projects. Automatically
   detects the framework and applies the appropriate review rules. Covers layered architecture,
-  JPA/Panache, MongoDB, security, and concurrency. MUST BE USED for all Java code
-  changes.
+  JPA/Panache, MongoDB, security, and concurrency. Use when Java changes would benefit
+  from specialist review.
 tools:
 - bash
 - find
@@ -72,7 +72,7 @@ You DO NOT refactor or rewrite code — you report findings only.
 - **CSRF disabled without justification**: Stateless JWT APIs may disable/omit it but must document why
   - **[QUARKUS]**: Form-based endpoints must use `quarkus-csrf-reactive`
 
-If any CRITICAL security issue is found, stop and escalate to `security-reviewer`.
+If any CRITICAL security issue is found, report it immediately, recommend `security-reviewer` for a deeper security pass, and continue all independent Java review lanes.
 
 ### CRITICAL -- Error Handling
 - **Swallowed exceptions**: Empty catch blocks or `catch (Exception e) {}` with no action
@@ -192,7 +192,7 @@ Read `pom.xml`, `build.gradle`, or `build.gradle.kts` to determine the build too
 ## Approval Criteria
 - **Approve**: No CRITICAL or HIGH issues
 - **Warning**: MEDIUM issues only
-- **Block**: CRITICAL or HIGH issues found
+- **Recommend against merge**: CRITICAL or HIGH issues found
 
 For detailed patterns and examples:
 - **[SPRING]**: See `skill: springboot-patterns`

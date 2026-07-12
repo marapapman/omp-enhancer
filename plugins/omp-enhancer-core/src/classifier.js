@@ -5,9 +5,6 @@ import { normalizeTaskDescriptor } from './task-descriptor.js';
 export const classifierDefaults = {
   modelRole: 'tiny',
   model: 'opencode-go/deepseek-v4-flash:medium',
-  fallbackModelRole: 'default',
-  fallbackModel: 'xiaomi/mimo-v2.5:high',
-  retryLimit: 1,
   temperature: 0,
   maxOutputTokens: 500,
   minResolvedConfidence: 0.55,
@@ -146,9 +143,6 @@ export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
   const config = {
     modelRole: classifierDefaults.modelRole,
     model: classifierDefaults.model,
-    fallbackModelRole: classifierDefaults.fallbackModelRole,
-    fallbackModel: classifierDefaults.fallbackModel,
-    retryLimit: classifierDefaults.retryLimit,
     temperature: classifierDefaults.temperature,
     maxOutputTokens: classifierDefaults.maxOutputTokens,
     minResolvedConfidence: classifierDefaults.minResolvedConfidence,
@@ -164,7 +158,7 @@ export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
       '## OMP Enhancer Core Classifier',
       '',
       `Use OMP's Tiny model role, modelRoles.${config.modelRole}. Packaged Tiny default: ${config.model}.`,
-      `If classifier output is invalid after ${config.retryLimit + 1} attempt(s), fall back to modelRoles.${config.fallbackModelRole} or the deterministic rule route.`,
+      'If classifier output is invalid, keep the deterministic rule route. Do not retry or schedule another model turn.',
       '',
       'You classify OMP enhancer user tasks. Return only JSON. Do not solve the task.',
       '',
@@ -182,7 +176,7 @@ export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
       '',
       'Rules:',
       '- Return descriptor hints only. Do not output or invent constraints, capabilities, skills, tools, agents, commands, or gates.',
-      `- The deterministic rule route is the capability ceiling and fallback baseline: ${ruleRoute.intent}. Hints may add requirements but never remove rule phases or risks.`,
+      `- The deterministic rule route is the scope-preserving baseline for classifier hints: ${ruleRoute.intent}. Hints may enrich advisory workflow suggestions but never create permissions or completion conditions.`,
       '- Use operationHint diagnose only when the user mainly asks why something failed and does not ask for a code/config change.',
       '- Use operationHint release only when the user mainly asks to publish, push, or deploy without asking for implementation.',
       '- Use operationHint modify with code/tests/plugin domains for implementation work, even when config or marketplace is mentioned.',
@@ -192,7 +186,7 @@ export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
       '- Focused or direct bug investigations are still inspect/diagnose; the deterministic route may retain a focused direct-audit mode.',
       '- Executable test analysis, coverage review, browser verification, and flaky-test review use tests domain and verify/review phase hints.',
       '- Explicit factual verification uses facts domain and inspect/review phase hints.',
-      '- Prose editing or drafting uses writing domain; language selects the writing workflow.',
+      '- Prose editing or drafting uses writing domain. For edits, language comes from the body text or explicit translation destination, never from the surrounding instruction language. Keep language unknown while a document body is still unread.',
       '- Pure bug-report drafting is writing; executable testing, finding, auditing, or verifying bugs uses code/tests.',
       '- Security announcements, privacy policies, license/compliance memos, and other prose artifacts are writing tasks when the user does not ask to audit or fix code/config/dependencies.',
       '- Research, scientific exploration, literature/PDF download, and daily office organization are unknown unless the user explicitly asks to draft, revise, polish, or write a concrete prose artifact.',
@@ -201,14 +195,14 @@ export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
       '- Do not add security domain merely because prose mentions safety, risk, review, or security. Security applies to code, config, auth, secrets, vulnerabilities, or infrastructure.',
       '- Never turn deterministic writing into security work for safety, risk, privacy, license, or security wording unless the task audits or fixes code/config/dependencies/secrets/auth/infrastructure.',
       '- Put every related concern into domains, phaseHints, and riskFlags so compound work is not lost.',
-      '- Implementation repair plan: fixing or optimizing OMP/plugin gates, routing, workflows, prompts, classifier, or smart gate uses modify with code/tests/plugin, even if the user first asks for a plan.',
+      '- Implementation repair plan: fixing or optimizing OMP/plugin routing, workflow controllers, prompts, or classifier logic uses modify with code/tests/plugin, even if the user first asks for a plan.',
       '- Workflow validation: running MiMo, advisor, E2E, smoke, workflow, gate, skill, subagent, or background-task validation without code changes uses inspect/execute with tests.',
       '- Test-observation summary: summarizing already observed test, E2E, gate, or workflow results uses writing and must not add executable verification.',
       '- Real config-assets inventory: add config/plugin only for explicit omp-config assets, templates, hooks, packaged inventory, doctor, or marketplace catalog checks.',
-      '- Do not expose classifier or smart-gate prompts, JSON schemas, Tiny model policy, route-gate internals, or captured evidence internals in user-facing output. Summarize the route decision and next action instead.',
+      '- Do not expose classifier prompts, JSON schemas, or Tiny model policy in user-facing output. Summarize the route decision and useful workflow guidance instead.',
       `- Use confidence below ${config.minResolvedConfidence} only when uncertain; all low-confidence hints fall back to the deterministic route, including an unknown fallback.`,
-      `- A different operation hint needs confidence >= ${config.minRouteOverrideConfidence}, but still cannot exceed the deterministic capability ceiling.`,
-      '- Use answer/general for concept-only or unrelated requests. It cannot remove deterministic release, security, or irreversible-operation requirements.',
+      `- A different operation hint needs confidence >= ${config.minRouteOverrideConfidence}, but it cannot erase deterministic user-scope preferences.`,
+      '- Use answer/general for concept-only or unrelated requests. It cannot remove deterministic release, security, or irreversible-operation risk notes.',
       '',
       'JSON Schema:',
       JSON.stringify(classifierSchema, null, 2),
@@ -224,8 +218,16 @@ export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
   };
 }
 
-export function resolveClassificationRoute({ prompt = '', output = '', classification = null } = {}) {
-  const fallbackRoute = routeNaturalLanguageTask({ prompt });
+export function resolveClassificationRoute({
+  prompt = '',
+  output = '',
+  classification = null,
+  baseRoute = null,
+} = {}) {
+  // The active runtime may already have refined a path-only writing request
+  // from the observed target body. Reuse that deterministic route so a later
+  // classifier hint cannot fall back to the language of the instruction.
+  const fallbackRoute = baseRoute ?? routeNaturalLanguageTask({ prompt });
   const parsed = classification ?? parseClassifierOutput(output);
   const validation = validateClassifierValue(parsed);
 
@@ -393,6 +395,12 @@ function routeIntentForClassification(classification, fallbackRoute) {
     return fallbackRoute.intent;
   }
   if (classification.intent === fallbackRoute.intent) return classification.intent;
+  if (isWritingIntent(fallbackRoute.intent) && isWritingIntent(classification.intent)) {
+    return fallbackRoute.intent;
+  }
+  if (isNonWritingWorkflowIntent(fallbackRoute.intent) && isWritingIntent(classification.intent)) {
+    return fallbackRoute.intent;
+  }
   if (shouldPreserveWritingFallback(classification, fallbackRoute)) {
     return fallbackRoute.intent;
   }
@@ -400,7 +408,6 @@ function routeIntentForClassification(classification, fallbackRoute) {
   if (routedIntents.includes(classification.intent)) {
     const candidateRoute = routeByIntent(classification.intent, { source: 'llm-classifier' });
     if (!routeFitsDeterministicCeiling(candidateRoute, fallbackRoute)) return fallbackRoute.intent;
-    if (!preservesProtectedRequirements(candidateRoute, fallbackRoute)) return fallbackRoute.intent;
     return classification.intent;
   }
   if (fallbackRoute.intent !== 'unknown') return fallbackRoute.intent;
@@ -417,7 +424,7 @@ function isCanonicalTestingRoute(route = {}) {
 
 function applyMonotonicClassifierHints(route, fallbackRoute, classification) {
   const fallbackDescriptor = fallbackRoute.taskDescriptor;
-  if (!fallbackDescriptor) return preserveLegacyRequirements(route, fallbackRoute);
+  if (!fallbackDescriptor) return projectAdvisoryResources(route, fallbackRoute);
   if (isFocusedLocalFactRoute(fallbackRoute)) return fallbackRoute;
 
   const useHints = classification.confidence >= classifierDefaults.minResolvedConfidence;
@@ -426,11 +433,9 @@ function applyMonotonicClassifierHints(route, fallbackRoute, classification) {
     : [];
   const descriptor = mergeTaskDescriptors(fallbackDescriptor, additions, classification, useHints);
   const compiledPlan = buildRoutePlan(descriptor, route);
-  const routePlan = mergeRoutePlans(fallbackRoute.routePlan, route.routePlan, compiledPlan, {
-    extraGates: classifierGateRequirements(classification, descriptor, useHints),
-  });
+  const routePlan = mergeRoutePlans(fallbackRoute.routePlan, route.routePlan, compiledPlan);
 
-  return preserveLegacyRequirements({
+  return projectAdvisoryResources({
     ...route,
     taskDescriptor: descriptor,
     routePlan,
@@ -576,40 +581,20 @@ function mergeTaskDescriptors(fallbackDescriptor, additions, classification, use
     phases,
     risk: { level: riskLevel, flags: riskFlags },
     complexity,
-    language: useHints && fallbackDescriptor.language === 'unknown' && classification.language !== 'unknown'
+    language: useHints
+      && fallbackDescriptor.writingSourcePending !== true
+      && fallbackDescriptor.language === 'unknown'
+      && classification.language !== 'unknown'
       ? classification.language
       : fallbackDescriptor.language,
     provenance: {
       ...fallbackDescriptor.provenance,
       reasons: unique([
         ...fallbackDescriptor.provenance.reasons,
-        ...(additions.length ? ['classifier advisory requirements merged'] : []),
+        ...(additions.length ? ['classifier advisory suggestions merged'] : []),
       ]),
     },
   });
-}
-
-function classifierGateRequirements(classification, descriptor, useHints) {
-  if (!useHints) return [];
-  const gates = [];
-  const flags = new Set(classification.riskFlags);
-  const domains = new Set(descriptor.domains);
-  const constraints = descriptor.constraints;
-
-  if (flags.has('needs-security-review') && domains.has('security')) gates.push({ key: 'security-evidence', mode: 'required' });
-  if (flags.has('needs-tests') && constraints.testExecution === 'required') gates.push({ key: 'test-evidence', mode: 'required' });
-  if (flags.has('needs-review') && descriptor.phases.some(({ kind }) => kind === 'review')) {
-    gates.push({ key: 'review-evidence', mode: 'required' });
-  }
-  if (flags.has('needs-writing-qa')
-    && domains.has('writing')
-    && descriptor.complexity === 'broad'
-    && descriptor.phases.some(({ kind, domain }) => kind === 'review' && domain === 'writing')) {
-    gates.push({ key: 'writing-quality', mode: 'required' });
-  }
-  if (flags.has('needs-fact-check') && domains.has('facts')) gates.push({ key: 'fact-evidence', mode: 'required' });
-  if (flags.has('release-or-push') && constraints.externalWrite === 'required') gates.push({ key: 'release-approval', mode: 'required' });
-  return gates;
 }
 
 function routeFitsDeterministicCeiling(candidateRoute, fallbackRoute) {
@@ -643,66 +628,30 @@ function phaseFitsDeterministicCeiling(phase, ceiling) {
   return ceiling.capabilities.includes('fs.read');
 }
 
-function preservesProtectedRequirements(candidateRoute, fallbackRoute) {
-  const required = requiredGateKeys(fallbackRoute.routePlan);
-  if (!required.length) return true;
-  const candidate = new Set(requiredGateKeys(candidateRoute.routePlan));
-  return required.every((key) => candidate.has(key));
-}
-
-function requiredGateKeys(routePlan) {
-  return (routePlan?.gateRequirements ?? [])
-    .filter(({ mode }) => mode === 'required')
-    .map(({ key }) => key);
-}
-
-function preserveLegacyRequirements(route, fallbackRoute) {
+function projectAdvisoryResources(route, fallbackRoute) {
   return projectRouteResourceCeilings({
     ...route,
-    requiredSkills: unique([...(fallbackRoute.requiredSkills ?? []), ...(route.requiredSkills ?? [])]),
-    requiredTools: unique([...(fallbackRoute.requiredTools ?? []), ...(route.requiredTools ?? [])]),
-    requiredSubagents: uniqueSubagents([...(fallbackRoute.requiredSubagents ?? []), ...(route.requiredSubagents ?? [])]),
-    shouldForkSubagents: Boolean(fallbackRoute.shouldForkSubagents || route.shouldForkSubagents),
-    hardBlockReasons: unique([...(fallbackRoute.hardBlockReasons ?? []), ...(route.hardBlockReasons ?? [])]),
+    routePlan: mergeRoutePlans(fallbackRoute.routePlan, route.routePlan),
   });
 }
 
 function mergeRoutePlans(...values) {
-  const options = values.at(-1)?.extraGates ? values.pop() : { extraGates: [] };
   const plans = values.filter(Boolean);
   const fallback = plans[0] ?? {};
   const latest = plans.at(-1) ?? fallback;
   return {
-    ...fallback,
-    ...latest,
-    version: Math.max(...plans.map(({ version = 1 }) => version), 1),
-    phases: uniquePhases(plans.flatMap(({ phases = [] }) => phases)),
-    requiredSkills: unique(plans.flatMap(({ requiredSkills = [] }) => requiredSkills)),
-    requiredTools: unique(plans.flatMap(({ requiredTools = [] }) => requiredTools)),
-    requiredSubagents: uniqueSubagents(plans.flatMap(({ requiredSubagents = [] }) => requiredSubagents)),
-    gateRequirements: mergeGateRequirements([
-      ...plans.flatMap(({ gateRequirements = [] }) => gateRequirements),
-      ...options.extraGates,
-    ]),
+    version: 2,
+    mode: 'advisory',
+    autoContinue: false,
+    steps: uniquePhases(plans.flatMap((plan) => plan.steps ?? plan.phases ?? [])),
+    skills: unique(plans.flatMap((plan) => plan.skills ?? plan.requiredSkills ?? [])),
+    tools: unique(plans.flatMap((plan) => plan.tools ?? plan.requiredTools ?? [])),
+    roles: uniqueRoles(plans.flatMap((plan) => plan.roles ?? plan.requiredSubagents ?? [])),
+    qualityChecks: unique(plans.flatMap(({ qualityChecks = [] }) => qualityChecks)),
+    riskNotes: unique(plans.flatMap(({ riskNotes = [] }) => riskNotes)),
+    legacyIntent: latest.legacyIntent ?? fallback.legacyIntent ?? null,
+    workflowRoute: latest.workflowRoute ?? fallback.workflowRoute ?? null,
   };
-}
-
-function mergeGateRequirements(requirements) {
-  const byKey = new Map();
-  for (const requirement of requirements) {
-    if (!requirement?.key) continue;
-    const current = byKey.get(requirement.key);
-    if (!current || current.mode === 'advisory' && requirement.mode === 'required') {
-      byKey.set(requirement.key, { key: requirement.key, mode: requirement.mode });
-    }
-  }
-  const order = ['security-evidence', 'test-evidence', 'review-evidence', 'fact-evidence', 'writing-quality', 'release-approval'];
-  return [...byKey.values()].sort((left, right) => gateOrder(left.key, order) - gateOrder(right.key, order));
-}
-
-function gateOrder(key, order) {
-  const index = order.indexOf(key);
-  return index === -1 ? order.length : index;
 }
 
 function uniquePhases(phases) {
@@ -715,21 +664,21 @@ function uniquePhases(phases) {
   });
 }
 
-function uniqueSubagents(subagents) {
+function uniqueRoles(subagents) {
   const byAgent = new Map();
   for (const subagent of subagents) {
     const agent = typeof subagent === 'string' ? subagent : subagent?.agent;
     if (!agent) continue;
     const current = byAgent.get(agent);
     if (typeof subagent === 'string' && current) continue;
-    const incoming = typeof subagent === 'string' ? { agent, requiredSkills: [] } : subagent;
+    const incoming = typeof subagent === 'string' ? { agent, skills: [] } : subagent;
     byAgent.set(agent, {
       ...(typeof current === 'object' ? current : {}),
       ...incoming,
       agent,
-      requiredSkills: unique([
-        ...(current?.requiredSkills ?? []),
-        ...(incoming?.requiredSkills ?? []),
+      skills: unique([
+        ...(current?.skills ?? current?.requiredSkills ?? []),
+        ...(incoming?.skills ?? incoming?.requiredSkills ?? []),
       ]),
       ...(current?.modelRoles || incoming?.modelRoles ? {
         modelRoles: unique([...(current?.modelRoles ?? []), ...(incoming?.modelRoles ?? [])]),
@@ -778,7 +727,7 @@ function maxComplexity(left, right) {
 }
 
 function isWritingIntent(intent) {
-  return intent === 'writing.zh' || intent === 'writing.en';
+  return intent === 'writing.pending' || intent === 'writing.zh' || intent === 'writing.en';
 }
 
 function isNonWritingWorkflowIntent(intent) {

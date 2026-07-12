@@ -37,7 +37,7 @@ Checklist-based pre-submission review. Run all 8 checks, report PASS/FAIL per it
 | 7 | Author List Complete | ✅ PASS / ❌ FAIL |
 | 8 | LaTeX Compiles | ✅ PASS / ❌ FAIL / ⚠️ N/A |
 
-**Result**: ✅ READY / ❌ NOT READY (blocking: N)
+**Result**: ✅ READY / ⚠️ NEEDS ATTENTION (critical findings: N)
 
 ## Issues
 ### [N]. [Check Name] — ❌ FAIL
@@ -50,5 +50,5 @@ Checklist-based pre-submission review. Run all 8 checks, report PASS/FAIL per it
 
 1. **Report only** — never modify source files.
 2. **Show specific locations** — every issue includes file:line.
-3. **Any FAIL blocks submission** — one failing check → NOT READY.
+3. **Any FAIL affects readiness** — report it as a critical finding; this skill does not block submission or session completion.
 4. **Missing directories** — `fig/` doesn't exist → FAIL on Check 2.

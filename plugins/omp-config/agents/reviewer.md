@@ -66,7 +66,6 @@ output:
             metadata: 
               description: "Last line (1-indexed, ≤10 lines)"
             type: number
-blocking: true
 ---
 
 Identify bugs the author would want fixed before merge.

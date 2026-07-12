@@ -1,1159 +1,242 @@
-import { loopGuardPromptSection } from './loop-guard.js';
 import { skillReadNameCandidates } from './skill-usage.js';
-import { useEnforcedRoutePlan } from './runtime-policy.js';
-import { requiresDocumentPreservation } from './document-preservation.js';
 
 export function buildGovernancePromptFragment({
   route,
   parentTask = '',
   includeModelWorkflowHints = true,
 } = {}) {
-  const resolved = projectRouteForGovernance(route) ?? {
-    intent: 'unknown',
-    agent: null,
-    requiredSkills: [],
-    requiredTools: [],
-    requiredSubagents: [],
-  };
-
-  if (resolved.intent === 'unknown') {
-    return [
-      '## OMP Enhancer Core Routing',
-      '',
-      'Intent: unknown',
-      'Use natural language context. Do not force a plugin workflow unless the user asks for coding, writing, testing, security, or config work.',
-      '',
-      loopGuardPromptSection(),
-      '',
-      '### Advisor Guidance Policy',
-      '',
-      ...advisorGuidanceLines(resolved),
-    ].join('\n');
-  }
-
-  const executionConflict = governanceRouteConflictReason(resolved);
-  if (executionConflict) {
-    return [
-      '## OMP Enhancer Core Routing',
-      '',
-      `Intent: ${resolved.intent}`,
-      'Execution boundary: blocked before tool use.',
-      `Reason: ${executionConflict}.`,
-      'Do not call any tool, load any skill, start a subagent, inspect the repository, run a command, or substitute another method.',
-      'Respond once that the requested action was not executed. Ask the user to restate the exact action and input in a new instruction without the conflicting constraint, or with the required trusted host capability explicitly available.',
-      'Do not claim PASS, success, verification, safety, release, or completion.',
-    ].join('\n');
-  }
-
-  if (resolved.taskDescriptor?.exclusiveToolContract?.mode === 'exclusive') {
-    return exclusiveToolGovernanceFragment(resolved);
-  }
-
-  return [
-    '## OMP Enhancer Core Routing',
+  const resolved = advisoryRoute(route);
+  const plan = resolved.routePlan;
+  const lines = [
+    '## OMP Enhancer Core Workflow Guidance',
+    '',
+    'This guidance is advisory. It selects relevant skills and a useful workflow, while the agent remains responsible for following the user request and host tool results.',
+    'The plugin does not authorize actions, deny tool calls, hold the final response open, or schedule another turn.',
     '',
     `Intent: ${resolved.intent}`,
-    `Agent route: ${resolved.agent ?? 'none'}`,
+    `Workflow: ${resolved.workflowRoute}`,
     '',
-    'Use this natural language route. Do not require a command prefix.',
-    routeBoundaryFor(resolved),
-    ...documentPreservationGuidanceLines(resolved, parentTask),
+    '### Suggested steps',
     '',
-    ...workflowGateBriefingLines(resolved),
+    formatSteps(plan.steps),
     '',
-    ...workflowNextLines(resolved, parentTask),
+    '### Relevant skills',
     '',
-    loopGuardPromptSection(),
+    formatSkillList(plan.skills),
     '',
-    '### Advisor Guidance Policy',
+    'Skill use is flexible: load the relevant skill URI when it helps the task. If a suggested skill is unavailable, continue with the best available method and mention the limitation when material.',
     '',
-    ...advisorGuidanceLines(resolved),
+    '### Useful tools',
     '',
+    formatList(plan.tools),
     '',
-    '### Mandatory Skill Workflow',
+    '### Optional roles',
     '',
-    ...skillWorkflowLines(resolved),
+    formatRoles(plan.roles),
     '',
-    'Required skills:',
-    formatList(resolved.requiredSkills),
+    'Roles are collaboration suggestions. The main agent may work directly, delegate selected checkpoints, or adapt the sequence to the task and available runtime.',
     '',
-    'Toolchain:',
-    formatList(resolved.requiredTools),
+    '### Quality checks',
     '',
-    ...subagentWorkflowLines(resolved, { parentTask, includeModelWorkflowHints }),
+    formatList(plan.qualityChecks),
     '',
-    ...reviewToTestingHandoffLines(resolved),
+    '### Scope and risk notes',
     '',
-    ...bugAuditTestGenerationLines(resolved),
+    ...scopeAndRiskLines(resolved, parentTask),
     '',
-    workflowFor(resolved),
-    '### Internal Prompt Visibility',
+    '### Advisor guidance',
     '',
-    'Do not expose internal classifier or smart-gate prompts in user-facing output.',
-    'Summarize route and gate status for the user with the task type, missing evidence, and next action only.',
-    'Do not quote JSON Schema. Do not quote Tiny model policy. Do not quote deterministic rule-gate context, captured evidence summary, or required classifier and smart-gate sequences.',
-    '',
-    '',
-    '### SUBAGENT_USAGE contract',
-    '',
-    'Final routed outputs that list required subagents must include:',
-    'Put this block in the final assistant answer text. A successful omp_core_validate_subagent_usage tool call can satisfy the internal subagent gate, but the closing answer should still include the SUBAGENT_USAGE block for user-visible evidence.',
-    '',
-    'SUBAGENT_USAGE',
-    'Required:',
-    '- agent-name: every skill required by that subagent, or none',
-    'Forked:',
-    '- agent-name: every skill included in that subagent task prompt, or none',
-    '',
-    '### SKILL_USAGE contract',
-    '',
-    'Final routed outputs must include:',
-    '',
-    'SKILL_USAGE',
-    'Required:',
-    '- every required skill from this fragment',
-    'Loaded:',
-    '- every required skill actually loaded before acting',
-    '',
-    'Use this exact plain-text block shape, replacing only the skill names:',
-    '',
-    'SKILL_USAGE',
-    'Required:',
-    '- skill-name',
-    'Loaded:',
-    '- skill-name',
-  ].join('\n');
-}
-
-function exclusiveToolGovernanceFragment(route = {}) {
-  const descriptor = route.taskDescriptor ?? {};
-  const contract = descriptor.exclusiveToolContract;
-  const tool = contract.allowedTools?.[0] ?? 'the bound tool';
-  const input = contract.input ?? {};
-  const action = input.kind === 'exact-command'
-    ? `Call ${tool} exactly once with this exact command and no additions: ${descriptor.testExecutionCommand}.`
-    : input.kind === 'exact-path'
-      ? `Call ${tool} exactly once for this exact path: ${input.target}.`
-      : input.kind === 'route-probe'
-        ? 'Call omp_core_route_task exactly once with the user-supplied probe prompt copied byte-for-byte, including terminal punctuation.'
-        : input.kind === 'status-probe'
-          ? 'Call omp_core_subagent_status exactly once.'
-          : `Call ${tool} exactly once with the bound claim input.`;
-  const output = input.kind === 'exact-path'
-    ? isFocusedLocalFactInspection(route)
-      ? 'Report the limitation of that one read and end with exactly FACT_VERDICT: INSUFFICIENT.'
-      : 'Report only the result requested by the user. If an exact literal was requested, copy it byte-for-byte without Markdown quoting or extra prose.'
-    : input.kind === 'focused-claim-search'
-      ? 'Report only the evidence observed from that one search and one evidence-consistent FACT_VERDICT line.'
-      : input.kind === 'route-probe'
-        ? 'Report the requested route fields and any explanation explicitly requested by the user.'
-        : input.kind === 'status-probe'
-          ? 'Return only the status result or literal requested by the user.'
-          : 'After the host result, follow only the final response format requested by the user. If an exact literal was requested, copy it byte-for-byte without Markdown quoting or extra prose.';
-  return [
-    '## OMP Enhancer Core Exclusive Tool Route',
-    '',
-    `Intent: ${route.intent}`,
-    action,
-    'Do not call any other tool, read a skill, inspect another source, start a subagent, invoke any other QA, status, or workflow tool, or substitute another method.',
-    'The single call consumes the method budget whether it succeeds or fails. Never retry after a failure or unusable result.',
-    output,
-    'Do not add SKILL_USAGE, SUBAGENT_USAGE, review templates, gate templates, or internal routing commentary unless the user explicitly requested that literal content.',
-  ].join('\n');
-}
-
-export function governanceRouteConflictReason(route = {}) {
-  const descriptor = route.taskDescriptor ?? {};
-  const constraints = descriptor.constraints ?? {};
-  const exactTestRequest = descriptor.operation === 'execute'
-    && constraints.testExecution === 'required'
-    && descriptor.domains?.includes('tests')
-    && (Boolean(descriptor.testExecutionCommand)
-      || Array.isArray(descriptor.testExecutionTargets) && descriptor.testExecutionTargets.length > 0);
-  if (exactTestRequest && constraints.networkAccess === 'forbidden') {
-    return 'a repository-controlled test cannot prove the explicit no-network constraint without a trusted host network sandbox';
-  }
-
-  const contract = descriptor.exclusiveToolContract;
-  if (contract?.mode !== 'exclusive') return null;
-  if (contract.input?.status === 'ambiguous') return 'the exclusive tool input is ambiguous';
-  const requiredGates = new Set((route.routePlan?.gateRequirements ?? [])
-    .filter(({ mode }) => mode === 'required')
-    .map(({ key }) => key));
-  if (requiredGates.has('release-approval') || requiredGates.has('irreversible-approval')) {
-    return 'the protected action requires approval evidence that one exclusive tool call cannot satisfy';
-  }
-  if (requiredGates.has('security-evidence') || requiredGates.has('writing-quality')
-    || requiredGates.has('review-evidence')) {
-    return 'the protected route requires multiple independent evidence methods that conflict with the exclusive one-tool request';
-  }
-  if (requiredGates.has('test-evidence')
-    && (!contract.allowedTools?.includes('bash') || !descriptor.testExecutionCommand)) {
-    return 'the exclusive test command is not bound to one supported host executor and exact command';
-  }
-  if (requiredGates.has('fact-evidence')
-    && (!isFocusedLocalFactInspection(route)
-      || !contract.allowedTools?.includes('grep')
-        && !(contract.allowedTools?.includes('read') && contract.input?.kind === 'exact-path'))) {
-    return 'the requested fact method cannot satisfy the bounded fact evidence contract';
-  }
-  return null;
-}
-
-function projectRouteForGovernance(route) {
-  if (!route) return route;
-  const constraints = route.taskDescriptor?.constraints ?? {};
-  const canonical = useEnforcedRoutePlan(route)
-    || constraints.testExecution === 'forbidden'
-    || constraints.subagents === 'forbidden';
-  if (!canonical) return route;
-  const plan = route.routePlan ?? {};
-  const projected = {
-    ...route,
-    requiredSkills: Array.isArray(plan.requiredSkills)
-      ? plan.requiredSkills
-      : (route.requiredSkills ?? []).filter((skill) => constraints.testExecution !== 'forbidden'
-        || !['test-driven-development', 'ai-regression-testing'].includes(skill)),
-    requiredTools: Array.isArray(plan.requiredTools)
-      ? plan.requiredTools
-      : (route.requiredTools ?? []).filter((tool) => constraints.testExecution !== 'forbidden'
-        || !/^omp_test_/i.test(tool)),
-    requiredSubagents: Array.isArray(plan.requiredSubagents)
-      ? plan.requiredSubagents
-      : constraints.subagents === 'forbidden' ? [] : route.requiredSubagents ?? [],
-  };
-  if (isFocusedLocalFactInspection(projected)) {
-    return {
-      ...projected,
-      intent: 'fact-check',
-      workflowRoute: 'factcheck.local',
-      agent: null,
-      auditMode: 'focused',
-    };
-  }
-  if (isExactTestExecution(projected)) {
-    return {
-      ...projected,
-      intent: 'testing',
-      workflowRoute: 'code.test',
-      agent: null,
-      auditMode: 'focused',
-      requiredTools: [],
-    };
-  }
-  if (isReadOnlySecurityReview(projected)) {
-    return {
-      ...projected,
-      intent: 'security-review',
-      workflowRoute: 'security.review',
-      agent: null,
-      auditMode: 'focused',
-    };
-  }
-  if (isReadOnlyCodeReview(projected)) {
-    return {
-      ...projected,
-      intent: 'code.review',
-      workflowRoute: 'code.review',
-      agent: null,
-      auditMode: 'focused',
-    };
-  }
-  if (isCodeModificationWithoutTests(projected)) {
-    const securitySensitive = projected.taskDescriptor?.domains?.includes('security');
-    const releaseRequired = routeRequiresGate(projected, 'release-approval')
-      || projected.taskDescriptor?.constraints?.externalWrite === 'required';
-    return {
-      ...projected,
-      intent: releaseRequired ? 'release' : securitySensitive ? 'security-review' : 'code.dev',
-      workflowRoute: releaseRequired ? 'release' : securitySensitive ? 'security-review' : 'code.dev',
-      agent: null,
-    };
-  }
-  return projected;
-}
-
-function advisorGuidanceLines(route) {
-  const mayDoStatefulWork = [
-    'implementation-with-tests',
-    'bug-audit',
-    'diagnosis',
-    'security-review',
-    'config-assets',
-    'release',
-  ].includes(route?.intent);
-
-  return [
-    'Use the active OMP advisor configuration without binding the prompt to a specific advisor model.',
-    'When an advisor result or advisor message exists in the transcript, give that advice serious weight before choosing the next action.',
-    ...(mayDoStatefulWork ? [
-      'If the runtime exposes an advisor tool, consult it after read-only orientation and before the first edit, write, or state-changing command on non-trivial routed work. If no advisor tool is exposed, continue without inventing one.',
-    ] : []),
-    'If empirical evidence contradicts advisor guidance, follow the primary-source evidence, explain the conflict briefly, and do not silently ignore the advisor.',
-    'If advisor guidance conflicts with the user request, repository facts, or tool results, reconcile the conflict with evidence before committing to a plan or final answer.',
+    'Use advisor input as another evidence source when it is available and useful. Reconcile it with the user request, repository facts, and observed tool results.',
   ];
-}
 
-function documentPreservationGuidanceLines(route, parentTask = '') {
-  const descriptor = route?.taskDescriptor;
-  if (descriptor?.operation !== 'modify'
-    || !descriptor?.domains?.includes('document')
-    || !requiresDocumentPreservation(parentTask)) return [];
-  const targets = Array.isArray(descriptor.workspaceWriteTargets) ? descriptor.workspaceWriteTargets : [];
-  if (targets.length !== 1) return [
-    'Document preservation constraint: this request names multiple document targets, but host preservation evidence is bound to one complete document at a time.',
-    'Do not edit, write, patch, run a mutating shell command, or delegate a writing subagent. Ask the user to split the work into one exact document per task.',
-  ];
-  return [
-    'Document preservation constraint: this is a style edit, not authority to change factual propositions.',
-    'Preserve the full claim, including its subject, predicate, exact values, polarity, quantifiers, range, and modality. Keeping only the same number does not preserve the fact.',
-    `Before any direct or subagent mutation, use the direct read tool to read the complete authorized document ${targets[0]} so the host can bind the baseline; prefer the full selector "raw". Do not use a line-range selector, suffix-matched path, or alternate copy.`,
-    'If that full read is truncated by the host, stop method attempts and ask the user to split the document/task into one smaller exact file or explicitly narrow the preservation scope; chunked reads cannot establish this whole-document baseline.',
-    'After the final direct edit and after all subagent work, the parent agent must directly read the complete authorized document once so host evidence can compare it with the original baseline.',
-    'The host check is a conservative lexical and structural invariant, not a proof of arbitrary semantic equivalence; keep factual rewrites minimal so the invariant remains mechanically verifiable.',
-    'Use the smallest equivalent rephrase; if a factual sentence is already clear, leave it unchanged. Compare the original and final claim before reporting completion.',
-  ];
-}
-
-function skillWorkflowLines(route) {
-  const hasSubagents = (route.requiredSubagents ?? []).length > 0;
-  const exclusiveTool = route.taskDescriptor?.exclusiveToolContract?.allowedTools?.[0];
-  if (exclusiveTool) {
-    if (isFocusedLocalFactInspection(route) && exclusiveTool === 'read') {
-      return [
-        `The user authorized exactly one read of ${route.taskDescriptor.exclusiveToolContract.input?.target}; no grep, skill read, QA tool, subagent, or alternate method is authorized.`,
-        'Treat this as method-limited evidence. Explain the observed limitation if requested and end with FACT_VERDICT: INSUFFICIENT; do not claim supported or contradicted from one bounded read.',
-      ];
-    }
-    if (isFocusedLocalFactInspection(route) && exclusiveTool === 'grep') {
-      return [
-        'The user authorized exactly one built-in focused grep. Do not read another file, load skills, call fact_check_* tools, delegate, or retry with another search method.',
-        'Explain only the host-observed repository evidence and end with one FACT_VERDICT line.',
-      ];
-    }
-    if (route.routePlan?.gateRequirements?.some(({ key, mode }) => mode === 'required'
-      && ['security-evidence', 'review-evidence', 'release-approval', 'irreversible-approval', 'writing-quality'].includes(key))) {
-      return [
-        'The exclusive one-tool request cannot satisfy this protected multi-evidence route. Do not call the tool, load skills, delegate, or try an alternate method; report the conflict and request one clarified authorization.',
-      ];
-    }
-  }
-  if (isFocusedLocalFactInspection(route)) {
-    return [
-      'This is a focused offline repository-evidence check handled directly by the main agent; no network, subagent, edit, test, or heavyweight cross-source fact workflow is authorized.',
-      'Read the claim and search independent repository files for corroborating or contradicting evidence. The claim text itself is not independent evidence.',
-      'Report supported, contradicted, or insufficient evidence explicitly. If the repository contains only the claim itself, conclude that local evidence is insufficient and stop.',
-    ];
-  }
-  if (isExactTestExecution(route)) {
-    const scope = exactTestScope(route);
-    const commandOnly = isCommandOnlyExactTestExecution(route);
-    return [
-      `This is one exact test execution for ${scope}; no broader verification scope is authorized.`,
-      commandOnly
-        ? 'The user authorized only the single direct test command. Do not call read or any other tool before or after it.'
-        : 'Inspect package or runner configuration with the read tool. Do not use shell pipelines, redirections, aliases, or exploratory commands for that inspection.',
-      'Run one direct host test command that names every authorized test file once and in the requested order, then report the observed result. A successful matching host result closes this exact-test evidence directly; do not call omp_test_gate or omp_core_subagent_status to infer whether it is complete. Do not omit or substitute targets, use an aggregate suite, or add runner preloads and extra flags.',
-    ];
-  }
-  if (isReadOnlySecurityReview(route)) {
-    return [
-      'This is a focused read-only security review handled by the main agent; no subagent, test, edit, network, or release workflow is authorized.',
-      'Before reviewing, read skill://security-review and skill://security-scan. Then inspect the target and, when needed to substantiate impact, direct local callers with read-only tools.',
-      'Report only code-supported facts. Missing validation, authentication, logging, or sanitization is not itself an exploitable vulnerability unless a concrete local caller or security-sensitive sink proves that responsibility and impact.',
-      'Do not assign vulnerability names or severity from a function name, pass-through behavior, or hypothetical downstream use. If no concrete caller or sink supports impact, use Findings: none confirmed in the inspected scope.',
-      'For this report-only route, Verdict: COMPLETE means the evidence collection is complete; it does not approve a remediation or claim the code is safe.',
-      'Finish with this exact multiline evidence block:',
-      'SECURITY_REVIEW',
-      'Scope: <reviewed file and any callers actually inspected>',
-      'Findings: <supported findings, or none confirmed in the inspected scope>',
-      'Evidence: <concrete boundary, caller, or sink evidence; a function name or missing validation alone is insufficient>',
-      'OpenBlockers: none',
-      'Verdict: COMPLETE',
-    ];
-  }
-  if (isReadOnlyCodeReview(route)) {
-    return [
-      'This is a read-only code review. Inspect the requested scope and report concrete evidence directly.',
-      'Test execution is forbidden for this route. Do not run test commands, generate test files, or enter a testing workflow.',
-      'Do not turn findings into production-code edits or test-evidence repair attempts.',
-    ];
-  }
-  if (isCodeModificationWithoutTests(route)) {
-    const releaseRequired = routeRequiresGate(route, 'release-approval')
-      || route.taskDescriptor?.constraints?.externalWrite === 'required';
-    return [
-      hasSubagents
-        ? 'This is a routed code modification with an explicit no-test boundary; keep every listed review and subagent contract that does not require test execution.'
-        : 'This is a focused direct code modification with an explicit no-test boundary.',
-      hasSubagents
-        ? 'Delegate only to the listed required subagents with their assigned skills, apply the authorized edit, and use static review evidence.'
-        : 'Load the listed direct-work skills, inspect the requested target, apply the smallest authorized edit, and perform a static review.',
-      'Test execution is forbidden for this route. Do not enter a testing workflow or try test commands as verification.',
-      ...(releaseRequired ? ['After static review, perform only the explicitly authorized release action and independently verify its exact target and immutable version or revision.'] : []),
-    ];
-  }
-  if (isFocusedBugAuditRoute(route)) {
-    if (!needsTesting(route) && !(route.requiredSkills ?? []).length) {
-      return [
-        'This is a focused direct bug-audit route. The main agent inspects the bounded failure path directly instead of forking the heavy audit subagent set.',
-        'No particular skill, test method, or QA gate is mandatory for this route. Use the smallest relevant evidence path once and do not invent extra method attempts.',
-        'Do not fork bug-audit subagents unless the user expands the task into a broad audit or asks for parallel delegation.',
-      ];
-    }
-    return [
-      'This is a focused direct bug-audit route. The main agent does the bounded audit directly instead of forking the heavy audit subagent set.',
-      'Before using edit, write, bash, route-specific QA, or omp_test_* gates, preload only the listed focused audit skills with read calls and wait for the results.',
-      'Use the listed skills to build a compact local test matrix, inspect the concrete failure path, run the relevant checks, and finish with the listed test gate plus SKILL_USAGE evidence.',
-      'Do not fork bug-audit subagents unless the user expands the task into a broad audit or asks for parallel delegation.',
-    ];
+  if (includeModelWorkflowHints) {
+    lines.push(
+      '',
+      '### Routing model note',
+      '',
+      'Classifier output is a route hint. It may refine workflow suggestions, but it does not create permissions or completion conditions.',
+    );
   }
 
-  if (hasSubagents) {
-    return [
-      'This route delegates required skill loading to the task subagents. Do not read root route skills in the main agent just to unlock task.',
-      'Before forking, put each subagent-specific skill list into that subagent task assignment. The subagent must read those skill URIs before acting and report which skills it loaded.',
-      'If the main agent later does direct work itself with edit, write, bash, route-specific QA, or test gates, load only the skills needed for that direct main-agent action.',
-      'When validating loaded skills, prefer subagent task evidence and SUBAGENT_USAGE for delegated skills. Use SKILL_USAGE to summarize the skills loaded by the acting agent or subagents; do not repair delegated skill gaps by repeatedly reading them in the main agent.',
-    ];
-  }
-
-  return [
-    'There is no tool named `skill` in this runtime. Load skills only by calling the `read` tool with a `skill://<skill-name>` path.',
-    `Required skill URIs: ${(route.requiredSkills ?? []).map((skill) => `skill://${skill}`).join(', ') || 'none'}.`,
-    'Do not print XML or <tool_call> text. Make the actual tool call instead.',
-    'Before doing the routed work, call the `read` tool once for each required skill using the exact URI `skill://<skill-name>`. Wait for those reads to finish before acting. If a required skill is unavailable, state that explicitly and do not pretend it was loaded.',
-    'The runtime enforces this as a pre-work skill gate: direct work tools such as edit, write, bash, route-specific QA, and test gates may be blocked until every required skill has successful read evidence.',
-    'When validating loaded skills, prefer this order in the same assistant continuation: read every missing `skill://<skill-name>` first, wait for those read results, then call `omp_core_validate_skill_usage` with the full SKILL_USAGE output. This avoids stale branch snapshots hiding just-loaded skills.',
-  ];
+  return lines.join('\n');
 }
 
 export function buildSubagentPromptFragment({ prompt = '' } = {}) {
-  const { agent, requiredSkills } = parseSubagentLaunchContract(prompt);
-  const resolvedAgent = agent || 'subagent';
-  const workflowBriefing = parseWorkflowGateBriefing(prompt);
-
+  const agent = parseRole(prompt) || 'subagent';
+  const skills = parseRoleSkills(prompt);
+  const parentBriefing = parseWorkflowBriefing(prompt);
   return [
-    '## OMP Enhancer Core Subagent Contract',
+    '## OMP Enhancer Core Role Guidance',
     '',
-    `Subagent: ${resolvedAgent}`,
+    `Role: ${agent}`,
     '',
-    'This is a spawned subagent assignment, not a root routed workflow. Do not start another OMP Enhancer Core role-gate cycle and do not fork extra subagents unless the assignment explicitly asks for nested delegation.',
-    '',
-    ...(workflowBriefing.length ? [
-      'Parent workflow and gates:',
-      ...workflowBriefing,
-      'Read this briefing before acting. Your output completes only your assigned checkpoint; the main agent owns parent workflow completion gates unless the assignment explicitly says otherwise.',
+    ...(parentBriefing.length ? [
+      'Parent workflow context:',
+      ...parentBriefing,
       '',
     ] : []),
-    'Required skills for this subagent:',
-    formatList(requiredSkills),
+    'Suggested skills for this role:',
+    formatSkillList(skills),
     '',
-    'Before acting, read the required skills using these URIs. If a required skill is unavailable, stop and report it in BLOCKERS.',
-    formatSubagentSkillReadSteps(requiredSkills),
-    'Use canonical names in Required. In Loaded, list the exact skill names successfully read; aliases equivalent to the Required entries are accepted.',
+    'Use the suggested skills when they improve the assigned checkpoint. Missing skills are a limitation to report, not a reason for the plugin to halt the role.',
     '',
-    'Final subagent output must end with:',
-    '',
-    'SKILL_USAGE',
-    'Required:',
-    formatList(requiredSkills),
-    'Loaded:',
-    formatList(requiredSkills),
-    '',
-    'SUBAGENT_RESULT',
-    `Agent: ${resolvedAgent}`,
-    'Status: complete|blocked',
-    'Evidence:',
-    '- concise files, tools, checks, or decisions used',
-    'BLOCKERS:',
-    '- none, or the exact blocker',
+    'Return a concise result with the evidence, files, checks, and decisions used. The parent agent integrates this checkpoint into the overall task.',
   ].join('\n');
 }
 
-export function buildMissingGateContext({ route, state } = {}) {
-  return buildMissingGateContexts({ route, state })[0]?.context ?? null;
-}
-
-export function buildMissingGateContexts({ route, state } = {}) {
-  if (!route || route.intent === 'unknown') return [];
-  if (governanceRouteConflictReason(route)) return [];
-
-  const contexts = [];
-
-  if (needsFactCheck(route) && !state?.evidence?.factCheckGate) {
-    const focusedEvidenceKind = state?.evidence?.focusedFactEvidence?.matchKind;
-    const hasReusableFocusedEvidence = ['no-match', 'claim-only', 'independent-hit'].includes(focusedEvidenceKind);
-    const focusedSearchStatus = state?.focusedFactSearch?.status;
-    const focusedExclusiveTool = route.taskDescriptor?.exclusiveToolContract?.allowedTools?.[0];
-    contexts.push(isFocusedLocalFactInspection(route)
-      ? { key: 'fact-check', context: hasReusableFocusedEvidence ? [
-        `OMP Enhancer Core already recorded host-observed local fact evidence (${focusedEvidenceKind}).`,
-        'Do not run grep or another method again. Rewrite only the final conclusion so it explicitly says supported, contradicted, or insufficient repository evidence.',
-        'End the answer with exactly one machine-readable line: FACT_VERDICT: INSUFFICIENT, FACT_VERDICT: SUPPORTED, or FACT_VERDICT: CONTRADICTED.',
-        focusedEvidenceKind === 'independent-hit'
-          ? 'Keep the verdict consistent with the independent repository result already shown to you.'
-          : 'A claim-only or no-match result cannot support or contradict the claim; report insufficient evidence without adding a positive or negative factual verdict.',
-      ].join('\n') : focusedSearchStatus === 'failed' ? [
-        'OMP Enhancer Core recorded that the route-scoped focused grep failed or returned no usable host evidence.',
-        'Do not run grep or another search method again. Report that verification is blocked by the failed search and that repository evidence is insufficient.',
-        'End the answer with exactly one machine-readable line: FACT_VERDICT: INSUFFICIENT.',
-      ].join('\n') : focusedSearchStatus === 'succeeded' ? [
-        'OMP Enhancer Core recorded the single route-scoped focused grep, but its result did not provide reusable claim-bound evidence.',
-        'Do not run grep or another search method again. Report that the available repository evidence is insufficient.',
-        'End the answer with exactly one machine-readable line: FACT_VERDICT: INSUFFICIENT.',
-      ].join('\n') : focusedSearchStatus === 'started' ? [
-        'OMP Enhancer Core already recorded the single route-scoped focused grep as started.',
-        'Do not launch grep or another search method. Wait for and use that host result; if it failed or returned no usable evidence, report the verification as blocked and the evidence as insufficient.',
-        'End the answer with exactly one machine-readable line consistent with the host result: FACT_VERDICT: INSUFFICIENT, FACT_VERDICT: SUPPORTED, or FACT_VERDICT: CONTRADICTED.',
-      ].join('\n') : focusedExclusiveTool === 'read' ? [
-        `OMP Enhancer Core is waiting for the one authorized read of ${route.taskDescriptor.exclusiveToolContract.input?.target}.`,
-        'Do not call grep, search, skills, fact_check_* tools, or another read. After the single host result, report the method limitation and end with FACT_VERDICT: INSUFFICIENT.',
-      ].join('\n') : [
-        'OMP Enhancer Core local fact-evidence gate is still open.',
-        'Use one successful built-in grep over the repository root with a concrete claim-related pattern before concluding. Reading or repeating only the claim text is not independent evidence.',
-        'Then report supported, contradicted, or insufficient repository evidence explicitly. Do not use the network, subagents, tests, edits, or the heavyweight fact_check_* workflow.',
-        'End the answer with exactly one machine-readable line: FACT_VERDICT: INSUFFICIENT, FACT_VERDICT: SUPPORTED, or FACT_VERDICT: CONTRADICTED.',
-      ].join('\n') }
-      : { key: 'fact-check', context: [
-        'OMP Enhancer Core gate is still open for this fact-checking task.',
-        'Run the fact-checking workflow before finishing: fact_check_analyze, independent fact_check_evidence lanes when sources are available, fact_check_report, then fact_check_gate.',
-        'The final answer must distinguish supported, contradicted, insufficient, and stale claims. Include FACT_CHECK_PLAN, FACT_EVIDENCE_A, FACT_EVIDENCE_B when required, FACT_CROSS_CHECK, FACT_REVIEW, FACT_CHECK_REPORT, FACT_CHECK_USAGE, SKILL_USAGE, and SUBAGENT_USAGE when subagents are routed.',
-        formatRecentToolFailures(state, ['fact_check_gate']),
-      ].filter(Boolean).join('\n') });
-  }
-
-  if (needsWritingQuality(route) && !state?.evidence?.writingQuality) {
-    contexts.push({ key: 'writing-qa', context: [
-      'OMP Enhancer Core gate is still open for this writing task.',
-      'Run writing QA before finishing. Use writing_quality_check or writing_logic_check, and make sure SKILL_USAGE lists the required writing skills such as plain-chinese-writing when required.',
-      formatRecentToolFailures(state, ['writing_quality_check', 'writing_logic_check']),
-    ].filter(Boolean).join('\n') });
-  }
-
-  if (needsTesting(route) && !state?.evidence?.testingGate) {
-    if (isExactTestExecution(route)) {
-      const commandOnly = isCommandOnlyExactTestExecution(route);
-      contexts.push({ key: 'testing', context: [
-        'OMP Enhancer Core exact-test evidence is still open.',
-        commandOnly
-          ? `Execute the one direct host command authorized by ${exactTestScope(route)} and report the observed result; do not call read or any other tool.`
-          : `Use read to inspect runner configuration, then execute one direct host command authorized by ${exactTestScope(route)} and report the observed result.`,
-        'Do not run aggregate aliases, additional test targets, pipelines, redirections, runner preloads, or generated test cases.',
-        formatRecentToolFailures(state, ['omp_test_gate']),
-      ].filter(Boolean).join('\n') });
-    } else if (route.intent === 'implementation-with-tests') {
-      contexts.push({ key: 'testing', context: [
-        'OMP Enhancer Core gate is still open for this implementation testing task.',
-        'Review is not the terminal phase. After plan, implementation-task, and reviewer have returned, switch to the post-review testing checkpoint before finishing.',
-        'Post-review testing checkpoint: resolve reviewer blockers or report BLOCKERS, load any root skills needed for direct testing tools, run the relevant local test commands, then run omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report.',
-        'If omp_test_* tools are unavailable in this runtime, do not loop on missing tool calls; run the local test commands and close with a manual testing gate report covering indirect-test, test-file-scope, browser-interaction, browser-visual, and test-command evidence.',
-        'Do not finish with only reviewer approval. When omp_test_* tools are available, first produce a successful host-observed test command result, then close the testing checkpoint with a successful omp_test_gate result and SKILL_USAGE evidence; omp_test_gate never executes a command from its arguments or project config. Otherwise the manual testing gate report closes the fallback path.',
-        formatRecentToolFailures(state, ['omp_test_gate']),
-      ].filter(Boolean).join('\n') });
-    } else {
-      contexts.push({ key: 'testing', context: [
-        'OMP Enhancer Core gate is still open for this bug-audit or implementation testing task.',
-        'Run the testing-enhancer workflow and finish with omp_test_gate. Use omp_test_analyze and omp_test_context first; for bug-audit, build and execute a deduplicated test matrix instead of relying on static analysis alone. Call omp_test_browser_check only when browserPlan exists, omp_test_coverage_analyze only when a coverage report exists, and omp_test_mutation_context only when a mutation report exists. Keep SKILL_USAGE evidence in the final response.',
-        'If omp_test_* tools are unavailable in this runtime, do not loop on missing tool calls; run the local test commands and close with a manual testing gate report covering generated/executed/skipped cases and the testing gate evidence.',
-        formatRecentToolFailures(state, ['omp_test_gate']),
-      ].filter(Boolean).join('\n') });
-    }
-  }
-
-  return contexts;
-}
-
-function workflowGateBriefingLines(route) {
-  return [
-    '### Workflow and Gate Briefing',
-    '',
-    `Routed intent: ${route.intent}`,
-    `Routed workflow: ${workflowFor(route)}`,
-    `Routed boundary: ${stripRouteBoundaryLabel(routeBoundaryFor(route))}`,
-    '',
-    'Completion gates before final answer:',
-    ...completionGateChecklist(route).map((gate) => `- ${gate}`),
-    '',
-    workflowBriefingScopeLine(route),
-  ];
-}
-
-export function formatWorkflowGateBriefingForAssignment(route) {
+export function formatWorkflowBriefingForAssignment(route) {
   if (!route || route.intent === 'unknown') return '';
+  const resolved = advisoryRoute(route);
   return [
-    'Workflow and gate briefing:',
-    `Parent intent: ${route.intent}`,
-    `Parent workflow: ${workflowFor(route)}`,
-    `Parent boundary: ${stripRouteBoundaryLabel(routeBoundaryFor(route))}`,
-    'Parent completion gates before final answer:',
-    ...completionGateChecklist(route).map((gate) => `- ${gate}`),
-    'Subagent scope: read this before acting, complete only this assigned checkpoint, and return evidence or BLOCKERS. Do not claim the parent workflow is complete.',
+    'Workflow briefing:',
+    `Parent intent: ${resolved.intent}`,
+    `Parent workflow: ${resolved.workflowRoute}`,
+    'Suggested parent steps:',
+    formatSteps(resolved.routePlan.steps),
+    'This role contributes one checkpoint; the parent agent coordinates the final result.',
   ].join('\n');
 }
 
-function completionGateChecklist(route) {
-  const gates = [];
-  const requiredSubagents = route.requiredSubagents ?? [];
-
-  if (isReadOnlyCodeReview(route)) {
-    gates.push('Read-only review boundary: report file and symbol evidence without running tests or repairing test evidence.');
-  }
-
-  if (requiredSubagents.length) {
-    gates.push(`Native subagent gate: fork ${requiredSubagents.map(({ agent }) => agent).join(', ')} with their role skill contracts and finish with SUBAGENT_USAGE.`);
-  }
-
-  if (route.intent === 'implementation-with-tests' && needsTesting(route)) {
-    gates.push('Review-to-testing gate: reviewer approval is followed by the post-review testing checkpoint; reviewer approval alone is not enough.');
-  }
-
-  if (routeRequiresGate(route, 'review-evidence')) {
-    gates.push([
-      'Review evidence gate: complete the routed reviewer checkpoint, or for a focused main-agent change include concrete multiline evidence after the static review. Do not copy instruction placeholders:',
-      'REVIEW_EVIDENCE',
-      'Scope: state the target and change actually reviewed',
-      'Findings: state the concrete findings actually observed',
-      'OpenBlockers: state none only when no blocker remains; otherwise list the blockers',
-      'Verdict: use PASS only when the review actually passes; otherwise report the blocking verdict',
-    ].join('\n'));
-  }
-
-  if (needsTesting(route)) {
-    gates.push(isExactTestExecution(route)
-      ? isCommandOnlyExactTestExecution(route)
-        ? `Exact test evidence gate: execute the single direct host command authorized by ${exactTestScope(route)}, and report that observed result; do not call another tool, run additional targets, or substitute an alias.`
-        : `Exact test evidence gate: use read for runner configuration, execute one direct host command authorized by ${exactTestScope(route)}, and report that observed result; do not run additional targets or substitute an alias.`
-      : 'Testing gate: run relevant local test/build/lint commands through an explicit host tool call, then omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report before final claims. omp_test_gate only validates route-scoped host evidence and never executes its testCommand/config command. If omp_test_* tools are unavailable, provide an equivalent manual testing gate report with concrete local command evidence.');
-  }
-
-  if (needsWritingQuality(route)) {
-    gates.push('Writing QA gate: run writing_logic_check or writing_quality_check before final writing claims.');
-  }
-
-  if (route.intent === 'bug-audit' && needsTesting(route)) {
-    gates.push(isFocusedBugAuditRoute(route)
-      ? 'Focused audit gate: generate and run a compact bounded test matrix before the focused BUG-AUDIT-REPORT.'
-      : 'Bug-audit gate: generate, deduplicate, execute, and report high-signal test cases before BUG-AUDIT-REPORT claims.');
-  }
-
-  if (route.intent === 'fact-check') {
-    gates.push(isFocusedLocalFactInspection(route)
-      ? route.taskDescriptor?.exclusiveToolContract?.allowedTools?.[0] === 'read'
-        ? `Local fact-evidence gate: use the one authorized read of ${route.taskDescriptor.exclusiveToolContract.input?.target}, treat it as method-limited evidence, and conclude FACT_VERDICT: INSUFFICIENT without another method.`
-        : 'Local fact-evidence gate: run one built-in grep over the repository root with a concrete claim-related pattern, then report supported, contradicted, or insufficient evidence without external research.'
-      : 'Fact-check gate: plan claims, collect independent evidence lanes when sources are available, cross-check agreement and conflicts, review overclaiming, then run fact_check_gate before final factual claims.');
-  }
-
-  if (route.intent === 'security-review' || routeRequiresGate(route, 'security-evidence')) {
-    gates.push(isReadOnlySecurityReview(route)
-      ? [
-        'Security evidence gate: after loading the two required security skills and inspecting the requested source scope, include this exact multiline block:',
-        'SECURITY_REVIEW',
-        'Scope: <reviewed file and any callers actually inspected>',
-        'Findings: <supported findings, or none confirmed in the inspected scope>',
-        'Evidence: <concrete boundary, caller, or sink evidence; a function name or missing validation alone is insufficient>',
-        'OpenBlockers: none',
-        'Verdict: COMPLETE',
-      ].join('\n')
-      : 'Security gate: complete security risk analysis first; remediation or final risk claims must be checked by the reviewer role when changes are in scope.');
-  }
-
-  if (route.intent === 'config-assets') {
-    gates.push('Config gate: use the config doctor/assets/plan tools as relevant, then have config-librarian and reviewer evidence before config or marketplace claims.');
-  }
-
-  if (route.intent === 'diagnosis') {
-    gates.push('Diagnosis gate: inspect the concrete failure path and explain root cause before proposing or making fixes.');
-  }
-
-  if (route.intent === 'release' || routeRequiresGate(route, 'release-approval')) {
-    gates.push('Release gate: verify repository state and the requested packaging, push, marketplace, or upgrade checks before release claims.');
-  }
-
-  if (!gates.length) {
-    gates.push('No additional plugin-specific tool gate beyond the route boundary and final evidence requirements.');
-  }
-
-  gates.push('Final evidence gate: final assistant answer text includes SKILL_USAGE, and includes SUBAGENT_USAGE when routed subagents are required; successful validator tool calls can satisfy internal gates, while final blocks remain required user-visible evidence.');
-  return gates;
+function advisoryRoute(route = {}) {
+  const rawPlan = route.routePlan ?? {};
+  const skills = unique(rawPlan.skills ?? route.skills ?? route.requiredSkills ?? []);
+  const tools = unique(rawPlan.tools ?? route.tools ?? route.requiredTools ?? []);
+  const roles = normalizeRoles(rawPlan.roles ?? route.roles ?? route.requiredSubagents ?? []);
+  const steps = normalizeSteps(rawPlan.steps ?? route.taskDescriptor?.phases ?? []);
+  return {
+    ...route,
+    intent: route.intent ?? 'unknown',
+    workflowRoute: route.workflowRoute ?? 'agentic.simple',
+    routePlan: {
+      version: 2,
+      mode: 'advisory',
+      autoContinue: false,
+      steps,
+      skills,
+      tools,
+      roles,
+      qualityChecks: unique(rawPlan.qualityChecks ?? route.qualityChecks ?? []),
+      riskNotes: unique(rawPlan.riskNotes ?? route.riskNotes ?? []),
+    },
+  };
 }
 
-function workflowBriefingScopeLine(route) {
-  return (route.requiredSubagents ?? []).length
-    ? 'Every task subagent must read this briefing before acting, complete only its assigned checkpoint, and return evidence instead of claiming the parent workflow is complete.'
-    : 'No task subagent is required for this route; the main agent owns the workflow gates directly.';
-}
+function scopeAndRiskLines(route, parentTask = '') {
+  const lines = [];
+  const descriptor = route.taskDescriptor ?? {};
+  const plan = route.routePlan;
 
-function stripRouteBoundaryLabel(value = '') {
-  return String(value).replace(/^Route boundary:\s*/i, '').trim();
-}
-
-function reviewToTestingHandoffLines(route) {
-  if (route.intent !== 'implementation-with-tests' || !needsTesting(route)) return [];
-  return [
-    '### Review-to-Testing Handoff',
-    '',
-    'Implementation routes have two separate quality checkpoints: semantic review first, deterministic testing second.',
-    '',
-    'Required order:',
-    '- plan produces or confirms the implementation plan.',
-    '- implementation-task applies the code and test changes.',
-    '- reviewer checks the resulting diff for semantic regressions and blockers.',
-    '- main agent resolves reviewer blockers or reports BLOCKERS.',
-    '- main agent then switches to testing: run the relevant local test command(s), omp_test_analyze, omp_test_context, omp_test_gate, and omp_test_report.',
-    '',
-    'Reviewer approval does not close the testing gate. Do not produce a final answer until the post-review testing checkpoint has run and omp_test_gate has passed.',
-  ];
-}
-
-function formatRecentToolFailures(state, toolNames = []) {
-  const failures = state?.evidence?.toolFailures;
-  if (!Array.isArray(failures)) return null;
-  const allowed = new Set(toolNames);
-  const relevant = failures.filter((failure) => allowed.has(failure.tool));
-  if (!relevant.length) return null;
-  return [
-    'Recent failed tool results:',
-    ...relevant.map((failure) => {
-      const details = [failure.summary, failure.message, failure.repairHint ? `Repair: ${failure.repairHint}` : null]
-        .filter(Boolean)
-        .join(' ');
-      const attempts = Number.isInteger(failure.attempts) && failure.attempts > 1 ? ` (${failure.attempts} attempts)` : '';
-      return `- ${failure.tool}${attempts}: ${details || 'tool returned a failed result'}`;
-    }),
-  ].join('\n');
-}
-
-function workflowNextLines(route, parentTask = '') {
-  const exclusiveRouteProbe = (route.taskDescriptor?.provenance?.reasons ?? [])
-    .includes('exclusive route task diagnostic probe');
-  const exclusiveStatusProbe = (route.taskDescriptor?.provenance?.reasons ?? [])
-    .includes('exclusive subagent status diagnostic probe');
-  const exclusiveObservationProbe = exclusiveRouteProbe || exclusiveStatusProbe;
-  const firstSkill = route.requiredSkills?.[0];
-  const directSkills = route.requiredSkills ?? [];
-  const delegatesWork = Boolean(route.requiredSubagents?.length);
-  const nextAction = exclusiveRouteProbe
-    ? 'Next action: call omp_core_route_task exactly once with the user-supplied prompt, then report the requested route fields and any explanation explicitly requested by the user.'
-    : exclusiveStatusProbe
-      ? 'Next action: call omp_core_subagent_status exactly once, then report only the requested status result.'
-    : firstSkill && delegatesWork
-    ? `Next action: load skill://${firstSkill} into the first routed subagent task assignment before acting.`
-    : directSkills.length
-      ? `Next action sequence before task work: read ${directSkills.map((skill) => `skill://${skill}`).join(', ')}; wait for every read result; then call omp_core_validate_skill_usage with all required and loaded skills before using task-domain tools.`
-      : 'Next action: follow the route card using the selected tools.';
-  const constrainedProbe = exclusiveObservationProbe || isConstrainedRouteStatusSkillPrompt(parentTask);
-  return [
-    'WORKFLOW_NEXT',
-    nextAction,
-    ...(constrainedProbe ? [
-      'User constraint: route/status/skill checks only.',
-      ...(exclusiveObservationProbe ? [`Do not call any tool other than the single requested ${exclusiveRouteProbe ? 'omp_core_route_task' : 'omp_core_subagent_status'} probe. Do not load routed skills or execute the probed workflow.`] : []),
-      'Do not call eval, bash, task, edit, write, project QA tools, or test commands while this constraint is active.',
-      'If compact JSON is requested, return one raw single JSON object with no Markdown fence, without Markdown fences, without a preface, and without trailing explanation.',
-      'Do not repeat SKILL_USAGE, SUBAGENT_USAGE, or evidence blocks inside compact JSON route/status/skill check responses; encode only the compact fields the user requested.',
-    ] : []),
-    directSkills.length && !delegatesWork
-      ? 'Soft guidance: complete this bounded skill bootstrap once, then perform the task; do not defer skill evidence to a completion repair.'
-      : 'Soft guidance: keep this to one immediate action and adjust only when tool evidence conflicts.',
-    '',
-    'WORKFLOW_CONTEXT',
-  ];
-}
-
-function isConstrainedRouteStatusSkillPrompt(prompt = '') {
-  const text = String(prompt).toLowerCase();
-  const limitsTools = /(?:route\/status\/skill|route.*status.*skill|omp_core_route_task.*omp_core_subagent_status|omp_core_subagent_status.*omp_core_route_task)/.test(text);
-  const avoidsStatefulWork = /(?:do not modify|do not run tests|do not fork|不修改|不运行测试|不跑测试|不\s*fork)/.test(text);
-  return limitsTools && avoidsStatefulWork;
-}
-
-function workflowFor(route) {
-  const intent = route.intent;
-  if (isFocusedLocalFactInspection(route)) return route.taskDescriptor?.exclusiveToolContract?.allowedTools?.[0] === 'read'
-    ? `Focused local fact workflow: read ${route.taskDescriptor.exclusiveToolContract.input?.target} exactly once -> report the method-limited evidence -> end with FACT_VERDICT: INSUFFICIENT without grep or another method.`
-    : 'Focused local fact workflow: read the claim -> search repository evidence -> separate the claim from independent support -> report supported, contradicted, or insufficient evidence without external research.';
-  if (isExactTestExecution(route)) return isCommandOnlyExactTestExecution(route)
-    ? `Exact test workflow: run the single direct command authorized by ${exactTestScope(route)} -> report the host-observed result without another tool call.`
-    : `Exact test workflow: inspect runner configuration with read -> run one direct command authorized by ${exactTestScope(route)} -> report the host-observed result without generating additional tests.`;
-  if (isReadOnlySecurityReview(route)) return 'Focused read-only security workflow: load security-review and security-scan -> inspect the requested file and direct local callers -> separate code facts from unsupported threat assumptions -> emit SECURITY_REVIEW evidence without edits or tests.';
-  if (isReadOnlyCodeReview(route)) return 'Read-only code review workflow: inspect the requested file and directly related code -> collect concrete file and symbol evidence -> report findings without test execution or test-evidence repair.';
-  if (isCodeModificationWithoutTests(route)) {
-    const actors = (route.requiredSubagents ?? []).map(({ agent }) => agent).filter(Boolean);
-    const releaseRequired = routeRequiresGate(route, 'release-approval')
-      || route.taskDescriptor?.constraints?.externalWrite === 'required';
-    const actorStep = actors.length ? ` -> delegate the routed checkpoints (${actors.join(', ')})` : '';
-    const releaseStep = releaseRequired ? ' -> perform the explicitly authorized release -> independently verify the exact released target and immutable version or revision' : '';
-    return `No-test code modification workflow: inspect the authorized scope${actorStep} -> apply the authorized change -> use static review evidence${releaseStep} -> report the untested change explicitly.`;
-  }
-  if ((intent === 'writing.zh' || intent === 'writing.en') && !(route.requiredSubagents ?? []).length) {
-    return 'Writing workflow: lightweight edit handled directly by the main agent after required skills are loaded.';
-  }
-  if (intent === 'writing.zh') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, zh-writer -> zh-checker -> writing_quality_check.';
-  if (intent === 'writing.en') return 'Writing workflow: for simple writing, the main agent edits directly; for complex writing, writer -> checker -> writing_quality_check.';
-  if (intent === 'bug-audit' && isFocusedBugAuditRoute(route) && !needsTesting(route)) return 'Focused bug audit workflow: inspect the bounded failure path once with the smallest relevant evidence path -> report concrete findings or no finding. No mandatory test method, QA gate, or subagent attempt applies.';
-  if (intent === 'bug-audit' && isFocusedBugAuditRoute(route)) return 'Focused bug audit workflow: preload only the listed skills -> inspect the bounded failure path directly -> generate and run the smallest high-signal local test matrix -> close the listed test and review evidence gates -> focused BUG-AUDIT-REPORT.';
-  if (intent === 'bug-audit') return 'Bug audit workflow: ecc-tdd-guide generates a deduplicated multi-channel executable test matrix -> ecc-code-reviewer static audit -> ecc-silent-failure-hunter failure-path audit -> ecc-pr-test-analyzer checks generated tests, duplicate removal, execution results, and coverage gaps -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report -> BUG-AUDIT-REPORT or final bug report.';
-  if (intent === 'fact-check') return 'Fact-check workflow: fact-planner -> fact-researcher-a and fact-researcher-b independent evidence lanes -> fact-cross-checker -> fact-reviewer -> fact_check_analyze -> fact_check_evidence as needed -> fact_check_report -> fact_check_gate -> FACT_CHECK_REPORT.';
-  if (intent === 'testing') return 'Focused testing workflow: run only the authorized test target list once with a direct host command, then report the observed result.';
-  if (intent === 'implementation-with-tests') return 'Coding workflow: plan -> implementation-task -> reviewer -> post-review testing checkpoint -> local test commands -> omp_test_analyze -> omp_test_context -> conditional browser, coverage, and mutation checks from testing-enhancer -> omp_test_gate -> omp_test_report.';
-  if (intent === 'security-review') return 'Security workflow: ecc-security-reviewer -> reviewer -> fix or report only after risk evidence is checked.';
-  if (intent === 'config-assets') return 'Config workflow: use omp_config_doctor, omp_config_assets, or omp_config_plan as needed.';
-  if (intent === 'diagnosis') return 'Diagnosis workflow: inspect the reported failure and explain root cause first; do not modify files unless the user asks for a fix.';
-  if (intent === 'release') return 'Release workflow: verify repository status, run the relevant packaging or marketplace checks, then execute the requested push, publish, upgrade, or release step.';
-  return 'Workflow: use the selected agent and tools.';
-}
-
-function routeBoundaryFor(route) {
-  const intent = route.intent;
-  if (isExactTestExecution(route)) {
-    const descriptor = route.taskDescriptor ?? {};
-    const scope = exactTestScope(route);
-    const constraints = descriptor.constraints ?? {};
-    const extras = [
-      constraints.workspaceWrite === 'forbidden' ? 'workspace writes' : null,
-      constraints.networkAccess === 'forbidden' ? 'network access' : null,
-      constraints.subagents === 'forbidden' ? 'subagents' : null,
-      constraints.externalWrite !== 'required' ? 'external writes' : null,
-    ].filter(Boolean);
-    const commandSequence = isCommandOnlyExactTestExecution(route)
-      ? 'Use only the single direct command naming every target once and in order; do not call read or any other tool'
-      : 'Use read for configuration inspection and one direct command naming every target once and in order';
-    return `Route boundary: execute only ${scope}. ${commandSequence}; omitted or substituted targets or commands, pipelines, redirections, and runner preloads are outside scope.${extras.length ? ` ${extras.join(', ')} remain forbidden.` : ''}`;
-  }
-  if (isReadOnlySecurityReview(route)) {
-    return 'Route boundary: this is a read-only, local security review. Use read-only tools, inspect the requested source scope and direct callers, and report only supported findings; do not edit, run tests, use the network, delegate, or release.';
-  }
-  if (isReadOnlyCodeReview(route)) {
-    return 'Route boundary: this is a read-only code review. Test execution is forbidden; do not run test commands, create test files, enter a testing workflow, or edit production code. Report only evidence from permitted read operations.';
-  }
-  if (isCodeModificationWithoutTests(route)) {
-    const descriptor = route.taskDescriptor ?? {};
-    const constraints = descriptor.constraints ?? {};
-    const targets = route.taskDescriptor?.workspaceWriteTargets ?? [];
-    const forbidden = [
-      'test execution',
-      constraints.networkAccess === 'forbidden' ? 'network access' : null,
-      constraints.subagents === 'forbidden' ? 'subagents' : null,
-      constraints.externalWrite !== 'required' ? 'external writes' : null,
-    ].filter(Boolean);
-    const scope = targets.length ? targets.join(', ') : 'the explicitly authorized workspace scope';
-    const releaseBoundary = constraints.externalWrite === 'required'
-      ? ' External writes are limited to the explicitly authorized release target and require independent post-release verification.'
-      : '';
-    return `Route boundary: this is a ${descriptor.complexity === 'broad' ? 'routed' : 'focused'} code modification. Edit only ${scope}; ${forbidden.join(', ')} ${forbidden.length === 1 ? 'is' : 'are'} forbidden.${releaseBoundary} Use static review and state that the change was not test-executed.`;
-  }
-  if ((intent === 'writing.zh' || intent === 'writing.en') && !(route.requiredSubagents ?? []).length) {
-    return 'Route boundary: this is a lightweight writing workflow. The main agent must load the required writing skill(s), edit directly, and must not fork writer/checker subagents.';
-  }
-  if (intent === 'writing.zh' || intent === 'writing.en') {
-    return 'Route boundary: this is a writing workflow. Do not call omp_test_* tools unless a separate routed code/testing task is created later.';
-  }
-  if (intent === 'bug-audit') {
-    return 'Route boundary: this is a bug audit workflow. Test-case files, disposable harnesses, and command invocations are allowed when needed for audit verification, but production-code fixes require a separate user request. Do not turn audit findings into production code edits without a fix request. The omp_test_* tools are owned by omp-testing-enhancer; core only routes to them and listens for their results.';
-  }
-  if (intent === 'fact-check' && !isFocusedLocalFactInspection(route)) {
-    return 'Route boundary: this is a factual verification workflow. Read, search, cite, and report evidence; do not rewrite the source document or change project files unless the user explicitly asks for edits.';
-  }
-  if (isFocusedLocalFactInspection(route)) {
-    if (route.taskDescriptor?.exclusiveToolContract?.allowedTools?.[0] === 'read') {
-      return `Route boundary: read only ${route.taskDescriptor.exclusiveToolContract.input?.target} exactly once. Do not grep, search, edit, test, browse, delegate, release, load skills, or use another tool. The bounded method can conclude only FACT_VERDICT: INSUFFICIENT.`;
+  if (descriptor.writingSourcePending || route.intent === 'writing.pending') {
+    const targets = descriptor.workspaceWriteTargets ?? [];
+    if (descriptor.language === 'mixed') {
+      lines.push('The observed writing source is mixed-language. Select Chinese or English guidance per target or section instead of forcing one global language skill.');
+    } else {
+      lines.push(targets.length
+        ? `Writing language is pending content inspection. Read ${targets.join(', ')} and refine the language-specific skill suggestions from the body text.`
+        : 'Writing language is pending source inspection. Read or obtain the text being revised, then refine the language-specific skill suggestions from that body text.');
     }
-    return 'Route boundary: use only local read/search tools to evaluate repository evidence. Do not treat the claim itself as corroboration, and do not edit, test, browse, delegate, or release. End with exactly one line: FACT_VERDICT: INSUFFICIENT, FACT_VERDICT: SUPPORTED, or FACT_VERDICT: CONTRADICTED.';
-  }
-  if (intent === 'testing' || intent === 'implementation-with-tests') {
-    return 'Route boundary: this is a code/testing workflow. Use the omp-testing-enhancer tools only after routed test or implementation work has actually been performed.';
-  }
-  return 'Route boundary: use only the tools listed for this route unless the user explicitly changes the task.';
-}
-
-function bugAuditTestGenerationLines(route) {
-  if (route.intent !== 'bug-audit' || !needsTesting(route)) return [];
-
-  if (isFocusedBugAuditRoute(route)) {
-    return [
-      '### Focused Bug Audit Test Generation Contract',
-      '',
-      'Static analysis alone is not sufficient. Generate and run a compact, high-signal test matrix for the bounded failure path before final claims.',
-      '',
-      'Required focused channels:',
-      '- Local code summary: summarize the target block, public contracts, invariants, branches, state transitions, and existing tests before generating cases.',
-      '- Local evidence: mine existing tests, failures, logs, fixtures, issue text in the checkout, and similar modules for missing behaviors.',
-      '- Model-derived adversarial cases: generate negative, malformed, boundary, regression, and error-propagation cases from the summarized behavior.',
-      '',
-      'Scope control:',
-      '- Do not launch the full bug-audit subagent workflow unless the user broadens the task.',
-      '- Deduplicate by behavior signature and run the smallest set that can confirm or falsify the suspected bug.',
-      '- Report generated, executed, skipped, and duplicate-removed case counts in the focused BUG-AUDIT-REPORT.',
-    ];
+    lines.push('The language of the surrounding instruction is not evidence of the body language.');
   }
 
-  return [
-    '### Bug Audit Test Generation Contract',
-    '',
-    'Static analysis alone is not sufficient for bug-audit. Before final claims, generate and run as many high-signal, non-duplicate test cases as the target and budget allow.',
-    '',
-    'Required generation channels:',
-    '- Local code summary: summarize the target block, public contracts, invariants, branches, state transitions, and existing tests before generating cases.',
-    '- Local evidence: mine existing tests, coverage, failures, logs, fixtures, issue text in the checkout, and similar modules for missing behaviors.',
-    '- External or knowledge evidence: when search or web_search is available, look up comparable implementations, framework docs, public test examples, and common failure patterns; when unavailable, state the skipped channel and use packaged skills plus model knowledge without pretending web evidence was checked.',
-    '- Model-derived adversarial cases: generate negative, malformed, property-style, concurrency, and regression cases from the summarized behavior.',
-    '',
-    'Required coverage dimensions:',
-    '- Boundary values, empty/null/undefined inputs, malformed types, unicode/special characters, invalid config, missing dependencies, and error propagation.',
-    '- Different loads and operating conditions: large inputs, repeated calls, concurrency/races, timeout/retry behavior, feature flags, environment/config modes, browser/device modes when UI is in scope, and degraded dependency behavior.',
-    '',
-    'Deduplication contract:',
-    '- Deduplicate by behavior signature: target path, invariant, input class, operating condition, and expected outcome.',
-    '- Merge overlapping cases before writing or running tests; keep the strongest assertion and remove no-op or assertion-light duplicates.',
-    '- Report generated, executed, skipped, and duplicate-removed case counts in BUG-AUDIT-REPORT or the final bug report.',
-  ];
-}
-
-function subagentWorkflowLines(route, { parentTask = '', includeModelWorkflowHints = true } = {}) {
-  const requiredSubagents = route.requiredSubagents ?? [];
-  const common = [
-    '### Mandatory Subagent Workflow',
-    '',
-    ...(includeModelWorkflowHints ? [
-      'Runtime model policy: use the active OMP configuration for main/default, advisor, Tiny, task subagents, and all other model roles without binding the prompt to a specific model name unless this route names explicit subagent model roles or the user explicitly overrides a role.',
-      '',
-      'Classifier model policy: ambiguous routing uses OMP Tiny (`modelRoles.tiny`) instead of a separate classifier role. A valid, high-confidence classifier route that resolves through the OMP route whitelist supersedes the deterministic rule route before assigning skills, tools, or subagents.',
-      '',
-      'Smart gate policy: workflow gates are rule-first but Tiny-reviewed when a rule gate remains open. If a deterministic gate blocks a tool call or final answer despite concrete evidence, call `omp_core_smart_gate_prompt`, use OMP Tiny (`modelRoles.tiny`) for strict JSON, then call `omp_core_resolve_smart_gate`; only a validated pass may release the blocked gate. Treat needs-work as local follow-up, not BLOCKERS; report BLOCKERS only for real external blockers such as missing credentials, inaccessible files/services, permission limits, or required user-provided input.',
-      '',
-    ] : []),
-  ];
-
-  if (!requiredSubagents.length) {
-    return [
-      ...common,
-      'No routed subagents are required for this route. The main agent should do the work directly after loading any listed required skills.',
-      'Do not fork writer, checker, zh-writer, or zh-checker for lightweight writing edits unless the user explicitly expands the task into a larger writing job.',
-      '',
-      'Required subagents:',
-      '- none',
-      '',
-      '### Pre-fork Subagent Contract',
-      '',
-      'No routed subagents are required.',
-      '',
-      'SUBAGENT_USAGE is not required for this route.',
-    ];
+  if (isDocumentStyleEdit(parentTask)) {
+    lines.push('This style-edit request benefits from preserving subjects, predicates, values, polarity, quantifiers, ranges, modality, citations, math, and document structure.');
+    lines.push('A before-and-after read of the complete target is useful when practical, especially for factual or structural preservation.');
   }
 
-  return [
-    ...common,
-    'Use a subagent-driven workflow for routed work. Before doing non-trivial implementation, testing, writing, security, or config work yourself, fork the listed roles with the OMP task tool so OMP can render native subagent TUI status lines. Call task once per distinct agent role; if several items share one agent, use the batch task shape.',
-    'If this environment does not expose the native task/completion tool, do not loop on unavailable tooling. Complete the assigned checkpoints directly, then close the gate with a complete SUBAGENT_USAGE block and each required SUBAGENT_RESULT evidence block.',
-    '',
-    'When calling task, set each task item `role` or `agent` to the exact required subagent name, such as `writer`, `checker`, `zh-writer`, or `zh-checker`. Do not use generic `task` as the only role for required subagents.',
-    '',
-    'Do not read `agent://<agent-name>` to inspect or launch a required agent. `agent://` names completed subagent outputs, not callable agent types. Use the task tool to launch required agent types, then read `agent://<task-id>` only after that subagent has returned output.',
-    '',
-    'Give every task item a short `description` or first assignment line that names the subagent duty; this is the text OMP can show after the subagent name in its native status display. Keep it specific and under 100 characters.',
-    '',
-    'When forking each subagent, include that subagent-specific skill list and any listed model role hints in the task prompt. Tell the subagent to read the listed skill URI for each required skill before acting and to report which skills it loaded.',
-    '',
-    'Required subagents:',
-    formatSubagents(requiredSubagents),
-    '',
-    '### Pre-fork Subagent Contract',
-    '',
-    'Before calling task, prepare each subagent assignment with the matching contract below. Copy the required role, required skills, and final output block into the task assignment before forking so the subagent does not need to infer the gate format.',
-    '',
-    formatPreforkSubagentContracts(requiredSubagents, { parentTask, route }),
-    '',
-    'After the task call returns, the main agent must include this exact subagent evidence block in the routed final output:',
-    '',
-    formatSubagentUsageBlock(requiredSubagents),
-  ];
+  if (descriptor.constraints?.testExecution === 'forbidden') {
+    lines.push('The user-stated scope excludes test execution, so static inspection and an explicit untested-status note are appropriate.');
+  }
+  if (descriptor.constraints?.subagents === 'forbidden') {
+    lines.push('The user-stated scope keeps the work with the main agent.');
+  }
+  if (descriptor.constraints?.networkAccess === 'forbidden') {
+    lines.push('The user-stated scope is local and offline; conclusions should identify the evidence actually available in the workspace.');
+  }
+  if (descriptor.constraints?.externalWrite === 'required') {
+    lines.push('The requested external action deserves a target check and independent observation of the result. Host approval behavior remains outside this plugin.');
+  }
+  lines.push(...plan.riskNotes);
+  if (!lines.length) lines.push('Use task-appropriate judgment and keep the work aligned with the user request.');
+  return unique(lines).map((line) => `- ${line}`);
 }
 
-function isFocusedBugAuditRoute(route) {
-  return route?.intent === 'bug-audit' && route.auditMode === 'focused';
+function formatSteps(values = []) {
+  if (!values.length) return '- Follow the user request using the smallest useful workflow.';
+  return values.map(({ kind, domain }, index) => `- ${index + 1}. ${stepDescription(kind, domain)}`).join('\n');
 }
 
-function isReadOnlyCodeReview(route) {
-  const descriptor = route?.taskDescriptor;
-  return descriptor?.operation === 'inspect'
-    && Array.isArray(descriptor.domains)
-    && descriptor.domains.includes('code')
-    && !descriptor.domains.includes('security')
-    && descriptor.constraints?.workspaceWrite === 'forbidden'
-    && descriptor.constraints?.testExecution === 'forbidden';
+function stepDescription(kind, domain) {
+  const action = ({
+    answer: 'Prepare the response',
+    inspect: 'Inspect the relevant context',
+    diagnose: 'Trace and explain the cause',
+    modify: 'Apply the requested change',
+    create: 'Create the requested artifact',
+    execute: 'Run the requested operation',
+    verify: 'Verify the observed behavior',
+    review: 'Review the result',
+    release: 'Perform and observe the requested release action',
+  })[kind] ?? kind;
+  return `${action} (${domain}).`;
 }
 
-function isReadOnlySecurityReview(route) {
-  const descriptor = route?.taskDescriptor;
-  return descriptor?.operation === 'inspect'
-    && Array.isArray(descriptor.domains)
-    && descriptor.domains.includes('security')
-    && descriptor.constraints?.workspaceWrite === 'forbidden'
-    && descriptor.constraints?.testExecution === 'forbidden'
-    && descriptor.constraints?.subagents === 'forbidden';
-}
-
-function isFocusedLocalFactInspection(route) {
-  const descriptor = route?.taskDescriptor;
-  return descriptor?.operation === 'inspect'
-    && descriptor.domains?.includes('facts')
-    && descriptor.complexity === 'focused'
-    && descriptor.constraints?.workspaceWrite === 'forbidden'
-    && descriptor.constraints?.networkAccess === 'forbidden'
-    && descriptor.constraints?.externalWrite === 'forbidden'
-    && descriptor.constraints?.subagents === 'forbidden';
-}
-
-function isExactTestExecution(route) {
-  const descriptor = route?.taskDescriptor;
-  const commandOnlyExclusive = (descriptor?.provenance?.reasons ?? [])
-    .includes('exclusive command-only exact test requested');
-  return descriptor?.operation === 'execute'
-    && descriptor.constraints?.testExecution === 'required'
-    && ((Array.isArray(descriptor.testExecutionTargets) && descriptor.testExecutionTargets.length > 0)
-      || commandOnlyExclusive && typeof descriptor.testExecutionCommand === 'string' && descriptor.testExecutionCommand.length > 0)
-    && (descriptor.phases ?? []).every(({ kind }) => kind === 'verify');
-}
-
-function exactTestScope(route) {
-  const command = route?.taskDescriptor?.testExecutionCommand;
-  if (command) return `the exact command ${command}`;
-  return `the complete target list ${(route?.taskDescriptor?.testExecutionTargets ?? []).join(', ')}`;
-}
-
-function isCommandOnlyExactTestExecution(route) {
-  return isExactTestExecution(route)
-    && (route.taskDescriptor?.provenance?.reasons ?? [])
-      .includes('exclusive command-only exact test requested');
-}
-
-function isCodeModificationWithoutTests(route) {
-  const descriptor = route?.taskDescriptor;
-  return ['modify', 'create'].includes(descriptor?.operation)
-    && Array.isArray(descriptor.domains)
-    && descriptor.domains.includes('code')
-    && descriptor.constraints?.workspaceWrite === 'required'
-    && descriptor.constraints?.testExecution === 'forbidden';
-}
-
-function routeRequiresGate(route, key) {
-  return (route?.routePlan?.gateRequirements ?? [])
-    .some((gate) => gate?.key === key && gate?.mode === 'required');
+function formatSkillList(skills = []) {
+  if (!skills.length) return '- none yet';
+  return skills.map((skill) => {
+    const preferred = skillReadNameCandidates(skill, { limit: 1 })[0] ?? skill;
+    const alias = preferred === skill ? '' : ` (available as ${preferred})`;
+    return `- skill://${preferred}${alias}`;
+  }).join('\n');
 }
 
 function formatList(values = []) {
-  if (!values.length) return '- none';
+  if (!values.length) return '- none suggested';
   return values.map((value) => `- ${value}`).join('\n');
 }
 
-function formatSubagents(values = []) {
-  if (!values.length) return '- none';
-  return values.map((value) => {
-    if (typeof value === 'string') return `- ${value}`;
-    const skills = value.requiredSkills?.length ? value.requiredSkills.join(', ') : 'none';
-    const modelRoles = value.modelRoles?.length ? `; model roles: ${value.modelRoles.join(', ')}` : '';
-    return `- ${value.agent}: ${value.duty}; skills: ${skills}${modelRoles}`;
+function formatRoles(values = []) {
+  if (!values.length) return '- none suggested';
+  return values.map(({ agent, duty, skills, modelRoles }) => {
+    const parts = [duty, skills.length ? `skills: ${skills.join(', ')}` : null, modelRoles.length ? `model roles: ${modelRoles.join(', ')}` : null]
+      .filter(Boolean);
+    return `- ${agent}${parts.length ? `: ${parts.join('; ')}` : ''}`;
   }).join('\n');
 }
 
-function formatPreforkSubagentContracts(values = [], { parentTask = '', route = null } = {}) {
-  const subagents = normalizeSubagentValues(values);
-  if (!subagents.length) return 'No routed subagents are required.';
-  const parentTaskLine = formatParentTaskLine(parentTask);
-  const workflowBriefing = formatWorkflowGateBriefingForAssignment(route);
-
-  return subagents.map(({ agent, requiredSkills, modelRoles }) => [
-    `Subagent: ${agent}`,
-    'Task item fields:',
-    `- role: ${agent}`,
-    `- agent: ${agent}`,
-    '- description: short duty text for OMP native subagent status',
-    ...(modelRoles.length ? [`- model role hint: ${modelRoles.join(' -> ')}`] : []),
-    'Assignment must start with:',
-    `OMP_REQUIRED_SUBAGENT: ${agent}`,
-    parentTaskLine,
-    ...(modelRoles.length ? [
-      `OMP_MODEL_ROLE_HINT: ${modelRoles.join(' -> ')}`,
-      'Use the first available listed OMP model role for this subagent; do not silently downgrade to the generic task role unless those roles are unavailable.',
-    ] : []),
-    ...(workflowBriefing ? [workflowBriefing] : []),
-    'Required skills for this subagent:',
-    formatList(requiredSkills),
-    'Before acting:',
-    formatSubagentSkillReadSteps(requiredSkills),
-    '- In SKILL_USAGE Required, keep the canonical names above. In Loaded, list the exact skill names successfully read; accepted aliases are valid evidence.',
-    '- Do not fork another OMP Enhancer Core role gate unless explicitly asked.',
-    'Final subagent output must end with:',
-    'SKILL_USAGE',
-    'Required:',
-    formatList(requiredSkills),
-    'Loaded:',
-    formatList(requiredSkills),
-    'SUBAGENT_RESULT',
-    `Agent: ${agent}`,
-    'Status: complete|blocked',
-  ].join('\n')).join('\n\n');
+function normalizeSteps(values = []) {
+  const seen = new Set();
+  return (values ?? []).filter(({ kind, domain } = {}) => {
+    const key = `${kind}:${domain}`;
+    if (!kind || !domain || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map(({ kind, domain }) => ({ kind, domain }));
 }
 
-function formatParentTaskLine(parentTask = '') {
-  const cleaned = String(parentTask).replace(/\s+/g, ' ').trim();
-  return `OMP_PARENT_TASK: ${cleaned ? cleaned.slice(0, 300) : '<copy the original user task here>'}`;
-}
-
-function formatSubagentSkillReadSteps(requiredSkills = []) {
-  if (!requiredSkills.length) return '- No skill reads are required for this subagent.';
-  return requiredSkills.map((skill) => {
-    const candidates = skillReadNameCandidates(skill, { limit: 3 });
-    const preferred = candidates[0] ?? skill;
-    const aliasNote = preferred !== skill ? ` (accepted alias for ${skill})` : '';
-    const fallbackUris = preferred !== skill
-      ? candidates.slice(1).filter((candidate) => candidate && candidate !== preferred).map((candidate) => `skill://${candidate}`)
-      : [];
-    const fallbackNote = fallbackUris.length ? ` Fallbacks accepted: ${fallbackUris.join(', ')}.` : '';
-    return `- Read \`skill://${preferred}\`${aliasNote}.${fallbackNote}`;
-  }).join('\n');
-}
-
-function formatSubagentUsageBlock(values = []) {
-  const subagents = normalizeSubagentValues(values);
-  if (!subagents.length) return 'SUBAGENT_USAGE:\n- none';
-
-  return [
-    'SUBAGENT_USAGE:',
-    ...subagents.map(({ agent, requiredSkills }) => `- ${agent}: ${requiredSkills.join(', ') || 'none'}`),
-  ].join('\n');
-}
-
-function normalizeSubagentValues(values = []) {
-  return values.map((value) => {
-    if (typeof value === 'string') return { agent: value, requiredSkills: [], modelRoles: [] };
+function normalizeRoles(values = []) {
+  return (values ?? []).map((value) => {
+    if (typeof value === 'string') return { agent: value, duty: '', skills: [], modelRoles: [] };
     return {
       agent: value?.agent,
-      requiredSkills: Array.isArray(value?.requiredSkills) ? value.requiredSkills : [],
-      modelRoles: Array.isArray(value?.modelRoles) ? value.modelRoles : [],
+      duty: String(value?.duty ?? ''),
+      skills: unique(value?.skills ?? value?.requiredSkills ?? []),
+      modelRoles: unique(value?.modelRoles ?? []),
     };
   }).filter(({ agent }) => agent);
 }
 
-function parseSubagentLaunchContract(prompt = '') {
-  return {
-    agent: parseRequiredSubagent(prompt),
-    requiredSkills: parseRequiredSubagentSkills(prompt),
-  };
+function parseRole(prompt = '') {
+  const source = String(prompt);
+  return source.match(/OMP_WORKFLOW_ROLE:\s*([^\r\n]+)/i)?.[1]?.trim().replace(/[.;,，。]+$/, '')
+    ?? source.match(/OMP_REQUIRED_SUBAGENT:\s*([^\r\n]+)/i)?.[1]?.trim().replace(/[.;,，。]+$/, '')
+    ?? source.match(/(?:Suggested role|Role):\s*([^\r\n]+)/i)?.[1]?.trim()
+    ?? '';
 }
 
-function parseRequiredSubagent(prompt = '') {
-  const match = String(prompt).match(/OMP_REQUIRED_SUBAGENT:\s*([^\r\n]+)/i);
-  return match ? match[1].trim().replace(/[.;,，。]+$/, '') : '';
-}
-
-function parseRequiredSubagentSkills(prompt = '') {
+function parseRoleSkills(prompt = '') {
   const lines = String(prompt).split(/\r?\n/);
-  const start = lines.findIndex((line) => /^Required skills for this subagent:/i.test(line.trim()));
-  if (start === -1) return [];
-
+  const start = lines.findIndex((line) => /^(?:Suggested skills for this role|Skills for this role|Required skills for this subagent):/i.test(line.trim()));
+  if (start < 0) return [];
   const skills = [];
   for (const rawLine of lines.slice(start + 1)) {
     const line = rawLine.trim();
@@ -1161,57 +244,34 @@ function parseRequiredSubagentSkills(prompt = '') {
       if (skills.length) break;
       continue;
     }
-    if (/^(Workflow and gate briefing|Before acting|Final subagent output|SUBAGENT_RESULT|SKILL_USAGE|BLOCKERS|Assignment)/i.test(line)) break;
-    const match = line.match(/^[-*]\s*(.+)$/);
-    if (!match) {
-      if (skills.length) break;
-      continue;
-    }
+    const match = line.match(/^[-*]\s*(?:skill:\/\/)?(.+)$/i);
+    if (!match) break;
     const skill = match[1].trim();
     if (skill && skill.toLowerCase() !== 'none') skills.push(skill);
   }
-  return skills;
+  return unique(skills);
 }
 
-function parseWorkflowGateBriefing(prompt = '') {
+function parseWorkflowBriefing(prompt = '') {
   const lines = String(prompt).split(/\r?\n/);
-  const start = lines.findIndex((line) => /^Workflow and gate briefing:/i.test(line.trim()));
-  if (start === -1) return [];
-
+  const start = lines.findIndex((line) => /^Workflow briefing:/i.test(line.trim()));
+  if (start < 0) return [];
   const collected = [];
   for (const rawLine of lines.slice(start)) {
     const line = rawLine.trimEnd();
-    if (collected.length && /^(Required skills for this subagent:|Before acting:|Final subagent output|SUBAGENT_RESULT|SKILL_USAGE|BLOCKERS:|Assignment:)/i.test(line.trim())) break;
-    collected.push(line);
+    if (collected.length && /^(?:Suggested skills for this role|Skills for this role|Required skills for this subagent|Before acting|Final subagent output):/i.test(line.trim())) break;
+    collected.push(line.trim());
   }
-
-  return collected.map((line) => line.trim()).filter(Boolean);
+  return collected.filter(Boolean);
 }
 
-function needsWritingQuality(route) {
-  if (useEnforcedRoutePlan(route)) {
-    return (route.routePlan.gateRequirements ?? [])
-      .some((gate) => gate.key === 'writing-quality' && gate.mode === 'required');
-  }
-  return (route.intent === 'writing.zh' || route.intent === 'writing.en')
-    && (route.requiredTools ?? []).some((tool) => tool === 'writing_quality_check' || tool === 'writing_logic_check');
+function unique(values = []) {
+  return [...new Set((values ?? []).filter(Boolean))];
 }
 
-function needsTesting(route) {
-  if (route?.taskDescriptor?.constraints?.testExecution === 'forbidden') return false;
-  if (useEnforcedRoutePlan(route)) {
-    return (route.routePlan.gateRequirements ?? [])
-      .some((gate) => gate.key === 'test-evidence' && gate.mode === 'required');
-  }
-  return route.intent === 'testing'
-    || (route.intent === 'implementation-with-tests' || route.intent === 'bug-audit')
-      && (route.requiredTools ?? []).some((tool) => /^omp_test_/i.test(tool));
-}
-
-function needsFactCheck(route) {
-  if (useEnforcedRoutePlan(route)) {
-    return (route.routePlan.gateRequirements ?? [])
-      .some((gate) => gate.key === 'fact-evidence' && gate.mode === 'required');
-  }
-  return route.intent === 'fact-check';
+function isDocumentStyleEdit(prompt = '') {
+  const text = String(prompt);
+  const styleAction = /(?:润色|改写|校对|措辞|文风|语法|polish|rewrite|proofread|copyedit|wording|style|grammar)/i.test(text);
+  const documentTarget = /(?:论文|摘要|正文|段落|句子|文档|letter|paper|abstract|manuscript|section|paragraph|sentence|\.tex\b|\.md\b|\.docx?\b)/i.test(text);
+  return styleAction && documentTarget;
 }

@@ -41,6 +41,6 @@ describe('analyzeWritingQuality', () => {
     assert.equal(result.summary.byCategory.logic > 0, true);
     assert.equal(result.summary.byCategory.style > 0, true);
     assert.equal(result.summary.byCategory.citation > 0, true);
-    assert.equal(result.summary.verdict, 'blocked');
+    assert.equal(result.summary.verdict, 'critical_findings');
   });
 });

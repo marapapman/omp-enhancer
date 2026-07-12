@@ -1,6 +1,6 @@
 export function evaluateIndirectTestGate(input) {
     const results = [];
-    const severity = input.severity ?? 'blocker';
+    const severity = input.severity ?? 'critical';
     if (input.targets.length === 0) {
         return [{
                 gate: 'indirect-test',
@@ -8,7 +8,7 @@ export function evaluateIndirectTestGate(input) {
                 severity,
                 summary: 'No changed targets supplied for indirect-test gate.',
                 evidence: { candidateId: input.candidate.id },
-                repairHint: 'Run omp_test_analyze and pass the changed targets into omp_test_gate before accepting the tests.'
+                repairHint: 'Report that target analysis was not observed; use omp_test_analyze once when that evidence would improve the review.'
             }];
     }
     for (const file of input.candidate.files) {
@@ -68,7 +68,7 @@ export function evaluateIndirectTestGate(input) {
             gate: 'indirect-test',
             passed: true,
             severity,
-            summary: 'Tests do not rely on blocked implementation details.',
+            summary: 'Tests do not rely on private implementation details.',
             evidence: {}
         }];
 }

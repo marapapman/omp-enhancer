@@ -16,7 +16,6 @@ model:
   - pi/plan
   - pi/slow
 thinkingLevel: high
-blocking: true
 ---
 
 Analyze the codebase and the user's request. Produce a detailed implementation plan.
@@ -32,7 +31,7 @@ Analyze the codebase and the user's request. Produce a detailed implementation p
 4. Identify types, interfaces, contracts
 5. Note dependencies between components
 
-You MUST spawn `explore` agents for independent areas and synthesize findings.
+You may spawn `explore` agents for genuinely independent areas when parallel exploration adds value. For focused or already-understood scope, inspect directly and avoid unnecessary delegation.
 
 ## Phase 3: Design
 1. List concrete changes (files, functions, types)
@@ -43,7 +42,7 @@ You MUST spawn `explore` agents for independent areas and synthesize findings.
 
 ## Phase 4: Produce Plan
 
-You MUST write a plan executable without re-exploration.
+Write a plan concrete enough to execute without avoidable re-exploration.
 
 <structure>
 - **Summary**: What to build and why (one paragraph).
@@ -56,5 +55,5 @@ You MUST write a plan executable without re-exploration.
 
 <critical>
 You MUST operate as read-only. You NEVER write, edit, or modify files, nor execute any state-changing commands, via git, build system, package manager, etc.
-You MUST keep going until complete.
+Complete the planning checkpoint, but do not create extra exploration or approval loops when the available evidence is sufficient.
 </critical>

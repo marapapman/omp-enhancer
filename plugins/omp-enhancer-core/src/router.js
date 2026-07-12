@@ -2,13 +2,14 @@ import { buildWorkflowRouteCard, decorateWorkflowRoute } from './workflow-routes
 import {
   describeNaturalLanguageTask,
   descriptorFromLegacyIntent,
+  extractInlineWritingSource,
   normalizeTaskDescriptor,
   resolveWritingTargetLanguage,
   writingDirectivePromptForSignals,
   writingOperationalPromptForSignals,
 } from './task-descriptor.js';
 import { attachCompiledTaskRoute, compileTaskRoutePolicy } from './route-policy.js';
-import { resolveGateMode, resolveRouterMode } from './runtime-policy.js';
+import { resolveRouterMode } from './runtime-policy.js';
 import { subagentPlans } from './subagent-plans.js';
 
 const zhWritingTerms = ['中文', '论文', '摘要', '润色', '改写', '翻译腔', 'ai 味', '博士', '段落', '写作', '写', '报告', '文档', '起草', '引言', '相关工作', '审稿'];
@@ -54,7 +55,6 @@ const factCheckToolchain = [
   'fact_check_analyze',
   'fact_check_evidence',
   'fact_check_report',
-  'fact_check_gate',
 ];
 const testingEnhancerTools = [
   'omp_test_analyze',
@@ -62,12 +62,12 @@ const testingEnhancerTools = [
   'omp_test_browser_check',
   'omp_test_coverage_analyze',
   'omp_test_mutation_context',
-  'omp_test_gate',
   'omp_test_report',
 ];
 
 export const routedIntents = [
   'agentic.simple',
+  'writing.pending',
   'writing.zh',
   'writing.en',
   'writing.latex',
@@ -94,21 +94,26 @@ export const routedIntents = [
 
 export function routeNaturalLanguageTask(input = {}) {
   const prompt = String(input.prompt ?? input.text ?? '');
+  const providedSourceText = normalizeSourceTextInput(input.sourceText);
+  const hasProvidedSourceText = hasSourceTextInput(providedSourceText);
+  const sourceText = hasProvidedSourceText ? providedSourceText : extractInlineWritingSource(prompt);
   const directivePrompt = writingDirectivePromptForSignals(prompt);
   const operationalPrompt = writingOperationalPromptForSignals(directivePrompt);
   const explicitSubagentsRequested = hasExplicitSubagentRequest(directivePrompt);
   const described = promoteExplicitSubagentDescriptor(
-    describeNaturalLanguageTask({ prompt }),
+    describeNaturalLanguageTask({ prompt, ...(hasProvidedSourceText ? { sourceText: providedSourceText } : {}) }),
     explicitSubagentsRequested,
   );
   const rawLegacyRoute = routeNaturalLanguageTaskLegacy({
     ...input,
+    sourceText,
     prompt: operationalPrompt,
     text: operationalPrompt,
   });
   const specializedPrompt = stripSpecializedRouteConstraints(operationalPrompt);
   const specializedLegacyRoute = specializedPrompt === operationalPrompt ? rawLegacyRoute : routeNaturalLanguageTaskLegacy({
     ...input,
+    sourceText,
     prompt: specializedPrompt,
     text: specializedPrompt,
   });
@@ -118,7 +123,6 @@ export function routeNaturalLanguageTask(input = {}) {
     : rawLegacyRoute;
   const policy = compileTaskRoutePolicy(described, { legacyRoute });
   const routerMode = resolveRouterMode(input.routerMode ?? input.mode);
-  const gateRecoveryMode = resolveGateMode(input.gateRecoveryMode);
   const canonicalTestExecution = isCanonicalTestingProjection(described, prompt);
   const canonicalPureWriting = isCanonicalPureWritingProjection(described, legacyRoute, prompt);
   const canonicalPureSecurity = isCanonicalPureSecurityProjection(described);
@@ -195,6 +199,8 @@ export function routeNaturalLanguageTask(input = {}) {
     && described.constraints?.testExecution !== 'required';
   const alignedCanonicalDirectWriting = canonicalDirectWriting
     && legacyRoute.intent === policy.intent;
+  const canonicalContentDrivenWriting = canonicalDirectWriting
+    && ['writing.pending', 'writing.zh', 'writing.en'].includes(policy.intent);
   const canonicalBoundedTestModification = described.operation === 'modify'
     && (described.testExclusions ?? []).length > 0;
   const canonicalObservedSummary = (described.provenance?.reasons ?? []).includes('observed test summary requested')
@@ -209,7 +215,7 @@ export function routeNaturalLanguageTask(input = {}) {
   const payloadSanitized = directivePrompt !== prompt;
   const alignedPayloadProjection = payloadSanitized && (
     legacyRoute.intent === policy.intent && legacyRoute.workflowRoute === policy.workflowRoute
-    || ['writing.zh', 'writing.en'].includes(policy.intent) && legacyRoute.intent !== 'design.visual'
+    || ['writing.pending', 'writing.zh', 'writing.en'].includes(policy.intent) && legacyRoute.intent !== 'design.visual'
   );
   const authorityBearingTargetNeutralized = writingTargetAuthorityNeutralized(directivePrompt, operationalPrompt);
   const compatibleSpecializedWorkflow = isSpecializedDocumentRoute(legacyRoute)
@@ -227,6 +233,7 @@ export function routeNaturalLanguageTask(input = {}) {
       || canonicalReleaseOperation || canonicalConfigDiagnosis || canonicalExclusiveRouteProbe || canonicalExclusiveStatusProbe || canonicalPrimaryTestAuthoring || canonicalResponseWriting
       || canonicalWritingActions || canonicalVisualAction || canonicalFunctionalUiCorrection
       || alignedCanonicalDirectWriting
+      || canonicalContentDrivenWriting
       || canonicalObservedSummary
       || canonicalBoundedTestModification
       || alignedPayloadProjection || authorityBearingTargetNeutralized))
@@ -241,7 +248,6 @@ export function routeNaturalLanguageTask(input = {}) {
       workflowRoute: compatibleSpecializedWorkflow,
       auditMode: policy.auditMode,
       writingComplexity: policy.writingComplexity,
-      hardBlock: policy.hardBlock,
       shouldUseClassifier: described.provenance.needsClassifier,
     })
     : legacyRoute;
@@ -257,16 +263,19 @@ export function routeNaturalLanguageTask(input = {}) {
   const projected = projectEffectivePlan
     ? {
       ...compiled,
-      requiredSkills: compiled.routePlan.requiredSkills,
-      requiredTools: compiled.routePlan.requiredTools,
-      requiredSubagents: compiled.routePlan.requiredSubagents,
-      shouldForkSubagents: compiled.routePlan.requiredSubagents.length > 0,
+      skills: compiled.routePlan.skills,
+      tools: compiled.routePlan.tools,
+      roles: compiled.routePlan.roles,
+      requiredSkills: compiled.routePlan.skills,
+      requiredTools: compiled.routePlan.tools,
+      requiredSubagents: compiled.requiredSubagents,
       ...(compiled.intent === 'writing.zh' || compiled.intent === 'writing.en'
         ? { writingComplexity: described.complexity === 'broad' ? 'complex' : 'simple' }
         : {}),
       routeCard: buildWorkflowRouteCard({
         route: compiled.workflowRoute,
-        requiredSkills: compiled.routePlan.requiredSkills,
+        skills: compiled.routePlan.skills,
+        roles: compiled.routePlan.roles,
         includeCatalogSkills: false,
       }),
     }
@@ -274,7 +283,6 @@ export function routeNaturalLanguageTask(input = {}) {
   return {
     ...projected,
     routerMode,
-    gateRecoveryMode,
     routeObservation: routerMode === 'observe'
       ? buildRouteObservation(legacyRoute, policy, compiled.routePlan, { projectEffectivePlan })
       : null,
@@ -306,9 +314,9 @@ function buildRouteObservation(legacyRoute, policy, routePlan, { projectEffectiv
   const legacyResources = routeResourceSummary(legacyRoute);
   const plannedResources = routeResourceSummary({
     workflowRoute: routePlan?.workflowRoute ?? policy.workflowRoute,
-    requiredSkills: routePlan?.requiredSkills ?? [],
-    requiredTools: routePlan?.requiredTools ?? [],
-    requiredSubagents: routePlan?.requiredSubagents ?? [],
+    skills: routePlan?.skills ?? [],
+    tools: routePlan?.tools ?? [],
+    roles: routePlan?.roles ?? [],
   });
   const intentDisagrees = legacyRoute.intent !== policy.intent;
   const resourceDisagrees = JSON.stringify(legacyResources) !== JSON.stringify(plannedResources);
@@ -325,9 +333,9 @@ function buildRouteObservation(legacyRoute, policy, routePlan, { projectEffectiv
 function routeResourceSummary(route = {}) {
   return {
     workflowRoute: route.workflowRoute ?? null,
-    requiredSkills: [...(route.requiredSkills ?? [])],
-    requiredTools: [...(route.requiredTools ?? [])],
-    requiredSubagents: (route.requiredSubagents ?? []).map(({ agent }) => agent),
+    skills: [...(route.skills ?? route.requiredSkills ?? [])],
+    tools: [...(route.tools ?? route.requiredTools ?? [])],
+    roles: (route.roles ?? route.requiredSubagents ?? []).map(({ agent }) => agent),
   };
 }
 
@@ -432,6 +440,7 @@ function shouldOverrideLegacyRoute(descriptor, legacyRoute, prompt = '') {
 
 function routeNaturalLanguageTaskLegacy(input = {}) {
   const prompt = String(input.prompt ?? input.text ?? '');
+  const sourceText = normalizeSourceTextInput(input.sourceText);
   const normalized = prompt.toLowerCase();
 
   if (!normalized.trim()) return unknownRoute();
@@ -460,7 +469,7 @@ function routeNaturalLanguageTaskLegacy(input = {}) {
   const hasCoding = hasRawCodeChange && !hasBugAudit && !hasKnowledgeOnly;
   const hasCodeChange = hasCoding && !hasTestReportWriting;
   const hasSecurityWritingArtifact = isSecurityWritingArtifact(normalized);
-  const writingTargetLanguage = resolveWritingTargetLanguage(prompt, 'unknown');
+  const writingTargetLanguage = resolveWritingTargetLanguage(prompt, 'unknown', { sourceText });
   const hasEnglishWriting = writingTargetLanguage === 'en'
     || writingTargetLanguage === 'unknown' && (isEnglishWriting(normalized)
       || (hasSecurityWritingArtifact && !/[\u4e00-\u9fff]/.test(prompt)));
@@ -488,7 +497,7 @@ function routeNaturalLanguageTaskLegacy(input = {}) {
   if (conceptOnly && !isSecurityConceptQuestion(normalized)) return routed('agentic.simple');
 
   if (isHardBlockRequest(normalized) && !hasWriting && !hasCodeChange && !hasBugAudit && !hasTestAnalysis && !hasDiagnosisOnly && !hasSecurity) {
-    return routed(hasRelease ? 'release' : 'agentic.simple', { workflowRoute: 'agentic.simple', hardBlock: true });
+    return routed(hasRelease ? 'release' : 'agentic.simple', { workflowRoute: 'agentic.simple' });
   }
 
   if (workflowRouteHint === 'doc.convert.word') {
@@ -590,7 +599,7 @@ function routeNaturalLanguageTaskLegacy(input = {}) {
   }
 
   if (hasRelease && !hasDiagnosisOnly) {
-    return routed('release', { workflowRoute: 'agentic.simple', hardBlock: true });
+    return routed('release', { workflowRoute: 'agentic.simple' });
   }
 
   if (hasConfigAssets) {
@@ -612,6 +621,16 @@ function routeNaturalLanguageTaskLegacy(input = {}) {
   return routed('agentic.simple');
 }
 
+function normalizeSourceTextInput(value) {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value.filter((item) => typeof item === 'string' && item.trim());
+}
+
+function hasSourceTextInput(value) {
+  return typeof value === 'string' ? Boolean(value.trim()) : Array.isArray(value) && value.length > 0;
+}
+
 export function routeByIntent(intent, options = {}) {
   const descriptor = options.taskDescriptor == null
     ? descriptorFromLegacyIntent(intent, {
@@ -626,12 +645,11 @@ export function routeByIntent(intent, options = {}) {
     auditMode: options.auditMode ?? policy.auditMode,
     workflowRoute: options.workflowRoute ?? policy.workflowRoute,
     writingComplexity: options.writingComplexity ?? policy.writingComplexity,
-    hardBlock: options.hardBlock ?? policy.hardBlock,
   });
   return attachCompiledTaskRoute(route, descriptor);
 }
 
-function routeByLegacyIntent(intent, { source = 'natural-language', writingComplexity = 'complex', auditMode = null, workflowRoute = null, shouldUseClassifier = false, hardBlock = false, prompt = '' } = {}) {
+function routeByLegacyIntent(intent, { source = 'natural-language', writingComplexity = 'complex', auditMode = null, workflowRoute = null, shouldUseClassifier = false, prompt = '' } = {}) {
   if (intent === 'testing') {
     return route({
       intent: 'testing',
@@ -643,7 +661,6 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
       source,
       workflowRoute: workflowRoute ?? 'code.test',
       shouldUseClassifier,
-      hardBlock,
     });
   }
 
@@ -656,7 +673,6 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
       requiredSubagents: [],
       workflowRoute: 'agentic.simple',
       shouldUseClassifier,
-      hardBlock,
       source,
     });
   }
@@ -722,7 +738,6 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
       source,
       workflowRoute,
       shouldUseClassifier,
-      hardBlock,
     });
   }
 
@@ -736,7 +751,6 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
       source,
       workflowRoute,
       shouldUseClassifier,
-      hardBlock,
     });
   }
 
@@ -750,7 +764,6 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
       source,
       workflowRoute,
       shouldUseClassifier,
-      hardBlock,
     });
   }
 
@@ -764,7 +777,6 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
       source,
       workflowRoute,
       shouldUseClassifier,
-      hardBlock,
     });
   }
 
@@ -778,7 +790,6 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
       source,
       workflowRoute,
       shouldUseClassifier,
-      hardBlock,
     });
   }
 
@@ -794,7 +805,6 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
         source,
         workflowRoute,
         shouldUseClassifier,
-        hardBlock,
       });
     }
 
@@ -807,7 +817,6 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
       source,
       workflowRoute,
       shouldUseClassifier,
-      hardBlock,
     });
   }
 
@@ -821,7 +830,25 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
       source,
       workflowRoute,
       shouldUseClassifier,
-      hardBlock,
+    });
+  }
+
+  if (intent === 'writing.pending') {
+    const formatSkills = workflowRoute === 'writing.latex'
+      ? latexSkillsForPrompt(prompt)
+      : workflowRoute === 'doc.convert.word'
+          ? ['docx']
+          : [];
+    return route({
+      intent,
+      agent: null,
+      requiredSkills: formatSkills,
+      requiredTools: [],
+      requiredSubagents: [],
+      writingComplexity: writingComplexity === 'simple' ? 'simple' : 'complex',
+      source,
+      workflowRoute: workflowRoute ?? 'writing.pending',
+      shouldUseClassifier,
     });
   }
 
@@ -839,7 +866,6 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
       source,
       workflowRoute,
       shouldUseClassifier,
-      hardBlock,
     });
   }
 
@@ -855,7 +881,6 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
       source,
       workflowRoute,
       shouldUseClassifier,
-      hardBlock,
     });
   }
 
@@ -872,7 +897,6 @@ function route({
   auditMode = null,
   workflowRoute = null,
   shouldUseClassifier = false,
-  hardBlock = false,
   source = 'natural-language',
 }) {
   const routed = {
@@ -887,7 +911,6 @@ function route({
   if (auditMode) routed.auditMode = auditMode;
   const decorated = decorateWorkflowRoute(routed, { workflowRoute });
   decorated.shouldUseClassifier = Boolean(shouldUseClassifier);
-  if (hardBlock) decorated.gateMode = 'hard-block';
   return decorated;
 }
 
@@ -899,7 +922,7 @@ function workflowRouteForPromptIntent(workflowRouteHint, intent) {
     if (intent === 'fact-check') return 'factcheck.document';
     if (intent === 'security-review') return 'security.review';
     if (intent === 'config-assets') return 'omp.plugin';
-    if (intent === 'writing.zh' || intent === 'writing.en') return workflowRouteHint;
+    if (intent === 'writing.pending' || intent === 'writing.zh' || intent === 'writing.en') return workflowRouteHint;
     if (intent === 'release') return 'agentic.simple';
     if (intent === 'agentic.simple') return 'agentic.simple';
     return workflowRouteHint;

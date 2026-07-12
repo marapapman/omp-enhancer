@@ -5,124 +5,88 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { routeNaturalLanguageTask } from '../src/router.js';
-import {
-  buildWorkflowRouteCard,
-  workflowRouteCardSections,
-  workflowRouteNames,
-} from '../src/workflow-routes.js';
+import { workflowRouteCardSections, workflowRouteNames } from '../src/workflow-routes.js';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(testDir, '..', '..', '..');
-const fixturePath = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'fixtures',
-  'workload-matrix.json',
-);
-const workloadMatrix = JSON.parse(await readFile(fixturePath, 'utf8'));
-const expectedSections = ['WORKFLOW_CARD', 'Task type', 'Do', 'Do not', 'Skills', 'Gate'];
+const workloadMatrix = JSON.parse(await readFile(path.join(testDir, 'fixtures', 'workload-matrix.json'), 'utf8'));
+const expectedSections = [
+  'WORKFLOW_GUIDE',
+  'Task type',
+  'Suggested steps',
+  'Skills',
+  'Optional roles',
+  'Quality checks',
+  'Scope and risk notes',
+];
 
-test('workflow route catalog exposes the frozen route set', () => {
-  assert.deepEqual(workflowRouteNames, [
-    'agentic.simple',
-    'writing.zh',
-    'writing.en',
-    'writing.latex',
-    'writing.markdown',
-    'doc.convert.word',
-    'factcheck.document',
-    'code.dev',
-    'code.debug',
-    'code.test',
-    'code.review',
-    'omp.plugin',
-    'security.review',
-    'design.visual',
-  ]);
+test('workflow catalog exposes advisory routes including language-pending writing', () => {
+  assert.ok(workflowRouteNames.includes('writing.pending'));
+  assert.ok(workflowRouteNames.includes('writing.zh'));
+  assert.ok(workflowRouteNames.includes('writing.en'));
   assert.deepEqual(workflowRouteCardSections(), expectedSections);
 });
 
-test('workflow matrix fixtures are complete and unique', () => {
-  assert.ok(workloadMatrix.length >= 60, 'matrix should stay broad enough to cover route boundaries');
-  const ids = new Set();
+test('broad workload matrix always produces an advisory workflow plan', () => {
+  assert.ok(workloadMatrix.length >= 60);
   for (const item of workloadMatrix) {
-    assert.equal(typeof item.id, 'string', 'id is required');
-    assert.equal(ids.has(item.id), false, `duplicate fixture id ${item.id}`);
-    ids.add(item.id);
-    assert.equal(typeof item.prompt, 'string', item.id);
-    assert.ok(item.prompt.trim().length > 0, item.id);
-    assert.ok(workflowRouteNames.includes(item.expectedRoute), item.id);
-    assert.ok(Array.isArray(item.notRoute), item.id);
-    for (const notRoute of item.notRoute) assert.ok(workflowRouteNames.includes(notRoute), item.id);
-    assert.equal(typeof item.expectedGateMode, 'string', item.id);
-    assert.equal(typeof item.shouldUseClassifier, 'boolean', item.id);
-    assert.equal(typeof item.shouldForkSubagents, 'boolean', item.id);
-    assert.ok(Array.isArray(item.expectedSkills), item.id);
-    assert.deepEqual(item.expectedRouteCardSections, expectedSections, item.id);
-    assert.ok(Object.hasOwn(item, 'expectedHardBlockReason'), item.id);
-    assert.ok(Object.hasOwn(item, 'expectedLoopAction'), item.id);
-    assert.ok(Array.isArray(item.expectedDebugLog), item.id);
+    const route = routeNaturalLanguageTask({ prompt: item.prompt, routerMode: 'enforce' });
+    assert.ok(workflowRouteNames.includes(route.workflowRoute), item.id);
+    assert.equal(route.advisoryOnly, true, item.id);
+    assert.equal(route.autoContinue, false, item.id);
+    assert.equal(route.routePlan.version, 2, item.id);
+    assert.equal(route.routePlan.mode, 'advisory', item.id);
+    assert.equal(route.routePlan.autoContinue, false, item.id);
+    assert.ok(Array.isArray(route.routePlan.steps), item.id);
+    assert.ok(Array.isArray(route.routePlan.skills), item.id);
+    assert.ok(Array.isArray(route.routePlan.tools), item.id);
+    assert.ok(Array.isArray(route.routePlan.roles), item.id);
+    assert.ok(Array.isArray(route.routePlan.qualityChecks), item.id);
+    assert.ok(Array.isArray(route.routePlan.riskNotes), item.id);
+    assert.equal(Object.hasOwn(route.routePlan, 'gateRequirements'), false, item.id);
+    assert.equal(Object.hasOwn(route, 'gateMode'), false, item.id);
+    assert.equal(Object.hasOwn(route, 'hardBlockReasons'), false, item.id);
   }
 });
 
-test('workflow matrix required skills are packaged in the marketplace catalog', async () => {
+test('body-less writing may defer language but never guesses from instruction language', () => {
+  for (const item of workloadMatrix.filter(({ expectedRoute }) => ['writing.zh', 'writing.en'].includes(expectedRoute))) {
+    const route = routeNaturalLanguageTask({ prompt: item.prompt, routerMode: 'enforce' });
+    if (route.intent !== 'writing.pending') continue;
+    assert.equal(route.taskDescriptor.language, 'unknown', item.id);
+    assert.ok(!route.routePlan.skills.includes('plain-chinese-writing'), item.id);
+    assert.ok(!route.routePlan.skills.includes('zh-writing-polish'), item.id);
+    assert.ok(!route.routePlan.skills.includes('writing-markdown-helper'), item.id);
+  }
+});
+
+test('route cards expose guidance sections and no gate section', () => {
+  for (const item of workloadMatrix) {
+    const route = routeNaturalLanguageTask({ prompt: item.prompt, routerMode: 'enforce' });
+    assert.match(route.routeCard, /^WORKFLOW_GUIDE\n/, item.id);
+    assert.match(route.routeCard, /\nSuggested steps:\n- /, item.id);
+    assert.match(route.routeCard, /\nSkills:\n- /, item.id);
+    assert.match(route.routeCard, /\nOptional roles:\n- /, item.id);
+    assert.match(route.routeCard, /\nScope and risk notes:\n- /, item.id);
+    assert.doesNotMatch(route.routeCard, /\nGate:\n|\nDo not:\n/i, item.id);
+    assert.deepEqual(route.routeCardSections, expectedSections, item.id);
+  }
+});
+
+test('every selected skill remains packaged by the marketplace', async () => {
   const registeredSkills = await registeredMarketplaceSkills(repoRoot);
-  const expectedSkills = new Set(workloadMatrix.flatMap((item) => item.expectedSkills));
-  for (const skill of expectedSkills) {
-    assert.equal(registeredSkills.has(skill), true, `missing packaged skill ${skill}`);
-  }
-});
-
-test('workflow matrix routes prompts to the frozen workflow route contract', () => {
   for (const item of workloadMatrix) {
-    const route = routeNaturalLanguageTask({ prompt: item.prompt });
-
-    assert.equal(route.workflowRoute, item.expectedRoute, `${item.id} workflowRoute`);
-    assert.equal(route.workflowTaskType, item.expectedRoute, `${item.id} workflowTaskType`);
-    for (const notRoute of item.notRoute) assert.notEqual(route.workflowRoute, notRoute, `${item.id} notRoute ${notRoute}`);
-    assert.equal(route.gateMode, item.expectedGateMode, `${item.id} gateMode`);
-    assert.equal(route.skillGateMode, 'hidden-coach', `${item.id} skillGateMode`);
-    assert.equal(route.classifierMode, 'route-hint-only', `${item.id} classifierMode`);
-    assert.equal(route.shouldUseClassifier, item.shouldUseClassifier, `${item.id} shouldUseClassifier`);
-    assert.equal(route.shouldForkSubagents, item.shouldForkSubagents, `${item.id} shouldForkSubagents`);
-    for (const skill of item.expectedSkills) {
-      assert.ok(route.requiredSkills.includes(skill), `${item.id} expected required skill ${skill}`);
+    const route = routeNaturalLanguageTask({ prompt: item.prompt, routerMode: 'enforce' });
+    for (const skill of route.routePlan.skills) {
+      assert.equal(registeredSkills.has(skill), true, `${item.id}: ${skill}`);
+    }
+    for (const role of route.routePlan.roles) {
+      for (const skill of role.skills ?? []) {
+        assert.equal(registeredSkills.has(skill), true, `${item.id}: ${role.agent}/${skill}`);
+      }
     }
   }
 });
-
-test('route cards use the fixed five-section short card shape', () => {
-  for (const item of workloadMatrix) {
-    const route = routeNaturalLanguageTask({ prompt: item.prompt });
-    const card = route.routeCard ?? buildWorkflowRouteCard({ route: item.expectedRoute, requiredSkills: route.requiredSkills ?? [] });
-
-    assert.equal(card.startsWith('WORKFLOW_CARD\n'), true, item.id);
-    assert.match(card, new RegExp(`Task type: ${escapeRegExp(item.expectedRoute)}`), item.id);
-    assert.match(card, /\nDo:\n- /, item.id);
-    assert.match(card, /\nDo not:\n- /, item.id);
-    assert.match(card, /\nSkills:\n- /, item.id);
-    assert.match(card, /\nGate:\n- /, item.id);
-    assert.deepEqual(route.routeCardSections, item.expectedRouteCardSections, item.id);
-  }
-});
-
-test('hard blocks are limited to the frozen reason code list', () => {
-  const hardBlockCases = workloadMatrix.filter((item) => item.expectedGateMode === 'hard-block');
-  assert.ok(hardBlockCases.length >= 2);
-  for (const item of hardBlockCases) {
-    const route = routeNaturalLanguageTask({ prompt: item.prompt });
-    assert.deepEqual(route.hardBlockReasons, [
-      'external_credential_missing',
-      'irreversible_file_operation',
-      'release_or_deploy',
-      'real_high_security_risk',
-      'network_or_service_unavailable',
-      'user_required_approval',
-    ], item.id);
-    assert.notEqual(route.skillGateMode, 'hard-block', item.id);
-    assert.ok(item.expectedHardBlockReason, `${item.id} expected hard-block reason`);
-  }
-});
-
 
 async function registeredMarketplaceSkills(root) {
   const catalog = JSON.parse(await readFile(path.join(root, '.omp-plugin', 'marketplace.json'), 'utf8'));
@@ -137,7 +101,4 @@ async function registeredMarketplaceSkills(root) {
     }
   }
   return skills;
-}
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

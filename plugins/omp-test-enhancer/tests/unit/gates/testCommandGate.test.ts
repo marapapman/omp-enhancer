@@ -12,11 +12,11 @@ describe('evaluateTestCommandGate', () => {
     }])
   })
 
-  it('blocks missing test command when configured as blocker', () => {
-    expect(evaluateTestCommandGate(undefined, { severity: 'blocker' })).toEqual([{
+  it('reports critical missing test command evidence when configured as critical', () => {
+    expect(evaluateTestCommandGate(undefined, { severity: 'critical' })).toEqual([{
       gate: 'test-command',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'No matching host-observed test command evidence.',
       evidence: {}
     }])
@@ -26,17 +26,17 @@ describe('evaluateTestCommandGate', () => {
     expect(evaluateTestCommandGate({ command: 'bunx vitest run', exitCode: 0, stdout: 'ok', stderr: '' })).toEqual([{
       gate: 'test-command',
       passed: true,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Matching host-observed test command passed.',
       evidence: { command: 'bunx vitest run', exitCode: 0 }
     }])
   })
 
-  it('blocks failed command results', () => {
+  it('reports failed command results as critical findings', () => {
     expect(evaluateTestCommandGate({ command: 'bunx vitest run', exitCode: 1, stdout: '', stderr: 'fail' })).toEqual([{
       gate: 'test-command',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Host-observed test evidence did not satisfy the expected command and exit-status contract.',
       evidence: { command: 'bunx vitest run', exitCode: 1 }
     }])
@@ -52,34 +52,34 @@ describe('evaluateTestCommandGate', () => {
     }])
   })
 
-  it('warns when the command is skipped behind static blockers', () => {
-    expect(evaluateTestCommandGate(undefined, { severity: 'blocker', skippedDueToStaticBlocker: true })).toEqual([{
+  it('reports when command evidence is not evaluated after static findings', () => {
+    expect(evaluateTestCommandGate(undefined, { severity: 'critical', notEvaluatedDueToStaticFindings: true })).toEqual([{
       gate: 'test-command',
       passed: true,
       severity: 'warning',
-      summary: 'Host-observed test evidence was not evaluated because static blockers remain.',
+      summary: 'Host-observed test evidence was not evaluated because static critical findings remain.',
       evidence: {}
     }])
   })
 
-  it('reports skipped static blockers before considering a failed command result', () => {
+  it('reports static findings before considering a failed command result', () => {
     expect(evaluateTestCommandGate({ command: 'npm test', exitCode: 1, stdout: '', stderr: 'fail' }, {
-      severity: 'blocker',
-      skippedDueToStaticBlocker: true
+      severity: 'critical',
+      notEvaluatedDueToStaticFindings: true
     })).toEqual([{
       gate: 'test-command',
       passed: true,
       severity: 'warning',
-      summary: 'Host-observed test evidence was not evaluated because static blockers remain.',
+      summary: 'Host-observed test evidence was not evaluated because static critical findings remain.',
       evidence: {}
     }])
   })
 
-  it('blocks timeout-style negative exit codes', () => {
+  it('reports timeout-style negative exit codes as critical findings', () => {
     expect(evaluateTestCommandGate({ command: 'npm test', exitCode: -1, stdout: '', stderr: 'timed out' })).toEqual([{
       gate: 'test-command',
       passed: false,
-      severity: 'blocker',
+      severity: 'critical',
       summary: 'Host-observed test evidence did not satisfy the expected command and exit-status contract.',
       evidence: { command: 'npm test', exitCode: -1 }
     }])

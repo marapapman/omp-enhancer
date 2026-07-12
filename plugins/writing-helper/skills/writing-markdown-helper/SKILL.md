@@ -1,16 +1,27 @@
 ---
 name: writing-markdown-helper
-description: "Fine-mode paragraph writing — one paragraph at a time with user confirmation at each step"
+description: "English markdown drafting and revision, with optional user-requested paragraph-by-paragraph review"
 ---
 
 # Writing Markdown Helper Skill
 
-Write academic-style markdown documents one paragraph at a time. The writer agent drafts directly — no subagents. Every paragraph requires user confirmation before the next step. Designed for structured research papers with section metadata in HTML comments.
+Draft or revise academic-style markdown directly within the scope the user authorized. The writer agent works directly, without subagents. Use one focused pass by default. Paragraph-by-paragraph confirmation is an optional interaction mode only when the user explicitly requests it.
 
 ## When to Use
 
-- User wants to draft a structured markdown document paragraph by paragraph
-- User wants systematic, line-by-line composition with review at each step
+- User wants to draft or revise an English markdown document
+- User explicitly requests paragraph-by-paragraph or line-by-line review
+
+## Default Direct Workflow
+
+For ordinary requests such as "polish the abstract" or "revise this section":
+
+1. Read the exact target text and nearby context.
+2. Apply the requested revision directly under the existing user authorization.
+3. Review meaning, structure, citations, and formatting once.
+4. Report material limitations. Do not require a new confirmation merely because this skill was loaded.
+
+Use the fine-mode workflow below only when the user asks for interactive approval at each paragraph or when a genuinely material ambiguity requires a choice.
 
 ## Document Structure Assumed
 
@@ -28,20 +39,20 @@ Write academic-style markdown documents one paragraph at a time. The writer agen
 | `.pi/research/papers/` | Downloaded papers — read only the ones relevant to the current section |
 | `.pi/research/storyline.md` | Alternative storyline path (if `storyline.md` absent) |
 
-## Fine-Mode Writing Workflow
+## Optional Fine-Mode Writing Workflow
 
 ### Step 1: Generate Overall Outline
 
 1. Read `storyline.md` and the existing `paper.md` structure (Level 2–5 headers + their `description` metadata).
 2. Propose a **list of topic sentences** (≤50 chars each) for every empty Level 5 section. Group them under their parent headers.
 3. Present the outline to the user. Ask: *"Here is the proposed paragraph outline. Accept, Modify, or Regenerate?"*
-4. **Wait for user response.** Do not proceed without confirmation.
+4. In user-requested fine mode, wait for the response before drafting paragraphs.
 
 ### Step 2: Scan & Propose Paragraph
 
 1. Read `paper.md` top to bottom. Find the **first Level 5 section** that has no Level 6 children yet.
 2. Report the section name and its `description` metadata. Ask: *"Next section: [title]. Shall I draft a paragraph here based on the approved outline?"*
-3. **Wait for user confirmation.**
+3. In user-requested fine mode, wait for confirmation.
 
 ### Step 3: Gather Context & Draft
 
@@ -63,7 +74,7 @@ Then write **exactly one paragraph** (`######` node):
 
 Ask: *"Accept, Modify (provide feedback), or Rewrite completely?"*
 
-**Wait for user response.**
+In user-requested fine mode, wait for the response.
 
 ### Step 5: Apply & Loop
 
@@ -71,11 +82,12 @@ Ask: *"Accept, Modify (provide feedback), or Rewrite completely?"*
 - **Modify**: Take the user's feedback, revise the paragraph, and re-present (back to Step 4).
 - **Rewrite**: Discard and draft anew (back to Step 3).
 
-**Never auto-advance** to the next paragraph without explicit user confirmation at Steps 1, 2, and 4.
+When fine mode was explicitly requested, do not auto-advance to the next paragraph without confirmation at Steps 1, 2, and 4. In the default direct workflow, complete the requested scope in one focused pass.
 
 ## Anti-Patterns
 
-- Do not write multiple paragraphs in one go
-- Do not skip outline generation (Step 1)
-- Do not insert content before the user accepts it (Step 4)
+- Do not force fine mode onto an ordinary direct-edit request
+- In fine mode, do not write multiple paragraphs in one go
+- In fine mode, do not skip outline generation (Step 1)
+- In fine mode, do not insert content before the user accepts it (Step 4)
 - Do not modify section headings (Level 2–5)

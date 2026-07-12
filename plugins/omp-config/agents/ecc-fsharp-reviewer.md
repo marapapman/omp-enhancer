@@ -1,8 +1,8 @@
 ---
 name: ecc-fsharp-reviewer
 description: Expert F# code reviewer specializing in functional idioms, type safety,
-  pattern matching, computation expressions, and performance. Use for all F# code
-  changes. MUST BE USED for F# projects.
+  pattern matching, computation expressions, and performance. Use when F# changes
+  would benefit from specialist review.
 tools:
 - bash
 - find
@@ -99,7 +99,7 @@ Fix: What to change
 
 - **Approve**: No CRITICAL or HIGH issues
 - **Warning**: MEDIUM issues only (can merge with caution)
-- **Block**: CRITICAL or HIGH issues found
+- **Recommend against merge**: CRITICAL or HIGH issues found
 
 ## Framework Checks
 

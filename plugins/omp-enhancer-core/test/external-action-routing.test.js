@@ -13,7 +13,7 @@ const CONNECTOR_PROMPTS = [
   'Update Notion page roadmap.',
 ];
 
-test('Chinese Slack target-before-action wording remains a connector action under a no-release ceiling', () => {
+test('Chinese Slack target-before-action wording remains a connector action under a no-release constraint', () => {
   const prompt = '在 Slack 频道 #omp-e2e 发送消息 hello；不要发布。';
   const descriptor = describeNaturalLanguageTask({ prompt });
   assert.equal(descriptor.operation, 'execute');
@@ -25,7 +25,7 @@ test('Chinese Slack target-before-action wording remains a connector action unde
   assert.equal(descriptor.phases.some(({ kind }) => kind === 'release'), false);
 });
 
-test('complete reversible connector actions compile as external execution rather than releases', () => {
+test('complete reversible connector actions compile as advisory external execution rather than releases', () => {
   for (const prompt of CONNECTOR_PROMPTS) {
     const descriptor = describeNaturalLanguageTask({ prompt });
     assert.equal(descriptor.operation, 'execute', prompt);
@@ -39,10 +39,16 @@ test('complete reversible connector actions compile as external execution rather
     assert.ok(descriptor.capabilities.includes('external.write'), prompt);
 
     const plan = buildRoutePlan(descriptor);
-    assert.ok(!plan.gateRequirements.some(({ key }) => key === 'release-approval'), prompt);
+    assert.equal(plan.mode, 'advisory', prompt);
+    assert.equal(plan.autoContinue, false, prompt);
+    assert.ok(!plan.steps.some(({ kind }) => kind === 'release'), prompt);
+    assert.ok(!plan.qualityChecks.includes('post-action-verification'), prompt);
+    assert.match(plan.riskNotes.join(' '), /Confirm the external target/, prompt);
     const policy = compileTaskRoutePolicy(descriptor);
     assert.equal(policy.intent, 'unknown', prompt);
-    assert.equal(policy.hardBlock, false, prompt);
+    assert.equal(policy.advisoryOnly, true, prompt);
+    assert.equal(policy.autoContinue, false, prompt);
+    assert.equal('hardBlock' in policy, false, prompt);
   }
 });
 
@@ -60,11 +66,14 @@ test('incomplete and conflicting connector actions preserve authorization shape 
     assert.equal(descriptor.constraints.externalWrite, 'required', prompt);
     assert.equal(descriptor.externalActionContract?.state, state, prompt);
     assert.deepEqual(descriptor.phases, [{ kind: 'execute', domain: 'general' }], prompt);
-    assert.ok(!buildRoutePlan(descriptor).gateRequirements.some(({ key }) => key === 'release-approval'), prompt);
+    const plan = buildRoutePlan(descriptor);
+    assert.deepEqual(plan.steps, [{ kind: 'execute', domain: 'general' }], prompt);
+    assert.ok(!plan.qualityChecks.includes('post-action-verification'), prompt);
+    assert.match(plan.riskNotes.join(' '), /Confirm the external target/, prompt);
   }
 });
 
-test('release approval is derived from a release phase, not generic external-write capability', () => {
+test('post-action verification guidance is derived from a release step, not generic external-write capability', () => {
   const connector = normalizeTaskDescriptor({
     operation: 'execute',
     domains: ['general'],
@@ -73,22 +82,26 @@ test('release approval is derived from a release phase, not generic external-wri
     phases: [{ kind: 'execute', domain: 'general' }],
     externalActionContract: describeNaturalLanguageTask({ prompt: CONNECTOR_PROMPTS[0] }).externalActionContract,
   });
-  assert.ok(!buildRoutePlan(connector).gateRequirements.some(({ key }) => key === 'release-approval'));
+  assert.ok(!buildRoutePlan(connector).qualityChecks.includes('post-action-verification'));
 
   const release = describeNaturalLanguageTask({ prompt: 'Publish package pkg@1.2.3 to npm.' });
   assert.ok(release.phases.some(({ kind }) => kind === 'release'));
-  assert.ok(buildRoutePlan(release).gateRequirements.some(({ key }) => key === 'release-approval'));
+  const releasePlan = buildRoutePlan(release);
+  assert.ok(releasePlan.steps.some(({ kind }) => kind === 'release'));
+  assert.ok(releasePlan.qualityChecks.includes('post-action-verification'));
 });
 
-test('irreversible connector deletion remains on the protected unsupported path', () => {
+test('irreversible connector deletion carries critical advisory risk guidance', () => {
   const descriptor = describeNaturalLanguageTask({ prompt: 'Delete Notion page roadmap.' });
-  assert.equal(descriptor.externalActionContract?.state, 'unsupported');
   assert.equal(descriptor.externalActionContract?.action, 'delete');
   assert.equal(descriptor.risk.level, 'critical');
-  assert.ok(descriptor.risk.flags.includes('user-approval-required'));
+  assert.ok(descriptor.risk.flags.includes('irreversible-file-operation'));
   assert.deepEqual(descriptor.phases, [{ kind: 'execute', domain: 'general' }]);
-  assert.ok(!buildRoutePlan(descriptor).gateRequirements.some(({ key }) => key === 'release-approval'));
-  assert.ok(buildRoutePlan(descriptor).gateRequirements.some(({ key }) => key === 'irreversible-approval'));
+  const plan = buildRoutePlan(descriptor);
+  assert.equal(plan.mode, 'advisory');
+  assert.ok(!plan.steps.some(({ kind }) => kind === 'release'));
+  assert.ok(!plan.qualityChecks.includes('post-action-verification'));
+  assert.match(plan.riskNotes.join(' '), /irreversible file operation/i);
 });
 
 test('multi-action contracts split safely while retaining one aggregate clarification state', () => {
@@ -106,7 +119,9 @@ test('multi-action contracts split safely while retaining one aggregate clarific
     normalizeTaskDescriptor(JSON.parse(JSON.stringify(descriptor))).externalActionContracts.length,
     2,
   );
-  assert.ok(!buildRoutePlan(descriptor).gateRequirements.some(({ key }) => key === 'release-approval'));
+  const plan = buildRoutePlan(descriptor);
+  assert.ok(!plan.steps.some(({ kind }) => kind === 'release'));
+  assert.ok(!plan.qualityChecks.includes('post-action-verification'));
 });
 
 test('local modification and verification phases survive a following connector action', () => {
@@ -139,7 +154,9 @@ test('local modification and verification phases survive a following connector a
     assert.equal(descriptor.constraints.networkAccess, 'required', prompt);
     assert.equal(descriptor.constraints.externalWrite, 'required', prompt);
     assert.ok(!descriptor.phases.some(({ kind }) => kind === 'release'), prompt);
-    assert.ok(!buildRoutePlan(descriptor).gateRequirements.some(({ key }) => key === 'release-approval'), prompt);
+    const plan = buildRoutePlan(descriptor);
+    assert.ok(!plan.steps.some(({ kind }) => kind === 'release'), prompt);
+    assert.ok(!plan.qualityChecks.includes('post-action-verification'), prompt);
   }
 });
 
@@ -164,7 +181,7 @@ test('connector implementation meta-work and local event code remain local-only 
   }
 });
 
-test('create and build imperatives with explicit code targets authorize local creation without connector authority', () => {
+test('create and build imperatives with explicit code targets select local creation without connector actions', () => {
   for (const prompt of [
     'Create a function in src/parser.js.',
     'Create src/new-module.js.',
@@ -181,12 +198,12 @@ test('create and build imperatives with explicit code targets authorize local cr
     assert.equal(descriptor.externalActionContract, null, prompt);
     assert.ok(descriptor.capabilities.includes('fs.write'), prompt);
     const plan = buildRoutePlan(descriptor);
-    assert.ok(plan.requiredSkills.includes('verification-before-completion'), prompt);
-    assert.ok(plan.gateRequirements.some(({ key }) => key === 'review-evidence'), prompt);
+    assert.ok(plan.skills.includes('verification-before-completion'), prompt);
+    assert.ok(plan.qualityChecks.includes('review-evidence'), prompt);
   }
 });
 
-test('destructive connector matrix compiles as critical external execution without becoming local modification', () => {
+test('destructive connector matrix compiles as critical advisory external execution without becoming local modification', () => {
   for (const prompt of [
     'Delete Gmail email message 42.',
     'Delete Google Calendar event evt-1.',
@@ -200,11 +217,10 @@ test('destructive connector matrix compiles as critical external execution witho
     assert.equal(descriptor.constraints.workspaceWrite, 'forbidden', prompt);
     assert.equal(descriptor.constraints.networkAccess, 'required', prompt);
     assert.equal(descriptor.constraints.externalWrite, 'required', prompt);
-    assert.equal(descriptor.externalActionContract?.state, 'unsupported', prompt);
     assert.equal(descriptor.externalActionContract?.action, 'delete', prompt);
     assert.deepEqual(descriptor.phases, [{ kind: 'execute', domain: 'general' }], prompt);
     assert.equal(descriptor.risk.level, 'critical', prompt);
-    assert.ok(descriptor.risk.flags.includes('user-approval-required'), prompt);
+    assert.ok(descriptor.risk.flags.includes('irreversible-file-operation'), prompt);
     assert.ok(descriptor.provenance.reasons.includes('irreversible external operation requested'), prompt);
   }
 

@@ -24,7 +24,8 @@ mvn -T 4 clean verify -DskipTests
 ./gradlew clean assemble -x test
 ```
 
-If build fails, stop and fix.
+If the build fails, preserve the output and continue independent static checks.
+Make one focused repair when build repair is in scope.
 
 ## Phase 2: Static Analysis
 

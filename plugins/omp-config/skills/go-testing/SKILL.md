@@ -1,6 +1,6 @@
 ---
 name: go-testing
-description: "Handles all Golang testing tasks including running tests, writing new tests, and fixing test failures. Uses standard Go testing practices with mandatory testify library (github.com/stretchr/testify) for enhanced assertions using require for critical checks and assert for non-critical ones."
+description: "Handles Golang testing tasks including running tests, writing new tests, and fixing failures, while following the repository's existing assertion conventions."
 ---
 
 # Go Testing Skill

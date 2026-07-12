@@ -36,35 +36,39 @@ class FakePi {
   }
 }
 
-test('e2e implementation route auto-attaches task contracts and releases after testing evidence', async () => {
+test('e2e implementation route adds advisory role and skill context', async () => {
   const { pi, ctx } = registeredCore();
-  const prompt = 'Agentically update gate handling across all affected core files, add complete regression tests, and run the tests.';
+  const prompt = 'Agentically update runtime routing across all affected core files, add complete regression tests, and run the tests.';
 
   await event(pi, 'session_start')({}, ctx);
   const routed = await event(pi, 'before_agent_start')({ prompt }, ctx);
 
   assert.equal(routed.route.intent, 'implementation-with-tests');
-  assert.deepEqual(routed.route.requiredSubagents.map(({ agent }) => agent), ['plan', 'implementation-task', 'reviewer']);
-  assert.match(routed.additionalContext, /Required task assignment contracts/);
+  assert.deepEqual(
+    routed.route.routePlan.roles.map(({ agent }) => agent),
+    ['plan', 'implementation-task', 'reviewer'],
+  );
+  assert.match(routed.additionalContext, /This guidance is advisory/);
+  assert.match(routed.additionalContext, /### Optional roles/);
 
   const taskEvent = {
     toolName: 'task',
     callId: 'implementation-batch',
     input: {
       tasks: [
-        { role: 'plan', assignment: 'Decompose the gate fix.' },
+        { role: 'plan', assignment: 'Decompose the routing change.' },
         { role: 'implementation-task', assignment: 'Patch the runtime and tests.' },
         { role: 'reviewer', assignment: 'Review the resulting diff.' },
       ],
     },
   };
 
-  const taskGate = await event(pi, 'tool_call')(taskEvent, ctx);
-  assert.equal(taskGate, undefined);
+  assert.equal(await event(pi, 'tool_call')(taskEvent, ctx), undefined);
   for (const item of taskEvent.input.tasks) {
-    assert.match(item.assignment, new RegExp(`OMP_REQUIRED_SUBAGENT:\\s*${escapeRegExp(item.role)}`));
-    assert.match(item.assignment, /OMP_PARENT_TASK:\s*Agentically update gate handling/);
-    assert.match(item.assignment, /Required skills for this subagent:/);
+    assert.match(item.assignment, new RegExp('OMP_WORKFLOW_ROLE:\\s*' + escapeRegExp(item.role)));
+    assert.match(item.assignment, /Parent task context: Agentically update runtime routing/);
+    assert.match(item.assignment, /Suggested skills for this role:/);
+    assert.match(item.assignment, /This is advisory workflow context/);
   }
 
   await event(pi, 'tool_result')(
@@ -73,16 +77,17 @@ test('e2e implementation route auto-attaches task contracts and releases after t
       callId: 'implementation-batch',
       input: taskEvent.input,
       result: {
-        content: [{ type: 'text', text: subagentResultText(['plan', 'implementation-task', 'reviewer']) }],
+        content: [{ type: 'text', text: 'All suggested checkpoints completed.' }],
         details: {
-          results: taskEvent.input.tasks.map((item) => ({ role: item.role, status: 'completed', requests: 1, tokens: 120 })),
+          results: taskEvent.input.tasks.map((item) => ({
+            role: item.role,
+            status: 'completed',
+          })),
         },
       },
     },
     ctx,
   );
-  await event(pi, 'tool_result')({ name: 'omp_test_gate', details: { passed: true } }, ctx);
-  await recordPassingHostTest(pi, ctx);
 
   const status = await tool(pi, 'omp_core_subagent_status').execute(
     'status-after-implementation-e2e',
@@ -91,27 +96,17 @@ test('e2e implementation route auto-attaches task contracts and releases after t
     undefined,
     ctx,
   );
-  assert.match(status.content[0].text, /Completed:\n- plan/);
+  assert.match(status.content[0].text, /Observed completed roles:\n- plan/);
   assert.match(status.content[0].text, /implementation-task/);
   assert.match(status.content[0].text, /reviewer/);
 
-  const stopped = await event(pi, 'session_stop')(
-    {
-      output: usageEvidence({
-        subagents: {
-          plan: ['brainstorming', 'subagent-driven-development'],
-          'implementation-task': ['test-driven-development', 'verification-before-completion'],
-          reviewer: ['verification-before-completion'],
-        },
-        skills: ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'],
-      }),
-    },
-    ctx,
+  assert.equal(
+    await event(pi, 'session_stop')({ output: 'Implemented and verified.' }, ctx),
+    undefined,
   );
-  assert.equal(stopped, undefined);
 });
 
-test('e2e broad bug audit task call gets parent context repair and still requires testing evidence', async () => {
+test('e2e broad bug audit suggests roles without completion enforcement', async () => {
   const { pi, ctx } = registeredCore();
   const prompt = '帮我测试整个插件工作流并检查 bug，只报告问题，不要修复。';
 
@@ -119,82 +114,46 @@ test('e2e broad bug audit task call gets parent context repair and still require
   const routed = await event(pi, 'before_agent_start')({ prompt }, ctx);
 
   assert.equal(routed.route.intent, 'bug-audit');
-  assert.deepEqual(routed.route.requiredSubagents.map(({ agent }) => agent), [
-    'ecc-tdd-guide',
-    'ecc-code-reviewer',
-    'ecc-silent-failure-hunter',
-    'ecc-pr-test-analyzer',
-  ]);
+  assert.deepEqual(
+    routed.route.routePlan.roles.map(({ agent }) => agent),
+    [
+      'ecc-tdd-guide',
+      'ecc-code-reviewer',
+      'ecc-silent-failure-hunter',
+      'ecc-pr-test-analyzer',
+    ],
+  );
 
   const taskEvent = {
     toolName: 'task',
     input: {
-      tasks: routed.route.requiredSubagents.map(({ agent }) => ({
+      tasks: routed.route.routePlan.roles.map(({ agent }) => ({
         role: agent,
-        assignment: `Run ${agent} for the audit.`,
+        assignment: 'Run ' + agent + ' for the audit.',
       })),
     },
   };
 
-  const taskGate = await event(pi, 'tool_call')(taskEvent, ctx);
-  assert.equal(taskGate, undefined);
+  assert.equal(await event(pi, 'tool_call')(taskEvent, ctx), undefined);
   for (const item of taskEvent.input.tasks) {
-    assert.match(item.assignment, new RegExp(`OMP_REQUIRED_SUBAGENT:\\s*${escapeRegExp(item.role)}`));
-    assert.match(item.assignment, /OMP_PARENT_TASK:\s*帮我测试整个插件工作流并检查 bug/);
+    assert.match(item.assignment, new RegExp('OMP_WORKFLOW_ROLE:\\s*' + escapeRegExp(item.role)));
+    assert.match(item.assignment, /Parent task context: 帮我测试整个插件工作流并检查 bug/);
   }
 
-  await event(pi, 'tool_result')(
-    {
-      name: 'task',
-      input: taskEvent.input,
-      result: {
-        content: [{ type: 'text', text: subagentResultText(taskEvent.input.tasks.map(({ role }) => role)) }],
-        details: { results: taskEvent.input.tasks.map(({ role }) => ({ role, status: 'completed' })) },
-      },
-    },
-    ctx,
+  assert.equal(
+    await event(pi, 'session_stop')({ output: 'Best-effort audit findings.' }, ctx),
+    undefined,
   );
-
-  const missingTestingEvidence = await event(pi, 'session_stop')(
-    {
-      output: usageEvidence({
-        subagents: {
-          'ecc-tdd-guide': ['test-driven-development', 'search-first', 'ai-regression-testing'],
-          'ecc-code-reviewer': ['verification-before-completion'],
-          'ecc-silent-failure-hunter': ['diagnose'],
-          'ecc-pr-test-analyzer': ['verification-before-completion'],
-        },
-        skills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
-      }),
-    },
-    ctx,
-  );
-
-  assert.equal(missingTestingEvidence?.continue, true);
-  assert.match(missingTestingEvidence.additionalContext, /omp_test_gate/);
-
-  await event(pi, 'tool_result')({ name: 'omp_test_gate', details: { passed: true } }, ctx);
-  await recordPassingHostTest(pi, ctx);
-  const released = await event(pi, 'session_stop')(
-    {
-      output: usageEvidence({
-        subagents: {
-          'ecc-tdd-guide': ['test-driven-development', 'search-first', 'ai-regression-testing'],
-          'ecc-code-reviewer': ['verification-before-completion'],
-          'ecc-silent-failure-hunter': ['diagnose'],
-          'ecc-pr-test-analyzer': ['verification-before-completion'],
-        },
-        skills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
-      }),
-    },
-    ctx,
-  );
-  assert.equal(released, undefined);
+  const snapshot = pi.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  assert.equal(Object.hasOwn(snapshot, 'gateController'), false);
+  assert.equal(Object.hasOwn(snapshot, 'evidence'), false);
 });
 
-test('e2e diagnosis and unknown prompts do not leave workflow gates open', async () => {
+test('e2e diagnosis and unknown prompts finish without plugin continuation', async () => {
   const prompts = [
-    '解释为什么 task tool_call 需要 OMP_REQUIRED_SUBAGENT，不要改代码。',
+    '解释为什么 task 工具需要角色上下文，不要改代码。',
     'What is a unit test?',
   ];
 
@@ -202,9 +161,7 @@ test('e2e diagnosis and unknown prompts do not leave workflow gates open', async
     const { pi, ctx } = registeredCore();
     await event(pi, 'session_start')({}, ctx);
     await event(pi, 'before_agent_start')({ prompt }, ctx);
-
-    const stopped = await event(pi, 'session_stop')({ output: 'Done.' }, ctx);
-    assert.equal(stopped, undefined, prompt);
+    assert.equal(await event(pi, 'session_stop')({ output: 'Done.' }, ctx), undefined);
   }
 });
 
@@ -217,23 +174,14 @@ function registeredCore() {
 
 function tool(pi, name) {
   const found = pi.tools.get(name);
-  if (!found) throw new Error(`Missing tool ${name}`);
+  if (!found) throw new Error('Missing tool ' + name);
   return found;
 }
 
 function event(pi, name) {
   const found = pi.eventHandlers.find((handler) => handler.event === name);
-  if (!found) throw new Error(`Missing event ${name}`);
+  if (!found) throw new Error('Missing event ' + name);
   return found.handler;
-}
-
-async function recordPassingHostTest(pi, ctx, command = 'npm test') {
-  await event(pi, 'tool_result')({
-    name: 'bash',
-    params: { command },
-    content: [{ type: 'text', text: '42 tests passed, 0 failed' }],
-    isError: false,
-  }, ctx);
 }
 
 function extensionContext(entries = []) {
@@ -245,43 +193,19 @@ function extensionContext(entries = []) {
   };
 }
 
-function subagentResultText(agents) {
-  return agents.map((agent) => [
-    'SUBAGENT_RESULT',
-    `Agent: ${agent}`,
-    'Status: complete',
-    'Evidence:',
-    '- e2e task completed',
-  ].join('\n')).join('\n\n');
-}
-
-function usageEvidence({ subagents = {}, skills = [] } = {}) {
-  return [
-    'Done.',
-    '',
-    'SUBAGENT_USAGE:',
-    ...Object.entries(subagents).map(([agent, agentSkills]) => `- ${agent}: ${agentSkills.join(', ') || 'none'}`),
-    '',
-    'SKILL_USAGE',
-    'Required:',
-    ...skills.map((skill) => `- ${skill}`),
-    'Loaded:',
-    ...skills.map((skill) => `- ${skill}`),
-  ].join('\n');
-}
-
 function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(value).replace(/[.*+?^{}()|[\]\\]/g, '\\$&');
 }
 
 function fakeZod() {
-  const withOptional = (schema) => ({ ...schema, optional: () => ({ type: 'optional', schema }) });
+  const withOptional = (schema) => ({
+    ...schema,
+    optional: () => ({ type: 'optional', schema }),
+  });
   return {
     object: (shape) => withOptional({ type: 'object', shape }),
     string: () => withOptional({ type: 'string' }),
     boolean: () => withOptional({ type: 'boolean' }),
     array: (schema) => withOptional({ type: 'array', schema }),
-    enum: (values) => withOptional({ type: 'enum', values }),
-    optional: (schema) => ({ type: 'optional', schema }),
   };
 }

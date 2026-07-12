@@ -78,7 +78,7 @@ test('local evidence lanes cross-check to agreement and conflict', () => {
   assert.equal(cross[0].status, 'CONFLICTED');
 });
 
-test('fact gate requires plan, evidence, cross-check, review, report, and usage', () => {
+test('fact advisory review reports missing plan, evidence, cross-check, review, report, and usage', () => {
   const failed = validateFactCheckGate({ finalOutput: 'FACT_CHECK_PLAN\nFACT_CHECK_REPORT' });
   assert.equal(failed.ok, false);
   assert.deepEqual(failed.missing.includes('FACT_REVIEW'), true);
@@ -97,7 +97,7 @@ test('fact gate requires plan, evidence, cross-check, review, report, and usage'
   assert.equal(passed.ok, true);
 });
 
-test('the registered gate binds final claims to host-observed plan, evidence, and report tools', async () => {
+test('the registered review reports workflow inconsistencies without failing tool execution', async () => {
   const omp = new FakeOmp();
   factCheckerExtension(omp);
   const ctx = { cwd: process.cwd(), sessionManager: {} };
@@ -118,7 +118,9 @@ test('the registered gate binds final claims to host-observed plan, evidence, an
   const premature = await omp.tools.get('fact_check_gate').execute(
     'premature-gate', { finalOutput: completeOutput(), riskLevel: 'low' }, undefined, undefined, ctx,
   );
-  assert.equal(premature.isError, true);
+  assert.equal(premature.isError, false);
+  assert.equal(premature.details.advisoryOnly, true);
+  assert.equal(premature.details.complete, false);
   assert.ok(premature.details.missingObserved.includes('host FACT_CHECK_PLAN'));
 
   const analyzed = await omp.tools.get('fact_check_analyze').execute(
@@ -150,8 +152,8 @@ test('the registered gate binds final claims to host-observed plan, evidence, an
       )),
     }, undefined, undefined, ctx,
   );
-  assert.equal(mismatchedEvidence.isError, true);
-  assert.match(mismatchedEvidence.content[0].text, /do not match host-observed/i);
+  assert.equal(mismatchedEvidence.isError, false);
+  assert.ok(mismatchedEvidence.details.warnings.some((warning) => /differs from earlier session telemetry/i.test(warning)));
 
   const mismatchedCrossCheck = await omp.tools.get('fact_check_report').execute(
     'mismatched-cross-check-report', {
@@ -166,8 +168,8 @@ test('the registered gate binds final claims to host-observed plan, evidence, an
       }],
     }, undefined, undefined, ctx,
   );
-  assert.equal(mismatchedCrossCheck.isError, true);
-  assert.match(mismatchedCrossCheck.content[0].text, /deterministic cross-check/i);
+  assert.equal(mismatchedCrossCheck.isError, false);
+  assert.ok(mismatchedCrossCheck.details.warnings.some((warning) => /deterministic result/i.test(warning)));
 
   const report = await omp.tools.get('fact_check_report').execute(
     'observed-report', { claims, evidenceRecords }, undefined, undefined, ctx,
@@ -184,7 +186,8 @@ test('the registered gate binds final claims to host-observed plan, evidence, an
   const inconsistent = await omp.tools.get('fact_check_gate').execute(
     'inconsistent-gate', { finalOutput: completeOutput('CONTRADICTED'), riskLevel: 'low' }, undefined, undefined, ctx,
   );
-  assert.equal(inconsistent.isError, true);
+  assert.equal(inconsistent.isError, false);
+  assert.equal(inconsistent.details.complete, false);
   assert.ok(inconsistent.details.missingObserved.includes('final verdicts matching host FACT_CHECK_REPORT'));
 
   const conflicting = await omp.tools.get('fact_check_gate').execute(
@@ -193,7 +196,7 @@ test('the registered gate binds final claims to host-observed plan, evidence, an
       riskLevel: 'low',
     }, undefined, undefined, ctx,
   );
-  assert.equal(conflicting.isError, true);
+  assert.equal(conflicting.isError, false);
   assert.ok(conflicting.details.missingObserved.includes('final verdicts matching host FACT_CHECK_REPORT'));
 
   const duplicated = await omp.tools.get('fact_check_gate').execute(
@@ -202,11 +205,11 @@ test('the registered gate binds final claims to host-observed plan, evidence, an
       riskLevel: 'low',
     }, undefined, undefined, ctx,
   );
-  assert.equal(duplicated.isError, true);
+  assert.equal(duplicated.isError, false);
   assert.ok(duplicated.details.missingObserved.includes('final verdicts matching host FACT_CHECK_REPORT'));
 });
 
-test('registered workflow fails closed without identity and isolates distinct session managers', async () => {
+test('registered workflow supports stateless advisory use and isolates optional session telemetry', async () => {
   const omp = new FakeOmp();
   factCheckerExtension(omp);
   const analyze = omp.tools.get('fact_check_analyze');
@@ -214,8 +217,8 @@ test('registered workflow fails closed without identity and isolates distinct se
   const noIdentity = await analyze.execute(
     'no-identity', { text: 'The stable fact is 42.' }, undefined, undefined, { cwd: process.cwd() },
   );
-  assert.equal(noIdentity.isError, true);
-  assert.match(noIdentity.content[0].text, /stable fact-check session identity/i);
+  assert.equal(noIdentity.isError, false);
+  assert.equal(noIdentity.details.telemetry, 'stateless');
 
   const managerA = {};
   const managerB = {};
@@ -236,7 +239,8 @@ test('registered workflow fails closed without identity and isolates distinct se
       riskLevel: 'low',
     }, undefined, undefined, ctxB,
   );
-  assert.equal(isolated.isError, true);
+  assert.equal(isolated.isError, false);
+  assert.equal(isolated.details.complete, false);
   assert.ok(isolated.details.missingObserved.includes('host FACT_CHECK_PLAN'));
 });
 
@@ -294,7 +298,8 @@ test('analyze rejects ambiguous path plus text and gate ignores a lower model ri
       riskLevel: 'low',
     }, undefined, undefined, ctx,
   );
-  assert.equal(gated.isError, true);
+  assert.equal(gated.isError, false);
+  assert.equal(gated.details.complete, false);
   assert.ok(gated.details.missingObserved.includes('host FACT_EVIDENCE_B'));
 });
 

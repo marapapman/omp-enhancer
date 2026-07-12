@@ -63,7 +63,7 @@ export function formatFactCheckPlan(plan = {}) {
   return [
     'FACT_CHECK_PLAN',
     `Risk: ${plan.riskLevel ?? 'unknown'}`,
-    'Required stages:',
+    'Recommended stages:',
     ...((plan.requiredStages ?? []).map((stage) => `- ${stage}`)),
     '',
     'Claims:',

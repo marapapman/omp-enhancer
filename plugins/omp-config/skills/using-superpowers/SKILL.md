@@ -1,19 +1,15 @@
 ---
 name: using-superpowers
-description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+description: Use when starting work to discover relevant skills and apply the smallest useful workflow without turning skill selection into a blocking preflight
 ---
 
 <SUBAGENT-STOP>
 If you were dispatched as a subagent to execute a specific task, skip this skill.
 </SUBAGENT-STOP>
 
-<EXTREMELY-IMPORTANT>
-If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
-
-IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
-
-This is not negotiable. This is not optional. You cannot rationalize your way out of this.
-</EXTREMELY-IMPORTANT>
+<SKILL-SELECTION-GUIDANCE>
+Load a skill when it clearly matches the task or the user names it. Prefer the smallest set that materially improves the work. Do not delay a clarification, harmless inspection, or obvious direct action merely to search for marginally related skills. If a suggested skill is unavailable, continue with the best available method and report the limitation when material.
+</SKILL-SELECTION-GUIDANCE>
 
 ## Instruction Priority
 
@@ -43,56 +39,42 @@ Skills use Claude Code tool names. Non-CC platforms: see `references/copilot-too
 
 ## The Rule
 
-**Invoke relevant or requested skills BEFORE any response or action.** Even a 1% chance a skill might apply means that you should invoke the skill to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.
+**Invoke explicitly requested and clearly relevant skills before the work they guide.** A marginal match is not a precondition for answering or acting. If an invoked skill turns out to be wrong for the situation, set it aside and continue.
 
 ```dot
 digraph skill_flow {
     "User message received" [shape=doublecircle];
-    "About to EnterPlanMode?" [shape=doublecircle];
-    "Already brainstormed?" [shape=diamond];
-    "Invoke brainstorming skill" [shape=box];
     "Might any skill apply?" [shape=diamond];
     "Invoke Skill tool" [shape=box];
     "Announce: 'Using [skill] to [purpose]'" [shape=box];
-    "Has checklist?" [shape=diamond];
-    "Create TodoWrite todo per item" [shape=box];
-    "Follow skill exactly" [shape=box];
+    "Useful checklist?" [shape=diamond];
+    "Track relevant items" [shape=box];
+    "Adapt skill to task" [shape=box];
     "Respond (including clarifications)" [shape=doublecircle];
 
-    "About to EnterPlanMode?" -> "Already brainstormed?";
-    "Already brainstormed?" -> "Invoke brainstorming skill" [label="no"];
-    "Already brainstormed?" -> "Might any skill apply?" [label="yes"];
-    "Invoke brainstorming skill" -> "Might any skill apply?";
-
     "User message received" -> "Might any skill apply?";
-    "Might any skill apply?" -> "Invoke Skill tool" [label="yes, even 1%"];
+    "Might any skill apply?" -> "Invoke Skill tool" [label="yes, clearly relevant"];
     "Might any skill apply?" -> "Respond (including clarifications)" [label="definitely not"];
     "Invoke Skill tool" -> "Announce: 'Using [skill] to [purpose]'";
-    "Announce: 'Using [skill] to [purpose]'" -> "Has checklist?";
-    "Has checklist?" -> "Create TodoWrite todo per item" [label="yes"];
-    "Has checklist?" -> "Follow skill exactly" [label="no"];
-    "Create TodoWrite todo per item" -> "Follow skill exactly";
+    "Announce: 'Using [skill] to [purpose]'" -> "Useful checklist?";
+    "Useful checklist?" -> "Track relevant items" [label="yes"];
+    "Useful checklist?" -> "Adapt skill to task" [label="no"];
+    "Track relevant items" -> "Adapt skill to task";
 }
 ```
 
-## Red Flags
+## Common Skill-Selection Mistakes
 
-These thoughts mean STOP—you're rationalizing:
+These thoughts are useful prompts to reconsider, not reasons to halt unrelated work:
 
 | Thought | Reality |
 |---------|---------|
-| "This is just a simple question" | Questions are tasks. Check for skills. |
-| "I need more context first" | Skill check comes BEFORE clarifying questions. |
-| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
-| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
-| "Let me gather information first" | Skills tell you HOW to gather information. |
-| "This doesn't need a formal skill" | If a skill exists, use it. |
-| "I remember this skill" | Skills evolve. Read current version. |
-| "This doesn't count as a task" | Action = task. Check for skills. |
-| "The skill is overkill" | Simple things become complex. Use it. |
-| "I'll just do this one thing first" | Check BEFORE doing anything. |
-| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
-| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+| "This is a simple question" | Usually answer directly unless a named or clearly relevant skill improves accuracy. |
+| "I need more context first" | Ask a necessary clarification or perform safe inspection; skill discovery must not block it. |
+| "Let me explore the codebase first" | A focused read-only inspection is often the right first step. |
+| "I remember this skill" | Re-read it when the current version materially affects the workflow. |
+| "The skill is overkill" | Use a smaller workflow when the full skill would add ceremony without value. |
+| "A skill is unavailable" | Continue best effort and report the limitation when material. |
 
 ## Skill Priority
 
@@ -106,7 +88,7 @@ When multiple skills could apply, use this order:
 
 ## Skill Types
 
-**Rigid** (TDD, debugging): Follow exactly. Don't adapt away discipline.
+**Structured** (TDD, debugging): Preserve the evidence-seeking principles while adapting sequence and depth to the user request, repository, and available runtime.
 
 **Flexible** (patterns): Adapt principles to context.
 
@@ -114,4 +96,4 @@ The skill itself tells you which.
 
 ## User Instructions
 
-Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
+Instructions say both what outcome is wanted and which constraints matter. Skills provide workflow options; they do not override an explicit direct request or create a new approval requirement.

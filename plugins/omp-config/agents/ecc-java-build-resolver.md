@@ -262,9 +262,9 @@ grep -rn "@RegisterForReflection" src/main/java --include="*.java"
 - **[QUARKUS]**: Always check if `@RegisterForReflection` is needed before adding reflection config manually
 - Check `pom.xml`, `build.gradle`, or `build.gradle.kts` to confirm the build tool before running commands
 
-## Stop Conditions
+## Resolver Exit Conditions
 
-Stop and report if:
+Conclude this bounded resolver run and report the remaining limitation if:
 - Same error persists after 3 fix attempts
 - Fix introduces more errors than it resolves
 - Error requires architectural changes beyond scope

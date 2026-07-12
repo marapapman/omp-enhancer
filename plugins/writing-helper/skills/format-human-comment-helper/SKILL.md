@@ -5,7 +5,7 @@ description: "Process human review comments — parse, categorize, and suggest r
 
 # Format Human Comment Helper
 
-Help process human review comments on a document. Parse feedback, categorize each point, suggest responses, and estimate effort. Never auto-apply changes — always get confirmation.
+Help process human review comments on a document. Parse feedback, categorize each point, suggest responses, and estimate effort. If the user already authorized revisions, apply non-substantive wording fixes directly; confirm changes to core claims, evidence, or scope.
 
 ## Trigger
 
@@ -54,11 +54,11 @@ Present all points in a single structured table, ordered by severity (major → 
 | 4 | 🟢 Question | ... | ... | ... | small |
 ```
 
-After the table, ask: **"Shall I draft the changes for any of these? Reply with the number(s) or 'none'."**
+If the user has not authorized edits, ask: **"Shall I draft the changes for any of these? Reply with the number(s) or 'none'."**
 
 ### Step 5: Draft on Request
 
-When the user picks a numbered item, propose concrete document edits. Present the exact changes inline. Ask again before applying.
+When the user picks a numbered item, or has already asked for the review comments to be addressed, propose concrete document edits. Apply wording fixes within that authorization; ask again only before changing core claims, evidence, or scope.
 
 ## Guidelines
 
@@ -66,5 +66,5 @@ When the user picks a numbered item, propose concrete document edits. Present th
 - **Be honest about effort** — don't underestimate complex changes
 - **Prioritize by impact** — a major concern on a core claim ranks above a major concern on a minor result
 - **One table per review round** — if multiple rounds of feedback exist, process separately
-- **Never apply changes without confirmation** — user must approve each change individually
+- **Respect the current authorization** — an explicit request to address the comments authorizes ordinary wording edits; seek confirmation for substantive claim, evidence, or scope changes
 - **When unsure about a category**, present the ambiguity and let the user decide

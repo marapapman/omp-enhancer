@@ -1,12 +1,12 @@
 # OMP Fact Checker
 
-Fact-checking workflow plugin for OMP. It extracts factual claims, collects evidence, compares independent evidence lanes, and gates final reports on plan + evidence + cross-check + reviewer output.
+Fact-checking workflow plugin for OMP. It extracts factual claims, collects evidence, compares independent evidence lanes, and provides an advisory completeness review.
 
 The workflow is designed for low user interruption:
 
 - small low-risk checks may use one evidence lane plus review;
 - ordinary fact-checking uses two independent evidence lanes;
-- high-risk domains require planner, two researchers, cross-checker, and reviewer evidence;
+- high-risk domains benefit from planner, two researchers, cross-checker, and reviewer evidence;
 - missing network/API access is reported as insufficient evidence instead of repeated blocking.
 
 ## Tools
@@ -14,7 +14,9 @@ The workflow is designed for low user interruption:
 - `fact_check_analyze` extracts claim candidates and builds a `FACT_CHECK_PLAN`.
 - `fact_check_evidence` collects local or provider evidence for claims.
 - `fact_check_report` summarizes verdicts into `FACT_CHECK_REPORT`.
-- `fact_check_gate` validates workflow evidence before final claims.
+- `fact_check_gate` is a compatibility name for a non-blocking workflow completeness review. Missing evidence is returned as findings, never as a session gate.
+
+The plugin does not block tools, retry work automatically, or prevent session completion. Invalid parameters and real file/network execution errors still use normal error results.
 
 ## Agents
 

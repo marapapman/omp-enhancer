@@ -51,7 +51,7 @@ Check for:
 
 ### Step 2b: Security Review
 
-Check before continuing — if any CRITICAL security issue is found, stop and hand off to `security-reviewer`:
+Check these issues alongside the other review lanes. Report any CRITICAL finding immediately and recommend `security-reviewer` for a deeper pass, while continuing independent Flutter/Dart analysis:
 - Hardcoded API keys, tokens, or secrets in Dart source
 - Sensitive data in plaintext storage instead of platform-secure storage
 - Missing input validation on user input and deep link URLs
@@ -220,7 +220,7 @@ Adapt to the project's chosen architecture (Clean Architecture, MVVM, feature-fi
 - **Missing input validation** — User input passed to APIs/navigation without sanitization
 - **Unsafe deep links** — Handlers that act without validation
 
-If any CRITICAL security issue is present, stop and escalate to `security-reviewer`.
+If any CRITICAL security issue is present, keep it at CRITICAL severity, recommend `security-reviewer`, and continue independent analysis.
 
 ## Output Format
 
@@ -246,16 +246,16 @@ End every review with:
 | Severity | Count | Status |
 |----------|-------|--------|
 | CRITICAL | 0     | pass   |
-| HIGH     | 1     | block  |
+| HIGH     | 1     | do not merge |
 | MEDIUM   | 2     | info   |
 | LOW      | 0     | note   |
 
-Verdict: BLOCK — HIGH issues must be fixed before merge.
+Verdict: RECOMMEND AGAINST MERGE — HIGH issues should be fixed before merge.
 ```
 
 ## Approval Criteria
 
 - **Approve**: No CRITICAL or HIGH issues
-- **Block**: Any CRITICAL or HIGH issues — must fix before merge
+- **Recommend against merge**: Any CRITICAL or HIGH issues should be fixed before merge
 
 Refer to the `flutter-dart-code-review` skill for the comprehensive review checklist.
