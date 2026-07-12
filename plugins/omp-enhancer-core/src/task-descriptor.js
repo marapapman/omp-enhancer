@@ -2474,10 +2474,10 @@ function isFunctionalUiConstructionDirective(value = '') {
 
 function isWritingTransformationDirective(value = '') {
   const original = String(value).toLowerCase();
-  if (/(?:测试用例|测试代码).{0,24}(?:写成|写入|生成|新增|添加).{0,16}(?:测试)?文件|(?:写成|写入|生成|新增|添加).{0,24}(?:测试用例|测试代码|测试文件)|\b(?:write|generate|add|create)\b.{0,48}\b(?:tests?|test cases?|test code|test files?)\b/i.test(original)) return false;
   const text = original
     .replace(/(?:do not|don't|without|no need to)[^.;!\n]{0,80}(?:write|edit|revise|polish|rewrite|draft|improve)[^.;!\n]*/gi, ' ')
     .replace(/(?:不要|别|无需|不用|禁止|不得|不\s*(?:要|做|进行)?)[^。；;！!\n]{0,80}(?:写|编辑|修改|润色|改写|校对|修订|起草|改善|优化)[^。；;！!\n]*/g, ' ');
+  if (/(?:测试用例|测试代码).{0,24}(?:写成|写入|生成|新增|添加).{0,16}(?:测试)?文件|(?:写成|写入|生成|新增|添加).{0,24}(?:测试用例|测试代码|测试文件)|\b(?:write|generate|add|create)\b.{0,48}\b(?:tests?|test cases?|test code|test files?)\b/i.test(text)) return false;
   return /(?:翻译|润色|改写|校对|修订|写成|整理成)/.test(text)
     || /\b(?:translate|polish|proofread|rewrite)\b/.test(text)
     || /\b(?:edit|revise|update|improve)\b[^。！？.!?\n]{0,64}(?:readme|(?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.(?:md|mdx|rst|txt|tex|docx?|pdf))\b/iu.test(text)
@@ -2541,6 +2541,7 @@ export function detectWritingSourceLanguage(sourceText = '') {
     .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/gu, ' ')
     .replace(/\\(?:begin|end)\{[^}]+\}|\\[A-Za-z@]+\*?(?:\[[^\]]*\])?/gu, ' ')
     .replace(/\$\$[\s\S]*?\$\$|\$[^$\n]*\$/gu, ' ')
+    .replace(/\b[A-Za-z][A-Za-z0-9]*(?:[_.][A-Za-z0-9]+)+\b/gu, ' ')
     .replace(/https?:\/\/\S+|(?:\/?[\p{L}\p{N}_.-]+\/)+[\p{L}\p{N}_.-]+/giu, ' ')
     .replace(/\[[^\]]*\]\([^)]*\)|\[@[^\]]+\]/gu, ' ');
   const hanCount = text.match(/\p{Script=Han}/gu)?.length ?? 0;

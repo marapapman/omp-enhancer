@@ -117,6 +117,34 @@ test('labeled multiline source is data and mixed targets stay language-pending',
   );
 });
 
+test('tool identifiers and negative clauses do not erase inline writing language', () => {
+  const cases = [
+    {
+      prompt: 'Please carefully polish this paragraph: Verify route status with omp_core_route_task and omp_core_subagent_status. Do not write files and do not run tests.',
+      intent: 'writing.en',
+      language: 'en',
+    },
+    {
+      prompt: '请润色这段文字：验证路由状态：omp_core_route_task 和 omp_core_subagent_status。不要写文件，也不要跑测试。',
+      intent: 'writing.zh',
+      language: 'zh',
+    },
+  ];
+
+  for (const { prompt, intent, language } of cases) {
+    for (const routerMode of ['legacy', 'observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+      const label = `${routerMode}: ${prompt}`;
+      assert.equal(route.intent, intent, label);
+      assert.equal(route.taskDescriptor.language, language, label);
+      assert.deepEqual(route.taskDescriptor.domains, ['writing'], label);
+      assert.notEqual(route.taskDescriptor.constraints.testExecution, 'required', label);
+      assert.equal(route.routePlan.mode, 'advisory', label);
+      assert.equal(route.routePlan.autoContinue, false, label);
+    }
+  }
+});
+
 test('path-only and body-less writing routes wait for source inspection', () => {
   for (const prompt of [
     '请润色 tex/abstract.tex。',
