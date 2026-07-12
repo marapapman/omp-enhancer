@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -108,6 +108,9 @@ test('inspection budgets add per-result model guidance without blocking tools', 
     result: { content: [{ type: 'text', text: 'extensions/agent-fleet/index.ts' }] },
   }, ctx);
   assert.match(second.content.at(-1).text, /2\/3 read\/search calls used; 1 remaining/i);
+  assert.match(second.content.at(-1).text, /use the snapshot with the largest used value[\s\S]*smallest remaining value/i);
+  assert.match(second.content.at(-1).text, /FINAL-BUDGET MODE:[\s\S]*at most ONE read\/search tool call/i);
+  assert.match(second.content.at(-1).text, /delete any second read\/grep\/glob call/i);
   assert.match(second.content.at(-1).text, /NEXT BATCH LIMIT: issue at most 1 individual read\/search tool call/i);
   assert.match(second.content.at(-1).text, /choose only the 1 highest-value target, then finalize/i);
   assert.match(second.content.at(-1).text, /do not queue more read\/search calls than the remaining count/i);
@@ -129,6 +132,33 @@ test('inspection budgets add per-result model guidance without blocking tools', 
   }, ctx);
   assert.match(fourth.content.at(-1).text, /4\/3 read\/search calls used; 0 remaining/i);
   assert.notEqual(fourth.block, true);
+});
+
+test('inspection guidance recognizes a routed project skill alias and does not repeat stale reminders', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omp-inspection-project-skill-'));
+  try {
+    const skillDir = join(cwd, 'skills', 'superpowers-debugging');
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, 'SKILL.md'),
+      '---\nname: superpowers-debugging\ndescription: Project debugging\n---\n',
+      'utf8',
+    );
+    const prompt = '只读诊断 strict-agent-model-routing.test.mjs 的约束风险，不修改文件，不运行测试，最多 3 次读取或搜索。';
+    const { pi, ctx } = await routedRuntime(prompt, cwd);
+    const result = await event(pi, 'tool_result')({
+      name: 'read',
+      input: { path: 'skills/superpowers-debugging/SKILL.md' },
+      result: {
+        content: [{ type: 'text', text: '---\nname: superpowers-debugging\ndescription: Project debugging\n---\n' }],
+      },
+    }, ctx);
+
+    assert.doesNotMatch(result.content.at(-1).text, /No routed primary skill read is observed/i);
+    assert.match(result.content.at(-1).text, /FINAL-BUDGET MODE:[\s\S]*at most ONE read\/search tool call/i);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 test('session self-report is a claim and cannot impersonate a successful skill read', async () => {

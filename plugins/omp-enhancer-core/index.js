@@ -1057,10 +1057,20 @@ function buildInspectionProgressGuidance(state, ctx = {}) {
   ];
   if (remaining > 0) {
     const primary = state.lastRoute?.routePlan?.skills?.[0];
-    const observed = primary && [...state.observedSkills].some((skill) => skillNamesEquivalent(skill, primary));
-    if (primary && !observed) {
-      const target = preferredSkillReadTarget(primary, { workspaceRoot: ctx.cwd || process.cwd() });
+    const target = primary
+      ? preferredSkillReadTarget(primary, { workspaceRoot: ctx.cwd || process.cwd() })
+      : '';
+    const targetNames = collectSkillFilePaths(target);
+    const observed = primary && [...state.observedSkills].some((skill) => (
+      skillNamesEquivalent(skill, primary)
+        || targetNames.some((targetName) => skillNamesEquivalent(skill, targetName))
+    ));
+    if (primary && !observed && used <= 1) {
       if (target) lines.push(`No routed primary skill read is observed yet. Prefer read(path="${target}") next if that exact target has not already failed; otherwise make one corrected attempt and continue.`);
+    }
+    lines.push('BUDGET SNAPSHOT RULE: a parallel batch may produce several progress snapshots. Before issuing more tools, use the snapshot with the largest used value (equivalently the smallest remaining value); ignore earlier larger remaining counts from that batch.');
+    if (remaining <= 3) {
+      lines.push(`FINAL-BUDGET MODE: this next assistant message may contain at most ONE read/search tool call, even though ${remaining} remain. Wait for its result and recompute from the newest progress snapshot, or finalize now. Count toolCall entries before sending and delete any second read/grep/glob call.`);
     }
     lines.push(`NEXT BATCH LIMIT: issue at most ${remaining} individual read/search tool call${remaining === 1 ? '' : 's'}. If more candidates exist, choose only the ${remaining} highest-value target${remaining === 1 ? '' : 's'}, then finalize.`);
     lines.push('Do not queue more read/search calls than the remaining count. Use the evidence already returned and keep the final response in view.');
