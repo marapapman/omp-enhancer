@@ -146,6 +146,22 @@ test('semantic-edit-en fixture and sentinels require legal escaped LaTeX percent
   }
 });
 
+test('semantic-edit-zh fixture contains a concrete removable style defect', async () => {
+  const matrix = JSON.parse(await readFile(
+    new URL('./e2e/fixtures/deepseek-installed-matrix.json', import.meta.url),
+    'utf8',
+  ));
+  const scenario = matrix.scenarios.find(({ id }) => id === 'semantic-edit-zh');
+  const prepared = await prepareScenario(scenario);
+  try {
+    const text = await readFile(path.join(prepared.cwd, 'paper.md'), 'utf8');
+    assert.match(text, /——/u);
+    assert.deepEqual(scenario.fixtureExpectations.forbiddenPatterns['paper.md'], ['——']);
+  } finally {
+    await prepared.cleanup();
+  }
+});
+
 test('mandatory matrix isolates plugin compliance from the explicit advisor stress matrix', async () => {
   const outputRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-e2e-matrix-mode-'));
   try {

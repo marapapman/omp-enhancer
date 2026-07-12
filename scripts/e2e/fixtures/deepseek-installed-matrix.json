@@ -177,6 +177,9 @@
         "requiredChangedFiles": ["paper.md"],
         "requiredPatterns": {
           "paper.md": ["通常", "显著", "可能", "仅", "37\\.5%", "12\\.5%", "(?:并不能|不能)", "\\[@smith2025\\]"]
+        },
+        "forbiddenPatterns": {
+          "paper.md": ["——"]
         }
       }
     }

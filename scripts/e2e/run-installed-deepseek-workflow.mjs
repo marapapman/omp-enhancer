@@ -189,7 +189,7 @@ export async function prepareScenario(scenario) {
   } else if (scenario.fixture === 'semantic-edit-zh') {
     await writeFile(
       path.join(cwd, 'paper.md'),
-      '该方法通常可以显著降低错误率，但可能仅将错误率从 37.5% 降至 12.5%，并不能完全消除错误，相关结论见 [@smith2025]。\n',
+      '该方法通常可以显著降低错误率——但可能仅将错误率从 37.5% 降至 12.5%，并不能完全消除错误，相关结论见 [@smith2025]。\n',
     );
   } else {
     throw new Error(`Unknown fixture: ${scenario.fixture}`);
@@ -227,6 +227,18 @@ async function verifyFixture(root, beforeFiles, expectations) {
     }
     for (const pattern of patterns) {
       if (!new RegExp(pattern, 'iu').test(text)) failures.push(`semantic sentinel was lost in ${file}: ${pattern}`);
+    }
+  }
+  for (const [file, patterns] of Object.entries(expectations.forbiddenPatterns ?? {})) {
+    let text = '';
+    try {
+      text = await readFile(path.join(root, file), 'utf8');
+    } catch {
+      failures.push(`forbidden-pattern fixture output is unreadable: ${file}`);
+      continue;
+    }
+    for (const pattern of patterns) {
+      if (new RegExp(pattern, 'iu').test(text)) failures.push(`forbidden fixture pattern remained in ${file}: ${pattern}`);
     }
   }
   return { pass: failures.length === 0, failures, changedFiles };
