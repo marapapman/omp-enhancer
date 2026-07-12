@@ -65,6 +65,8 @@ test('governance front-loads an existing project skill path before project inspe
 
     assert.match(fragment, /### Start with the workflow skill/);
     assert.match(fragment, /Primary skill to read now: `skills\/superpowers-writing-plans\/SKILL\.md`/);
+    assert.match(fragment, /WORKFLOW FIRST TOOL CALL: read\(path="skills\/superpowers-writing-plans\/SKILL\.md"\)/);
+    assert.match(fragment, /Do not substitute a read of the task target[\s\S]*plugin does not block a different call/i);
     assert.ok(fragment.indexOf('### Start with the workflow skill') < fragment.indexOf('### Suggested steps'));
     assert.match(fragment, /workflow guidance, not a tool authorization or completion gate/i);
     assert.match(fragment, /### Immediate next action[\s\S]*PREFERRED NEXT TOOL: read\(path="skills\/superpowers-writing-plans\/SKILL\.md"\)/);
@@ -73,6 +75,8 @@ test('governance front-loads an existing project skill path before project inspe
     const message = buildImmediateWorkflowMessage({ route, workspaceRoot: root });
     assert.match(message, /^OMP advisory workflow note for this turn:/);
     assert.match(message, /PREFERRED NEXT TOOL: read\(path="skills\/superpowers-writing-plans\/SKILL\.md"\)/);
+    assert.match(message, /WORKFLOW FIRST TOOL CALL: read\(path="skills\/superpowers-writing-plans\/SKILL\.md"\)/);
+    assert.match(message, /Make this exact skill read the first call/i);
     assert.match(message, /never block tools or completion/i);
   } finally {
     rmSync(root, { recursive: true, force: true });

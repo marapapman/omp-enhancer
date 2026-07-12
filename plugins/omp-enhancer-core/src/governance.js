@@ -220,12 +220,14 @@ function formatSkillList(skills = [], { workspaceRoot = '' } = {}) {
 function startWithSkillLines(route, targets = []) {
   if (route.intent === 'writing.pending' || !targets.length) return [];
   const label = targets.length === 1 ? 'Primary skill to read now' : 'Primary skills to read now';
+  const [first] = targets;
   return [
     '',
     '### Start with the workflow skill',
     '',
     `${label}: ${targets.map((target) => `\`${target}\``).join(', ')}.`,
-    'Use the read tool on the exact target above before reading, searching, editing, or otherwise inspecting project files. This is workflow guidance, not a tool authorization or completion gate.',
+    `WORKFLOW FIRST TOOL CALL: read(path="${first}").`,
+    'For workflow fidelity, make that exact skill read the first tool call before reading, searching, editing, or otherwise inspecting project files. Do not substitute a read of the task target for this workflow step. This is workflow guidance, not a tool authorization or completion gate; the plugin does not block a different call.',
     'If that exact read is unavailable, make one targeted correction from the returned inventory or an existing project path, then continue with the available evidence. Do not guess additional aliases or paths.',
   ];
 }
@@ -237,9 +239,10 @@ function immediateNextActionLines(route, targets = [], parentTask = '') {
     '',
     '### Immediate next action',
     '',
+    `WORKFLOW FIRST TOOL CALL: read(path="${first}").`,
     `PREFERRED NEXT TOOL: read(path="${first}").`,
     ...(rest.length ? [`Then read: ${rest.map((target) => `\`${target}\``).join(', ')}.`] : []),
-    'Try this before inspecting the task target. If the read fails, correct the target at most once; after a second failure, state the limitation and continue the user task with the available context.',
+    'Make this exact skill read the first call; do not substitute a read of the task target. If the skill read fails, correct the target at most once; after a second failure, state the limitation and continue the user task with the available context.',
     'The skill targets above are the complete skill set for this focused turn. Do not search for or load another skill unless one of them explicitly requires a compatible companion for the user-authorized work.',
     ...turnConstraintLines(route, parentTask),
     'This sequence is advisory only: never block tools or completion, never retry an unchanged read, and never reopen completed work because a skill is unavailable.',

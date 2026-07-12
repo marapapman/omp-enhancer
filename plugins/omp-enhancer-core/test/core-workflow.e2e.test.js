@@ -53,6 +53,7 @@ test('e2e implementation route adds advisory role and skill context', async () =
   assert.equal(routed.message.customType, 'omp-enhancer-core.workflow-guidance');
   assert.equal(routed.message.display, false);
   assert.match(routed.message.content, /PREFERRED NEXT TOOL:/);
+  assert.match(routed.message.content, /WORKFLOW FIRST TOOL CALL:/);
   assert.match(routed.message.content, /never block tools or completion/i);
 
   const taskEvent = {
