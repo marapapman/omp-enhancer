@@ -1,6 +1,6 @@
 ---
 name: writing-review
-description: Bounded English writing review that applies authorized safe fixes in one pass and reports substantive decisions
+description: Bounded English writing review that returns evidence-backed findings and only revises text when the user explicitly requests revision
 ---
 
 # Writing Review
@@ -15,8 +15,9 @@ user-specified text directly and state that no prior checker report was used.
    LaTeX math, cross-references, commands, and structure.
 2. Sort findings as critical, important, or minor while preserving their order
    within each severity.
-3. Apply clarity, grammar, structure, tone, and formatting fixes that stay
-   within the user's existing edit authorization and preserve claims.
+3. For an explicitly authorized edit or revision, apply clarity, grammar,
+   structure, tone, and formatting fixes that preserve claims. A review-only
+   request produces findings rather than a rewritten document.
 4. Do not silently change a factual statement, central argument, citation
    meaning, or requested scope. Present those items as author decisions.
 5. Compare the result with the source once. Treat any changed semantic anchor
@@ -39,9 +40,11 @@ user-specified text directly and state that no prior checker report was used.
 Process at most 20 findings in one pass. Summarize any remainder without
 starting another checker/review cycle automatically.
 
-For a read-only task, return the review and proposed revision in the final
-response. Do not create `.pi` files or request write access solely to satisfy
-the workflow template.
+For a read-only review, return evidence-backed findings and concise local
+replacement suggestions only where they help explain a finding. Do not append
+a complete rewritten passage or document unless the user explicitly asks for
+one. Do not create `.pi` files or request write access solely to satisfy the
+workflow template.
 
 ## Optional Interactive Mode
 
