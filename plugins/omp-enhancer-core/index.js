@@ -233,6 +233,7 @@ export default function registerCoreEnhancer(pi) {
           route,
           parentTask: params.prompt ?? state.lastPrompt,
           includeModelWorkflowHints: true,
+          workspaceRoot: ctx.cwd || process.cwd(),
         })
         : 'No active route. Follow the user request directly and use available skills when useful.';
       return okResult(fragment, { fragment, route });
@@ -323,6 +324,7 @@ export default function registerCoreEnhancer(pi) {
       route,
       parentTask: state.lastPrompt,
       includeModelWorkflowHints: false,
+      workspaceRoot: ctx.cwd || process.cwd(),
     });
     return {
       ...injectBeforeAgentSystemPrompt(event, fragment),

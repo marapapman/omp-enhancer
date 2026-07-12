@@ -63,7 +63,8 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
   const exactMethodRequest = descriptor.exclusiveToolContract?.mode === 'exclusive';
   const localFactInspection = descriptor.operation === 'inspect'
     && domains.has('facts')
-    && constraints.networkAccess === 'forbidden';
+    && constraints.networkAccess === 'forbidden'
+    && (descriptor.complexity === 'focused' || domains.has('document'));
   const primaryDirectTestAuthoring = (descriptor.provenance?.reasons ?? [])
     .includes('primary direct test authoring requested');
   const exactTestExecution = descriptor.operation === 'execute'
@@ -99,7 +100,7 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
     && steps.some(({ kind, domain }) => kind === 'modify' && domain === 'tests');
 
   if (domains.has('facts')) {
-    if (localFactInspection && descriptor.complexity === 'focused') {
+    if (localFactInspection) {
       skills.push('fact-checking');
     } else {
       skills.push(...FACT_SKILLS);
@@ -140,9 +141,15 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
   }
 
   if (route.intent === 'planning') {
-    skills.push('brainstorming', 'writing-plans');
-    if (domains.has('tests')) skills.push('ai-regression-testing');
+    skills.push('writing-plans');
     qualityChecks.push('plan-scope-consistency');
+  }
+
+  const routeDiagnosticProbe = (descriptor.provenance?.reasons ?? [])
+    .includes('route status skill diagnostic probe');
+  if (!routeDiagnosticProbe && (route.intent === 'diagnosis'
+    || route.intent === 'bug-audit' && descriptor.operation === 'inspect')) {
+    skills.push('diagnose');
   }
 
   if (domains.has('security') && descriptor.operation !== 'answer') {
@@ -194,7 +201,9 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
       && ['writing.latex', 'writing.markdown', 'doc.convert.word'].includes(route.workflowRoute)) {
     skills.push(...routeSkills(route));
   }
-  if (descriptor.operation === 'modify' && domains.has('document')) skills.push('verification-before-completion');
+  if (descriptor.operation === 'modify' && domains.has('document') && !domains.has('writing')) {
+    skills.push('verification-before-completion');
+  }
   if (descriptor.operation === 'execute' && domains.has('tests') && !exactTestExecution) {
     skills.push('verification-before-completion');
     tools.push('omp_test_report');
@@ -210,9 +219,7 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
     steps,
     skills: exactMethodRequest ? [] : unique(skills).filter((skill) => (
       (rolesAllowedByRequest || skill !== 'subagent-driven-development')
-      && (testsSuggested
-        || route.intent === 'planning' && skill === 'ai-regression-testing'
-        || !['test-driven-development', 'ai-regression-testing'].includes(skill))
+      && (testsSuggested || !['test-driven-development', 'ai-regression-testing'].includes(skill))
     )),
     tools: exactMethodRequest ? [] : unique(tools).filter((tool) => testsSuggested || !TESTING_TOOLS.includes(tool)),
     roles: exactMethodRequest || !rolesAllowedByRequest ? [] : uniqueRoles(roles, { testsSuggested }),

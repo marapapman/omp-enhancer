@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import {
   buildSkillAliasMapFromRoots,
   parseLoadedSkillEvidence,
+  preferredSkillReadTarget,
   skillNamesEquivalent,
   skillReadNameCandidates,
   validateSkillUsage,
@@ -255,6 +256,36 @@ test('matches canonical and namespaced skills symmetrically', () => {
   assert.equal(skillNamesEquivalent('ecc-security-review', 'security-review'), true);
 });
 
+test('does not collapse language-specific writing skills into English skills', () => {
+  assert.equal(skillNamesEquivalent('writing-review', 'zh-writing-review'), false);
+  assert.equal(skillNamesEquivalent('zh-writing-review', 'writing-review'), false);
+  assert.equal(skillNamesEquivalent('writing-markdown-helper', 'zh-writing-markdown-helper'), false);
+});
+
+test('prefers an existing project skill file over an unavailable namespaced URI', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'omp-project-skill-target-'));
+  try {
+    writeFixtureSkill(path.join(root, 'skills'), 'superpowers-writing-plans', 'superpowers-writing-plans');
+    writeFixtureSkill(path.join(root, 'skills'), 'superpowers-debugging', 'superpowers-debugging');
+    writeFixtureSkill(path.join(root, 'skills'), 'zh-writing-review', 'zh-writing-review');
+
+    assert.equal(
+      preferredSkillReadTarget('writing-plans', { workspaceRoot: root }),
+      'skills/superpowers-writing-plans/SKILL.md',
+    );
+    assert.equal(
+      preferredSkillReadTarget('writing-review', { workspaceRoot: root }),
+      'skill://writing-review',
+    );
+    assert.equal(
+      preferredSkillReadTarget('diagnose', { workspaceRoot: root }),
+      'skills/superpowers-debugging/SKILL.md',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('suggests installed namespaced read aliases for canonical required skills', () => {
   const reviewCandidates = skillReadNameCandidates('security-review');
   const scanCandidates = skillReadNameCandidates('security-scan');
@@ -271,14 +302,14 @@ test('prefers a packaged exact name over a managed alias', () => {
     const packagedRoot = path.join(root, 'packaged');
     const managedRoot = path.join(root, '.omp', 'agent', 'managed-skills');
     writeFixtureSkill(packagedRoot, 'exact-review', 'exact-review');
-    writeFixtureSkill(managedRoot, 'legacy-exact-review', 'legacy-exact-review');
+    writeFixtureSkill(managedRoot, 'vendor-exact-review', 'vendor-exact-review');
 
     const candidates = skillReadNameCandidates('exact-review', {
       limit: 4,
       roots: [managedRoot, packagedRoot],
     });
     assert.equal(candidates[0], 'exact-review');
-    assert.ok(candidates.includes('legacy-exact-review'));
+    assert.ok(candidates.includes('vendor-exact-review'));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

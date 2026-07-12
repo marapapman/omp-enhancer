@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import {
   buildGovernancePromptFragment,
@@ -40,6 +43,47 @@ test('governance asks for one exact minimal skill read and bounded evidence-driv
   assert.match(fragment, /dispatch an asynchronous task once/i);
   assert.match(fragment, /gate-satisfy.*gate-unblock/i);
   assert.doesNotMatch(fragment, /Skill use is flexible/);
+});
+
+test('governance front-loads an existing project skill path before project inspection', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'omp-governance-project-skill-'));
+  try {
+    const skillDir = path.join(root, 'skills', 'superpowers-writing-plans');
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(path.join(skillDir, 'SKILL.md'), [
+      '---',
+      'name: superpowers-writing-plans',
+      'description: Project planning workflow',
+      '---',
+      '# Planning',
+    ].join('\n'));
+
+    const prompt = '为修复 agent-fleet 路由问题制定实现和测试计划，不修改文件，不运行测试。';
+    const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+    const fragment = buildGovernancePromptFragment({ route, parentTask: prompt, workspaceRoot: root });
+
+    assert.match(fragment, /### Start with the workflow skill/);
+    assert.match(fragment, /Primary skill to read now: `skills\/superpowers-writing-plans\/SKILL\.md`/);
+    assert.ok(fragment.indexOf('### Start with the workflow skill') < fragment.indexOf('### Suggested steps'));
+    assert.match(fragment, /workflow guidance, not a tool authorization or completion gate/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('review guidance requires one verbatim evidence check and one user-visible deliverable', () => {
+  const prompt = 'Read-only review of sections/5.7.md for Chinese argument flow and academic wording.';
+  const route = routeNaturalLanguageTask({
+    prompt,
+    sourceText: '本文讨论自动化安全测试的研究进展。',
+    routerMode: 'enforce',
+  });
+  const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
+
+  assert.match(fragment, /quoted passage.*verbatim.*successful read/is);
+  assert.match(fragment, /check every quoted phrase and location once before the final response/i);
+  assert.match(fragment, /one user-visible deliverable/i);
+  assert.match(fragment, /advisor-only continuation.*no user-visible text or tools/i);
 });
 
 test('advisor guidance consumes evidence deltas once without reopening completed work', () => {

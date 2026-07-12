@@ -62,7 +62,7 @@ test('real DeepSeek failures compile to descriptor-policy routes in observe and 
       assert.equal(enforce.routeObservation, null);
       assert.deepEqual(observe.routePlan, enforce.routePlan);
       if (fixture.expectedIntent === 'planning' && fixture.expectedDomains.includes('tests')) {
-        assert.ok(observe.routePlan.skills.includes('ai-regression-testing'));
+        assert.deepEqual(observe.routePlan.skills, ['writing-plans']);
         assert.equal(observe.routePlan.tools.some((tool) => /^omp_test_/.test(tool)), false);
       }
     });

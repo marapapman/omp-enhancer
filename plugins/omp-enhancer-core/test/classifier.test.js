@@ -184,7 +184,7 @@ test('resolveClassificationRoute preserves focused audit mode from the determini
   assert.equal(result.route.intent, 'bug-audit');
   assert.equal(result.route.auditMode, 'focused');
   assert.deepEqual(result.route.requiredSubagents, []);
-  assert.deepEqual(result.route.requiredSkills, []);
+  assert.deepEqual(result.route.requiredSkills, ['diagnose']);
   assert.deepEqual(result.route.requiredTools, []);
 });
 

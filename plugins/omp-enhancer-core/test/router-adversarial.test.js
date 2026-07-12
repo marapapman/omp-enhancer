@@ -26,8 +26,28 @@ const advisoryQualityChecks = {
 };
 
 const advisoryResourceOverrides = {
+  gate_review_read_only_zh: {
+    skills: ['diagnose'],
+    tools: [],
+    roles: [],
+  },
+  gate_review_read_only_en: {
+    skills: ['diagnose'],
+    tools: [],
+    roles: [],
+  },
+  optimization_suggestions_no_write_zh: {
+    skills: ['diagnose'],
+    tools: [],
+    roles: [],
+  },
+  router_file_review_no_write_zh: {
+    skills: ['diagnose'],
+    tools: [],
+    roles: [],
+  },
   readme_update_push_zh: {
-    skills: ['verification-before-completion'],
+    skills: [],
     tools: [],
     roles: [],
   },
@@ -35,6 +55,11 @@ const advisoryResourceOverrides = {
     skills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
     tools: ['fact_check_analyze', 'fact_check_evidence', 'fact_check_report'],
     roles: ['fact-planner', 'fact-researcher-a', 'fact-researcher-b', 'fact-cross-checker', 'fact-reviewer'],
+  },
+  single_function_review_en: {
+    skills: ['diagnose'],
+    tools: [],
+    roles: [],
   },
 };
 

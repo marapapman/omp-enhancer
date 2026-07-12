@@ -1726,7 +1726,7 @@ test('specialized document, visual, pull-request, and diagnosis routes stay cano
       prompt: 'Rewrite this README section in Markdown and preserve headings and code fences.',
       intent: 'writing.pending',
       workflowRoute: 'writing.markdown',
-      requiredSkill: 'verification-before-completion',
+      forbiddenSkill: 'verification-before-completion',
       requiredQualityCheck: 'detect-source-language',
     },
     {
@@ -1769,6 +1769,7 @@ test('specialized document, visual, pull-request, and diagnosis routes stay cano
       if (item.domain) assert.ok(route.taskDescriptor.domains.includes(item.domain), label);
       if (item.forbiddenDomain) assert.equal(route.taskDescriptor.domains.includes(item.forbiddenDomain), false, label);
       if (item.requiredSkill) assert.ok(route.skills.includes(item.requiredSkill), label);
+      if (item.forbiddenSkill) assert.equal(route.skills.includes(item.forbiddenSkill), false, label);
       if (item.requiredQualityCheck) assert.ok(route.routePlan.qualityChecks.includes(item.requiredQualityCheck), label);
       if (item.phase) {
         const phases = route.routePlan.steps.map(({ kind, domain }) => `${kind}:${domain}`);

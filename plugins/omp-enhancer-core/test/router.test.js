@@ -61,7 +61,7 @@ const routingCases = [
     prompt: 'Do the bug investigation directly as a focused audit; report verified findings only.',
     expectedIntent: 'bug-audit',
     expectedAgent: 'tester',
-    requiredSkills: [],
+    requiredSkills: ['diagnose'],
     requiredTools: [],
     requiredSubagents: [],
     requiredSubagentSkills: {},

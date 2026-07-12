@@ -1,9 +1,14 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const placeholderValues = new Set(['todo', 'tbd', '<required skill>', '<skill>', '[skill]', 'required skill']);
+const SKILL_NAMESPACE_PREFIXES = new Set(['ecc', 'omp', 'superpowers', 'vendor']);
+const PROJECT_SKILL_FAMILIES = new Map([
+  ['diagnose', new Set(['debugging', 'systematic-debugging'])],
+  ['systematic-debugging', new Set(['debugging', 'diagnose'])],
+]);
 let runtimeSkillAliases;
 
 export function validateSkillUsage({ requiredSkills = [], output = '', loadedSkills = [] } = {}) {
@@ -530,6 +535,28 @@ export function skillReadNameCandidates(skill, { limit = 3, roots = defaultSkill
   return uniqueValues([...candidates, fallback]).slice(0, limit);
 }
 
+export function preferredSkillReadTarget(skill, { workspaceRoot = '' } = {}) {
+  const projectRoot = safeRealpath(workspaceRoot);
+  if (projectRoot) {
+    const projectRoots = [
+      path.join(projectRoot, 'skills'),
+      path.join(projectRoot, '.omp', 'skills'),
+      path.join(projectRoot, '.pi', 'skills'),
+    ].filter((root) => existsSync(root));
+    const projectCandidates = collectSkillAliasCandidates(projectRoots)
+      .filter((candidate) => projectSkillMatches(skill, candidate))
+      .filter((candidate) => isProjectSkillFile(projectRoot, candidate.skillFile))
+      .sort((left, right) => projectSkillCandidateScore(skill, left) - projectSkillCandidateScore(skill, right));
+    const selected = projectCandidates[0];
+    if (selected) {
+      return path.relative(projectRoot, selected.skillFile).split(path.sep).join('/');
+    }
+  }
+
+  const preferred = skillReadNameCandidates(skill, { limit: 1 })[0] ?? normalizeSkillName(skill);
+  return preferred ? `skill://${preferred}` : '';
+}
+
 export function buildSkillAliasMapFromRoots(roots = []) {
   const aliases = new Map();
   for (const root of roots) {
@@ -587,7 +614,14 @@ function lookupSkillAlias(value) {
 }
 
 function hasNamespacedSuffix(value, suffix) {
-  return suffix.includes('-') && (value.endsWith(`-${suffix}`) || value.endsWith(`/${suffix}`));
+  if (!suffix.includes('-')) return false;
+  for (const separator of ['-', '/']) {
+    const tail = `${separator}${suffix}`;
+    if (!value.endsWith(tail)) continue;
+    const namespace = value.slice(0, -tail.length).split(/[-/]/)[0];
+    if (SKILL_NAMESPACE_PREFIXES.has(namespace)) return true;
+  }
+  return false;
 }
 
 function hasNamespacedDenial(output, skill) {
@@ -678,8 +712,47 @@ function addSkillFileAliasCandidates(root, skillDir, skillFile, kind, candidates
   const canonical = normalizeSkillToken(skillFrontmatterName(text) || leafName);
   for (const name of [canonical, leafName, relativePath, relativePath.replace(/\//g, '-')]) {
     const normalizedName = normalizeSkillToken(name);
-    if (normalizedName) candidates.push({ name: normalizedName, canonical, kind });
+    if (normalizedName) candidates.push({ name: normalizedName, canonical, kind, skillFile });
   }
+}
+
+function projectSkillCandidateScore(skill, candidate) {
+  const requested = normalizeSkillToken(skill);
+  if (candidate.name === requested) return 0;
+  if (candidate.canonical === requested) return 1;
+  return 2;
+}
+
+function projectSkillMatches(skill, candidate) {
+  if (skillNamesEquivalent(skill, candidate.name) || skillNamesEquivalent(skill, candidate.canonical)) return true;
+  const requested = normalizeSkillToken(skill);
+  const family = PROJECT_SKILL_FAMILIES.get(requested);
+  if (!family) return false;
+  return [candidate.name, candidate.canonical]
+    .map(withoutKnownNamespace)
+    .some((value) => family.has(value));
+}
+
+function withoutKnownNamespace(value) {
+  const normalized = normalizeSkillToken(value);
+  const [prefix, ...rest] = normalized.split('-');
+  return SKILL_NAMESPACE_PREFIXES.has(prefix) && rest.length ? rest.join('-') : normalized;
+}
+
+function safeRealpath(value) {
+  if (!value) return '';
+  try {
+    return realpathSync(value);
+  } catch {
+    return '';
+  }
+}
+
+function isProjectSkillFile(projectRoot, skillFile) {
+  const resolved = safeRealpath(skillFile);
+  if (!resolved) return false;
+  const relativePath = path.relative(projectRoot, resolved);
+  return relativePath !== '' && !relativePath.startsWith(`..${path.sep}`) && relativePath !== '..' && !path.isAbsolute(relativePath);
 }
 
 function rootKind(root) {

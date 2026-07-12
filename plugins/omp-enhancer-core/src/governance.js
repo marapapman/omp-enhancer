@@ -1,12 +1,17 @@
-import { skillReadNameCandidates } from './skill-usage.js';
+import { preferredSkillReadTarget, skillReadNameCandidates } from './skill-usage.js';
 
 export function buildGovernancePromptFragment({
   route,
   parentTask = '',
   includeModelWorkflowHints = true,
+  workspaceRoot = '',
 } = {}) {
   const resolved = advisoryRoute(route);
   const plan = resolved.routePlan;
+  const primarySkills = primarySkillsFor(resolved);
+  const primaryTargets = primarySkills
+    .map((skill) => preferredSkillReadTarget(skill, { workspaceRoot }))
+    .filter(Boolean);
   const lines = [
     '## OMP Enhancer Core Workflow Guidance',
     '',
@@ -15,6 +20,7 @@ export function buildGovernancePromptFragment({
     '',
     `Intent: ${resolved.intent}`,
     `Workflow: ${resolved.workflowRoute}`,
+    ...startWithSkillLines(resolved, primaryTargets),
     '',
     '### Suggested steps',
     '',
@@ -22,7 +28,7 @@ export function buildGovernancePromptFragment({
     '',
     '### Relevant skills',
     '',
-    formatSkillList(plan.skills),
+    formatSkillList(plan.skills, { workspaceRoot }),
     '',
     'Before substantive work, read exactly the smallest directly applicable primary skill once. Prefer an exact project-specified skill, then the exact routed URI, then one inventory-confirmed equivalent. A skill counts as loaded only after a successful read of its SKILL.md. If resolution fails, make one targeted correction, continue without the skill, and report the limitation briefly. Do not invent aliases, create replacement skills, or retry unchanged calls.',
     'For a focused task, one primary skill is normally enough; Chinese writing may use its base language guidance plus one task-specific skill. When writing language is pending, inspect the source first and only then select a language skill. Do not expand into the whole skill list unless the primary skill explicitly requires a companion.',
@@ -33,6 +39,7 @@ export function buildGovernancePromptFragment({
     'Confirm a path exists before reading it; do not guess report files or resource URIs. For a schema or path error, make at most one evidence-based targeted correction, then continue with the evidence already available.',
     'For focused work, treat 6 to 8 read or search calls as a convergence checkpoint and synthesize the result. For a broad audit, produce at least one file-backed finding within that window. If time is short, deliver a clearly scoped partial result instead of searching indefinitely.',
     'Dispatch an asynchronous task once. Wait through the host job or messaging mechanism when available; do not dispatch a second task merely to poll and do not create an unauthorized file rendezvous.',
+    ...evidenceDisciplineLines(resolved),
     '',
     '### Useful tools',
     '',
@@ -54,7 +61,8 @@ export function buildGovernancePromptFragment({
     '',
     '### Advisor guidance',
     '',
-    'Treat advisor notes as evidence deltas. Incorporate each distinct material point once. A repeated note or a note without a new file, location, error, or observed result does not justify rereading skills, rerunning unchanged tools, reopening completed work, or emitting a second final answer. If the deliverable is already complete, apply only a concrete newly evidenced correction; otherwise stop.',
+    'Treat advisor notes as evidence deltas. Incorporate each distinct material point once, applying a concrete newly evidenced correction before delivery when it improves the user result. A repeated note or a note without a new file, location, error, or observed result does not justify rereading skills, rerunning unchanged tools, reopening completed work, or emitting a second final answer.',
+    'Finish tool use and absorb advisor notes already delivered before producing one user-visible deliverable. If the host invokes an advisor-only continuation after that deliverable, produce no user-visible text or tools and wait for an actual user message.',
   ];
 
   if (includeModelWorkflowHints) {
@@ -150,6 +158,7 @@ function scopeAndRiskLines(route, parentTask = '') {
   if (isDocumentStyleEdit(parentTask)) {
     lines.push('This style-edit request benefits from preserving subjects, predicates, values, polarity, quantifiers, ranges, modality, citations, math, and document structure.');
     lines.push('A before-and-after read of the complete target is useful when practical, especially for factual or structural preservation.');
+    lines.push('After editing, compare the observed before and after text once and report every actual change accurately; do not claim that only one token changed when formatting or escaping also changed.');
   }
 
   if (descriptor.constraints?.testExecution === 'forbidden') {
@@ -189,13 +198,61 @@ function stepDescription(kind, domain) {
   return `${action} (${domain}).`;
 }
 
-function formatSkillList(skills = []) {
+function formatSkillList(skills = [], { workspaceRoot = '' } = {}) {
   if (!skills.length) return '- none yet';
   return skills.map((skill) => {
+    const target = preferredSkillReadTarget(skill, { workspaceRoot });
+    if (target) return `- ${target}`;
     const preferred = skillReadNameCandidates(skill, { limit: 1 })[0] ?? skill;
-    const alias = preferred === skill ? '' : ` (available as ${preferred})`;
-    return `- skill://${preferred}${alias}`;
+    return `- skill://${preferred}`;
   }).join('\n');
+}
+
+function startWithSkillLines(route, targets = []) {
+  if (route.intent === 'writing.pending' || !targets.length) return [];
+  const label = targets.length === 1 ? 'Primary skill to read now' : 'Primary skills to read now';
+  return [
+    '',
+    '### Start with the workflow skill',
+    '',
+    `${label}: ${targets.map((target) => `\`${target}\``).join(', ')}.`,
+    'Use the read tool on the exact target above before reading, searching, editing, or otherwise inspecting project files. This is workflow guidance, not a tool authorization or completion gate.',
+    'If that exact read is unavailable, make one targeted correction from the returned inventory or an existing project path, then continue with the available evidence. Do not guess additional aliases or paths.',
+  ];
+}
+
+function primarySkillsFor(route = {}) {
+  const skills = route.routePlan?.skills ?? [];
+  const descriptor = route.taskDescriptor ?? {};
+  if (route.intent === 'writing.pending') return [];
+  if (route.intent === 'writing.zh') {
+    return unique([
+      skills.find((skill) => skill === 'plain-chinese-writing'),
+      skills.find((skill) => /^zh-writing-(?:review|polish|markdown-helper)$/.test(skill)),
+    ]);
+  }
+  if (route.intent === 'writing.en') {
+    return unique([skills.find((skill) => ['writing-review', 'writing-markdown-helper'].includes(skill))]);
+  }
+  if (route.intent === 'fact-check') return unique([skills.find((skill) => skill === 'fact-checking')]);
+  if (route.intent === 'planning') return unique([skills.find((skill) => skill === 'writing-plans')]);
+  if (['diagnosis', 'bug-audit'].includes(route.intent)) {
+    return unique([skills.find((skill) => ['diagnose', 'systematic-debugging'].includes(skill))]);
+  }
+  if (descriptor.domains?.includes('security')) {
+    return unique([skills.find((skill) => skill === 'security-review')]);
+  }
+  return skills.slice(0, 1);
+}
+
+function evidenceDisciplineLines(route = {}) {
+  const domains = new Set(route.taskDescriptor?.domains ?? []);
+  const taskKind = route.taskDescriptor?.writingTaskKind;
+  if (!domains.has('facts') && taskKind !== 'review' && !['bug-audit', 'diagnosis'].includes(route.intent)) return [];
+  return [
+    'For evidence-backed review, diagnosis, or fact checking, every quoted passage must be copied verbatim from a successful read; a paraphrase must not appear inside quotation marks.',
+    'Check every quoted phrase and location once before the final response. Remove, correct, or clearly label any finding whose wording or location is not supported by the observed source.',
+  ];
 }
 
 function formatList(values = []) {
