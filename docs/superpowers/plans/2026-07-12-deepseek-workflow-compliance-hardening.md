@@ -1,7 +1,7 @@
 # DeepSeek Flash 路由与工作流遵循修复计划
 
 日期：2026-07-12
-状态：实施中（确定性修复与本地验证已完成，待发布、本机同步和安装态 mandatory E2E）
+状态：已完成（代码、发布、本机同步、mandatory E2E 与 advisor stress 均已验证）
 
 ## 1. 计划定位
 
@@ -788,3 +788,69 @@ omp plugin doctor --json
 9. 全量测试、coverage、typecheck/build、marketplace、pack 和安装态 mandatory E2E 全部通过。
 10. commit、push、marketplace、本机安装和远端 SHA 全部一致。
 11. 运行时仍为 advisory-only：0 个 block、0 个 Core continue、0 个自动 repair turn。
+
+## 17. 实际实施与最终证据
+
+### 17.1 最终安装版本
+
+- OMP `16.4.6`
+- `omp-enhancer-core` `0.1.114`
+- `omp-config` `0.1.22`
+- `writing-helper` `0.2.9`
+- `omp-testing-enhancer` `0.1.13`
+- `omp-fact-checker` `0.1.7`
+- marketplace catalog `1.0.21`，全部插件继续使用 `track-main`
+
+本机安装均来自 `omp-enhancer` marketplace cache。Core、config、writing 和 fact-checker 的关键运行文件已逐一比较 SHA-256，工作树与安装缓存一致。旧的 `omp-writing-logic-plugin` 功能已经并入 `writing-helper`，本机孤儿锁项已通过 OMP 卸载命令清理；最终 `omp plugin doctor --json` 全部为 `ok`。
+
+### 17.2 主要实现结果
+
+1. Core 通过 OMP 原生 `skill-prompt` 以 developer attribution 提供活动 inventory 中的 routed skill 正文。状态把 `providedSkills` 与真实成功 read 形成的 `observedSkills` 分开记录；E2E 不再把仅表示路由期望的 `routedSkills` 当作加载证据。
+2. 项目 exact skill 必须 realpath 精确匹配。它不在宿主活动 inventory 时，Core 回退为普通 advisory guidance，由模型真实读取项目 `SKILL.md`，不会拿打包 alias 冒充。
+3. 写作路由按被审查或修改的正文语言选择中英文 skill。中文提示加英文正文、英文提示加中文正文各连续 3 次通过。
+4. review-only skill 只返回有文本证据的问题和必要的局部建议；明确修改任务才直接改正文。短摘要最多五个实质问题，不探测无关 checker report、宏定义或仓库上下文。
+5. advisor 识别宿主隐藏的原生 skill context，默认每个主任务最多一次建议；完整 final 后保持静默。一个不安全候选只淘汰该候选，不再冻结整个编辑任务。
+6. focused fact-check 使用局部证据优先级和六次目标，不重复等价 glob、整库 bibliography/PDF 搜索；证据不足直接返回 `LOCAL_UNVERIFIED` 或 `INSUFFICIENT`。
+7. inspection budget 始终是软提示。每个 tool result 后统一提示下一条消息最多一个 read/search，并等待结果；最后槽位失败也直接收束。代码没有增加工具拦截、修复续跑或完成门禁。
+8. E2E 事件汇总新增真实 host-provided skill 证据、provision mode、重复 skill read 和 post-final advisor 计数。英文语义编辑夹具加入明确可安全删除的重复词，避免把合理 no-op 错判为不服从。
+
+### 17.3 最终 mandatory E2E
+
+报告：`.omp/e2e-results/mandatory-final-0.1.114/report.json`
+
+- 28/28 PASS，主模型均为 `opencode-go/deepseek-v4-flash`。
+- 28 个 primary final，0 abort，0 web call，0 plugin continuation。
+- 0 个重复失败调用，0 个未观测 skill 声明，0 个重复 skill read。
+- provision mode：17 次 native、10 次 project workflow fallback、1 次 none。`none` 是无业务 skill 的 autolearn fixture。
+- host-provided skill 包括 `fact-checking`、`writing-review`、`writing-markdown-helper`、`plain-chinese-writing`、`zh-writing-review` 和 `zh-writing-polish`。
+- project exact skill 的真实 read 证据包括 `superpowers-writing-plans` 和 `superpowers-debugging`。
+- 英文审查、英文润色、中文审查、中文润色、focused fact-check、code plan、code diagnosis 和 test strategy 的重复样本全部通过；broad audit 也通过。
+- 英文与中文隔离编辑均只修改指定临时文件，各使用一次初始 read、一次 edit、一次验证 read，所有限定、模态、否定、数值、百分比、引用和 LaTeX 哨兵通过。
+- 四个真实评估仓库保持只读；写入只发生在 runner 创建的临时 fixture。
+
+autolearn 专项结果：
+
+- 5 个业务 read，恰好 1 个 hidden capture。
+- capture tool call 为 0，Core continuation 为 0。
+- 测试前后均为 `autolearn.enabled=true`、`autolearn.autoContinue=true`、`autolearn.minToolCalls=5`。
+
+### 17.4 最终 advisor stress
+
+报告：`.omp/e2e-results/advisor-final-0.1.114/report.json`
+
+- 2/2 PASS。
+- 两个场景各 1 个 primary final、1 条 pre-final advisor、0 条 post-final advisor。
+- 0 abort、0 Core continuation。
+- 英文只读审查不改文件；英文编辑只改 `paper.tex`，语义和 LaTeX 哨兵全部通过。
+
+### 17.5 本地回归与无门禁审计
+
+- `npm test`：root scripts 与全部 workspace 测试通过。
+- Core：474/474。
+- Testing Enhancer：149/149。
+- Writing Helper：95/95，lines、branches、functions 均为 100%。
+- Fact Checker：12/12。
+- ECC skill-comply：33/33。
+- `npm run check:marketplace` 与 `npm run pack:all` 通过。
+- 生产源码静态扫描未发现 `block: true`、`continue: true`、`triggerTurn`、protected action boundary 或 GateController。唯一 `session_stop` handler 只记录观测状态并返回 `undefined`。
+- Core 的所有预算、scope、review 和证据规则均明确标记为 model guidance/advisory，不决定工具许可或完成许可。
