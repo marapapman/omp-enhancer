@@ -71,14 +71,14 @@ export function buildGovernancePromptFragment({
     );
   }
 
-  lines.push(...immediateNextActionLines(resolved, primaryTargets));
+  lines.push(...immediateNextActionLines(resolved, primaryTargets, parentTask));
 
   return lines.join('\n');
 }
 
-export function buildImmediateWorkflowMessage({ route, workspaceRoot = '' } = {}) {
+export function buildImmediateWorkflowMessage({ route, workspaceRoot = '', parentTask = '' } = {}) {
   const resolved = advisoryRoute(route);
-  const lines = immediateNextActionLines(resolved, primarySkillTargets(resolved, workspaceRoot));
+  const lines = immediateNextActionLines(resolved, primarySkillTargets(resolved, workspaceRoot), parentTask);
   if (!lines.length) return '';
   return [
     'OMP advisory workflow note for this turn:',
@@ -230,7 +230,7 @@ function startWithSkillLines(route, targets = []) {
   ];
 }
 
-function immediateNextActionLines(route, targets = []) {
+function immediateNextActionLines(route, targets = [], parentTask = '') {
   if (route.intent === 'writing.pending' || !targets.length) return [];
   const [first, ...rest] = targets;
   return [
@@ -240,9 +240,41 @@ function immediateNextActionLines(route, targets = []) {
     `PREFERRED NEXT TOOL: read(path="${first}").`,
     ...(rest.length ? [`Then read: ${rest.map((target) => `\`${target}\``).join(', ')}.`] : []),
     'Try this before inspecting the task target. If the read fails, correct the target at most once; after a second failure, state the limitation and continue the user task with the available context.',
+    'The skill targets above are the complete skill set for this focused turn. Do not search for or load another skill unless one of them explicitly requires a compatible companion for the user-authorized work.',
+    ...turnConstraintLines(route, parentTask),
     'This sequence is advisory only: never block tools or completion, never retry an unchanged read, and never reopen completed work because a skill is unavailable.',
     'If the read succeeds, follow the skill and bounded workflow above; otherwise proceed with the user request using the available evidence.',
   ];
+}
+
+function turnConstraintLines(route, parentTask = '') {
+  const descriptor = route.taskDescriptor ?? {};
+  const constraints = descriptor.constraints ?? {};
+  const lines = [];
+  const budget = explicitInspectionBudget(parentTask);
+  if (budget) {
+    lines.push(`The user set a total inspection budget of ${budget} read/search calls, including skill reads. At that point, stop inspecting and deliver the best scoped evidence-backed result; do not reread the same file or region.`);
+  }
+  const readOnly = constraints.workspaceWrite === 'forbidden';
+  const noTests = constraints.testExecution === 'forbidden';
+  if (route.intent === 'planning' && readOnly) {
+    lines.push(`This is a response-only plan. The user's no-write${noTests ? '/no-test' : ''} scope means repository or skill templates that normally write .pi/plan, add instrumentation, run tests, delegate implementation, or wait for approval do not apply on this turn. Return the concrete plan in the final response.`);
+    lines.push('Inspect only the target and directly relevant implementation/test files needed to make the plan concrete; do not reopen a root-cause investigation or search for a diagnosis skill.');
+  } else if (route.intent === 'diagnosis' && readOnly) {
+    lines.push(`This is static diagnosis only. The user's no-write${noTests ? '/no-test' : ''} scope overrides generic debugging steps that add instrumentation, reproduce by execution, invoke shell commands, or implement a fix.`);
+    lines.push('Read the named test and only a small number of directly called implementation files, then report the strongest file-backed diagnosis and any remaining uncertainty.');
+  }
+  return lines;
+}
+
+function explicitInspectionBudget(parentTask = '') {
+  const text = String(parentTask ?? '').toLowerCase();
+  const match = text.match(/(?:最多|不超过|限制在)\s*(\d{1,3})\s*次.{0,20}(?:读取|读|搜索|检索)/u)
+    ?? text.match(/在\s*(\d{1,3})\s*次以内.{0,20}(?:读取|读|搜索|检索)/u)
+    ?? text.match(/\b(?:within|at most|maximum of)\s+(\d{1,3})\s+(?:read|search)/u);
+  if (!match) return 0;
+  const value = Number(match[1]);
+  return Number.isInteger(value) && value > 0 ? value : 0;
 }
 
 function primarySkillTargets(route, workspaceRoot = '') {

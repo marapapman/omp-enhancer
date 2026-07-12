@@ -1589,9 +1589,9 @@ function operationFor(signals) {
     && /(?:润色|改写|改得|改成|改为|校对|修订|翻译|转换|转成|更新|撰写|起草|总结|汇总|归纳|整理|写)|\b(?:polish|rewrite|proofread|translate|convert|transform|update|draft|write|revise|edit|improve|summarize|summarise|condense)\b/.test(signals.text)) return 'modify';
   if (!signals.noTestExecution && signals.directTestExecution && !signals.directModify && !signals.directTestAuthoring
     && !(signals.review && signals.codeWork)) return 'execute';
+  if (signals.diagnosis) return 'diagnose';
   if (signals.noWorkspaceWrite && (signals.directModify || signals.directCreate || signals.directTestAuthoring) && !signals.writingWork) return 'inspect';
   if (signals.noWorkspaceWrite && signals.codeWork) return 'inspect';
-  if (signals.diagnosis) return 'diagnose';
   if ((signals.noWorkspaceWrite || signals.advisory) && signals.review) return 'inspect';
   if (signals.observedTestSummaryWriting && !signals.directTestExecution) return 'modify';
   if (signals.bugReportWriting) return 'modify';

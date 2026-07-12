@@ -134,6 +134,23 @@ test('pending writing guidance asks for body inspection before language skills',
   assert.equal(buildImmediateWorkflowMessage({ route }), '');
 });
 
+test('turn-local planning and diagnosis guidance preserves user read-only budgets', () => {
+  const planningPrompt = '为修复 agent-fleet 路由问题制定实现和测试计划，不修改文件，不运行测试。在 8 次以内的读取或搜索后交付计划。';
+  const planningRoute = routeNaturalLanguageTask({ prompt: planningPrompt, routerMode: 'enforce' });
+  const planning = buildImmediateWorkflowMessage({ route: planningRoute, parentTask: planningPrompt });
+  assert.match(planning, /total inspection budget of 8 read\/search calls/i);
+  assert.match(planning, /response-only plan/i);
+  assert.match(planning, /do not reopen a root-cause investigation or search for a diagnosis skill/i);
+
+  const diagnosisPrompt = '诊断 src/router.test.mjs 的路由失配，不修改文件、不运行测试，最多 8 次读取或搜索。';
+  const diagnosisRoute = routeNaturalLanguageTask({ prompt: diagnosisPrompt, routerMode: 'enforce' });
+  const diagnosis = buildImmediateWorkflowMessage({ route: diagnosisRoute, parentTask: diagnosisPrompt });
+  assert.equal(diagnosisRoute.intent, 'diagnosis');
+  assert.match(diagnosis, /static diagnosis only/i);
+  assert.match(diagnosis, /overrides generic debugging steps/i);
+  assert.match(diagnosis, /total inspection budget of 8 read\/search calls/i);
+});
+
 test('document preservation is a quality suggestion rather than an execution boundary', () => {
   const prompt = '只做文风润色，保持所有事实不变；修改 docs/paper.md。';
   const route = routeNaturalLanguageTask({ prompt, sourceText: '本文的数值是 42。', routerMode: 'enforce' });

@@ -329,6 +329,7 @@ export default function registerCoreEnhancer(pi) {
     });
     const workflowMessage = buildImmediateWorkflowMessage({
       route,
+      parentTask: state.lastPrompt,
       workspaceRoot: ctx.cwd || process.cwd(),
     });
     return {
