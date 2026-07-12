@@ -282,7 +282,7 @@ test('routes common work situations without unreasonable workflow escalation', (
     ['integration test completion', '补全集成测试，覆盖插件 hook 和 session state。', 'bug-audit'],
     ['e2e smoke verification', '运行 browser smoke 和 Playwright e2e，报告失败。', 'bug-audit'],
     ['load and stress tests', '做并发和压力测试，检查不同负载下的门禁行为。', 'bug-audit'],
-    ['flaky test diagnosis', '定位 flaky test 的原因，不修实现。', 'bug-audit'],
+    ['flaky test diagnosis', '定位 flaky test 的原因，不修实现。', 'diagnosis'],
     ['mutation and coverage audit', '分析 mutation 和 coverage 缺口，指出弱断言。', 'bug-audit'],
     ['test report writing', '请写一份测试报告，不运行测试。', 'writing.pending'],
     ['test code review', '审查测试代码，避免重复测试和弱断言，不改实现。', 'bug-audit'],

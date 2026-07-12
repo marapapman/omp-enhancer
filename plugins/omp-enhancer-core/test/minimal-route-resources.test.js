@@ -67,14 +67,16 @@ test('focused diagnosis and read-only bug inspection recommend diagnose', () => 
 
 test('an explicit read-only diagnosis of one named routing test stays diagnosis', () => {
   const prompt = '诊断 extensions/agent-fleet/strict-agent-model-routing.test.mjs 所覆盖的路由约束可能在哪里失配。遵循 AGENTS.md，先读取 exact debugging skill，只读检查并给出文件与行级证据，不修改文件、不运行测试，最多 8 次读取或搜索。';
-  const route = routeNaturalLanguageTask({ prompt, routerMode: 'enforce' });
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode });
 
-  assert.equal(route.intent, 'diagnosis');
-  assert.equal(route.workflowRoute, 'code.debug');
-  assert.equal(route.taskDescriptor.operation, 'diagnose');
-  assert.deepEqual(route.routePlan.skills, ['diagnose']);
-  assert.deepEqual(route.routePlan.roles, []);
-  assertAdvisory(route, prompt);
+    assert.equal(route.intent, 'diagnosis', routerMode);
+    assert.equal(route.workflowRoute, 'code.debug', routerMode);
+    assert.equal(route.taskDescriptor.operation, 'diagnose', routerMode);
+    assert.deepEqual(route.routePlan.skills, ['diagnose'], routerMode);
+    assert.deepEqual(route.routePlan.roles, [], routerMode);
+    assertAdvisory(route, `${routerMode}: ${prompt}`);
+  }
 });
 
 test('pure writing document modification does not inherit coding completion skills', () => {

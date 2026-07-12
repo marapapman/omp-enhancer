@@ -56,7 +56,6 @@ const routeSuites = {
     'Analyze flaky e2e failures in Playwright.',
     '为 src/router.js 写高信号单元测试。',
     '补测试覆盖 skill usage 的错误路径。',
-    '检查浏览器回归测试为什么失败。',
     '分析覆盖率缺口，不要改实现。',
     '审查测试是否覆盖 marketplace upgrade。',
     '帮我测试项目并检查 bug，写 bug audit report，不要修复代码。',
@@ -143,6 +142,7 @@ const routeSuites = {
     '排查插件加载失败的原因，只列清单。',
     '为什么 advisor 建议没有被使用？先诊断。',
     'Root cause analysis for the routing failure, read-only.',
+    '检查浏览器回归测试为什么失败。',
   ],
   release: [
     'Push the current release commit and upgrade marketplace plugins.',

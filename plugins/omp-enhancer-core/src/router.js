@@ -189,8 +189,7 @@ export function routeNaturalLanguageTask(input = {}) {
       'security re-review forbidden',
     ].includes(reason));
   const canonicalReleaseOperation = described.operation === 'release';
-  const canonicalConfigDiagnosis = described.operation === 'diagnose'
-    && described.domains?.includes('config');
+  const canonicalDiagnosis = described.operation === 'diagnose';
   const canonicalExclusiveRouteProbe = (described.provenance?.reasons ?? [])
     .includes('exclusive route task diagnostic probe');
   const canonicalExclusiveStatusProbe = (described.provenance?.reasons ?? [])
@@ -256,7 +255,7 @@ export function routeNaturalLanguageTask(input = {}) {
       || canonicalObserveCodeModification
       || canonicalTestExecution || canonicalPureWriting || canonicalPureSecurity || canonicalPureFact || canonicalSecurityWriting
       || canonicalSecurityRemediation || canonicalFactWriting || canonicalWritingTestRelease || canonicalCompoundCodeWriting
-      || canonicalReleaseOperation || canonicalConfigDiagnosis || canonicalExclusiveRouteProbe || canonicalExclusiveStatusProbe || canonicalPrimaryTestAuthoring || canonicalResponseWriting
+      || canonicalReleaseOperation || canonicalDiagnosis || canonicalExclusiveRouteProbe || canonicalExclusiveStatusProbe || canonicalPrimaryTestAuthoring || canonicalResponseWriting
       || canonicalWritingActions || canonicalVisualAction || canonicalFunctionalUiCorrection
       || alignedCanonicalDirectWriting
       || canonicalContentDrivenWriting
