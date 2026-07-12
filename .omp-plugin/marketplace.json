@@ -13,7 +13,7 @@
     {
       "name": "omp-config",
       "description": "Pluginized OMP configuration assets, agents, skills, hooks, model override templates, and config diagnostics.",
-      "version": "0.1.21",
+      "version": "0.1.22",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -306,7 +306,7 @@
     {
       "name": "writing-helper",
       "description": "Standalone OMP writing helper with logic checks, quality checks, citation verification, writer/checker agents, and writing skills.",
-      "version": "0.2.8",
+      "version": "0.2.9",
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",
