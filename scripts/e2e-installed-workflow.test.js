@@ -157,6 +157,10 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
     const command = report.results[0].command;
     assert.ok(command.includes('--mode=rpc'));
     assert.equal(command.includes('--advisor'), false);
+    assert.deepEqual(report.results[0].runtimeConfig, { advisorEnabled: false });
+    const configArg = command.find((value) => value.startsWith('--config='));
+    assert.ok(configArg);
+    assert.equal(await readFile(configArg.slice('--config='.length), 'utf8'), 'advisor:\n  enabled: false\n');
 
     const stress = JSON.parse(await readFile(
       new URL('./e2e/fixtures/deepseek-advisor-stress.json', import.meta.url),

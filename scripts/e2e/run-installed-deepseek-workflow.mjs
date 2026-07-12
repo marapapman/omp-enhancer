@@ -75,10 +75,13 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
   const runDir = path.join(outputRoot, runName);
   const sessionDir = path.join(runDir, 'session');
   await mkdir(sessionDir, { recursive: true });
+  const advisorEnabled = scenario.advisor ?? matrix.defaults?.advisor ?? false;
+  const configOverlayPath = path.join(runDir, 'config-overlay.yml');
+  await writeFile(configOverlayPath, `advisor:\n  enabled: ${advisorEnabled ? 'true' : 'false'}\n`);
   const expectations = { ...(matrix.defaults?.expectations ?? {}), ...(scenario.expectations ?? {}) };
   const timeoutSeconds = scenario.timeoutSeconds ?? matrix.defaults?.timeoutSeconds ?? 120;
   const executionMode = scenario.executionMode ?? matrix.defaults?.executionMode ?? 'print';
-  const args = buildOmpArgs({ matrix, scenario, prepared, sessionDir, timeoutSeconds, executionMode });
+  const args = buildOmpArgs({ matrix, scenario, prepared, sessionDir, timeoutSeconds, executionMode, configOverlayPath, advisorEnabled });
 
   if (dryRun) {
     const result = {
@@ -86,6 +89,7 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
       repetition,
       cwd: prepared.cwd,
       command: ['omp', ...args],
+      runtimeConfig: { advisorEnabled },
       dryRun: true,
       evaluation: { pass: true, failures: [] },
     };
@@ -132,6 +136,7 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
     repetition,
     cwd: prepared.displayCwd ?? prepared.cwd,
     command: ['omp', ...args.map((arg) => arg === prepared.prompt ? '<prompt>' : arg)],
+    runtimeConfig: { advisorEnabled },
     summary,
     fileEvaluation,
     evaluation,
@@ -141,7 +146,7 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
   return result;
 }
 
-function buildOmpArgs({ matrix, scenario, prepared, sessionDir, timeoutSeconds, executionMode }) {
+function buildOmpArgs({ matrix, scenario, prepared, sessionDir, timeoutSeconds, executionMode, configOverlayPath, advisorEnabled }) {
   const model = scenario.model ?? matrix.defaults?.model ?? 'opencode-go/deepseek-v4-flash';
   const thinking = scenario.thinking ?? matrix.defaults?.thinking ?? 'minimal';
   const tools = scenario.tools ?? matrix.defaults?.tools ?? ['read', 'grep', 'glob'];
@@ -150,12 +155,13 @@ function buildOmpArgs({ matrix, scenario, prepared, sessionDir, timeoutSeconds, 
     `--model=${model}`,
     `--thinking=${thinking}`,
     `--approval-mode=${scenario.approvalMode ?? matrix.defaults?.approvalMode ?? 'yolo'}`,
+    `--config=${configOverlayPath}`,
     `--session-dir=${sessionDir}`,
     '--no-title',
     `--max-time=${timeoutSeconds}`,
     `--tools=${tools.join(',')}`,
   ];
-  if (scenario.advisor ?? matrix.defaults?.advisor) args.push('--advisor');
+  if (advisorEnabled) args.push('--advisor');
   if (executionMode !== 'rpc') args.push('-p', prepared.prompt);
   return args;
 }
