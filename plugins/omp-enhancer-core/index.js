@@ -1062,6 +1062,7 @@ function buildInspectionProgressGuidance(state, ctx = {}) {
       const target = preferredSkillReadTarget(primary, { workspaceRoot: ctx.cwd || process.cwd() });
       if (target) lines.push(`No routed primary skill read is observed yet. Prefer read(path="${target}") next if that exact target has not already failed; otherwise make one corrected attempt and continue.`);
     }
+    lines.push(`NEXT BATCH LIMIT: issue at most ${remaining} individual read/search tool call${remaining === 1 ? '' : 's'}. If more candidates exist, choose only the ${remaining} highest-value target${remaining === 1 ? '' : 's'}, then finalize.`);
     lines.push('Do not queue more read/search calls than the remaining count. Use the evidence already returned and keep the final response in view.');
   } else {
     lines.push('The user inspection budget is exhausted. Synthesize the best scoped evidence-backed result now; do not start another read/search batch. A scoped partial result is successful completion.');

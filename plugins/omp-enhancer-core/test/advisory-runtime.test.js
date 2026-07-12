@@ -108,6 +108,8 @@ test('inspection budgets add per-result model guidance without blocking tools', 
     result: { content: [{ type: 'text', text: 'extensions/agent-fleet/index.ts' }] },
   }, ctx);
   assert.match(second.content.at(-1).text, /2\/3 read\/search calls used; 1 remaining/i);
+  assert.match(second.content.at(-1).text, /NEXT BATCH LIMIT: issue at most 1 individual read\/search tool call/i);
+  assert.match(second.content.at(-1).text, /choose only the 1 highest-value target, then finalize/i);
   assert.match(second.content.at(-1).text, /do not queue more read\/search calls than the remaining count/i);
 
   const third = await toolResult({
