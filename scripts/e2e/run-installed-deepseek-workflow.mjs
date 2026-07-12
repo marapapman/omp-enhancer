@@ -260,10 +260,11 @@ async function snapshotTree(root) {
   return values;
 }
 
-async function readSessionCustomEvents(root) {
+export async function readSessionCustomEvents(root) {
   const relevantTypes = new Set([
     'advisor',
     'autolearn-nudge',
+    'skill-prompt',
     'omp-continuation',
     'omp-enhancer-continuation',
     'session-stop-continuation',

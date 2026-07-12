@@ -33,6 +33,8 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
   const assistantStops = [];
   const finals = [];
   const observedSkills = new Set();
+  const providedSkills = new Set();
+  const providedSkillEvidence = new Map();
   const claimedSkills = new Set();
   const routes = [];
   let pendingTurnKind = 'user';
@@ -44,6 +46,10 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
     const custom = customMessageFromEvent(event);
     if (custom) {
       customMessages.push(custom);
+      for (const evidence of custom.providedSkillEvidence) {
+        providedSkills.add(evidence.name);
+        providedSkillEvidence.set(skillEvidenceIdentity(evidence), evidence);
+      }
       if (custom.customType === 'autolearn-nudge') {
         pendingTurnKind = 'autolearn-capture';
         if (agentStarts > agentEnds) activeTurnKind = 'autolearn-capture';
@@ -126,7 +132,18 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
 
   const primaryFinals = finals.filter(({ turnKind }) => turnKind !== 'autolearn-capture');
   const autolearnFinals = finals.filter(({ turnKind }) => turnKind === 'autolearn-capture');
-  const unobservedClaims = [...claimedSkills].filter((name) => !hasEquivalentSkill(observedSkills, name));
+  const effectiveSkills = new Set([...observedSkills, ...providedSkills]);
+  const unobservedClaims = [...claimedSkills].filter((name) => !hasEquivalentSkill(effectiveSkills, name));
+  const duplicateSkillReads = [...observedSkills]
+    .filter((name) => hasEquivalentSkill(providedSkills, name))
+    .sort();
+  const provisionMode = [...providedSkillEvidence.values()].some(({ source }) => source === 'autoload')
+    ? 'native'
+    : customMessages.some(({ customType }) => customType === 'omp-enhancer-core.workflow-guidance')
+      ? 'workflow-fallback'
+      : providedSkillEvidence.size
+        ? 'user-invoked'
+        : 'none';
 
   return {
     scenarioId: metadata.scenarioId ?? null,
@@ -142,6 +159,11 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
     sourceSearchCallCount: calls.filter(({ name }) => SOURCE_SEARCH_TOOLS.has(name)).length,
     webCallCount: calls.filter(({ name }) => WEB_TOOLS.has(name) || /(?:web|browse|search_query)/i.test(name)).length,
     observedSkills: [...observedSkills].sort(),
+    providedSkills: [...providedSkills].sort(),
+    providedSkillEvidence: [...providedSkillEvidence.values()]
+      .sort((left, right) => skillEvidenceIdentity(left).localeCompare(skillEvidenceIdentity(right))),
+    provisionMode,
+    duplicateSkillReads,
     claimedSkills: [...claimedSkills].sort(),
     unobservedClaims: unobservedClaims.sort(),
     routes,
@@ -164,13 +186,16 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
 
 export function evaluateWorkflowSummary(summary, expectations = {}) {
   const failures = [];
-  const observed = new Set(summary.observedSkills ?? []);
+  const observed = new Set([
+    ...(summary.observedSkills ?? []),
+    ...(summary.providedSkills ?? []),
+  ]);
 
   for (const skill of expectations.requiredSkills ?? []) {
-    if (!hasEquivalentSkill(observed, skill)) failures.push(`required skill was not observed: ${skill}`);
+    if (!hasEquivalentSkill(observed, skill)) failures.push(`required skill was not observed or provided: ${skill}`);
   }
   for (const skill of expectations.forbiddenSkills ?? []) {
-    if (hasEquivalentSkill(observed, skill)) failures.push(`forbidden skill was observed: ${skill}`);
+    if (hasEquivalentSkill(observed, skill)) failures.push(`forbidden skill was observed or provided: ${skill}`);
   }
   if (expectations.noWeb === true && summary.webCallCount > 0) {
     failures.push(`web tools were called ${summary.webCallCount} time(s)`);
@@ -291,18 +316,60 @@ function customMessageFromEvent(event) {
 }
 
 function customIdentity(custom) {
-  return `${custom.customType}:${custom.contentDigest}:${custom.attribution ?? ''}:${custom.display}`;
+  const evidence = custom.providedSkillEvidence.map(skillEvidenceIdentity).sort().join(',');
+  return `${custom.customType}:${custom.contentDigest}:${custom.attribution ?? ''}:${custom.display}:${evidence}`;
 }
 
 function normalizeCustom(value) {
   const customType = String(value?.customType ?? value?.custom_type ?? '').trim();
   if (!customType) return null;
+  const details = value?.details && typeof value.details === 'object' ? value.details : {};
+  const attribution = value?.attribution ?? null;
+  const providedSkillEvidence = customType === 'skill-prompt'
+    ? normalizeProvidedSkillEvidence(details, attribution)
+    : [];
   return {
     customType,
     display: value?.display !== false,
-    attribution: value?.attribution ?? null,
+    attribution,
     contentDigest: digest(typeof value?.content === 'string' ? value.content : JSON.stringify(value?.content ?? '')),
+    providedSkills: [...new Set(providedSkillEvidence.map(({ name }) => name))],
+    providedSkillEvidence,
   };
+}
+
+function normalizeProvidedSkillEvidence(details, attribution) {
+  const source = attribution === 'agent' ? 'autoload' : 'user';
+  const records = Array.isArray(details.providedSkillRecords)
+    ? details.providedSkillRecords
+    : [];
+  const evidence = records.map((record) => ({
+    name: normalizeSkillName(record?.name),
+    path: String(record?.path ?? '').trim(),
+    requestedSkill: normalizeSkillName(record?.requestedSkill),
+    source,
+  })).filter(({ name }) => name);
+  if (!evidence.length) {
+    const name = normalizeSkillName(details.name);
+    if (name) evidence.push({
+      name,
+      path: String(details.path ?? '').trim(),
+      requestedSkill: '',
+      source,
+    });
+  }
+  const uniqueEvidence = new Map();
+  for (const item of evidence) uniqueEvidence.set(skillEvidenceIdentity(item), item);
+  return [...uniqueEvidence.values()];
+}
+
+function skillEvidenceIdentity(evidence) {
+  return [
+    evidence.source ?? '',
+    normalizeSkillName(evidence.name),
+    String(evidence.path ?? ''),
+    normalizeSkillName(evidence.requestedSkill),
+  ].join(':');
 }
 
 function normalizeArguments(value) {

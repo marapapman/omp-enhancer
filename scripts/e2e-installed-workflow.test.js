@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -10,7 +10,11 @@ import {
   parseNdjson,
   summarizeWorkflowEvents,
 } from './e2e/workflow-events.mjs';
-import { prepareScenario, runInstalledMatrix } from './e2e/run-installed-deepseek-workflow.mjs';
+import {
+  prepareScenario,
+  readSessionCustomEvents,
+  runInstalledMatrix,
+} from './e2e/run-installed-deepseek-workflow.mjs';
 
 test('installed workflow summary distinguishes observed skill reads from claims', () => {
   const events = [
@@ -45,6 +49,7 @@ test('installed workflow summary distinguishes observed skill reads from claims'
     { exitCode: 0 },
   );
   assert.deepEqual(summary.observedSkills, ['writing-review']);
+  assert.deepEqual(summary.providedSkills, []);
   assert.deepEqual(summary.claimedSkills, ['invented-helper', 'writing-checkers', 'writing-review']);
   assert.deepEqual(summary.unobservedClaims, ['invented-helper', 'writing-checkers']);
   assert.equal(summary.primaryFinalCount, 1);
@@ -55,6 +60,177 @@ test('installed workflow summary distinguishes observed skill reads from claims'
   });
   assert.equal(evaluation.pass, false);
   assert.match(evaluation.failures.join('\n'), /writing-checkers/);
+});
+
+test('native skill prompts count as host-provided skill evidence without a model read', () => {
+  const summary = summarizeWorkflowEvents([
+    {
+      type: 'message_end',
+      message: {
+        role: 'custom',
+        customType: 'skill-prompt',
+        content: 'Native routed skill content.',
+        display: false,
+        attribution: 'agent',
+        details: {
+          name: 'plain-chinese-writing',
+          path: '/skills/plain-chinese-writing/SKILL.md',
+          lineCount: 20,
+          routedSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+          providedSkillRecords: [
+            {
+              requestedSkill: 'plain-chinese-writing',
+              name: 'plain-chinese-writing',
+              path: '/skills/plain-chinese-writing/SKILL.md',
+            },
+            {
+              requestedSkill: 'zh-writing-polish',
+              name: 'zh-writing-polish',
+              path: '/skills/zh-writing-polish/SKILL.md',
+            },
+          ],
+        },
+      },
+    },
+    { type: 'agent_start' },
+    {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Applied the provided writing guidance.' }],
+      },
+    },
+    { type: 'agent_end' },
+  ]);
+
+  assert.deepEqual(summary.observedSkills, []);
+  assert.deepEqual(summary.providedSkills, [
+    'plain-chinese-writing',
+    'zh-writing-polish',
+  ]);
+  assert.equal(evaluateWorkflowSummary(summary, {
+    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+  }).pass, true);
+  assert.equal(evaluateWorkflowSummary(summary, {
+    forbiddenSkills: ['zh-writing-polish'],
+  }).pass, false);
+  assert.equal(summary.provisionMode, 'native');
+  assert.deepEqual(summary.duplicateSkillReads, []);
+});
+
+test('routed skill expectations alone cannot impersonate actual native provision', () => {
+  const summary = summarizeWorkflowEvents([
+    {
+      type: 'message_end',
+      message: {
+        role: 'custom',
+        customType: 'skill-prompt',
+        content: 'Only the base Chinese skill was actually provided.',
+        display: false,
+        attribution: 'agent',
+        details: {
+          name: 'plain-chinese-writing',
+          path: '/skills/plain-chinese-writing/SKILL.md',
+          lineCount: 20,
+          routedSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+        },
+      },
+    },
+    { type: 'agent_start' },
+    {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Completed with the available context.' }],
+      },
+    },
+    { type: 'agent_end' },
+  ]);
+
+  assert.deepEqual(summary.providedSkills, ['plain-chinese-writing']);
+  const evaluation = evaluateWorkflowSummary(summary, {
+    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+  });
+  assert.equal(evaluation.pass, false);
+  assert.match(evaluation.failures.join('\n'), /zh-writing-polish/);
+});
+
+test('skill prompt fallback evidence survives detail-less primary events and keeps identities distinct', () => {
+  const content = 'Shared skill context.';
+  const primary = [{
+    type: 'message_end',
+    message: {
+      role: 'custom',
+      customType: 'skill-prompt',
+      content,
+      display: false,
+      attribution: 'agent',
+    },
+  }];
+  const sessionFallbacks = [
+    {
+      type: 'session_custom',
+      entry: {
+        role: 'custom',
+        customType: 'skill-prompt',
+        content,
+        display: false,
+        attribution: 'agent',
+        details: {
+          name: 'writing-review',
+          path: '/skills/writing-review/SKILL.md',
+          lineCount: 10,
+        },
+      },
+    },
+    {
+      type: 'session_custom',
+      entry: {
+        role: 'custom',
+        customType: 'skill-prompt',
+        content,
+        display: false,
+        attribution: 'agent',
+        details: {
+          name: 'fact-checking',
+          path: '/skills/fact-checking/SKILL.md',
+          lineCount: 10,
+        },
+      },
+    },
+  ];
+
+  const summary = summarizeWorkflowEvents(mergeCustomEventFallbacks(primary, sessionFallbacks));
+  assert.deepEqual(summary.providedSkills, ['fact-checking', 'writing-review']);
+  assert.equal(summary.customMessages.length, 3);
+});
+
+test('session fallback loading retains persisted native skill prompts', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'omp-e2e-skill-session-'));
+  try {
+    await writeFile(path.join(root, 'session.jsonl'), [
+      JSON.stringify({
+        type: 'custom',
+        customType: 'skill-prompt',
+        content: 'Native skill context.',
+        display: false,
+        attribution: 'agent',
+        details: {
+          name: 'writing-review',
+          path: '/skills/writing-review/SKILL.md',
+          lineCount: 10,
+        },
+      }),
+      JSON.stringify({ type: 'custom', customType: 'unrelated', content: 'ignore' }),
+    ].join('\n'));
+
+    const events = await readSessionCustomEvents(root);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].entry.customType, 'skill-prompt');
+    assert.equal(summarizeWorkflowEvents(events).providedSkills[0], 'writing-review');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('skill equivalence never treats zh-writing-review as writing-review', () => {
@@ -79,7 +255,7 @@ test('skill equivalence never treats zh-writing-review as writing-review', () =>
     requiredSkills: ['writing-review'],
   });
   assert.equal(required.pass, false);
-  assert.match(required.failures.join('\n'), /required skill was not observed: writing-review/);
+  assert.match(required.failures.join('\n'), /required skill was not observed or provided: writing-review/);
 
   const forbidden = evaluateWorkflowSummary(summary, {
     requireFinal: false,
