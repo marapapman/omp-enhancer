@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "defaults": {
+    "model": "opencode-go/deepseek-v4-flash",
+    "thinking": "minimal",
+    "approvalMode": "yolo",
+    "advisor": true,
+    "tools": ["read", "grep", "glob"],
+    "repeat": 3,
+    "timeoutSeconds": 120,
+    "expectations": {
+      "noWeb": true,
+      "requireFinal": true,
+      "maxPrimaryFinals": 1,
+      "noUnobservedSkillClaims": true,
+      "maxDuplicateFailedCalls": 1,
+      "maxAbortedAssistants": 0,
+      "pluginContinuationCount": 0
+    }
+  },
+  "scenarios": [
+    {
+      "id": "english-review-zh-prompt",
+      "category": "writing-en",
+      "cwd": "/home/dingli/leihanwen_TOSEM",
+      "prompt": "请只读审查 tex/abstract.tex 的英文论证逻辑、学术表达和清晰度。先按项目与 OMP 工作流读取最小适用 skill，只给出有文本证据的建议，不修改文件，不联网。",
+      "expectations": {
+        "requiredSkills": ["writing-review"],
+        "forbiddenSkills": ["plain-chinese-writing", "zh-writing-polish", "format-markdown2latex", "format-latex2markdown", "format-template-latex"],
+        "maxSourceSearchCalls": 8
+      }
+    },
+    {
+      "id": "english-polish-natural",
+      "category": "writing-en",
+      "cwd": "/home/dingli/anzhida_ATC2026",
+      "prompt": "Read tex/abstract.tex and propose a conservative polished version of its first prose paragraph. Preserve every qualifier, number, citation, negation, and modality. Do not edit files or browse the web.",
+      "expectations": {
+        "requiredSkills": ["writing-markdown-helper"],
+        "forbiddenSkills": ["plain-chinese-writing", "zh-writing-polish", "format-markdown2latex", "format-latex2markdown", "format-template-latex"],
+        "maxSourceSearchCalls": 8
+      }
+    },
+    {
+      "id": "chinese-review-en-prompt",
+      "category": "writing-zh",
+      "cwd": "/home/dingli/ChenkaiBook",
+      "prompt": "Read-only review of sections/5.7.md for Chinese argument flow and academic wording. Load the minimal exact skills selected from the source language, cite concrete passages, and do not modify files or use the network.",
+      "expectations": {
+        "requiredSkills": ["plain-chinese-writing", "zh-writing-review"],
+        "forbiddenSkills": ["writing-markdown-helper", "writing-review", "format-markdown2latex", "format-latex2markdown", "format-template-latex"],
+        "maxSourceSearchCalls": 8
+      }
+    },
+    {
+      "id": "chinese-polish-natural",
+      "category": "writing-zh",
+      "cwd": "/home/dingli/ChenkaiBook",
+      "prompt": "只读评估第5章-合并正文.md开头第一段，并给出克制的中文润色稿。保留所有限定、否定、数字、引用和作者语气，不修改文件，不联网。",
+      "expectations": {
+        "requiredSkills": ["plain-chinese-writing", "zh-writing-polish"],
+        "forbiddenSkills": ["writing-markdown-helper", "writing-review"],
+        "maxSourceSearchCalls": 8
+      }
+    },
+    {
+      "id": "local-fact-check-specific",
+      "category": "fact-local",
+      "cwd": "/home/dingli/ChenkaiBook",
+      "prompt": "核查 sections/5.7.md 中 Claude Mythos Preview、CyberGym 83.1% 和钓鱼盈利约50倍三个事实是否有本地引文支持。只使用工作区现有正文和引用，不联网；证据不足时直接报告 LOCAL_UNVERIFIED，不修改文件。",
+      "expectations": {
+        "requiredSkills": ["fact-checking"],
+        "forbiddenSkills": ["omp-factcheck-gate-satisfy", "omp-gate-satisfaction", "omp-gate-unblock", "omp-subagent-gate-satisfaction", "omp-testing-gate-report", "format-markdown2latex", "format-latex2markdown"],
+        "maxSourceSearchCalls": 8
+      }
+    },
+    {
+      "id": "code-implementation-plan",
+      "category": "code-plan",
+      "cwd": "/home/dingli/frugal-pi",
+      "prompt": "为修复 agent-fleet 路由问题制定实现和测试计划，不修改文件，不运行测试。先遵循 AGENTS.md 并读取其中为实现计划指定的 exact skill，然后在 8 次以内的读取或搜索后交付有文件证据的计划。",
+      "expectations": {
+        "requiredSkills": ["superpowers-writing-plans"],
+        "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing"],
+        "maxSourceSearchCalls": 8
+      }
+    },
+    {
+      "id": "code-diagnosis-focused",
+      "category": "code-diagnosis",
+      "cwd": "/home/dingli/frugal-pi",
+      "prompt": "诊断 extensions/agent-fleet/strict-agent-model-routing.test.mjs 所覆盖的路由约束可能在哪里失配。遵循 AGENTS.md，先读取 exact debugging skill，只读检查并给出文件与行级证据，不修改文件、不运行测试，最多 8 次读取或搜索。",
+      "expectations": {
+        "requiredSkills": ["superpowers-debugging"],
+        "forbiddenSkills": ["systematic-debugging", "writing-markdown-helper", "plain-chinese-writing"],
+        "maxSourceSearchCalls": 8
+      }
+    },
+    {
+      "id": "code-test-strategy",
+      "category": "code-plan",
+      "cwd": "/home/dingli/frugal-pi",
+      "prompt": "为 agent-fleet 的路由逻辑设计测试策略，不运行测试也不修改文件。遵循 AGENTS.md，读取实现计划所需的 exact project skill，给出 RED 矩阵、关键 fixture 和回滚验证，最多 8 次读取或搜索。",
+      "expectations": {
+        "requiredSkills": ["superpowers-writing-plans"],
+        "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing"],
+        "maxSourceSearchCalls": 8
+      }
+    },
+    {
+      "id": "code-broad-audit",
+      "category": "code-audit",
+      "cwd": "/home/dingli/frugal-pi",
+      "timeoutSeconds": 150,
+      "repeat": 1,
+      "prompt": "只读审计 extensions/agent-fleet 的任务路由与失败收敛逻辑。遵循 AGENTS.md 并读取 exact debugging skill。在前 8 次读取或搜索内先形成至少一个文件证据化发现；若 150 秒不足，交付明确范围的部分结果，不修改文件、不运行测试。",
+      "expectations": {
+        "requiredSkills": ["superpowers-debugging"],
+        "forbiddenSkills": ["systematic-debugging", "writing-markdown-helper", "plain-chinese-writing"],
+        "maxSourceSearchCalls": 12
+      }
+    },
+    {
+      "id": "autolearn-five-reads",
+      "category": "autolearn",
+      "fixture": "autolearn-five-files",
+      "repeat": 1,
+      "executionMode": "rpc",
+      "waitForAutolearn": true,
+      "advisor": false,
+      "prompt": "依次读取当前目录中的 1.txt、2.txt、3.txt、4.txt、5.txt，各读取一次，然后按文件名逐行返回读取到的值。这些随机值不具有长期意义；不要创建或修改文件。",
+      "tools": ["read"],
+      "expectations": {
+        "requiredSkills": [],
+        "forbiddenSkills": ["omp-gate-satisfaction", "omp-gate-unblock"],
+        "maxToolCalls": 5,
+        "autolearnCaptureCount": 1,
+        "maxAutolearnToolCalls": 0
+      }
+    },
+    {
+      "id": "semantic-edit-en",
+      "category": "writing-edit",
+      "fixture": "semantic-edit-en",
+      "repeat": 1,
+      "prompt": "Conservatively polish paper.tex in place. Preserve every qualifier, modality, negation, percentage, range, and citation. Modify only paper.tex, perform one after-edit read, and return a concise result.",
+      "tools": ["read", "edit"],
+      "expectations": {
+        "requiredSkills": ["writing-markdown-helper"],
+        "forbiddenSkills": ["plain-chinese-writing", "format-markdown2latex", "format-latex2markdown"],
+        "maxSourceSearchCalls": 6
+      },
+      "fixtureExpectations": {
+        "allowedChangedFiles": ["paper.tex"],
+        "requiredChangedFiles": ["paper.tex"],
+        "requiredPatterns": {
+          "paper.tex": ["\\btypically\\b", "\\bsignificantly\\b", "\\bmay\\b", "\\bonly\\b", "37\\.5%", "12\\.5%", "(?:cannot|can\\s+not)", "\\\\cite\\{smith2025\\}"]
+        }
+      }
+    },
+    {
+      "id": "semantic-edit-zh",
+      "category": "writing-edit",
+      "fixture": "semantic-edit-zh",
+      "repeat": 1,
+      "prompt": "克制地润色 paper.md，只修改这个文件。保留全部限定、模态、否定、百分比、范围和引用；修改后只复读一次并简要报告。",
+      "tools": ["read", "edit"],
+      "expectations": {
+        "requiredSkills": ["plain-chinese-writing", "zh-writing-polish"],
+        "forbiddenSkills": ["writing-markdown-helper", "writing-review"],
+        "maxSourceSearchCalls": 6
+      },
+      "fixtureExpectations": {
+        "allowedChangedFiles": ["paper.md"],
+        "requiredChangedFiles": ["paper.md"],
+        "requiredPatterns": {
+          "paper.md": ["通常", "显著", "可能", "仅", "37\\.5%", "12\\.5%", "(?:并不能|不能)", "\\[@smith2025\\]"]
+        }
+      }
+    }
+  ]
+}

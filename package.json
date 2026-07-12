@@ -13,6 +13,8 @@
     "test": "node --test scripts/*.test.js && npm test --workspaces --if-present",
     "pack:all": "node scripts/pack-all.js",
     "check:marketplace": "node scripts/check-marketplace.js",
-    "release": "node scripts/release.js"
+    "release": "node scripts/release.js",
+    "e2e:deepseek": "node scripts/e2e/run-installed-deepseek-workflow.mjs",
+    "migrate:legacy-gate-skills": "node scripts/migrate-legacy-gate-skills.mjs"
   }
 }

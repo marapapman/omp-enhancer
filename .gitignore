@@ -1,4 +1,5 @@
 .worktrees/
 .superpowers/
+.omp/e2e-results/
 node_modules/
 /bun.lock
