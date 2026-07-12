@@ -21,6 +21,14 @@ For ordinary requests such as "polish the abstract" or "revise this section":
 3. Review meaning, structure, citations, and formatting once.
 4. Report material limitations. Do not require a new confirmation merely because this skill was loaded.
 
+Before editing, record semantic anchors: frequency and intensity qualifiers,
+modality, scope, negation, comparison and causal direction, numbers and units,
+citations and identifiers, and LaTeX math, cross-references, commands, and
+structure. Preserve them unless the user or evidence explicitly authorizes a
+change. Compare source and result once. Report drift without starting another
+rewrite automatically. For a read-only task, return the proposed revision in
+the final response and do not create workflow files.
+
 Use the fine-mode workflow below only when the user asks for interactive approval at each paragraph or when a genuinely material ambiguity requires a choice.
 
 ## Document Structure Assumed

@@ -26,6 +26,15 @@ When a governance fragment recommends skills, use the relevant ones when availab
 
 Do not claim a skill was loaded unless it was actually read. Skill summaries are optional diagnostics.
 
+## Semantic Preservation
+
+Treat frequency and intensity qualifiers, modality, scope, negation,
+comparison and causal direction, numbers and units, citations and identifiers,
+and LaTeX math, cross-references, commands, and structure as semantic anchors.
+When source and revision are both available, compare them once and report any
+added, removed, or changed anchor. Do not recommend deleting an anchor merely
+to make prose shorter or smoother.
+
 ---
 
 ## Seven Quality Dimensions
@@ -70,7 +79,10 @@ Review **in this exact order**. Each dimension builds on the previous one. Do no
 
 ## Output Format
 
-Write findings to `.pi/research/checker_report.md`. Do **NOT** modify the reviewed document.
+Write findings to `.pi/research/checker_report.md` only when the user permits
+that report file. For a read-only review, return the same structured report in
+the final response. Do not create `.pi` or request write access solely to
+satisfy this template. Do **NOT** modify the reviewed document.
 
 Use this structured format for each finding:
 
@@ -132,7 +144,9 @@ Status: 2 issues found
 ---
 ```
 
-4. **Write to report**: Append the finding to `.pi/research/checker_report.md` with location, evidence, and severity.
+4. **Deliver the report**: Append the finding to
+   `.pi/research/checker_report.md` when permitted; otherwise include it in the
+   final response with the same location, evidence, and severity.
 
 ### Phase 3: Final Summary
 
@@ -219,7 +233,8 @@ The checker agent can invoke these skills for deeper review:
 
 ## Guardrails
 
-- If the document is under 500 words and clearly a draft/outline, output a single finding in `.pi/research/checker_report.md`:
+- If the document is under 500 words and clearly a draft/outline, output a
+  single finding at the report destination selected above:
 
 ```markdown
 ### Finding: problem — INFO

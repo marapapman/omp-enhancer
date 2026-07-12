@@ -43,4 +43,39 @@ describe('analyzeWritingQuality', () => {
     assert.equal(result.summary.byCategory.citation > 0, true);
     assert.equal(result.summary.verdict, 'critical_findings');
   });
+
+  it('adds semantic preservation findings only when explicitly requested', () => {
+    const result = analyzeWritingQuality({
+      originalText: 'The method typically may improve accuracy by 12.5%.',
+      text: 'The method improves accuracy by 14%.',
+      language: 'en',
+      checks: ['preservation'],
+    });
+
+    assert.deepEqual(result.checks, ['preservation']);
+    assert.equal(result.preservation.compared, true);
+    assert.equal(result.preservation.driftDetected, true);
+    assert.equal(result.summary.byCategory.preservation > 0, true);
+    assert.equal(result.summary.verdict, 'needs_revision');
+  });
+
+  it('supports the preservation flag and degrades safely without original text', () => {
+    const preserved = analyzeWritingQuality({
+      originalText: '通常可能提升 12%。',
+      text: '通常可能提升 12%。',
+      language: 'zh',
+      checks: ['style'],
+      preservation: true,
+    });
+    assert.deepEqual(preserved.checks, ['style', 'preservation']);
+    assert.equal(preserved.preservation.driftDetected, false);
+
+    const missingOriginal = analyzeWritingQuality({
+      text: 'Revised text.',
+      checks: ['preservation'],
+    });
+    assert.equal(missingOriginal.preservation.compared, false);
+    assert.match(missingOriginal.preservation.reason, /originalText/);
+    assert.equal(missingOriginal.summary.total, 0);
+  });
 });

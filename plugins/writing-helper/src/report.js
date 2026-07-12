@@ -47,9 +47,10 @@ export function formatWritingLogicReport(result) {
 
 function formatSummaryLine(result) {
   const counts = result.summary.byCategory ?? {};
+  const preservation = counts.preservation ?? 0;
   return result.language === 'zh'
-    ? `逻辑 ${counts.logic ?? 0}，风格 ${counts.style ?? 0}，引用 ${counts.citation ?? 0}`
-    : `logic ${counts.logic ?? 0}, style ${counts.style ?? 0}, citation ${counts.citation ?? 0}`;
+    ? `逻辑 ${counts.logic ?? 0}，风格 ${counts.style ?? 0}，引用 ${counts.citation ?? 0}${preservation > 0 ? `，语义保真 ${preservation}` : ''}`
+    : `logic ${counts.logic ?? 0}, style ${counts.style ?? 0}, citation ${counts.citation ?? 0}${preservation > 0 ? `, preservation ${preservation}` : ''}`;
 }
 
 export function formatWritingQualityReport(result) {

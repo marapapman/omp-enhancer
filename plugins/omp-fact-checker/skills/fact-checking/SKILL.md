@@ -1,38 +1,24 @@
 ---
 name: fact-checking
-description: Plan, evidence, cross-check, and review workflow for factual claim verification.
+description: Verify factual claims in prose, papers, reports, citations, statistics, and time-sensitive statements with a focused local-first workflow and explicit evidence limitations.
 ---
 
 # Fact Checking Workflow
 
-Use this skill when checking whether prose, reports, papers, public claims, citations, statistics, or time-sensitive statements are factually supported.
+Run one bounded pass for a focused request:
 
-Principles:
+1. Extract only the requested atomic claims.
+2. Inspect the named document, nearby citations, and available local source text.
+3. Assign `SUPPORTED`, `CONTRADICTED`, `LOCAL_UNVERIFIED`, or `INSUFFICIENT` to each claim and cite the evidence used.
+4. Return the verdicts and concrete limitations.
 
-- Do not rely on model memory for final factual verdicts.
-- Split broad statements into atomic claims.
-- Prefer primary or authoritative sources.
-- Treat unavailable evidence as `INSUFFICIENT`, not as false.
-- Keep source date and retrieval context when facts may change.
-- Use independent evidence lanes for medium and high-risk tasks.
+Do not rely on model memory for a verdict. Do not automatically retry a failed
+search, start another evidence lane, or repeat the workflow. Add an independent
+lane only for a broad task, a high-risk claim, or when the user explicitly
+requests cross-checking.
 
-Recommended workflow (adapt it to the task and available evidence):
-
-1. Produce `FACT_CHECK_PLAN`.
-2. Collect `FACT_EVIDENCE_A`.
-3. Collect independent `FACT_EVIDENCE_B` for medium/high-risk or multi-claim checks.
-4. Produce `FACT_CROSS_CHECK`.
-5. Produce `FACT_REVIEW`.
-6. Final answer includes `FACT_CHECK_REPORT` and `FACT_CHECK_USAGE`.
-
-Optional workflow summary:
-
-FACT_CHECK_USAGE
-Recommended stages:
-- FACT_CHECK_PLAN
-- FACT_EVIDENCE_A
-- FACT_EVIDENCE_B or CROSS_CHECK_DEGRADED
-- FACT_CROSS_CHECK
-- FACT_REVIEW
-Completed stages:
-- ...
+When network access is forbidden, stay local. Use `LOCAL_UNVERIFIED` when local
+bibliography metadata or an identifier exists but the source text needed to
+check claim support is unavailable. Use `INSUFFICIENT` when no relevant local
+evidence exists. Neither verdict means the claim is false, and neither starts a
+retry.

@@ -164,4 +164,24 @@ describe('formatWritingQualityReport', () => {
     assert.match(report, /Summary: logic 0, style 0, citation 0\./);
     assert.match(report, /Issue 1: style IMPORTANT/);
   });
+
+  it('includes Chinese semantic preservation findings when present', () => {
+    const report = formatWritingQualityReport({
+      language: 'zh',
+      summary: {
+        total: 1,
+        byCategory: { logic: 0, style: 0, citation: 0, preservation: 1 },
+      },
+      issues: [{
+        dimension: '语义保真',
+        severity: 'IMPORTANT',
+        location: '全文',
+        problem: '限定词被删除。',
+        quote: '通常',
+        suggestion: '恢复原有限定。',
+      }],
+    });
+
+    assert.match(report, /语义保真 1/);
+  });
 });

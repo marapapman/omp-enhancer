@@ -27,6 +27,18 @@ When a governance fragment recommends skills, use the relevant ones when availab
 
 Do not claim that a skill was loaded unless it was actually read. A short skill summary is optional and must never delay the writing task.
 
+## Semantic Preservation
+
+Before revising existing text, note its semantic anchors: frequency and
+intensity qualifiers, modality, scope, negation, comparison and causal
+direction, numbers and units, citations and identifiers, and LaTeX math,
+cross-references, commands, and structure. Preserve each anchor unless the user
+or evidence explicitly authorizes a change. Compare the result with the source
+once after editing. Report drift as an advisory finding; do not start another
+rewrite cycle automatically. If edits are unavailable or the task is read-only,
+return the proposed revision in the final response without creating workflow
+files or requesting write access.
+
 ---
 ## Three Writing Modes
 

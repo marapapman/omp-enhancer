@@ -12,4 +12,9 @@ Verify:
 - The cited source supports the sentence near the citation.
 - The citation is not being used for a broader claim than it establishes.
 
-Use `MISMATCH` for metadata contradictions, `UNVERIFIED` for missing evidence, and `SUPPORTED` only when the metadata and claim alignment are both adequate.
+Use `MISMATCH` for metadata contradictions and `SUPPORTED` only when both
+identity and claim alignment are supported by evidence. When network use is
+forbidden and local metadata identifies the item but local source text cannot
+establish claim alignment, use `LOCAL_UNVERIFIED`. Use `INSUFFICIENT` when even
+the local identity or relevant evidence is absent. Stop after this bounded
+check; do not automatically retry resolution or open another evidence lane.

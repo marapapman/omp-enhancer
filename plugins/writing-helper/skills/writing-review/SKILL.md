@@ -10,17 +10,26 @@ user-specified text directly and state that no prior checker report was used.
 
 ## Default One-Pass Workflow
 
-1. Sort findings as critical, important, or minor while preserving their order
+1. Record semantic anchors in the source: qualifiers, modality, scope,
+   negation, direction, numbers and units, citations and identifiers, and
+   LaTeX math, cross-references, commands, and structure.
+2. Sort findings as critical, important, or minor while preserving their order
    within each severity.
-2. Apply clarity, grammar, structure, tone, and formatting fixes that stay
+3. Apply clarity, grammar, structure, tone, and formatting fixes that stay
    within the user's existing edit authorization and preserve claims.
-3. Do not silently change a factual statement, central argument, citation
+4. Do not silently change a factual statement, central argument, citation
    meaning, or requested scope. Present those items as author decisions.
-4. Review the resulting text once and summarize applied changes, unresolved
+5. Compare the result with the source once. Treat any changed semantic anchor
+   as an advisory finding, not as a reason to start another repair cycle.
+6. Review the resulting text once and summarize applied changes, unresolved
    decisions, and evidence limitations.
 
 Process at most 20 findings in one pass. Summarize any remainder without
 starting another checker/review cycle automatically.
+
+For a read-only task, return the review and proposed revision in the final
+response. Do not create `.pi` files or request write access solely to satisfy
+the workflow template.
 
 ## Optional Interactive Mode
 

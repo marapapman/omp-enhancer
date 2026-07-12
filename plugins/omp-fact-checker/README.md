@@ -2,12 +2,12 @@
 
 Fact-checking workflow plugin for OMP. It extracts factual claims, collects evidence, compares independent evidence lanes, and provides an advisory completeness review.
 
-The workflow is designed for low user interruption:
+The workflow is designed for bounded, low-interruption checks:
 
-- small low-risk checks may use one evidence lane plus review;
-- ordinary fact-checking uses two independent evidence lanes;
-- high-risk domains benefit from planner, two researchers, cross-checker, and reviewer evidence;
-- missing network/API access is reported as insufficient evidence instead of repeated blocking.
+- focused checks use one local-first pass and stop with explicit verdicts and limitations;
+- broad, high-risk, or explicitly requested cross-checks may use independent evidence lanes;
+- local metadata without the source text needed for claim alignment yields `LOCAL_UNVERIFIED`;
+- absent relevant evidence yields `INSUFFICIENT`, without automatic search or lane retries.
 
 ## Tools
 

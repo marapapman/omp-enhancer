@@ -1,10 +1,11 @@
 import { analyzeWritingLogic } from './analyzer.js';
 import { verifyCitations } from './citations.js';
 import { resolveLanguage } from './language.js';
+import { compareSemanticPreservation } from './preservation.js';
 import { styleIssues } from './style.js';
 
 const DEFAULT_CHECKS = ['logic', 'style', 'citation'];
-const VALID_CHECKS = new Set(DEFAULT_CHECKS);
+const VALID_CHECKS = new Set([...DEFAULT_CHECKS, 'preservation']);
 const DEFAULT_MAX_ISSUES = 30;
 
 function normalizeChecks(checks) {
@@ -26,7 +27,7 @@ function normalizeLogicIssue(issue) {
 }
 
 function summarize(issues, returnedIssues) {
-  const byCategory = { logic: 0, style: 0, citation: 0 };
+  const byCategory = { logic: 0, style: 0, citation: 0, preservation: 0 };
   let fatalOrCritical = 0;
   let warningsOrImportant = 0;
   let minor = 0;
@@ -54,10 +55,19 @@ function summarize(issues, returnedIssues) {
 export function analyzeWritingQuality(input = {}) {
   const text = String(input.text ?? '');
   const language = resolveLanguage(input.language, text);
-  const checks = normalizeChecks(input.checks);
+  const selectedChecks = normalizeChecks(input.checks);
+  const checks = input.preservation === true && !selectedChecks.includes('preservation')
+    ? [...selectedChecks, 'preservation']
+    : selectedChecks;
   const maxIssues = maxIssueCount(input.maxIssues);
   const issues = [];
   let citationDetails = [];
+  let preservation = {
+    compared: false,
+    driftDetected: false,
+    findings: [],
+    reason: 'Preservation comparison was not requested.',
+  };
 
   if (checks.includes('logic')) {
     const logic = analyzeWritingLogic({
@@ -84,6 +94,18 @@ export function analyzeWritingQuality(input = {}) {
     issues.push(...citationResult.issues);
   }
 
+  if (checks.includes('preservation')) {
+    preservation = typeof input.originalText === 'string'
+      ? compareSemanticPreservation(input.originalText, text, { language })
+      : {
+          compared: false,
+          driftDetected: false,
+          findings: [],
+          reason: 'originalText is required for a preservation comparison.',
+        };
+    issues.push(...preservation.findings);
+  }
+
   const returnedIssues = issues.slice(0, maxIssues);
   return {
     ok: true,
@@ -93,5 +115,6 @@ export function analyzeWritingQuality(input = {}) {
     summary: summarize(issues, returnedIssues),
     issues: returnedIssues,
     citations: citationDetails,
+    preservation,
   };
 }

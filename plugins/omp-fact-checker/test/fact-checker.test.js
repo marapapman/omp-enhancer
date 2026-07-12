@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import factCheckerExtension, {
   buildFactCheckPlan,
@@ -8,6 +9,11 @@ import factCheckerExtension, {
   validateFactCheckGate,
 } from '../index.js';
 import { fetchProviderEvidence } from '../src/providers.js';
+
+const factSkill = (name) => readFileSync(
+  new URL(`../skills/${name}/SKILL.md`, import.meta.url),
+  'utf8',
+);
 
 class FakeOmp {
   constructor() {
@@ -37,6 +43,23 @@ test('registers fact-check tools and command', () => {
     'fact_check_gate',
   ]);
   assert.equal(omp.commands.has('fact-check'), true);
+});
+
+test('fact-check skills prescribe one bounded local pass without automatic lane retries', () => {
+  const workflow = factSkill('fact-checking');
+  const claims = factSkill('claim-extraction');
+  const sources = factSkill('source-evaluation');
+  const citations = factSkill('citation-authenticity');
+
+  assert.match(workflow, /one bounded pass/i);
+  assert.match(workflow, /LOCAL_UNVERIFIED/);
+  assert.match(workflow, /do not (?:automatically )?(?:retry|start another|add another)/i);
+  assert.match(workflow, /broad|high-risk|explicitly requests/i);
+  assert.match(claims, /focused|bounded/i);
+  assert.match(sources, /local/i);
+  assert.match(sources, /INSUFFICIENT|LOCAL_UNVERIFIED/);
+  assert.match(citations, /LOCAL_UNVERIFIED/);
+  assert.doesNotMatch(workflow, /FACT_EVIDENCE_B or CROSS_CHECK_DEGRADED/);
 });
 
 test('buildFactCheckPlan extracts prioritized factual claims', () => {

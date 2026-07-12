@@ -12,9 +12,15 @@ The plugin registers two model-callable tools:
 | Tool | Purpose |
 | --- | --- |
 | `writing_logic_check` | Checks substantive writing logic: unsupported conclusions, data inconsistencies, terminology drift, causal leaps, and contribution/evidence mismatches. |
-| `writing_quality_check` | Runs logic, style, and citation authenticity checks. Citation findings are `VERIFIED`, `MISMATCH`, or `UNVERIFIED`. |
+| `writing_quality_check` | Runs logic, style, citation authenticity, and optional semantic preservation checks. Citation findings are `VERIFIED`, `MISMATCH`, or `UNVERIFIED`. |
 
 Both tools accept inline `text` or a UTF-8 text `path`.
+
+For an advisory semantic-preservation comparison, pass the revised `text`, the
+prior `originalText`, and either `preservation: true` or
+`checks: ['preservation']`. The result reports changed qualifiers, modality,
+polarity, numbers, citations, and LaTeX anchors. Drift findings never make the
+tool call fail or control whether editing may continue.
 
 ### Slash commands
 

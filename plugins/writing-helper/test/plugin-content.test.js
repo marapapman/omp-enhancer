@@ -78,4 +78,35 @@ describe('bundled frugal-pi writing content', () => {
     assert.equal(existsSync(join(rootDir, 'skills', 'guided-doc-writing')), false);
     assert.equal(existsSync(join(rootDir, 'skills', 'superpowers-writing-plans')), false);
   });
+
+  it('preserves semantic anchors and supports read-only review output across English and Chinese workflows', () => {
+    const sources = [
+      'agents/writer.md',
+      'agents/checker.md',
+      'agents/zh-writer.md',
+      'agents/zh-checker.md',
+      'skills/writing-markdown-helper/SKILL.md',
+      'skills/writing-review/SKILL.md',
+      'skills/writing-checkers/SKILL.md',
+      'skills/plain-chinese-writing/SKILL.md',
+      'skills/zh-writing-polish/SKILL.md',
+      'skills/zh-writing-review/SKILL.md',
+      'skills/zh-writing-checkers/SKILL.md',
+    ].map((path) => ({ path, source: readFileSync(join(rootDir, path), 'utf8') }));
+
+    for (const { path, source } of sources) {
+      assert.match(source, /semantic anchor|语义锚点/i, `${path} should preserve semantic anchors`);
+    }
+
+    for (const path of [
+      'agents/checker.md',
+      'agents/zh-checker.md',
+      'skills/writing-checkers/SKILL.md',
+      'skills/zh-writing-checkers/SKILL.md',
+    ]) {
+      const source = readFileSync(join(rootDir, path), 'utf8');
+      assert.match(source, /read-only|只读/i, `${path} should support read-only review`);
+      assert.match(source, /final response|最终响应/i, `${path} should return an in-band report`);
+    }
+  });
 });

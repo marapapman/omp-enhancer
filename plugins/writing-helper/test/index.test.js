@@ -90,6 +90,32 @@ describe('writing-logic extension', () => {
     assert.match(qualityTool.description, /UNVERIFIED/);
   });
 
+  it('quality tool exposes an optional advisory preservation comparison', async () => {
+    const api = makeExtensionApi();
+    extension(api);
+
+    const qualityTool = api.registerTool.mock.calls[1].arguments[0];
+    assert.equal(qualityTool.parameters.shape.originalText.kind, 'string');
+    assert.equal(qualityTool.parameters.shape.preservation.kind, 'boolean');
+    assert.equal(qualityTool.parameters.shape.checks.item.values.includes('preservation'), true);
+
+    const response = await qualityTool.execute(
+      'preservation-call',
+      {
+        originalText: 'The method typically improves accuracy by 12%.',
+        text: 'The method improves accuracy by 14%.',
+        checks: ['preservation'],
+      },
+      undefined,
+      undefined,
+      { cwd: process.cwd() },
+    );
+
+    assert.equal(response.isError, false);
+    assert.equal(response.details.preservation.driftDetected, true);
+    assert.match(response.content[0].text, /preservation/i);
+  });
+
   it('tool execution returns report content and structured details', async () => {
     const api = makeExtensionApi();
     extension(api);

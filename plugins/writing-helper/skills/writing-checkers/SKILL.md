@@ -79,14 +79,21 @@ After all 7 dimensions, output:
 5. **Negative claims require evidence.** Before flagging something as missing or wrong, search the document thoroughly to confirm it's absent.
 6. **One issue per bullet.** Do not bundle multiple concerns into one item.
 7. **Be precise about severity.** Reserve CRITICAL for fundamental flaws. Over-tagging erodes trust.
+8. **Preserve semantic anchors.** Do not recommend deleting frequency or
+   intensity qualifiers, modality, scope, negation, comparison or causal
+   direction, numbers or units, citations or identifiers, or LaTeX math,
+   cross-references, commands, and structure merely for style. When source and
+   revision are both available, compare them once and report drift.
 
 ## Output Destination
 
-Write to `.pi/research/checker_report.md`. Create the directory if it doesn't exist.
+Write to `.pi/research/checker_report.md` only when the user permits that report
+file. For a read-only review, return the same structured report in the final
+response. Do not create `.pi` or request write access solely for this skill.
 
 ## Pi Integration
 
 - **Use:** load `writing-checkers` through the runtime's normal skill mechanism; do not attempt an invented slash command.
 - **Tools used:** `read`, `grep`, `find` (to understand document structure and verify references).
-- **Output only:** `.pi/research/checker_report.md`. No other files created or modified.
+- **Output:** use the permitted report path, or the final response in read-only mode. Create no other files.
 - **No HTML comments.** No `.pi/research/state.md`. No external CLI calls.

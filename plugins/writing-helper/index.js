@@ -24,7 +24,9 @@ function buildLogicParameters(z) {
 function buildQualityParameters(z) {
   return z.object({
     ...buildBaseShape(z),
-    checks: z.array(z.enum(['logic', 'style', 'citation'])).optional(),
+    checks: z.array(z.enum(['logic', 'style', 'citation', 'preservation'])).optional(),
+    originalText: z.string().optional(),
+    preservation: z.boolean().optional(),
     bibliography: z.string().optional(),
     bibliographyPath: z.string().optional(),
     literaturePath: z.string().optional(),
@@ -316,11 +318,12 @@ export default function writingLogicExtension(omp) {
     name: 'writing_quality_check',
     label: 'Writing Quality Check',
     description:
-      'Run writing logic, language-specific style, and evidence-backed citation authenticity checks. Citations are VERIFIED only when evidence confirms metadata, MISMATCH when evidence contradicts it, and UNVERIFIED when evidence is absent.',
+      'Run advisory writing logic, language-specific style, citation authenticity, and optional semantic preservation checks. Citations are VERIFIED only when evidence confirms metadata, MISMATCH when evidence contradicts it, and UNVERIFIED when evidence is absent.',
     promptSnippet: 'Check writing quality, style, and citation authenticity for a draft or document path.',
     promptGuidelines: [
       'Use writing_quality_check for final writing QA across logic, style, and citations.',
       'Treat UNVERIFIED citations as needing evidence, not as fabricated or true.',
+      'For preservation review, pass originalText and select the preservation check; drift findings are advisory and never block editing or completion.',
       'Do not use this tool to rewrite documents; it reports issues only.',
     ],
     parameters: qualityParameters,
@@ -365,4 +368,5 @@ export default function writingLogicExtension(omp) {
   });
 }
 
+export { compareSemanticPreservation, extractSemanticAnchors } from './src/preservation.js';
 export { verifyCitations };
