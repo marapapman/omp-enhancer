@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import {
@@ -9,7 +10,7 @@ import {
   parseNdjson,
   summarizeWorkflowEvents,
 } from './e2e/workflow-events.mjs';
-import { prepareScenario } from './e2e/run-installed-deepseek-workflow.mjs';
+import { prepareScenario, runInstalledMatrix } from './e2e/run-installed-deepseek-workflow.mjs';
 
 test('installed workflow summary distinguishes observed skill reads from claims', () => {
   const events = [
@@ -142,6 +143,32 @@ test('semantic-edit-en fixture and sentinels require legal escaped LaTeX percent
     }
   } finally {
     await prepared.cleanup();
+  }
+});
+
+test('mandatory matrix isolates plugin compliance from the explicit advisor stress matrix', async () => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-e2e-matrix-mode-'));
+  try {
+    const { report } = await runInstalledMatrix({
+      dryRun: true,
+      scenarioIds: ['english-review-zh-prompt'],
+      outputRoot,
+    });
+    const command = report.results[0].command;
+    assert.ok(command.includes('--mode=rpc'));
+    assert.equal(command.includes('--advisor'), false);
+
+    const stress = JSON.parse(await readFile(
+      new URL('./e2e/fixtures/deepseek-advisor-stress.json', import.meta.url),
+      'utf8',
+    ));
+    assert.equal(stress.defaults.advisor, true);
+    assert.equal(stress.defaults.executionMode, 'rpc');
+    assert.equal(stress.defaults.expectations.maxPrimaryFinals, 1);
+    assert.ok(stress.scenarios.some(({ id }) => id === 'advisor-english-review'));
+    assert.ok(stress.scenarios.some(({ id }) => id === 'advisor-semantic-edit-en'));
+  } finally {
+    await rm(outputRoot, { recursive: true, force: true });
   }
 });
 

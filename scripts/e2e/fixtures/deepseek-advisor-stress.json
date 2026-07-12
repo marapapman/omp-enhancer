@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "defaults": {
+    "model": "opencode-go/deepseek-v4-flash",
+    "thinking": "minimal",
+    "approvalMode": "yolo",
+    "advisor": true,
+    "executionMode": "rpc",
+    "tools": ["read", "grep", "glob"],
+    "repeat": 1,
+    "timeoutSeconds": 120,
+    "expectations": {
+      "noWeb": true,
+      "requireFinal": true,
+      "maxPrimaryFinals": 1,
+      "noUnobservedSkillClaims": true,
+      "maxDuplicateFailedCalls": 1,
+      "maxAbortedAssistants": 0,
+      "pluginContinuationCount": 0
+    }
+  },
+  "scenarios": [
+    {
+      "id": "advisor-english-review",
+      "category": "advisor-stress",
+      "cwd": "/home/dingli/leihanwen_TOSEM",
+      "prompt": "请只读审查 tex/abstract.tex 的英文论证逻辑、学术表达和清晰度。先按项目与 OMP 工作流读取最小适用 skill，只给出有文本证据的建议，不修改文件，不联网。",
+      "expectations": {
+        "requiredSkills": ["writing-review"],
+        "forbiddenSkills": ["plain-chinese-writing", "zh-writing-review"],
+        "maxSourceSearchCalls": 8
+      }
+    },
+    {
+      "id": "advisor-semantic-edit-en",
+      "category": "advisor-stress",
+      "fixture": "semantic-edit-en",
+      "prompt": "Conservatively polish paper.tex in place. Preserve every qualifier, modality, negation, percentage, range, and citation. Modify only paper.tex, perform one after-edit read, and return a concise result.",
+      "tools": ["read", "edit"],
+      "expectations": {
+        "requiredSkills": ["writing-markdown-helper"],
+        "forbiddenSkills": ["plain-chinese-writing", "zh-writing-review"],
+        "maxSourceSearchCalls": 6
+      },
+      "fixtureExpectations": {
+        "allowedChangedFiles": ["paper.tex"],
+        "requiredChangedFiles": ["paper.tex"],
+        "requiredPatterns": {
+          "paper.tex": ["\\btypically\\b", "\\bsignificantly\\b", "\\bmay\\b", "\\bonly\\b", "37\\.5\\\\%", "12\\.5\\\\%", "(?:cannot|can\\s+not)", "\\\\cite\\{smith2025\\}"]
+        }
+      }
+    }
+  ]
+}

@@ -15,6 +15,7 @@
     "check:marketplace": "node scripts/check-marketplace.js",
     "release": "node scripts/release.js",
     "e2e:deepseek": "node scripts/e2e/run-installed-deepseek-workflow.mjs",
+    "e2e:deepseek:advisor": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-advisor-stress.json",
     "migrate:legacy-gate-skills": "node scripts/migrate-legacy-gate-skills.mjs"
   }
 }

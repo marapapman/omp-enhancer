@@ -77,7 +77,7 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
   await mkdir(sessionDir, { recursive: true });
   const expectations = { ...(matrix.defaults?.expectations ?? {}), ...(scenario.expectations ?? {}) };
   const timeoutSeconds = scenario.timeoutSeconds ?? matrix.defaults?.timeoutSeconds ?? 120;
-  const executionMode = scenario.executionMode ?? 'print';
+  const executionMode = scenario.executionMode ?? matrix.defaults?.executionMode ?? 'print';
   const args = buildOmpArgs({ matrix, scenario, prepared, sessionDir, timeoutSeconds, executionMode });
 
   if (dryRun) {
