@@ -472,6 +472,10 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     || hasNaturalNoNetworkAccess(networkConstraintText)
     || chineseNegativeClauseIncludes(networkConstraintText, /(?:上网|联网|外网|互联网|网络|网页搜索|网络搜索)/i)
     || englishNegativeClauseIncludes(networkConstraintText, /\b(?:(?:use|access|browse|search)\s+(?:the\s+)?(?:web|internet|network|online(?:\s+sources?)?)|go\s+online)\b/i);
+  const networkReadRequested = !noActionExecution && !noNetworkAccess && !instructionalAdvice && (
+    /(?:^|[,.!?;]\s*(?:(?:and(?:\s+then)?|then|next|separately|after\s+that)\s*)?)(?:please\s+)?(?:access|browse|search|use)\s+(?:the\s+)?(?:network|internet|web)\b/i.test(text)
+    || /(?:^|[，,。！？；;]\s*(?:(?:并且|并|然后|接着|随后|另外|再)\s*)?)(?:请)?(?:访问|浏览|搜索|使用|连接)\s*(?:网络|互联网|网页|外网)/u.test(text)
+  );
   const noSubagents = /(?:不要|不|别|无需|不用|禁止|不得).{0,18}(?:子代理|子 agent|subagent|sub-agent)|(?:只由|仅由).{0,12}(?:主代理|主 agent|main agent)|(?:do not|don't|without|no).{0,18}(?:subagents?|sub-agents?)|(?:main agent only|only the main agent)/.test(subagentConstraintText)
     || chineseNegativeClauseIncludes(subagentConstraintText, /(?:子代理|子\s*agent|subagents?|sub-agents?)/i)
     || englishNegativeClauseIncludes(subagentConstraintText, /\b(?:use\s+)?(?:subagents?|sub-agents?)\b/i);
@@ -825,6 +829,7 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
   if (implicitModify) reasons.push('implicit code modification imperative');
   if (localGitMetadata) reasons.push('local git metadata mutation requested');
   if (localAutomationExecution) reasons.push('local project automation requested');
+  if (networkReadRequested) reasons.push('explicit network read requested');
   if (ambiguousCodeAction) reasons.push('ambiguous code-target imperative');
   if (securityConceptOnly) reasons.push('security concept explanation only');
 
@@ -846,6 +851,7 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     externalWriteTargets: externalScopes.targets,
     externalWriteExclusions: externalScopes.exclusions,
     noNetworkAccess,
+    networkReadRequested,
     noSubagents,
     releaseArtifact,
     dependencyUpgrade,
@@ -1499,7 +1505,7 @@ function constraintsFor(signals, operation, domains) {
     testExecution,
     networkAccess: signals.noNetworkAccess || exclusiveLocalFactObservation || exclusiveReadObservation
       ? 'forbidden'
-      : signals.externalActionRequested || signals.irreversibleExternalOperation || signals.dependencyInstallExecution || signals.factWork || signals.releaseRequested && ['modify', 'release'].includes(operation)
+      : signals.networkReadRequested || signals.externalActionRequested || signals.irreversibleExternalOperation || signals.dependencyInstallExecution || signals.factWork || signals.releaseRequested && ['modify', 'release'].includes(operation)
         ? 'required'
         : 'unspecified',
     externalWrite: signals.externalActionRequested || signals.irreversibleExternalOperation || signals.releaseRequested && ['modify', 'release'].includes(operation) ? 'required' : 'forbidden',
@@ -1860,9 +1866,10 @@ function isRouteStatusSkillDiagnosticProbe(
   // quoted sample to inject writing guidance into a diagnostic matrix.
   const explicitDiagnosticLead = beginsWithExplicitRouteDiagnostic(diagnosticEnvelopePrompt);
   if (isWritingTransformationDirective(diagnosticDirectivePrompt) && !explicitDiagnosticLead) return false;
+  if (hasRouteDiagnosticCompanionAction(diagnosticEnvelopePrompt)) return false;
   const hasRouteAndStatusTools = /omp_core_route_task/.test(text)
     && /omp_core_subagent_status/.test(text);
-  const asksForDiagnosticProbe = /(?:验证|检查|核对|诊断|probe|check|verify).{0,120}(?:路由|状态|route|routing|status)|(?:路由|状态|route|routing|status).{0,120}(?:验证|检查|核对|诊断|probe|check|verify)/.test(text);
+  const asksForDiagnosticProbe = /(?:验证|检查|核对|诊断|审计|探测|probe|check|verify|audit|inspect).{0,120}(?:路由|状态|route|routing|status)|(?:路由|状态|route|routing|status).{0,120}(?:验证|检查|核对|诊断|审计|探测|probe|check|verify|audit|inspect)/.test(text);
   const hasMultiRouteProbe = /omp_core_route_task/.test(text)
     && /(?:exactly\s+twice|call(?:ing)?[^.!?\n]{0,48}\btwice\b|two\s+(?:route\s+)?probe\s+prompts?|调用[^。！？\n]{0,32}两次|分别[^。！？\n]{0,48}(?:调用|检查)|两个[^。！？\n]{0,24}(?:probe|路由样例|提示))/.test(text);
   const namesDiagnosticMatrix = /(?:e2e|installed(?:-plugin)?|安装态).{0,120}(?:route|routing|路由)|(?:route|routing|路由).{0,120}(?:e2e|installed(?:-plugin)?|安装态)/.test(text);
@@ -1876,27 +1883,21 @@ function isRouteStatusSkillDiagnosticProbe(
 
 function beginsWithExplicitRouteDiagnostic(value = '') {
   const text = String(value).trim().toLowerCase();
-  const courtesy = '(?:(?:please|can\\s+you|could\\s+you|would\\s+you)\\s+)?';
-  const action = '(?:verify|check|probe|diagnose|inspect|audit)';
-  const directRouteTarget = new RegExp(
-    `^${courtesy}${action}\\s+(?:(?:the|this|current|installed)\\s+){0,3}(?:route|routing|workflow\\s+route)\\b`,
-    'u',
-  );
-  const routeSelection = new RegExp(
-    `^${courtesy}${action}\\b[^.!?\\n]{0,120}\\b(?:uses?|selects?|chooses?|resolves?|maps?|routes?)\\b[^.!?\\n]{0,40}\\b(?:correct|expected|right|intended)?\\s*(?:route|routing|workflow)\\b`,
-    'u',
-  );
-  const namedRouteBehavior = new RegExp(
-    `^${courtesy}${action}\\b[^.!?\\n]{0,120}\\b(?:route|routing)\\s+(?:selection|behaviou?r|status|result|classification)\\b`,
-    'u',
-  );
-  const chineseDirect = /^(?:(?:请|帮我|麻烦)\s*)?(?:验证|检查|核对|诊断|审计|探测)(?:一下)?\s*(?:(?:安装态|当前|这个|该)\s*)?(?:路由|路由行为|路由选择)/u;
-  const chineseSelection = /^(?:(?:请|帮我|麻烦)\s*)?(?:验证|检查|核对|诊断|审计|探测).{0,80}(?:是否|能否|有没有).{0,32}(?:使用|选择|进入|得到|映射到).{0,24}(?:正确|预期|合适|对应)?\s*(?:路由|工作流)/u;
-  return directRouteTarget.test(text)
-    || routeSelection.test(text)
-    || namedRouteBehavior.test(text)
-    || chineseDirect.test(text)
-    || chineseSelection.test(text);
+  const englishStart = text.match(/^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:verify|check|probe|diagnose|inspect|audit)\b/u);
+  if (englishStart) {
+    const remainder = text.slice(englishStart[0].length);
+    if (!/^\s*(?:and|then)\s+(?:polish|rewrite|proofread|translate|edit|revise|improve)\b/u.test(remainder)) {
+      const lead = remainder.split(/\bomp_core_(?:route_task|subagent_status)\b|[.!?\n]/u, 1)[0];
+      if (/\b(?:routes?|routing|routed|router)\b|\b(?:map(?:s|ped|ping)?\s+to|classif(?:y|ies|ied|ication))\b|\bwriting\.(?:en|zh|pending)\b/u.test(lead)) return true;
+    }
+  }
+
+  const chineseStart = text.match(/^(?:(?:请|帮我|麻烦)\s*)?(?:验证|检查|核对|诊断|审计|探测)(?:一下)?/u);
+  if (!chineseStart) return false;
+  const remainder = text.slice(chineseStart[0].length);
+  if (/^\s*(?:并|并且|然后|再)\s*(?:润色|改写|校对|翻译|编辑|修订|优化)/u.test(remainder)) return false;
+  const lead = remainder.split(/\bomp_core_(?:route_task|subagent_status)\b|[。！？\n]/u, 1)[0];
+  return /路由|映射|分类|writing\.(?:en|zh|pending)/u.test(lead);
 }
 
 function maskRouteDiagnosticProbePayloads(value = '') {
@@ -2247,7 +2248,7 @@ function maskRelationalWritingPayload(source = '') {
   const boundary = boundaries.sort((left, right) => left - right)
     .find((index) => containsAuthorityBearingWritingPayload(value.slice(index)));
   if (!Number.isInteger(boundary)) return value;
-  const end = independentWritingContinuationBoundary(value, boundary);
+  const end = independentWritingContinuationBoundary(value, boundary, { detectOperationalActions: true });
   return `${value.slice(0, boundary).trimEnd()} __payload__${value.slice(end)}`;
 }
 
@@ -2255,10 +2256,55 @@ function containsAuthorityBearingWritingPayload(value = '') {
   return /(?:测试|发布|提交|推送|部署|上线|联网|网络|子代理|代理|安全|漏洞|插件|代码|路由|门禁|工作流|安装)|\b(?:tests?|testing|e2e|publish|release|commit|push|deploy|network|internet|web|subagents?|agents?|security|vulnerabilit(?:y|ies)|plugins?|code|routes?|router|routing|gates?|workflows?|install(?:ed|ation)?)\b|\bomp_core_(?:route_task|subagent_status)\b/i.test(String(value));
 }
 
-function independentWritingContinuationBoundary(value = '', start = 0) {
+function independentWritingContinuationBoundary(
+  value = '',
+  start = 0,
+  { detectOperationalActions = false } = {},
+) {
   const tail = String(value).slice(start);
   const continuation = /[，,。！？.!?；;](?=\s*(?:(?:then|next|separately|finally|after\s+that|also)\b\s*,?\s*|(?:然后(?:单独)?|接着|随后|另外|最后|再|单独)(?:请)?))/iu.exec(tail);
-  return continuation ? start + (continuation.index ?? 0) : String(value).length;
+  const operationalBoundary = detectOperationalActions
+    ? independentOperationalContinuationIndex(value, start)
+    : null;
+  const candidates = [
+    operationalBoundary,
+    continuation ? start + (continuation.index ?? 0) : null,
+  ].filter(Number.isInteger);
+  return candidates.length ? Math.min(...candidates) : String(value).length;
+}
+
+function hasRouteDiagnosticCompanionAction(value = '') {
+  return Number.isInteger(independentOperationalContinuationIndex(value, 0));
+}
+
+function independentOperationalContinuationIndex(value = '', start = 0) {
+  const tail = String(value).slice(start);
+  const englishAction = String.raw`(?:
+    (?:run|execute|rerun)\b[^.!?;\n]{0,40}\b(?:npm\s+test|tests?|testing|vitest|pytest|build|lint)\b
+    |(?:push|publish|deploy|release|commit)\b
+    |(?:access|browse|search|use)\b[^.!?;\n]{0,32}\b(?:network|internet|web)\b
+    |(?:audit|scan|review|check|inspect)\b[^.!?;\n]{0,64}\b(?:security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|code)\b
+    |(?:fix|modify|implement|refactor|delete|remove)\b[^.!?;\n]{0,64}\b(?:code|files?|project|repository|repo|src/|lib/|app/|packages?/|plugins?/)\b
+    |(?:write|draft|polish|rewrite|edit|revise|improve)\b[^.!?;\n]{0,64}\b(?:report|summary|document|readme|files?|paragraph|text|wording|copy)\b
+  )`.replace(/\s+/g, '');
+  const chineseAction = String.raw`(?:
+    (?:运行|执行|跑|重跑)[^。！？；\n]{0,32}(?:npm\s+test|测试|构建|lint)
+    |(?:发布|推送|部署|上线|提交)
+    |(?:访问|浏览|搜索|使用)[^。！？；\n]{0,24}(?:网络|互联网|网页|外网)
+    |(?:审计|扫描|检查|审查)[^。！？；\n]{0,48}(?:安全|漏洞|鉴权|认证|权限|代码)
+    |(?:修复|修改|实现|重构|删除|移除)[^。！？；\n]{0,48}(?:代码|文件|项目|仓库|src/|lib/|app/|packages?/|plugins?/)
+    |(?:写|撰写|起草|润色|改写|编辑|修订|优化)[^。！？；\n]{0,48}(?:报告|总结|文档|readme|文件|段落|文本|措辞|文案)
+  )`.replace(/\s+/g, '');
+  const patterns = [
+    new RegExp(`[,.!?;]\\s*(?:(?:and(?:\\s+(?:then|also))?|then|next|separately|finally|after\\s+that|also)\\s*,?\\s*)?(?=${englishAction})`, 'iu'),
+    new RegExp(`\\s+and\\s+then\\s*,?\\s*(?=${englishAction})`, 'iu'),
+    new RegExp(`[，。！？；,.;!?]\\s*(?:(?:并且|并|然后|接着|随后|另外|最后|再)\\s*)?(?=${chineseAction})`, 'u'),
+    new RegExp(`\\s+并且?随后\\s*(?=${chineseAction})`, 'u'),
+  ];
+  const indexes = patterns
+    .map((pattern) => pattern.exec(tail)?.index)
+    .filter(Number.isInteger);
+  return indexes.length ? start + Math.min(...indexes) : null;
 }
 
 function maskEmbeddedWritingAuthority(source = '') {
@@ -2276,8 +2322,8 @@ function maskEmbeddedWritingAuthority(source = '') {
   const protectCapturedAction = (pattern) => {
     protectedSource = protectedSource.replace(pattern, (match, prefix, action) => `${prefix}${protect(action)}`);
   };
-  protectCapturedAction(new RegExp(`(^|[.!?;,]\\s*(?:(?:then|next|separately|finally|after\\s+that|also)\\b\\s*,?\\s*)?)(${englishAction}[^.!?;\\n]*)`, 'gim'));
-  protectCapturedAction(new RegExp(`(^|[。！？；;，,]\\s*(?:(?:然后(?:单独)?|接着|随后|另外|最后|再|单独)(?:请)?\\s*)?)(${chineseAction}[^。！？；;\\n]*)`, 'gmu'));
+  protectCapturedAction(new RegExp(`(^|[.!?;,]\\s*(?:(?:and(?:\\s+(?:then|also))?|then|next|separately|finally|after\\s+that|also)\\b\\s*,?\\s*)?)(${englishAction}[^.!?;\\n]*)`, 'gim'));
+  protectCapturedAction(new RegExp(`(^|[。！？；;，,]\\s*(?:(?:并且|并|然后(?:单独)?|接着|随后|另外|最后|再|单独)(?:请)?\\s*)?)(${chineseAction}[^。！？；;\\n]*)`, 'gmu'));
   protectCapturedAction(new RegExp(`((?:readme(?:\\.md)?|(?:\\/?[\\p{L}\\p{N}_.-]+/)*[\\p{L}\\p{N}_.-]+\\.(?:md|mdx|rst|txt|tex|docx?|pdf)|document|file|wording|sentence|paragraph|copy|text)\\s*(?:,\\s*(?:(?:and|then)\\s+)?|\\s+(?:and|then)\\s+))(${englishAction}[^.!?;\\n]*)`, 'gimu'));
   protectCapturedAction(new RegExp(`((?:(?:\\/?[\\p{L}\\p{N}_.-]+/)*[\\p{L}\\p{N}_.-]+\\.(?:md|mdx|rst|txt|tex|docx?|pdf)|文档|文件|措辞|句子|段落|文案|文字)\\s*(?:[，,]\\s*(?:(?:并且|并|然后|再)\\s*)?|\\s*(?:并且|并|然后|再)\\s*))(${chineseAction}[^。！？；;\\n]*)`, 'gmu'));
   protectCapturedAction(/(^|[.!?;,]\s*(?:(?:but|then|next|separately|finally|also)\s+)?)(?:((?:do not|don't|without|no need to)[^.!?;\n]{0,160}))/gim);

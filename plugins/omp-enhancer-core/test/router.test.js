@@ -524,7 +524,14 @@ test('routes unquoted labeled multi-sample route probes by their outer instructi
 test('keeps explicit route diagnostics diagnostic when they mention writing prompt types', () => {
   const prompts = [
     'Please verify that polish prompts use the correct route. Call omp_core_route_task exactly twice and return both intents. Do not write files.',
+    'Please check how polish prompts are routed. Call omp_core_route_task exactly twice and return both intents. Do not write files.',
+    'Please verify which route polish prompts choose. Call omp_core_route_task exactly twice and return both intents. Do not write files.',
+    'Check whether polish prompts map to writing.en. Call omp_core_route_task exactly twice and return both intents. Do not write files.',
+    'Audit how the router classifies polish prompts. Call omp_core_route_task exactly twice and return both intents. Do not write files.',
     '请验证润色提示词是否选择正确路由。调用 omp_core_route_task 两次并返回两个 intent。不要修改文件。',
+    '请检查润色提示词会进入哪个路由。调用 omp_core_route_task 两次并返回两个 intent。不要修改文件。',
+    '请核对润色提示词映射到什么路由。调用 omp_core_route_task 两次并返回两个 intent。不要修改文件。',
+    '请审计路由器如何分类润色提示词。调用 omp_core_route_task 两次并返回两个 intent。不要修改文件。',
   ];
 
   for (const prompt of prompts) {
@@ -536,6 +543,60 @@ test('keeps explicit route diagnostics diagnostic when they mention writing prom
       assert.deepEqual(route.taskDescriptor.domains, ['plugin'], `${routerMode}: ${prompt}`);
       assert.deepEqual(route.routePlan.skills, [], `${routerMode}: ${prompt}`);
       assert.equal(route.routePlan.autoContinue, false, `${routerMode}: ${prompt}`);
+    }
+  }
+});
+
+test('keeps companion work outside a multi-route diagnostic probe', () => {
+  const prefix = 'Installed route E2E. Do not write files during the probe. Call omp_core_route_task exactly twice. A prompt: "Polish this English paragraph." B prompt: "请润色这段中文。" Return A and B.';
+  const cases = [
+    {
+      name: 'release',
+      prompt: `${prefix} Then publish the package.`,
+      check(route) {
+        assert.equal(route.taskDescriptor.constraints.externalWrite, 'required');
+        assert.equal(route.taskDescriptor.phases.some(({ kind }) => kind === 'release'), true);
+      },
+    },
+    {
+      name: 'test execution',
+      prompt: `${prefix} Then run npm test.`,
+      check(route) {
+        assert.equal(route.taskDescriptor.constraints.testExecution, 'required');
+        assert.equal(route.taskDescriptor.phases.some(({ kind }) => kind === 'verify'), true);
+      },
+    },
+    {
+      name: 'security audit',
+      prompt: `${prefix} Then audit authentication code for vulnerabilities.`,
+      check(route) {
+        assert.equal(route.taskDescriptor.domains.includes('security'), true);
+        assert.equal(route.taskDescriptor.phases.some(({ kind, domain }) => kind === 'inspect' && domain === 'security'), true);
+      },
+    },
+    {
+      name: 'code modification',
+      prompt: `${prefix} Then modify src/router.js and add a regression test.`,
+      check(route) {
+        assert.equal(route.taskDescriptor.domains.includes('code'), true);
+        assert.equal(route.taskDescriptor.domains.includes('tests'), true);
+        assert.equal(route.taskDescriptor.phases.some(({ kind, domain }) => kind === 'modify' && domain === 'code'), true);
+      },
+    },
+  ];
+
+  for (const { name, prompt, check } of cases) {
+    for (const routerMode of ['legacy', 'observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+
+      assert.equal(
+        route.taskDescriptor.provenance.reasons.includes('route status skill diagnostic probe'),
+        false,
+        `${name}: ${routerMode}`,
+      );
+      check(route);
+      assert.equal(route.routePlan.mode, 'advisory', `${name}: ${routerMode}`);
+      assert.equal(route.routePlan.autoContinue, false, `${name}: ${routerMode}`);
     }
   }
 });

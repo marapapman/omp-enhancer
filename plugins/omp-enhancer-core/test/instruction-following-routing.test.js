@@ -722,6 +722,7 @@ test('unquoted relational writing payload cannot schedule operational actions', 
     ['Rewrite docs/guide.md so it instructs users to run npm test and publish the release.', 'docs/guide.md'],
     ['Edit README.md to document how to run tests and publish the plugin.', 'README.md'],
     ['Polish docs/guide.md about the release process and network setup.', 'docs/guide.md'],
+    ['Improve README.md wording for a section about how to run npm test and publish the plugin.', 'README.md'],
     ['Rewrite docs/security.md to describe security audit steps.', 'docs/security.md'],
     ['Rewrite docs/guide.md so it tells users to separately audit src/auth.js for vulnerabilities.', 'docs/guide.md'],
     ['把 docs/guide.md 改写成提醒用户运行 npm test、发布版本、联网并调用子代理。', 'docs/guide.md'],
@@ -729,6 +730,7 @@ test('unquoted relational writing payload cannot schedule operational actions', 
     ['把 docs/guide.md 改为说明如何运行测试和发布插件。', 'docs/guide.md'],
     ['润色 docs/release-notes.md，让文案说明如何运行测试和发布插件。', 'docs/release-notes.md'],
     ['编辑 docs/security.md 以描述安全审计步骤。', 'docs/security.md'],
+    ['润色 README.md 文案用于说明如何运行测试和发布插件。', 'README.md'],
   ];
 
   for (const [prompt, target] of cases) {
@@ -759,6 +761,13 @@ test('independent actions after writing payload remain explicitly authorized', (
     'Polish docs/guide.md, then run npm test and publish the plugin.',
     '润色 docs/guide.md，让文案说明安装步骤。然后运行测试并发布插件。',
     '润色 docs/guide.md，并运行测试、发布插件。',
+    'Improve README.md wording for the route E2E section, and run npm test and publish the plugin.',
+    'Improve README.md wording for the route E2E section; run npm test and publish the plugin.',
+    'Improve README.md wording for the route E2E section. Run npm test and publish the plugin.',
+    'Improve README.md wording for the route E2E section and then run npm test and publish the plugin.',
+    '润色 README.md 文案用于路由 E2E 说明，并运行测试、发布插件。',
+    '润色 README.md 文案用于路由 E2E 说明；运行测试并发布插件。',
+    '润色 README.md 文案用于路由 E2E 说明。发布插件并运行测试。',
   ];
 
   for (const prompt of cases) {
@@ -769,7 +778,11 @@ test('independent actions after writing payload remain explicitly authorized', (
       assert.equal(route.workflowRoute, 'writing.markdown', label);
       assert.ok(route.routePlan.qualityChecks.includes('detect-source-language'), label);
       assert.equal(route.taskDescriptor.operation, 'modify', label);
-      assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['docs/guide.md'], label);
+      assert.deepEqual(
+        route.taskDescriptor.workspaceWriteTargets,
+        [prompt.includes('README.md') ? 'README.md' : 'docs/guide.md'],
+        label,
+      );
       assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', label);
       assert.equal(route.taskDescriptor.constraints.testExecution, 'required', label);
       assert.equal(route.taskDescriptor.constraints.networkAccess, 'required', label);
@@ -813,11 +826,43 @@ test('punctuated independent actions after writing payload remain outside the pa
   }
 });
 
+test('network and code companions remain outside qualified writing payloads', () => {
+  const networkPrompts = [
+    'Improve README.md wording for the route E2E section. Access the network to verify links.',
+    '润色 README.md 文案用于路由说明。访问网络核对链接。',
+  ];
+  for (const prompt of networkPrompts) {
+    for (const routerMode of ['legacy', 'observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+      const label = `${routerMode}: ${prompt}`;
+      assert.equal(route.intent, 'writing.pending', label);
+      assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['README.md'], label);
+      assert.equal(route.taskDescriptor.constraints.networkAccess, 'required', label);
+      assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden', label);
+      assert.equal(route.taskDescriptor.capabilities.includes('network.read'), true, label);
+      assert.equal(route.routePlan.autoContinue, false, label);
+    }
+  }
+
+  const codePrompt = 'Improve README.md wording for the route E2E section. Modify src/router.js and add a regression test.';
+  for (const routerMode of ['legacy', 'observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt: codePrompt, routerMode });
+    assert.equal(route.intent, 'implementation-with-tests', routerMode);
+    assert.equal(route.taskDescriptor.domains.includes('code'), true, routerMode);
+    assert.equal(route.taskDescriptor.domains.includes('writing'), true, routerMode);
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'required', routerMode);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['README.md', 'src/router.js'], routerMode);
+    assert.equal(route.routePlan.autoContinue, false, routerMode);
+  }
+});
+
 test('an independent security audit after a writing payload keeps both workflows aligned', () => {
   for (const [prompt, expectedTargets] of [
     ['Rewrite docs/guide.md to mention security. Separately audit src/auth.js for vulnerabilities.', ['docs/guide.md']],
     ['Rewrite the docs and audit the auth code; do not run tests.', []],
     ['Rewrite docs/guide.md and separately audit src/auth.js for vulnerabilities.', ['docs/guide.md']],
+    ['Improve README.md wording for the route E2E section. Audit src/auth.js for vulnerabilities.', ['README.md']],
+    ['润色 README.md 文案用于路由说明。审计 src/auth.js 的安全漏洞。', ['README.md']],
   ]) {
     for (const routerMode of ['observe', 'enforce']) {
       const route = routeNaturalLanguageTask({ prompt, routerMode });
