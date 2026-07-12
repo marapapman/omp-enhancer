@@ -39,6 +39,13 @@ look for a safe lexical or structural edit outside the anchors. Leave the file
 unchanged only when no such improvement exists, and report that limitation
 without performing extra verification reads.
 
+Evaluate candidates independently. Before returning a no-op, check at least
+one anchor-neutral correction for duplication, grammar, collocation, or
+redundant wording. Rejecting one unsafe candidate rejects only that candidate;
+for example, one occurrence of an accidentally repeated adjacent word can be
+removed when the remaining occurrence preserves the meaning. Run the single
+verification read only after a successful edit result.
+
 For a `.tex` target, preserve valid LaTeX escaping as part of the anchor. A
 percentage is written as `\%`; never turn it into a bare `%` comment marker.
 After the single verification read, report every observed change accurately,

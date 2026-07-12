@@ -56,6 +56,11 @@ range. Do not search for macro definitions or unrelated repository context
 unless that context is necessary to avoid a concrete false finding about the
 visible prose.
 
+For one abstract or another short passage, report at most five material
+findings. Keep the semantic-anchor inventory internal, omit empty severity
+sections and full-source restatements, and finalize as soon as the complete
+target supports the findings.
+
 ## Optional Interactive Mode
 
 Use accept, modify, or skip prompts one issue at a time only when the user
