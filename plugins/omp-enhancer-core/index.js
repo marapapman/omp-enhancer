@@ -9,23 +9,27 @@ import {
   formatWorkflowBriefingForAssignment,
 } from './src/governance.js';
 import { installPluginSkills } from './src/install-skills.js';
+import { classifyHostTurn } from './src/host-turn-context.js';
 import { routeNaturalLanguageTask } from './src/router.js';
 import { detectWritingSourceLanguage } from './src/task-descriptor.js';
 import {
   normalizeSkillName,
   parseLoadedSkillEvidence,
+  skillReadNameCandidates,
+  skillNamesEquivalent,
   validateSkillUsage,
 } from './src/skill-usage.js';
 import { validateSubagentUsage } from './src/subagent-usage.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
-const STATE_SCHEMA_VERSION = 2;
+const STATE_SCHEMA_VERSION = 3;
 const MAX_WRITING_SOURCE_BYTES = 512 * 1024;
 const MAX_WRITING_SOURCE_CHARS = 120000;
 const MAX_WRITING_SOURCE_FILES = 4;
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
+  let activeHostTurnKind = 'user';
   const z = pi.zod?.z ?? pi.z;
 
   pi.setLabel?.('OMP Enhancer Core');
@@ -157,10 +161,15 @@ export default function registerCoreEnhancer(pi) {
         : params.requiredSkills ?? [];
       const validation = validateSkillUsage({
         requiredSkills: suggestedSkills,
-        output: params.output ?? '',
-        loadedSkills: state.loadedSkills,
+        output: '',
+        loadedSkills: state.observedSkills,
       });
-      state.lastSkillUsage = skillCoverageReview(validation, suggestedSkills);
+      for (const skill of parseLoadedSkillEvidence(params.output ?? '')) {
+        state.claimedSkills.add(normalizeSkillName(skill));
+      }
+      state.lastSkillUsage = skillCoverageReview(validation, suggestedSkills, {
+        claimedSkills: state.claimedSkills,
+      });
       await persistState(pi, state);
       return okResult(state.lastSkillUsage.summary, {
         validation: state.lastSkillUsage,
@@ -233,7 +242,7 @@ export default function registerCoreEnhancer(pi) {
   pi.registerTool({
     name: 'omp_core_install_skills',
     label: 'Install plugin skills',
-    description: 'Install marketplace plugin skills into OMP skill resolution paths without overwriting real skill directories.',
+    description: 'Install marketplace plugin skills without overwriting real directories, and report exact legacy gate skills that can be ignored without disabling autolearn.',
     parameters: z?.object ? z.object({
       dryRun: z.boolean().optional(),
     }) : undefined,
@@ -244,12 +253,14 @@ export default function registerCoreEnhancer(pi) {
         'Skipped: ' + result.skipped.length,
         'Errors: ' + result.errors.length,
         ...(result.warnings.length ? ['Warnings: ' + result.warnings.length] : []),
+        ...(result.legacyFindings.length ? ['Legacy gate skill findings: ' + result.legacyFindings.length] : []),
       ].join(', ');
       return okResult(summary, result);
     },
   });
 
   pi.on?.('session_start', async (_event = {}, ctx = {}) => {
+    activeHostTurnKind = 'user';
     if (!restoreStateFromContext(state, ctx)) resetState(state);
     await persistState(pi, state);
     return undefined;
@@ -257,6 +268,9 @@ export default function registerCoreEnhancer(pi) {
 
   pi.on?.('before_agent_start', async (event = {}, ctx = {}) => {
     restoreStateFromContext(state, ctx);
+    const hostTurn = classifyHostTurn(event, ctx);
+    activeHostTurnKind = hostTurn.kind;
+    if (hostTurn.kind === 'autolearn-capture') return undefined;
     const prompt = extractPrompt(event);
     if (isSlashCommandPrompt(prompt)) return undefined;
 
@@ -268,19 +282,24 @@ export default function registerCoreEnhancer(pi) {
       };
     }
 
-    const inherited = shouldInheritContinuation(state, prompt);
+    const implementationTransition = isPlanningImplementationTransition(state, prompt);
+    const inherited = !implementationTransition && shouldInheritContinuation(state, prompt);
+    const previousPrompt = state.lastPrompt;
     const route = inherited
       ? state.lastRoute
       : resolveAdvisoryRoute({ prompt, ctx });
 
     if (!inherited) {
       state.lastRoute = route;
-      state.lastPrompt = prompt;
+      state.lastPrompt = implementationTransition
+        ? [previousPrompt, prompt].filter(Boolean).join('\n')
+        : prompt;
       state.routeStartedAt = Math.max(Date.now(), state.routeStartedAt + 1);
       state.lastSkillUsage = null;
       state.lastSubagentUsage = null;
       state.classifierAttempted = false;
-      state.loadedSkills.clear();
+      state.observedSkills.clear();
+      state.claimedSkills.clear();
       state.tasks.clear();
       state.completedRoles.clear();
     } else {
@@ -312,6 +331,7 @@ export default function registerCoreEnhancer(pi) {
   });
 
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
+    if (activeHostTurnKind === 'autolearn-capture') return undefined;
     restoreStateFromContext(state, ctx);
     if (toolEventName(event) === 'task') {
       decorateTaskAssignments(event, state);
@@ -322,6 +342,7 @@ export default function registerCoreEnhancer(pi) {
   });
 
   pi.on?.('tool_result', async (event = {}, ctx = {}) => {
+    if (activeHostTurnKind === 'autolearn-capture') return undefined;
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
     if (name === 'read' && !toolEventFailed(event)) recordSkillReads(state, event);
@@ -331,9 +352,13 @@ export default function registerCoreEnhancer(pi) {
   });
 
   pi.on?.('session_stop', async (event = {}, ctx = {}) => {
+    if (activeHostTurnKind === 'autolearn-capture') {
+      activeHostTurnKind = 'user';
+      return undefined;
+    }
     restoreStateFromContext(state, ctx);
     for (const skill of parseLoadedSkillEvidence(extractText(event))) {
-      state.loadedSkills.add(normalizeSkillName(skill));
+      state.claimedSkills.add(normalizeSkillName(skill));
     }
     await persistState(pi, state);
     return undefined;
@@ -350,7 +375,8 @@ export function createState() {
     lastSkillUsage: null,
     lastSubagentUsage: null,
     classifierAttempted: false,
-    loadedSkills: new Set(),
+    observedSkills: new Set(),
+    claimedSkills: new Set(),
     tasks: new Map(),
     completedRoles: new Set(),
     taskSequence: 0,
@@ -366,7 +392,7 @@ function resolveAdvisoryRoute({ prompt = '', sourceText, ctx = {} } = {}) {
   const descriptor = route.taskDescriptor ?? {};
   if (!descriptor.domains?.includes('writing')) return route;
   if (descriptor.writingLanguageSource === 'inline-source') return route;
-  if (!(descriptor.workspaceWriteTargets ?? []).length) return route;
+  if (!(descriptor.writingSourceTargets ?? descriptor.workspaceWriteTargets ?? []).length) return route;
 
   const observed = readWritingTargets(route, ctx);
   if (!observed.text) return route;
@@ -387,7 +413,9 @@ function resolveAdvisoryRoute({ prompt = '', sourceText, ctx = {} } = {}) {
 }
 
 function readWritingTargets(route, ctx = {}) {
-  const targets = route.taskDescriptor?.workspaceWriteTargets ?? [];
+  const targets = route.taskDescriptor?.writingSourceTargets
+    ?? route.taskDescriptor?.workspaceWriteTargets
+    ?? [];
   if (!targets.length) return { text: '', texts: [], paths: [], languages: [], truncated: false };
 
   let root;
@@ -545,9 +573,75 @@ function recordTaskResult(state, event) {
 }
 
 function recordSkillReads(state, event) {
-  for (const skill of collectSkillUris(event)) {
-    state.loadedSkills.add(normalizeSkillName(skill));
-  }
+  const skill = verifiedSkillReadName(event);
+  if (skill) state.observedSkills.add(normalizeSkillName(skill));
+}
+
+function verifiedSkillReadName(event = {}) {
+  const declaredName = skillFrontmatterName(readResultText(event));
+  if (!declaredName) return '';
+
+  const requestedNames = collectSkillReadNames(event);
+  if (!requestedNames.length) return '';
+  const requestedTokens = new Set(requestedNames.map(skillEvidenceToken).filter(Boolean));
+  const declaredToken = skillEvidenceToken(declaredName);
+  if (requestedTokens.has(declaredToken)) return declaredName;
+
+  const inventoryNames = skillReadNameCandidates(declaredName, { limit: 64 });
+  return inventoryNames.some((name) => requestedTokens.has(skillEvidenceToken(name)))
+    ? declaredName
+    : '';
+}
+
+function readResultText(event = {}) {
+  const result = event.result;
+  if (typeof result === 'string') return result;
+  if (result?.content !== undefined) return readContentText(result.content);
+  if (result?.output !== undefined) return readContentText(result.output);
+  if (event.content !== undefined) return readContentText(event.content);
+  if (event.output !== undefined) return readContentText(event.output);
+  return '';
+}
+
+function readContentText(value) {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value
+    .filter((block) => block?.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text)
+    .join('\n');
+}
+
+function skillFrontmatterName(text = '') {
+  const frontmatter = String(text)
+    .replace(/^\uFEFF/, '')
+    .match(/^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---(?:[ \t]*\r?\n|\s*$)/);
+  if (!frontmatter) return '';
+  const match = frontmatter[1].match(/^name\s*:\s*(.*?)\s*$/mi);
+  if (!match) return '';
+  const value = match[1].trim();
+  const unquoted = (
+    (value.startsWith('"') && value.endsWith('"'))
+    || (value.startsWith("'") && value.endsWith("'"))
+  ) ? value.slice(1, -1).trim() : value.replace(/\s+#.*$/, '').trim();
+  return /^[A-Za-z0-9_.\/-]+$/.test(unquoted) ? unquoted : '';
+}
+
+function skillEvidenceToken(value = '') {
+  return String(value)
+    .trim()
+    .replace(/^skill:\/\//i, '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '')
+    .toLowerCase();
+}
+
+function collectSkillReadNames(event = {}) {
+  const input = event.input ?? event.params ?? event.arguments ?? {};
+  return unique([
+    ...collectSkillUris(input),
+    ...collectSkillFilePaths(input),
+  ]);
 }
 
 function collectSkillUris(value, seen = new Set()) {
@@ -562,6 +656,18 @@ function collectSkillUris(value, seen = new Set()) {
       ? []
       : collectSkillUris(child, seen)
   ));
+}
+
+function collectSkillFilePaths(value, seen = new Set()) {
+  if (typeof value === 'string') {
+    const normalized = value.replace(/\\/g, '/').replace(/[?#].*$/, '');
+    const match = normalized.match(/(?:^|\/)\s*([^/]+)\/SKILL\.md$/i);
+    return match?.[1] ? [match[1]] : [];
+  }
+  if (!value || typeof value !== 'object' || seen.has(value)) return [];
+  seen.add(value);
+  if (Array.isArray(value)) return value.flatMap((item) => collectSkillFilePaths(item, seen));
+  return Object.values(value).flatMap((child) => collectSkillFilePaths(child, seen));
 }
 
 function buildWorkflowStatus(state) {
@@ -581,7 +687,9 @@ function buildWorkflowStatus(state) {
       skills: roleSkills(role),
     })),
     quality_checks: route?.routePlan?.qualityChecks ?? [],
-    loaded_skills: [...state.loadedSkills],
+    observed_skills: [...state.observedSkills],
+    claimed_skills: [...state.claimedSkills],
+    loaded_skills: [...state.observedSkills],
     completed_roles: [...state.completedRoles],
     tasks: [...state.tasks.values()],
     skill_review: state.lastSkillUsage,
@@ -598,6 +706,8 @@ function formatWorkflowStatus(status) {
     'Last probe route: ' + status.last_probe_route,
     'Suggested skills: ' + (status.suggested_skills.join(', ') || 'none'),
     'Suggested tools: ' + (status.suggested_tools.join(', ') || 'none'),
+    'Observed skills: ' + (status.observed_skills.join(', ') || 'none'),
+    'Claimed skills: ' + (status.claimed_skills.join(', ') || 'none'),
     'Suggested quality checks: ' + (status.quality_checks.join(', ') || 'none'),
     'Suggested roles:',
     ...(status.suggested_roles.length
@@ -731,8 +841,18 @@ function readStateSnapshot(value = {}) {
   state.classifierAttempted = value.classifierAttempted === true;
 
   const legacyEvidence = isRecord(value.evidence) ? value.evidence : {};
-  for (const skill of arrayValue(value.loadedSkills, legacyEvidence.loadedSkills)) {
-    if (typeof skill === 'string') state.loadedSkills.add(normalizeSkillName(skill));
+  for (const skill of arrayValue(value.observedSkills)) {
+    if (typeof skill === 'string') state.observedSkills.add(normalizeSkillName(skill));
+  }
+  const priorClaims = Number(value.schemaVersion) >= STATE_SCHEMA_VERSION
+    ? arrayValue(value.claimedSkills)
+    : unique([
+      ...arrayValue(value.claimedSkills),
+      ...arrayValue(value.loadedSkills),
+      ...arrayValue(legacyEvidence.loadedSkills),
+    ]);
+  for (const skill of priorClaims) {
+    if (typeof skill === 'string') state.claimedSkills.add(normalizeSkillName(skill));
   }
   const taskValues = arrayValue(value.tasks, legacyEvidence.taskProgress);
   for (const raw of taskValues) {
@@ -886,7 +1006,8 @@ function serializeState(state) {
     lastSkillUsage: state.lastSkillUsage,
     lastSubagentUsage: state.lastSubagentUsage,
     classifierAttempted: state.classifierAttempted,
-    loadedSkills: [...state.loadedSkills],
+    observedSkills: [...state.observedSkills],
+    claimedSkills: [...state.claimedSkills],
     tasks: [...state.tasks.values()],
     completedRoles: [...state.completedRoles],
     taskSequence: state.taskSequence,
@@ -920,6 +1041,19 @@ function shouldInheritContinuation(state, prompt = '') {
     .replace(/[。！？.!?]+$/u, '')
     .replace(/^(?:please\s+|请\s*|麻烦\s*)/u, '');
   return /^(?:继续(?:吧|执行|实现|修复|开发)?|开始吧|开始(?:执行|实现|修复|开发)(?:吧)?|按(?:照)?(?:这个|该|上述)?计划执行|照(?:这个|该|上述)?方案做|就(?:按)?这么做|执行吧|go ahead|continue|proceed(?: with (?:the|this) plan)?|start now|do it)$/i.test(text);
+}
+
+function isPlanningImplementationTransition(state, prompt = '') {
+  if (!state.lastRoute || !state.lastPrompt) return false;
+  if (!shouldInheritContinuation(state, prompt)) return false;
+  const route = state.lastRoute;
+  const planning = route.intent === 'planning'
+    || route.workflowRoute === 'code.plan'
+    || route.taskDescriptor?.provenance?.reasons?.includes('implementation or test planning requested');
+  if (!planning) return false;
+  const next = routeNaturalLanguageTask({ prompt: String(prompt ?? '') });
+  return ['modify', 'create'].includes(next.taskDescriptor?.operation)
+    && next.taskDescriptor?.constraints?.workspaceWrite === 'required';
 }
 
 function isSlashCommandPrompt(prompt) {
@@ -998,17 +1132,24 @@ function firstText(values = []) {
   return values.find((value) => typeof value === 'string' && value.trim())?.trim().slice(0, 1000) ?? '';
 }
 
-function skillCoverageReview(validation, suggestedSkills = []) {
+function skillCoverageReview(validation, suggestedSkills = [], { claimedSkills = [] } = {}) {
   const gaps = unique([
     ...(validation.missing ?? []),
     ...(validation.invalid ?? []),
     ...(validation.denied ?? []),
   ]);
+  const observed = unique(validation.loaded ?? []);
+  const claimed = unique([...claimedSkills]);
+  const unobservedClaims = claimed.filter((claim) => (
+    !observed.some((skill) => skillNamesEquivalent(claim, skill))
+  ));
   return {
     advisory: true,
     complete: gaps.length === 0,
     suggested: unique(suggestedSkills),
-    observed: unique(validation.loaded ?? []),
+    observed,
+    claimed,
+    unobservedClaims,
     gaps,
     summary: gaps.length
       ? 'Advisory skill coverage gaps: ' + gaps.join(', ') + '. Continue with the best available method and report material limitations.'

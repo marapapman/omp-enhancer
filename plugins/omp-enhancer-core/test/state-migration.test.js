@@ -10,13 +10,14 @@ const LEGACY_STATE = JSON.parse(
 
 const ADVISORY_STATE_KEYS = [
   'classifierAttempted',
+  'claimedSkills',
   'completedRoles',
   'lastPrompt',
   'lastRoute',
   'lastRouteProbe',
   'lastSkillUsage',
   'lastSubagentUsage',
-  'loadedSkills',
+  'observedSkills',
   'routeStartedAt',
   'schemaVersion',
   'tasks',
@@ -37,7 +38,7 @@ const LEGACY_ENFORCEMENT_FIELDS = [
   'classifierPreflight',
 ];
 
-test('migrates v0.1.74 route, skill, and task diagnostics into advisory schema v2', async () => {
+test('migrates v0.1.74 route, skill claims, and task diagnostics into advisory schema v3', async () => {
   const fixtureWithUnknownFields = structuredClone(LEGACY_STATE);
   fixtureWithUnknownFields.futureControllerState = { mode: 'future-only' };
   fixtureWithUnknownFields.evidence.futureEvidence = { ignored: true };
@@ -68,7 +69,8 @@ test('migrates v0.1.74 route, skill, and task diagnostics into advisory schema v
     status.details.status.suggested_roles.map(({ agent }) => agent),
     migrated.lastRoute.routePlan.roles.map(({ agent }) => agent),
   );
-  assert.deepEqual(status.details.status.loaded_skills, LEGACY_STATE.evidence.loadedSkills);
+  assert.deepEqual(status.details.status.observed_skills, []);
+  assert.deepEqual(status.details.status.claimed_skills, LEGACY_STATE.evidence.loadedSkills);
   assert.deepEqual(status.details.status.completed_roles, LEGACY_STATE.evidence.taskSubagents);
   assert.equal(status.details.status.tasks.length, 1);
   assert.equal(status.details.status.tasks[0].id, 'call-legacy-subagent');
@@ -83,7 +85,8 @@ test('migrates v0.1.74 route, skill, and task diagnostics into advisory schema v
   assert.equal(migrated.lastRoute.routePlan.autoContinue, false);
   assert.ok(migrated.lastRoute.routePlan.skills.length > 0);
   assert.equal(migrated.lastPrompt, LEGACY_STATE.lastPrompt);
-  assert.deepEqual(migrated.loadedSkills, LEGACY_STATE.evidence.loadedSkills);
+  assert.deepEqual(migrated.observedSkills, []);
+  assert.deepEqual(migrated.claimedSkills, LEGACY_STATE.evidence.loadedSkills);
   assert.deepEqual(migrated.completedRoles, LEGACY_STATE.evidence.taskSubagents);
   assert.equal(migrated.tasks.length, 1);
   assert.deepEqual(
@@ -113,14 +116,15 @@ test('new snapshots default to an empty advisory workflow state', async () => {
   assert.deepEqual(status.details.status.suggested_skills, []);
   assert.deepEqual(status.details.status.suggested_tools, []);
   assert.deepEqual(status.details.status.suggested_roles, []);
-  assert.deepEqual(status.details.status.loaded_skills, []);
+  assert.deepEqual(status.details.status.observed_skills, []);
+  assert.deepEqual(status.details.status.claimed_skills, []);
   assert.deepEqual(status.details.status.completed_roles, []);
   assert.deepEqual(status.details.status.tasks, []);
 
   const migrated = latestCoreState(pi.entries);
 
   assertAdvisorySnapshot(migrated);
-  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.schemaVersion, 3);
   assert.equal(migrated.lastRoute, null);
   assert.equal(migrated.lastPrompt, '');
   assert.equal(migrated.routeStartedAt, 0);
@@ -128,17 +132,18 @@ test('new snapshots default to an empty advisory workflow state', async () => {
   assert.equal(migrated.lastSkillUsage, null);
   assert.equal(migrated.lastSubagentUsage, null);
   assert.equal(migrated.classifierAttempted, false);
-  assert.deepEqual(migrated.loadedSkills, []);
+  assert.deepEqual(migrated.observedSkills, []);
+  assert.deepEqual(migrated.claimedSkills, []);
   assert.deepEqual(migrated.tasks, []);
   assert.deepEqual(migrated.completedRoles, []);
   assert.equal(migrated.taskSequence, 0);
 });
 
 function assertAdvisorySnapshot(snapshot) {
-  assert.equal(snapshot.schemaVersion, 2);
+  assert.equal(snapshot.schemaVersion, 3);
   assert.deepEqual(Object.keys(snapshot).sort(), ADVISORY_STATE_KEYS);
   for (const field of LEGACY_ENFORCEMENT_FIELDS) {
-    assert.equal(field in snapshot, false, `${field} must not be serialized in advisory schema v2`);
+    assert.equal(field in snapshot, false, `${field} must not be serialized in advisory schema v3`);
   }
 }
 

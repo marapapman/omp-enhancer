@@ -17,7 +17,7 @@ const advisoryQualityChecks = {
   fix_test_push_en: ['test-evidence', 'review-evidence', 'post-action-verification'],
   readme_update_push_zh: ['detect-source-language', 'review-evidence', 'post-action-verification'],
   factcheck_polish_zh: ['fact-evidence', 'detect-source-language', 'review-evidence'],
-  factcheck_polish_en: ['fact-evidence', 'writing-quality', 'review-evidence'],
+  factcheck_polish_en: ['fact-evidence', 'review-evidence'],
   security_fix_test_release_zh: ['security-evidence', 'test-evidence', 'review-evidence', 'post-action-verification'],
   security_fix_test_release_en: ['security-evidence', 'test-evidence', 'review-evidence', 'post-action-verification'],
   fix_without_test_execution_zh: ['review-evidence'],

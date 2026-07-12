@@ -12,13 +12,10 @@ const routingCases = [
     prompt: '请帮我润色这段中文论文摘要，要求语气自然，不要有翻译腔。',
     expectedIntent: 'writing.zh',
     expectedAgent: 'writing-helper.zh-writer',
-    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
-    requiredTools: ['writing_logic_check', 'writing_quality_check'],
-    requiredSubagents: ['zh-writer', 'zh-checker'],
-    requiredSubagentSkills: {
-      'zh-writer': ['plain-chinese-writing', 'zh-writing-polish'],
-      'zh-checker': ['plain-chinese-writing', 'zh-writing-checkers'],
-    },
+    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+    requiredTools: [],
+    requiredSubagents: [],
+    requiredSubagentSkills: {},
   },
   {
     name: 'English writing request routes to English writing profile',
@@ -312,7 +309,7 @@ test('routes common work situations without unreasonable workflow escalation', (
     ['one-line code edit', '只改一行代码，但不要跑全量测试。', 'implementation-with-tests', { direct: true }],
     ['push and upgrade only', '推送并升级插件，但不要改代码。', 'release'],
     ['release notes without publish', '写 release notes，但不要发布。', 'writing.pending'],
-    ['research implementation plan only', '调研方案，并生成实现计划，但先不要实现。', 'unknown'],
+    ['research implementation plan only', '调研方案，并生成实现计划，但先不要实现。', 'planning'],
   ];
 
   const nonGated = new Set(['unknown', 'release']);
@@ -965,7 +962,7 @@ test('routes extended boundary work situations without workflow confusion', () =
     ['rerun failed CI tests', '重跑失败的 CI 测试并报告结果，不改实现。', 'testing'],
     ['update snapshot tests', '更新 snapshot 测试并确认 diff 合理。', 'bug-audit'],
     ['review weak assertions', '检查现有测试有没有弱断言和重复断言。', 'bug-audit'],
-    ['write coverage plan', '写一份提升覆盖率的测试计划，不运行测试。', 'writing.zh'],
+    ['write coverage plan', '写一份提升覆盖率的测试计划，不运行测试。', 'planning'],
     ['implement coverage plan', '根据覆盖率缺口补测试并运行门禁。', 'bug-audit'],
     ['polish README', '润色 README 的安装说明，不发布。', 'writing.pending'],
     ['write API reference', '写一份 API reference 文档。', 'writing.zh'],
@@ -1243,7 +1240,7 @@ test('routes infrastructure api schema and policy workloads without workflow con
     ['browser accessibility fix', '修复页面可访问性问题，并用浏览器验证。', 'implementation-with-tests'],
     ['schema generate', '生成 schema.graphql 文件并补 resolver 测试。', 'implementation-with-tests'],
     ['schema audit', '检查 schema.graphql 和 resolver 是否一致，只报告。', 'bug-audit'],
-    ['workflow plan only', '制定修复 gate 的实现计划，先不要写代码。', 'unknown'],
+    ['workflow plan only', '制定修复 gate 的实现计划，先不要写代码。', 'planning'],
     ['workflow execute plan', '按计划修复 gate，并补回归测试。', 'implementation-with-tests'],
     ['subagent inventory', '查看当前 packaged subagents 是否齐全，只报告。', 'config-assets'],
     ['subagent add', '新增一个 reviewer subagent 模板，并更新 marketplace。', 'implementation-with-tests'],

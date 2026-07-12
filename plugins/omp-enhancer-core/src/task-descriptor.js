@@ -23,6 +23,14 @@ const PHASE_KIND_VALUES = new Set(['answer', 'inspect', 'diagnose', 'modify', 'c
 const DOMAIN_VALUES = new Set(DOMAIN_ORDER);
 const TEST_EXCLUSION_ORDER = ['unit', 'integration', 'e2e', 'smoke', 'full-suite'];
 const TEST_EXCLUSION_VALUES = new Set(TEST_EXCLUSION_ORDER);
+const WRITING_TASK_KIND_VALUES = new Set(['review', 'polish', 'draft', 'translate', 'convert', 'unknown']);
+const WRITING_CONVERSION_VALUES = new Set([
+  'markdown-to-latex',
+  'latex-to-markdown',
+  'latex-template',
+  'word',
+  'unknown',
+]);
 
 const CAPABILITY_ORDER = [
   'fs.read',
@@ -196,6 +204,7 @@ export function describeNaturalLanguageTask(input = {}) {
     operation,
     domains,
     constraints,
+    writingSourceTargets: signals.writingSourceTargets,
     workspaceWriteTargets: signals.workspaceWriteTargets,
     workspaceWriteExclusions: signals.workspaceWriteExclusions,
     externalWriteTargets: signals.externalWriteTargets,
@@ -214,6 +223,8 @@ export function describeNaturalLanguageTask(input = {}) {
     language,
     writingLanguageSource: writingLanguage?.source ?? null,
     writingSourcePending: signals.writingWork && !['zh', 'en'].includes(language),
+    writingTaskKind: signals.writingTaskKind,
+    writingConversion: signals.writingConversion,
     provenance: {
       ruleConfidence: requiresPolicyRoute ? 0.94 : 0.72,
       reasons: signals.reasons,
@@ -257,6 +268,10 @@ export function descriptorFromLegacyIntent(intent = 'unknown', options = {}) {
     'factcheck.document': {
       operation: 'inspect', domains: ['facts'], constraints: { networkAccess: 'required' },
       phases: [{ kind: 'inspect', domain: 'facts' }], risk: { level: 'medium', flags: ['factual-claims', 'network-read'] }, complexity: 'broad',
+    },
+    'code.plan': {
+      operation: 'inspect', domains: ['code'], constraints: { testExecution: 'forbidden' },
+      phases: [{ kind: 'inspect', domain: 'code' }, { kind: 'answer', domain: 'code' }], complexity: 'focused',
     },
     'code.dev': {
       operation: 'modify', domains: ['code', 'tests'], constraints: { workspaceWrite: 'required', testExecution: 'required' },
@@ -302,9 +317,19 @@ export function normalizeTaskDescriptor(value = {}) {
   const operation = OPERATION_VALUES.has(value.operation) ? value.operation : 'answer';
   const constraints = normalizeConstraints(value.constraints);
   if (operation === 'answer' || operation === 'inspect') constraints.externalWrite = 'forbidden';
+  const normalizedDomains = (value.domains?.length ? value.domains : ['general'])
+    .filter((domain) => DOMAIN_VALUES.has(domain));
+  const domains = orderedUnique(normalizedDomains.length ? normalizedDomains : ['general'], DOMAIN_ORDER);
   const workspaceWriteTargets = constraints.workspaceWrite === 'required'
     ? normalizeScopedTargets(value.workspaceWriteTargets)
     : [];
+  // Source targets are observed inputs, not write authorization. Preserve
+  // them even when workspace writes are forbidden. For one compatibility
+  // cycle, old writing descriptors may reuse their scoped write targets as
+  // source targets when the new field is absent.
+  const writingSourceTargets = normalizeScopedTargets(
+    value.writingSourceTargets ?? (domains.includes('writing') ? value.workspaceWriteTargets : []),
+  );
   const workspaceWriteExclusions = normalizeScopedTargets(value.workspaceWriteExclusions);
   const externalWriteTargets = constraints.externalWrite === 'required'
     ? normalizeScopedTargets(value.externalWriteTargets)
@@ -336,9 +361,6 @@ export function normalizeTaskDescriptor(value = {}) {
   const testExecutionCommand = constraints.testExecution === 'required'
     ? normalizeTestExecutionCommand(value.testExecutionCommand)
     : '';
-  const normalizedDomains = (value.domains?.length ? value.domains : ['general'])
-    .filter((domain) => DOMAIN_VALUES.has(domain));
-  const domains = orderedUnique(normalizedDomains.length ? normalizedDomains : ['general'], DOMAIN_ORDER);
   const exclusiveToolContract = normalizeExclusiveToolContract(value.exclusiveToolContract, {
     operation,
     domains,
@@ -372,6 +394,7 @@ export function normalizeTaskDescriptor(value = {}) {
     operation,
     domains,
     constraints,
+    writingSourceTargets,
     workspaceWriteTargets,
     workspaceWriteExclusions,
     externalWriteTargets,
@@ -392,6 +415,12 @@ export function normalizeTaskDescriptor(value = {}) {
       ? value.writingLanguageSource
       : null,
     writingSourcePending: value.writingSourcePending === true,
+    writingTaskKind: WRITING_TASK_KIND_VALUES.has(value.writingTaskKind)
+      ? value.writingTaskKind
+      : 'unknown',
+    writingConversion: WRITING_CONVERSION_VALUES.has(value.writingConversion)
+      ? value.writingConversion
+      : 'unknown',
     provenance: {
       ruleConfidence: clamp(value.provenance?.ruleConfidence ?? 1),
       reasons: uniqueStrings(value.provenance?.reasons ?? []),
@@ -504,13 +533,10 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     || chineseNegativeClauseIncludes(text, /(?:判断|检查|审查|分析).{0,16}(?:代码|源码|实现)(?:问题)?/i)
     || englishNegativeClauseIncludes(text, /\b(?:judge|check|review|inspect|analyze)\b.{0,24}\b(?:code|source|implementation)\b/i);
   const testReportWriting = /\b(?:write|draft|prepare|revise|edit|summarize|summarise)\b.{0,48}\btest\s+(?:(?:failure|coverage|execution|result|results|gate)\s+)?report\b|(?:写|起草|撰写|整理|总结|修订|修改).{0,32}(?:测试|覆盖率|失败|门禁).{0,16}(?:报告|总结|结果说明)/.test(text);
+  const explicitDefectAudit = !suppliedFindingsReport && /\b(?:inspect|audit|review|check|find|hunt)\b.{0,80}\b(?:plugin|project|codebase|repository|repo|code|implementation|pull\s+request|pr)\b.{0,80}\b(?:bugs?|defects?)\b|\b(?:inspect|audit|review|check|find|hunt)\b.{0,40}\b(?:bugs?|defects?)\b|(?:检查|审查|审计|排查|查找).{0,64}(?:插件|项目|代码库|仓库|代码|实现).{0,64}(?:bug|缺陷|问题)|(?:检查|审查|审计|排查|查找).{0,40}(?:bug|缺陷)/.test(text);
   const factSentenceText = text.replace(/((?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+)\.([a-z0-9]{1,10})\b/gi, '$1_fileext_$2');
-  const factWork = !suppliedFindingsReport && !factReviewForbidden && (/(?:事实核查|事实审查|查证|核验事实|引用核验|引用真实性)|(?:核查|检查|核验).{0,24}(?:事实|声明|主张|引用)|\bfact[- ]?check\b|(?:verify|check)\s+(?:the\s+)?(?:facts?|claims?)/.test(text)
-    || /\b(?:verify|review|check|inspect|assess)\b.{0,96}\b(?:citation authenticity|citation metadata|bibliograph(?:y|ic) metadata|factual errors?|stale numbers?|outdated (?:figures?|numbers?))\b/.test(text)
-    || /(?:核查|核验|查证|verify|check)[^。！？.!?\n]{0,120}(?:(?:证据|evidence)[^。！？.!?\n]{0,16}(?:支持|支撑|证明|support(?:s|ed)?)|(?:支持|支撑|证明|support(?:s|ed)?)[^。！？.!?\n]{0,40}(?:证据|evidence))/.test(factSentenceText)
-    || /(?:check|verify)[^。！？.!?\n]{0,80}(?:cited\s+source|citation(?:\s+source)?)[^。！？.!?\n]{0,80}supports?[^。！？.!?\n]{0,40}claims?/.test(factSentenceText)
-    || /(?:check|verify)[^。！？.!?\n]{0,80}claims?[^。！？.!?\n]{0,80}supported\s+by[^。！？.!?\n]{0,40}(?:the\s+)?(?:cited\s+source|citation(?:\s+source)?)/.test(factSentenceText)
-    || /\b(?:inspect|determine|assess)\b[^。！？.!?\n]{0,120}\blocal\s+evidence\b[^。！？.!?\n]{0,32}\bsupports?\b[^。！？.!?\n]{0,32}\bclaims?\b/.test(factSentenceText));
+  const factWork = !suppliedFindingsReport && !factReviewForbidden && !explicitDefectAudit
+    && isFactCheckDirective(text);
   const explicitFactDocumentTargets = uniqueStrings([...String(scopePrompt).matchAll(/(?:^|[\s`'"])((?:\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?))(?=$|[\s`'"，。；、：;,:.!！])/gi)]
     .map((match) => match[1]));
   const factDocumentTargets = explicitFactDocumentTargets.length
@@ -526,7 +552,6 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     && (factDocumentTargets.length === 1 || explicitSingleRepositoryFactSearch && noTestExecution)
     && /(?:证据|evidence)[^。！？.!?\n]{0,20}(?:支持|支撑|证明|support(?:s|ed)?)|(?:支持|支撑|证明|support(?:s|ed)?)[^。！？.!?\n]{0,40}(?:证据|evidence)/.test(factSentenceText)
     && !/(?:全部|所有|整个(?:仓库|项目|代码库)|全仓库|多条|引用)|\b(?:all|every|entire|repo[- ]wide|repository[- ]wide|multiple|citations?)\b/.test(text);
-  const explicitDefectAudit = !suppliedFindingsReport && /\b(?:inspect|audit|review|check|find|hunt)\b.{0,80}\b(?:plugin|project|codebase|repository|repo|code|implementation|pull\s+request|pr)\b.{0,80}\b(?:bugs?|defects?)\b|\b(?:inspect|audit|review|check|find|hunt)\b.{0,40}\b(?:bugs?|defects?)\b|(?:检查|审查|审计|排查|查找).{0,64}(?:插件|项目|代码库|仓库|代码|实现).{0,64}(?:bug|缺陷|问题)|(?:检查|审查|审计|排查|查找).{0,40}(?:bug|缺陷)/.test(text);
   const bugReportArtifactRequested = /(?:写|撰写|起草|整理|总结|归纳|创建|准备|提交).{0,24}(?:英文|英语|english)?.{0,12}\bbug\s+report\b/.test(text)
     || /\b(?:draft|write|revise|edit|summarize|summarise|create|prepare|file)\b.{0,48}\bbug\s+report\b/.test(text);
   const bugReportImplementationArtifact = /\bbug\s+report\s+(?:generator|parser|implementation|component|function|class|module|tool)\b/.test(text)
@@ -560,6 +585,10 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     || /(?:更新|修改|编辑|写|完善).{0,32}(?:readme|安装说明|发布说明|更新日志|release notes?|changelog)|\b(?:update|modify|edit|write|improve)\b.{0,32}\b(?:readme|release notes?|changelog)\b/.test(positiveDomainText)
     || /(?:段|句|话|文字|文本|摘要|表述).{0,24}(?:改得|改成|改为)/.test(positiveDomainText)
     || /(?:检查|审查).{0,32}(?:逻辑表达|表达|行文|措辞|翻译腔)/.test(positiveDomainText)
+    || /(?:检查|审查|评估)[^。！？.!?\n]{0,96}\.(?:md|mdx|rst|txt|tex|docx?)[^。！？.!?\n]{0,96}(?:逻辑|论证)|(?:逻辑|论证)[^。！？.!?\n]{0,96}\.(?:md|mdx|rst|txt|tex|docx?)[^。！？.!?\n]{0,96}(?:检查|审查|评估)/.test(positiveDomainText)
+    || /\b(?:check|review|inspect|assess|copyedit)\b.{0,96}\b(?:style|wording|structure|clarity|grammar|prose|readability|flow|logic\s+(?:and|&)\s+(?:clarity|flow|wording|structure))\b/.test(positiveDomainText)
+    || /\b(?:check|review|inspect|assess|copyedit)\b[^.!?\n]{0,96}\.(?:md|mdx|rst|txt|tex|docx?)[^.!?\n]{0,96}\b(?:logic|argument(?:ation)?|reasoning)\b|\b(?:logic|argument(?:ation)?|reasoning)\b[^.!?\n]{0,96}\.(?:md|mdx|rst|txt|tex|docx?)[^.!?\n]{0,96}\b(?:check|review|inspection|assessment|copyedit)\b/.test(positiveDomainText)
+    || /\b(?:style|wording|structure|clarity|grammar|prose|readability|flow|logic\s+(?:and|&)\s+(?:clarity|flow|wording|structure))\b.{0,96}\b(?:check|review|inspection|assessment|copyedit)\b/.test(positiveDomainText)
     || /(?:写|撰写|起草).{0,24}(?:审稿回复|段落|小节|申请材料|研究计划)/.test(positiveDomainText)
     || /(?:写|撰写|起草).{0,24}(?:报告|提案|论文|摘要|说明|文档)/.test(positiveDomainText)
     || /\b(?:draft|write|revise|edit|summarize|summarise)\b.{0,48}\b(?:proposal|report|paper|manuscript|abstract|paragraph|section|letter|email|policy|memo|announcement|post|release notes?|changelog|documentation|docs?|guide|manual)\b/.test(positiveDomainText)
@@ -587,6 +616,11 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
   const testWork = !testReportWriting && !suppliedFindingsReport
     && (!externalActionRequested || explicitTestAction)
     && /(?:测试|回归测试|单元测试|覆盖率)|\b(?:tests?|testing|regression|coverage|vitest|pytest|npm test|e2e|playwright|flaky|flakiness|smoke suite)\b/.test(positiveDomainText);
+  const implementationContinuation = isImplementationContinuationDirective(text);
+  const planningWork = !implementationContinuation && isPlanningDirective(text, {
+    writingWork,
+    documentArtifactRequested: documentArtifactCreateRequested,
+  });
   const noTestAuthoring = /(?:不要|不|别|无需|不用|禁止|不得).{0,16}(?:生成|编写|新增|添加|写).{0,12}(?:测试代码|测试文件|测试用例|tests?|test code)|(?:do not|don't|without).{0,20}(?:generate|write|add|create).{0,16}(?:tests?|test code)/.test(text);
   const broadDefectAudit = explicitDefectAudit
     && /(?:整个|全部|全量).{0,16}(?:插件|项目|代码库|仓库|代码)|\b(?:whole|entire|full|all)\b.{0,16}\b(?:plugin|project|codebase|repository|repo|code)\b|\b(?:plugin|project|codebase|repository|repo)\b.{0,80}\b(?:bugs?|defects?)\b/.test(text);
@@ -676,10 +710,13 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:build|create|implement)\b.{0,80}\b(?:config|plugin|routing|router|gate|hook)\b.{0,32}\b(?:workflow|logic|handler|detection)\b/.test(effectiveActionText.trim())
     || /^(?:(?:请|帮我|麻烦)\s*)?(?:构建|创建|实现|开发)\s*.{0,80}(?:配置|插件|路由|门禁|hook).{0,32}(?:工作流|流程|逻辑|处理器|检测)/.test(effectiveActionText.trim())
   );
-  const implicitModify = !noWorkspaceWrite && !noActionExecution && codeTarget && (
-    /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:take\s+care\s+of|handle)\s+(?:the\s+)?(?:todo|fixme|issue|bug|problem)\b/.test(effectiveActionText.trim())
-    || /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?make\s+.{0,80}\b(?:work|handle|support|accept)\b/.test(effectiveActionText.trim())
-    || /^(?:(?:请|帮我|麻烦)\s*)?把\s*.{0,80}(?:处理一下|处理好|弄好|修好)(?:[。！!]|$)/.test(effectiveActionText.trim())
+  const implicitModify = !noWorkspaceWrite && !noActionExecution && (
+    implementationContinuation
+    || codeTarget && (
+      /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:take\s+care\s+of|handle)\s+(?:the\s+)?(?:todo|fixme|issue|bug|problem)\b/.test(effectiveActionText.trim())
+      || /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?make\s+.{0,80}\b(?:work|handle|support|accept)\b/.test(effectiveActionText.trim())
+      || /^(?:(?:请|帮我|麻烦)\s*)?把\s*.{0,80}(?:处理一下|处理好|弄好|修好)(?:[。！!]|$)/.test(effectiveActionText.trim())
+    )
   );
   const ambiguousCodeAction = !noWorkspaceWrite && !noActionExecution && !advisory && !implicitModify && codeTarget && (
     /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:look\s+into|deal\s+with|check\s+out)\b/.test(effectiveActionText.trim())
@@ -832,6 +869,20 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
   if (networkReadRequested) reasons.push('explicit network read requested');
   if (ambiguousCodeAction) reasons.push('ambiguous code-target imperative');
   if (securityConceptOnly) reasons.push('security concept explanation only');
+  if (planningWork) reasons.push('implementation or test planning requested');
+
+  const writingTaskKind = writingWork
+    ? writingTaskKindFor(text, {
+      noWorkspaceWrite,
+      documentTransformationRequested,
+    })
+    : 'unknown';
+  const writingConversion = writingTaskKind === 'convert'
+    ? writingConversionFor(text)
+    : 'unknown';
+  const writingSourceTargets = writingWork
+    ? writingSourceTargetsFor(scopePrompt)
+    : [];
 
   return {
     text,
@@ -867,6 +918,10 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     factWork,
     focusedLocalFactWork,
     writingWork,
+    writingSourceTargets,
+    writingTaskKind,
+    writingConversion,
+    planningWork,
     documentArtifactCreateRequested,
     documentTransformationRequested,
     bugReportWriting,
@@ -907,6 +962,108 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     ambiguous,
     reasons,
   };
+}
+
+/**
+ * Shared deterministic fact-check signal used by both descriptor and legacy
+ * projections. File extensions, decimals, entity names, and percentages are
+ * intentionally allowed between the directive and the claim/evidence object.
+ */
+export function isFactCheckDirective(value = '') {
+  const text = String(value).toLowerCase()
+    .replace(/((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+)\.([a-z0-9]{1,10})\b/giu, '$1_fileext_$2')
+    .replace(/(\d)\.(\d)/g, '$1_decimal_$2');
+  return /(?:事实核查|事实审查|事实检查|查证事实|核验事实|引用核验|引用真实性|引用查证|数据真实性|结论是否有证据)|\bfact[- ]?check(?:ing)?\b|\b(?:verify|check)\s+(?:the\s+)?(?:facts?|claims?)\b/.test(text)
+    || /(?:核查|核验|查证|检查|审查)[^\n]{0,240}(?:事实|声明|主张|引文|引用|出处|来源|真实性)/.test(text)
+    || /(?:事实|声明|主张|引文|引用|出处|来源|真实性)[^\n]{0,240}(?:核查|核验|查证)/.test(text)
+    || /(?:核查|核验|查证)[^。！？.!?\n]{0,120}(?:(?:证据)[^。！？.!?\n]{0,24}(?:支持|支撑|证明)|(?:支持|支撑|证明)[^。！？.!?\n]{0,40}(?:证据))/.test(text)
+    || /(?:核查|核验|查证)[^\n]{0,200}(?:数字|年份|百分比|倍数)[^\n]{0,64}(?:是否|真实性|引文|引用|来源|出处|证据|支持|支撑)/.test(text)
+    || /\b(?:verify|review|check|inspect|assess)\b[^\n]{0,180}\b(?:citation authenticity|citation metadata|bibliograph(?:y|ic) metadata|factual errors?|stale numbers?|outdated (?:figures?|numbers?))\b/.test(text)
+    || /\b(?:check|verify|inspect|determine|assess)\b[^\n]{0,240}\b(?:cited\s+source|citations?|claims?|local\s+evidence|source\s+support)\b[^\n]{0,160}\b(?:supports?|supported|evidence|claims?|source)\b/.test(text)
+    || /\b(?:claims?|citations?|local\s+evidence|source\s+support)\b[^\n]{0,200}\b(?:supported\s+by|supports?|verify|check|evidence)\b/.test(text);
+}
+
+export function writingSourceTargetsFor(value = '') {
+  const source = String(value);
+  const candidates = [];
+  const quotedPatterns = [
+    /"([^"\n]+)"/gu,
+    /'([^'\n]+)'/gu,
+    /`([^`\n]+)`/gu,
+    /“([^”\n]+)”/gu,
+    /‘([^’\n]+)’/gu,
+  ];
+  for (const pattern of quotedPatterns) {
+    for (const match of source.matchAll(pattern)) candidates.push(match[1]);
+  }
+  for (const match of source.matchAll(
+    /(?:^|[\s([（{，,;；:：])((?:\.\/)?(?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.(?:md|mdx|rst|txt|tex|docx?|pdf))(?=$|[\s)\]）}，。；、：;,:.!！?？]|的|中|里|内|开头|开篇|结尾|末尾|首段|第一段|前文|后文)/giu,
+  )) candidates.push(match[1]);
+  return uniqueStrings(candidates.map(normalizeWritingSourceTarget).filter(Boolean));
+}
+
+function normalizeWritingSourceTarget(value = '') {
+  const target = String(value).trim()
+    .replace(/^[`'"“”‘’]+|[`'"“”‘’，。；、：;,:.!！?？]+$/gu, '')
+    .replace(/^(?:请)?(?:只读)?(?:检查|审查|核对|查看|评估|润色|改写|校对|修订|编辑)(?:一下|下)?/u, '')
+    .replace(/\\/g, '/');
+  if (!target || target.length > 256 || /[\u0000-\u001f\u007f]/.test(target)) return '';
+  if (/^(?:\/|~\/|[a-z]:\/|https?:\/\/)/i.test(target)) return '';
+  const relative = target.replace(/^\.\//, '');
+  if (relative.split('/').some((segment) => segment === '..' || !segment)) return '';
+  if (!/\.(?:md|mdx|rst|txt|tex|docx?|pdf)$/iu.test(relative)) return '';
+  return relative;
+}
+
+function isPlanningDirective(text = '', {
+  writingWork = false,
+  documentArtifactRequested = false,
+} = {}) {
+  const value = String(text).toLowerCase();
+  const writingArtifact = documentArtifactRequested
+    || /(?:写|撰写|起草|创建|生成).{0,48}(?:计划|策略|方案)(?:文档|报告)?|(?:写|撰写|起草|创建|生成).{0,48}(?:文档|报告)[^。！？.!?\n]{0,48}(?:计划|策略|方案)|\b(?:write|draft|create|generate)\b.{0,64}\b(?:(?:plan|strategy)(?:\s+(?:document|report))?|(?:document|report).{0,32}(?:plan|strategy))\b/.test(value);
+  if (writingWork && writingArtifact) return false;
+  const explicitExecutionRequest = /^(?:(?:请|帮我|麻烦)\s*)?(?:去|继续|开始)?\s*(?:修复|修正|修改|实现|重构|开发|添加|新增|删除|优化)|^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:go\s+)?(?:fix|repair|modify|implement|refactor|develop|add|remove|optimize)\b/i.test(value.trim());
+  if (explicitExecutionRequest) return false;
+  return /(?:制定|设计|规划|给出|提出|准备).{0,96}(?:(?:实现|修复|开发|测试|路由|工作流).{0,32})?(?:计划|策略|方案)|(?:实现|修复|开发|测试).{0,64}(?:计划|策略|方案)/.test(value)
+    || /\b(?:create|develop|design|prepare|produce|give|outline)\b[^.!?\n]{0,120}\b(?:(?:implementation|repair|development|testing|test)\s+(?:plan|strategy)|(?:plan|strategy)\s+for\s+(?:implementation|repair|development|testing|tests?))\b/.test(value)
+    || /\b(?:implementation|repair|development|testing|test)\s+(?:plan|strategy)\b/.test(value);
+}
+
+function isImplementationContinuationDirective(text = '') {
+  const value = String(text).toLowerCase();
+  const boundary = '(?:^|[，,。！？.!?；;\\n]\\s*|(?:然后|接着|随后|下一步|再|同时)\\s*)';
+  const chinese = new RegExp(
+    boundary
+      + '(?:请\\s*)?(?:(?:开始|继续|着手)\\s*(?:执行|实施|实现|修复|修改|编辑|重构|开发(?!计划|策略|方案))|按(?:照)?(?:这个|该|上述)?计划(?:开始)?执行)',
+    'u',
+  );
+  const english = /(?:^|[,.!?;\n]\s*|\b(?:then|next|after\s+that|and\s+then)\s+)(?:please\s+)?(?:(?:start|begin|continue)\s+(?:to\s+)?(?:implement|implementing|fix|fixing|modify|modifying|edit|editing|refactor|refactoring|develop|developing)\b|(?:proceed|go\s+ahead)\s+(?:to|and|with)\s+(?:implement|fix|modify|edit|refactor|develop)\b)/i;
+  return chinese.test(value) || english.test(value);
+}
+
+function writingTaskKindFor(text = '', {
+  noWorkspaceWrite = false,
+  documentTransformationRequested = false,
+} = {}) {
+  const value = String(text).toLowerCase();
+  if (documentTransformationRequested) return 'convert';
+  if (/(?:翻译|译成|翻成)|\btranslat(?:e|ion)\b/.test(value)) return 'translate';
+  const review = /(?:只读|只检查|审查|检查|核对).{0,96}(?:逻辑|表达|行文|措辞|结构|清晰|可读|风格)|\b(?:review|check|inspect|assess|copyedit)\b.{0,120}\b(?:logic|style|wording|structure|clarity|grammar|prose|readability|flow)\b/.test(value);
+  if (review && noWorkspaceWrite) return 'review';
+  if (/(?:润色|改写|校对|修订|改善|优化).{0,120}(?:文字|文本|正文|段落|摘要|论文|报告|措辞|表达|行文)?|\b(?:polish|proofread|rewrite|revise|edit|improve|copyedit)\b/.test(value)) return 'polish';
+  if (/(?:撰写|起草|写一|写个|写出)|\b(?:draft|write|compose)\b/.test(value)) return 'draft';
+  if (review) return 'review';
+  return 'unknown';
+}
+
+function writingConversionFor(text = '') {
+  const value = String(text).toLowerCase();
+  if (/\bapply\b.{0,80}\b(?:latex|conference|journal|acm|ieee)\s+template\b|(?:套用|应用).{0,80}(?:latex|会议|期刊|acm|ieee)?\s*模板/.test(value)) return 'latex-template';
+  if (/(?:latex|\.tex\b)[^\n]{0,96}(?:to|into|转成|转换成|转换为)[^\n]{0,32}(?:markdown|\bmd\b)|(?:转换|转成).{0,64}(?:latex|tex).{0,48}(?:markdown|md)/.test(value)) return 'latex-to-markdown';
+  if (/(?:markdown|\.md\b)[^\n]{0,96}(?:to|into|转成|转换成|转换为)[^\n]{0,32}(?:latex|\btex\b)|(?:转换|转成).{0,64}(?:markdown|md).{0,48}(?:latex|tex)/.test(value)) return 'markdown-to-latex';
+  if (/\b(?:word|docx)\b|word\s*文档/.test(value)) return 'word';
+  return 'unknown';
 }
 
 function workspaceWriteScopesFor(value = '') {
@@ -1367,9 +1524,10 @@ function hasNaturalNoNetworkAccess(text) {
   const clause = '(?:^|[，。；、：;,:.!！]\\s*|\\b(?:but|and)\\s+)';
   const english = new RegExp(
     `${clause}(?:please\\s+)?(?:do not|don't|dont|never|no need to)\\s+(?:(?:browse|search|access|use)\\s+(?:the\\s+)?(?:web|internet|network|online(?:\\s+sources?)?)|go\\s+online)`
+      + `|${clause}(?:please\\s+)?(?:do not|don't|dont|never|no need to)\\s+(?:browse|search)\\b`
       + `|${clause}(?:please\\s+)?(?:skip|omit)\\s+(?:the\\s+)?(?:(?:web|internet|network|online)\\s+)?(?:browsing|search|access)`
-      + '|\\bwithout\\s+(?:(?:the\\s+)?(?:web|internet|network)(?:\\s+(?:browsing|search|access))?|going\\s+online)\\b'
-      + '|\\bno\\s+(?:web(?:\\s+(?:browsing|access))?|internet(?:\\s+access)?|network(?:\\s+access)?|online\\s+access)\\b',
+      + '|\\bwithout\\s+(?:(?:the\\s+)?(?:web|internet|network)(?:\\s+(?:browsing|search|access))?|going\\s+online|browsing|searching)\\b'
+      + '|\\bno\\s+(?:browsing|web(?:\\s+(?:browsing|access))?|internet(?:\\s+access)?|network(?:\\s+access)?|online\\s+access)\\b',
     'i',
   );
   const chinese = /(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:不要|别|无需|不用|不必|禁止|不得|不(?=\s*(?:上网|联网)))\s*(?:上网|联网|访问\s*(?:外网|互联网|网络)|浏览\s*(?:网页|互联网|网络)|(?:进行)?\s*(?:网页|网络|互联网)搜索|使用\s*(?:网络|互联网)|(?:网络|互联网)访问|(?:网络|互联网)(?=\s|[，。；、：;,:.!！]|$))|(?:^|[，。；、：;,:.!！]\s*|(?:但|并且|然后)\s*)(?:请)?(?:跳过|省略|略过)\s*(?:网页|网络|互联网|在线)\s*(?:搜索|浏览|访问)/;
@@ -1413,6 +1571,8 @@ function isSecurityConceptOnlyRequest(text = '') {
 
 function operationFor(signals) {
   if (signals.exclusiveToolContract?.input?.kind === 'exact-path') return 'inspect';
+  if (signals.planningWork) return 'inspect';
+  if (signals.writingWork && signals.writingTaskKind === 'review') return 'inspect';
   if (signals.answerOnly && !signals.factWork) return 'answer';
   if (signals.conceptOnly && signals.noWorkspaceWrite && signals.codeWork) return 'inspect';
   if (signals.conceptOnly) return 'answer';
@@ -1587,6 +1747,14 @@ function capabilitiesFor({ operation, domains, constraints, complexity }) {
 
 function phasesFor({ operation, domains, constraints, signals }) {
   if (operation === 'answer') return [{ kind: 'answer', domain: domains[0] ?? 'general' }];
+  if (signals.planningWork) {
+    const domain = domains.includes('code')
+      ? 'code'
+      : domains.includes('tests')
+        ? 'tests'
+        : domains[0] ?? 'general';
+    return [{ kind: 'inspect', domain }, { kind: 'answer', domain }];
+  }
   if (signals.primaryDirectTestAuthoring) {
     return [
       { kind: 'inspect', domain: 'tests' },
@@ -1760,7 +1928,8 @@ function riskFor({ operation, domains, constraints, signals = {} }) {
 }
 
 function shouldUseDescriptorPolicy({ operation, domains, constraints, phases, signals }) {
-  return signals.noWorkspaceWrite
+  return signals.planningWork
+    || signals.noWorkspaceWrite
     || signals.advisory
     || signals.noTestExecution
     || signals.testExclusions.length > 0
@@ -1799,6 +1968,8 @@ function canonicalLegacyIntent(intent) {
     'doc.convert.word': 'doc.convert.word',
     'factcheck.document': 'factcheck.document',
     'fact-check': 'factcheck.document',
+    planning: 'code.plan',
+    'code.plan': 'code.plan',
     'code.dev': 'code.dev',
     'implementation-with-tests': 'code.dev',
     'code.debug': 'code.debug',
@@ -2535,7 +2706,10 @@ export function detectWritingSourceLanguage(sourceText = '') {
     if (languages.has('mixed') || languages.has('zh') && languages.has('en')) return 'mixed';
     return languages.values().next().value ?? 'unknown';
   }
-  const rawText = String(sourceText);
+  const rawText = String(sourceText).replace(
+    /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?(?:参考文献|references|bibliography)(?:\*\*)?\s*(?:\r?\n)[\s\S]*$/imu,
+    '\n',
+  );
   const outerProseFence = rawText.trim().match(/^(```|~~~)(?:text|plaintext|plain|markdown|md|latex|tex|rst)?[^\S\r\n]*\r?\n([\s\S]*?)\r?\n\1$/iu);
   const text = String(outerProseFence?.[2] ?? rawText)
     .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/gu, ' ')

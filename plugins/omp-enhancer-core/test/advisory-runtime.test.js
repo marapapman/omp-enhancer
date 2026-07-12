@@ -89,6 +89,175 @@ test('session_stop never schedules a repair or terminal continuation', async (t)
   }
 });
 
+test('session self-report is a claim and cannot impersonate a successful skill read', async () => {
+  const { pi, ctx } = await routedRuntime('Review this English paragraph for writing quality.');
+  assert.equal(await event(pi, 'session_stop')({
+    output: [
+      'SKILL_USAGE',
+      'Loaded:',
+      '- writing-review',
+    ].join('\n'),
+  }, ctx), undefined);
+
+  const status = await pi.tools.get('omp_core_subagent_status').execute(
+    'status-after-claim',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+  assert.deepEqual(status.details.status.observed_skills, []);
+  assert.deepEqual(status.details.status.claimed_skills, ['writing-review']);
+
+  const review = await pi.tools.get('omp_core_validate_skill_usage').execute(
+    'review-after-claim',
+    { output: 'Loaded writing-review.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  assert.deepEqual(review.details.validation.observed, []);
+  assert.deepEqual(review.details.validation.claimed, ['writing-review']);
+  assert.deepEqual(review.details.validation.unobservedClaims, ['writing-review']);
+});
+
+test('only a successful, identity-verified SKILL.md read records observed evidence', async () => {
+  const { pi, ctx } = await routedRuntime('Review this English paragraph for writing quality.');
+
+  await event(pi, 'tool_result')({
+    name: 'read',
+    input: { path: 'skill://writing-review' },
+    result: {
+      isError: true,
+      content: [{ type: 'text', text: '---\nname: writing-review\n---\n' }],
+    },
+  }, ctx);
+  await event(pi, 'tool_result')({
+    name: 'read',
+    input: { path: '/tmp/writing-checkers/SKILL.md' },
+    result: { content: [{ type: 'text', text: '# Writing checkers' }] },
+  }, ctx);
+  await event(pi, 'tool_result')({
+    name: 'read',
+    input: { path: '/tmp/writing-review/SKILL.md' },
+    result: {
+      content: [{ type: 'text', text: '---\nname: writing-checkers\n---\n' }],
+    },
+  }, ctx);
+  await event(pi, 'tool_result')({
+    name: 'read',
+    input: { path: '/workspace/.omp/skills/writing-checkers/SKILL.md' },
+    result: {
+      content: [{ type: 'text', text: '---\nname: writing-checkers\ndescription: Project writing checks\n---\n' }],
+    },
+  }, ctx);
+  await event(pi, 'tool_result')({
+    name: 'read',
+    input: { path: 'skill://writing-review' },
+    result: {
+      content: [{ type: 'text', text: '---\nname: writing-review\ndescription: Packaged writing review\n---\n' }],
+    },
+  }, ctx);
+  await event(pi, 'tool_result')({
+    name: 'read',
+    input: { path: 'skill://ecc/security-review' },
+    result: {
+      content: [{ type: 'text', text: '---\nname: security-review\ndescription: Packaged security review\n---\n' }],
+    },
+  }, ctx);
+
+  const status = await pi.tools.get('omp_core_subagent_status').execute(
+    'status-after-reads',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+  assert.deepEqual(
+    status.details.status.observed_skills.sort(),
+    ['security-review', 'writing-checkers', 'writing-review'],
+  );
+});
+
+test('autolearn capture yields without changing route or business evidence', async () => {
+  const { pi, ctx } = await routedRuntime('Review src/router.js and report defects only.');
+  const before = pi.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  const capturePrompt = [
+    'Automated capture turn — not a user reply. The user has not yet responded to your previous turn. Do not treat this prompt as their answer, as approval to continue, or as acceptance of any pending action; only the user can do that.',
+    '',
+    'If your previous turn produced anything reusable, capture it now: a repeatable procedure becomes a managed skill (`manage_skill`); a durable fact, convention, or user preference is worth remembering (`learn`, when memory is enabled). Only capture what will genuinely help next time. If nothing is worth keeping, do nothing.',
+    '',
+    "Then stop. Do not run any other tools, do not resume prior work, do not answer your own pending questions, and do not produce a continuation reply. Yield and wait for the user's next prompt.",
+  ].join('\n');
+  pi.entries.push({
+    type: 'custom_message',
+    customType: 'autolearn-nudge',
+    content: capturePrompt,
+    display: false,
+    attribution: 'user',
+  });
+  const entryCount = pi.entries.length;
+
+  assert.equal(await event(pi, 'before_agent_start')({ prompt: capturePrompt }, ctx), undefined);
+  await event(pi, 'tool_result')({
+    name: 'read',
+    input: { path: 'skill://writing-review' },
+    result: { content: [{ type: 'text', text: '# Writing review' }] },
+  }, ctx);
+  assert.equal(await event(pi, 'session_stop')({
+    output: 'SKILL_USAGE\nLoaded:\n- writing-review',
+  }, ctx), undefined);
+  assert.equal(pi.entries.length, entryCount);
+
+  const afterCapture = pi.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  assert.equal(afterCapture.lastPrompt, before.lastPrompt);
+  assert.deepEqual(afterCapture.lastRoute, before.lastRoute);
+  assert.deepEqual(afterCapture.observedSkills, before.observedSkills);
+  assert.deepEqual(afterCapture.claimedSkills, before.claimedSkills);
+
+  const next = await event(pi, 'before_agent_start')({
+    prompt: 'Explain what autolearn.autoContinue does.',
+  }, ctx);
+  assert.notEqual(next, undefined);
+  const afterUser = pi.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  assert.equal(afterUser.lastPrompt, 'Explain what autolearn.autoContinue does.');
+});
+
+test('an implementation follow-up recompiles a planning route while a plain continuation inherits it', async () => {
+  const { pi, ctx } = await routedRuntime('为 src/router.js 制定修复计划，暂时不要修改文件。');
+  const before = pi.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  assert.equal(before.lastRoute.intent, 'planning');
+  assert.equal(before.lastRoute.taskDescriptor.constraints.workspaceWrite, 'forbidden');
+
+  const continued = await event(pi, 'before_agent_start')({ prompt: '继续' }, ctx);
+  assert.equal(continued.route.intent, 'planning');
+  assert.equal(continued.route.taskDescriptor.constraints.workspaceWrite, 'forbidden');
+
+  const started = await event(pi, 'before_agent_start')({ prompt: '开始实现' }, ctx);
+  assert.equal(started.route.intent, 'implementation-with-tests');
+  assert.equal(started.route.workflowRoute, 'code.dev');
+  assert.equal(started.route.taskDescriptor.operation, 'modify');
+  assert.equal(started.route.taskDescriptor.constraints.workspaceWrite, 'required');
+  assert.ok(started.route.taskDescriptor.phases.some((phase) => phase.kind === 'modify'));
+  assert.notEqual(started.block, true);
+
+  const after = pi.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  assert.equal(after.lastRoute.intent, 'implementation-with-tests');
+  assert.match(after.lastPrompt, /src\/router\.js/);
+  assert.match(after.lastPrompt, /开始实现/);
+  assert.equal(await event(pi, 'session_stop')({ output: 'Implementation started.' }, ctx), undefined);
+});
+
 test('legacy terminal, action-boundary, and exclusive state cannot revive runtime enforcement', async () => {
   const seeded = await routedRuntime('Review src/router.js without modifying files.');
   const snapshot = seeded.pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state');
@@ -306,6 +475,33 @@ test('before_agent_start reads workspace writing targets and routes by body lang
     assert.ok(chineseRoute.routePlan.skills.includes('plain-chinese-writing'));
     assert.deepEqual(chineseRoute.writingSourceObservation.paths, ['abstract.tex']);
     assert.deepEqual(chineseRoute.writingSourceObservation.languages, ['zh']);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('before_agent_start reads a read-only Unicode writing source without granting write scope', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omp-writing-readonly-'));
+  try {
+    const target = '第5章-合并正文.md';
+    writeFileSync(
+      join(cwd, target),
+      '本章系统检查中文逻辑、行文与论证结构。',
+      'utf8',
+    );
+
+    const routed = await routedRuntime(
+      '只读检查第5章-合并正文.md的中文逻辑和行文，不要修改文件。',
+      cwd,
+    );
+    const route = routed.pi.entries.findLast(
+      (entry) => entry.customType === 'omp-enhancer-core.state',
+    ).data.lastRoute;
+    assert.equal(route.intent, 'writing.zh');
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'forbidden');
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, []);
+    assert.deepEqual(route.taskDescriptor.writingSourceTargets, [target]);
+    assert.deepEqual(route.writingSourceObservation.paths, [target]);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

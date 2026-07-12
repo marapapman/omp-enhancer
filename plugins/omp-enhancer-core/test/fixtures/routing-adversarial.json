@@ -497,12 +497,11 @@
           { "kind": "modify", "domain": "writing" },
           { "kind": "review", "domain": "writing" }
         ],
-        "requiredSkills": ["fact-checking", "claim-extraction", "source-evaluation", "citation-authenticity", "writing-markdown-helper", "writing-checkers"],
-        "requiredTools": ["fact_check_analyze", "fact_check_evidence", "fact_check_report", "fact_check_gate", "writing_logic_check", "writing_quality_check"],
-        "requiredSubagents": ["fact-planner", "fact-researcher-a", "fact-researcher-b", "fact-cross-checker", "fact-reviewer", "writer", "checker"],
+        "requiredSkills": ["fact-checking", "claim-extraction", "source-evaluation", "citation-authenticity", "writing-markdown-helper"],
+        "requiredTools": ["fact_check_analyze", "fact_check_evidence", "fact_check_report", "fact_check_gate"],
+        "requiredSubagents": ["fact-planner", "fact-researcher-a", "fact-researcher-b", "fact-cross-checker", "fact-reviewer"],
         "gateRequirements": [
-          { "key": "fact-evidence", "mode": "required" },
-          { "key": "writing-quality", "mode": "required" }
+          { "key": "fact-evidence", "mode": "required" }
         ]
       },
       "legacy": {

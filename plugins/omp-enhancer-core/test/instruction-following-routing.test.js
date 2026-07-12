@@ -1391,10 +1391,10 @@ test('offline repository-evidence support questions stay on the fact-check route
     ...FORBIDDEN_SIDE_EFFECTS,
   });
   assert.deepEqual(route.routePlan.steps, [{ kind: 'inspect', domain: 'facts' }]);
-  assert.deepEqual(route.routePlan.skills, []);
+  assert.deepEqual(route.routePlan.skills, ['fact-checking']);
   assert.deepEqual(route.routePlan.tools, []);
   assert.deepEqual(route.routePlan.roles, []);
-  assert.deepEqual(route.skills, []);
+  assert.deepEqual(route.skills, ['fact-checking']);
   assert.deepEqual(route.tools, []);
   assert.deepEqual(route.roles, []);
   assertAdvisoryPlan(route);
@@ -1459,7 +1459,7 @@ test('a root README fact target does not add a writing workflow to focused offli
 
   assert.equal(route.intent, 'fact-check');
   assert.equal(route.taskDescriptor.complexity, 'focused');
-  assert.deepEqual(route.routePlan.skills, []);
+  assert.deepEqual(route.routePlan.skills, ['fact-checking']);
   assert.deepEqual(route.routePlan.tools, []);
   assert.deepEqual(route.routePlan.roles, []);
   assertAdvisoryPlan(route);
@@ -1488,7 +1488,7 @@ test('an English supported-by repository claim uses the focused single-search fa
     assert.equal(route.intent, 'fact-check', routerMode);
     assert.equal(route.taskDescriptor.operation, 'inspect', routerMode);
     assert.equal(route.taskDescriptor.complexity, 'focused', routerMode);
-    assert.deepEqual(route.skills, [], routerMode);
+    assert.deepEqual(route.skills, ['fact-checking'], routerMode);
     assert.deepEqual(route.tools, [], routerMode);
     assert.deepEqual(route.roles, [], routerMode);
     assert.deepEqual(route.routePlan.qualityChecks, ['fact-evidence'], routerMode);

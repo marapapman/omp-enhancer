@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -257,10 +259,29 @@ test('suggests installed namespaced read aliases for canonical required skills',
   const reviewCandidates = skillReadNameCandidates('security-review');
   const scanCandidates = skillReadNameCandidates('security-scan');
 
-  assert.equal(reviewCandidates[0], 'ecc-security-review');
-  assert.equal(scanCandidates[0], 'ecc-security-scan');
+  assert.equal(reviewCandidates[0], 'security-review');
+  assert.equal(scanCandidates[0], 'security-scan');
   assert.ok(reviewCandidates.includes('security-review'));
   assert.ok(scanCandidates.includes('security-scan'));
+});
+
+test('prefers a packaged exact name over a managed alias', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'omp-skill-priority-'));
+  try {
+    const packagedRoot = path.join(root, 'packaged');
+    const managedRoot = path.join(root, '.omp', 'agent', 'managed-skills');
+    writeFixtureSkill(packagedRoot, 'exact-review', 'exact-review');
+    writeFixtureSkill(managedRoot, 'legacy-exact-review', 'legacy-exact-review');
+
+    const candidates = skillReadNameCandidates('exact-review', {
+      limit: 4,
+      roots: [managedRoot, packagedRoot],
+    });
+    assert.equal(candidates[0], 'exact-review');
+    assert.ok(candidates.includes('legacy-exact-review'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('rejects explicit denial written with a namespaced skill alias', () => {
@@ -357,6 +378,16 @@ test('ignores fenced code blocks when finding the authoritative SKILL_USAGE bloc
 function skillFrontmatterName(text) {
   const match = String(text).match(/^name:\s*['"]?([^'"\r\n]+)['"]?\s*$/m);
   return match?.[1]?.trim() ?? '';
+}
+
+function writeFixtureSkill(root, directory, name) {
+  const target = path.join(root, directory);
+  mkdirSync(target, { recursive: true });
+  writeFileSync(
+    path.join(target, 'SKILL.md'),
+    `---\nname: ${name}\ndescription: fixture\n---\n`,
+    'utf8',
+  );
 }
 
 test('accepts common model formatting variants for SKILL_USAGE evidence', () => {

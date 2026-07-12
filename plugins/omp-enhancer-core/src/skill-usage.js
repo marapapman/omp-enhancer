@@ -515,12 +515,14 @@ export function skillNamesEquivalent(requiredSkill, loadedSkill) {
   return false;
 }
 
-export function skillReadNameCandidates(skill, { limit = 3 } = {}) {
+export function skillReadNameCandidates(skill, { limit = 3, roots = defaultSkillAliasRoots() } = {}) {
   const normalized = normalizeSkillToken(skill);
   if (!normalized) return [];
+  const allowLegacyGateSkill = isLegacyGateCompatibilitySkill(normalized);
 
-  const candidates = collectSkillAliasCandidates(defaultSkillAliasRoots())
+  const candidates = collectSkillAliasCandidates(roots)
     .filter((candidate) => skillNamesEquivalent(skill, candidate.name) || skillNamesEquivalent(skill, candidate.canonical))
+    .filter((candidate) => allowLegacyGateSkill || !isLegacyGateCompatibilitySkill(candidate.name))
     .sort((left, right) => skillCandidateScore(skill, left) - skillCandidateScore(skill, right))
     .map((candidate) => candidate.name);
 
@@ -686,10 +688,16 @@ function rootKind(root) {
 
 function skillCandidateScore(skill, candidate) {
   const requested = normalizeSkillToken(skill);
-  if (candidate.kind === 'managed') return 0;
-  if (candidate.name === requested) return 1;
-  if (candidate.name.includes('/')) return 3;
-  return 2;
+  const packaged = candidate.kind === 'packaged';
+  if (candidate.name === requested) return packaged ? 0 : 1;
+  if (candidate.canonical === requested) return packaged ? 2 : 3;
+  if (packaged) return candidate.name.includes('/') ? 5 : 4;
+  return candidate.name.includes('/') ? 7 : 6;
+}
+
+function isLegacyGateCompatibilitySkill(value) {
+  const normalized = normalizeSkillToken(value);
+  return /(?:^|[-/])(?:omp-)?(?:(?:factcheck|testing|subagent)-)?gate-(?:satisfy|satisfaction|unblock)(?:$|[-/])/.test(normalized);
 }
 
 function collectSkillAliases(root, current, aliases) {

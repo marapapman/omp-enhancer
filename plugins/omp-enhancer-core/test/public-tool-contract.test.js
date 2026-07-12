@@ -42,7 +42,7 @@ const PUBLIC_TOOL_CONTRACT = [
   {
     name: 'omp_core_install_skills',
     parameters: { dryRun: 'boolean?' },
-    detailKeys: ['errors', 'installed', 'skipped', 'warnings'],
+    detailKeys: ['errors', 'installed', 'legacyFindings', 'recommendedIgnoredSkills', 'skipped', 'warnings'],
   },
 ];
 

@@ -39,7 +39,7 @@ test('user scope preferences shape suggestions without becoming runtime ceilings
   assert.equal(route.advisoryOnly, true);
 });
 
-test('broad writing suggestions are selected only after body language is known', () => {
+test('broad polish suggestions stay minimal after body language is known', () => {
   const pending = routeNaturalLanguageTask({
     prompt: 'Review and polish the logic and wording of docs/paper.md.',
     routerMode: 'enforce',
@@ -55,9 +55,9 @@ test('broad writing suggestions are selected only after body language is known',
   });
   assert.equal(refined.intent, 'writing.en');
   assert.ok(refined.routePlan.skills.includes('writing-markdown-helper'));
-  assert.ok(refined.routePlan.skills.includes('writing-checkers'));
-  assert.ok(refined.routePlan.tools.includes('writing_logic_check'));
-  assert.ok(refined.routePlan.tools.includes('writing_quality_check'));
+  assert.ok(!refined.routePlan.skills.includes('writing-checkers'));
+  assert.ok(!refined.routePlan.tools.includes('writing_logic_check'));
+  assert.ok(!refined.routePlan.tools.includes('writing_quality_check'));
 });
 
 test('release and irreversible work produces risk notes rather than protected gates', () => {

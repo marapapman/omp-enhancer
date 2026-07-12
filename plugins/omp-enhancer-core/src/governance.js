@@ -24,7 +24,15 @@ export function buildGovernancePromptFragment({
     '',
     formatSkillList(plan.skills),
     '',
-    'Skill use is flexible: load the relevant skill URI when it helps the task. If a suggested skill is unavailable, continue with the best available method and mention the limitation when material.',
+    'Before substantive work, read exactly the smallest directly applicable primary skill once. Prefer an exact project-specified skill, then the exact routed URI, then one inventory-confirmed equivalent. A skill counts as loaded only after a successful read of its SKILL.md. If resolution fails, make one targeted correction, continue without the skill, and report the limitation briefly. Do not invent aliases, create replacement skills, or retry unchanged calls.',
+    'For a focused task, one primary skill is normally enough; Chinese writing may use its base language guidance plus one task-specific skill. When writing language is pending, inspect the source first and only then select a language skill. Do not expand into the whole skill list unless the primary skill explicitly requires a companion.',
+    'Unless the user is auditing historical gate behavior, use only current routed or project-specified skills; do not load legacy gate-satisfy or gate-unblock compatibility resources.',
+    '',
+    '### Bounded execution guidance',
+    '',
+    'Confirm a path exists before reading it; do not guess report files or resource URIs. For a schema or path error, make at most one evidence-based targeted correction, then continue with the evidence already available.',
+    'For focused work, treat 6 to 8 read or search calls as a convergence checkpoint and synthesize the result. For a broad audit, produce at least one file-backed finding within that window. If time is short, deliver a clearly scoped partial result instead of searching indefinitely.',
+    'Dispatch an asynchronous task once. Wait through the host job or messaging mechanism when available; do not dispatch a second task merely to poll and do not create an unauthorized file rendezvous.',
     '',
     '### Useful tools',
     '',
@@ -46,7 +54,7 @@ export function buildGovernancePromptFragment({
     '',
     '### Advisor guidance',
     '',
-    'Use advisor input as another evidence source when it is available and useful. Reconcile it with the user request, repository facts, and observed tool results.',
+    'Treat advisor notes as evidence deltas. Incorporate each distinct material point once. A repeated note or a note without a new file, location, error, or observed result does not justify rereading skills, rerunning unchanged tools, reopening completed work, or emitting a second final answer. If the deliverable is already complete, apply only a concrete newly evidenced correction; otherwise stop.',
   ];
 
   if (includeModelWorkflowHints) {
@@ -78,7 +86,8 @@ export function buildSubagentPromptFragment({ prompt = '' } = {}) {
     'Suggested skills for this role:',
     formatSkillList(skills),
     '',
-    'Use the suggested skills when they improve the assigned checkpoint. Missing skills are a limitation to report, not a reason for the plugin to halt the role.',
+    'Before substantive work, read exactly the smallest directly applicable primary skill once. Prefer the exact project-specified or routed name. A skill counts as loaded only after a successful read of its SKILL.md.',
+    'If resolution fails, make one targeted correction and then continue with the available evidence. Do not invent an alias or retry the unchanged call. Missing skills are a limitation to report, not a reason for the plugin to halt the role.',
     '',
     'Return a concise result with the evidence, files, checks, and decisions used. The parent agent integrates this checkpoint into the overall task.',
   ].join('\n');
@@ -127,7 +136,7 @@ function scopeAndRiskLines(route, parentTask = '') {
   const plan = route.routePlan;
 
   if (descriptor.writingSourcePending || route.intent === 'writing.pending') {
-    const targets = descriptor.workspaceWriteTargets ?? [];
+    const targets = descriptor.writingSourceTargets ?? descriptor.workspaceWriteTargets ?? [];
     if (descriptor.language === 'mixed') {
       lines.push('The observed writing source is mixed-language. Select Chinese or English guidance per target or section instead of forcing one global language skill.');
     } else {

@@ -7,6 +7,7 @@ export const workflowRouteNames = [
   'writing.markdown',
   'doc.convert.word',
   'factcheck.document',
+  'code.plan',
   'code.dev',
   'code.debug',
   'code.test',
@@ -65,6 +66,12 @@ export const workflowRouteCatalog = {
     qualityChecks: ['claim-to-evidence consistency'],
     roles: ['fact-planner', 'fact-researcher-a', 'fact-researcher-b', 'fact-cross-checker', 'fact-reviewer'],
   }),
+  'code.plan': routeMeta({
+    steps: ['Inspect the smallest relevant implementation and test context.', 'Define scope, invariants, implementation steps, and verification strategy.', 'Return an actionable plan without executing it.'],
+    scopeNotes: ['Planning is advisory and does not imply permission to edit files or run tests.'],
+    skills: ['brainstorming', 'writing-plans'],
+    qualityChecks: ['plan scope and verification correspondence'],
+  }),
   'code.dev': routeMeta({
     steps: ['Inspect the affected code and existing patterns.', 'Plan the smallest coherent change.', 'Implement the change.', 'Run relevant verification and review the diff.'],
     scopeNotes: ['Release or deployment is a separate step when the user requests it.'],
@@ -119,6 +126,7 @@ export function workflowRouteForLegacyIntent(intent, { auditMode = null } = {}) 
   if (intent === 'diagnosis') return 'code.debug';
   if (intent === 'bug-audit') return auditMode === 'focused' ? 'code.review' : 'code.review';
   if (intent === 'fact-check') return 'factcheck.document';
+  if (intent === 'planning') return 'code.plan';
   if (intent === 'security-review') return 'security.review';
   if (intent === 'config-assets') return 'omp.plugin';
   if (intent === 'writing.pending') return 'writing.pending';

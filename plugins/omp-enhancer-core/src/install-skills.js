@@ -3,6 +3,15 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
+export const LEGACY_GATE_SKILL_NAMES = Object.freeze([
+  'gate-aware-interaction',
+  'omp-factcheck-gate-satisfy',
+  'omp-gate-satisfaction',
+  'omp-gate-unblock',
+  'omp-subagent-gate-satisfaction',
+  'omp-testing-gate-report',
+]);
+
 export function defaultOmpRoot() {
   return path.join(os.homedir(), '.omp');
 }
@@ -32,11 +41,19 @@ function resolvePaths(ompRoot) {
  * @param {object} options
  * @param {boolean} [options.dryRun=false]  Print actions without executing.
  * @param {string}  [options.ompRoot]       OMP root dir (default: ~/.omp)
- * @returns {{ installed: string[], skipped: string[], errors: string[], warnings: string[] }}
+ * @returns {{ installed: string[], skipped: string[], errors: string[], warnings: string[], legacyFindings: object[], recommendedIgnoredSkills: string[] }}
  */
 export async function installPluginSkills({ dryRun = false, ompRoot } = {}) {
-  const results = { installed: [], skipped: [], errors: [], warnings: [] };
-  const paths = resolvePaths(ompRoot ?? defaultOmpRoot());
+  const root = ompRoot ?? defaultOmpRoot();
+  const compatibility = inspectManagedSkillCompatibility({ ompRoot: root });
+  const results = {
+    installed: [],
+    skipped: [],
+    errors: [],
+    warnings: [],
+    ...compatibility,
+  };
+  const paths = resolvePaths(root);
   const marketplaces = await discoverMarketplaces(paths.marketplacesDir);
 
   if (!marketplaces.length) {
@@ -82,6 +99,43 @@ export async function installPluginSkills({ dryRun = false, ompRoot } = {}) {
   }
 
   return results;
+}
+
+/**
+ * Report exact historical managed skills whose instructions still describe
+ * completion gates. This is deliberately read-only: auto-learn remains
+ * enabled, real directories are preserved, and callers decide whether to add
+ * the returned exact names to the host's ignored-skill list.
+ */
+export function inspectManagedSkillCompatibility({ ompRoot } = {}) {
+  const root = ompRoot ?? defaultOmpRoot();
+  const { managedSkillsDir } = resolvePaths(root);
+  const legacyFindings = [];
+
+  for (const name of LEGACY_GATE_SKILL_NAMES) {
+    const skillDir = path.join(managedSkillsDir, name);
+    let linkTarget = null;
+    try {
+      linkTarget = readlinkSync(skillDir);
+    } catch {
+      // A real directory or absent path is handled below.
+    }
+    if (linkTarget == null && !existsSync(skillDir)) continue;
+
+    legacyFindings.push({
+      name,
+      path: skillDir,
+      kind: linkTarget == null ? 'real-directory' : 'symlink',
+      ...(linkTarget == null ? {} : { linkTarget }),
+      action: 'ignore-exact-name',
+      advisory: true,
+    });
+  }
+
+  return {
+    legacyFindings,
+    recommendedIgnoredSkills: legacyFindings.map(({ name }) => name),
+  };
 }
 
 function installSingle(name, sourceDir, targetBase, dryRun, results) {

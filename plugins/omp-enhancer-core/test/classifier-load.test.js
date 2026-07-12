@@ -15,7 +15,7 @@ const validRouteCases = [
     language: 'zh',
     riskFlags: ['needs-writing-qa', 'needs-subagents'],
     expectedAgent: 'writing-helper.zh-writer',
-    expectedSubagents: ['zh-writer', 'zh-checker'],
+    expectedSubagents: [],
   }),
   caseFor({
     name: 'en writing',

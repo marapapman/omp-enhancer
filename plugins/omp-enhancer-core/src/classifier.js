@@ -15,6 +15,7 @@ export const classifierDefaults = {
 export const classifierIntents = [
   'writing.zh',
   'writing.en',
+  'planning',
   'bug-audit',
   'fact-check',
   'implementation-with-tests',
@@ -178,6 +179,7 @@ export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
       '- Return descriptor hints only. Do not output or invent constraints, capabilities, skills, tools, agents, commands, or gates.',
       `- The deterministic rule route is the scope-preserving baseline for classifier hints: ${ruleRoute.intent}. Hints may enrich advisory workflow suggestions but never create permissions or completion conditions.`,
       '- Use operationHint diagnose only when the user mainly asks why something failed and does not ask for a code/config change.',
+      '- Use operationHint plan when the user asks only for an implementation plan, repair plan, or test strategy. Represent it as inspect/answer guidance; it never grants edits or test execution.',
       '- Use operationHint release only when the user mainly asks to publish, push, or deploy without asking for implementation.',
       '- Use operationHint modify with code/tests/plugin domains for implementation work, even when config or marketplace is mentioned.',
       '- Chinese requests like "写一个登录功能", "写个页面", "写用户模块", or other product/code construction use modify/create with code or visual domains, not writing.',
@@ -191,12 +193,12 @@ export function buildClassifierPrompt({ prompt = '', context = [] } = {}) {
       '- Pure bug-report drafting is writing; executable testing, finding, auditing, or verifying bugs uses code/tests.',
       '- Security announcements, privacy policies, license/compliance memos, and other prose artifacts are writing tasks when the user does not ask to audit or fix code/config/dependencies.',
       '- Research, scientific exploration, literature/PDF download, and daily office organization are unknown unless the user explicitly asks to draft, revise, polish, or write a concrete prose artifact.',
-      '- Read-only module explanation, API usage lookup, official-doc lookup, source lists, and implementation-plan research are unknown unless the user asks to edit code, run tests, or draft a prose artifact.',
+      '- Read-only module explanation, API usage lookup, official-doc lookup, and source lists are unknown unless the user asks to edit code, run tests, or draft a prose artifact. Explicit implementation plans and test strategies use plan.',
       '- A request to draft, revise, polish, or write a report/summary/document about tests, coverage, gates, or release status uses writing, not executable tests.',
       '- Do not add security domain merely because prose mentions safety, risk, review, or security. Security applies to code, config, auth, secrets, vulnerabilities, or infrastructure.',
       '- Never turn deterministic writing into security work for safety, risk, privacy, license, or security wording unless the task audits or fixes code/config/dependencies/secrets/auth/infrastructure.',
       '- Put every related concern into domains, phaseHints, and riskFlags so compound work is not lost.',
-      '- Implementation repair plan: fixing or optimizing OMP/plugin routing, workflow controllers, prompts, or classifier logic uses modify with code/tests/plugin, even if the user first asks for a plan.',
+      '- An implementation repair plan without edits uses plan with code/tests/plugin. A request to perform the repair uses modify with code/tests/plugin.',
       '- Workflow validation: running MiMo, advisor, E2E, smoke, workflow, gate, skill, subagent, or background-task validation without code changes uses inspect/execute with tests.',
       '- Test-observation summary: summarizing already observed test, E2E, gate, or workflow results uses writing and must not add executable verification.',
       '- Real config-assets inventory: add config/plugin only for explicit omp-config assets, templates, hooks, packaged inventory, doctor, or marketplace catalog checks.',
@@ -487,7 +489,11 @@ function safeHintDescriptorAddition(classification, fallbackRoute) {
     && classification.domains.some((domain) => domain !== 'writing' && domain !== 'general')
     && ceiling.constraints.workspaceWrite !== 'required') return null;
 
+  const planningHint = classification.operationHint === 'plan';
   const phases = classification.phaseHints
+    .map((phase) => planningHint && phase.kind === 'plan'
+      ? { kind: 'answer', domain: phase.domain }
+      : phase)
     .filter((phase) => phaseFitsDeterministicCeiling(phase, ceiling));
   if (!phases.length) return null;
   const phaseDomains = new Set(phases.map(({ domain }) => domain));
@@ -514,7 +520,7 @@ function safeHintDescriptorAddition(classification, fallbackRoute) {
   }
 
   return normalizeTaskDescriptor({
-    operation: classification.operationHint,
+    operation: planningHint ? 'inspect' : classification.operationHint,
     domains,
     constraints: ceiling.constraints,
     capabilities: ceiling.capabilities,
@@ -522,6 +528,11 @@ function safeHintDescriptorAddition(classification, fallbackRoute) {
     risk: { level: riskLevel, flags: riskFlags },
     complexity: domains.length > 2 ? 'broad' : 'focused',
     language: classification.language,
+    provenance: planningHint ? {
+      ruleConfidence: classification.confidence,
+      reasons: ['classifier planning hint'],
+      requiresPolicyRoute: true,
+    } : undefined,
   });
 }
 
@@ -733,6 +744,7 @@ function isWritingIntent(intent) {
 
 function isNonWritingWorkflowIntent(intent) {
   return intent === 'security-review'
+    || intent === 'planning'
     || intent === 'bug-audit'
     || intent === 'fact-check'
     || intent === 'testing'

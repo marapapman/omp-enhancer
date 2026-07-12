@@ -45,6 +45,31 @@ test('TaskDescriptor v1 exposes the planned construction and legacy compatibilit
   assert.equal(typeof module.descriptorFromLegacyIntent, 'function', 'missing descriptorFromLegacyIntent(intent, options) export');
 });
 
+test('a plan followed by explicit implementation remains a writable implementation task', async (t) => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const prompts = [
+    '制定计划，然后开始实现并修改代码。',
+    '先制定修复计划，然后开始实现并修改 src/router.js。',
+    'Create a plan, then start implementing and modify the code.',
+    'Create an implementation plan, then start implementing and modify src/router.js.',
+  ];
+
+  for (const prompt of prompts) {
+    await t.test(prompt, () => {
+      const descriptor = describeNaturalLanguageTask({ prompt });
+      assert.equal(descriptor.operation, 'modify');
+      assert.ok(descriptor.domains.includes('code'));
+      assert.equal(descriptor.constraints.workspaceWrite, 'required');
+      assert.ok(descriptor.capabilities.includes('fs.write'));
+      assert.ok(descriptor.phases.some((phase) => phase.kind === 'modify'));
+      assert.equal(
+        descriptor.provenance.reasons.includes('implementation or test planning requested'),
+        false,
+      );
+    });
+  }
+});
+
 test('an exclusive single route-tool probe describes the envelope instead of its embedded payload', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   const prompt = 'Call omp_core_route_task exactly once with this prompt: Polish README.md to say do not push. Separately, push the release. Then report only constraints.externalWrite and whether a release phase is present. Do not execute the described release and do not use any other tools.';

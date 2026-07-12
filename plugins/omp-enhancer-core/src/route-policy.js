@@ -12,6 +12,8 @@ export const PUBLIC_INTENT_ALIASES = Object.freeze({
   'doc.convert.word': 'doc.convert.word',
   'factcheck.document': 'fact-check',
   'fact-check': 'fact-check',
+  'code.plan': 'planning',
+  planning: 'planning',
   'code.dev': 'implementation-with-tests',
   'implementation-with-tests': 'implementation-with-tests',
   'code.debug': 'diagnosis',
@@ -59,9 +61,8 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
   const testsSuggested = constraints.testExecution === 'required';
   const rolesAllowedByRequest = constraints.subagents !== 'forbidden';
   const exactMethodRequest = descriptor.exclusiveToolContract?.mode === 'exclusive';
-  const focusedLocalFactInspection = descriptor.operation === 'inspect'
+  const localFactInspection = descriptor.operation === 'inspect'
     && domains.has('facts')
-    && descriptor.complexity === 'focused'
     && constraints.networkAccess === 'forbidden';
   const primaryDirectTestAuthoring = (descriptor.provenance?.reasons ?? [])
     .includes('primary direct test authoring requested');
@@ -98,7 +99,9 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
     && steps.some(({ kind, domain }) => kind === 'modify' && domain === 'tests');
 
   if (domains.has('facts')) {
-    if (!focusedLocalFactInspection) {
+    if (localFactInspection && descriptor.complexity === 'focused') {
+      skills.push('fact-checking');
+    } else {
       skills.push(...FACT_SKILLS);
       tools.push(...FACT_TOOLS);
       if (rolesAllowedByRequest) roles.push(...subagentPlans.factCheck);
@@ -107,27 +110,39 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
   }
 
   const writingWorkflow = domains.has('writing') && descriptor.operation !== 'execute';
-  if (writingWorkflow && !focusedLocalFactInspection) {
+  if (writingWorkflow && !localFactInspection) {
     const language = descriptor.language;
-    const complexWriting = domains.has('facts') || descriptor.complexity === 'broad';
+    const taskKind = descriptor.writingTaskKind ?? 'unknown';
+    const complexReview = ['review', 'draft', 'unknown'].includes(taskKind) && descriptor.complexity === 'broad';
     if (language === 'zh') {
-      skills.push('plain-chinese-writing', 'zh-writing-polish');
-      if (complexWriting) skills.push('zh-writing-checkers');
-      if (complexWriting && rolesAllowedByRequest) roles.push(...subagentPlans.writingZh);
+      skills.push('plain-chinese-writing');
+      if (taskKind === 'review') skills.push('zh-writing-review');
+      else skills.push('zh-writing-polish');
+      if (complexReview) skills.push('zh-writing-checkers');
+      if (complexReview && rolesAllowedByRequest) roles.push(...subagentPlans.writingZh);
     } else if (language === 'en') {
-      skills.push('writing-markdown-helper');
-      if (complexWriting) skills.push('writing-checkers');
-      if (complexWriting && rolesAllowedByRequest) roles.push(...subagentPlans.writingEn);
+      skills.push(taskKind === 'review' ? 'writing-review' : 'writing-markdown-helper');
+      if (complexReview) skills.push('writing-checkers');
+      if (complexReview && rolesAllowedByRequest) roles.push(...subagentPlans.writingEn);
     } else {
       qualityChecks.push('detect-source-language');
       riskNotes.push(language === 'mixed'
         ? 'Select Chinese or English writing guidance per target or section; do not force a single language across mixed source text.'
         : 'Read the target text before selecting Chinese or English writing skills.');
     }
-    if (complexWriting && ['zh', 'en'].includes(language)) {
+    if (complexReview && ['zh', 'en'].includes(language)) {
       tools.push('writing_logic_check', 'writing_quality_check');
       qualityChecks.push('writing-quality');
     }
+    if (taskKind === 'review' && descriptor.writingSourceTargets?.some((target) => /\.docx?$/i.test(target))) {
+      skills.push('docx');
+    }
+  }
+
+  if (route.intent === 'planning') {
+    skills.push('brainstorming', 'writing-plans');
+    if (domains.has('tests')) skills.push('ai-regression-testing');
+    qualityChecks.push('plan-scope-consistency');
   }
 
   if (domains.has('security') && descriptor.operation !== 'answer') {
@@ -168,7 +183,15 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
     skills.push(...routeSkills(route));
     tools.push(...routeTools(route));
   }
-  if (['writing.latex', 'writing.markdown', 'doc.convert.word', 'design.visual'].includes(route.workflowRoute)) {
+  if (descriptor.writingTaskKind === 'convert') {
+    const conversionSkill = conversionSkillFor(descriptor.writingConversion);
+    if (conversionSkill) skills.push(conversionSkill);
+  } else if (route.workflowRoute === 'doc.convert.word'
+    && descriptor.writingTaskKind === 'review') {
+    skills.push('docx');
+  } else if (route.workflowRoute === 'design.visual'
+    || descriptor.writingTaskKind === 'unknown'
+      && ['writing.latex', 'writing.markdown', 'doc.convert.word'].includes(route.workflowRoute)) {
     skills.push(...routeSkills(route));
   }
   if (descriptor.operation === 'modify' && domains.has('document')) skills.push('verification-before-completion');
@@ -187,7 +210,9 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
     steps,
     skills: exactMethodRequest ? [] : unique(skills).filter((skill) => (
       (rolesAllowedByRequest || skill !== 'subagent-driven-development')
-      && (testsSuggested || !['test-driven-development', 'ai-regression-testing'].includes(skill))
+      && (testsSuggested
+        || route.intent === 'planning' && skill === 'ai-regression-testing'
+        || !['test-driven-development', 'ai-regression-testing'].includes(skill))
     )),
     tools: exactMethodRequest ? [] : unique(tools).filter((tool) => testsSuggested || !TESTING_TOOLS.includes(tool)),
     roles: exactMethodRequest || !rolesAllowedByRequest ? [] : uniqueRoles(roles, { testsSuggested }),
@@ -252,6 +277,7 @@ function legacyIntentForDescriptor(descriptor = {}) {
   if (descriptor.operation === 'diagnose' && domains.has('config')) return 'config-assets';
   if (descriptor.operation === 'diagnose') return 'diagnosis';
   if (descriptor.operation === 'release') return 'release';
+  if (reasons.includes('implementation or test planning requested')) return 'planning';
   if (['create', 'modify'].includes(descriptor.operation) && domains.has('visual')) return 'design.visual';
   if (descriptor.operation === 'create' && domains.has('code')) return 'implementation-with-tests';
   if (reasons.includes('primary direct test authoring requested')
@@ -274,7 +300,14 @@ function legacyIntentForDescriptor(descriptor = {}) {
 
 function workflowRouteForIntent(intent, descriptor = {}) {
   if (['writing.pending', 'writing.zh', 'writing.en'].includes(intent)) {
-    const targets = descriptor.workspaceWriteTargets ?? [];
+    if (descriptor.writingTaskKind === 'convert') {
+      if (descriptor.writingConversion === 'latex-to-markdown') return 'writing.markdown';
+      if (descriptor.writingConversion === 'word') return 'doc.convert.word';
+      if (['markdown-to-latex', 'latex-template'].includes(descriptor.writingConversion)) return 'writing.latex';
+    }
+    const targets = descriptor.writingSourceTargets?.length
+      ? descriptor.writingSourceTargets
+      : descriptor.workspaceWriteTargets ?? [];
     if (targets.some((target) => /\.tex$/i.test(target))) return 'writing.latex';
     if (targets.some((target) => /\.(?:md|mdx|rst)$/i.test(target))) return 'writing.markdown';
     if (targets.some((target) => /\.docx?$/i.test(target))) return 'doc.convert.word';
@@ -288,6 +321,7 @@ function workflowRouteForIntent(intent, descriptor = {}) {
     'writing.markdown': 'writing.markdown',
     'doc.convert.word': 'doc.convert.word',
     'fact-check': 'factcheck.document',
+    planning: 'code.plan',
     'implementation-with-tests': 'code.dev',
     testing: 'code.test',
     diagnosis: 'code.debug',
@@ -297,6 +331,15 @@ function workflowRouteForIntent(intent, descriptor = {}) {
     'design.visual': 'design.visual',
     release: 'agentic.simple',
   })[intent] ?? 'agentic.simple';
+}
+
+function conversionSkillFor(conversion = 'unknown') {
+  return ({
+    'markdown-to-latex': 'format-markdown2latex',
+    'latex-to-markdown': 'format-latex2markdown',
+    'latex-template': 'format-template-latex',
+    word: 'docx',
+  })[conversion] ?? null;
 }
 
 function routeSkills(route = {}) {

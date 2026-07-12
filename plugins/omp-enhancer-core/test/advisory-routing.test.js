@@ -247,4 +247,12 @@ test('inline source extraction and language detection ignore common document mar
   assert.equal(detectWritingSourceLanguage('本文介绍 router.js 的设计与 API 边界。'), 'zh');
   assert.equal(detectWritingSourceLanguage('```text\nThis is fenced English prose.\n```'), 'en');
   assert.equal(detectWritingSourceLanguage('正文说明如下。\n```js\nconst englishCode = true;\n```'), 'zh');
+  assert.equal(detectWritingSourceLanguage([
+    '本节系统分析自动化测试方法，并讨论其适用范围与局限。',
+    '',
+    '**参考文献**',
+    '',
+    'Smith J, et al. A Long English Reference Title for Automated Testing Systems.',
+    'Jones A, et al. Another Long English Bibliography Entry with Technical Terms.',
+  ].join('\n')), 'zh');
 });

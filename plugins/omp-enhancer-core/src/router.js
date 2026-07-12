@@ -3,6 +3,7 @@ import {
   describeNaturalLanguageTask,
   descriptorFromLegacyIntent,
   extractInlineWritingSource,
+  isFactCheckDirective,
   normalizeTaskDescriptor,
   resolveWritingTargetLanguage,
   writingDirectivePromptForSignals,
@@ -74,6 +75,7 @@ export const routedIntents = [
   'writing.markdown',
   'doc.convert.word',
   'factcheck.document',
+  'code.plan',
   'code.dev',
   'code.debug',
   'code.test',
@@ -83,6 +85,7 @@ export const routedIntents = [
   'design.visual',
   'config-assets',
   'fact-check',
+  'planning',
   'bug-audit',
   'diagnosis',
   'release',
@@ -236,7 +239,9 @@ export function routeNaturalLanguageTask(input = {}) {
     || ['writing.pending', 'writing.zh', 'writing.en'].includes(policy.intent) && legacyRoute.intent !== 'design.visual'
   );
   const authorityBearingTargetNeutralized = writingTargetAuthorityNeutralized(directivePrompt, operationalPrompt);
-  const compatibleSpecializedWorkflow = isSpecializedDocumentRoute(legacyRoute)
+  const policyOwnsWorkflow = ['fact-check', 'planning', 'bug-audit', 'diagnosis', 'security-review', 'config-assets']
+    .includes(policy.intent);
+  const compatibleSpecializedWorkflow = isSpecializedDocumentRoute(legacyRoute) && !policyOwnsWorkflow
     ? legacyRoute.workflowRoute
     : policy.workflowRoute;
   const preserveSpecializedLegacyRoute = isSpecializedDocumentRoute(legacyRoute)
@@ -244,8 +249,11 @@ export function routeNaturalLanguageTask(input = {}) {
       || legacyRoute.workflowRoute === 'doc.convert.word'
         && described.operation === 'create'
         && described.domains?.includes('document'));
-  const usePolicyRoute = !preserveSpecializedLegacyRoute && ((routerMode !== 'legacy'
-    && (canonicalObserveCodeModification
+  const supportedDescriptorProjection = policy.intent === 'planning'
+    || described.domains?.includes('writing') && (described.writingSourceTargets ?? []).length > 0;
+  const usePolicyRoute = !preserveSpecializedLegacyRoute && ((routerMode !== 'legacy' && (
+    supportedDescriptorProjection
+      || canonicalObserveCodeModification
       || canonicalTestExecution || canonicalPureWriting || canonicalPureSecurity || canonicalPureFact || canonicalSecurityWriting
       || canonicalSecurityRemediation || canonicalFactWriting || canonicalWritingTestRelease || canonicalCompoundCodeWriting
       || canonicalReleaseOperation || canonicalConfigDiagnosis || canonicalExclusiveRouteProbe || canonicalExclusiveStatusProbe || canonicalPrimaryTestAuthoring || canonicalResponseWriting
@@ -254,11 +262,11 @@ export function routeNaturalLanguageTask(input = {}) {
       || canonicalContentDrivenWriting
       || canonicalObservedSummary
       || canonicalBoundedTestModification
-      || alignedPayloadProjection || authorityBearingTargetNeutralized))
+      || alignedPayloadProjection || authorityBearingTargetNeutralized)
     || (routerMode === 'enforce'
       && (policy.shouldOverrideLegacy || canonicalCodeModification || canonicalFunctionalUiCreation || canonicalVisualAction || canonicalDirectWriting
         || canonicalObservedSummary || canonicalObservedRerun
-        || shouldOverrideLegacyRoute(described, legacyRoute, prompt)))
+        || shouldOverrideLegacyRoute(described, legacyRoute, prompt))))
     || contentDrivenWritingCorrection);
   const routed = usePolicyRoute
     ? routeByLegacyIntent(policy.intent, {
@@ -764,6 +772,19 @@ function routeByLegacyIntent(intent, { source = 'natural-language', writingCompl
     });
   }
 
+  if (intent === 'planning') {
+    return route({
+      intent,
+      agent: null,
+      requiredSkills: ['brainstorming', 'writing-plans'],
+      requiredTools: [],
+      requiredSubagents: [],
+      source,
+      workflowRoute: workflowRoute ?? 'code.plan',
+      shouldUseClassifier,
+    });
+  }
+
   if (intent === 'release') {
     return route({
       intent,
@@ -943,6 +964,7 @@ function workflowRouteForPromptIntent(workflowRouteHint, intent) {
     if (intent === 'bug-audit') return 'code.review';
     if (intent === 'diagnosis') return 'code.debug';
     if (intent === 'fact-check') return 'factcheck.document';
+    if (intent === 'planning') return 'code.plan';
     if (intent === 'security-review') return 'security.review';
     if (intent === 'config-assets') return 'omp.plugin';
     if (intent === 'writing.pending' || intent === 'writing.zh' || intent === 'writing.en') return workflowRouteHint;
@@ -997,14 +1019,7 @@ function isMarkdownWritingRequest(text) {
 }
 
 function isFactCheckDocumentRequest(text) {
-  const sentenceText = String(text).replace(/((?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+)\.([a-z0-9]{1,10})\b/gi, '$1_fileext_$2');
-  return sentenceText.split(/[。！？.!?\n]+/).some((clause) => (
-    /(?:核验|核查|查证|事实核查|事实审查|事实检查|verify|fact.?check)[^。！？.!?\n]{0,160}(?:引用|事实|数据|年份|claims?|citations?|source|evidence|证据)/i.test(clause)
-    || /(?:引用|事实|数据|年份|claims?|citations?|source|evidence|证据)[^。！？.!?\n]{0,160}(?:核验|核查|查证|verify|fact.?check)/i.test(clause)
-    || /(?:是否|whether|does|do)[^。！？.!?\n]{0,120}(?:evidence|证据)[^。！？.!?\n]{0,40}(?:support|支持|支撑|证明)/i.test(clause)
-    || /(?:check|verify)[^。！？.!?\n]{0,80}(?:cited\s+source|citation(?:\s+source)?)[^。！？.!?\n]{0,80}supports?[^。！？.!?\n]{0,40}claims?/i.test(clause)
-    || /(?:check|verify)[^。！？.!?\n]{0,80}claims?[^。！？.!?\n]{0,80}supported\s+by[^。！？.!?\n]{0,40}(?:the\s+)?(?:cited\s+source|citation(?:\s+source)?)/i.test(clause)
-  ));
+  return isFactCheckDirective(text);
 }
 
 function isVisualDesignRequest(text, original) {
@@ -1404,9 +1419,8 @@ function isConfigAssetRequest(text) {
 }
 
 function isFactCheckRequest(text) {
-  return includesAny(text, factCheckTerms)
-    || /(?:检查|审查|核对|验证|核验|查证).{0,20}(?:事实|真实性|引用|citation|claim|数据|数字|年份|出处|来源|证据)/.test(text)
-    || /(?:fact|factual|claim|citation).{0,30}(?:check|verify|verification|review|audit|authenticity)/.test(text);
+  return isFactCheckDirective(text)
+    || includesAny(text, factCheckTerms);
 }
 
 function isGateValidatorStatusReport(text) {

@@ -5,7 +5,11 @@ import { existsSync, readlinkSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { installPluginSkills } from '../src/install-skills.js';
+import {
+  LEGACY_GATE_SKILL_NAMES,
+  inspectManagedSkillCompatibility,
+  installPluginSkills,
+} from '../src/install-skills.js';
 
 /**
  * Create a minimal marketplace catalog at <ompRoot>/plugins/cache/marketplaces/<name>/marketplace.json
@@ -282,6 +286,56 @@ test('installPluginSkills handles missing SKILL.md gracefully', async () => {
     // Should warn about missing SKILL.md but not crash
     assert.equal(result.installed.length, 0);
     assert.ok(result.warnings.some((w) => w.includes('SKILL.md not found')), 'should warn about missing SKILL.md');
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('managed skill compatibility reports only exact legacy gate skills without modifying them', async () => {
+  const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-skills-compat-'));
+  const managedRoot = path.join(tmpRoot, 'agent', 'managed-skills');
+
+  try {
+    for (const name of [...LEGACY_GATE_SKILL_NAMES, 'gateguard', 'omp-testing-enhancer-audit']) {
+      const skillDir = path.join(managedRoot, name);
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(path.join(skillDir, 'SKILL.md'), `---\nname: ${name}\n---\n`);
+    }
+
+    const before = await Promise.all(
+      [...LEGACY_GATE_SKILL_NAMES, 'gateguard', 'omp-testing-enhancer-audit']
+        .map(async (name) => [name, await readFile(path.join(managedRoot, name, 'SKILL.md'), 'utf8')]),
+    );
+    const result = inspectManagedSkillCompatibility({ ompRoot: tmpRoot });
+
+    assert.deepEqual(result.recommendedIgnoredSkills, [...LEGACY_GATE_SKILL_NAMES]);
+    assert.deepEqual(result.legacyFindings.map(({ name }) => name), [...LEGACY_GATE_SKILL_NAMES]);
+    assert.equal(result.legacyFindings.every(({ action }) => action === 'ignore-exact-name'), true);
+    assert.equal(result.legacyFindings.some(({ name }) => name === 'gateguard'), false);
+    assert.equal(result.legacyFindings.some(({ name }) => name === 'omp-testing-enhancer-audit'), false);
+
+    const after = await Promise.all(
+      [...LEGACY_GATE_SKILL_NAMES, 'gateguard', 'omp-testing-enhancer-audit']
+        .map(async (name) => [name, await readFile(path.join(managedRoot, name, 'SKILL.md'), 'utf8')]),
+    );
+    assert.deepEqual(after, before);
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('installPluginSkills returns legacy diagnostics even when no marketplace is installed', async () => {
+  const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-skills-compat-'));
+  try {
+    const legacyDir = path.join(tmpRoot, 'agent', 'managed-skills', 'omp-gate-unblock');
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(path.join(legacyDir, 'SKILL.md'), '---\nname: omp-gate-unblock\n---\n');
+
+    const result = await installPluginSkills({ ompRoot: tmpRoot, dryRun: true });
+    assert.deepEqual(result.recommendedIgnoredSkills, ['omp-gate-unblock']);
+    assert.deepEqual(result.legacyFindings.map(({ name }) => name), ['omp-gate-unblock']);
+    assert.equal(existsSync(path.join(legacyDir, 'SKILL.md')), true);
+    assert.ok(result.warnings.some((warning) => warning.includes('No marketplace catalogs')));
   } finally {
     await rm(tmpRoot, { recursive: true, force: true });
   }
