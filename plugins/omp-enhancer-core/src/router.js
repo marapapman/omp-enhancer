@@ -104,8 +104,11 @@ export function routeNaturalLanguageTask(input = {}) {
     describeNaturalLanguageTask({ prompt, ...(hasProvidedSourceText ? { sourceText: providedSourceText } : {}) }),
     explicitSubagentsRequested,
   );
-  const descriptorRouteDiagnostic = (described.provenance?.reasons ?? [])
-    .includes('route status skill diagnostic probe');
+  const descriptorRouteDiagnostic = (described.provenance?.reasons ?? []).some((reason) => [
+    'route status skill diagnostic probe',
+    'exclusive route task diagnostic probe',
+    'exclusive subagent status diagnostic probe',
+  ].includes(reason));
   // Quoted probe payloads are data. Preserve the outer route-tool instruction
   // for legacy compatibility routing so embedded writing examples cannot turn
   // a diagnostic matrix into a writing workflow.
@@ -214,6 +217,8 @@ export function routeNaturalLanguageTask(input = {}) {
     && legacyRoute.intent === policy.intent;
   const canonicalContentDrivenWriting = canonicalDirectWriting
     && ['writing.pending', 'writing.zh', 'writing.en'].includes(policy.intent);
+  const contentDrivenWritingCorrection = canonicalContentDrivenWriting
+    && legacyRoute.intent !== policy.intent;
   const canonicalBoundedTestModification = described.operation === 'modify'
     && (described.testExclusions ?? []).length > 0;
   const canonicalObservedSummary = (described.provenance?.reasons ?? []).includes('observed test summary requested')
@@ -253,7 +258,8 @@ export function routeNaturalLanguageTask(input = {}) {
     || (routerMode === 'enforce'
       && (policy.shouldOverrideLegacy || canonicalCodeModification || canonicalFunctionalUiCreation || canonicalVisualAction || canonicalDirectWriting
         || canonicalObservedSummary || canonicalObservedRerun
-        || shouldOverrideLegacyRoute(described, legacyRoute, prompt))));
+        || shouldOverrideLegacyRoute(described, legacyRoute, prompt)))
+    || contentDrivenWritingCorrection);
   const routed = usePolicyRoute
     ? routeByLegacyIntent(policy.intent, {
       prompt,

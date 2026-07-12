@@ -167,6 +167,47 @@ test('registered route and status tools never self-reject an exclusive route', a
   }
 });
 
+test('multi-route writing diagnostics remain advisory and never schedule continuation', async () => {
+  const prompt = 'Final installed writing-route E2E. Call omp_core_route_task exactly twice. A prompt: "请润色这段摘要：This paper presents a reliable advisory router for coding agents." B prompt: "Please polish this paragraph: 本文提出一种可靠的智能体工作流路由方法。" Return exactly A=<intent>/<routePlan.mode>, B=<intent>/<routePlan.mode>. Do not write files.';
+  const { pi, ctx } = await routedRuntime(prompt);
+  const routeTool = pi.tools.get('omp_core_route_task');
+  const initial = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
+  assert.equal(initial.lastRoute.intent, 'diagnosis');
+  assert.equal(initial.lastRoute.routePlan.mode, 'advisory');
+  assert.equal(initial.lastRoute.routePlan.autoContinue, false);
+
+  const english = await routeTool.execute(
+    'route-english',
+    { prompt: '请润色这段摘要：This paper presents a reliable advisory router for coding agents.' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  const chinese = await routeTool.execute(
+    'route-chinese',
+    { prompt: 'Please polish this paragraph: 本文提出一种可靠的智能体工作流路由方法。' },
+    undefined,
+    undefined,
+    ctx,
+  );
+  assert.equal(english.details.route.intent, 'writing.en');
+  assert.equal(english.details.route.routePlan.mode, 'advisory');
+  assert.equal(chinese.details.route.intent, 'writing.zh');
+  assert.equal(chinese.details.route.routePlan.mode, 'advisory');
+
+  const toolCall = await event(pi, 'tool_call')(
+    { toolName: 'omp_core_route_task', input: { prompt: 'Polish this English paragraph.' } },
+    ctx,
+  );
+  assert.notEqual(toolCall?.block, true);
+  assert.equal(await event(pi, 'session_stop')({ output: 'A=writing.en/advisory, B=writing.zh/advisory' }, ctx), undefined);
+
+  const final = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
+  assert.equal(final.lastRoute.intent, 'diagnosis');
+  assert.equal(Object.hasOwn(final, 'gateController'), false);
+  assert.equal(Object.hasOwn(final, 'loopGuard'), false);
+});
+
 test('route probes refine path-only writing after observed source text is supplied', async () => {
   const { pi, ctx } = await routedRuntime('Please polish tex/abstract.tex.');
   const routeTool = pi.tools.get('omp_core_route_task');

@@ -418,7 +418,7 @@ test('routes E2E route/status/skill workflow audits as diagnosis-only probes', (
 test('routes multi-sample route-tool probes by the outer diagnostic instruction', () => {
   const prompt = 'Final installed writing-route E2E. Call omp_core_route_task exactly twice. A prompt: "请润色这段摘要：This paper presents a reliable advisory router for coding agents." B prompt: "Please polish this paragraph: 本文提出一种可靠的智能体工作流路由方法。" Return exactly A=<intent>/<routePlan.mode>, B=<intent>/<routePlan.mode>. Do not write files.';
 
-  for (const routerMode of ['observe', 'enforce']) {
+  for (const routerMode of ['legacy', 'observe', 'enforce']) {
     const route = routeNaturalLanguageTask({ prompt, routerMode });
 
     assert.equal(route.intent, 'diagnosis', routerMode);
@@ -433,13 +433,111 @@ test('routes multi-sample route-tool probes by the outer diagnostic instruction'
 });
 
 test('keeps route-tool prose inside an explicit writing payload as data', () => {
-  const route = routeNaturalLanguageTask({
-    prompt: 'Polish this paragraph: Final installed writing-route E2E. Call omp_core_route_task exactly twice. Do not write files. This sentence documents a diagnostic command without requesting its execution.',
-  });
+  const cases = [
+    {
+      name: 'direct English request',
+      prompt: 'Polish this paragraph: Final installed writing-route E2E. Call omp_core_route_task exactly twice. Do not write files. This sentence documents a diagnostic command without requesting its execution.',
+      intent: 'writing.en',
+    },
+    {
+      name: 'English adverb before directive',
+      prompt: 'Please carefully polish this paragraph: Final installed writing-route E2E. Call omp_core_route_task exactly twice. Do not write files.',
+      intent: 'writing.en',
+    },
+    {
+      name: 'English polite request',
+      prompt: 'Could you please polish this paragraph: Final installed writing-route E2E. Call omp_core_route_task exactly twice. Do not write files.',
+      intent: 'writing.en',
+    },
+    {
+      name: 'English publication preface',
+      prompt: 'For publication, please polish this paragraph: Final installed writing-route E2E. Call omp_core_route_task exactly twice. Do not write files.',
+      intent: 'writing.en',
+    },
+    {
+      name: 'Chinese polite request',
+      prompt: '请帮我润色这段文字：安装态路由 E2E 要调用 omp_core_route_task 两次。不要修改文件。',
+      intent: 'writing.zh',
+    },
+    {
+      name: 'Chinese publication preface',
+      prompt: '为了投稿，请帮我润色这段文字：安装态路由 E2E 要调用 omp_core_route_task 两次。不要修改文件。',
+      intent: 'writing.zh',
+    },
+    {
+      name: 'Chinese request with English payload',
+      prompt: '请优化以下英文段落：Final installed route E2E calls omp_core_route_task exactly twice. Do not write files.',
+      intent: 'writing.en',
+    },
+    {
+      name: 'README wording request',
+      prompt: 'Please improve README.md wording for the installed route E2E section that says to call omp_core_route_task exactly twice. Do not write files; return the proposed text only.',
+      intent: 'writing.pending',
+    },
+    {
+      name: 'explicit quoted writing instruction',
+      prompt: 'Follow this instruction exactly: "Polish this paragraph: Final installed route E2E calls omp_core_route_task exactly twice." Do not write files.',
+      intent: 'writing.en',
+    },
+    {
+      name: 'writing request after source prose',
+      prompt: 'This paragraph documents the installed route E2E and says to call omp_core_route_task exactly twice. Please polish it without writing files.',
+      intent: 'writing.pending',
+    },
+  ];
 
-  assert.equal(route.intent, 'writing.en');
-  assert.equal(route.taskDescriptor.operation, 'modify');
-  assert.equal(route.taskDescriptor.domains.includes('writing'), true);
+  for (const { name, prompt, intent } of cases) {
+    for (const routerMode of ['legacy', 'observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+
+      assert.equal(route.intent, intent, `${name}: ${routerMode}`);
+      assert.equal(route.taskDescriptor.operation, 'modify', `${name}: ${routerMode}`);
+      assert.equal(route.taskDescriptor.domains.includes('writing'), true, `${name}: ${routerMode}`);
+      assert.equal(route.taskDescriptor.domains.includes('plugin'), false, `${name}: ${routerMode}`);
+      assert.equal(route.taskDescriptor.domains.includes('tests'), false, `${name}: ${routerMode}`);
+      assert.equal(
+        route.taskDescriptor.provenance.reasons.includes('route status skill diagnostic probe'),
+        false,
+        `${name}: ${routerMode}`,
+      );
+      assert.equal(route.routePlan.mode, 'advisory', `${name}: ${routerMode}`);
+      assert.equal(route.routePlan.autoContinue, false, `${name}: ${routerMode}`);
+      assert.equal(route.routePlan.tools.some((tool) => /^omp_test_/u.test(tool)), false, `${name}: ${routerMode}`);
+    }
+  }
+});
+
+test('routes unquoted labeled multi-sample route probes by their outer instruction', () => {
+  const prompt = 'Installed route E2E. Call omp_core_route_task exactly twice. A prompt: 请润色这段摘要：This paper presents a reliable router. B prompt: Please polish this paragraph: 本文提出一种可靠的路由方法。 Return exactly A and B. Do not write files.';
+
+  for (const routerMode of ['legacy', 'observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode });
+
+    assert.equal(route.intent, 'diagnosis', routerMode);
+    assert.equal(route.taskDescriptor.operation, 'diagnose', routerMode);
+    assert.deepEqual(route.taskDescriptor.domains, ['plugin'], routerMode);
+    assert.deepEqual(route.routePlan.skills, [], routerMode);
+    assert.equal(route.routePlan.autoContinue, false, routerMode);
+  }
+});
+
+test('keeps explicit route diagnostics diagnostic when they mention writing prompt types', () => {
+  const prompts = [
+    'Please verify that polish prompts use the correct route. Call omp_core_route_task exactly twice and return both intents. Do not write files.',
+    '请验证润色提示词是否选择正确路由。调用 omp_core_route_task 两次并返回两个 intent。不要修改文件。',
+  ];
+
+  for (const prompt of prompts) {
+    for (const routerMode of ['legacy', 'observe', 'enforce']) {
+      const route = routeNaturalLanguageTask({ prompt, routerMode });
+
+      assert.equal(route.intent, 'diagnosis', `${routerMode}: ${prompt}`);
+      assert.equal(route.taskDescriptor.operation, 'diagnose', `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.taskDescriptor.domains, ['plugin'], `${routerMode}: ${prompt}`);
+      assert.deepEqual(route.routePlan.skills, [], `${routerMode}: ${prompt}`);
+      assert.equal(route.routePlan.autoContinue, false, `${routerMode}: ${prompt}`);
+    }
+  }
 });
 
 test('routes exclusive one-shot route probes as diagnosis with no workflow resources', () => {
@@ -449,7 +547,7 @@ test('routes exclusive one-shot route probes as diagnosis with no workflow resou
   ];
 
   for (const prompt of prompts) {
-    for (const routerMode of ['observe', 'enforce']) {
+    for (const routerMode of ['legacy', 'observe', 'enforce']) {
       const route = routeNaturalLanguageTask({ prompt, routerMode, gateRecoveryMode: 'enforce' });
       assert.equal(route.intent, 'diagnosis', `${routerMode}: ${prompt}`);
       assert.equal(route.taskDescriptor.operation, 'diagnose', `${routerMode}: ${prompt}`);
@@ -467,7 +565,7 @@ test('routes exclusive one-shot route probes as diagnosis with no workflow resou
 test('routes an exclusive status observation as diagnosis with no workflow resources', () => {
   const prompt = 'Call omp_core_subagent_status exactly once only to inspect the current route status. If that tool succeeds, return exactly STATUS_ALLOWED: YES; otherwise return exactly STATUS_ALLOWED: NO. Do not start subagents, modify files, run tests, access the network, or call any other tool.';
 
-  for (const routerMode of ['observe', 'enforce']) {
+  for (const routerMode of ['legacy', 'observe', 'enforce']) {
     const route = routeNaturalLanguageTask({ prompt, routerMode, gateRecoveryMode: 'enforce' });
     assert.equal(route.intent, 'diagnosis', routerMode);
     assert.equal(route.taskDescriptor.operation, 'diagnose', routerMode);

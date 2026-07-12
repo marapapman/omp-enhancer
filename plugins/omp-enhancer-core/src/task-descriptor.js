@@ -65,7 +65,9 @@ export function describeNaturalLanguageTask(input = {}) {
   const directivePrompt = writingDirectivePromptForSignals(prompt);
   const operationalPrompt = writingOperationalPromptForSignals(directivePrompt);
   const text = operationalPrompt.toLowerCase();
-  const diagnosticText = prompt.toLowerCase();
+  const diagnosticEnvelopePrompt = maskRouteDiagnosticProbePayloads(prompt);
+  const diagnosticDirectivePrompt = writingDirectivePromptForSignals(diagnosticEnvelopePrompt);
+  const diagnosticText = diagnosticEnvelopePrompt.toLowerCase();
   const promptLanguage = languageFor(prompt);
   if (isCompletedGateStatusReport(text)) {
     return normalizeTaskDescriptor({
@@ -145,7 +147,11 @@ export function describeNaturalLanguageTask(input = {}) {
       },
     });
   }
-  if (isRouteStatusSkillDiagnosticProbe(diagnosticText)) {
+  if (isRouteStatusSkillDiagnosticProbe(
+    diagnosticText,
+    diagnosticDirectivePrompt,
+    diagnosticEnvelopePrompt,
+  )) {
     return normalizeTaskDescriptor({
       version: 1,
       operation: 'diagnose',
@@ -1843,11 +1849,17 @@ function isCompletedGateStatusReport(text = '') {
     && /(?:报告已交付|无更多工作|审计完成|所有.{0,20}完成|gate complete|no more work)/.test(text);
 }
 
-function isRouteStatusSkillDiagnosticProbe(text = '') {
-  const routeToolIndex = text.indexOf('omp_core_route_task');
-  const leadingText = routeToolIndex >= 0 ? text.slice(0, routeToolIndex).trim() : '';
-  const beginsAsWritingPayload = /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:polish|rewrite|proofread|translate|edit|revise)\b|^(?:(?:请|帮我|麻烦)\s*)?(?:润色|改写|校对|翻译|编辑|修订)/.test(leadingText);
-  if (beginsAsWritingPayload) return false;
+function isRouteStatusSkillDiagnosticProbe(
+  text = '',
+  diagnosticDirectivePrompt = '',
+  diagnosticEnvelopePrompt = diagnosticDirectivePrompt,
+) {
+  // A route-tool example may itself contain writing verbs. Ignore only those
+  // sample payloads, then use the shared writing-directive parser for the outer
+  // request. This keeps real prose edits on writing routes without allowing a
+  // quoted sample to inject writing guidance into a diagnostic matrix.
+  const explicitDiagnosticLead = beginsWithExplicitRouteDiagnostic(diagnosticEnvelopePrompt);
+  if (isWritingTransformationDirective(diagnosticDirectivePrompt) && !explicitDiagnosticLead) return false;
   const hasRouteAndStatusTools = /omp_core_route_task/.test(text)
     && /omp_core_subagent_status/.test(text);
   const asksForDiagnosticProbe = /(?:验证|检查|核对|诊断|probe|check|verify).{0,120}(?:路由|状态|route|routing|status)|(?:路由|状态|route|routing|status).{0,120}(?:验证|检查|核对|诊断|probe|check|verify)/.test(text);
@@ -1856,10 +1868,45 @@ function isRouteStatusSkillDiagnosticProbe(text = '') {
   const namesDiagnosticMatrix = /(?:e2e|installed(?:-plugin)?|安装态).{0,120}(?:route|routing|路由)|(?:route|routing|路由).{0,120}(?:e2e|installed(?:-plugin)?|安装态)/.test(text);
   const forbidsWorkspaceWrite = /(?:不|不要|禁止|不得).{0,16}(?:修改|改动|写入).{0,12}(?:文件|代码|项目)?|(?:do not|don't|without).{0,18}(?:modify|edit|write).{0,12}(?:files?|code|project)?/.test(text);
   const forbidsTestExecution = /(?:不|不要|禁止|不得).{0,16}(?:运行|执行|跑).{0,12}测试|(?:do not|don't|without).{0,18}(?:run|execute).{0,12}tests?/.test(text);
-  return hasRouteAndStatusTools && asksForDiagnosticProbe
+  return (hasRouteAndStatusTools && asksForDiagnosticProbe
       && forbidsWorkspaceWrite && forbidsTestExecution
     || hasMultiRouteProbe && (asksForDiagnosticProbe || namesDiagnosticMatrix)
-      && forbidsWorkspaceWrite;
+      && forbidsWorkspaceWrite);
+}
+
+function beginsWithExplicitRouteDiagnostic(value = '') {
+  const text = String(value).trim().toLowerCase();
+  const courtesy = '(?:(?:please|can\\s+you|could\\s+you|would\\s+you)\\s+)?';
+  const action = '(?:verify|check|probe|diagnose|inspect|audit)';
+  const directRouteTarget = new RegExp(
+    `^${courtesy}${action}\\s+(?:(?:the|this|current|installed)\\s+){0,3}(?:route|routing|workflow\\s+route)\\b`,
+    'u',
+  );
+  const routeSelection = new RegExp(
+    `^${courtesy}${action}\\b[^.!?\\n]{0,120}\\b(?:uses?|selects?|chooses?|resolves?|maps?|routes?)\\b[^.!?\\n]{0,40}\\b(?:correct|expected|right|intended)?\\s*(?:route|routing|workflow)\\b`,
+    'u',
+  );
+  const namedRouteBehavior = new RegExp(
+    `^${courtesy}${action}\\b[^.!?\\n]{0,120}\\b(?:route|routing)\\s+(?:selection|behaviou?r|status|result|classification)\\b`,
+    'u',
+  );
+  const chineseDirect = /^(?:(?:请|帮我|麻烦)\s*)?(?:验证|检查|核对|诊断|审计|探测)(?:一下)?\s*(?:(?:安装态|当前|这个|该)\s*)?(?:路由|路由行为|路由选择)/u;
+  const chineseSelection = /^(?:(?:请|帮我|麻烦)\s*)?(?:验证|检查|核对|诊断|审计|探测).{0,80}(?:是否|能否|有没有).{0,32}(?:使用|选择|进入|得到|映射到).{0,24}(?:正确|预期|合适|对应)?\s*(?:路由|工作流)/u;
+  return directRouteTarget.test(text)
+    || routeSelection.test(text)
+    || namedRouteBehavior.test(text)
+    || chineseDirect.test(text)
+    || chineseSelection.test(text);
+}
+
+function maskRouteDiagnosticProbePayloads(value = '') {
+  const source = stripQuotedConstraintMentions(
+    activateExplicitQuotedInstruction(String(value)),
+  );
+  return source.replace(
+    /\b(?:[a-z]|first|second)\s+(?:probe\s+)?(?:prompt|提示(?:词)?)\s*[:：][\s\S]*?(?=\b(?:[a-z]|first|second)\s+(?:probe\s+)?(?:prompt|提示(?:词)?)\s*[:：]|\b(?:return|report|respond|output)\b|(?:返回|报告|输出)|$)/giu,
+    ' __route_probe_payload__ ',
+  );
 }
 
 function isExclusiveRouteTaskDiagnosticProbe(text = '') {
@@ -2185,6 +2232,14 @@ function maskRelationalWritingPayload(source = '') {
   addBoundary(/\bso(?:\s+that)?\s+(?:(?:it|this|the\s+(?:copy|text|wording|document|file))\s+)?(?:says?|tells?|mentions?|explains?|states?|notes?|reminds?|warns?)\b/i);
   addBoundary(/\bto\s+(?:say|tell|mention|explain|state|note|remind|warn)\b/i);
   addBoundary(/\b(?:with|using)\s+(?:copy|wording|text|content)\s+that\b/i);
+  const englishContentQualifier = /\b(?:wording|copy|text|content)\b(?=\s+(?:for|about)\b)/i.exec(value);
+  if (englishContentQualifier) {
+    boundaries.push((englishContentQualifier.index ?? 0) + englishContentQualifier[0].length);
+  }
+  const chineseContentQualifier = /(?:措辞|文案|文本|内容)(?=\s*(?:用于|关于|来|以便))/u.exec(value);
+  if (chineseContentQualifier) {
+    boundaries.push((chineseContentQualifier.index ?? 0) + chineseContentQualifier[0].length);
+  }
   const chineseResult = /(?:改写|修改|改|写|整理)(?:成|为)(?=\s*(?:提醒|说明|告诉|写明|注明|声称|建议|要求))/u.exec(value);
   if (chineseResult) boundaries.push((chineseResult.index ?? 0) + chineseResult[0].length - 1);
   addBoundary(/[，,]\s*(?:让|使)(?:这份|该|其|文案|文本|内容|说明|文档)?[^，,。；;.!！\n]{0,12}(?:提醒|说明|告诉|写明|注明|声称|建议|要求)/u);
@@ -2197,7 +2252,7 @@ function maskRelationalWritingPayload(source = '') {
 }
 
 function containsAuthorityBearingWritingPayload(value = '') {
-  return /(?:测试|发布|提交|推送|部署|上线|联网|网络|子代理|代理|安全|漏洞|插件|代码|路由|门禁|工作流|安装)|\b(?:tests?|testing|publish|release|commit|push|deploy|network|internet|web|subagents?|agents?|security|vulnerabilit(?:y|ies)|plugins?|code|router|routing|gates?|workflows?|install)\b/i.test(String(value));
+  return /(?:测试|发布|提交|推送|部署|上线|联网|网络|子代理|代理|安全|漏洞|插件|代码|路由|门禁|工作流|安装)|\b(?:tests?|testing|e2e|publish|release|commit|push|deploy|network|internet|web|subagents?|agents?|security|vulnerabilit(?:y|ies)|plugins?|code|routes?|router|routing|gates?|workflows?|install(?:ed|ation)?)\b|\bomp_core_(?:route_task|subagent_status)\b/i.test(String(value));
 }
 
 function independentWritingContinuationBoundary(value = '', start = 0) {
@@ -2246,7 +2301,7 @@ function maskEmbeddedWritingAuthority(source = '') {
   protectedSource = protectStructuredWritingReferences(protectedSource, protect);
   protectedSource = protectedSource.replace(/(?:安全(?:政策|策略|公告|说明|文案|通知|草案|措辞)|插件\s*(?:readme|文档|说明)|发布(?:说明|公告)|测试(?:覆盖率)?报告|安装说明)|\b(?:security\s+(?:policy|announcement|notice|advisory|draft|wording)|plugin\s+(?:readme|documentation|docs?)|release\s+notes?|test(?:\s+coverage)?\s+report|coverage\s+report|installation\s+(?:guide|instructions?))\b/giu, (match) => protect(match));
   const sanitized = protectedSource
-    .replace(/\b(?:npm\s+test|tests?|testing|publish|release|push|deploy|commit|network|internet|web|subagents?|sub-agents?|security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|bypass|injection|secrets?|plugins?|code|router|routing|gates?|workflows?|install)\b/giu, ' __embedded_content__ ')
+    .replace(/\b(?:npm\s+test|tests?|testing|e2e|publish|release|push|deploy|commit|network|internet|web|subagents?|sub-agents?|security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|bypass|injection|secrets?|plugins?|code|routes?|router|routing|gates?|workflows?|install(?:ed|ation)?)\b|\bomp_core_(?:route_task|subagent_status)\b/giu, ' __embedded_content__ ')
     .replace(/(?:测试|发布|提交|推送|部署|上线|联网|网络|互联网|网页|子代理|安全|审计|扫描|审查|漏洞|鉴权|认证|权限|越权|注入|密钥|插件|代码|路由|门禁|工作流|安装)/gu, ' __embedded_content__ ');
   let restored = sanitized;
   for (let index = protectedValues.length - 1; index >= 0; index -= 1) {
