@@ -17,6 +17,12 @@ search, start another evidence lane, or repeat the workflow. Add an independent
 lane only for a broad task, a high-risk claim, or when the user explicitly
 requests cross-checking.
 
+Treat a request naming a small set of claims in one document as focused. Use at
+most eight local read, grep, or glob calls, including the source document and
+nearby evidence. At that checkpoint, return the supported verdicts and mark the
+rest `LOCAL_UNVERIFIED` or `INSUFFICIENT`; do not broaden into unrelated
+evidence directories merely to avoid an uncertain verdict.
+
 When network access is forbidden, stay local. Use `LOCAL_UNVERIFIED` when local
 bibliography metadata or an identifier exists but the source text needed to
 check claim support is unavailable. Use `INSUFFICIENT` when no relevant local

@@ -24,6 +24,18 @@ user-specified text directly and state that no prior checker report was used.
 6. Review the resulting text once and summarize applied changes, unresolved
    decisions, and evidence limitations.
 
+## Evidence Fidelity
+
+- Copy every quoted passage verbatim from text returned by a successful read.
+  Before the final response, check each quote and stated location once against
+  that text. Remove or correct anything that is not present.
+- Do not invent line numbers when the read result did not expose them. Label a
+  paraphrase as a paraphrase instead of placing it in quotation marks.
+- Distinguish ambiguity from contradiction. Two statements are contradictory
+  only when their subject and scope are actually the same.
+- A proposed replacement is an editorial suggestion, not evidence about what
+  the source already says.
+
 Process at most 20 findings in one pass. Summarize any remainder without
 starting another checker/review cycle automatically.
 

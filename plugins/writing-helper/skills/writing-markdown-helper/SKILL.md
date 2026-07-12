@@ -29,6 +29,12 @@ change. Compare source and result once. Report drift without starting another
 rewrite automatically. For a read-only task, return the proposed revision in
 the final response and do not create workflow files.
 
+For a `.tex` target, preserve valid LaTeX escaping as part of the anchor. A
+percentage is written as `\%`; never turn it into a bare `%` comment marker.
+After the single verification read, report every observed change accurately,
+including escaping or formatting changes, and keep the user-facing result
+concise. Do not claim that only one word changed if the file diff shows more.
+
 Use the fine-mode workflow below only when the user asks for interactive approval at each paragraph or when a genuinely material ambiguity requires a choice.
 
 ## Document Structure Assumed
