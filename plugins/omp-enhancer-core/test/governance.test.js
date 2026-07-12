@@ -145,6 +145,7 @@ test('turn-local planning and diagnosis guidance preserves user read-only budget
   assert.match(planning, /total inspection budget of 8 read\/search calls/i);
   assert.match(planning, /each call inside a parallel batch counts separately/i);
   assert.match(planning, /never queue a batch larger than the remaining budget/i);
+  assert.match(planning, /budget is a ceiling, not a quota[\s\S]*final two slots as recovery margin/i);
   assert.match(planning, /SERIAL INSPECTION MODE:[\s\S]*at most ONE read\/search tool call in each assistant message/i);
   assert.match(planning, /Do not issue parallel read, grep, or glob calls/i);
   assert.match(planning, /response-only plan/i);
@@ -168,6 +169,7 @@ test('natural inspection routes receive advisory convergence targets without har
   assert.equal(factRoute.intent, 'fact-check');
   assert.match(fact, /Advisory workflow convergence target:[\s\S]*within 8 read\/search calls/i);
   assert.match(fact, /target guides scope and does not block any tool call/i);
+  assert.match(fact, /budget is a ceiling, not a quota/i);
   assert.match(fact, /SERIAL INSPECTION MODE/i);
 
   const auditPrompt = '只读审计 extensions/agent-fleet 的任务路由与失败收敛逻辑，读取 exact debugging skill，不修改文件、不运行测试。';

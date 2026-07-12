@@ -1208,10 +1208,15 @@ function buildInspectionProgressGuidance(state, ctx = {}) {
     if (remaining <= 3) {
       lines.push(`FINAL-BUDGET MODE: this next assistant message may contain at most ONE read/search tool call, even though ${remaining} remain. Wait for its result and recompute from the newest progress snapshot, or finalize now. Count toolCall entries before sending and delete any second read/grep/glob call.`);
     }
+    if (remaining === 2) {
+      lines.push('SYNTHESIS RESERVE: finalize now when the requested result is already supported. If one more lookup is indispensable, issue only that call and keep the last slot unused as failure margin.');
+    } else if (remaining === 1) {
+      lines.push('LAST-SLOT RULE: use this final call only if it is indispensable. Whether it succeeds, fails, or returns no matches, finalize next; do not repair it with another read, grep, or glob.');
+    }
     lines.push(`NEXT BATCH LIMIT: issue at most ${remaining} individual read/search tool call${remaining === 1 ? '' : 's'}. If more candidates exist, choose only the ${remaining} highest-value target${remaining === 1 ? '' : 's'}, then finalize.`);
     lines.push('Do not queue more read/search calls than the remaining count. Use the evidence already returned and keep the final response in view.');
   } else {
-    lines.push('The user inspection budget is exhausted. Synthesize the best scoped evidence-backed result now; do not start another read/search batch. A scoped partial result is successful completion.');
+    lines.push('The user inspection budget is exhausted. Synthesize the best scoped evidence-backed result now; do not start another read/search batch. A failed or empty final lookup does not authorize a recovery read, grep, or glob. A scoped partial result is successful completion.');
   }
   lines.push('This is model guidance only; no tool call or completion is blocked.');
   return lines.join('\n');

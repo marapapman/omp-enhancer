@@ -111,6 +111,7 @@ test('inspection budgets add per-result model guidance without blocking tools', 
   assert.match(second.content.at(-1).text, /use the snapshot with the largest used value[\s\S]*smallest remaining value/i);
   assert.match(second.content.at(-1).text, /FINAL-BUDGET MODE:[\s\S]*at most ONE read\/search tool call/i);
   assert.match(second.content.at(-1).text, /delete any second read\/grep\/glob call/i);
+  assert.match(second.content.at(-1).text, /LAST-SLOT RULE:[\s\S]*fails[\s\S]*do not repair it/i);
   assert.match(second.content.at(-1).text, /NEXT BATCH LIMIT: issue at most 1 individual read\/search tool call/i);
   assert.match(second.content.at(-1).text, /choose only the 1 highest-value target, then finalize/i);
   assert.match(second.content.at(-1).text, /do not queue more read\/search calls than the remaining count/i);
@@ -122,6 +123,7 @@ test('inspection budgets add per-result model guidance without blocking tools', 
   }, ctx);
   assert.match(third.content.at(-1).text, /3\/3 read\/search calls used; 0 remaining/i);
   assert.match(third.content.at(-1).text, /inspection budget is exhausted[\s\S]*synthesize/i);
+  assert.match(third.content.at(-1).text, /failed or empty final lookup does not authorize a recovery/i);
   assert.match(third.content.at(-1).text, /no tool call or completion is blocked/i);
   assert.notEqual(third.block, true);
 
