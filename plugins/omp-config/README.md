@@ -5,7 +5,8 @@
 ## Contents
 
 - `assets/CLAUDE.md` and root or agent config templates.
-- `assets/config.yml`, `assets/models.yml`, and `assets/mcp.json` as templates only.
+- `assets/config.yml`, `assets/models.yml`, `assets/mcp.json`, and `assets/WATCHDOG.yml` as templates only.
+- `assets/WATCHDOG.yml` teaches the host advisor to recognize native `skill-prompt` context, avoid redundant skill reads, and remain silent after a complete final response.
 - `assets/config.yml` includes `modelRoles.tiny`, the OMP Tiny role reused by `omp-enhancer-core` for schema-first route classification when the deterministic router is ambiguous.
 - `agents/`, `skills/`, and `hooks/` copied from the config source.
 - Slash command content for `/omp-config:config`, `/omp-config:config-doctor`, and `/omp-config:config-assets`.
@@ -23,6 +24,9 @@ does not activate them automatically, and they are not permission gates.
 Bundled agents do not declare `blocking: true`, and the config template disables
 `loopGuard` plus compaction `autoContinue` by default. Host sandboxing, approval,
 and system safety policy remain independent of this plugin.
+
+The packaged advisor instructions are prompt guidance only. They do not change
+host approval, block a tool call, or schedule an agent continuation.
 
 The LLM classifier does not use a separate classifier role. It reuses OMP Tiny:
 

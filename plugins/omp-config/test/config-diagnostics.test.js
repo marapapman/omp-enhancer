@@ -203,6 +203,18 @@ test('packaged config template keeps DeepSeek Flash as default and GLM as adviso
   assert.doesNotMatch(template, /task:\s*opencode-go\/deepseek/);
 });
 
+test('packaged advisor guidance recognizes native skills and converges before one final', async () => {
+  const watchdog = await readFile(path.join(packageRoot(), 'assets', 'WATCHDOG.yml'), 'utf8');
+
+  assert.match(watchdog, /hidden `skill-prompt`/);
+  assert.match(watchdog, /Skill: <path>/);
+  assert.match(watchdog, /Routed workflow skills already loaded/);
+  assert.match(watchdog, /Do not advise a skill read or `omp_core_route_task`/);
+  assert.match(watchdog, /Once the main agent has emitted a complete final response, do not call `advise`/);
+  assert.match(watchdog, /suggestions, not execution or completion gates/);
+  assert.doesNotMatch(watchdog, /block:\s*true|continue:\s*true|triggerTurn/);
+});
+
 test('ships every omp-config skill from the plugin skills directory', async () => {
   const skillsRoot = path.join(packageRoot(), 'skills');
   const actualSkills = (await findSkillDirs(skillsRoot))
@@ -288,6 +300,7 @@ test('runConfigPlan resolves packaged assets from a workspace root', async () =>
   const result = await runConfigPlan({ root });
 
   assert.equal(result.plan[0], `Review packaged templates under ${pluginRoot}/assets.`);
+  assert.match(result.plan[1], /assets\/WATCHDOG\.yml/);
 });
 
 test('registered defaults resolve bundled package assets from a normal project cwd', async () => {
@@ -309,6 +322,7 @@ test('registered defaults resolve bundled package assets from a normal project c
   assert.ok(assetsResult.details.hooks.pre.includes('guard-destructive.ts'));
   assert.ok(assetsResult.details.hooks.post.includes('truncate-output.ts'));
   assert.ok(assetsResult.details.templates.includes('config.yml'));
+  assert.ok(assetsResult.details.templates.includes('WATCHDOG.yml'));
 
   const plan = tools.find((tool) => tool.name === 'omp_config_plan');
   const planResult = await plan.execute('call-3', {}, undefined, undefined, { cwd: projectRoot });
@@ -327,6 +341,7 @@ test('registered defaults resolve bundled package assets from a normal project c
     assert.ok(commandAssets.hooks.pre.includes('guard-destructive.ts'));
     assert.ok(commandAssets.hooks.post.includes('truncate-output.ts'));
     assert.ok(commandAssets.templates.includes('config.yml'));
+    assert.ok(commandAssets.templates.includes('WATCHDOG.yml'));
 
     const directPlan = await runConfigPlan();
     assert.equal(directPlan.plan[0], `Review packaged templates under ${bundledRoot}/assets.`);

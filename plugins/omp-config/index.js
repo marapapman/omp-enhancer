@@ -27,7 +27,7 @@ export async function runConfigPlan(input = {}) {
   const pluginRoot = await resolvePluginRoot(root);
   const plan = [
     `Review packaged templates under ${pluginRoot}/assets.`,
-    'Compare assets/config.yml, assets/models.yml, and assets/mcp.json with the target OMP home.',
+    'Compare assets/config.yml, assets/models.yml, assets/mcp.json, and assets/WATCHDOG.yml with the target OMP home.',
     'Compare bundled agents and skills with the target installation.',
     'Prepare a patch for explicit user review before copying or overwriting any live config files.',
   ];
