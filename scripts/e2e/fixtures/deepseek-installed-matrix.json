@@ -80,6 +80,7 @@
       "id": "code-implementation-plan",
       "category": "code-plan",
       "cwd": "/home/dingli/frugal-pi",
+      "timeoutSeconds": 180,
       "prompt": "为修复 agent-fleet 路由问题制定实现和测试计划，不修改文件，不运行测试。先遵循 AGENTS.md 并读取其中为实现计划指定的 exact skill，然后在 8 次以内的读取或搜索后交付有文件证据的计划。",
       "expectations": {
         "requiredSkills": ["superpowers-writing-plans"],
@@ -91,6 +92,7 @@
       "id": "code-diagnosis-focused",
       "category": "code-diagnosis",
       "cwd": "/home/dingli/frugal-pi",
+      "timeoutSeconds": 180,
       "prompt": "诊断 extensions/agent-fleet/strict-agent-model-routing.test.mjs 所覆盖的路由约束可能在哪里失配。遵循 AGENTS.md，先读取 exact debugging skill，只读检查并给出文件与行级证据，不修改文件、不运行测试，最多 8 次读取或搜索。",
       "expectations": {
         "requiredSkills": ["superpowers-debugging"],
@@ -102,6 +104,7 @@
       "id": "code-test-strategy",
       "category": "code-plan",
       "cwd": "/home/dingli/frugal-pi",
+      "timeoutSeconds": 180,
       "prompt": "为 agent-fleet 的路由逻辑设计测试策略，不运行测试也不修改文件。遵循 AGENTS.md，读取实现计划所需的 exact project skill，给出 RED 矩阵、关键 fixture 和回滚验证，最多 8 次读取或搜索。",
       "expectations": {
         "requiredSkills": ["superpowers-writing-plans"],

@@ -376,6 +376,9 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
     assert.equal(matrix.defaults.expectations.maxAdvisorMessages, 0);
     assert.ok(stress.scenarios.some(({ id }) => id === 'advisor-english-review'));
     assert.ok(stress.scenarios.some(({ id }) => id === 'advisor-semantic-edit-en'));
+    for (const id of ['code-implementation-plan', 'code-diagnosis-focused', 'code-test-strategy']) {
+      assert.equal(matrix.scenarios.find((scenario) => scenario.id === id)?.timeoutSeconds, 180);
+    }
   } finally {
     await rm(outputRoot, { recursive: true, force: true });
   }
