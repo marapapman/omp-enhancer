@@ -199,6 +199,7 @@ test('session self-report is a claim and cannot impersonate a successful skill r
     ctx,
   );
   assert.deepEqual(status.details.status.observed_skills, []);
+  assert.deepEqual(status.details.status.provided_skills, []);
   assert.deepEqual(status.details.status.claimed_skills, ['writing-review']);
 
   const review = await pi.tools.get('omp_core_validate_skill_usage').execute(
@@ -309,6 +310,7 @@ test('autolearn capture yields without changing route or business evidence', asy
   assert.equal(afterCapture.lastPrompt, before.lastPrompt);
   assert.deepEqual(afterCapture.lastRoute, before.lastRoute);
   assert.deepEqual(afterCapture.observedSkills, before.observedSkills);
+  assert.deepEqual(afterCapture.providedSkills, before.providedSkills);
   assert.deepEqual(afterCapture.claimedSkills, before.claimedSkills);
 
   const next = await event(pi, 'before_agent_start')({
@@ -519,6 +521,7 @@ test('route probes refine path-only writing after observed source text is suppli
     ctx,
   );
   assert.equal(status.details.status.mode, 'advisory');
+  assert.equal(status.details.status.core_continuation, 'none');
   assert.equal(status.details.status.auto_continue, false);
   assert.equal(Object.hasOwn(status.details.status, 'gate_requirements'), false);
 });

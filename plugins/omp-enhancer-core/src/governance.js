@@ -5,6 +5,7 @@ export function buildGovernancePromptFragment({
   parentTask = '',
   includeModelWorkflowHints = true,
   workspaceRoot = '',
+  skillsProvided = false,
 } = {}) {
   const resolved = advisoryRoute(route);
   const plan = resolved.routePlan;
@@ -17,7 +18,7 @@ export function buildGovernancePromptFragment({
     '',
     `Intent: ${resolved.intent}`,
     `Workflow: ${resolved.workflowRoute}`,
-    ...startWithSkillLines(resolved, primaryTargets),
+    ...startWithSkillLines(resolved, primaryTargets, { skillsProvided }),
     '',
     '### Suggested steps',
     '',
@@ -27,7 +28,9 @@ export function buildGovernancePromptFragment({
     '',
     formatSkillList(plan.skills, { workspaceRoot }),
     '',
-    'Before substantive work, read exactly the smallest directly applicable primary skill once. Prefer an exact project-specified skill, then the exact routed URI, then one inventory-confirmed equivalent. A skill counts as loaded only after a successful read of its SKILL.md. If resolution fails, make one targeted correction, continue without the skill, and report the limitation briefly. Do not invent aliases, create replacement skills, or retry unchanged calls.',
+    skillsProvided
+      ? 'The host has already provided the exact primary skill content for this turn. Apply that content directly and do not spend a read/search call loading the same skill again.'
+      : 'Before substantive work, read exactly the smallest directly applicable primary skill once. Prefer an exact project-specified skill, then the exact routed URI, then one inventory-confirmed equivalent. A skill counts as loaded only after a successful read of its SKILL.md. If resolution fails, make one targeted correction, continue without the skill, and report the limitation briefly. Do not invent aliases, create replacement skills, or retry unchanged calls.',
     'For a focused task, one primary skill is normally enough; Chinese writing may use its base language guidance plus one task-specific skill. When writing language is pending, inspect the source first and only then select a language skill. Do not expand into the whole skill list unless the primary skill explicitly requires a companion.',
     'Unless the user is auditing historical gate behavior, use only current routed or project-specified skills; do not load legacy gate-satisfy or gate-unblock compatibility resources.',
     '',
@@ -71,14 +74,24 @@ export function buildGovernancePromptFragment({
     );
   }
 
-  lines.push(...immediateNextActionLines(resolved, primaryTargets, parentTask));
+  lines.push(...immediateNextActionLines(resolved, primaryTargets, parentTask, { skillsProvided }));
 
   return lines.join('\n');
 }
 
-export function buildImmediateWorkflowMessage({ route, workspaceRoot = '', parentTask = '' } = {}) {
+export function buildImmediateWorkflowMessage({
+  route,
+  workspaceRoot = '',
+  parentTask = '',
+  skillsProvided = false,
+} = {}) {
   const resolved = advisoryRoute(route);
-  const lines = immediateNextActionLines(resolved, primarySkillTargets(resolved, workspaceRoot), parentTask);
+  const lines = immediateNextActionLines(
+    resolved,
+    primarySkillTargets(resolved, workspaceRoot),
+    parentTask,
+    { skillsProvided },
+  );
   if (!lines.length) return '';
   return [
     'OMP advisory workflow note for this turn:',
@@ -217,10 +230,20 @@ function formatSkillList(skills = [], { workspaceRoot = '' } = {}) {
   }).join('\n');
 }
 
-function startWithSkillLines(route, targets = []) {
+function startWithSkillLines(route, targets = [], { skillsProvided = false } = {}) {
   if (route.intent === 'writing.pending' || !targets.length) return [];
   const label = targets.length === 1 ? 'Primary skill to read now' : 'Primary skills to read now';
   const [first] = targets;
+  if (skillsProvided) {
+    return [
+      '',
+      '### Routed workflow skills already loaded',
+      '',
+      `Provided primary skill content: ${targets.map((target) => `\`${target}\``).join(', ')}.`,
+      'Use the provided skill content directly. Do not reread the skill file or URI; begin the smallest task-target inspection that the user request needs.',
+      'This is advisory workflow context, not a tool authorization or completion gate; the plugin does not block a different call.',
+    ];
+  }
   return [
     '',
     '### Start with the workflow skill',
@@ -232,8 +255,19 @@ function startWithSkillLines(route, targets = []) {
   ];
 }
 
-function immediateNextActionLines(route, targets = [], parentTask = '') {
+function immediateNextActionLines(route, targets = [], parentTask = '', { skillsProvided = false } = {}) {
   if (route.intent === 'writing.pending' || !targets.length) return [];
+  if (skillsProvided) {
+    return [
+      '',
+      '### Immediate next action',
+      '',
+      `ROUTED SKILLS ALREADY PROVIDED: ${targets.map((target) => `\`${target}\``).join(', ')}.`,
+      'Apply the provided skill instructions now. Do not reread those skill targets; use the first project tool call for the smallest directly relevant task target.',
+      ...turnConstraintLines(route, parentTask),
+      'This sequence is advisory only: it does not authorize, deny, or block a tool call and it never delays completion.',
+    ];
+  }
   const [first, ...rest] = targets;
   return [
     '',
@@ -307,7 +341,7 @@ function primarySkillTargets(route, workspaceRoot = '') {
     .filter(Boolean);
 }
 
-function primarySkillsFor(route = {}) {
+export function primarySkillsFor(route = {}) {
   const skills = route.routePlan?.skills ?? [];
   const descriptor = route.taskDescriptor ?? {};
   if (route.intent === 'writing.pending') return [];

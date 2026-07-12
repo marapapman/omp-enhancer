@@ -19,6 +19,7 @@ const ADVISORY_STATE_KEYS = [
   'lastSkillUsage',
   'lastSubagentUsage',
   'observedSkills',
+  'providedSkills',
   'routeStartedAt',
   'schemaVersion',
   'tasks',
@@ -39,7 +40,7 @@ const LEGACY_ENFORCEMENT_FIELDS = [
   'classifierPreflight',
 ];
 
-test('migrates v0.1.74 route, skill claims, and task diagnostics into advisory schema v3', async () => {
+test('migrates v0.1.74 route, skill claims, and task diagnostics into advisory schema v4', async () => {
   const fixtureWithUnknownFields = structuredClone(LEGACY_STATE);
   fixtureWithUnknownFields.futureControllerState = { mode: 'future-only' };
   fixtureWithUnknownFields.evidence.futureEvidence = { ignored: true };
@@ -63,6 +64,7 @@ test('migrates v0.1.74 route, skill claims, and task diagnostics into advisory s
 
   assert.equal(status.details.status.route, 'bug-audit');
   assert.equal(status.details.status.mode, 'advisory');
+  assert.equal(status.details.status.core_continuation, 'none');
   assert.equal(status.details.status.auto_continue, false);
   assert.deepEqual(status.details.status.suggested_skills, migrated.lastRoute.routePlan.skills);
   assert.deepEqual(status.details.status.suggested_tools, migrated.lastRoute.routePlan.tools);
@@ -71,6 +73,8 @@ test('migrates v0.1.74 route, skill claims, and task diagnostics into advisory s
     migrated.lastRoute.routePlan.roles.map(({ agent }) => agent),
   );
   assert.deepEqual(status.details.status.observed_skills, []);
+  assert.deepEqual(status.details.status.provided_skills, []);
+  assert.deepEqual(status.details.status.effective_skills, []);
   assert.deepEqual(status.details.status.claimed_skills, LEGACY_STATE.evidence.loadedSkills);
   assert.deepEqual(status.details.status.completed_roles, LEGACY_STATE.evidence.taskSubagents);
   assert.equal(status.details.status.tasks.length, 1);
@@ -87,6 +91,7 @@ test('migrates v0.1.74 route, skill claims, and task diagnostics into advisory s
   assert.ok(migrated.lastRoute.routePlan.skills.length > 0);
   assert.equal(migrated.lastPrompt, LEGACY_STATE.lastPrompt);
   assert.deepEqual(migrated.observedSkills, []);
+  assert.deepEqual(migrated.providedSkills, []);
   assert.deepEqual(migrated.claimedSkills, LEGACY_STATE.evidence.loadedSkills);
   assert.deepEqual(migrated.completedRoles, LEGACY_STATE.evidence.taskSubagents);
   assert.equal(migrated.tasks.length, 1);
@@ -111,6 +116,7 @@ test('new snapshots default to an empty advisory workflow state', async () => {
     ctx,
   );
   assert.equal(status.details.status.mode, 'advisory');
+  assert.equal(status.details.status.core_continuation, 'none');
   assert.equal(status.details.status.auto_continue, false);
   assert.equal(status.details.status.route, 'none');
   assert.equal(status.details.status.active_route, 'none');
@@ -118,6 +124,8 @@ test('new snapshots default to an empty advisory workflow state', async () => {
   assert.deepEqual(status.details.status.suggested_tools, []);
   assert.deepEqual(status.details.status.suggested_roles, []);
   assert.deepEqual(status.details.status.observed_skills, []);
+  assert.deepEqual(status.details.status.provided_skills, []);
+  assert.deepEqual(status.details.status.effective_skills, []);
   assert.deepEqual(status.details.status.claimed_skills, []);
   assert.deepEqual(status.details.status.completed_roles, []);
   assert.deepEqual(status.details.status.tasks, []);
@@ -125,7 +133,7 @@ test('new snapshots default to an empty advisory workflow state', async () => {
   const migrated = latestCoreState(pi.entries);
 
   assertAdvisorySnapshot(migrated);
-  assert.equal(migrated.schemaVersion, 3);
+  assert.equal(migrated.schemaVersion, 4);
   assert.equal(migrated.lastRoute, null);
   assert.equal(migrated.lastPrompt, '');
   assert.equal(migrated.routeStartedAt, 0);
@@ -134,6 +142,7 @@ test('new snapshots default to an empty advisory workflow state', async () => {
   assert.equal(migrated.lastSubagentUsage, null);
   assert.equal(migrated.classifierAttempted, false);
   assert.deepEqual(migrated.observedSkills, []);
+  assert.deepEqual(migrated.providedSkills, []);
   assert.deepEqual(migrated.claimedSkills, []);
   assert.deepEqual(migrated.tasks, []);
   assert.deepEqual(migrated.completedRoles, []);
@@ -141,11 +150,40 @@ test('new snapshots default to an empty advisory workflow state', async () => {
   assert.equal(migrated.inspectionCalls, 0);
 });
 
+test('schema v3 snapshots migrate with empty host-provided skill evidence', async () => {
+  const entries = [coreStateEntry({
+    schemaVersion: 3,
+    lastPrompt: 'Review this paragraph.',
+    observedSkills: ['writing-review'],
+    claimedSkills: ['writing-review'],
+    loadedSkills: ['legacy-duplicate'],
+  })];
+  const pi = new FakePi(entries);
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
+
+  const status = await tool(pi, 'omp_core_subagent_status').execute(
+    'v3-status',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.deepEqual(status.details.status.observed_skills, ['writing-review']);
+  assert.deepEqual(status.details.status.provided_skills, []);
+  assert.deepEqual(status.details.status.effective_skills, ['writing-review']);
+  assert.deepEqual(status.details.status.claimed_skills, ['writing-review']);
+  const migrated = latestCoreState(entries);
+  assert.equal(migrated.schemaVersion, 4);
+  assert.deepEqual(migrated.providedSkills, []);
+});
+
 function assertAdvisorySnapshot(snapshot) {
-  assert.equal(snapshot.schemaVersion, 3);
+  assert.equal(snapshot.schemaVersion, 4);
   assert.deepEqual(Object.keys(snapshot).sort(), ADVISORY_STATE_KEYS);
   for (const field of LEGACY_ENFORCEMENT_FIELDS) {
-    assert.equal(field in snapshot, false, `${field} must not be serialized in advisory schema v3`);
+    assert.equal(field in snapshot, false, `${field} must not be serialized in advisory schema v4`);
   }
 }
 

@@ -9,6 +9,7 @@ import {
   buildSubagentPromptFragment,
   formatWorkflowBriefingForAssignment,
   inspectionBudgetForRoute,
+  primarySkillsFor,
 } from './src/governance.js';
 import { installPluginSkills } from './src/install-skills.js';
 import { classifyHostTurn } from './src/host-turn-context.js';
@@ -25,7 +26,8 @@ import {
 import { validateSubagentUsage } from './src/subagent-usage.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
-const STATE_SCHEMA_VERSION = 3;
+const STATE_SCHEMA_VERSION = 4;
+const CLAIMED_SKILLS_SCHEMA_VERSION = 3;
 const MAX_WRITING_SOURCE_BYTES = 512 * 1024;
 const MAX_WRITING_SOURCE_CHARS = 120000;
 const MAX_WRITING_SOURCE_FILES = 4;
@@ -166,7 +168,7 @@ export default function registerCoreEnhancer(pi) {
       const validation = validateSkillUsage({
         requiredSkills: suggestedSkills,
         output: '',
-        loadedSkills: state.observedSkills,
+        loadedSkills: effectiveSkills(state),
       });
       for (const skill of parseLoadedSkillEvidence(params.output ?? '')) {
         state.claimedSkills.add(normalizeSkillName(skill));
@@ -304,6 +306,7 @@ export default function registerCoreEnhancer(pi) {
       state.lastSubagentUsage = null;
       state.classifierAttempted = false;
       state.observedSkills.clear();
+      state.providedSkills.clear();
       state.claimedSkills.clear();
       state.tasks.clear();
       state.completedRoles.clear();
@@ -323,29 +326,41 @@ export default function registerCoreEnhancer(pi) {
         writingLanguageSource: route.taskDescriptor?.writingLanguageSource ?? null,
       },
     }));
+    const workspaceRoot = ctx.cwd || process.cwd();
+    const skillProvision = await buildNativeSkillProvision(pi, {
+      route,
+      workspaceRoot,
+    });
+    for (const skill of skillProvision?.providedSkills ?? []) {
+      state.providedSkills.add(normalizeProvidedSkillName(skill));
+    }
     await persistState(pi, state);
-
     const fragment = buildGovernancePromptFragment({
       route,
       parentTask: state.lastPrompt,
       includeModelWorkflowHints: false,
-      workspaceRoot: ctx.cwd || process.cwd(),
+      workspaceRoot,
+      skillsProvided: Boolean(skillProvision),
     });
-    const workflowMessage = buildImmediateWorkflowMessage({
+    const workflowMessage = skillProvision ? '' : buildImmediateWorkflowMessage({
       route,
       parentTask: state.lastPrompt,
-      workspaceRoot: ctx.cwd || process.cwd(),
+      workspaceRoot,
+      skillsProvided: false,
     });
-    return {
-      ...injectBeforeAgentSystemPrompt(event, fragment),
-      ...(workflowMessage ? {
-        message: {
+    const message = skillProvision
+      ? skillProvision.message
+      : workflowMessage
+        ? {
           customType: 'omp-enhancer-core.workflow-guidance',
           content: workflowMessage,
           display: false,
-          attribution: 'user',
-        },
-      } : {}),
+          attribution: 'agent',
+        }
+        : null;
+    return {
+      ...injectBeforeAgentSystemPrompt(event, fragment),
+      ...(message ? { message } : {}),
       route,
     };
   });
@@ -403,6 +418,7 @@ export function createState() {
     lastSubagentUsage: null,
     classifierAttempted: false,
     observedSkills: new Set(),
+    providedSkills: new Set(),
     claimedSkills: new Set(),
     tasks: new Map(),
     completedRoles: new Set(),
@@ -700,8 +716,10 @@ function collectSkillFilePaths(value, seen = new Set()) {
 
 function buildWorkflowStatus(state) {
   const route = state.lastRoute;
+  const loadedSkills = [...effectiveSkills(state)];
   return {
     mode: 'advisory',
+    core_continuation: 'none',
     auto_continue: false,
     route: route?.intent ?? 'none',
     active_route: route?.intent ?? 'none',
@@ -716,8 +734,10 @@ function buildWorkflowStatus(state) {
     })),
     quality_checks: route?.routePlan?.qualityChecks ?? [],
     observed_skills: [...state.observedSkills],
+    provided_skills: [...state.providedSkills],
+    effective_skills: loadedSkills,
     claimed_skills: [...state.claimedSkills],
-    loaded_skills: [...state.observedSkills],
+    loaded_skills: loadedSkills,
     completed_roles: [...state.completedRoles],
     tasks: [...state.tasks.values()],
     skill_review: state.lastSkillUsage,
@@ -728,13 +748,15 @@ function buildWorkflowStatus(state) {
 function formatWorkflowStatus(status) {
   return [
     'Mode: ' + status.mode,
-    'Auto-continue: ' + status.auto_continue,
+    'Core continuation: ' + status.core_continuation,
     'Route: ' + status.route,
     'Active route: ' + status.active_route,
     'Last probe route: ' + status.last_probe_route,
     'Suggested skills: ' + (status.suggested_skills.join(', ') || 'none'),
     'Suggested tools: ' + (status.suggested_tools.join(', ') || 'none'),
     'Observed skills: ' + (status.observed_skills.join(', ') || 'none'),
+    'Host-provided skills: ' + (status.provided_skills.join(', ') || 'none'),
+    'Effective skills: ' + (status.effective_skills.join(', ') || 'none'),
     'Claimed skills: ' + (status.claimed_skills.join(', ') || 'none'),
     'Suggested quality checks: ' + (status.quality_checks.join(', ') || 'none'),
     'Suggested roles:',
@@ -758,7 +780,7 @@ function formatRoute(route) {
     'Intent: ' + (route?.intent ?? 'unknown'),
     'Workflow: ' + (route?.workflowRoute ?? 'agentic.simple'),
     'Mode: advisory',
-    'Auto-continue: false',
+    'Core continuation: none',
     'Writing language: ' + (descriptor.language ?? 'unknown'),
     'Writing language source: ' + (descriptor.writingLanguageSource ?? 'none'),
     'constraints.workspaceWrite: ' + (constraints.workspaceWrite ?? 'unspecified'),
@@ -872,7 +894,10 @@ function readStateSnapshot(value = {}) {
   for (const skill of arrayValue(value.observedSkills)) {
     if (typeof skill === 'string') state.observedSkills.add(normalizeSkillName(skill));
   }
-  const priorClaims = Number(value.schemaVersion) >= STATE_SCHEMA_VERSION
+  for (const skill of arrayValue(value.providedSkills)) {
+    if (typeof skill === 'string') state.providedSkills.add(normalizeProvidedSkillName(skill));
+  }
+  const priorClaims = Number(value.schemaVersion) >= CLAIMED_SKILLS_SCHEMA_VERSION
     ? arrayValue(value.claimedSkills)
     : unique([
       ...arrayValue(value.claimedSkills),
@@ -1038,12 +1063,123 @@ function serializeState(state) {
     lastSubagentUsage: state.lastSubagentUsage,
     classifierAttempted: state.classifierAttempted,
     observedSkills: [...state.observedSkills],
+    providedSkills: [...state.providedSkills],
     claimedSkills: [...state.claimedSkills],
     tasks: [...state.tasks.values()],
     completedRoles: [...state.completedRoles],
     taskSequence: state.taskSequence,
     inspectionCalls: state.inspectionCalls,
   };
+}
+
+async function buildNativeSkillProvision(pi, { route, workspaceRoot = '' } = {}) {
+  const runtime = pi?.pi;
+  if (
+    typeof runtime?.getActiveSkills !== 'function'
+    || typeof runtime?.buildSkillPromptMessage !== 'function'
+    || typeof runtime?.SKILL_PROMPT_MESSAGE_TYPE !== 'string'
+    || !runtime.SKILL_PROMPT_MESSAGE_TYPE
+  ) return null;
+
+  const requestedSkills = primarySkillsFor(route);
+  if (!requestedSkills.length) return null;
+
+  let activeSkills;
+  try {
+    activeSkills = runtime.getActiveSkills();
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(activeSkills) || !activeSkills.length) return null;
+
+  const selected = requestedSkills.map((skill) => (
+    selectActiveSkill(activeSkills, skill, workspaceRoot)
+  ));
+  if (selected.some((skill) => !skill)) return null;
+
+  const built = [];
+  try {
+    for (const skill of selected) {
+      const prompt = await runtime.buildSkillPromptMessage(skill, '', 'autoload');
+      if (!prompt?.message || !prompt?.details) return null;
+      built.push(prompt);
+    }
+  } catch {
+    return null;
+  }
+  if (!built.length) return null;
+
+  const routedSkills = requestedSkills.map(normalizeSkillName).filter(Boolean);
+  const providedSkillRecords = selected.map((skill, index) => ({
+    requestedSkill: routedSkills[index],
+    name: normalizeProvidedSkillName(skill.name),
+    path: String(skill.filePath || built[index]?.details?.path || ''),
+  }));
+  const providedSkills = providedSkillRecords.map(({ name }) => name).filter(Boolean);
+  const providedPaths = providedSkillRecords.map(({ path }) => path).filter(Boolean);
+  return {
+    providedSkills,
+    message: {
+      customType: runtime.SKILL_PROMPT_MESSAGE_TYPE,
+      content: built.map(({ message }) => message).join('\n\n'),
+      display: false,
+      attribution: 'agent',
+      details: {
+        ...built[0].details,
+        lineCount: built.reduce((total, { details }) => total + (Number(details.lineCount) || 0), 0),
+        routedSkills,
+        routedSkillPaths: providedPaths,
+        providedSkillRecords,
+      },
+    },
+  };
+}
+
+function selectActiveSkill(activeSkills, requestedSkill, workspaceRoot = '') {
+  const target = preferredSkillReadTarget(requestedSkill, { workspaceRoot });
+  const targetNames = collectSkillFilePaths(target);
+  const uriName = String(target).match(/^skill:\/\/(.+)$/i)?.[1]?.split('/').at(-1);
+  if (uriName) targetNames.push(uriName);
+
+  if (target && !target.startsWith('skill://')) {
+    const targetPath = normalizedRealPath(
+      isAbsolute(target) ? target : resolve(workspaceRoot || process.cwd(), target),
+    );
+    const exact = activeSkills.find(({ filePath }) => (
+      filePath && normalizedRealPath(filePath) === targetPath
+    ));
+    if (exact) return exact;
+    return null;
+  }
+
+  const candidates = unique([
+    requestedSkill,
+    ...targetNames,
+    ...skillReadNameCandidates(requestedSkill, { limit: 64 }),
+  ]);
+  return activeSkills.find(({ name }) => (
+    typeof name === 'string'
+      && candidates.some((candidate) => skillNamesEquivalent(name, candidate))
+  )) ?? null;
+}
+
+function normalizedRealPath(value = '') {
+  try {
+    return realpathSync(value);
+  } catch {
+    return resolve(value);
+  }
+}
+
+function normalizeProvidedSkillName(value = '') {
+  return String(value).trim().toLowerCase();
+}
+
+function effectiveSkills(state) {
+  return new Set([
+    ...state.observedSkills,
+    ...state.providedSkills,
+  ]);
 }
 
 function buildInspectionProgressGuidance(state, ctx = {}) {
@@ -1061,7 +1197,7 @@ function buildInspectionProgressGuidance(state, ctx = {}) {
       ? preferredSkillReadTarget(primary, { workspaceRoot: ctx.cwd || process.cwd() })
       : '';
     const targetNames = collectSkillFilePaths(target);
-    const observed = primary && [...state.observedSkills].some((skill) => (
+    const observed = primary && [...effectiveSkills(state)].some((skill) => (
       skillNamesEquivalent(skill, primary)
         || targetNames.some((targetName) => skillNamesEquivalent(skill, targetName))
     ));
