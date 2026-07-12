@@ -8,6 +8,7 @@ import {
   buildImmediateWorkflowMessage,
   buildSubagentPromptFragment,
   formatWorkflowBriefingForAssignment,
+  inspectionBudgetForPrompt,
 } from './src/governance.js';
 import { installPluginSkills } from './src/install-skills.js';
 import { classifyHostTurn } from './src/host-turn-context.js';
@@ -16,6 +17,7 @@ import { detectWritingSourceLanguage } from './src/task-descriptor.js';
 import {
   normalizeSkillName,
   parseLoadedSkillEvidence,
+  preferredSkillReadTarget,
   skillReadNameCandidates,
   skillNamesEquivalent,
   validateSkillUsage,
@@ -27,6 +29,7 @@ const STATE_SCHEMA_VERSION = 3;
 const MAX_WRITING_SOURCE_BYTES = 512 * 1024;
 const MAX_WRITING_SOURCE_CHARS = 120000;
 const MAX_WRITING_SOURCE_FILES = 4;
+const INSPECTION_TOOL_NAMES = new Set(['read', 'grep', 'glob']);
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
@@ -304,6 +307,7 @@ export default function registerCoreEnhancer(pi) {
       state.claimedSkills.clear();
       state.tasks.clear();
       state.completedRoles.clear();
+      state.inspectionCalls = 0;
     } else {
       state.lastPrompt = [state.lastPrompt, prompt].filter(Boolean).join('\n');
     }
@@ -363,8 +367,15 @@ export default function registerCoreEnhancer(pi) {
     const name = toolEventName(event);
     if (name === 'read' && !toolEventFailed(event)) recordSkillReads(state, event);
     if (name === 'task') recordTaskResult(state, event);
+    let inspectionGuidance = '';
+    if (INSPECTION_TOOL_NAMES.has(name)) {
+      state.inspectionCalls += 1;
+      inspectionGuidance = buildInspectionProgressGuidance(state, ctx);
+    }
     await persistState(pi, state);
-    return undefined;
+    return inspectionGuidance
+      ? { content: appendToolResultText(event, inspectionGuidance) }
+      : undefined;
   });
 
   pi.on?.('session_stop', async (event = {}, ctx = {}) => {
@@ -396,6 +407,7 @@ export function createState() {
     tasks: new Map(),
     completedRoles: new Set(),
     taskSequence: 0,
+    inspectionCalls: 0,
   };
 }
 
@@ -885,6 +897,9 @@ function readStateSnapshot(value = {}) {
   state.taskSequence = Number.isInteger(value.taskSequence) && value.taskSequence >= 0
     ? value.taskSequence
     : state.tasks.size;
+  state.inspectionCalls = Number.isInteger(value.inspectionCalls) && value.inspectionCalls >= 0
+    ? value.inspectionCalls
+    : 0;
   return state;
 }
 
@@ -1027,7 +1042,41 @@ function serializeState(state) {
     tasks: [...state.tasks.values()],
     completedRoles: [...state.completedRoles],
     taskSequence: state.taskSequence,
+    inspectionCalls: state.inspectionCalls,
   };
+}
+
+function buildInspectionProgressGuidance(state, ctx = {}) {
+  const budget = inspectionBudgetForPrompt(state.lastPrompt);
+  if (!budget) return '';
+  const used = state.inspectionCalls;
+  const remaining = Math.max(0, budget - used);
+  const lines = [
+    '',
+    `OMP advisory inspection progress: ${used}/${budget} read/search calls used; ${remaining} remaining. Each skill read, failed call, and parallel call counts separately.`,
+  ];
+  if (remaining > 0) {
+    const primary = state.lastRoute?.routePlan?.skills?.[0];
+    const observed = primary && [...state.observedSkills].some((skill) => skillNamesEquivalent(skill, primary));
+    if (primary && !observed) {
+      const target = preferredSkillReadTarget(primary, { workspaceRoot: ctx.cwd || process.cwd() });
+      if (target) lines.push(`No routed primary skill read is observed yet. Prefer read(path="${target}") next if that exact target has not already failed; otherwise make one corrected attempt and continue.`);
+    }
+    lines.push('Do not queue more read/search calls than the remaining count. Use the evidence already returned and keep the final response in view.');
+  } else {
+    lines.push('The user inspection budget is exhausted. Synthesize the best scoped evidence-backed result now; do not start another read/search batch. A scoped partial result is successful completion.');
+  }
+  lines.push('This is model guidance only; no tool call or completion is blocked.');
+  return lines.join('\n');
+}
+
+function appendToolResultText(event = {}, guidance = '') {
+  const current = event.content ?? event.result?.content;
+  if (Array.isArray(current)) return [...current, { type: 'text', text: guidance }];
+  if (typeof current === 'string') {
+    return [{ type: 'text', text: current }, { type: 'text', text: guidance }];
+  }
+  return [{ type: 'text', text: guidance }];
 }
 
 function injectBeforeAgentSystemPrompt(event = {}, fragment = '') {

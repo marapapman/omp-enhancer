@@ -251,7 +251,7 @@ function turnConstraintLines(route, parentTask = '') {
   const descriptor = route.taskDescriptor ?? {};
   const constraints = descriptor.constraints ?? {};
   const lines = [];
-  const budget = explicitInspectionBudget(parentTask);
+  const budget = inspectionBudgetForPrompt(parentTask);
   if (budget) {
     lines.push(`The user set a total inspection budget of ${budget} read/search calls, including skill reads. At that point, stop inspecting and deliver the best scoped evidence-backed result; do not reread the same file or region.`);
     lines.push('Each failed call and each call inside a parallel batch counts separately. Never queue a batch larger than the remaining budget; a clearly scoped partial result is successful completion.');
@@ -269,7 +269,7 @@ function turnConstraintLines(route, parentTask = '') {
   return lines;
 }
 
-function explicitInspectionBudget(parentTask = '') {
+export function inspectionBudgetForPrompt(parentTask = '') {
   const text = String(parentTask ?? '').toLowerCase();
   const match = text.match(/(?:最多|不超过|限制在)\s*(\d{1,3})\s*次.{0,20}(?:读取|读|搜索|检索)/u)
     ?? text.match(/在\s*(\d{1,3})\s*次以内.{0,20}(?:读取|读|搜索|检索)/u)

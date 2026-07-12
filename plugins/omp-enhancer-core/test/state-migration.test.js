@@ -12,6 +12,7 @@ const ADVISORY_STATE_KEYS = [
   'classifierAttempted',
   'claimedSkills',
   'completedRoles',
+  'inspectionCalls',
   'lastPrompt',
   'lastRoute',
   'lastRouteProbe',
@@ -137,6 +138,7 @@ test('new snapshots default to an empty advisory workflow state', async () => {
   assert.deepEqual(migrated.tasks, []);
   assert.deepEqual(migrated.completedRoles, []);
   assert.equal(migrated.taskSequence, 0);
+  assert.equal(migrated.inspectionCalls, 0);
 });
 
 function assertAdvisorySnapshot(snapshot) {

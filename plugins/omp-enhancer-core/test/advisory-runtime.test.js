@@ -89,6 +89,46 @@ test('session_stop never schedules a repair or terminal continuation', async (t)
   }
 });
 
+test('inspection budgets add per-result model guidance without blocking tools', async () => {
+  const prompt = '为 agent-fleet 制定只读计划，不修改文件，不运行测试，最多 3 次读取或搜索。';
+  const { pi, ctx } = await routedRuntime(prompt);
+  const toolResult = event(pi, 'tool_result');
+
+  const first = await toolResult({
+    name: 'read',
+    input: { path: 'skill://writing-plans' },
+    result: { content: [{ type: 'text', text: '---\nname: writing-plans\ndescription: Planning\n---\n' }] },
+  }, ctx);
+  assert.match(first.content.at(-1).text, /1\/3 read\/search calls used; 2 remaining/i);
+  assert.doesNotMatch(first.content.at(-1).text, /No routed primary skill read is observed/i);
+
+  const second = await toolResult({
+    name: 'grep',
+    input: { pattern: 'agent-fleet' },
+    result: { content: [{ type: 'text', text: 'extensions/agent-fleet/index.ts' }] },
+  }, ctx);
+  assert.match(second.content.at(-1).text, /2\/3 read\/search calls used; 1 remaining/i);
+  assert.match(second.content.at(-1).text, /do not queue more read\/search calls than the remaining count/i);
+
+  const third = await toolResult({
+    name: 'read',
+    input: { path: 'extensions/agent-fleet/index.ts' },
+    result: { content: [{ type: 'text', text: 'export const route = true;' }] },
+  }, ctx);
+  assert.match(third.content.at(-1).text, /3\/3 read\/search calls used; 0 remaining/i);
+  assert.match(third.content.at(-1).text, /inspection budget is exhausted[\s\S]*synthesize/i);
+  assert.match(third.content.at(-1).text, /no tool call or completion is blocked/i);
+  assert.notEqual(third.block, true);
+
+  const fourth = await toolResult({
+    name: 'read',
+    input: { path: 'extensions/agent-fleet/extra.ts' },
+    result: { content: [{ type: 'text', text: 'extra' }] },
+  }, ctx);
+  assert.match(fourth.content.at(-1).text, /4\/3 read\/search calls used; 0 remaining/i);
+  assert.notEqual(fourth.block, true);
+});
+
 test('session self-report is a claim and cannot impersonate a successful skill read', async () => {
   const { pi, ctx } = await routedRuntime('Review this English paragraph for writing quality.');
   assert.equal(await event(pi, 'session_stop')({
