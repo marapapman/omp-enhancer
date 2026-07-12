@@ -343,7 +343,7 @@ export default function registerCoreEnhancer(pi) {
           customType: 'omp-enhancer-core.workflow-guidance',
           content: workflowMessage,
           display: false,
-          attribution: 'agent',
+          attribution: 'user',
         },
       } : {}),
       route,
