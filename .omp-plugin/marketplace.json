@@ -306,7 +306,7 @@
     {
       "name": "writing-helper",
       "description": "Standalone OMP writing helper with logic checks, quality checks, citation verification, writer/checker agents, and writing skills.",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -354,7 +354,7 @@
     {
       "name": "omp-fact-checker",
       "description": "Fact-checking workflow with claim planning, evidence collection, cross-agent validation, reports, and advisory completeness review.",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-fact-checker",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -369,7 +369,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "Advisory OMP runtime router for coding, writing, testing, and config workflows with content-driven writing-language selection.",
-      "version": "0.1.96",
+      "version": "0.1.97",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",
