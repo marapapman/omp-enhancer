@@ -66,6 +66,8 @@ test('governance front-loads an existing project skill path before project inspe
     assert.match(fragment, /Primary skill to read now: `skills\/superpowers-writing-plans\/SKILL\.md`/);
     assert.ok(fragment.indexOf('### Start with the workflow skill') < fragment.indexOf('### Suggested steps'));
     assert.match(fragment, /workflow guidance, not a tool authorization or completion gate/i);
+    assert.match(fragment, /### Immediate next action[\s\S]*NEXT TOOL: read\(path="skills\/superpowers-writing-plans\/SKILL\.md"\)/);
+    assert.ok(fragment.trimEnd().endsWith('After that skill read succeeds, follow the user request and the bounded workflow above.'));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -84,6 +86,7 @@ test('review guidance requires one verbatim evidence check and one user-visible 
   assert.match(fragment, /check every quoted phrase and location once before the final response/i);
   assert.match(fragment, /one user-visible deliverable/i);
   assert.match(fragment, /advisor-only continuation.*no user-visible text or tools/i);
+  assert.match(fragment, /NEXT TOOL: read\(path="skill:\/\/plain-chinese-writing"\)/);
 });
 
 test('advisor guidance consumes evidence deltas once without reopening completed work', () => {

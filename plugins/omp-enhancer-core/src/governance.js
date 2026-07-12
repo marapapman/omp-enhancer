@@ -74,6 +74,8 @@ export function buildGovernancePromptFragment({
     );
   }
 
+  lines.push(...immediateNextActionLines(resolved, primaryTargets));
+
   return lines.join('\n');
 }
 
@@ -218,6 +220,20 @@ function startWithSkillLines(route, targets = []) {
     `${label}: ${targets.map((target) => `\`${target}\``).join(', ')}.`,
     'Use the read tool on the exact target above before reading, searching, editing, or otherwise inspecting project files. This is workflow guidance, not a tool authorization or completion gate.',
     'If that exact read is unavailable, make one targeted correction from the returned inventory or an existing project path, then continue with the available evidence. Do not guess additional aliases or paths.',
+  ];
+}
+
+function immediateNextActionLines(route, targets = []) {
+  if (route.intent === 'writing.pending' || !targets.length) return [];
+  const [first, ...rest] = targets;
+  return [
+    '',
+    '### Immediate next action',
+    '',
+    `NEXT TOOL: read(path="${first}").`,
+    ...(rest.length ? [`Then read: ${rest.map((target) => `\`${target}\``).join(', ')}.`] : []),
+    'Do not read or edit the task target before this exact skill read. This sequence is prompt guidance only; the plugin does not block tools or completion.',
+    'After that skill read succeeds, follow the user request and the bounded workflow above.',
   ];
 }
 
