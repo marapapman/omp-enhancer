@@ -149,6 +149,10 @@ test('semantic-edit-en fixture and sentinels require legal escaped LaTeX percent
 test('mandatory matrix isolates plugin compliance from the explicit advisor stress matrix', async () => {
   const outputRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-e2e-matrix-mode-'));
   try {
+    const matrix = JSON.parse(await readFile(
+      new URL('./e2e/fixtures/deepseek-installed-matrix.json', import.meta.url),
+      'utf8',
+    ));
     const { report } = await runInstalledMatrix({
       dryRun: true,
       scenarioIds: ['english-review-zh-prompt'],
@@ -169,6 +173,8 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
     assert.equal(stress.defaults.advisor, true);
     assert.equal(stress.defaults.executionMode, 'rpc');
     assert.equal(stress.defaults.expectations.maxPrimaryFinals, 1);
+    assert.equal(stress.defaults.expectations.minAdvisorMessages, 1);
+    assert.equal(matrix.defaults.expectations.maxAdvisorMessages, 0);
     assert.ok(stress.scenarios.some(({ id }) => id === 'advisor-english-review'));
     assert.ok(stress.scenarios.some(({ id }) => id === 'advisor-semantic-edit-en'));
   } finally {
@@ -224,6 +230,33 @@ test('installed workflow summary separates advisor, autolearn, and plugin contin
     pluginContinuationCount: 0,
     maxPrimaryFinals: 1,
   }).pass, true);
+});
+
+test('installed workflow evaluation checks advisor isolation in both directions', () => {
+  const base = {
+    primaryFinalCount: 1,
+    observedSkills: [],
+    claimedSkills: [],
+    unobservedClaims: [],
+    webCallCount: 0,
+    toolCallCount: 0,
+    sourceSearchCallCount: 0,
+    duplicateFailedCalls: [],
+    pluginContinuationCount: 0,
+    autolearnCaptureCount: 0,
+    autolearnFinalCount: 0,
+    autolearnToolCallCount: 0,
+    abortedAssistantCount: 0,
+    routeEvents: [],
+  };
+  assert.equal(evaluateWorkflowSummary(
+    { ...base, advisorMessageCount: 1 },
+    { maxAdvisorMessages: 0 },
+  ).pass, false);
+  assert.equal(evaluateWorkflowSummary(
+    { ...base, advisorMessageCount: 0 },
+    { minAdvisorMessages: 1 },
+  ).pass, false);
 });
 
 test('installed workflow summary preserves repeated real custom events while removing session mirrors', () => {

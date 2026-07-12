@@ -13,6 +13,7 @@
       "noWeb": true,
       "requireFinal": true,
       "maxPrimaryFinals": 1,
+      "minAdvisorMessages": 1,
       "noUnobservedSkillClaims": true,
       "maxDuplicateFailedCalls": 1,
       "maxAbortedAssistants": 0,

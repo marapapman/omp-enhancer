@@ -71,6 +71,7 @@ export async function runInstalledMatrix(options = {}) {
 
 async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun }) {
   const prepared = await prepareScenario(scenario);
+  try {
   const runName = `${scenario.id}-${String(repetition).padStart(2, '0')}`;
   const runDir = path.join(outputRoot, runName);
   const sessionDir = path.join(runDir, 'session');
@@ -94,7 +95,6 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
       evaluation: { pass: true, failures: [] },
     };
     await writeFile(path.join(runDir, 'summary.json'), `${JSON.stringify(result, null, 2)}\n`);
-    await prepared.cleanup();
     return result;
   }
 
@@ -142,8 +142,10 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
     evaluation,
   };
   await writeFile(path.join(runDir, 'summary.json'), `${JSON.stringify(result, null, 2)}\n`);
-  await prepared.cleanup();
   return result;
+  } finally {
+    await prepared.cleanup();
+  }
 }
 
 function buildOmpArgs({ matrix, scenario, prepared, sessionDir, timeoutSeconds, executionMode, configOverlayPath, advisorEnabled }) {

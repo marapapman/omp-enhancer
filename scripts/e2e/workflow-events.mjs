@@ -189,6 +189,14 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     && summary.primaryFinalCount > expectations.maxPrimaryFinals) {
     failures.push(`primary finals ${summary.primaryFinalCount} exceeded ${expectations.maxPrimaryFinals}`);
   }
+  if (Number.isFinite(expectations.minAdvisorMessages)
+    && summary.advisorMessageCount < expectations.minAdvisorMessages) {
+    failures.push(`advisor messages ${summary.advisorMessageCount} was below ${expectations.minAdvisorMessages}`);
+  }
+  if (Number.isFinite(expectations.maxAdvisorMessages)
+    && summary.advisorMessageCount > expectations.maxAdvisorMessages) {
+    failures.push(`advisor messages ${summary.advisorMessageCount} exceeded ${expectations.maxAdvisorMessages}`);
+  }
   if (expectations.noUnobservedSkillClaims === true && summary.unobservedClaims.length) {
     failures.push(`unobserved skill claims: ${summary.unobservedClaims.join(', ')}`);
   }
