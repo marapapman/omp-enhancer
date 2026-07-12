@@ -254,16 +254,18 @@ function turnConstraintLines(route, parentTask = '') {
   const budget = explicitInspectionBudget(parentTask);
   if (budget) {
     lines.push(`The user set a total inspection budget of ${budget} read/search calls, including skill reads. At that point, stop inspecting and deliver the best scoped evidence-backed result; do not reread the same file or region.`);
+    lines.push('Each failed call and each call inside a parallel batch counts separately. Never queue a batch larger than the remaining budget; a clearly scoped partial result is successful completion.');
   }
   const readOnly = constraints.workspaceWrite === 'forbidden';
   const noTests = constraints.testExecution === 'forbidden';
   if (route.intent === 'planning' && readOnly) {
     lines.push(`This is a response-only plan. The user's no-write${noTests ? '/no-test' : ''} scope means repository or skill templates that normally write .pi/plan, add instrumentation, run tests, delegate implementation, or wait for approval do not apply on this turn. Return the concrete plan in the final response.`);
-    lines.push('Inspect only the target and directly relevant implementation/test files needed to make the plan concrete; do not reopen a root-cause investigation or search for a diagnosis skill.');
+    lines.push('Inspect only the target and directly relevant implementation/test files needed to make the plan concrete; do not reopen a root-cause investigation, search .pi/specs for an unstated design, or load a diagnosis skill.');
   } else if (route.intent === 'diagnosis' && readOnly) {
     lines.push(`This is static diagnosis only. The user's no-write${noTests ? '/no-test' : ''} scope overrides generic debugging steps that add instrumentation, reproduce by execution, invoke shell commands, or implement a fix.`);
     lines.push('Read the named test and only a small number of directly called implementation files, then report the strongest file-backed diagnosis and any remaining uncertainty.');
   }
+  if (readOnly) lines.push('Use only tools that are actually available; do not encode shell, git, test, or task commands as read selectors.');
   return lines;
 }
 

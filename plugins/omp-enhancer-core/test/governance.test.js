@@ -139,8 +139,11 @@ test('turn-local planning and diagnosis guidance preserves user read-only budget
   const planningRoute = routeNaturalLanguageTask({ prompt: planningPrompt, routerMode: 'enforce' });
   const planning = buildImmediateWorkflowMessage({ route: planningRoute, parentTask: planningPrompt });
   assert.match(planning, /total inspection budget of 8 read\/search calls/i);
+  assert.match(planning, /each call inside a parallel batch counts separately/i);
+  assert.match(planning, /never queue a batch larger than the remaining budget/i);
   assert.match(planning, /response-only plan/i);
-  assert.match(planning, /do not reopen a root-cause investigation or search for a diagnosis skill/i);
+  assert.match(planning, /do not reopen a root-cause investigation[\s\S]*search \.pi\/specs[\s\S]*load a diagnosis skill/i);
+  assert.match(planning, /do not encode shell, git, test, or task commands as read selectors/i);
 
   const diagnosisPrompt = '诊断 src/router.test.mjs 的路由失配，不修改文件、不运行测试，最多 8 次读取或搜索。';
   const diagnosisRoute = routeNaturalLanguageTask({ prompt: diagnosisPrompt, routerMode: 'enforce' });
