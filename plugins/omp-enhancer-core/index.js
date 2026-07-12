@@ -5,6 +5,7 @@ import { buildClassifierPrompt, resolveClassificationRoute } from './src/classif
 import { appendDebugLog, buildDebugRecord } from './src/debug-logger.js';
 import {
   buildGovernancePromptFragment,
+  buildImmediateWorkflowMessage,
   buildSubagentPromptFragment,
   formatWorkflowBriefingForAssignment,
 } from './src/governance.js';
@@ -326,8 +327,20 @@ export default function registerCoreEnhancer(pi) {
       includeModelWorkflowHints: false,
       workspaceRoot: ctx.cwd || process.cwd(),
     });
+    const workflowMessage = buildImmediateWorkflowMessage({
+      route,
+      workspaceRoot: ctx.cwd || process.cwd(),
+    });
     return {
       ...injectBeforeAgentSystemPrompt(event, fragment),
+      ...(workflowMessage ? {
+        message: {
+          customType: 'omp-enhancer-core.workflow-guidance',
+          content: workflowMessage,
+          display: false,
+          attribution: 'agent',
+        },
+      } : {}),
       route,
     };
   });

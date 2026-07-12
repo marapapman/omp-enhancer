@@ -8,10 +8,7 @@ export function buildGovernancePromptFragment({
 } = {}) {
   const resolved = advisoryRoute(route);
   const plan = resolved.routePlan;
-  const primarySkills = primarySkillsFor(resolved);
-  const primaryTargets = primarySkills
-    .map((skill) => preferredSkillReadTarget(skill, { workspaceRoot }))
-    .filter(Boolean);
+  const primaryTargets = primarySkillTargets(resolved, workspaceRoot);
   const lines = [
     '## OMP Enhancer Core Workflow Guidance',
     '',
@@ -77,6 +74,16 @@ export function buildGovernancePromptFragment({
   lines.push(...immediateNextActionLines(resolved, primaryTargets));
 
   return lines.join('\n');
+}
+
+export function buildImmediateWorkflowMessage({ route, workspaceRoot = '' } = {}) {
+  const resolved = advisoryRoute(route);
+  const lines = immediateNextActionLines(resolved, primarySkillTargets(resolved, workspaceRoot));
+  if (!lines.length) return '';
+  return [
+    'OMP advisory workflow note for this turn:',
+    ...lines.filter(Boolean),
+  ].join('\n');
 }
 
 export function buildSubagentPromptFragment({ prompt = '' } = {}) {
@@ -236,6 +243,12 @@ function immediateNextActionLines(route, targets = []) {
     'This sequence is advisory only: never block tools or completion, never retry an unchanged read, and never reopen completed work because a skill is unavailable.',
     'If the read succeeds, follow the skill and bounded workflow above; otherwise proceed with the user request using the available evidence.',
   ];
+}
+
+function primarySkillTargets(route, workspaceRoot = '') {
+  return primarySkillsFor(route)
+    .map((skill) => preferredSkillReadTarget(skill, { workspaceRoot }))
+    .filter(Boolean);
 }
 
 function primarySkillsFor(route = {}) {

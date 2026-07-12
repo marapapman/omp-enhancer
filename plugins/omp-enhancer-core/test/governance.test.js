@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import {
   buildGovernancePromptFragment,
+  buildImmediateWorkflowMessage,
   buildSubagentPromptFragment,
   formatWorkflowBriefingForAssignment,
 } from '../src/governance.js';
@@ -69,6 +70,10 @@ test('governance front-loads an existing project skill path before project inspe
     assert.match(fragment, /### Immediate next action[\s\S]*PREFERRED NEXT TOOL: read\(path="skills\/superpowers-writing-plans\/SKILL\.md"\)/);
     assert.match(fragment, /correct the target at most once[\s\S]*continue the user task/i);
     assert.ok(fragment.trimEnd().endsWith('otherwise proceed with the user request using the available evidence.'));
+    const message = buildImmediateWorkflowMessage({ route, workspaceRoot: root });
+    assert.match(message, /^OMP advisory workflow note for this turn:/);
+    assert.match(message, /PREFERRED NEXT TOOL: read\(path="skills\/superpowers-writing-plans\/SKILL\.md"\)/);
+    assert.match(message, /never block tools or completion/i);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -126,6 +131,7 @@ test('pending writing guidance asks for body inspection before language skills',
   assert.match(fragment, /Writing language is pending content inspection/);
   assert.match(fragment, /language of the surrounding instruction is not evidence/i);
   assert.doesNotMatch(fragment, /skill:\/\/(?:plain-chinese-writing|zh-writing-polish|writing-markdown-helper)/);
+  assert.equal(buildImmediateWorkflowMessage({ route }), '');
 });
 
 test('document preservation is a quality suggestion rather than an execution boundary', () => {
