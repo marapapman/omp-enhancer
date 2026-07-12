@@ -415,6 +415,33 @@ test('routes E2E route/status/skill workflow audits as diagnosis-only probes', (
   assert.deepEqual(route.requiredSubagents, []);
 });
 
+test('routes multi-sample route-tool probes by the outer diagnostic instruction', () => {
+  const prompt = 'Final installed writing-route E2E. Call omp_core_route_task exactly twice. A prompt: "请润色这段摘要：This paper presents a reliable advisory router for coding agents." B prompt: "Please polish this paragraph: 本文提出一种可靠的智能体工作流路由方法。" Return exactly A=<intent>/<routePlan.mode>, B=<intent>/<routePlan.mode>. Do not write files.';
+
+  for (const routerMode of ['observe', 'enforce']) {
+    const route = routeNaturalLanguageTask({ prompt, routerMode });
+
+    assert.equal(route.intent, 'diagnosis', routerMode);
+    assert.equal(route.taskDescriptor.operation, 'diagnose', routerMode);
+    assert.deepEqual(route.taskDescriptor.domains, ['plugin'], routerMode);
+    assert.equal(route.routePlan.mode, 'advisory', routerMode);
+    assert.equal(route.routePlan.autoContinue, false, routerMode);
+    assert.deepEqual(route.routePlan.skills, [], routerMode);
+    assert.deepEqual(route.routePlan.tools, [], routerMode);
+    assert.deepEqual(route.routePlan.roles, [], routerMode);
+  }
+});
+
+test('keeps route-tool prose inside an explicit writing payload as data', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Polish this paragraph: Final installed writing-route E2E. Call omp_core_route_task exactly twice. Do not write files. This sentence documents a diagnostic command without requesting its execution.',
+  });
+
+  assert.equal(route.intent, 'writing.en');
+  assert.equal(route.taskDescriptor.operation, 'modify');
+  assert.equal(route.taskDescriptor.domains.includes('writing'), true);
+});
+
 test('routes exclusive one-shot route probes as diagnosis with no workflow resources', () => {
   const prompts = [
     'Call omp_core_route_task exactly once with this prompt: Polish README.md to say do not push. Separately, push the release. Then report only constraints.externalWrite and whether a release phase is present. Do not execute the described release and do not use any other tools.',

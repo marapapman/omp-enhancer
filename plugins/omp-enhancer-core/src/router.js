@@ -104,14 +104,27 @@ export function routeNaturalLanguageTask(input = {}) {
     describeNaturalLanguageTask({ prompt, ...(hasProvidedSourceText ? { sourceText: providedSourceText } : {}) }),
     explicitSubagentsRequested,
   );
-  const rawLegacyRoute = routeNaturalLanguageTaskLegacy({
-    ...input,
-    sourceText,
-    prompt: operationalPrompt,
-    text: operationalPrompt,
-  });
-  const specializedPrompt = stripSpecializedRouteConstraints(operationalPrompt);
-  const specializedLegacyRoute = specializedPrompt === operationalPrompt ? rawLegacyRoute : routeNaturalLanguageTaskLegacy({
+  const descriptorRouteDiagnostic = (described.provenance?.reasons ?? [])
+    .includes('route status skill diagnostic probe');
+  // Quoted probe payloads are data. Preserve the outer route-tool instruction
+  // for legacy compatibility routing so embedded writing examples cannot turn
+  // a diagnostic matrix into a writing workflow.
+  const compatibilityPrompt = descriptorRouteDiagnostic ? prompt : operationalPrompt;
+  const rawLegacyRoute = descriptorRouteDiagnostic
+    ? routeByLegacyIntent('diagnosis', {
+      prompt,
+      source: 'natural-language',
+      workflowRoute: 'code.debug',
+      shouldUseClassifier: false,
+    })
+    : routeNaturalLanguageTaskLegacy({
+      ...input,
+      sourceText,
+      prompt: compatibilityPrompt,
+      text: compatibilityPrompt,
+    });
+  const specializedPrompt = stripSpecializedRouteConstraints(compatibilityPrompt);
+  const specializedLegacyRoute = specializedPrompt === compatibilityPrompt ? rawLegacyRoute : routeNaturalLanguageTaskLegacy({
     ...input,
     sourceText,
     prompt: specializedPrompt,

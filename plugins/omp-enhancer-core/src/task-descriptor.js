@@ -65,6 +65,7 @@ export function describeNaturalLanguageTask(input = {}) {
   const directivePrompt = writingDirectivePromptForSignals(prompt);
   const operationalPrompt = writingOperationalPromptForSignals(directivePrompt);
   const text = operationalPrompt.toLowerCase();
+  const diagnosticText = prompt.toLowerCase();
   const promptLanguage = languageFor(prompt);
   if (isCompletedGateStatusReport(text)) {
     return normalizeTaskDescriptor({
@@ -85,7 +86,7 @@ export function describeNaturalLanguageTask(input = {}) {
       },
     });
   }
-  if (isExclusiveRouteTaskDiagnosticProbe(text)) {
+  if (isExclusiveRouteTaskDiagnosticProbe(diagnosticText)) {
     const probePrompt = exclusiveRouteProbePrompt(prompt);
     return normalizeTaskDescriptor({
       version: 1,
@@ -115,7 +116,7 @@ export function describeNaturalLanguageTask(input = {}) {
       },
     });
   }
-  if (isExclusiveSubagentStatusDiagnosticProbe(text)) {
+  if (isExclusiveSubagentStatusDiagnosticProbe(diagnosticText)) {
     return normalizeTaskDescriptor({
       version: 1,
       operation: 'diagnose',
@@ -144,7 +145,7 @@ export function describeNaturalLanguageTask(input = {}) {
       },
     });
   }
-  if (isRouteStatusSkillDiagnosticProbe(text)) {
+  if (isRouteStatusSkillDiagnosticProbe(diagnosticText)) {
     return normalizeTaskDescriptor({
       version: 1,
       operation: 'diagnose',
@@ -1843,13 +1844,22 @@ function isCompletedGateStatusReport(text = '') {
 }
 
 function isRouteStatusSkillDiagnosticProbe(text = '') {
+  const routeToolIndex = text.indexOf('omp_core_route_task');
+  const leadingText = routeToolIndex >= 0 ? text.slice(0, routeToolIndex).trim() : '';
+  const beginsAsWritingPayload = /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:polish|rewrite|proofread|translate|edit|revise)\b|^(?:(?:请|帮我|麻烦)\s*)?(?:润色|改写|校对|翻译|编辑|修订)/.test(leadingText);
+  if (beginsAsWritingPayload) return false;
   const hasRouteAndStatusTools = /omp_core_route_task/.test(text)
     && /omp_core_subagent_status/.test(text);
   const asksForDiagnosticProbe = /(?:验证|检查|核对|诊断|probe|check|verify).{0,120}(?:路由|状态|route|routing|status)|(?:路由|状态|route|routing|status).{0,120}(?:验证|检查|核对|诊断|probe|check|verify)/.test(text);
+  const hasMultiRouteProbe = /omp_core_route_task/.test(text)
+    && /(?:exactly\s+twice|call(?:ing)?[^.!?\n]{0,48}\btwice\b|two\s+(?:route\s+)?probe\s+prompts?|调用[^。！？\n]{0,32}两次|分别[^。！？\n]{0,48}(?:调用|检查)|两个[^。！？\n]{0,24}(?:probe|路由样例|提示))/.test(text);
+  const namesDiagnosticMatrix = /(?:e2e|installed(?:-plugin)?|安装态).{0,120}(?:route|routing|路由)|(?:route|routing|路由).{0,120}(?:e2e|installed(?:-plugin)?|安装态)/.test(text);
   const forbidsWorkspaceWrite = /(?:不|不要|禁止|不得).{0,16}(?:修改|改动|写入).{0,12}(?:文件|代码|项目)?|(?:do not|don't|without).{0,18}(?:modify|edit|write).{0,12}(?:files?|code|project)?/.test(text);
   const forbidsTestExecution = /(?:不|不要|禁止|不得).{0,16}(?:运行|执行|跑).{0,12}测试|(?:do not|don't|without).{0,18}(?:run|execute).{0,12}tests?/.test(text);
   return hasRouteAndStatusTools && asksForDiagnosticProbe
-    && forbidsWorkspaceWrite && forbidsTestExecution;
+      && forbidsWorkspaceWrite && forbidsTestExecution
+    || hasMultiRouteProbe && (asksForDiagnosticProbe || namesDiagnosticMatrix)
+      && forbidsWorkspaceWrite;
 }
 
 function isExclusiveRouteTaskDiagnosticProbe(text = '') {
