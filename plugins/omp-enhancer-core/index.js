@@ -8,7 +8,7 @@ import {
   buildImmediateWorkflowMessage,
   buildSubagentPromptFragment,
   formatWorkflowBriefingForAssignment,
-  inspectionBudgetForPrompt,
+  inspectionBudgetForRoute,
 } from './src/governance.js';
 import { installPluginSkills } from './src/install-skills.js';
 import { classifyHostTurn } from './src/host-turn-context.js';
@@ -1047,7 +1047,7 @@ function serializeState(state) {
 }
 
 function buildInspectionProgressGuidance(state, ctx = {}) {
-  const budget = inspectionBudgetForPrompt(state.lastPrompt);
+  const budget = inspectionBudgetForRoute(state.lastRoute, state.lastPrompt);
   if (!budget) return '';
   const used = state.inspectionCalls;
   const remaining = Math.max(0, budget - used);

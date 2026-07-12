@@ -161,6 +161,26 @@ test('inspection guidance recognizes a routed project skill alias and does not r
   }
 });
 
+test('natural fact and broad-audit routes expose soft route-aware inspection progress', async () => {
+  const fact = await routedRuntime('核查 sections/5.7.md 中三个事实是否有本地引文支持，只使用工作区证据，不联网。');
+  const factResult = await event(fact.pi, 'tool_result')({
+    name: 'read',
+    input: { path: 'skill://fact-checking' },
+    result: { content: [{ type: 'text', text: '---\nname: fact-checking\ndescription: Local fact check\n---\n' }] },
+  }, fact.ctx);
+  assert.match(factResult.content.at(-1).text, /1\/8 read\/search calls used; 7 remaining/i);
+  assert.notEqual(factResult.block, true);
+
+  const audit = await routedRuntime('只读审计 extensions/agent-fleet 的任务路由与失败收敛逻辑，读取 exact debugging skill，不修改文件、不运行测试。');
+  const auditResult = await event(audit.pi, 'tool_result')({
+    name: 'read',
+    input: { path: 'skill://diagnose' },
+    result: { content: [{ type: 'text', text: '---\nname: diagnose\ndescription: Audit diagnosis\n---\n' }] },
+  }, audit.ctx);
+  assert.match(auditResult.content.at(-1).text, /1\/12 read\/search calls used; 11 remaining/i);
+  assert.notEqual(auditResult.block, true);
+});
+
 test('session self-report is a claim and cannot impersonate a successful skill read', async () => {
   const { pi, ctx } = await routedRuntime('Review this English paragraph for writing quality.');
   assert.equal(await event(pi, 'session_stop')({

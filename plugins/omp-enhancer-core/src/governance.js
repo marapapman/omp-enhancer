@@ -251,9 +251,12 @@ function turnConstraintLines(route, parentTask = '') {
   const descriptor = route.taskDescriptor ?? {};
   const constraints = descriptor.constraints ?? {};
   const lines = [];
-  const budget = inspectionBudgetForPrompt(parentTask);
+  const explicitBudget = inspectionBudgetForPrompt(parentTask);
+  const budget = inspectionBudgetForRoute(route, parentTask);
   if (budget) {
-    lines.push(`The user set a total inspection budget of ${budget} read/search calls, including skill reads. At that point, stop inspecting and deliver the best scoped evidence-backed result; do not reread the same file or region.`);
+    lines.push(explicitBudget
+      ? `The user set a total inspection budget of ${budget} read/search calls, including skill reads. At that point, stop inspecting and deliver the best scoped evidence-backed result; do not reread the same file or region.`
+      : `Advisory workflow convergence target: finish inspection within ${budget} read/search calls, including skill reads, then deliver the best scoped evidence-backed result. This target guides scope and does not block any tool call.`);
     lines.push('Each failed call and each call inside a parallel batch counts separately. Never queue a batch larger than the remaining budget; a clearly scoped partial result is successful completion.');
     lines.push('SERIAL INSPECTION MODE: for this entire budgeted turn, put at most ONE read/search tool call in each assistant message and wait for its result before choosing the next call. Do not issue parallel read, grep, or glob calls; use the newest progress count after every result.');
   }
@@ -278,6 +281,21 @@ export function inspectionBudgetForPrompt(parentTask = '') {
   if (!match) return 0;
   const value = Number(match[1]);
   return Number.isInteger(value) && value > 0 ? value : 0;
+}
+
+export function inspectionBudgetForRoute(route = {}, parentTask = '') {
+  const explicit = inspectionBudgetForPrompt(parentTask);
+  if (explicit) return explicit;
+
+  const intent = String(route.intent ?? '');
+  const workflowRoute = String(route.workflowRoute ?? '');
+  const operation = String(route.taskDescriptor?.operation ?? '');
+  const isWriting = intent.startsWith('writing.') || workflowRoute.startsWith('writing.');
+  if (isWriting && ['inspect', 'modify'].includes(operation)) return 6;
+  if (['bug-audit', 'security-review'].includes(intent)) return 12;
+  if (['fact-check', 'planning', 'diagnosis', 'testing'].includes(intent)) return 8;
+  if (['inspect', 'diagnose', 'plan'].includes(operation)) return 8;
+  return 0;
 }
 
 function primarySkillTargets(route, workspaceRoot = '') {

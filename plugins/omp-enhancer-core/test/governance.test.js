@@ -157,6 +157,23 @@ test('turn-local planning and diagnosis guidance preserves user read-only budget
   assert.match(diagnosis, /SERIAL INSPECTION MODE/i);
 });
 
+test('natural inspection routes receive advisory convergence targets without hard gates', () => {
+  const factPrompt = '核查 sections/5.7.md 中三个事实是否有本地引文支持，只使用工作区证据，不联网。';
+  const factRoute = routeNaturalLanguageTask({ prompt: factPrompt, routerMode: 'enforce' });
+  const fact = buildImmediateWorkflowMessage({ route: factRoute, parentTask: factPrompt });
+  assert.equal(factRoute.intent, 'fact-check');
+  assert.match(fact, /Advisory workflow convergence target:[\s\S]*within 8 read\/search calls/i);
+  assert.match(fact, /target guides scope and does not block any tool call/i);
+  assert.match(fact, /SERIAL INSPECTION MODE/i);
+
+  const auditPrompt = '只读审计 extensions/agent-fleet 的任务路由与失败收敛逻辑，读取 exact debugging skill，不修改文件、不运行测试。';
+  const auditRoute = routeNaturalLanguageTask({ prompt: auditPrompt, routerMode: 'enforce' });
+  const audit = buildImmediateWorkflowMessage({ route: auditRoute, parentTask: auditPrompt });
+  assert.equal(auditRoute.intent, 'bug-audit');
+  assert.match(audit, /Advisory workflow convergence target:[\s\S]*within 12 read\/search calls/i);
+  assert.match(audit, /SERIAL INSPECTION MODE/i);
+});
+
 test('document preservation is a quality suggestion rather than an execution boundary', () => {
   const prompt = '只做文风润色，保持所有事实不变；修改 docs/paper.md。';
   const route = routeNaturalLanguageTask({ prompt, sourceText: '本文的数值是 42。', routerMode: 'enforce' });
