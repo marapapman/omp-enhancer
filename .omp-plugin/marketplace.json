@@ -5,15 +5,15 @@
     "name": "marapapman"
   },
   "metadata": {
-    "description": "OMP enhancement plugins for config assets, writing support, test workflow support, and core runtime routing.",
+    "description": "OMP enhancement plugins for autonomous workflow orchestration, shared config context, writing support, test workflow support, and fact checking.",
     "version": "1.0.21",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "omp-config",
-      "description": "Pluginized OMP configuration assets, agents, skills, hooks, model override templates, and config diagnostics.",
-      "version": "0.1.23",
+      "description": "Pluginized shared main/Advisor workflow context, configuration assets, agents, skills, hooks, templates, and diagnostics.",
+      "version": "0.1.24",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -368,8 +368,8 @@
     },
     {
       "name": "omp-enhancer-core",
-      "description": "Advisory OMP runtime router for coding, writing, testing, and config workflows with content-driven writing-language selection.",
-      "version": "0.1.116",
+      "description": "Advisory main-agent workflow catalog, TODO orchestration, active skill discovery, and parent-selected subagent step context.",
+      "version": "0.1.117",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",

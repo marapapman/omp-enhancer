@@ -1,4 +1,5 @@
 import { preferredSkillReadTarget, skillReadNameCandidates } from './skill-usage.js';
+import { buildWorkflowCatalogPrompt } from './workflow-routes.js';
 
 export function buildGovernancePromptFragment({
   route,
@@ -9,74 +10,42 @@ export function buildGovernancePromptFragment({
   availableSkills = [],
 } = {}) {
   const resolved = advisoryRoute(route);
-  const plan = resolved.routePlan;
-  const primaryTargets = primarySkillTargets(resolved, workspaceRoot);
-  const skillInventory = normalizeSkillInventory(availableSkills);
+  const catalog = buildWorkflowCatalogPrompt({ availableSkills, audience: 'main' });
   const lines = [
-    '## OMP Enhancer Core Workflow Guidance',
+    '## OMP Main-Agent Workflow Orchestration',
     '',
-    'This guidance is advisory. It selects relevant skills and a useful workflow, while the agent remains responsible for following the user request and host tool results.',
+    'This guidance is advisory. The main agent selects and composes workflows, skills, TODO items, tools, and subagents from the observed task.',
     'The plugin does not authorize actions, deny tool calls, hold the final response open, or schedule another turn.',
     '',
-    '### Workflow and skill discovery first',
+    '### Required planning sequence for non-trivial work',
     '',
-    'Before substantive project work, first identify the workflow from the user goal, requested action, target artifact, source language, and explicit constraints. Distinguish writing review or revision, planning, diagnosis, implementation, testing, fact checking, release, and other workflows before choosing tools.',
-    skillInventory.length
-      ? `Current active skill inventory: ${formatInlineSkillInventory(skillInventory)}.`
-      : 'Inspect the runtime or project skill inventory once when the current environment exposes it; do not assume that remembered skill names are installed.',
-    skillsProvided
-      ? 'The host has already inspected the active inventory and loaded the routed skill bundle below. This completes skill selection for the current workflow: apply those skill bodies before project work and do not independently search, substitute, or reread them.'
-      : 'After identifying the workflow and inspecting the current inventory, load the smallest set of clearly necessary matching skills before project work. Routed skills below are strong candidates, but correct a clear mismatch using an exact skill that actually exists.',
-    'Learned memory and general model ability may supply context, but they do not replace pre-work skill discovery and loading. Searching for or creating a managed skill after finishing also does not satisfy this step; search existing skills before creating a new one.',
-    'If no suitable skill exists or one load fails after a single targeted correction, continue with the best available method and report the limitation when material. Skill discovery is workflow guidance, not a tool or completion gate.',
+    '1. Read the user goal and applicable project instructions, then choose or compose the matching workflows from the full catalog below. The legacy route object is diagnostic only and must not make this decision for you.',
+    '2. Inspect the current model-visible skill inventory in this prompt. Select the smallest skill set that directly supports the chosen workflow steps and load each selected skill before the step that uses it. Do not assume a remembered name exists.',
+    '3. Before substantive project work, initialize OMP\'s native `todo` tool with `op: "init"`. Put the selected workflow IDs in phase names, record selected skills in the first item, and map every workflow step and every user requirement to its own stable TODO item.',
+    '4. Execute TODO items in order and call `todo` with `op: "done"` immediately after each item finishes. Use the exact TODO content string; never invent task IDs. New user instructions must be added to the TODO before continuing.',
+    '5. Before doing all work yourself, identify independent workstreams. When two or more useful workstreams are independent, fork multiple subagents early with the native `task` tool, preferably in one `tasks[]` batch when that schema is available. A focused single-step task, an explicit no-subagent request, or a truly dependent sequence is an exception.',
+    '6. Keep integration, conflict resolution, final verification, and the user-visible answer with the main agent. Reconcile every open TODO and every child result before finishing.',
     '',
-    `Intent: ${resolved.intent}`,
-    `Workflow: ${resolved.workflowRoute}`,
-    ...startWithSkillLines(resolved, primaryTargets, { skillsProvided }),
+    'Every child task must begin with a compact prefix inside its first 120 characters:',
+    '`[workflow=<ids> step=<step-id> todo=<exact-item> skills=<comma-separated-skill-names>]`',
+    'Then state the exact target, non-goals, requested change or investigation, and observable acceptance criteria. The parent chooses these values; Core only passes them through.',
     '',
-    '### Suggested steps',
-    '',
-    formatSteps(plan.steps),
-    '',
-    '### Relevant skills',
-    '',
-    formatSkillList(plan.skills, { workspaceRoot }),
-    '',
-    skillsProvided
-      ? 'The host has already provided the exact primary skill content for this turn. Apply that content directly and do not spend a read/search call loading the same skill again.'
-      : 'Before substantive work, read exactly the smallest directly applicable primary skill once. Prefer an exact project-specified skill, then the exact routed URI, then one inventory-confirmed equivalent. A skill counts as loaded only after a successful read of its SKILL.md. If resolution fails, make one targeted correction, continue without the skill, and report the limitation briefly. Do not invent aliases, create replacement skills, or retry unchanged calls.',
-    'Use the smallest ordered skill bundle that matches the workflow. A focused task often needs one primary skill; Chinese writing may use its base language guidance plus one task-specific skill, and a routed checker companion should be applied when present. When writing language is pending, inspect the source first and only then select a language skill. Do not expand into unrelated skills.',
-    'Unless the user is auditing historical gate behavior, use only current routed or project-specified skills; do not load legacy gate-satisfy or gate-unblock compatibility resources.',
-    '',
-    '### Bounded execution guidance',
-    '',
-    'Confirm a path exists before reading it; do not guess report files or resource URIs. For a schema or path error, make at most one evidence-based targeted correction, then continue with the evidence already available.',
-    'For focused work, treat 6 to 8 read or search calls as a convergence checkpoint and synthesize the result. For a broad audit, produce at least one file-backed finding within that window. If time is short, deliver a clearly scoped partial result instead of searching indefinitely.',
-    'Dispatch an asynchronous task once. Wait through the host job or messaging mechanism when available; do not dispatch a second task merely to poll and do not create an unauthorized file rendezvous.',
+    'Learned memory, general model ability, and a managed skill created after finishing do not replace pre-work skill discovery. If a skill, `todo`, or `task` is unavailable, continue with the best concise checklist or direct method and report a material limitation; never block, loop, or auto-continue.',
+    'Confirm a path exists before reading it. For a schema or path error, make at most one evidence-based targeted correction, then continue with the evidence already available.',
     ...evidenceDisciplineLines(resolved),
     '',
-    '### Useful tools',
+    '### Observed task facts (not a workflow decision)',
     '',
-    formatList(plan.tools),
-    '',
-    '### Optional roles',
-    '',
-    formatRoles(plan.roles),
-    '',
-    'Roles are collaboration suggestions. The main agent may work directly, delegate selected checkpoints, or adapt the sequence to the task and available runtime.',
-    '',
-    '### Quality checks',
-    '',
-    formatList(plan.qualityChecks),
-    '',
-    '### Scope and risk notes',
-    '',
-    ...scopeAndRiskLines(resolved, parentTask),
+    ...taskFactLines(resolved, parentTask),
     '',
     '### Advisor guidance',
     '',
     'Treat advisor notes as evidence deltas. Incorporate each distinct material point once, applying a concrete newly evidenced correction before delivery when it improves the user result. A repeated note or a note without a new file, location, error, or observed result does not justify rereading skills, rerunning unchanged tools, reopening completed work, or emitting a second final answer.',
     'Finish tool use and absorb advisor notes already delivered before producing one user-visible deliverable. If the host invokes an advisor-only continuation after that deliverable, produce no user-visible text or tools and wait for an actual user message.',
+    '',
+    '## Complete workflow catalog',
+    '',
+    catalog,
   ];
 
   if (includeModelWorkflowHints) {
@@ -88,8 +57,6 @@ export function buildGovernancePromptFragment({
     );
   }
 
-  lines.push(...immediateNextActionLines(resolved, primaryTargets, parentTask, { skillsProvided }));
-
   return lines.join('\n');
 }
 
@@ -100,45 +67,33 @@ export function buildImmediateWorkflowMessage({
   skillsProvided = false,
   availableSkills = [],
 } = {}) {
-  const resolved = advisoryRoute(route);
-  const skillInventory = normalizeSkillInventory(availableSkills);
-  const lines = immediateNextActionLines(
-    resolved,
-    primarySkillTargets(resolved, workspaceRoot),
-    parentTask,
-    { skillsProvided },
-  );
-  if (!lines.length) return '';
   return [
-    'OMP advisory workflow note for this turn:',
-    'First identify the workflow, inspect the current skill inventory, and load the smallest necessary matching skill bundle before substantive project work.',
-    ...(skillInventory.length ? [`Current active skills: ${formatInlineSkillInventory(skillInventory)}.`] : []),
-    'Memory, general model ability, and a skill created after the task are not substitutes for this pre-work discovery step.',
-    ...lines.filter(Boolean),
+    'OMP autonomous workflow reminder:',
+    'Choose or compose workflows from the full catalog, inspect the active skill inventory, and initialize the native `todo` before substantive work.',
+    'Load the smallest selected skills before their steps. Fork multiple independent workstreams with `task`; put workflow, step, TODO, and skills metadata at the start of every child task.',
+    'This is advisory only. If a mechanism is unavailable, continue without blocking or automatic continuation.',
   ].join('\n');
 }
 
 export function buildSubagentPromptFragment({ prompt = '' } = {}) {
+  const metadata = parseWorkflowMetadata(prompt);
   const agent = parseRole(prompt) || 'subagent';
-  const skills = parseRoleSkills(prompt);
-  const parentBriefing = parseWorkflowBriefing(prompt);
+  const skills = metadata.skills.length ? metadata.skills : parseRoleSkills(prompt);
   return [
-    '## OMP Enhancer Core Role Guidance',
+    '## OMP Subagent Workflow Checkpoint',
     '',
     `Role: ${agent}`,
+    `Parent-selected workflow: ${metadata.workflow || 'unspecified'}`,
+    `Parent-selected step: ${metadata.step || 'unspecified'}`,
+    `Parent TODO item: ${metadata.todo || 'unspecified'}`,
     '',
-    ...(parentBriefing.length ? [
-      'Parent workflow context:',
-      ...parentBriefing,
-      '',
-    ] : []),
-    'Suggested skills for this role:',
+    'Parent-selected skills for this checkpoint:',
     formatSkillList(skills),
     '',
-    'Before substantive work, read exactly the smallest directly applicable primary skill once. Prefer the exact project-specified or routed name. A skill counts as loaded only after a successful read of its SKILL.md.',
-    'If resolution fails, make one targeted correction and then continue with the available evidence. Do not invent an alias or retry the unchanged call. Missing skills are a limitation to report, not a reason for the plugin to halt the role.',
+    'Do not reroute the whole parent task or select a different workflow. Own only this checkpoint. Load the exact parent-selected skills before substantive work, unless they are already present in the subagent context.',
+    'If a selected skill cannot be loaded, make one targeted correction and continue with the available evidence. Missing metadata or skills are limitations to report, not reasons to block.',
     '',
-    'Return a concise result with the evidence, files, checks, and decisions used. The parent agent integrates this checkpoint into the overall task.',
+    'Return a concise checkpoint result with evidence, files, checks, unresolved risks, and the acceptance criteria outcome. The parent integrates and verifies the final result.',
   ].join('\n');
 }
 
@@ -146,12 +101,10 @@ export function formatWorkflowBriefingForAssignment(route) {
   if (!route || route.intent === 'unknown') return '';
   const resolved = advisoryRoute(route);
   return [
-    'Workflow briefing:',
-    `Parent intent: ${resolved.intent}`,
-    `Parent workflow: ${resolved.workflowRoute}`,
-    'Suggested parent steps:',
-    formatSteps(resolved.routePlan.steps),
-    'This role contributes one checkpoint; the parent agent coordinates the final result.',
+    'Legacy diagnostic briefing:',
+    `Observed operation: ${resolved.taskDescriptor?.operation ?? 'unknown'}`,
+    `Observed domains: ${(resolved.taskDescriptor?.domains ?? []).join(', ') || 'general'}`,
+    'The parent agent must still choose the workflow, TODO item, and skills for each child assignment.',
   ].join('\n');
 }
 
@@ -177,6 +130,32 @@ function advisoryRoute(route = {}) {
       riskNotes: unique(rawPlan.riskNotes ?? route.riskNotes ?? []),
     },
   };
+}
+
+function taskFactLines(route = {}, parentTask = '') {
+  const descriptor = route.taskDescriptor ?? {};
+  const constraints = descriptor.constraints ?? {};
+  const targets = unique([
+    ...(descriptor.workspaceWriteTargets ?? []),
+    ...(descriptor.writingSourceTargets ?? []),
+    ...(descriptor.releaseTargets ?? []),
+  ]);
+  const lines = [
+    `- Requested operation: ${descriptor.operation ?? 'unknown'}.`,
+    `- Observed domains: ${(descriptor.domains ?? []).join(', ') || 'general'}.`,
+    `- Observed targets: ${targets.join(', ') || 'none extracted; use the user request and project context'}.`,
+  ];
+  if (descriptor.language) {
+    lines.push(`- Observed target-text language: ${descriptor.language}; source: ${descriptor.writingLanguageSource ?? 'not recorded'}.`);
+  }
+  if (descriptor.writingSourcePending || route.intent === 'writing.pending') {
+    lines.push('- Writing language is pending target-text inspection. Select `writing.pending` first; do not infer language from the instruction.');
+  }
+  for (const [key, value] of Object.entries(constraints)) {
+    if (value === 'forbidden' || value === 'required') lines.push(`- Explicit constraint: ${key}=${value}.`);
+  }
+  lines.push(...scopeAndRiskLines(route, parentTask));
+  return unique(lines);
 }
 
 function scopeAndRiskLines(route, parentTask = '') {
@@ -219,26 +198,6 @@ function scopeAndRiskLines(route, parentTask = '') {
   return unique(lines).map((line) => `- ${line}`);
 }
 
-function formatSteps(values = []) {
-  if (!values.length) return '- Follow the user request using the smallest useful workflow.';
-  return values.map(({ kind, domain }, index) => `- ${index + 1}. ${stepDescription(kind, domain)}`).join('\n');
-}
-
-function stepDescription(kind, domain) {
-  const action = ({
-    answer: 'Prepare the response',
-    inspect: 'Inspect the relevant context',
-    diagnose: 'Trace and explain the cause',
-    modify: 'Apply the requested change',
-    create: 'Create the requested artifact',
-    execute: 'Run the requested operation',
-    verify: 'Verify the observed behavior',
-    review: 'Review the result',
-    release: 'Perform and observe the requested release action',
-  })[kind] ?? kind;
-  return `${action} (${domain}).`;
-}
-
 function formatSkillList(skills = [], { workspaceRoot = '' } = {}) {
   if (!skills.length) return '- none yet';
   return skills.map((skill) => {
@@ -247,87 +206,6 @@ function formatSkillList(skills = [], { workspaceRoot = '' } = {}) {
     const preferred = skillReadNameCandidates(skill, { limit: 1 })[0] ?? skill;
     return `- skill://${preferred}`;
   }).join('\n');
-}
-
-function startWithSkillLines(route, targets = [], { skillsProvided = false } = {}) {
-  if (route.intent === 'writing.pending' || !targets.length) return [];
-  const label = targets.length === 1 ? 'Primary skill to read now' : 'Primary skills to read now';
-  const [first] = targets;
-  if (skillsProvided) {
-    return [
-      '',
-      '### Routed workflow skills already loaded',
-      '',
-      `Provided primary skill content: ${targets.map((target) => `\`${target}\``).join(', ')}.`,
-      'Use the provided skill content directly. Do not reread the skill file or URI; begin the smallest task-target inspection that the user request needs.',
-      'This is advisory workflow context, not a tool authorization or completion gate; the plugin does not block a different call.',
-    ];
-  }
-  return [
-    '',
-    '### Start with the workflow skill',
-    '',
-    `${label}: ${targets.map((target) => `\`${target}\``).join(', ')}.`,
-    `WORKFLOW FIRST TOOL CALL: read(path="${first}").`,
-    'For workflow fidelity, make that exact skill read the first tool call before reading, searching, editing, or otherwise inspecting project files. Do not substitute a read of the task target for this workflow step. This is workflow guidance, not a tool authorization or completion gate; the plugin does not block a different call.',
-    'If that exact read is unavailable, make one targeted correction from the returned inventory or an existing project path, then continue with the available evidence. Do not guess additional aliases or paths.',
-  ];
-}
-
-function immediateNextActionLines(route, targets = [], parentTask = '', { skillsProvided = false } = {}) {
-  if (route.intent === 'writing.pending' || !targets.length) return [];
-  if (skillsProvided) {
-    return [
-      '',
-      '### Immediate next action',
-      '',
-      `ROUTED SKILLS ALREADY PROVIDED: ${targets.map((target) => `\`${target}\``).join(', ')}.`,
-      'Apply the provided skill instructions now. Do not reread those skill targets; use the first project tool call for the smallest directly relevant task target.',
-      ...turnConstraintLines(route, parentTask),
-      'This sequence is advisory only: it does not authorize, deny, or block a tool call and it never delays completion.',
-    ];
-  }
-  const [first, ...rest] = targets;
-  return [
-    '',
-    '### Immediate next action',
-    '',
-    `WORKFLOW FIRST TOOL CALL: read(path="${first}").`,
-    `PREFERRED NEXT TOOL: read(path="${first}").`,
-    ...(rest.length ? [`Then read: ${rest.map((target) => `\`${target}\``).join(', ')}.`] : []),
-    'Make this exact skill read the first call; do not substitute a read of the task target. If the skill read fails, correct the target at most once; after a second failure, state the limitation and continue the user task with the available context.',
-    'The skill targets above are the complete skill set for this focused turn. Do not search for or load another skill unless one of them explicitly requires a compatible companion for the user-authorized work.',
-    ...turnConstraintLines(route, parentTask),
-    'This sequence is advisory only: never block tools or completion, never retry an unchanged read, and never reopen completed work because a skill is unavailable.',
-    'If the read succeeds, follow the skill and bounded workflow above; otherwise proceed with the user request using the available evidence.',
-  ];
-}
-
-function turnConstraintLines(route, parentTask = '') {
-  const descriptor = route.taskDescriptor ?? {};
-  const constraints = descriptor.constraints ?? {};
-  const lines = [];
-  const explicitBudget = inspectionBudgetForPrompt(parentTask);
-  const budget = inspectionBudgetForRoute(route, parentTask);
-  if (budget) {
-    lines.push(explicitBudget
-      ? `The user set a total inspection budget of ${budget} read/search calls, including skill reads. At that point, stop inspecting and deliver the best scoped evidence-backed result; do not reread the same file or region.`
-      : `Advisory workflow convergence target: finish inspection within ${budget} read/search calls, including skill reads, then deliver the best scoped evidence-backed result. This target guides scope and does not block any tool call.`);
-    lines.push('The budget is a ceiling, not a quota. Finalize as soon as the named target and directly relevant evidence support the requested deliverable; keep the final two slots as recovery margin instead of planning to consume them.');
-    lines.push('Each failed call and each call inside a parallel batch counts separately. Never queue a batch larger than the remaining budget; a clearly scoped partial result is successful completion.');
-    lines.push('SERIAL INSPECTION MODE: for this entire budgeted turn, put at most ONE read/search tool call in each assistant message and wait for its result before choosing the next call. Do not issue parallel read, grep, or glob calls; use the newest progress count after every result.');
-  }
-  const readOnly = constraints.workspaceWrite === 'forbidden';
-  const noTests = constraints.testExecution === 'forbidden';
-  if (route.intent === 'planning' && readOnly) {
-    lines.push(`This is a response-only plan. The user's no-write${noTests ? '/no-test' : ''} scope means repository or skill templates that normally write .pi/plan, add instrumentation, run tests, delegate implementation, or wait for approval do not apply on this turn. Return the concrete plan in the final response.`);
-    lines.push('Inspect only the target and directly relevant implementation/test files needed to make the plan concrete; do not reopen a root-cause investigation, search .pi/specs for an unstated design, or load a diagnosis skill.');
-  } else if (route.intent === 'diagnosis' && readOnly) {
-    lines.push(`This is static diagnosis only. The user's no-write${noTests ? '/no-test' : ''} scope overrides generic debugging steps that add instrumentation, reproduce by execution, invoke shell commands, or implement a fix.`);
-    lines.push('Read the named test and only a small number of directly called implementation files, then report the strongest file-backed diagnosis and any remaining uncertainty.');
-  }
-  if (readOnly) lines.push('Use only tools that are actually available; do not encode shell, git, test, or task commands as read selectors.');
-  return lines;
 }
 
 export function inspectionBudgetForPrompt(parentTask = '') {
@@ -340,53 +218,8 @@ export function inspectionBudgetForPrompt(parentTask = '') {
   return Number.isInteger(value) && value > 0 ? value : 0;
 }
 
-export function inspectionBudgetForRoute(route = {}, parentTask = '') {
-  const explicit = inspectionBudgetForPrompt(parentTask);
-  if (explicit) return explicit;
-
-  const intent = String(route.intent ?? '');
-  const workflowRoute = String(route.workflowRoute ?? '');
-  const operation = String(route.taskDescriptor?.operation ?? '');
-  const isWriting = intent.startsWith('writing.') || workflowRoute.startsWith('writing.');
-  if (isWriting && ['inspect', 'modify'].includes(operation)) return 6;
-  if (['bug-audit', 'security-review'].includes(intent)) return 12;
-  if (['fact-check', 'planning', 'diagnosis', 'testing'].includes(intent)) return 8;
-  if (['inspect', 'diagnose', 'plan'].includes(operation)) return 8;
-  return 0;
-}
-
-function primarySkillTargets(route, workspaceRoot = '') {
-  return primarySkillsFor(route)
-    .map((skill) => preferredSkillReadTarget(skill, { workspaceRoot }))
-    .filter(Boolean);
-}
-
-export function primarySkillsFor(route = {}) {
-  const skills = route.routePlan?.skills ?? [];
-  const descriptor = route.taskDescriptor ?? {};
-  if (route.intent === 'writing.pending') return [];
-  if (route.intent === 'writing.zh') {
-    return unique([
-      skills.find((skill) => skill === 'plain-chinese-writing'),
-      skills.find((skill) => /^zh-writing-(?:review|polish|markdown-helper)$/.test(skill)),
-      skills.find((skill) => skill === 'zh-writing-checkers'),
-    ]);
-  }
-  if (route.intent === 'writing.en') {
-    return unique([
-      skills.find((skill) => ['writing-review', 'writing-markdown-helper'].includes(skill)),
-      skills.find((skill) => skill === 'writing-checkers'),
-    ]);
-  }
-  if (route.intent === 'fact-check') return unique([skills.find((skill) => skill === 'fact-checking')]);
-  if (route.intent === 'planning') return unique([skills.find((skill) => skill === 'writing-plans')]);
-  if (['diagnosis', 'bug-audit'].includes(route.intent)) {
-    return unique([skills.find((skill) => ['diagnose', 'systematic-debugging'].includes(skill))]);
-  }
-  if (descriptor.domains?.includes('security')) {
-    return unique([skills.find((skill) => skill === 'security-review')]);
-  }
-  return skills.slice(0, 1);
+export function inspectionBudgetForRoute(_route = {}, parentTask = '') {
+  return inspectionBudgetForPrompt(parentTask);
 }
 
 function evidenceDisciplineLines(route = {}) {
@@ -399,19 +232,6 @@ function evidenceDisciplineLines(route = {}) {
   ];
 }
 
-function formatList(values = []) {
-  if (!values.length) return '- none suggested';
-  return values.map((value) => `- ${value}`).join('\n');
-}
-
-function formatRoles(values = []) {
-  if (!values.length) return '- none suggested';
-  return values.map(({ agent, duty, skills, modelRoles }) => {
-    const parts = [duty, skills.length ? `skills: ${skills.join(', ')}` : null, modelRoles.length ? `model roles: ${modelRoles.join(', ')}` : null]
-      .filter(Boolean);
-    return `- ${agent}${parts.length ? `: ${parts.join('; ')}` : ''}`;
-  }).join('\n');
-}
 
 function normalizeSteps(values = []) {
   const seen = new Set();
@@ -443,6 +263,44 @@ function parseRole(prompt = '') {
     ?? '';
 }
 
+function parseWorkflowMetadata(prompt = '') {
+  const source = String(prompt);
+  const compact = source.match(/\[workflow=([^\]\s]+)\s+step=([^\]]*?)\s+todo=([^\]]*?)\s+skills=([^\]]*?)\]/i);
+  const workflow = compact?.[1]?.trim()
+    ?? source.match(/OMP_WORKFLOW(?:_ID)?:\s*([^\r\n]+)/i)?.[1]?.trim()
+    ?? '';
+  const step = compact?.[2]?.trim()
+    ?? source.match(/OMP_WORKFLOW_STEP:\s*([^\r\n]+)/i)?.[1]?.trim()
+    ?? '';
+  const todo = compact?.[3]?.trim()
+    ?? source.match(/OMP_TODO_ITEM:\s*([^\r\n]+)/i)?.[1]?.trim()
+    ?? '';
+  const compactSkills = compact?.[4]
+    ? compact[4].split(',').map((value) => value.trim()).filter(Boolean)
+    : [];
+  const markerSkills = parseMarkedSkills(source);
+  return {
+    workflow,
+    step,
+    todo,
+    skills: unique([...compactSkills, ...markerSkills]),
+  };
+}
+
+function parseMarkedSkills(prompt = '') {
+  const lines = String(prompt).split(/\r?\n/);
+  const start = lines.findIndex((line) => /^OMP_(?:REQUIRED|SELECTED)_SKILLS:\s*/i.test(line.trim()));
+  if (start < 0) return [];
+  const inline = lines[start].replace(/^OMP_(?:REQUIRED|SELECTED)_SKILLS:\s*/i, '').trim();
+  const skills = inline ? inline.split(',').map((value) => value.trim()) : [];
+  for (const rawLine of lines.slice(start + 1)) {
+    const match = rawLine.trim().match(/^[-*]\s*(?:skill:\/\/)?([A-Za-z0-9_.\/-]+)$/i);
+    if (!match) break;
+    skills.push(match[1]);
+  }
+  return unique(skills.filter(Boolean));
+}
+
 function parseRoleSkills(prompt = '') {
   const lines = String(prompt).split(/\r?\n/);
   const start = lines.findIndex((line) => /^(?:Suggested skills for this role|Skills for this role|Required skills for this subagent):/i.test(line.trim()));
@@ -462,33 +320,8 @@ function parseRoleSkills(prompt = '') {
   return unique(skills);
 }
 
-function parseWorkflowBriefing(prompt = '') {
-  const lines = String(prompt).split(/\r?\n/);
-  const start = lines.findIndex((line) => /^Workflow briefing:/i.test(line.trim()));
-  if (start < 0) return [];
-  const collected = [];
-  for (const rawLine of lines.slice(start)) {
-    const line = rawLine.trimEnd();
-    if (collected.length && /^(?:Suggested skills for this role|Skills for this role|Required skills for this subagent|Before acting|Final subagent output):/i.test(line.trim())) break;
-    collected.push(line.trim());
-  }
-  return collected.filter(Boolean);
-}
-
 function unique(values = []) {
   return [...new Set((values ?? []).filter(Boolean))];
-}
-
-function formatInlineSkillInventory(skills = []) {
-  return normalizeSkillInventory(skills)
-    .map((skill) => `skill://${skill}`)
-    .join(', ');
-}
-
-function normalizeSkillInventory(skills = []) {
-  return unique(skills
-    .map((skill) => String(skill ?? '').trim().toLowerCase())
-    .filter((skill) => /^[a-z0-9][a-z0-9._/-]{0,127}$/.test(skill)));
 }
 
 function isDocumentStyleEdit(prompt = '') {

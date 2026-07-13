@@ -238,7 +238,8 @@ test('workflow cards and governance describe suggestions without hard-stop contr
   const subagent = buildSubagentPromptFragment({
     prompt: 'OMP_REQUIRED_SUBAGENT: writer\nRequired skills for this subagent:\n- writing-markdown-helper',
   });
-  assert.match(subagent, /Suggested skills for this role/);
+  assert.match(subagent, /Parent-selected skills for this checkpoint/);
+  assert.match(subagent, /Do not reroute the whole parent task/);
   assert.doesNotMatch(subagent, /Final subagent output must end with|Status: complete\|blocked|SKILL_USAGE|SUBAGENT_RESULT/);
 });
 

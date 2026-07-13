@@ -16,11 +16,16 @@ test('global guidance selects workflow and skills before substantive work withou
     const content = readFileSync(join(pluginRoot, relative), 'utf8');
     const workflow = content.indexOf('1. Determine the applicable workflow');
     const inventory = content.indexOf('2. Inspect the active skill inventory');
-    const load = content.indexOf('3. Load the smallest necessary skill set');
-    const work = content.indexOf('4. Begin the substantive review');
+    const todo = content.indexOf('3. Initialize the native `todo`');
+    const load = content.indexOf('4. Load each selected skill');
+    const fork = content.indexOf('5. Fork multiple independent workstreams');
+    const work = content.indexOf('6. Execute and update the TODO');
 
     assert.ok(workflow >= 0, `${relative} should start with workflow selection`);
-    assert.ok(workflow < inventory && inventory < load && load < work, `${relative} should preserve workflow-first ordering`);
+    assert.ok(
+      workflow < inventory && inventory < todo && todo < load && load < fork && fork < work,
+      `${relative} should preserve workflow-first TODO and delegation ordering`,
+    );
     assert.match(content, /native `skill-prompt`/i, relative);
     assert.match(content, /do not read the same (?:`SKILL\.md`|skill) again/i, relative);
     assert.match(content, /`writing\.pending`[\s\S]{0,240}(?:continue skill selection|skill selection)/i, relative);

@@ -165,17 +165,14 @@ test('inspection guidance recognizes a routed project skill alias and does not r
   }
 });
 
-test('natural fact and broad-audit routes expose soft route-aware inspection progress', async () => {
+test('natural fact and broad-audit routes do not impose route-derived inspection budgets', async () => {
   const fact = await routedRuntime('核查 sections/5.7.md 中三个事实是否有本地引文支持，只使用工作区证据，不联网。');
   const factResult = await event(fact.pi, 'tool_result')({
     name: 'read',
     input: { path: 'skill://fact-checking' },
     result: { content: [{ type: 'text', text: '---\nname: fact-checking\ndescription: Local fact check\n---\n' }] },
   }, fact.ctx);
-  assert.match(factResult.content.at(-1).text, /1\/8 read\/search calls used; 7 remaining/i);
-  assert.match(factResult.content.at(-1).text, /NEXT MESSAGE LIMIT:[\s\S]*at most ONE individual read\/search tool call/i);
-  assert.doesNotMatch(factResult.content.at(-1).text, /issue at most 7 individual read\/search tool calls/i);
-  assert.notEqual(factResult.block, true);
+  assert.equal(factResult, undefined);
 
   const audit = await routedRuntime('只读审计 extensions/agent-fleet 的任务路由与失败收敛逻辑，读取 exact debugging skill，不修改文件、不运行测试。');
   const auditResult = await event(audit.pi, 'tool_result')({
@@ -183,8 +180,7 @@ test('natural fact and broad-audit routes expose soft route-aware inspection pro
     input: { path: 'skill://diagnose' },
     result: { content: [{ type: 'text', text: '---\nname: diagnose\ndescription: Audit diagnosis\n---\n' }] },
   }, audit.ctx);
-  assert.match(auditResult.content.at(-1).text, /1\/12 read\/search calls used; 11 remaining/i);
-  assert.notEqual(auditResult.block, true);
+  assert.equal(auditResult, undefined);
 });
 
 test('session self-report is a claim and cannot impersonate a successful skill read', async () => {
@@ -329,21 +325,22 @@ test('autolearn capture yields without changing route or business evidence', asy
   assert.equal(afterUser.lastPrompt, 'Explain what autolearn.autoContinue does.');
 });
 
-test('an implementation follow-up recompiles a planning route while a plain continuation inherits it', async () => {
+test('an implementation follow-up refreshes task facts while workflow selection remains with the agent', async () => {
   const { pi, ctx } = await routedRuntime('为 src/router.js 制定修复计划，暂时不要修改文件。');
   const before = pi.entries.findLast(
     (entry) => entry.customType === 'omp-enhancer-core.state',
   ).data;
-  assert.equal(before.lastRoute.intent, 'planning');
+  assert.equal(before.lastRoute.intent, 'agent-selected');
+  assert.equal(before.lastRoute.routePlan.mode, 'agent-selected');
   assert.equal(before.lastRoute.taskDescriptor.constraints.workspaceWrite, 'forbidden');
 
   const continued = await event(pi, 'before_agent_start')({ prompt: '继续' }, ctx);
-  assert.equal(continued.route.intent, 'planning');
+  assert.equal(continued.route.intent, 'agent-selected');
   assert.equal(continued.route.taskDescriptor.constraints.workspaceWrite, 'forbidden');
 
   const started = await event(pi, 'before_agent_start')({ prompt: '开始实现' }, ctx);
-  assert.equal(started.route.intent, 'implementation-with-tests');
-  assert.equal(started.route.workflowRoute, 'code.dev');
+  assert.equal(started.route.intent, 'agent-selected');
+  assert.equal(started.route.workflowRoute, 'agent-selected');
   assert.equal(started.route.taskDescriptor.operation, 'modify');
   assert.equal(started.route.taskDescriptor.constraints.workspaceWrite, 'required');
   assert.ok(started.route.taskDescriptor.phases.some((phase) => phase.kind === 'modify'));
@@ -352,7 +349,7 @@ test('an implementation follow-up recompiles a planning route while a plain cont
   const after = pi.entries.findLast(
     (entry) => entry.customType === 'omp-enhancer-core.state',
   ).data;
-  assert.equal(after.lastRoute.intent, 'implementation-with-tests');
+  assert.equal(after.lastRoute.intent, 'agent-selected');
   assert.match(after.lastPrompt, /src\/router\.js/);
   assert.match(after.lastPrompt, /开始实现/);
   assert.equal(await event(pi, 'session_stop')({ output: 'Implementation started.' }, ctx), undefined);
@@ -441,8 +438,8 @@ test('multi-route writing diagnostics remain advisory and never schedule continu
   const { pi, ctx } = await routedRuntime(prompt);
   const routeTool = pi.tools.get('omp_core_route_task');
   const initial = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.equal(initial.lastRoute.intent, 'diagnosis');
-  assert.equal(initial.lastRoute.routePlan.mode, 'advisory');
+  assert.equal(initial.lastRoute.intent, 'agent-selected');
+  assert.equal(initial.lastRoute.routePlan.mode, 'agent-selected');
   assert.equal(initial.lastRoute.routePlan.autoContinue, false);
 
   const english = await routeTool.execute(
@@ -472,7 +469,7 @@ test('multi-route writing diagnostics remain advisory and never schedule continu
   assert.equal(await event(pi, 'session_stop')({ output: 'A=writing.en/advisory, B=writing.zh/advisory' }, ctx), undefined);
 
   const final = pi.entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.equal(final.lastRoute.intent, 'diagnosis');
+  assert.equal(final.lastRoute.intent, 'agent-selected');
   assert.equal(Object.hasOwn(final, 'gateController'), false);
   assert.equal(Object.hasOwn(final, 'loopGuard'), false);
 });
@@ -545,7 +542,7 @@ test('the runtime has no generated-output loop controller or completion continua
   assert.equal(Object.hasOwn(snapshot, 'gateController'), false);
 });
 
-test('before_agent_start reads workspace writing targets and routes by body language', async () => {
+test('before_agent_start reads workspace writing targets and exposes body language without choosing resources', async () => {
   const cwd = mkdtempSync(join(tmpdir(), 'omp-writing-language-'));
   try {
     writeFileSync(
@@ -557,10 +554,9 @@ test('before_agent_start reads workspace writing targets and routes by body lang
     const englishRoute = english.pi.entries.findLast(
       (entry) => entry.customType === 'omp-enhancer-core.state',
     ).data.lastRoute;
-    assert.equal(englishRoute.intent, 'writing.en');
+    assert.equal(englishRoute.intent, 'agent-selected');
     assert.equal(englishRoute.taskDescriptor.writingLanguageSource, 'provided-source');
-    assert.ok(englishRoute.routePlan.skills.includes('writing-review'));
-    assert.ok(!englishRoute.routePlan.skills.includes('writing-markdown-helper'));
+    assert.deepEqual(englishRoute.routePlan.skills, []);
     assert.deepEqual(englishRoute.writingSourceObservation.paths, ['abstract.tex']);
     assert.deepEqual(englishRoute.writingSourceObservation.languages, ['en']);
 
@@ -573,9 +569,9 @@ test('before_agent_start reads workspace writing targets and routes by body lang
     const chineseRoute = chinese.pi.entries.findLast(
       (entry) => entry.customType === 'omp-enhancer-core.state',
     ).data.lastRoute;
-    assert.equal(chineseRoute.intent, 'writing.zh');
+    assert.equal(chineseRoute.intent, 'agent-selected');
     assert.equal(chineseRoute.taskDescriptor.writingLanguageSource, 'provided-source');
-    assert.ok(chineseRoute.routePlan.skills.includes('plain-chinese-writing'));
+    assert.deepEqual(chineseRoute.routePlan.skills, []);
     assert.deepEqual(chineseRoute.writingSourceObservation.paths, ['abstract.tex']);
     assert.deepEqual(chineseRoute.writingSourceObservation.languages, ['zh']);
   } finally {
@@ -600,7 +596,7 @@ test('before_agent_start reads a read-only Unicode writing source without granti
     const route = routed.pi.entries.findLast(
       (entry) => entry.customType === 'omp-enhancer-core.state',
     ).data.lastRoute;
-    assert.equal(route.intent, 'writing.zh');
+    assert.equal(route.intent, 'agent-selected');
     assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'forbidden');
     assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, []);
     assert.deepEqual(route.taskDescriptor.writingSourceTargets, [target]);
@@ -624,7 +620,7 @@ test('workspace language inspection rejects a symlink escape and leaves writing 
     const route = routed.pi.entries.findLast(
       (entry) => entry.customType === 'omp-enhancer-core.state',
     ).data.lastRoute;
-    assert.equal(route.intent, 'writing.pending');
+    assert.equal(route.intent, 'agent-selected');
     assert.equal(route.taskDescriptor.language, 'unknown');
     assert.equal(route.writingSourceObservation, undefined);
   } finally {
@@ -633,13 +629,13 @@ test('workspace language inspection rejects a symlink escape and leaves writing 
   }
 });
 
-test('public usage reviews report advisory coverage instead of failure-shaped validation', async () => {
+test('public usage reviews honor explicit main-agent selections without becoming gates', async () => {
   const { pi, ctx } = await routedRuntime(
     'Agentically implement the parser change, add regression tests, and review the diff.',
   );
   const skill = await pi.tools.get('omp_core_validate_skill_usage').execute(
     'skill-coverage',
-    { output: '' },
+    { output: '', requiredSkills: ['writing-review'] },
     undefined,
     undefined,
     ctx,
@@ -647,13 +643,15 @@ test('public usage reviews report advisory coverage instead of failure-shaped va
   assert.equal(skill.isError, false);
   assert.equal(skill.details.validation.advisory, true);
   assert.equal(skill.details.validation.complete, false);
+  assert.deepEqual(skill.details.validation.suggested, ['writing-review']);
+  assert.deepEqual(skill.details.validation.gaps, ['writing-review']);
   assert.equal(Object.hasOwn(skill.details.validation, 'ok'), false);
   assert.equal(Object.hasOwn(skill.details.validation, 'required'), false);
-  assert.doesNotMatch(skill.content[0].text, /missing|required|blocked/i);
+  assert.doesNotMatch(skill.content[0].text, /blocked/i);
 
   const roles = await pi.tools.get('omp_core_validate_subagent_usage').execute(
     'role-coverage',
-    { output: '' },
+    { output: '', requiredSubagents: ['reviewer'] },
     undefined,
     undefined,
     ctx,
@@ -661,9 +659,11 @@ test('public usage reviews report advisory coverage instead of failure-shaped va
   assert.equal(roles.isError, false);
   assert.equal(roles.details.validation.advisory, true);
   assert.equal(roles.details.validation.complete, false);
+  assert.deepEqual(roles.details.validation.suggested, ['reviewer']);
+  assert.deepEqual(roles.details.validation.gaps.roles, ['reviewer']);
   assert.equal(Object.hasOwn(roles.details.validation, 'ok'), false);
   assert.equal(Object.hasOwn(roles.details.validation, 'missing'), false);
-  assert.doesNotMatch(roles.content[0].text, /missing|required|blocked/i);
+  assert.doesNotMatch(roles.content[0].text, /blocked/i);
 });
 
 async function routedRuntime(prompt, cwd = process.cwd()) {

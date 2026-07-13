@@ -8,6 +8,9 @@ const PLUGIN_CONTINUATION_TYPES = new Set([
   'session-stop-continuation',
 ]);
 const EQUIVALENT_SKILL_NAMESPACE_PREFIXES = ['superpowers-'];
+const ORCHESTRATION_TOOLS = new Set(['task', 'todo']);
+export const TASK_METADATA_PREFIX_CHAR_LIMIT = 120;
+const TASK_ASSIGNMENT_METADATA_FIELDS = ['workflow', 'step', 'todo', 'skills'];
 
 export function parseNdjson(text = '') {
   const events = [];
@@ -118,7 +121,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
       registerCall(calls, callsById, unresolvedByFingerprint, {
         id: event.toolCallId ?? event.callId ?? event.id,
         name: event.toolName ?? event.name,
-        arguments: event.arguments ?? event.input ?? {},
+        arguments: event.arguments ?? event.args ?? event.input ?? {},
         turnKind: activeTurnKind,
         eventIndex,
       });
@@ -135,6 +138,9 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
         call.completed = true;
         call.isError = isError;
         call.resultPreview = resultText(result).slice(0, 1000);
+        if (!isError && call.name === 'todo') {
+          call.todoResult = summarizeTodoResult(result?.details);
+        }
         if (!isError && call.name === 'read') {
           const skill = skillNameFromRead(call.arguments, result);
           if (skill) observedSkills.add(skill);
@@ -169,6 +175,14 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
   const firstProjectToolCallEventIndex = projectToolCalls.length
     ? Math.min(...projectToolCalls.map(({ eventIndex }) => eventIndex))
     : null;
+  const substantiveToolCalls = calls.filter((call) => (
+    !skillReadAttemptFromCall(call) && !ORCHESTRATION_TOOLS.has(call.name)
+  ));
+  const firstSubstantiveToolCallEventIndex = substantiveToolCalls.length
+    ? Math.min(...substantiveToolCalls.map(({ eventIndex }) => eventIndex))
+    : null;
+  const nativeTodo = summarizeNativeTodo(calls, firstSubstantiveToolCallEventIndex);
+  const nativeTask = summarizeNativeTask(calls);
   const provisionMode = [...providedSkillEvidence.values()].some(({ source }) => source === 'autoload')
     ? 'native'
     : customMessages.some(({ customType }) => customType === 'omp-enhancer-core.workflow-guidance')
@@ -199,6 +213,9 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
     skillReadAttempts,
     duplicateSkillReadAttempts,
     firstProjectToolCallEventIndex,
+    firstSubstantiveToolCallEventIndex,
+    nativeTodo,
+    nativeTask,
     claimedSkills: [...claimedSkills].sort(),
     unobservedClaims: unobservedClaims.sort(),
     routes,
@@ -331,6 +348,60 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   if (Number.isFinite(expectations.maxAbortedAssistants)
     && summary.abortedAssistantCount > expectations.maxAbortedAssistants) {
     failures.push(`aborted assistant messages ${summary.abortedAssistantCount} exceeded ${expectations.maxAbortedAssistants}`);
+  }
+  const nativeTodo = summary.nativeTodo ?? {};
+  if (expectations.requireNativeTodoInit === true && !(nativeTodo.initCallCount > 0)) {
+    failures.push('native todo was not initialized successfully');
+  }
+  if (Number.isFinite(expectations.minNativeTodoItems)
+    && (nativeTodo.initializedTaskCount ?? 0) < expectations.minNativeTodoItems) {
+    failures.push(`native todo initialized ${(nativeTodo.initializedTaskCount ?? 0)} task(s), expected at least ${expectations.minNativeTodoItems}`);
+  }
+  if (Number.isFinite(expectations.minNativeTodoCompletionTransitions)
+    && (nativeTodo.completionTransitionCount ?? 0) < expectations.minNativeTodoCompletionTransitions) {
+    failures.push(`native todo completed ${(nativeTodo.completionTransitionCount ?? 0)} task transition(s), expected at least ${expectations.minNativeTodoCompletionTransitions}`);
+  }
+  if (expectations.requireNativeTodoCompletion === true && nativeTodo.allCompleted !== true) {
+    failures.push(`native todo was not fully completed (${nativeTodo.completedTaskCount ?? 0}/${nativeTodo.currentTaskCount ?? 0})`);
+  }
+  if (expectations.requireNativeTodoInitBeforeSubstantiveTool === true
+    && nativeTodo.initializedBeforeFirstSubstantiveTool !== true) {
+    failures.push('native todo was not initialized before the first substantive tool call');
+  }
+
+  const nativeTask = summary.nativeTask ?? {};
+  if (Number.isFinite(expectations.minNativeTaskCalls)
+    && (nativeTask.callCount ?? 0) < expectations.minNativeTaskCalls) {
+    failures.push(`native task calls ${(nativeTask.callCount ?? 0)} was below ${expectations.minNativeTaskCalls}`);
+  }
+  if (Number.isFinite(expectations.minNativeTaskForks)
+    && (nativeTask.forkCount ?? 0) < expectations.minNativeTaskForks) {
+    failures.push(`native task forks ${(nativeTask.forkCount ?? 0)} was below ${expectations.minNativeTaskForks}`);
+  }
+  if (Number.isFinite(expectations.minNativeTaskBatchCalls)
+    && (nativeTask.batchCallCount ?? 0) < expectations.minNativeTaskBatchCalls) {
+    failures.push(`native task batch calls ${(nativeTask.batchCallCount ?? 0)} was below ${expectations.minNativeTaskBatchCalls}`);
+  }
+  if (expectations.requireNativeTaskBatch === true && !(nativeTask.multiForkBatchCallCount > 0)) {
+    failures.push('no native task batch forked multiple subagents');
+  }
+  const requiredTaskMetadata = Array.isArray(expectations.requiredNativeTaskMetadata)
+    ? expectations.requiredNativeTaskMetadata
+    : expectations.requireNativeTaskMetadataPrefix === true
+      ? TASK_ASSIGNMENT_METADATA_FIELDS
+      : [];
+  if (requiredTaskMetadata.length) {
+    const assignments = nativeTask.assignments ?? [];
+    if (!assignments.length) {
+      failures.push('no native task assignments were observed for metadata evaluation');
+    } else {
+      const incomplete = assignments.filter(({ metadata }) => (
+        requiredTaskMetadata.some((field) => !metadata?.[field])
+      ));
+      if (incomplete.length) {
+        failures.push(`${incomplete.length} native task assignment(s) omitted ${requiredTaskMetadata.join('/')} metadata from the first ${TASK_METADATA_PREFIX_CHAR_LIMIT} characters`);
+      }
+    }
   }
   if (expectations.expectedRoute) {
     const effective = summary.routes.at(-1);
@@ -569,6 +640,152 @@ function routeSummary(route) {
     advisoryOnly: route.advisoryOnly === true,
     coreAutoContinue: route.autoContinue === true,
   };
+}
+
+function summarizeTodoResult(details) {
+  if (!details || typeof details !== 'object') return null;
+  const phases = Array.isArray(details.phases) ? details.phases : [];
+  const tasks = phases.flatMap((phase) => (
+    Array.isArray(phase?.tasks) ? phase.tasks : []
+  ));
+  const completedTasks = Array.isArray(details.completedTasks) ? details.completedTasks : [];
+  return {
+    op: typeof details.op === 'string' ? details.op : null,
+    taskCount: tasks.length,
+    completedTaskCount: tasks.filter(({ status }) => status === 'completed').length,
+    pendingTaskCount: tasks.filter(({ status }) => status === 'pending' || status === 'in_progress').length,
+    abandonedTaskCount: tasks.filter(({ status }) => status === 'abandoned').length,
+    completionTransitions: completedTasks.length,
+  };
+}
+
+function summarizeNativeTodo(calls, firstSubstantiveToolCallEventIndex) {
+  const todoCalls = calls.filter(({ name }) => name === 'todo');
+  const successful = todoCalls.filter(({ completed, isError }) => completed === true && isError === false);
+  const initCalls = successful.filter((call) => (
+    call.arguments?.op === 'init' || call.todoResult?.op === 'init'
+  ));
+  const doneCalls = successful.filter((call) => (
+    call.arguments?.op === 'done' || call.todoResult?.op === 'done'
+  ));
+  const latestSnapshot = [...successful].reverse().find(({ todoResult }) => todoResult)?.todoResult ?? null;
+  const latestInit = initCalls.at(-1);
+  const initializedTaskCount = latestInit?.todoResult?.taskCount
+    ?? todoInitTaskCount(latestInit?.arguments)
+    ?? 0;
+  const completionTransitionCount = successful.reduce((sum, call) => (
+    sum + (call.todoResult?.completionTransitions ?? 0)
+  ), 0);
+  const earliestInitEventIndex = initCalls.length
+    ? Math.min(...initCalls.map(({ eventIndex }) => eventIndex))
+    : null;
+  const initializedBeforeFirstSubstantiveTool = earliestInitEventIndex != null
+    && (firstSubstantiveToolCallEventIndex == null
+      || earliestInitEventIndex < firstSubstantiveToolCallEventIndex);
+  const currentTaskCount = latestSnapshot?.taskCount ?? 0;
+  const completedTaskCount = latestSnapshot?.completedTaskCount ?? 0;
+
+  return {
+    callCount: todoCalls.length,
+    successfulCallCount: successful.length,
+    initCallCount: initCalls.length,
+    doneCallCount: doneCalls.length,
+    initializedTaskCount,
+    completionTransitionCount,
+    currentTaskCount,
+    completedTaskCount,
+    pendingTaskCount: latestSnapshot?.pendingTaskCount ?? 0,
+    abandonedTaskCount: latestSnapshot?.abandonedTaskCount ?? 0,
+    allCompleted: currentTaskCount > 0 && completedTaskCount === currentTaskCount,
+    firstInitEventIndex: earliestInitEventIndex,
+    initializedBeforeFirstSubstantiveTool,
+  };
+}
+
+function todoInitTaskCount(args) {
+  if (!args || args.op !== 'init') return null;
+  if (Array.isArray(args.list)) {
+    return args.list.reduce((sum, phase) => sum + (Array.isArray(phase?.items) ? phase.items.length : 0), 0);
+  }
+  return Array.isArray(args.items) ? args.items.length : null;
+}
+
+function summarizeNativeTask(calls) {
+  const taskCalls = calls.filter(({ name }) => name === 'task');
+  const assignments = taskCalls.flatMap((call) => taskAssignmentsFromCall(call));
+  const batchCalls = taskCalls.filter(({ arguments: args }) => Array.isArray(args?.tasks));
+  const multiForkBatchCalls = batchCalls.filter(({ arguments: args }) => args.tasks.length > 1);
+  return {
+    callCount: taskCalls.length,
+    successfulCallCount: taskCalls.filter(({ completed, isError }) => completed === true && isError === false).length,
+    batchCallCount: batchCalls.length,
+    multiForkBatchCallCount: multiForkBatchCalls.length,
+    forkCount: assignments.length,
+    successfulForkCount: assignments.filter(({ successful }) => successful).length,
+    metadataCompleteCount: assignments.filter(({ metadataComplete }) => metadataComplete).length,
+    metadataIncompleteCount: assignments.filter(({ metadataComplete }) => !metadataComplete).length,
+    assignments,
+  };
+}
+
+function taskAssignmentsFromCall(call) {
+  const args = call.arguments ?? {};
+  const isBatch = Array.isArray(args.tasks);
+  const items = isBatch ? args.tasks : [{ name: args.name, agent: args.agent, task: args.task }];
+  return items
+    .filter((item) => item && typeof item.task === 'string' && item.task.trim())
+    .map((item, index) => {
+      const prefix = takeCodePoints(item.task, TASK_METADATA_PREFIX_CHAR_LIMIT);
+      const metadata = taskAssignmentMetadata(prefix);
+      const missingMetadata = TASK_ASSIGNMENT_METADATA_FIELDS.filter((field) => !metadata[field]);
+      return {
+        callId: call.id,
+        index,
+        batch: isBatch,
+        name: typeof item.name === 'string' ? item.name : null,
+        agent: typeof item.agent === 'string' ? item.agent : null,
+        prefix,
+        prefixCharacterCount: [...prefix].length,
+        metadata,
+        missingMetadata,
+        metadataComplete: missingMetadata.length === 0,
+        completed: call.completed,
+        successful: call.completed === true && call.isError === false,
+      };
+    });
+}
+
+function taskAssignmentMetadata(prefix) {
+  const compact = String(prefix).match(/\[workflow=([^\]\s]+)\s+step=([^\]]*?)\s+todo=([^\]]*?)\s+skills=([^\]]*?)\]/iu);
+  if (compact) {
+    return {
+      workflow: normalizeMetadataValue(compact[1]),
+      step: normalizeMetadataValue(compact[2]),
+      todo: normalizeMetadataValue(compact[3]),
+      skills: normalizeMetadataValue(compact[4]),
+    };
+  }
+  return {
+    workflow: metadataValue(prefix, /(?:OMP[_ -]?WORKFLOW(?![_ -]?STEP)|WORKFLOW(?![_ -]?STEP))/iu),
+    step: metadataValue(prefix, /(?:OMP[_ -]?WORKFLOW[_ -]?STEP|WORKFLOW[_ -]?STEP|STEP)/iu),
+    todo: metadataValue(prefix, /(?:OMP[_ -]?TODO(?:[_ -]?ITEM)?|TODO(?:[_ -]?ITEM)?)/iu),
+    skills: metadataValue(prefix, /(?:OMP[_ -]?(?:REQUIRED[_ -]?)?SKILLS?|(?:REQUIRED[_ -]?)?SKILLS?(?:[_ -]?FOR[_ -]?THIS[_ -]?ROLE)?)/iu),
+  };
+}
+
+function metadataValue(text, labelPattern) {
+  const match = new RegExp(`${labelPattern.source}\\s*[:=]\\s*([^\\n;|]{1,80})`, labelPattern.flags).exec(text);
+  return normalizeMetadataValue(match?.[1]);
+}
+
+function normalizeMetadataValue(value) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized || /^(?:unspecified|unknown|none|n\/a|pending)$/iu.test(normalized)) return null;
+  return normalized;
+}
+
+function takeCodePoints(value, limit) {
+  return [...String(value ?? '')].slice(0, limit).join('');
 }
 
 function callFingerprint(name, argumentsValue) {

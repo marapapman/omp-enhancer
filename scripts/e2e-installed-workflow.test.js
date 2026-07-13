@@ -568,9 +568,11 @@ test('English Introduction fixture requires the unique conservative edit exactly
   const scenario = matrix.scenarios.find(({ id }) => id === 'semantic-edit-en-introduction-skill-first');
   assert.ok(scenario);
   assert.deepEqual(scenario.expectations.requiredSkills, ['writing-review']);
-  assert.deepEqual(scenario.expectations.expectedToolSequence, ['read', 'edit', 'read']);
-  assert.equal(scenario.expectations.requiredProvidedSkills[0].source, 'autoload');
-  assert.equal(scenario.expectations.requiredProvidedSkills[0].beforeFirstProjectTool, true);
+  assert.deepEqual(scenario.tools, ['todo', 'read', 'edit']);
+  assert.equal(scenario.expectations.maxSkillReadAttempts, 1);
+  assert.equal(scenario.expectations.requireNativeTodoInit, true);
+  assert.equal(scenario.expectations.requireNativeTodoCompletion, true);
+  assert.equal(scenario.expectations.requireNativeTodoInitBeforeSubstantiveTool, true);
 
   const prepared = await prepareScenario(scenario);
   try {
@@ -879,6 +881,191 @@ test('installed workflow summary detects unchanged failed tool retries and route
   });
   assert.equal(evaluation.pass, false);
   assert.match(evaluation.failures.join('\n'), /repeated/);
+});
+
+test('installed workflow summary tracks native todo initialization and completion', () => {
+  const events = [
+    { type: 'agent_start' },
+    {
+      type: 'tool_execution_start',
+      toolCallId: 'todo-init',
+      toolName: 'todo',
+      args: {
+        op: 'init',
+        list: [{ phase: 'Implementation', items: ['Inspect workflow', 'Run tests'] }],
+      },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'todo-init',
+      toolName: 'todo',
+      result: {
+        isError: false,
+        details: {
+          op: 'init',
+          phases: [{
+            name: 'Implementation',
+            tasks: [
+              { content: 'Inspect workflow', status: 'in_progress' },
+              { content: 'Run tests', status: 'pending' },
+            ],
+          }],
+        },
+      },
+    },
+    {
+      type: 'tool_execution_start',
+      toolCallId: 'project-read',
+      toolName: 'read',
+      args: { path: 'src/router.js' },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'project-read',
+      toolName: 'read',
+      result: { isError: false, content: [{ type: 'text', text: 'source' }] },
+    },
+    {
+      type: 'tool_execution_start',
+      toolCallId: 'todo-done',
+      toolName: 'todo',
+      args: { op: 'done', phase: 'Implementation' },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'todo-done',
+      toolName: 'todo',
+      result: {
+        isError: false,
+        details: {
+          op: 'done',
+          phases: [{
+            name: 'Implementation',
+            tasks: [
+              { content: 'Inspect workflow', status: 'completed' },
+              { content: 'Run tests', status: 'completed' },
+            ],
+          }],
+          completedTasks: [
+            { phase: 'Implementation', content: 'Inspect workflow' },
+            { phase: 'Implementation', content: 'Run tests' },
+          ],
+        },
+      },
+    },
+    { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] } },
+    { type: 'agent_end' },
+  ];
+
+  const summary = summarizeWorkflowEvents(events, { exitCode: 0 });
+  assert.deepEqual(summary.nativeTodo, {
+    callCount: 2,
+    successfulCallCount: 2,
+    initCallCount: 1,
+    doneCallCount: 1,
+    initializedTaskCount: 2,
+    completionTransitionCount: 2,
+    currentTaskCount: 2,
+    completedTaskCount: 2,
+    pendingTaskCount: 0,
+    abandonedTaskCount: 0,
+    allCompleted: true,
+    firstInitEventIndex: 1,
+    initializedBeforeFirstSubstantiveTool: true,
+  });
+  assert.equal(evaluateWorkflowSummary(summary, {
+    requireNativeTodoInit: true,
+    minNativeTodoItems: 2,
+    minNativeTodoCompletionTransitions: 2,
+    requireNativeTodoCompletion: true,
+    requireNativeTodoInitBeforeSubstantiveTool: true,
+  }).pass, true);
+});
+
+test('installed workflow summary checks task batch assignment metadata within the first 120 characters', () => {
+  const metadataPrefix = 'OMP_WORKFLOW:code.dev;OMP_WORKFLOW_STEP:inspect;OMP_TODO_ITEM:audit;OMP_SKILLS:diagnose';
+  const summary = summarizeWorkflowEvents([
+    {
+      type: 'tool_execution_start',
+      toolCallId: 'task-batch',
+      toolName: 'task',
+      args: {
+        context: 'Inspect independently and return evidence.',
+        tasks: [
+          { name: 'route-audit', agent: 'scout', task: `${metadataPrefix}\nInspect routing.` },
+          { name: 'prompt-audit', agent: 'scout', task: `${metadataPrefix}\nInspect prompts.` },
+        ],
+      },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'task-batch',
+      toolName: 'task',
+      result: { isError: false, content: [{ type: 'text', text: 'Spawned 2 agents.' }] },
+    },
+    { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'Delegated.' }] } },
+  ], { exitCode: 0 });
+
+  assert.equal(summary.nativeTask.callCount, 1);
+  assert.equal(summary.nativeTask.batchCallCount, 1);
+  assert.equal(summary.nativeTask.multiForkBatchCallCount, 1);
+  assert.equal(summary.nativeTask.forkCount, 2);
+  assert.equal(summary.nativeTask.successfulForkCount, 2);
+  assert.equal(summary.nativeTask.metadataCompleteCount, 2);
+  assert.deepEqual(summary.nativeTask.assignments[0].metadata, {
+    workflow: 'code.dev',
+    step: 'inspect',
+    todo: 'audit',
+    skills: 'diagnose',
+  });
+  assert.equal(evaluateWorkflowSummary(summary, {
+    minNativeTaskCalls: 1,
+    minNativeTaskForks: 2,
+    minNativeTaskBatchCalls: 1,
+    requireNativeTaskBatch: true,
+    requireNativeTaskMetadataPrefix: true,
+  }).pass, true);
+
+  const lateMetadata = summarizeWorkflowEvents([
+    {
+      type: 'tool_execution_start',
+      toolCallId: 'task-late-metadata',
+      toolName: 'task',
+      args: {
+        agent: 'scout',
+        task: `${'x'.repeat(121)}${metadataPrefix}`,
+      },
+    },
+  ]);
+  assert.equal(lateMetadata.nativeTask.assignments[0].prefixCharacterCount, 120);
+  assert.deepEqual(lateMetadata.nativeTask.assignments[0].missingMetadata, [
+    'workflow',
+    'step',
+    'todo',
+    'skills',
+  ]);
+  const evaluation = evaluateWorkflowSummary(lateMetadata, {
+    requireFinal: false,
+    requiredNativeTaskMetadata: ['workflow', 'step', 'todo', 'skills'],
+  });
+  assert.equal(evaluation.pass, false);
+  assert.match(evaluation.failures.join('\n'), /first 120 characters/);
+
+  const placeholderMetadata = summarizeWorkflowEvents([{
+    type: 'tool_execution_start',
+    toolCallId: 'task-placeholder-metadata',
+    toolName: 'task',
+    args: {
+      agent: 'scout',
+      task: '[workflow=unspecified step=unknown todo=pending skills=none]\nInspect routing.',
+    },
+  }]);
+  assert.deepEqual(placeholderMetadata.nativeTask.assignments[0].missingMetadata, [
+    'workflow',
+    'step',
+    'todo',
+    'skills',
+  ]);
 });
 
 test('parseNdjson retains valid events and reports malformed lines', () => {

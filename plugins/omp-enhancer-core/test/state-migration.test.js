@@ -62,7 +62,7 @@ test('migrates v0.1.74 route, skill claims, and task diagnostics into advisory s
   );
   const migrated = latestCoreState(pi.entries);
 
-  assert.equal(status.details.status.route, 'bug-audit');
+  assert.equal(status.details.status.route, 'agent-selected');
   assert.equal(status.details.status.mode, 'advisory');
   assert.equal(status.details.status.core_continuation, 'none');
   assert.equal(status.details.status.auto_continue, false);
@@ -82,13 +82,14 @@ test('migrates v0.1.74 route, skill claims, and task diagnostics into advisory s
   assert.equal(status.details.status.tasks[0].status, 'completed');
 
   assertAdvisorySnapshot(migrated);
-  assert.equal(migrated.lastRoute.intent, LEGACY_STATE.lastRoute.intent);
+  assert.equal(migrated.lastRoute.intent, 'agent-selected');
   assert.equal(migrated.lastRoute.advisoryOnly, true);
   assert.equal(migrated.lastRoute.autoContinue, false);
-  assert.equal(migrated.lastRoute.routePlan.version, 2);
-  assert.equal(migrated.lastRoute.routePlan.mode, 'advisory');
+  assert.equal(migrated.lastRoute.routePlan.version, 3);
+  assert.equal(migrated.lastRoute.routePlan.mode, 'agent-selected');
   assert.equal(migrated.lastRoute.routePlan.autoContinue, false);
-  assert.ok(migrated.lastRoute.routePlan.skills.length > 0);
+  assert.deepEqual(migrated.lastRoute.routePlan.skills, []);
+  assert.equal(migrated.lastRoute.taskDescriptor.operation, 'modify');
   assert.equal(migrated.lastPrompt, LEGACY_STATE.lastPrompt);
   assert.deepEqual(migrated.observedSkills, []);
   assert.deepEqual(migrated.providedSkills, []);

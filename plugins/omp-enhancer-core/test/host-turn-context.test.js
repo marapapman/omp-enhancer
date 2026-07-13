@@ -90,7 +90,6 @@ test('does not mistake ordinary autolearn discussion or untrusted branch message
   for (const entry of [
     { type: 'custom_message', customType: 'autolearn-nudge', content: prompt, display: true, attribution: 'user' },
     { type: 'custom_message', customType: 'autolearn-nudge', content: prompt, display: false, attribution: 'agent' },
-    { type: 'custom_message', customType: 'advisor', content: prompt, display: false, attribution: 'user' },
   ]) {
     assert.deepEqual(classifyHostTurn(
       { prompt },
@@ -109,4 +108,35 @@ test('does not mistake ordinary autolearn discussion or untrusted branch message
       },
     },
   ), { kind: 'user', source: 'default' });
+});
+
+test('classifies trusted advisor turns separately from real user tasks', () => {
+  const prompt = 'Check whether the workflow and TODO still match the user request.';
+  assert.deepEqual(classifyHostTurn({
+    prompt,
+    customType: 'advisor',
+    display: false,
+    attribution: 'user',
+  }), { kind: 'advisor', source: 'event' });
+
+  assert.deepEqual(classifyHostTurn(
+    { prompt },
+    {
+      sessionManager: {
+        getBranch: () => [{
+          type: 'custom_message',
+          customType: 'advisor',
+          content: prompt,
+          display: true,
+          attribution: 'user',
+        }],
+      },
+    },
+  ), { kind: 'advisor', source: 'branch' });
+
+  assert.deepEqual(classifyHostTurn({
+    prompt,
+    customType: 'advisor',
+    attribution: 'agent',
+  }), { kind: 'user', source: 'default' });
 });

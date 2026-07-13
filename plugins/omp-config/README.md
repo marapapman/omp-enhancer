@@ -5,16 +5,19 @@
 ## Contents
 
 - `assets/CLAUDE.md` and root or agent config templates.
-- `assets/config.yml`, `assets/models.yml`, `assets/mcp.json`, and `assets/WATCHDOG.yml` as templates only.
-- `assets/WATCHDOG.yml` teaches the host advisor to recognize native `skill-prompt` context, avoid redundant skill reads, and remain silent after a complete final response.
-- `assets/config.yml` includes `modelRoles.tiny`, the OMP Tiny role reused by `omp-enhancer-core` for schema-first route classification when the deterministic router is ambiguous.
+- `assets/WORKFLOW_CATALOG.md` is the shared advisory workflow, TODO, skill-selection, and multi-subagent protocol.
+- `assets/AGENTS.md` and `assets/WATCHDOG.yml` both import the installed `OMP_ENHANCER_WORKFLOW_CATALOG.md`, so OMP's native `@`-import expansion gives the main agent and Advisor the same catalog.
+- `assets/config.yml`, `assets/models.yml`, and `assets/mcp.json` remain templates only.
+- `assets/config.yml` includes `modelRoles.tiny` for optional lightweight tasks; workflow selection remains with the main agent.
 - `agents/`, `skills/`, and `hooks/` copied from the config source.
 - Slash command content for `/omp-config:config`, `/omp-config:config-doctor`, and `/omp-config:config-assets`.
-- Runtime tools for extension loading: `omp_config_doctor`, `omp_config_assets`, and `omp_config_plan`.
+- Runtime tools for extension loading: `omp_config_doctor`, `omp_config_assets`, `omp_config_plan`, and `omp_config_sync_workflow_context`.
 
 ## Safety
 
 This package does not automatically overwrite `~/.omp`. Treat the packaged files as templates and review any patch plan before applying changes to a live OMP home.
+
+`omp_config_sync_workflow_context` defaults to dry-run. It manages the dedicated `OMP_ENHANCER_WORKFLOW_CATALOG.md` file and marker-delimited blocks in `AGENTS.md` and `WATCHDOG.yml`; unrelated `AGENTS.md` and Advisor content is preserved. The catalog itself also carries managed markers, and sync refuses to overwrite a same-named user-owned file without them. Set `apply: true` only after reviewing the reported target and actions. The sync rejects incomplete managed markers, unsupported non-literal Advisor instructions, and symlinked destination files rather than guessing.
 
 The destructive-command and malformed edit-anchor guard hooks are advisory-only:
 they produce UI warnings but never return `block: true`. Other packaged
@@ -25,17 +28,17 @@ Bundled agents do not declare `blocking: true`, and the config template disables
 `loopGuard` plus compaction `autoContinue` by default. Host sandboxing, approval,
 and system safety policy remain independent of this plugin.
 
-The packaged advisor instructions are prompt guidance only. They do not change
-host approval, block a tool call, or schedule an agent continuation.
+The packaged main-agent and Advisor instructions are prompt guidance only. They
+do not change host approval, block a tool call, or schedule an agent continuation.
 
-The LLM classifier does not use a separate classifier role. It reuses OMP Tiny:
+The optional diagnostic classifier does not select the active workflow. If invoked explicitly, it may reuse OMP Tiny:
 
 ```yaml
 modelRoles:
   tiny: opencode-go/deepseek-v4-flash:medium
 ```
 
-`/model` changes the active session model. Classifier preflight should dispatch through `modelRoles.tiny`; do not create or maintain a classifier-specific model role.
+`/model` changes the active session model. The primary request path does not run classifier preflight; the main agent chooses and composes workflows from the injected catalog.
 
 ## Commands
 
@@ -64,6 +67,19 @@ When the extension entrypoint is loaded, the plugin registers:
 | `omp_config_doctor` | Reports basic package and safe-application checks without modifying files. |
 | `omp_config_assets` | Lists packaged agents, skills, hooks, and config templates. |
 | `omp_config_plan` | Produces a manual review plan before applying templates to a target OMP home. |
+| `omp_config_sync_workflow_context` | Dry-runs or explicitly applies the shared catalog and managed context blocks to a target OMP agent directory. |
+
+Example preview and explicit apply tool inputs:
+
+```json
+{"target":"/home/example/.omp/agent"}
+```
+
+```json
+{"target":"/home/example/.omp/agent","apply":true}
+```
+
+The target defaults to `PI_CODING_AGENT_DIR` when set, otherwise `~/.omp/agent`.
 
 ## Validation
 

@@ -16,13 +16,16 @@ Load a skill when it clearly matches the task or the user names it. Prefer the s
 For each non-trivial primary task, use this order:
 
 1. Determine the applicable workflow from the requested outcome, scope, and observed target content.
-2. Inspect the active skill inventory and any skill content already provided by the host.
-3. Load the smallest necessary skill set for that workflow.
-4. Begin the substantive review, drafting, editing, diagnosis, or implementation.
+2. Inspect the active skill inventory and choose the smallest necessary skill set.
+3. Initialize the native `todo` for multi-step work and map the selected workflow, skills, user requirements, and verification.
+4. Load each selected skill before the step that uses it.
+5. Fork multiple independent workstreams with native `task` when useful; keep integration and final verification with the parent.
+6. Execute and update the TODO through completion.
 
-A native `skill-prompt`, a skill body followed by `Skill: <path>`, or host text
-saying `Routed workflow skills already loaded` means that skill is already
-loaded. Follow it directly and do not read the same skill again.
+A native `skill-prompt` body followed by `Skill: <path>` means the skill has already been
+loaded in the current context. Follow it directly and do not read the same skill again.
+OMP Enhancer Core does not choose or autoload a routed skill
+bundle; the main agent owns selection from the active inventory.
 
 `writing.pending` defers language-specific skill selection until source prose
 is visible; it does not mean that writing needs no skill. Read the exact target

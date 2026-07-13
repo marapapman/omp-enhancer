@@ -7,18 +7,15 @@ import {
   buildGovernancePromptFragment,
   buildImmediateWorkflowMessage,
   buildSubagentPromptFragment,
-  formatWorkflowBriefingForAssignment,
   inspectionBudgetForRoute,
-  primarySkillsFor,
 } from './src/governance.js';
 import { installPluginSkills } from './src/install-skills.js';
 import { classifyHostTurn } from './src/host-turn-context.js';
 import { routeNaturalLanguageTask } from './src/router.js';
-import { detectWritingSourceLanguage } from './src/task-descriptor.js';
+import { describeNaturalLanguageTask, detectWritingSourceLanguage } from './src/task-descriptor.js';
 import {
   normalizeSkillName,
   parseLoadedSkillEvidence,
-  preferredSkillReadTarget,
   skillReadNameCandidates,
   skillNamesEquivalent,
   validateSkillUsage,
@@ -93,7 +90,7 @@ export default function registerCoreEnhancer(pi) {
   pi.registerTool({
     name: 'omp_core_resolve_classification',
     label: 'Resolve OMP classifier output',
-    description: 'Validate classifier JSON and merge monotonic workflow hints into the active advisory route.',
+    description: 'Validate classifier JSON as a diagnostic route probe without changing the main agent selected workflow.',
     parameters: z?.object ? z.object({
       prompt: z.string(),
       output: z.string(),
@@ -105,49 +102,19 @@ export default function registerCoreEnhancer(pi) {
       const result = resolveClassificationRoute({
         prompt,
         output: params.output,
-        baseRoute: active ? state.lastRoute : undefined,
       });
-
-      if (!active) {
-        state.lastRouteProbe = {
-          route: result.route,
-          prompt,
-          changedActiveRoute: false,
-          probedAt: Date.now(),
-        };
-        await persistState(pi, state);
-        return okResult(
-          formatRoute(result.route) + '\nClassifier probe only: no active user-turn route was changed.',
-          {
-            ...result,
-            activated: false,
-            probe_only: true,
-          },
-        );
-      }
-
-      if (state.classifierAttempted) {
-        const repeated = {
-          ok: true,
-          route: state.lastRoute,
-          fallbackRoute: state.lastRoute,
-          classification: null,
-          validation: { ok: true, errors: [] },
-          activated: false,
-          repeated: true,
-        };
-        return okResult(
-          formatRoute(state.lastRoute) + '\nClassifier refinement was already considered for this user turn.',
-          repeated,
-        );
-      }
-
       state.classifierAttempted = true;
-      if (result.ok) state.lastRoute = result.route;
+      state.lastRouteProbe = {
+        route: result.route,
+        prompt,
+        changedActiveRoute: false,
+        probedAt: Date.now(),
+      };
       await persistState(pi, state);
-      return okResult(formatRoute(result.route), {
+      return okResult(formatRoute(result.route) + '\nClassifier probe only: the active main-agent workflow was not changed.', {
         ...result,
-        activated: result.ok,
+        activated: false,
+        probe_only: true,
       });
     },
   });
@@ -162,9 +129,10 @@ export default function registerCoreEnhancer(pi) {
     }) : undefined,
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
-      const suggestedSkills = state.lastRoute
-        ? routeSkills(state.lastRoute)
-        : params.requiredSkills ?? [];
+      const explicitSkills = unique(params.requiredSkills ?? []);
+      const suggestedSkills = explicitSkills.length
+        ? explicitSkills
+        : routeSkills(state.lastRoute);
       const validation = validateSkillUsage({
         requiredSkills: suggestedSkills,
         output: '',
@@ -193,9 +161,10 @@ export default function registerCoreEnhancer(pi) {
     }) : undefined,
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
-      const suggestedRoles = state.lastRoute
-        ? routeRoles(state.lastRoute)
-        : params.requiredSubagents ?? [];
+      const explicitRoles = unique(params.requiredSubagents ?? []);
+      const suggestedRoles = explicitRoles.length
+        ? explicitRoles
+        : routeRoles(state.lastRoute);
       const validation = validateSubagentUsage({
         requiredSubagents: suggestedRoles,
         output: params.output ?? '',
@@ -278,6 +247,7 @@ export default function registerCoreEnhancer(pi) {
     const hostTurn = classifyHostTurn(event, ctx);
     activeHostTurnKind = hostTurn.kind;
     if (hostTurn.kind === 'autolearn-capture') return undefined;
+    if (hostTurn.kind === 'advisor') return undefined;
     const prompt = extractPrompt(event);
     if (isSlashCommandPrompt(prompt)) return undefined;
 
@@ -294,7 +264,10 @@ export default function registerCoreEnhancer(pi) {
     const previousPrompt = state.lastPrompt;
     const route = inherited
       ? state.lastRoute
-      : resolveAdvisoryRoute({ prompt, ctx });
+      : resolveMainTaskContext({
+        prompt,
+        ctx,
+      });
 
     if (!inherited) {
       state.lastRoute = route;
@@ -328,41 +301,31 @@ export default function registerCoreEnhancer(pi) {
     }));
     const workspaceRoot = ctx.cwd || process.cwd();
     const activeSkills = activeSkillInventory(pi);
-    const availableSkills = relevantActiveSkillNames(route, activeSkills);
-    const skillProvision = await buildNativeSkillProvision(pi, {
-      route,
-      workspaceRoot,
-      activeSkills,
-    });
-    for (const skill of skillProvision?.providedSkills ?? []) {
-      state.providedSkills.add(normalizeProvidedSkillName(skill));
-    }
+    const availableSkills = activeSkills;
     await persistState(pi, state);
     const fragment = buildGovernancePromptFragment({
       route,
       parentTask: state.lastPrompt,
       includeModelWorkflowHints: false,
       workspaceRoot,
-      skillsProvided: Boolean(skillProvision),
+      skillsProvided: false,
       availableSkills,
     });
-    const workflowMessage = skillProvision ? '' : buildImmediateWorkflowMessage({
+    const workflowMessage = buildImmediateWorkflowMessage({
       route,
       parentTask: state.lastPrompt,
       workspaceRoot,
       skillsProvided: false,
       availableSkills,
     });
-    const message = skillProvision
-      ? skillProvision.message
-      : workflowMessage
-        ? {
-          customType: 'omp-enhancer-core.workflow-guidance',
-          content: workflowMessage,
-          display: false,
-          attribution: 'agent',
-        }
-        : null;
+    const message = workflowMessage
+      ? {
+        customType: 'omp-enhancer-core.workflow-guidance',
+        content: workflowMessage,
+        display: false,
+        attribution: 'agent',
+      }
+      : null;
     return {
       ...injectBeforeAgentSystemPrompt(event, fragment),
       ...(message ? { message } : {}),
@@ -388,18 +351,13 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'read' && !toolEventFailed(event)) recordSkillReads(state, event);
     if (name === 'task') recordTaskResult(state, event);
     let inspectionGuidance = '';
-    let writingDiscoveryGuidance = '';
-    if (name === 'read' && !toolEventFailed(event)) {
-      writingDiscoveryGuidance = await refinePendingWritingRouteAfterRead(pi, state, event, ctx);
-    }
     if (INSPECTION_TOOL_NAMES.has(name)) {
       state.inspectionCalls += 1;
       inspectionGuidance = buildInspectionProgressGuidance(state, ctx);
     }
     await persistState(pi, state);
-    const guidance = [writingDiscoveryGuidance, inspectionGuidance].filter(Boolean).join('\n');
-    return guidance
-      ? { content: appendToolResultText(event, guidance) }
+    return inspectionGuidance
+      ? { content: appendToolResultText(event, inspectionGuidance) }
       : undefined;
   });
 
@@ -463,6 +421,57 @@ function resolveAdvisoryRoute({ prompt = '', sourceText, ctx = {} } = {}) {
       languages: observed.languages,
       truncated: observed.truncated,
     },
+  };
+}
+
+function resolveMainTaskContext({ prompt = '', sourceText, ctx = {} } = {}) {
+  let taskDescriptor = describeNaturalLanguageTask({
+    prompt: String(prompt ?? ''),
+    ...(hasWritingSource(sourceText) ? { sourceText } : {}),
+  });
+  let writingSourceObservation;
+  if (!hasWritingSource(sourceText)
+    && taskDescriptor.domains?.includes('writing')
+    && (taskDescriptor.writingSourceTargets ?? taskDescriptor.workspaceWriteTargets ?? []).length) {
+    const observed = readWritingTargets({ taskDescriptor }, ctx);
+    if (observed.text) {
+      taskDescriptor = describeNaturalLanguageTask({
+        prompt: String(prompt ?? ''),
+        sourceText: observed.texts.length > 1 ? observed.texts : observed.text,
+      });
+      writingSourceObservation = {
+        kind: 'workspace-target',
+        paths: observed.paths,
+        languages: observed.languages,
+        truncated: observed.truncated,
+      };
+    }
+  }
+  return buildAgentSelectedTaskContext(taskDescriptor, writingSourceObservation);
+}
+
+function buildAgentSelectedTaskContext(taskDescriptor, writingSourceObservation) {
+  return {
+    intent: 'agent-selected',
+    workflowRoute: 'agent-selected',
+    workflowTaskType: 'agent-selected',
+    workflowMode: 'autonomous-advisory',
+    advisoryOnly: true,
+    autoContinue: false,
+    diagnosticOnly: true,
+    taskDescriptor,
+    routePlan: {
+      version: 3,
+      mode: 'agent-selected',
+      autoContinue: false,
+      steps: [...(taskDescriptor.phases ?? [])],
+      skills: [],
+      tools: [],
+      roles: [],
+      qualityChecks: [],
+      riskNotes: [],
+    },
+    ...(writingSourceObservation ? { writingSourceObservation } : {}),
   };
 }
 
@@ -554,27 +563,80 @@ function isWithinWorkspace(root, candidate) {
 }
 
 function decorateTaskAssignments(event, state) {
-  const roles = routeRoles(state.lastRoute);
-  const byName = new Map(roles.map((role) => [roleName(role), role]));
   for (const item of taskInputItems(event)) {
-    const name = roleName(item);
-    const suggestion = byName.get(name);
-    if (!name || !suggestion) continue;
     const key = assignmentKey(item);
     const current = String(item[key] ?? '');
-    if (/OMP_WORKFLOW_ROLE:/i.test(current)) continue;
+    if (!current.trim() || /OMP_PARENT_ASSIGNMENT_CONTEXT:/i.test(current)) continue;
+    const metadata = taskAssignmentMetadata(current);
+    const prefix = formatTaskAssignmentPrefix(metadata);
+    const withoutPrefix = current.replace(/^\s*\[workflow=[^\r\n\]]+\]\s*/i, '');
     item[key] = [
-      current,
+      prefix,
+      withoutPrefix,
       '',
-      'OMP_WORKFLOW_ROLE: ' + name,
+      'OMP_PARENT_ASSIGNMENT_CONTEXT:',
+      `OMP_WORKFLOW: ${metadata.workflow}`,
+      `OMP_WORKFLOW_STEP: ${metadata.step}`,
+      `OMP_TODO_ITEM: ${metadata.todo}`,
+      'OMP_SELECTED_SKILLS:',
+      ...metadata.skills.map((skill) => `- skill://${skill}`),
       state.lastPrompt ? 'Parent task context: ' + state.lastPrompt.slice(0, 800) : null,
-      suggestion.duty ? 'Suggested checkpoint: ' + suggestion.duty : null,
-      'Suggested skills for this role:',
-      ...roleSkills(suggestion).map((skill) => '- skill://' + skill),
-      'This is advisory workflow context. Adapt it to the observed task and available runtime.',
-      formatWorkflowBriefingForAssignment(state.lastRoute),
+      'Complete only this parent-selected checkpoint. The parent owns integration and final verification.',
+      'This is advisory pass-through context. Missing metadata is a parent planning limitation, never a tool or completion gate.',
     ].filter(Boolean).join('\n');
   }
+}
+
+function taskAssignmentMetadata(value = '') {
+  const source = String(value);
+  const compact = source.match(/\[workflow=([^\]\s]+)\s+step=([^\]]*?)\s+todo=([^\]]*?)\s+skills=([^\]]*?)\]/i);
+  const workflow = source.match(/OMP_WORKFLOW(?:_ID)?:\s*([^\r\n]+)/i)?.[1]?.trim()
+    ?? compact?.[1]?.trim()
+    ?? 'unspecified';
+  const step = source.match(/OMP_WORKFLOW_STEP:\s*([^\r\n]+)/i)?.[1]?.trim()
+    ?? compact?.[2]?.trim()
+    ?? 'unspecified';
+  const todo = source.match(/OMP_TODO_ITEM:\s*([^\r\n]+)/i)?.[1]?.trim()
+    ?? compact?.[3]?.trim()
+    ?? 'unspecified';
+  const skills = unique([
+    ...(compact?.[4] ? compact[4].split(',') : []),
+    ...assignmentMarkerSkills(source),
+  ].map((skill) => normalizeProvidedSkillName(skill)).filter(Boolean));
+  return {
+    workflow: oneLine(workflow, Number.MAX_SAFE_INTEGER),
+    step: oneLine(step, Number.MAX_SAFE_INTEGER),
+    todo: oneLine(todo, Number.MAX_SAFE_INTEGER),
+    skills: skills.length ? skills : ['unspecified'],
+  };
+}
+
+function assignmentMarkerSkills(value = '') {
+  const lines = String(value).split(/\r?\n/);
+  const start = lines.findIndex((line) => /^(?:OMP_(?:REQUIRED|SELECTED)_SKILLS|Suggested skills for this role|Skills for this role):/i.test(line.trim()));
+  if (start < 0) return [];
+  const inline = lines[start].replace(/^[^:]+:\s*/, '').trim();
+  const skills = inline ? inline.split(',') : [];
+  for (const rawLine of lines.slice(start + 1)) {
+    const match = rawLine.trim().match(/^[-*]\s*(?:skill:\/\/)?([A-Za-z0-9_.\/-]+)$/i);
+    if (!match) break;
+    skills.push(match[1]);
+  }
+  return skills;
+}
+
+function formatTaskAssignmentPrefix(metadata = {}) {
+  const workflow = oneLine(metadata.workflow, 20);
+  const step = oneLine(metadata.step, 10);
+  const todo = oneLine(metadata.todo, 18);
+  const skills = oneLine((metadata.skills ?? ['unspecified']).join(','), 32);
+  return `[workflow=${workflow} step=${step} todo=${todo} skills=${skills}]`;
+}
+
+function oneLine(value = '', max = 32) {
+  const normalized = String(value).replace(/[\[\]\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (normalized.length <= max) return normalized || 'unspecified';
+  return normalized.slice(0, Math.max(1, max - 1)).trimEnd() + '…';
 }
 
 function recordTaskDispatch(state, event) {
@@ -940,6 +1002,47 @@ function readStateSnapshot(value = {}) {
 
 function sanitizeRestoredRoute(route, prompt = '') {
   if (!isRecord(route)) return null;
+  const taskDescriptor = isRecord(route.taskDescriptor)
+    ? route.taskDescriptor
+    : describeNaturalLanguageTask({ prompt: String(prompt ?? '') });
+  return buildAgentSelectedTaskContext(taskDescriptor, route.writingSourceObservation);
+}
+
+function sanitizeDiagnosticRoute(route, prompt = '') {
+  if (!isRecord(route)) return null;
+  if (route.intent === 'agent-selected' && route.taskDescriptor && route.routePlan?.version === 3) {
+    const {
+      hardBlock: _hardBlock,
+      hardBlockReasons: _hardBlockReasons,
+      shouldForkSubagents: _shouldForkSubagents,
+      gateMode: _gateMode,
+      skillGateMode: _skillGateMode,
+      gateRecoveryMode: _gateRecoveryMode,
+      approvalState: _approvalState,
+      actionBoundary: _actionBoundary,
+      gateController: _gateController,
+      ...agentSelectedRoute
+    } = route;
+    return {
+      ...agentSelectedRoute,
+      intent: 'agent-selected',
+      workflowRoute: 'agent-selected',
+      advisoryOnly: true,
+      autoContinue: false,
+      diagnosticOnly: true,
+      routePlan: {
+        version: 3,
+        mode: 'agent-selected',
+        autoContinue: false,
+        steps: Array.isArray(route.routePlan.steps) ? route.routePlan.steps : [],
+        skills: [],
+        tools: [],
+        roles: [],
+        qualityChecks: [],
+        riskNotes: [],
+      },
+    };
+  }
   if (route.taskDescriptor && route.routePlan?.version === 2) {
     const {
       hardBlock: _hardBlock,
@@ -1028,7 +1131,7 @@ function sanitizeRoutePlan(plan = {}) {
 function sanitizeRouteProbe(value) {
   if (!isRecord(value) || !isRecord(value.route)) return null;
   return {
-    route: sanitizeRestoredRoute(value.route, value.prompt),
+    route: sanitizeDiagnosticRoute(value.route, value.prompt),
     prompt: typeof value.prompt === 'string' ? value.prompt : '',
     changedActiveRoute: false,
     probedAt: Number.isFinite(value.probedAt) ? value.probedAt : 0,
@@ -1099,224 +1202,6 @@ function isModelVisibleSkill(skill = {}) {
     && skill.modelInvocationDisabled !== true;
 }
 
-function relevantActiveSkillNames(route = {}, activeSkills = []) {
-  const routed = route.routePlan?.skills ?? [];
-  return unique(activeSkills
-    .filter((skill) => routed.some((name) => skillNamesEquivalent(skill?.name, name)))
-    .map((skill) => normalizeProvidedSkillName(skill?.name))
-    .filter((name) => /^[a-z0-9][a-z0-9._/-]{0,127}$/.test(name)));
-}
-
-async function refinePendingWritingRouteAfterRead(pi, state, event, ctx = {}) {
-  if (state.lastRoute?.intent !== 'writing.pending') return '';
-  const target = readToolTarget(event);
-  if (!isWritingSourceReadTarget(target)
-    || !pendingWritingReadMatches(state.lastRoute, state.lastPrompt, target)
-    || readResultIsIncomplete(event)) return '';
-  const sourceText = readResultText(event);
-  const language = detectWritingSourceLanguage(sourceText);
-  if (!['en', 'zh'].includes(language)) return '';
-
-  const route = routeNaturalLanguageTask({
-    prompt: `${state.lastPrompt}\nObserved writing source target: ${target}`,
-    sourceText,
-  });
-  if (!['writing.en', 'writing.zh'].includes(route.intent)) return '';
-  state.lastRoute = {
-    ...route,
-    writingSourceObservation: {
-      kind: 'tool-result',
-      paths: [normalizeWritingReadTarget(target)],
-      languages: [language],
-      truncated: readResultIsIncomplete(event),
-    },
-  };
-
-  const workspaceRoot = ctx.cwd || process.cwd();
-  const activeSkills = activeSkillInventory(pi);
-  const availableSkills = relevantActiveSkillNames(state.lastRoute, activeSkills);
-  const skillProvision = await buildNativeSkillProvision(pi, {
-    route: state.lastRoute,
-    workspaceRoot,
-    activeSkills,
-  });
-  for (const skill of skillProvision?.providedSkills ?? []) {
-    state.providedSkills.add(normalizeProvidedSkillName(skill));
-  }
-
-  const next = skillProvision?.message?.content || buildImmediateWorkflowMessage({
-    route: state.lastRoute,
-    parentTask: state.lastPrompt,
-    workspaceRoot,
-    skillsProvided: false,
-    availableSkills,
-  });
-  return [
-    '',
-    `OMP writing workflow refined after reading the target: body language is ${language}; workflow is ${state.lastRoute.workflowRoute}.`,
-    'Complete workflow and skill selection now, before revising or reviewing the target. The surrounding instruction language does not override the observed body language.',
-    next,
-    'This refinement is advisory only; it does not authorize, deny, or block any tool call or completion.',
-  ].filter(Boolean).join('\n');
-}
-
-function readToolTarget(event = {}) {
-  const input = event.input ?? event.params ?? event.arguments ?? {};
-  for (const key of ['path', 'filePath', 'file', 'target', 'uri']) {
-    if (typeof input?.[key] === 'string' && input[key].trim()) return input[key].trim();
-  }
-  return '';
-}
-
-function isWritingSourceReadTarget(target = '') {
-  const value = String(target).trim();
-  if (!value || /^skill:\/\//i.test(value) || /(?:^|\/)SKILL\.md(?:$|[?#])/i.test(value)) return false;
-  return /\.(?:tex|md|markdown|txt|rst|adoc|org)(?:$|[?#:])/i.test(value);
-}
-
-function pendingWritingReadMatches(route = {}, prompt = '', target = '') {
-  const observed = normalizeWritingReadTarget(target);
-  const expected = route.taskDescriptor?.writingSourceTargets
-    ?? route.taskDescriptor?.workspaceWriteTargets
-    ?? [];
-  if (expected.length) {
-    return expected.some((value) => normalizeWritingReadTarget(value) === observed);
-  }
-
-  const filename = observed.split('/').at(-1) ?? '';
-  const stem = filename.replace(/\.(?:tex|md|markdown|txt|rst|adoc|org)$/i, '').toLowerCase();
-  if (!stem || stem.length < 4 || /^(?:agents|claude|readme|license|changelog|contributing)$/i.test(stem)) return false;
-  return String(prompt).toLowerCase().includes(stem);
-}
-
-function normalizeWritingReadTarget(target = '') {
-  return String(target)
-    .trim()
-    .replace(/\\/g, '/')
-    .replace(/[?#].*$/, '')
-    .replace(/:(?:raw|\d+(?:-\d+)?)$/i, '')
-    .replace(/^\.\//, '');
-}
-
-function readResultIsIncomplete(event = {}) {
-  const details = [event.details, event.result?.details].filter((value) => value && typeof value === 'object');
-  if (details.some((value) => (
-    value.truncated === true
-    || value.isTruncated === true
-    || value.hasMore === true
-    || value.partial === true
-    || value.complete === false
-  ))) return true;
-  const input = event.input ?? event.params ?? event.arguments ?? {};
-  if (['offset', 'limit', 'startLine', 'endLine', 'lineStart', 'lineEnd', 'line_start', 'line_end']
-    .some((key) => input?.[key] !== undefined)) return true;
-  return /(?:output|result|content)\s+(?:was\s+)?truncated|\[truncated\]|showing\s+lines?\s+\d+\s*[-–]\s*\d+\s+of\s+\d+/i
-    .test(readResultText(event));
-}
-
-async function buildNativeSkillProvision(pi, { route, workspaceRoot = '', activeSkills = [] } = {}) {
-  const runtime = pi?.pi;
-  if (
-    typeof runtime?.buildSkillPromptMessage !== 'function'
-    || typeof runtime?.SKILL_PROMPT_MESSAGE_TYPE !== 'string'
-    || !runtime.SKILL_PROMPT_MESSAGE_TYPE
-  ) return null;
-
-  const requestedSkills = primarySkillsFor(route);
-  if (!requestedSkills.length) return null;
-
-  if (!Array.isArray(activeSkills) || !activeSkills.length) return null;
-
-  const selected = requestedSkills.map((skill) => (
-    selectActiveSkill(activeSkills, skill, workspaceRoot)
-  ));
-  if (selected.some((skill) => !skill)) return null;
-
-  const built = [];
-  try {
-    for (const skill of selected) {
-      const prompt = await runtime.buildSkillPromptMessage(skill, '', 'autoload');
-      if (!prompt?.message || !prompt?.details) return null;
-      built.push(prompt);
-    }
-  } catch {
-    return null;
-  }
-  if (!built.length) return null;
-
-  const routedSkills = requestedSkills.map(normalizeSkillName).filter(Boolean);
-  const providedSkillRecords = selected.map((skill, index) => ({
-    requestedSkill: routedSkills[index],
-    name: normalizeProvidedSkillName(skill.name),
-    path: String(skill.filePath || built[index]?.details?.path || ''),
-  }));
-  const providedSkills = providedSkillRecords.map(({ name }) => name).filter(Boolean);
-  const providedPaths = providedSkillRecords.map(({ path }) => path).filter(Boolean);
-  const availableSkillNames = relevantActiveSkillNames(route, activeSkills);
-  const discoveryPreamble = [
-    'OMP WORKFLOW AND SKILL DISCOVERY FIRST',
-    'Before substantive project work, identify the workflow from the user goal, target artifact, source language, requested action, and constraints.',
-    `Matching routed skills found in the active inventory: ${availableSkillNames.map((name) => `skill://${name}`).join(', ')}.`,
-    `The host selected and loaded this workflow bundle: ${routedSkills.map((name) => `skill://${name}`).join(', ')}. This completes skill selection for the current workflow; apply the loaded instructions before project work and do not independently search, substitute, or reread them.`,
-    'Memory, general model ability, and a managed skill created after the task are not substitutes for this pre-work discovery and loading step.',
-    'Only if the host reports a concrete loading failure, make one exact inventory-based correction and then continue. This is advisory guidance and never blocks a tool call or completion.',
-  ].join('\n');
-  return {
-    providedSkills,
-    message: {
-      customType: runtime.SKILL_PROMPT_MESSAGE_TYPE,
-      content: [discoveryPreamble, ...built.map(({ message }) => message)].join('\n\n'),
-      display: false,
-      attribution: 'agent',
-      details: {
-        ...built[0].details,
-        provisionProvider: 'omp-enhancer-core',
-        provisionSchemaVersion: 1,
-        lineCount: built.reduce((total, { details }) => total + (Number(details.lineCount) || 0), 0),
-        routedSkills,
-        routedSkillPaths: providedPaths,
-        providedSkillRecords,
-      },
-    },
-  };
-}
-
-function selectActiveSkill(activeSkills, requestedSkill, workspaceRoot = '') {
-  const target = preferredSkillReadTarget(requestedSkill, { workspaceRoot });
-  const targetNames = collectSkillFilePaths(target);
-  const uriName = String(target).match(/^skill:\/\/(.+)$/i)?.[1]?.split('/').at(-1);
-  if (uriName) targetNames.push(uriName);
-
-  if (target && !target.startsWith('skill://')) {
-    const targetPath = normalizedRealPath(
-      isAbsolute(target) ? target : resolve(workspaceRoot || process.cwd(), target),
-    );
-    const exact = activeSkills.find(({ filePath }) => (
-      filePath && normalizedRealPath(filePath) === targetPath
-    ));
-    if (exact) return exact;
-    return null;
-  }
-
-  const candidates = unique([
-    requestedSkill,
-    ...targetNames,
-    ...skillReadNameCandidates(requestedSkill, { limit: 64 }),
-  ]);
-  return activeSkills.find(({ name }) => (
-    typeof name === 'string'
-      && candidates.some((candidate) => skillNamesEquivalent(name, candidate))
-  )) ?? null;
-}
-
-function normalizedRealPath(value = '') {
-  try {
-    return realpathSync(value);
-  } catch {
-    return resolve(value);
-  }
-}
-
 function normalizeProvidedSkillName(value = '') {
   return String(value).trim().toLowerCase();
 }
@@ -1329,7 +1214,7 @@ function effectiveSkills(state) {
 }
 
 function buildInspectionProgressGuidance(state, ctx = {}) {
-  const budget = inspectionBudgetForRoute(state.lastRoute, state.lastPrompt);
+  const budget = inspectionBudgetForRoute({}, state.lastPrompt);
   if (!budget) return '';
   const used = state.inspectionCalls;
   const remaining = Math.max(0, budget - used);
@@ -1338,18 +1223,6 @@ function buildInspectionProgressGuidance(state, ctx = {}) {
     `OMP advisory inspection progress: ${used}/${budget} read/search calls used; ${remaining} remaining. Each skill read, failed call, and parallel call counts separately.`,
   ];
   if (remaining > 0) {
-    const primary = state.lastRoute?.routePlan?.skills?.[0];
-    const target = primary
-      ? preferredSkillReadTarget(primary, { workspaceRoot: ctx.cwd || process.cwd() })
-      : '';
-    const targetNames = collectSkillFilePaths(target);
-    const observed = primary && [...effectiveSkills(state)].some((skill) => (
-      skillNamesEquivalent(skill, primary)
-        || targetNames.some((targetName) => skillNamesEquivalent(skill, targetName))
-    ));
-    if (primary && !observed && used <= 1) {
-      if (target) lines.push(`No routed primary skill read is observed yet. Prefer read(path="${target}") next if that exact target has not already failed; otherwise make one corrected attempt and continue.`);
-    }
     lines.push('BUDGET SNAPSHOT RULE: a parallel batch may produce several progress snapshots. Before issuing more tools, use the snapshot with the largest used value (equivalently the smallest remaining value); ignore earlier larger remaining counts from that batch.');
     if (remaining <= 3) {
       lines.push(`FINAL-BUDGET MODE: this next assistant message may contain at most ONE read/search tool call, even though ${remaining} remain. Wait for its result and recompute from the newest progress snapshot, or finalize now. Count toolCall entries before sending and delete any second read/grep/glob call.`);
@@ -1385,11 +1258,7 @@ function injectBeforeAgentSystemPrompt(event = {}, fragment = '') {
       : [];
   const systemPrompt = [...existing, String(fragment)];
   event.systemPrompt = systemPrompt;
-  event.additionalContext = [event.additionalContext, fragment].filter(Boolean).join('\n\n');
-  return {
-    systemPrompt,
-    additionalContext: fragment,
-  };
+  return { systemPrompt };
 }
 
 function classifierPromptContext(state, prompt = '') {
@@ -1414,9 +1283,9 @@ function isPlanningImplementationTransition(state, prompt = '') {
     || route.workflowRoute === 'code.plan'
     || route.taskDescriptor?.provenance?.reasons?.includes('implementation or test planning requested');
   if (!planning) return false;
-  const next = routeNaturalLanguageTask({ prompt: String(prompt ?? '') });
-  return ['modify', 'create'].includes(next.taskDescriptor?.operation)
-    && next.taskDescriptor?.constraints?.workspaceWrite === 'required';
+  const next = describeNaturalLanguageTask({ prompt: String(prompt ?? '') });
+  return ['modify', 'create'].includes(next.operation)
+    && next.constraints?.workspaceWrite === 'required';
 }
 
 function isSlashCommandPrompt(prompt) {
@@ -1424,13 +1293,13 @@ function isSlashCommandPrompt(prompt) {
 }
 
 function isSubagentLaunchPrompt(prompt) {
-  return /OMP_WORKFLOW_ROLE:|OMP_REQUIRED_SUBAGENT:|Suggested skills for this role:|Required skills for this subagent:/i.test(String(prompt));
+  return /OMP_PARENT_ASSIGNMENT_CONTEXT:|OMP_WORKFLOW_ROLE:|OMP_REQUIRED_SUBAGENT:|Suggested skills for this role:|Required skills for this subagent:/i.test(String(prompt));
 }
 
 function taskInputItems(event = {}) {
   const input = event.input ?? event.params ?? event.arguments ?? {};
   if (Array.isArray(input.tasks)) return input.tasks.filter(isRecord);
-  return isRecord(input) && roleName(input) ? [input] : [];
+  return isRecord(input) && ['assignment', 'prompt', 'task', 'message'].some((key) => typeof input[key] === 'string') ? [input] : [];
 }
 
 function assignmentKey(item) {

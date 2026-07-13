@@ -2,12 +2,12 @@
 
 ## Project Overview
 
-This is an OMP marketplace monorepo for the OMP Enhancer stack. It packages runtime routing, config assets, writing QA, testing QA, and fact-checking workflows as installable OMP plugins.
+This is an OMP marketplace monorepo for the OMP Enhancer stack. It packages autonomous workflow orchestration, shared config context, writing QA, testing QA, and fact-checking workflows as installable OMP plugins.
 
 Current workspace plugins:
 
-- `plugins/omp-enhancer-core`: task descriptor compiler, advisory runtime router, workflow guidance injection, and optional diagnostics.
-- `plugins/omp-config`: packaged agents, skills, hooks, templates, and config diagnostics.
+- `plugins/omp-enhancer-core`: full workflow-catalog injection, task-fact collection, TODO/subagent orchestration guidance, and compatibility diagnostics.
+- `plugins/omp-config`: shared main/Advisor workflow context, packaged agents, skills, hooks, templates, and config diagnostics.
 - `plugins/writing-helper`: writing logic/style/citation QA tools, writer/checker agents, writing skills.
 - `plugins/omp-test-enhancer`: test target analysis, test context, browser evidence, coverage/mutation context, advisory quality review, reports.
 - `plugins/omp-fact-checker`: claim extraction, evidence collection, cross-checking, reporting, advisory completeness review.
@@ -19,14 +19,15 @@ The repo is an npm workspace monorepo. `.omp-plugin/marketplace.json` is the mar
 Core runtime flow in `plugins/omp-enhancer-core/index.js`:
 
 1. OMP lifecycle hooks call `registerCoreEnhancer(pi)`.
-2. `src/task-descriptor.js` extracts operation, domains, user scope constraints, ordered phases, capabilities, complexity, risk notes, and writing-source language state.
-3. `src/route-policy.js` compiles the descriptor into an advisory `RoutePlan`; `src/router.js` preserves compatibility projections while exposing recommended steps, skills, tools, roles, and checks.
-4. `src/workflow-routes.js` supplies legacy-compatible route resources and `src/governance.js` injects route-specific guidance.
-5. `src/classifier.js` accepts only monotonic descriptor hints; it cannot grant side effects, choose a writing language over observed source text, or control execution.
-6. Tool calls, tool results, and task/subagent events may update versioned, route-scoped diagnostics. Diagnostics never authorize, refuse, or replay an action.
-7. Runtime hooks are advisory-only: no plugin hook returns `block: true` or `continue: true`, and no plugin schedules automatic repair turns.
-8. The core does not register generated-output loop control. Repetition handling is left to the host and the acting agent.
-9. Testing Enhancer publishes optional evidence for reports but has no standalone or shared completion owner.
+2. `src/task-descriptor.js` extracts operation, domains, user scope constraints, ordered phases, capabilities, complexity, risk notes, and writing-source language state. These are task facts, not workflow or skill decisions.
+3. `src/workflow-routes.js` defines the complete composable catalog; `src/governance.js` injects that catalog, the full active skill inventory, and the TODO-first/multi-subagent protocol.
+4. Normal `before_agent_start` uses `agent-selected` runtime context with empty skills, tools, and roles. It never calls the legacy route compiler or native skill autoload.
+5. Parent-selected workflow, step, TODO item, and skills travel in native `task` assignment text. Core passes them through to the child without static role matching.
+6. `src/router.js`, `src/route-policy.js`, and `src/classifier.js` remain explicit compatibility diagnostics only; they do not control the main runtime.
+7. `omp-config/assets/WORKFLOW_CATALOG.md` is the shared main/Advisor session-start catalog. Managed `AGENTS.md` and `WATCHDOG.yml` blocks import it, and explicit config sync preserves unrelated content.
+8. Runtime hooks are advisory-only: no plugin hook returns `block: true` or `continue: true`, and no plugin schedules automatic repair turns.
+9. The core does not register generated-output loop control. Repetition handling is left to the host and the acting agent.
+10. Testing Enhancer publishes optional evidence for reports but has no standalone or shared completion owner.
 
 Common extension pattern:
 
@@ -37,14 +38,14 @@ Common extension pattern:
 
 ## Key Directories
 
-- `plugins/omp-enhancer-core/`: core advisory routing and workflow guidance.
+- `plugins/omp-enhancer-core/`: main-agent workflow orchestration and compatibility diagnostics.
   - `index.js`: main registration, tool/hook wiring, state persistence.
   - `src/task-descriptor.js`: deterministic task, scope, and writing-language model.
-  - `src/route-policy.js`: descriptor-to-route-plan compiler and public intent aliases.
-  - `src/subagent-plans.js`: suggested actor duties and per-role skill profiles.
-  - `src/router.js`: legacy-compatible natural-language projection and rollout selection.
+  - `src/route-policy.js`: compatibility descriptor-to-route-plan compiler and public intent aliases.
+  - `src/subagent-plans.js`: compatibility actor duties and per-role skill profiles.
+  - `src/router.js`: legacy-compatible diagnostic projection and rollout selection.
   - `src/runtime-policy.js`: compatibility-only route projection switches; it has no execution-control behavior.
-  - `src/governance.js`: advisory workflow prompt builders.
+  - `src/governance.js`: full-catalog, TODO-first, skill-discovery, and subagent-checkpoint prompt builders.
   - `src/classifier.js`: strict JSON classifier hints and monotonic merge.
   - `src/skill-usage.js`, `src/subagent-usage.js`: evidence parsers and validators.
 - `plugins/omp-test-enhancer/`: TypeScript testing enhancer.
@@ -53,7 +54,7 @@ Common extension pattern:
   - `src/gates/`: pure advisory review evaluators retained behind compatibility tool names.
   - `tests/`: Vitest suites.
 - `plugins/omp-config/`: config asset plugin.
-  - `assets/`: packaged OMP config templates/assets.
+  - `assets/`: packaged OMP config templates/assets, including the shared `WORKFLOW_CATALOG.md` imported by main and Advisor context.
   - `agents/`, `skills/`, `hooks/`: distributable config inventory.
   - `src/asset-index.js`: indexes packaged assets.
 - `plugins/writing-helper/`: writing QA plugin.
@@ -139,17 +140,17 @@ Advisory runtime contracts:
 - `package.json`: root npm workspaces and root scripts.
 - `package-lock.json`: canonical committed npm lockfile.
 - `.omp-plugin/marketplace.json`: source of truth for marketplace plugin entries, versions, sources, and skills lists.
-- `README.md`: install, routing, classifier, release, and validation docs.
+- `README.md`: install, orchestration, compatibility diagnostics, release, and validation docs.
 - `scripts/release.js`: version bump and catalog sync logic.
 - `scripts/check-marketplace.js`: marketplace integrity checks.
 - `scripts/pack-all.js`: dry-run package validation for all plugins.
 - `plugins/omp-enhancer-core/index.js`: primary runtime entry point.
-- `plugins/omp-enhancer-core/src/router.js`: route classification rules.
-- `plugins/omp-enhancer-core/src/workflow-routes.js`: route catalog and route cards.
+- `plugins/omp-enhancer-core/src/router.js`: compatibility-only route classification rules.
+- `plugins/omp-enhancer-core/src/workflow-routes.js`: canonical runtime workflow catalog and compatibility route cards.
 - `plugins/omp-enhancer-core/test/fixtures/workload-matrix.json`: routing/workflow workload fixture.
 - `plugins/omp-test-enhancer/tsconfig.json`: TS build settings.
 - `plugins/omp-test-enhancer/vitest.config.ts`: Vitest configuration.
-- `plugins/omp-config/assets/CLAUDE.md`: packaged comprehensive agent instructions.
+- `plugins/omp-config/assets/WORKFLOW_CATALOG.md`: shared main/Advisor workflow context.
 
 ## Runtime/Tooling Preferences
 

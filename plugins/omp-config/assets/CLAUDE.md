@@ -13,13 +13,16 @@ Use the runtime's supported skill loader or read the referenced `SKILL.md` to lo
 For each non-trivial primary task, use this order:
 
 1. Determine the applicable workflow from the requested outcome, scope, and observed target content.
-2. Inspect the active skill inventory and any skill content already provided by the host.
-3. Load the smallest necessary skill set for that workflow.
-4. Begin the substantive review, drafting, editing, diagnosis, or implementation.
+2. Inspect the active skill inventory and choose the smallest necessary skill set.
+3. Initialize the native `todo` for multi-step work, including workflow steps, selected skills, user requirements, and verification.
+4. Load each selected skill before the step that uses it.
+5. Fork multiple independent workstreams with native `task` when useful; keep integration and final verification with the parent.
+6. Execute and update the TODO through completion.
 
-A native `skill-prompt`, a skill body followed by `Skill: <path>`, or host text
-saying `Routed workflow skills already loaded` means that skill is already
-loaded. Apply it directly and do not read the same `SKILL.md` again.
+A native `skill-prompt` body followed by `Skill: <path>` means that the model has already
+loaded that skill in the current context. Apply it directly and do not read the same `SKILL.md` again.
+OMP Enhancer Core does not choose or autoload a routed
+skill bundle; the main agent owns selection from the active inventory.
 
 `writing.pending` means language-specific selection is deferred, not that no
 writing skill applies. Read the exact target text once, determine the language
@@ -59,7 +62,9 @@ Brainstorm → Plan → Implement/Execute → Verify → Review → Finish
 | **Finish** | `finishing-a-development-branch` | When implementation is complete |
 | **Code Review (receiving)** | `receiving-code-review` | When responding to review feedback |
 
-## Available Skills (16 total)
+## Bundled skill examples (not the active inventory)
+
+The complete active inventory injected for the current session is the source of truth. This legacy list only illustrates commonly bundled names; do not use it to skip inventory inspection or assume a skill is installed.
 
 ### From Superpowers
 - `skill://using-superpowers` — Entry point: how to find and invoke skills

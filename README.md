@@ -1,11 +1,11 @@
 # omp-enhancer
 
-OMP marketplace monorepo for advisory task routing, workflow skills, writing QA, testing QA, fact checking, and packaged OMP configuration.
+OMP marketplace monorepo for autonomous workflow orchestration, workflow skills, writing QA, testing QA, fact checking, and packaged OMP configuration.
 
 ## Plugins
 
-- `omp-enhancer-core`: compiles natural-language tasks into an advisory route plan and injects suggested skills, roles, steps, quality checks, and risk notes.
-- `omp-config`: packages OMP config assets, agents, skills, non-blocking hooks, templates, and diagnostics.
+- `omp-enhancer-core`: injects the complete workflow catalog and active skill inventory, collects safe task facts, and passes parent-selected workflow steps to subagents.
+- `omp-config`: packages the shared main/Advisor workflow context, OMP config assets, agents, skills, non-blocking hooks, templates, and diagnostics.
 - `writing-helper`: provides writing logic, style, and citation checks plus writer/checker agents and writing skills.
 - `omp-testing-enhancer`: provides test target analysis, browser evidence, coverage/mutation context, advisory quality review, and reports.
 - `omp-fact-checker`: provides claim extraction, evidence collection, cross-checking, reporting, and advisory completeness review.
@@ -33,42 +33,43 @@ omp plugin marketplace add /path/to/omp-enhancer
 omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer
 ```
 
-Plugins remain independently installable. `omp-enhancer-core` is needed only for automatic natural-language routing and workflow guidance.
+Plugins remain independently installable. `omp-enhancer-core` provides dynamic main-agent orchestration guidance; `omp-config` provides the shared session-start context used by both the main agent and Advisor.
 
-## Advisory routing
+After installing or upgrading `omp-config`, preview and then apply the managed shared context from an OMP session:
 
-After installing `omp-enhancer-core`, describe the task naturally. The core plugin builds a `TaskDescriptor`, then compiles a RoutePlan with:
+```text
+Call omp_config_sync_workflow_context first with apply=false, then with apply=true after reviewing the target files.
+```
 
-- `steps`: a suggested task sequence;
-- `skills`: skills worth loading for the acting agent;
-- `tools`: optional workflow tools;
-- `roles`: optional subagent roles;
-- `qualityChecks`: checks to consider before making completion claims;
-- `riskNotes`: risks and host-permission boundaries to keep visible;
-- `mode: "advisory"` and `autoContinue: false`.
+The sync preserves unrelated `AGENTS.md` and `WATCHDOG.yml` content. A new OMP session is required because main and Advisor system context is constructed at session start.
 
-Route constraints describe the user's requested scope. They are not plugin-generated authorization tokens. A wrong route can therefore produce a poor recommendation, but it cannot return `block: true`, stop an edit, or force another model turn.
+## Autonomous workflow orchestration
 
-The runtime behavior is deliberately small:
+After installing `omp-enhancer-core`, describe the task naturally. Core injects:
 
-1. `before_agent_start` injects route and workflow guidance.
-2. `tool_call` may attach advisory skill and role context to delegated tasks; it never refuses the call.
-3. `tool_result` records optional skill and task diagnostics.
-4. `session_stop` persists advisory state and always allows the session to finish. Core does not register generated-output loop control.
+- the complete composable workflow catalog;
+- the complete model-visible skill inventory, including descriptions when the host exposes them;
+- safe task facts such as operation, targets, target-text language, explicit user constraints, and risk observations;
+- a TODO-first orchestration protocol and the native `task` assignment contract.
 
-Missing skills or workflow tools should be reported as limitations while the agent continues with the best available method. `SKILL_USAGE`, `SUBAGENT_USAGE`, and structured QA blocks are optional diagnostic summaries, not completion permits.
+The main agent, not Core, selects or composes workflows and skills. The normal runtime route is `agent-selected`; its `skills`, `tools`, and `roles` arrays are empty. The legacy router and classifier remain available only through explicit diagnostic tools for compatibility.
+
+For non-trivial work, the injected protocol asks the main agent to:
+
+1. choose one or more workflows from the catalog;
+2. inspect the active inventory and load the smallest matching skills before their steps;
+3. initialize OMP's native `todo` before substantive work and map every workflow step and user requirement;
+4. fork multiple useful independent workstreams with native `task`, preferably in one batch;
+5. give each child its exact workflow, step, TODO item, selected skills, scope, and acceptance criteria;
+6. update TODO items as they finish, integrate child results, verify, and deliver one final response.
+
+This is prompt guidance rather than a gate. Missing skills, `todo`, or `task` are reported as limitations while the agent continues with the best available method. Core never returns `block: true`, never returns `continue: true`, and never preloads a route-selected skill bundle.
 
 `autoContinue: false` describes Core's own lifecycle behavior; it does not disable or rewrite the host's autolearn settings. When the host emits an `autolearn-nudge` capture turn, Core does not route it as a new user task, inject another workflow, or schedule a follow-up. Host-owned `autolearn.enabled` and `autolearn.autoContinue` therefore remain available while Core itself never returns `continue: true`.
 
-## Planning routes
-
-Implementation and test-planning requests use the public `planning` intent and the compatibility workflow name `code.plan`. This keeps planning distinct from `code.dev`: the route suggests inspecting the relevant implementation and test context, defining scope and invariants, and returning an actionable verification strategy without implying that files should be edited or tests should be run.
-
-The primary planning skills are `brainstorming` and `writing-plans`. A test-focused plan may also suggest `ai-regression-testing`, even when the requested scope explicitly excludes test execution. All three are workflow guidance, not prerequisites for answering and not execution permissions.
-
 ## Skill use diagnostics
 
-Workflow guidance asks the agent to read exactly the smallest directly applicable primary skill once. Resolution priority is an exact project-specified skill, then the exact routed URI, then one inventory-confirmed equivalent. A failed resolution gets at most one evidence-based correction; the agent then continues with the available method instead of retrying unchanged calls.
+The workflow catalog lists skill candidates rather than fixed prerequisites. The main agent checks the actual active inventory and chooses the smallest set needed for the selected steps. A failed resolution gets at most one evidence-based correction; the agent then continues instead of retrying unchanged calls.
 
 Core records two different signals:
 
@@ -82,17 +83,17 @@ The workflow status and advisory coverage review expose both sets. Claims withou
 Writing intent and writing language are separate decisions:
 
 - The instruction identifies the operation, such as polish, revise, translate, or draft.
-- The text being modified determines whether Chinese or English writing skills are suggested.
+- The text being modified determines whether the main agent selects Chinese or English writing skills.
 - `writingSourceTargets` records the concrete document paths whose body text determines that language; text from those files is never treated as task instructions.
 - An explicit translation or output language takes precedence because it determines the language of the result.
 - Chinese instructions with English source text select English writing resources.
 - English instructions with Chinese source text select Chinese writing resources.
 - The pure parser treats a path-only request such as `polish tex/abstract.tex` as `writing.pending`; it never guesses from the instruction language.
-- During `before_agent_start`, core safely reads an existing regular target file inside the workspace and refines the route from its body before injecting guidance. Unavailable, oversized, binary, escaping, or mixed-language targets remain pending.
+- During `before_agent_start`, Core may safely read an existing regular target file inside the workspace and expose its body language as a task fact. It does not select a route or preload a skill. Unavailable, oversized, binary, escaping, or mixed-language targets remain pending.
 - A model or external caller can also pass the observed body to `omp_core_route_task` as `sourceText` to obtain the same language-specific recommendations.
 - Mixed-language content stays mixed and should be handled per section or target instead of forcing one global language skill.
 
-Task kind and file format are also kept separate. English review selects `writing-review`, English polish selects `writing-markdown-helper`, Chinese review selects `plain-chinese-writing` plus `zh-writing-review`, and Chinese polish selects `plain-chinese-writing` plus `zh-writing-polish`. A `.tex` or Markdown review/polish may use the corresponding document workflow, but it does not load `format-markdown2latex`, `format-latex2markdown`, or `format-template-latex`. Those converter skills are suggested only for an explicit conversion task; Word review may still use `docx` for document access.
+Task kind, prose language, and file format are separate. For example, the main agent may compose `writing.en + writing.latex`, or `writing.zh + writing.markdown`. Format workflows do not choose the language. Converter skills are candidates only for matching conversion steps, and Word access may use `docx`.
 
 Source text is treated as data. Words such as `run tests`, `publish`, or `delete` inside the document cannot change the task operation, permissions, or risk route.
 
@@ -110,7 +111,7 @@ modelRoles:
   tiny: opencode-go/deepseek-v4-flash:medium
 ```
 
-Invalid or unavailable classifier output falls back to deterministic routing. Classifier output cannot grant host permissions, remove user constraints, block tools, or trigger a repair loop. For writing tasks, prompt-language classifier hints do not override the observed source-text language.
+Classifier output is a compatibility diagnostic. It cannot select the main runtime workflow, grant host permissions, remove user constraints, block tools, or trigger a repair loop. For writing diagnostics, prompt-language hints do not override observed source-text language.
 
 ## Quality tools
 
@@ -193,7 +194,7 @@ The key runtime regressions are:
 - no registered plugin hook returns `block: true`;
 - no registered plugin hook returns `continue: true`;
 - old persisted gate/terminal state cannot revive a block;
-- route guidance still selects useful skills, tools, roles, and workflow steps;
+- the main runtime exposes the full catalog and inventory while leaving skills, tools, roles, and workflow composition agent-selected;
 - writing language follows source text, not instruction language.
 
 ### Installed DeepSeek workflow E2E
@@ -218,7 +219,7 @@ Run the full installed-runtime matrix with its configured repetitions:
 npm run e2e:deepseek
 ```
 
-The matrix covers English and Chinese review/polish with cross-language instructions, local fact checking, code planning/diagnosis/audit behavior, host autolearn capture, and semantic-preservation edits. It distinguishes successful skill reads from model claims, checks for duplicate failed calls and plugin-triggered continuation, snapshots editable fixtures, and verifies that autolearn settings remain stable. Raw events and the aggregate `report.json` are written below `.omp/e2e-results/<run-id>/` and are gitignored.
+The matrix covers English and Chinese review/polish with cross-language instructions, local fact checking, code planning/diagnosis/audit behavior, host autolearn capture, and semantic-preservation edits. Its event summarizer can verify native TODO initialization and completion, TODO-before-work ordering, task batch size, and workflow/step/TODO/skill metadata within the first 120 characters of each child assignment. It also distinguishes successful skill reads from claims, checks for duplicate failed calls and plugin-triggered continuation, snapshots editable fixtures, and verifies that autolearn settings remain stable. Raw events and the aggregate `report.json` are written below `.omp/e2e-results/<run-id>/` and are gitignored.
 
 The autolearn scenario uses OMP RPC mode so the runner can keep the host process alive until the hidden capture turn actually finishes. Ordinary print mode may dispose the process after the primary result and abort the asynchronously scheduled capture. The evaluator rejects aborted assistant messages, process signals, and hard timeouts instead of counting those runs as successful.
 
@@ -244,3 +245,5 @@ The marketplace tracks GitHub `main` by default. Use `--pin-ref` only for an int
 The implementation plan for the advisory-only redesign is in [`docs/superpowers/plans/2026-07-12-advisory-only-workflow-refactor.md`](docs/superpowers/plans/2026-07-12-advisory-only-workflow-refactor.md).
 
 The DeepSeek workflow-compliance hardening plan is in [`docs/superpowers/plans/2026-07-12-deepseek-workflow-compliance-hardening.md`](docs/superpowers/plans/2026-07-12-deepseek-workflow-compliance-hardening.md).
+
+The main-agent workflow orchestration redesign is in [`docs/superpowers/plans/2026-07-13-main-agent-workflow-orchestration-redesign.md`](docs/superpowers/plans/2026-07-13-main-agent-workflow-orchestration-redesign.md).

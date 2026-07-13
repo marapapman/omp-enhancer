@@ -126,6 +126,30 @@
       }
     },
     {
+      "id": "code-audit-todo-multifork",
+      "category": "orchestration",
+      "cwd": "/home/dingli/frugal-pi",
+      "timeoutSeconds": 240,
+      "repeat": 1,
+      "prompt": "只读审计 extensions/agent-fleet 的任务路由、失败收敛和测试覆盖。先从共享工作流目录选择并组合 workflow，检查当前技能目录并加载 exact project debugging skill；在任何项目读取前用原生 todo 建立完整计划。把至少两个独立审计面放进一次 task tasks[] 批量 fork，每个子任务前120字符写明 workflow、step、todo、skills。主 agent 负责汇总、逐项完成 todo 并给出文件证据；不修改文件、不运行测试、不联网。",
+      "tools": ["todo", "task", "read", "grep", "glob"],
+      "expectations": {
+        "requiredSkills": ["superpowers-debugging"],
+        "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing", "omp-gate-satisfaction", "omp-gate-unblock"],
+        "maxSourceSearchCalls": 16,
+        "requireNativeTodoInit": true,
+        "minNativeTodoItems": 4,
+        "minNativeTodoCompletionTransitions": 3,
+        "requireNativeTodoCompletion": true,
+        "requireNativeTodoInitBeforeSubstantiveTool": true,
+        "minNativeTaskCalls": 1,
+        "minNativeTaskForks": 2,
+        "minNativeTaskBatchCalls": 1,
+        "requireNativeTaskBatch": true,
+        "requireNativeTaskMetadataPrefix": true
+      }
+    },
+    {
       "id": "autolearn-five-reads",
       "category": "autolearn",
       "fixture": "autolearn-five-files",
@@ -171,25 +195,20 @@
       "category": "writing-edit",
       "fixture": "semantic-edit-en-introduction",
       "repeat": 3,
-      "prompt": "先使用宿主已提供的最小适用英文写作 skill，再保守润色 tex/introduction.tex。只删除第一段中重复的第二个 lower；除此之外逐字保留文件内容，包括所有 LaTeX 命令、标签、限定词、模态、否定、百分比和引用。按 read、edit、read 的顺序各执行一次；不要主动重新读取宿主已提供的 skill，不联网，最后简要报告。",
-      "tools": ["read", "edit"],
+      "prompt": "先从共享工作流目录选择 writing.en + writing.latex，并在任何项目读取前用原生 todo 建立计划；从当前技能目录加载最小适用英文写作 skill。然后保守润色 tex/introduction.tex，只删除第一段中重复的第二个 lower；除此之外逐字保留文件内容，包括所有 LaTeX 命令、标签、限定词、模态、否定、百分比和引用。修改后复读一次，逐项完成 todo，不联网，最后简要报告。",
+      "tools": ["todo", "read", "edit"],
       "expectations": {
         "requiredSkills": ["writing-review"],
-        "requiredProvidedSkills": [
-          {
-            "name": "writing-review",
-            "source": "autoload",
-            "eventSource": "live",
-            "beforeFirstProjectTool": true
-          }
-        ],
-        "expectedProvisionMode": "native",
-        "maxSkillReadAttempts": 0,
+        "maxSkillReadAttempts": 1,
         "maxDuplicateSkillReadAttempts": 0,
-        "expectedToolSequence": ["read", "edit", "read"],
         "requireSuccessfulToolCalls": true,
-        "maxToolCalls": 3,
+        "maxToolCalls": 10,
         "maxSourceSearchCalls": 2,
+        "requireNativeTodoInit": true,
+        "minNativeTodoItems": 3,
+        "minNativeTodoCompletionTransitions": 2,
+        "requireNativeTodoCompletion": true,
+        "requireNativeTodoInitBeforeSubstantiveTool": true,
         "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing", "zh-writing-polish", "format-markdown2latex", "format-latex2markdown", "format-template-latex"]
       },
       "fixtureExpectations": {

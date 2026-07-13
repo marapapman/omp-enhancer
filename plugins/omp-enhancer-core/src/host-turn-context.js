@@ -1,4 +1,5 @@
 const AUTOLEARN_CUSTOM_TYPE = 'autolearn-nudge';
+const ADVISOR_CUSTOM_TYPE = 'advisor';
 const AUTOLEARN_PROTOCOL_MARKERS = [
   'Automated capture turn — not a user reply.',
   'The user has not yet responded to your previous turn.',
@@ -15,6 +16,9 @@ export function classifyHostTurn(event = {}, ctx = {}) {
   if (isTrustedAutolearnMetadata(direct)) {
     return { kind: 'autolearn-capture', source: 'event' };
   }
+  if (isTrustedAdvisorMetadata(direct)) {
+    return { kind: 'advisor', source: 'event' };
+  }
 
   const branch = safeBranch(ctx);
   const matchingEntries = branch
@@ -23,6 +27,9 @@ export function classifyHostTurn(event = {}, ctx = {}) {
   const currentMatchingEntry = matchingEntries.at(-1);
   if (isTrustedAutolearnMetadata(currentMatchingEntry)) {
     return { kind: 'autolearn-capture', source: 'branch' };
+  }
+  if (isTrustedAdvisorMetadata(currentMatchingEntry)) {
+    return { kind: 'advisor', source: 'branch' };
   }
 
   // A matching branch entry means host metadata is available. Do not let a
@@ -64,6 +71,13 @@ function branchMessageMetadata(entry = {}) {
 function isTrustedAutolearnMetadata(value = {}) {
   if (value?.customType !== AUTOLEARN_CUSTOM_TYPE) return false;
   if (value.display !== undefined && value.display !== false) return false;
+  if (value.attribution !== undefined && value.attribution !== 'user') return false;
+  if (value.type !== undefined && value.type !== 'custom_message') return false;
+  return true;
+}
+
+function isTrustedAdvisorMetadata(value = {}) {
+  if (value?.customType !== ADVISOR_CUSTOM_TYPE) return false;
   if (value.attribution !== undefined && value.attribution !== 'user') return false;
   if (value.type !== undefined && value.type !== 'custom_message') return false;
   return true;

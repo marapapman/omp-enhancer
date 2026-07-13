@@ -103,6 +103,7 @@ function createRegistrationHarness() {
     zod: {
       z: {
         string: () => ({ optional: () => ({ type: 'optional-string' }) }),
+        boolean: () => ({ optional: () => ({ type: 'optional-boolean' }) }),
         optional: (schema) => ({ type: 'optional', schema }),
         object: (shape) => ({ type: 'object', shape }),
       },
@@ -203,13 +204,13 @@ test('packaged config template keeps DeepSeek Flash as default and GLM as adviso
   assert.doesNotMatch(template, /task:\s*opencode-go\/deepseek/);
 });
 
-test('packaged advisor guidance recognizes native skills and converges before one final', async () => {
+test('packaged advisor guidance audits autonomous workflow selection and converges before one final', async () => {
   const watchdog = await readFile(path.join(packageRoot(), 'assets', 'WATCHDOG.yml'), 'utf8');
 
-  assert.match(watchdog, /hidden `skill-prompt`/);
-  assert.match(watchdog, /Skill: <path>/);
-  assert.match(watchdog, /Routed workflow skills already loaded/);
-  assert.match(watchdog, /Do not advise a skill read or `omp_core_route_task`/);
+  assert.match(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
+  assert.match(watchdog, /selected workflow, TODO coverage, skill use, and delegation/);
+  assert.match(watchdog, /multiple subagents/);
+  assert.match(watchdog, /Do not ask for `omp_core_route_task`/);
   assert.match(watchdog, /Once the main agent has emitted a complete final response, do not call `advise`/);
   assert.match(watchdog, /at most one `advise` call for a primary task/);
   assert.match(watchdog, /judge the concrete candidate rather than freezing the whole task/);
@@ -359,6 +360,7 @@ test('index registers doctor assets and plan tools safely', async () => {
     zod: {
       z: {
         string: () => ({ optional: () => ({ type: 'optional-string' }) }),
+        boolean: () => ({ optional: () => ({ type: 'optional-boolean' }) }),
         optional: (schema) => ({ type: 'optional', schema }),
         object: (shape) => ({ type: 'object', shape }),
       },
@@ -376,6 +378,7 @@ test('index registers doctor assets and plan tools safely', async () => {
   assert.equal(pi.label, 'OMP Config');
   assert.deepEqual(registered.map((tool) => tool.name), [
     'omp_config_doctor',
+    'omp_config_sync_workflow_context',
     'omp_config_assets',
     'omp_config_plan',
   ]);
