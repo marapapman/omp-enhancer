@@ -186,6 +186,15 @@ test('LaTeX polish and explicit conversions receive only task-appropriate writin
   assert.ok(markdownPolish.routePlan.skills.includes('writing-markdown-helper'));
   assert.ok(!markdownPolish.routePlan.skills.includes('writing-review'));
 
+  const constrainedIntroduction = routeNaturalLanguageTask({
+    prompt: '先使用宿主已提供的最小适用英文写作 skill，再保守润色 tex/introduction.tex。只删除重复的第二个 lower；除此之外逐字保留文件内容，包括所有 LaTeX 命令、标签、限定词、模态、否定、百分比和引用。按 read、edit、read 的顺序各执行一次；不要主动重新读取宿主已提供的 skill，不联网。',
+    sourceText: '\\section{Introduction}\nThis paragraph has a lower lower failure rate.',
+    routerMode: 'enforce',
+  });
+  assert.equal(constrainedIntroduction.intent, 'writing.en');
+  assert.equal(constrainedIntroduction.workflowRoute, 'writing.latex');
+  assert.deepEqual(constrainedIntroduction.routePlan.skills, ['writing-review']);
+
   const toLatex = routeNaturalLanguageTask({
     prompt: 'Convert notes.md to LaTeX.',
     routerMode: 'observe',

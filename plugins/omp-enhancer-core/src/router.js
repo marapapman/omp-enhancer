@@ -240,7 +240,9 @@ export function routeNaturalLanguageTask(input = {}) {
   const authorityBearingTargetNeutralized = writingTargetAuthorityNeutralized(directivePrompt, operationalPrompt);
   const policyOwnsWorkflow = ['fact-check', 'planning', 'bug-audit', 'diagnosis', 'security-review', 'config-assets']
     .includes(policy.intent);
-  const compatibleSpecializedWorkflow = isSpecializedDocumentRoute(legacyRoute) && !policyOwnsWorkflow
+  const compatibleSpecializedWorkflow = isSpecializedDocumentRoute(legacyRoute)
+    && !policyOwnsWorkflow
+    && descriptorSupportsSpecializedWorkflow(legacyRoute.workflowRoute, described, prompt)
     ? legacyRoute.workflowRoute
     : policy.workflowRoute;
   const preserveSpecializedLegacyRoute = isSpecializedDocumentRoute(legacyRoute)
@@ -377,6 +379,29 @@ function stripSpecializedRouteConstraints(value = '') {
 function isSpecializedDocumentRoute(route = {}) {
   return ['writing.latex', 'writing.markdown', 'doc.convert.word', 'design.visual']
     .includes(route.workflowRoute);
+}
+
+function descriptorSupportsSpecializedWorkflow(workflowRoute = '', descriptor = {}, prompt = '') {
+  const targets = descriptor.writingSourceTargets?.length
+    ? descriptor.writingSourceTargets
+    : descriptor.workspaceWriteTargets ?? [];
+  if (workflowRoute === 'writing.latex') {
+    return targets.some((target) => /\.tex$/i.test(target))
+      || ['markdown-to-latex', 'latex-to-markdown', 'latex-template'].includes(descriptor.writingConversion)
+      || /\b(?:in|as|using)\s+(?:latex|tex)\b|(?:使用|采用|以)\s*(?:latex|tex)\s*(?:格式)?/i.test(prompt);
+  }
+  if (workflowRoute === 'writing.markdown') {
+    return targets.some((target) => /\.(?:md|mdx|rst)$/i.test(target))
+      || ['latex-to-markdown', 'markdown-to-latex'].includes(descriptor.writingConversion)
+      || /\b(?:in|as|using)\s+(?:markdown|md)\b|(?:使用|采用|以)\s*(?:markdown|md)\s*(?:格式)?/i.test(prompt);
+  }
+  if (workflowRoute === 'doc.convert.word') {
+    return targets.some((target) => /\.docx?$/i.test(target))
+      || descriptor.writingConversion === 'word'
+      || /\b(?:in|as|using|create|generate)\s+(?:a\s+)?(?:word\s+document|docx)\b|(?:使用|采用|以|生成|创建)\s*(?:word\s*文档|docx)\s*(?:格式)?/i.test(prompt);
+  }
+  if (workflowRoute === 'design.visual') return descriptor.domains?.includes('visual');
+  return false;
 }
 
 function isCanonicalFocusedSafeWritingProjection(descriptor) {
