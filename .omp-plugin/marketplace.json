@@ -13,7 +13,7 @@
     {
       "name": "omp-config",
       "description": "Pluginized shared main/Advisor workflow context, configuration assets, agents, skills, hooks, templates, and diagnostics.",
-      "version": "0.1.25",
+      "version": "0.1.26",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -369,7 +369,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "Advisory main-agent workflow catalog, TODO orchestration, active skill discovery, and parent-selected subagent step context.",
-      "version": "0.1.118",
+      "version": "0.1.119",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",

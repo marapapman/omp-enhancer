@@ -19,12 +19,13 @@ export function buildGovernancePromptFragment({
     '',
     '### Required planning sequence for non-trivial work',
     '',
-    '1. Read the user goal and applicable project instructions, then choose or compose the matching workflows from the full catalog below. The legacy route object is diagnostic only and must not make this decision for you.',
-    '2. Inspect the current model-visible skill inventory in this prompt. Select the smallest skill set that directly supports the chosen workflow steps and load each selected skill before the step that uses it. Do not assume a remembered name exists.',
-    '3. Before substantive project work, initialize OMP\'s native `todo` tool with `op: "init"`. Put the selected workflow IDs in phase names, record selected skills in the first item, and map every workflow step and every user requirement to its own stable TODO item.',
-    '4. Execute TODO items in order and call `todo` with `op: "done"` immediately after each item finishes. Use the exact TODO content string; never invent task IDs. New user instructions must be added to the TODO before continuing.',
-    '5. Before doing all work yourself, identify independent workstreams. When two or more useful workstreams are independent, fork multiple subagents early with the native `task` tool, preferably in one `tasks[]` batch when that schema is available. A focused single-step task, an explicit no-subagent request, or a truly dependent sequence is an exception.',
-    '6. Keep integration, conflict resolution, final verification, and the user-visible answer with the main agent. Reconcile every open TODO and every child result before finishing.',
+    '1. From the user goal and already injected project instructions, choose or compose the matching workflows from the full catalog below. The legacy route object is diagnostic only and must not make this decision for you.',
+    '2. Inspect the current model-visible skill inventory in this prompt and select the smallest skill set that directly supports the chosen workflow steps. Do not assume a remembered name exists.',
+    '3. For non-trivial work, the FIRST tool call must initialize OMP\'s native `todo` tool with `op: "init"`; do not call `read`, `glob`, `grep`, `edit`, or another project tool first. Put the selected workflow IDs in phase names, record selected skills in the first item, and map every workflow step and every user requirement to its own stable TODO item.',
+    '4. After TODO initialization and before any project read, load each selected installed skill with the `read` tool using the exact path `skill://<skill-name>`. A native `skill-prompt` body already present in context also counts as loaded. `manage_skill`, `learn`, memory, and a sentence claiming a skill was loaded do NOT load an installed skill.',
+    '5. Execute TODO items in order and call `todo` with `op: "done"` immediately after each item finishes. Use the exact TODO content string; never invent task IDs. New user instructions must be added to the TODO before continuing.',
+    '6. Before doing all work yourself, identify independent workstreams. When two or more useful workstreams are independent, fork multiple subagents early with the native `task` tool, preferably in one `tasks[]` batch when that schema is available. A focused single-step task, an explicit no-subagent request, or a truly dependent sequence is an exception.',
+    '7. Keep integration, conflict resolution, final verification, and the user-visible answer with the main agent. Reconcile every open TODO and every child result before finishing.',
     '',
     'Every child task must begin with a compact prefix inside its first 120 characters:',
     '`[workflow=<ids> step=<step-id> todo=<exact-item> skills=<comma-separated-skill-names>]`',
@@ -71,8 +72,9 @@ export function buildImmediateWorkflowMessage({
 } = {}) {
   return [
     'OMP autonomous workflow reminder:',
-    'Choose or compose workflows from the full catalog, inspect the active skill inventory, and initialize the native `todo` before substantive work.',
-    'Load the smallest selected skills before their steps. Fork multiple independent workstreams with `task`; begin every child task with the exact `[workflow=... step=... todo=... skills=...]` prefix.',
+    'For non-trivial work, choose workflows and skills from the injected catalog, initialize the native `todo` before substantive work, and make `todo` with `op: "init"` the FIRST tool call.',
+    'Next load each selected skill with `read` path `skill://<exact-name>` before project reads; never use `manage_skill` or a verbal claim as loading evidence.',
+    'Fork multiple independent workstreams with `task`; begin every child task with the exact `[workflow=... step=... todo=... skills=...]` prefix.',
     'This is advisory only. If a mechanism is unavailable, continue without blocking or automatic continuation.',
   ].join('\n');
 }
