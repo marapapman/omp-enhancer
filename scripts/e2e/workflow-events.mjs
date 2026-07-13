@@ -247,6 +247,11 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   for (const skill of expectations.requiredSkills ?? []) {
     if (!hasEquivalentSkill(observed, skill)) failures.push(`required skill was not observed or provided: ${skill}`);
   }
+  if (Array.isArray(expectations.requiredAnySkills)
+    && expectations.requiredAnySkills.length > 0
+    && !expectations.requiredAnySkills.some((skill) => hasEquivalentSkill(observed, skill))) {
+    failures.push(`none of the acceptable skills were observed or provided: ${expectations.requiredAnySkills.join(', ')}`);
+  }
   for (const skill of expectations.forbiddenSkills ?? []) {
     if (hasEquivalentSkill(observed, skill)) failures.push(`forbidden skill was observed or provided: ${skill}`);
   }

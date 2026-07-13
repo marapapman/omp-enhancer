@@ -135,6 +135,17 @@ test('installed workflow summary distinguishes observed skill reads from claims'
   });
   assert.equal(evaluation.pass, false);
   assert.match(evaluation.failures.join('\n'), /writing-checkers/);
+
+  assert.equal(evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredAnySkills: ['writing-review', 'polish-acm-latex-prose'],
+  }).pass, true);
+  const missingAny = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredAnySkills: ['plain-chinese-writing', 'zh-writing-review'],
+  });
+  assert.equal(missingAny.pass, false);
+  assert.match(missingAny.failures.join('\n'), /none of the acceptable skills/);
 });
 
 test('native skill prompts count as host-provided skill evidence without a model read', () => {
@@ -640,7 +651,8 @@ test('English Introduction fixture requires the unique conservative edit exactly
   ));
   const scenario = matrix.scenarios.find(({ id }) => id === 'semantic-edit-en-introduction-skill-first');
   assert.ok(scenario);
-  assert.deepEqual(scenario.expectations.requiredSkills, ['writing-review']);
+  assert.deepEqual(scenario.expectations.requiredSkills, []);
+  assert.deepEqual(scenario.expectations.requiredAnySkills, ['writing-review', 'polish-acm-latex-prose']);
   assert.deepEqual(scenario.tools, ['todo', 'read', 'edit']);
   assert.equal(scenario.expectations.maxSkillReadAttempts, 1);
   assert.equal(scenario.expectations.requireNativeTodoInit, true);
