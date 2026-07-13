@@ -14,6 +14,13 @@ import {
   CATALOG_BLOCK_START,
   mergeWatchdogManagedBlock,
 } from '../src/workflow-context-sync.js';
+import { loadWorkflowContextAssets } from '../src/workflow-context-assets.js';
+import * as managedBlocks from '../src/workflow-managed-blocks.js';
+import {
+  applyWorkflowContextChanges,
+  readWorkflowContextTargetFiles,
+  resolveWorkflowContextTarget,
+} from '../src/workflow-target-files.js';
 
 function packageRoot() {
   return path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -37,6 +44,78 @@ function registrationHarness() {
   registerOmpConfig(pi);
   return tools;
 }
+
+test('workflow context facade preserves the managed-block API after modularization', async () => {
+  const facade = await import('../src/workflow-context-sync.js');
+
+  for (const name of [
+    'ADVISOR_BLOCK_END',
+    'ADVISOR_BLOCK_START',
+    'AGENTS_BLOCK_END',
+    'AGENTS_BLOCK_START',
+    'CATALOG_BLOCK_END',
+    'CATALOG_BLOCK_START',
+    'mergeManagedCatalog',
+    'mergeMarkdownManagedBlock',
+    'mergeWatchdogManagedBlock',
+  ]) {
+    assert.equal(facade[name], managedBlocks[name], name);
+  }
+});
+
+test('workflow context asset loader reads packaged files and extracts pure managed blocks', async () => {
+  const assets = await loadWorkflowContextAssets(packageRoot());
+
+  assert.match(assets.catalog, new RegExp(CATALOG_BLOCK_START));
+  assert.match(assets.agentsManagedBlock, new RegExp(`^${AGENTS_BLOCK_START}`));
+  assert.match(assets.agentsManagedBlock, new RegExp(`${AGENTS_BLOCK_END}$`));
+  assert.match(assets.advisorManagedBlock, new RegExp(`^${ADVISOR_BLOCK_START}`));
+  assert.match(assets.advisorManagedBlock, new RegExp(`${ADVISOR_BLOCK_END}$`));
+  assert.match(assets.watchdogAsset, /^instructions: \|$/m);
+});
+
+test('workflow context asset loader preserves malformed managed-block errors', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'omp-config-context-assets-'));
+  const assetsDir = path.join(root, 'assets');
+  await mkdir(assetsDir);
+  await Promise.all([
+    writeFile(path.join(assetsDir, 'WORKFLOW_CATALOG.md'), 'catalog\n'),
+    writeFile(path.join(assetsDir, 'AGENTS.md'), 'missing managed markers\n'),
+    writeFile(
+      path.join(assetsDir, 'WATCHDOG.yml'),
+      `instructions: |\n  ${ADVISOR_BLOCK_START}\n  managed\n  ${ADVISOR_BLOCK_END}\n`,
+    ),
+  ]);
+
+  await assert.rejects(
+    loadWorkflowContextAssets(root),
+    new RegExp(`Packaged asset has an invalid managed block: ${AGENTS_BLOCK_START}`),
+  );
+});
+
+test('workflow target file module preserves WATCHDOG.yaml fallback and changed-only writes', async () => {
+  const target = await mkdtemp(path.join(tmpdir(), 'omp-config-target-files-'));
+  const yamlPath = path.join(target, 'WATCHDOG.yaml');
+  const unchangedPath = path.join(target, 'AGENTS.md');
+  const createdPath = path.join(target, 'created.md');
+  await writeFile(yamlPath, 'instructions: |\n  Existing\n');
+  await writeFile(unchangedPath, 'keep\n');
+
+  const targetDir = await resolveWorkflowContextTarget(target);
+  const files = await readWorkflowContextTargetFiles(targetDir);
+
+  assert.equal(files.watchdogPath, yamlPath);
+  assert.equal(files.existingWatchdog, 'instructions: |\n  Existing\n');
+  assert.equal(files.existingAgents, 'keep\n');
+  assert.equal(files.existingCatalog, null);
+
+  await applyWorkflowContextChanges(targetDir, [
+    { path: unchangedPath, changed: false, content: 'replace\n' },
+    { path: createdPath, changed: true, content: 'created\n' },
+  ]);
+  assert.equal(await readFile(unchangedPath, 'utf8'), 'keep\n');
+  assert.equal(await readFile(createdPath, 'utf8'), 'created\n');
+});
 
 test('shared main and Advisor assets import one complete advisory workflow catalog', async () => {
   const assets = path.join(packageRoot(), 'assets');
@@ -80,20 +159,23 @@ test('shared main and Advisor assets import one complete advisory workflow catal
   assert.match(catalog, /preferably in one `task\.tasks\[\]` batch/);
   assert.match(catalog, /body of the text being modified, never from the prompt language/);
   assert.match(catalog, /guidance, not a router, permission system, completion gate, or continuation controller/);
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 9/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 10/);
   assert.match(catalog, /`zh-writer` owns the requested Chinese drafting or prose revision.+`zh-checker` independently reviews/i);
   assert.match(catalog, /`writer` owns the requested English drafting or prose revision.+`checker` independently reviews/i);
-  assert.match(catalog, /before the body language is observed, do not delegate to `writer`, `checker`, `zh-writer`, or `zh-checker`/i);
-  assert.match(catalog, /`test-planner` produces the target-to-behavior and evidence plan.+`test-executor` owns bounded test and fixture changes.+`test-reviewer` independently audits/i);
+  assert.match(catalog, /before the body language is observed, do not delegate to writer, checker, zh-writer, or zh-checker/i);
+  assert.match(catalog, /`test-planner` produces the target-to-behavior and evidence plan/i);
+  assert.match(catalog, /`test-executor` owns bounded test and fixture changes/i);
+  assert.match(catalog, /`test-reviewer` independently audits the plan/i);
+  assert.doesNotMatch(catalog, /evidence `plan`|verification `plan`/i);
   assert.match(catalog, /### `research\.web`[\s\S]*live web search[\s\S]*`factcheck\.document`/i);
   assert.match(catalog, /Absolute correctness cannot be guaranteed/i);
   assert.match(catalog, /`fact-researcher-a` and `fact-researcher-b` search independent source lanes/i);
   assert.match(catalog, /staleness as a temporal-validity finding rather than a verdict/i);
   assert.match(catalog, /fixed source count and a blanket recency window are not completion targets/i);
   assert.match(catalog, /`fact-cross-checker` classifies agreement, conflicts, temporal-staleness findings, and insufficient evidence without inventing resolution/i);
-  assert.match(catalog, /`designer` owns the final slide layout.+`visioner` independently reviews the latest rendered pages/i);
+  assert.match(catalog, /`designer` owns the final layout pass.+`visioner` independently reviews the latest rendered pages/i);
   assert.match(catalog, /Do not widen scope to unrelated pre-existing layout defects/i);
-  assert.match(catalog, /`designer` creates and revises the SVG; `visioner` reviews each fresh raster/i);
+  assert.match(catalog, /`designer` creates the SVG and owns every source revision.+`visioner` independently reviews the fresh full-size and 60% raster renders/i);
   assert.match(catalog, new RegExp(CATALOG_BLOCK_START));
   assert.match(catalog, new RegExp(CATALOG_BLOCK_END));
   assert.match(agents, /^@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md$/m);

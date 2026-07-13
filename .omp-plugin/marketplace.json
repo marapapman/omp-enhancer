@@ -13,7 +13,7 @@
     {
       "name": "omp-config",
       "description": "Pluginized shared main/Advisor workflow context, configuration assets, agents, skills, hooks, templates, and diagnostics.",
-      "version": "0.1.29",
+      "version": "0.1.30",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -349,7 +349,7 @@
     {
       "name": "omp-testing-enhancer",
       "description": "Plan, execute, and independently review OMP testing work with packaged agents, target analysis, public API context, browser evidence, coverage and mutation analyzers, advisory review, and reports.",
-      "version": "0.1.14",
+      "version": "0.1.15",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -373,7 +373,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "Advisory main-agent workflow catalog, TODO orchestration, active skill discovery, and parent-selected subagent step context.",
-      "version": "0.1.122",
+      "version": "0.1.123",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",

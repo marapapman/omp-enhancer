@@ -20,11 +20,11 @@ Core runtime flow in `plugins/omp-enhancer-core/index.js`:
 
 1. OMP lifecycle hooks call `registerCoreEnhancer(pi)`.
 2. `src/task-descriptor.js` extracts operation, domains, user scope constraints, ordered phases, capabilities, complexity, risk notes, and writing-source language state. These are task facts, not workflow or skill decisions.
-3. `src/workflow-routes.js` defines the complete composable catalog; `src/governance.js` injects that catalog, the full active skill inventory, and the TODO-first/multi-subagent protocol.
+3. `src/workflows/definitions/*.js` defines the complete composable catalog; `src/workflows/catalog.js` validates and derives it, the two renderers expose it to Main and Advisor, and `src/governance.js` injects the Main catalog, full active skill inventory, and TODO-first/multi-subagent protocol. `src/workflow-routes.js` is a compatibility re-export facade only.
 4. Normal `before_agent_start` uses `agent-selected` runtime context with empty skills, tools, and roles. It never calls the legacy route compiler or native skill autoload.
 5. Parent-selected workflow, step, TODO item, and skills travel in native `task` assignment text. Core passes them through to the child without static role matching.
 6. `src/router.js`, `src/route-policy.js`, and `src/classifier.js` remain explicit compatibility diagnostics only; they do not control the main runtime.
-7. `omp-config/assets/WORKFLOW_CATALOG.md` is the shared main/Advisor session-start catalog. Managed `AGENTS.md` and `WATCHDOG.yml` blocks import it, and explicit config sync preserves unrelated content.
+7. `omp-config/assets/WORKFLOW_CATALOG.md` is a generated shared main/Advisor session-start catalog. Managed `AGENTS.md` and `WATCHDOG.yml` blocks import it, and explicit config sync preserves unrelated content. Change definitions or renderers, then run `npm run generate:workflows`; never hand-edit the generated asset.
 8. Runtime hooks are advisory-only: no plugin hook returns `block: true` or `continue: true`, and no plugin schedules automatic repair turns.
 9. The core does not register generated-output loop control. Repetition handling is left to the host and the acting agent.
 10. Testing Enhancer publishes optional evidence for reports but has no standalone or shared completion owner.
@@ -46,10 +46,13 @@ Common extension pattern:
   - `src/router.js`: legacy-compatible diagnostic projection and rollout selection.
   - `src/runtime-policy.js`: compatibility-only route projection switches; it has no execution-control behavior.
   - `src/governance.js`: full-catalog, TODO-first, skill-discovery, and subagent-checkpoint prompt builders.
+  - `src/workflows/`: schema, domain definitions, Main/shared renderers, catalog projections, and the legacy route adapter.
+  - `src/workflow-routes.js`: compatibility re-export facade for existing imports.
   - `src/classifier.js`: strict JSON classifier hints and monotonic merge.
   - `src/skill-usage.js`, `src/subagent-usage.js`: evidence parsers and validators.
 - `plugins/omp-test-enhancer/`: TypeScript testing enhancer.
   - `src/extension.ts`: registers `omp_test_*` tools and `/test` command.
+  - `src/host/observedTestEvidence.ts`: host-observed test command, result, and workspace-mutation evidence parsing.
   - `src/tools/testingTools.ts`: target analysis, context, coverage, mutation, gate, report logic.
   - `src/gates/`: pure advisory review evaluators retained behind compatibility tool names.
   - `tests/`: Vitest suites.
@@ -57,6 +60,7 @@ Common extension pattern:
   - `assets/`: packaged OMP config templates/assets, including the shared `WORKFLOW_CATALOG.md` imported by main and Advisor context.
   - `agents/`, `skills/`, `hooks/`: distributable config inventory.
   - `src/asset-index.js`: indexes packaged assets.
+  - `src/workflow-context-*.js`, `src/workflow-managed-blocks.js`, `src/workflow-target-files.js`: asset loading, pure managed-block merging, safe target I/O, and thin sync orchestration.
 - `plugins/writing-helper/`: writing QA plugin.
   - `src/`: deterministic writing logic/style/citation checks.
   - `agents/`, `skills/`: writing workflow agents and skills.
@@ -66,6 +70,7 @@ Common extension pattern:
   - `agents/`, `skills/`: fact-check roles and skills.
 - `scripts/`: release and package validation tooling.
 - `docs/superpowers/`: design notes and archived workflow/gate plans, mostly Chinese.
+- `docs/WORKFLOW_DEVELOPMENT.md`: current workflow definition, Agent/Skill ownership, generation, validation, release, and install-sync guide.
 - `.omp-plugin/marketplace.json`: distribution catalog and plugin metadata.
 
 ## Development Commands
@@ -74,6 +79,8 @@ Run commands from the repository root unless noted.
 
 ```bash
 npm test
+npm run generate:workflows
+npm run check:workflows
 npm run check:marketplace
 npm run pack:all
 npm run release -- --plugin all --bump patch --dry-run
@@ -144,13 +151,15 @@ Advisory runtime contracts:
 - `scripts/release.js`: version bump and catalog sync logic.
 - `scripts/check-marketplace.js`: marketplace integrity checks.
 - `scripts/pack-all.js`: dry-run package validation for all plugins.
+- `scripts/generate-workflow-catalog.js`: deterministic `--write`/`--check` renderer for the packaged shared catalog.
 - `plugins/omp-enhancer-core/index.js`: primary runtime entry point.
 - `plugins/omp-enhancer-core/src/router.js`: compatibility-only route classification rules.
-- `plugins/omp-enhancer-core/src/workflow-routes.js`: canonical runtime workflow catalog and compatibility route cards.
+- `plugins/omp-enhancer-core/src/workflows/definitions/`: canonical domain-grouped workflow definitions.
+- `plugins/omp-enhancer-core/src/workflow-routes.js`: compatibility re-export facade and route-card API.
 - `plugins/omp-enhancer-core/test/fixtures/workload-matrix.json`: routing/workflow workload fixture.
 - `plugins/omp-test-enhancer/tsconfig.json`: TS build settings.
 - `plugins/omp-test-enhancer/vitest.config.ts`: Vitest configuration.
-- `plugins/omp-config/assets/WORKFLOW_CATALOG.md`: shared main/Advisor workflow context.
+- `plugins/omp-config/assets/WORKFLOW_CATALOG.md`: generated shared main/Advisor workflow context.
 
 ## Runtime/Tooling Preferences
 

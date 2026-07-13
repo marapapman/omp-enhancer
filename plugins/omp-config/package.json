@@ -1,6 +1,6 @@
 {
   "name": "omp-config",
-  "version": "0.1.29",
+  "version": "0.1.30",
   "private": true,
   "type": "module",
   "description": "Pluginized OMP config assets, hooks, agents, skills, and diagnostics.",

@@ -228,6 +228,15 @@ test('ships every omp-config skill from the plugin skills directory', async () =
   const actualSkills = (await findSkillDirs(skillsRoot))
     .map((skillPath) => path.relative(skillsRoot, skillPath).split(path.sep).join('/'))
     .sort();
+  const marketplace = JSON.parse(await readFile(
+    path.join(packageRoot(), '..', '..', '.omp-plugin', 'marketplace.json'),
+    'utf8',
+  ));
+  const marketplaceSkills = marketplace.plugins
+    .find(({ name }) => name === 'omp-config')
+    ?.skills
+    ?.map((skillPath) => skillPath.replace(/^\.\/skills\//, ''))
+    .sort();
 
   for (const skill of expectedBundledSkills) {
     assert.ok(actualSkills.includes(skill), `${skill} should be bundled`);
@@ -236,7 +245,7 @@ test('ships every omp-config skill from the plugin skills directory', async () =
     assert.match(skillDoc, /\S/, `${skill} should ship a non-empty SKILL.md`);
   }
 
-  assert.equal(actualSkills.length, 286);
+  assert.deepEqual(actualSkills, marketplaceSkills);
   assert.ok(actualSkills.includes('ecc/accessibility'));
   assert.ok(actualSkills.includes('ecc/tdd-workflow'));
   assert.ok(actualSkills.includes('ecc/workspace-surface-audit'));

@@ -13,7 +13,6 @@ import { attachCompiledTaskRoute, compileTaskRoutePolicy } from './route-policy.
 import { resolveRouterMode } from './runtime-policy.js';
 import { subagentPlans } from './subagent-plans.js';
 
-const zhWritingTerms = ['中文', '论文', '摘要', '润色', '改写', '翻译腔', 'ai 味', '博士', '段落', '写作', '写', '报告', '文档', '起草', '引言', '相关工作', '审稿'];
 const strongZhWritingTerms = [
   '中文',
   '论文',
@@ -42,8 +41,6 @@ const strongZhWritingTerms = [
 const enWritingActionTerms = ['draft', 'write', 'revise', 'polish', 'edit', 'improve', 'proofread', 'copyedit', 'summarize', 'summarise', 'condense'];
 const enWritingObjectTerms = ['paper', 'report', 'bug report', 'manuscript', 'abstract', 'related work', 'paragraph', 'sentence', 'wording', 'grammar', 'release notes', 'changelog', 'commit message', 'letter', 'email', 'proposal', 'summary', 'guide', 'manual', 'section', 'policy', 'memo', 'announcement', 'troubleshooting guide'];
 const testingTerms = ['tests', 'testing', 'unit test', 'coverage', 'mutation', 'e2e', 'playwright', 'regression', 'flaky', 'flakiness', 'test flakiness', 'lint', 'eslint', 'prettier', 'benchmark', 'smoke', 'screenshot', '测试', '测试用例', '覆盖率', '门禁', '浏览器', '截图'];
-const codingTerms = ['implement', 'refactor', 'fix', 'bug', 'build', 'modify', 'code', 'component', 'migrate', 'migration', 'dependency', 'dependencies', '实现', '重构', '修复', '报错', '功能', '代码', '接口', '迁移', '依赖'];
-const configTerms = ['omp-config', 'config asset', 'config assets', 'asset paths', 'config templates', 'config doctor', 'assets', 'hooks', 'templates', 'modelroles', 'model roles', 'agents', 'skills', 'subagent', 'subagents', '配置资产', '配置模板', '技能清单'];
 const securityTerms = ['security', 'vulnerability', 'vulnerabilities', 'path traversal', 'path expansion', 'unsafe path', 'dangerous command', 'dangerous commands', 'command injection', 'command execution', 'auth bypass', 'xss', 'ssrf', 'injection', 'auth', 'authentication', 'authorization', 'permissions', 'privilege', 'oauth', 'owasp', 'license', 'privacy', 'high severity', '安全', '漏洞', '注入', '鉴权', '认证', '权限', '越权', '密钥', 'secret', 'secrets', '路径穿越', '危险命令', '隐私', '许可证'];
 const noCodeChangeTerms = ['不要改代码', '不改代码', '不要写代码', '不写代码', '不要写入文件', '不要写入项目', '不写入文件', '不写入项目', '不写文件', '不写脚本', '不要改实现', '不改实现', '不修实现', '不要修代码', '不修代码', '不要实现', '先不要实现', '不实现', '不要改', '不要修改代码', '不要修改文件', '不修改文件', '先不要修', '不要修复', '不要修改', '只诊断', '只分析', '只检查', '只列清单', 'do not change', 'do not modify', 'do not fix', 'do not implement', 'do not write code', 'without writing code', 'diagnosis only', 'read-only'];
 const diagnosisTerms = ['why', 'diagnose', 'diagnosis', 'investigate', 'root cause', '原因', '为什么', '诊断', '定位', '排查', '是什么导致', '是什么原因', 'warning:', 'failed', 'failure'];

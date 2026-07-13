@@ -1,6 +1,6 @@
 {
   "name": "omp-testing-enhancer",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "OMP plugin with test planning, execution, and independent review agents plus advisory testing tools and reports.",
   "type": "module",
   "main": "./dist/extension.js",

@@ -5,7 +5,6 @@ import {
   buildGovernancePromptFragment,
   buildImmediateWorkflowMessage,
   buildSubagentPromptFragment,
-  formatWorkflowBriefingForAssignment,
 } from '../src/governance.js';
 import { routeNaturalLanguageTask } from '../src/router.js';
 import {
@@ -129,12 +128,4 @@ test('subagent guidance consumes the parent-selected checkpoint instead of rerou
   assert.match(fragment, /Do not reroute the whole parent task/i);
   assert.match(fragment, /Own only this checkpoint/i);
   assert.doesNotMatch(fragment, /Status: complete\|blocked|SKILL_USAGE|SUBAGENT_RESULT/);
-});
-
-test('legacy assignment briefing is explicitly diagnostic only', () => {
-  const route = routeNaturalLanguageTask({ prompt: 'Fact-check the report.' });
-  const briefing = formatWorkflowBriefingForAssignment(route);
-  assert.match(briefing, /^Legacy diagnostic briefing:/);
-  assert.match(briefing, /parent agent must still choose the workflow, TODO item, and skills/i);
-  assert.doesNotMatch(briefing, /completion gate|BLOCKERS/);
 });

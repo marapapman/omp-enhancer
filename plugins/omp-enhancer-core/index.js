@@ -7,10 +7,11 @@ import {
   buildGovernancePromptFragment,
   buildImmediateWorkflowMessage,
   buildSubagentPromptFragment,
-  inspectionBudgetForRoute,
+  inspectionBudgetForPrompt,
 } from './src/governance.js';
 import { installPluginSkills } from './src/install-skills.js';
 import { classifyHostTurn } from './src/host-turn-context.js';
+import { withoutLegacyControlFields } from './src/legacy-fields.js';
 import { routeNaturalLanguageTask } from './src/router.js';
 import { describeNaturalLanguageTask, detectWritingSourceLanguage } from './src/task-descriptor.js';
 import {
@@ -208,7 +209,6 @@ export default function registerCoreEnhancer(pi) {
           route,
           parentTask: params.prompt ?? state.lastPrompt,
           includeModelWorkflowHints: true,
-          workspaceRoot: ctx.cwd || process.cwd(),
           availableSkills: activeSkillInventory(pi),
         })
         : 'No active route. Follow the user request directly and use available skills when useful.';
@@ -300,7 +300,6 @@ export default function registerCoreEnhancer(pi) {
         writingLanguageSource: route.taskDescriptor?.writingLanguageSource ?? null,
       },
     }));
-    const workspaceRoot = ctx.cwd || process.cwd();
     const activeSkills = activeSkillInventory(pi);
     const availableSkills = activeSkills;
     await persistState(pi, state);
@@ -308,15 +307,9 @@ export default function registerCoreEnhancer(pi) {
       route,
       parentTask: state.lastPrompt,
       includeModelWorkflowHints: false,
-      workspaceRoot,
-      skillsProvided: false,
       availableSkills,
     });
     const workflowMessage = buildImmediateWorkflowMessage({
-      route,
-      parentTask: state.lastPrompt,
-      workspaceRoot,
-      skillsProvided: false,
       availableSkills,
     });
     const message = workflowMessage
@@ -354,7 +347,7 @@ export default function registerCoreEnhancer(pi) {
     let inspectionGuidance = '';
     if (INSPECTION_TOOL_NAMES.has(name)) {
       state.inspectionCalls += 1;
-      inspectionGuidance = buildInspectionProgressGuidance(state, ctx);
+      inspectionGuidance = buildInspectionProgressGuidance(state);
     }
     await persistState(pi, state);
     return inspectionGuidance
@@ -1017,18 +1010,7 @@ function sanitizeRestoredRoute(route, prompt = '') {
 function sanitizeDiagnosticRoute(route, prompt = '') {
   if (!isRecord(route)) return null;
   if (route.intent === 'agent-selected' && route.taskDescriptor && route.routePlan?.version === 3) {
-    const {
-      hardBlock: _hardBlock,
-      hardBlockReasons: _hardBlockReasons,
-      shouldForkSubagents: _shouldForkSubagents,
-      gateMode: _gateMode,
-      skillGateMode: _skillGateMode,
-      gateRecoveryMode: _gateRecoveryMode,
-      approvalState: _approvalState,
-      actionBoundary: _actionBoundary,
-      gateController: _gateController,
-      ...agentSelectedRoute
-    } = route;
+    const agentSelectedRoute = withoutLegacyControlFields(route);
     return {
       ...agentSelectedRoute,
       intent: 'agent-selected',
@@ -1050,18 +1032,7 @@ function sanitizeDiagnosticRoute(route, prompt = '') {
     };
   }
   if (route.taskDescriptor && route.routePlan?.version === 2) {
-    const {
-      hardBlock: _hardBlock,
-      hardBlockReasons: _hardBlockReasons,
-      shouldForkSubagents: _shouldForkSubagents,
-      gateMode: _gateMode,
-      skillGateMode: _skillGateMode,
-      gateRecoveryMode: _gateRecoveryMode,
-      approvalState: _approvalState,
-      actionBoundary: _actionBoundary,
-      gateController: _gateController,
-      ...advisoryRoute
-    } = route;
+    const advisoryRoute = withoutLegacyControlFields(route);
     return {
       ...advisoryRoute,
       advisoryOnly: true,
@@ -1219,8 +1190,8 @@ function effectiveSkills(state) {
   ]);
 }
 
-function buildInspectionProgressGuidance(state, ctx = {}) {
-  const budget = inspectionBudgetForRoute({}, state.lastPrompt);
+function buildInspectionProgressGuidance(state) {
+  const budget = inspectionBudgetForPrompt(state.lastPrompt);
   if (!budget) return '';
   const used = state.inspectionCalls;
   const remaining = Math.max(0, budget - used);

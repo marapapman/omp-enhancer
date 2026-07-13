@@ -5,8 +5,6 @@ export function buildGovernancePromptFragment({
   route,
   parentTask = '',
   includeModelWorkflowHints = true,
-  workspaceRoot = '',
-  skillsProvided = false,
   availableSkills = [],
 } = {}) {
   const resolved = advisoryRoute(route);
@@ -64,10 +62,6 @@ export function buildGovernancePromptFragment({
 }
 
 export function buildImmediateWorkflowMessage({
-  route,
-  workspaceRoot = '',
-  parentTask = '',
-  skillsProvided = false,
   availableSkills = [],
 } = {}) {
   const inventoryNames = unique((availableSkills ?? [])
@@ -103,17 +97,6 @@ export function buildSubagentPromptFragment({ prompt = '' } = {}) {
     'If a selected skill cannot be loaded, make one targeted correction and continue with the available evidence. Missing metadata or skills are limitations to report, not reasons to block.',
     '',
     'Return a concise checkpoint result with evidence, files, checks, unresolved risks, and the acceptance criteria outcome. The parent integrates and verifies the final result.',
-  ].join('\n');
-}
-
-export function formatWorkflowBriefingForAssignment(route) {
-  if (!route || route.intent === 'unknown') return '';
-  const resolved = advisoryRoute(route);
-  return [
-    'Legacy diagnostic briefing:',
-    `Observed operation: ${resolved.taskDescriptor?.operation ?? 'unknown'}`,
-    `Observed domains: ${(resolved.taskDescriptor?.domains ?? []).join(', ') || 'general'}`,
-    'The parent agent must still choose the workflow, TODO item, and skills for each child assignment.',
   ].join('\n');
 }
 
@@ -225,10 +208,6 @@ export function inspectionBudgetForPrompt(parentTask = '') {
   if (!match) return 0;
   const value = Number(match[1]);
   return Number.isInteger(value) && value > 0 ? value : 0;
-}
-
-export function inspectionBudgetForRoute(_route = {}, parentTask = '') {
-  return inspectionBudgetForPrompt(parentTask);
 }
 
 function evidenceDisciplineLines(route = {}) {

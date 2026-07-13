@@ -197,7 +197,7 @@ export function describeNaturalLanguageTask(input = {}) {
   const capabilities = capabilitiesFor({ operation, domains, constraints, complexity });
   const phases = phasesFor({ operation, domains, constraints, signals });
   const risk = riskFor({ operation, domains, constraints, signals });
-  const requiresPolicyRoute = shouldUseDescriptorPolicy({ operation, domains, constraints, phases, signals });
+  const requiresPolicyRoute = shouldUseDescriptorPolicy({ operation, domains, phases, signals });
 
   return normalizeTaskDescriptor({
     version: 1,
@@ -797,12 +797,8 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     prompt,
     rawPrompt,
     directTestExecution,
-    testExecutionTargets,
     testExecutionCommand,
     factWork,
-    securityWork,
-    review,
-    noWorkspaceWrite,
     directModify,
     directCreate,
     directTestAuthoring,
@@ -1381,12 +1377,8 @@ function exclusiveToolContractFor({
   prompt = '',
   rawPrompt = prompt,
   directTestExecution = false,
-  testExecutionTargets = [],
   testExecutionCommand = '',
   factWork = false,
-  securityWork = false,
-  review = false,
-  noWorkspaceWrite = false,
   directModify = false,
   directCreate = false,
   directTestAuthoring = false,
@@ -1927,7 +1919,7 @@ function riskFor({ operation, domains, constraints, signals = {} }) {
   return { level, flags: ordered };
 }
 
-function shouldUseDescriptorPolicy({ operation, domains, constraints, phases, signals }) {
+function shouldUseDescriptorPolicy({ operation, domains, phases, signals }) {
   return signals.planningWork
     || signals.noWorkspaceWrite
     || signals.advisory
@@ -2206,15 +2198,6 @@ function compactPhases(values) {
       && PHASE_KIND_VALUES.has(value.kind)
       && DOMAIN_VALUES.has(value.domain))
     .map(({ kind, domain }) => ({ kind, domain }));
-}
-
-function phaseAllowedByConstraints(phase, constraints) {
-  if (phase.kind === 'release' && constraints.externalWrite !== 'required') return false;
-  if (phase.kind === 'verify' && phase.domain === 'tests' && constraints.testExecution !== 'required') return false;
-  if ((phase.kind === 'modify' || phase.kind === 'create')
-    && ['code', 'document', 'plugin', 'config', 'visual'].includes(phase.domain)
-    && constraints.workspaceWrite !== 'required') return false;
-  return true;
 }
 
 function defaultPhaseFor(operation, domains) {
