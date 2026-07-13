@@ -38,6 +38,21 @@ test('shared main and advisor catalog stays aligned with the Core runtime catalo
   assert.doesNotMatch(catalog, /block:\s*true|continue:\s*true|hard gate/i);
 });
 
+test('README documents every current workflow and the autonomous selection trigger', async () => {
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  const section = markdownSection(readme, 'Available workflow catalog');
+  const documentedVersion = Number(section.match(/Catalog version:\s*\*\*(\d+)\*\*/)?.[1]);
+
+  assert.equal(documentedVersion, WORKFLOW_CATALOG_VERSION);
+  for (const id of workflowRouteNames) {
+    assert.ok(section.includes(`| \`${id}\` |`), `README is missing workflow ${id}`);
+  }
+  assert.match(readme, /There is no workflow slash command and no keyword-to-route switch/i);
+  assert.match(readme, /main agent uses those facts to select one workflow or compose several workflows/i);
+  assert.match(readme, /English instruction does not select English-writing skills when the target text is Chinese/i);
+  assert.match(readme, /Naming a workflow is guidance to the main agent; it is not permission/i);
+});
+
 function workflowSection(catalog, id) {
   const start = catalog.indexOf(`### \`${id}\``);
   const next = catalog.indexOf('\n### `', start + 1);
@@ -75,4 +90,11 @@ function normalizeProse(value) {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
+}
+
+function markdownSection(markdown, heading) {
+  const start = markdown.indexOf(`### ${heading}`);
+  const next = markdown.indexOf('\n### ', start + 1);
+  assert.ok(start >= 0, `missing README section ${heading}`);
+  return markdown.slice(start, next < 0 ? markdown.length : next);
 }

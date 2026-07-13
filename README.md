@@ -52,7 +52,7 @@ After installing `omp-enhancer-core`, describe the task naturally. Core injects:
 - safe task facts such as operation, targets, target-text language, explicit user constraints, and risk observations;
 - a TODO-first orchestration protocol and the native `task` assignment contract.
 
-The main agent, not Core, selects or composes workflows and skills. The normal runtime route is `agent-selected`; its `skills`, `tools`, and `roles` arrays are empty. The legacy router and classifier remain available only through explicit diagnostic tools for compatibility.
+The main agent, not Core, selects or composes workflows and skills. The normal runtime uses an `agent-selected` context whose `skills`, `tools`, and `roles` arrays are intentionally empty, so nothing is preselected on the agent's behalf. The legacy router and classifier remain available only through explicit diagnostic tools for compatibility.
 
 For non-trivial work, the injected protocol asks the main agent to:
 
@@ -66,6 +66,64 @@ For non-trivial work, the injected protocol asks the main agent to:
 This is prompt guidance rather than a gate. Missing skills, `todo`, or `task` are reported as limitations while the agent continues with the best available method. Core never returns `block: true`, never returns `continue: true`, and never preloads a route-selected skill bundle.
 
 `autoContinue: false` describes Core's own lifecycle behavior; it does not disable or rewrite the host's autolearn settings. When the host emits an `autolearn-nudge` capture turn, Core does not route it as a new user task, inject another workflow, or schedule a follow-up. Host-owned `autolearn.enabled` and `autolearn.autoContinue` therefore remain available while Core itself never returns `continue: true`.
+
+### How workflow selection is triggered
+
+There is no workflow slash command and no keyword-to-route switch. A normal natural-language request is enough. Workflow selection happens in three layers:
+
+1. At session startup, `omp-config` makes the same complete workflow catalog available to the main agent and Advisor through the managed `AGENTS.md` and `WATCHDOG.yml` imports.
+2. Before each normal main-agent turn, `omp-enhancer-core` adds the current model-visible skill inventory and task facts such as requested operation, target paths, target-text language, explicit constraints, and observed risk. It does not choose a workflow on the agent's behalf.
+3. The main agent uses those facts to select one workflow or compose several workflows, records their steps in native `todo`, loads the applicable installed skills, and delegates independent steps. A child receives only the workflow checkpoint chosen by the parent rather than rerunning selection for the whole task.
+
+Advisor turns, autolearn capture turns, slash commands, and child launches do not start a second main-agent selection cycle. Advisor uses the shared startup catalog, while a child receives its parent-selected workflow, step, TODO item, and skills.
+
+Selection is semantic rather than lexical. A word such as `publish` inside a document does not activate a release workflow, and an English instruction does not select English-writing skills when the target text is Chinese. User constraints and host permissions remain in force regardless of the selected workflow.
+
+You can optionally name workflow IDs in the request when you want to constrain the plan, for example, `Use code.review + security.review and do not modify files`. Naming a workflow is guidance to the main agent; it is not permission for writes, network access, release, or another side effect.
+
+### Available workflow catalog
+
+Catalog version: **3**. Candidate skills are recommendations from the catalog, not mandatory bundles. The main agent loads only candidates that are present in the active inventory and useful for a selected step. The canonical cards with ordered steps, delegation advice, and quality checks are in [`plugins/omp-config/assets/WORKFLOW_CATALOG.md`](plugins/omp-config/assets/WORKFLOW_CATALOG.md).
+
+Document and general workflows:
+
+| Workflow | Main selection signal | Typical skill candidates |
+| --- | --- | --- |
+| `agentic.simple` | A bounded request needs no specialized process. | No default; use an exact active skill only when useful. |
+| `writing.pending` | Writing intent is clear, but the body of the target text has not been observed. | No language-specific skill until the target body is read. |
+| `writing.zh` | The prose being drafted or changed is Chinese, regardless of instruction language. | `plain-chinese-writing`, `zh-writing-review`, `zh-writing-polish`, `zh-writing-checkers` |
+| `writing.en` | The prose being drafted or changed is English, regardless of instruction language. | `writing-review`, `writing-checkers`, `writing-markdown-helper` |
+| `writing.latex` | The artifact is LaTeX. Compose it with a language workflow for prose changes. | `format-markdown2latex`, `format-latex2markdown`, `format-template-latex` |
+| `writing.markdown` | The artifact is Markdown. Compose it with a language workflow for prose changes. | `writing-markdown-helper`, `zh-writing-markdown-helper` |
+| `doc.convert.word` | The task creates, edits, or converts a Word document. | `docx` |
+| `factcheck.document` | The user asks to verify claims, citations, chronology, freshness, or source support. | `fact-checking`, `claim-extraction`, `source-evaluation`, `citation-authenticity` |
+
+Engineering and delivery workflows:
+
+| Workflow | Main selection signal | Typical skill candidates |
+| --- | --- | --- |
+| `code.plan` | The requested deliverable is an implementation, repair, migration, or test plan, not the change itself. | `brainstorming`, `writing-plans` |
+| `code.dev` | The user asks for code or configuration changes. | `brainstorming`, `test-driven-development`, `subagent-driven-development`, `verification-before-completion` |
+| `code.debug` | A concrete failure, regression, or mismatch must be reproduced, localized, or explained. | `diagnose`, `systematic-debugging` |
+| `code.test` | The task is to design, add, run, or interpret tests. | Framework-specific testing skills, `verification-before-completion` |
+| `code.review` | The requested result is a read-only code review, bug audit, architecture review, or regression audit. | `diagnose`, `verification-before-completion`, an applicable language or framework reviewer |
+| `omp.plugin` | An OMP plugin, marketplace entry, packaged skill, hook, agent, template, install, or upgrade is in scope. | `omp-marketplace-plugin-activation`, an applicable plugin- or skill-authoring skill |
+| `security.review` | The user explicitly requests review of security boundaries, vulnerabilities, impact, or remediation. | `security-review`, `security-scan` |
+| `design.visual` | The deliverable is a UI, visual asset, diagram, layout, or interaction design. | `frontend-design`, `canvas-design`, or another medium-specific visual skill |
+| `release.publish` | The user explicitly asks to commit, push, publish, deploy, version, upgrade, or synchronize an installed artifact. | `conventional-commits`, `finishing-a-development-branch`, `verification-before-completion` |
+
+### Composition examples
+
+The workflows are designed to compose; selecting one does not exclude another:
+
+- `Polish tex/introduction.tex` starts as `writing.pending` when only the path is known. After reading an English body, the main agent composes `writing.en + writing.latex` and loads the smallest applicable English-review and LaTeX skills.
+- `Review this Chinese chapter for logic and citations` composes `writing.zh + factcheck.document`; the Chinese body, not the English wording of a possible instruction, determines the writing workflow.
+- `Find the crash, fix it, and add regression tests` commonly composes `code.debug + code.dev + code.test`.
+- `Audit the authentication code but do not modify anything` commonly composes `code.review + security.review`; the no-write constraint prevents `code.dev` work even if remediation ideas are reported.
+- `Update this OMP plugin, run its tests, commit, push, and upgrade the installed copy` commonly composes `omp.plugin + code.dev + code.test + release.publish`. The release workflow appears only because the external mutations were explicitly requested.
+- `Design and implement a responsive settings page` commonly composes `design.visual + code.dev + code.test`.
+
+These examples are planning guidance rather than fixed mappings. The main agent may choose a smaller or larger composition when the actual target, constraints, and acceptance criteria justify it, and should make that choice visible in its TODO.
 
 ## Skill use diagnostics
 
