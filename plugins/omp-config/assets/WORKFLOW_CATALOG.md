@@ -17,7 +17,7 @@ For every non-trivial task:
 6. Execute TODO items in dependency order and update their status as evidence arrives. Do not rely on memory to retain unfinished requirements.
 7. When at least two useful workstreams are independent, fork multiple subagents, preferably in one `task.tasks[]` batch. Keep integration, irreversible choices, and final verification with the parent. Do not fork ceremonial work for a trivial or tightly coupled task.
 8. Give every child its workflow, exact workflow step, TODO item, selected skills, scope, non-goals, dependencies, deliverable, and acceptance evidence. Begin with the literal `[workflow=<ids> step=<step-id> todo=<exact-item> skills=<comma-separated-skill-names>]` prefix; do not abbreviate or rename those keys. A child owns only that checkpoint.
-9. Consume the child results returned by `task`; do not launch extra subagents merely to poll other children or check temporary report files.
+9. Native `task` starts background jobs. Consume child results when delivered; if status is needed and native `job` is available, use one bounded `job` list or poll. Never launch another `task` merely to poll children or check temporary report files.
 10. Reconcile the TODO, child results, and verification before the final response.
 
 If `todo`, `task`, or a selected skill is unavailable, continue with a concise checklist or direct work and report a material limitation. Missing workflow mechanics are findings, never authorization or completion gates. The host alone owns sandboxing and approval.

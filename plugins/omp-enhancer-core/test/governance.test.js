@@ -90,9 +90,14 @@ test('task facts preserve source-language and explicit constraints without selec
 });
 
 test('immediate note is a short autonomous reminder without exact routed calls', () => {
-  const message = buildImmediateWorkflowMessage({});
+  const message = buildImmediateWorkflowMessage({
+    availableSkills: [{ name: 'writing-review' }, { name: 'systematic-debugging' }],
+  });
   assert.match(message, /^OMP autonomous workflow reminder:/);
   assert.match(message, /initialize the native `todo` before substantive work/i);
+  assert.match(message, /Active installed skill names for this turn: writing-review, systematic-debugging/);
+  assert.match(message, /do not probe bare `skill:\/\/`/i);
+  assert.match(message, /`read` path `skill:\/\/<exact-name>`/i);
   assert.match(message, /Fork multiple independent workstreams with `task`/i);
   assert.match(message, /without blocking or automatic continuation/i);
   assert.doesNotMatch(message, /WORKFLOW FIRST TOOL CALL|read\(path=/i);

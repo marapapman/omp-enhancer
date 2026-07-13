@@ -65,6 +65,7 @@ test('primary startup exposes the full catalog and skill inventory without autol
   assert.deepEqual(routed.route.routePlan.skills, []);
   assert.equal(routed.message.customType, 'omp-enhancer-core.workflow-guidance');
   assert.equal(routed.message.display, false);
+  assert.match(routed.message.content, /Active installed skill names for this turn: writing-review, systematic-debugging/);
   assert.ok(Array.isArray(routed.systemPrompt));
   assert.equal(routed.systemPrompt[0], 'base prompt');
   const injected = routed.systemPrompt.at(-1);

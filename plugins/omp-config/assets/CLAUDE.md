@@ -16,6 +16,7 @@ For each non-trivial primary task, use this order:
 2. Inspect the active skill inventory and choose the smallest necessary skill set.
 3. Initialize the native `todo` for multi-step work, including workflow steps, selected skills, user requirements, and verification.
 4. Load each selected skill before project work with `read` path `skill://<exact-name>`; never substitute `manage_skill`, `learn`, memory, or a verbal claim.
+   Choose the exact name from the injected active inventory. Do not probe bare `skill://` or inspect a skill directory to rediscover names already listed in context.
 5. Fork multiple independent workstreams with native `task` when useful; keep integration and final verification with the parent.
 6. Execute and update the TODO through completion.
 

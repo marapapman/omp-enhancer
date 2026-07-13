@@ -209,6 +209,7 @@ export default function registerCoreEnhancer(pi) {
           parentTask: params.prompt ?? state.lastPrompt,
           includeModelWorkflowHints: true,
           workspaceRoot: ctx.cwd || process.cwd(),
+          availableSkills: activeSkillInventory(pi),
         })
         : 'No active route. Follow the user request directly and use available skills when useful.';
       return okResult(fragment, { fragment, route });

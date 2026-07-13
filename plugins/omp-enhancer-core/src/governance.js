@@ -31,7 +31,7 @@ export function buildGovernancePromptFragment({
     '`[workflow=<ids> step=<step-id> todo=<exact-item> skills=<comma-separated-skill-names>]`',
     'Copy that bracketed key format literally. Do not abbreviate it as WR/ST/TODO/SK, rename the keys, or put it after prose. Reuse the exact native TODO string in `todo=`.',
     'Then state the exact target, non-goals, requested change or investigation, and observable acceptance criteria. The parent chooses these values; Core only passes them through.',
-    'Use the child results returned by the `task` call. Do not launch extra subagents merely to poll other children or check temporary report files.',
+    'The native `task` tool starts background jobs. Consume child results when delivered; if status is needed and the native `job` tool is available, use one bounded `job` list or poll. Never launch another `task` merely to poll children or check temporary report files.',
     '',
     'Learned memory, general model ability, and a managed skill created after finishing do not replace pre-work skill discovery. If a skill, `todo`, or `task` is unavailable, continue with the best concise checklist or direct method and report a material limitation; never block, loop, or auto-continue.',
     'Confirm a path exists before reading it. For a schema or path error, make at most one evidence-based targeted correction, then continue with the evidence already available.',
@@ -70,9 +70,14 @@ export function buildImmediateWorkflowMessage({
   skillsProvided = false,
   availableSkills = [],
 } = {}) {
+  const inventoryNames = unique((availableSkills ?? [])
+    .map((skill) => typeof skill === 'string' ? skill : skill?.name)
+    .map((name) => String(name ?? '').trim())
+    .filter((name) => /^[a-z0-9][a-z0-9._/-]*$/i.test(name)));
   return [
     'OMP autonomous workflow reminder:',
     'For non-trivial work, choose workflows and skills from the injected catalog, initialize the native `todo` before substantive work, and make `todo` with `op: "init"` the FIRST tool call.',
+    `Active installed skill names for this turn: ${inventoryNames.join(', ') || 'none exposed by the host'}. Choose directly from this list; do not probe bare \`skill://\` or list skill directories.`,
     'Next load each selected skill with `read` path `skill://<exact-name>` before project reads; never use `manage_skill` or a verbal claim as loading evidence.',
     'Fork multiple independent workstreams with `task`; begin every child task with the exact `[workflow=... step=... todo=... skills=...]` prefix.',
     'This is advisory only. If a mechanism is unavailable, continue without blocking or automatic continuation.',
