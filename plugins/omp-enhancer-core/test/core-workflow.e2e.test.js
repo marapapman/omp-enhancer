@@ -70,8 +70,10 @@ test('primary startup exposes the full catalog and skill inventory without autol
   assert.equal(routed.systemPrompt[0], 'base prompt');
   const injected = routed.systemPrompt.at(-1);
   assert.match(injected, /OMP Main-Agent Workflow Orchestration/);
-  assert.match(injected, /OMP_WORKFLOW_CATALOG_VERSION: 3/);
+  assert.match(injected, /OMP_WORKFLOW_CATALOG_VERSION: 4/);
   assert.match(injected, /### writing\.en/);
+  assert.match(injected, /### slides\.generate/);
+  assert.match(injected, /### slides\.modify/);
   assert.match(injected, /### code\.debug/);
   assert.match(injected, /### release\.publish/);
   assert.match(injected, /skill:\/\/writing-review — Review academic prose\./);

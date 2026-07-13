@@ -83,7 +83,7 @@ You can optionally name workflow IDs in the request when you want to constrain t
 
 ### Available workflow catalog
 
-Catalog version: **3**. Candidate skills are recommendations from the catalog, not mandatory bundles. The main agent loads only candidates that are present in the active inventory and useful for a selected step. The canonical cards with ordered steps, delegation advice, and quality checks are in [`plugins/omp-config/assets/WORKFLOW_CATALOG.md`](plugins/omp-config/assets/WORKFLOW_CATALOG.md).
+Catalog version: **4**. Candidate skills are recommendations from the catalog, not mandatory bundles. The main agent loads only candidates that are present in the active inventory and useful for a selected step. The canonical cards with ordered steps, delegation advice, and quality checks are in [`plugins/omp-config/assets/WORKFLOW_CATALOG.md`](plugins/omp-config/assets/WORKFLOW_CATALOG.md).
 
 Document and general workflows:
 
@@ -94,6 +94,8 @@ Document and general workflows:
 | `writing.zh` | The prose being drafted or changed is Chinese, regardless of instruction language. | `plain-chinese-writing`, `zh-writing-review`, `zh-writing-polish`, `zh-writing-checkers` |
 | `writing.en` | The prose being drafted or changed is English, regardless of instruction language. | `writing-review`, `writing-checkers`, `writing-markdown-helper` |
 | `writing.latex` | The artifact is LaTeX. Compose it with a language workflow for prose changes. | `format-markdown2latex`, `format-latex2markdown`, `format-template-latex` |
+| `slides.generate` | A new LaTeX Beamer deck needs template validation, a confirmed story outline, generation, and rendered QA. | `latex-beamer-slides`, `slides-storyline`, optional `beamer-to-powerpoint` |
+| `slides.modify` | An existing Beamer deck needs bounded wording, language, or current-style changes. | `latex-beamer-slides` plus the source-language writing skills |
 | `writing.markdown` | The artifact is Markdown. Compose it with a language workflow for prose changes. | `writing-markdown-helper`, `zh-writing-markdown-helper` |
 | `doc.convert.word` | The task creates, edits, or converts a Word document. | `docx` |
 | `factcheck.document` | The user asks to verify claims, citations, chronology, freshness, or source support. | `fact-checking`, `claim-extraction`, `source-evaluation`, `citation-authenticity` |
@@ -117,6 +119,8 @@ Engineering and delivery workflows:
 The workflows are designed to compose; selecting one does not exclude another:
 
 - `Polish tex/introduction.tex` starts as `writing.pending` when only the path is known. After reading an English body, the main agent composes `writing.en + writing.latex` and loads the smallest applicable English-review and LaTeX skills.
+- `Create a Beamer lecture deck` selects `slides.generate`. It validates or discusses the template first, confirms a numbered story outline and output language with the user, generates and renders the deck, and runs a PowerPoint conversion only when the user supplied the command.
+- `Tighten the wording on slides/012-example.tex` starts from the target body language and composes `slides.modify + writing.zh|writing.en + writing.latex`; it preserves the existing template and story rather than reopening design discovery.
 - `Review this Chinese chapter for logic and citations` composes `writing.zh + factcheck.document`; the Chinese body, not the English wording of a possible instruction, determines the writing workflow.
 - `Find the crash, fix it, and add regression tests` commonly composes `code.debug + code.dev + code.test`.
 - `Audit the authentication code but do not modify anything` commonly composes `code.review + security.review`; the no-write constraint prevents `code.dev` work even if remediation ideas are reported.

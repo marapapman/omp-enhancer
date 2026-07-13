@@ -62,6 +62,7 @@ function packageRoot() {
 
 const expectedBundledSkills = [
   'astrbot-plugin-development',
+  'beamer-to-powerpoint',
   'brainstorming',
   'canvas-design',
   'caveman',
@@ -78,11 +79,13 @@ const expectedBundledSkills = [
   'grill-with-docs',
   'handoff',
   'improve-codebase-architecture',
+  'latex-beamer-slides',
   'omp-marketplace-plugin-activation',
   'plan-execute-review-commit',
   'prototype',
   'receiving-code-review',
   'requesting-code-review',
+  'slides-storyline',
   'spike',
   'subagent-driven-development',
   'systematic-debugging',
@@ -232,7 +235,7 @@ test('ships every omp-config skill from the plugin skills directory', async () =
     assert.match(skillDoc, /\S/, `${skill} should ship a non-empty SKILL.md`);
   }
 
-  assert.equal(actualSkills.length, 282);
+  assert.equal(actualSkills.length, 285);
   assert.ok(actualSkills.includes('ecc/accessibility'));
   assert.ok(actualSkills.includes('ecc/tdd-workflow'));
   assert.ok(actualSkills.includes('ecc/workspace-surface-audit'));

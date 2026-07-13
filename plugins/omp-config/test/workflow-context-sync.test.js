@@ -51,6 +51,8 @@ test('shared main and Advisor assets import one complete advisory workflow catal
     'writing.zh',
     'writing.en',
     'writing.latex',
+    'slides.generate',
+    'slides.modify',
     'writing.markdown',
     'doc.convert.word',
     'factcheck.document',
@@ -76,7 +78,7 @@ test('shared main and Advisor assets import one complete advisory workflow catal
   assert.match(catalog, /preferably in one `task\.tasks\[\]` batch/);
   assert.match(catalog, /body of the text being modified, never from the prompt language/);
   assert.match(catalog, /guidance, not a router, permission system, completion gate, or continuation controller/);
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 3/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 4/);
   assert.match(catalog, new RegExp(CATALOG_BLOCK_START));
   assert.match(catalog, new RegExp(CATALOG_BLOCK_END));
   assert.match(agents, /^@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md$/m);

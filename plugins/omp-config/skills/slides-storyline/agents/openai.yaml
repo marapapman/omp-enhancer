@@ -1,0 +1,4 @@
+interface:
+  display_name: "Slides Storyline"
+  short_description: "Plan and confirm a clear slide-by-slide story arc"
+  default_prompt: "Use $slides-storyline to turn my topic into a confirmed slide-by-slide story outline."

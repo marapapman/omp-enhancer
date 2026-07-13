@@ -53,7 +53,8 @@ and lists these paths in the root marketplace catalog.
 Installed marketplace packages include:
 
 - All 12 source `agent/skills` entries from `sakuradairong/omp-config`.
-- All 17 top-level source workflow skills under `skills/`.
+- All 17 existing top-level source workflow skills under `skills/`.
+- Three Beamer workflow skills for deck generation and modification, story planning, and user-command PowerPoint conversion.
 - All 249 source ECC skills under `skills/ecc/`.
 
 The marketplace catalog registers every directory containing a `SKILL.md`, including nested paths such as `./skills/ecc/accessibility`.

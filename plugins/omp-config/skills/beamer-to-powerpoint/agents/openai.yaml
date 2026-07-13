@@ -1,0 +1,4 @@
+interface:
+  display_name: "Beamer to PowerPoint"
+  short_description: "Convert a verified Beamer deck with a user command"
+  default_prompt: "Use $beamer-to-powerpoint to run my Beamer-to-PowerPoint conversion command and verify the output."

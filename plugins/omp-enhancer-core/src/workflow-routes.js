@@ -4,6 +4,8 @@ export const workflowRouteNames = [
   'writing.zh',
   'writing.en',
   'writing.latex',
+  'slides.generate',
+  'slides.modify',
   'writing.markdown',
   'doc.convert.word',
   'factcheck.document',
@@ -18,7 +20,7 @@ export const workflowRouteNames = [
   'release.publish',
 ];
 
-export const WORKFLOW_CATALOG_VERSION = 3;
+export const WORKFLOW_CATALOG_VERSION = 4;
 
 const workflowSelectionGuidance = Object.freeze({
   'agentic.simple': 'The request is focused and does not benefit from a specialized workflow.',
@@ -26,6 +28,8 @@ const workflowSelectionGuidance = Object.freeze({
   'writing.zh': 'The prose being drafted or revised is Chinese, regardless of the instruction language.',
   'writing.en': 'The prose being drafted or revised is English, regardless of the instruction language.',
   'writing.latex': 'The target artifact is LaTeX; compose this format workflow with the prose language workflow.',
+  'slides.generate': 'The user wants a new LaTeX Beamer deck, with template and story decisions completed before frame authoring.',
+  'slides.modify': 'The user wants bounded wording, language, or existing-style changes to a current LaTeX Beamer deck.',
   'writing.markdown': 'The target artifact is Markdown; compose this format workflow with the prose language workflow.',
   'doc.convert.word': 'The requested output is a Word document or a conversion to or from Word.',
   'factcheck.document': 'The user asks to verify factual claims, citations, freshness, or source support.',
@@ -41,13 +45,15 @@ const workflowSelectionGuidance = Object.freeze({
 });
 
 const workflowComposition = Object.freeze({
-  'writing.pending': ['writing.latex', 'writing.markdown', 'doc.convert.word'],
-  'writing.zh': ['writing.latex', 'writing.markdown', 'doc.convert.word', 'factcheck.document'],
-  'writing.en': ['writing.latex', 'writing.markdown', 'doc.convert.word', 'factcheck.document'],
-  'writing.latex': ['writing.pending', 'writing.zh', 'writing.en', 'factcheck.document'],
+  'writing.pending': ['writing.latex', 'slides.modify', 'writing.markdown', 'doc.convert.word'],
+  'writing.zh': ['writing.latex', 'slides.generate', 'slides.modify', 'writing.markdown', 'doc.convert.word', 'factcheck.document'],
+  'writing.en': ['writing.latex', 'slides.generate', 'slides.modify', 'writing.markdown', 'doc.convert.word', 'factcheck.document'],
+  'writing.latex': ['writing.pending', 'writing.zh', 'writing.en', 'slides.generate', 'slides.modify', 'factcheck.document'],
+  'slides.generate': ['writing.zh', 'writing.en', 'writing.latex', 'design.visual', 'factcheck.document'],
+  'slides.modify': ['writing.pending', 'writing.zh', 'writing.en', 'writing.latex'],
   'writing.markdown': ['writing.pending', 'writing.zh', 'writing.en', 'factcheck.document'],
   'doc.convert.word': ['writing.pending', 'writing.zh', 'writing.en'],
-  'factcheck.document': ['writing.zh', 'writing.en', 'writing.latex', 'writing.markdown'],
+  'factcheck.document': ['writing.zh', 'writing.en', 'writing.latex', 'slides.generate', 'writing.markdown'],
   'code.plan': ['code.review', 'security.review'],
   'code.dev': ['code.debug', 'code.test', 'code.review', 'security.review', 'omp.plugin'],
   'code.debug': ['code.dev', 'code.test', 'code.review'],
@@ -55,7 +61,7 @@ const workflowComposition = Object.freeze({
   'code.review': ['code.plan', 'code.debug', 'code.test', 'security.review'],
   'omp.plugin': ['code.plan', 'code.dev', 'code.test', 'code.review', 'release.publish'],
   'security.review': ['code.plan', 'code.dev', 'code.review', 'code.test'],
-  'design.visual': ['code.dev', 'code.test'],
+  'design.visual': ['slides.generate', 'slides.modify', 'code.dev', 'code.test'],
   'release.publish': ['omp.plugin', 'code.dev', 'code.test', 'code.review'],
 });
 
@@ -89,6 +95,18 @@ export const workflowRouteCatalog = {
     scopeNotes: ['Compilation and publication are separate workflow steps when requested.'],
     skills: ['format-markdown2latex', 'format-latex2markdown', 'format-template-latex'],
     qualityChecks: ['LaTeX structure, active-text boundaries, reference integrity, and compile evidence when requested'],
+  }),
+  'slides.generate': routeMeta({
+    steps: ['Inspect project instructions, the template, compiler, and any explicitly supplied conversion command.', 'Validate template readiness through the Beamer entry point, theme, logo decision, layout assets, and a compile smoke.', 'If the template is not ready, discuss its style, logo, aspect ratio, typography, and layout with the user and configure it first.', 'Discuss the purpose, audience, duration, output language, and numbered story outline with the user and obtain confirmation.', 'Generate Beamer frames from the confirmed template and outline, composing writing.zh or writing.en from the agreed output language.', 'Compile and render the deck, then inspect overflow, missing glyphs, shrink readability, broken assets, and blank-like pages.', 'Only when the user supplied a conversion command, run it after Beamer QA and verify the PowerPoint artifact.'],
+    scopeNotes: ['Template discussion precedes story discussion when configuration is incomplete.', 'A familiar template or converter is not a substitute for the user-selected template or command.'],
+    skills: ['latex-beamer-slides', 'slides-storyline', 'beamer-to-powerpoint'],
+    qualityChecks: ['template readiness, confirmed story outline, output-language writing compliance, Beamer structure, frame legibility, compile evidence, and user-command conversion evidence when requested'],
+  }),
+  'slides.modify': routeMeta({
+    steps: ['Read the exact target, body language, current template and style, and local build commands.', 'Compose writing.zh or writing.en from the slide body and preserve LaTeX structure and semantic anchors.', 'Apply only the requested wording, language-norm, and existing-style changes while preserving story order, template, logo, layout, math, citations, code, and unrelated content.', 'Compile and render the affected deck, then inspect the semantic diff, changed frames, and layout overflow.'],
+    scopeNotes: ['Do not reopen template selection or story planning for an ordinary modification.', 'A path-only request remains language-pending until the target body is read.'],
+    skills: ['latex-beamer-slides'],
+    qualityChecks: ['requested-scope preservation, source-language writing compliance, existing visual-style consistency, Beamer structure, and compile evidence when in scope'],
   }),
   'writing.markdown': routeMeta({
     steps: ['Read the source and local conventions.', 'Make the requested revision or conversion.', 'Review headings, lists, links, citations, and code fences.', 'Render or verify when in scope.'],
@@ -177,7 +195,7 @@ export function buildWorkflowCatalogPrompt({ availableSkills = [], audience = 'm
   const lines = [
     `OMP_WORKFLOW_CATALOG_VERSION: ${WORKFLOW_CATALOG_VERSION}`,
     'This catalog is a composable menu, not an exclusive classifier. Select one or more workflows from the observed task; a legacy route hint is diagnostic only.',
-    'For writing, select writing.zh or writing.en from the language of the text being changed, then compose writing.latex, writing.markdown, or doc.convert.word for the artifact format. The surrounding instruction language does not decide the writing language.',
+    'For writing, select writing.zh or writing.en from the language of the text being changed, then compose writing.latex, slides.modify, writing.markdown, or doc.convert.word for the artifact format. For a new deck, slides.generate establishes the output language during story discussion. The surrounding instruction language does not decide the writing language.',
     '',
   ];
 

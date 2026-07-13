@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { routeNaturalLanguageTask } from '../src/router.js';
-import { workflowRouteCardSections, workflowRouteNames } from '../src/workflow-routes.js';
+import { workflowRouteCardSections, workflowRouteCatalog, workflowRouteNames } from '../src/workflow-routes.js';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(testDir, '..', '..', '..');
@@ -24,7 +24,25 @@ test('workflow catalog exposes advisory routes including language-pending writin
   assert.ok(workflowRouteNames.includes('writing.pending'));
   assert.ok(workflowRouteNames.includes('writing.zh'));
   assert.ok(workflowRouteNames.includes('writing.en'));
+  assert.ok(workflowRouteNames.includes('slides.generate'));
+  assert.ok(workflowRouteNames.includes('slides.modify'));
   assert.deepEqual(workflowRouteCardSections(), expectedSections);
+});
+
+test('slides workflows separate template-and-story generation from bounded modification', () => {
+  const generate = workflowRouteCatalog['slides.generate'];
+  const modify = workflowRouteCatalog['slides.modify'];
+
+  assert.deepEqual(generate.skills, ['latex-beamer-slides', 'slides-storyline', 'beamer-to-powerpoint']);
+  assert.match(generate.steps[1], /template readiness/i);
+  assert.match(generate.steps[2], /discuss its style, logo, aspect ratio, typography, and layout/i);
+  assert.match(generate.steps[3], /story outline.+obtain confirmation/i);
+  assert.match(generate.steps.at(-1), /only when the user supplied a conversion command/i);
+
+  assert.deepEqual(modify.skills, ['latex-beamer-slides']);
+  assert.match(modify.steps[1], /slide body/i);
+  assert.match(modify.steps[2], /only the requested wording, language-norm, and existing-style changes/i);
+  assert.match(modify.scopeNotes.join(' '), /Do not reopen template selection or story planning/i);
 });
 
 test('broad workload matrix always produces an advisory workflow plan', () => {

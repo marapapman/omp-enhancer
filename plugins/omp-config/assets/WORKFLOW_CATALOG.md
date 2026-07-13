@@ -1,7 +1,7 @@
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->
 # OMP Enhancer Workflow Catalog
 
-OMP_WORKFLOW_CATALOG_VERSION: 3
+OMP_WORKFLOW_CATALOG_VERSION: 4
 
 This catalog is shared by the main agent and Advisor. It is guidance, not a router, permission system, completion gate, or continuation controller. The acting agent chooses and may compose workflows from the observed task, target content, user constraints, and active skill inventory.
 
@@ -22,7 +22,7 @@ For every non-trivial task:
 
 If `todo`, `task`, or a selected skill is unavailable, continue with a concise checklist or direct work and report a material limitation. Missing workflow mechanics are findings, never authorization or completion gates. The host alone owns sandboxing and approval.
 
-Writing intent comes from the user instruction. Chinese or English writing resources come from the body of the text being modified, never from the prompt language. For a path-only writing request, read the target first and use `writing.pending` until the body language is observed. LaTeX, Markdown, and Word are format companions and do not choose the prose language.
+Writing intent comes from the user instruction. Chinese or English writing resources come from the body of the text being modified, never from the prompt language. For a path-only writing request, read the target first and use `writing.pending` until the body language is observed. LaTeX, Beamer modification, Markdown, and Word are format companions and do not choose the prose language. For a new Beamer deck, establish the output language explicitly during story discussion.
 
 ## Workflow cards
 
@@ -65,6 +65,22 @@ Writing intent comes from the user instruction. Chinese or English writing resou
 - Skill candidates: `format-markdown2latex`, `format-latex2markdown`, `format-template-latex`, plus the selected language skills.
 - Quality checks: LaTeX structure, active-text boundaries, reference integrity, and compile evidence when requested.
 - Delegation: split independent sections, bibliography inspection, and compilation checks; avoid concurrent edits to the same source span.
+
+### `slides.generate`
+
+- Select when: the user wants a new LaTeX Beamer deck, with template and story decisions completed before frame authoring.
+- Steps: (1) inspect project instructions, the template, compiler, and any explicitly supplied conversion command; (2) validate template readiness through the Beamer entry point, theme, logo decision, layout assets, and a compile smoke; (3) if the template is not ready, discuss its style, logo, aspect ratio, typography, and layout with the user and configure it first; (4) discuss the purpose, audience, duration, output language, and numbered story outline with the user and obtain confirmation; (5) generate Beamer frames from the confirmed template and outline, composing writing.zh or writing.en from the agreed output language; (6) compile and render the deck, then inspect overflow, missing glyphs, shrink readability, broken assets, and blank-like pages; (7) only when the user supplied a conversion command, run it after Beamer QA and verify the PowerPoint artifact.
+- Skill candidates: `latex-beamer-slides`, `slides-storyline`, and `beamer-to-powerpoint` when its conversion stage applies.
+- Quality checks: template readiness, confirmed story outline, output-language writing compliance, Beamer structure, frame legibility, compile evidence, and user-command conversion evidence when requested.
+- Delegation: after the parent owns template and outline confirmation, split independent frame groups, asset preparation, or rendered QA; keep story coherence and final integration with the parent.
+
+### `slides.modify`
+
+- Select when: the user wants bounded wording, language, or existing-style changes to a current LaTeX Beamer deck.
+- Steps: (1) read the exact target, body language, current template and style, and local build commands; (2) compose writing.zh or writing.en from the slide body and preserve LaTeX structure and semantic anchors; (3) apply only the requested wording, language-norm, and existing-style changes while preserving story order, template, logo, layout, math, citations, code, and unrelated content; (4) compile and render the affected deck, then inspect the semantic diff, changed frames, and layout overflow.
+- Skill candidates: `latex-beamer-slides`.
+- Quality checks: requested-scope preservation, source-language writing compliance, existing visual-style consistency, Beamer structure, and compile evidence when in scope.
+- Delegation: split only independent target frames or a separate rendered review; keep one owner for terminology and visual-style consistency.
 
 ### `writing.markdown`
 
