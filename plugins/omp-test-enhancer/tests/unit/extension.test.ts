@@ -118,6 +118,12 @@ describe('registerTestingEnhancer', () => {
     expect(pi.userMessages[0]).toContain('omp_test_browser_check')
     expect(pi.userMessages[0]).toContain('coverage')
     expect(pi.userMessages[0]).toContain('mutation')
+    expect(pi.userMessages[0]).toContain('test-planner')
+    expect(pi.userMessages[0]).toContain('test-executor')
+    expect(pi.userMessages[0]).toContain('test-reviewer')
+    expect(pi.userMessages[0].indexOf('test-planner')).toBeLessThan(pi.userMessages[0].indexOf('test-executor'))
+    expect(pi.userMessages[0].indexOf('test-executor')).toBeLessThan(pi.userMessages[0].indexOf('test-reviewer'))
+    expect(pi.userMessages[0]).toContain('独立只读审查')
     expect(pi.userMessages[0]).not.toContain('--')
   })
 
@@ -129,6 +135,7 @@ describe('registerTestingEnhancer', () => {
     await runCommand(pi, 'report')
 
     expect(pi.userMessages[0]).toContain('omp_test_gate')
+    expect(pi.userMessages[0]).toContain('test-reviewer')
     expect(pi.userMessages[0]).not.toContain('omp_test_analyze')
     expect(pi.userMessages[1]).toContain('omp_test_report')
     expect(pi.userMessages[1]).not.toContain('omp_test_analyze')

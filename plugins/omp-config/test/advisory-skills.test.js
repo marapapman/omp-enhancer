@@ -68,6 +68,16 @@ test('compatibility guard skills explicitly remain advisory', () => {
   }
 });
 
+test('deep research scales source breadth and freshness to the evidence need', () => {
+  const relative = 'skills/ecc/deep-research/SKILL.md';
+  const content = readFileSync(join(pluginRoot, relative), 'utf8');
+
+  assert.match(content, /source count is not a quality target/i, relative);
+  assert.match(content, /freshness cutoff.+claim/i, relative);
+  assert.doesNotMatch(content, /Aim for 15-30 unique sources/i, relative);
+  assert.doesNotMatch(content, /Prefer sources from the last 12 months/i, relative);
+});
+
 test('bundled reviewers report limitations without self-stopping or mandatory dispatch', () => {
   const agentsDir = join(pluginRoot, 'agents');
   const files = readdirSync(agentsDir)

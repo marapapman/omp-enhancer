@@ -53,8 +53,10 @@ test('shared main and Advisor assets import one complete advisory workflow catal
     'writing.latex',
     'slides.generate',
     'slides.modify',
+    'diagram.svg',
     'writing.markdown',
     'doc.convert.word',
+    'research.web',
     'factcheck.document',
     'code.plan',
     'code.dev',
@@ -71,14 +73,27 @@ test('shared main and Advisor assets import one complete advisory workflow catal
   for (const workflowId of workflowIds) {
     assert.ok(catalog.includes(`### \`${workflowId}\``), `${workflowId} should have a workflow card`);
   }
-  for (const heading of ['Select when:', 'Steps:', 'Skill candidates:', 'Quality checks:', 'Delegation:']) {
+  for (const heading of ['Select when:', 'Steps:', 'Skill candidates:', 'Agent roles:', 'Quality checks:', 'Delegation:']) {
     assert.equal((catalog.match(new RegExp(`^- ${heading}`, 'gm')) ?? []).length, workflowIds.length);
   }
   assert.match(catalog, /Initialize the native `todo` before substantive project work/);
   assert.match(catalog, /preferably in one `task\.tasks\[\]` batch/);
   assert.match(catalog, /body of the text being modified, never from the prompt language/);
   assert.match(catalog, /guidance, not a router, permission system, completion gate, or continuation controller/);
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 4/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 9/);
+  assert.match(catalog, /`zh-writer` owns the requested Chinese drafting or prose revision.+`zh-checker` independently reviews/i);
+  assert.match(catalog, /`writer` owns the requested English drafting or prose revision.+`checker` independently reviews/i);
+  assert.match(catalog, /before the body language is observed, do not delegate to `writer`, `checker`, `zh-writer`, or `zh-checker`/i);
+  assert.match(catalog, /`test-planner` produces the target-to-behavior and evidence plan.+`test-executor` owns bounded test and fixture changes.+`test-reviewer` independently audits/i);
+  assert.match(catalog, /### `research\.web`[\s\S]*live web search[\s\S]*`factcheck\.document`/i);
+  assert.match(catalog, /Absolute correctness cannot be guaranteed/i);
+  assert.match(catalog, /`fact-researcher-a` and `fact-researcher-b` search independent source lanes/i);
+  assert.match(catalog, /staleness as a temporal-validity finding rather than a verdict/i);
+  assert.match(catalog, /fixed source count and a blanket recency window are not completion targets/i);
+  assert.match(catalog, /`fact-cross-checker` classifies agreement, conflicts, temporal-staleness findings, and insufficient evidence without inventing resolution/i);
+  assert.match(catalog, /`designer` owns the final slide layout.+`visioner` independently reviews the latest rendered pages/i);
+  assert.match(catalog, /Do not widen scope to unrelated pre-existing layout defects/i);
+  assert.match(catalog, /`designer` creates and revises the SVG; `visioner` reviews each fresh raster/i);
   assert.match(catalog, new RegExp(CATALOG_BLOCK_START));
   assert.match(catalog, new RegExp(CATALOG_BLOCK_END));
   assert.match(agents, /^@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md$/m);

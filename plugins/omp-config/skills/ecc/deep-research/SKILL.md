@@ -64,9 +64,11 @@ web_search_advanced_exa(query: "<keywords>", numResults: 5, startPublishedDate: 
 ```
 
 **Search strategy:**
-- Use 2-3 different keyword variations per sub-question
+- Start with the most direct query for each sub-question and add variants only when they cover a distinct synonym, source class, date range, geography, or unresolved evidence gap
 - Mix general and news-focused queries
-- Aim for 15-30 unique sources total
+- Source count is not a quality target; stop when each material claim meets its planned evidence requirement or the remaining gap is explicit
+- Apply a claim-specific freshness cutoff: current claims need current evidence, while historical and foundational claims may require the applicable original source rather than a newer summary
+- Treat multiple pages that repeat one upstream dataset, press release, or analysis as one evidence lineage
 - Prioritize: academic, official, reputable news > blogs > forums
 
 ### Step 4: Deep-Read Key Sources
@@ -83,7 +85,7 @@ firecrawl_scrape(url: "<url>")
 crawling_exa(url: "<url>", tokensNum: 5000)
 ```
 
-Read 3-5 key sources in full for depth. Do not rely only on search snippets.
+Read enough key sources in full to satisfy the claim-level evidence plan. Do not rely only on search snippets, bibliographic metadata, provider labels, or landing-page identity records.
 
 ### Step 5: Synthesize and Write Report
 
@@ -142,8 +144,8 @@ Each agent searches, reads sources, and returns findings. The main session synth
 ## Quality Rules
 
 1. **Every claim needs a source.** No unsourced assertions.
-2. **Cross-reference.** If only one source says it, flag it as unverified.
-3. **Recency matters.** Prefer sources from the last 12 months.
+2. **Cross-reference by need.** Follow each claim's predetermined corroboration requirement and count genuinely independent evidence lineages, not duplicated pages.
+3. **Freshness is claim-specific.** Use the defined freshness cutoff for the claim, and do not replace an applicable original or historical authority with a merely newer summary.
 4. **Acknowledge gaps.** If you couldn't find good info on a sub-question, say so.
 5. **No hallucination.** If you don't know, say "insufficient data found."
 6. **Separate fact from inference.** Label estimates, projections, and opinions clearly.

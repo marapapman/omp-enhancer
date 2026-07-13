@@ -27,6 +27,14 @@ test('complete workflow catalog is composable and self-describing', () => {
   assert.match(catalog, /composable menu, not an exclusive classifier/i);
   assert.match(catalog, /language of the text being changed/i);
   assert.match(catalog, /writing\.en[\s\S]*Compose with:.*writing\.latex/i);
+  assert.match(catalog, /### writing\.zh[\s\S]*Delegation:\n- step-2: zh-writer owns[\s\S]*\n- step-3: zh-checker independently reviews/i);
+  assert.match(catalog, /### writing\.en[\s\S]*Delegation:\n- step-2: writer owns[\s\S]*\n- step-3: checker independently reviews/i);
+  assert.match(catalog, /### writing\.pending[\s\S]*before the body language is observed, do not delegate to writer, checker, zh-writer, or zh-checker/i);
+  assert.match(catalog, /### diagram\.svg[\s\S]*Delegation:\n- step-2: designer creates[\s\S]*\n- step-4: visioner independently reviews/i);
+  assert.match(catalog, /### slides\.generate[\s\S]*Delegation:\n- step-7: designer owns the final layout pass[\s\S]*\n- step-10: visioner independently reviews/i);
+  assert.match(catalog, /### slides\.modify[\s\S]*Delegation:\n- step-5: designer owns the bounded final layout pass[\s\S]*\n- step-8: visioner independently reviews/i);
+  assert.match(catalog, /### research\.web[\s\S]*Compose with: factcheck\.document[\s\S]*Delegation:\n- step-2: fact-planner defines[\s\S]*\n- step-3: fact-researcher-a and fact-researcher-b search independent source lanes/i);
+  assert.match(catalog, /### code\.test[\s\S]*Delegation:\n- step-2: test-planner produces[\s\S]*\n- step-3: test-executor owns[\s\S]*\n- step-5: test-reviewer independently audits/i);
   assert.match(catalog, /release\.publish[\s\S]*independently verify/i);
   assert.match(catalog, /skill:\/\/writing-review — Review academic prose\./i);
   assert.match(catalog, /skill:\/\/systematic-debugging — Trace root causes\./i);

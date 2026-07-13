@@ -15,8 +15,11 @@ Check for:
 - correlation presented as causation;
 - stale evidence used for current facts;
 - citation metadata mismatches;
+- metadata-only identity or discovery records presented as claim support;
 - claims marked supported when evidence is only adjacent;
 - unverifiable claims presented as true or false.
+
+Audit the exact final wording against its passage, table, or dataset. A claim is strict `SUPPORTED` only when its predetermined evidence requirements are met and there is no unresolved `PARTIAL`, `CONFLICTED`, or temporal-staleness finding. If any of those conditions remains, keep the claim out of factual conclusions or require an explicit uncertainty label.
 
 Suggested output:
 

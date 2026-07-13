@@ -1,6 +1,7 @@
 import { normalizeDoi, normalizeWhitespace } from './fact-check.js';
 
 const DEFAULT_PROVIDERS = ['crossref', 'arxiv', 'openalex', 'datacite', 'google-fact-check'];
+const METADATA_ONLY_REASON = 'Provider metadata is for discovery or identity checking only; inspect the underlying passage, table, or dataset before marking the claim SUPPORTED.';
 
 export async function fetchProviderEvidence({
   claims = [],
@@ -44,11 +45,10 @@ async function lookupCrossref({ claim, lane, fetchImpl }) {
   });
   const message = data?.message;
   if (!message) return null;
-  return {
+  return metadataDiscoveryRecord({
     claimId: claim.id,
     lane,
     provider: 'crossref',
-    status: 'SUPPORTED',
     source: `https://doi.org/${doi}`,
     quote: first(message.title),
     observed: {
@@ -56,7 +56,7 @@ async function lookupCrossref({ claim, lane, fetchImpl }) {
       year: message.published?.['date-parts']?.[0]?.[0] ?? message.issued?.['date-parts']?.[0]?.[0],
       doi,
     },
-  };
+  });
 }
 
 async function lookupArxiv({ claim, lane, fetchImpl }) {
@@ -68,26 +68,24 @@ async function lookupArxiv({ claim, lane, fetchImpl }) {
   const entry = /<entry>([\s\S]*?)<\/entry>/u.exec(xml)?.[1];
   if (!entry) return null;
   const title = normalizeWhitespace(/<title>([\s\S]*?)<\/title>/u.exec(entry)?.[1] ?? '');
-  return {
+  return metadataDiscoveryRecord({
     claimId: claim.id,
     lane,
     provider: 'arxiv',
-    status: 'SUPPORTED',
     source: `https://arxiv.org/abs/${id}`,
     quote: title,
     observed: { title, arxiv: id },
-  };
+  });
 }
 
 async function lookupOpenAlex({ claim, lane, fetchImpl }) {
   const data = await fetchJson(fetchImpl, `https://api.openalex.org/works?search=${encodeURIComponent(claim.text)}&per-page=1`);
   const work = data?.results?.[0];
   if (!work) return null;
-  return {
+  return metadataDiscoveryRecord({
     claimId: claim.id,
     lane,
     provider: 'openalex',
-    status: 'SUPPORTED',
     source: work.id ?? work.doi ?? '',
     quote: work.display_name ?? '',
     observed: {
@@ -95,7 +93,7 @@ async function lookupOpenAlex({ claim, lane, fetchImpl }) {
       year: work.publication_year,
       doi: work.doi ? normalizeDoi(work.doi) : undefined,
     },
-  };
+  });
 }
 
 async function lookupDataCite({ claim, lane, fetchImpl }) {
@@ -104,11 +102,10 @@ async function lookupDataCite({ claim, lane, fetchImpl }) {
   const data = await fetchJson(fetchImpl, `https://api.datacite.org/dois/${encodeURIComponent(doi)}`);
   const attributes = data?.data?.attributes;
   if (!attributes) return null;
-  return {
+  return metadataDiscoveryRecord({
     claimId: claim.id,
     lane,
     provider: 'datacite',
-    status: 'SUPPORTED',
     source: `https://doi.org/${doi}`,
     quote: first(attributes.titles?.map((item) => item.title)),
     observed: {
@@ -116,7 +113,7 @@ async function lookupDataCite({ claim, lane, fetchImpl }) {
       year: attributes.publicationYear,
       doi,
     },
-  };
+  });
 }
 
 async function lookupGoogleFactCheck({ claim, lane, fetchImpl, googleApiKey }) {
@@ -128,11 +125,10 @@ async function lookupGoogleFactCheck({ claim, lane, fetchImpl, googleApiKey }) {
   const item = data?.claims?.[0];
   const review = item?.claimReview?.[0];
   if (!item || !review) return null;
-  return {
+  return metadataDiscoveryRecord({
     claimId: claim.id,
     lane,
     provider: 'google-fact-check',
-    status: 'SUPPORTED',
     source: review.url ?? '',
     quote: normalizeWhitespace([item.text, review.textualRating].filter(Boolean).join(' | ')),
     observed: {
@@ -140,6 +136,16 @@ async function lookupGoogleFactCheck({ claim, lane, fetchImpl, googleApiKey }) {
       rating: review.textualRating,
       publisher: review.publisher?.name,
     },
+  });
+}
+
+function metadataDiscoveryRecord(record) {
+  return {
+    ...record,
+    status: 'INSUFFICIENT',
+    evidenceType: 'metadata',
+    requirementsMet: false,
+    reason: METADATA_ONLY_REASON,
   };
 }
 

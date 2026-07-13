@@ -1,6 +1,6 @@
 ---
 name: latex-beamer-slides
-description: Create or revise LaTeX Beamer presentations while preserving project templates, source structure, language rules, and visual style. Use for new Beamer decks, slide-by-slide `.tex` generation, edits to existing Beamer slides, template readiness checks, compilation, rendered-slide QA, or a Beamer deck that may later be converted to PowerPoint with a separate user-provided command.
+description: Create or revise LaTeX Beamer presentations while preserving project templates, source structure, language rules, and visual style, with designer-owned layout refinement and independent visioner review of fresh renders. Use for new Beamer decks, slide-by-slide `.tex` generation, edits to existing Beamer slides, template readiness checks, compilation, rendered-slide QA, or a Beamer deck that may later be converted to PowerPoint with a separate user-provided command.
 ---
 
 # LaTeX Beamer Slides
@@ -26,8 +26,13 @@ Read [references/beamer-quality.md](references/beamer-quality.md) before a templ
 4. After the template is ready, load `slides-storyline`. Discuss purpose, audience, duration, output language, key takeaway, evidence, and a numbered slide outline. Obtain user confirmation before authoring frames.
 5. Generate the deck from the confirmed template and outline. Keep the main file structural and use one frame file per slide when the project follows that layout. Mark generated frame files and delete or replace only files carrying that marker; never erase handcrafted frames merely because their names match a pattern.
 6. Keep one main job per slide. Prefer visuals, examples, diagrams, or short code over dense prose. Split overflowing content instead of making it unreadably small.
-7. Compile with the native engine for enough passes to resolve navigation and references. Render every page and inspect it for clipping, overflow, missing glyphs, blank-like pages, broken assets, inconsistent spacing, and unreadable code or figures.
-8. Load `beamer-to-powerpoint` only when the user explicitly supplied a conversion command and PowerPoint output is in scope. Convert only after the Beamer PDF passes its checks.
+7. Compile with the native engine for enough passes to resolve navigation and references. Render every page so `designer` receives an initial PDF and current page images.
+8. Have `designer` perform the final layout pass across the deck. Correct text and image overlap, crowding, clipping, undersized text, cropped or distorted figures, inconsistent margins, weak alignment, and unclear hierarchy. Preserve the confirmed story and template. Split an overloaded slide instead of shrinking it below the readable baseline.
+9. Reconcile the designer revision against the confirmed outline, output language, source facts, semantic anchors, and LaTeX structure. Restore any unintended content, frame-order, or scope change before rendering.
+10. Recompile and render the designer revision. Bind one revision identifier, the PDF, the render directory, fresh renders of every page, and an overview or contact sheet. Do not give `visioner` pre-designer or mixed-revision evidence.
+11. Have `visioner` independently inspect the latest rendered pages and overview for text and image overlap, crowding, clipping, undersized text, image treatment, margins, alignment, whitespace, hierarchy, and cross-slide consistency. Require exactly `APPROVED | CHANGES_REQUIRED | UNREVIEWABLE` for the supplied revision. Do not accept `PASS` or `FAIL` as a substitute. Treat source inspection, compile success, and designer self-review as insufficient visual evidence.
+12. For `CHANGES_REQUIRED`, have `designer` address every blocker and major finding and create a new revision. Reconcile content and scope again, then recompile and generate fresh renders before another vision review. Use a maximum of three vision review rounds. Do not review an unchanged artifact; if material findings remain, report the limitation instead of claiming completion.
+13. Load `beamer-to-powerpoint` only when the user explicitly supplied a conversion command and PowerPoint output is in scope. Convert only after the final Beamer revision is approved by `visioner`.
 
 Do not claim generation is complete while template choices or the story outline still await user confirmation.
 
@@ -36,10 +41,15 @@ Do not claim generation is complete while template choices or the story outline 
 1. Read the exact requested frames and enough surrounding source to identify the current wording, language, macros, and visual conventions.
 2. Apply only the requested wording, language-norm, and existing-style changes. Preserve the story arc, frame order, template, logo, layout system, math, citations, code, and unrelated content unless the user explicitly expands scope.
 3. Match the existing title pattern, terminology, capitalization, spacing, color roles, content density, and figure treatment. Do not redesign the template or reopen story planning.
-4. Compare semantic and LaTeX anchors once after editing. Compile and render the affected deck when a build is available, then inspect the changed frames and any pages whose layout they can influence.
+4. Compare semantic and LaTeX anchors once after editing. Compile and render the affected deck when a build is available, then identify the changed frames and any pages whose layout they can influence.
+5. Have `designer` perform a final layout pass on the changed frames and any pages whose layout they can influence. Correct text and image overlap, crowding, clipping, undersized text, cropped or distorted figures, alignment, and spacing while preserving the existing template, story, and visual style.
+6. Reconcile the designer revision against the requested semantic diff, LaTeX anchors, and authorized scope. Restore unintended wording, math, citations, frame order, or unrelated changes before rendering.
+7. Recompile and render the designer revision. Bind one revision identifier, the PDF, the render directory, fresh high-resolution renders of every affected page, and a current full-deck overview or contact sheet. If a shared template, style, or macro changed, render and review every page.
+8. Have `visioner` independently review the latest renders for text and image overlap, crowding, clipping, undersized text, image treatment, margins, readability, and consistency with the existing deck. Require exactly `APPROVED | CHANGES_REQUIRED | UNREVIEWABLE` for the supplied revision. Do not accept `PASS` or `FAIL` as a substitute.
+9. For `CHANGES_REQUIRED`, have `designer` make only the necessary bounded fix and create a new revision. Reconcile semantics and scope again, then recompile and generate fresh rerenders before another vision review. Use a maximum of three vision review rounds. Report unresolved blocker or major findings honestly.
 
-Do not require template discussion or a story-outline checkpoint merely because an existing deck lacks a separate template manifest. Escalate only a concrete ambiguity that prevents the requested edit.
+Do not require template discussion or a story-outline checkpoint merely because an existing deck lacks a separate template manifest. Do not widen the edit to unrelated pre-existing layout defects. Do not split, add, remove, or reorder frames without explicit user authorization. Escalate only a concrete ambiguity that prevents the requested edit.
 
 ## Hand off
 
-Report the main `.tex` file, generated or changed frame files, output PDF, compiler command, QA evidence, and unresolved warnings. If conversion was requested, report the verified PowerPoint artifact separately.
+Report the main `.tex` file, generated or changed frame files, final revision identifier, output PDF, compiler command, render directory, designer and visioner QA evidence, and unresolved warnings. If conversion was requested, report the verified PowerPoint artifact separately.

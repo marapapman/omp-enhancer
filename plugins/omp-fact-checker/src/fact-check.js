@@ -10,6 +10,7 @@ const CLAIM_CATEGORY_RULES = [
 ];
 
 const HIGH_RISK_PATTERN = /(?:medical|clinical|health|drug|dose|legal|law|policy|financial|investment|stock|crypto|safety|security|医学|临床|药物|剂量|法律|法规|政策|金融|投资|股票|加密|安全)/iu;
+const CURRENT_CLAIM_PATTERN = /\b(?:currently|current|latest|today|now|presently|as of)\b|(?:当前|目前|最新|现在|今天|截至|现任|本年度)/iu;
 
 export function normalizeWhitespace(value = '') {
   return String(value ?? '').replace(/\s+/gu, ' ').trim();
@@ -35,6 +36,7 @@ export function extractFactClaims({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } 
       priority: claimPriority(segment.text, category),
       location: segment.location,
       evidencePlan: evidencePlanFor(segment.text, category),
+      freshnessRequirement: freshnessRequirementFor(segment.text),
     });
     if (claims.length >= maxClaims) break;
   }
@@ -72,6 +74,7 @@ export function formatFactCheckPlan(plan = {}) {
       `  category: ${claim.category}`,
       `  priority: ${claim.priority}`,
       `  evidence: ${(claim.evidencePlan ?? []).join(', ') || 'none'}`,
+      `  freshness-requirement: ${claim.freshnessRequirement ?? 'NOT_APPLICABLE'}`,
     ]) : ['- none']),
   ].join('\n');
 }
@@ -103,14 +106,19 @@ export function crossCheckEvidence({ claims = [], evidenceRecords = [] } = {}) {
       if (!lanes.has(lane)) lanes.set(lane, []);
       lanes.get(lane).push(record);
     }
-    const laneA = strongestStatus(lanes.get('A') ?? []);
-    const laneB = strongestStatus(lanes.get('B') ?? []);
+    const laneARecords = lanes.get('A') ?? [];
+    const laneBRecords = lanes.get('B') ?? [];
+    const laneA = strongestStatus(laneARecords);
+    const laneB = strongestStatus(laneBRecords);
+    const conflicts = conflictFields(laneARecords, laneBRecords, claim);
+    const baseStatus = crossCheckStatus(laneA, laneB);
     return {
       claimId: claim.id,
-      status: crossCheckStatus(laneA, laneB),
+      status: conflicts.length > 0 && baseStatus === 'AGREED' ? 'CONFLICTED' : baseStatus,
       laneA,
       laneB,
-      conflicts: conflictFields(lanes.get('A') ?? [], lanes.get('B') ?? []),
+      conflicts,
+      findings: hasStaleFinding(records) ? ['STALE_EVIDENCE'] : [],
     };
   });
 }
@@ -122,12 +130,15 @@ export function buildFactCheckReport({ claims = [], evidenceRecords = [], crossC
     const strongest = strongestStatus(records);
     const cross = crossByClaim.get(claim.id);
     const verdict = finalVerdict(strongest, cross);
+    const strict = strictClaimAssessment({ claim, evidenceRecords: records, crossCheck: cross });
     return {
       claimId: claim.id,
       claim: claim.text,
       category: claim.category,
       priority: claim.priority,
       verdict,
+      strictVerdict: strict.verdict,
+      strictReasons: strict.reasons,
       crossCheck: cross?.status ?? 'NOT_RUN',
       evidence: records.map((record) => ({
         lane: record.lane,
@@ -135,6 +146,11 @@ export function buildFactCheckReport({ claims = [], evidenceRecords = [], crossC
         status: record.status,
         source: record.source,
         quote: record.quote,
+        evidenceType: record.evidenceType,
+        freshness: record.freshness,
+        requirementsMet: record.requirementsMet,
+        sourceLineage: record.sourceLineage,
+        observed: record.observed,
       })),
     };
   });
@@ -150,9 +166,13 @@ export function formatFactCheckReport(report = {}) {
     `Contradicted: ${summary.contradicted}`,
     `Insufficient: ${summary.insufficient}`,
     `Unverifiable: ${summary.unverifiable}`,
+    `Strict supported: ${summary.strictSupported ?? results.filter((item) => item.strictVerdict === 'SUPPORTED').length}`,
+    `Strict unresolved: ${summary.strictUnresolved ?? results.filter((item) => item.strictVerdict !== 'SUPPORTED').length}`,
     '',
     ...results.flatMap((result) => [
       `- ${result.claimId}: ${result.verdict}`,
+      `  strict-verdict: ${result.strictVerdict ?? result.verdict}`,
+      ...(result.strictReasons?.length ? [`  strict-reasons: ${result.strictReasons.join('; ')}`] : []),
       `  claim: ${result.claim}`,
       `  cross-check: ${result.crossCheck}`,
       `  evidence: ${result.evidence.length ? result.evidence.map((item) => `${item.lane ?? '?'}:${item.provider}:${item.status}`).join('; ') : 'none'}`,
@@ -222,6 +242,10 @@ function evidencePlanFor(text = '', category = '') {
   return [...new Set(plan)];
 }
 
+function freshnessRequirementFor(text = '') {
+  return CURRENT_CLAIM_PATTERN.test(text) ? 'CURRENT' : 'NOT_APPLICABLE';
+}
+
 function requiredStagesFor({ claims = [] } = {}) {
   const highRisk = claims.some((claim) => claim.priority === 'high');
   const multiClaim = claims.length > 2;
@@ -258,7 +282,21 @@ function normalizeEvidenceRecord(record = {}, claim = {}, lane = 'A') {
     source: normalizeWhitespace(record.source ?? record.url ?? record.doi ?? ''),
     observed: record.observed,
     reason: record.reason ?? '',
+    evidenceType: normalizeEvidenceType(record.evidenceType),
+    freshness: normalizeFreshness(record.freshness),
+    requirementsMet: record.requirementsMet === true,
+    sourceLineage: normalizeWhitespace(record.sourceLineage ?? ''),
   };
+}
+
+function normalizeEvidenceType(value) {
+  const normalized = String(value ?? '').toLowerCase();
+  return ['passage', 'table', 'dataset', 'metadata'].includes(normalized) ? normalized : '';
+}
+
+function normalizeFreshness(value) {
+  const normalized = String(value ?? '').toUpperCase();
+  return ['CURRENT', 'STALE', 'UNKNOWN', 'NOT_APPLICABLE'].includes(normalized) ? normalized : '';
 }
 
 function normalizeEvidenceStatus(status = '') {
@@ -285,15 +323,29 @@ function crossCheckStatus(a, b) {
   return 'PARTIAL';
 }
 
-function conflictFields(a = [], b = []) {
+function conflictFields(a = [], b = [], claim = {}) {
   if (!a.length || !b.length) return [];
   const conflicts = [];
-  for (const field of ['title', 'year', 'doi', 'source']) {
-    const left = new Set(a.map((item) => item.observed?.[field] ?? item[field]).filter(Boolean));
-    const right = new Set(b.map((item) => item.observed?.[field] ?? item[field]).filter(Boolean));
-    if (left.size && right.size && [...left].some((value) => !right.has(value))) conflicts.push(field);
+  const fields = ['value', 'number', 'unit', 'date', 'version', 'effectiveDate'];
+  if (claim.category === 'citation') fields.push('title', 'year', 'doi');
+  for (const field of fields) {
+    const left = comparableFieldValues(a, field);
+    const right = comparableFieldValues(b, field);
+    if (left.size && right.size && (
+      [...left].some((value) => !right.has(value))
+      || [...right].some((value) => !left.has(value))
+    )) conflicts.push(field);
   }
   return conflicts;
+}
+
+function comparableFieldValues(records = [], field = '') {
+  return new Set(records
+    .map((item) => item.observed?.[field] ?? item[field])
+    .filter((value) => value !== undefined && value !== null && value !== '')
+    .map((value) => field === 'doi'
+      ? normalizeDoi(value)
+      : normalizeWhitespace(value).toLowerCase()));
 }
 
 function finalVerdict(strongest, cross) {
@@ -304,11 +356,126 @@ function finalVerdict(strongest, cross) {
   return 'INSUFFICIENT';
 }
 
+export function strictClaimVerdict(input = {}) {
+  return strictClaimAssessment(input).verdict;
+}
+
+function strictClaimAssessment({ claim = {}, evidenceRecords = [], crossCheck } = {}) {
+  const strongest = strongestStatus(evidenceRecords);
+  const compatibilityVerdict = finalVerdict(strongest, crossCheck);
+  if (compatibilityVerdict === 'CONFLICTED' || crossCheck?.status === 'CONFLICTED') {
+    return { verdict: 'CONFLICTED', reasons: ['independent evidence conflicts'] };
+  }
+  if (hasStaleFinding(evidenceRecords, crossCheck)) {
+    return { verdict: 'INSUFFICIENT', reasons: ['stale evidence cannot strictly support a current claim'] };
+  }
+  if (compatibilityVerdict === 'CONTRADICTED') {
+    const contradicted = evidenceRecords.filter((record) => normalizeEvidenceStatus(record.status) === 'CONTRADICTED');
+    const directContradicted = contradicted.filter(hasDirectClaimEvidence);
+    if (!everyClaimedLaneHasDirectEvidence(contradicted, directContradicted)) {
+      return { verdict: 'INSUFFICIENT', reasons: ['a contradiction lane lacks a supporting passage, table, or dataset'] };
+    }
+    if (!freshnessRequirementSatisfied(claim, directContradicted)) {
+      return { verdict: 'INSUFFICIENT', reasons: ['current evidence is required for this time-sensitive claim'] };
+    }
+    return { verdict: 'CONTRADICTED', reasons: [] };
+  }
+  if (compatibilityVerdict === 'UNVERIFIABLE') {
+    return { verdict: 'UNVERIFIABLE', reasons: [] };
+  }
+  if (compatibilityVerdict !== 'SUPPORTED') {
+    return { verdict: 'INSUFFICIENT', reasons: ['no supporting evidence'] };
+  }
+  if (crossCheck?.status !== 'AGREED') {
+    return {
+      verdict: 'INSUFFICIENT',
+      reasons: [crossCheck?.status === 'PARTIAL'
+        ? 'only one evidence lane has usable support'
+        : 'independent cross-check agreement is missing'],
+    };
+  }
+
+  const supported = evidenceRecords.filter((record) => normalizeEvidenceStatus(record.status) === 'SUPPORTED');
+  const directEvidence = supported.filter(hasDirectClaimEvidence);
+  if (!everyClaimedLaneHasDirectEvidence(supported, directEvidence)) {
+    return {
+      verdict: 'INSUFFICIENT',
+      reasons: ['a supporting lane lacks a passage, table, or dataset that directly supports the claim'],
+    };
+  }
+  if (new Set(directEvidence.map(evidenceLane)).size < 2) {
+    return { verdict: 'INSUFFICIENT', reasons: ['independent direct-evidence lane agreement is missing'] };
+  }
+  if (!freshnessRequirementSatisfied(claim, directEvidence)) {
+    return { verdict: 'INSUFFICIENT', reasons: ['current evidence is required for this time-sensitive claim'] };
+  }
+
+  const evidencePlan = Array.isArray(claim.evidencePlan) ? claim.evidencePlan.filter(Boolean) : [];
+  if (evidencePlan.length > 0 && !directEvidence.some((record) => record.requirementsMet === true)) {
+    return {
+      verdict: 'INSUFFICIENT',
+      reasons: ['preplanned evidence requirements are not explicitly satisfied'],
+    };
+  }
+
+  if (evidencePlan.some((requirement) => /independent/iu.test(String(requirement)))) {
+    const lineages = new Set(directEvidence
+      .map((record) => normalizeWhitespace(record.sourceLineage || record.source))
+      .filter(Boolean));
+    if (lineages.size < 2) {
+      return {
+        verdict: 'INSUFFICIENT',
+        reasons: ['the evidence plan requires independent sources'],
+      };
+    }
+  }
+
+  return { verdict: 'SUPPORTED', reasons: [] };
+}
+
+function everyClaimedLaneHasDirectEvidence(records = [], directRecords = []) {
+  const claimedLanes = new Set(records.map(evidenceLane));
+  const directLanes = new Set(directRecords.map(evidenceLane));
+  return claimedLanes.size > 0 && [...claimedLanes].every((lane) => directLanes.has(lane));
+}
+
+function evidenceLane(record = {}) {
+  return String(record.lane ?? 'A').toUpperCase();
+}
+
+function freshnessRequirementSatisfied(claim = {}, records = []) {
+  const requirement = String(claim.freshnessRequirement ?? '').toUpperCase();
+  const needsCurrent = requirement === 'CURRENT'
+    || (!requirement && CURRENT_CLAIM_PATTERN.test(String(claim.text ?? '')));
+  return !needsCurrent || (records.length > 0
+    && records.every((record) => normalizeFreshness(record.freshness) === 'CURRENT'));
+}
+
+function hasDirectClaimEvidence(record = {}) {
+  return ['passage', 'table', 'dataset'].includes(normalizeEvidenceType(record.evidenceType))
+    && Boolean(normalizeWhitespace(record.source))
+    && Boolean(normalizeWhitespace(record.quote));
+}
+
+function hasStaleFinding(records = [], crossCheck = {}) {
+  if (String(crossCheck?.status ?? '').toUpperCase() === 'STALE') return true;
+  const findings = Array.isArray(crossCheck?.findings) ? crossCheck.findings : [];
+  if (findings.some((finding) => /\bstale\b|outdated|superseded/iu.test(String(finding)))) return true;
+  return records.some((record) => (
+    normalizeFreshness(record?.freshness) === 'STALE'
+    || record?.stale === true
+    || (Array.isArray(record?.findings)
+      && record.findings.some((finding) => /\bstale\b|outdated|superseded/iu.test(String(finding))))
+  ));
+}
+
 function summarizeResults(results = []) {
   return {
     supported: results.filter((item) => item.verdict === 'SUPPORTED').length,
     contradicted: results.filter((item) => item.verdict === 'CONTRADICTED' || item.verdict === 'CONFLICTED').length,
     insufficient: results.filter((item) => item.verdict === 'INSUFFICIENT').length,
     unverifiable: results.filter((item) => item.verdict === 'UNVERIFIABLE').length,
+    strictSupported: results.filter((item) => item.strictVerdict === 'SUPPORTED').length,
+    strictUnresolved: results.filter((item) => item.strictVerdict !== 'SUPPORTED').length,
   };
 }

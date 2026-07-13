@@ -1,4 +1,4 @@
 interface:
   display_name: "LaTeX Beamer Slides"
   short_description: "Create or revise polished LaTeX Beamer slide decks"
-  default_prompt: "Use $latex-beamer-slides to create a Beamer deck after confirming the template and story outline."
+  default_prompt: "Use $latex-beamer-slides to create or revise a Beamer deck with designer layout and visioner review of fresh renders."

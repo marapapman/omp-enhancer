@@ -5,7 +5,7 @@
 ## Contents
 
 - `assets/CLAUDE.md` and root or agent config templates.
-- `assets/WORKFLOW_CATALOG.md` is the shared advisory workflow, TODO, skill-selection, and multi-subagent protocol.
+- `assets/WORKFLOW_CATALOG.md` is the shared advisory workflow, TODO, skill-selection, and multi-subagent protocol, including exact direct agent IDs and per-role delegation duties.
 - `assets/AGENTS.md` and `assets/WATCHDOG.yml` both import the installed `OMP_ENHANCER_WORKFLOW_CATALOG.md`, so OMP's native `@`-import expansion gives the main agent and Advisor the same catalog.
 - `assets/config.yml`, `assets/models.yml`, and `assets/mcp.json` remain templates only.
 - `assets/config.yml` includes `modelRoles.tiny` for optional lightweight tasks; workflow selection remains with the main agent.
@@ -54,7 +54,8 @@ Installed marketplace packages include:
 
 - All 12 source `agent/skills` entries from `sakuradairong/omp-config`.
 - All 17 existing top-level source workflow skills under `skills/`.
-- Three Beamer workflow skills for deck generation and modification, story planning, and user-command PowerPoint conversion.
+- Three Beamer workflow skills for deck generation and modification, designer/visioner layout QA, story planning, and user-command PowerPoint conversion.
+- One SVG flowchart skill with deterministic source validation and designer/visioner rendered review.
 - All 249 source ECC skills under `skills/ecc/`.
 
 The marketplace catalog registers every directory containing a `SKILL.md`, including nested paths such as `./skills/ecc/accessibility`.

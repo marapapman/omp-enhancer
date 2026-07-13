@@ -1478,7 +1478,11 @@ test('subagent providers match the configured workflow ownership', async () => {
   };
   const testingEnhancerAgents = await agentNames(path.join(repoRoot, 'plugins', 'omp-test-enhancer', 'agents'));
 
-  assert.deepEqual([...testingEnhancerAgents], [], 'omp-testing-enhancer is tool-only; testing subagents are routed through omp-config');
+  assert.deepEqual(
+    [...testingEnhancerAgents].sort(),
+    ['test-executor', 'test-planner', 'test-reviewer'],
+    'omp-testing-enhancer should package its plan, execution, and review roles',
+  );
 
   for (const item of routingCases) {
     const owner = expectedSubagentOwner(item.expectedIntent);

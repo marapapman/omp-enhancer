@@ -413,7 +413,7 @@ function buildAgentInstruction(mode: Exclude<TestCommandMode, { kind: 'help' } |
     return [
       '请运行一次建议型测试审查。',
       '先通过宿主 shell 显式运行 .omp/testing-enhancer.yml 中的期望测试命令，并确认真实成功结果。',
-      '再调用兼容工具 omp_test_gate 汇总当前 route 的宿主测试证据，检查候选测试是否验证公开行为、是否包含生产代码修改，以及浏览器证据是否充分；该工具本身不会执行命令或阻止会话。',
+      '再把计划、测试 diff 和当前执行证据交给 test-reviewer 做独立只读审查。test-reviewer 可调用一次兼容工具 omp_test_gate，检查候选测试是否验证公开行为、是否包含生产代码修改，以及浏览器证据是否充分；该工具本身不会执行命令或阻止会话。',
       '把 critical findings 和 repairHint 作为修复建议；是否继续修复由当前任务和用户要求决定。'
     ].join('\n')
   }
@@ -432,15 +432,13 @@ function buildAgentInstruction(mode: Exclude<TestCommandMode, { kind: 'help' } |
   return [
     '请按 OMP Testing Enhancer 工作流补测试。',
     targetLine,
-    '先调用 omp_test_analyze 找出需要补测的目标。',
-    '再调用 omp_test_context 获取现有测试、公开入口、propertyPlan 和 apiPlan。',
-    '如果 omp_test_context 返回 browserPlan，请调用 omp_test_browser_check 打开浏览器执行用户事件、采集 console/pageerror/network/视觉证据。',
-    '如果有 coverage 报告，请调用 omp_test_coverage_analyze 读取未覆盖的行、分支和函数，并据此补测试。',
-    '如果有 mutation 报告，请调用 omp_test_mutation_context 读取 survived mutants，并据此补能杀死 mutant 的断言。',
-    '只修改必要的测试文件，优先验证公开行为。',
-    '写完测试后，通过宿主 shell 显式运行 .omp/testing-enhancer.yml 中的期望测试命令并确认真实成功结果。',
-    '写完测试并采集可用证据后，可以调用兼容工具 omp_test_gate 做建议型审查，检查 indirect-test、test-file-scope、browser-interaction、browser-visual 和 test-command findings。',
-    '最后可调用 omp_test_report 生成简短报告。',
-    '建议使用 omp_test_analyze、omp_test_context、omp_test_gate 和 omp_test_report；按需使用 omp_test_browser_check、omp_test_coverage_analyze、omp_test_mutation_context。缺少某项证据时报告 limitation，不要自动重试或阻止会话结束。'
+    '先委派 test-planner 做只读规划。它调用 omp_test_analyze 找出目标，再调用 omp_test_context 获取现有测试、公开入口、propertyPlan、apiPlan 和可选 browserPlan。',
+    '如果已有 coverage 或 mutation 报告，test-planner 可调用 omp_test_coverage_analyze 或 omp_test_mutation_context，把缺口写进 target-to-behavior TEST_PLAN。它不改文件，也不运行命令。',
+    '父级确认计划范围后，委派 test-executor 只修改必要的测试文件和 fixtures，优先验证公开行为，不修改生产代码。',
+    '如果计划含 browserPlan，test-executor 调用 omp_test_browser_check 执行用户事件并采集 console、pageerror、network 和视觉证据。',
+    'test-executor 写完测试后，通过宿主 shell 显式运行 .omp/testing-enhancer.yml 中的期望测试命令，记录真实输出和 exit status。',
+    '获得测试 diff 和当前执行证据后，委派 test-reviewer 做独立只读审查。它不改文件，也不重跑测试。',
+    'test-reviewer 可以调用一次兼容工具 omp_test_gate 检查 indirect-test、test-file-scope、browser-interaction、browser-visual 和 test-command findings，并按需调用 omp_test_report。',
+    '父级汇总 TEST_PLAN、TEST_EXECUTION 和 TEST_REVIEW。缺少某项证据时报告 limitation，不要自动调度修复、自动重试或阻止会话结束。'
   ].join('\n')
 }

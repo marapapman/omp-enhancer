@@ -7,7 +7,7 @@ OMP marketplace monorepo for autonomous workflow orchestration, workflow skills,
 - `omp-enhancer-core`: injects the complete workflow catalog and active skill inventory, collects safe task facts, and passes parent-selected workflow steps to subagents.
 - `omp-config`: packages the shared main/Advisor workflow context, OMP config assets, agents, skills, non-blocking hooks, templates, and diagnostics.
 - `writing-helper`: provides writing logic, style, and citation checks plus writer/checker agents and writing skills.
-- `omp-testing-enhancer`: provides test target analysis, browser evidence, coverage/mutation context, advisory quality review, and reports.
+- `omp-testing-enhancer`: provides `test-planner`, `test-executor`, and `test-reviewer` agents plus test target analysis, browser evidence, coverage/mutation context, advisory quality review, and reports.
 - `omp-fact-checker`: provides claim extraction, evidence collection, cross-checking, reporting, and advisory completeness review.
 
 The stack is advisory-only. Its extensions do not block tool calls, prevent session completion, or start automatic repair turns. Host sandboxing, permissions, and approval prompts remain authoritative and are outside this plugin stack.
@@ -60,7 +60,7 @@ For non-trivial work, the injected protocol asks the main agent to:
 2. inspect the active inventory and load the smallest matching skills before their steps;
 3. initialize OMP's native `todo` before substantive work and map every workflow step and user requirement;
 4. fork multiple useful independent workstreams with native `task`, preferably in one batch;
-5. give each child its exact workflow, step, TODO item, selected skills, scope, and acceptance criteria;
+5. select each child by an exact `Agent roles` ID and give it the exact workflow, step, TODO item, selected skills, scope, and acceptance criteria;
 6. update TODO items as they finish, integrate child results, verify, and deliver one final response.
 
 This is prompt guidance rather than a gate. Missing skills, `todo`, or `task` are reported as limitations while the agent continues with the best available method. Core never returns `block: true`, never returns `continue: true`, and never preloads a route-selected skill bundle.
@@ -83,7 +83,9 @@ You can optionally name workflow IDs in the request when you want to constrain t
 
 ### Available workflow catalog
 
-Catalog version: **4**. Candidate skills are recommendations from the catalog, not mandatory bundles. The main agent loads only candidates that are present in the active inventory and useful for a selected step. The canonical cards with ordered steps, delegation advice, and quality checks are in [`plugins/omp-config/assets/WORKFLOW_CATALOG.md`](plugins/omp-config/assets/WORKFLOW_CATALOG.md).
+Catalog version: **9**. Candidate skills are recommendations from the catalog, not mandatory bundles. The main agent loads only candidates that are present in the active inventory and useful for a selected step. Every card now exposes exact direct agent IDs through `Agent roles`; roles inherited from composed workflows remain explicit in the workflow and delegation guidance. The canonical cards with ordered steps, delegation advice, agent roles, and quality checks are in [`plugins/omp-config/assets/WORKFLOW_CATALOG.md`](plugins/omp-config/assets/WORKFLOW_CATALOG.md).
+
+Resolved Chinese writing delegates prose edits to `zh-writer` and independent review to `zh-checker`. Resolved English writing uses `writer` and `checker`. `writing.pending` and format-only companions do not guess a language role. The `code.test` workflow uses `test-planner`, `test-executor`, and `test-reviewer` in plan, bounded execution, and independent-review order.
 
 Document and general workflows:
 
@@ -94,10 +96,12 @@ Document and general workflows:
 | `writing.zh` | The prose being drafted or changed is Chinese, regardless of instruction language. | `plain-chinese-writing`, `zh-writing-review`, `zh-writing-polish`, `zh-writing-checkers` |
 | `writing.en` | The prose being drafted or changed is English, regardless of instruction language. | `writing-review`, `writing-checkers`, `writing-markdown-helper` |
 | `writing.latex` | The artifact is LaTeX. Compose it with a language workflow for prose changes. | `format-markdown2latex`, `format-latex2markdown`, `format-template-latex` |
-| `slides.generate` | A new LaTeX Beamer deck needs template validation, a confirmed story outline, generation, and rendered QA. | `latex-beamer-slides`, `slides-storyline`, optional `beamer-to-powerpoint` |
-| `slides.modify` | An existing Beamer deck needs bounded wording, language, or current-style changes. | `latex-beamer-slides` plus the source-language writing skills |
+| `slides.generate` | A new LaTeX Beamer deck needs template validation, a confirmed story outline, designer layout, and independent visioner review. | `latex-beamer-slides`, `slides-storyline`, optional `beamer-to-powerpoint` |
+| `slides.modify` | An existing Beamer deck needs bounded wording or style changes plus designer/visioner QA of affected pages. | `latex-beamer-slides` plus the source-language writing skills |
+| `diagram.svg` | A workflow, process, block, or box diagram needs strict monochrome SVG geometry plus iterative rendered review. | `svg-flowchart` with `designer` creation and `visioner` review |
 | `writing.markdown` | The artifact is Markdown. Compose it with a language workflow for prose changes. | `writing-markdown-helper`, `zh-writing-markdown-helper` |
 | `doc.convert.word` | The task creates, edits, or converts a Word document. | `docx` |
+| `research.web` | The task requires current online research, reliable source selection, synthesis, and claim-level fact checking. | `research-ops`, `deep-research`, plus the fact-checking skill set |
 | `factcheck.document` | The user asks to verify claims, citations, chronology, freshness, or source support. | `fact-checking`, `claim-extraction`, `source-evaluation`, `citation-authenticity` |
 
 Engineering and delivery workflows:
@@ -107,7 +111,7 @@ Engineering and delivery workflows:
 | `code.plan` | The requested deliverable is an implementation, repair, migration, or test plan, not the change itself. | `brainstorming`, `writing-plans` |
 | `code.dev` | The user asks for code or configuration changes. | `brainstorming`, `test-driven-development`, `subagent-driven-development`, `verification-before-completion` |
 | `code.debug` | A concrete failure, regression, or mismatch must be reproduced, localized, or explained. | `diagnose`, `systematic-debugging` |
-| `code.test` | The task is to design, add, run, or interpret tests. | Framework-specific testing skills, `verification-before-completion` |
+| `code.test` | The task is to design, add, run, or interpret tests through planning, bounded execution, and independent review. | `test-driven-development`, `verification-before-completion` |
 | `code.review` | The requested result is a read-only code review, bug audit, architecture review, or regression audit. | `diagnose`, `verification-before-completion`, an applicable language or framework reviewer |
 | `omp.plugin` | An OMP plugin, marketplace entry, packaged skill, hook, agent, template, install, or upgrade is in scope. | `omp-marketplace-plugin-activation`, an applicable plugin- or skill-authoring skill |
 | `security.review` | The user explicitly requests review of security boundaries, vulnerabilities, impact, or remediation. | `security-review`, `security-scan` |
@@ -118,11 +122,13 @@ Engineering and delivery workflows:
 
 The workflows are designed to compose; selecting one does not exclude another:
 
-- `Polish tex/introduction.tex` starts as `writing.pending` when only the path is known. After reading an English body, the main agent composes `writing.en + writing.latex` and loads the smallest applicable English-review and LaTeX skills.
-- `Create a Beamer lecture deck` selects `slides.generate`. It validates or discusses the template first, confirms a numbered story outline and output language with the user, generates and renders the deck, and runs a PowerPoint conversion only when the user supplied the command.
-- `Tighten the wording on slides/012-example.tex` starts from the target body language and composes `slides.modify + writing.zh|writing.en + writing.latex`; it preserves the existing template and story rather than reopening design discovery.
+- `Polish tex/introduction.tex` starts as `writing.pending` when only the path is known. After reading an English body, the main agent composes `writing.en + writing.latex`, delegates the prose revision to `writer`, delegates independent review to `checker`, and loads the smallest applicable English-review and LaTeX skills.
+- `Create a Beamer lecture deck` selects `slides.generate`. It validates or discusses the template first, confirms a numbered story outline and output language, then uses `designer` for final layout and `visioner` for independent review of fresh page renders before any user-command PowerPoint conversion.
+- `Tighten the wording on slides/012-example.tex` starts from the target body language and composes `slides.modify + writing.zh|writing.en + writing.latex`; it preserves the existing template and story while `designer` and `visioner` check only changed or layout-affected pages.
+- `Create a black-and-white SVG workflow diagram` selects `diagram.svg + design.visual`. A `designer` owns the source and revisions, a read-only `visioner` checks fresh full-size and reduced renders, and material findings trigger a bounded relayout cycle.
+- `Research the current market and produce a cited Chinese report` composes `research.web + factcheck.document + writing.zh`. Independent evidence lanes prioritize claim-appropriate primary sources, the cross-checker classifies agreement, conflicts, and temporal-staleness findings without inventing resolution, and unsupported conclusions are excluded or labeled uncertain.
 - `Review this Chinese chapter for logic and citations` composes `writing.zh + factcheck.document`; the Chinese body, not the English wording of a possible instruction, determines the writing workflow.
-- `Find the crash, fix it, and add regression tests` commonly composes `code.debug + code.dev + code.test`.
+- `Find the crash, fix it, and add regression tests` commonly composes `code.debug + code.dev + code.test`; the testing phase uses `test-planner`, `test-executor`, and an independent `test-reviewer` while production changes remain in `code.dev`.
 - `Audit the authentication code but do not modify anything` commonly composes `code.review + security.review`; the no-write constraint prevents `code.dev` work even if remediation ideas are reported.
 - `Update this OMP plugin, run its tests, commit, push, and upgrade the installed copy` commonly composes `omp.plugin + code.dev + code.test + release.publish`. The release workflow appears only because the external mutations were explicitly requested.
 - `Design and implement a responsive settings page` commonly composes `design.visual + code.dev + code.test`.

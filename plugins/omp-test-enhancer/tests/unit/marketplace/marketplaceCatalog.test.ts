@@ -73,7 +73,31 @@ describe('marketplace catalog', () => {
     const packageJson = await readJson<PackageJson>(join(process.cwd(), 'package.json'))
 
     expect(packageJson.omp.extensions).toEqual(['./src/extension.ts'])
-    expect(packageJson.files).toEqual(expect.arrayContaining(['src', 'package.json', 'README.md', 'tools', 'commands']))
+    expect(packageJson.files).toEqual(expect.arrayContaining(['src', 'package.json', 'README.md', 'tools', 'commands', 'agents']))
+  })
+
+  it('ships explicit plan, execution, and independent review agents for the test workflow', async () => {
+    const expectedAgents = ['test-planner', 'test-executor', 'test-reviewer']
+
+    for (const agent of expectedAgents) {
+      const source = await readFile(join(process.cwd(), 'agents', `${agent}.md`), 'utf8')
+      expect(source).toMatch(new RegExp(`^name:\\s*${agent}$`, 'm'))
+      expect(source).toMatch(/advisory/i)
+    }
+
+    const planner = await readFile(join(process.cwd(), 'agents', 'test-planner.md'), 'utf8')
+    const executor = await readFile(join(process.cwd(), 'agents', 'test-executor.md'), 'utf8')
+    const reviewer = await readFile(join(process.cwd(), 'agents', 'test-reviewer.md'), 'utf8')
+
+    expect(planner).toMatch(/model:\s*\n\s*-\s*pi\/plan\s*\n\s*-\s*pi\/slow/)
+    expect(planner).toMatch(/read-only/i)
+    expect(executor).toMatch(/host-authorized/i)
+    expect(executor).toMatch(/test files? and fixtures?/i)
+    expect(reviewer).toMatch(/model:\s*\n\s*-\s*pi\/slow/)
+    expect(reviewer).toMatch(/independent/i)
+    expect(reviewer).toMatch(/read-only/i)
+    expect(`${planner}\n${executor}\n${reviewer}`).not.toMatch(/block:\s*true|continue:\s*true/i)
+    expect(`${planner}\n${executor}\n${reviewer}`).toMatch(/do not (?:schedule|start)[\s\S]{0,40}(?:repair turn|hidden retry)/i)
   })
 
   it('exposes marketplace tools through the custom tool wrapper', async () => {

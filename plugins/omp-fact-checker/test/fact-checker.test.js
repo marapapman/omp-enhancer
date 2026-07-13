@@ -4,14 +4,21 @@ import { readFileSync } from 'node:fs';
 
 import factCheckerExtension, {
   buildFactCheckPlan,
+  buildFactCheckReport,
   collectLocalEvidence,
   crossCheckEvidence,
+  strictClaimVerdict,
   validateFactCheckGate,
 } from '../index.js';
 import { fetchProviderEvidence } from '../src/providers.js';
 
 const factSkill = (name) => readFileSync(
   new URL(`../skills/${name}/SKILL.md`, import.meta.url),
+  'utf8',
+);
+
+const factAgent = (name) => readFileSync(
+  new URL(`../agents/${name}.md`, import.meta.url),
   'utf8',
 );
 
@@ -65,6 +72,33 @@ test('fact-check skills prescribe one bounded local pass without automatic lane 
   assert.doesNotMatch(workflow, /FACT_EVIDENCE_B or CROSS_CHECK_DEGRADED/);
 });
 
+test('fact researchers treat scholarly metadata as discovery rather than claim support', () => {
+  for (const name of ['fact-researcher-a', 'fact-researcher-b']) {
+    const agent = factAgent(name);
+    assert.match(agent, /DOI.*Crossref.*DataCite.*OpenAlex.*Google Scholar/is);
+    assert.match(agent, /metadata.*(?:discovery|identity)/is);
+    assert.match(agent, /passage.*table.*dataset/is);
+    assert.match(agent, /must not.*SUPPORTED|not sufficient.*SUPPORTED/is);
+    assert.match(agent, /evidence-type.*freshness.*evidence-plan.*source-lineage/is);
+  }
+});
+
+test('fact planner assigns claim-specific freshness and evidence requirements', () => {
+  const agent = factAgent('fact-planner');
+
+  assert.match(agent, /freshness.+CURRENT.*NOT_APPLICABLE/is);
+  assert.match(agent, /independence and source-lineage requirements/i);
+});
+
+test('fact reviewer rejects unresolved or metadata-only claims from strict factual conclusions', () => {
+  const agent = factAgent('fact-reviewer');
+
+  assert.match(agent, /exact final wording/i);
+  assert.match(agent, /metadata-only/i);
+  assert.match(agent, /PARTIAL.*CONFLICTED.*temporal-staleness/is);
+  assert.match(agent, /strict `SUPPORTED`/i);
+});
+
 test('buildFactCheckPlan extracts prioritized factual claims', () => {
   const plan = buildFactCheckPlan({
     text: 'The dataset was released in 2024. The method improves accuracy by 12%. This is a nice paragraph.',
@@ -86,6 +120,15 @@ test('buildFactCheckPlan computes risk from the untruncated text', () => {
   assert.ok(plan.requiredStages.includes('fact-researcher-b'));
 });
 
+test('buildFactCheckPlan records claim-specific freshness requirements', () => {
+  const plan = buildFactCheckPlan({
+    text: 'The company currently has 42 offices. The archive recorded 12 offices in 1998.',
+  });
+
+  assert.equal(plan.claims[0].freshnessRequirement, 'CURRENT');
+  assert.equal(plan.claims[1].freshnessRequirement, 'NOT_APPLICABLE');
+});
+
 test('local evidence lanes cross-check to agreement and conflict', () => {
   const claims = buildFactCheckPlan({ text: 'The method improves accuracy by 12%.' }).claims;
   const supported = collectLocalEvidence({
@@ -102,6 +145,35 @@ test('local evidence lanes cross-check to agreement and conflict', () => {
   const cross = crossCheckEvidence({ claims, evidenceRecords: [...supported, ...contradicted] });
 
   assert.equal(cross[0].status, 'CONFLICTED');
+});
+
+test('cross-check uses claim fields for real conflicts and ignores distinct source URLs', () => {
+  const numericClaim = { id: 'FC-001', text: 'The result is 12%.', category: 'numeric' };
+  const distinctSources = [
+    { claimId: numericClaim.id, lane: 'A', status: 'SUPPORTED', source: 'https://a.test', quote: '12%', observed: { value: 12, unit: '%' } },
+    { claimId: numericClaim.id, lane: 'B', status: 'SUPPORTED', source: 'https://b.test', quote: '12%', observed: { value: 12, unit: '%' } },
+  ];
+  const agreed = crossCheckEvidence({ claims: [numericClaim], evidenceRecords: distinctSources });
+  assert.equal(agreed[0].status, 'AGREED');
+  assert.deepEqual(agreed[0].conflicts, []);
+
+  const valueConflict = crossCheckEvidence({
+    claims: [numericClaim],
+    evidenceRecords: [distinctSources[0], { ...distinctSources[1], quote: '8%', observed: { value: 8, unit: '%' } }],
+  });
+  assert.equal(valueConflict[0].status, 'CONFLICTED');
+  assert.deepEqual(valueConflict[0].conflicts, ['value']);
+
+  const citationClaim = { id: 'FC-002', text: 'DOI: 10.1234/example was published in 2024.', category: 'citation' };
+  const citationConflict = crossCheckEvidence({
+    claims: [citationClaim],
+    evidenceRecords: [
+      { claimId: citationClaim.id, lane: 'A', status: 'SUPPORTED', source: 'https://a.test', quote: '2024', observed: { doi: '10.1234/example', year: 2024 } },
+      { claimId: citationClaim.id, lane: 'B', status: 'SUPPORTED', source: 'https://b.test', quote: '2025', observed: { doi: '10.1234/example', year: 2025 } },
+    ],
+  });
+  assert.equal(citationConflict[0].status, 'CONFLICTED');
+  assert.deepEqual(citationConflict[0].conflicts, ['year']);
 });
 
 test('fact advisory review reports missing plan, evidence, cross-check, review, report, and usage', () => {
@@ -201,12 +273,20 @@ test('the registered review reports workflow inconsistencies without failing too
     'observed-report', { claims, evidenceRecords }, undefined, undefined, ctx,
   );
   assert.equal(report.isError, false);
+  assert.equal(report.details.results[0].verdict, 'SUPPORTED');
+  assert.equal(report.details.results[0].strictVerdict, 'INSUFFICIENT');
+  assert.match(report.content[0].text, /Strict supported: 0/);
 
   const passed = await omp.tools.get('fact_check_gate').execute(
     'observed-gate', { finalOutput: completeOutput(), riskLevel: 'low' }, undefined, undefined, ctx,
   );
   assert.equal(passed.isError, false);
   assert.equal(passed.details.ok, true);
+  assert.equal(passed.details.complete, true);
+  assert.equal(passed.details.factualSupportComplete, false);
+  assert.equal(passed.details.observed.strictSupported, 0);
+  assert.deepEqual(passed.details.observed.strictUnresolvedClaimIds, ['FC-001']);
+  assert.match(passed.content[0].text, /workflow ready.+strict factual support unresolved/i);
   assert.deepEqual(passed.details.missingObserved, []);
 
   const inconsistent = await omp.tools.get('fact_check_gate').execute(
@@ -403,13 +483,53 @@ test('fact report rejects malformed model-owned claim records instead of emittin
   assert.doesNotMatch(malformed.content[0].text, /undefined/i);
 });
 
-test('provider evidence uses Crossref DOI endpoint with mock fetch', async () => {
+test('provider metadata is discovery evidence and never directly SUPPORTED', async () => {
   const calls = [];
   const fetchImpl = async (url) => {
     calls.push(url);
+    if (String(url).includes('export.arxiv.org')) {
+      return {
+        ok: true,
+        async text() {
+          return '<feed><entry><title>A Test Paper</title></entry></feed>';
+        },
+      };
+    }
     return {
       ok: true,
       async json() {
+        if (String(url).includes('api.openalex.org')) {
+          return {
+            results: [{
+              id: 'https://openalex.org/W1',
+              display_name: 'A Test Paper',
+              publication_year: 2024,
+              doi: 'https://doi.org/10.1234/example.paper',
+            }],
+          };
+        }
+        if (String(url).includes('api.datacite.org')) {
+          return {
+            data: {
+              attributes: {
+                titles: [{ title: 'A Test Paper' }],
+                publicationYear: 2024,
+              },
+            },
+          };
+        }
+        if (String(url).includes('factchecktools.googleapis.com')) {
+          return {
+            claims: [{
+              text: 'A claim about the paper',
+              claimReview: [{
+                url: 'https://example.test/review',
+                textualRating: 'Accurate',
+                publisher: { name: 'Example reviewer' },
+              }],
+            }],
+          };
+        }
         return {
           message: {
             title: ['A Test Paper'],
@@ -421,14 +541,170 @@ test('provider evidence uses Crossref DOI endpoint with mock fetch', async () =>
   };
   const records = await fetchProviderEvidence({
     allowNetwork: true,
-    providers: ['crossref'],
-    claims: [{ id: 'FC-001', text: 'See DOI: 10.1234/example.paper for details.' }],
+    providers: ['crossref', 'arxiv', 'openalex', 'datacite', 'google-fact-check'],
+    claims: [{
+      id: 'FC-001',
+      text: 'See DOI: 10.1234/example.paper and arXiv: 2401.12345 for details.',
+    }],
     fetchImpl,
+    googleApiKey: 'test-key',
   });
 
-  assert.equal(records.length, 1);
-  assert.equal(records[0].provider, 'crossref');
-  assert.match(calls[0], /api\.crossref\.org\/works\/10\.1234%2Fexample\.paper/);
+  assert.equal(records.length, 5);
+  assert.deepEqual(new Set(records.map((record) => record.provider)), new Set([
+    'crossref',
+    'arxiv',
+    'openalex',
+    'datacite',
+    'google-fact-check',
+  ]));
+  assert.ok(records.every((record) => record.status === 'INSUFFICIENT'));
+  assert.ok(records.every((record) => record.evidenceType === 'metadata'));
+  assert.ok(records.every((record) => /passage|table|dataset/i.test(record.reason)));
+  assert.ok(calls.some((url) => /api\.crossref\.org\/works\/10\.1234%2Fexample\.paper/.test(url)));
+});
+
+test('provider outage remains unresolved and cannot become strict support', async () => {
+  const claim = {
+    id: 'FC-001',
+    text: 'See DOI: 10.1234/example.paper for details.',
+    evidencePlan: ['primary source'],
+  };
+  const records = await fetchProviderEvidence({
+    allowNetwork: true,
+    providers: ['crossref'],
+    claims: [claim],
+    fetchImpl: async () => {
+      throw new Error('network unavailable');
+    },
+  });
+
+  assert.deepEqual(records, []);
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: records,
+    crossCheck: { status: 'INSUFFICIENT' },
+  }), 'INSUFFICIENT');
+});
+
+test('strict claim verdict fails closed without changing compatibility verdicts', () => {
+  const claim = {
+    id: 'FC-001',
+    text: 'The method improves accuracy by 12%.',
+    evidencePlan: ['primary source', 'independent secondary source'],
+  };
+  const currentPassages = [
+    {
+      claimId: claim.id,
+      lane: 'A',
+      provider: 'primary-study',
+      status: 'SUPPORTED',
+      source: 'https://example.test/study',
+      quote: 'Accuracy improved by 12%.',
+      evidenceType: 'table',
+      freshness: 'CURRENT',
+      requirementsMet: true,
+    },
+    {
+      claimId: claim.id,
+      lane: 'B',
+      provider: 'independent-review',
+      status: 'SUPPORTED',
+      source: 'https://independent.test/review',
+      quote: 'The reported gain is 12%.',
+      evidenceType: 'passage',
+      freshness: 'CURRENT',
+      requirementsMet: true,
+    },
+  ];
+
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: currentPassages,
+    crossCheck: { status: 'AGREED' },
+  }), 'SUPPORTED');
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: currentPassages.slice(0, 1),
+    crossCheck: { status: 'PARTIAL' },
+  }), 'INSUFFICIENT');
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: currentPassages,
+    crossCheck: { status: 'CONFLICTED' },
+  }), 'CONFLICTED');
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: currentPassages.map((record, index) => (
+      index === 0 ? { ...record, freshness: 'STALE' } : record
+    )),
+    crossCheck: { status: 'AGREED', findings: ['STALE_EVIDENCE'] },
+  }), 'INSUFFICIENT');
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: currentPassages.map((record) => ({ ...record, requirementsMet: false })),
+    crossCheck: { status: 'AGREED' },
+  }), 'INSUFFICIENT');
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: currentPassages.map((record) => ({
+      ...record,
+      provider: 'crossref',
+      evidenceType: 'metadata',
+    })),
+    crossCheck: { status: 'AGREED' },
+  }), 'INSUFFICIENT');
+  assert.equal(strictClaimVerdict({
+    claim: { ...claim, evidencePlan: ['primary source'] },
+    evidenceRecords: [
+      currentPassages[0],
+      {
+        ...currentPassages[1],
+        provider: 'crossref',
+        evidenceType: 'metadata',
+      },
+    ],
+    crossCheck: { status: 'AGREED' },
+  }), 'INSUFFICIENT');
+
+  const currentClaim = {
+    ...claim,
+    text: 'The method currently improves accuracy by 12%.',
+    freshnessRequirement: 'CURRENT',
+  };
+  assert.equal(strictClaimVerdict({
+    claim: currentClaim,
+    evidenceRecords: currentPassages.map((record) => ({ ...record, freshness: 'UNKNOWN' })),
+    crossCheck: { status: 'AGREED' },
+  }), 'INSUFFICIENT');
+  assert.equal(strictClaimVerdict({
+    claim: currentClaim,
+    evidenceRecords: currentPassages,
+    crossCheck: { status: 'AGREED' },
+  }), 'SUPPORTED');
+
+  const staleCrossCheck = crossCheckEvidence({
+    claims: [claim],
+    evidenceRecords: currentPassages.map((record, index) => (
+      index === 0 ? { ...record, freshness: 'STALE' } : record
+    )),
+  });
+  assert.equal(staleCrossCheck[0].status, 'AGREED');
+  assert.deepEqual(staleCrossCheck[0].findings, ['STALE_EVIDENCE']);
+
+  const compatibilityReport = buildFactCheckReport({
+    claims: [claim],
+    evidenceRecords: currentPassages.slice(0, 1),
+    crossChecks: [{
+      claimId: claim.id,
+      status: 'PARTIAL',
+      laneA: 'SUPPORTED',
+      laneB: 'INSUFFICIENT',
+      conflicts: [],
+    }],
+  });
+  assert.equal(compatibilityReport.results[0].verdict, 'SUPPORTED');
+  assert.equal(compatibilityReport.results[0].strictVerdict, 'INSUFFICIENT');
 });
 
 function fakeZod() {

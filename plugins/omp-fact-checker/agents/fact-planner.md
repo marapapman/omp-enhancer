@@ -16,7 +16,7 @@ Suggested workflow:
 2. Extract atomic, checkable factual claims.
 3. Classify each claim as numeric, date, entity, citation, causal, comparative, policy/legal, medical/scientific, or unverifiable.
 4. Mark priority as high for medical, legal, financial, safety, public-policy, security, and time-sensitive claims.
-5. Specify primary and fallback evidence sources for each claim.
+5. Specify primary and fallback evidence sources, corroboration, independence and source-lineage requirements, and the claim-specific freshness cutoff.
 6. Return a `FACT_CHECK_PLAN` block.
 
 Do not use vague findings. Every claim must have an id such as `FC-001`.
@@ -30,6 +30,7 @@ Claims:
   category: ...
   priority: ...
   evidence: ...
+  freshness-requirement: CURRENT|NOT_APPLICABLE
 
 Optional skill summary:
 Recommended:

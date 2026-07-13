@@ -9,6 +9,7 @@ import {
   formatFactCheckPlan,
   formatFactCheckReport,
   normalizeWhitespace,
+  strictClaimVerdict,
   validateFactCheckGate,
 } from './src/fact-check.js';
 import { fetchProviderEvidence } from './src/providers.js';
@@ -75,6 +76,7 @@ function buildReportParameters(z) {
     laneA: z.string().optional(),
     laneB: z.string().optional(),
     conflicts: z.array(z.string()).optional(),
+    findings: z.array(z.string()).optional(),
   });
   return z.object({
     claims: z.array(claim).optional(),
@@ -91,6 +93,7 @@ function buildClaimSchema(z) {
     priority: z.string().optional(),
     location: z.string().optional(),
     evidencePlan: z.array(z.string()).optional(),
+    freshnessRequirement: z.enum(['CURRENT', 'NOT_APPLICABLE']).optional(),
   });
 }
 
@@ -103,6 +106,11 @@ function buildEvidenceRecordSchema(z) {
     quote: z.string().optional(),
     source: z.string().optional(),
     reason: z.string().optional(),
+    evidenceType: z.enum(['passage', 'table', 'dataset', 'metadata']).optional(),
+    freshness: z.enum(['CURRENT', 'STALE', 'UNKNOWN', 'NOT_APPLICABLE']).optional(),
+    requirementsMet: z.boolean().optional(),
+    sourceLineage: z.string().optional(),
+    observed: z.any().optional(),
   });
 }
 
@@ -121,6 +129,10 @@ function formatEvidenceBlock(lane, records = []) {
       `  provider: ${record.provider}`,
       `  source: ${record.source || 'none'}`,
       `  quote: ${record.quote || 'none'}`,
+      record.evidenceType ? `  evidence-type: ${record.evidenceType}` : null,
+      record.freshness ? `  freshness: ${record.freshness}` : null,
+      record.requirementsMet === true ? '  evidence-plan: satisfied' : null,
+      record.sourceLineage ? `  source-lineage: ${record.sourceLineage}` : null,
       record.reason ? `  reason: ${record.reason}` : null,
     ].filter(Boolean).join('\n')) : ['- none']),
   ].join('\n');
@@ -134,6 +146,7 @@ function formatCrossCheckBlock(crossChecks = []) {
       `  laneA: ${item.laneA}`,
       `  laneB: ${item.laneB}`,
       item.conflicts?.length ? `  conflicts: ${item.conflicts.join(', ')}` : null,
+      item.findings?.length ? `  findings: ${item.findings.join(', ')}` : null,
     ].filter(Boolean).join('\n')) : ['- none']),
   ].join('\n');
 }
@@ -294,16 +307,20 @@ export default function factCheckerExtension(omp) {
           summary: { telemetry: 'stateless' },
         };
       const complete = textual.ok && observed.missingObserved.length === 0;
+      const factualSupportComplete = complete && observed.summary.strictUnresolved === 0;
       const result = {
         ...textual,
         ok: complete,
         complete,
+        factualSupportComplete,
         advisoryOnly: true,
         missingObserved: observed.missingObserved,
         observed: observed.summary,
       };
-      const report = complete
-        ? 'Fact-check advisory review: ready.'
+      const report = factualSupportComplete
+        ? 'Fact-check advisory review: workflow ready; strict factual support complete.'
+        : complete
+          ? `Fact-check advisory review: workflow ready; strict factual support unresolved (${observed.summary.strictUnresolved} claim(s)).`
         : `Fact-check advisory review: needs attention (${[...result.missing, ...result.missingObserved].join(', ')}).`;
       return {
         content: [textContent(report)],
@@ -432,11 +449,25 @@ function sameEvidenceRecords(expected = [], observed = []) {
     quote: normalizeWhitespace(record?.quote ?? ''),
     source: normalizeWhitespace(record?.source ?? ''),
     reason: normalizeWhitespace(record?.reason ?? ''),
+    evidenceType: record?.evidenceType ?? '',
+    freshness: record?.freshness ?? '',
+    requirementsMet: record?.requirementsMet === true,
+    sourceLineage: normalizeWhitespace(record?.sourceLineage ?? ''),
+    observed: normalizeObserved(record?.observed),
   });
   const left = expected.map(normalize).sort();
   const right = observed.map(normalize).sort();
   return left.length === right.length
     && left.every((value, index) => value === right[index]);
+}
+
+function normalizeObserved(observed) {
+  if (!observed || typeof observed !== 'object' || Array.isArray(observed)) return '';
+  return JSON.stringify(Object.fromEntries(
+    Object.entries(observed)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => [key, normalizeWhitespace(value)]),
+  ));
 }
 
 function sameCrossChecks(expected = [], observed = []) {
@@ -446,6 +477,7 @@ function sameCrossChecks(expected = [], observed = []) {
     laneA: item?.laneA ?? '',
     laneB: item?.laneB ?? '',
     conflicts: [...(item?.conflicts ?? [])].sort(),
+    findings: [...(item?.findings ?? [])].sort(),
   });
   const left = expected.map(normalize).sort();
   const right = observed.map(normalize).sort();
@@ -460,6 +492,9 @@ function validateObservedWorkflow({ workflow, finalOutput = '', riskLevel = 'sta
   const laneB = workflow?.evidenceByLane?.get('B') ?? [];
   const report = workflow?.report?.report;
   const crossChecks = workflow?.report?.crossChecks ?? [];
+  const strictUnresolvedClaimIds = Array.isArray(report?.results)
+    ? report.results.filter((item) => item.strictVerdict !== 'SUPPORTED').map((item) => item.claimId)
+    : [];
   if (!isValidClaimList(planClaims)) missingObserved.push('host FACT_CHECK_PLAN');
   if (!laneCoversClaims(laneA, planClaims)) missingObserved.push('host FACT_EVIDENCE_A');
   if (riskLevel !== 'low' && !laneCoversClaims(laneB, planClaims)) missingObserved.push('host FACT_EVIDENCE_B');
@@ -476,6 +511,11 @@ function validateObservedWorkflow({ workflow, finalOutput = '', riskLevel = 'sta
       laneAClaims: laneA.length,
       laneBClaims: laneB.length,
       reportedClaims: Array.isArray(report?.results) ? report.results.length : 0,
+      strictSupported: Array.isArray(report?.results)
+        ? report.results.filter((item) => item.strictVerdict === 'SUPPORTED').length
+        : 0,
+      strictUnresolved: strictUnresolvedClaimIds.length,
+      strictUnresolvedClaimIds,
     },
   };
 }
@@ -541,13 +581,25 @@ function mergeEvidence(localEvidence = [], providerEvidence = []) {
   for (const record of [...localEvidence, ...providerEvidence]) {
     const key = `${record.claimId}:${record.lane}`;
     const current = byClaim.get(key);
-    if (!current || evidenceRank(record.status) > evidenceRank(current.status)) byClaim.set(key, record);
+    const rank = evidenceRank(record.status);
+    const currentRank = evidenceRank(current?.status);
+    if (!current
+      || rank > currentRank
+      || (rank === currentRank && evidenceSpecificity(record) > evidenceSpecificity(current))) {
+      byClaim.set(key, record);
+    }
   }
   return [...byClaim.values()];
 }
 
 function evidenceRank(status = '') {
   return { CONTRADICTED: 4, SUPPORTED: 3, UNVERIFIABLE: 2, INSUFFICIENT: 1 }[String(status).toUpperCase()] ?? 0;
+}
+
+function evidenceSpecificity(record = {}) {
+  return Number(Boolean(normalizeWhitespace(record.source)))
+    + Number(Boolean(normalizeWhitespace(record.quote)))
+    + Number(Boolean(record.evidenceType));
 }
 
 function parseCommandArgs(args = '') {
@@ -574,5 +626,6 @@ export {
   crossCheckEvidence,
   formatFactCheckPlan,
   formatFactCheckReport,
+  strictClaimVerdict,
   validateFactCheckGate,
 };

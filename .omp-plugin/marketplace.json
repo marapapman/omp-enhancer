@@ -13,7 +13,7 @@
     {
       "name": "omp-config",
       "description": "Pluginized shared main/Advisor workflow context, configuration assets, agents, skills, hooks, templates, and diagnostics.",
-      "version": "0.1.28",
+      "version": "0.1.29",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -295,6 +295,7 @@
         "./skills/slides-storyline",
         "./skills/spike",
         "./skills/subagent-driven-development",
+        "./skills/svg-flowchart",
         "./skills/systematic-debugging",
         "./skills/tdd",
         "./skills/test-driven-development",
@@ -347,8 +348,8 @@
     },
     {
       "name": "omp-testing-enhancer",
-      "description": "Help OMP agents write and check tests with target analysis, public API context, browser evidence, coverage and mutation analyzers, advisory review, and reports.",
-      "version": "0.1.13",
+      "description": "Plan, execute, and independently review OMP testing work with packaged agents, target analysis, public API context, browser evidence, coverage and mutation analyzers, advisory review, and reports.",
+      "version": "0.1.14",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -357,7 +358,7 @@
     {
       "name": "omp-fact-checker",
       "description": "Fact-checking workflow with claim planning, evidence collection, cross-agent validation, reports, and advisory completeness review.",
-      "version": "0.1.7",
+      "version": "0.1.8",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-fact-checker",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -372,7 +373,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "Advisory main-agent workflow catalog, TODO orchestration, active skill discovery, and parent-selected subagent step context.",
-      "version": "0.1.121",
+      "version": "0.1.122",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",

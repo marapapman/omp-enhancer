@@ -1,6 +1,6 @@
 {
   "name": "omp-fact-checker",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "description": "OMP fact-checking workflow with claim planning, evidence collection, cross-checking, reports, and advisory review.",

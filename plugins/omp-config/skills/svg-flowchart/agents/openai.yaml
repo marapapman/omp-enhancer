@@ -1,0 +1,4 @@
+interface:
+  display_name: "SVG Flowchart"
+  short_description: "Create clear monochrome SVG workflow diagrams"
+  default_prompt: "Use $svg-flowchart to create and visually verify a clear black-and-white SVG workflow diagram."

@@ -88,6 +88,7 @@ const expectedBundledSkills = [
   'slides-storyline',
   'spike',
   'subagent-driven-development',
+  'svg-flowchart',
   'systematic-debugging',
   'tdd',
   'test-driven-development',
@@ -235,7 +236,7 @@ test('ships every omp-config skill from the plugin skills directory', async () =
     assert.match(skillDoc, /\S/, `${skill} should ship a non-empty SKILL.md`);
   }
 
-  assert.equal(actualSkills.length, 285);
+  assert.equal(actualSkills.length, 286);
   assert.ok(actualSkills.includes('ecc/accessibility'));
   assert.ok(actualSkills.includes('ecc/tdd-workflow'));
   assert.ok(actualSkills.includes('ecc/workspace-surface-audit'));
