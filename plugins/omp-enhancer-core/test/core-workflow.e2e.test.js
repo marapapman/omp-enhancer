@@ -120,7 +120,7 @@ test('real batch task assignments preserve native schema and pass through parent
         {
           name: 'RouteScout',
           agent: 'scout',
-          task: '[workflow=code.review step=step-1 todo=Inspect router skills=systematic-debugging]\n# Target\nsrc/router.js\n# Acceptance\nFile-backed findings.',
+          task: 'WR:code.review ST:step-1 TODO:Inspect-router SK:systematic-debugging\n# Target\nsrc/router.js\n# Acceptance\nFile-backed findings.',
         },
         {
           name: 'TestReviewer',
@@ -157,6 +157,7 @@ test('real batch task assignments preserve native schema and pass through parent
     assert.match(item.task, /parent owns integration and final verification/i);
   }
   assert.match(taskEvent.input.tasks[0].task, /OMP_WORKFLOW: code\.review/);
+  assert.match(taskEvent.input.tasks[0].task, /^\[workflow=code\.review step=step-1 todo=Inspect-router skills=systematic-debugging\]/);
   assert.match(taskEvent.input.tasks[0].task, /skill:\/\/systematic-debugging/);
   assert.match(taskEvent.input.tasks[1].task, /OMP_WORKFLOW: code\.review,code\.test/);
   assert.match(taskEvent.input.tasks[1].task, /OMP_WORKFLOW_STEP: step-coverage-review/);

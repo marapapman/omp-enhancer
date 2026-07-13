@@ -11,12 +11,85 @@ import {
   summarizeWorkflowEvents,
 } from './e2e/workflow-events.mjs';
 import {
+  createBoundedNdjsonCapture,
   prepareScenario,
   readSessionCustomEvents,
   runInstalledMatrix,
   snapshotTree,
   verifyFixture,
 } from './e2e/run-installed-deepseek-workflow.mjs';
+
+test('bounded NDJSON capture keeps workflow event order and filters unused streaming events', () => {
+  const observed = [];
+  const capture = createBoundedNdjsonCapture({
+    maxLineCharacters: 512,
+    maxCapturedCharacters: 2048,
+    maxCapturedLines: 10,
+    maxDropSamples: 4,
+    onEvent: (event) => observed.push(event.type),
+  });
+  capture.write('{"type":"agent_start"}\n{"type":"message_update","delta":"unused"}\n{"type":"tool_execution_');
+  capture.write('start","toolCallId":"read-1","toolName":"read","args":{"path":"paper.tex"}}\n');
+  capture.write('{"type":"agent_end"}');
+  const result = capture.finish();
+
+  assert.deepEqual(observed, ['agent_start', 'tool_execution_start', 'agent_end']);
+  assert.deepEqual(parseNdjson(result.stdout).events.map(({ type }) => type), [
+    'agent_start',
+    'tool_execution_start',
+    'agent_end',
+  ]);
+  assert.equal(result.capture.filteredLineCount, 1);
+  assert.equal(result.capture.unterminatedInputLineCount, 1);
+  assert.equal(result.capture.captureTruncated, false);
+  assert.equal(result.capture.droppedLineCount, 0);
+});
+
+test('bounded NDJSON capture discards one oversized JSON line without losing later events', () => {
+  const capture = createBoundedNdjsonCapture({
+    maxLineCharacters: 128,
+    maxCapturedCharacters: 1024,
+    maxCapturedLines: 10,
+    maxDropSamples: 2,
+  });
+  capture.write('{"type":"agent_start"}\n');
+  capture.write(`{"type":"tool_execution_end","result":{"content":"${'x'.repeat(20_000)}`);
+  capture.write('"}}\n{"type":"agent_end"}\n');
+  const result = capture.finish();
+  const parsed = parseNdjson(result.stdout);
+
+  assert.deepEqual(parsed.events.map(({ type }) => type), ['agent_start', 'agent_end']);
+  assert.equal(parsed.invalidLines.length, 0);
+  assert.equal(result.capture.oversizedLineCount, 1);
+  assert.equal(result.capture.capacityDroppedLineCount, 0);
+  assert.equal(result.capture.droppedLineCount, 1);
+  assert.equal(result.capture.captureTruncated, true);
+  assert.ok(result.capture.droppedCharacters > 20_000);
+  assert.deepEqual(result.capture.dropSamples.map(({ reason }) => reason), ['line-too-large']);
+  assert.ok(result.stdout.length < 128);
+});
+
+test('bounded NDJSON capture reports total-capacity drops and remains idempotent after finish', () => {
+  const observed = [];
+  const capture = createBoundedNdjsonCapture({
+    maxLineCharacters: 256,
+    maxCapturedCharacters: 50,
+    maxCapturedLines: 10,
+    maxDropSamples: 2,
+    onEvent: (event) => observed.push(event.type),
+  });
+  capture.write('{"type":"agent_start"}\n{"type":"agent_end","padding":"1234567890"}\n');
+  const first = capture.finish();
+  const second = capture.finish();
+
+  assert.deepEqual(second, first);
+  assert.deepEqual(observed, ['agent_start', 'agent_end']);
+  assert.deepEqual(parseNdjson(first.stdout).events.map(({ type }) => type), ['agent_start']);
+  assert.equal(first.capture.capacityDroppedLineCount, 1);
+  assert.equal(first.capture.captureTruncated, true);
+  assert.equal(first.capture.dropSamples[0].reason, 'capture-capacity');
+  assert.throws(() => capture.write('{"type":"agent_end"}\n'), /finished NDJSON capture/);
+});
 
 test('installed workflow summary distinguishes observed skill reads from claims', () => {
   const events = [

@@ -15,8 +15,9 @@ For every non-trivial task:
 4. Initialize the native `todo` before substantive project work. Include the selected workflow, required steps, selected skills, explicit user requirements, verification, and final reconciliation.
 5. Execute TODO items in dependency order and update their status as evidence arrives. Do not rely on memory to retain unfinished requirements.
 6. When at least two useful workstreams are independent, fork multiple subagents, preferably in one `task.tasks[]` batch. Keep integration, irreversible choices, and final verification with the parent. Do not fork ceremonial work for a trivial or tightly coupled task.
-7. Give every child its workflow, exact workflow step, TODO item, selected skills, scope, non-goals, dependencies, deliverable, and acceptance evidence. A child owns only that checkpoint.
-8. Reconcile the TODO, child results, and verification before the final response.
+7. Give every child its workflow, exact workflow step, TODO item, selected skills, scope, non-goals, dependencies, deliverable, and acceptance evidence. Begin with the literal `[workflow=<ids> step=<step-id> todo=<exact-item> skills=<comma-separated-skill-names>]` prefix; do not abbreviate or rename those keys. A child owns only that checkpoint.
+8. Consume the child results returned by `task`; do not launch extra subagents merely to poll other children or check temporary report files.
+9. Reconcile the TODO, child results, and verification before the final response.
 
 If `todo`, `task`, or a selected skill is unavailable, continue with a concise checklist or direct work and report a material limitation. Missing workflow mechanics are findings, never authorization or completion gates. The host alone owns sandboxing and approval.
 

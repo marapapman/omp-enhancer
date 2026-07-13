@@ -24,6 +24,182 @@ import {
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..', '..');
 const DEFAULT_MATRIX = path.join(SCRIPT_DIR, 'fixtures', 'deepseek-installed-matrix.json');
+export const DEFAULT_NDJSON_CAPTURE_LIMITS = Object.freeze({
+  maxLineCharacters: 2 * 1024 * 1024,
+  maxCapturedCharacters: 32 * 1024 * 1024,
+  maxCapturedLines: 100_000,
+  maxDropSamples: 20,
+});
+
+const WORKFLOW_EVENT_TYPES = new Set([
+  'agent_start',
+  'agent_end',
+  'message_end',
+  'tool_execution_start',
+  'tool_execution_end',
+]);
+
+/**
+ * Incrementally captures only events consumed by workflow-events.mjs.
+ *
+ * The pending line, retained output, line count, and drop samples are all
+ * bounded. A line that exceeds maxLineCharacters is discarded as a unit, so
+ * the capture never creates malformed truncated JSON or grows an unbounded
+ * string while waiting for its newline.
+ */
+export function createBoundedNdjsonCapture(options = {}) {
+  const limits = normalizeNdjsonCaptureLimits(options);
+  const capturedLines = [];
+  const dropSamples = [];
+  let pendingLine = '';
+  let discardingOversizedLine = false;
+  let oversizedLineCharacters = 0;
+  let inputCharacters = 0;
+  let inputLineCount = 0;
+  let capturedCharacters = 0;
+  let capturedLineCount = 0;
+  let filteredLineCount = 0;
+  let invalidLineCount = 0;
+  let oversizedLineCount = 0;
+  let capacityDroppedLineCount = 0;
+  let droppedCharacters = 0;
+  let unterminatedInputLineCount = 0;
+  let finished = false;
+
+  const recordDrop = (reason, lineCharacters, preview = '') => {
+    droppedCharacters += lineCharacters;
+    if (dropSamples.length < limits.maxDropSamples) {
+      dropSamples.push({
+        line: inputLineCount,
+        reason,
+        characters: lineCharacters,
+        preview: String(preview).slice(0, 160),
+      });
+    }
+  };
+
+  const retainLine = (line) => {
+    const outputCharacters = line.length + 1;
+    if (capturedLineCount >= limits.maxCapturedLines
+      || capturedCharacters + outputCharacters > limits.maxCapturedCharacters) {
+      capacityDroppedLineCount += 1;
+      recordDrop('capture-capacity', line.length, line);
+      return;
+    }
+    capturedLines.push(line);
+    capturedLineCount += 1;
+    capturedCharacters += outputCharacters;
+  };
+
+  const finishLine = (hasTerminatingNewline) => {
+    inputLineCount += 1;
+    if (!hasTerminatingNewline) unterminatedInputLineCount += 1;
+    if (discardingOversizedLine) {
+      oversizedLineCount += 1;
+      recordDrop('line-too-large', oversizedLineCharacters);
+      pendingLine = '';
+      discardingOversizedLine = false;
+      oversizedLineCharacters = 0;
+      return;
+    }
+
+    const line = pendingLine.endsWith('\r') ? pendingLine.slice(0, -1) : pendingLine;
+    pendingLine = '';
+    if (!line.trim()) return;
+
+    let event;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      invalidLineCount += 1;
+      retainLine(line);
+      return;
+    }
+    if (!isWorkflowSummaryEvent(event)) {
+      filteredLineCount += 1;
+      return;
+    }
+    if (typeof options.onEvent === 'function') options.onEvent(event);
+    retainLine(line);
+  };
+
+  const appendLinePart = (part) => {
+    if (discardingOversizedLine) {
+      oversizedLineCharacters += part.length;
+      return;
+    }
+    if (pendingLine.length + part.length <= limits.maxLineCharacters) {
+      pendingLine += part;
+      return;
+    }
+    discardingOversizedLine = true;
+    oversizedLineCharacters = pendingLine.length + part.length;
+    pendingLine = '';
+  };
+
+  return {
+    write(chunk) {
+      if (finished) throw new Error('Cannot write to a finished NDJSON capture.');
+      const text = String(chunk ?? '');
+      inputCharacters += text.length;
+      let offset = 0;
+      while (offset < text.length) {
+        const newline = text.indexOf('\n', offset);
+        if (newline === -1) {
+          appendLinePart(text.slice(offset));
+          break;
+        }
+        appendLinePart(text.slice(offset, newline));
+        finishLine(true);
+        offset = newline + 1;
+      }
+    },
+    finish() {
+      if (!finished) {
+        finished = true;
+        if (pendingLine || discardingOversizedLine) finishLine(false);
+      }
+      const stdout = capturedLines.length ? `${capturedLines.join('\n')}\n` : '';
+      return {
+        stdout,
+        capture: {
+          version: 1,
+          ...limits,
+          inputCharacters,
+          inputLineCount,
+          capturedCharacters,
+          capturedLineCount,
+          filteredLineCount,
+          invalidLineCount,
+          oversizedLineCount,
+          capacityDroppedLineCount,
+          droppedLineCount: oversizedLineCount + capacityDroppedLineCount,
+          droppedCharacters,
+          unterminatedInputLineCount,
+          captureTruncated: oversizedLineCount > 0 || capacityDroppedLineCount > 0,
+          dropSamples,
+        },
+      };
+    },
+  };
+}
+
+function normalizeNdjsonCaptureLimits(options) {
+  return Object.fromEntries(Object.entries(DEFAULT_NDJSON_CAPTURE_LIMITS).map(([key, fallback]) => {
+    const value = Number(options[key] ?? fallback);
+    if (!Number.isSafeInteger(value) || value < 1) {
+      throw new TypeError(`${key} must be a positive safe integer.`);
+    }
+    return [key, value];
+  }));
+}
+
+function isWorkflowSummaryEvent(event) {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return false;
+  if (WORKFLOW_EVENT_TYPES.has(event.type)) return true;
+  if (!event.type && (event.role === 'custom' || event.customType)) return true;
+  return Boolean(event.route || event.details?.route);
+}
 
 export async function runInstalledMatrix(options = {}) {
   const matrixPath = path.resolve(options.matrixPath ?? DEFAULT_MATRIX);
@@ -56,7 +232,7 @@ export async function runInstalledMatrix(options = {}) {
   const configStable = JSON.stringify(beforeConfig) === JSON.stringify(afterConfig);
   const advisorConfigStable = JSON.stringify(beforeAdvisorConfig) === JSON.stringify(afterAdvisorConfig);
   const report = {
-    version: 1,
+    version: 2,
     runId,
     matrix: path.relative(REPO_ROOT, matrixPath),
     startedFrom: process.cwd(),
@@ -112,6 +288,7 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
     });
   await writeFile(path.join(runDir, 'events.ndjson'), execution.stdout);
   await writeFile(path.join(runDir, 'stderr.log'), execution.stderr);
+  await writeFile(path.join(runDir, 'event-capture.json'), `${JSON.stringify(execution.capture, null, 2)}\n`);
 
   const parsed = parseNdjson(execution.stdout);
   const sessionCustomEvents = await readSessionCustomEvents(sessionDir);
@@ -137,6 +314,7 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
     cwd: prepared.displayCwd ?? prepared.cwd,
     command: ['omp', ...args.map((arg) => arg === prepared.prompt ? '<prompt>' : arg)],
     runtimeConfig: { advisorEnabled },
+    eventCapture: execution.capture,
     summary,
     fileEvaluation,
     evaluation,
@@ -325,12 +503,12 @@ function spawnCaptured(command, args, { cwd, timeoutMs }) {
   return new Promise((resolvePromise) => {
     const startedAt = Date.now();
     const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
+    const stdoutCapture = createBoundedNdjsonCapture();
     let stderr = '';
     let timedOut = false;
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stdout.on('data', (chunk) => { stdoutCapture.write(chunk); });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     const timer = setTimeout(() => {
       timedOut = true;
@@ -339,12 +517,12 @@ function spawnCaptured(command, args, { cwd, timeoutMs }) {
     }, timeoutMs);
     child.on('error', (error) => {
       clearTimeout(timer);
-      resolvePromise({ stdout, stderr: `${stderr}${error.stack ?? error.message}\n`, exitCode: 1, signal: null, timedOut, durationMs: Date.now() - startedAt });
+      resolvePromise({ ...stdoutCapture.finish(), stderr: `${stderr}${error.stack ?? error.message}\n`, exitCode: 1, signal: null, timedOut, durationMs: Date.now() - startedAt });
     });
     child.on('close', (code, signal) => {
       clearTimeout(timer);
       resolvePromise({
-        stdout,
+        ...stdoutCapture.finish(),
         stderr: `${stderr}${timedOut ? '\nRunner hard timeout reached.\n' : ''}`,
         exitCode: code,
         signal,
@@ -364,9 +542,7 @@ function spawnRpcCaptured(command, args, {
   return new Promise((resolvePromise) => {
     const startedAt = Date.now();
     const child = spawn(command, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
-    let stdout = '';
     let stderr = '';
-    let lineBuffer = '';
     let timedOut = false;
     let captureSeen = false;
     let agentEnds = 0;
@@ -377,13 +553,7 @@ function spawnRpcCaptured(command, args, {
       inputClosed = true;
       child.stdin.end();
     };
-    const inspectLine = (line) => {
-      let event;
-      try {
-        event = JSON.parse(line);
-      } catch {
-        return;
-      }
+    const inspectEvent = (event) => {
       if (event?.type === 'message_end'
         && event?.message?.role === 'custom'
         && event.message.customType === 'autolearn-nudge') {
@@ -397,15 +567,12 @@ function spawnRpcCaptured(command, args, {
         if (complete) setTimeout(closeInput, 100).unref();
       }
     };
+    const stdoutCapture = createBoundedNdjsonCapture({ onEvent: inspectEvent });
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => {
-      stdout += chunk;
-      lineBuffer += chunk;
-      const lines = lineBuffer.split(/\r?\n/);
-      lineBuffer = lines.pop() ?? '';
-      for (const line of lines) if (line.trim()) inspectLine(line);
+      stdoutCapture.write(chunk);
     });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.stdin.on('error', (error) => {
@@ -421,12 +588,12 @@ function spawnRpcCaptured(command, args, {
     }, timeoutMs);
     child.on('error', (error) => {
       clearTimeout(timer);
-      resolvePromise({ stdout, stderr: `${stderr}${error.stack ?? error.message}\n`, exitCode: 1, signal: null, timedOut, durationMs: Date.now() - startedAt });
+      resolvePromise({ ...stdoutCapture.finish(), stderr: `${stderr}${error.stack ?? error.message}\n`, exitCode: 1, signal: null, timedOut, durationMs: Date.now() - startedAt });
     });
     child.on('close', (code, signal) => {
       clearTimeout(timer);
       resolvePromise({
-        stdout,
+        ...stdoutCapture.finish(),
         stderr: `${stderr}${timedOut ? '\nRunner hard timeout reached.\n' : ''}`,
         exitCode: code,
         signal,

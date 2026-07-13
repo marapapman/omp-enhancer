@@ -28,7 +28,9 @@ export function buildGovernancePromptFragment({
     '',
     'Every child task must begin with a compact prefix inside its first 120 characters:',
     '`[workflow=<ids> step=<step-id> todo=<exact-item> skills=<comma-separated-skill-names>]`',
+    'Copy that bracketed key format literally. Do not abbreviate it as WR/ST/TODO/SK, rename the keys, or put it after prose. Reuse the exact native TODO string in `todo=`.',
     'Then state the exact target, non-goals, requested change or investigation, and observable acceptance criteria. The parent chooses these values; Core only passes them through.',
+    'Use the child results returned by the `task` call. Do not launch extra subagents merely to poll other children or check temporary report files.',
     '',
     'Learned memory, general model ability, and a managed skill created after finishing do not replace pre-work skill discovery. If a skill, `todo`, or `task` is unavailable, continue with the best concise checklist or direct method and report a material limitation; never block, loop, or auto-continue.',
     'Confirm a path exists before reading it. For a schema or path error, make at most one evidence-based targeted correction, then continue with the evidence already available.',
@@ -53,7 +55,7 @@ export function buildGovernancePromptFragment({
       '',
       '### Routing model note',
       '',
-      'Classifier output is a route hint. It may refine workflow suggestions, but it does not create permissions or completion conditions.',
+      'Classifier output is diagnostic only. It cannot replace or refine the active main-agent workflow, and it does not create permissions or completion conditions.',
     );
   }
 
@@ -70,7 +72,7 @@ export function buildImmediateWorkflowMessage({
   return [
     'OMP autonomous workflow reminder:',
     'Choose or compose workflows from the full catalog, inspect the active skill inventory, and initialize the native `todo` before substantive work.',
-    'Load the smallest selected skills before their steps. Fork multiple independent workstreams with `task`; put workflow, step, TODO, and skills metadata at the start of every child task.',
+    'Load the smallest selected skills before their steps. Fork multiple independent workstreams with `task`; begin every child task with the exact `[workflow=... step=... todo=... skills=...]` prefix.',
     'This is advisory only. If a mechanism is unavailable, continue without blocking or automatic continuation.',
   ].join('\n');
 }

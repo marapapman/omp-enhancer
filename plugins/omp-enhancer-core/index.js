@@ -590,17 +590,22 @@ function decorateTaskAssignments(event, state) {
 function taskAssignmentMetadata(value = '') {
   const source = String(value);
   const compact = source.match(/\[workflow=([^\]\s]+)\s+step=([^\]]*?)\s+todo=([^\]]*?)\s+skills=([^\]]*?)\]/i);
+  const shorthand = source.match(/^\s*WR:([^\s]+)\s+ST:([^\s]+)\s+TODO:([^\s]+)\s+SK:([^\r\n]+)/i);
   const workflow = source.match(/OMP_WORKFLOW(?:_ID)?:\s*([^\r\n]+)/i)?.[1]?.trim()
     ?? compact?.[1]?.trim()
+    ?? shorthand?.[1]?.trim()
     ?? 'unspecified';
   const step = source.match(/OMP_WORKFLOW_STEP:\s*([^\r\n]+)/i)?.[1]?.trim()
     ?? compact?.[2]?.trim()
+    ?? shorthand?.[2]?.trim()
     ?? 'unspecified';
   const todo = source.match(/OMP_TODO_ITEM:\s*([^\r\n]+)/i)?.[1]?.trim()
     ?? compact?.[3]?.trim()
+    ?? shorthand?.[3]?.trim()
     ?? 'unspecified';
   const skills = unique([
     ...(compact?.[4] ? compact[4].split(',') : []),
+    ...(shorthand?.[4] ? shorthand[4].split(',') : []),
     ...assignmentMarkerSkills(source),
   ].map((skill) => normalizeProvidedSkillName(skill)).filter(Boolean));
   return {
