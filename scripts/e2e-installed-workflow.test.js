@@ -14,6 +14,8 @@ import {
   prepareScenario,
   readSessionCustomEvents,
   runInstalledMatrix,
+  snapshotTree,
+  verifyFixture,
 } from './e2e/run-installed-deepseek-workflow.mjs';
 
 test('installed workflow summary distinguishes observed skill reads from claims', () => {
@@ -73,6 +75,8 @@ test('native skill prompts count as host-provided skill evidence without a model
         display: false,
         attribution: 'agent',
         details: {
+          provisionProvider: 'omp-enhancer-core',
+          provisionSchemaVersion: 1,
           name: 'plain-chinese-writing',
           path: '/skills/plain-chinese-writing/SKILL.md',
           lineCount: 20,
@@ -118,7 +122,162 @@ test('native skill prompts count as host-provided skill evidence without a model
   assert.deepEqual(summary.duplicateSkillReads, []);
 });
 
-test('routed skill expectations alone cannot impersonate actual native provision', () => {
+test('native autoload precedes project tools and successful project calls follow the exact sequence', () => {
+  const summary = summarizeWorkflowEvents([
+    { type: 'agent_start' },
+    {
+      type: 'message_end',
+      message: {
+        role: 'custom',
+        customType: 'skill-prompt',
+        content: 'Native English review guidance.',
+        display: false,
+        attribution: 'agent',
+        details: {
+          provisionProvider: 'omp-enhancer-core',
+          provisionSchemaVersion: 1,
+          routedSkills: ['writing-review'],
+          name: 'writing-review',
+          path: '/skills/writing-review/SKILL.md',
+          lineCount: 20,
+          providedSkillRecords: [
+            {
+              requestedSkill: 'writing-review',
+              name: 'writing-review',
+              path: '/skills/writing-review/SKILL.md',
+            },
+          ],
+        },
+      },
+    },
+    {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'project-read-before', name: 'read', arguments: { path: 'tex/introduction.tex' } }],
+      },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'project-read-before',
+      toolName: 'read',
+      result: { isError: false, content: [{ type: 'text', text: 'Introduction source.' }] },
+    },
+    {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'project-edit', name: 'edit', arguments: { input: '[tex/introduction.tex#AAAA]\nSWAP 1.=1:\n+fixed' } }],
+      },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'project-edit',
+      toolName: 'edit',
+      result: { isError: false, content: [{ type: 'text', text: 'edited' }] },
+    },
+    {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'project-read-after', name: 'read', arguments: { path: 'tex/introduction.tex' } }],
+      },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'project-read-after',
+      toolName: 'read',
+      result: { isError: false, content: [{ type: 'text', text: 'Fixed introduction source.' }] },
+    },
+    {
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Updated the Introduction.' }] },
+    },
+    { type: 'agent_end' },
+  ], { exitCode: 0 });
+
+  assert.deepEqual(summary.observedSkills, []);
+  assert.deepEqual(summary.skillReadAttempts, []);
+  assert.deepEqual(summary.toolCalls.map(({ name }) => name), ['read', 'edit', 'read']);
+  assert.equal(summary.providedSkillEvidence[0].source, 'autoload');
+  assert.equal(summary.providedSkillEvidence[0].eventSource, 'live');
+  assert.ok(summary.providedSkillEvidence[0].eventIndex < summary.firstProjectToolCallEventIndex);
+  assert.equal(evaluateWorkflowSummary(summary, {
+    requiredSkills: ['writing-review'],
+    requiredProvidedSkills: [{
+      name: 'writing-review',
+      source: 'autoload',
+      eventSource: 'live',
+      beforeFirstProjectTool: true,
+    }],
+    expectedProvisionMode: 'native',
+    maxSkillReadAttempts: 0,
+    maxDuplicateSkillReadAttempts: 0,
+    expectedToolSequence: ['read', 'edit', 'read'],
+    requireSuccessfulToolCalls: true,
+  }).pass, true);
+});
+
+test('successful and failed reads of an autoloaded skill are both detected as duplicate attempts', () => {
+  for (const isError of [false, true]) {
+    const summary = summarizeWorkflowEvents([
+      {
+        type: 'message_end',
+        message: {
+          role: 'custom',
+          customType: 'skill-prompt',
+          content: 'Native English review guidance.',
+          display: false,
+          attribution: 'agent',
+          details: {
+            provisionProvider: 'omp-enhancer-core',
+            provisionSchemaVersion: 1,
+            name: 'writing-review',
+            path: '/skills/writing-review/SKILL.md',
+            lineCount: 20,
+            routedSkills: ['writing-review'],
+            providedSkillRecords: [{
+              requestedSkill: 'writing-review',
+              name: 'writing-review',
+              path: '/skills/writing-review/SKILL.md',
+            }],
+          },
+        },
+      },
+      {
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'toolCall', id: `skill-read-${isError}`, name: 'read', arguments: { path: 'skill://writing-review' } }],
+        },
+      },
+      {
+        type: 'tool_execution_end',
+        toolCallId: `skill-read-${isError}`,
+        toolName: 'read',
+        result: {
+          isError,
+          content: [{ type: 'text', text: isError ? 'skill unavailable' : '---\nname: writing-review\n---' }],
+        },
+      },
+    ]);
+
+    assert.equal(summary.skillReadAttempts.length, 1);
+    assert.equal(summary.skillReadAttempts[0].isError, isError);
+    assert.equal(summary.duplicateSkillReadAttempts.length, 1);
+    assert.deepEqual(summary.observedSkills, isError ? [] : ['writing-review']);
+    const evaluation = evaluateWorkflowSummary(summary, {
+      requireFinal: false,
+      maxSkillReadAttempts: 0,
+      maxDuplicateSkillReadAttempts: 0,
+    });
+    assert.equal(evaluation.pass, false);
+    assert.match(evaluation.failures.join('\n'), /skill read attempts 1 exceeded 0/);
+    assert.match(evaluation.failures.join('\n'), /duplicate skill read attempts 1 exceeded 0/);
+  }
+});
+
+test('an unmarked routed skill prompt cannot impersonate Core native provision', () => {
   const summary = summarizeWorkflowEvents([
     {
       type: 'message_end',
@@ -147,7 +306,8 @@ test('routed skill expectations alone cannot impersonate actual native provision
     { type: 'agent_end' },
   ]);
 
-  assert.deepEqual(summary.providedSkills, ['plain-chinese-writing']);
+  assert.deepEqual(summary.providedSkills, []);
+  assert.equal(summary.providedSkillEvidence[0].source, 'untrusted');
   const evaluation = evaluateWorkflowSummary(summary, {
     requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
   });
@@ -177,9 +337,17 @@ test('skill prompt fallback evidence survives detail-less primary events and kee
         display: false,
         attribution: 'agent',
         details: {
+          provisionProvider: 'omp-enhancer-core',
+          provisionSchemaVersion: 1,
           name: 'writing-review',
           path: '/skills/writing-review/SKILL.md',
           lineCount: 10,
+          routedSkills: ['writing-review'],
+          providedSkillRecords: [{
+            requestedSkill: 'writing-review',
+            name: 'writing-review',
+            path: '/skills/writing-review/SKILL.md',
+          }],
         },
       },
     },
@@ -192,9 +360,17 @@ test('skill prompt fallback evidence survives detail-less primary events and kee
         display: false,
         attribution: 'agent',
         details: {
+          provisionProvider: 'omp-enhancer-core',
+          provisionSchemaVersion: 1,
           name: 'fact-checking',
           path: '/skills/fact-checking/SKILL.md',
           lineCount: 10,
+          routedSkills: ['fact-checking'],
+          providedSkillRecords: [{
+            requestedSkill: 'fact-checking',
+            name: 'fact-checking',
+            path: '/skills/fact-checking/SKILL.md',
+          }],
         },
       },
     },
@@ -203,6 +379,57 @@ test('skill prompt fallback evidence survives detail-less primary events and kee
   const summary = summarizeWorkflowEvents(mergeCustomEventFallbacks(primary, sessionFallbacks));
   assert.deepEqual(summary.providedSkills, ['fact-checking', 'writing-review']);
   assert.equal(summary.customMessages.length, 3);
+});
+
+test('session fallback cannot overwrite earlier live native provision timing', () => {
+  const details = {
+    provisionProvider: 'omp-enhancer-core',
+    provisionSchemaVersion: 1,
+    name: 'writing-review',
+    path: '/skills/writing-review/SKILL.md',
+    lineCount: 10,
+    routedSkills: ['writing-review'],
+    providedSkillRecords: [{
+      requestedSkill: 'writing-review',
+      name: 'writing-review',
+      path: '/skills/writing-review/SKILL.md',
+    }],
+  };
+  const summary = summarizeWorkflowEvents([
+    {
+      type: 'message_end',
+      message: {
+        role: 'custom',
+        customType: 'skill-prompt',
+        content: 'Live skill body.',
+        display: false,
+        attribution: 'agent',
+        details,
+      },
+    },
+    {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'read-target', name: 'read', arguments: { path: 'paper.tex' } }],
+      },
+    },
+    {
+      type: 'session_custom',
+      entry: {
+        role: 'custom',
+        customType: 'skill-prompt',
+        content: 'Persisted skill body with a different digest.',
+        display: false,
+        attribution: 'agent',
+        details,
+      },
+    },
+  ]);
+
+  assert.equal(summary.providedSkillEvidence.length, 1);
+  assert.equal(summary.providedSkillEvidence[0].eventSource, 'live');
+  assert.ok(summary.providedSkillEvidence[0].eventIndex < summary.firstProjectToolCallEventIndex);
 });
 
 test('session fallback loading retains persisted native skill prompts', async () => {
@@ -216,9 +443,17 @@ test('session fallback loading retains persisted native skill prompts', async ()
         display: false,
         attribution: 'agent',
         details: {
+          provisionProvider: 'omp-enhancer-core',
+          provisionSchemaVersion: 1,
           name: 'writing-review',
           path: '/skills/writing-review/SKILL.md',
           lineCount: 10,
+          routedSkills: ['writing-review'],
+          providedSkillRecords: [{
+            requestedSkill: 'writing-review',
+            name: 'writing-review',
+            path: '/skills/writing-review/SKILL.md',
+          }],
         },
       }),
       JSON.stringify({ type: 'custom', customType: 'unrelated', content: 'ignore' }),
@@ -320,6 +555,48 @@ test('semantic-edit-en fixture and sentinels require legal escaped LaTeX percent
       assert.match(text, sentinel);
       assert.doesNotMatch(text.replaceAll('\\%', '%'), sentinel);
     }
+  } finally {
+    await prepared.cleanup();
+  }
+});
+
+test('English Introduction fixture requires the unique conservative edit exactly', async () => {
+  const matrix = JSON.parse(await readFile(
+    new URL('./e2e/fixtures/deepseek-installed-matrix.json', import.meta.url),
+    'utf8',
+  ));
+  const scenario = matrix.scenarios.find(({ id }) => id === 'semantic-edit-en-introduction-skill-first');
+  assert.ok(scenario);
+  assert.deepEqual(scenario.expectations.requiredSkills, ['writing-review']);
+  assert.deepEqual(scenario.expectations.expectedToolSequence, ['read', 'edit', 'read']);
+  assert.equal(scenario.expectations.requiredProvidedSkills[0].source, 'autoload');
+  assert.equal(scenario.expectations.requiredProvidedSkills[0].beforeFirstProjectTool, true);
+
+  const prepared = await prepareScenario(scenario);
+  try {
+    const target = path.join(prepared.cwd, 'tex', 'introduction.tex');
+    const original = await readFile(target, 'utf8');
+    assert.match(original, /lower lower/u);
+    const beforeFiles = await snapshotTree(prepared.cwd);
+    const expected = scenario.fixtureExpectations.exactContents['tex/introduction.tex'];
+
+    await writeFile(target, expected);
+    const exact = await verifyFixture(
+      prepared.cwd,
+      beforeFiles,
+      scenario.fixtureExpectations,
+    );
+    assert.equal(exact.pass, true);
+    assert.deepEqual(exact.changedFiles, ['tex/introduction.tex']);
+
+    await writeFile(target, expected.replace('Our evaluation', 'The evaluation'));
+    const overEdited = await verifyFixture(
+      prepared.cwd,
+      beforeFiles,
+      scenario.fixtureExpectations,
+    );
+    assert.equal(overEdited.pass, false);
+    assert.match(overEdited.failures.join('\n'), /did not exactly match/);
   } finally {
     await prepared.cleanup();
   }

@@ -6,6 +6,31 @@ import { dirname, join } from 'node:path';
 
 const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+test('global guidance selects workflow and skills before substantive work without creating a gate', () => {
+  const files = [
+    'assets/CLAUDE.md',
+    'skills/using-superpowers/SKILL.md',
+  ];
+
+  for (const relative of files) {
+    const content = readFileSync(join(pluginRoot, relative), 'utf8');
+    const workflow = content.indexOf('1. Determine the applicable workflow');
+    const inventory = content.indexOf('2. Inspect the active skill inventory');
+    const load = content.indexOf('3. Load the smallest necessary skill set');
+    const work = content.indexOf('4. Begin the substantive review');
+
+    assert.ok(workflow >= 0, `${relative} should start with workflow selection`);
+    assert.ok(workflow < inventory && inventory < load && load < work, `${relative} should preserve workflow-first ordering`);
+    assert.match(content, /native `skill-prompt`/i, relative);
+    assert.match(content, /do not read the same (?:`SKILL\.md`|skill) again/i, relative);
+    assert.match(content, /`writing\.pending`[\s\S]{0,240}(?:continue skill selection|skill selection)/i, relative);
+    assert.match(content, /Memory, `recall`, `learn`, general model ability, and `manage_skill`/i, relative);
+    assert.match(content, /autolearn-nudge[\s\S]{0,220}do not resume the primary task/i, relative);
+    assert.match(content, /continue\s+with\s+the\s+best\s+available\s+method/i, relative);
+    assert.doesNotMatch(content, /block:\s*true|continue:\s*true|triggerTurn\s*\(/i, relative);
+  }
+});
+
 test('workflow skills do not instruct the agent to self-block or repeat unchanged work', () => {
   const files = [
     'skills/test-driven-development/SKILL.md',

@@ -121,6 +121,11 @@ test('native host skill prompts provide every routed Chinese writing skill witho
   const activeSkills = [
     {
       name: 'plain-chinese-writing',
+      filePath: '/hidden/plain-chinese-writing/SKILL.md',
+      disableModelInvocation: true,
+    },
+    {
+      name: 'plain-chinese-writing',
       filePath: '/virtual/skills/plain-chinese-writing/SKILL.md',
       baseDir: '/virtual/skills/plain-chinese-writing',
     },
@@ -161,6 +166,8 @@ test('native host skill prompts provide every routed Chinese writing skill witho
   assert.equal(routed.message.customType, 'skill-prompt');
   assert.equal(routed.message.display, false);
   assert.equal(routed.message.attribution, 'agent');
+  assert.equal(routed.message.details.provisionProvider, 'omp-enhancer-core');
+  assert.equal(routed.message.details.provisionSchemaVersion, 1);
   assert.deepEqual(routed.message.details.routedSkills, [
     'plain-chinese-writing',
     'zh-writing-polish',
@@ -179,6 +186,10 @@ test('native host skill prompts provide every routed Chinese writing skill witho
   ]);
   assert.match(routed.message.content, /AUTOLOADED SKILL: plain-chinese-writing/);
   assert.match(routed.message.content, /AUTOLOADED SKILL: zh-writing-polish/);
+  assert.match(routed.message.content, /OMP WORKFLOW AND SKILL DISCOVERY FIRST/);
+  assert.match(routed.message.content, /Matching routed skills found in the active inventory:.*skill:\/\/plain-chinese-writing.*skill:\/\/zh-writing-polish/i);
+  assert.doesNotMatch(routed.message.content, /\/hidden\/plain-chinese-writing/);
+  assert.match(routed.message.content, /Memory, general model ability, and a managed skill created after the task are not substitutes/i);
   assert.doesNotMatch(routed.message.content, /ROUTED SKILLS ALREADY PROVIDED/);
   assert.doesNotMatch(routed.message.content, /WORKFLOW FIRST TOOL CALL/);
   assert.match(routed.additionalContext, /Routed workflow skills already loaded/);
@@ -351,11 +362,127 @@ test('missing native skill APIs use the advisory workflow fallback', async () =>
     prompt: 'Review this English paragraph for clarity: This result is very significant.',
   }, ctx);
 
-  assert.equal(inventoryReads, 0);
+  assert.equal(inventoryReads, 1);
   assert.equal(routed.message.customType, 'omp-enhancer-core.workflow-guidance');
   assert.equal(routed.message.attribution, 'agent');
+  assert.match(routed.additionalContext, /Current active skill inventory: skill:\/\/writing-review/i);
   assert.notEqual(routed.block, true);
   assert.equal(await event(pi, 'session_stop')({ output: 'Done.' }, ctx), undefined);
+});
+
+test('skills disabled for model invocation are neither advertised nor autoloaded', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  let builds = 0;
+  pi.pi = {
+    SKILL_PROMPT_MESSAGE_TYPE: 'skill-prompt',
+    getActiveSkills: () => [{
+      name: 'writing-review',
+      filePath: '/hidden/writing-review/SKILL.md',
+      disableModelInvocation: true,
+    }],
+    buildSkillPromptMessage: async () => {
+      builds += 1;
+      return { message: 'must not load', details: { name: 'writing-review' } };
+    },
+  };
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
+  await event(pi, 'session_start')({}, ctx);
+  const routed = await event(pi, 'before_agent_start')({
+    prompt: 'Review this English paragraph for clarity: This result is significant.',
+  }, ctx);
+
+  assert.equal(routed.route.intent, 'writing.en');
+  assert.equal(builds, 0);
+  assert.equal(routed.message.customType, 'omp-enhancer-core.workflow-guidance');
+  assert.doesNotMatch(routed.additionalContext, /Current active skill inventory:.*writing-review/i);
+  assert.deepEqual(entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data.providedSkills, []);
+});
+
+test('a pending Introduction polish selects and provides the English LaTeX skill after the source read', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  const activeSkills = [
+    { name: 'writing-markdown-helper', filePath: '/skills/writing-markdown-helper/SKILL.md' },
+    { name: 'writing-review', filePath: '/hidden/writing-review/SKILL.md', disableModelInvocation: true },
+    { name: 'writing-review', filePath: '/skills/writing-review/SKILL.md' },
+    { name: 'writing-checkers', filePath: '/skills/writing-checkers/SKILL.md' },
+  ];
+  const built = [];
+  pi.pi = {
+    SKILL_PROMPT_MESSAGE_TYPE: 'skill-prompt',
+    getActiveSkills: () => activeSkills,
+    buildSkillPromptMessage: async (skill, args, invocation) => {
+      built.push({ name: skill.name, path: skill.filePath, args, invocation });
+      return {
+        message: `AUTOLOADED SKILL: ${skill.name}`,
+        details: { name: skill.name, path: skill.filePath, lineCount: 8 },
+      };
+    },
+  };
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
+  const prompt = '阻塞已解除。开始逐节润色。先从 Introduction 开始。';
+
+  await event(pi, 'session_start')({}, ctx);
+  const initial = await event(pi, 'before_agent_start')({ prompt }, ctx);
+  assert.equal(initial.route.intent, 'writing.pending');
+  assert.deepEqual(built, []);
+  assert.match(initial.additionalContext, /Workflow and skill discovery first/);
+
+  const unrelated = await event(pi, 'tool_result')({
+    name: 'read',
+    callId: 'read-agents',
+    input: { path: 'AGENTS.md' },
+    result: { content: [{ type: 'text', text: 'Repository instructions written in English.' }] },
+  }, ctx);
+  assert.doesNotMatch(unrelated.content.at(-1).text, /AUTOLOADED SKILL/);
+  assert.equal(entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.lastRoute.intent, 'writing.pending');
+
+  const partial = await event(pi, 'tool_result')({
+    name: 'read',
+    callId: 'read-introduction-partial',
+    input: { path: 'tex/introduction.tex' },
+    result: {
+      details: { truncated: true },
+      content: [{ type: 'text', text: '\\section{Introduction}\nPartial English prose.' }],
+    },
+  }, ctx);
+  assert.doesNotMatch(partial.content.at(-1).text, /AUTOLOADED SKILL/);
+  assert.equal(entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.lastRoute.intent, 'writing.pending');
+
+  const refined = await event(pi, 'tool_result')({
+    name: 'read',
+    callId: 'read-introduction',
+    input: { path: 'tex/introduction.tex' },
+    result: {
+      content: [{
+        type: 'text',
+        text: '\\section{Introduction}\nThis paper introduces the problem and summarizes the contributions.',
+      }],
+    },
+  }, ctx);
+
+  assert.deepEqual(built, [
+    { name: 'writing-review', path: '/skills/writing-review/SKILL.md', args: '', invocation: 'autoload' },
+  ]);
+  assert.match(refined.content.at(-1).text, /body language is en; workflow is writing\.latex/i);
+  assert.match(refined.content.at(-1).text, /AUTOLOADED SKILL: writing-review/);
+  assert.match(refined.content.at(-1).text, /before revising or reviewing the target/i);
+  assert.doesNotMatch(refined.content.at(-1).text, /writing-markdown-helper[\s\S]*AUTOLOADED SKILL: writing-markdown-helper/i);
+  assert.notEqual(refined.block, true);
+
+  const snapshot = entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  assert.equal(snapshot.lastRoute.intent, 'writing.en');
+  assert.equal(snapshot.lastRoute.workflowRoute, 'writing.latex');
+  assert.deepEqual(snapshot.lastRoute.routePlan.skills, ['writing-review']);
+  assert.deepEqual(snapshot.providedSkills, ['writing-review']);
+  assert.equal(await event(pi, 'session_stop')({ output: 'Introduction polished.' }, ctx), undefined);
 });
 
 test('e2e broad bug audit suggests roles without completion enforcement', async () => {

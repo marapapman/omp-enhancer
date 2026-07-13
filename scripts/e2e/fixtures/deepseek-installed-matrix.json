@@ -38,8 +38,8 @@
       "cwd": "/home/dingli/anzhida_ATC2026",
       "prompt": "Read tex/abstract.tex and propose a conservative polished version of its first prose paragraph. Preserve every qualifier, number, citation, negation, and modality. Do not edit files or browse the web.",
       "expectations": {
-        "requiredSkills": ["writing-markdown-helper"],
-        "forbiddenSkills": ["plain-chinese-writing", "zh-writing-polish", "format-markdown2latex", "format-latex2markdown", "format-template-latex"],
+        "requiredSkills": ["writing-review"],
+        "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing", "zh-writing-polish", "format-markdown2latex", "format-latex2markdown", "format-template-latex"],
         "maxSourceSearchCalls": 8
       }
     },
@@ -151,8 +151,8 @@
       "prompt": "Conservatively polish paper.tex in place. Preserve every qualifier, modality, negation, percentage, range, and citation. Modify only paper.tex, perform one after-edit read, and return a concise result.",
       "tools": ["read", "edit"],
       "expectations": {
-        "requiredSkills": ["writing-markdown-helper"],
-        "forbiddenSkills": ["plain-chinese-writing", "format-markdown2latex", "format-latex2markdown"],
+        "requiredSkills": ["writing-review"],
+        "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing", "format-markdown2latex", "format-latex2markdown"],
         "maxSourceSearchCalls": 6
       },
       "fixtureExpectations": {
@@ -163,6 +163,46 @@
         },
         "forbiddenPatterns": {
           "paper.tex": ["lower\\s+lower"]
+        }
+      }
+    },
+    {
+      "id": "semantic-edit-en-introduction-skill-first",
+      "category": "writing-edit",
+      "fixture": "semantic-edit-en-introduction",
+      "repeat": 3,
+      "prompt": "先使用宿主已提供的最小适用英文写作 skill，再保守润色 tex/introduction.tex。只删除第一段中重复的第二个 lower；除此之外逐字保留文件内容，包括所有 LaTeX 命令、标签、限定词、模态、否定、百分比和引用。按 read、edit、read 的顺序各执行一次；不要主动重新读取宿主已提供的 skill，不联网，最后简要报告。",
+      "tools": ["read", "edit"],
+      "expectations": {
+        "requiredSkills": ["writing-review"],
+        "requiredProvidedSkills": [
+          {
+            "name": "writing-review",
+            "source": "autoload",
+            "eventSource": "live",
+            "beforeFirstProjectTool": true
+          }
+        ],
+        "expectedProvisionMode": "native",
+        "maxSkillReadAttempts": 0,
+        "maxDuplicateSkillReadAttempts": 0,
+        "expectedToolSequence": ["read", "edit", "read"],
+        "requireSuccessfulToolCalls": true,
+        "maxToolCalls": 3,
+        "maxSourceSearchCalls": 2,
+        "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing", "zh-writing-polish", "format-markdown2latex", "format-latex2markdown", "format-template-latex"]
+      },
+      "fixtureExpectations": {
+        "allowedChangedFiles": ["tex/introduction.tex"],
+        "requiredChangedFiles": ["tex/introduction.tex"],
+        "exactContents": {
+          "tex/introduction.tex": "\\section{Introduction}\n\\label{sec:introduction}\n\nOur evaluation typically finds a significantly lower failure rate, but \\sys may only reduce errors from 37.5\\% to 12.5\\% and cannot eliminate them~\\cite{smith2025}.\n"
+        },
+        "requiredPatterns": {
+          "tex/introduction.tex": ["\\\\section\\{Introduction\\}", "\\\\label\\{sec:introduction\\}", "\\btypically\\b", "\\bsignificantly\\b", "\\blower\\b", "\\\\sys\\b", "\\bmay\\b", "\\bonly\\b", "37\\.5\\\\%", "12\\.5\\\\%", "\\bcannot\\b", "\\\\cite\\{smith2025\\}"]
+        },
+        "forbiddenPatterns": {
+          "tex/introduction.tex": ["lower\\s+lower"]
         }
       }
     },

@@ -115,6 +115,7 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
     const language = descriptor.language;
     const taskKind = descriptor.writingTaskKind ?? 'unknown';
     const complexReview = ['review', 'draft', 'unknown'].includes(taskKind) && descriptor.complexity === 'broad';
+    const latexProsePolish = taskKind === 'polish' && route.workflowRoute === 'writing.latex';
     if (language === 'zh') {
       skills.push('plain-chinese-writing');
       if (taskKind === 'review') skills.push('zh-writing-review');
@@ -122,7 +123,7 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
       if (complexReview) skills.push('zh-writing-checkers');
       if (complexReview && rolesAllowedByRequest) roles.push(...subagentPlans.writingZh);
     } else if (language === 'en') {
-      skills.push(taskKind === 'review' ? 'writing-review' : 'writing-markdown-helper');
+      skills.push(taskKind === 'review' || latexProsePolish ? 'writing-review' : 'writing-markdown-helper');
       if (complexReview) skills.push('writing-checkers');
       if (complexReview && rolesAllowedByRequest) roles.push(...subagentPlans.writingEn);
     } else {

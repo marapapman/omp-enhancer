@@ -115,6 +115,9 @@ describe('bundled frugal-pi writing content', () => {
     assert.match(englishReview, /Do not probe `.pi` merely to\s+discover whether a prior report exists/i);
     assert.match(englishReview, /Do not repeat it with a different selector/i);
     assert.match(englishReview, /report at most five material\s+findings/i);
+    assert.match(englishReview, /direct English LaTeX prose polish[\s\S]*first\s+review[\s\S]*then apply/i);
+    assert.match(englishReview, /Preserve custom\s+commands and revision markup/i);
+    assert.match(englishReview, /writing-checkers[\s\S]*only for a broad whole-document or\s+project-wide argument review/i);
 
     const chineseReview = readFileSync(join(rootDir, 'skills/zh-writing-review/SKILL.md'), 'utf8');
     assert.match(chineseReview, /仅审查任务只返回问题，不改写整篇正文/);

@@ -166,17 +166,25 @@ test('a broad read-only English review adds checkers without conversion skills',
   assert.ok(!route.routePlan.skills.some((skill) => skill.startsWith('format-')));
 });
 
-test('polish and explicit conversions receive only task-appropriate writing resources', () => {
+test('LaTeX polish and explicit conversions receive only task-appropriate writing resources', () => {
   const polish = routeNaturalLanguageTask({
     prompt: 'Polish papers/abstract.tex for clarity.',
     sourceText: 'This paper presents an advisory workflow router.',
     routerMode: 'observe',
   });
   assert.equal(polish.taskDescriptor.writingTaskKind, 'polish');
-  assert.ok(polish.routePlan.skills.includes('writing-markdown-helper'));
-  assert.ok(!polish.routePlan.skills.includes('writing-review'));
+  assert.ok(polish.routePlan.skills.includes('writing-review'));
+  assert.ok(!polish.routePlan.skills.includes('writing-markdown-helper'));
   assert.ok(!polish.routePlan.skills.includes('writing-checkers'));
   assert.ok(!polish.routePlan.skills.some((skill) => skill.startsWith('format-')));
+
+  const markdownPolish = routeNaturalLanguageTask({
+    prompt: 'Polish papers/abstract.md for clarity.',
+    sourceText: 'This paper presents an advisory workflow router.',
+    routerMode: 'observe',
+  });
+  assert.ok(markdownPolish.routePlan.skills.includes('writing-markdown-helper'));
+  assert.ok(!markdownPolish.routePlan.skills.includes('writing-review'));
 
   const toLatex = routeNaturalLanguageTask({
     prompt: 'Convert notes.md to LaTeX.',

@@ -11,6 +11,40 @@ If you were dispatched as a subagent to execute a specific task, skip this skill
 Load a skill when it clearly matches the task or the user names it. Prefer the smallest set that materially improves the work. Do not delay a clarification, harmless inspection, or obvious direct action merely to search for marginally related skills. If a suggested skill is unavailable, continue with the best available method and report the limitation when material.
 </SKILL-SELECTION-GUIDANCE>
 
+## Workflow-First Sequence
+
+For each non-trivial primary task, use this order:
+
+1. Determine the applicable workflow from the requested outcome, scope, and observed target content.
+2. Inspect the active skill inventory and any skill content already provided by the host.
+3. Load the smallest necessary skill set for that workflow.
+4. Begin the substantive review, drafting, editing, diagnosis, or implementation.
+
+A native `skill-prompt`, a skill body followed by `Skill: <path>`, or host text
+saying `Routed workflow skills already loaded` means that skill is already
+loaded. Follow it directly and do not read the same skill again.
+
+`writing.pending` defers language-specific skill selection until source prose
+is visible; it does not mean that writing needs no skill. Read the exact target
+once, determine the language from the body, and then continue skill selection
+before revising or reviewing. A bounded English review uses `writing-review`,
+a broad document or project review adds `writing-checkers`, and a direct local
+English LaTeX prose polish uses `writing-review`. A direct local English
+Markdown revision uses `writing-markdown-helper`; use the corresponding
+Chinese skills for Chinese source text.
+
+Memory, `recall`, `learn`, general model ability, and `manage_skill` provide or
+capture context but do not replace workflow selection or loading a task skill.
+Use `learn` or `manage_skill` during the primary task only when the user
+explicitly asks for capture. During a host `autolearn-nudge` after delivery,
+capture only genuinely reusable knowledge, do not resume the primary task or
+reread routed skills, and do not duplicate an already loaded installed skill.
+
+This sequence is guidance rather than an execution or completion gate. If a
+needed skill is unavailable, make at most one targeted resolution attempt,
+continue with the best available method, and report the limitation when
+material.
+
 ## Instruction Priority
 
 Superpowers skills override default system prompt behavior, but **user instructions always take precedence**:

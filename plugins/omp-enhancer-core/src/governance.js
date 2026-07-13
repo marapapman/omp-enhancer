@@ -6,15 +6,29 @@ export function buildGovernancePromptFragment({
   includeModelWorkflowHints = true,
   workspaceRoot = '',
   skillsProvided = false,
+  availableSkills = [],
 } = {}) {
   const resolved = advisoryRoute(route);
   const plan = resolved.routePlan;
   const primaryTargets = primarySkillTargets(resolved, workspaceRoot);
+  const skillInventory = normalizeSkillInventory(availableSkills);
   const lines = [
     '## OMP Enhancer Core Workflow Guidance',
     '',
     'This guidance is advisory. It selects relevant skills and a useful workflow, while the agent remains responsible for following the user request and host tool results.',
     'The plugin does not authorize actions, deny tool calls, hold the final response open, or schedule another turn.',
+    '',
+    '### Workflow and skill discovery first',
+    '',
+    'Before substantive project work, first identify the workflow from the user goal, requested action, target artifact, source language, and explicit constraints. Distinguish writing review or revision, planning, diagnosis, implementation, testing, fact checking, release, and other workflows before choosing tools.',
+    skillInventory.length
+      ? `Current active skill inventory: ${formatInlineSkillInventory(skillInventory)}.`
+      : 'Inspect the runtime or project skill inventory once when the current environment exposes it; do not assume that remembered skill names are installed.',
+    skillsProvided
+      ? 'The host has already inspected the active inventory and loaded the routed skill bundle below. This completes skill selection for the current workflow: apply those skill bodies before project work and do not independently search, substitute, or reread them.'
+      : 'After identifying the workflow and inspecting the current inventory, load the smallest set of clearly necessary matching skills before project work. Routed skills below are strong candidates, but correct a clear mismatch using an exact skill that actually exists.',
+    'Learned memory and general model ability may supply context, but they do not replace pre-work skill discovery and loading. Searching for or creating a managed skill after finishing also does not satisfy this step; search existing skills before creating a new one.',
+    'If no suitable skill exists or one load fails after a single targeted correction, continue with the best available method and report the limitation when material. Skill discovery is workflow guidance, not a tool or completion gate.',
     '',
     `Intent: ${resolved.intent}`,
     `Workflow: ${resolved.workflowRoute}`,
@@ -31,7 +45,7 @@ export function buildGovernancePromptFragment({
     skillsProvided
       ? 'The host has already provided the exact primary skill content for this turn. Apply that content directly and do not spend a read/search call loading the same skill again.'
       : 'Before substantive work, read exactly the smallest directly applicable primary skill once. Prefer an exact project-specified skill, then the exact routed URI, then one inventory-confirmed equivalent. A skill counts as loaded only after a successful read of its SKILL.md. If resolution fails, make one targeted correction, continue without the skill, and report the limitation briefly. Do not invent aliases, create replacement skills, or retry unchanged calls.',
-    'For a focused task, one primary skill is normally enough; Chinese writing may use its base language guidance plus one task-specific skill. When writing language is pending, inspect the source first and only then select a language skill. Do not expand into the whole skill list unless the primary skill explicitly requires a companion.',
+    'Use the smallest ordered skill bundle that matches the workflow. A focused task often needs one primary skill; Chinese writing may use its base language guidance plus one task-specific skill, and a routed checker companion should be applied when present. When writing language is pending, inspect the source first and only then select a language skill. Do not expand into unrelated skills.',
     'Unless the user is auditing historical gate behavior, use only current routed or project-specified skills; do not load legacy gate-satisfy or gate-unblock compatibility resources.',
     '',
     '### Bounded execution guidance',
@@ -84,8 +98,10 @@ export function buildImmediateWorkflowMessage({
   workspaceRoot = '',
   parentTask = '',
   skillsProvided = false,
+  availableSkills = [],
 } = {}) {
   const resolved = advisoryRoute(route);
+  const skillInventory = normalizeSkillInventory(availableSkills);
   const lines = immediateNextActionLines(
     resolved,
     primarySkillTargets(resolved, workspaceRoot),
@@ -95,6 +111,9 @@ export function buildImmediateWorkflowMessage({
   if (!lines.length) return '';
   return [
     'OMP advisory workflow note for this turn:',
+    'First identify the workflow, inspect the current skill inventory, and load the smallest necessary matching skill bundle before substantive project work.',
+    ...(skillInventory.length ? [`Current active skills: ${formatInlineSkillInventory(skillInventory)}.`] : []),
+    'Memory, general model ability, and a skill created after the task are not substitutes for this pre-work discovery step.',
     ...lines.filter(Boolean),
   ].join('\n');
 }
@@ -350,10 +369,14 @@ export function primarySkillsFor(route = {}) {
     return unique([
       skills.find((skill) => skill === 'plain-chinese-writing'),
       skills.find((skill) => /^zh-writing-(?:review|polish|markdown-helper)$/.test(skill)),
+      skills.find((skill) => skill === 'zh-writing-checkers'),
     ]);
   }
   if (route.intent === 'writing.en') {
-    return unique([skills.find((skill) => ['writing-review', 'writing-markdown-helper'].includes(skill))]);
+    return unique([
+      skills.find((skill) => ['writing-review', 'writing-markdown-helper'].includes(skill)),
+      skills.find((skill) => skill === 'writing-checkers'),
+    ]);
   }
   if (route.intent === 'fact-check') return unique([skills.find((skill) => skill === 'fact-checking')]);
   if (route.intent === 'planning') return unique([skills.find((skill) => skill === 'writing-plans')]);
@@ -454,6 +477,18 @@ function parseWorkflowBriefing(prompt = '') {
 
 function unique(values = []) {
   return [...new Set((values ?? []).filter(Boolean))];
+}
+
+function formatInlineSkillInventory(skills = []) {
+  return normalizeSkillInventory(skills)
+    .map((skill) => `skill://${skill}`)
+    .join(', ');
+}
+
+function normalizeSkillInventory(skills = []) {
+  return unique(skills
+    .map((skill) => String(skill ?? '').trim().toLowerCase())
+    .filter((skill) => /^[a-z0-9][a-z0-9._/-]{0,127}$/.test(skill)));
 }
 
 function isDocumentStyleEdit(prompt = '') {

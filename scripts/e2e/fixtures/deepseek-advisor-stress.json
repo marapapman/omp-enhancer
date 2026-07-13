@@ -40,8 +40,8 @@
       "prompt": "Conservatively polish paper.tex in place. Preserve every qualifier, modality, negation, percentage, range, and citation. Modify only paper.tex, perform one after-edit read, and return a concise result.",
       "tools": ["read", "edit"],
       "expectations": {
-        "requiredSkills": ["writing-markdown-helper"],
-        "forbiddenSkills": ["plain-chinese-writing", "zh-writing-review"],
+        "requiredSkills": ["writing-review"],
+        "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing", "zh-writing-review"],
         "maxSourceSearchCalls": 6
       },
       "fixtureExpectations": {

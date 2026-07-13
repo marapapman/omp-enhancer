@@ -171,7 +171,8 @@ test('a second-stage sourceText refinement selects document-language skills', ()
   assert.equal(route.intent, 'writing.en');
   assert.equal(route.workflowRoute, 'writing.latex');
   assert.equal(route.taskDescriptor.writingLanguageSource, 'provided-source');
-  assert.ok(route.routePlan.skills.includes('writing-markdown-helper'));
+  assert.ok(route.routePlan.skills.includes('writing-review'));
+  assert.ok(!route.routePlan.skills.includes('writing-markdown-helper'));
   assert.ok(!route.routePlan.skills.includes('plain-chinese-writing'));
 });
 

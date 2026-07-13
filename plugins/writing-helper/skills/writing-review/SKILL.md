@@ -10,6 +10,18 @@ Use `.pi/research/checker_report.md` only when the user supplies or references
 it, or the active workflow already exposes it. Do not probe `.pi` merely to
 discover whether a prior report exists.
 
+For a direct English LaTeX prose polish, use this skill before editing: first
+review the requested passage against its semantic and LaTeX anchors, then apply
+the explicitly authorized revision in the same bounded pass. Preserve custom
+commands and revision markup; modify only the user-authorized active prose
+inside them. A host-provided skill body is already loaded and must not be read
+again.
+
+Use `writing-checkers` as a companion only for a broad whole-document or
+project-wide argument review. A local section, paragraph, or sentence polish
+does not need the seven-dimension checker unless the user explicitly asks for
+that broader review.
+
 ## Default One-Pass Workflow
 
 1. Read the exact target once and record semantic anchors in the source:

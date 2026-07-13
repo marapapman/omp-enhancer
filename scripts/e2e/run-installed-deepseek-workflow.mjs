@@ -186,6 +186,18 @@ export async function prepareScenario(scenario) {
       path.join(cwd, 'paper.tex'),
       'Our analysis typically finds a significantly lower lower failure rate, but it may only reduce errors from 37.5\\% to 12.5\\% and cannot eliminate them \\cite{smith2025}.\n',
     );
+  } else if (scenario.fixture === 'semantic-edit-en-introduction') {
+    await mkdir(path.join(cwd, 'tex'), { recursive: true });
+    await writeFile(
+      path.join(cwd, 'tex', 'introduction.tex'),
+      [
+        '\\section{Introduction}',
+        '\\label{sec:introduction}',
+        '',
+        'Our evaluation typically finds a significantly lower lower failure rate, but \\sys may only reduce errors from 37.5\\% to 12.5\\% and cannot eliminate them~\\cite{smith2025}.',
+        '',
+      ].join('\n'),
+    );
   } else if (scenario.fixture === 'semantic-edit-zh') {
     await writeFile(
       path.join(cwd, 'paper.md'),
@@ -204,7 +216,7 @@ export async function prepareScenario(scenario) {
   };
 }
 
-async function verifyFixture(root, beforeFiles, expectations) {
+export async function verifyFixture(root, beforeFiles, expectations) {
   const afterFiles = await snapshotTree(root);
   const changedFiles = [...new Set([...beforeFiles.keys(), ...afterFiles.keys()])]
     .filter((file) => beforeFiles.get(file) !== afterFiles.get(file))
@@ -216,6 +228,16 @@ async function verifyFixture(root, beforeFiles, expectations) {
   }
   for (const file of expectations.requiredChangedFiles ?? []) {
     if (!changedFiles.includes(file)) failures.push(`expected fixture file was not changed: ${file}`);
+  }
+  for (const [file, expected] of Object.entries(expectations.exactContents ?? {})) {
+    let actual = '';
+    try {
+      actual = await readFile(path.join(root, file), 'utf8');
+    } catch {
+      failures.push(`exact fixture output is unreadable: ${file}`);
+      continue;
+    }
+    if (actual !== expected) failures.push(`fixture output did not exactly match the expected content: ${file}`);
   }
   for (const [file, patterns] of Object.entries(expectations.requiredPatterns ?? {})) {
     let text = '';
@@ -244,7 +266,7 @@ async function verifyFixture(root, beforeFiles, expectations) {
   return { pass: failures.length === 0, failures, changedFiles };
 }
 
-async function snapshotTree(root) {
+export async function snapshotTree(root) {
   const values = new Map();
   async function walk(current) {
     for (const entry of await readdir(current, { withFileTypes: true })) {

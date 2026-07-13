@@ -504,7 +504,8 @@ test('route probes refine path-only writing after observed source text is suppli
     ctx,
   );
   assert.equal(english.details.route.intent, 'writing.en');
-  assert.ok(english.details.route.skills.includes('writing-markdown-helper'));
+  assert.ok(english.details.route.skills.includes('writing-review'));
+  assert.ok(!english.details.route.skills.includes('writing-markdown-helper'));
 
   const chinese = await routeTool.execute(
     'writing-chinese',
@@ -558,7 +559,8 @@ test('before_agent_start reads workspace writing targets and routes by body lang
     ).data.lastRoute;
     assert.equal(englishRoute.intent, 'writing.en');
     assert.equal(englishRoute.taskDescriptor.writingLanguageSource, 'provided-source');
-    assert.ok(englishRoute.routePlan.skills.includes('writing-markdown-helper'));
+    assert.ok(englishRoute.routePlan.skills.includes('writing-review'));
+    assert.ok(!englishRoute.routePlan.skills.includes('writing-markdown-helper'));
     assert.deepEqual(englishRoute.writingSourceObservation.paths, ['abstract.tex']);
     assert.deepEqual(englishRoute.writingSourceObservation.languages, ['en']);
 

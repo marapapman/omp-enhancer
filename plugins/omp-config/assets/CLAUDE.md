@@ -8,6 +8,39 @@ Skills are installed at `~/.omp/skills/` and loaded via `skill://<name>`.
 For non-trivial work, use the relevant phases below. Adapt their depth and order to the explicit user request, repository state, and available runtime. Missing skills are limitations, not completion gates.
 Use the runtime's supported skill loader or read the referenced `SKILL.md` to load the full skill. Do not invent a slash command.
 
+### Workflow-first skill order
+
+For each non-trivial primary task, use this order:
+
+1. Determine the applicable workflow from the requested outcome, scope, and observed target content.
+2. Inspect the active skill inventory and any skill content already provided by the host.
+3. Load the smallest necessary skill set for that workflow.
+4. Begin the substantive review, drafting, editing, diagnosis, or implementation.
+
+A native `skill-prompt`, a skill body followed by `Skill: <path>`, or host text
+saying `Routed workflow skills already loaded` means that skill is already
+loaded. Apply it directly and do not read the same `SKILL.md` again.
+
+`writing.pending` means language-specific selection is deferred, not that no
+writing skill applies. Read the exact target text once, determine the language
+from its body, and then continue skill selection before revising or reviewing
+the text. Use `writing-review` for a bounded English review,
+`writing-review` plus `writing-checkers` for a broad document or project
+review. Use `writing-review` for a direct English LaTeX prose polish and
+`writing-markdown-helper` for a direct local English Markdown revision. Use the
+corresponding Chinese skills for Chinese source text.
+
+Memory, `recall`, `learn`, general model ability, and `manage_skill` do not
+replace workflow selection or loading a task skill. `learn` and `manage_skill`
+belong to explicit capture requests or a host `autolearn-nudge` after the
+primary task. During that hidden capture turn, do not resume the primary task,
+reread routed skills, or create a managed skill that merely duplicates an
+already loaded installed skill.
+
+This ordering is workflow guidance, not an execution or completion gate. If a
+skill cannot be resolved, make at most one targeted correction, continue with
+the best available method, and report a material limitation briefly.
+
 ```
 Brainstorm → Plan → Implement/Execute → Verify → Review → Finish
 ```

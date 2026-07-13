@@ -44,7 +44,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
   let sawPrimaryFinal = false;
   let postFinalAdvisorMessageCount = 0;
 
-  for (const event of events) {
+  for (const [eventIndex, event] of events.entries()) {
     const custom = customMessageFromEvent(event);
     if (custom) {
       customMessages.push(custom);
@@ -54,8 +54,19 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
         postFinalAdvisorMessageCount += 1;
       }
       for (const evidence of custom.providedSkillEvidence) {
-        providedSkills.add(evidence.name);
-        providedSkillEvidence.set(skillEvidenceIdentity(evidence), evidence);
+        const locatedEvidence = {
+          ...evidence,
+          eventSource: event?.type === 'session_custom' ? 'session-fallback' : 'live',
+          eventIndex,
+        };
+        if (['autoload', 'user'].includes(locatedEvidence.source)) {
+          providedSkills.add(locatedEvidence.name);
+        }
+        const identity = skillEvidenceIdentity(locatedEvidence);
+        const existing = providedSkillEvidence.get(identity);
+        if (!existing || existing.eventSource === 'session-fallback' && locatedEvidence.eventSource === 'live') {
+          providedSkillEvidence.set(identity, locatedEvidence);
+        }
       }
       if (custom.customType === 'autolearn-nudge') {
         pendingTurnKind = 'autolearn-capture';
@@ -86,6 +97,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
         name: item.name,
         arguments: item.arguments ?? item.input ?? {},
         turnKind: activeTurnKind,
+        eventIndex,
       });
       const text = content
         .filter((item) => item?.type === 'text')
@@ -108,6 +120,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
         name: event.toolName ?? event.name,
         arguments: event.arguments ?? event.input ?? {},
         turnKind: activeTurnKind,
+        eventIndex,
       });
     }
 
@@ -147,6 +160,15 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
   const duplicateSkillReads = [...observedSkills]
     .filter((name) => hasEquivalentSkill(providedSkills, name))
     .sort();
+  const skillReadAttempts = calls
+    .map(skillReadAttemptFromCall)
+    .filter(Boolean);
+  const duplicateSkillReadAttempts = skillReadAttempts
+    .filter(({ name }) => hasEquivalentSkill(providedSkills, name));
+  const projectToolCalls = calls.filter((call) => !skillReadAttemptFromCall(call));
+  const firstProjectToolCallEventIndex = projectToolCalls.length
+    ? Math.min(...projectToolCalls.map(({ eventIndex }) => eventIndex))
+    : null;
   const provisionMode = [...providedSkillEvidence.values()].some(({ source }) => source === 'autoload')
     ? 'native'
     : customMessages.some(({ customType }) => customType === 'omp-enhancer-core.workflow-guidance')
@@ -174,6 +196,9 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
       .sort((left, right) => skillEvidenceIdentity(left).localeCompare(skillEvidenceIdentity(right))),
     provisionMode,
     duplicateSkillReads,
+    skillReadAttempts,
+    duplicateSkillReadAttempts,
+    firstProjectToolCallEventIndex,
     claimedSkills: [...claimedSkills].sort(),
     unobservedClaims: unobservedClaims.sort(),
     routes,
@@ -207,6 +232,49 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   }
   for (const skill of expectations.forbiddenSkills ?? []) {
     if (hasEquivalentSkill(observed, skill)) failures.push(`forbidden skill was observed or provided: ${skill}`);
+  }
+  for (const expected of expectations.requiredProvidedSkills ?? []) {
+    const requirement = typeof expected === 'string' ? { name: expected } : expected;
+    const matches = (summary.providedSkillEvidence ?? []).filter((evidence) => (
+      hasEquivalentSkill(new Set([evidence.name]), requirement?.name)
+      && (!requirement?.source || evidence.source === requirement.source)
+      && (!requirement?.eventSource || evidence.eventSource === requirement.eventSource)
+    ));
+    if (!matches.length) {
+      failures.push(`required provided skill evidence was missing: ${requirement?.name ?? '<unnamed>'}`);
+      continue;
+    }
+    if (requirement?.beforeFirstProjectTool === true) {
+      const firstProjectTool = summary.firstProjectToolCallEventIndex;
+      if (!Number.isFinite(firstProjectTool)
+        || !matches.some(({ eventIndex }) => Number.isFinite(eventIndex) && eventIndex < firstProjectTool)) {
+        failures.push(`required skill was not provided before the first project tool: ${requirement.name}`);
+      }
+    }
+  }
+  if (expectations.expectedProvisionMode
+    && summary.provisionMode !== expectations.expectedProvisionMode) {
+    failures.push(`skill provision mode was ${summary.provisionMode ?? 'unobserved'}, expected ${expectations.expectedProvisionMode}`);
+  }
+  if (Number.isFinite(expectations.maxSkillReadAttempts)
+    && (summary.skillReadAttempts?.length ?? 0) > expectations.maxSkillReadAttempts) {
+    failures.push(`skill read attempts ${summary.skillReadAttempts.length} exceeded ${expectations.maxSkillReadAttempts}`);
+  }
+  if (Number.isFinite(expectations.maxDuplicateSkillReadAttempts)
+    && (summary.duplicateSkillReadAttempts?.length ?? 0) > expectations.maxDuplicateSkillReadAttempts) {
+    failures.push(`duplicate skill read attempts ${summary.duplicateSkillReadAttempts.length} exceeded ${expectations.maxDuplicateSkillReadAttempts}`);
+  }
+  if (Array.isArray(expectations.expectedToolSequence)) {
+    const actualSequence = (summary.toolCalls ?? []).map(({ name }) => name);
+    if (JSON.stringify(actualSequence) !== JSON.stringify(expectations.expectedToolSequence)) {
+      failures.push(`tool sequence was ${actualSequence.join(' -> ') || '<empty>'}, expected ${expectations.expectedToolSequence.join(' -> ') || '<empty>'}`);
+    }
+  }
+  if (expectations.requireSuccessfulToolCalls === true) {
+    const unsuccessful = (summary.toolCalls ?? []).filter(({ completed, isError }) => (
+      completed !== true || isError !== false
+    ));
+    if (unsuccessful.length) failures.push(`${unsuccessful.length} tool call(s) did not complete successfully`);
   }
   if (expectations.noWeb === true && summary.webCallCount > 0) {
     failures.push(`web tools were called ${summary.webCallCount} time(s)`);
@@ -306,6 +374,7 @@ function registerCall(calls, callsById, unresolvedByFingerprint, value) {
     name,
     arguments: argumentsValue,
     turnKind: value.turnKind ?? 'user',
+    eventIndex: Number.isFinite(value.eventIndex) ? value.eventIndex : -1,
     completed: false,
     isError: null,
   };
@@ -354,7 +423,11 @@ function normalizeCustom(value) {
 }
 
 function normalizeProvidedSkillEvidence(details, attribution) {
-  const source = attribution === 'agent' ? 'autoload' : 'user';
+  const coreAutoload = attribution === 'agent'
+    && details.provisionProvider === 'omp-enhancer-core'
+    && details.provisionSchemaVersion === 1;
+  const source = coreAutoload ? 'autoload' : attribution === 'user' ? 'user' : 'untrusted';
+  const routed = new Set((details.routedSkills ?? []).map(normalizeSkillName).filter(Boolean));
   const records = Array.isArray(details.providedSkillRecords)
     ? details.providedSkillRecords
     : [];
@@ -362,9 +435,13 @@ function normalizeProvidedSkillEvidence(details, attribution) {
     name: normalizeSkillName(record?.name),
     path: String(record?.path ?? '').trim(),
     requestedSkill: normalizeSkillName(record?.requestedSkill),
-    source,
+    source: coreAutoload
+      && routed.has(normalizeSkillName(record?.requestedSkill))
+      && /(?:^|\/)SKILL\.md$/i.test(String(record?.path ?? '').replace(/\\/g, '/'))
+      ? source
+      : coreAutoload ? 'untrusted' : source,
   })).filter(({ name }) => name);
-  if (!evidence.length) {
+  if (!evidence.length && !coreAutoload) {
     const name = normalizeSkillName(details.name);
     if (name) evidence.push({
       name,
@@ -409,6 +486,34 @@ function skillNameFromRead(args, result) {
   if (contentName) return normalizeSkillName(contentName);
   const parts = target.replace(/\\/g, '/').split('/');
   return normalizeSkillName(parts.at(-2) ?? '');
+}
+
+function skillReadAttemptFromCall(call) {
+  if (call?.name !== 'read') return null;
+  const target = String(
+    call.arguments?.path
+    ?? call.arguments?.file_path
+    ?? call.arguments?.uri
+    ?? call.arguments?.value
+    ?? '',
+  ).trim();
+  const uriMatch = target.match(/^skill:\/\/([^/\s]+)(?:\/SKILL\.md)?/i);
+  let name = uriMatch?.[1] ?? '';
+  if (!name && /(?:^|\/)SKILL\.md$/i.test(target)) {
+    const parts = target.replace(/\\/g, '/').split('/');
+    name = parts.at(-2) ?? '';
+  }
+  name = normalizeSkillName(name);
+  if (!name) return null;
+  return {
+    id: call.id,
+    name,
+    target,
+    completed: call.completed,
+    isError: call.isError,
+    turnKind: call.turnKind,
+    eventIndex: call.eventIndex,
+  };
 }
 
 function claimedSkillNames(text) {

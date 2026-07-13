@@ -854,3 +854,34 @@ autolearn 专项结果：
 - `npm run check:marketplace` 与 `npm run pack:all` 通过。
 - 生产源码静态扫描未发现 `block: true`、`continue: true`、`triggerTurn`、protected action boundary 或 GateController。唯一 `session_stop` handler 只记录观测状态并返回 `undefined`。
 - Core 的所有预算、scope、review 和证据规则均明确标记为 model guidance/advisory，不决定工具许可或完成许可。
+
+### 17.6 2026-07-13 工作流优先的技能发现补强
+
+针对 DeepSeek 在逐节润色英文 LaTeX 时先读取正文、直接编辑，最后才通过
+autolearn 创建 managed skill 的回归，提示与运行时改为以下软流程：
+
+1. 在实质工作前先根据用户目标、动作、目标载体、正文语言和约束判断工作流。
+2. 查看当前活动 skill inventory 以及宿主已经提供的 skill 正文。
+3. 加载与该工作流匹配的最小必要 skill 集合。
+4. 完成上述步骤后才开始审查、润色、诊断或实现。
+
+Core 会要求模型查看宿主已有的活动 inventory，并只把经过 model-visible、名称和
+当前路由过滤的候选子集随该顺序注入 system guidance 与原生 `skill-prompt`，避免
+复制完整 inventory。宿主已经 autoload 的 skill 视为已加载，模型不重复读取；
+memory、`recall`、`learn`、通用模型能力和任务结束后运行的 `manage_skill` 都不能
+替代任务开始前的 workflow/skill 选择。skill 缺失时只做一次有依据的纠正，随后
+继续任务并报告限制，不拦截工具，也不保持完成状态。
+
+英文 `.tex` 的直接 prose polish 现在使用 LaTeX-aware 的 `writing-review`，而不是
+`writing-markdown-helper`。广泛全文 review 才附加 `writing-checkers`；局部
+Introduction、Abstract 或段落润色不会无条件启动七维全文检查。
+
+当当前提示只能得到 `writing.pending` 时，Core 会在第一次成功读取 `.tex`、`.md`
+或其他写作目标后，根据宿主观测到的正文语言重新计算写作工作流，并把所需 skill
+正文作为该工具结果的附加 guidance 提供给模型。这样“先从 Introduction 开始”
+这类依赖前文上下文、当前轮没有路径的请求，也会在编辑前完成语言与 skill 选择。
+
+安装态 E2E 新增英文 LaTeX Introduction 精确编辑夹具，要求 live native autoload
+的 `writing-review` 先于第一个项目工具，随后严格执行 `read -> edit -> read`，禁止
+成功或失败的重复 skill read，并精确验证最终文件只删除重复的第二个 `lower`。
+这些检查只评估事件证据，不改变运行时工具许可或 session continuation。

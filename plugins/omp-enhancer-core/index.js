@@ -327,9 +327,12 @@ export default function registerCoreEnhancer(pi) {
       },
     }));
     const workspaceRoot = ctx.cwd || process.cwd();
+    const activeSkills = activeSkillInventory(pi);
+    const availableSkills = relevantActiveSkillNames(route, activeSkills);
     const skillProvision = await buildNativeSkillProvision(pi, {
       route,
       workspaceRoot,
+      activeSkills,
     });
     for (const skill of skillProvision?.providedSkills ?? []) {
       state.providedSkills.add(normalizeProvidedSkillName(skill));
@@ -341,12 +344,14 @@ export default function registerCoreEnhancer(pi) {
       includeModelWorkflowHints: false,
       workspaceRoot,
       skillsProvided: Boolean(skillProvision),
+      availableSkills,
     });
     const workflowMessage = skillProvision ? '' : buildImmediateWorkflowMessage({
       route,
       parentTask: state.lastPrompt,
       workspaceRoot,
       skillsProvided: false,
+      availableSkills,
     });
     const message = skillProvision
       ? skillProvision.message
@@ -383,13 +388,18 @@ export default function registerCoreEnhancer(pi) {
     if (name === 'read' && !toolEventFailed(event)) recordSkillReads(state, event);
     if (name === 'task') recordTaskResult(state, event);
     let inspectionGuidance = '';
+    let writingDiscoveryGuidance = '';
+    if (name === 'read' && !toolEventFailed(event)) {
+      writingDiscoveryGuidance = await refinePendingWritingRouteAfterRead(pi, state, event, ctx);
+    }
     if (INSPECTION_TOOL_NAMES.has(name)) {
       state.inspectionCalls += 1;
       inspectionGuidance = buildInspectionProgressGuidance(state, ctx);
     }
     await persistState(pi, state);
-    return inspectionGuidance
-      ? { content: appendToolResultText(event, inspectionGuidance) }
+    const guidance = [writingDiscoveryGuidance, inspectionGuidance].filter(Boolean).join('\n');
+    return guidance
+      ? { content: appendToolResultText(event, guidance) }
       : undefined;
   });
 
@@ -1072,11 +1082,142 @@ function serializeState(state) {
   };
 }
 
-async function buildNativeSkillProvision(pi, { route, workspaceRoot = '' } = {}) {
+function activeSkillInventory(pi) {
+  if (typeof pi?.pi?.getActiveSkills !== 'function') return [];
+  try {
+    const skills = pi.pi.getActiveSkills();
+    return Array.isArray(skills) ? skills.filter(isModelVisibleSkill) : [];
+  } catch {
+    return [];
+  }
+}
+
+function isModelVisibleSkill(skill = {}) {
+  return skill.disableModelInvocation !== true
+    && skill.hidden !== true
+    && skill.hideFromModel !== true
+    && skill.modelInvocationDisabled !== true;
+}
+
+function relevantActiveSkillNames(route = {}, activeSkills = []) {
+  const routed = route.routePlan?.skills ?? [];
+  return unique(activeSkills
+    .filter((skill) => routed.some((name) => skillNamesEquivalent(skill?.name, name)))
+    .map((skill) => normalizeProvidedSkillName(skill?.name))
+    .filter((name) => /^[a-z0-9][a-z0-9._/-]{0,127}$/.test(name)));
+}
+
+async function refinePendingWritingRouteAfterRead(pi, state, event, ctx = {}) {
+  if (state.lastRoute?.intent !== 'writing.pending') return '';
+  const target = readToolTarget(event);
+  if (!isWritingSourceReadTarget(target)
+    || !pendingWritingReadMatches(state.lastRoute, state.lastPrompt, target)
+    || readResultIsIncomplete(event)) return '';
+  const sourceText = readResultText(event);
+  const language = detectWritingSourceLanguage(sourceText);
+  if (!['en', 'zh'].includes(language)) return '';
+
+  const route = routeNaturalLanguageTask({
+    prompt: `${state.lastPrompt}\nObserved writing source target: ${target}`,
+    sourceText,
+  });
+  if (!['writing.en', 'writing.zh'].includes(route.intent)) return '';
+  state.lastRoute = {
+    ...route,
+    writingSourceObservation: {
+      kind: 'tool-result',
+      paths: [normalizeWritingReadTarget(target)],
+      languages: [language],
+      truncated: readResultIsIncomplete(event),
+    },
+  };
+
+  const workspaceRoot = ctx.cwd || process.cwd();
+  const activeSkills = activeSkillInventory(pi);
+  const availableSkills = relevantActiveSkillNames(state.lastRoute, activeSkills);
+  const skillProvision = await buildNativeSkillProvision(pi, {
+    route: state.lastRoute,
+    workspaceRoot,
+    activeSkills,
+  });
+  for (const skill of skillProvision?.providedSkills ?? []) {
+    state.providedSkills.add(normalizeProvidedSkillName(skill));
+  }
+
+  const next = skillProvision?.message?.content || buildImmediateWorkflowMessage({
+    route: state.lastRoute,
+    parentTask: state.lastPrompt,
+    workspaceRoot,
+    skillsProvided: false,
+    availableSkills,
+  });
+  return [
+    '',
+    `OMP writing workflow refined after reading the target: body language is ${language}; workflow is ${state.lastRoute.workflowRoute}.`,
+    'Complete workflow and skill selection now, before revising or reviewing the target. The surrounding instruction language does not override the observed body language.',
+    next,
+    'This refinement is advisory only; it does not authorize, deny, or block any tool call or completion.',
+  ].filter(Boolean).join('\n');
+}
+
+function readToolTarget(event = {}) {
+  const input = event.input ?? event.params ?? event.arguments ?? {};
+  for (const key of ['path', 'filePath', 'file', 'target', 'uri']) {
+    if (typeof input?.[key] === 'string' && input[key].trim()) return input[key].trim();
+  }
+  return '';
+}
+
+function isWritingSourceReadTarget(target = '') {
+  const value = String(target).trim();
+  if (!value || /^skill:\/\//i.test(value) || /(?:^|\/)SKILL\.md(?:$|[?#])/i.test(value)) return false;
+  return /\.(?:tex|md|markdown|txt|rst|adoc|org)(?:$|[?#:])/i.test(value);
+}
+
+function pendingWritingReadMatches(route = {}, prompt = '', target = '') {
+  const observed = normalizeWritingReadTarget(target);
+  const expected = route.taskDescriptor?.writingSourceTargets
+    ?? route.taskDescriptor?.workspaceWriteTargets
+    ?? [];
+  if (expected.length) {
+    return expected.some((value) => normalizeWritingReadTarget(value) === observed);
+  }
+
+  const filename = observed.split('/').at(-1) ?? '';
+  const stem = filename.replace(/\.(?:tex|md|markdown|txt|rst|adoc|org)$/i, '').toLowerCase();
+  if (!stem || stem.length < 4 || /^(?:agents|claude|readme|license|changelog|contributing)$/i.test(stem)) return false;
+  return String(prompt).toLowerCase().includes(stem);
+}
+
+function normalizeWritingReadTarget(target = '') {
+  return String(target)
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/[?#].*$/, '')
+    .replace(/:(?:raw|\d+(?:-\d+)?)$/i, '')
+    .replace(/^\.\//, '');
+}
+
+function readResultIsIncomplete(event = {}) {
+  const details = [event.details, event.result?.details].filter((value) => value && typeof value === 'object');
+  if (details.some((value) => (
+    value.truncated === true
+    || value.isTruncated === true
+    || value.hasMore === true
+    || value.partial === true
+    || value.complete === false
+  ))) return true;
+  const input = event.input ?? event.params ?? event.arguments ?? {};
+  if (['offset', 'limit', 'startLine', 'endLine', 'lineStart', 'lineEnd', 'line_start', 'line_end']
+    .some((key) => input?.[key] !== undefined)) return true;
+  return /(?:output|result|content)\s+(?:was\s+)?truncated|\[truncated\]|showing\s+lines?\s+\d+\s*[-–]\s*\d+\s+of\s+\d+/i
+    .test(readResultText(event));
+}
+
+async function buildNativeSkillProvision(pi, { route, workspaceRoot = '', activeSkills = [] } = {}) {
   const runtime = pi?.pi;
   if (
-    typeof runtime?.getActiveSkills !== 'function'
-    || typeof runtime?.buildSkillPromptMessage !== 'function'
+    typeof runtime?.buildSkillPromptMessage !== 'function'
     || typeof runtime?.SKILL_PROMPT_MESSAGE_TYPE !== 'string'
     || !runtime.SKILL_PROMPT_MESSAGE_TYPE
   ) return null;
@@ -1084,12 +1225,6 @@ async function buildNativeSkillProvision(pi, { route, workspaceRoot = '' } = {})
   const requestedSkills = primarySkillsFor(route);
   if (!requestedSkills.length) return null;
 
-  let activeSkills;
-  try {
-    activeSkills = runtime.getActiveSkills();
-  } catch {
-    return null;
-  }
   if (!Array.isArray(activeSkills) || !activeSkills.length) return null;
 
   const selected = requestedSkills.map((skill) => (
@@ -1117,15 +1252,26 @@ async function buildNativeSkillProvision(pi, { route, workspaceRoot = '' } = {})
   }));
   const providedSkills = providedSkillRecords.map(({ name }) => name).filter(Boolean);
   const providedPaths = providedSkillRecords.map(({ path }) => path).filter(Boolean);
+  const availableSkillNames = relevantActiveSkillNames(route, activeSkills);
+  const discoveryPreamble = [
+    'OMP WORKFLOW AND SKILL DISCOVERY FIRST',
+    'Before substantive project work, identify the workflow from the user goal, target artifact, source language, requested action, and constraints.',
+    `Matching routed skills found in the active inventory: ${availableSkillNames.map((name) => `skill://${name}`).join(', ')}.`,
+    `The host selected and loaded this workflow bundle: ${routedSkills.map((name) => `skill://${name}`).join(', ')}. This completes skill selection for the current workflow; apply the loaded instructions before project work and do not independently search, substitute, or reread them.`,
+    'Memory, general model ability, and a managed skill created after the task are not substitutes for this pre-work discovery and loading step.',
+    'Only if the host reports a concrete loading failure, make one exact inventory-based correction and then continue. This is advisory guidance and never blocks a tool call or completion.',
+  ].join('\n');
   return {
     providedSkills,
     message: {
       customType: runtime.SKILL_PROMPT_MESSAGE_TYPE,
-      content: built.map(({ message }) => message).join('\n\n'),
+      content: [discoveryPreamble, ...built.map(({ message }) => message)].join('\n\n'),
       display: false,
       attribution: 'agent',
       details: {
         ...built[0].details,
+        provisionProvider: 'omp-enhancer-core',
+        provisionSchemaVersion: 1,
         lineCount: built.reduce((total, { details }) => total + (Number(details.lineCount) || 0), 0),
         routedSkills,
         routedSkillPaths: providedPaths,
