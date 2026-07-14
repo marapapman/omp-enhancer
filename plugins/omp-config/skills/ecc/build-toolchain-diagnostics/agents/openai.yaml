@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Toolchain Diagnostics"
+  short_description: "Diagnose build and toolchain failures from exact evidence"
+  default_prompt: "Use $build-toolchain-diagnostics to localize this build failure before proposing a bounded repair."

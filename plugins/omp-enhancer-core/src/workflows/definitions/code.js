@@ -39,9 +39,13 @@ export const codeWorkflows = [
       "scope completeness, dependency order, and verification correspondence"
     ],
     "riskNotes": [],
-    "roles": [],
+    "roles": [
+      "explore",
+      "plan"
+    ],
     "delegation": [
-      "step-1: keep the plan with the main agent; compose a specialized workflow before delegating architecture, test, security, or impact analysis to an exact listed role"
+      "step-1: explore performs bounded read-only inspection of the implementation and test context",
+      "steps-2-5: plan owns the complete advisory implementation and verification plan without editing files or running tests"
     ]
   },
   {
@@ -90,11 +94,13 @@ export const codeWorkflows = [
     ],
     "riskNotes": [],
     "roles": [
+      "explore",
       "plan",
       "implementation-task",
       "reviewer"
     ],
     "delegation": [
+      "step-1: explore performs bounded read-only inspection of affected code, tests, callers, and conventions",
       "step-2: plan owns the bounded implementation and verification plan without editing files",
       "steps-3-4: implementation-task owns the planned implementation and focused tests within its assigned scope",
       "step-5: reviewer independently audits the semantic diff, tests, scope, and evidence without taking over integration"
@@ -245,9 +251,141 @@ export const codeWorkflows = [
       "finding-to-code evidence, severity rationale, regression impact, and explicit hypotheses"
     ],
     "riskNotes": [],
-    "roles": [],
+    "roles": [
+      "explore",
+      "reviewer"
+    ],
     "delegation": [
-      "steps-1-4: keep the general review with the main agent; compose security.review, code.test, or another specialized workflow before delegating a checkpoint to its exact listed role"
+      "steps-1-2: explore performs bounded read-only inspection of requested paths, surrounding contracts, callers, and failure paths",
+      "steps-3-4: reviewer independently validates and reports prioritized findings with concrete file, symbol, test, or runtime evidence"
+    ]
+  },
+  {
+    "id": "code.build",
+    "chooseWhen": "A compiler, type checker, linker, bundler, package, or build command fails and the user wants diagnosis or an authorized repair.",
+    "composeWith": [
+      "code.debug",
+      "code.dev",
+      "code.test",
+      "code.review"
+    ],
+    "steps": [
+      {
+        "id": "step-1",
+        "text": "Capture the exact build command, target revision, environment, current failure evidence, and the smallest reproducible target."
+      },
+      {
+        "id": "step-2",
+        "text": "Inspect the relevant toolchain, configuration, dependency, source, and generated-file boundaries without changing them."
+      },
+      {
+        "id": "step-3",
+        "text": "Plan the smallest repair and the focused regression evidence that will distinguish the root cause from downstream symptoms."
+      },
+      {
+        "id": "step-4",
+        "text": "When repair is authorized, write or update a focused failing test where a meaningful seam exists, then implement only the planned change."
+      },
+      {
+        "id": "step-5",
+        "text": "Rerun the exact failing build command and the smallest relevant test set on the current revision, recording exit status and limitations."
+      },
+      {
+        "id": "step-6",
+        "text": "Independently review the semantic diff, build evidence, generated artifacts, dependency changes, and scope before reporting."
+      }
+    ],
+    "scopeNotes": [
+      "Do not upgrade dependencies, clear shared caches, regenerate broad artifacts, or modify lockfiles unless the evidence and user-authorized repair require it.",
+      "Compose code.debug for diagnosis-only work, code.dev for production changes, and code.test for independently planned test execution."
+    ],
+    "skills": [
+      "build-toolchain-diagnostics",
+      "systematic-debugging",
+      "test-driven-development",
+      "verification-before-completion"
+    ],
+    "qualityChecks": [
+      "exact build command correspondence, current failure evidence, root-cause evidence, focused regression coverage, successful current-revision rerun, semantic diff review, and explicit limitations"
+    ],
+    "riskNotes": [
+      "Toolchain and dependency changes can widen the diff or invalidate reproducibility; keep them evidence-driven and reversible."
+    ],
+    "roles": [
+      "explore",
+      "plan",
+      "implementation-task",
+      "reviewer"
+    ],
+    "delegation": [
+      "steps-1-2: explore collects bounded read-only build, toolchain, configuration, dependency, and source evidence",
+      "step-3: plan owns the minimal repair and verification plan without editing files",
+      "step-4: implementation-task owns only the authorized focused test and implementation changes",
+      "step-6: reviewer independently audits the diff and current build and test evidence"
+    ]
+  },
+  {
+    "id": "performance.optimize",
+    "chooseWhen": "The user wants a measured performance improvement with a preserved correctness contract rather than an unmeasured cleanup.",
+    "composeWith": [
+      "code.plan",
+      "code.dev",
+      "code.test",
+      "code.review"
+    ],
+    "steps": [
+      {
+        "id": "step-1",
+        "text": "Define the operation, metric, correctness gate, representative input, baseline environment, and bounded search budget."
+      },
+      {
+        "id": "step-2",
+        "text": "Measure a reproducible baseline and profile the actual bottleneck before proposing source changes."
+      },
+      {
+        "id": "step-3",
+        "text": "Plan one evidence-backed optimization hypothesis at a time with rollback and regression checks."
+      },
+      {
+        "id": "step-4",
+        "text": "Implement the smallest authorized variant while preserving the correctness gate and avoiding unrelated refactors."
+      },
+      {
+        "id": "step-5",
+        "text": "Repeat the benchmark under the same conditions, run correctness tests, and compare the result against baseline and measurement noise."
+      },
+      {
+        "id": "step-6",
+        "text": "Independently review the profiling evidence, semantic diff, correctness results, claimed delta, reproducibility, and rollback."
+      }
+    ],
+    "scopeNotes": [
+      "Do not claim a global optimum from a bounded search or accept a faster result that fails the correctness gate.",
+      "Load stack-specific performance skills only when they match the measured bottleneck."
+    ],
+    "skills": [
+      "benchmark",
+      "benchmark-optimization-loop",
+      "test-driven-development",
+      "verification-before-completion"
+    ],
+    "qualityChecks": [
+      "reproducible baseline, profile-backed bottleneck, bounded hypothesis, same-condition comparison, correctness preservation, repeated performance delta, semantic diff review, and rollback evidence"
+    ],
+    "riskNotes": [
+      "Benchmarks can mutate data, consume substantial compute, or mislead when environments differ; bound cost and record conditions."
+    ],
+    "roles": [
+      "explore",
+      "plan",
+      "implementation-task",
+      "reviewer"
+    ],
+    "delegation": [
+      "steps-1-2: explore gathers bounded read-only baseline, benchmark, profile, and relevant source context",
+      "step-3: plan owns the measurable optimization and rollback plan without editing files",
+      "step-4: implementation-task owns only the selected bounded optimization variant and focused tests",
+      "step-6: reviewer independently audits the baseline, profile, diff, correctness, claimed delta, and reproducibility"
     ]
   }
 ];

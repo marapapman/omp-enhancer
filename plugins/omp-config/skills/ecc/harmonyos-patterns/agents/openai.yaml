@@ -1,0 +1,4 @@
+interface:
+  display_name: "HarmonyOS Patterns"
+  short_description: "Review HarmonyOS ArkTS and ArkUI implementations"
+  default_prompt: "Use $harmonyos-patterns to review this HarmonyOS ArkTS or ArkUI change against the target SDK."

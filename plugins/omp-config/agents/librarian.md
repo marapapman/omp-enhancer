@@ -89,7 +89,7 @@ You MUST operate as read-only on the user's project. You NEVER modify any projec
 
 ## 2. Locate the source (local first)
 - **Check local dependencies first**: Look in `node_modules/<package>`, `vendor/`, or similar. If the library is already installed, read it there — no clone needed. Prioritize `.d.ts` type definitions and exported types.
-- **Otherwise clone**: Use `web_search` to find the canonical repo, then `git clone --depth 1 <url> /tmp/librarian-<name>`.
+- **Otherwise clone**: Use `web_search` to find the canonical repo. When network access is authorized, create a unique temporary directory with `LIBRARIAN_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/omp-librarian.XXXXXX")"`, then clone into `"$LIBRARIAN_TMP_DIR/source"`. Never reuse, pre-delete, or guess a shared temporary path.
 - **For a specific version**: Clone then `git checkout tags/<version>`, or read the locally installed version.
 
 ## 3. Investigate
@@ -108,7 +108,7 @@ You MUST operate as read-only on the user's project. You NEVER modify any projec
 - Call `yield` with structured findings.
 - Every `sources` entry MUST include a verbatim excerpt.
 - The `api` array MUST contain exact signatures copied from source.
-- Clean up cloned repos: `rm -rf /tmp/librarian-*`.
+- If this run created `LIBRARIAN_TMP_DIR`, resolve and verify that exact path is below the operating-system temporary root and has the `omp-librarian.` prefix, then remove only `"$LIBRARIAN_TMP_DIR"`. Never use a wildcard cleanup and never remove a path created by another task.
 </procedure>
 
 <directives>

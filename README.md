@@ -83,7 +83,7 @@ You can optionally name workflow IDs in the request when you want to constrain t
 
 ### Available workflow catalog
 
-Catalog version: **10**. Candidate skills are recommendations from the catalog, not mandatory bundles. The main agent loads only candidates that are present in the active inventory and useful for a selected step. Every card exposes exact direct agent IDs through `Agent roles`; roles inherited from composed workflows remain explicit in the workflow and delegation guidance. The structured definitions under [`plugins/omp-enhancer-core/src/workflows/definitions`](plugins/omp-enhancer-core/src/workflows/definitions) are the single semantic source. `npm run generate:workflows` renders the packaged [`plugins/omp-config/assets/WORKFLOW_CATALOG.md`](plugins/omp-config/assets/WORKFLOW_CATALOG.md), while `npm run check:workflows` rejects drift. Both Main and Advisor now receive selection, composition, ordered steps, delegation, roles, skills, quality checks, scope notes, and risk notes from that generated source.
+Catalog version: **11**. Candidate skills are recommendations from the catalog, not mandatory bundles. The main agent loads only candidates that are present in the active inventory and useful for a selected step. Every card exposes exact direct agent IDs through `Agent roles`; roles inherited from composed workflows remain explicit in the workflow and delegation guidance. The structured definitions under [`plugins/omp-enhancer-core/src/workflows/definitions`](plugins/omp-enhancer-core/src/workflows/definitions) are the single semantic source. `npm run generate:workflows` renders the packaged [`plugins/omp-config/assets/WORKFLOW_CATALOG.md`](plugins/omp-config/assets/WORKFLOW_CATALOG.md), while `npm run check:workflows` rejects drift. Both Main and Advisor receive selection, composition, ordered steps, delegation, roles, skills, quality checks, scope notes, and risk notes from that generated source. Version 11 deliberately has no healthcare workflow; healthcare-related skills remain optional knowledge overlays for an ordinary research, security, fact-checking, or review workflow.
 
 See [`docs/WORKFLOW_DEVELOPMENT.md`](docs/WORKFLOW_DEVELOPMENT.md) for the definition schema, Agent/Skill ownership rules, generation commands, validation matrix, and release impact of adding or changing a workflow.
 
@@ -105,6 +105,7 @@ Document and general workflows:
 | `doc.convert.word` | The task creates, edits, or converts a Word document. | `docx` |
 | `research.web` | The task requires current online research, reliable source selection, synthesis, and claim-level fact checking. | `research-ops`, `deep-research`, plus the fact-checking skill set |
 | `factcheck.document` | The user asks to verify claims, citations, chronology, freshness, or source support. | `fact-checking`, `claim-extraction`, `source-evaluation`, `citation-authenticity` |
+| `research.technical` | A technical answer depends on the exact installed or current library, SDK, API, signature, or version. | `documentation-lookup`, source evaluation, and citation checks |
 
 Engineering and delivery workflows:
 
@@ -115,9 +116,23 @@ Engineering and delivery workflows:
 | `code.debug` | A concrete failure, regression, or mismatch must be reproduced, localized, or explained. | `diagnose`, `systematic-debugging` |
 | `code.test` | The task is to design, add, run, or interpret tests through planning, bounded execution, and independent review. | `test-driven-development`, `verification-before-completion` |
 | `code.review` | The requested result is a read-only code review, bug audit, architecture review, or regression audit. | `diagnose`, `verification-before-completion`, an applicable language or framework reviewer |
+| `code.build` | A compiler, linker, package, SDK, code-generation, or bundler failure needs evidence-led diagnosis and an authorized repair. | `build-toolchain-diagnostics`, `systematic-debugging`, language-specific patterns |
+| `performance.optimize` | A measured bottleneck needs profiling, a bounded change, and like-for-like before/after evidence. | `benchmark`, `benchmark-optimization-loop`, relevant runtime patterns |
+| `network.design` | A network topology, addressing, routing, segmentation, or resilience design is requested without applying configuration. | `network-config-validation`, applicable vendor patterns, `safety-guard` |
+| `network.homelab` | A home-lab network needs a bounded readiness or topology plan. | `homelab-network-readiness`, `homelab-network-setup`, applicable DNS/VLAN/VPN skills |
+| `network.review` | Existing network configuration needs an independent read-only review. | `network-config-validation`, vendor patterns, `safety-guard` |
+| `network.debug` | A concrete connectivity, route, interface, BGP, DNS, VPN, or device-state failure needs localization. | `network-interface-health`, `network-bgp-diagnostics`, `systematic-debugging` |
+| `database.review` | Schema, query, transaction, index, or migration behavior needs a read-only database-aware review. | `database-migrations`, an applicable database pattern skill, `verification-before-completion` |
+| `database.change` | An authorized schema, query, persistence, or transaction change needs plan, implementation, tests, and independent review. | `database-migrations`, database patterns, TDD and safety skills |
+| `database.migration.repair` | A failed or unsafe migration needs current-state diagnosis, backup and rollback planning, repair, and verification. | `database-migrations`, `postgres-patterns`, `systematic-debugging`, `safety-guard` |
+| `ml.review` | An ML system needs a read-only audit of data contracts, leakage, reproducibility, evaluation, serving, and operations. | `mle-workflow`, relevant framework patterns, `verification-before-completion` |
+| `ml.debug` | An ML data, training, evaluation, artifact, or serving failure needs evidence-led diagnosis and an authorized repair. | `mle-workflow`, `systematic-debugging`, framework patterns and TDD |
+| `marketing.campaign` | A campaign needs reliable market evidence, fact-checked claims, language-aware writing, and optional visual design. | `marketing-campaign`, `market-research`, `brand-voice` |
+| `seo.audit` | A site needs evidence-based crawl, indexability, rendering, content, structured-data, or performance analysis without implicit repair. | `seo`, `benchmark`, frontend and accessibility skills |
 | `omp.plugin` | An OMP plugin, marketplace entry, packaged skill, hook, agent, template, install, or upgrade is in scope. | `omp-marketplace-plugin-activation`, an applicable plugin- or skill-authoring skill |
 | `security.review` | The user explicitly requests review of security boundaries, vulnerabilities, impact, or remediation. | `security-review`, `security-scan` |
 | `design.visual` | The deliverable is a UI, visual asset, diagram, layout, or interaction design. | `frontend-design`, `canvas-design`, or another medium-specific visual skill |
+| `release.opensource` | A private project must be prepared in a separate staging copy, independently sanitized, packaged, and reviewed before any optional publication. | `opensource-pipeline`, `security-review`, `verification-before-completion` |
 | `release.publish` | The user explicitly asks to commit, push, publish, deploy, version, upgrade, or synchronize an installed artifact. | `conventional-commits`, `finishing-a-development-branch`, `verification-before-completion` |
 
 ### Composition examples
@@ -134,6 +149,10 @@ The workflows are designed to compose; selecting one does not exclude another:
 - `Audit the authentication code but do not modify anything` commonly composes `code.review + security.review`; the no-write constraint prevents `code.dev` work even if remediation ideas are reported.
 - `Update this OMP plugin, run its tests, commit, push, and upgrade the installed copy` commonly composes `omp.plugin + code.dev + code.test + release.publish`. The release workflow appears only because the external mutations were explicitly requested.
 - `Design and implement a responsive settings page` commonly composes `design.visual + code.dev + code.test`.
+- `Research the exact SDK behavior, repair the build, and verify it` commonly composes `research.technical + code.build + code.test + code.review`; versioned evidence precedes repair.
+- `Repair the failed production migration` commonly composes `database.migration.repair + security.review`; backup, rollback, current migration state, focused tests, and an independent review remain visible checkpoints.
+- `Prepare this private repository for open source, but do not publish it` selects `release.opensource` only. The source stays read-only, work happens in a separate staging copy, and publication is unavailable unless the user separately authorizes `release.publish`.
+- `Draft an English launch campaign from current market evidence` composes `marketing.campaign + research.web + factcheck.document + writing.en`, keeping research, claims, writing, and optional design review distinct.
 
 These examples are planning guidance rather than fixed mappings. The main agent may choose a smaller or larger composition when the actual target, constraints, and acceptance criteria justify it, and should make that choice visible in its TODO.
 

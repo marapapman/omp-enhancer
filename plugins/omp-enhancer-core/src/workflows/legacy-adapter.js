@@ -53,6 +53,7 @@ export function buildWorkflowRouteCard({
   roles = [],
   requiredSkills = [],
   includeCatalogSkills = true,
+  includeCatalogRoles = true,
 } = {}) {
   const workflowRoute = workflowRouteNames.includes(route) ? route : 'agentic.simple';
   const meta = workflowRouteCatalog[workflowRoute];
@@ -61,7 +62,7 @@ export function buildWorkflowRouteCard({
     : unique([...(skills ?? []), ...(requiredSkills ?? [])]);
   const selectedRoles = unique([
     ...normalizeRoles(roles).map(({ agent }) => agent),
-    ...meta.roles,
+    ...(includeCatalogRoles ? meta.roles : []),
   ]);
   return [
     'WORKFLOW_GUIDE',

@@ -70,7 +70,21 @@ test('primary startup exposes the full catalog and skill inventory without autol
   assert.equal(routed.systemPrompt[0], 'base prompt');
   const injected = routed.systemPrompt.at(-1);
   assert.match(injected, /OMP Main-Agent Workflow Orchestration/);
-  assert.match(injected, /OMP_WORKFLOW_CATALOG_VERSION: 10/);
+  assert.match(injected, /OMP_WORKFLOW_CATALOG_VERSION: 11/);
+  for (const workflow of [
+    'code.build',
+    'research.technical',
+    'network.design',
+    'database.migration.repair',
+    'performance.optimize',
+    'ml.debug',
+    'release.opensource',
+    'marketing.campaign',
+    'seo.audit',
+  ]) {
+    assert.match(injected, new RegExp(`### ${workflow}\\n`), workflow);
+  }
+  assert.doesNotMatch(injected, /### healthcare\.review\n/);
   assert.match(injected, /### writing\.en/);
   assert.match(injected, /### slides\.generate/);
   assert.match(injected, /### slides\.modify/);

@@ -52,7 +52,7 @@ const validRouteCases = [
     language: 'zh',
     riskFlags: ['needs-tests', 'needs-review', 'needs-subagents'],
     expectedAgent: 'tester',
-    expectedSubagents: ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'],
+    expectedSubagents: ['reviewer', 'test-planner', 'test-reviewer'],
   }),
   caseFor({
     name: 'focused bug audit',

@@ -1,0 +1,4 @@
+interface:
+  display_name: "FSharp Patterns"
+  short_description: "Review and implement idiomatic FSharp safely"
+  default_prompt: "Use $fsharp-patterns to review this F# change for type safety, idioms, and testability."

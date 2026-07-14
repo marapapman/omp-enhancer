@@ -146,9 +146,7 @@ Fix: Generate a unique title per product using the product name and primary cate
 | content advice without checking the actual page | read the real page first |
 | generic “improve SEO” outputs | tie every recommendation to a page or asset |
 
-## Related Skills
+## Related Workflows and Skills
 
-- `seo-specialist`
-- `frontend-patterns`
-- `brand-voice`
-- `market-research`
+- Workflow: `seo.audit`; compose `code.dev` separately for authorized repairs
+- Skills: `frontend-patterns`, `brand-voice`, and `market-research`

@@ -205,6 +205,6 @@ credentials. Warn on best-practice gaps that are outside the change scope.
 
 ## See Also
 
-- Agent: `network-config-reviewer`
-- Agent: `network-troubleshooter`
+- Workflow role: `ecc-network-config-reviewer` through `network.review`
+- Workflow: `network.debug` with Agent `ecc-network-troubleshooter`
 - Skill: `network-interface-health`

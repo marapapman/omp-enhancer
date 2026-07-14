@@ -302,6 +302,7 @@ export function routeNaturalLanguageTask(input = {}) {
         skills: compiled.routePlan.skills,
         roles: compiled.routePlan.roles,
         includeCatalogSkills: false,
+        includeCatalogRoles: described.constraints?.subagents !== 'forbidden',
       }),
     }
     : compiled;

@@ -129,10 +129,9 @@ test('resolveClassificationRoute maps bug audit classifier output to audit subag
   assert.equal(result.route.intent, 'bug-audit');
   assert.equal(result.route.source, 'llm-classifier');
   assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), [
-    'ecc-tdd-guide',
-    'ecc-code-reviewer',
-    'ecc-silent-failure-hunter',
-    'ecc-pr-test-analyzer',
+    'reviewer',
+    'test-planner',
+    'test-reviewer',
   ]);
 });
 

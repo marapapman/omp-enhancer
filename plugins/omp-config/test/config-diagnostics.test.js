@@ -334,7 +334,7 @@ test('registered defaults resolve bundled package assets from a normal project c
 
   const assets = tools.find((tool) => tool.name === 'omp_config_assets');
   const assetsResult = await assets.execute('call-2', {}, undefined, undefined, { cwd: projectRoot });
-  assert.ok(assetsResult.details.agents.includes('task.md'));
+  assert.ok(assetsResult.details.agents.includes('implementation-task.md'));
   assert.ok(assetsResult.details.skills.includes('tdd'));
   assert.ok(assetsResult.details.hooks.pre.includes('guard-destructive.ts'));
   assert.ok(assetsResult.details.hooks.post.includes('truncate-output.ts'));
@@ -353,7 +353,7 @@ test('registered defaults resolve bundled package assets from a normal project c
     assert.equal(commandDoctor.summary, '1 config risk(s) found.');
 
     const commandAssets = await commands.get('config-assets').handler('');
-    assert.ok(commandAssets.agents.includes('task.md'));
+    assert.ok(commandAssets.agents.includes('implementation-task.md'));
     assert.ok(commandAssets.skills.includes('tdd'));
     assert.ok(commandAssets.hooks.pre.includes('guard-destructive.ts'));
     assert.ok(commandAssets.hooks.post.includes('truncate-output.ts'));

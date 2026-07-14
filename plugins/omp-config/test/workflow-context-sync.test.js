@@ -137,14 +137,29 @@ test('shared main and Advisor assets import one complete advisory workflow catal
     'doc.convert.word',
     'research.web',
     'factcheck.document',
+    'research.technical',
     'code.plan',
     'code.dev',
     'code.debug',
     'code.test',
     'code.review',
+    'code.build',
+    'performance.optimize',
+    'network.design',
+    'network.homelab',
+    'network.review',
+    'network.debug',
+    'database.review',
+    'database.change',
+    'database.migration.repair',
+    'ml.review',
+    'ml.debug',
+    'marketing.campaign',
+    'seo.audit',
     'omp.plugin',
     'security.review',
     'design.visual',
+    'release.opensource',
     'release.publish',
   ];
 
@@ -159,7 +174,8 @@ test('shared main and Advisor assets import one complete advisory workflow catal
   assert.match(catalog, /preferably in one `task\.tasks\[\]` batch/);
   assert.match(catalog, /body of the text being modified, never from the prompt language/);
   assert.match(catalog, /guidance, not a router, permission system, completion gate, or continuation controller/);
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 10/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 11/);
+  assert.doesNotMatch(catalog, /healthcare\.review|ecc-healthcare-reviewer/i);
   assert.match(catalog, /`zh-writer` owns the requested Chinese drafting or prose revision.+`zh-checker` independently reviews/i);
   assert.match(catalog, /`writer` owns the requested English drafting or prose revision.+`checker` independently reviews/i);
   assert.match(catalog, /before the body language is observed, do not delegate to writer, checker, zh-writer, or zh-checker/i);

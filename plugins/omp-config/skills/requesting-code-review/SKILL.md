@@ -1,103 +1,40 @@
 ---
 name: requesting-code-review
-description: Use when completing tasks, implementing major features, or before merging to verify work meets requirements
+description: Request an independent OMP code review at a useful checkpoint with a bounded diff, requirements, and current verification evidence. Use after a coherent implementation batch or before merge.
 ---
 
 # Requesting Code Review
 
-Dispatch a code reviewer subagent to catch issues before they cascade. The reviewer gets precisely crafted context for evaluation — never your session's history. This keeps the reviewer focused on the work product, not your thought process, and preserves your own context for continued work.
+Compose `code.review` and assign the exact canonical `reviewer`. The reviewer is read-only and receives the work product and evidence, not authority to repair it.
 
-**Core principle:** Review early, review often.
+## Prepare the Review Packet
 
-## When to Request Review
+Include:
 
-**Usually valuable:**
-- After each task in subagent-driven development
-- After completing major feature
-- Before merge to main
+- user objective, acceptance criteria, and explicit non-goals;
+- repository instructions and target paths;
+- base and head revisions or the exact uncommitted diff scope;
+- summary of behavior changed and compatibility obligations;
+- tests, typechecks, builds, browser checks, or other commands actually run, with current exit status and limitations;
+- known risks, generated files, and unrelated dirty-tree changes to ignore.
 
-**Optional but valuable:**
-- When stuck (fresh perspective)
-- Before refactoring (baseline check)
-- After fixing complex bug
+Do not claim commands ran when they did not. If a revision range is unavailable, provide the exact files and semantic change to inspect.
 
-## How to Request
+## Native Assignment
 
-**1. Get git SHAs:**
-```bash
-BASE_SHA=$(git rev-parse HEAD~1)  # or origin/main
-HEAD_SHA=$(git rev-parse HEAD)
+```text
+workflow=code.review
+step=<review checkpoint>
+todo=<bounded review item>
+role=reviewer
+skills=<only relevant review and domain skills>
+scope=<paths or revision range>
+requirements=<behavior and non-goals>
+evidence=<current commands and results>
 ```
 
-**2. Dispatch code reviewer subagent:**
+Ask for prioritized findings with triggering conditions, impact, and file or symbol evidence. Require the reviewer to distinguish proven defects from hypotheses and to report when evidence is missing.
 
-Use Task tool with `general-purpose` type, fill template at `code-reviewer.md`
+## Reconcile Findings
 
-**Placeholders:**
-- `{DESCRIPTION}` - Brief summary of what you built
-- `{PLAN_OR_REQUIREMENTS}` - What it should do
-- `{BASE_SHA}` - Starting commit
-- `{HEAD_SHA}` - Ending commit
-
-**3. Act on feedback:**
-- Fix supported Critical issues when they are in scope, or report them clearly
-- Address Important issues in the current pass when practical
-- Note Minor issues for later
-- Push back if reviewer is wrong (with reasoning)
-
-## Example
-
-```
-[Just completed Task 2: Add verification function]
-
-You: Let me request code review before proceeding.
-
-BASE_SHA=$(git log --oneline | grep "Task 1" | head -1 | awk '{print $1}')
-HEAD_SHA=$(git rev-parse HEAD)
-
-[Dispatch code reviewer subagent]
-  DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
-  PLAN_OR_REQUIREMENTS: Task 2 from docs/superpowers/plans/deployment-plan.md
-  BASE_SHA: a7981ec
-  HEAD_SHA: 3df7661
-
-[Subagent returns]:
-  Strengths: Clean architecture, real tests
-  Issues:
-    Important: Missing progress indicators
-    Minor: Magic number (100) for reporting interval
-  Assessment: Ready to proceed
-
-You: [Fix progress indicators]
-[Continue to Task 3]
-```
-
-## Integration with Workflows
-
-**Subagent-Driven Development:**
-- Review at useful task or batch boundaries
-- Catch issues before they compound
-- Apply one focused repair pass, then use parent judgment or report remaining findings
-
-**Executing Plans:**
-- Review after each task or at natural checkpoints
-- Get feedback, apply, continue
-
-**Ad-Hoc Development:**
-- Review before merge
-- Review when stuck
-
-## Red Flags
-
-**Never:**
-- Skip review because "it's simple"
-- Ignore Critical issues
-- Proceed with unfixed Important issues
-- Argue with valid technical feedback
-
-**If reviewer wrong:**
-- Push back with technical reasoning
-- Show code/tests that prove it works
-- Request clarification
-
-See template at: requesting-code-review/code-reviewer.md
+Validate each finding against the code and tests. Route supported in-scope repairs through `code.dev`, then run focused verification and obtain a fresh independent review when the semantic diff changed materially. Do not create an automatic review-repair loop or treat “no findings” as proof that untested behavior works.

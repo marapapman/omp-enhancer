@@ -32,6 +32,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
   const callsById = new Map();
   const unresolvedByFingerprint = new Map();
   const customMessages = [];
+  const asyncJobResults = [];
   const assistantTexts = [];
   const assistantStops = [];
   const finals = [];
@@ -48,6 +49,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
   let postFinalAdvisorMessageCount = 0;
 
   for (const [eventIndex, event] of events.entries()) {
+    asyncJobResults.push(...asyncJobResultsFromEvent(event));
     const custom = customMessageFromEvent(event);
     if (custom) {
       customMessages.push(custom);
@@ -141,6 +143,12 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
         if (!isError && call.name === 'todo') {
           call.todoResult = summarizeTodoResult(result?.details);
         }
+        if (!isError && call.name === 'task') {
+          call.taskResult = summarizeTaskResult(result?.details);
+        }
+        if (!isError && call.name === 'job') {
+          call.jobResults = summarizeJobResults(result?.details);
+        }
         if (!isError && call.name === 'read') {
           const skill = skillNameFromRead(call.arguments, result);
           if (skill) observedSkills.add(skill);
@@ -182,7 +190,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
     ? Math.min(...substantiveToolCalls.map(({ eventIndex }) => eventIndex))
     : null;
   const nativeTodo = summarizeNativeTodo(calls, firstSubstantiveToolCallEventIndex);
-  const nativeTask = summarizeNativeTask(calls);
+  const nativeTask = summarizeNativeTask(calls, asyncJobResults);
   const provisionMode = [...providedSkillEvidence.values()].some(({ source }) => source === 'autoload')
     ? 'native'
     : customMessages.some(({ customType }) => customType === 'omp-enhancer-core.workflow-guidance')
@@ -375,13 +383,24 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   }
 
   const nativeTask = summary.nativeTask ?? {};
+  const assignmentAttemptCount = nativeTask.assignmentAttemptCount ?? nativeTask.forkCount ?? 0;
+  const minAssignmentAttempts = Number.isFinite(expectations.minNativeTaskAssignmentAttempts)
+    ? expectations.minNativeTaskAssignmentAttempts
+    : expectations.minNativeTaskForks;
+  const maxAssignmentAttempts = Number.isFinite(expectations.maxNativeTaskAssignmentAttempts)
+    ? expectations.maxNativeTaskAssignmentAttempts
+    : expectations.maxNativeTaskForks;
   if (Number.isFinite(expectations.minNativeTaskCalls)
     && (nativeTask.callCount ?? 0) < expectations.minNativeTaskCalls) {
     failures.push(`native task calls ${(nativeTask.callCount ?? 0)} was below ${expectations.minNativeTaskCalls}`);
   }
-  if (Number.isFinite(expectations.minNativeTaskForks)
-    && (nativeTask.forkCount ?? 0) < expectations.minNativeTaskForks) {
-    failures.push(`native task forks ${(nativeTask.forkCount ?? 0)} was below ${expectations.minNativeTaskForks}`);
+  if (Number.isFinite(minAssignmentAttempts)
+    && assignmentAttemptCount < minAssignmentAttempts) {
+    failures.push(`native task assignment attempts ${assignmentAttemptCount} was below ${minAssignmentAttempts}`);
+  }
+  if (Number.isFinite(maxAssignmentAttempts)
+    && assignmentAttemptCount > maxAssignmentAttempts) {
+    failures.push(`native task assignment attempts ${assignmentAttemptCount} exceeded ${maxAssignmentAttempts}`);
   }
   if (Number.isFinite(expectations.minNativeTaskBatchCalls)
     && (nativeTask.batchCallCount ?? 0) < expectations.minNativeTaskBatchCalls) {
@@ -389,6 +408,41 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   }
   if (expectations.requireNativeTaskBatch === true && !(nativeTask.multiForkBatchCallCount > 0)) {
     failures.push('no native task batch forked multiple subagents');
+  }
+  if (typeof expectations.requiredNativeTaskContext === 'string') {
+    const mismatched = (nativeTask.assignments ?? []).filter(({ context }) => (
+      context !== expectations.requiredNativeTaskContext
+    ));
+    if (!nativeTask.assignments?.length || mismatched.length) {
+      failures.push(`${mismatched.length || 'all'} native task assignment(s) omitted the required native task context: ${expectations.requiredNativeTaskContext}`);
+    }
+  }
+  if (expectations.requireNativeTaskCompletion === true) {
+    const jobs = nativeTask.jobStatuses ?? [];
+    if (!jobs.length) {
+      failures.push('no spawned native task job status was observed');
+    } else {
+      for (const job of jobs) {
+        if (job.status !== 'completed') {
+          failures.push(`native task job ${job.id} ended with ${job.status ?? 'unobserved'}`);
+        }
+      }
+    }
+  }
+  const nativeTaskAgents = new Set(nativeTask.agents ?? []);
+  const nativeTaskWorkflows = new Set(nativeTask.workflows ?? []);
+  const nativeTaskSkills = new Set(nativeTask.skills ?? []);
+  for (const agent of expectations.requiredNativeTaskAgents ?? []) {
+    if (!nativeTaskAgents.has(agent)) failures.push(`required native task agent was not observed: ${agent}`);
+  }
+  for (const agent of expectations.forbiddenNativeTaskAgents ?? []) {
+    if (nativeTaskAgents.has(agent)) failures.push(`forbidden native task agent was observed: ${agent}`);
+  }
+  for (const workflow of expectations.requiredNativeTaskWorkflows ?? []) {
+    if (!nativeTaskWorkflows.has(workflow)) failures.push(`required native task workflow was not observed: ${workflow}`);
+  }
+  for (const skill of expectations.requiredNativeTaskSkills ?? []) {
+    if (!hasEquivalentSkill(nativeTaskSkills, skill)) failures.push(`required native task skill was not observed: ${skill}`);
   }
   const requiredTaskMetadata = Array.isArray(expectations.requiredNativeTaskMetadata)
     ? expectations.requiredNativeTaskMetadata
@@ -473,6 +527,29 @@ function customMessageFromEvent(event) {
   if (event?.type === 'message_end' && message?.role === 'custom') return normalizeCustom(message);
   if (!event?.type && (event?.role === 'custom' || event?.customType)) return normalizeCustom(event);
   return null;
+}
+
+function asyncJobResultsFromEvent(event) {
+  const message = event?.type === 'message_end' ? event.message : event;
+  if (message?.role !== 'custom' || message?.customType !== 'async-result') return [];
+  const content = typeof message.content === 'string'
+    ? message.content
+    : Array.isArray(message.content)
+      ? message.content.map((item) => String(item?.text ?? '')).join('\n')
+      : '';
+  const jobs = [];
+  for (const match of content.matchAll(/<task-result\b([^>]*)>/giu)) {
+    const attributes = match[1];
+    const id = attributeValue(attributes, 'id');
+    const status = normalizeJobStatus(attributeValue(attributes, 'status'));
+    if (id) jobs.push({ id, status });
+  }
+  return jobs;
+}
+
+function attributeValue(value, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${escaped}=(?:"([^"]*)"|'([^']*)')`, 'iu').exec(String(value ?? ''))?.slice(1).find((item) => item !== undefined) ?? '';
 }
 
 function customIdentity(custom) {
@@ -664,6 +741,41 @@ function summarizeTodoResult(details) {
   };
 }
 
+function summarizeTaskResult(details) {
+  if (!details || typeof details !== 'object') return null;
+  const records = [
+    ...(Array.isArray(details.progress) ? details.progress : []),
+    ...(Array.isArray(details.results) ? details.results : []),
+  ];
+  if (details.async?.jobId) {
+    records.push({ id: details.async.jobId, status: details.async.state });
+  }
+  return { jobs: normalizeJobRecords(records) };
+}
+
+function summarizeJobResults(details) {
+  if (!details || typeof details !== 'object') return [];
+  return normalizeJobRecords(Array.isArray(details.jobs) ? details.jobs : []);
+}
+
+function normalizeJobRecords(records) {
+  const jobs = new Map();
+  for (const record of records) {
+    const id = typeof record?.id === 'string' ? record.id.trim() : '';
+    if (!id) continue;
+    jobs.set(id, {
+      id,
+      status: normalizeJobStatus(record.status ?? record.state),
+    });
+  }
+  return [...jobs.values()];
+}
+
+function normalizeJobStatus(value) {
+  const status = String(value ?? '').trim().toLowerCase();
+  return status || 'unobserved';
+}
+
 function summarizeNativeTodo(calls, firstSubstantiveToolCallEventIndex) {
   const todoCalls = calls.filter(({ name }) => name === 'todo');
   const successful = todoCalls.filter(({ completed, isError }) => completed === true && isError === false);
@@ -715,20 +827,48 @@ function todoInitTaskCount(args) {
   return Array.isArray(args.items) ? args.items.length : null;
 }
 
-function summarizeNativeTask(calls) {
+function summarizeNativeTask(calls, asyncJobResults = []) {
   const taskCalls = calls.filter(({ name }) => name === 'task');
   const assignments = taskCalls.flatMap((call) => taskAssignmentsFromCall(call));
   const batchCalls = taskCalls.filter(({ arguments: args }) => Array.isArray(args?.tasks));
   const multiForkBatchCalls = batchCalls.filter(({ arguments: args }) => args.tasks.length > 1);
+  const agents = uniqueSorted(assignments.map(({ agent }) => agent).filter(Boolean));
+  const workflows = uniqueSorted(assignments.flatMap(({ metadata }) => metadataItems(metadata.workflow)));
+  const skills = uniqueSorted(assignments.flatMap(({ metadata }) => metadataItems(metadata.skills)));
+  const submittedJobs = new Map();
+  for (const call of taskCalls) {
+    for (const job of call.taskResult?.jobs ?? []) submittedJobs.set(job.id, job.status);
+  }
+  for (const call of calls.filter(({ name }) => name === 'job')) {
+    for (const job of call.jobResults ?? []) {
+      if (submittedJobs.has(job.id)) submittedJobs.set(job.id, job.status);
+    }
+  }
+  for (const job of asyncJobResults) {
+    if (submittedJobs.has(job.id)) submittedJobs.set(job.id, job.status);
+  }
+  const jobStatuses = [...submittedJobs.entries()]
+    .map(([id, status]) => ({ id, status }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const completedForkCount = jobStatuses.filter(({ status }) => status === 'completed').length;
   return {
     callCount: taskCalls.length,
     successfulCallCount: taskCalls.filter(({ completed, isError }) => completed === true && isError === false).length,
     batchCallCount: batchCalls.length,
     multiForkBatchCallCount: multiForkBatchCalls.length,
     forkCount: assignments.length,
+    assignmentAttemptCount: assignments.length,
     successfulForkCount: assignments.filter(({ successful }) => successful).length,
+    successfulAssignmentAttemptCount: assignments.filter(({ successful }) => successful).length,
+    submittedJobCount: jobStatuses.length,
+    completedForkCount,
+    allSubmittedJobsCompleted: jobStatuses.length > 0 && completedForkCount === jobStatuses.length,
+    jobStatuses,
     metadataCompleteCount: assignments.filter(({ metadataComplete }) => metadataComplete).length,
     metadataIncompleteCount: assignments.filter(({ metadataComplete }) => !metadataComplete).length,
+    agents,
+    workflows,
+    skills,
     assignments,
   };
 }
@@ -747,6 +887,7 @@ function taskAssignmentsFromCall(call) {
         callId: call.id,
         index,
         batch: isBatch,
+        context: typeof args.context === 'string' ? args.context : null,
         name: typeof item.name === 'string' ? item.name : null,
         agent: typeof item.agent === 'string' ? item.agent : null,
         prefix,
@@ -787,6 +928,17 @@ function normalizeMetadataValue(value) {
   const normalized = String(value ?? '').trim();
   if (!normalized || /^(?:unspecified|unknown|none|n\/a|pending)$/iu.test(normalized)) return null;
   return normalized;
+}
+
+function metadataItems(value) {
+  return String(value ?? '')
+    .split(/[\s,，]+/u)
+    .map((item) => item.trim())
+    .filter((item) => normalizeMetadataValue(item));
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
 function takeCodePoints(value, limit) {

@@ -19,13 +19,20 @@ export const subagentPlans = Object.freeze({
   ]),
   bugAudit: Object.freeze([
     subagent(
-      'ecc-tdd-guide',
-      'generate a deduplicated multi-channel boundary, load, mode, and input test matrix for audit verification',
-      ['test-driven-development', 'search-first', 'ai-regression-testing'],
+      'reviewer',
+      'audit concrete code paths, error handling, fallbacks, and regressions with file and line evidence',
+      ['error-handling', 'verification-before-completion'],
     ),
-    subagent('ecc-code-reviewer', 'audit code paths for concrete bugs with file and line evidence', ['verification-before-completion']),
-    subagent('ecc-silent-failure-hunter', 'hunt swallowed errors, bad fallbacks, and missing error propagation', ['diagnose']),
-    subagent('ecc-pr-test-analyzer', 'review generated test execution, duplicate removal, and coverage gaps that affect bug confidence', ['verification-before-completion']),
+    subagent(
+      'test-planner',
+      'produce a deduplicated target-to-behavior and boundary test plan without editing files or running tests',
+      ['test-driven-development', 'ai-regression-testing'],
+    ),
+    subagent(
+      'test-reviewer',
+      'independently review test coverage, current execution evidence, and limitations without editing files or rerunning tests',
+      ['verification-before-completion'],
+    ),
   ]),
   factCheck: Object.freeze([
     subagent(

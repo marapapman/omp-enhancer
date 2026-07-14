@@ -197,7 +197,7 @@ Code reviewer: ✅ Approved
 ...
 
 [After all tasks]
-[Dispatch final code-reviewer]
+[Dispatch canonical reviewer through code.review]
 Final reviewer: All requirements met, ready to merge
 
 Done!

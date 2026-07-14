@@ -10,8 +10,7 @@ tools:
   - web_search
   - ast_grep
   - yield
-spawns: 
-  - explore
+spawns: []
 model: 
   - pi/plan
   - pi/slow
@@ -31,7 +30,7 @@ Analyze the codebase and the user's request. Produce a detailed implementation p
 4. Identify types, interfaces, contracts
 5. Note dependencies between components
 
-You may spawn `explore` agents for genuinely independent areas when parallel exploration adds value. For focused or already-understood scope, inspect directly and avoid unnecessary delegation.
+Return the bounded plan directly to the parent. Do not spawn additional agents; the parent owns any parallel exploration or follow-on delegation.
 
 ## Phase 3: Design
 1. List concrete changes (files, functions, types)

@@ -1,0 +1,4 @@
+interface:
+  display_name: "TypeScript Patterns"
+  short_description: "Review sound maintainable TypeScript patterns"
+  default_prompt: "Use $typescript-patterns to review this TypeScript change for sound types, runtime boundaries, and maintainability."

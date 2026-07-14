@@ -48,12 +48,11 @@ const routingCases = [
     expectedAgent: 'tester',
     requiredSkills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
     requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_report'],
-    requiredSubagents: ['ecc-tdd-guide', 'ecc-code-reviewer', 'ecc-silent-failure-hunter', 'ecc-pr-test-analyzer'],
+    requiredSubagents: ['reviewer', 'test-planner', 'test-reviewer'],
     requiredSubagentSkills: {
-      'ecc-tdd-guide': ['test-driven-development', 'search-first', 'ai-regression-testing'],
-      'ecc-code-reviewer': ['verification-before-completion'],
-      'ecc-silent-failure-hunter': ['diagnose'],
-      'ecc-pr-test-analyzer': ['verification-before-completion'],
+      reviewer: ['error-handling', 'verification-before-completion'],
+      'test-planner': ['test-driven-development', 'ai-regression-testing'],
+      'test-reviewer': ['verification-before-completion'],
     },
   },
   {
@@ -233,7 +232,7 @@ test('routes mixed real-world workloads without false workflow gates', () => {
     ['direct audit context followed by workflow optimization', 'The OMP gate is blocking delegation. Let me do the bug investigation directly as a focused audit. 帮我优化插件的工作流，再事前准备好skills。', 'implementation-with-tests', []],
     ['precise scoped code edit', '只修改 plugins/omp-enhancer-core/src/router.js 里 routeNaturalLanguageTask 的一个判断，保持范围最小。', 'implementation-with-tests', []],
     ['agentic code modification', 'Agentically update the codebase to improve gate handling and add regression tests.', 'implementation-with-tests', ['plan', 'implementation-task', 'reviewer']],
-    ['read-only code bug finding', '帮我在代码里找 bug，只报告问题，不要修复。', 'bug-audit', ['ecc-code-reviewer', 'ecc-silent-failure-hunter']],
+    ['read-only code bug finding', '帮我在代码里找 bug，只报告问题，不要修复。', 'bug-audit', ['reviewer']],
     ['focused direct bug audit', '直接做 focused bug audit，只报告验证过的问题。', 'bug-audit', []],
     ['code testing workload', '帮我为 subagent fork 逻辑生成测试并运行门禁，不要改实现。', 'bug-audit', []],
     ['fact-check workload', 'Verify citation authenticity and factual claims in this paragraph.', 'fact-check', ['fact-planner', 'fact-researcher-a', 'fact-researcher-b', 'fact-cross-checker', 'fact-reviewer']],
@@ -1421,6 +1420,7 @@ test('required route subagents are packaged by owning workflow plugins', async (
   const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const roots = [
     path.join(repoRoot, 'plugins', 'omp-config', 'agents'),
+    path.join(repoRoot, 'plugins', 'omp-test-enhancer', 'agents'),
     path.join(repoRoot, 'plugins', 'writing-helper', 'agents'),
     path.join(repoRoot, 'plugins', 'omp-fact-checker', 'agents'),
   ];
@@ -1473,10 +1473,11 @@ test('subagent providers match the configured workflow ownership', async () => {
   const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const ownerAgents = {
     'omp-config': await agentNames(path.join(repoRoot, 'plugins', 'omp-config', 'agents')),
+    'omp-testing-enhancer': await agentNames(path.join(repoRoot, 'plugins', 'omp-test-enhancer', 'agents')),
     'writing-helper': await agentNames(path.join(repoRoot, 'plugins', 'writing-helper', 'agents')),
     'omp-fact-checker': await agentNames(path.join(repoRoot, 'plugins', 'omp-fact-checker', 'agents')),
   };
-  const testingEnhancerAgents = await agentNames(path.join(repoRoot, 'plugins', 'omp-test-enhancer', 'agents'));
+  const testingEnhancerAgents = ownerAgents['omp-testing-enhancer'];
 
   assert.deepEqual(
     [...testingEnhancerAgents].sort(),
@@ -1485,13 +1486,16 @@ test('subagent providers match the configured workflow ownership', async () => {
   );
 
   for (const item of routingCases) {
-    const owner = expectedSubagentOwner(item.expectedIntent);
-    if (!owner) {
+    const defaultOwner = expectedSubagentOwner(item.expectedIntent);
+    if (!defaultOwner) {
       assert.deepEqual(item.requiredSubagents, [], `${item.name} should not require subagents`);
       continue;
     }
 
     for (const agent of item.requiredSubagents) {
+      const owner = agent === 'test-planner' || agent === 'test-executor' || agent === 'test-reviewer'
+        ? 'omp-testing-enhancer'
+        : defaultOwner;
       assert.equal(ownerAgents[owner].has(agent), true, `${item.name} should use ${owner} subagent ${agent}`);
       for (const [otherOwner, names] of Object.entries(ownerAgents)) {
         if (otherOwner !== owner) assert.equal(names.has(agent), false, `${item.name} should not resolve ${agent} from ${otherOwner}`);

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Swift Patterns"
+  short_description: "Review and implement idiomatic safe Swift"
+  default_prompt: "Use $swift-patterns to review this Swift change for concurrency, ownership, API, and test risks."

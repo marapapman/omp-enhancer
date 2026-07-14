@@ -109,6 +109,12 @@ describe('bundled frugal-pi writing content', () => {
       assert.match(source, /final response|最终响应/i, `${path} should return an in-band report`);
     }
 
+    for (const path of ['agents/checker.md', 'agents/zh-checker.md']) {
+      const source = readFileSync(join(rootDir, path), 'utf8');
+      const tools = source.match(/^tools:\s*([^\n]+)$/m)?.[1] ?? '';
+      assert.doesNotMatch(tools, /(?:^|,\s*)write(?:,|$)/, `${path} checker must not have write capability`);
+    }
+
     const englishReview = readFileSync(join(rootDir, 'skills/writing-review/SKILL.md'), 'utf8');
     assert.match(englishReview, /review-only\s+request produces findings rather than a rewritten document/i);
     assert.match(englishReview, /Do not append\s+a complete rewritten passage or document/i);

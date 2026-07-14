@@ -157,7 +157,7 @@ source rather than relying on a generic ping.
 
 ## See Also
 
-- Agent: `network-config-reviewer`
-- Agent: `network-troubleshooter`
+- Workflow role: `ecc-network-config-reviewer` through `network.review`
+- Workflow: `network.debug` with Agent `ecc-network-troubleshooter`
 - Skill: `network-config-validation`
 - Skill: `network-interface-health`

@@ -34,9 +34,9 @@ Examples:
 | Instead of council | Use |
 | --- | --- |
 | Verifying whether output is correct | `santa-method` |
-| Breaking a feature into implementation steps | `planner` |
-| Designing system architecture | `architect` |
-| Reviewing code for bugs or security | `code-reviewer` or `santa-method` |
+| Breaking a feature into implementation steps | `code.plan` with `plan` |
+| Designing system architecture | `code.plan` with the relevant architecture skill |
+| Reviewing code for bugs or security | `code.review`, `security.review`, or `santa-method` |
 | Straight factual questions | just answer directly |
 | Obvious execution tasks | just do the task |
 

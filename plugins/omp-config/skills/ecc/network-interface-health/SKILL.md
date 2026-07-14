@@ -147,6 +147,6 @@ def parse_show_interfaces(raw: str) -> list[dict[str, Any]]:
 
 ## See Also
 
-- Agent: `network-troubleshooter`
+- Workflow: `network.debug` with Agent `ecc-network-troubleshooter`
 - Skill: `network-config-validation`
 - Skill: `homelab-network-setup`

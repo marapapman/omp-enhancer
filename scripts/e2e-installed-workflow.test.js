@@ -717,6 +717,11 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
       scenarioIds: ['english-review-zh-prompt'],
       outputRoot,
     });
+    assert.equal(report.mode, 'dry-run');
+    assert.equal(report.executed, false);
+    assert.equal(report.passed, null);
+    assert.equal(report.previewValid, true);
+    assert.equal(report.results[0].evaluation.skipped, true);
     const command = report.results[0].command;
     assert.ok(command.includes('--mode=rpc'));
     assert.equal(command.includes('--advisor'), false);
@@ -746,6 +751,132 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
   } finally {
     await rm(outputRoot, { recursive: true, force: true });
   }
+});
+
+test('installed runner isolates extension discovery and loads explicit worktree plugin directories', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-e2e-worktree-plugins-'));
+  const repoRoot = path.resolve(import.meta.dirname, '..');
+  const matrixPath = path.join(tempRoot, 'matrix.json');
+  const outputRoot = path.join(tempRoot, 'results');
+  await writeFile(matrixPath, `${JSON.stringify({
+    version: 1,
+    defaults: {
+      advisor: false,
+      noExtensions: true,
+      pluginDirs: [
+        'plugins/omp-config',
+        'plugins/omp-enhancer-core',
+      ],
+    },
+    scenarios: [{
+      id: 'worktree-plugin-load',
+      cwd: repoRoot,
+      prompt: 'Return a concise read-only result.',
+    }],
+  }, null, 2)}\n`);
+
+  try {
+    const { report } = await runInstalledMatrix({
+      matrixPath,
+      outputRoot,
+      dryRun: true,
+      runId: 'worktree-plugin-load',
+    });
+    const result = report.results[0];
+    const expectedPluginDirs = [
+      path.join(repoRoot, 'plugins/omp-config'),
+      path.join(repoRoot, 'plugins/omp-enhancer-core'),
+    ];
+
+    assert.ok(result.command.includes('--no-extensions'));
+    assert.deepEqual(
+      result.command.filter((argument) => argument.startsWith('--plugin-dir=')),
+      expectedPluginDirs.map((pluginDir) => `--plugin-dir=${pluginDir}`),
+    );
+    assert.deepEqual(result.runtimeConfig, {
+      advisorEnabled: false,
+      noExtensions: true,
+      pluginDirs: expectedPluginDirs,
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('workflow consolidation matrix covers representative non-medical workflows with native task evidence', async () => {
+  const matrix = JSON.parse(await readFile(
+    new URL('./e2e/fixtures/workflow-consolidation-installed.json', import.meta.url),
+    'utf8',
+  ));
+  const serialized = JSON.stringify(matrix).toLowerCase();
+  const requiredWorkflows = new Set(matrix.scenarios.flatMap(
+    ({ expectations }) => expectations?.requiredNativeTaskWorkflows ?? [],
+  ));
+
+  assert.equal(serialized.includes('healthcare'), false);
+  assert.equal(matrix.defaults.noExtensions, true);
+  assert.deepEqual(matrix.defaults.pluginDirs, [
+    'plugins/omp-config',
+    'plugins/writing-helper',
+    'plugins/omp-test-enhancer',
+    'plugins/omp-fact-checker',
+    'plugins/omp-enhancer-core',
+  ]);
+  assert.equal(matrix.defaults.expectations.requireNativeTaskCompletion, true);
+  assert.equal(matrix.defaults.expectations.minNativeTaskBatchCalls, 1);
+  assert.equal(
+    matrix.defaults.expectations.requiredNativeTaskContext,
+    'single read-only checkpoint',
+  );
+  for (const workflow of [
+    'code.build',
+    'research.technical',
+    'database.migration.repair',
+    'release.opensource',
+    'marketing.campaign',
+  ]) {
+    assert.ok(requiredWorkflows.has(workflow), `matrix omitted ${workflow}`);
+  }
+  for (const scenario of matrix.scenarios) {
+    assert.ok(scenario.expectations.requiredNativeTaskAgents.length > 0, scenario.id);
+    assert.ok(scenario.expectations.requiredNativeTaskWorkflows.length > 0, scenario.id);
+    assert.ok(scenario.expectations.requiredNativeTaskSkills.length > 0, scenario.id);
+    assert.equal(scenario.expectations.minNativeTaskAssignmentAttempts, 1, scenario.id);
+    assert.equal(scenario.expectations.maxNativeTaskAssignmentAttempts, 1, scenario.id);
+    assert.match(
+      scenario.prompt,
+      /Your first tool call must be native todo with exactly one pending item/i,
+      scenario.id,
+    );
+    assert.match(
+      scenario.prompt,
+      /Do not use read, grep, or glob in the parent/i,
+      scenario.id,
+    );
+    assert.match(
+      scenario.prompt,
+      /set the task batch context to "single read-only checkpoint"/i,
+      scenario.id,
+    );
+    const expectedAgent = scenario.expectations.requiredNativeTaskAgents[0];
+    assert.match(
+      scenario.prompt,
+      new RegExp(`tasks\\[0\\]\\.agent JSON value must be exactly "${expectedAgent}"`, 'i'),
+      scenario.id,
+    );
+  }
+
+  const byId = Object.fromEntries(matrix.scenarios.map((scenario) => [scenario.id, scenario]));
+  assert.match(byId['database-migration-worktree-audit'].prompt, /step=step-6/);
+  assert.match(byId['opensource-release-worktree-audit'].prompt, /step=step-3/);
+
+  const guide = await readFile(
+    new URL('../docs/WORKFLOW_DEVELOPMENT.md', import.meta.url),
+    'utf8',
+  );
+  const liveBlock = guide.match(/真实 OMP E2E[^`]*```bash\n([\s\S]*?)```/)?.[1] ?? '';
+  assert.match(liveBlock, /workflow-consolidation-installed\.json/);
+  assert.doesNotMatch(liveBlock, /--dry-run/);
 });
 
 test('installed workflow summary separates advisor, autolearn, and plugin continuation', () => {
@@ -1095,7 +1226,10 @@ test('installed workflow summary checks task batch assignment metadata within th
   assert.equal(summary.nativeTask.batchCallCount, 1);
   assert.equal(summary.nativeTask.multiForkBatchCallCount, 1);
   assert.equal(summary.nativeTask.forkCount, 2);
+  assert.equal(summary.nativeTask.assignmentAttemptCount, 2);
   assert.equal(summary.nativeTask.successfulForkCount, 2);
+  assert.equal(summary.nativeTask.successfulAssignmentAttemptCount, 2);
+  assert.equal(summary.nativeTask.assignments[0].context, 'Inspect independently and return evidence.');
   assert.equal(summary.nativeTask.metadataCompleteCount, 2);
   assert.deepEqual(summary.nativeTask.assignments[0].metadata, {
     workflow: 'code.dev',
@@ -1105,11 +1239,18 @@ test('installed workflow summary checks task batch assignment metadata within th
   });
   assert.equal(evaluateWorkflowSummary(summary, {
     minNativeTaskCalls: 1,
-    minNativeTaskForks: 2,
+    minNativeTaskAssignmentAttempts: 2,
     minNativeTaskBatchCalls: 1,
     requireNativeTaskBatch: true,
     requireNativeTaskMetadataPrefix: true,
+    requiredNativeTaskContext: 'Inspect independently and return evidence.',
   }).pass, true);
+  const tooManyForks = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    maxNativeTaskAssignmentAttempts: 1,
+  });
+  assert.equal(tooManyForks.pass, false);
+  assert.match(tooManyForks.failures.join('\n'), /native task assignment attempts 2 exceeded 1/);
 
   const lateMetadata = summarizeWorkflowEvents([
     {
@@ -1136,6 +1277,14 @@ test('installed workflow summary checks task batch assignment metadata within th
   assert.equal(evaluation.pass, false);
   assert.match(evaluation.failures.join('\n'), /first 120 characters/);
 
+  const missingContext = evaluateWorkflowSummary(lateMetadata, {
+    requireFinal: false,
+    minNativeTaskBatchCalls: 1,
+    requiredNativeTaskContext: 'single read-only checkpoint',
+  });
+  assert.equal(missingContext.pass, false);
+  assert.match(missingContext.failures.join('\n'), /native task context/);
+
   const placeholderMetadata = summarizeWorkflowEvents([{
     type: 'tool_execution_start',
     toolCallId: 'task-placeholder-metadata',
@@ -1151,6 +1300,144 @@ test('installed workflow summary checks task batch assignment metadata within th
     'todo',
     'skills',
   ]);
+});
+
+test('installed workflow summary requires every spawned native task job to complete', () => {
+  const taskEvents = (status) => [
+    {
+      type: 'tool_execution_start',
+      toolCallId: 'task-one',
+      toolName: 'task',
+      args: {
+        context: 'single read-only checkpoint',
+        tasks: [{
+          agent: 'reviewer',
+          task: '[workflow=code.review step=step-4 todo=audit skills=error-handling] Review.',
+        }],
+      },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'task-one',
+      toolName: 'task',
+      result: {
+        isError: false,
+        details: {
+          progress: [{ id: 'ReviewJob', status: 'pending', agent: 'reviewer' }],
+          async: { jobId: 'ReviewJob', state: 'running', type: 'task' },
+        },
+      },
+    },
+    {
+      type: 'tool_execution_start',
+      toolCallId: 'job-one',
+      toolName: 'job',
+      args: { poll: ['ReviewJob'] },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'job-one',
+      toolName: 'job',
+      result: {
+        isError: false,
+        details: { jobs: [{ id: 'ReviewJob', type: 'task', status }] },
+      },
+    },
+    { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] } },
+  ];
+
+  const failed = summarizeWorkflowEvents(taskEvents('failed'), { exitCode: 0 });
+  assert.deepEqual(failed.nativeTask.jobStatuses, [{ id: 'ReviewJob', status: 'failed' }]);
+  assert.equal(failed.nativeTask.completedForkCount, 0);
+  const failedEvaluation = evaluateWorkflowSummary(failed, {
+    requireNativeTaskCompletion: true,
+  });
+  assert.equal(failedEvaluation.pass, false);
+  assert.match(failedEvaluation.failures.join('\n'), /native task job ReviewJob ended with failed/);
+
+  const completed = summarizeWorkflowEvents(taskEvents('completed'), { exitCode: 0 });
+  assert.equal(completed.nativeTask.completedForkCount, 1);
+  assert.equal(evaluateWorkflowSummary(completed, {
+    requireNativeTaskCompletion: true,
+  }).pass, true);
+
+  const asyncCompletionEvents = taskEvents('running');
+  asyncCompletionEvents.splice(-1, 0, {
+    type: 'message_end',
+    message: {
+      role: 'custom',
+      customType: 'async-result',
+      content: '<task-result id="ReviewJob" agent="reviewer" status="completed" duration="1s">done</task-result>',
+      details: { jobs: [{ jobId: 'ReviewJob', type: 'task' }] },
+    },
+  });
+  const asyncCompleted = summarizeWorkflowEvents(asyncCompletionEvents, { exitCode: 0 });
+  assert.deepEqual(asyncCompleted.nativeTask.jobStatuses, [{ id: 'ReviewJob', status: 'completed' }]);
+  assert.equal(evaluateWorkflowSummary(asyncCompleted, {
+    requireNativeTaskCompletion: true,
+  }).pass, true);
+});
+
+test('installed workflow summary enforces required native task agents, workflows, and skills', () => {
+  const summary = summarizeWorkflowEvents([
+    {
+      type: 'tool_execution_start',
+      toolCallId: 'task-native-requirements',
+      toolName: 'task',
+      args: {
+        tasks: [
+          {
+            name: 'review-code',
+            agent: 'reviewer',
+            task: '[workflow=code.review,code.test step=step-4 todo=audit skills=error-handling,verification-before-completion]\nReview code.',
+          },
+          {
+            name: 'review-tests',
+            agent: 'test-reviewer',
+            task: '[workflow=code.test step=step-5 todo=tests skills=test-driven-development]\nReview tests.',
+          },
+        ],
+      },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'task-native-requirements',
+      toolName: 'task',
+      result: { isError: false, content: [{ type: 'text', text: 'Spawned 2 agents.' }] },
+    },
+  ], { exitCode: 0 });
+
+  assert.deepEqual(summary.nativeTask.agents, ['reviewer', 'test-reviewer']);
+  assert.deepEqual(summary.nativeTask.workflows, ['code.review', 'code.test']);
+  assert.deepEqual(summary.nativeTask.skills, [
+    'error-handling',
+    'test-driven-development',
+    'verification-before-completion',
+  ]);
+  assert.equal(evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredNativeTaskAgents: ['reviewer', 'test-reviewer'],
+    requiredNativeTaskWorkflows: ['code.review', 'code.test'],
+    requiredNativeTaskSkills: ['error-handling', 'test-driven-development'],
+  }).pass, true);
+
+  const missing = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredNativeTaskAgents: ['plan'],
+    requiredNativeTaskWorkflows: ['code.build'],
+    requiredNativeTaskSkills: ['systematic-debugging'],
+  });
+  assert.equal(missing.pass, false);
+  assert.match(missing.failures.join('\n'), /required native task agent was not observed: plan/);
+  assert.match(missing.failures.join('\n'), /required native task workflow was not observed: code\.build/);
+  assert.match(missing.failures.join('\n'), /required native task skill was not observed: systematic-debugging/);
+
+  const forbidden = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    forbiddenNativeTaskAgents: ['reviewer'],
+  });
+  assert.equal(forbidden.pass, false);
+  assert.match(forbidden.failures.join('\n'), /forbidden native task agent was observed: reviewer/);
 });
 
 test('parseNdjson retains valid events and reports malformed lines', () => {

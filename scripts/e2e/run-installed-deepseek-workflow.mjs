@@ -231,14 +231,21 @@ export async function runInstalledMatrix(options = {}) {
   const afterAdvisorConfig = readAdvisorConfig();
   const configStable = JSON.stringify(beforeConfig) === JSON.stringify(afterConfig);
   const advisorConfigStable = JSON.stringify(beforeAdvisorConfig) === JSON.stringify(afterAdvisorConfig);
+  const dryRun = options.dryRun === true;
+  const environmentStable = configStable && advisorConfigStable;
   const report = {
     version: 2,
     runId,
+    mode: dryRun ? 'dry-run' : 'live',
+    executed: !dryRun,
     matrix: path.relative(REPO_ROOT, matrixPath),
     startedFrom: process.cwd(),
     autolearn: { before: beforeConfig, after: afterConfig, stable: configStable },
     advisor: { before: beforeAdvisorConfig, after: afterAdvisorConfig, stable: advisorConfigStable },
-    passed: configStable && advisorConfigStable && results.every(({ evaluation }) => evaluation.pass),
+    previewValid: dryRun ? environmentStable : null,
+    passed: dryRun
+      ? null
+      : environmentStable && results.every(({ evaluation }) => evaluation.pass),
     results,
   };
   await writeFile(path.join(outputRoot, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
@@ -258,7 +265,21 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
   const expectations = { ...(matrix.defaults?.expectations ?? {}), ...(scenario.expectations ?? {}) };
   const timeoutSeconds = scenario.timeoutSeconds ?? matrix.defaults?.timeoutSeconds ?? 120;
   const executionMode = scenario.executionMode ?? matrix.defaults?.executionMode ?? 'print';
-  const args = buildOmpArgs({ matrix, scenario, prepared, sessionDir, timeoutSeconds, executionMode, configOverlayPath, advisorEnabled });
+  const noExtensions = resolveNoExtensions(scenario.noExtensions ?? matrix.defaults?.noExtensions ?? false);
+  const pluginDirs = resolvePluginDirs(scenario.pluginDirs ?? matrix.defaults?.pluginDirs ?? []);
+  const args = buildOmpArgs({
+    matrix,
+    scenario,
+    prepared,
+    sessionDir,
+    timeoutSeconds,
+    executionMode,
+    configOverlayPath,
+    advisorEnabled,
+    noExtensions,
+    pluginDirs,
+  });
+  const runtimeConfig = buildRuntimeConfig({ advisorEnabled, noExtensions, pluginDirs });
 
   if (dryRun) {
     const result = {
@@ -266,9 +287,9 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
       repetition,
       cwd: prepared.cwd,
       command: ['omp', ...args],
-      runtimeConfig: { advisorEnabled },
+      runtimeConfig,
       dryRun: true,
-      evaluation: { pass: true, failures: [] },
+      evaluation: { pass: null, skipped: true, failures: [] },
     };
     await writeFile(path.join(runDir, 'summary.json'), `${JSON.stringify(result, null, 2)}\n`);
     return result;
@@ -313,7 +334,7 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
     repetition,
     cwd: prepared.displayCwd ?? prepared.cwd,
     command: ['omp', ...args.map((arg) => arg === prepared.prompt ? '<prompt>' : arg)],
-    runtimeConfig: { advisorEnabled },
+    runtimeConfig,
     eventCapture: execution.capture,
     summary,
     fileEvaluation,
@@ -326,7 +347,18 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
   }
 }
 
-function buildOmpArgs({ matrix, scenario, prepared, sessionDir, timeoutSeconds, executionMode, configOverlayPath, advisorEnabled }) {
+function buildOmpArgs({
+  matrix,
+  scenario,
+  prepared,
+  sessionDir,
+  timeoutSeconds,
+  executionMode,
+  configOverlayPath,
+  advisorEnabled,
+  noExtensions,
+  pluginDirs,
+}) {
   const model = scenario.model ?? matrix.defaults?.model ?? 'opencode-go/deepseek-v4-flash';
   const thinking = scenario.thinking ?? matrix.defaults?.thinking ?? 'minimal';
   const tools = scenario.tools ?? matrix.defaults?.tools ?? ['read', 'grep', 'glob'];
@@ -342,8 +374,34 @@ function buildOmpArgs({ matrix, scenario, prepared, sessionDir, timeoutSeconds, 
     `--tools=${tools.join(',')}`,
   ];
   if (advisorEnabled) args.push('--advisor');
+  if (noExtensions) args.push('--no-extensions');
+  for (const pluginDir of pluginDirs) args.push(`--plugin-dir=${pluginDir}`);
   if (executionMode !== 'rpc') args.push('-p', prepared.prompt);
   return args;
+}
+
+function resolveNoExtensions(value) {
+  if (typeof value !== 'boolean') throw new TypeError('noExtensions must be a boolean.');
+  return value;
+}
+
+function resolvePluginDirs(value) {
+  if (!Array.isArray(value)) throw new TypeError('pluginDirs must be an array.');
+  return value.map((pluginDir, index) => {
+    if (typeof pluginDir !== 'string' || !pluginDir.trim()) {
+      throw new TypeError(`pluginDirs[${index}] must be a non-empty string.`);
+    }
+    return path.resolve(REPO_ROOT, pluginDir);
+  });
+}
+
+function buildRuntimeConfig({ advisorEnabled, noExtensions, pluginDirs }) {
+  const runtimeConfig = { advisorEnabled };
+  if (noExtensions || pluginDirs.length) {
+    runtimeConfig.noExtensions = noExtensions;
+    runtimeConfig.pluginDirs = pluginDirs;
+  }
+  return runtimeConfig;
 }
 
 export async function prepareScenario(scenario) {
@@ -650,8 +708,9 @@ async function main() {
     return;
   }
   const { report, outputRoot } = await runInstalledMatrix(options);
-  process.stdout.write(`${JSON.stringify({ passed: report.passed, outputRoot, results: report.results.map(({ scenarioId, repetition, evaluation }) => ({ scenarioId, repetition, ...evaluation })) }, null, 2)}\n`);
-  if (!report.passed) process.exitCode = 1;
+  process.stdout.write(`${JSON.stringify({ mode: report.mode, executed: report.executed, previewValid: report.previewValid, passed: report.passed, outputRoot, results: report.results.map(({ scenarioId, repetition, evaluation }) => ({ scenarioId, repetition, ...evaluation })) }, null, 2)}\n`);
+  const succeeded = report.mode === 'dry-run' ? report.previewValid : report.passed;
+  if (!succeeded) process.exitCode = 1;
 }
 
 if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {

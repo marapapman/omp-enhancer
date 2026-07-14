@@ -238,7 +238,7 @@ Cron: every 30 min during work hours
 2. For each new PR:
    - Pull branch locally
    - Run tests
-   - Review changes with code-reviewer agent
+   - Review changes through `code.review` with the canonical `reviewer`
    - Post review comments via GitHub MCP
 3. Update memory with review status
 ```

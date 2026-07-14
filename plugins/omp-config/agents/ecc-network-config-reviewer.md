@@ -31,6 +31,8 @@ router and switch configuration and return prioritized findings with evidence.
 - Proposed change snippets that will be pasted into a change window.
 - Read-only review only. Do not apply configuration or suggest live testing that
   removes protections.
+- Bash is limited to read-only local inspection. Never open a device session,
+  push configuration, or execute a command against network equipment.
 
 ## Review Workflow
 

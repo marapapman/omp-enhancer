@@ -1,78 +1,33 @@
 ---
 name: hipaa-compliance
-description: HIPAA-specific entrypoint for healthcare privacy and security work. Use when a task is explicitly framed around HIPAA, PHI handling, covered entities, BAAs, breach posture, or US healthcare compliance requirements.
+description: Apply HIPAA-specific privacy and security questions when a task explicitly concerns PHI, covered entities, business associates, BAAs, or US healthcare data handling. This is a knowledge overlay, not a standalone medical workflow or legal determination.
 origin: ECC direct-port adaptation
-version: "1.0.0"
+version: "1.1.0"
 ---
 
-# HIPAA Compliance
+# HIPAA Compliance Overlay
 
-Use this as the HIPAA-specific entrypoint when a task is clearly about US healthcare compliance. This skill intentionally stays thin and canonical:
+Use `healthcare-phi-compliance` for PHI data-flow guidance and compose the ordinary `security.review`, `code.review`, `factcheck.document`, or research workflow needed by the user's actual request. There is no dedicated healthcare workflow or healthcare Agent.
 
-- `healthcare-phi-compliance` remains the primary implementation skill for PHI/PII handling, data classification, audit logging, encryption, and leak prevention.
-- `healthcare-reviewer` remains the specialized reviewer when code, architecture, or product behavior needs a healthcare-aware second pass.
-- `security-review` still applies for general auth, input-handling, secrets, API, and deployment hardening.
+HIPAA obligations and agency guidance can change. For a high-stakes or current compliance conclusion, use reliable primary sources and an independent fact check, state the jurisdiction and date, and recommend qualified legal or compliance review. Do not present this skill as legal advice.
 
-## When to Use
+## Questions to Resolve
 
-- The request explicitly mentions HIPAA, PHI, covered entities, business associates, or BAAs
-- Building or reviewing US healthcare software that stores, processes, exports, or transmits PHI
-- Assessing whether logging, analytics, LLM prompts, storage, or support workflows create HIPAA exposure
-- Designing patient-facing or clinician-facing systems where minimum necessary access and auditability matter
+1. What data is created, received, maintained, or transmitted, and can it be linked to an individual?
+2. Which party is the covered entity, business associate, subcontractor, or other actor, and what agreement governs the processing?
+3. Is every data field and access path necessary for the authorized purpose?
+4. Are identity, authorization, audit, retention, export, deletion, incident response, and vendor boundaries explicit?
+5. Do logs, analytics, crash reports, prompts, model providers, support tools, browser storage, URLs, screenshots, backups, or test fixtures receive PHI?
+6. What evidence supports encryption, key handling, access review, audit integrity, recovery, and breach procedures in the actual target environment?
 
-## How It Works
+## Guardrails
 
-Treat HIPAA as an overlay on top of the broader healthcare privacy skill:
+- Use synthetic or irreversibly de-identified examples; never copy real PHI into prompts or reusable artifacts.
+- Keep PHI out of URLs, client-visible errors, analytics, general logs, screenshots, and unapproved third parties.
+- Require scoped authentication and authorization plus auditable reads, writes, exports, and administrative actions.
+- Treat third-party processing as blocked until its contract, BAA status where applicable, data region, retention, subprocessors, and model-training policy are verified.
+- Separate a technical control finding from a legal applicability conclusion, and label uncertainty.
 
-1. Start with `healthcare-phi-compliance` for the concrete implementation rules.
-2. Apply HIPAA-specific decision gates:
-   - Is this data PHI?
-   - Is this actor a covered entity or business associate?
-   - Does a vendor or model provider require a BAA before touching the data?
-   - Is access limited to the minimum necessary scope?
-   - Are read/write/export events auditable?
-3. Escalate to `healthcare-reviewer` if the task affects patient safety, clinical workflows, or regulated production architecture.
+## Output
 
-## HIPAA-Specific Guardrails
-
-- Never place PHI in logs, analytics events, crash reports, prompts, or client-visible error strings.
-- Never expose PHI in URLs, browser storage, screenshots, or copied example payloads.
-- Require authenticated access, scoped authorization, and audit trails for PHI reads and writes.
-- Treat third-party SaaS, observability, support tooling, and LLM providers as blocked-by-default until BAA status and data boundaries are clear.
-- Follow minimum necessary access: the right user should only see the smallest PHI slice needed for the task.
-- Prefer opaque internal IDs over names, MRNs, phone numbers, addresses, or other identifiers.
-
-## Examples
-
-### Example 1: Product request framed as HIPAA
-
-User request:
-
-> Add AI-generated visit summaries to our clinician dashboard. We serve US clinics and need to stay HIPAA compliant.
-
-Response pattern:
-
-- Activate `hipaa-compliance`
-- Use `healthcare-phi-compliance` to review PHI movement, logging, storage, and prompt boundaries
-- Verify whether the summarization provider is covered by a BAA before any PHI is sent
-- Escalate to `healthcare-reviewer` if the summaries influence clinical decisions
-
-### Example 2: Vendor/tooling decision
-
-User request:
-
-> Can we send support transcripts and patient messages into our analytics stack?
-
-Response pattern:
-
-- Assume those messages may contain PHI
-- Block the design unless the analytics vendor is approved for HIPAA-bound workloads and the data path is minimized
-- Require redaction or a non-PHI event model when possible
-
-## Related Skills
-
-- `healthcare-phi-compliance`
-- `healthcare-reviewer`
-- `healthcare-emr-patterns`
-- `healthcare-eval-harness`
-- `security-review`
+Return the scoped data-flow, actor and vendor assumptions, current primary evidence, concrete control findings, unverified obligations, and the owner who must resolve each high-stakes decision. A review finding is advisory evidence, not permission to deploy or process PHI.

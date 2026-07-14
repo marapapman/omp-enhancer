@@ -320,8 +320,5 @@ Use these examples as patterns, not as project-wide templates:
 
 ## See Also
 
-- Agent: `fastapi-reviewer`
-- Command: `/fastapi-review`
-- Skill: `python-patterns`
-- Skill: `python-testing`
-- Skill: `api-design`
+- Workflow: `code.review` with the canonical `reviewer`
+- Skills: `python-patterns`, `python-testing`, and `api-design`

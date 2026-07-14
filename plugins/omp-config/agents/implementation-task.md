@@ -1,7 +1,7 @@
 ---
 name: implementation-task
 description: Advisory worker agent for delegated implementation tasks that returns telemetry and final evidence inline.
-spawns: "*"
+spawns: []
 model:
   - pi/task
 thinkingLevel: medium

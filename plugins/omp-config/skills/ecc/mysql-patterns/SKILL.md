@@ -409,4 +409,4 @@ When this skill is used for review, return:
 - Skill: `database-migrations` - migration planning and rollout safety
 - Skill: `backend-patterns` - API and service-layer patterns
 - Skill: `security-review` - secret handling, auth, and least privilege
-- Agent: `database-reviewer` - broader database review workflow
+- Workflow: `database.review` with the canonical `reviewer` and this skill

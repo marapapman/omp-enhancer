@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Documentation"
+  short_description: "Update code documentation from verified behavior"
+  default_prompt: "Use $code-documentation to update only documentation supported by the current implementation and tests."

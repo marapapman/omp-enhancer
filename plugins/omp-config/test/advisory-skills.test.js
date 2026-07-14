@@ -108,17 +108,24 @@ test('bundled agent guidance stays advisory, bounded, and host-authorized', () =
   }
 });
 
-test('build resolvers use bounded exit guidance instead of workflow gates', () => {
-  const agentsDir = join(pluginRoot, 'agents');
-  const files = readdirSync(agentsDir)
-    .filter((name) => /build.*resolver\.md$/i.test(name))
-    .sort();
-  const prohibited = /##\s+Stop\s+Conditions|Stop\s+and\s+report\s+if:|MUST\s+BE\s+USED|Use\s+PROACTIVELY/i;
+test('build diagnosis is a bounded skill and language knowledge stays in skills', () => {
+  const relative = 'skills/ecc/build-toolchain-diagnostics/SKILL.md';
+  const content = readFileSync(join(pluginRoot, relative), 'utf8');
 
-  assert.ok(files.length > 0);
-  for (const file of files) {
-    const content = readFileSync(join(agentsDir, file), 'utf8');
-    assert.doesNotMatch(content, prohibited, file);
-    assert.match(content, /bounded|after\s+3\s+fix\s+attempts|at\s+most\s+one/i, file);
+  assert.match(content, /exact build command/i, relative);
+  assert.match(content, /earliest causal/i, relative);
+  assert.match(content, /bounded change/i, relative);
+  assert.doesNotMatch(content, /retry until|repeat until|until (?:the )?build passes|install automatically/i, relative);
+
+  for (const skill of [
+    'fsharp-patterns',
+    'harmonyos-patterns',
+    'swift-patterns',
+    'typescript-patterns',
+  ]) {
+    assert.doesNotThrow(
+      () => readFileSync(join(pluginRoot, 'skills', 'ecc', skill, 'SKILL.md'), 'utf8'),
+      skill,
+    );
   }
 });

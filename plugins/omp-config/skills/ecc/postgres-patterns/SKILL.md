@@ -6,7 +6,7 @@ origin: ECC
 
 # PostgreSQL Patterns
 
-Quick reference for PostgreSQL best practices. For detailed guidance, use the `database-reviewer` agent.
+Quick reference for PostgreSQL best practices. For a detailed independent review, use `database.review` with the canonical `reviewer` and this skill.
 
 ## When to Activate
 
@@ -138,7 +138,7 @@ SELECT pg_reload_conf();
 
 ## Related
 
-- Agent: `database-reviewer` - Full database review workflow
+- Workflow: `database.review` - Full read-only database review with canonical `reviewer`
 - Skill: `clickhouse-io` - ClickHouse analytics patterns
 - Skill: `backend-patterns` - API and backend patterns
 

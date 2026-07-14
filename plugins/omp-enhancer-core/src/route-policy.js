@@ -272,6 +272,7 @@ export function projectRouteResourceCeilings(route = {}) {
       skills: plan.skills,
       roles: plan.roles,
       includeCatalogSkills: false,
+      includeCatalogRoles: route.taskDescriptor?.constraints?.subagents !== 'forbidden',
     }),
   };
 }
@@ -384,7 +385,10 @@ function uniqueSteps(values = []) {
 }
 
 function uniqueRoles(values = [], { testsSuggested = true } = {}) {
-  const testOnlyAgents = new Set(['ecc-tdd-guide', 'ecc-pr-test-analyzer']);
+  const testOnlyAgents = new Set([
+    'test-planner',
+    'test-reviewer',
+  ]);
   const byAgent = new Map();
   for (const value of values ?? []) {
     const normalized = typeof value === 'string'

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Type Design Review"
+  short_description: "Review type invariants and illegal states"
+  default_prompt: "Use $type-design-review to inspect these types for explicit invariants, compatibility, and illegal states."
