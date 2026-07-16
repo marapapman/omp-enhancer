@@ -159,6 +159,8 @@ export default function factCheckerExtension(omp) {
     name: 'fact_check_analyze',
     label: 'Fact Check Analyze',
     description: 'Extract checkable factual claims and suggest a FACT_CHECK_PLAN. Workflow telemetry is optional and never blocks later tools.',
+    defaultInactive: true,
+    approval: 'read',
     parameters: buildAnalyzeParameters(z),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = paramsOrEmpty(params);
@@ -188,6 +190,8 @@ export default function factCheckerExtension(omp) {
     name: 'fact_check_evidence',
     label: 'Fact Check Evidence',
     description: 'Collect local and optional provider evidence for fact-check claims. path/text derive claims only when claims are omitted; when claims are supplied, pass structured evidenceRecords. Network/API failures degrade to insufficient evidence.',
+    defaultInactive: true,
+    approval: 'read',
     parameters: buildEvidenceParameters(z),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = paramsOrEmpty(params);
@@ -246,6 +250,8 @@ export default function factCheckerExtension(omp) {
     name: 'fact_check_report',
     label: 'Fact Check Report',
     description: 'Build an advisory source-aware FACT_CHECK_REPORT from supplied claims and evidence. Earlier workflow telemetry is helpful but optional.',
+    defaultInactive: true,
+    approval: 'read',
     parameters: buildReportParameters(z),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = paramsOrEmpty(params);
@@ -294,6 +300,8 @@ export default function factCheckerExtension(omp) {
     name: 'fact_check_gate',
     label: 'Fact Check Review',
     description: 'Compatibility alias for an advisory completeness review. It reports missing or inconsistent evidence but never blocks tools or session completion.',
+    defaultInactive: true,
+    approval: 'read',
     parameters: buildGateParameters(z),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = paramsOrEmpty(params);

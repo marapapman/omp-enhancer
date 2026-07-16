@@ -3,12 +3,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 
 import { buildClassifierPrompt, resolveClassificationRoute } from './src/classifier.js';
 import { appendDebugLog, buildDebugRecord } from './src/debug-logger.js';
-import {
-  buildGovernancePromptFragment,
-  buildImmediateWorkflowMessage,
-  buildSubagentPromptFragment,
-  inspectionBudgetForPrompt,
-} from './src/governance.js';
+import { buildGovernancePromptFragment } from './src/governance.js';
 import { installPluginSkills } from './src/install-skills.js';
 import { classifyHostTurn } from './src/host-turn-context.js';
 import { withoutLegacyControlFields } from './src/legacy-fields.js';
@@ -24,12 +19,38 @@ import {
 import { validateSubagentUsage } from './src/subagent-usage.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
-const STATE_SCHEMA_VERSION = 4;
+const STATE_SCHEMA_VERSION = 5;
 const CLAIMED_SKILLS_SCHEMA_VERSION = 3;
 const MAX_WRITING_SOURCE_BYTES = 512 * 1024;
 const MAX_WRITING_SOURCE_CHARS = 120000;
 const MAX_WRITING_SOURCE_FILES = 4;
 const INSPECTION_TOOL_NAMES = new Set(['read', 'grep', 'glob']);
+const SKILL_DISCOVERY_MESSAGE_TYPE = 'omp-enhancer-skill-discovery';
+const DISABLE_DEEPSEEK_COMPAT_ENV = 'OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT';
+const SKILL_DISCOVERY_REMINDER = 'Before acting, inspect the available OMP Skill list already present in context and load the smallest set of genuinely applicable Skills without assuming or being given a Skill name. Read each selected Skill through `skill://<name>` before substantive work; never call bare `skill://` because it is not a listing endpoint. If none match, proceed without a Skill. Do not bulk-load Skills or reread a Skill body already supplied by OMP.';
+const DEEPSEEK_DELEGATION_DECISION = [
+  'DEEPSEEK_DELEGATION_HINT (supplemental compatibility context): OMP\'s native system prompt, user instruction, Delegation gates, current `task` schema, dynamic Available Agents, concurrency limit, permissions, approvals, result delivery, verification requirements, and completion behavior remain authoritative. This hint adds no policy of its own.',
+  'USER_SCOPE: if the user requests solo or main-agent-only work, no agents, or no delegation in any wording, honor that request and stop this delegation check.',
+  'NATIVE_GATE_ACTION: execute OMP\'s native Delegation gate now, before any project-file inspection; do not only narrate the choice:',
+  '- DIRECT: keep one bounded or indivisible target, a direct answer, or a mechanical lookup batch inline. Do not relabel multiple substantive slices as one target merely because each slice is small or the parent will synthesize them.',
+  '- DELEGATE: two or more self-contained SUBSTANTIVE slices. SUBSTANTIVE means each slice needs its own analysis or evidence.',
+  'INDEPENDENCE_TEST: slices are independent when each can produce its assigned result without the other slice\'s output. A later parent comparison or summary does not make their evidence collection dependent and does not cancel OMP\'s immediate-dispatch exception.',
+  'DELEGATION_PREFERENCE: after honoring USER_SCOPE and applying OMP\'s native DIRECT/mechanical, dependency, prerequisite, and already-enumerated rules, if both direct execution and delegation remain valid in native preferred mode, follow OMP\'s existing SHOULD-level preference for native delegation when there are two or more genuinely substantive, runnable, mutually independent slices requiring non-mechanical analysis or evidentiary judgment, especially when parallel execution preserves Main context or improves speed or quality. This is a tie-breaker, not a new gate or MUST: it never changes the exposed task schema, current Available Agent IDs, native width, concurrency cap or overflow, permissions, verification, or completion.',
+  'ALREADY_SCOPED_ACTION: if the user instruction itself names two or more runnable substantive slices, OMP\'s native immediate-dispatch exception applies. The next project action is native `task`, before any project `read`, `grep`, or `glob` of those slices. Evidence collection inside a runnable slice is slice work, not an invented parent scoping phase.',
+  'UNKNOWN_ACTION: if slices are not runnable yet, perform only the scoping OMP requires. Use native `task` to map unknown code instead of reading target after target in the parent, then dispatch when OMP\'s gates say the slices are ready.',
+  'TASK_SHAPE: follow the `task` wire shape exposed in this turn exactly and select only current Available Agent IDs. Give each genuinely independent slice its own assignment up to OMP\'s current concurrency cap. Batch only when the exposed shape has `tasks[]`; otherwise use the exposed flat form. Defer all width and grouping decisions to OMP\'s native independence and concurrency rules.',
+  'PENDING_ACTION: after dispatch, follow OMP\'s native result-delivery or wait path. Do not duplicate a child\'s assigned work inline merely because it is slow.',
+  'SYNTHESIS_ACTION: synthesize delivered results and perform every verification the user and OMP require; do not recrawl delegated slices without a concrete evidence need.',
+  'Examples: two one-field package lookups stay DIRECT. Two user-named files each needing independent risk evidence are DELEGATE and take ALREADY_SCOPED_ACTION. An inline prerequisite is needed only when its output is genuinely required to make assignments runnable; a shared manifest or catalog that an assignment can read as evidence is slice work.',
+  'This hint does not replace a system prompt, choose a workflow, invent a tool or Agent, impose a batch size independently of OMP\'s native width, schema, or cap, grant permission, limit verification, decide completion, schedule a repair turn, or continue the session.',
+].join('\n');
+const ENHANCER_TOOL_GROUPS = Object.freeze({
+  core: ['omp_core_'],
+  config: ['omp_config_'],
+  writing: ['writing_'],
+  fact: ['fact_check_'],
+  test: ['omp_test_'],
+});
 
 export default function registerCoreEnhancer(pi) {
   const state = createState();
@@ -42,6 +63,8 @@ export default function registerCoreEnhancer(pi) {
     name: 'omp_core_route_task',
     label: 'Route OMP task',
     description: 'Return advisory workflow steps, skills, tools, roles, and quality checks. Writing language follows the source text being revised. This tool does not authorize actions or block execution.',
+    defaultInactive: true,
+    approval: 'read',
     parameters: z?.object ? z.object({
       prompt: z.string(),
       sourceText: z.string().optional(),
@@ -77,6 +100,8 @@ export default function registerCoreEnhancer(pi) {
     name: 'omp_core_classifier_prompt',
     label: 'Build OMP classifier prompt',
     description: 'Build the strict JSON prompt for an optional advisory route classifier.',
+    defaultInactive: true,
+    approval: 'read',
     parameters: z?.object ? z.object({ prompt: z.string() }) : undefined,
     execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
@@ -92,6 +117,8 @@ export default function registerCoreEnhancer(pi) {
     name: 'omp_core_resolve_classification',
     label: 'Resolve OMP classifier output',
     description: 'Validate classifier JSON as a diagnostic route probe without changing the main agent selected workflow.',
+    defaultInactive: true,
+    approval: 'read',
     parameters: z?.object ? z.object({
       prompt: z.string(),
       output: z.string(),
@@ -124,6 +151,8 @@ export default function registerCoreEnhancer(pi) {
     name: 'omp_core_validate_skill_usage',
     label: 'Review routed skill usage',
     description: 'Compare observed skill usage with the route suggestions and return advisory coverage findings.',
+    defaultInactive: true,
+    approval: 'read',
     parameters: z?.object ? z.object({
       output: z.string(),
       requiredSkills: z.array(z.string()).optional(),
@@ -156,6 +185,8 @@ export default function registerCoreEnhancer(pi) {
     name: 'omp_core_validate_subagent_usage',
     label: 'Review routed role usage',
     description: 'Compare observed collaboration with the route role suggestions and return advisory coverage findings.',
+    defaultInactive: true,
+    approval: 'read',
     parameters: z?.object ? z.object({
       output: z.string(),
       requiredSubagents: z.array(z.string()).optional(),
@@ -182,6 +213,8 @@ export default function registerCoreEnhancer(pi) {
     name: 'omp_core_subagent_status',
     label: 'Show advisory workflow status',
     description: 'Show the current advisory route, suggested resources, and observed task progress.',
+    defaultInactive: true,
+    approval: 'read',
     parameters: z?.object ? z.object({}) : undefined,
     execute: async (_callId, _params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
@@ -195,6 +228,8 @@ export default function registerCoreEnhancer(pi) {
     name: 'omp_core_governance_prompt',
     label: 'Build workflow guidance',
     description: 'Build an advisory workflow prompt for the active route or a supplied natural-language task.',
+    defaultInactive: true,
+    approval: 'read',
     parameters: z?.object ? z.object({
       prompt: z.string().optional(),
     }) : undefined,
@@ -220,6 +255,8 @@ export default function registerCoreEnhancer(pi) {
     name: 'omp_core_install_skills',
     label: 'Install plugin skills',
     description: 'Install marketplace plugin skills without overwriting real directories, and report exact legacy gate skills that can be ignored without disabling autolearn.',
+    defaultInactive: true,
+    approval: 'write',
     parameters: z?.object ? z.object({
       dryRun: z.boolean().optional(),
     }) : undefined,
@@ -235,6 +272,8 @@ export default function registerCoreEnhancer(pi) {
       return okResult(summary, result);
     },
   });
+
+  registerEnhancerToolsCommand(pi);
 
   pi.on?.('session_start', async (_event = {}, ctx = {}) => {
     activeHostTurnKind = 'user';
@@ -252,13 +291,7 @@ export default function registerCoreEnhancer(pi) {
     const prompt = extractPrompt(event);
     if (isSlashCommandPrompt(prompt)) return undefined;
 
-    if (isSubagentLaunchPrompt(prompt)) {
-      const fragment = buildSubagentPromptFragment({ prompt });
-      return {
-        ...injectBeforeAgentSystemPrompt(event, fragment),
-        route: emptySubagentRoute(),
-      };
-    }
+    if (isSubagentSession(ctx) || isSubagentLaunchPrompt(prompt)) return undefined;
 
     const implementationTransition = isPlanningImplementationTransition(state, prompt);
     const inherited = !implementationTransition && shouldInheritContinuation(state, prompt);
@@ -267,7 +300,6 @@ export default function registerCoreEnhancer(pi) {
       ? state.lastRoute
       : resolveMainTaskContext({
         prompt,
-        ctx,
       });
 
     if (!inherited) {
@@ -300,38 +332,44 @@ export default function registerCoreEnhancer(pi) {
         writingLanguageSource: route.taskDescriptor?.writingLanguageSource ?? null,
       },
     }));
-    const activeSkills = activeSkillInventory(pi);
-    const availableSkills = activeSkills;
-    await persistState(pi, state);
-    const fragment = buildGovernancePromptFragment({
-      route,
-      parentTask: state.lastPrompt,
-      includeModelWorkflowHints: false,
-      availableSkills,
-    });
-    const workflowMessage = buildImmediateWorkflowMessage({
-      availableSkills,
-    });
-    const message = workflowMessage
-      ? {
-        customType: 'omp-enhancer-core.workflow-guidance',
-        content: workflowMessage,
-        display: false,
-        attribution: 'agent',
-      }
+    const compatibilityReminder = isDeepSeekFlash(ctx.model)
+      ? buildDeepSeekCompatibilityReminder({
+        hasVisibleSkills: activeSkillInventory(pi).length > 0,
+        hasNativeTask: hasActiveNativeTask(pi),
+        subagentsAllowed: route.taskDescriptor?.constraints?.subagents !== 'forbidden',
+        nativeBatchCapacity: nativePromptBatchCapacity(event.systemPrompt),
+      })
       : null;
-    return {
-      ...injectBeforeAgentSystemPrompt(event, fragment),
-      ...(message ? { message } : {}),
-      route,
-    };
+    const shouldRemindDeepSeek = (
+      compatibilityReminder
+      && state.skillDiscoveryRemindedRouteStartedAt !== state.routeStartedAt
+    );
+    if (shouldRemindDeepSeek) {
+      state.skillDiscoveryRemindedRouteStartedAt = state.routeStartedAt;
+    }
+    await persistState(pi, state);
+    if (shouldRemindDeepSeek) {
+      return {
+        message: {
+          customType: SKILL_DISCOVERY_MESSAGE_TYPE,
+          content: compatibilityReminder.content,
+          display: false,
+          attribution: 'user',
+          details: {
+            compatibility: 'skill-discovery',
+            features: compatibilityReminder.features,
+            source: 'omp-enhancer-core',
+          },
+        },
+      };
+    }
+    return undefined;
   });
 
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
     if (activeHostTurnKind === 'autolearn-capture') return undefined;
     restoreStateFromContext(state, ctx);
     if (toolEventName(event) === 'task') {
-      decorateTaskAssignments(event, state);
       recordTaskDispatch(state, event);
       await persistState(pi, state);
     }
@@ -344,15 +382,11 @@ export default function registerCoreEnhancer(pi) {
     const name = toolEventName(event);
     if (name === 'read' && !toolEventFailed(event)) recordSkillReads(state, event);
     if (name === 'task') recordTaskResult(state, event);
-    let inspectionGuidance = '';
     if (INSPECTION_TOOL_NAMES.has(name)) {
       state.inspectionCalls += 1;
-      inspectionGuidance = buildInspectionProgressGuidance(state);
     }
     await persistState(pi, state);
-    return inspectionGuidance
-      ? { content: appendToolResultText(event, inspectionGuidance) }
-      : undefined;
+    return undefined;
   });
 
   pi.on?.('session_stop', async (event = {}, ctx = {}) => {
@@ -369,12 +403,129 @@ export default function registerCoreEnhancer(pi) {
   });
 }
 
+function isDeepSeekFlash(model) {
+  return process.env[DISABLE_DEEPSEEK_COMPAT_ENV] !== '1'
+    && String(model?.provider ?? '').toLowerCase() === 'opencode-go'
+    && String(model?.id ?? '').trim().toLowerCase() === 'deepseek-v4-flash';
+}
+
+function buildDeepSeekCompatibilityReminder({
+  hasVisibleSkills = false,
+  hasNativeTask = false,
+  subagentsAllowed = true,
+  nativeBatchCapacity = null,
+} = {}) {
+  const sections = [];
+  const features = [];
+  if (hasVisibleSkills) {
+    sections.push(SKILL_DISCOVERY_REMINDER);
+    features.push('skill-discovery');
+  }
+  if (hasNativeTask && subagentsAllowed) {
+    sections.push([
+      DEEPSEEK_DELEGATION_DECISION,
+      ...(nativeBatchCapacity ? [buildDeepSeekNativeBatchAction(nativeBatchCapacity)] : []),
+    ].join('\n'));
+    features.push('delegation-decision');
+  }
+  if (!sections.length) return null;
+  return {
+    content: sections.join('\n\n'),
+    features,
+  };
+}
+
+function buildDeepSeekNativeBatchAction(capacity) {
+  return `CURRENT_NATIVE_BATCH_ACTION: this turn's canonical OMP Delegation section confirms batch \`tasks[]\` and native concurrency cap ${capacity}. When USER_SCOPE permits and OMP's native gate identifies from 2 through ${capacity} independent runnable SUBSTANTIVE slices, execute the native immediate-dispatch result now with EXACTLY ONE \`task\` call whose single \`tasks[]\` contains one assignment per slice. Before emitting that call, verify \`tasks[].length\` equals the number of selected slices and every selected slice appears exactly once; if the array is incomplete, finish it before sending instead of repairing it with a later \`task\` call. Never split that initial fan-out across multiple one-item batch calls. For exactly two such slices this means one call with exactly two assignments. This is the current native width, shape, and cap, not a plugin-defined fan-out; above ${capacity}, defer to OMP's native overflow decision.`;
+}
+
+function nativePromptBatchCapacity(systemPrompt = []) {
+  const canonicalBlocks = (Array.isArray(systemPrompt) ? systemPrompt : [systemPrompt])
+    .map((value) => String(value ?? ''))
+    .filter((block) => block.trimStart().startsWith('<system-conventions>')
+      && block.includes('</system-conventions>')
+      && block.includes('\n## Delegation gates:\n')
+      && block.includes('\nEXECUTION WORKFLOW\n'));
+  if (canonicalBlocks.length !== 1) return null;
+  const block = canonicalBlocks[0];
+  const sectionStart = block.lastIndexOf('\n## Delegation gates:\n');
+  const sectionEnd = block.indexOf('\nEXECUTION WORKFLOW\n', sectionStart);
+  if (sectionStart < 0 || sectionEnd <= sectionStart) return null;
+  const delegationSection = block.slice(sectionStart, sectionEnd);
+  const exposesBatch = /- \*\*Width = real independence\.\*\*[^\n]*batched into one `tasks\[\]` array/iu.test(delegationSection);
+  const capMatch = delegationSection.match(/- \*\*Concurrency cap:\*\*\s*At most\s+(\d+)\s+subagents?/iu);
+  const cap = Number(capMatch?.[1] ?? Number.NaN);
+  return exposesBatch && Number.isSafeInteger(cap) && cap >= 2 ? cap : null;
+}
+
+function hasActiveNativeTask(pi) {
+  if (typeof pi?.getActiveTools !== 'function') return false;
+  try {
+    const activeTools = pi.getActiveTools();
+    return Array.isArray(activeTools) && activeTools.includes('task');
+  } catch {
+    return false;
+  }
+}
+
+function registerEnhancerToolsCommand(pi) {
+  if (typeof pi.registerCommand !== 'function') return;
+  pi.registerCommand('enhancer-tools', {
+    description: 'Explicitly enable, disable, or inspect opt-in OMP Enhancer tools without changing OMP native defaults.',
+    async handler(args = '', ctx = {}) {
+      const [rawAction = 'status', rawGroup = 'all'] = String(args).trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const action = rawAction || 'status';
+      const group = rawGroup || 'all';
+      const prefixes = enhancerToolPrefixes(group);
+      if (!['status', 'enable', 'disable'].includes(action) || !prefixes) {
+        await ctx.ui?.notify?.(
+          'Usage: /enhancer-tools status | enable <core|config|writing|fact|test|all> | disable <group>',
+          'warn',
+        );
+        return;
+      }
+      if (typeof pi.getActiveTools !== 'function' || typeof pi.getAllTools !== 'function') {
+        await ctx.ui?.notify?.('This OMP runtime does not expose active-tool management.', 'warn');
+        return;
+      }
+      const available = unique(pi.getAllTools()).filter((name) => prefixes.some((prefix) => name.startsWith(prefix)));
+      const active = unique(pi.getActiveTools());
+      if (action === 'status') {
+        const enabled = available.filter((name) => active.includes(name));
+        await ctx.ui?.notify?.(
+          enabled.length ? `Enabled enhancer tools: ${enabled.join(', ')}` : 'No enhancer tools are enabled.',
+          'info',
+        );
+        return;
+      }
+      if (typeof pi.setActiveTools !== 'function') {
+        await ctx.ui?.notify?.('This OMP runtime cannot change active tools.', 'warn');
+        return;
+      }
+      const next = action === 'enable'
+        ? unique([...active, ...available])
+        : active.filter((name) => !available.includes(name));
+      await pi.setActiveTools(next);
+      await ctx.ui?.notify?.(
+        `${action === 'enable' ? 'Enabled' : 'Disabled'} ${available.length} ${group} enhancer tool${available.length === 1 ? '' : 's'}.`,
+        'info',
+      );
+    },
+  });
+}
+
+function enhancerToolPrefixes(group) {
+  if (group === 'all') return Object.values(ENHANCER_TOOL_GROUPS).flat();
+  return ENHANCER_TOOL_GROUPS[group] ?? null;
+}
+
 export function createState() {
   return {
     schemaVersion: STATE_SCHEMA_VERSION,
     lastRoute: null,
     lastPrompt: '',
     routeStartedAt: 0,
+    skillDiscoveryRemindedRouteStartedAt: 0,
     lastRouteProbe: null,
     lastSkillUsage: null,
     lastSubagentUsage: null,
@@ -418,30 +569,12 @@ function resolveAdvisoryRoute({ prompt = '', sourceText, ctx = {} } = {}) {
   };
 }
 
-function resolveMainTaskContext({ prompt = '', sourceText, ctx = {} } = {}) {
-  let taskDescriptor = describeNaturalLanguageTask({
+function resolveMainTaskContext({ prompt = '', sourceText } = {}) {
+  const taskDescriptor = describeNaturalLanguageTask({
     prompt: String(prompt ?? ''),
     ...(hasWritingSource(sourceText) ? { sourceText } : {}),
   });
-  let writingSourceObservation;
-  if (!hasWritingSource(sourceText)
-    && taskDescriptor.domains?.includes('writing')
-    && (taskDescriptor.writingSourceTargets ?? taskDescriptor.workspaceWriteTargets ?? []).length) {
-    const observed = readWritingTargets({ taskDescriptor }, ctx);
-    if (observed.text) {
-      taskDescriptor = describeNaturalLanguageTask({
-        prompt: String(prompt ?? ''),
-        sourceText: observed.texts.length > 1 ? observed.texts : observed.text,
-      });
-      writingSourceObservation = {
-        kind: 'workspace-target',
-        paths: observed.paths,
-        languages: observed.languages,
-        truncated: observed.truncated,
-      };
-    }
-  }
-  return buildAgentSelectedTaskContext(taskDescriptor, writingSourceObservation);
+  return buildAgentSelectedTaskContext(taskDescriptor);
 }
 
 function buildAgentSelectedTaskContext(taskDescriptor, writingSourceObservation) {
@@ -556,88 +689,6 @@ function isWithinWorkspace(root, candidate) {
   return fromRoot !== '..' && !fromRoot.startsWith('../') && !isAbsolute(fromRoot);
 }
 
-function decorateTaskAssignments(event, state) {
-  for (const item of taskInputItems(event)) {
-    const key = assignmentKey(item);
-    const current = String(item[key] ?? '');
-    if (!current.trim() || /OMP_PARENT_ASSIGNMENT_CONTEXT:/i.test(current)) continue;
-    const metadata = taskAssignmentMetadata(current);
-    const prefix = formatTaskAssignmentPrefix(metadata);
-    const withoutPrefix = current.replace(/^\s*\[workflow=[^\r\n\]]+\]\s*/i, '');
-    item[key] = [
-      prefix,
-      withoutPrefix,
-      '',
-      'OMP_PARENT_ASSIGNMENT_CONTEXT:',
-      `OMP_WORKFLOW: ${metadata.workflow}`,
-      `OMP_WORKFLOW_STEP: ${metadata.step}`,
-      `OMP_TODO_ITEM: ${metadata.todo}`,
-      'OMP_SELECTED_SKILLS:',
-      ...metadata.skills.map((skill) => `- skill://${skill}`),
-      state.lastPrompt ? 'Parent task context: ' + state.lastPrompt.slice(0, 800) : null,
-      'Complete only this parent-selected checkpoint. The parent owns integration and final verification.',
-      'This is advisory pass-through context. Missing metadata is a parent planning limitation, never a tool or completion gate.',
-    ].filter(Boolean).join('\n');
-  }
-}
-
-function taskAssignmentMetadata(value = '') {
-  const source = String(value);
-  const compact = source.match(/\[workflow=([^\]\s]+)\s+step=([^\]]*?)\s+todo=([^\]]*?)\s+skills=([^\]]*?)\]/i);
-  const shorthand = source.match(/^\s*WR:([^\s]+)\s+ST:([^\s]+)\s+TODO:([^\s]+)\s+SK:([^\r\n]+)/i);
-  const workflow = source.match(/OMP_WORKFLOW(?:_ID)?:\s*([^\r\n]+)/i)?.[1]?.trim()
-    ?? compact?.[1]?.trim()
-    ?? shorthand?.[1]?.trim()
-    ?? 'unspecified';
-  const step = source.match(/OMP_WORKFLOW_STEP:\s*([^\r\n]+)/i)?.[1]?.trim()
-    ?? compact?.[2]?.trim()
-    ?? shorthand?.[2]?.trim()
-    ?? 'unspecified';
-  const todo = source.match(/OMP_TODO_ITEM:\s*([^\r\n]+)/i)?.[1]?.trim()
-    ?? compact?.[3]?.trim()
-    ?? shorthand?.[3]?.trim()
-    ?? 'unspecified';
-  const skills = unique([
-    ...(compact?.[4] ? compact[4].split(',') : []),
-    ...(shorthand?.[4] ? shorthand[4].split(',') : []),
-    ...assignmentMarkerSkills(source),
-  ].map((skill) => normalizeProvidedSkillName(skill)).filter(Boolean));
-  return {
-    workflow: oneLine(workflow, Number.MAX_SAFE_INTEGER),
-    step: oneLine(step, Number.MAX_SAFE_INTEGER),
-    todo: oneLine(todo, Number.MAX_SAFE_INTEGER),
-    skills: skills.length ? skills : ['unspecified'],
-  };
-}
-
-function assignmentMarkerSkills(value = '') {
-  const lines = String(value).split(/\r?\n/);
-  const start = lines.findIndex((line) => /^(?:OMP_(?:REQUIRED|SELECTED)_SKILLS|Suggested skills for this role|Skills for this role):/i.test(line.trim()));
-  if (start < 0) return [];
-  const inline = lines[start].replace(/^[^:]+:\s*/, '').trim();
-  const skills = inline ? inline.split(',') : [];
-  for (const rawLine of lines.slice(start + 1)) {
-    const match = rawLine.trim().match(/^[-*]\s*(?:skill:\/\/)?([A-Za-z0-9_.\/-]+)$/i);
-    if (!match) break;
-    skills.push(match[1]);
-  }
-  return skills;
-}
-
-function formatTaskAssignmentPrefix(metadata = {}) {
-  const workflow = oneLine(metadata.workflow, 20);
-  const step = oneLine(metadata.step, 10);
-  const todo = oneLine(metadata.todo, 18);
-  const skills = oneLine((metadata.skills ?? ['unspecified']).join(','), 32);
-  return `[workflow=${workflow} step=${step} todo=${todo} skills=${skills}]`;
-}
-
-function oneLine(value = '', max = 32) {
-  const normalized = String(value).replace(/[\[\]\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (normalized.length <= max) return normalized || 'unspecified';
-  return normalized.slice(0, Math.max(1, max - 1)).trimEnd() + '…';
-}
-
 function recordTaskDispatch(state, event) {
   const items = taskInputItems(event);
   if (!items.length) return;
@@ -696,6 +747,8 @@ function verifiedSkillReadName(event = {}) {
   const declaredName = skillFrontmatterName(readResultText(event));
   if (!declaredName) return '';
 
+  if (isEccNestedSkillRead(event)) return declaredName;
+
   const requestedNames = collectSkillReadNames(event);
   if (!requestedNames.length) return '';
   const requestedTokens = new Set(requestedNames.map(skillEvidenceToken).filter(Boolean));
@@ -706,6 +759,13 @@ function verifiedSkillReadName(event = {}) {
   return inventoryNames.some((name) => requestedTokens.has(skillEvidenceToken(name)))
     ? declaredName
     : '';
+}
+
+function isEccNestedSkillRead(event = {}) {
+  const input = event.input ?? event.params ?? event.arguments ?? {};
+  const target = [input.path, input.file_path, input.uri, input.value]
+    .find((value) => typeof value === 'string');
+  return /^skill:\/\/ecc-skill-catalog\/[A-Za-z0-9_.-]+\/SKILL\.md(?:[?#].*)?$/i.test(target ?? '');
 }
 
 function readResultText(event = {}) {
@@ -914,26 +974,6 @@ function roleSkills(value) {
   return unique(value.skills ?? value.requiredSkills ?? []);
 }
 
-function emptySubagentRoute() {
-  return {
-    intent: 'subagent',
-    agent: null,
-    advisoryOnly: true,
-    autoContinue: false,
-    routePlan: {
-      version: 2,
-      mode: 'advisory',
-      autoContinue: false,
-      steps: [],
-      skills: [],
-      tools: [],
-      roles: [],
-      qualityChecks: [],
-      riskNotes: [],
-    },
-  };
-}
-
 function resetState(state) {
   Object.assign(state, createState());
 }
@@ -955,6 +995,9 @@ function readStateSnapshot(value = {}) {
   const state = createState();
   state.lastPrompt = typeof value.lastPrompt === 'string' ? value.lastPrompt : '';
   state.routeStartedAt = Number.isFinite(value.routeStartedAt) ? value.routeStartedAt : 0;
+  state.skillDiscoveryRemindedRouteStartedAt = Number.isFinite(value.skillDiscoveryRemindedRouteStartedAt)
+    ? value.skillDiscoveryRemindedRouteStartedAt
+    : 0;
   state.lastRoute = sanitizeRestoredRoute(value.lastRoute, state.lastPrompt);
   state.lastRouteProbe = sanitizeRouteProbe(value.lastRouteProbe);
   state.lastSkillUsage = isRecord(value.lastSkillUsage) ? value.lastSkillUsage : null;
@@ -1148,6 +1191,7 @@ function serializeState(state) {
     lastRoute: state.lastRoute,
     lastPrompt: state.lastPrompt,
     routeStartedAt: state.routeStartedAt,
+    skillDiscoveryRemindedRouteStartedAt: state.skillDiscoveryRemindedRouteStartedAt,
     lastRouteProbe: state.lastRouteProbe,
     lastSkillUsage: state.lastSkillUsage,
     lastSubagentUsage: state.lastSubagentUsage,
@@ -1174,6 +1218,7 @@ function activeSkillInventory(pi) {
 
 function isModelVisibleSkill(skill = {}) {
   return skill.disableModelInvocation !== true
+    && skill.hide !== true
     && skill.hidden !== true
     && skill.hideFromModel !== true
     && skill.modelInvocationDisabled !== true;
@@ -1188,54 +1233,6 @@ function effectiveSkills(state) {
     ...state.observedSkills,
     ...state.providedSkills,
   ]);
-}
-
-function buildInspectionProgressGuidance(state) {
-  const budget = inspectionBudgetForPrompt(state.lastPrompt);
-  if (!budget) return '';
-  const used = state.inspectionCalls;
-  const remaining = Math.max(0, budget - used);
-  const lines = [
-    '',
-    `OMP advisory inspection progress: ${used}/${budget} read/search calls used; ${remaining} remaining. Each skill read, failed call, and parallel call counts separately.`,
-  ];
-  if (remaining > 0) {
-    lines.push('BUDGET SNAPSHOT RULE: a parallel batch may produce several progress snapshots. Before issuing more tools, use the snapshot with the largest used value (equivalently the smallest remaining value); ignore earlier larger remaining counts from that batch.');
-    if (remaining <= 3) {
-      lines.push(`FINAL-BUDGET MODE: this next assistant message may contain at most ONE read/search tool call, even though ${remaining} remain. Wait for its result and recompute from the newest progress snapshot, or finalize now. Count toolCall entries before sending and delete any second read/grep/glob call.`);
-    }
-    if (remaining === 2) {
-      lines.push('SYNTHESIS RESERVE: finalize now when the requested result is already supported. If one more lookup is indispensable, issue only that call and keep the last slot unused as failure margin.');
-    } else if (remaining === 1) {
-      lines.push('LAST-SLOT RULE: use this final call only if it is indispensable. Whether it succeeds, fails, or returns no matches, finalize next; do not repair it with another read, grep, or glob.');
-    }
-    lines.push('NEXT MESSAGE LIMIT: issue at most ONE individual read/search tool call, then wait for its result before deciding whether another call is needed. If several candidates exist, choose only the single highest-value target for this message.');
-    lines.push('Do not queue more read/search calls than the remaining count. Use the evidence already returned and keep the final response in view.');
-  } else {
-    lines.push('The user inspection budget is exhausted. Synthesize the best scoped evidence-backed result now; do not start another read/search batch. A failed or empty final lookup does not authorize a recovery read, grep, or glob. A scoped partial result is successful completion.');
-  }
-  lines.push('This is model guidance only; no tool call or completion is blocked.');
-  return lines.join('\n');
-}
-
-function appendToolResultText(event = {}, guidance = '') {
-  const current = event.content ?? event.result?.content;
-  if (Array.isArray(current)) return [...current, { type: 'text', text: guidance }];
-  if (typeof current === 'string') {
-    return [{ type: 'text', text: current }, { type: 'text', text: guidance }];
-  }
-  return [{ type: 'text', text: guidance }];
-}
-
-function injectBeforeAgentSystemPrompt(event = {}, fragment = '') {
-  const existing = Array.isArray(event.systemPrompt)
-    ? event.systemPrompt.filter((block) => typeof block === 'string' && block)
-    : typeof event.systemPrompt === 'string' && event.systemPrompt
-      ? [event.systemPrompt]
-      : [];
-  const systemPrompt = [...existing, String(fragment)];
-  event.systemPrompt = systemPrompt;
-  return { systemPrompt };
 }
 
 function classifierPromptContext(state, prompt = '') {
@@ -1267,6 +1264,15 @@ function isPlanningImplementationTransition(state, prompt = '') {
 
 function isSlashCommandPrompt(prompt) {
   return /^\/[A-Za-z][A-Za-z0-9:_-]*(?:\s|$)/.test(String(prompt ?? '').trim());
+}
+
+function isSubagentSession(ctx = {}) {
+  try {
+    const entries = ctx.sessionManager?.getEntries?.();
+    return Array.isArray(entries) && entries.some((entry) => entry?.type === 'session_init');
+  } catch {
+    return false;
+  }
 }
 
 function isSubagentLaunchPrompt(prompt) {

@@ -236,17 +236,22 @@ test('route cards expose guidance sections and no gate section', () => {
   }
 });
 
-test('every catalog role and every catalog or selected skill remains packaged by the marketplace', async () => {
+test('every catalog role is OMP-native or marketplace-packaged and every selected skill remains packaged', async () => {
   const [registeredSkills, registeredAgents] = await Promise.all([
     registeredMarketplaceSkills(repoRoot),
     registeredMarketplaceAgents(repoRoot),
   ]);
+  const nativeAgents = new Set(['designer', 'librarian', 'reviewer']);
   for (const [workflow, meta] of Object.entries(workflowRouteCatalog)) {
     for (const skill of meta.skills) {
       assert.equal(registeredSkills.has(skill), true, `${workflow}: ${skill}`);
     }
     for (const role of meta.roles) {
-      assert.equal(registeredAgents.has(role), true, `${workflow}: ${role}`);
+      assert.equal(
+        nativeAgents.has(role) || registeredAgents.has(role),
+        true,
+        `${workflow}: ${role}`,
+      );
     }
   }
   for (const item of workloadMatrix) {

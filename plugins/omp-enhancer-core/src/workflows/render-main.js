@@ -4,9 +4,10 @@ export function buildWorkflowCatalogPrompt({ availableSkills = [], audience = 'm
   const inventory = normalizeSkillInventory(availableSkills);
   const lines = [
     `OMP_WORKFLOW_CATALOG_VERSION: ${WORKFLOW_CATALOG_VERSION}`,
-    'This catalog is a composable menu, not an exclusive classifier. Select one or more workflows from the observed task; a legacy route hint is diagnostic only.',
+    'Supplemental reference only: OMP\'s native system prompt, settings, active tools, dynamic Available Agents list, permissions, and completion behavior are authoritative.',
+    'This catalog is a composable menu, not a router or required execution protocol. The acting Agent may select, combine, simplify, or ignore workflows; a legacy route hint is diagnostic only.',
     'For writing, select writing.zh or writing.en from the language of the text being changed, then compose writing.latex, slides.modify, writing.markdown, or doc.convert.word for the artifact format. For a new deck, slides.generate establishes the output language during story discussion. The surrounding instruction language does not decide the writing language. For evidence-backed online research, compose research.web with factcheck.document and the selected output-language or format workflow.',
-    'Agent roles are exact installed agent IDs. Invoke only roles listed by the selected workflow plus roles inherited from an explicitly composed workflow.',
+    'Agent candidates are non-exclusive suggestions. Use one only when it appears in OMP\'s current dynamic Available Agents list; other native or future Agents remain valid.',
     '',
   ];
 
@@ -21,11 +22,11 @@ export function buildWorkflowCatalogPrompt({ availableSkills = [], audience = 'm
       ...(definition.skills.length
         ? definition.skills.map((skill) => `- skill://${skill} — load only when it directly supports a selected step`)
         : ['- none by default; inspect the active inventory for an exact task match']),
-      'Agent roles:',
+      'Optional agent candidates:',
       ...(definition.roles.length
-        ? definition.roles.map((role) => `- \`${role}\` — exact installed agent ID`)
-        : ['- none']),
-      'Delegation:',
+        ? definition.roles.map((role) => `- \`${role}\` — use only when currently available in OMP`)
+        : ['- none suggested']),
+      'Optional delegation ideas:',
       ...definition.delegation.map((line) => `- ${line}`),
       'Quality checks:',
       ...definition.qualityChecks.map((line) => `- ${line}`),

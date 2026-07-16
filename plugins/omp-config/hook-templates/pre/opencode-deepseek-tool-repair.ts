@@ -1,3 +1,4 @@
+// Explicit opt-in template; this file is outside the auto-discovered hooks/ tree.
 // DeepSeek 工具调用修复钩子（增强版 v3）
 //
 // DeepSeek 系列模型在工具调用时有几个已知的失败模式：
@@ -23,6 +24,7 @@
 // 15. 更全面的 NULLISH 值识别
 
 import type { HookAPI } from "@oh-my-pi/pi-coding-agent/extensibility/hooks";
+import { isOpenCodeDeepSeekV4Model } from "../lib/model-gate.js";
 
 // 常见会被 DeepSeek 传 null 的可选字段
 const OFTEN_NULLED_OPTIONALS = new Set([
@@ -414,7 +416,8 @@ function repairTopLevelArgs(rawArgs: unknown): Record<string, unknown> {
 }
 
 export default function (pi: HookAPI): void {
-  pi.on("context", async (event) => {
+  pi.on("context", async (event, ctx) => {
+    if (!isOpenCodeDeepSeekV4Model(ctx.model)) return;
     const msgs = event.messages;
     if (!msgs || !Array.isArray(msgs)) return;
 

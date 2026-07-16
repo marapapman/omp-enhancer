@@ -1,5 +1,3 @@
-import type { HookAPI } from "@oh-my-pi/pi-coding-agent/extensibility/hooks";
-
 export const name = "redact-secrets";
 export const event = "tool_result";
 
@@ -34,11 +32,4 @@ export function redactToolResultContent(content: any[] = []) {
 export function execute(toolResult: any) {
   if (typeof toolResult?.result !== "string") return;
   toolResult.result = redactText(toolResult.result);
-}
-
-export default function (pi: HookAPI): void {
-  pi.on("tool_result", (toolResult) => {
-    const content = redactToolResultContent(toolResult.content);
-    return content ? { content } : undefined;
-  });
 }

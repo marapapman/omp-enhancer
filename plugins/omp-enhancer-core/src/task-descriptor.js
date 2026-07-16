@@ -505,7 +505,8 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     /(?:^|[,.!?;]\s*(?:(?:and(?:\s+then)?|then|next|separately|after\s+that)\s*)?)(?:please\s+)?(?:access|browse|search|use)\s+(?:the\s+)?(?:network|internet|web)\b/i.test(text)
     || /(?:^|[，,。！？；;]\s*(?:(?:并且|并|然后|接着|随后|另外|再)\s*)?)(?:请)?(?:访问|浏览|搜索|使用|连接)\s*(?:网络|互联网|网页|外网)/u.test(text)
   );
-  const noSubagents = /(?:不要|不|别|无需|不用|禁止|不得).{0,18}(?:子代理|子 agent|subagent|sub-agent)|(?:只由|仅由).{0,12}(?:主代理|主 agent|main agent)|(?:do not|don't|without|no).{0,18}(?:subagents?|sub-agents?)|(?:main agent only|only the main agent)/.test(subagentConstraintText)
+  const noSubagents = hasExplicitNoDelegation(subagentConstraintText)
+    || /(?:不要|不|别|无需|不用|禁止|不得).{0,18}(?:子代理|子 agent|subagent|sub-agent)|(?:只由|仅由).{0,12}(?:主代理|主 agent|main agent)|(?:do not|don't|without|no).{0,18}(?:subagents?|sub-agents?)|(?:main agent only|only the main agent)/.test(subagentConstraintText)
     || chineseNegativeClauseIncludes(subagentConstraintText, /(?:子代理|子\s*agent|subagents?|sub-agents?)/i)
     || englishNegativeClauseIncludes(subagentConstraintText, /\b(?:use\s+)?(?:subagents?|sub-agents?)\b/i);
   const releaseArtifact = /(?:release notes?|changelog|发布公告|发布说明|release announcement|release report)/.test(text);
@@ -766,6 +767,7 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
   const securityConceptOnly = isSecurityConceptOnlyRequest(text);
   const review = !securityConceptOnly && !codeReviewForbidden
     && /(?:检查|审查|审计|分析|评估|核对|列出|查看|是否合理|问题)|\b(?:review|inspect|audit|analy[sz]e|assess|check|list|show|inventory|findings?)\b/.test(text);
+  const patchReviewRequested = review && isPatchReviewRequest(text);
   const conceptOnly = securityConceptOnly || /(?:解释|是什么|含义|概念)|\b(?:what is|explain|define)\b/.test(text)
     && !review && !directModify && !directTestAuthoring;
   const answerOnly = (noTestExecution && /(?:命令|command)/.test(text) || noActionExecution && instructionalAdvice) && !directModify;
@@ -866,6 +868,7 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
   if (ambiguousCodeAction) reasons.push('ambiguous code-target imperative');
   if (securityConceptOnly) reasons.push('security concept explanation only');
   if (planningWork) reasons.push('implementation or test planning requested');
+  if (patchReviewRequested) reasons.push('supplied patch or diff review requested');
 
   const writingTaskKind = writingWork
     ? writingTaskKindFor(text, {
@@ -958,6 +961,13 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     ambiguous,
     reasons,
   };
+}
+
+function isPatchReviewRequest(value = '') {
+  const text = String(value).toLowerCase();
+  return /\b(?:review|audit|inspect|check)\b[^.!?\n]{0,96}\b(?:diff|patch|pull request|pr|commit)\b/.test(text)
+    || /(?:审查|检查|审计|复核).{0,64}(?:\bdiff\b|\bpr\b|pull request|补丁|提交)/.test(text)
+    || /(?:\b(?:current|this|provided|supplied)\s+(?:diff|patch|pull request|pr|commit)\b|(?:当前|这个|该|给定的|提供的)\s*(?:diff|pr|pull request|补丁|提交))/.test(text);
 }
 
 /**
@@ -1299,6 +1309,12 @@ function normalizeAffirmativeSubagentPhrases(text) {
     .replace(/\b(?:no need to|do not|don't|dont|never)\s+(?:avoid|skip)\s+(?:using\s+)?(?:subagents?|sub-agents?)\b/g, ' use subagents ')
     .replace(/(?:不要|别|不能|不得|禁止)\s*(?:犹豫|跳过|避免)(?:\s*[，,])?\s*(?:直接)?\s*(?:使用)?\s*(?:子代理|子\s*agent)(?:协作)?/g, ' 使用子代理 ')
     .replace(/(?:不用|无需|不必)\s*(?:等待|等)(?:\s*[，,])?\s*(?:直接)?\s*使用\s*(?:子代理|子\s*agent)/g, ' 使用子代理 ');
+}
+
+function hasExplicitNoDelegation(text) {
+  const english = /\b(?:do not|don't|dont|never)\s+delegate\b|\b(?:without|no)\s+delegation\b|\bwithout\s+delegating\b|\bkeep\s+(?:all|the\s+entire)\s+(?:of\s+)?(?:the\s+)?work\s+(?:in|within|with)\s+(?:the\s+)?main\s+agent\b|\b(?:do not|don't|dont|never)\s+use\s+(?:(?:any|other)\s+)?agents?\b|\bwork\s+(?:entirely\s+)?alone(?:\s+on\s+(?:this|it|the\s+task))?\b|\b(?:handle|do|complete|finish|perform)\s+(?:this|it|everything|all(?:\s+of\s+)?(?:\s+the)?\s+work|the\s+(?:whole|entire)\s+(?:task|job))\s+(?:by\s+)?yourself\b/i;
+  const chinese = /(?:不要|别|无需|不用|禁止|不得|不)\s*(?:再|进行|做|使用)?\s*(?:委派|分派|转交)|(?:所有|全部)(?:的)?(?:工作|任务)\s*(?:都|应当|应该|必须)?\s*(?:留在|交由|由)\s*(?:主代理|主\s*agent|main\s+agent)(?:\s*(?:完成|处理|执行))?|(?:不要|别|禁止|不得)\s*(?:把|将)?(?:这项|这个|该|任何|全部|所有)?\s*(?:工作|任务)?\s*(?:交给|交由|转给|分给|使用)\s*(?:任何|其他)?\s*(?:代理|agents?)|(?:请)?(?:你|主代理)\s*(?:自己|亲自|独自)\s*(?:完成|处理|执行|做)|(?:请)?\s*(?:自己|亲自|独自)\s*(?:完成|处理|执行|做)\s*(?:这项|这个|该)?\s*(?:工作|任务)?/i;
+  return english.test(String(text)) || chinese.test(String(text));
 }
 
 function maskAffirmativeTestPhrases(text) {

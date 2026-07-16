@@ -1,15 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
+import { checkSvgFlowchart } from '../skills/svg-flowchart/scripts/check-svg-flowchart.mjs';
 
-const execFileAsync = promisify(execFile);
 const skillUrl = new URL('../skills/svg-flowchart/SKILL.md', import.meta.url);
-const checkerUrl = new URL('../skills/svg-flowchart/scripts/check-svg-flowchart.mjs', import.meta.url);
-const designerUrl = new URL('../agents/designer.md', import.meta.url);
 const visionerUrl = new URL('../agents/visioner.md', import.meta.url);
 
 test('SVG flowchart skill defines strict geometry, spacing, and bounded rendered review', async () => {
@@ -31,10 +27,10 @@ test('SVG flowchart skill defines strict geometry, spacing, and bounded rendered
   assert.doesNotMatch(skill, /retry until|repeat until|block:\s*true|continue:\s*true/i);
 });
 
-test('designer honors explicit pure black and white diagram constraints', async () => {
-  const designer = await readFile(designerUrl, 'utf8');
+test('SVG skill supplies the explicit pure black and white diagram constraint', async () => {
+  const skill = await readFile(skillUrl, 'utf8');
 
-  assert.match(designer, /unless an explicit monochrome artifact constraint requires exact black and white/i);
+  assert.match(skill, /Use only black.+white.+fill="none"/is);
 });
 
 test('visioner is a read-only rendered-diagram reviewer backed by the vision role', async () => {
@@ -76,9 +72,7 @@ test('SVG checker accepts a monochrome orthogonal flowchart', async () => {
 </svg>
 `);
 
-  const result = await execFileAsync(process.execPath, [checkerUrl.pathname, svgPath]);
-  assert.match(result.stdout, /SVG flowchart check passed/i);
-  assert.equal(result.stderr, '');
+  assert.deepEqual(checkSvgFlowchart(await readFile(svgPath, 'utf8')), []);
 });
 
 test('SVG checker rejects curves, non-orthogonal polylines, color, and small text', async () => {
@@ -93,18 +87,13 @@ test('SVG checker rejects curves, non-orthogonal polylines, color, and small tex
 </svg>
 `);
 
-  await assert.rejects(
-    execFileAsync(process.execPath, [checkerUrl.pathname, svgPath]),
-    (error) => {
-      assert.match(error.stderr, /<path> elements are not allowed/i);
-      assert.match(error.stderr, /polyline.+not orthogonal/i);
-      assert.match(error.stderr, /rounded connector caps are not allowed/i);
-      assert.match(error.stderr, /unsupported color #f00/i);
-      assert.match(error.stderr, /unsupported color #0f0/i);
-      assert.match(error.stderr, /font-size 10px is below 16px/i);
-      return true;
-    },
-  );
+  const findings = checkSvgFlowchart(await readFile(svgPath, 'utf8')).join('\n');
+  assert.match(findings, /<path> elements are not allowed/i);
+  assert.match(findings, /polyline.+not orthogonal/i);
+  assert.match(findings, /rounded connector caps are not allowed/i);
+  assert.match(findings, /unsupported color #f00/i);
+  assert.match(findings, /unsupported color #0f0/i);
+  assert.match(findings, /font-size 10px is below 16px/i);
 });
 
 test('SVG checker rejects comments posing as documents, malformed XML, active content, and remote URLs', async () => {
@@ -135,14 +124,7 @@ test('SVG checker rejects comments posing as documents, malformed XML, active co
   for (const item of cases) {
     const svgPath = path.join(root, item.name);
     await writeFile(svgPath, item.source);
-    await assert.rejects(
-      execFileAsync(process.execPath, [checkerUrl.pathname, svgPath]),
-      (error) => {
-        assert.match(error.stderr, item.expected, item.name);
-        return true;
-      },
-      item.name,
-    );
+    assert.match(checkSvgFlowchart(await readFile(svgPath, 'utf8')).join('\n'), item.expected, item.name);
   }
 });
 
@@ -160,16 +142,11 @@ test('SVG checker enforces stable unique IDs, explicit readable text, and real p
 </svg>
 `);
 
-  await assert.rejects(
-    execFileAsync(process.execPath, [checkerUrl.pathname, svgPath]),
-    (error) => {
-      assert.match(error.stderr, /viewBox must contain exactly four SVG numbers/i);
-      assert.match(error.stderr, /rect.+must have a stable id/i);
-      assert.match(error.stderr, /duplicate id duplicate/i);
-      assert.match(error.stderr, /tspan.+font-size 4px is below 16px/i);
-      assert.match(error.stderr, /polyline.+at least three coordinate pairs/i);
-      assert.match(error.stderr, /points contains invalid SVG number syntax/i);
-      return true;
-    },
-  );
+  const findings = checkSvgFlowchart(await readFile(svgPath, 'utf8')).join('\n');
+  assert.match(findings, /viewBox must contain exactly four SVG numbers/i);
+  assert.match(findings, /rect.+must have a stable id/i);
+  assert.match(findings, /duplicate id duplicate/i);
+  assert.match(findings, /tspan.+font-size 4px is below 16px/i);
+  assert.match(findings, /polyline.+at least three coordinate pairs/i);
+  assert.match(findings, /points contains invalid SVG number syntax/i);
 });

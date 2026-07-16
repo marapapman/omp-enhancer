@@ -1,68 +1,52 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import registerRedactSecrets, {
+import {
   execute as executeLegacyRedaction,
-} from '../hooks/post/redact-secrets.ts';
-import registerTruncateOutput, {
+  redactToolResultContent,
+} from '../hook-templates/lib/redact-secrets.ts';
+import {
   execute as executeLegacyTruncation,
   MAX_LENGTH,
-} from '../hooks/post/truncate-output.ts';
+  truncateToolResultContent,
+} from '../hook-templates/lib/truncate-output.ts';
 
-function registeredToolResultHandler(factory) {
-  let handler = null;
-  factory({
-    on(event, candidate) {
-      assert.equal(event, 'tool_result');
-      handler = candidate;
-    },
-  });
-  assert.equal(typeof handler, 'function');
-  return handler;
-}
-
-test('redact-secrets is a loadable extension factory and rewrites visible text blocks', async () => {
-  const handler = registeredToolResultHandler(registerRedactSecrets);
+test('redact-secrets template helper rewrites visible text blocks only', async () => {
   const image = { type: 'image', data: 'safe-image' };
   const unchanged = { type: 'text', text: 'ordinary output' };
-  const result = await handler({
-    content: [
-      unchanged,
-      { type: 'text', text: 'token sk-abcdefghijklmnopqrstuvwxyz123456 and ghp_abcdefghijklmnopqrstuvwxyz1234567890' },
-      image,
-    ],
-  });
+  const result = redactToolResultContent([
+    unchanged,
+    { type: 'text', text: 'token sk-abcdefghijklmnopqrstuvwxyz123456 and ghp_abcdefghijklmnopqrstuvwxyz1234567890' },
+    image,
+  ]);
 
-  assert.equal(result.content[0], unchanged);
-  assert.equal(result.content[2], image);
-  assert.equal(result.content[1].text.includes('sk-'), false);
-  assert.equal(result.content[1].text.includes('ghp_'), false);
-  assert.equal((result.content[1].text.match(/\[REDACTED\]/g) ?? []).length, 2);
-  assert.equal(await handler({ content: [unchanged, image] }), undefined);
+  assert.equal(result[0], unchanged);
+  assert.equal(result[2], image);
+  assert.equal(result[1].text.includes('sk-'), false);
+  assert.equal(result[1].text.includes('ghp_'), false);
+  assert.equal((result[1].text.match(/\[REDACTED\]/g) ?? []).length, 2);
+  assert.equal(redactToolResultContent([unchanged, image]), null);
 
   const legacy = { result: 'api_key="abcdefghijklmnop1234"' };
   executeLegacyRedaction(legacy);
   assert.equal(legacy.result, '[REDACTED]');
 });
 
-test('truncate-output is a loadable extension factory and caps aggregate text once', async () => {
-  const handler = registeredToolResultHandler(registerTruncateOutput);
+test('truncate-output template helper caps aggregate text once', async () => {
   const image = { type: 'image', data: 'safe-image' };
-  const result = await handler({
-    content: [
-      { type: 'text', text: 'a'.repeat(MAX_LENGTH - 5) },
-      image,
-      { type: 'text', text: 'b'.repeat(10) },
-      { type: 'text', text: 'discarded tail' },
-    ],
-  });
+  const result = truncateToolResultContent([
+    { type: 'text', text: 'a'.repeat(MAX_LENGTH - 5) },
+    image,
+    { type: 'text', text: 'b'.repeat(10) },
+    { type: 'text', text: 'discarded tail' },
+  ]);
 
-  assert.equal(result.content[1], image);
-  const text = result.content.filter((block) => block.type === 'text').map((block) => block.text).join('');
+  assert.equal(result[1], image);
+  const text = result.filter((block) => block.type === 'text').map((block) => block.text).join('');
   assert.equal(text.startsWith(`${'a'.repeat(MAX_LENGTH - 5)}${'b'.repeat(5)}`), true);
   assert.equal((text.match(/\[\.\.\. truncated to 50000 chars\]/g) ?? []).length, 1);
   assert.equal(text.includes('discarded tail'), false);
-  assert.equal(await handler({ content: [{ type: 'text', text: 'short' }, image] }), undefined);
+  assert.equal(truncateToolResultContent([{ type: 'text', text: 'short' }, image]), null);
 
   const legacy = { result: 'x'.repeat(MAX_LENGTH + 1) };
   executeLegacyTruncation(legacy);

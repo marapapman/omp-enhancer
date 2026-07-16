@@ -6,41 +6,57 @@ import registerCoreEnhancer from '../index.js';
 const PUBLIC_TOOL_CONTRACT = [
   {
     name: 'omp_core_route_task',
+    approval: 'read',
+    defaultInactive: true,
     parameters: { prompt: 'string', sourceText: 'string?' },
     detailKeys: ['activated', 'probe_only', 'route', 'state_changed'],
   },
   {
     name: 'omp_core_classifier_prompt',
+    approval: 'read',
+    defaultInactive: true,
     parameters: { prompt: 'string' },
     detailKeys: ['classifier'],
   },
   {
     name: 'omp_core_resolve_classification',
+    approval: 'read',
+    defaultInactive: true,
     parameters: { prompt: 'string', output: 'string' },
     detailKeys: ['activated', 'classification', 'fallbackRoute', 'ok', 'probe_only', 'route', 'validation'],
   },
   {
     name: 'omp_core_validate_skill_usage',
+    approval: 'read',
+    defaultInactive: true,
     parameters: { output: 'string', requiredSkills: 'string[]?' },
     detailKeys: ['validation'],
   },
   {
     name: 'omp_core_validate_subagent_usage',
+    approval: 'read',
+    defaultInactive: true,
     parameters: { output: 'string', requiredSubagents: 'string[]?' },
     detailKeys: ['validation'],
   },
   {
     name: 'omp_core_subagent_status',
+    approval: 'read',
+    defaultInactive: true,
     parameters: {},
     detailKeys: ['status'],
   },
   {
     name: 'omp_core_governance_prompt',
+    approval: 'read',
+    defaultInactive: true,
     parameters: { prompt: 'string?' },
     detailKeys: ['fragment', 'route'],
   },
   {
     name: 'omp_core_install_skills',
+    approval: 'write',
+    defaultInactive: true,
     parameters: { dryRun: 'boolean?' },
     detailKeys: ['errors', 'installed', 'legacyFindings', 'recommendedIgnoredSkills', 'skipped', 'warnings'],
   },
@@ -62,6 +78,8 @@ test('freezes public omp_core tool names and parameter schemas', () => {
   registerCoreEnhancer(pi);
   const actual = [...pi.tools.values()].map((tool) => ({
     name: tool.name,
+    approval: tool.approval,
+    defaultInactive: tool.defaultInactive,
     parameters: describeObjectSchema(tool.parameters),
     detailKeys: PUBLIC_TOOL_CONTRACT.find((entry) => entry.name === tool.name)?.detailKeys,
   }));
@@ -91,6 +109,39 @@ test('all public omp_core tools preserve the structured result envelope', async 
       assert.deepEqual(Object.keys(result.details).sort(), contract.detailKeys);
     });
   }
+});
+
+test('enhancer tools stay inactive until the user explicitly enables a group', async () => {
+  const pi = new FakePi();
+  pi.allTools = [
+    'read',
+    ...PUBLIC_TOOL_CONTRACT.map(({ name }) => name),
+    'omp_config_doctor',
+    'writing_logic_check',
+    'fact_check_analyze',
+    'omp_test_analyze',
+  ];
+  pi.activeTools = ['read'];
+  registerCoreEnhancer(pi);
+
+  const command = pi.commands.get('enhancer-tools');
+  assert.ok(command);
+  const notifications = [];
+  const ctx = { ui: { notify: (message, level) => notifications.push({ message, level }) } };
+
+  await command.handler('enable core', ctx);
+  assert.equal(pi.activeTools.includes('read'), true);
+  assert.equal(pi.activeTools.includes('omp_core_route_task'), true);
+  assert.equal(pi.activeTools.includes('omp_config_doctor'), false);
+
+  await command.handler('disable core', ctx);
+  assert.deepEqual(pi.activeTools, ['read']);
+
+  await command.handler('enable all', ctx);
+  for (const name of pi.allTools.filter((name) => name !== 'read')) {
+    assert.equal(pi.activeTools.includes(name), true, name);
+  }
+  assert.match(notifications.at(-1).message, /Enabled/);
 });
 
 test('the public route tool exposes exact tests as advisory bounded work', async () => {
@@ -258,6 +309,9 @@ class FakePi {
     this.entries = entries;
     this.tools = new Map();
     this.eventHandlers = [];
+    this.commands = new Map();
+    this.allTools = [];
+    this.activeTools = [];
     const z = fakeZod();
     this.z = z;
     this.zod = { z };
@@ -267,6 +321,22 @@ class FakePi {
 
   registerTool(tool) {
     this.tools.set(tool.name, tool);
+  }
+
+  registerCommand(name, command) {
+    this.commands.set(name, command);
+  }
+
+  getAllTools() {
+    return this.allTools.length ? [...this.allTools] : [...this.tools.keys()];
+  }
+
+  getActiveTools() {
+    return [...this.activeTools];
+  }
+
+  async setActiveTools(names) {
+    this.activeTools = [...names];
   }
 
   on(event, handler) {

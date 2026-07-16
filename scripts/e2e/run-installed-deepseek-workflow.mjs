@@ -260,13 +260,23 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
   const sessionDir = path.join(runDir, 'session');
   await mkdir(sessionDir, { recursive: true });
   const advisorEnabled = scenario.advisor ?? matrix.defaults?.advisor ?? false;
+  const taskEager = resolveTaskEager(scenario.taskEager ?? matrix.defaults?.taskEager);
   const configOverlayPath = path.join(runDir, 'config-overlay.yml');
-  await writeFile(configOverlayPath, `advisor:\n  enabled: ${advisorEnabled ? 'true' : 'false'}\n`);
+  await writeFile(configOverlayPath, [
+    'advisor:',
+    `  enabled: ${advisorEnabled ? 'true' : 'false'}`,
+    ...(taskEager ? ['task:', `  eager: ${taskEager}`] : []),
+    '',
+  ].join('\n'));
   const expectations = { ...(matrix.defaults?.expectations ?? {}), ...(scenario.expectations ?? {}) };
   const timeoutSeconds = scenario.timeoutSeconds ?? matrix.defaults?.timeoutSeconds ?? 120;
   const executionMode = scenario.executionMode ?? matrix.defaults?.executionMode ?? 'print';
   const noExtensions = resolveNoExtensions(scenario.noExtensions ?? matrix.defaults?.noExtensions ?? false);
   const pluginDirs = resolvePluginDirs(scenario.pluginDirs ?? matrix.defaults?.pluginDirs ?? []);
+  if (noExtensions && pluginDirs.length > 0) {
+    throw new Error('noExtensions cannot be combined with pluginDirs because OMP disables explicitly supplied worktree extensions too.');
+  }
+  const pluginExtensionEntries = await resolvePluginExtensionEntries(pluginDirs);
   const args = buildOmpArgs({
     matrix,
     scenario,
@@ -278,8 +288,15 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
     advisorEnabled,
     noExtensions,
     pluginDirs,
+    pluginExtensionEntries,
   });
-  const runtimeConfig = buildRuntimeConfig({ advisorEnabled, noExtensions, pluginDirs });
+  const runtimeConfig = buildRuntimeConfig({
+    advisorEnabled,
+    taskEager,
+    noExtensions,
+    pluginDirs,
+    pluginExtensionEntries,
+  });
 
   if (dryRun) {
     const result = {
@@ -358,6 +375,7 @@ function buildOmpArgs({
   advisorEnabled,
   noExtensions,
   pluginDirs,
+  pluginExtensionEntries,
 }) {
   const model = scenario.model ?? matrix.defaults?.model ?? 'opencode-go/deepseek-v4-flash';
   const thinking = scenario.thinking ?? matrix.defaults?.thinking ?? 'minimal';
@@ -375,6 +393,7 @@ function buildOmpArgs({
   ];
   if (advisorEnabled) args.push('--advisor');
   if (noExtensions) args.push('--no-extensions');
+  for (const extensionEntry of pluginExtensionEntries) args.push('-e', extensionEntry);
   for (const pluginDir of pluginDirs) args.push(`--plugin-dir=${pluginDir}`);
   if (executionMode !== 'rpc') args.push('-p', prepared.prompt);
   return args;
@@ -383,6 +402,15 @@ function buildOmpArgs({
 function resolveNoExtensions(value) {
   if (typeof value !== 'boolean') throw new TypeError('noExtensions must be a boolean.');
   return value;
+}
+
+function resolveTaskEager(value) {
+  if (value == null || value === '') return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (!['default', 'preferred', 'always'].includes(normalized)) {
+    throw new Error('taskEager must be one of: default, preferred, always.');
+  }
+  return normalized;
 }
 
 function resolvePluginDirs(value) {
@@ -395,11 +423,37 @@ function resolvePluginDirs(value) {
   });
 }
 
-function buildRuntimeConfig({ advisorEnabled, noExtensions, pluginDirs }) {
+async function resolvePluginExtensionEntries(pluginDirs) {
+  const entries = [];
+  for (const pluginDir of pluginDirs) {
+    const manifestPath = path.join(pluginDir, 'package.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    const declared = manifest?.omp?.extensions ?? [];
+    if (!Array.isArray(declared)) throw new TypeError(`${manifestPath}: omp.extensions must be an array.`);
+    for (const [index, value] of declared.entries()) {
+      if (typeof value !== 'string' || !value.trim()) {
+        throw new TypeError(`${manifestPath}: omp.extensions[${index}] must be a non-empty string.`);
+      }
+      const resolved = path.resolve(pluginDir, value);
+      const relative = path.relative(pluginDir, resolved);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        throw new Error(`${manifestPath}: extension entry escapes the plugin directory: ${value}`);
+      }
+      const info = await stat(resolved);
+      if (!info.isFile()) throw new Error(`${manifestPath}: extension entry is not a file: ${value}`);
+      entries.push(resolved);
+    }
+  }
+  return [...new Set(entries)];
+}
+
+function buildRuntimeConfig({ advisorEnabled, taskEager, noExtensions, pluginDirs, pluginExtensionEntries }) {
   const runtimeConfig = { advisorEnabled };
+  if (taskEager) runtimeConfig.taskEager = taskEager;
   if (noExtensions || pluginDirs.length) {
     runtimeConfig.noExtensions = noExtensions;
     runtimeConfig.pluginDirs = pluginDirs;
+    runtimeConfig.pluginExtensionEntries = pluginExtensionEntries;
   }
   return runtimeConfig;
 }
@@ -439,6 +493,18 @@ export async function prepareScenario(scenario) {
       path.join(cwd, 'paper.md'),
       '该方法通常可以显著降低错误率——但可能仅将错误率从 37.5% 降至 12.5%，并不能完全消除错误，相关结论见 [@smith2025]。\n',
     );
+  } else if (scenario.fixture === 'skill-discovery-readonly') {
+    await Promise.all([
+      writeFile(
+        path.join(cwd, 'abstract.tex'),
+        'Our evaluation typically finds a significantly lower lower failure rate, but the system may only reduce errors from 37.5\\% to 12.5\\% and cannot eliminate them~\\cite{smith2025}.\n',
+      ),
+      writeFile(path.join(cwd, 'claims.md'), '- The release has five plugins.\n- Every package passed validation.\n- Rollback is documented.\n'),
+      writeFile(path.join(cwd, 'evidence.md'), 'The catalog lists five plugins. Package validation has not run. No rollback document is present.\n'),
+      writeFile(path.join(cwd, 'docker-compose.yml'), 'services:\n  api:\n    image: example/api:latest\n    ports: ["0.0.0.0:8080:8080"]\n    environment:\n      API_TOKEN: plaintext-secret\n'),
+      writeFile(path.join(cwd, 'sales.csv'), 'month,revenue,cost\nJan,100,70\nFeb,140,80\n'),
+      writeFile(path.join(cwd, 'README.md'), '# Skill discovery fixture\n\nA deterministic read-only test workspace.\n'),
+    ]);
   } else {
     throw new Error(`Unknown fixture: ${scenario.fixture}`);
   }

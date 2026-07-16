@@ -10,13 +10,18 @@
     "plugins/omp-enhancer-core"
   ],
   "scripts": {
-    "test": "npm run check:workflows && node --test scripts/*.test.js && npm test --workspaces --if-present",
+    "test": "npm run check:workflows && npm run check:ecc-skills && node --test scripts/*.test.js && npm test --workspaces --if-present",
     "generate:workflows": "node scripts/generate-workflow-catalog.js --write",
     "check:workflows": "node scripts/generate-workflow-catalog.js --check",
+    "generate:ecc-skills": "node scripts/generate-ecc-skill-catalog.js --write",
+    "check:ecc-skills": "node scripts/generate-ecc-skill-catalog.js --check",
+    "generate:marketplace": "node scripts/check-marketplace.js --write",
     "pack:all": "node scripts/pack-all.js",
     "check:marketplace": "node scripts/check-marketplace.js",
     "release": "node scripts/release.js",
     "e2e:deepseek": "node scripts/e2e/run-installed-deepseek-workflow.mjs",
+    "e2e:deepseek:skills": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-skill-discovery.json",
+    "e2e:deepseek:subagents": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-subagent-willingness.json",
     "e2e:deepseek:advisor": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-advisor-stress.json",
     "migrate:legacy-gate-skills": "node scripts/migrate-legacy-gate-skills.mjs"
   }

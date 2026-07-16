@@ -50,6 +50,10 @@ test('registers fact-check tools and command', () => {
     'fact_check_gate',
   ]);
   assert.equal(omp.commands.has('fact-check'), true);
+  for (const tool of omp.tools.values()) {
+    assert.equal(tool.defaultInactive, true, `${tool.name} must be opt-in`);
+    assert.equal(tool.approval, 'read', `${tool.name} must remain read-only`);
+  }
 });
 
 test('fact-check skills prescribe one bounded local pass without automatic lane retries', () => {

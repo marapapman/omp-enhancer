@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "defaults": {
+    "model": "opencode-go/deepseek-v4-flash",
+    "thinking": "high",
+    "approvalMode": "yolo",
+    "advisor": false,
+    "executionMode": "rpc",
+    "tools": ["read"],
+    "repeat": 1,
+    "timeoutSeconds": 150,
+    "expectations": {
+      "noWeb": true,
+      "requireFinal": true,
+      "maxPrimaryFinals": 1,
+      "maxAdvisorMessages": 0,
+      "noUnobservedSkillClaims": true,
+      "requireSuccessfulToolCalls": true,
+      "maxDuplicateFailedCalls": 0,
+      "maxDuplicateSkillReadAttempts": 0,
+      "maxProvidedSkills": 0,
+      "expectedProvisionMode": "none",
+      "maxToolCalls": 8,
+      "maxSourceSearchCalls": 8,
+      "maxAbortedAssistants": 0,
+      "pluginContinuationCount": 0
+    }
+  },
+  "scenarios": [
+    {
+      "id": "natural-writing-en",
+      "category": "writing-helper",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Read abstract.tex and propose a conservative correction of its single English sentence. Preserve all qualifiers, modality, negation, percentages, citations, and LaTeX commands. Do not modify files or use the network.",
+      "expectations": {
+        "requiredAnySkills": ["writing-review", "polish-acm-latex-prose"],
+        "maxObservedSkills": 2,
+        "forbiddenSkills": ["plain-chinese-writing", "zh-writing-polish", "writing-markdown-helper"]
+      }
+    },
+    {
+      "id": "natural-fact-check",
+      "category": "fact-checker",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Check the three claims in claims.md against evidence.md using only local evidence. Give a separate verdict for each claim and state limitations. Do not modify files or use the network.",
+      "expectations": {
+        "requiredObservedSkills": ["fact-checking"],
+        "maxObservedSkills": 4,
+        "forbiddenSkills": ["writing-review", "systematic-debugging"]
+      }
+    },
+    {
+      "id": "natural-docker-compose",
+      "category": "omp-config",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Audit docker-compose.yml for production safety, current Compose syntax, secret handling, port exposure, persistence, and a health check. Return evidence-backed findings only; do not modify files or run containers.",
+      "expectations": {
+        "requiredObservedSkills": ["docker-compose"],
+        "maxObservedSkills": 1,
+        "forbiddenSkills": ["frontend-design", "webapp-testing"]
+      }
+    },
+    {
+      "id": "natural-workflow-reference",
+      "category": "omp-config",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Consult the optional OMP Enhancer workflow reference already available in this session, then create a compact, ordered release-readiness checklist for a five-plugin OMP marketplace. Cover implementation validation, independent security review, package verification, rollback readiness, and separate publish authorization. Explain which phases can be composed. Do not inspect or modify project files.",
+      "expectations": {
+        "requiredObservedSkills": ["omp-enhancer-workflows"],
+        "maxObservedSkills": 6,
+        "forbiddenSkills": ["writing-review", "docker-compose"]
+      }
+    },
+    {
+      "id": "natural-xlsx",
+      "category": "omp-user-skill",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Read sales.csv and specify the exact workbook structure, formulas, professional formatting, validation checks, and chart you would use to deliver sales.xlsx. This is a read-only planning run, so do not create the file.",
+      "expectations": {
+        "requiredObservedSkills": ["xlsx"],
+        "maxObservedSkills": 1,
+        "forbiddenSkills": ["pdf", "pptx"]
+      }
+    },
+    {
+      "id": "natural-ecc-nested",
+      "category": "omp-config-ecc",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Create a concise troubleshooting checklist for a home Pi-hole installation where DHCP clients intermittently bypass local DNS and DNS-over-HTTPS is enabled. Distinguish router, DHCP, client, upstream, and cache checks. Do not inspect files, change configuration, or use the network.",
+      "expectations": {
+        "requiredObservedSkills": ["ecc-skill-catalog", "homelab-pihole-dns"],
+        "maxObservedSkills": 2,
+        "forbiddenSkills": ["docker-compose", "frontend-design", "xlsx"]
+      }
+    },
+    {
+      "id": "natural-subagent-isolation",
+      "category": "omp-native-agent-control",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Use exactly one native scout subagent to read README.md and return its first Markdown heading. The parent must not read the file itself. Do not modify files or use the network.",
+      "tools": ["task", "read"],
+      "expectations": {
+        "requireSuccessfulToolCalls": false,
+        "maxObservedSkills": 0,
+        "minNativeTaskCalls": 1,
+        "minNativeTaskForks": 1,
+        "requireNativeTaskCompletion": true,
+        "forbiddenSkills": ["writing-review", "fact-checking", "docker-compose", "omp-enhancer-workflows", "xlsx", "ecc-skill-catalog"]
+      }
+    },
+    {
+      "id": "natural-negative-read",
+      "category": "negative-control",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Read README.md and return only its first Markdown heading. Do not modify files.",
+      "expectations": {
+        "maxObservedSkills": 0,
+        "forbiddenSkills": ["writing-review", "fact-checking", "docker-compose", "omp-enhancer-workflows", "xlsx", "pdf", "frontend-design", "webapp-testing", "ecc-skill-catalog"]
+      }
+    }
+  ]
+}

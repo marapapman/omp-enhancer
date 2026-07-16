@@ -151,6 +151,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       name: 'omp_test_analyze',
       label: 'Analyze test targets',
       description: '分析改动并找出需要补测的目标',
+      defaultInactive: true,
+      approval: 'read',
       parameters: z.object({
         files: z.optional(z.array(z.string())),
         changedFiles: z.optional(z.array(changedFileSchema))
@@ -165,6 +167,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       name: 'omp_test_context',
       label: 'Build test context',
       description: '读取目标相关的公开入口和现有测试上下文',
+      defaultInactive: true,
+      approval: 'read',
       parameters: z.object({ target: targetSchema }),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
         const output = await executeContext(params as ContextParams, ctx)
@@ -175,6 +179,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       name: 'omp_test_browser_check',
       label: 'Run browser check',
       description: '打开浏览器执行前端用户事件、视觉检查和操作错误采集',
+      defaultInactive: true,
+      approval: 'exec',
       parameters: z.object({
         baseUrl: z.string(),
         serverCommand: z.optional(z.string()),
@@ -191,6 +197,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       name: 'omp_test_coverage_analyze',
       label: 'Analyze coverage gaps',
       description: '读取覆盖率报告并找出未覆盖的行、分支和函数',
+      defaultInactive: true,
+      approval: 'read',
       parameters: z.object({
         coverageReport: z.optional(z.unknown()),
         reportPath: z.optional(z.string())
@@ -204,6 +212,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       name: 'omp_test_mutation_context',
       label: 'Analyze mutation survivors',
       description: '读取 mutation 报告并把 surviving mutants 转成补测建议',
+      defaultInactive: true,
+      approval: 'read',
       parameters: z.object({
         mutationReport: z.optional(z.unknown()),
         reportPath: z.optional(z.string())
@@ -217,6 +227,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       name: 'omp_test_gate',
       label: 'Review test evidence',
       description: '兼容名称：运行建议型测试审查，报告间接测试、测试文件范围、浏览器证据和测试命令 findings；不会执行命令或阻止工具与会话',
+      defaultInactive: true,
+      approval: 'read',
       parameters: z.object({
         targets: z.array(targetSchema),
         candidate: candidateSchema,
@@ -233,6 +245,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       name: 'omp_test_report',
       label: 'Build test report',
       description: '生成测试增强报告',
+      defaultInactive: true,
+      approval: 'read',
       parameters: z.object({
         gateResults: z.optional(z.array(gateResultSchema)),
         runId: z.optional(z.string())

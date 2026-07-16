@@ -89,56 +89,43 @@ test('session_stop never schedules a repair or terminal continuation', async (t)
   }
 });
 
-test('inspection budgets add per-result model guidance without blocking tools', async () => {
+test('tool results are observed without appending inspection guidance or changing the event', async () => {
   const prompt = '为 agent-fleet 制定只读计划，不修改文件，不运行测试，最多 3 次读取或搜索。';
   const { pi, ctx } = await routedRuntime(prompt);
   const toolResult = event(pi, 'tool_result');
 
-  const first = await toolResult({
+  const calls = [{
     name: 'read',
     input: { path: 'skill://writing-plans' },
     result: { content: [{ type: 'text', text: '---\nname: writing-plans\ndescription: Planning\n---\n' }] },
-  }, ctx);
-  assert.match(first.content.at(-1).text, /1\/3 read\/search calls used; 2 remaining/i);
-  assert.match(first.content.at(-1).text, /NEXT MESSAGE LIMIT:[\s\S]*at most ONE individual read\/search tool call/i);
-  assert.doesNotMatch(first.content.at(-1).text, /issue at most 2 individual read\/search tool calls/i);
-  assert.doesNotMatch(first.content.at(-1).text, /No routed primary skill read is observed/i);
-
-  const second = await toolResult({
+  }, {
     name: 'grep',
     input: { pattern: 'agent-fleet' },
     result: { content: [{ type: 'text', text: 'extensions/agent-fleet/index.ts' }] },
-  }, ctx);
-  assert.match(second.content.at(-1).text, /2\/3 read\/search calls used; 1 remaining/i);
-  assert.match(second.content.at(-1).text, /use the snapshot with the largest used value[\s\S]*smallest remaining value/i);
-  assert.match(second.content.at(-1).text, /FINAL-BUDGET MODE:[\s\S]*at most ONE read\/search tool call/i);
-  assert.match(second.content.at(-1).text, /delete any second read\/grep\/glob call/i);
-  assert.match(second.content.at(-1).text, /LAST-SLOT RULE:[\s\S]*fails[\s\S]*do not repair it/i);
-  assert.match(second.content.at(-1).text, /NEXT MESSAGE LIMIT: issue at most ONE individual read\/search tool call/i);
-  assert.match(second.content.at(-1).text, /choose only the single highest-value target for this message/i);
-  assert.match(second.content.at(-1).text, /do not queue more read\/search calls than the remaining count/i);
-
-  const third = await toolResult({
+  }, {
     name: 'read',
     input: { path: 'extensions/agent-fleet/index.ts' },
     result: { content: [{ type: 'text', text: 'export const route = true;' }] },
-  }, ctx);
-  assert.match(third.content.at(-1).text, /3\/3 read\/search calls used; 0 remaining/i);
-  assert.match(third.content.at(-1).text, /inspection budget is exhausted[\s\S]*synthesize/i);
-  assert.match(third.content.at(-1).text, /failed or empty final lookup does not authorize a recovery/i);
-  assert.match(third.content.at(-1).text, /no tool call or completion is blocked/i);
-  assert.notEqual(third.block, true);
-
-  const fourth = await toolResult({
+  }, {
     name: 'read',
     input: { path: 'extensions/agent-fleet/extra.ts' },
     result: { content: [{ type: 'text', text: 'extra' }] },
-  }, ctx);
-  assert.match(fourth.content.at(-1).text, /4\/3 read\/search calls used; 0 remaining/i);
-  assert.notEqual(fourth.block, true);
+  }];
+
+  for (const call of calls) {
+    const original = structuredClone(call);
+    assert.equal(await toolResult(call, ctx), undefined);
+    assert.deepEqual(call, original);
+  }
+
+  const snapshot = pi.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  assert.equal(snapshot.inspectionCalls, 4);
+  assert.deepEqual(snapshot.observedSkills, ['writing-plans']);
 });
 
-test('inspection guidance recognizes a routed project skill alias and does not repeat stale reminders', async () => {
+test('project skill reads are observed without replacing their native result', async () => {
   const cwd = mkdtempSync(join(tmpdir(), 'omp-inspection-project-skill-'));
   try {
     const skillDir = join(cwd, 'skills', 'superpowers-debugging');
@@ -150,16 +137,26 @@ test('inspection guidance recognizes a routed project skill alias and does not r
     );
     const prompt = '只读诊断 strict-agent-model-routing.test.mjs 的约束风险，不修改文件，不运行测试，最多 3 次读取或搜索。';
     const { pi, ctx } = await routedRuntime(prompt, cwd);
-    const result = await event(pi, 'tool_result')({
+    const toolEvent = {
       name: 'read',
       input: { path: 'skills/superpowers-debugging/SKILL.md' },
       result: {
         content: [{ type: 'text', text: '---\nname: superpowers-debugging\ndescription: Project debugging\n---\n' }],
       },
-    }, ctx);
+    };
+    const original = structuredClone(toolEvent);
+    const result = await event(pi, 'tool_result')(toolEvent, ctx);
 
-    assert.doesNotMatch(result.content.at(-1).text, /No routed primary skill read is observed/i);
-    assert.match(result.content.at(-1).text, /FINAL-BUDGET MODE:[\s\S]*at most ONE read\/search tool call/i);
+    assert.equal(result, undefined);
+    assert.deepEqual(toolEvent, original);
+    const status = await pi.tools.get('omp_core_subagent_status').execute(
+      'status-after-project-skill',
+      {},
+      undefined,
+      undefined,
+      ctx,
+    );
+    assert.deepEqual(status.details.status.observed_skills, ['superpowers-debugging']);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
@@ -255,9 +252,16 @@ test('only a successful, identity-verified SKILL.md read records observed eviden
   }, ctx);
   await event(pi, 'tool_result')({
     name: 'read',
-    input: { path: 'skill://ecc/security-review' },
+    input: { path: 'skill://ecc-skill-catalog/security-review/SKILL.md' },
     result: {
       content: [{ type: 'text', text: '---\nname: security-review\ndescription: Packaged security review\n---\n' }],
+    },
+  }, ctx);
+  await event(pi, 'tool_result')({
+    name: 'read',
+    input: { path: 'skill://ecc-skill-catalog/scientific-thinking-literature-review/SKILL.md' },
+    result: {
+      content: [{ type: 'text', text: '---\nname: literature-review\ndescription: Packaged literature review\n---\n' }],
     },
   }, ctx);
 
@@ -270,7 +274,7 @@ test('only a successful, identity-verified SKILL.md read records observed eviden
   );
   assert.deepEqual(
     status.details.status.observed_skills.sort(),
-    ['security-review', 'writing-checkers', 'writing-review'],
+    ['literature-review', 'security-review', 'writing-checkers', 'writing-review'],
   );
 });
 
@@ -318,7 +322,7 @@ test('autolearn capture yields without changing route or business evidence', asy
   const next = await event(pi, 'before_agent_start')({
     prompt: 'Explain what autolearn.autoContinue does.',
   }, ctx);
-  assert.notEqual(next, undefined);
+  assert.equal(next, undefined);
   const afterUser = pi.entries.findLast(
     (entry) => entry.customType === 'omp-enhancer-core.state',
   ).data;
@@ -335,21 +339,24 @@ test('an implementation follow-up refreshes task facts while workflow selection 
   assert.equal(before.lastRoute.taskDescriptor.constraints.workspaceWrite, 'forbidden');
 
   const continued = await event(pi, 'before_agent_start')({ prompt: '继续' }, ctx);
-  assert.equal(continued.route.intent, 'agent-selected');
-  assert.equal(continued.route.taskDescriptor.constraints.workspaceWrite, 'forbidden');
+  assert.equal(continued, undefined);
+  const afterContinuation = pi.entries.findLast(
+    (entry) => entry.customType === 'omp-enhancer-core.state',
+  ).data;
+  assert.equal(afterContinuation.lastRoute.intent, 'agent-selected');
+  assert.equal(afterContinuation.lastRoute.taskDescriptor.constraints.workspaceWrite, 'forbidden');
 
   const started = await event(pi, 'before_agent_start')({ prompt: '开始实现' }, ctx);
-  assert.equal(started.route.intent, 'agent-selected');
-  assert.equal(started.route.workflowRoute, 'agent-selected');
-  assert.equal(started.route.taskDescriptor.operation, 'modify');
-  assert.equal(started.route.taskDescriptor.constraints.workspaceWrite, 'required');
-  assert.ok(started.route.taskDescriptor.phases.some((phase) => phase.kind === 'modify'));
-  assert.notEqual(started.block, true);
+  assert.equal(started, undefined);
 
   const after = pi.entries.findLast(
     (entry) => entry.customType === 'omp-enhancer-core.state',
   ).data;
   assert.equal(after.lastRoute.intent, 'agent-selected');
+  assert.equal(after.lastRoute.workflowRoute, 'agent-selected');
+  assert.equal(after.lastRoute.taskDescriptor.operation, 'modify');
+  assert.equal(after.lastRoute.taskDescriptor.constraints.workspaceWrite, 'required');
+  assert.ok(after.lastRoute.taskDescriptor.phases.some((phase) => phase.kind === 'modify'));
   assert.match(after.lastPrompt, /src\/router\.js/);
   assert.match(after.lastPrompt, /开始实现/);
   assert.equal(await event(pi, 'session_stop')({ output: 'Implementation started.' }, ctx), undefined);
@@ -542,7 +549,7 @@ test('the runtime has no generated-output loop controller or completion continua
   assert.equal(Object.hasOwn(snapshot, 'gateController'), false);
 });
 
-test('before_agent_start reads workspace writing targets and exposes body language without choosing resources', async () => {
+test('before_agent_start leaves workspace writing target content unobserved', async () => {
   const cwd = mkdtempSync(join(tmpdir(), 'omp-writing-language-'));
   try {
     writeFileSync(
@@ -555,10 +562,10 @@ test('before_agent_start reads workspace writing targets and exposes body langua
       (entry) => entry.customType === 'omp-enhancer-core.state',
     ).data.lastRoute;
     assert.equal(englishRoute.intent, 'agent-selected');
-    assert.equal(englishRoute.taskDescriptor.writingLanguageSource, 'provided-source');
+    assert.equal(englishRoute.taskDescriptor.writingLanguageSource, 'pending-source');
+    assert.equal(englishRoute.taskDescriptor.language, 'unknown');
     assert.deepEqual(englishRoute.routePlan.skills, []);
-    assert.deepEqual(englishRoute.writingSourceObservation.paths, ['abstract.tex']);
-    assert.deepEqual(englishRoute.writingSourceObservation.languages, ['en']);
+    assert.equal(englishRoute.writingSourceObservation, undefined);
 
     writeFileSync(
       join(cwd, 'abstract.tex'),
@@ -570,16 +577,16 @@ test('before_agent_start reads workspace writing targets and exposes body langua
       (entry) => entry.customType === 'omp-enhancer-core.state',
     ).data.lastRoute;
     assert.equal(chineseRoute.intent, 'agent-selected');
-    assert.equal(chineseRoute.taskDescriptor.writingLanguageSource, 'provided-source');
+    assert.equal(chineseRoute.taskDescriptor.writingLanguageSource, 'explicit-output');
+    assert.equal(chineseRoute.taskDescriptor.language, 'en');
     assert.deepEqual(chineseRoute.routePlan.skills, []);
-    assert.deepEqual(chineseRoute.writingSourceObservation.paths, ['abstract.tex']);
-    assert.deepEqual(chineseRoute.writingSourceObservation.languages, ['zh']);
+    assert.equal(chineseRoute.writingSourceObservation, undefined);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
 });
 
-test('before_agent_start reads a read-only Unicode writing source without granting write scope', async () => {
+test('before_agent_start records a read-only Unicode target path without reading its content', async () => {
   const cwd = mkdtempSync(join(tmpdir(), 'omp-writing-readonly-'));
   try {
     const target = '第5章-合并正文.md';
@@ -600,7 +607,9 @@ test('before_agent_start reads a read-only Unicode writing source without granti
     assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'forbidden');
     assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, []);
     assert.deepEqual(route.taskDescriptor.writingSourceTargets, [target]);
-    assert.deepEqual(route.writingSourceObservation.paths, [target]);
+    assert.equal(route.taskDescriptor.language, 'unknown');
+    assert.equal(route.taskDescriptor.writingLanguageSource, 'pending-source');
+    assert.equal(route.writingSourceObservation, undefined);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

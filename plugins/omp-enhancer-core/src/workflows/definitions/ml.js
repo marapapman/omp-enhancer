@@ -28,7 +28,7 @@ export const mlWorkflows = [
       }
     ],
     "scopeNotes": [
-      "Use the canonical reviewer with ML skills; a prompt-only ML reviewer does not create a distinct permission boundary.",
+      "Use omp-target-auditor with ML skills for an existing bounded ML target; the OMP native reviewer remains reserved for a supplied patch or diff.",
       "Do not treat an offline metric, notebook output, or provider evaluation as proof of production behavior without matching data, artifact, and serving evidence."
     ],
     "skills": [
@@ -43,10 +43,10 @@ export const mlWorkflows = [
       "Model and dataset artifacts may contain sensitive data or unsafe serialized objects; inspect them through project-approved paths and preserve provenance."
     ],
     "roles": [
-      "reviewer"
+      "omp-target-auditor"
     ],
     "delegation": [
-      "steps-2-4: reviewer independently audits the ML system with selected ML skills and reports evidence-backed findings without editing code, data, or artifacts"
+      "steps-2-4: omp-target-auditor independently audits the bounded ML system with selected ML skills and reports evidence-backed findings without editing code, data, or artifacts"
     ]
   },
   {

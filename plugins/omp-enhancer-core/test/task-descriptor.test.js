@@ -652,10 +652,14 @@ test('affirmative subagent clauses are not mistaken for no-subagent constraints'
   for (const prompt of [
     'Do not hesitate to use subagents.',
     'No need to avoid subagents; use them.',
+    'Do not hesitate to delegate independent checks.',
+    'Do not avoid delegation; use it when useful.',
     '不要犹豫，使用子代理。',
     '不用等待，直接使用子代理。',
     '不要跳过子代理协作。',
     '禁止跳过子代理协作。',
+    '不要犹豫，委派独立检查。',
+    '不要避免委派；需要时可以使用。',
   ]) {
     const descriptor = describeNaturalLanguageTask({ prompt });
     assert.notEqual(descriptor.constraints.subagents, 'forbidden', prompt);
@@ -663,7 +667,18 @@ test('affirmative subagent clauses are not mistaken for no-subagent constraints'
 
   for (const prompt of [
     'Do not use subagents.',
+    'Do not delegate this work.',
+    'Inspect both files without delegation.',
+    'Keep all work in the main agent.',
+    'Handle everything yourself.',
+    'Work alone on this.',
+    'Do not use agents.',
     '不要使用子代理。',
+    '不要委派这项工作。',
+    '检查这两个文件，不做委派。',
+    '所有工作都留在主代理完成。',
+    '请你自己完成。',
+    '不要交给其他代理。',
   ]) {
     const descriptor = describeNaturalLanguageTask({ prompt });
     assert.equal(descriptor.constraints.subagents, 'forbidden', prompt);

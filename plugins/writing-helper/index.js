@@ -297,6 +297,8 @@ export default function writingLogicExtension(omp) {
     label: 'Writing Logic Check',
     description:
       'Check a draft or document for substantive writing logic issues, including unsupported conclusions, data inconsistencies, terminology drift, and causal leaps.',
+    defaultInactive: true,
+    approval: 'read',
     promptSnippet: 'Check writing logic for a draft, selected text, or document path.',
     promptGuidelines: [
       'Use writing_logic_check before claiming a draft is logically consistent.',
@@ -319,6 +321,8 @@ export default function writingLogicExtension(omp) {
     label: 'Writing Quality Check',
     description:
       'Run advisory writing logic, language-specific style, citation authenticity, and optional semantic preservation checks. Citations are VERIFIED only when evidence confirms metadata, MISMATCH when evidence contradicts it, and UNVERIFIED when evidence is absent.',
+    defaultInactive: true,
+    approval: 'read',
     promptSnippet: 'Check writing quality, style, and citation authenticity for a draft or document path.',
     promptGuidelines: [
       'Use writing_quality_check for final writing QA across logic, style, and citations.',

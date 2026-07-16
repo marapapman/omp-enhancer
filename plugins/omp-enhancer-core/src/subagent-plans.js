@@ -15,11 +15,15 @@ export const subagentPlans = Object.freeze({
   ]),
   securityReview: Object.freeze([
     subagent('ecc-security-reviewer', 'audit user-input, auth, file, network, secrets, and dependency risks', ['security-review', 'security-scan']),
-    subagent('reviewer', 'independently review the findings and false-positive risk', ['security-review']),
+    subagent('omp-target-auditor', 'independently audit the bounded security target and challenge false positives without requiring a diff', ['security-review']),
+  ]),
+  securityPatchReview: Object.freeze([
+    subagent('ecc-security-reviewer', 'audit the supplied security-sensitive diff and its concrete trust boundaries', ['security-review', 'security-scan']),
+    subagent('reviewer', 'review the supplied security diff and report patch-anchored correctness or regression concerns', ['security-review']),
   ]),
   bugAudit: Object.freeze([
     subagent(
-      'reviewer',
+      'omp-target-auditor',
       'audit concrete code paths, error handling, fallbacks, and regressions with file and line evidence',
       ['error-handling', 'verification-before-completion'],
     ),
@@ -32,6 +36,13 @@ export const subagentPlans = Object.freeze({
       'test-reviewer',
       'independently review test coverage, current execution evidence, and limitations without editing files or rerunning tests',
       ['verification-before-completion'],
+    ),
+  ]),
+  patchReview: Object.freeze([
+    subagent(
+      'reviewer',
+      'review the supplied diff, commit, or pull request and report patch-anchored correctness or regression concerns',
+      ['error-handling', 'verification-before-completion'],
     ),
   ]),
   factCheck: Object.freeze([

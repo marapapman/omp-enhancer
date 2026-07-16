@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 
-const svgPath = process.argv[2];
-
-if (!svgPath) {
-  console.error('Usage: node check-svg-flowchart.mjs <diagram.svg>');
-  process.exitCode = 2;
-} else {
+async function main(svgPath = process.argv[2]) {
+  if (!svgPath) {
+    console.error('Usage: node check-svg-flowchart.mjs <diagram.svg>');
+    process.exitCode = 2;
+    return;
+  }
   try {
     const source = await readFile(svgPath, 'utf8');
     const findings = checkSvgFlowchart(source);
@@ -23,7 +24,7 @@ if (!svgPath) {
   }
 }
 
-function checkSvgFlowchart(source) {
+export function checkSvgFlowchart(source) {
   let document;
   try {
     document = parseXmlDocument(source);
@@ -325,4 +326,8 @@ function hasNonEmptyElement(source, name) {
 
 function nearlyEqual(left, right) {
   return Math.abs(left - right) < 0.001;
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  await main();
 }

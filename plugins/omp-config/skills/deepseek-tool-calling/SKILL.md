@@ -207,7 +207,7 @@ Unexpected end of JSON input
 - `symbol` 可选，不要传 null
 
 ### todo 工具
-- OMP 16.4.8 的原生工具名是 `todo`，不是 `todo_write`
+- OMP 17 的原生工具名是 `todo`，不是 `todo_write`
 - 每次只传一个操作：`op` 可为 `init`, `start`, `done`, `drop`, `rm`, `append`, `view`
 - 初始化阶段计划：`{"op":"init","list":[{"phase":"Implementation","items":["Inspect target","Apply change","Verify result"]}]}`
 - 完成任务时，`task` 必须逐字复用初始化时的完整任务文本；不存在 `task-1` 一类自动 ID
@@ -224,7 +224,7 @@ Unexpected end of JSON input
 
 DeepSeek 思考模式下，当模型进行了工具调用时，`reasoning_content` **必须**在后续所有轮次中完整回传给 API。否则 API 返回 400 错误。
 
-OMP 已通过 hooks 自动处理此规则（`opencode-deepseek-cot.ts`），但手动构造消息时需注意：
+OMP 的原生 provider/runtime 行为始终优先。`omp-config` 不会自动改写上下文；只有用户显式安装 `hook-templates/pre/opencode-deepseek-cot.ts` 后，该可选模板才会为匹配的模型补全缺失字段。手动构造消息时仍需注意：
 
 ✅ **正确 — 保留 reasoning_content**
 ```json
@@ -275,20 +275,26 @@ DeepSeek 处理工具返回结果时（OpenAI 格式），`content` 字段必须
 }
 ```
 
-OMP 已通过 hook（`opencode-deepseek-tool-result.ts`）自动保证：
-- content 从不为空
-- 工具返回的 ANSI 转义码已清理
-- 大量输出前有摘要统计行
+`omp-config` 不会自动改写工具结果。用户可以在审查后显式安装
+`hook-templates/post/opencode-deepseek-tool-result-pipeline.ts` 及其引用的
+`lib/` helpers。这个可选模板按固定顺序完成兼容格式化、敏感信息脱敏
+和过长文本截断，同时保留非文本 content blocks、`details` 与 `isError`；
+纯图片结果不会被替换为空文本。
 
 ## 优化栈概述
 
-OMP 对 DeepSeek V4 的优化分 5 层：
+本插件提供的 DeepSeek V4 兼容材料分 5 层；Skill 是否呈现或加载由 OMP 的原生 Skill 机制决定，配置和行为型 hook 则需要用户显式选择，不能视为 OMP 默认行为：
 
-1. **models.yml** — 模型元数据覆盖（reasoning/compat/thinking 等 10+ 字段）
-2. **COT 钩子** — `reasoning_content` 自动补全
-3. **工具修复钩子** — 工具调用参数自动清洗（JSON 解析、类型转换、字段修正）
-4. **工具调用 skill** — 系统提示注入最佳实践（本文档）
-5. **结果优化钩子** — 工具返回结果格式归一化（非空、ANSI 清理、摘要统计）
+1. **models.yml 模板** — 可选模型元数据覆盖（reasoning/compat/thinking 等字段）
+2. **COT hook template** — 可选 `reasoning_content` 补全
+3. **工具修复 hook template** — 可选工具调用参数清洗（JSON 解析、类型转换、字段修正）
+4. **工具调用 Skill** — Agent 按需读取的最佳实践（本文档）
+5. **结果 pipeline template** — 可选格式化、脱敏和截断流水线
+
+所有行为型模板都位于 `hook-templates/`，不在自动发现的 `hooks/` 目录。
+它们仅在 provider 为 `opencode-go` 且模型 ID 为
+`deepseek-v4-flash` 或 `deepseek-v4-pro` 时运行。自动发现的 hooks 只做
+notify-only 风险提醒，不修改工具参数、上下文或结果。
 
 ## 模型版本
 

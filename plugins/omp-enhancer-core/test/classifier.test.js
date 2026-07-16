@@ -129,7 +129,7 @@ test('resolveClassificationRoute maps bug audit classifier output to audit subag
   assert.equal(result.route.intent, 'bug-audit');
   assert.equal(result.route.source, 'llm-classifier');
   assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), [
-    'reviewer',
+    'omp-target-auditor',
     'test-planner',
     'test-reviewer',
   ]);

@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "defaults": {
+    "model": "opencode-go/deepseek-v4-flash",
+    "thinking": "high",
+    "approvalMode": "yolo",
+    "advisor": false,
+    "executionMode": "rpc",
+    "taskEager": "preferred",
+    "tools": ["task", "hub", "read", "grep", "glob"],
+    "repeat": 3,
+    "timeoutSeconds": 360,
+    "expectations": {
+      "noWeb": true,
+      "requireFinal": true,
+      "maxPrimaryFinals": 1,
+      "maxAdvisorMessages": 0,
+      "requireSuccessfulToolCalls": false,
+      "maxDuplicateFailedCalls": 0,
+      "maxToolCalls": 30,
+      "maxSourceSearchCalls": 20,
+      "pluginContinuationCount": 0
+    }
+  },
+  "scenarios": [
+    {
+      "id": "single-read-direct",
+      "category": "negative/single-target",
+      "cwd": ".",
+      "prompt": "Read README.md and return only its first Markdown heading. Do not modify files or use the network.",
+      "expectations": {
+        "maxNativeTaskCalls": 0,
+        "maxNativeTaskAssignmentAttempts": 0
+      }
+    },
+    {
+      "id": "explicit-main-only",
+      "category": "negative/user-constraint",
+      "cwd": ".",
+      "prompt": "Inspect all five workspace plugin package manifests and entry files, but keep all work in the main agent and do not delegate any part. Report only whether every declared entry exists. Do not modify files, run tests, or use the network.",
+      "expectations": {
+        "maxNativeTaskCalls": 0,
+        "maxNativeTaskAssignmentAttempts": 0
+      }
+    },
+    {
+      "id": "two-trivial-lookups-direct",
+      "category": "negative/trivial-batch",
+      "cwd": ".",
+      "prompt": "Read plugins/omp-enhancer-core/package.json and plugins/omp-config/package.json and return only the name field from each file. Do not modify files or use the network.",
+      "expectations": {
+        "maxNativeTaskCalls": 0,
+        "maxNativeTaskAssignmentAttempts": 0
+      }
+    },
+    {
+      "id": "two-file-natural",
+      "category": "positive/two-files",
+      "cwd": ".",
+      "timeoutSeconds": 480,
+      "prompt": "Independently audit plugins/omp-enhancer-core/src/governance.js and plugins/omp-enhancer-core/src/skill-usage.js. For each file, trace externally controlled text or metadata through parsing, normalization, filesystem access, and validation; cover at least three distinct input-boundary failure classes, rank the most consequential gap with line-linked call-chain evidence, and identify missing regression tests. Then compare the two files' containment and false-positive tradeoffs. Do not modify files, run tests, or use the network.",
+      "expectations": {
+        "maxNativeTaskCalls": 1,
+        "maxProjectInspectionCallsBeforeNativeTask": 0,
+        "maxProjectInspectionCallsAfterNativeTask": 4,
+        "minNativeTaskAssignmentAttempts": 2,
+        "maxNativeTaskAssignmentAttempts": 2,
+        "requireNativeTaskCompletion": true
+      }
+    },
+    {
+      "id": "five-plugin-natural",
+      "category": "positive/five-plugins",
+      "cwd": ".",
+      "prompt": "For plugins/omp-enhancer-core, plugins/omp-config, plugins/writing-helper, plugins/omp-test-enhancer, and plugins/omp-fact-checker, independently audit how each declared entry file registers hooks, tools, or commands against its package and .omp-plugin/marketplace.json metadata. For every plugin, identify one plugin-specific integration risk or robustness gap with line evidence, then compare the five failure modes. Do not modify files, run tests, or use the network.",
+      "expectations": {
+        "maxNativeTaskCalls": 1,
+        "maxProjectInspectionCallsBeforeNativeTask": 1,
+        "maxProjectInspectionCallsAfterNativeTask": 4,
+        "minNativeTaskAssignmentAttempts": 5,
+        "maxNativeTaskAssignmentAttempts": 5,
+        "requireNativeTaskCompletion": true
+      }
+    }
+  ]
+}

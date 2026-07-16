@@ -230,7 +230,8 @@ test('workflow cards and governance describe suggestions without hard-stop contr
   assert.doesNotMatch(route.routeCard, /\nGate:\n|\nDo not:\n/i);
 
   const fragment = buildGovernancePromptFragment({ route, parentTask: '请润色 tex/abstract.tex。' });
-  assert.match(fragment, /This guidance is advisory/i);
+  assert.match(fragment, /explicit and optional/i);
+  assert.match(fragment, /OMP's system prompt[\s\S]*remain authoritative/i);
   assert.match(fragment, /Writing language is pending content inspection/i);
   assert.doesNotMatch(fragment, /Execution boundary: blocked|gate is still open|Mandatory Skill Workflow|Final routed outputs must include|runtime enforces/i);
   assert.doesNotMatch(fragment, /SKILL_USAGE|SUBAGENT_USAGE/);
@@ -238,8 +239,9 @@ test('workflow cards and governance describe suggestions without hard-stop contr
   const subagent = buildSubagentPromptFragment({
     prompt: 'OMP_REQUIRED_SUBAGENT: writer\nRequired skills for this subagent:\n- writing-markdown-helper',
   });
-  assert.match(subagent, /Parent-selected skills for this checkpoint/);
-  assert.match(subagent, /Do not reroute the whole parent task/);
+  assert.match(subagent, /Observed skill candidates/);
+  assert.match(subagent, /informational only/i);
+  assert.match(subagent, /OMP-provided subagent system prompt[\s\S]*authoritative/i);
   assert.doesNotMatch(subagent, /Final subagent output must end with|Status: complete\|blocked|SKILL_USAGE|SUBAGENT_RESULT/);
 });
 

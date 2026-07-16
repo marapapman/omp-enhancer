@@ -47,7 +47,7 @@ export const operationWorkflows = [
     ],
     "delegation": [
       "step-1: config-librarian inventories plugin assets, marketplace metadata, and installed-runtime state",
-      "step-4: reviewer independently checks package contents, catalog consistency, tests, and runtime parity before release",
+      "step-4: reviewer independently checks the plugin diff, package contents, catalog consistency, tests, and runtime parity before release",
       "step-5: the parent retains versioning, publication, synchronization, and final verification ownership"
     ]
   },
@@ -97,11 +97,11 @@ export const operationWorkflows = [
     ],
     "roles": [
       "ecc-security-reviewer",
-      "reviewer"
+      "omp-target-auditor"
     ],
     "delegation": [
       "step-2: ecc-security-reviewer traces the concrete trust boundaries, callers, sinks, exploit preconditions, and demonstrated impact",
-      "step-5: reviewer independently challenges high-impact findings, severity, evidence, and remediation feasibility",
+      "step-5: omp-target-auditor independently challenges high-impact findings, severity, evidence, and remediation feasibility within the bounded security target",
       "step-5: the parent reconciles disagreements and preserves authorization boundaries"
     ]
   },
@@ -277,10 +277,10 @@ export const operationWorkflows = [
       "Use host approval and the user-authorized target for irreversible or externally visible actions."
     ],
     "roles": [
-      "reviewer"
+      "omp-target-auditor"
     ],
     "delegation": [
-      "step-4: reviewer independently verifies the exact remote, marketplace, deployed, or installed state after the mutation",
+      "step-4: omp-target-auditor independently verifies the exact bounded remote, marketplace, deployed, or installed state after the mutation",
       "step-3: the parent alone owns the authorized release mutation, version target, and final reconciliation"
     ]
   }

@@ -6,7 +6,6 @@ const slidesSkillUrl = new URL('../skills/latex-beamer-slides/SKILL.md', import.
 const storylineSkillUrl = new URL('../skills/slides-storyline/SKILL.md', import.meta.url);
 const conversionSkillUrl = new URL('../skills/beamer-to-powerpoint/SKILL.md', import.meta.url);
 const qualityReferenceUrl = new URL('../skills/latex-beamer-slides/references/beamer-quality.md', import.meta.url);
-const designerUrl = new URL('../agents/designer.md', import.meta.url);
 const visionerUrl = new URL('../agents/visioner.md', import.meta.url);
 
 test('Beamer generation checks the template before confirming a story and authoring frames', async () => {
@@ -109,15 +108,15 @@ test('Beamer quality reference covers compile and rendered-slide evidence', asyn
   assert.match(reference, /Do not report visual QA from compilation alone/i);
 });
 
-test('designer owns Beamer layout revisions and visioner reviews fresh rendered slides read-only', async () => {
-  const [designer, visioner] = await Promise.all([
-    readFile(designerUrl, 'utf8'),
+test('Beamer skill supplies layout specialization while visioner reviews fresh rendered slides read-only', async () => {
+  const [slidesSkill, visioner] = await Promise.all([
+    readFile(slidesSkillUrl, 'utf8'),
     readFile(visionerUrl, 'utf8'),
   ]);
 
-  assert.match(designer, /For Beamer slides, own the final layout pass/i);
-  assert.match(designer, /overlap, clipping, crowding, undersized text, image cropping, alignment, spacing, and visual hierarchy/i);
-  assert.match(designer, /Do not split, add, remove, or reorder frames in an existing deck without explicit user authorization/i);
+  assert.match(slidesSkill, /Have `designer` perform the final layout pass/i);
+  assert.match(slidesSkill, /overlap, crowding, clipping, undersized text, cropped or distorted figures/is);
+  assert.match(slidesSkill, /Do not split, add, remove, or reorder frames without explicit user authorization/i);
   assert.match(visioner, /rendered diagrams and slide decks/i);
   assert.match(visioner, /latest full-resolution page renders and the overview or contact sheet/i);
   assert.match(visioner, /text and image overlap.+crowding.+clipping.+undersized text.+cropped or distorted images/is);

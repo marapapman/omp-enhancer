@@ -6,7 +6,7 @@
     "approvalMode": "yolo",
     "advisor": false,
     "executionMode": "rpc",
-    "noExtensions": true,
+    "noExtensions": false,
     "pluginDirs": [
       "plugins/omp-config",
       "plugins/writing-helper",

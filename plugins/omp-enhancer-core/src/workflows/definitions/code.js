@@ -253,11 +253,13 @@ export const codeWorkflows = [
     "riskNotes": [],
     "roles": [
       "explore",
-      "reviewer"
+      "reviewer",
+      "omp-target-auditor"
     ],
     "delegation": [
       "steps-1-2: explore performs bounded read-only inspection of requested paths, surrounding contracts, callers, and failure paths",
-      "steps-3-4: reviewer independently validates and reports prioritized findings with concrete file, symbol, test, or runtime evidence"
+      "steps-3-4: reviewer independently validates and reports patch-anchored findings when the assignment supplies a diff, commit, or pull request",
+      "steps-3-4: omp-target-auditor independently validates and reports target-anchored findings when the assignment names an existing bounded target without a diff"
     ]
   },
   {

@@ -22,6 +22,7 @@ const ADVISORY_STATE_KEYS = [
   'providedSkills',
   'routeStartedAt',
   'schemaVersion',
+  'skillDiscoveryRemindedRouteStartedAt',
   'tasks',
   'taskSequence',
 ].sort();
@@ -40,7 +41,7 @@ const LEGACY_ENFORCEMENT_FIELDS = [
   'classifierPreflight',
 ];
 
-test('migrates v0.1.74 route, skill claims, and task diagnostics into advisory schema v4', async () => {
+test('migrates v0.1.74 route, skill claims, and task diagnostics into advisory schema v5', async () => {
   const fixtureWithUnknownFields = structuredClone(LEGACY_STATE);
   fixtureWithUnknownFields.futureControllerState = { mode: 'future-only' };
   fixtureWithUnknownFields.evidence.futureEvidence = { ignored: true };
@@ -134,10 +135,11 @@ test('new snapshots default to an empty advisory workflow state', async () => {
   const migrated = latestCoreState(pi.entries);
 
   assertAdvisorySnapshot(migrated);
-  assert.equal(migrated.schemaVersion, 4);
+  assert.equal(migrated.schemaVersion, 5);
   assert.equal(migrated.lastRoute, null);
   assert.equal(migrated.lastPrompt, '');
   assert.equal(migrated.routeStartedAt, 0);
+  assert.equal(migrated.skillDiscoveryRemindedRouteStartedAt, 0);
   assert.equal(migrated.lastRouteProbe, null);
   assert.equal(migrated.lastSkillUsage, null);
   assert.equal(migrated.lastSubagentUsage, null);
@@ -176,15 +178,15 @@ test('schema v3 snapshots migrate with empty host-provided skill evidence', asyn
   assert.deepEqual(status.details.status.effective_skills, ['writing-review']);
   assert.deepEqual(status.details.status.claimed_skills, ['writing-review']);
   const migrated = latestCoreState(entries);
-  assert.equal(migrated.schemaVersion, 4);
+  assert.equal(migrated.schemaVersion, 5);
   assert.deepEqual(migrated.providedSkills, []);
 });
 
 function assertAdvisorySnapshot(snapshot) {
-  assert.equal(snapshot.schemaVersion, 4);
+  assert.equal(snapshot.schemaVersion, 5);
   assert.deepEqual(Object.keys(snapshot).sort(), ADVISORY_STATE_KEYS);
   for (const field of LEGACY_ENFORCEMENT_FIELDS) {
-    assert.equal(field in snapshot, false, `${field} must not be serialized in advisory schema v4`);
+    assert.equal(field in snapshot, false, `${field} must not be serialized in advisory schema v5`);
   }
 }
 

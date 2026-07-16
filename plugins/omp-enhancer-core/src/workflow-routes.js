@@ -12,6 +12,13 @@ export {
 } from './workflows/render-shared-markdown.js';
 
 export {
+  WORKFLOW_SKILL_NAME,
+  buildWorkflowSkillIndexMarkdown,
+  buildWorkflowSkillReferenceMarkdown,
+  buildWorkflowSkillReferences,
+} from './workflows/render-skill.js';
+
+export {
   buildWorkflowRouteCard,
   decorateWorkflowRoute,
   workflowRouteCardSections,

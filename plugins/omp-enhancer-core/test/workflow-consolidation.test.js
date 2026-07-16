@@ -35,13 +35,16 @@ test('catalog exposes the consolidated workflows and deliberately omits healthca
   assert.equal(workflowRouteNames.includes('communications.triage'), false);
 });
 
-test('existing generic workflows expose only their canonical roles', () => {
+test('existing generic workflows keep OMP native roles and namespace target-only audits', () => {
   assert.deepEqual(workflowRouteCatalog['code.plan'].roles, ['explore', 'plan']);
   assert.deepEqual(
     workflowRouteCatalog['code.dev'].roles,
     ['explore', 'plan', 'implementation-task', 'reviewer'],
   );
-  assert.deepEqual(workflowRouteCatalog['code.review'].roles, ['explore', 'reviewer']);
+  assert.deepEqual(
+    workflowRouteCatalog['code.review'].roles,
+    ['explore', 'reviewer', 'omp-target-auditor'],
+  );
   assert.deepEqual(workflowRouteCatalog['design.visual'].roles, ['designer']);
 });
 
@@ -53,11 +56,11 @@ test('new workflows use bounded exact roles instead of legacy mini-workflow wrap
     'network.homelab': ['ecc-network-architect'],
     'network.review': ['ecc-network-config-reviewer'],
     'network.debug': ['ecc-network-troubleshooter'],
-    'database.review': ['reviewer'],
+    'database.review': ['omp-target-auditor'],
     'database.change': ['plan', 'implementation-task', 'reviewer'],
     'database.migration.repair': ['plan', 'implementation-task', 'reviewer'],
     'performance.optimize': ['explore', 'plan', 'implementation-task', 'reviewer'],
-    'ml.review': ['reviewer'],
+    'ml.review': ['omp-target-auditor'],
     'ml.debug': ['explore', 'plan', 'implementation-task', 'reviewer'],
     'release.opensource': [
       'ecc-opensource-forker',
@@ -152,14 +155,15 @@ test('high-risk workflows define substantive composition, skills, and evidence c
   }
 });
 
-test('legacy bug-audit projection uses canonical review and test roles', () => {
+test('legacy bug-audit projection uses the namespaced target auditor and test roles', () => {
   assert.deepEqual(
     subagentPlans.bugAudit.map(({ agent }) => agent),
-    ['reviewer', 'test-planner', 'test-reviewer'],
+    ['omp-target-auditor', 'test-planner', 'test-reviewer'],
   );
-  const reviewer = subagentPlans.bugAudit.find(({ agent }) => agent === 'reviewer');
-  assert.ok(reviewer.skills.includes('error-handling'));
-  assert.ok(reviewer.skills.includes('verification-before-completion'));
+  const auditor = subagentPlans.bugAudit.find(({ agent }) => agent === 'omp-target-auditor');
+  assert.ok(auditor.skills.includes('error-handling'));
+  assert.ok(auditor.skills.includes('verification-before-completion'));
+  assert.deepEqual(subagentPlans.patchReview.map(({ agent }) => agent), ['reviewer']);
 });
 
 test('an explicit no-subagent constraint also removes catalog roles from the route card', () => {

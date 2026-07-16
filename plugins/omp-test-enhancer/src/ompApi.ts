@@ -41,6 +41,7 @@ export interface ToolDefinition<TParams = unknown> {
   hidden?: boolean
   defaultInactive?: boolean
   deferrable?: boolean
+  approval?: 'read' | 'write' | 'exec'
   execute(
     toolCallId: string,
     params: TParams,
@@ -74,6 +75,9 @@ export interface ExtensionAPI {
   registerCommand(name: string, command: CommandDefinition): void
   registerMessageRenderer?(customType: string, renderer: unknown): void
   on(event: string, handler: ExtensionEventHandler): void
+  getAllTools?(): string[]
+  getActiveTools?(): string[]
+  setActiveTools?(names: string[]): Promise<void> | void
   sendUserMessage(content: string, options?: { deliverAs?: 'steer' | 'followUp' | 'nextTurn' }): Promise<void> | void
   appendEntry(customType: string, data: unknown): Promise<void> | void
 }

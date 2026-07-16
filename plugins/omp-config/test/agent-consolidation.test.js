@@ -10,6 +10,9 @@ const SKILL_ROOT = path.join(PLUGIN_ROOT, 'skills');
 const REMOVED_AGENT_FILES = [
   'task.md',
   'quick_task.md',
+  'designer.md',
+  'librarian.md',
+  'reviewer.md',
   'ecc-a11y-architect.md',
   'ecc-architect.md',
   'ecc-build-error-resolver.md',
@@ -76,14 +79,14 @@ test('legacy agent wrappers are removed after their knowledge moves to workflows
 });
 
 test('orchestration and independent evidence agents keep bounded capability metadata', async () => {
-  for (const file of ['implementation-task.md', 'plan.md', 'reviewer.md']) {
+  for (const file of ['implementation-task.md', 'plan.md', 'omp-target-auditor.md']) {
     const source = await readFile(path.join(AGENT_ROOT, file), 'utf8');
     assert.doesNotMatch(source, /^spawns:\s*["']?\*["']?\s*$/m);
     assert.match(source, /^spawns:\s*\[\]\s*$/m);
   }
 
   for (const file of [
-    'reviewer.md',
+    'omp-target-auditor.md',
     'ecc-security-reviewer.md',
     'ecc-network-config-reviewer.md',
     'ecc-opensource-sanitizer.md',
@@ -94,11 +97,43 @@ test('orchestration and independent evidence agents keep bounded capability meta
     assert.equal(tools.includes('write'), false, `${file} must not write`);
   }
 
-  const reviewer = await readFile(path.join(AGENT_ROOT, 'reviewer.md'), 'utf8');
-  assert.match(reviewer, /patch review mode/i);
-  assert.match(reviewer, /target audit mode/i);
-  assert.match(reviewer, /only in patch review mode[^\n]*introduced/i);
-  assert.match(reviewer, /target audit mode[^\n]*(?:regardless of|without requiring)[^\n]*diff/i);
+  const auditor = await readFile(path.join(AGENT_ROOT, 'omp-target-auditor.md'), 'utf8');
+  assert.match(auditor, /^name:\s*omp-target-auditor$/m);
+  assert.match(auditor, /target audit/i);
+  assert.doesNotMatch(auditor, /patch review mode|introduced (?:by|in) (?:the )?patch/i);
+  assert.doesNotMatch(auditor, /report_finding/i);
+  assert.match(auditor, /incremental `yield`/i);
+  assert.match(auditor, /type:\s*\["findings"\]/i);
+  assert.match(auditor, /stop and let idle finalization assemble the result/i);
+});
+
+test('OMP native agent identities are not packaged by omp-config', async () => {
+  const present = new Set(await readdir(AGENT_ROOT));
+  for (const file of ['scout.md', 'task.md', 'sonic.md', 'designer.md', 'librarian.md', 'reviewer.md']) {
+    assert.equal(present.has(file), false, `OMP native agent is shadowed by plugin asset: ${file}`);
+  }
+});
+
+test('removed native-agent specialization remains available through skills', async () => {
+  const [frontend, canvas, beamer, svg, documentation] = await Promise.all([
+    readFile(path.join(SKILL_ROOT, 'frontend-design', 'SKILL.md'), 'utf8'),
+    readFile(path.join(SKILL_ROOT, 'canvas-design', 'SKILL.md'), 'utf8'),
+    readFile(path.join(SKILL_ROOT, 'latex-beamer-slides', 'SKILL.md'), 'utf8'),
+    readFile(path.join(SKILL_ROOT, 'svg-flowchart', 'SKILL.md'), 'utf8'),
+    readFile(path.join(SKILL_ROOT, 'ecc', 'documentation-lookup', 'SKILL.md'), 'utf8'),
+  ]);
+
+  assert.match(frontend, /design tokens.+shared primitives/is);
+  assert.match(frontend, /loading, empty, error, disabled, hover, and focus/i);
+  assert.match(frontend, /responsive/i);
+  assert.match(canvas, /visual hierarchy/i);
+  assert.match(canvas, /generic AI/i);
+  assert.match(beamer, /overlap, crowding, clipping, undersized text/is);
+  assert.match(beamer, /Do not split, add, remove, or reorder frames without explicit user authorization/i);
+  assert.match(svg, /black.+white.+fill="none"/is);
+  assert.match(documentation, /local installed source/i);
+  assert.match(documentation, /types?\s*\+\s*implementation|implementation\s*\+\s*tests?/i);
+  assert.match(documentation, /exact signature/i);
 });
 
 test('packaged top-level agents never use wildcard or dangling spawn targets', async () => {

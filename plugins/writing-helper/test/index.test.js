@@ -78,6 +78,12 @@ describe('writing-logic extension', () => {
     assert.equal(typeof tool.promptSnippet, 'string');
     assert.equal(Array.isArray(tool.promptGuidelines), true);
     assert.equal(typeof tool.description, 'string');
+    assert.equal(tool.defaultInactive, true);
+    assert.equal(tool.approval, 'read');
+
+    const qualityTool = api.registerTool.mock.calls[1].arguments[0];
+    assert.equal(qualityTool.defaultInactive, true);
+    assert.equal(qualityTool.approval, 'read');
   });
 
   it('quality tool exposes network citation controls and explicit disable support', () => {

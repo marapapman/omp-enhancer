@@ -5,6 +5,47 @@ export const ADVISOR_BLOCK_END = '<!-- OMP-ENHANCER-ADVISOR-WORKFLOW-CONTEXT:END
 export const CATALOG_BLOCK_START = '<!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->';
 export const CATALOG_BLOCK_END = '<!-- OMP-ENHANCER-WORKFLOW-CATALOG:END -->';
 
+// This is the exact guidance suffix shipped by the legacy WATCHDOG.yml asset.
+// Keep this byte-for-byte and adjacency-gated: a partial or user-edited copy is
+// user content and must survive workflow-context sync.
+const LEGACY_ADVISOR_GUIDANCE_BLOCK = [
+  "  Review the main agent as an advisory peer. Stay silent when the work is already correct or complete.",
+  '',
+  "  Skill and workflow selection belong to the main agent. Absence of a visible skill-read call is not evidence that a skill is missing when the transcript shows the skill body or another host-provided load. Raise a skill issue only when the main agent skipped active-inventory discovery for a non-trivial workflow, reports a concrete load failure, or applies instructions that conflict with the visible task. Do not ask for `omp_core_route_task`; its route is a compatibility diagnostic, not an execution decision.",
+  '',
+  "  Request another source read only when the transcript contains concrete truncation evidence, such as an explicit truncation marker or an incomplete requested range. A successful short-file read that reaches the file end is not clipped merely because it has few lines.",
+  '',
+  "  Deliver advice before the main agent's user-visible final. Once the main agent has emitted a complete final response, do not call `advise`, even if a late improvement is available. Stay silent rather than requesting a shorter restatement, another verification call, or a replacement final. Formatting taste, concision preference, and already-reported facts are not material post-final corrections.",
+  '',
+  "  ADVICE BUDGET: give at most one `advise` call for a primary task by default. Count prior advisor notes in this advisor session. After one note, stay silent unless later evidence reveals a new, materially different authorization, security, or irreversible-data-loss risk. A complete main-agent final sets this budget to zero unconditionally. Do not split one concern into follow-up notes, restate it after verification, or advise merely to refine how the final describes an already-correct outcome.",
+  '',
+  "  For an authorized edit, judge the concrete candidate rather than freezing the whole task. If one candidate would move a qualifier, change scope, or otherwise violate a semantic anchor, advise rejecting that candidate only. Preservation constraints do not make every other word immutable. When a safe lexical or structural improvement outside the protected anchors is visible, point to that alternative; do not conclude that no safe edit exists merely because one candidate is unsafe.",
+  '',
+  "  Use `concern`, not `blocker`, for a reversible wording candidate. Reserve `blocker` for an imminent authorization violation, security risk, or irreversible data loss.",
+  '',
+  "  Advisor notes are suggestions, not execution or completion gates. Never ask for repeated unchanged calls, a second skill load, or work outside the user's stated tool, write, test, network, and time scope.",
+].join('\n');
+
+// This is the exact instructions body from a846175^, before the managed block
+// existed. A later sync appended the managed marker immediately after it.
+const LEGACY_PRE_MARKER_ADVISOR_GUIDANCE_BLOCK = [
+  "  Review the main agent as an advisory peer. Stay silent when the work is already correct or complete.",
+  '',
+  "  OMP workflow context may provide a skill without a read tool call. A hidden `skill-prompt`, a skill body followed by `Skill: <path>`, or system text saying `Routed workflow skills already loaded` means the host has already loaded that skill. Skill routing and loading are the main agent and Core's responsibility: absence of a visible skill-read call is not evidence that a skill is missing. Do not advise a skill read or `omp_core_route_task` merely because the rendered advisor transcript omits hidden host context. Raise a skill issue only when the main agent reports a concrete load failure or applies instructions that conflict with the visible task.",
+  '',
+  "  Request another source read only when the transcript contains concrete truncation evidence, such as an explicit truncation marker or an incomplete requested range. A successful short-file read that reaches the file end is not clipped merely because it has few lines.",
+  '',
+  "  Deliver advice before the main agent's user-visible final. Once the main agent has emitted a complete final response, do not call `advise`, even if a late improvement is available. Stay silent rather than requesting a shorter restatement, another verification call, or a replacement final. Formatting taste, concision preference, and already-reported facts are not material post-final corrections.",
+  '',
+  "  ADVICE BUDGET: give at most one `advise` call for a primary task by default. Count prior advisor notes in this advisor session. After one note, stay silent unless later evidence reveals a new, materially different authorization, security, or irreversible-data-loss risk. A complete main-agent final sets this budget to zero unconditionally. Do not split one concern into follow-up notes, restate it after verification, or advise merely to refine how the final describes an already-correct outcome.",
+  '',
+  "  For an authorized edit, judge the concrete candidate rather than freezing the whole task. If one candidate would move a qualifier, change scope, or otherwise violate a semantic anchor, advise rejecting that candidate only. Preservation constraints do not make every other word immutable. When a safe lexical or structural improvement outside the protected anchors is visible, point to that alternative; do not conclude that no safe edit exists merely because one candidate is unsafe.",
+  '',
+  "  Use `concern`, not `blocker`, for a reversible wording candidate. Reserve `blocker` for an imminent authorization violation, security risk, or irreversible data loss.",
+  '',
+  "  Advisor notes are suggestions, not execution or completion gates. Never ask for repeated unchanged calls, a second skill load, or work outside the user's stated tool, write, test, network, and time scope.",
+].join('\n');
+
 export function mergeManagedCatalog(existing, packagedCatalog) {
   assertCompleteMarkers(packagedCatalog, CATALOG_BLOCK_START, CATALOG_BLOCK_END, 'packaged workflow catalog');
   if (existing === null) return ensureTrailingNewline(packagedCatalog);
@@ -32,7 +73,7 @@ export function mergeWatchdogManagedBlock(existing, managedBlock) {
       ADVISOR_BLOCK_END,
       { lineBoundaries: true },
     );
-    return ensureTrailingNewline(replaced);
+    return ensureTrailingNewline(removeExactLegacyAdvisorGuidance(replaced));
   }
   if (existing.includes(ADVISOR_BLOCK_END)) {
     throw new Error('WATCHDOG.yml contains an incomplete OMP Enhancer advisor managed block.');
@@ -66,7 +107,27 @@ export function mergeWatchdogManagedBlock(existing, managedBlock) {
   if (before.at(-1)?.trim() !== '') before.push('');
   before.push(...indentBlock(managedBlock, contentIndent).split('\n'));
   if (scalarEnd < lines.length && before.at(-1)?.trim() !== '') before.push('');
-  return ensureTrailingNewline([...before, ...lines.slice(scalarEnd)].join('\n'));
+  const merged = [...before, ...lines.slice(scalarEnd)].join('\n');
+  return ensureTrailingNewline(removeExactLegacyAdvisorGuidance(merged));
+}
+
+function removeExactLegacyAdvisorGuidance(text) {
+  const legacyPrefix = `instructions: |\n${LEGACY_PRE_MARKER_ADVISOR_GUIDANCE_BLOCK}\n\n  ${ADVISOR_BLOCK_START}`;
+  const prefixStart = text.indexOf(legacyPrefix);
+  const hasTopLevelLineBoundary = prefixStart === 0 || text[prefixStart - 1] === '\n';
+  const withoutLegacyPrefix = prefixStart >= 0 && hasTopLevelLineBoundary
+    ? `${text.slice(0, prefixStart)}instructions: |\n  ${ADVISOR_BLOCK_START}${text.slice(prefixStart + legacyPrefix.length)}`
+    : text;
+  const legacySuffix = `\n\n${LEGACY_ADVISOR_GUIDANCE_BLOCK}\n`;
+  const managedEnd = withoutLegacyPrefix.indexOf(ADVISOR_BLOCK_END);
+  const suffixStart = managedEnd + ADVISOR_BLOCK_END.length;
+  if (
+    managedEnd < 0
+    || withoutLegacyPrefix.slice(suffixStart, suffixStart + legacySuffix.length) !== legacySuffix
+  ) {
+    return withoutLegacyPrefix;
+  }
+  return `${withoutLegacyPrefix.slice(0, suffixStart)}\n${withoutLegacyPrefix.slice(suffixStart + legacySuffix.length)}`;
 }
 
 export function extractManagedBlock(text, startMarker, endMarker) {

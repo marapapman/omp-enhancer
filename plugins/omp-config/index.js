@@ -74,6 +74,8 @@ export default function registerOmpConfig(pi) {
     name: 'omp_config_doctor',
     label: 'OMP Config Doctor',
     description: 'Inspect packaged OMP config assets and report portability risks.',
+    defaultInactive: true,
+    approval: 'read',
     parameters,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const result = await runConfigDoctor(pluginRootFromParams(params, ctx));
@@ -89,6 +91,8 @@ export default function registerOmpConfig(pi) {
     name: 'omp_config_sync_workflow_context',
     label: 'OMP Workflow Context Sync',
     description: 'Preview or explicitly apply the shared main-agent and Advisor workflow catalog to an OMP agent directory. Defaults to dry-run and preserves unrelated AGENTS.md content.',
+    defaultInactive: true,
+    approval: 'write',
     parameters: syncParameters,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = paramsOrEmpty(params);
@@ -118,6 +122,8 @@ export default function registerOmpConfig(pi) {
     name: 'omp_config_assets',
     label: 'OMP Config Assets',
     description: 'List packaged OMP config agents, skills, hooks, and templates.',
+    defaultInactive: true,
+    approval: 'read',
     parameters,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const result = await listAssets(pluginRootFromParams(params, ctx));
@@ -133,6 +139,8 @@ export default function registerOmpConfig(pi) {
     name: 'omp_config_plan',
     label: 'OMP Config Plan',
     description: 'Create a safe manual review plan before applying packaged OMP config templates to a target config directory.',
+    defaultInactive: true,
+    approval: 'read',
     parameters,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const result = await runConfigPlan({ root: pluginRootFromParams(params, ctx) });

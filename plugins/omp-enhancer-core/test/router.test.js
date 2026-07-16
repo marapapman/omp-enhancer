@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 import { routeNaturalLanguageTask } from '../src/router.js';
 
+const OMP_NATIVE_AGENT_IDS = new Set(['designer', 'librarian', 'reviewer']);
+
 const routingCases = [
   {
     name: 'Chinese writing request routes to Chinese writing profile',
@@ -48,9 +50,9 @@ const routingCases = [
     expectedAgent: 'tester',
     requiredSkills: ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'],
     requiredTools: ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_report'],
-    requiredSubagents: ['reviewer', 'test-planner', 'test-reviewer'],
+    requiredSubagents: ['omp-target-auditor', 'test-planner', 'test-reviewer'],
     requiredSubagentSkills: {
-      reviewer: ['error-handling', 'verification-before-completion'],
+      'omp-target-auditor': ['error-handling', 'verification-before-completion'],
       'test-planner': ['test-driven-development', 'ai-regression-testing'],
       'test-reviewer': ['verification-before-completion'],
     },
@@ -167,10 +169,10 @@ const routingCases = [
     expectedAgent: 'ecc-security-reviewer',
     requiredSkills: ['security-review', 'security-scan'],
     requiredTools: [],
-    requiredSubagents: ['ecc-security-reviewer', 'reviewer'],
+    requiredSubagents: ['ecc-security-reviewer', 'omp-target-auditor'],
     requiredSubagentSkills: {
       'ecc-security-reviewer': ['security-review', 'security-scan'],
-      reviewer: ['security-review'],
+      'omp-target-auditor': ['security-review'],
     },
   },
   {
@@ -232,7 +234,7 @@ test('routes mixed real-world workloads without false workflow gates', () => {
     ['direct audit context followed by workflow optimization', 'The OMP gate is blocking delegation. Let me do the bug investigation directly as a focused audit. 帮我优化插件的工作流，再事前准备好skills。', 'implementation-with-tests', []],
     ['precise scoped code edit', '只修改 plugins/omp-enhancer-core/src/router.js 里 routeNaturalLanguageTask 的一个判断，保持范围最小。', 'implementation-with-tests', []],
     ['agentic code modification', 'Agentically update the codebase to improve gate handling and add regression tests.', 'implementation-with-tests', ['plan', 'implementation-task', 'reviewer']],
-    ['read-only code bug finding', '帮我在代码里找 bug，只报告问题，不要修复。', 'bug-audit', ['reviewer']],
+    ['read-only code bug finding', '帮我在代码里找 bug，只报告问题，不要修复。', 'bug-audit', ['omp-target-auditor']],
     ['focused direct bug audit', '直接做 focused bug audit，只报告验证过的问题。', 'bug-audit', []],
     ['code testing workload', '帮我为 subagent fork 逻辑生成测试并运行门禁，不要改实现。', 'bug-audit', []],
     ['fact-check workload', 'Verify citation authenticity and factual claims in this paragraph.', 'fact-check', ['fact-planner', 'fact-researcher-a', 'fact-researcher-b', 'fact-cross-checker', 'fact-reviewer']],
@@ -931,7 +933,7 @@ test('keeps dependency license compliance security audit on security review', ()
   });
 
   assert.equal(route.intent, 'security-review');
-  assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), ['ecc-security-reviewer', 'reviewer']);
+  assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), ['ecc-security-reviewer', 'omp-target-auditor']);
 });
 
 test('keeps security compliance audit for OMP gates on security review', () => {
@@ -940,7 +942,7 @@ test('keeps security compliance audit for OMP gates on security review', () => {
   });
 
   assert.equal(route.intent, 'security-review');
-  assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), ['ecc-security-reviewer', 'reviewer']);
+  assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), ['ecc-security-reviewer', 'omp-target-auditor']);
 });
 
 test('routes extended boundary work situations without workflow confusion', () => {
@@ -1268,8 +1270,8 @@ test('routes writing workflow edge cases with advisory resources and source-lang
     ['test report with verification', '检查测试报告里的结论是否准确，并运行相关测试验证。', 'bug-audit', null, []],
     ['zh security announcement writing', '起草一份中文安全公告，不做代码安全审计。', 'writing.pending', 'complex', []],
     ['zh license memo writing', '写一份 license 合规说明给法务，不审代码。', 'writing.pending', 'complex', []],
-    ['security audit remains security', '审查当前 GitHub Actions permissions 是否过宽，只报告。', 'security-review', null, ['ecc-security-reviewer', 'reviewer']],
-    ['security docs lookup remains unknown', '查 GitHub Actions permissions 官方文档，不改代码。', 'unknown', null, ['ecc-security-reviewer', 'reviewer']],
+    ['security audit remains security', '审查当前 GitHub Actions permissions 是否过宽，只报告。', 'security-review', null, ['ecc-security-reviewer', 'omp-target-auditor']],
+    ['security docs lookup remains unknown', '查 GitHub Actions permissions 官方文档，不改代码。', 'unknown', null, ['ecc-security-reviewer', 'omp-target-auditor']],
     ['copy file edit remains implementation', '修改 src/i18n/zh.json 里的空状态文案并跑测试。', 'implementation-with-tests', null, []],
     ['latex text file edit waits for body language', '润色 main.tex 里的 related work 段落并重新编译。', 'writing.pending', 'complex', []],
     ['latex text snippet waits for body text', '润色下面这段 related work，不改文件。', 'writing.pending', 'simple', []],
@@ -1416,7 +1418,7 @@ test('required route skills are registered in the root marketplace catalog', asy
   }
 });
 
-test('required route subagents are packaged by owning workflow plugins', async () => {
+test('extension route subagents are packaged while OMP native agents remain unshadowed', async () => {
   const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const roots = [
     path.join(repoRoot, 'plugins', 'omp-config', 'agents'),
@@ -1438,7 +1440,11 @@ test('required route subagents are packaged by owning workflow plugins', async (
         }),
       );
 
-      assert.equal(found.some(Boolean), true, `${item.name} requires unpackaged subagent ${agent}`);
+      if (OMP_NATIVE_AGENT_IDS.has(agent)) {
+        assert.equal(found.some(Boolean), false, `${item.name} shadows OMP native subagent ${agent}`);
+      } else {
+        assert.equal(found.some(Boolean), true, `${item.name} requires unpackaged subagent ${agent}`);
+      }
     }
   }
 });
@@ -1493,6 +1499,12 @@ test('subagent providers match the configured workflow ownership', async () => {
     }
 
     for (const agent of item.requiredSubagents) {
+      if (OMP_NATIVE_AGENT_IDS.has(agent)) {
+        for (const [owner, names] of Object.entries(ownerAgents)) {
+          assert.equal(names.has(agent), false, `${item.name} should resolve OMP native subagent ${agent}, not ${owner}`);
+        }
+        continue;
+      }
       const owner = agent === 'test-planner' || agent === 'test-executor' || agent === 'test-reviewer'
         ? 'omp-testing-enhancer'
         : defaultOwner;

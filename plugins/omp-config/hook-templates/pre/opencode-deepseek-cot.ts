@@ -1,3 +1,4 @@
+// Explicit opt-in template; this file is outside the auto-discovered hooks/ tree.
 // DeepSeek V4 思维链兼容钩子（精简版）
 //
 // DeepSeek 思考模式核心规则:
@@ -13,6 +14,7 @@
 // 参考资料: https://api-docs.deepseek.com/zh-cn/guides/thinking_mode
 
 import type { HookAPI } from "@oh-my-pi/pi-coding-agent/extensibility/hooks";
+import { isOpenCodeDeepSeekV4Model } from "../lib/model-gate.js";
 
 /**
  * 检查 assistant 消息是否有 reasoning/thinking 字段
@@ -48,7 +50,8 @@ function ensureReasoningContent(msg: Record<string, unknown>): boolean {
 }
 
 export default function (pi: HookAPI): void {
-  pi.on("context", async (event, _ctx) => {
+  pi.on("context", async (event, ctx) => {
+    if (!isOpenCodeDeepSeekV4Model(ctx.model)) return;
     const msgs = event.messages;
     if (!msgs || !Array.isArray(msgs) || msgs.length === 0) return;
 

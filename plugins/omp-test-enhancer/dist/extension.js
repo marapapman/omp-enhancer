@@ -113,8 +113,18 @@ async function handleTestCommand(pi, args, ctx) {
         await initializeConfig(pi, ctx);
         return;
     }
+    await activateTestingEnhancerTools(pi);
     await ctx.waitForIdle();
     await pi.sendUserMessage(buildAgentInstruction(mode), { deliverAs: 'steer' });
+}
+async function activateTestingEnhancerTools(pi) {
+    if (typeof pi.getAllTools !== 'function'
+        || typeof pi.getActiveTools !== 'function'
+        || typeof pi.setActiveTools !== 'function')
+        return;
+    const available = pi.getAllTools().filter(name => name.startsWith('omp_test_'));
+    const active = pi.getActiveTools();
+    await pi.setActiveTools([...new Set([...active, ...available])]);
 }
 async function initializeConfig(pi, ctx) {
     const cwd = typeof ctx.cwd === 'string' && ctx.cwd.trim() !== '' ? ctx.cwd : process.cwd();

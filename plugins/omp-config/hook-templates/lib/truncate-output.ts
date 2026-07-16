@@ -1,5 +1,3 @@
-import type { HookAPI } from "@oh-my-pi/pi-coding-agent/extensibility/hooks";
-
 export const name = "truncate-output";
 export const event = "tool_result";
 export const MAX_LENGTH = 50000;
@@ -45,11 +43,4 @@ export function execute(toolResult: any) {
     toolResult.result = toolResult.result.slice(0, MAX_LENGTH) +
       TRUNCATION_MARKER;
   }
-}
-
-export default function (pi: HookAPI): void {
-  pi.on("tool_result", (toolResult) => {
-    const content = truncateToolResultContent(toolResult.content);
-    return content ? { content } : undefined;
-  });
 }

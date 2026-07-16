@@ -1,6 +1,9 @@
-import { access, readdir, readFile } from 'node:fs/promises'
+import { access, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+const args = process.argv.slice(2)
+if (args.some((arg) => arg !== '--write')) throw new Error(`Unknown argument: ${args.join(' ')}`)
+const write = args.includes('--write')
 const catalogPath = path.join(process.cwd(), '.omp-plugin', 'marketplace.json')
 const catalog = JSON.parse(await readFile(catalogPath, 'utf8'))
 
@@ -32,12 +35,20 @@ for (const [name, source] of expected) {
 
   const expectedSkills = await expectedSkillPathsForPlugin(source)
   const actualSkills = plugin.skills ?? []
-  if (JSON.stringify(actualSkills) !== JSON.stringify(expectedSkills)) {
+  if (write) {
+    if (expectedSkills.length > 0) plugin.skills = expectedSkills
+    else delete plugin.skills
+  } else if (JSON.stringify(actualSkills) !== JSON.stringify(expectedSkills)) {
     throw new Error(`Plugin ${name} skills mismatch: expected ${expectedSkills.join(', ')}, got ${actualSkills.join(', ')}`)
   }
 }
 
-console.log('marketplace catalog ok')
+if (write) {
+  await writeFile(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`)
+  console.log('marketplace Skill paths updated')
+} else {
+  console.log('marketplace catalog ok')
+}
 
 async function expectedSkillPathsForPlugin(source) {
   const pluginRoot = path.join(process.cwd(), 'plugins', source.replace(/^\.\//, ''))

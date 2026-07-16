@@ -4,13 +4,13 @@ OMP marketplace monorepo for autonomous workflow orchestration, workflow skills,
 
 ## Plugins
 
-- `omp-enhancer-core`: injects the complete workflow catalog and active skill inventory, collects safe task facts, and passes parent-selected workflow steps to subagents.
-- `omp-config`: packages the shared main/Advisor workflow context, OMP config assets, agents, skills, non-blocking hooks, templates, and diagnostics.
+- `omp-enhancer-core`: records safe task facts, exposes opt-in compatibility diagnostics, and provides explicit extension-tool activation without replacing OMP's prompt or orchestration.
+- `omp-config`: packages OMP config assets, the optional workflow-reference skill, one uniquely named target-auditor Agent, notify-only guards, opt-in hook templates, and diagnostics.
 - `writing-helper`: provides writing logic, style, and citation checks plus writer/checker agents and writing skills.
 - `omp-testing-enhancer`: provides `test-planner`, `test-executor`, and `test-reviewer` agents plus test target analysis, browser evidence, coverage/mutation context, advisory quality review, and reports.
 - `omp-fact-checker`: provides claim extraction, evidence collection, cross-checking, reporting, and advisory completeness review.
 
-The stack is advisory-only. Its extensions do not block tool calls, prevent session completion, or start automatic repair turns. Host sandboxing, permissions, and approval prompts remain authoritative and are outside this plugin stack.
+The stack is advisory-only and OMP-native-first. Its default lifecycle handlers do not inject or replace `systemPrompt`, select workflows, force TODOs or delegation, block tool calls, prevent session completion, or start automatic repair turns. OMP's system prompt, settings, active tools, dynamically discovered Agents, sandboxing, permissions, approval prompts, and completion behavior remain authoritative.
 
 ## Marketplace install
 
@@ -33,65 +33,79 @@ omp plugin marketplace add /path/to/omp-enhancer
 omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer
 ```
 
-Plugins remain independently installable. `omp-enhancer-core` provides dynamic main-agent orchestration guidance; `omp-config` provides the shared session-start context used by both the main agent and Advisor.
+Plugins remain independently installable. `omp-enhancer-core` provides opt-in diagnostics and tool activation. `omp-config` publishes optional assets, Agents, Skills, guards, and hook templates through OMP's native discovery mechanisms.
 
-After installing or upgrading `omp-config`, preview and then apply the managed shared context from an OMP session:
+After installing or upgrading `omp-config`, you may preview and apply its managed optional context from an OMP session. With `omp-enhancer-core` loaded:
 
 ```text
+Run /enhancer-tools enable config.
 Call omp_config_sync_workflow_context first with apply=false, then with apply=true after reviewing the target files.
 ```
 
-The sync preserves unrelated `AGENTS.md` and `WATCHDOG.yml` content. A new OMP session is required because main and Advisor system context is constructed at session start.
+The sync preserves unrelated `AGENTS.md` and `WATCHDOG.yml` content. It can synchronize the generated `OMP_ENHANCER_WORKFLOW_CATALOG.md`, but the managed Main and Advisor blocks do not import that file. They only identify `omp-enhancer-workflows` as optional reference material and state that OMP remains authoritative. Start a new OMP session after applying context-file changes.
 
-## Autonomous workflow orchestration
+## OMP-native-first workflow reference
 
-After installing `omp-enhancer-core`, describe the task naturally. Core injects:
+Describe the task naturally and let OMP use its built-in workflow, tool, TODO, and Agent behavior. On normal `before_agent_start` turns, Core may record JSON-safe task facts for later diagnostics, but it never returns `systemPrompt`, chooses a workflow, activates a tool, supplies or autoloads a Skill, or rewrites a child assignment.
 
-- the complete composable workflow catalog;
-- the complete model-visible skill inventory, including descriptions when the host exposes them;
-- safe task facts such as operation, targets, target-text language, explicit user constraints, and risk observations;
-- a TODO-first orchestration protocol and the native `task` assignment contract.
+There is one narrowly scoped compatibility message for the exact `opencode-go/deepseek-v4-flash` model. Core may append it at most once per active top-level Main task as a hidden custom hook message. The stored message carries `attribution: user`, while OMP serializes an ordinary non-Skill custom hook message as supplemental developer context; its text therefore explicitly yields to the user instruction and every native OMP contract. Its sections are independently capability-gated: when OMP exposes visible Skills, it first includes the existing Skill-discovery reminder; when OMP's native `task` tool is active and the user has not forbidden agents or delegation, it then includes a concise `DEEPSEEK_DELEGATION_HINT`. The hint asks DeepSeek to act on OMP's own scope and delegation decision instead of merely describing it, while keeping direct work inline; it does not add a plugin workflow, fixed fan-out, inspection budget, or alternate task shape. In native preferred mode, it only uses OMP's existing SHOULD-level preference as a tie-breaker after the native direct/mechanical, dependency, prerequisite, and already-enumerated rules have been applied; it does not turn that preference into a new gate or MUST. When the one canonical OMP Delegation section itself confirms batch `tasks[]` and a numeric concurrency cap $N \geq 2$, Core may append those current-turn native facts: for 2 through $N$ genuinely independent runnable slices, native width means one batch assignment per slice. The fact is omitted for flat, ambiguous, unknown, unlimited-without-a-number, or cap-one configurations; counts above $N$ remain entirely OMP's decision. If neither capability is available, no message is emitted. The hint does not invent an Agent or grant authority: OMP's current dynamic Available Agents, native `task` schema, concurrency and result-delivery instructions, user scope, verification requirements, permissions, approvals, and completion behavior remain authoritative. The message does not provide or autoload a Skill, return or replace `systemPrompt`, activate a tool, rewrite a child assignment, or create a completion gate. Other models, subagent launches, Advisor turns, and later turns in the same active task do not receive it.
 
-The main agent, not Core, selects or composes workflows and skills. The normal runtime uses an `agent-selected` context whose `skills`, `tools`, and `roles` arrays are intentionally empty, so nothing is preselected on the agent's behalf. The legacy router and classifier remain available only through explicit diagnostic tools for compatibility.
+For controlled A/B diagnostics, set `OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT=1` on the OMP process to suppress only this compatibility message. The Core plugin and the rest of OMP stay loaded; the default remains enabled for the exact model and capability gates above.
 
-For non-trivial work, the injected protocol asks the main agent to:
+`omp-config` exposes the generated catalog through the optional `omp-enhancer-workflows` Skill. Load that Skill only when a domain checklist or composable workflow card would help. Its cards are reference information: the acting Agent may select, combine, simplify, or ignore them. They never grant permission or require a TODO, delegation, exact Agent, Skill load, or execution sequence.
 
-1. choose one or more workflows from the catalog;
-2. inspect the active inventory and load the smallest matching skills before their steps;
-3. initialize OMP's native `todo` before substantive work and map every workflow step and user requirement;
-4. fork multiple useful independent workstreams with native `task`, preferably in one batch;
-5. select each child by an exact `Agent roles` ID and give it the exact workflow, step, TODO item, selected skills, scope, and acceptance criteria;
-6. update TODO items as they finish, integrate child results, verify, and deliver one final response.
+The legacy router, classifier, status, and coverage views remain explicit compatibility diagnostics only. They do not control the normal runtime.
 
-This is prompt guidance rather than a gate. Missing skills, `todo`, or `task` are reported as limitations while the agent continues with the best available method. Core never returns `block: true`, never returns `continue: true`, and never preloads a route-selected skill bundle.
+### Extension tool activation
+
+All tools registered by this marketplace are `defaultInactive`. This keeps extension schemas out of the default prompt and preserves OMP's native active-tool set. When an extension tool is useful, activate only the relevant group explicitly:
+
+```text
+/enhancer-tools status
+/enhancer-tools enable core
+/enhancer-tools enable config
+/enhancer-tools enable writing
+/enhancer-tools enable fact
+/enhancer-tools enable test
+/enhancer-tools enable all
+/enhancer-tools disable <core|config|writing|fact|test|all>
+```
+
+The command changes the current session's active extension tools only after an explicit user invocation. Tool approval classes still apply; activation is not permission to perform a write, execute a command, access the network, or publish anything.
 
 `autoContinue: false` describes Core's own lifecycle behavior; it does not disable or rewrite the host's autolearn settings. When the host emits an `autolearn-nudge` capture turn, Core does not route it as a new user task, inject another workflow, or schedule a follow-up. Host-owned `autolearn.enabled` and `autolearn.autoContinue` therefore remain available while Core itself never returns `continue: true`.
 
-### How workflow selection is triggered
+### How the optional catalog is used
 
-There is no workflow slash command and no keyword-to-route switch. A normal natural-language request is enough. Workflow selection happens in three layers:
+There is no automatic keyword-to-route switch. OMP discovers `omp-enhancer-workflows` as a normal Skill and decides how Skills are presented and loaded. If the acting Agent chooses to consult it, the Skill provides a compact index and domain-specific reference files. Otherwise the task proceeds entirely through OMP's native behavior.
 
-1. At session startup, `omp-config` makes the same complete workflow catalog available to the main agent and Advisor through the managed `AGENTS.md` and `WATCHDOG.yml` imports.
-2. Before each normal main-agent turn, `omp-enhancer-core` adds the current model-visible skill inventory and task facts such as requested operation, target paths, target-text language, explicit constraints, and observed risk. It does not choose a workflow on the agent's behalf.
-3. The main agent uses those facts to select one workflow or compose several workflows, records their steps in native `todo`, loads the applicable installed skills, and delegates independent steps. A child receives only the workflow checkpoint chosen by the parent rather than rerunning selection for the whole task.
+The generated [`plugins/omp-config/assets/WORKFLOW_CATALOG.md`](plugins/omp-config/assets/WORKFLOW_CATALOG.md) remains available for explicit configuration synchronization and human inspection. Managed `AGENTS.md` and `WATCHDOG.yml` blocks do not import it automatically, so installing or syncing the plugin does not append the full catalog to Main or Advisor system context.
 
-Advisor turns, autolearn capture turns, slash commands, and child launches do not start a second main-agent selection cycle. Advisor uses the shared startup catalog, while a child receives its parent-selected workflow, step, TODO item, and skills.
+OMP's dynamic Available Agents list is the source of truth at assignment time. `designer`, `librarian`, and `reviewer` are OMP-native Agents; `omp-config` does not shadow them. The config plugin contributes only the uniquely named `omp-target-auditor` for a bounded read-only target audit. Other plugins retain their specialized, uniquely named Agents. Catalog role names are optional candidates and must be ignored when unavailable.
 
 Selection is semantic rather than lexical. A word such as `publish` inside a document does not activate a release workflow, and an English instruction does not select English-writing skills when the target text is Chinese. User constraints and host permissions remain in force regardless of the selected workflow.
 
-You can optionally name workflow IDs in the request when you want to constrain the plan, for example, `Use code.review + security.review and do not modify files`. Naming a workflow is guidance to the main agent; it is not permission for writes, network access, release, or another side effect.
+You can optionally name workflow IDs in the request when you want to constrain the plan, for example, `Use code.review + security.review and do not modify files`. Naming a workflow is reference guidance to the acting Agent; it is not permission for writes, network access, release, or another side effect.
+
+### OMP 17 Skill discovery and the ECC catalog
+
+OMP 17 directly discovers only immediate children shaped like `<plugin>/skills/<skill>/SKILL.md`. It does not register every deeper `SKILL.md` as a separate prompt-visible Skill. Therefore [`plugins/omp-config/skills/ecc/SKILL.md`](plugins/omp-config/skills/ecc/SKILL.md) appears as the single top-level `ecc-skill-catalog` Skill, while its 255 nested ECC guides remain on-demand resources instead of 255 permanent system-prompt entries.
+
+Use the adapter progressively: inspect OMP's directly visible Skills first; if none adequately matches a niche task, read `skill://ecc-skill-catalog/catalog.md`; then read only the exact guide URI listed there, for example `skill://ecc-skill-catalog/python-testing/SKILL.md`. Do not bulk-load the catalog or guess nested names.
+
+The marketplace `skills` array intentionally remains a recursive filesystem inventory, including nested ECC paths. Repository validation and the explicitly invoked `omp_core_install_skills` compatibility installer consume that inventory, but its presence does not mean OMP 17 directly registers every nested guide during normal plugin discovery.
 
 ### Available workflow catalog
 
-Catalog version: **11**. Candidate skills are recommendations from the catalog, not mandatory bundles. The main agent loads only candidates that are present in the active inventory and useful for a selected step. Every card exposes exact direct agent IDs through `Agent roles`; roles inherited from composed workflows remain explicit in the workflow and delegation guidance. The structured definitions under [`plugins/omp-enhancer-core/src/workflows/definitions`](plugins/omp-enhancer-core/src/workflows/definitions) are the single semantic source. `npm run generate:workflows` renders the packaged [`plugins/omp-config/assets/WORKFLOW_CATALOG.md`](plugins/omp-config/assets/WORKFLOW_CATALOG.md), while `npm run check:workflows` rejects drift. Both Main and Advisor receive selection, composition, ordered steps, delegation, roles, skills, quality checks, scope notes, and risk notes from that generated source. Version 11 deliberately has no healthcare workflow; healthcare-related skills remain optional knowledge overlays for an ordinary research, security, fact-checking, or review workflow.
+Catalog version: **12**. Candidate Skills, Agents, steps, quality checks, scope notes, risks, and delegation ideas are optional recommendations, not runtime requirements. The acting Agent should use only candidates currently available through OMP and useful for the task. The structured definitions under [`plugins/omp-enhancer-core/src/workflows/definitions`](plugins/omp-enhancer-core/src/workflows/definitions) are the single semantic source. `npm run generate:workflows` renders both the packaged catalog asset and the `omp-enhancer-workflows` Skill with domain references; `npm run check:workflows` rejects drift. Version 12 deliberately has no healthcare workflow; healthcare-related Skills remain optional knowledge overlays for an ordinary research, security, fact-checking, or review workflow.
 
 See [`docs/WORKFLOW_DEVELOPMENT.md`](docs/WORKFLOW_DEVELOPMENT.md) for the definition schema, Agent/Skill ownership rules, generation commands, validation matrix, and release impact of adding or changing a workflow.
 
-Resolved Chinese writing delegates prose edits to `zh-writer` and independent review to `zh-checker`. Resolved English writing uses `writer` and `checker`. `writing.pending` and format-only companions do not guess a language role. The `code.test` workflow uses `test-planner`, `test-executor`, and `test-reviewer` in plan, bounded execution, and independent-review order.
+For example, the catalog may suggest `zh-writer` and `zh-checker` for resolved Chinese writing, `writer` and `checker` for resolved English writing, or `test-planner`, `test-executor`, and `test-reviewer` for testing. These remain optional candidates; OMP's current Agent inventory and the acting Agent's judgment decide whether any delegation occurs.
 
 Document and general workflows:
 
-| Workflow | Main selection signal | Typical skill candidates |
+| Workflow | Optional reference signal | Typical Skill candidates |
 | --- | --- | --- |
 | `agentic.simple` | A bounded request needs no specialized process. | No default; use an exact active skill only when useful. |
 | `writing.pending` | Writing intent is clear, but the body of the target text has not been observed. | No language-specific skill until the target body is read. |
@@ -109,7 +123,7 @@ Document and general workflows:
 
 Engineering and delivery workflows:
 
-| Workflow | Main selection signal | Typical skill candidates |
+| Workflow | Optional reference signal | Typical Skill candidates |
 | --- | --- | --- |
 | `code.plan` | The requested deliverable is an implementation, repair, migration, or test plan, not the change itself. | `brainstorming`, `writing-plans` |
 | `code.dev` | The user asks for code or configuration changes. | `brainstorming`, `test-driven-development`, `subagent-driven-development`, `verification-before-completion` |
@@ -154,11 +168,11 @@ The workflows are designed to compose; selecting one does not exclude another:
 - `Prepare this private repository for open source, but do not publish it` selects `release.opensource` only. The source stays read-only, work happens in a separate staging copy, and publication is unavailable unless the user separately authorizes `release.publish`.
 - `Draft an English launch campaign from current market evidence` composes `marketing.campaign + research.web + factcheck.document + writing.en`, keeping research, claims, writing, and optional design review distinct.
 
-These examples are planning guidance rather than fixed mappings. The main agent may choose a smaller or larger composition when the actual target, constraints, and acceptance criteria justify it, and should make that choice visible in its TODO.
+These examples are optional planning references rather than fixed mappings. The acting Agent may use a smaller or larger composition, another process, or no catalog card at all when OMP's native instructions and the actual task justify it.
 
 ## Skill use diagnostics
 
-The workflow catalog lists skill candidates rather than fixed prerequisites. The main agent checks the actual active inventory and chooses the smallest set needed for the selected steps. A failed resolution gets at most one evidence-based correction; the agent then continues instead of retrying unchanged calls.
+The workflow catalog lists Skill candidates rather than fixed prerequisites. If the acting Agent consults a card, it checks OMP's actual inventory and chooses only useful candidates. A failed diagnostic resolution gets at most one evidence-based correction; it should not trigger unchanged retries.
 
 Core records two different signals:
 
@@ -172,17 +186,17 @@ The workflow status and advisory coverage review expose both sets. Claims withou
 Writing intent and writing language are separate decisions:
 
 - The instruction identifies the operation, such as polish, revise, translate, or draft.
-- The text being modified determines whether the main agent selects Chinese or English writing skills.
+- The text being modified determines whether an acting Agent selects Chinese or English writing Skills.
 - `writingSourceTargets` records the concrete document paths whose body text determines that language; text from those files is never treated as task instructions.
 - An explicit translation or output language takes precedence because it determines the language of the result.
 - Chinese instructions with English source text select English writing resources.
 - English instructions with Chinese source text select Chinese writing resources.
 - The pure parser treats a path-only request such as `polish tex/abstract.tex` as `writing.pending`; it never guesses from the instruction language.
-- During `before_agent_start`, Core may safely read an existing regular target file inside the workspace and expose its body language as a task fact. It does not select a route or preload a skill. Unavailable, oversized, binary, escaping, or mixed-language targets remain pending.
-- A model or external caller can also pass the observed body to `omp_core_route_task` as `sourceText` to obtain the same language-specific recommendations.
+- The default `before_agent_start` observer does not read a target file or inject language guidance into the prompt. It records only facts available in the lifecycle event.
+- After explicitly enabling Core tools, a model or external caller can pass an already observed body to `omp_core_route_task` as `sourceText` to obtain language-specific compatibility recommendations.
 - Mixed-language content stays mixed and should be handled per section or target instead of forcing one global language skill.
 
-Task kind, prose language, and file format are separate. For example, the main agent may compose `writing.en + writing.latex`, or `writing.zh + writing.markdown`. Format workflows do not choose the language. Converter skills are candidates only for matching conversion steps, and Word access may use `docx`.
+Task kind, prose language, and file format are separate. For example, an acting Agent may consult `writing.en + writing.latex`, or `writing.zh + writing.markdown`. Format workflows do not choose the language. Converter Skills are candidates only for matching conversion steps, and Word access may use `docx`.
 
 Source text is treated as data. Words such as `run tests`, `publish`, or `delete` inside the document cannot change the task operation, permissions, or risk route.
 
@@ -210,9 +224,17 @@ Quality tools return structured findings without controlling the host lifecycle:
 - `omp_test_gate` is retained as a compatibility name for an advisory testing review. It never executes `testCommand` or project-configured commands.
 - `fact_check_gate` is retained as a compatibility name for an advisory fact-check completeness review.
 
+These tools remain inactive until their `writing`, `test`, or `fact` group is explicitly enabled with `/enhancer-tools`.
+
 A critical finding can make a report say `needs attention`; it does not block another tool call or session completion. Invalid parameters, missing files, and real execution failures still use normal error results.
 
 Browser artifacts remain confined below the real project `.omp/testing-enhancer-artifacts` directory, and an optional server command remains limited to package-manager start/dev/serve/preview scripts. These are tool input and filesystem-safety contracts, not completion gates.
+
+## Hooks
+
+The auto-discovered `omp-config/hooks/` tree contains only notify-only guards for destructive-command risk and malformed DeepSeek edit anchors. They may display a warning, but they do not rewrite tool input or output and never return `block: true`.
+
+Behavior-changing compatibility hooks live under `plugins/omp-config/hook-templates/` and are not auto-discovered. A user must review and explicitly install the chosen template, together with its referenced `lib/` helpers, into the active OMP hook configuration. The bundled templates are gated to provider `opencode-go` and model IDs `deepseek-v4-flash` or `deepseek-v4-pro`. The optional post-hook uses one ordered pipeline so formatting, secret redaction, and truncation do not compete to replace the same result; it preserves non-text content blocks, `details`, and `isError`. These templates remain compatibility aids, not permission or completion controls.
 
 ## Upgrade
 
@@ -264,9 +286,13 @@ Run from the repository root unless noted:
 
 ```bash
 npm test
+npm run generate:ecc-skills
+npm run check:ecc-skills
 npm run check:marketplace
 npm run pack:all
 ```
+
+`generate:ecc-skills` rebuilds `plugins/omp-config/skills/ecc/SKILL.md` and `plugins/omp-config/skills/ecc/catalog.md` from the nested guides; `check:ecc-skills` fails when either generated adapter artifact has drifted.
 
 Targeted checks:
 
@@ -283,12 +309,38 @@ The key runtime regressions are:
 - no registered plugin hook returns `block: true`;
 - no registered plugin hook returns `continue: true`;
 - old persisted gate/terminal state cannot revive a block;
-- the main runtime exposes the full catalog and inventory while leaving skills, tools, roles, and workflow composition agent-selected;
+- default lifecycle hooks never return `systemPrompt`; only an exact `opencode-go/deepseek-v4-flash` top-level Main task can receive the single hidden capability-gated message described above, with Skill discovery only when Skills are visible and the native-policy delegation hint only when `task` is active and subagents are allowed;
+- extension tools remain inactive until `/enhancer-tools enable <group|all>` is explicitly invoked;
+- the optional workflow Skill is discoverable without importing the full catalog into `AGENTS.md` or `WATCHDOG.yml`;
+- OMP 17 sees `ecc-skill-catalog` as one top-level Skill and resolves its nested guides only through exact on-demand URIs;
+- OMP's native `designer`, `librarian`, and `reviewer` Agents are not shadowed by `omp-config`;
 - writing language follows source text, not instruction language.
+
+Run the isolated OMP 17 RPC contract probe against the host alone or the current worktree:
+
+```bash
+node scripts/e2e/omp17-rpc-probe.mjs --
+node scripts/e2e/omp17-rpc-probe.mjs -- \
+  -e plugins/omp-enhancer-core/index.js --plugin-dir plugins/omp-enhancer-core \
+  -e plugins/omp-config/index.js --plugin-dir plugins/omp-config \
+  -e plugins/writing-helper/index.js --plugin-dir plugins/writing-helper \
+  -e plugins/omp-test-enhancer/src/extension.ts --plugin-dir plugins/omp-test-enhancer \
+  -e plugins/omp-fact-checker/index.js --plugin-dir plugins/omp-fact-checker
+```
+
+The probe reports hashes and structural booleans instead of dumping prompts or secrets. It isolates OMP's home and agent directories, so the first command is a clean native baseline. Do not combine `--no-extensions` with `-e` or `--plugin-dir`: OMP disables the explicit worktree extensions too. Use the two outputs to compare the static startup prompt, active built-in tools, dynamic native Agents, optional Skill visibility, catalog-import count, and enhancer commands. The default probe does not submit a prompt, so it proves that the compatibility message is absent from startup `systemPrompt` and the native `task` schema; hook unit tests and the live DeepSeek matrices verify the capability-gated runtime message separately.
+
+After linking or upgrading the plugins, inspect the actual local OMP installation without invoking a model:
+
+```bash
+OMP_RPC_USE_HOST_INSTALLATION=1 node scripts/e2e/omp17-rpc-probe.mjs --
+```
+
+Host-installation mode loads the current OMP home and managed context, but still uses `--no-session` and emits only the same hashes and structural booleans.
 
 ### Installed DeepSeek workflow E2E
 
-The installed-runtime harness invokes the real `omp` executable with `opencode-go/deepseek-v4-flash` and advisor mode. Upgrade the marketplace plugins first; this harness tests the installed copies, not merely the current worktree.
+The installed-runtime harness invokes the real `omp` executable with `opencode-go/deepseek-v4-flash` and isolated per-scenario configuration; Advisor is off unless a scenario explicitly enables it. Upgrade the marketplace plugins first; this harness tests the installed copies, not merely the current worktree.
 
 Preview the complete scenario matrix without invoking the model:
 
@@ -308,7 +360,23 @@ Run the full installed-runtime matrix with its configured repetitions:
 npm run e2e:deepseek
 ```
 
-The matrix covers English and Chinese review/polish with cross-language instructions, local fact checking, code planning/diagnosis/audit behavior, host autolearn capture, and semantic-preservation edits. Its event summarizer can verify native TODO initialization and completion, TODO-before-work ordering, task batch size, and workflow/step/TODO/skill metadata within the first 120 characters of each child assignment. It also distinguishes successful skill reads from claims, checks for duplicate failed calls and plugin-triggered continuation, snapshots editable fixtures, and verifies that autolearn settings remain stable. Raw events and the aggregate `report.json` are written below `.omp/e2e-results/<run-id>/` and are gitignored.
+Run the focused natural-language Skill-discovery matrix:
+
+```bash
+npm run e2e:deepseek:skills
+```
+
+This matrix never names a Skill or `skill://` URI in its user prompts. It requires successful observed reads separately from provided/autoload evidence, covers plugin Skills, OMP/user Skills, the on-demand ECC nested catalog, a native subagent control, and a zero-Skill negative control.
+
+Run the natural-language subagent-willingness matrix:
+
+```bash
+npm run e2e:deepseek:subagents
+```
+
+Its positive prompts do not mention `task`, subagents, forks, or delegation. The matrix keeps `task.eager: preferred`, exposes OMP's native `task` and `hub` together, separates assignment attempts from accepted and completed jobs, and records parent inspections before the first task call and after child results arrive. The two-file case gives each file a substantive independent boundary audit and allows at most two assignments; the explicitly named five-plugin case allows OMP to choose up to five rather than encoding a two-way fan-out in the hint. These are scenario-local evaluator bounds, not runtime policy. Negative controls cover one target, two trivial lookups, and an explicit main-only user constraint that does not use the word `subagent`. Task calls remain observed model choices rather than plugin completion permissions.
+
+The matrix covers English and Chinese review/polish with cross-language instructions, local fact checking, code planning/diagnosis/audit behavior, host autolearn capture, and semantic-preservation edits. Interpret TODO, task, Skill, and Agent events as observations of OMP's own choices, not requirements imposed by this plugin. It also distinguishes successful Skill reads from claims, checks for duplicate failed calls and plugin-triggered continuation, snapshots editable fixtures, and verifies that autolearn settings remain stable. Raw events and the aggregate `report.json` are written below `.omp/e2e-results/<run-id>/` and are gitignored.
 
 The autolearn scenario uses OMP RPC mode so the runner can keep the host process alive until the hidden capture turn actually finishes. Ordinary print mode may dispose the process after the primary result and abort the asynchronously scheduled capture. The evaluator rejects aborted assistant messages, process signals, and hard timeouts instead of counting those runs as successful.
 
@@ -325,6 +393,7 @@ Apply a release and validate it:
 ```bash
 npm run release -- --plugin all --bump patch --apply
 npm test
+npm run check:ecc-skills
 npm run check:marketplace
 npm run pack:all
 ```

@@ -179,12 +179,12 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
     .filter(Boolean);
   const duplicateSkillReadAttempts = skillReadAttempts
     .filter(({ name }) => hasEquivalentSkill(providedSkills, name));
-  const projectToolCalls = calls.filter((call) => !skillReadAttemptFromCall(call));
+  const projectToolCalls = calls.filter((call) => !nonProjectResourceReadFromCall(call));
   const firstProjectToolCallEventIndex = projectToolCalls.length
     ? Math.min(...projectToolCalls.map(({ eventIndex }) => eventIndex))
     : null;
   const substantiveToolCalls = calls.filter((call) => (
-    !skillReadAttemptFromCall(call) && !ORCHESTRATION_TOOLS.has(call.name)
+    !nonProjectResourceReadFromCall(call) && !ORCHESTRATION_TOOLS.has(call.name)
   ));
   const firstSubstantiveToolCallEventIndex = substantiveToolCalls.length
     ? Math.min(...substantiveToolCalls.map(({ eventIndex }) => eventIndex))
@@ -251,9 +251,13 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     ...(summary.observedSkills ?? []),
     ...(summary.providedSkills ?? []),
   ]);
+  const observedOnly = new Set(summary.observedSkills ?? []);
 
   for (const skill of expectations.requiredSkills ?? []) {
     if (!hasEquivalentSkill(observed, skill)) failures.push(`required skill was not observed or provided: ${skill}`);
+  }
+  for (const skill of expectations.requiredObservedSkills ?? []) {
+    if (!hasEquivalentSkill(observedOnly, skill)) failures.push(`required observed skill was not read successfully: ${skill}`);
   }
   if (Array.isArray(expectations.requiredAnySkills)
     && expectations.requiredAnySkills.length > 0
@@ -262,6 +266,14 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   }
   for (const skill of expectations.forbiddenSkills ?? []) {
     if (hasEquivalentSkill(observed, skill)) failures.push(`forbidden skill was observed or provided: ${skill}`);
+  }
+  if (Number.isFinite(expectations.maxProvidedSkills)
+    && (summary.providedSkills?.length ?? 0) > expectations.maxProvidedSkills) {
+    failures.push(`provided skills ${summary.providedSkills.length} exceeded ${expectations.maxProvidedSkills}`);
+  }
+  if (Number.isFinite(expectations.maxObservedSkills)
+    && (summary.observedSkills?.length ?? 0) > expectations.maxObservedSkills) {
+    failures.push(`observed skills ${summary.observedSkills.length} exceeded ${expectations.maxObservedSkills}`);
   }
   for (const expected of expectations.requiredProvidedSkills ?? []) {
     const requirement = typeof expected === 'string' ? { name: expected } : expected;
@@ -393,6 +405,20 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   if (Number.isFinite(expectations.minNativeTaskCalls)
     && (nativeTask.callCount ?? 0) < expectations.minNativeTaskCalls) {
     failures.push(`native task calls ${(nativeTask.callCount ?? 0)} was below ${expectations.minNativeTaskCalls}`);
+  }
+  if (Number.isFinite(expectations.maxNativeTaskCalls)
+    && (nativeTask.callCount ?? 0) > expectations.maxNativeTaskCalls) {
+    failures.push(`native task calls ${(nativeTask.callCount ?? 0)} exceeded ${expectations.maxNativeTaskCalls}`);
+  }
+  if (Number.isFinite(expectations.maxProjectInspectionCallsBeforeNativeTask)
+    && (nativeTask.projectInspectionCallCountBeforeFirstTask ?? 0)
+      > expectations.maxProjectInspectionCallsBeforeNativeTask) {
+    failures.push(`project inspection calls before first native task ${(nativeTask.projectInspectionCallCountBeforeFirstTask ?? 0)} exceeded ${expectations.maxProjectInspectionCallsBeforeNativeTask}`);
+  }
+  if (Number.isFinite(expectations.maxProjectInspectionCallsAfterNativeTask)
+    && (nativeTask.projectInspectionCallCountAfterFirstTask ?? 0)
+      > expectations.maxProjectInspectionCallsAfterNativeTask) {
+    failures.push(`project inspection calls after first native task ${(nativeTask.projectInspectionCallCountAfterFirstTask ?? 0)} exceeded ${expectations.maxProjectInspectionCallsAfterNativeTask}`);
   }
   if (Number.isFinite(minAssignmentAttempts)
     && assignmentAttemptCount < minAssignmentAttempts) {
@@ -531,7 +557,17 @@ function customMessageFromEvent(event) {
 
 function asyncJobResultsFromEvent(event) {
   const message = event?.type === 'message_end' ? event.message : event;
-  if (message?.role !== 'custom' || message?.customType !== 'async-result') return [];
+  const customAsyncResult = message?.role === 'custom' && message?.customType === 'async-result';
+  const hubToolResult = event?.type === 'tool_execution_end'
+    && String(event.toolName ?? event.name ?? '').trim() === 'hub'
+    && event?.isError !== true
+    && event?.result?.isError !== true;
+  if (!customAsyncResult && !hubToolResult) return [];
+  if (hubToolResult) {
+    const structuredJobs = structuredHubJobs(event.result?.details);
+    if (structuredJobs !== null) return structuredJobs;
+    return legacyHubJobsFromText(resultText(event.result));
+  }
   const content = typeof message.content === 'string'
     ? message.content
     : Array.isArray(message.content)
@@ -545,6 +581,57 @@ function asyncJobResultsFromEvent(event) {
     if (id) jobs.push({ id, status });
   }
   return jobs;
+}
+
+function structuredHubJobs(details) {
+  const records = nestedJobsArray(details);
+  return records === null ? null : normalizeJobRecords(records);
+}
+
+function nestedJobsArray(value, depth = 0) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (Array.isArray(value.jobs)) return value.jobs;
+  if (depth >= 2) return null;
+  for (const key of ['result', 'data', 'snapshot', 'details']) {
+    const records = nestedJobsArray(value[key], depth + 1);
+    if (records !== null) return records;
+  }
+  return null;
+}
+
+function legacyHubJobsFromText(content) {
+  const jobs = [];
+  let section = null;
+  let fence = null;
+  for (const line of String(content ?? '').split(/\r?\n/u)) {
+    const fenceMatch = /^(`{3,}|~{3,})[^\r\n]*$/u.exec(line);
+    if (fenceMatch) {
+      const marker = fenceMatch[1][0];
+      if (fence === marker) fence = null;
+      else if (fence === null) fence = marker;
+      continue;
+    }
+    if (fence !== null) continue;
+    const sectionMatch = /^## (Completed|Still Running) \(\d+\)$/u.exec(line);
+    if (sectionMatch) {
+      section = sectionMatch[1];
+      continue;
+    }
+    if (/^## /u.test(line)) {
+      section = null;
+      continue;
+    }
+    if (section === 'Completed') {
+      const jobMatch = /^### (\S(?:.*\S)?) \[(?:task|bash)\] — (completed|failed|cancelled)$/u.exec(line);
+      if (jobMatch) jobs.push({ id: jobMatch[1], status: jobMatch[2] });
+      continue;
+    }
+    if (section === 'Still Running') {
+      const runningMatch = /^- `([^`]+)` \[(?:task|bash)\] — .+$/u.exec(line);
+      if (runningMatch) jobs.push({ id: runningMatch[1], status: 'running' });
+    }
+  }
+  return normalizeJobRecords(jobs);
 }
 
 function attributeValue(value, name) {
@@ -632,6 +719,11 @@ function normalizeArguments(value) {
 
 function skillNameFromRead(args, result) {
   const target = String(args?.path ?? args?.file_path ?? args?.uri ?? args?.value ?? '');
+  const nestedUriMatch = target.match(/^skill:\/\/([^/\s]+)\/(.+\/SKILL\.md)(?:[?#].*)?$/i);
+  if (nestedUriMatch) {
+    const contentName = resultText(result).match(/^name:\s*['"]?([^'"\r\n]+)['"]?\s*$/m)?.[1];
+    if (contentName) return normalizeSkillName(contentName);
+  }
   const uriMatch = target.match(/^skill:\/\/([^/\s]+)(?:\/SKILL\.md)?/i);
   if (uriMatch) return normalizeSkillName(uriMatch[1]);
   if (!/(?:^|\/)SKILL\.md$/i.test(target)) return '';
@@ -667,6 +759,18 @@ function skillReadAttemptFromCall(call) {
     turnKind: call.turnKind,
     eventIndex: call.eventIndex,
   };
+}
+
+function nonProjectResourceReadFromCall(call) {
+  if (call?.name !== 'read') return false;
+  const target = String(
+    call.arguments?.path
+    ?? call.arguments?.file_path
+    ?? call.arguments?.uri
+    ?? call.arguments?.value
+    ?? '',
+  ).trim();
+  return /^(?:agent|artifact|history|issue|local|mcp|omp|pr|skill):\/\//iu.test(target);
 }
 
 function claimedSkillNames(text) {
@@ -761,11 +865,13 @@ function summarizeJobResults(details) {
 function normalizeJobRecords(records) {
   const jobs = new Map();
   for (const record of records) {
-    const id = typeof record?.id === 'string' ? record.id.trim() : '';
+    const nested = record?.job && typeof record.job === 'object' ? record.job : {};
+    const rawId = record?.id ?? record?.jobId ?? nested.id ?? nested.jobId;
+    const id = typeof rawId === 'string' ? rawId.trim() : '';
     if (!id) continue;
     jobs.set(id, {
       id,
-      status: normalizeJobStatus(record.status ?? record.state),
+      status: normalizeJobStatus(record.status ?? record.state ?? nested.status ?? nested.state),
     });
   }
   return [...jobs.values()];
@@ -829,6 +935,23 @@ function todoInitTaskCount(args) {
 
 function summarizeNativeTask(calls, asyncJobResults = []) {
   const taskCalls = calls.filter(({ name }) => name === 'task');
+  const firstTaskCallIndex = calls.findIndex(({ name }) => name === 'task');
+  const callsBeforeFirstTask = firstTaskCallIndex === -1
+    ? calls
+    : calls.slice(0, firstTaskCallIndex);
+  const callsAfterFirstTask = firstTaskCallIndex === -1
+    ? []
+    : calls.slice(firstTaskCallIndex + 1);
+  const projectInspectionCallCountBeforeFirstTask = callsBeforeFirstTask.filter((call) => (
+    call.turnKind === 'user'
+      && SOURCE_SEARCH_TOOLS.has(call.name)
+      && !nonProjectResourceReadFromCall(call)
+  )).length;
+  const projectInspectionCallCountAfterFirstTask = callsAfterFirstTask.filter((call) => (
+    call.turnKind === 'user'
+      && SOURCE_SEARCH_TOOLS.has(call.name)
+      && !nonProjectResourceReadFromCall(call)
+  )).length;
   const assignments = taskCalls.flatMap((call) => taskAssignmentsFromCall(call));
   const batchCalls = taskCalls.filter(({ arguments: args }) => Array.isArray(args?.tasks));
   const multiForkBatchCalls = batchCalls.filter(({ arguments: args }) => args.tasks.length > 1);
@@ -853,6 +976,8 @@ function summarizeNativeTask(calls, asyncJobResults = []) {
   const completedForkCount = jobStatuses.filter(({ status }) => status === 'completed').length;
   return {
     callCount: taskCalls.length,
+    projectInspectionCallCountBeforeFirstTask,
+    projectInspectionCallCountAfterFirstTask,
     successfulCallCount: taskCalls.filter(({ completed, isError }) => completed === true && isError === false).length,
     batchCallCount: batchCalls.length,
     multiForkBatchCallCount: multiForkBatchCalls.length,

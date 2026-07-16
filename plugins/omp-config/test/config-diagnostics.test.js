@@ -72,6 +72,7 @@ const expectedBundledSkills = [
   'dispatching-parallel-agents',
   'docx',
   'docker-compose',
+  'ecc',
   'executing-plans',
   'finishing-a-development-branch',
   'frontend-design',
@@ -143,6 +144,16 @@ async function findSkillDirs(rootDir) {
   }
 }
 
+async function findOmpDiscoverableSkillDirs(rootDir) {
+  const result = [];
+  for (const entry of await readdir(rootDir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    const skillDir = path.join(rootDir, entry.name);
+    if (await hasSkillDoc(skillDir)) result.push(skillDir);
+  }
+  return result;
+}
+
 async function hasSkillDoc(dir) {
   try {
     await access(path.join(dir, 'SKILL.md'));
@@ -159,6 +170,8 @@ test('listAssets lists packaged agents, skills, hooks, and templates from plugin
   await mkdir(path.join(root, 'skills'));
   await mkdir(path.join(root, 'hooks', 'pre'), { recursive: true });
   await mkdir(path.join(root, 'hooks', 'post'), { recursive: true });
+  await mkdir(path.join(root, 'hook-templates', 'pre'), { recursive: true });
+  await mkdir(path.join(root, 'hook-templates', 'post'), { recursive: true });
   await mkdir(path.join(root, 'assets'));
   await writeFile(path.join(root, 'assets', 'config.yml'), 'packaged template\n');
   await writeFile(path.join(root, 'assets', '.secret'), 'hidden template\n');
@@ -168,7 +181,8 @@ test('listAssets lists packaged agents, skills, hooks, and templates from plugin
   await writeFile(path.join(root, 'skills', 'tdd', 'SKILL.md'), '# TDD');
   await writeFile(path.join(root, 'hooks', 'pre', 'guard-destructive.ts'), 'export default {};\n');
   await writeFile(path.join(root, 'hooks', 'pre', '.hidden.ts'), 'export default {};\n');
-  await writeFile(path.join(root, 'hooks', 'post', 'truncate-output.ts'), 'export default {};\n');
+  await writeFile(path.join(root, 'hook-templates', 'pre', 'opencode-deepseek-cot.ts'), 'export default {};\n');
+  await writeFile(path.join(root, 'hook-templates', 'post', 'opencode-deepseek-tool-result-pipeline.ts'), 'export default {};\n');
 
   const assets = await listAssets(root);
 
@@ -177,7 +191,11 @@ test('listAssets lists packaged agents, skills, hooks, and templates from plugin
     skills: ['tdd'],
     hooks: {
       pre: ['guard-destructive.ts'],
-      post: ['truncate-output.ts'],
+      post: [],
+    },
+    hookTemplates: {
+      pre: ['opencode-deepseek-cot.ts'],
+      post: ['opencode-deepseek-tool-result-pipeline.ts'],
     },
     templates: ['config.yml'],
   });
@@ -187,6 +205,7 @@ test('package manifest declares bundled skills as plugin content', async () => {
   const packageJson = JSON.parse(await readFile(path.join(packageRoot(), 'package.json'), 'utf8'));
 
   assert.ok(packageJson.files.includes('skills'));
+  assert.ok(packageJson.files.includes('hook-templates'));
   assert.deepEqual(packageJson.pi?.skills, ['./skills']);
   assert.ok(packageJson.keywords.includes('skills'));
   assert.ok(packageJson.keywords.includes('omp-plugin'));
@@ -208,24 +227,23 @@ test('packaged config template keeps DeepSeek Flash as default and GLM as adviso
   assert.doesNotMatch(template, /task:\s*opencode-go\/deepseek/);
 });
 
-test('packaged advisor guidance audits autonomous workflow selection and converges before one final', async () => {
+test('packaged advisor context is a minimal reference notice and does not redefine Advisor behavior', async () => {
   const watchdog = await readFile(path.join(packageRoot(), 'assets', 'WATCHDOG.yml'), 'utf8');
 
-  assert.match(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
-  assert.match(watchdog, /selected workflow, TODO coverage, skill use, and delegation/);
-  assert.match(watchdog, /multiple subagents/);
-  assert.match(watchdog, /Do not ask for `omp_core_route_task`/);
-  assert.match(watchdog, /Once the main agent has emitted a complete final response, do not call `advise`/);
-  assert.match(watchdog, /at most one `advise` call for a primary task/);
-  assert.match(watchdog, /judge the concrete candidate rather than freezing the whole task/);
-  assert.match(watchdog, /Reserve `blocker` for an imminent authorization violation/);
-  assert.match(watchdog, /suggestions, not execution or completion gates/);
+  assert.doesNotMatch(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
+  assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
+  assert.match(watchdog, /optional `omp-enhancer-workflows` skill is reference material only/);
+  assert.match(watchdog, /Do not require a workflow, TODO, skill load, delegation, exact Agent ID, or execution sequence/);
+  assert.doesNotMatch(watchdog, /ADVICE BUDGET|call `advise`|Reserve `blocker`|omp_core_route_task/);
   assert.doesNotMatch(watchdog, /block:\s*true|continue:\s*true|triggerTurn/);
 });
 
-test('ships every omp-config skill from the plugin skills directory', async () => {
+test('ships every omp-config Skill while exposing nested ECC guides through one OMP-discoverable catalog', async () => {
   const skillsRoot = path.join(packageRoot(), 'skills');
-  const actualSkills = (await findSkillDirs(skillsRoot))
+  const inventorySkills = (await findSkillDirs(skillsRoot))
+    .map((skillPath) => path.relative(skillsRoot, skillPath).split(path.sep).join('/'))
+    .sort();
+  const discoverableSkills = (await findOmpDiscoverableSkillDirs(skillsRoot))
     .map((skillPath) => path.relative(skillsRoot, skillPath).split(path.sep).join('/'))
     .sort();
   const marketplace = JSON.parse(await readFile(
@@ -239,16 +257,25 @@ test('ships every omp-config skill from the plugin skills directory', async () =
     .sort();
 
   for (const skill of expectedBundledSkills) {
-    assert.ok(actualSkills.includes(skill), `${skill} should be bundled`);
+    assert.ok(discoverableSkills.includes(skill), `${skill} should be directly discoverable`);
     const skillPath = path.join(skillsRoot, skill, 'SKILL.md');
     const skillDoc = await readFile(skillPath, 'utf8');
     assert.match(skillDoc, /\S/, `${skill} should ship a non-empty SKILL.md`);
   }
 
-  assert.deepEqual(actualSkills, marketplaceSkills);
-  assert.ok(actualSkills.includes('ecc/accessibility'));
-  assert.ok(actualSkills.includes('ecc/tdd-workflow'));
-  assert.ok(actualSkills.includes('ecc/workspace-surface-audit'));
+  assert.deepEqual(inventorySkills, marketplaceSkills);
+  assert.ok(discoverableSkills.includes('ecc'));
+  assert.ok(!discoverableSkills.some((skill) => skill.includes('/')));
+  assert.ok(inventorySkills.includes('ecc/accessibility'));
+  assert.ok(inventorySkills.includes('ecc/tdd-workflow'));
+  assert.ok(inventorySkills.includes('ecc/workspace-surface-audit'));
+
+  const eccIndex = await readFile(path.join(skillsRoot, 'ecc', 'SKILL.md'), 'utf8');
+  const eccCatalog = await readFile(path.join(skillsRoot, 'ecc', 'catalog.md'), 'utf8');
+  assert.match(eccIndex, /^name: ecc-skill-catalog$/mu);
+  for (const nestedSkill of ['accessibility', 'tdd-workflow', 'workspace-surface-audit']) {
+    assert.match(eccCatalog, new RegExp(`skill://ecc-skill-catalog/${nestedSkill}/SKILL\\.md`));
+  }
 });
 
 test('runConfigDoctor reads packaged config assets and reports path risks', async () => {
@@ -337,7 +364,10 @@ test('registered defaults resolve bundled package assets from a normal project c
   assert.ok(assetsResult.details.agents.includes('implementation-task.md'));
   assert.ok(assetsResult.details.skills.includes('tdd'));
   assert.ok(assetsResult.details.hooks.pre.includes('guard-destructive.ts'));
-  assert.ok(assetsResult.details.hooks.post.includes('truncate-output.ts'));
+  assert.deepEqual(assetsResult.details.hooks.post, []);
+  assert.ok(assetsResult.details.hookTemplates.pre.includes('opencode-deepseek-cot.ts'));
+  assert.ok(assetsResult.details.hookTemplates.pre.includes('opencode-deepseek-tool-repair.ts'));
+  assert.ok(assetsResult.details.hookTemplates.post.includes('opencode-deepseek-tool-result-pipeline.ts'));
   assert.ok(assetsResult.details.templates.includes('config.yml'));
   assert.ok(assetsResult.details.templates.includes('WATCHDOG.yml'));
 
@@ -356,7 +386,9 @@ test('registered defaults resolve bundled package assets from a normal project c
     assert.ok(commandAssets.agents.includes('implementation-task.md'));
     assert.ok(commandAssets.skills.includes('tdd'));
     assert.ok(commandAssets.hooks.pre.includes('guard-destructive.ts'));
-    assert.ok(commandAssets.hooks.post.includes('truncate-output.ts'));
+    assert.deepEqual(commandAssets.hooks.post, []);
+    assert.ok(commandAssets.hookTemplates.pre.includes('opencode-deepseek-cot.ts'));
+    assert.ok(commandAssets.hookTemplates.post.includes('opencode-deepseek-tool-result-pipeline.ts'));
     assert.ok(commandAssets.templates.includes('config.yml'));
     assert.ok(commandAssets.templates.includes('WATCHDOG.yml'));
 
@@ -418,6 +450,7 @@ test('index registers doctor assets and plan tools safely', async () => {
     agents: ['task.md'],
     skills: ['tdd'],
     hooks: { pre: [], post: [] },
+    hookTemplates: { pre: [], post: [] },
     templates: ['config.yml'],
   });
 

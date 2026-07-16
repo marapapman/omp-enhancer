@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for autonomous workflow orchestration, shared config context, writing support, test workflow support, and fact checking.",
-    "version": "1.0.21",
+    "version": "1.0.22",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "omp-config",
-      "description": "Pluginized shared main/Advisor workflow context, configuration assets, agents, skills, hooks, templates, and diagnostics.",
-      "version": "0.1.31",
+      "description": "Optional OMP workflow references, configuration assets, uniquely named agents, notify-only hooks, opt-in hook templates, and diagnostics.",
+      "version": "0.1.32",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -30,6 +30,7 @@
         "./skills/dispatching-parallel-agents",
         "./skills/docker-compose",
         "./skills/docx",
+        "./skills/ecc",
         "./skills/ecc/accessibility",
         "./skills/ecc/agent-architecture-audit",
         "./skills/ecc/agent-eval",
@@ -293,6 +294,7 @@
         "./skills/handoff",
         "./skills/improve-codebase-architecture",
         "./skills/latex-beamer-slides",
+        "./skills/omp-enhancer-workflows",
         "./skills/omp-marketplace-plugin-activation",
         "./skills/plan-execute-review-commit",
         "./skills/prototype",
@@ -316,7 +318,7 @@
     {
       "name": "writing-helper",
       "description": "Standalone OMP writing helper with logic checks, quality checks, citation verification, writer/checker agents, and writing skills.",
-      "version": "0.2.11",
+      "version": "0.2.12",
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -355,7 +357,7 @@
     {
       "name": "omp-testing-enhancer",
       "description": "Plan, execute, and independently review OMP testing work with packaged agents, target analysis, public API context, browser evidence, coverage and mutation analyzers, advisory review, and reports.",
-      "version": "0.1.15",
+      "version": "0.1.16",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -364,7 +366,7 @@
     {
       "name": "omp-fact-checker",
       "description": "Fact-checking workflow with claim planning, evidence collection, cross-agent validation, reports, and advisory completeness review.",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-fact-checker",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -378,8 +380,8 @@
     },
     {
       "name": "omp-enhancer-core",
-      "description": "Advisory main-agent workflow catalog, TODO orchestration, active skill discovery, and parent-selected subagent step context.",
-      "version": "0.1.124",
+      "description": "OMP-native-first task-fact observer with opt-in workflow diagnostics and explicit extension-tool activation.",
+      "version": "0.1.125",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",

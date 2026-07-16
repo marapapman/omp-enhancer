@@ -153,8 +153,19 @@ async function handleTestCommand(pi: ExtensionAPI, args: string, ctx: ExtensionC
     return
   }
 
+  await activateTestingEnhancerTools(pi)
   await ctx.waitForIdle()
   await pi.sendUserMessage(buildAgentInstruction(mode), { deliverAs: 'steer' })
+}
+
+async function activateTestingEnhancerTools(pi: ExtensionAPI): Promise<void> {
+  if (typeof pi.getAllTools !== 'function'
+    || typeof pi.getActiveTools !== 'function'
+    || typeof pi.setActiveTools !== 'function') return
+
+  const available = pi.getAllTools().filter(name => name.startsWith('omp_test_'))
+  const active = pi.getActiveTools()
+  await pi.setActiveTools([...new Set([...active, ...available])])
 }
 
 async function initializeConfig(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {

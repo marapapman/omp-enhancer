@@ -27,7 +27,7 @@ export const databaseWorkflows = [
       }
     ],
     "scopeNotes": [
-      "Use the canonical reviewer with database skills; database specialization does not create a second reviewer permission boundary.",
+      "Use omp-target-auditor with database skills for an existing bounded database target; the OMP native reviewer remains reserved for a supplied patch or diff.",
       "Do not run mutating SQL or production EXPLAIN ANALYZE as part of a read-only review."
     ],
     "skills": [
@@ -42,10 +42,10 @@ export const databaseWorkflows = [
       "Database diagnostics can expose sensitive data or acquire locks; prefer static plans and safe non-production evidence."
     ],
     "roles": [
-      "reviewer"
+      "omp-target-auditor"
     ],
     "delegation": [
-      "steps-2-4: reviewer independently audits the database artifacts with selected database skills and returns evidence-backed findings without editing or applying changes"
+      "steps-2-4: omp-target-auditor independently audits the bounded database artifacts with selected database skills and returns evidence-backed findings without editing or applying changes"
     ]
   },
   {

@@ -10,4 +10,6 @@ Use this when the user asks for a poster, static visual artifact, or exportable 
 1. Define the artifact size, audience, message, and visual hierarchy.
 2. Use original composition, color, typography, and spacing.
 3. Keep text short, legible, and correctly spelled.
-4. Validate the final exported artifact rather than only the source code.
+4. Commit to one deliberate aesthetic direction and establish a clear focal point, reading order, spacing rhythm, and contrast structure before adding decoration.
+5. Avoid generic AI composition such as interchangeable card grids, gratuitous glow or glass effects, gradient text, repetitive icon-and-heading blocks, or a uniformly centered layout unless the brief specifically calls for them.
+6. Validate the final exported artifact at its intended size rather than only the source code. Check clipping, text legibility, alignment, image treatment, color contrast, and whether the hierarchy survives export.

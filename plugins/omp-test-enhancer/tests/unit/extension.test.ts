@@ -16,10 +16,18 @@ class FakePi implements ExtensionAPI {
   readonly entries: Array<{ customType: string; data: unknown }> = []
   readonly notifications: Array<{ message: string; level?: 'info' | 'warn' | 'error' }> = []
   readonly zod = { z: fakeZod() }
+  activeTools = ['read']
+  readonly activeToolUpdates: string[][] = []
 
   setLabel(label: string): void { this.labels.push(label) }
   registerCommand(name: string, command: CommandDefinition): void { this.commands.set(name, command) }
   registerTool(tool: ToolDefinition): void { this.tools.set(tool.name, tool) }
+  getAllTools(): string[] { return [...this.activeTools, ...this.tools.keys()] }
+  getActiveTools(): string[] { return [...this.activeTools] }
+  setActiveTools(names: string[]): void {
+    this.activeTools = [...names]
+    this.activeToolUpdates.push([...names])
+  }
   on(event: string, handler: ExtensionEventHandler): void { this.eventHandlers.push({ event, handler }) }
   sendUserMessage(content: string, options?: { deliverAs?: 'steer' | 'followUp' | 'nextTurn' }): void {
     this.userMessages.push(content)
@@ -64,6 +72,13 @@ describe('registerTestingEnhancer', () => {
       'omp_test_report'
     ])
     expect([...pi.tools.values()].every(tool => typeof tool.execute === 'function')).toBe(true)
+    expect([...pi.tools.values()].every(tool => tool.defaultInactive === true)).toBe(true)
+    expect(pi.tools.get('omp_test_browser_check')?.approval).toBe('exec')
+    expect(
+      [...pi.tools.values()]
+        .filter(tool => tool.name !== 'omp_test_browser_check')
+        .every(tool => tool.approval === 'read')
+    ).toBe(true)
     expect(pi.eventHandlers.map(handler => handler.event)).toEqual([
       'session_start',
       'tool_result'
@@ -101,6 +116,8 @@ describe('registerTestingEnhancer', () => {
     expect(pi.userMessages[0]).toContain('omp_test_coverage_analyze')
     expect(pi.userMessages[0]).toContain('omp_test_mutation_context')
     expect(pi.notifications).toHaveLength(0)
+    expect(pi.activeTools).toEqual(['read', ...pi.tools.keys()])
+    expect(pi.activeToolUpdates).toHaveLength(1)
   })
 
   it('turns /test into an agent instruction with required and optional testing tools', async () => {
@@ -156,6 +173,7 @@ describe('registerTestingEnhancer', () => {
     expect(first).toContain('bunx vitest run')
     expect(await readFile(join(cwd, '.omp', 'testing-enhancer.yml'), 'utf8')).toContain('command: custom')
     expect(pi.userMessages).toHaveLength(0)
+    expect(pi.activeToolUpdates).toHaveLength(0)
     expect(pi.notifications.map(item => item.message)).toEqual([
       'Created .omp/testing-enhancer.yml',
       'OMP Testing Enhancer config already exists: .omp/testing-enhancer.yml'

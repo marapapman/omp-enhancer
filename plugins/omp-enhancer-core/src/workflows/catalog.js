@@ -9,7 +9,7 @@ import { researchWorkflows } from './definitions/research.js';
 import { writingWorkflows } from './definitions/writing.js';
 import { defineWorkflowCatalog } from './schema.js';
 
-export const WORKFLOW_CATALOG_VERSION = 11;
+export const WORKFLOW_CATALOG_VERSION = 12;
 
 export const workflowDefinitions = defineWorkflowCatalog([
   generalWorkflows,

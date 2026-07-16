@@ -15,7 +15,21 @@ test('broad code work recommends skill-bearing roles without making them complet
   assert.equal(route.routePlan.autoContinue, false);
 });
 
-test('security review recommends security skills and independent roles', () => {
+test('bounded target audits use namespaced auditors while supplied diffs retain OMP reviewer', () => {
+  const targetAudit = routeNaturalLanguageTask({
+    prompt: 'Audit this parser subsystem across callers, consumers, schemas, tests, and fallback paths for concrete bugs; report only and do not edit.',
+    routerMode: 'enforce',
+  });
+  assert.deepEqual(targetAudit.routePlan.roles.map(({ agent }) => agent), ['omp-target-auditor']);
+
+  const patchReview = routeNaturalLanguageTask({
+    prompt: 'Review the current PR diff across modified files, callers, consumers, tests, and fallback paths for concrete bugs; report only and do not edit.',
+    routerMode: 'enforce',
+  });
+  assert.deepEqual(patchReview.routePlan.roles.map(({ agent }) => agent), ['reviewer']);
+});
+
+test('security review recommends security skills and target-appropriate independent roles', () => {
   const route = routeNaturalLanguageTask({
     prompt: 'Audit this authentication module for concrete vulnerabilities.',
     routerMode: 'enforce',
@@ -24,7 +38,13 @@ test('security review recommends security skills and independent roles', () => {
   assert.ok(route.routePlan.skills.includes('security-review'));
   assert.ok(route.routePlan.skills.includes('security-scan'));
   assert.ok(route.routePlan.qualityChecks.includes('security-evidence'));
-  assert.deepEqual(route.routePlan.roles.map(({ agent }) => agent), ['ecc-security-reviewer', 'reviewer']);
+  assert.deepEqual(route.routePlan.roles.map(({ agent }) => agent), ['ecc-security-reviewer', 'omp-target-auditor']);
+
+  const diffRoute = routeNaturalLanguageTask({
+    prompt: 'Review the current diff for concrete authentication vulnerabilities.',
+    routerMode: 'enforce',
+  });
+  assert.deepEqual(diffRoute.routePlan.roles.map(({ agent }) => agent), ['ecc-security-reviewer', 'reviewer']);
 });
 
 test('user scope preferences shape suggestions without becoming runtime ceilings', () => {

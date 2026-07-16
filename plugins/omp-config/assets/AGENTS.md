@@ -1,7 +1,5 @@
 <!-- OMP-ENHANCER-WORKFLOW-CONTEXT:START -->
-# OMP Enhancer shared workflow context
+# OMP Enhancer optional workflow reference
 
-Load and follow the shared workflow catalog below before planning a non-trivial task. The main agent selects or composes the workflow, inspects and loads applicable skills, creates a TODO before substantive work, and delegates independent workstreams to multiple subagents when useful.
-
-@./OMP_ENHANCER_WORKFLOW_CATALOG.md
+OMP's native system prompt, settings, active tools, dynamic Available Agents list, approval flow, and completion behavior are authoritative. Optional workflow cards are available through the installed `omp-enhancer-workflows` skill. Load that skill only when its reference material is useful for the current task; it never requires TODOs, delegation, or a particular Agent.
 <!-- OMP-ENHANCER-WORKFLOW-CONTEXT:END -->

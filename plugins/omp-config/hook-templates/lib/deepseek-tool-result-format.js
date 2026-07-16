@@ -1,28 +1,5 @@
-function textContent(text) {
-  return { type: 'text', text };
-}
-
 function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function extractText(blocks) {
-  if (!blocks) return '';
-  if (typeof blocks === 'string') return blocks;
-  if (Array.isArray(blocks)) {
-    return blocks
-      .map((block) => {
-        if (typeof block === 'string') return block;
-        if (!isRecord(block)) return '';
-        if (typeof block.text === 'string') return block.text;
-        if (typeof block.content === 'string') return block.content;
-        return '';
-      })
-      .filter(Boolean)
-      .join('\n');
-  }
-  if (isRecord(blocks) && typeof blocks.text === 'string') return blocks.text;
-  return '';
 }
 
 function stripAnsi(text) {
@@ -131,44 +108,64 @@ function preserveOutcomeMetadata(event, result) {
 
 export function formatToolResultEvent(rawEvent = {}) {
   const event = isRecord(rawEvent) ? rawEvent : {};
+  if (!Array.isArray(event.content)) return undefined;
+
   const toolName = readToolName(event);
   const input = event.input;
-  let text = extractText(event.content);
+  let changed = false;
+  let foundText = false;
+  let formattedFirstText = false;
 
-  if (event.isError) {
-    const errorText = formatError(text, toolName);
-    return preserveOutcomeMetadata(event, {
-      content: [textContent(errorText)],
-      details: { ...(isRecord(event.details) ? event.details : {}), toolName, isError: true },
-      isError: true,
-    });
-  }
+  const content = event.content.map((block) => {
+    if (!isRecord(block) || block.type !== 'text' || typeof block.text !== 'string') {
+      return block;
+    }
 
-  switch (toolName) {
-    case 'read':
-      text = formatReadResult(text, input);
-      break;
-    case 'search':
-      text = formatSearchResult(text);
-      break;
-    case 'bash':
-      text = formatBashResult(text, false);
-      break;
-    case 'edit':
-    case 'ast_edit':
-      text = formatEditResult(text, false);
-      break;
-    case 'find':
-      text = formatFindResult(text);
-      break;
-    case 'write':
-      text = formatWriteResult(text, input);
-      break;
-    case 'browser':
-      text = formatBrowserResult(text);
-      break;
-  }
+    foundText = true;
+    let text = block.text;
 
-  text = ensureNonEmpty(text, toolName, false);
-  return preserveOutcomeMetadata(event, { content: [textContent(text)] });
+    if (!formattedFirstText) {
+      formattedFirstText = true;
+      if (event.isError) {
+        text = formatError(text, toolName);
+      } else {
+        switch (toolName) {
+          case 'read':
+            text = formatReadResult(text, input);
+            break;
+          case 'search':
+            text = formatSearchResult(text);
+            break;
+          case 'bash':
+            text = formatBashResult(text, false);
+            break;
+          case 'edit':
+          case 'ast_edit':
+            text = formatEditResult(text, false);
+            break;
+          case 'find':
+            text = formatFindResult(text);
+            break;
+          case 'write':
+            text = formatWriteResult(text, input);
+            break;
+          case 'browser':
+            text = formatBrowserResult(text);
+            break;
+        }
+        text = ensureNonEmpty(text, toolName, false);
+      }
+    } else if (toolName === 'bash') {
+      text = stripAnsi(text);
+    }
+
+    if (text === block.text) return block;
+    changed = true;
+    return { ...block, text };
+  });
+
+  // Do not synthesize text for image/resource/future block-only results.
+  // Returning undefined leaves the host-owned result object completely intact.
+  if (!foundText || !changed) return undefined;
+  return preserveOutcomeMetadata(event, { content });
 }

@@ -582,10 +582,9 @@ function normalizeSkillToken(value) {
 function canonicalizeSkillName(value, requiredSkills = []) {
   const normalized = normalizeSkillToken(value);
   if (!normalized) return '';
-  const aliased = lookupSkillAlias(normalized);
-  if (aliased) return aliased;
   const requiredMatch = requiredSkills.find((skill) => skillNamesEquivalent(skill, normalized));
-  return requiredMatch ? normalizeSkillName(requiredMatch) : normalized;
+  if (requiredMatch) return normalizeSkillName(requiredMatch);
+  return lookupSkillAlias(normalized) || normalized;
 }
 
 function normalizeLoadedSkills(skills, requiredSkills = []) {
@@ -689,7 +688,6 @@ function collectSkillAliasCandidateRecords(root, current, kind, candidates) {
   const skillFile = path.join(current, 'SKILL.md');
   if (existsSync(skillFile)) {
     addSkillFileAliasCandidates(root, current, skillFile, kind, candidates);
-    return;
   }
 
   for (const entry of entries) {
@@ -784,7 +782,6 @@ function collectSkillAliases(root, current, aliases) {
   const skillFile = path.join(current, 'SKILL.md');
   if (existsSync(skillFile)) {
     addSkillFileAliases(root, current, skillFile, aliases);
-    return;
   }
 
   for (const entry of entries) {

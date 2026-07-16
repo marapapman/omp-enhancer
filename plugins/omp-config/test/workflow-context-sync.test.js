@@ -26,6 +26,74 @@ function packageRoot() {
   return path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 }
 
+const LEGACY_ADVISOR_GUIDANCE_BLOCK = [
+  "  Review the main agent as an advisory peer. Stay silent when the work is already correct or complete.",
+  '',
+  "  Skill and workflow selection belong to the main agent. Absence of a visible skill-read call is not evidence that a skill is missing when the transcript shows the skill body or another host-provided load. Raise a skill issue only when the main agent skipped active-inventory discovery for a non-trivial workflow, reports a concrete load failure, or applies instructions that conflict with the visible task. Do not ask for `omp_core_route_task`; its route is a compatibility diagnostic, not an execution decision.",
+  '',
+  "  Request another source read only when the transcript contains concrete truncation evidence, such as an explicit truncation marker or an incomplete requested range. A successful short-file read that reaches the file end is not clipped merely because it has few lines.",
+  '',
+  "  Deliver advice before the main agent's user-visible final. Once the main agent has emitted a complete final response, do not call `advise`, even if a late improvement is available. Stay silent rather than requesting a shorter restatement, another verification call, or a replacement final. Formatting taste, concision preference, and already-reported facts are not material post-final corrections.",
+  '',
+  "  ADVICE BUDGET: give at most one `advise` call for a primary task by default. Count prior advisor notes in this advisor session. After one note, stay silent unless later evidence reveals a new, materially different authorization, security, or irreversible-data-loss risk. A complete main-agent final sets this budget to zero unconditionally. Do not split one concern into follow-up notes, restate it after verification, or advise merely to refine how the final describes an already-correct outcome.",
+  '',
+  "  For an authorized edit, judge the concrete candidate rather than freezing the whole task. If one candidate would move a qualifier, change scope, or otherwise violate a semantic anchor, advise rejecting that candidate only. Preservation constraints do not make every other word immutable. When a safe lexical or structural improvement outside the protected anchors is visible, point to that alternative; do not conclude that no safe edit exists merely because one candidate is unsafe.",
+  '',
+  "  Use `concern`, not `blocker`, for a reversible wording candidate. Reserve `blocker` for an imminent authorization violation, security risk, or irreversible data loss.",
+  '',
+  "  Advisor notes are suggestions, not execution or completion gates. Never ask for repeated unchanged calls, a second skill load, or work outside the user's stated tool, write, test, network, and time scope.",
+].join('\n');
+
+const LEGACY_PRE_MARKER_ADVISOR_GUIDANCE_BLOCK = [
+  "  Review the main agent as an advisory peer. Stay silent when the work is already correct or complete.",
+  '',
+  "  OMP workflow context may provide a skill without a read tool call. A hidden `skill-prompt`, a skill body followed by `Skill: <path>`, or system text saying `Routed workflow skills already loaded` means the host has already loaded that skill. Skill routing and loading are the main agent and Core's responsibility: absence of a visible skill-read call is not evidence that a skill is missing. Do not advise a skill read or `omp_core_route_task` merely because the rendered advisor transcript omits hidden host context. Raise a skill issue only when the main agent reports a concrete load failure or applies instructions that conflict with the visible task.",
+  '',
+  "  Request another source read only when the transcript contains concrete truncation evidence, such as an explicit truncation marker or an incomplete requested range. A successful short-file read that reaches the file end is not clipped merely because it has few lines.",
+  '',
+  "  Deliver advice before the main agent's user-visible final. Once the main agent has emitted a complete final response, do not call `advise`, even if a late improvement is available. Stay silent rather than requesting a shorter restatement, another verification call, or a replacement final. Formatting taste, concision preference, and already-reported facts are not material post-final corrections.",
+  '',
+  "  ADVICE BUDGET: give at most one `advise` call for a primary task by default. Count prior advisor notes in this advisor session. After one note, stay silent unless later evidence reveals a new, materially different authorization, security, or irreversible-data-loss risk. A complete main-agent final sets this budget to zero unconditionally. Do not split one concern into follow-up notes, restate it after verification, or advise merely to refine how the final describes an already-correct outcome.",
+  '',
+  "  For an authorized edit, judge the concrete candidate rather than freezing the whole task. If one candidate would move a qualifier, change scope, or otherwise violate a semantic anchor, advise rejecting that candidate only. Preservation constraints do not make every other word immutable. When a safe lexical or structural improvement outside the protected anchors is visible, point to that alternative; do not conclude that no safe edit exists merely because one candidate is unsafe.",
+  '',
+  "  Use `concern`, not `blocker`, for a reversible wording candidate. Reserve `blocker` for an imminent authorization violation, security risk, or irreversible data loss.",
+  '',
+  "  Advisor notes are suggestions, not execution or completion gates. Never ask for repeated unchanged calls, a second skill load, or work outside the user's stated tool, write, test, network, and time scope.",
+].join('\n');
+
+function legacyWatchdog(guidance = LEGACY_ADVISOR_GUIDANCE_BLOCK) {
+  return [
+    'instructions: |',
+    `  ${ADVISOR_BLOCK_START}`,
+    '  legacy managed instructions',
+    `  ${ADVISOR_BLOCK_END}`,
+    '',
+    guidance,
+    '',
+    'advisors:',
+    '  - name: User reviewer',
+    '    tools: []',
+    '',
+  ].join('\n');
+}
+
+function preMarkerLegacyWatchdog(guidance = LEGACY_PRE_MARKER_ADVISOR_GUIDANCE_BLOCK) {
+  return [
+    'instructions: |',
+    guidance,
+    '',
+    `  ${ADVISOR_BLOCK_START}`,
+    '  legacy managed instructions',
+    `  ${ADVISOR_BLOCK_END}`,
+    '',
+    'advisors:',
+    '  - name: User reviewer',
+    '    tools: []',
+    '',
+  ].join('\n');
+}
+
 function registrationHarness() {
   const tools = [];
   const pi = {
@@ -117,7 +185,7 @@ test('workflow target file module preserves WATCHDOG.yaml fallback and changed-o
   assert.equal(await readFile(createdPath, 'utf8'), 'created\n');
 });
 
-test('shared main and Advisor assets import one complete advisory workflow catalog', async () => {
+test('shared assets keep the catalog managed while exposing only neutral optional references', async () => {
   const assets = path.join(packageRoot(), 'assets');
   const [catalog, agents, watchdog] = await Promise.all([
     readFile(path.join(assets, 'WORKFLOW_CATALOG.md'), 'utf8'),
@@ -167,14 +235,23 @@ test('shared main and Advisor assets import one complete advisory workflow catal
   for (const workflowId of workflowIds) {
     assert.ok(catalog.includes(`### \`${workflowId}\``), `${workflowId} should have a workflow card`);
   }
-  for (const heading of ['Select when:', 'Steps:', 'Skill candidates:', 'Agent roles:', 'Quality checks:', 'Delegation:']) {
+  for (const heading of [
+    'Select when:',
+    'Steps:',
+    'Skill candidates:',
+    'Optional agent candidates:',
+    'Quality checks:',
+    'Optional delegation ideas:',
+  ]) {
     assert.equal((catalog.match(new RegExp(`^- ${heading}`, 'gm')) ?? []).length, workflowIds.length);
   }
-  assert.match(catalog, /Initialize the native `todo` before substantive project work/);
-  assert.match(catalog, /preferably in one `task\.tasks\[\]` batch/);
+  assert.match(catalog, /This is optional reference material/);
+  assert.match(catalog, /OMP's native system prompt, settings, active tools, dynamic Agent list, approval flow, and completion behavior remain authoritative/);
+  assert.match(catalog, /never selects a workflow, grants permission, or imposes a required execution sequence/);
+  assert.doesNotMatch(catalog, /Initialize the native `todo` before substantive project work/);
+  assert.doesNotMatch(catalog, /preferably in one `task\.tasks\[\]` batch/);
   assert.match(catalog, /body of the text being modified, never from the prompt language/);
-  assert.match(catalog, /guidance, not a router, permission system, completion gate, or continuation controller/);
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 11/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 12/);
   assert.doesNotMatch(catalog, /healthcare\.review|ecc-healthcare-reviewer/i);
   assert.match(catalog, /`zh-writer` owns the requested Chinese drafting or prose revision.+`zh-checker` independently reviews/i);
   assert.match(catalog, /`writer` owns the requested English drafting or prose revision.+`checker` independently reviews/i);
@@ -194,10 +271,14 @@ test('shared main and Advisor assets import one complete advisory workflow catal
   assert.match(catalog, /`designer` creates the SVG and owns every source revision.+`visioner` independently reviews the fresh full-size and 60% raster renders/i);
   assert.match(catalog, new RegExp(CATALOG_BLOCK_START));
   assert.match(catalog, new RegExp(CATALOG_BLOCK_END));
-  assert.match(agents, /^@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md$/m);
-  assert.match(watchdog, /^  @\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md$/m);
-  assert.match(watchdog, /selected workflow, TODO coverage, skill use, and delegation/);
-  assert.match(watchdog, /suggestions, not execution or completion gates/);
+  assert.doesNotMatch(agents, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
+  assert.match(agents, /OMP's native system prompt, settings, active tools, dynamic Available Agents list, approval flow, and completion behavior are authoritative/);
+  assert.match(agents, /installed `omp-enhancer-workflows` skill/);
+  assert.doesNotMatch(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
+  assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
+  assert.match(watchdog, /optional `omp-enhancer-workflows` skill is reference material only/);
+  assert.match(watchdog, /Do not require a workflow, TODO, skill load, delegation, exact Agent ID, or execution sequence/);
+  assert.doesNotMatch(watchdog, /ADVICE BUDGET|call `advise`|Reserve `blocker`/);
   assert.doesNotMatch(`${catalog}\n${agents}\n${watchdog}`, /block:\s*true|continue:\s*true|triggerTurn/);
 });
 
@@ -238,7 +319,10 @@ test('workflow context sync applies managed files while preserving unrelated mai
   assert.match(watchdog, /name: Existing reviewer/);
   assert.equal(watchdog.split(ADVISOR_BLOCK_START).length - 1, 1);
   assert.equal(watchdog.split(ADVISOR_BLOCK_END).length - 1, 1);
-  assert.match(watchdog, /^  @\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md$/m);
+  assert.doesNotMatch(agents, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
+  assert.match(agents, /installed `omp-enhancer-workflows` skill/);
+  assert.doesNotMatch(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
+  assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
 
   const repeated = await syncWorkflowContext({ root: packageRoot(), target, apply: true });
   assert.equal(repeated.changed, 0);
@@ -269,12 +353,94 @@ test('workflow context sync updates only stale managed blocks', async () => {
   assert.doesNotMatch(watchdog, /^  stale$/m);
 });
 
+test('watchdog merge removes the complete legacy guidance suffix and preserves the user roster', () => {
+  const managed = `${ADVISOR_BLOCK_START}\nOMP native authority remains unchanged.\n${ADVISOR_BLOCK_END}`;
+  const merged = mergeWatchdogManagedBlock(legacyWatchdog(), managed);
+
+  assert.doesNotMatch(merged, /Review the main agent as an advisory peer/);
+  assert.doesNotMatch(merged, /ADVICE BUDGET/);
+  assert.match(merged, /^  OMP native authority remains unchanged\.$/m);
+  assert.match(merged, /^advisors:$/m);
+  assert.match(merged, /^  - name: User reviewer$/m);
+  assert.match(merged, /^    tools: \[\]$/m);
+});
+
+test('watchdog merge preserves edited or non-adjacent legacy-like guidance as user content', () => {
+  const managed = `${ADVISOR_BLOCK_START}\nOMP native authority remains unchanged.\n${ADVISOR_BLOCK_END}`;
+  const editedGuidance = LEGACY_ADVISOR_GUIDANCE_BLOCK.replace(
+    'Stay silent when the work is already correct or complete.',
+    'Remain silent when the work is already correct or complete.',
+  );
+  const edited = mergeWatchdogManagedBlock(legacyWatchdog(editedGuidance), managed);
+  const nonAdjacent = mergeWatchdogManagedBlock(
+    legacyWatchdog().replace(
+      `${ADVISOR_BLOCK_END}\n\n`,
+      `${ADVISOR_BLOCK_END}\n\n  User-authored preface.\n\n`,
+    ),
+    managed,
+  );
+
+  assert.match(edited, /Remain silent when the work is already correct or complete/);
+  assert.match(edited, /ADVICE BUDGET/);
+  assert.match(nonAdjacent, /User-authored preface/);
+  assert.match(nonAdjacent, /Review the main agent as an advisory peer/);
+  assert.match(nonAdjacent, /ADVICE BUDGET/);
+});
+
+test('watchdog merge removes the exact a846175 parent guidance immediately before the managed marker', () => {
+  const managed = `${ADVISOR_BLOCK_START}\nOMP native authority remains unchanged.\n${ADVISOR_BLOCK_END}`;
+  const merged = mergeWatchdogManagedBlock(preMarkerLegacyWatchdog(), managed);
+  const mergedDirectlyFromHistoricalAsset = mergeWatchdogManagedBlock(
+    `instructions: |\n${LEGACY_PRE_MARKER_ADVISOR_GUIDANCE_BLOCK}\n`,
+    managed,
+  );
+
+  assert.doesNotMatch(merged, /OMP workflow context may provide a skill without a read tool call/);
+  assert.doesNotMatch(merged, /ADVICE BUDGET/);
+  assert.match(merged, /^instructions: \|$/m);
+  assert.match(merged, /^  OMP native authority remains unchanged\.$/m);
+  assert.match(merged, /^advisors:$/m);
+  assert.match(merged, /^  - name: User reviewer$/m);
+  assert.match(merged, /^    tools: \[\]$/m);
+  assert.doesNotMatch(mergedDirectlyFromHistoricalAsset, /OMP workflow context may provide a skill/);
+  assert.match(mergedDirectlyFromHistoricalAsset, /^  OMP native authority remains unchanged\.$/m);
+});
+
+test('watchdog merge preserves edited, partial, or non-adjacent a846175 parent guidance', () => {
+  const managed = `${ADVISOR_BLOCK_START}\nOMP native authority remains unchanged.\n${ADVISOR_BLOCK_END}`;
+  const editedGuidance = LEGACY_PRE_MARKER_ADVISOR_GUIDANCE_BLOCK.replace(
+    'OMP workflow context may provide a skill',
+    'OMP workflow context can provide a skill',
+  );
+  const partialGuidance = LEGACY_PRE_MARKER_ADVISOR_GUIDANCE_BLOCK
+    .split('\n\n')
+    .slice(1)
+    .join('\n\n');
+  const edited = mergeWatchdogManagedBlock(preMarkerLegacyWatchdog(editedGuidance), managed);
+  const partial = mergeWatchdogManagedBlock(preMarkerLegacyWatchdog(partialGuidance), managed);
+  const nonAdjacent = mergeWatchdogManagedBlock(
+    preMarkerLegacyWatchdog().replace(
+      `\n\n  ${ADVISOR_BLOCK_START}`,
+      `\n\n  User-authored preface.\n\n  ${ADVISOR_BLOCK_START}`,
+    ),
+    managed,
+  );
+
+  assert.match(edited, /OMP workflow context can provide a skill/);
+  assert.match(edited, /ADVICE BUDGET/);
+  assert.match(partial, /OMP workflow context may provide a skill/);
+  assert.match(partial, /ADVICE BUDGET/);
+  assert.match(nonAdjacent, /User-authored preface/);
+  assert.match(nonAdjacent, /OMP workflow context may provide a skill/);
+  assert.match(nonAdjacent, /ADVICE BUDGET/);
+});
+
 test('watchdog merge preserves a roster when shared instructions are initially absent', () => {
-  const managed = `${ADVISOR_BLOCK_START}\n@./OMP_ENHANCER_WORKFLOW_CATALOG.md\n${ADVISOR_BLOCK_END}`;
+  const managed = `${ADVISOR_BLOCK_START}\nOMP native authority remains unchanged.\n${ADVISOR_BLOCK_END}`;
   const merged = mergeWatchdogManagedBlock('advisors:\n  - name: Existing\n', managed);
 
   assert.match(merged, /^instructions: \|$/m);
-  assert.match(merged, /^  @\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md$/m);
+  assert.match(merged, /^  OMP native authority remains unchanged\.$/m);
   assert.match(merged, /^advisors:$/m);
   assert.match(merged, /^  - name: Existing$/m);
 });
@@ -320,5 +486,7 @@ test('registered workflow context sync tool previews by default and reports expl
   assert.equal(applied.isError, false);
   assert.equal(applied.details.mode, 'apply');
   await mkdir(target, { recursive: true });
-  assert.match(await readFile(path.join(target, 'AGENTS.md'), 'utf8'), /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
+  const agents = await readFile(path.join(target, 'AGENTS.md'), 'utf8');
+  assert.doesNotMatch(agents, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
+  assert.match(agents, /installed `omp-enhancer-workflows` skill/);
 });

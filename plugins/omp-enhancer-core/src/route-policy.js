@@ -77,6 +77,8 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
     && !domains.has('security')
     && route.intent === 'bug-audit'
     && route.auditMode !== 'focused';
+  const patchReviewRequested = (descriptor.provenance?.reasons ?? [])
+    .includes('supplied patch or diff review requested');
 
   const steps = uniqueSteps(descriptor.phases ?? []);
   if (route.intent === 'writing.pending' && !steps.some(({ kind }) => kind === 'inspect')) {
@@ -157,7 +159,7 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
     skills.unshift('security-review', 'security-scan');
     qualityChecks.push('security-evidence');
     if (descriptor.complexity === 'broad' && !codeModification && rolesAllowedByRequest) {
-      roles.push(...subagentPlans.securityReview);
+      roles.push(...(patchReviewRequested ? subagentPlans.securityPatchReview : subagentPlans.securityReview));
     }
   }
 
@@ -179,7 +181,9 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
   if (broadCodeAudit) {
     skills.push(...BUG_AUDIT_SKILLS);
     if (testsSuggested) tools.push(...TESTING_TOOLS);
-    if (rolesAllowedByRequest) roles.push(...subagentPlans.bugAudit);
+    if (rolesAllowedByRequest) {
+      roles.push(...(patchReviewRequested ? subagentPlans.patchReview : subagentPlans.bugAudit));
+    }
     qualityChecks.push('review-evidence');
   }
 

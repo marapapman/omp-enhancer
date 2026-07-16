@@ -1,9 +1,9 @@
 {
   "name": "omp-enhancer-core",
-  "version": "0.1.124",
+  "version": "0.1.125",
   "private": true,
   "type": "module",
-  "description": "Advisory main-agent workflow catalog, TODO orchestration, skill discovery, and subagent step context.",
+  "description": "OMP-native-first task-fact observer with opt-in workflow diagnostics and explicit extension-tool activation.",
   "main": "index.js",
   "exports": {
     ".": "./index.js"
