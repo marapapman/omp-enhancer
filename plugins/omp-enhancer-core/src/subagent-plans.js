@@ -52,8 +52,18 @@ export const subagentPlans = Object.freeze({
       ['fact-checking', 'claim-extraction'],
       { modelRoles: ['pi/plan', 'pi/slow'] },
     ),
-    subagent('fact-researcher-a', 'collect first-lane primary-source evidence for planned claims', ['fact-checking', 'source-evaluation', 'citation-authenticity']),
-    subagent('fact-researcher-b', 'independently collect counter-evidence, stale-version checks, and corroboration', ['fact-checking', 'source-evaluation', 'citation-authenticity']),
+    subagent(
+      'fact-researcher-a',
+      'collect first-lane primary-source evidence for planned claims',
+      ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+      { modelRoles: ['pi/slow'] },
+    ),
+    subagent(
+      'fact-researcher-b',
+      'independently collect counter-evidence, stale-version checks, and corroboration',
+      ['fact-checking', 'source-evaluation', 'citation-authenticity'],
+      { modelRoles: ['pi/plan'] },
+    ),
     subagent(
       'fact-cross-checker',
       'compare independent evidence lanes and classify agreement, conflict, staleness, and insufficiency',
@@ -68,12 +78,32 @@ export const subagentPlans = Object.freeze({
     ),
   ]),
   writingZh: Object.freeze([
-    subagent('zh-writer', 'draft or rewrite Chinese text using the relevant writing guidance', ['plain-chinese-writing', 'zh-writing-polish']),
-    subagent('zh-checker', 'review Chinese logic, style, and plain-writing quality', ['plain-chinese-writing', 'zh-writing-checkers']),
+    subagent(
+      'zh-writer',
+      'draft or rewrite Chinese text using the relevant writing guidance',
+      ['plain-chinese-writing', 'zh-writing-polish'],
+      { modelRoles: ['pi/task'] },
+    ),
+    subagent(
+      'zh-checker',
+      'review Chinese logic, style, and plain-writing quality',
+      ['plain-chinese-writing', 'zh-writing-checkers'],
+      { modelRoles: ['pi/slow'] },
+    ),
   ]),
   writingEn: Object.freeze([
-    subagent('writer', 'draft or revise English writing using the relevant writing guidance', ['writing-markdown-helper']),
-    subagent('checker', 'review English logic, style, formatting, and citation quality', ['writing-checkers']),
+    subagent(
+      'writer',
+      'draft or revise English writing using the relevant writing guidance',
+      ['writing-markdown-helper'],
+      { modelRoles: ['pi/task'] },
+    ),
+    subagent(
+      'checker',
+      'review English logic, style, formatting, and citation quality',
+      ['writing-checkers'],
+      { modelRoles: ['pi/slow'] },
+    ),
   ]),
 });
 

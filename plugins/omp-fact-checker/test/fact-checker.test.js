@@ -87,6 +87,14 @@ test('fact researchers treat scholarly metadata as discovery rather than claim s
   }
 });
 
+test('fact researcher A uses slow while researcher B uses plan', () => {
+  const researcherA = factAgent('fact-researcher-a');
+  const researcherB = factAgent('fact-researcher-b');
+
+  assert.match(researcherA, /model:\s*\n\s*-\s*pi\/slow/);
+  assert.match(researcherB, /model:\s*\n\s*-\s*pi\/plan/);
+});
+
 test('fact planner assigns claim-specific freshness and evidence requirements', () => {
   const agent = factAgent('fact-planner');
 

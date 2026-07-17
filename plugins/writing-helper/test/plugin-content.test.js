@@ -63,6 +63,23 @@ describe('bundled frugal-pi writing content', () => {
     }
   });
 
+  it('pins writers to the task role and checkers to the slow role', () => {
+    const expectedRoles = new Map([
+      ['writer', 'task'],
+      ['zh-writer', 'task'],
+      ['checker', 'slow'],
+      ['zh-checker', 'slow'],
+    ]);
+
+    for (const [agent, role] of expectedRoles) {
+      const source = readFileSync(join(rootDir, 'agents', `${agent}.md`), 'utf8');
+      assert.match(source, new RegExp(`model:\\s*\\n\\s*-\\s*pi/${role}(?:\\s|$)`));
+      if (role === 'task') {
+        assert.doesNotMatch(source, /max reasoning|最大推理力度/i, `${agent} must defer effort to the task role`);
+      }
+    }
+  });
+
   it('keeps agent skill references compatible with the bundled skill names', () => {
     const writer = readFileSync(join(rootDir, 'agents', 'writer.md'), 'utf8');
     const zhWriter = readFileSync(join(rootDir, 'agents', 'zh-writer.md'), 'utf8');

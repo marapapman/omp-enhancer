@@ -113,6 +113,11 @@ The package ships these agents:
 - `checker`
 - `zh-checker`
 
+Model policy:
+
+- `writer` and `zh-writer` declare `pi/task` for drafting and bounded revision work.
+- `checker` and `zh-checker` declare `pi/slow` for independent quality review.
+
 ### Skills
 
 The package ships these writing-related skills under their original names:

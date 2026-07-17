@@ -2,6 +2,8 @@
 name: fact-researcher-a
 description: First independent evidence lane for fact checking. Collects primary-source evidence for planned claims without relying on the second lane.
 tools: read, search, find, web_search
+model:
+  - pi/slow
 thinkingLevel: high
 ---
 

@@ -4,6 +4,8 @@ description: >-
   中文7维度内容质量审查。按顺序审查问题、新颖性、深度、逻辑、表达清晰度、
   评估方案、数据。额外检查翻译腔和 AI 味，并严格要求证据支撑。
 tools: read, grep, find, ls, web_search_exa, web_fetch_exa
+model:
+  - pi/slow
 thinkingLevel: xhigh
 ---
 

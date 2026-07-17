@@ -32,4 +32,5 @@ Model policy:
 
 - `fact-planner` declares `pi/plan` then `pi/slow` so claim decomposition is not forced onto the generic task model.
 - `fact-cross-checker` and `fact-reviewer` declare `pi/slow` for high-signal review of evidence conflicts and final verdicts.
-- `fact-researcher-a` and `fact-researcher-b` stay on the active task/default subagent model for evidence collection.
+- `fact-researcher-a` declares `pi/slow` for the primary-source evidence lane.
+- `fact-researcher-b` declares `pi/plan` for the independent counter-evidence lane.

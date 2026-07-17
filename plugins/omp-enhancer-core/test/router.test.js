@@ -1449,17 +1449,30 @@ test('extension route subagents are packaged while OMP native agents remain unsh
   }
 });
 
-test('fact-check route pins planning and review checkpoints to higher-capability model roles', () => {
+test('fact-check route pins planning, primary research, and review checkpoints to higher-capability model roles', () => {
   const route = routeNaturalLanguageTask({
     prompt: '帮我事实核查这段文字里的数据、年份和引用真实性。',
   });
   const byAgent = new Map(route.requiredSubagents.map((item) => [item.agent, item]));
 
   assert.deepEqual(byAgent.get('fact-planner')?.modelRoles, ['pi/plan', 'pi/slow']);
+  assert.deepEqual(byAgent.get('fact-researcher-a')?.modelRoles, ['pi/slow']);
+  assert.deepEqual(byAgent.get('fact-researcher-b')?.modelRoles, ['pi/plan']);
   assert.deepEqual(byAgent.get('fact-cross-checker')?.modelRoles, ['pi/slow']);
   assert.deepEqual(byAgent.get('fact-reviewer')?.modelRoles, ['pi/slow']);
-  assert.equal(byAgent.get('fact-researcher-a')?.modelRoles, undefined);
-  assert.equal(byAgent.get('fact-researcher-b')?.modelRoles, undefined);
+});
+
+test('writing routes pin writers to task and independent checkers to slow', () => {
+  for (const [prompt, writer, checker] of [
+    ['Draft a full English research proposal with background, methods, risks, and timeline.', 'writer', 'checker'],
+    ['请写一份中文长篇项目总结报告，包含背景、方法、结果和风险。', 'zh-writer', 'zh-checker'],
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+    const byAgent = new Map(route.requiredSubagents.map((item) => [item.agent, item]));
+
+    assert.deepEqual(byAgent.get(writer)?.modelRoles, ['pi/task']);
+    assert.deepEqual(byAgent.get(checker)?.modelRoles, ['pi/slow']);
+  }
 });
 
 test('packaged fact-check agents declare the model roles used by routing', async () => {
@@ -1467,10 +1480,14 @@ test('packaged fact-check agents declare the model roles used by routing', async
   const agentsRoot = path.join(repoRoot, 'plugins', 'omp-fact-checker', 'agents');
 
   const planner = await readFile(path.join(agentsRoot, 'fact-planner.md'), 'utf8');
+  const researcherA = await readFile(path.join(agentsRoot, 'fact-researcher-a.md'), 'utf8');
+  const researcherB = await readFile(path.join(agentsRoot, 'fact-researcher-b.md'), 'utf8');
   const crossChecker = await readFile(path.join(agentsRoot, 'fact-cross-checker.md'), 'utf8');
   const reviewer = await readFile(path.join(agentsRoot, 'fact-reviewer.md'), 'utf8');
 
   assert.match(planner, /model:\s*\n\s*-\s*pi\/plan\s*\n\s*-\s*pi\/slow/);
+  assert.match(researcherA, /model:\s*\n\s*-\s*pi\/slow/);
+  assert.match(researcherB, /model:\s*\n\s*-\s*pi\/plan/);
   assert.match(crossChecker, /model:\s*\n\s*-\s*pi\/slow/);
   assert.match(reviewer, /model:\s*\n\s*-\s*pi\/slow/);
 });

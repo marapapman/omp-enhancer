@@ -2,6 +2,8 @@
 name: checker
 description: 7-dimension advisory content review — problem, novelty, depth, logic, clarity, eval, data
 tools: read, grep, find, ls, web_search_exa, web_fetch_exa
+model:
+  - pi/slow
 thinkingLevel: xhigh
 ---
 

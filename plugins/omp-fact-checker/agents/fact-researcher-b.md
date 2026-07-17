@@ -2,6 +2,8 @@
 name: fact-researcher-b
 description: Second independent evidence lane for fact checking. Looks for corroboration, counter-evidence, stale facts, and source conflicts.
 tools: read, search, find, web_search
+model:
+  - pi/plan
 thinkingLevel: high
 ---
 
