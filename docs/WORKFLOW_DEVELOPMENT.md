@@ -46,7 +46,7 @@ scripts/generate-ecc-skill-catalog.js
 scripts/workflow-context-parity.test.js
 ```
 
-Core definitions 是唯一语义来源。Config 不在运行时依赖 Core；它只打包生成后的 Markdown 资产和 Skill 文件。`AGENTS.md` 与 `WATCHDOG.yml` 的 managed blocks 只声明 OMP 原生权威并指向可选 Skill，不自动 import `WORKFLOW_CATALOG.md`。
+Core definitions 是唯一语义来源。Config 不在运行时依赖 Core；它只打包生成后的 Markdown 资产和 Skill 文件。`AGENTS.md` 与 `WATCHDOG.yml` 的 managed blocks 都声明 OMP 原生权威并指向可选 Skill，不自动 import `WORKFLOW_CATALOG.md`。Advisor block 额外提供紧凑的 evidence/send-limit 指导：不得用 Advisor 自己的工具 schema 推断 Main 能力，每个主任务默认合并为至多一条普通有效建议，完整 Main final 后抑制 late nit/concern，同时保留符合 OMP 原生标准的 `blocker` delivery；这些是行为提示，不是运行时 gate。
 
 ## Definition 结构
 
@@ -266,7 +266,7 @@ Parity 测试负责检查：
 - 生成 Markdown 与 Core renderer 完整一致；
 - optional Skill 暴露 choose、compose、steps、skills、roles、delegation、quality、scope 和 risk，并按领域拆分 references；
 - OMP 17 只直接发现一个 `ecc-skill-catalog` adapter；255 个嵌套 ECC guide 只能从 `catalog.md` 的 exact URI 按需读取；
-- Main 与 Advisor managed blocks 都不导入共享目录，只说明 OMP 原生权威和可选 Skill；
+- Main 与 Advisor managed blocks 都不导入共享目录；Main 只说明 OMP 原生权威和可选 Skill，Advisor 另有紧凑的 evidence/send-limit 指导，但不创建 gate 或 continuation；
 - 所有打包 Agent/Skill 的 frontmatter 名全局唯一；插件角色在 marketplace 中恰好有一个打包所有者，OMP 原生 `designer`、`librarian`、`reviewer` 不得被插件打包；
 - README 版本和工作流清单同步。
 

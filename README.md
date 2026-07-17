@@ -42,7 +42,7 @@ Run /enhancer-tools enable config.
 Call omp_config_sync_workflow_context first with apply=false, then with apply=true after reviewing the target files.
 ```
 
-The sync preserves unrelated `AGENTS.md` and `WATCHDOG.yml` content. It can synchronize the generated `OMP_ENHANCER_WORKFLOW_CATALOG.md`, but the managed Main and Advisor blocks do not import that file. They only identify `omp-enhancer-workflows` as optional reference material and state that OMP remains authoritative. Start a new OMP session after applying context-file changes.
+The sync preserves unrelated `AGENTS.md` and `WATCHDOG.yml` content. It can synchronize the generated `OMP_ENHANCER_WORKFLOW_CATALOG.md`, but the managed Main and Advisor blocks do not import that file. Main identifies `omp-enhancer-workflows` as optional reference material. Advisor additionally receives a compact evidence and send-limit policy that distinguishes Main's tools from Advisor's, consolidates material findings into at most one ordinary note per primary task by default, and suppresses late nits and concerns after a complete Main final without overriding OMP's native `blocker` delivery. OMP remains authoritative, and this guidance creates no execution or completion gate. The packaged config selects `openai-codex/gpt-5.6-luna:xhigh` for `modelRoles.advisor`. Start a new OMP session after applying context-file changes.
 
 ## OMP-native-first workflow reference
 

@@ -8,9 +8,9 @@
 - `assets/WORKFLOW_CATALOG.md` is the generated catalog version 12 for explicit synchronization and human inspection. Its semantic source lives in `omp-enhancer-core/src/workflows/definitions`; do not edit this asset by hand.
 - `skills/omp-enhancer-workflows/` publishes the same catalog as an optional OMP Skill with domain-specific references. It does not select a workflow, require TODOs or delegation, activate tools, grant permission, or decide completion.
 - `skills/ecc/SKILL.md` publishes one top-level `ecc-skill-catalog` adapter, and `skills/ecc/catalog.md` indexes 255 nested ECC guides for exact, on-demand reads.
-- `assets/AGENTS.md` and `assets/WATCHDOG.yml` contain small native-authority notices. They refer to the optional Skill but do not import `OMP_ENHANCER_WORKFLOW_CATALOG.md` or append the full catalog to a system prompt.
+- `assets/AGENTS.md` contains a small native-authority notice. `assets/WATCHDOG.yml` adds a compact Advisor evidence and send-limit policy. Neither imports `OMP_ENHANCER_WORKFLOW_CATALOG.md` nor appends the full catalog to a system prompt.
 - `assets/config.yml`, `assets/models.yml`, and `assets/mcp.json` remain templates only.
-- `assets/config.yml` includes `modelRoles.tiny` for optional lightweight tasks; OMP and the acting Agent retain workflow selection.
+- `assets/config.yml` selects `openai-codex/gpt-5.6-luna:xhigh` for `modelRoles.advisor` and includes `modelRoles.tiny` for optional lightweight tasks; OMP and the acting Agent retain workflow selection.
 - `agents/`, `skills/`, and notify-only `hooks/` copied from the config source. `omp-config` contributes the uniquely named `omp-target-auditor`; OMP's native `designer`, `librarian`, and `reviewer` remain authoritative and are not shadowed.
 - `hook-templates/` contains behavior-changing DeepSeek compatibility templates that are packaged but not auto-discovered.
 - Slash command content for `/omp-config:config`, `/omp-config:config-doctor`, and `/omp-config:config-assets`.
@@ -37,8 +37,13 @@ and system safety policy remain independent of this plugin.
 
 The packaged Main and Advisor blocks explicitly defer to OMP's native system
 prompt, settings, active tools, dynamic Available Agents list, approval flow,
-and completion behavior. They do not require the optional workflow Skill,
-change host approval, block a tool call, or schedule an Agent continuation.
+and completion behavior. The Advisor block adds only low-noise evidence rules:
+it does not infer Main capabilities from Advisor's narrower tool schema, defaults
+to one consolidated ordinary note per primary task, and suppresses late nits and
+concerns after a complete Main final while preserving native `blocker` delivery.
+These are model-behavior instructions, not a runtime guarantee. The blocks
+do not require the optional workflow Skill, change host approval, block a tool
+call, or schedule an Agent continuation.
 
 The companion Core plugin has one model-specific exception that does not alter
 this package's prompt assets. For an exact `opencode-go/deepseek-v4-flash`

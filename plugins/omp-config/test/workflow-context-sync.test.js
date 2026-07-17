@@ -278,7 +278,11 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
   assert.match(watchdog, /optional `omp-enhancer-workflows` skill is reference material only/);
   assert.match(watchdog, /Do not require a workflow, TODO, skill load, delegation, exact Agent ID, or execution sequence/);
-  assert.doesNotMatch(watchdog, /ADVICE BUDGET|call `advise`|Reserve `blocker`/);
+  assert.match(watchdog, /Advisor's tool schema describes Advisor capability only, never Main's tools, Skills, Agents, or permissions/);
+  assert.match(watchdog, /at most one ordinary `advise` call per primary user task/);
+  assert.match(watchdog, /A complete user-visible Main final sets the ordinary send limit to zero/);
+  assert.match(watchdog, /post-final `blocker` remains allowed only when it meets OMP's native `blocker` standard/);
+  assert.match(watchdog, /exact evidence, material impact, and the smallest safe correction/);
   assert.doesNotMatch(`${catalog}\n${agents}\n${watchdog}`, /block:\s*true|continue:\s*true|triggerTurn/);
 });
 
@@ -323,6 +327,8 @@ test('workflow context sync applies managed files while preserving unrelated mai
   assert.match(agents, /installed `omp-enhancer-workflows` skill/);
   assert.doesNotMatch(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
   assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
+  assert.match(watchdog, /at most one ordinary `advise` call per primary user task/);
+  assert.match(watchdog, /A complete user-visible Main final sets the ordinary send limit to zero/);
 
   const repeated = await syncWorkflowContext({ root: packageRoot(), target, apply: true });
   assert.equal(repeated.changed, 0);

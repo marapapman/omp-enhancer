@@ -7,7 +7,7 @@ skills:
     - /root/.omp/skills/ecc
     - /root/.claude/skills
 modelRoles: 
-  advisor: ollama-cloud/glm-5.2:xhigh
+  advisor: openai-codex/gpt-5.6-luna:xhigh
   commit: ollama-cloud/gemma3:4b
   default: opencode-go/deepseek-v4-flash:medium
   designer: ollama-cloud/glm-5.2:xhigh
