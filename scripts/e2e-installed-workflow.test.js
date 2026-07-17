@@ -11,13 +11,55 @@ import {
   summarizeWorkflowEvents,
 } from './e2e/workflow-events.mjs';
 import {
+  createMonotonicDuration,
   createBoundedNdjsonCapture,
+  parseCliArgs,
   prepareScenario,
   readSessionCustomEvents,
+  resolveTimeoutPolicy,
   runInstalledMatrix,
   snapshotTree,
   verifyFixture,
 } from './e2e/run-installed-deepseek-workflow.mjs';
+
+test('installed runner duration uses a monotonic clock when wall time jumps', () => {
+  const readings = [1_000, 1_125.5, 1_240];
+  const elapsed = createMonotonicDuration(() => readings.shift());
+
+  assert.equal(elapsed(), 125.5);
+  assert.equal(elapsed(), 240);
+});
+
+test('installed runner default duration ignores Date.now rollback', () => {
+  const originalDateNow = Date.now;
+  let wallTime = 10_000;
+  Date.now = () => wallTime;
+  try {
+    const elapsed = createMonotonicDuration();
+    wallTime = -10_000;
+    assert.ok(elapsed() >= 0);
+  } finally {
+    Date.now = originalDateNow;
+  }
+});
+
+test('timeout policy can omit the OMP deadline without removing the runner hard timeout', () => {
+  assert.deepEqual(resolveTimeoutPolicy(120), {
+    ompDeadlineSeconds: 120,
+    runnerHardTimeoutMs: 150_000,
+  });
+  assert.deepEqual(resolveTimeoutPolicy(120, false), {
+    ompDeadlineSeconds: null,
+    runnerHardTimeoutMs: 150_000,
+  });
+});
+
+test('installed runner exposes an explicit CLI switch for runner-timeout-only recovery', () => {
+  assert.deepEqual(parseCliArgs(['--no-omp-deadline']), {
+    scenarioIds: [],
+    useOmpDeadline: false,
+  });
+});
 
 test('bounded NDJSON capture keeps workflow event order and filters unused streaming events', () => {
   const observed = [];
@@ -927,10 +969,30 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
     const command = report.results[0].command;
     assert.ok(command.includes('--mode=rpc'));
     assert.equal(command.includes('--advisor'), false);
+    assert.ok(command.includes('--max-time=120'));
+    assert.deepEqual(report.results[0].timeoutPolicy, {
+      ompDeadlineSeconds: 120,
+      runnerHardTimeoutMs: 150_000,
+    });
     assert.deepEqual(report.results[0].runtimeConfig, { advisorEnabled: false });
     const configArg = command.find((value) => value.startsWith('--config='));
     assert.ok(configArg);
     assert.equal(await readFile(configArg.slice('--config='.length), 'utf8'), 'advisor:\n  enabled: false\n');
+
+    const { report: recoveryReport } = await runInstalledMatrix({
+      dryRun: true,
+      scenarioIds: ['english-review-zh-prompt'],
+      outputRoot: path.join(outputRoot, 'runner-timeout-only'),
+      useOmpDeadline: false,
+    });
+    assert.equal(
+      recoveryReport.results[0].command.some((value) => value.startsWith('--max-time=')),
+      false,
+    );
+    assert.deepEqual(recoveryReport.results[0].timeoutPolicy, {
+      ompDeadlineSeconds: null,
+      runnerHardTimeoutMs: 150_000,
+    });
 
     const stress = JSON.parse(await readFile(
       new URL('./e2e/fixtures/deepseek-advisor-stress.json', import.meta.url),

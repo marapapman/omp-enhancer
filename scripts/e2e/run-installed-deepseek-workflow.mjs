@@ -39,6 +39,21 @@ const WORKFLOW_EVENT_TYPES = new Set([
   'tool_execution_end',
 ]);
 
+export function createMonotonicDuration(now = () => performance.now()) {
+  const startedAt = now();
+  return () => now() - startedAt;
+}
+
+export function resolveTimeoutPolicy(timeoutSeconds, useOmpDeadline = true) {
+  if (typeof useOmpDeadline !== 'boolean') {
+    throw new TypeError('useOmpDeadline must be a boolean.');
+  }
+  return {
+    ompDeadlineSeconds: useOmpDeadline ? timeoutSeconds : null,
+    runnerHardTimeoutMs: (timeoutSeconds + 30) * 1000,
+  };
+}
+
 /**
  * Incrementally captures only events consumed by workflow-events.mjs.
  *
@@ -224,6 +239,7 @@ export async function runInstalledMatrix(options = {}) {
         repetition,
         outputRoot,
         dryRun: options.dryRun === true,
+        useOmpDeadlineOverride: options.useOmpDeadline,
       }));
     }
   }
@@ -252,7 +268,14 @@ export async function runInstalledMatrix(options = {}) {
   return { report, outputRoot };
 }
 
-async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun }) {
+async function runScenario({
+  matrix,
+  scenario,
+  repetition,
+  outputRoot,
+  dryRun,
+  useOmpDeadlineOverride,
+}) {
   const prepared = await prepareScenario(scenario);
   try {
   const runName = `${scenario.id}-${String(repetition).padStart(2, '0')}`;
@@ -270,6 +293,11 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
   ].join('\n'));
   const expectations = { ...(matrix.defaults?.expectations ?? {}), ...(scenario.expectations ?? {}) };
   const timeoutSeconds = scenario.timeoutSeconds ?? matrix.defaults?.timeoutSeconds ?? 120;
+  const useOmpDeadline = useOmpDeadlineOverride
+    ?? scenario.useOmpDeadline
+    ?? matrix.defaults?.useOmpDeadline
+    ?? true;
+  const timeoutPolicy = resolveTimeoutPolicy(timeoutSeconds, useOmpDeadline);
   const executionMode = scenario.executionMode ?? matrix.defaults?.executionMode ?? 'print';
   const noExtensions = resolveNoExtensions(scenario.noExtensions ?? matrix.defaults?.noExtensions ?? false);
   const pluginDirs = resolvePluginDirs(scenario.pluginDirs ?? matrix.defaults?.pluginDirs ?? []);
@@ -282,7 +310,7 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
     scenario,
     prepared,
     sessionDir,
-    timeoutSeconds,
+    ompDeadlineSeconds: timeoutPolicy.ompDeadlineSeconds,
     executionMode,
     configOverlayPath,
     advisorEnabled,
@@ -305,6 +333,7 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
       cwd: prepared.cwd,
       command: ['omp', ...args],
       runtimeConfig,
+      timeoutPolicy,
       dryRun: true,
       evaluation: { pass: null, skipped: true, failures: [] },
     };
@@ -317,12 +346,12 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
     ? await spawnRpcCaptured('omp', args, {
       cwd: prepared.cwd,
       prompt: prepared.prompt,
-      timeoutMs: (timeoutSeconds + 30) * 1000,
+      timeoutMs: timeoutPolicy.runnerHardTimeoutMs,
       waitForAutolearn: scenario.waitForAutolearn === true,
     })
     : await spawnCaptured('omp', args, {
       cwd: prepared.cwd,
-      timeoutMs: (timeoutSeconds + 30) * 1000,
+      timeoutMs: timeoutPolicy.runnerHardTimeoutMs,
     });
   await writeFile(path.join(runDir, 'events.ndjson'), execution.stdout);
   await writeFile(path.join(runDir, 'stderr.log'), execution.stderr);
@@ -352,6 +381,7 @@ async function runScenario({ matrix, scenario, repetition, outputRoot, dryRun })
     cwd: prepared.displayCwd ?? prepared.cwd,
     command: ['omp', ...args.map((arg) => arg === prepared.prompt ? '<prompt>' : arg)],
     runtimeConfig,
+    timeoutPolicy,
     eventCapture: execution.capture,
     summary,
     fileEvaluation,
@@ -369,7 +399,7 @@ function buildOmpArgs({
   scenario,
   prepared,
   sessionDir,
-  timeoutSeconds,
+  ompDeadlineSeconds,
   executionMode,
   configOverlayPath,
   advisorEnabled,
@@ -388,7 +418,7 @@ function buildOmpArgs({
     `--config=${configOverlayPath}`,
     `--session-dir=${sessionDir}`,
     '--no-title',
-    `--max-time=${timeoutSeconds}`,
+    ...(ompDeadlineSeconds == null ? [] : [`--max-time=${ompDeadlineSeconds}`]),
     `--tools=${tools.join(',')}`,
   ];
   if (advisorEnabled) args.push('--advisor');
@@ -625,7 +655,7 @@ export async function readSessionCustomEvents(root) {
 
 function spawnCaptured(command, args, { cwd, timeoutMs }) {
   return new Promise((resolvePromise) => {
-    const startedAt = Date.now();
+    const elapsed = createMonotonicDuration();
     const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
     const stdoutCapture = createBoundedNdjsonCapture();
     let stderr = '';
@@ -641,7 +671,7 @@ function spawnCaptured(command, args, { cwd, timeoutMs }) {
     }, timeoutMs);
     child.on('error', (error) => {
       clearTimeout(timer);
-      resolvePromise({ ...stdoutCapture.finish(), stderr: `${stderr}${error.stack ?? error.message}\n`, exitCode: 1, signal: null, timedOut, durationMs: Date.now() - startedAt });
+      resolvePromise({ ...stdoutCapture.finish(), stderr: `${stderr}${error.stack ?? error.message}\n`, exitCode: 1, signal: null, timedOut, durationMs: elapsed() });
     });
     child.on('close', (code, signal) => {
       clearTimeout(timer);
@@ -651,7 +681,7 @@ function spawnCaptured(command, args, { cwd, timeoutMs }) {
         exitCode: code,
         signal,
         timedOut,
-        durationMs: Date.now() - startedAt,
+        durationMs: elapsed(),
       });
     });
   });
@@ -664,7 +694,7 @@ function spawnRpcCaptured(command, args, {
   waitForAutolearn = false,
 }) {
   return new Promise((resolvePromise) => {
-    const startedAt = Date.now();
+    const elapsed = createMonotonicDuration();
     const child = spawn(command, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
     let stderr = '';
     let timedOut = false;
@@ -712,7 +742,7 @@ function spawnRpcCaptured(command, args, {
     }, timeoutMs);
     child.on('error', (error) => {
       clearTimeout(timer);
-      resolvePromise({ ...stdoutCapture.finish(), stderr: `${stderr}${error.stack ?? error.message}\n`, exitCode: 1, signal: null, timedOut, durationMs: Date.now() - startedAt });
+      resolvePromise({ ...stdoutCapture.finish(), stderr: `${stderr}${error.stack ?? error.message}\n`, exitCode: 1, signal: null, timedOut, durationMs: elapsed() });
     });
     child.on('close', (code, signal) => {
       clearTimeout(timer);
@@ -722,7 +752,7 @@ function spawnRpcCaptured(command, args, {
         exitCode: code,
         signal,
         timedOut,
-        durationMs: Date.now() - startedAt,
+        durationMs: elapsed(),
       });
     });
   });
@@ -751,11 +781,12 @@ function readOmpConfig(keys) {
   }));
 }
 
-function parseCliArgs(argv = process.argv.slice(2)) {
+export function parseCliArgs(argv = process.argv.slice(2)) {
   const options = { scenarioIds: [] };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === '--dry-run') options.dryRun = true;
+    else if (value === '--no-omp-deadline') options.useOmpDeadline = false;
     else if (value === '--scenario') options.scenarioIds.push(argv[++index]);
     else if (value === '--repeat') options.repeat = Number(argv[++index]);
     else if (value === '--matrix') options.matrixPath = argv[++index];
@@ -770,7 +801,7 @@ function parseCliArgs(argv = process.argv.slice(2)) {
 async function main() {
   const options = parseCliArgs();
   if (options.help) {
-    process.stdout.write('Usage: run-installed-deepseek-workflow.mjs [--scenario ID] [--repeat N] [--dry-run] [--output DIR]\n');
+    process.stdout.write('Usage: run-installed-deepseek-workflow.mjs [--scenario ID] [--repeat N] [--dry-run] [--no-omp-deadline] [--output DIR]\n');
     return;
   }
   const { report, outputRoot } = await runInstalledMatrix(options);

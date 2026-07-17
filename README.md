@@ -364,6 +364,8 @@ Run the full installed-runtime matrix with its configured repetitions:
 npm run e2e:deepseek
 ```
 
+If the host wall clock is known to jump during a recovery run, pass `--no-omp-deadline` to the underlying runner. This omits OMP's wall-clock `--max-time` while preserving the runner's independent hard timeout and monotonic duration measurement. It is a recovery option, not an automatic retry for provider or socket failures.
+
 Run the focused natural-language Skill-discovery matrix:
 
 ```bash
