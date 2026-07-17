@@ -9,6 +9,7 @@ import { classifyHostTurn } from './src/host-turn-context.js';
 import { withoutLegacyControlFields } from './src/legacy-fields.js';
 import { routeNaturalLanguageTask } from './src/router.js';
 import { describeNaturalLanguageTask, detectWritingSourceLanguage } from './src/task-descriptor.js';
+import { buildDynamicReviewBudgetPrompt } from './src/review-budget.js';
 import {
   normalizeSkillName,
   parseLoadedSkillEvidence,
@@ -29,7 +30,7 @@ const SKILL_DISCOVERY_MESSAGE_TYPE = 'omp-enhancer-skill-discovery';
 const DISABLE_DEEPSEEK_COMPAT_ENV = 'OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT';
 const SKILL_DISCOVERY_REMINDER = 'Before acting, inspect the available OMP Skill list already present in context and load the smallest set of genuinely applicable Skills without assuming or being given a Skill name. Read each selected Skill through `skill://<name>` before substantive work; never call bare `skill://` because it is not a listing endpoint. If none match, proceed without a Skill. Do not bulk-load Skills or reread a Skill body already supplied by OMP.';
 const DEEPSEEK_DELEGATION_DECISION = [
-  'DEEPSEEK_DELEGATION_HINT (supplemental compatibility context): OMP\'s native system prompt, user instruction, Delegation gates, current `task` schema, dynamic Available Agents, concurrency limit, permissions, approvals, result delivery, verification requirements, and completion behavior remain authoritative. This hint adds no policy of its own.',
+  'DEEPSEEK_DELEGATION_HINT (supplemental compatibility context): OMP\'s native system prompt, user instruction, Delegation gates, current `task` schema, dynamic Available Agents, concurrency limit, permissions, approvals, result delivery, verification requirements, and completion behavior remain authoritative. This hint adds no authority, permission, or completion condition of its own.',
   'USER_SCOPE: if the user requests solo or main-agent-only work, no agents, or no delegation in any wording, honor that request and stop this delegation check.',
   'NATIVE_GATE_ACTION: execute OMP\'s native Delegation gate now, before any project-file inspection; do not only narrate the choice:',
   '- DIRECT: keep one bounded or indivisible target, a direct answer, or a mechanical lookup batch inline. Do not relabel multiple substantive slices as one target merely because each slice is small or the parent will synthesize them.',
@@ -332,12 +333,17 @@ export default function registerCoreEnhancer(pi) {
         writingLanguageSource: route.taskDescriptor?.writingLanguageSource ?? null,
       },
     }));
+    const nativeBatchCapacity = nativePromptBatchCapacity(event.systemPrompt);
+    const nativeConcurrencyCapacity = nativePromptConcurrencyCapacity(event.systemPrompt);
     const compatibilityReminder = isDeepSeekFlash(ctx.model)
       ? buildDeepSeekCompatibilityReminder({
         hasVisibleSkills: activeSkillInventory(pi).length > 0,
         hasNativeTask: hasActiveNativeTask(pi),
         subagentsAllowed: route.taskDescriptor?.constraints?.subagents !== 'forbidden',
-        nativeBatchCapacity: nativePromptBatchCapacity(event.systemPrompt),
+        implementationDelegationAllowed: route.taskDescriptor?.constraints?.implementationDelegation !== 'forbidden',
+        nativeBatchCapacity,
+        nativeConcurrencyCapacity,
+        taskDescriptor: route.taskDescriptor,
       })
       : null;
     const shouldRemindDeepSeek = (
@@ -413,7 +419,10 @@ function buildDeepSeekCompatibilityReminder({
   hasVisibleSkills = false,
   hasNativeTask = false,
   subagentsAllowed = true,
+  implementationDelegationAllowed = true,
   nativeBatchCapacity = null,
+  nativeConcurrencyCapacity = null,
+  taskDescriptor = {},
 } = {}) {
   const sections = [];
   const features = [];
@@ -422,11 +431,20 @@ function buildDeepSeekCompatibilityReminder({
     features.push('skill-discovery');
   }
   if (hasNativeTask && subagentsAllowed) {
-    sections.push([
-      DEEPSEEK_DELEGATION_DECISION,
-      ...(nativeBatchCapacity ? [buildDeepSeekNativeBatchAction(nativeBatchCapacity)] : []),
-    ].join('\n'));
-    features.push('delegation-decision');
+    const reviewBudgetPrompt = buildDynamicReviewBudgetPrompt({
+      taskDescriptor,
+      nativeConcurrencyCapacity,
+    });
+    const delegationSections = [
+      ...(reviewBudgetPrompt ? [reviewBudgetPrompt] : []),
+      ...(implementationDelegationAllowed ? [
+        DEEPSEEK_DELEGATION_DECISION,
+        ...(nativeBatchCapacity ? [buildDeepSeekNativeBatchAction(nativeBatchCapacity)] : []),
+      ] : []),
+    ];
+    if (delegationSections.length) sections.push(delegationSections.join('\n'));
+    if (implementationDelegationAllowed) features.push('delegation-decision');
+    if (reviewBudgetPrompt) features.push('dynamic-review-budget');
   }
   if (!sections.length) return null;
   return {
@@ -439,22 +457,34 @@ function buildDeepSeekNativeBatchAction(capacity) {
   return `CURRENT_NATIVE_BATCH_ACTION: this turn's canonical OMP Delegation section confirms batch \`tasks[]\` and native concurrency cap ${capacity}. When USER_SCOPE permits and OMP's native gate identifies from 2 through ${capacity} independent runnable SUBSTANTIVE slices, execute the native immediate-dispatch result now with EXACTLY ONE \`task\` call whose single \`tasks[]\` contains one assignment per slice. Before emitting that call, verify \`tasks[].length\` equals the number of selected slices and every selected slice appears exactly once; if the array is incomplete, finish it before sending instead of repairing it with a later \`task\` call. Never split that initial fan-out across multiple one-item batch calls. For exactly two such slices this means one call with exactly two assignments. This is the current native width, shape, and cap, not a plugin-defined fan-out; above ${capacity}, defer to OMP's native overflow decision.`;
 }
 
-function nativePromptBatchCapacity(systemPrompt = []) {
+function nativeDelegationSection(systemPrompt = []) {
   const canonicalBlocks = (Array.isArray(systemPrompt) ? systemPrompt : [systemPrompt])
     .map((value) => String(value ?? ''))
     .filter((block) => block.trimStart().startsWith('<system-conventions>')
       && block.includes('</system-conventions>')
       && block.includes('\n## Delegation gates:\n')
       && block.includes('\nEXECUTION WORKFLOW\n'));
-  if (canonicalBlocks.length !== 1) return null;
+  if (canonicalBlocks.length !== 1) return '';
   const block = canonicalBlocks[0];
   const sectionStart = block.lastIndexOf('\n## Delegation gates:\n');
   const sectionEnd = block.indexOf('\nEXECUTION WORKFLOW\n', sectionStart);
-  if (sectionStart < 0 || sectionEnd <= sectionStart) return null;
-  const delegationSection = block.slice(sectionStart, sectionEnd);
-  const exposesBatch = /- \*\*Width = real independence\.\*\*[^\n]*batched into one `tasks\[\]` array/iu.test(delegationSection);
+  if (sectionStart < 0 || sectionEnd <= sectionStart) return '';
+  return block.slice(sectionStart, sectionEnd);
+}
+
+function nativePromptConcurrencyCapacity(systemPrompt = []) {
+  const delegationSection = nativeDelegationSection(systemPrompt);
+  if (!delegationSection) return null;
   const capMatch = delegationSection.match(/- \*\*Concurrency cap:\*\*\s*At most\s+(\d+)\s+subagents?/iu);
   const cap = Number(capMatch?.[1] ?? Number.NaN);
+  return Number.isSafeInteger(cap) && cap >= 1 ? cap : null;
+}
+
+function nativePromptBatchCapacity(systemPrompt = []) {
+  const delegationSection = nativeDelegationSection(systemPrompt);
+  if (!delegationSection) return null;
+  const exposesBatch = /- \*\*Width = real independence\.\*\*[^\n]*batched into one `tasks\[\]` array/iu.test(delegationSection);
+  const cap = nativePromptConcurrencyCapacity(systemPrompt);
   return exposesBatch && Number.isSafeInteger(cap) && cap >= 2 ? cap : null;
 }
 

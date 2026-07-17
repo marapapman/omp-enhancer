@@ -73,6 +73,664 @@ test('a strong prohibition on other files preserves the explicitly requested wri
   ]);
 });
 
+test('directory write allowlists survive a bounded project-config exclusion', () => {
+  const prompt = '在这个临时项目中，把配置加载器修到完全符合 CONTRACT.md 的公开行为，并补足能证明这些行为的回归测试。保持现有导出 API，只修改 src/ 和 test/，只运行 package.json 已有的 Node 测试命令。不要联网、安装依赖或改动项目配置。完成后报告改动、实际命令、结果和仍有限制。';
+  const route = routeNaturalLanguageTask({ prompt });
+
+  assert.equal(route.taskDescriptor.operation, 'modify');
+  assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['src/', 'test/']);
+  assert.deepEqual(route.taskDescriptor.constraints, {
+    workspaceWrite: 'required',
+    testExecution: 'required',
+    networkAccess: 'forbidden',
+    externalWrite: 'forbidden',
+    subagents: 'unspecified',
+  });
+  assert.equal(route.taskDescriptor.complexity, 'broad');
+});
+
+test('English directory allowlists survive an Oxford-list project-config exclusion', () => {
+  const prompt = 'In this temporary project, fix the configuration loader so it fully conforms to the public behavior in CONTRACT.md, and add regression tests that prove those behaviors. Preserve the existing export API, modify only src/ and test/, and run only the existing Node test command from package.json. Do not use the network, install dependencies, or change project configuration. Report the changes, actual command, results, and remaining limitations.';
+  const route = routeNaturalLanguageTask({ prompt });
+
+  assert.equal(route.taskDescriptor.operation, 'modify');
+  assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['src/', 'test/']);
+  assert.deepEqual(route.taskDescriptor.constraints, {
+    workspaceWrite: 'required',
+    testExecution: 'required',
+    networkAccess: 'forbidden',
+    externalWrite: 'forbidden',
+    subagents: 'unspecified',
+  });
+  assert.equal(route.taskDescriptor.complexity, 'broad');
+});
+
+test('negative directory write scopes remain exclusions instead of becoming allowed targets', () => {
+  for (const prompt of [
+    '只修改 src/，不要修改 test/。',
+    'Modify only src/; do not modify test/.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['src/'], prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, ['test/'], prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'unspecified', prompt);
+    assert.equal(route.taskDescriptor.complexity, 'focused', prompt);
+  }
+});
+
+test('Unicode directory write exclusions remain exclusions instead of becoming allowed targets', () => {
+  for (const prompt of [
+    '只修改 源码/，不要修改 测试/。',
+    'Modify only 源码/; do not modify 测试/.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['源码/'], prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, ['测试/'], prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'unspecified', prompt);
+    assert.equal(route.taskDescriptor.complexity, 'focused', prompt);
+  }
+});
+
+test('negative directory lists preserve every exclusion across languages', () => {
+  const cases = [
+    {
+      prompt: '只修改 源码/，不要修改 测试/、测试夹具/。',
+      targets: ['源码/'],
+      exclusions: ['测试/', '测试夹具/'],
+    },
+    {
+      prompt: 'Modify only src/; do not modify test/ or fixtures/.',
+      targets: ['src/'],
+      exclusions: ['test/', 'fixtures/'],
+    },
+    {
+      prompt: 'Modify only "source files/"; do not modify "test data/" or "test fixtures/".',
+      targets: ['source files/'],
+      exclusions: ['test data/', 'test fixtures/'],
+    },
+    {
+      prompt: 'Modify only src/; do not modify test/, fixtures/, or snapshots/.',
+      targets: ['src/'],
+      exclusions: ['test/', 'fixtures/', 'snapshots/'],
+    },
+    {
+      prompt: '只修改 src/，不要修改 test/、fixtures/ 或 snapshots/。',
+      targets: ['src/'],
+      exclusions: ['test/', 'fixtures/', 'snapshots/'],
+    },
+  ];
+
+  for (const { prompt, targets, exclusions } of cases) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, targets, prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, exclusions, prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'unspecified', prompt);
+  }
+});
+
+test('quoted directory scopes remain actionable across quote styles', () => {
+  const cases = [
+    {
+      prompt: 'Modify only "source files/"; do not modify "test data/".',
+      targets: ['source files/'],
+      exclusions: ['test data/'],
+    },
+    {
+      prompt: '只修改 “源码/”，不要修改 “测试/”。',
+      targets: ['源码/'],
+      exclusions: ['测试/'],
+    },
+    {
+      prompt: 'Modify only `src/`; do not modify `test/`.',
+      targets: ['src/'],
+      exclusions: ['test/'],
+    },
+  ];
+
+  for (const { prompt, targets, exclusions } of cases) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, targets, prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, exclusions, prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+  }
+});
+
+test('dotted directories do not create truncated file scopes', () => {
+  for (const prompt of [
+    '只修改 src.v2/，不要修改 test.v2/。',
+    'Modify only src/.cache/; do not modify test/.fixtures/.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.equal(route.taskDescriptor.workspaceWriteTargets.length, 1, prompt);
+    assert.equal(route.taskDescriptor.workspaceWriteExclusions.length, 1, prompt);
+    assert.ok(route.taskDescriptor.workspaceWriteTargets[0].endsWith('/'), prompt);
+    assert.ok(route.taskDescriptor.workspaceWriteExclusions[0].endsWith('/'), prompt);
+  }
+});
+
+test('directory scope extraction accepts trailing questions and parentheses', () => {
+  const cases = [
+    {
+      prompt: '只修改 src/，不要修改 test/？',
+      targets: ['src/'],
+      exclusions: ['test/'],
+    },
+    {
+      prompt: 'Modify src/ (do not modify test/).',
+      targets: ['src/'],
+      exclusions: ['test/'],
+    },
+  ];
+
+  for (const { prompt, targets, exclusions } of cases) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, targets, prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, exclusions, prompt);
+  }
+});
+
+test('directory scopes accept common prefix and exclusion wording', () => {
+  const cases = [
+    {
+      prompt: 'Only modify src/ and test/.',
+      targets: ['src/', 'test/'],
+      exclusions: [],
+    },
+    {
+      prompt: 'Modify src/ without modifying test/.',
+      targets: ['src/'],
+      exclusions: ['test/'],
+    },
+    {
+      prompt: 'Modify src/ except test/.',
+      targets: ['src/'],
+      exclusions: ['test/'],
+    },
+    {
+      prompt: '只修改 src/，不改 test/。',
+      targets: ['src/'],
+      exclusions: ['test/'],
+    },
+    {
+      prompt: '只修改 src/，test/ 保持不变。',
+      targets: ['src/'],
+      exclusions: ['test/'],
+    },
+    {
+      prompt: 'Only modify ./src/ and ./lib/, except ./release/.',
+      targets: ['./src/', './lib/'],
+      exclusions: ['./release/'],
+    },
+    {
+      prompt: 'Only modify /tmp/project/src/; do not modify /tmp/project/release/.',
+      targets: ['/tmp/project/src/'],
+      exclusions: ['/tmp/project/release/'],
+    },
+    {
+      prompt: '只改 “src/”，不改 “release/”。',
+      targets: ['src/'],
+      exclusions: ['release/'],
+    },
+    {
+      prompt: 'Only modify src/; leave release/ unchanged.',
+      targets: ['src/'],
+      exclusions: ['release/'],
+    },
+    {
+      prompt: 'Only modify src/; keep release/ unchanged.',
+      targets: ['src/'],
+      exclusions: ['release/'],
+    },
+    {
+      prompt: 'Only modify src/; release/ must remain unchanged.',
+      targets: ['src/'],
+      exclusions: ['release/'],
+    },
+    {
+      prompt: 'Only modify src/ while preserving release/.',
+      targets: ['src/'],
+      exclusions: ['release/'],
+    },
+  ];
+
+  for (const { prompt, targets, exclusions } of cases) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, targets, prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, exclusions, prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+  }
+});
+
+test('workspace path names stay scope data instead of manufacturing domains or external actions', () => {
+  for (const prompt of [
+    'Modify src/, but not release/.',
+    'Modify src/, but not security/.',
+    'Modify src/, but not tests/.',
+    '只修改 src/，不要修改 release/。',
+    '只修改 src/，不要修改 security/。',
+    '只修改 src/，不要修改 tests/。',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['src/'], prompt);
+    assert.equal(route.taskDescriptor.workspaceWriteExclusions.length, 1, prompt);
+    assert.deepEqual(route.taskDescriptor.domains, ['code'], prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'unspecified', prompt);
+    assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden', prompt);
+    assert.equal(route.taskDescriptor.risk.flags.includes('security-sensitive'), false, prompt);
+  }
+});
+
+test('postfixed preservation wording excludes workspace paths without activating their basenames', () => {
+  for (const prompt of [
+    'Modify src/ but leave release/ as-is.',
+    'Only modify src/; avoid changes to release/.',
+    'Only modify src/; release/ should not change.',
+    'Only modify "src/"; keep "release/" as is.',
+    'Only modify "src/"; avoid changes to "release/".',
+    'Only modify src/; "release/" should not change.',
+    'Only modify src/; “release/” should remain unchanged.',
+    '只修改 src/，release/ 不要动。',
+    '只修改 src/，release/ 不变。',
+    '只修改 src/，保持 release/ 原样。',
+    '只修改“src/”，“release/”保持原样。',
+    '只修改“src/”，保持“release/”原样。',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['src/'], prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, ['release/'], prompt);
+    assert.deepEqual(route.taskDescriptor.domains, ['code'], prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden', prompt);
+    assert.notEqual(route.taskDescriptor.constraints.networkAccess, 'required', prompt);
+    assert.equal(route.taskDescriptor.risk.flags.includes('external-write'), false, prompt);
+  }
+});
+
+test('broad workspace mutations can exclude named directories without activating their basenames', () => {
+  for (const [prompt, exclusion] of [
+    ['Modify all files except release/.', 'release/'],
+    ['Modify the repository except tests/.', 'tests/'],
+    ['Update everything except security/.', 'security/'],
+    ['修改整个项目，但 release/ 除外。', 'release/'],
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, [exclusion], prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden', prompt);
+    assert.notEqual(route.taskDescriptor.constraints.networkAccess, 'required', prompt);
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'unspecified', prompt);
+    assert.equal(route.taskDescriptor.risk.flags.includes('security-sensitive'), false, prompt);
+  }
+});
+
+test('quoted workspace path lists preserve write and exclusion scope', () => {
+  const cases = [
+    {
+      prompt: 'Modify src/, but not "release/".',
+      targets: ['src/'],
+      exclusions: ['release/'],
+    },
+    {
+      prompt: 'Modify "src/" and "tests/".',
+      targets: ['src/', 'tests/'],
+      exclusions: [],
+    },
+    {
+      prompt: '只修改“源码/”和“测试/”。',
+      targets: ['源码/', '测试/'],
+      exclusions: [],
+    },
+    {
+      prompt: '只修改 src/，“测试/”保持不变。',
+      targets: ['src/'],
+      exclusions: ['测试/'],
+    },
+  ];
+
+  for (const { prompt, targets, exclusions } of cases) {
+    const route = routeNaturalLanguageTask({ prompt });
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, targets, prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, exclusions, prompt);
+    assert.deepEqual(route.taskDescriptor.domains, ['code'], prompt);
+  }
+});
+
+test('real actions after path scopes still produce release, security, and test signals', () => {
+  const release = routeNaturalLanguageTask({ prompt: 'Modify src/, then release the plugin.' });
+  assert.equal(release.taskDescriptor.domains.includes('plugin'), true);
+  assert.equal(release.taskDescriptor.constraints.externalWrite, 'required');
+  assert.equal(release.taskDescriptor.risk.flags.includes('external-write'), true);
+
+  const security = routeNaturalLanguageTask({ prompt: 'Modify security/, then audit it for vulnerabilities.' });
+  assert.equal(security.taskDescriptor.domains.includes('security'), true);
+  assert.equal(security.taskDescriptor.risk.flags.includes('security-sensitive'), true);
+
+  const tests = routeNaturalLanguageTask({ prompt: 'Modify tests/, then run tests.' });
+  assert.equal(tests.taskDescriptor.domains.includes('tests'), true);
+  assert.equal(tests.taskDescriptor.constraints.testExecution, 'required');
+});
+
+test('bare except and quoted path prose need a real workspace-write context', () => {
+  for (const prompt of [
+    'Explain all directories except tests/.',
+    'Explain this quotation: "except tests/".',
+    'Explain all files except "src/a.js".',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'answer', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, [], prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, [], prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'forbidden', prompt);
+  }
+
+  const scoped = routeNaturalLanguageTask({ prompt: 'Modify src/ except "tests/".' });
+  assert.deepEqual(scoped.taskDescriptor.workspaceWriteTargets, ['src/']);
+  assert.deepEqual(scoped.taskDescriptor.workspaceWriteExclusions, ['tests/']);
+});
+
+test('independent-review scope is distinct from implementation-agent scope', () => {
+  const cases = [
+    {
+      prompt: 'Fix the parser and run tests. You may use implementation agents, but do not use an independent reviewer.',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: '修复解析器并运行测试。可以使用实现代理，但不要使用独立 reviewer。',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: 'Fix the parser and run tests with implementation agents, but no independent reviewer.',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: '修复解析器并运行测试，但不使用独立审查。',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: 'Fix the parser and require an independent reviewer after verification.',
+      independentReview: 'required',
+    },
+    {
+      prompt: '修复解析器，并在验证后安排独立审查。',
+      independentReview: 'required',
+    },
+    {
+      prompt: 'Fix the parser and run tests, but avoid independent review.',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: 'Fix the parser and do not skip an independent review.',
+      independentReview: 'required',
+    },
+    {
+      prompt: 'Fix the parser. Independent review is required.',
+      independentReview: 'required',
+    },
+    {
+      prompt: 'Fix the parser across multiple files and add regression tests, but do not review the code.',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: '跨多个文件修复解析器并添加回归测试，但不要审查代码。',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: 'Fix the parser across multiple files and add tests, but use no reviewers.',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: 'Fix the parser without code review.',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: 'Fix the parser; code review is not needed.',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: '修复解析器，无需代码审查。',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: '修复解析器，不需要 reviewer。',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: 'Fix the parser. Independent review required.',
+      independentReview: 'required',
+    },
+    {
+      prompt: 'Fix the parser. Independent reviewer mandatory.',
+      independentReview: 'required',
+    },
+    {
+      prompt: 'Fix the parser. It must be independently reviewed.',
+      independentReview: 'required',
+    },
+    {
+      prompt: 'Fix the parser. No independent review.',
+      independentReview: 'forbidden',
+    },
+    {
+      prompt: 'Fix the parser. Independent review not required.',
+      independentReview: 'forbidden',
+    },
+  ];
+
+  for (const { prompt, independentReview } of cases) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.equal(route.taskDescriptor.constraints.subagents, 'unspecified', prompt);
+    assert.equal(route.taskDescriptor.constraints.independentReview, independentReview, prompt);
+  }
+});
+
+test('a no-write constraint does not forbid the requested read-only code review', () => {
+  const route = routeNaturalLanguageTask({ prompt: 'Without modifying files, review the code.' });
+  assert.equal(route.taskDescriptor.operation, 'inspect');
+  assert.deepEqual(route.taskDescriptor.domains, ['code']);
+  assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'forbidden');
+  assert.equal(route.taskDescriptor.constraints.independentReview, undefined);
+  assert.equal(route.taskDescriptor.phases.some(({ kind, domain }) => kind === 'review' && domain === 'code'), true);
+});
+
+test('implementation-only delegation limits preserve an explicit independent-review exception', () => {
+  for (const prompt of [
+    'Do not delegate implementation, but require an independent reviewer.',
+    '不要委派实现，但需要独立审查。',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+    assert.equal(route.taskDescriptor.constraints.subagents, 'unspecified', prompt);
+    assert.equal(route.taskDescriptor.constraints.implementationDelegation, 'forbidden', prompt);
+    assert.equal(route.taskDescriptor.constraints.independentReview, 'required', prompt);
+  }
+
+  for (const prompt of [
+    'Do not delegate this work, but require an independent reviewer.',
+    '不要委派这项工作，但要求独立审查。',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+    assert.equal(route.taskDescriptor.constraints.subagents, 'forbidden', prompt);
+    assert.equal(route.taskDescriptor.constraints.implementationDelegation, undefined, prompt);
+    assert.equal(route.taskDescriptor.constraints.independentReview, 'required', prompt);
+  }
+
+  const implementation = routeNaturalLanguageTask({
+    prompt: 'Fix the parser across multiple files and add tests. Do not delegate implementation, but require an independent reviewer.',
+    routerMode: 'enforce',
+  });
+  assert.equal(implementation.taskDescriptor.constraints.subagents, 'unspecified');
+  assert.equal(implementation.taskDescriptor.constraints.implementationDelegation, 'forbidden');
+  assert.equal(implementation.taskDescriptor.constraints.independentReview, 'required');
+  assert.equal(implementation.roles.some(({ agent }) => ['plan', 'implementation-task'].includes(agent)), false);
+  assert.ok(implementation.roles.some(({ agent }) => agent === 'reviewer'));
+  assert.equal(implementation.skills.includes('subagent-driven-development'), false);
+  assert.equal(implementation.requiredSkills.includes('subagent-driven-development'), false);
+  assert.doesNotMatch(implementation.routeCard, /subagent-driven-development/u);
+  assert.doesNotMatch(implementation.routeCard, /^- (?:plan|implementation-task)$/mu);
+});
+
+test('independent-review prohibitions filter reviewer roles without removing implementation roles', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Fix the parser across multiple files and add regression tests, but do not use an independent reviewer.',
+    routerMode: 'enforce',
+  });
+
+  assert.equal(route.taskDescriptor.constraints.subagents, 'unspecified');
+  assert.equal(route.taskDescriptor.constraints.independentReview, 'forbidden');
+  assert.ok(route.roles.some(({ agent }) => agent === 'plan'));
+  assert.ok(route.roles.some(({ agent }) => agent === 'implementation-task'));
+  assert.equal(route.roles.some(({ agent }) => agent === 'reviewer'), false);
+  assert.equal(route.roles.some(({ agent }) => agent === 'test-reviewer'), false);
+  assert.doesNotMatch(route.routeCard, /^- (?:reviewer|test-reviewer)$/mu);
+});
+
+test('reviewer wording inside writing source remains data', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Polish this sentence without changing its meaning: The policy says "do not use an independent reviewer."',
+  });
+
+  assert.equal(route.taskDescriptor.operation, 'modify');
+  assert.equal(route.taskDescriptor.constraints.independentReview, undefined);
+});
+
+test('quoted slash-terminated prose remains data outside a workspace scope', () => {
+  const explanation = routeNaturalLanguageTask({
+    prompt: 'Explain this quotation: "run tests/".',
+  });
+  assert.equal(explanation.taskDescriptor.operation, 'answer');
+  assert.deepEqual(explanation.taskDescriptor.domains, ['general']);
+  assert.equal(explanation.taskDescriptor.constraints.testExecution, 'unspecified');
+
+  const codeEdit = routeNaturalLanguageTask({
+    prompt: 'Fix src/a.js. Explain the quoted sample "use an independent reviewer/".',
+  });
+  assert.equal(codeEdit.taskDescriptor.operation, 'modify');
+  assert.equal(codeEdit.taskDescriptor.constraints.independentReview, undefined);
+});
+
+test('quoted exact-test examples cannot manufacture test execution authority', () => {
+  for (const prompt of [
+    'Explain this quotation: "run exactly node --test test/a.test.js".',
+    'Analyze the string `run src/a.test.js` without executing it.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+    assert.notEqual(route.taskDescriptor.operation, 'execute', prompt);
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'unspecified', prompt);
+    assert.deepEqual(route.taskDescriptor.testExecutionTargets, [], prompt);
+    assert.equal(route.taskDescriptor.capabilities.includes('tests.execute'), false, prompt);
+  }
+
+  const activated = routeNaturalLanguageTask({
+    prompt: 'Follow this instruction exactly: "Use bash exactly once to run exactly `node --test test/a.test.js` and do not call any other tool."',
+  });
+  assert.equal(activated.taskDescriptor.operation, 'execute');
+  assert.equal(activated.taskDescriptor.constraints.testExecution, 'required');
+  assert.deepEqual(activated.taskDescriptor.testExecutionTargets, ['test/a.test.js']);
+});
+
+test('exact test target basenames stay data instead of manufacturing release or security work', () => {
+  for (const prompt of [
+    'Run tests/release.test.js.',
+    'Run tests/publish.test.js.',
+    'Run tests/security.test.js.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+    assert.equal(route.taskDescriptor.operation, 'execute', prompt);
+    assert.deepEqual(route.taskDescriptor.domains, ['tests'], prompt);
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'required', prompt);
+    assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden', prompt);
+    assert.notEqual(route.taskDescriptor.constraints.networkAccess, 'required', prompt);
+    assert.equal(route.taskDescriptor.risk.flags.includes('external-write'), false, prompt);
+    assert.equal(route.taskDescriptor.risk.flags.includes('security-sensitive'), false, prompt);
+  }
+
+
+  for (const prompt of [
+    'Do not run tests/release.test.js.',
+    '不要运行 tests/security.test.js。',
+    'Fix src/a.js, but do not run tests/publish.test.js.',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+    assert.equal(route.taskDescriptor.constraints.testExecution, 'forbidden', prompt);
+    assert.equal(route.taskDescriptor.constraints.externalWrite, 'forbidden', prompt);
+    assert.equal(route.taskDescriptor.risk.flags.includes('security-sensitive'), false, prompt);
+  }
+
+  const review = routeNaturalLanguageTask({
+    prompt: 'Review tests/security.test.js without modifying files.',
+  });
+  assert.equal(review.taskDescriptor.operation, 'inspect');
+  assert.deepEqual(review.taskDescriptor.domains, ['code', 'tests']);
+  assert.equal(review.taskDescriptor.constraints.workspaceWrite, 'forbidden');
+  assert.equal(review.taskDescriptor.risk.flags.includes('security-sensitive'), false);
+});
+
+test('rename requests remain modifications when followed by focused test execution', () => {
+  const route = routeNaturalLanguageTask({
+    prompt: 'Rename one local variable in src/a.js and run its focused test.',
+  });
+
+  assert.equal(route.taskDescriptor.operation, 'modify');
+  assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required');
+  assert.equal(route.taskDescriptor.constraints.testExecution, 'required');
+  assert.ok(route.taskDescriptor.domains.includes('code'));
+  assert.ok(route.taskDescriptor.domains.includes('tests'));
+});
+
+test('negative file scopes do not leak their parent directory into exclusions or targets', () => {
+  for (const prompt of [
+    'Fix lib/x.js; do not modify src/a.js.',
+    '修复 lib/x.js，不要修改 src/a.js。',
+  ]) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, ['lib/x.js'], prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteExclusions, ['src/a.js'], prompt);
+  }
+});
+
+test('affirmative project configuration edits are not masked as bounded exclusions', () => {
+  const cases = [
+    { prompt: '修改项目配置。', targets: [] },
+    { prompt: 'Update the project configuration.', targets: [] },
+    { prompt: 'Change package.json.', targets: ['package.json'] },
+  ];
+
+  for (const { prompt, targets } of cases) {
+    const route = routeNaturalLanguageTask({ prompt });
+
+    assert.equal(route.taskDescriptor.operation, 'modify', prompt);
+    assert.ok(route.taskDescriptor.domains.includes('config'), prompt);
+    assert.equal(route.taskDescriptor.constraints.workspaceWrite, 'required', prompt);
+    assert.deepEqual(route.taskDescriptor.workspaceWriteTargets, targets, prompt);
+  }
+});
+
 test('a global no-write prohibition wins over a bounded other-files clause', () => {
   for (const prompt of [
     '修复 src/parser.js。禁止修改任何文件，也禁止修改任何其他文件。',

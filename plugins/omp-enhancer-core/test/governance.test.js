@@ -95,6 +95,18 @@ test('task facts preserve source-language and explicit constraints without selec
   assert.doesNotMatch(fragment, /Intent: writing\.en|Workflow: writing\./i);
 });
 
+test('task facts preserve explicit write targets and exclusions without creating permissions', () => {
+  const prompt = '只修改 源码/，不要修改 测试/、测试夹具/。';
+  const route = routeNaturalLanguageTask({ prompt });
+  const fragment = buildGovernancePromptFragment({ route, parentTask: prompt });
+
+  assert.match(fragment, /Observed targets: 源码\//i);
+  assert.match(fragment, /Observed write exclusions: 测试\/, 测试夹具\//i);
+  assert.doesNotMatch(fragment, /Observed targets:[^\n]*(?:测试\/|测试夹具\/)/i);
+  assert.match(fragment, /observed task facts only/i);
+  assert.match(fragment, /permissions[\s\S]*remain authoritative/i);
+});
+
 test('immediate note is optional information and never directs native orchestration', () => {
   const message = buildImmediateWorkflowMessage({
     availableSkills: [{ name: 'writing-review' }, { name: 'systematic-debugging' }],

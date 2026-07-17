@@ -341,6 +341,65 @@ test('resolveClassificationRoute blocks security-review override for writing fal
   }
 });
 
+test('resolveClassificationRoute cannot merge reviewer roles back through legacy classifier hints', () => {
+  const result = resolveClassificationRoute({
+    prompt: 'Fix parser across multiple files and add regression tests, but do not use an independent reviewer.',
+    classification: {
+      intent: 'security-review',
+      secondaryIntents: [],
+      language: 'en',
+      confidence: 0.95,
+      riskFlags: ['needs-review', 'needs-security-review'],
+      domainHints: ['security'],
+      reason: 'The classifier recommends a security review.',
+    },
+  });
+
+  const forbiddenReviewers = new Set([
+    'reviewer',
+    'test-reviewer',
+    'ecc-security-reviewer',
+    'omp-target-auditor',
+  ]);
+  const projectedRoles = result.route.roles.map(({ agent }) => agent);
+  const plannedRoles = result.route.routePlan.roles.map(({ agent }) => agent);
+  const legacyRoles = result.route.requiredSubagents.map(({ agent }) => agent);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.route.taskDescriptor.constraints.independentReview, 'forbidden');
+  assert.deepEqual(projectedRoles, ['plan', 'implementation-task']);
+  assert.deepEqual(plannedRoles, projectedRoles);
+  assert.deepEqual(legacyRoles, projectedRoles);
+  assert.equal(projectedRoles.some((agent) => forbiddenReviewers.has(agent)), false);
+  assert.doesNotMatch(result.route.routeCard, /reviewer|auditor/u);
+});
+
+test('resolveClassificationRoute preserves required review while classifier merging honors no implementation delegation', () => {
+  const result = resolveClassificationRoute({
+    prompt: 'Fix parser across multiple files and add regression tests. Do not delegate implementation, but require an independent reviewer.',
+    classification: {
+      intent: 'implementation-with-tests',
+      secondaryIntents: [],
+      language: 'en',
+      confidence: 0.95,
+      riskFlags: ['needs-review', 'needs-subagents'],
+      domainHints: ['code'],
+      reason: 'The classifier recommends an implementation workflow.',
+    },
+  });
+
+  const roles = result.route.roles.map(({ agent }) => agent);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.route.taskDescriptor.constraints.implementationDelegation, 'forbidden');
+  assert.equal(result.route.taskDescriptor.constraints.independentReview, 'required');
+  assert.deepEqual(roles, ['reviewer']);
+  assert.deepEqual(result.route.routePlan.roles.map(({ agent }) => agent), roles);
+  assert.deepEqual(result.route.requiredSubagents.map(({ agent }) => agent), roles);
+  assert.equal(result.route.skills.includes('subagent-driven-development'), false);
+  assert.equal(result.route.routePlan.skills.includes('subagent-driven-development'), false);
+});
+
 test('resolveClassificationRoute preserves writing reports when classifier self-identifies report writing', () => {
   for (const [prompt, classifierIntent, expectedIntent] of [
     ['请写测试报告，重点说明当前验证风险，不要生成测试代码。', 'testing', 'writing.pending'],

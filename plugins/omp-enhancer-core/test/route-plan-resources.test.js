@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { routeNaturalLanguageTask } from '../src/router.js';
+import { filterRoutePlanByTaskConstraints } from '../src/route-policy.js';
 
 test('broad code work recommends skill-bearing roles without making them completion conditions', () => {
   const route = routeNaturalLanguageTask({
@@ -106,4 +107,25 @@ test('top-level required fields are explicitly deprecated compatibility aliases'
   assert.deepEqual(route.requiredTools, route.routePlan.tools);
   assert.deepEqual(route.requiredSubagents.map(({ agent }) => agent), route.routePlan.roles.map(({ agent }) => agent));
   assert.deepEqual(route.deprecatedAliases, ['requiredSkills', 'requiredTools', 'requiredSubagents']);
+});
+
+test('shared route-plan filtering recognizes catalog reviewer role suffixes', () => {
+  const plan = filterRoutePlanByTaskConstraints({
+    skills: ['subagent-driven-development', 'security-review'],
+    roles: [
+      { agent: 'plan' },
+      { agent: 'implementation-task' },
+      { agent: 'ecc-network-config-reviewer' },
+      { agent: 'fact-researcher-a' },
+    ],
+  }, {
+    constraints: { independentReview: 'forbidden' },
+  });
+
+  assert.deepEqual(plan.roles.map(({ agent }) => agent), [
+    'plan',
+    'implementation-task',
+    'fact-researcher-a',
+  ]);
+  assert.deepEqual(plan.skills, ['subagent-driven-development', 'security-review']);
 });

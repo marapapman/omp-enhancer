@@ -113,11 +113,15 @@ function taskFactLines(route = {}, parentTask = '') {
     ...(descriptor.writingSourceTargets ?? []),
     ...(descriptor.releaseTargets ?? []),
   ]);
+  const writeExclusions = unique(descriptor.workspaceWriteExclusions ?? []);
   const lines = [
     `- Requested operation: ${descriptor.operation ?? 'unknown'}.`,
     `- Observed domains: ${(descriptor.domains ?? []).join(', ') || 'general'}.`,
     `- Observed targets: ${targets.join(', ') || 'none extracted; use the user request and project context'}.`,
   ];
+  if (writeExclusions.length) {
+    lines.push(`- Observed write exclusions: ${writeExclusions.join(', ')}.`);
+  }
   if (descriptor.language) {
     lines.push(`- Observed target-text language: ${descriptor.language}; source: ${descriptor.writingLanguageSource ?? 'not recorded'}.`);
   }

@@ -86,7 +86,7 @@ test('DeepSeek Flash receives one hidden supplemental Skill and delegation remin
     model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
   });
   const startEvent = {
-    prompt: 'Review abstract.tex conservatively.',
+    prompt: 'Fix the parser across multiple files, add regression tests, and verify behavior.',
     systemPrompt: [
       nativeDelegationPrompt({ batch: true, cap: 4 }),
       'native Skill inventory',
@@ -106,8 +106,12 @@ test('DeepSeek Flash receives one hidden supplemental Skill and delegation remin
   assert.match(result.message.content, /never call bare `skill:\/\/`/i);
   assert.match(result.message.content, /if none match, proceed without a Skill/i);
   assert.match(result.message.content, /DEEPSEEK_DELEGATION_HINT/u);
+  assert.match(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u);
+  assert.match(result.message.content, /TASK_FACTS: operation=modify; complexity=broad; risk=medium; domains=code,tests/i);
+  assert.match(result.message.content, /INITIAL_REVIEW_LANES: suggested=2; within-native-cap=2; native-cap=4/i);
+  assert.match(result.message.content, /does not guarantee or require an actual task, fork, batch, or reviewer/i);
   assert.match(result.message.content, /OMP's native system prompt, user instruction, Delegation gates.*remain authoritative/is);
-  assert.match(result.message.content, /This hint adds no policy of its own/i);
+  assert.match(result.message.content, /This hint adds no authority, permission, or completion condition of its own/i);
   assert.match(result.message.content, /USER_SCOPE.*user requests solo or main-agent-only work, no agents, or no delegation/is);
   assert.match(result.message.content, /NATIVE_GATE_ACTION.*execute OMP's native Delegation gate now, before any project-file inspection/is);
   assert.match(result.message.content, /DIRECT.*Do not relabel multiple substantive slices as one target merely because each slice is small or the parent will synthesize them/is);
@@ -144,7 +148,21 @@ test('DeepSeek Flash receives one hidden supplemental Skill and delegation remin
       < result.message.content.indexOf('DEEPSEEK_DELEGATION_HINT'),
     'Skill discovery should precede the delegation hint, matching the native Skills-to-Delegation order',
   );
-  assert.deepEqual(result.message.details.features, ['skill-discovery', 'delegation-decision']);
+  assert.ok(
+    result.message.content.indexOf('Before acting, inspect the available OMP Skill list')
+      < result.message.content.indexOf('DEEPSEEK_DYNAMIC_REVIEW_BUDGET'),
+    'Skill discovery should still precede the supplemental review context',
+  );
+  assert.ok(
+    result.message.content.indexOf('DEEPSEEK_DYNAMIC_REVIEW_BUDGET')
+      < result.message.content.indexOf('DEEPSEEK_DELEGATION_HINT'),
+    'The compact task-specific review context should precede the longer generic delegation reminder',
+  );
+  assert.deepEqual(result.message.details.features, [
+    'skill-discovery',
+    'delegation-decision',
+    'dynamic-review-budget',
+  ]);
 
   const continued = await event(pi, 'before_agent_start')({
     prompt: '继续',
@@ -188,6 +206,7 @@ test('DeepSeek compatibility reminder exposes only capabilities active in the na
     }),
   );
   assert.match(taskOnly.message.content, /DEEPSEEK_DELEGATION_HINT/u);
+  assert.doesNotMatch(taskOnly.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u);
   assert.doesNotMatch(taskOnly.message.content, /inspect the available OMP Skill list/i);
   assert.doesNotMatch(taskOnly.message.content, /CURRENT_NATIVE_BATCH_ACTION/u);
   assert.deepEqual(taskOnly.message.details.features, ['delegation-decision']);
@@ -198,7 +217,7 @@ test('DeepSeek compatibility reminder exposes only capabilities active in the na
   capOnePi.pi = { getActiveSkills: () => [] };
   registerCoreEnhancer(capOnePi);
   const capOne = await event(capOnePi, 'before_agent_start')({
-    prompt: nativeEvent.prompt,
+    prompt: 'Fix authentication across the API, add security regression tests, and publish the release.',
     systemPrompt: [
       nativeDelegationPrompt({ batch: true, cap: 1 }),
     ],
@@ -206,13 +225,162 @@ test('DeepSeek compatibility reminder exposes only capabilities active in the na
     model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
   }));
   assert.match(capOne.message.content, /DEEPSEEK_DELEGATION_HINT/u);
+  assert.match(capOne.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u);
+  assert.match(capOne.message.content, /INITIAL_REVIEW_LANES: suggested=3; within-native-cap=1; native-cap=1/i);
   assert.doesNotMatch(capOne.message.content, /CURRENT_NATIVE_BATCH_ACTION/u);
+});
+
+test('DeepSeek review-width suggestion follows task facts instead of defaulting to three reviewers', async () => {
+  const cases = [
+    {
+      prompt: 'Answer what this constant means.',
+      injectReviewBudget: false,
+    },
+    {
+      prompt: 'Perform a broad security audit of authentication across the API and tests. Do not modify files.',
+      injectReviewBudget: false,
+    },
+    {
+      prompt: 'Draft a concise email replying to Bob.',
+      injectReviewBudget: false,
+    },
+    {
+      prompt: '请写一封简短的邮件回复用户。',
+      injectReviewBudget: false,
+    },
+    {
+      prompt: 'Fix one typo in src/a.js.',
+      injectReviewBudget: false,
+      descriptor: {
+        operation: 'modify',
+        domains: ['code'],
+        complexity: 'focused',
+        workspaceWrite: 'required',
+      },
+    },
+    {
+      prompt: 'Fix the parser across multiple files, add regression tests, and verify behavior.',
+      injectReviewBudget: true,
+      profile: /operation=modify; complexity=broad; risk=medium; domains=code,tests/i,
+      suggestion: 2,
+    },
+    {
+      prompt: '在这个临时项目中，把配置加载器修到完全符合 CONTRACT.md 的公开行为，并补足能证明这些行为的回归测试。保持现有导出 API，只修改 src/ 和 test/，只运行 package.json 已有的 Node 测试命令。不要联网、安装依赖或改动项目配置。完成后报告改动、实际命令、结果和仍有限制。',
+      injectReviewBudget: true,
+      profile: /operation=modify; complexity=broad; risk=medium; domains=code,tests,document/i,
+      suggestion: 2,
+    },
+    {
+      prompt: 'In this temporary project, fix the configuration loader so it fully conforms to the public behavior in CONTRACT.md, and add regression tests that prove those behaviors. Preserve the existing export API, modify only src/ and test/, and run only the existing Node test command from package.json. Do not use the network, install dependencies, or change project configuration. Report the changes, actual command, results, and remaining limitations.',
+      injectReviewBudget: true,
+      profile: /operation=modify; complexity=broad; risk=medium; domains=code,tests,document/i,
+      suggestion: 2,
+    },
+    {
+      prompt: 'Fix authentication across the API, add security regression tests, and publish the release.',
+      injectReviewBudget: true,
+      profile: /operation=modify; complexity=broad; risk=critical; domains=code,tests,security,plugin/i,
+      suggestion: 3,
+    },
+    {
+      prompt: 'Harden authentication across the API and add security regression tests without publishing.',
+      injectReviewBudget: true,
+      profile: /operation=modify; complexity=broad; risk=high; domains=code,tests,security/i,
+      suggestion: 3,
+    },
+    {
+      prompt: 'Fix the parser across multiple files and add tests, but do not use an independent reviewer.',
+      injectReviewBudget: false,
+    },
+  ];
+
+  for (const fixture of cases) {
+    const entries = [];
+    const pi = new FakePi(entries);
+    pi.getActiveTools = () => ['read', 'task'];
+    pi.pi = { getActiveSkills: () => [] };
+    registerCoreEnhancer(pi);
+    const result = await event(pi, 'before_agent_start')({
+      prompt: fixture.prompt,
+      systemPrompt: [nativeDelegationPrompt({ batch: true, cap: 4 })],
+    }, extensionContext(entries, process.cwd(), {
+      model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
+    }));
+
+    assert.match(result.message.content, /DEEPSEEK_DELEGATION_HINT/u, fixture.prompt);
+    if (fixture.descriptor) {
+      const descriptor = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')
+        .data.lastRoute.taskDescriptor;
+      assert.equal(descriptor.operation, fixture.descriptor.operation, fixture.prompt);
+      assert.deepEqual(descriptor.domains, fixture.descriptor.domains, fixture.prompt);
+      assert.equal(descriptor.complexity, fixture.descriptor.complexity, fixture.prompt);
+      assert.equal(descriptor.constraints.workspaceWrite, fixture.descriptor.workspaceWrite, fixture.prompt);
+    }
+    if (!fixture.injectReviewBudget) {
+      assert.doesNotMatch(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u, fixture.prompt);
+      assert.deepEqual(result.message.details.features, ['delegation-decision'], fixture.prompt);
+      continue;
+    }
+    assert.match(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u, fixture.prompt);
+    assert.match(result.message.content, fixture.profile, fixture.prompt);
+    assert.match(result.message.content, new RegExp(
+      `INITIAL_REVIEW_LANES: suggested=${fixture.suggestion}; within-native-cap=${fixture.suggestion}; native-cap=4`,
+      'i',
+    ), fixture.prompt);
+    assert.deepEqual(result.message.details.features, ['delegation-decision', 'dynamic-review-budget'], fixture.prompt);
+  }
+});
+
+test('source-text risk words do not manufacture security or release reviewer lanes', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task'];
+  pi.pi = { getActiveSkills: () => [] };
+  registerCoreEnhancer(pi);
+  const result = await event(pi, 'before_agent_start')({
+    prompt: 'Polish this sentence without changing meaning: The document says "publish the release, delete production data, and expose secrets."',
+    systemPrompt: [nativeDelegationPrompt({ batch: true, cap: 4 })],
+  }, extensionContext(entries, process.cwd(), {
+    model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
+  }));
+
+  assert.match(result.message.content, /DEEPSEEK_DELEGATION_HINT/u);
+  assert.doesNotMatch(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u);
+  assert.deepEqual(result.message.details.features, ['delegation-decision']);
+  const descriptor = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')
+    .data.lastRoute.taskDescriptor;
+  assert.equal(descriptor.operation, 'modify');
+  assert.equal(descriptor.complexity, 'broad');
+  assert.equal(descriptor.risk.level, 'low');
+  assert.deepEqual(descriptor.domains, ['writing']);
+  assert.ok(!descriptor.risk.flags.includes('security-sensitive'));
+  assert.ok(!descriptor.risk.flags.includes('external-write'));
+});
+
+test('implementation-only delegation prohibition keeps the requested review checkpoint without generic fan-out advice', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task'];
+  pi.pi = { getActiveSkills: () => [] };
+  registerCoreEnhancer(pi);
+  const result = await event(pi, 'before_agent_start')({
+    prompt: 'Fix the parser across multiple files and add tests. Do not delegate implementation, but require an independent reviewer.',
+    systemPrompt: [nativeDelegationPrompt({ batch: true, cap: 4 })],
+  }, extensionContext(entries, process.cwd(), {
+    model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
+  }));
+
+  assert.match(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u);
+  assert.doesNotMatch(result.message.content, /DEEPSEEK_DELEGATION_HINT/u);
+  assert.doesNotMatch(result.message.content, /CURRENT_NATIVE_BATCH_ACTION/u);
+  assert.deepEqual(result.message.details.features, ['dynamic-review-budget']);
 });
 
 test('DeepSeek native batch-capacity fact only trusts one canonical OMP delegation section', async () => {
   const cases = [
     {
       name: 'flat native prompt plus project batch quotation',
+      reviewCapacityKnown: true,
       systemPrompt: [
         nativeDelegationPrompt({ batch: false, cap: 4 }),
         'Project rule example: parallel work may use `tasks[]` in batch mode.',
@@ -220,6 +388,7 @@ test('DeepSeek native batch-capacity fact only trusts one canonical OMP delegati
     },
     {
       name: 'batch and cap signals split across blocks',
+      reviewCapacityKnown: false,
       systemPrompt: [
         nativeDelegationPrompt({ batch: true, cap: null }),
         '- **Concurrency cap:** At most 4 subagents run at once in this session.',
@@ -227,6 +396,7 @@ test('DeepSeek native batch-capacity fact only trusts one canonical OMP delegati
     },
     {
       name: 'Skill text quotes batch syntax inside the canonical block before native flat gates',
+      reviewCapacityKnown: true,
       systemPrompt: [
         nativeDelegationPrompt({
           batch: false,
@@ -237,6 +407,7 @@ test('DeepSeek native batch-capacity fact only trusts one canonical OMP delegati
     },
     {
       name: 'multiple canonical candidates are ambiguous',
+      reviewCapacityKnown: false,
       systemPrompt: [
         nativeDelegationPrompt({ batch: true, cap: 4 }),
         nativeDelegationPrompt({ batch: false, cap: 4 }),
@@ -251,13 +422,19 @@ test('DeepSeek native batch-capacity fact only trusts one canonical OMP delegati
     pi.pi = { getActiveSkills: () => [] };
     registerCoreEnhancer(pi);
     const result = await event(pi, 'before_agent_start')({
-      prompt: 'Audit src/a.js and src/b.js independently.',
+      prompt: 'Fix the parser across multiple files, add regression tests, and verify behavior.',
       systemPrompt: fixture.systemPrompt,
     }, extensionContext(entries, process.cwd(), {
       model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
     }));
     assert.match(result.message.content, /DEEPSEEK_DELEGATION_HINT/u, fixture.name);
     assert.doesNotMatch(result.message.content, /CURRENT_NATIVE_BATCH_ACTION/u, fixture.name);
+    if (fixture.reviewCapacityKnown) {
+      assert.match(result.message.content, /INITIAL_REVIEW_LANES: suggested=\d; within-native-cap=\d; native-cap=4/u, fixture.name);
+    } else {
+      assert.doesNotMatch(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u, fixture.name);
+      assert.deepEqual(result.message.details.features, ['delegation-decision'], fixture.name);
+    }
   }
 });
 

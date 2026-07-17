@@ -35,6 +35,17 @@ const FACT_TOOLS = ['fact_check_analyze', 'fact_check_evidence', 'fact_check_rep
 const TESTING_TOOLS = ['omp_test_analyze', 'omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_report'];
 const BUG_AUDIT_SKILLS = ['diagnose', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion', 'search-first', 'ai-regression-testing'];
 const IMPLEMENTATION_SKILLS = ['brainstorming', 'test-driven-development', 'subagent-driven-development', 'verification-before-completion'];
+const IMPLEMENTATION_ROLE_IDS = new Set(['plan', 'implementation-task']);
+const INDEPENDENT_REVIEW_ROLE_IDS = new Set([
+  'reviewer',
+  'test-reviewer',
+  'checker',
+  'zh-checker',
+  'fact-cross-checker',
+  'fact-reviewer',
+  'ecc-security-reviewer',
+  'omp-target-auditor',
+]);
 
 export function legacyIntentForPublicIntent(intent = 'unknown') {
   return PUBLIC_INTENT_ALIASES[intent] ?? 'unknown';
@@ -60,6 +71,8 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
   const constraints = descriptor.constraints ?? {};
   const testsSuggested = constraints.testExecution === 'required';
   const rolesAllowedByRequest = constraints.subagents !== 'forbidden';
+  const implementationRolesAllowed = constraints.implementationDelegation !== 'forbidden';
+  const independentReviewRolesAllowed = constraints.independentReview !== 'forbidden';
   const exactMethodRequest = descriptor.exclusiveToolContract?.mode === 'exclusive';
   const localFactInspection = descriptor.operation === 'inspect'
     && domains.has('facts')
@@ -217,22 +230,56 @@ export function buildRoutePlan(descriptor = {}, route = {}) {
   if (steps.some(({ kind }) => kind === 'review')) qualityChecks.push('review-evidence');
   if (steps.some(({ kind }) => kind === 'release')) qualityChecks.push('post-action-verification');
 
-  return {
+  return filterRoutePlanByTaskConstraints({
     version: 2,
     mode: 'advisory',
     autoContinue: false,
     steps,
     skills: exactMethodRequest ? [] : unique(skills).filter((skill) => (
       (rolesAllowedByRequest || skill !== 'subagent-driven-development')
+      && (implementationRolesAllowed || skill !== 'subagent-driven-development')
       && (testsSuggested || !['test-driven-development', 'ai-regression-testing'].includes(skill))
     )),
     tools: exactMethodRequest ? [] : unique(tools).filter((tool) => testsSuggested || !TESTING_TOOLS.includes(tool)),
-    roles: exactMethodRequest || !rolesAllowedByRequest ? [] : uniqueRoles(roles, { testsSuggested }),
+    roles: exactMethodRequest || !rolesAllowedByRequest ? [] : uniqueRoles(
+      roles.filter(({ agent } = {}) => (
+        (implementationRolesAllowed || !IMPLEMENTATION_ROLE_IDS.has(agent))
+        && (independentReviewRolesAllowed || !INDEPENDENT_REVIEW_ROLE_IDS.has(agent))
+      )),
+      { testsSuggested },
+    ),
     qualityChecks: unique(qualityChecks),
     riskNotes: unique(riskNotes),
     legacyIntent: route.intent ?? null,
     workflowRoute: route.workflowRoute ?? null,
+  }, descriptor);
+}
+
+export function filterRoutePlanByTaskConstraints(plan = {}, descriptorOrConstraints = {}) {
+  const constraints = descriptorOrConstraints?.constraints ?? descriptorOrConstraints ?? {};
+  const rolesAllowed = constraints.subagents !== 'forbidden';
+  const implementationRolesAllowed = constraints.implementationDelegation !== 'forbidden';
+  const independentReviewRolesAllowed = constraints.independentReview !== 'forbidden';
+  const skills = unique(plan.skills ?? plan.requiredSkills ?? []).filter((skill) => (
+    (rolesAllowed && implementationRolesAllowed) || skill !== 'subagent-driven-development'
+  ));
+  const roles = rolesAllowed ? uniqueRoles(plan.roles ?? plan.requiredSubagents ?? []).filter(({ agent }) => (
+    (implementationRolesAllowed || !IMPLEMENTATION_ROLE_IDS.has(agent))
+    && (independentReviewRolesAllowed || !isIndependentReviewRole(agent))
+  )) : [];
+
+  return {
+    ...plan,
+    skills,
+    roles,
+    ...('requiredSkills' in plan ? { requiredSkills: skills } : {}),
+    ...('requiredSubagents' in plan ? { requiredSubagents: roles } : {}),
   };
+}
+
+function isIndependentReviewRole(agent = '') {
+  return INDEPENDENT_REVIEW_ROLE_IDS.has(agent)
+    || /(?:reviewer|checker|auditor)$/u.test(agent);
 }
 
 export function attachCompiledTaskRoute(route, descriptor) {
@@ -246,7 +293,10 @@ export function attachCompiledTaskRoute(route, descriptor) {
 // Kept under its historical export name for one compatibility cycle. It now
 // projects advisory resources and never acts as an authority ceiling.
 export function projectRouteResourceCeilings(route = {}) {
-  const plan = route.routePlan ?? buildRoutePlan(route.taskDescriptor, route);
+  const plan = filterRoutePlanByTaskConstraints(
+    route.routePlan ?? buildRoutePlan(route.taskDescriptor, route),
+    route.taskDescriptor,
+  );
   const legacyRoles = plan.roles.map(({ skills = [], ...role }) => ({
     ...role,
     requiredSkills: [...skills],
@@ -276,7 +326,9 @@ export function projectRouteResourceCeilings(route = {}) {
       skills: plan.skills,
       roles: plan.roles,
       includeCatalogSkills: false,
-      includeCatalogRoles: route.taskDescriptor?.constraints?.subagents !== 'forbidden',
+      includeCatalogRoles: route.taskDescriptor?.constraints?.subagents !== 'forbidden'
+        && route.taskDescriptor?.constraints?.implementationDelegation !== 'forbidden'
+        && route.taskDescriptor?.constraints?.independentReview !== 'forbidden',
     }),
   };
 }

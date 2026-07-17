@@ -430,28 +430,53 @@ export function normalizeTaskDescriptor(value = {}) {
   };
 }
 
-function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt } = {}) {
-  const positiveDomainText = positiveDomainSignalText(text);
+function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = prompt } = {}) {
+  const rawText = String(sourceText);
   const rawExclusiveCompanionMutation = hasExclusiveCompanionMutation(rawPrompt);
   const externalActionContract = analyzeExternalActionPrompt(prompt);
   const externalActionContracts = analyzeExternalActionContracts(prompt);
   const externalActionRequested = ['complete', 'incomplete', 'conflicting'].includes(externalActionContract?.state);
   const workspaceScopes = workspaceWriteScopesFor(scopePrompt);
   const externalScopes = externalWriteScopesFor(prompt);
-  const workspaceConstraintText = maskScopedWorkspaceWriteNegatives(normalizeAffirmativeWorkspacePhrases(stripQuotedConstraintMentions(text)));
-  const testConstraintText = maskAffirmativeTestPhrases(text);
-  const testAllowlist = testAllowlistFor(testConstraintText);
-  const testExclusions = testExclusionsFor(testConstraintText);
   const testExecutionBinding = testExecutionBindingFor(prompt);
   const testExecutionTargets = testExecutionBinding.ambiguous
     ? []
     : testExecutionBinding.targets.length
-    ? testExecutionBinding.targets
-    : testExecutionTargetsFor(prompt);
+      ? testExecutionBinding.targets
+      : testExecutionTargetsFor(prompt);
+  // Workspace paths are scope data, not action or domain words. Extract them
+  // first, then remove both ordinary quoted data and every recognized scope
+  // target from the shared semantic signal text. This prevents directories
+  // such as release/, security/, or tests/ from manufacturing unrelated work.
+  const semanticSource = stripQuotedConstraintMentions(sourceText);
+  const text = maskWorkspaceScopeTargetMentions(
+    maskTestExecutionTargetMentions(
+      rawExclusiveCompanionMutation
+        ? maskRouteProbeScopedWorkspaceConstraints(semanticSource)
+        : semanticSource,
+      testExecutionTargets,
+    ),
+    [
+      ...workspaceScopes.targets,
+      ...workspaceScopes.exclusions,
+    ],
+  );
+  const positiveDomainText = positiveDomainSignalText(text);
+  const workspaceConstraintText = maskScopedWorkspaceWriteNegatives(
+    normalizeAffirmativeWorkspacePhrases(text),
+  );
+  const testConstraintText = maskAffirmativeTestPhrases(maskWorkspaceTestPathMentions(
+    text,
+  ));
+  const testAllowlist = testAllowlistFor(testConstraintText);
+  const testExclusions = testExclusionsFor(testConstraintText);
   const globalTestConstraintText = maskSelectiveTestExclusions(testConstraintText);
   const networkConstraintText = maskAffirmativeNetworkPhrases(text);
   const externalConstraintText = maskScopedExternalWriteNegatives(normalizeAffirmativeExternalWritePhrases(text));
   const subagentConstraintText = normalizeAffirmativeSubagentPhrases(text);
+  const implementationDelegationConstraint = implementationDelegationConstraintFor(subagentConstraintText);
+  const globalSubagentConstraintText = maskImplementationOnlyDelegationProhibitions(subagentConstraintText);
+  let independentReviewConstraint = independentReviewConstraintFor(text);
   const documentTargetWithCodeExclusion = workspaceScopes.targets.some((target) => /(?:^|\/)(?:readme(?:\.[a-z0-9]+)?|[^/]+\.(?:md|mdx|rst|txt|tex|docx?))$/i.test(target))
     && /(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*(?:代码|源代码)|\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?(?:code|source code)\b/i.test(workspaceConstraintText);
   const testArtifactWriteWithCodeExclusion = (
@@ -505,10 +530,10 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     /(?:^|[,.!?;]\s*(?:(?:and(?:\s+then)?|then|next|separately|after\s+that)\s*)?)(?:please\s+)?(?:access|browse|search|use)\s+(?:the\s+)?(?:network|internet|web)\b/i.test(text)
     || /(?:^|[，,。！？；;]\s*(?:(?:并且|并|然后|接着|随后|另外|再)\s*)?)(?:请)?(?:访问|浏览|搜索|使用|连接)\s*(?:网络|互联网|网页|外网)/u.test(text)
   );
-  const noSubagents = hasExplicitNoDelegation(subagentConstraintText)
-    || /(?:不要|不|别|无需|不用|禁止|不得).{0,18}(?:子代理|子 agent|subagent|sub-agent)|(?:只由|仅由).{0,12}(?:主代理|主 agent|main agent)|(?:do not|don't|without|no).{0,18}(?:subagents?|sub-agents?)|(?:main agent only|only the main agent)/.test(subagentConstraintText)
-    || chineseNegativeClauseIncludes(subagentConstraintText, /(?:子代理|子\s*agent|subagents?|sub-agents?)/i)
-    || englishNegativeClauseIncludes(subagentConstraintText, /\b(?:use\s+)?(?:subagents?|sub-agents?)\b/i);
+  const noSubagents = hasExplicitNoDelegation(globalSubagentConstraintText)
+    || /(?:不要|不|别|无需|不用|禁止|不得).{0,18}(?:子代理|子 agent|subagent|sub-agent)|(?:只由|仅由).{0,12}(?:主代理|主 agent|main agent)|(?:do not|don't|without|no).{0,18}(?:subagents?|sub-agents?)|(?:main agent only|only the main agent)/.test(globalSubagentConstraintText)
+    || chineseNegativeClauseIncludes(globalSubagentConstraintText, /(?:子代理|子\s*agent|subagents?|sub-agents?)/i)
+    || englishNegativeClauseIncludes(globalSubagentConstraintText, /\b(?:use\s+)?(?:subagents?|sub-agents?)\b/i);
   const releaseArtifact = /(?:release notes?|changelog|发布公告|发布说明|release announcement|release report)/.test(text);
   const dependencyUpgrade = /(?:升级|更新).{0,18}(?:npm|依赖|dependenc(?:y|ies)|packages?)|\b(?:upgrade|update).{0,18}(?:dependenc(?:y|ies)|packages?)\b/.test(text);
   const localReleaseCache = /(?:发布缓存|release cache)/.test(text);
@@ -531,8 +556,9 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
   const factReviewForbidden = /\b(?:without|do\s+not|don't|no\s+need\s+to)\b[^.!?;\n]{0,32}\b(?:verif(?:y|ying)|fact[- ]?check(?:ing)?|check(?:ing)?)\b[^.!?;\n]{0,24}\b(?:claims?|facts?)\b|(?:不要|不再|无需|不用|不)\s*(?:再|进行|执行)?\s*(?:核验|核查|查证|事实核查)[^。！？；;\n]{0,16}(?:声明|主张|事实)?/.test(text);
   const securityReviewForbidden = /\b(?:without|do\s+not|don't|no\s+need\s+to)\b[^.!?;\n]{0,36}\b(?:perform|run|do)?\s*(?:a\s+)?(?:security\s+)?(?:audit|review|scan)\b|(?:不要|不再|无需|不用|不)[^。！？；;\n]{0,24}(?:做|进行|执行)?\s*(?:代码)?安全(?:审查|审计|扫描)|(?:不要|不再|无需|不用|不)[^。！？；;\n]{0,16}(?:审查|审计|扫描)(?:代码|仓库|实现)/.test(text);
   const codeReviewForbidden = /(?:不要|不|无需|不用)\s*(?:再|进行|执行)?\s*(?:判断|检查|审查|分析)[^。！？；;\n]{0,16}(?:代码|源码|实现)(?:问题)?|\b(?:do\s+not|don't|without|no\s+need\s+to)\b[^.!?;\n]{0,24}\b(?:judge|check|review|inspect|analyze)\b[^.!?;\n]{0,16}\b(?:code|source|implementation)\b/.test(text)
-    || chineseNegativeClauseIncludes(text, /(?:判断|检查|审查|分析).{0,16}(?:代码|源码|实现)(?:问题)?/i)
-    || englishNegativeClauseIncludes(text, /\b(?:judge|check|review|inspect|analyze)\b.{0,24}\b(?:code|source|implementation)\b/i);
+    || /(?:无需|不用|不需要|不做|不要做)\s*(?:任何)?\s*(?:代码|源码|实现)\s*(?:审查|审核|评审|复核)|\b(?:without|with\s+no|no\s+need\s+for)\s+(?:an?\s+)?(?:independent\s+)?code\s+review\b|\bcode\s+review\s+(?:is\s+)?not\s+(?:needed|required|necessary)\b/.test(text)
+    || chineseNegativeClauseIncludes(text, /(?:判断|检查|审查|分析)\s*(?:代码|源码|实现)/i)
+    || englishCoordinatedNegativeClauseIncludes(text, /\b(?:judge|check|review|inspect|analyze)\b[^.!?;\n]{0,16}\b(?:code|source|implementation)\b/i);
   const testReportWriting = /\b(?:write|draft|prepare|revise|edit|summarize|summarise)\b.{0,48}\btest\s+(?:(?:failure|coverage|execution|result|results|gate)\s+)?report\b|(?:写|起草|撰写|整理|总结|修订|修改).{0,32}(?:测试|覆盖率|失败|门禁).{0,16}(?:报告|总结|结果说明)/.test(text);
   const explicitDefectAudit = !suppliedFindingsReport && /\b(?:inspect|audit|review|check|find|hunt)\b.{0,80}\b(?:plugin|project|codebase|repository|repo|code|implementation|pull\s+request|pr)\b.{0,80}\b(?:bugs?|defects?)\b|\b(?:inspect|audit|review|check|find|hunt)\b.{0,40}\b(?:bugs?|defects?)\b|(?:检查|审查|审计|排查|查找).{0,64}(?:插件|项目|代码库|仓库|代码|实现).{0,64}(?:bug|缺陷|问题)|(?:检查|审查|审计|排查|查找).{0,40}(?:bug|缺陷)/.test(text);
   const factSentenceText = text.replace(/((?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+)\.([a-z0-9]{1,10})\b/gi, '$1_fileext_$2');
@@ -629,9 +655,18 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     /(?:检查|审查|审计|排查).{0,24}(?:(?:整个|全|全部|所有).{0,8})?(?:项目|代码库|代码).{0,20}(?:(?:所有|全部|全面).{0,8})?(?:bugs?|缺陷)/.test(text)
     || /\b(?:audit|inspect|review|check|find|hunt)\b.{0,36}\b(?:the\s+)?(?:whole|entire|full|all)\s+(?:project|codebase|repository|repo|code)\b.{0,36}\b(?:bugs?|defects?)\b/.test(text)
   );
-  const explicitTestTargetExecution = /(?:只|仅)?\s*(?:运行|执行|跑|重跑)\s+(?:node\s+--test\s+)?[`'"]?[^\s，。；;!！]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)\b/i.test(text)
-    || /\b(?:only\s+)?(?:run|execute|rerun)\s+(?:exactly\s+)?(?:node\s+--test\s+)?[`'"]?[^\s,.;!]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)\b(?:\s+once\b)?/i.test(text);
-  const directTestExecution = !noTestExecution && (testAllowlist.length > 0 || explicitTestTargetExecution || broadBugAudit || (
+  const exactTestCommandAuthorized = Boolean(testExecutionBinding.command) && (
+    /\b(?:run|execute|rerun)\s+(?:exactly\s+)?(?:node\s+--test\s+)?test-target\b/iu.test(text)
+    || /(?:运行|执行|跑|重跑)\s*(?:恰好|准确|仅|只)?\s*(?:node\s+--test\s+)?test-target\b/iu.test(text)
+    || /\b(?:run|execute|rerun)\s+(?:exactly\s+)?(?:once\s+)?(?:[.!?;]|$)/iu.test(text)
+    || /\b(?:use|call)\b[^.!?;\n]{0,48}\b(?:bash|shell)\b[^.!?;\n]{0,48}\b(?:run|execute)\b/iu.test(text)
+    || /(?:使用|调用)\s*(?:bash|shell|外壳)[^。！？；;\n]{0,32}(?:运行|执行)/u.test(text)
+  );
+  const explicitTestTargetExecution = exactTestCommandAuthorized && (
+    /(?:只|仅)?\s*(?:运行|执行|跑|重跑)\s+(?:node\s+--test\s+)?[`'"]?[^\s，。；;!！]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)\b/i.test(rawText)
+    || /\b(?:only\s+)?(?:run|execute|rerun)\s+(?:exactly\s+)?(?:node\s+--test\s+)?[`'"]?[^\s,.;!]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)\b(?:\s+once\b)?/i.test(rawText)
+  );
+  const directTestExecution = !noTestExecution && (exactTestCommandAuthorized || testAllowlist.length > 0 || explicitTestTargetExecution || broadBugAudit || (
     testWork && !(writingWork && noTestAuthoring) && (
       /(?:运行|执行|跑|重跑).{0,32}(?:测试|test)|(?:测试|test).{0,32}(?:运行|执行|跑|重跑)|\b(?:run|execute|rerun)\b.{0,32}\b(?:tests?|testing\s+workflow)\b/.test(globalTestConstraintText)
       || /\b(?:tests?|testing)\b[^.!?\n]{0,48}\band\s+(?:run|execute|rerun)\s+(?:them|it|these|those)\b/.test(globalTestConstraintText)
@@ -692,11 +727,16 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     .replace(/\b(?:plugin|package)\s+update\b|插件更新/g, ' ')
     .replace(/\b(?:this|that|the|a|an)\s+draft\b/g, ' ')
     .replace(/\b(?:inspect|review|assess|analy[sz]e|verify|check)\s+(?:the\s+)?(?:update|fix|implementation|release)\s+(?:plan|proposal|draft|workflow|risks?)\b/g, ' inspect plan ');
-  const codeTarget = hasCodeTarget(effectiveActionText) || workspaceScopes.exclusions.length > 0;
+  const scopedCodeTarget = [...workspaceScopes.targets, ...workspaceScopes.exclusions]
+    .some((target) => target.endsWith('/') || /\.(?:[cm]?[jt]sx?|py|go|rs|java)$/iu.test(target));
+  const codeTarget = hasCodeTarget(effectiveActionText) || scopedCodeTarget;
   const nonTestActionText = testExecutionTargets.length
-    ? effectiveActionText.replace(/(?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)/gi, ' ')
+    ? effectiveActionText
+      .replace(/(?:\.\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+(?:\.test|\.spec)\.(?:[cm]?[jt]sx?|py|go|rs|java)/gi, ' ')
+      .replace(/\btest-target\b/gi, ' ')
     : effectiveActionText;
-  const nonTestCodeTarget = hasCodeTarget(nonTestActionText) || workspaceScopes.exclusions.length > 0;
+  const observedTestFileTarget = testExecutionTargets.length > 0 && !testExecutionBinding.command;
+  const nonTestCodeTarget = hasCodeTarget(nonTestActionText) || scopedCodeTarget || observedTestFileTarget;
   const functionalUiConstructionRequested = isFunctionalUiConstructionDirective(effectiveActionText);
   const directCodeCreate = !noWorkspaceWrite && !noActionExecution && !pureBugReportWriting && !directTestAuthoring && (
     /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:create|build|write|implement)\b.{0,96}\b(?:function|file|module|parser|handler|listener|class|component)\b/.test(effectiveActionText.trim())
@@ -717,6 +757,7 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
       /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:take\s+care\s+of|handle)\s+(?:the\s+)?(?:todo|fixme|issue|bug|problem)\b/.test(effectiveActionText.trim())
       || /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?make\s+.{0,80}\b(?:work|handle|support|accept)\b/.test(effectiveActionText.trim())
       || /^(?:(?:请|帮我|麻烦)\s*)?把\s*.{0,80}(?:处理一下|处理好|弄好|修好)(?:[。！!]|$)/.test(effectiveActionText.trim())
+      || /^(?:(?:请|帮我|麻烦)\s*)?把\s*.{0,80}(?:修到|改到|调整到)\s*.{0,80}(?:符合|满足|通过)/.test(effectiveActionText.trim())
     )
   );
   const ambiguousCodeAction = !noWorkspaceWrite && !noActionExecution && !advisory && !implicitModify && codeTarget && (
@@ -725,17 +766,18 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
   );
   const narrowLineEdit = /(?:只|仅)\s*(?:改|修改|调整)(?:动)?\s*(?:一|1)\s*行(?:代码)?/.test(effectiveActionText);
   const narrowScopedEdit = /(?:只|仅)\s*改(?:动)?\s*[`'"]?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.[a-z0-9_.-]+[`'"]?/i.test(effectiveActionText);
+  const scopedOnlyModifyAction = /(?:^|[，。；、：;,:.!！]\s*)(?:只|仅)\s*改(?:动)?\s*[“‘"'`]?scoped-path/u.test(effectiveActionText.trim());
   const releaseCompanionModify = !releaseRequested || (
-    /(?:修复|修一下|修正|解决|修改|编辑|实现|重构|调整|加固|打补丁).{0,64}(?:代码|逻辑|实现|文件|模块|函数|插件|漏洞|鉴权|认证|权限|注入|parser)|(?:更新).{0,32}(?:代码|逻辑|实现|文件|模块|函数)|\b(?:fix|repair|resolve|modify|edit|implement|refactor|patch|harden)\b.{0,64}\b(?:code|logic|implementation|files?|module|function|plugin|parser|issue|security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|injection)\b|\bupdate\b.{0,32}\b(?:code|logic|implementation|files?|module|function)\b/.test(effectiveActionText)
+    /(?:修复|修一下|修正|解决|修改|编辑|实现|重构|调整|重命名|加固|打补丁).{0,64}(?:代码|逻辑|实现|文件|模块|函数|变量|插件|漏洞|鉴权|认证|权限|注入|parser)|(?:更新).{0,32}(?:代码|逻辑|实现|文件|模块|函数)|\b(?:fix|repair|resolve|modify|edit|implement|refactor|rename|patch|harden)\b.{0,64}\b(?:code|logic|implementation|files?|module|function|variable|plugin|parser|issue|security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|injection)\b|\bupdate\b.{0,32}\b(?:code|logic|implementation|files?|module|function)\b/.test(effectiveActionText)
     || /(?:润色|改写|修订|编辑|更新).{0,64}(?:文档|说明|指南|readme|docs?\/|\.(?:md|mdx|rst|txt|tex|docx?)\b)|\b(?:rewrite|revise|edit|polish|update)\b.{0,64}(?:documentation|document|guide|readme|docs?\/|\.(?:md|mdx|rst|txt|tex|docx?)\b)/.test(effectiveActionText)
   );
-  const explicitModifyAction = /(?:^|[，。；、：;,:.!！]\s*)(?:(?:(?:请|帮我|麻烦)\s*)*)(?:(?:只|仅)\s*)?(?:修复|修一下|修改|编辑|修正|解决|实现|重构|更新|调整|优化|收紧|加固|添加|新增|删除|打补丁)/.test(effectiveActionText.trim())
-    || /(?:^|[，。；、：;,:.!！]\s*)(?:(?:(?:请|帮我|麻烦)\s*)*)(?:去|继续|开始)\s*(?:修复|修一下|修改|编辑|修正|解决|实现|重构|更新|调整|优化|收紧|加固|添加|新增|删除|打补丁)/.test(effectiveActionText.trim())
-    || /(?:然后|并且|同时|接着|再|继续|开始)\s*(?:修复|修一下|修改|编辑|修正|解决|实现|重构|更新|调整|优化|收紧|加固|添加|新增|删除|打补丁)/.test(effectiveActionText)
-    || /(?:^|[.;,!]\s*)(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:fix|repair|resolve|patch|modify|implement|refactor|update|harden|tighten|add|remove|write|revise|edit|polish|proofread|rewrite|improve)\b/.test(effectiveActionText.trim())
-    || /\b(?:then|and|also|next)\s+(?:fix|repair|resolve|patch|modify|implement|refactor|update|harden|tighten|add|remove|write|revise|edit|polish|proofread|rewrite|improve)\b/.test(effectiveActionText);
+  const explicitModifyAction = /(?:^|[，。；、：;,:.!！]\s*)(?:(?:(?:请|帮我|麻烦)\s*)*)(?:(?:只|仅)\s*)?(?:修复|修一下|修改|编辑|修正|解决|实现|重构|重命名|更新|调整|优化|收紧|加固|添加|新增|删除|打补丁)/.test(effectiveActionText.trim())
+    || /(?:^|[，。；、：;,:.!！]\s*)(?:(?:(?:请|帮我|麻烦)\s*)*)(?:去|继续|开始)\s*(?:修复|修一下|修改|编辑|修正|解决|实现|重构|重命名|更新|调整|优化|收紧|加固|添加|新增|删除|打补丁)/.test(effectiveActionText.trim())
+    || /(?:然后|并且|同时|接着|再|继续|开始)\s*(?:修复|修一下|修改|编辑|修正|解决|实现|重构|重命名|更新|调整|优化|收紧|加固|添加|新增|删除|打补丁)/.test(effectiveActionText)
+    || /(?:^|[.;,!]\s*)(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:only\s+)?(?:fix|repair|resolve|patch|modify|change|implement|refactor|rename|update|harden|tighten|add|remove|write|revise|edit|polish|proofread|rewrite|improve)\b/.test(effectiveActionText.trim())
+    || /\b(?:then|and|also|next)\s+(?:fix|repair|resolve|patch|modify|change|implement|refactor|rename|update|harden|tighten|add|remove|write|revise|edit|polish|proofread|rewrite|improve)\b/.test(effectiveActionText);
   const directModify = !advisory && !noActionExecution && releaseCompanionModify && (directDestructiveModify || localGitMetadata || implicitModify || dependencyUpgrade
-    || narrowLineEdit || narrowScopedEdit
+    || narrowLineEdit || narrowScopedEdit || scopedOnlyModifyAction
     || explicitModifyAction
     || !noWorkspaceWrite && rawExclusiveCompanionMutation
     || documentTransformationRequested
@@ -749,8 +791,8 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     && (
     !writingWork
     || bugReportCompanionCodeAction
-    || /\b(?:fix|repair|resolve|patch|modify|implement|refactor|update|harden|tighten|add|remove|write)\b[^.!?\n]{0,80}\b(?:code|implementation|parser|router|module|function|handler|api|bugs?|security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|injection)\b/.test(effectiveActionText)
-    || /(?:修复|修一下|修正|解决|实现|重构|修改|加固|收紧|打补丁|新增|添加).{0,64}(?:代码|实现|解析器|路由|模块|函数|处理器|接口|bug|漏洞|鉴权|认证|权限|注入)/.test(effectiveActionText)
+    || /\b(?:fix|repair|resolve|patch|modify|implement|refactor|rename|update|harden|tighten|add|remove|write)\b[^.!?\n]{0,80}\b(?:code|implementation|parser|router|module|function|variable|handler|api|bugs?|security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|injection)\b/.test(effectiveActionText)
+    || /(?:修复|修一下|修正|解决|实现|重构|重命名|修改|加固|收紧|打补丁|新增|添加).{0,64}(?:代码|实现|解析器|路由|模块|函数|变量|处理器|接口|bug|漏洞|鉴权|认证|权限|注入)/.test(effectiveActionText)
     );
   const primaryDirectTestAuthoring = directTestAuthoring
     && !/\bbug\s+report\b/.test(text)
@@ -776,9 +818,11 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
   const documentWork = /(?:readme|安装说明|docx|word 文档|latex)|\b(?:readme|docx|latex|markdown document)\b/.test(text)
     || workspaceScopes.targets.some((target) => /\.(?:md|mdx|rst|txt|tex|docx?)$/iu.test(target))
     || /(?:^|[\s`'"])(?:\/)?(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:md|mdx|rst|txt|tex|docx?)(?=$|[\s`'"，。；、：;,:.!！])/i.test(text);
-  const configWork = dependencyInstallExecution || setupScriptExecution
+  const scopedConfigTarget = workspaceScopes.targets.some((target) => /(?:^|\/)(?:package\.json|pyproject\.toml|cargo\.toml|[^/]+\.(?:jsonc?|ya?ml|toml))$/iu.test(target));
+  const configWork = dependencyInstallExecution || setupScriptExecution || scopedConfigTarget
     || /(?:配置资产|配置模板|技能清单|打包后.{0,16}(?:agents?|skills?|hooks?|代理|技能)|config assets?|config doctor|omp-config)|\b(?:config assets?|config doctor|skill assets?|asset inventory|packaged assets?|packaged hooks?|bundled hooks?|packaged agents?|packaged skills?)\b/.test(text)
-    || /(?:\benv\b|modelroles|marketplace|hooks?|agents?).{0,120}(?:配置|清单)|(?:配置|清单).{0,120}(?:\benv\b|modelroles|marketplace|hooks?|agents?)/.test(text);
+    || /(?:\benv\b|modelroles|marketplace|hooks?|agents?).{0,120}(?:配置|清单)|(?:配置|清单).{0,120}(?:\benv\b|modelroles|marketplace|hooks?|agents?)/.test(text)
+    || /(?:修改|改动|编辑|更新|写入|触碰|更改)\s*(?:项目|工程|仓库)?\s*(?:配置(?:文件)?|package\.json|pyproject\.toml|cargo\.toml)|\b(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?(?:(?:project|repository|repo)\s+)?(?:configuration|config(?:uration)?\s+files?|package\.json|pyproject\.toml|cargo\.toml)\b/.test(effectiveActionText);
   const secondaryPositiveAction = releaseRequested
     || externalActionRequested
     || irreversibleExternalOperation
@@ -845,6 +889,9 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
   if (externalScopes.targets.length || externalScopes.exclusions.length) reasons.push('scoped external write targets requested');
   if (noNetworkAccess) reasons.push('network access forbidden');
   if (noSubagents) reasons.push('subagents forbidden');
+  if (implementationDelegationConstraint === 'forbidden') reasons.push('implementation delegation forbidden');
+  if (independentReviewConstraint === 'forbidden') reasons.push('independent review forbidden');
+  if (independentReviewConstraint === 'required') reasons.push('independent review required');
   if (releaseRequested) reasons.push('release or external write requested');
   if (externalActionRequested) reasons.push('reversible external connector action requested');
   if (externalActionContract?.state === 'unsupported') reasons.push('unsupported external connector action detected');
@@ -903,6 +950,8 @@ function collectSignals(text, prompt, { scopePrompt = prompt, rawPrompt = prompt
     noNetworkAccess,
     networkReadRequested,
     noSubagents,
+    implementationDelegationConstraint,
+    independentReviewConstraint,
     releaseArtifact,
     dependencyUpgrade,
     irreversibleFileOperation,
@@ -1073,17 +1122,29 @@ function writingConversionFor(text = '') {
 }
 
 function workspaceWriteScopesFor(value = '') {
-  const source = String(value);
+  const source = stripQuotedWorkspaceScopeData(value);
   const exclusions = uniqueStrings([...collectScopedTargets(source, [
-    /\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
-    /\bbut\s+(?:do\s+)?not\s+(?:(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+)?(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
-    /(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
-  ], normalizeWorkspaceTarget), ...collectQuotedWorkspaceTargets(source, { negative: true })]);
-  const positiveSource = maskScopedWorkspaceWriteNegatives(source);
+    /\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?[`'"]?((?:\.\/|\/)?(?:[\p{L}\p{M}\p{N}_.-]+\/)+)[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/giu,
+    /\bbut\s+(?:do\s+)?not\s+(?:(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+)?(?:the\s+)?[`'"]?((?:\.\/|\/)?(?:[\p{L}\p{M}\p{N}_.-]+\/)+)[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/giu,
+    /(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰|改)\s*[`'"]?((?:\.\/|\/)?(?:[\p{L}\p{M}\p{N}_.-]+\/)+)[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/giu,
+    /\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/gi,
+    /\bbut\s+(?:do\s+)?not\s+(?:(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+)?(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/gi,
+    /(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰|改)\s*[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/gi,
+    /(?:^|[，,。；;\n])\s*[`'"]?((?:\.\/|\/)?(?:[\p{L}\p{M}\p{N}_.-]+\/)+)[`'"]?\s*(?:保持|维持)\s*不变/giu,
+    /(?:^|[，,。；;\n])\s*(?:“(?<target>[^”\n]+)”|‘(?<targetSingle>[^’\n]+)’)\s*(?:保持|维持)\s*不变/giu,
+  ], normalizeWorkspaceTarget),
+  ...collectQuotedWorkspaceTargets(source, { negative: true }),
+  ...collectNegativeWorkspaceTargetLists(source),
+  ...collectContextualWorkspaceExceptTargets(source),
+  ...collectPreservedWorkspaceTargets(source)]);
+  const positiveSource = uniqueStrings(exclusions).reduce(
+    (current, target) => current.split(target).join('scoped-path'),
+    maskScopedWorkspaceWriteNegatives(source),
+  );
   const targets = uniqueStrings([...collectScopedTargets(positiveSource, [
-    /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:only\s+)?(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
-    /(?:修复|更新|修改|编辑|调整|润色|改写)\s*[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
-    /(?:只|仅)\s*改(?:动)?\s*[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?/gi,
+    /\b(?:only\s+)?(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:only\s+)?(?:the\s+)?[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/gi,
+    /(?:修复|更新|修改|编辑|调整|润色|改写)\s*[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/gi,
+    /(?:只|仅)\s*改(?:动)?\s*[`'"]?([a-z0-9_./-]+\.[a-z0-9_.-]+)[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/gi,
     /\b(?:polish|proofread|rewrite|revise|edit|improve)\b[^.;!\n]{0,80}?\b(?:in|inside|within)\s+(?:the\s+)?[`'"]?((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?/giu,
     /(?:润色|改写|校对|修订|编辑)(?:一下|下)?[^。；;\n]{0,80}?((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))\s*(?:中|里|内)(?:的)?\s*(?:措辞|文字|文案|句子|段落|章节|内容|表述)/giu,
     /\b(?:in|inside|within)\s+(?:the\s+)?[`'"]?((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?\s*[,;:]?\s*(?:please\s+)?(?:polish|proofread|rewrite|revise|edit|improve)\b/giu,
@@ -1098,14 +1159,15 @@ function workspaceWriteScopesFor(value = '') {
     /(?:^|[.!?;\n]\s*)[`'"]?((?:\/?[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf))[`'"]?\s+(?:needs?|requires?)\s+[^.!?;\n]{0,32}\b(?:polish|proofread|rewrite|revision|editing|improvement)\b/giu,
   ], normalizeWorkspaceTarget),
   ...collectQuotedWorkspaceTargets(positiveSource),
-  ...collectAffirmativeWorkspaceTargetLists(positiveSource)]);
+  ...collectAffirmativeWorkspaceTargetLists(positiveSource)])
+    .filter((target) => !exclusions.includes(target));
   return { targets, exclusions };
 }
 
 function collectAffirmativeWorkspaceTargetLists(value = '') {
   const source = String(value);
   const targets = [];
-  const actions = /\b(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:only\s+)?(?:the\s+)?|(?:(?:只|仅)\s*改(?:动)?|修复|更新|修改|编辑|调整|润色|改写|校对|修订)(?:一下|下)?\s*/giu;
+  const actions = /\b(?:only\s+)?(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:only\s+)?(?:the\s+)?|(?:(?:只|仅)\s*改(?:动)?|修复|更新|修改|编辑|调整|润色|改写|校对|修订)(?:一下|下)?\s*/giu;
   for (const match of source.matchAll(actions)) {
     let remaining = source.slice((match.index ?? 0) + match[0].length).split(/[。；;\n]/u, 1)[0] ?? '';
     let next = consumeLeadingWorkspaceTarget(remaining);
@@ -1113,7 +1175,7 @@ function collectAffirmativeWorkspaceTargetLists(value = '') {
     targets.push(next.target);
     remaining = next.rest;
     while (remaining) {
-      const separator = remaining.match(/^\s*(?:以及|、|，|,|和|与|\band\b|\bor\b)\s*/iu);
+      const separator = workspaceTargetListSeparator(remaining);
       if (!separator) break;
       next = consumeLeadingWorkspaceTarget(remaining.slice(separator[0].length));
       if (!next) break;
@@ -1124,19 +1186,176 @@ function collectAffirmativeWorkspaceTargetLists(value = '') {
   return uniqueStrings(targets);
 }
 
+function collectNegativeWorkspaceTargetLists(value = '') {
+  const source = String(value);
+  const targets = [];
+  const actions = /\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?|\bbut\s+(?:do\s+)?not\s+(?:(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+)?(?:the\s+)?|\bwithout\s+(?:modifying|editing|changing|updating|writing(?:\s+to)?|touching)\s+(?:the\s+)?|(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰|改)\s*/giu;
+  for (const match of source.matchAll(actions)) {
+    let remaining = source.slice((match.index ?? 0) + match[0].length).split(/[。；;\n]/u, 1)[0] ?? '';
+    let next = consumeLeadingWorkspaceTarget(remaining);
+    if (!next) continue;
+    targets.push(next.target);
+    remaining = next.rest;
+    while (remaining) {
+      const separator = workspaceTargetListSeparator(remaining);
+      if (!separator) break;
+      next = consumeLeadingWorkspaceTarget(remaining.slice(separator[0].length));
+      if (!next) break;
+      targets.push(next.target);
+      remaining = next.rest;
+    }
+  }
+  return uniqueStrings(targets);
+}
+
+function collectContextualWorkspaceExceptTargets(value = '') {
+  const source = String(value);
+  const targets = [];
+  for (const match of source.matchAll(/\bexcept\s+(?:the\s+)?/giu)) {
+    const index = match.index ?? 0;
+    const clauseStart = lastWorkspaceClauseBoundaryBefore(source, index) + 1;
+    const prefix = source.slice(clauseStart, index);
+    if (collectAffirmativeWorkspaceTargetLists(prefix).length === 0
+      && !hasBroadWorkspaceMutationContext(prefix)) continue;
+    let remaining = source.slice(index + match[0].length).split(/[。；;\n]/u, 1)[0] ?? '';
+    let next = consumeLeadingWorkspaceTarget(remaining);
+    if (!next) continue;
+    targets.push(next.target);
+    remaining = next.rest;
+    while (remaining) {
+      const separator = workspaceTargetListSeparator(remaining);
+      if (!separator) break;
+      next = consumeLeadingWorkspaceTarget(remaining.slice(separator[0].length));
+      if (!next) break;
+      targets.push(next.target);
+      remaining = next.rest;
+    }
+  }
+  for (let index = 0; index < source.length; index += 1) {
+    if (index > 0 && !/[\s，,。；;:!?()\[\]{}“‘"'`]/u.test(source[index - 1])) continue;
+    const next = consumeLeadingWorkspaceTarget(source.slice(index));
+    if (!next) continue;
+    const consumed = source.slice(index).length - next.rest.length;
+    if (!/^\s*除外/u.test(source.slice(index + consumed))) {
+      index += Math.max(0, consumed - 1);
+      continue;
+    }
+    const clauseStart = lastWorkspaceClauseBoundaryBefore(source, index) + 1;
+    if (hasBroadWorkspaceMutationContext(source.slice(clauseStart, index))) targets.push(next.target);
+    index += Math.max(0, consumed - 1);
+  }
+  return uniqueStrings(targets);
+}
+
+function hasBroadWorkspaceMutationContext(value = '') {
+  const text = String(value);
+  return /\b(?:modify|edit|change|update|rewrite|fix)\s+(?:(?:all|every)\s+(?:the\s+)?(?:files?|code)|everything|the\s+(?:repository|repo|project|workspace))\b/iu.test(text)
+    || /(?:修改|编辑|改动|更改|更新|重写|修复)\s*(?:整个|全部|所有)\s*(?:项目|工程|仓库|工作区|文件|代码)/u.test(text);
+}
+
+function collectPreservedWorkspaceTargets(value = '') {
+  const source = String(value);
+  const targets = [];
+  for (const match of source.matchAll(/\b(?:leave|keep)\s+(?:the\s+)?|(?:保持|维持)\s*/giu)) {
+    let remaining = source.slice((match.index ?? 0) + match[0].length).split(/[。；;\n]/u, 1)[0] ?? '';
+    const pending = [];
+    let next = consumeLeadingWorkspaceTarget(remaining);
+    if (!next) continue;
+    pending.push(next.target);
+    remaining = next.rest;
+    while (remaining) {
+      const separator = workspaceTargetListSeparator(remaining);
+      if (!separator) break;
+      next = consumeLeadingWorkspaceTarget(remaining.slice(separator[0].length));
+      if (!next) break;
+      pending.push(next.target);
+      remaining = next.rest;
+    }
+    if (isPreservedWorkspaceTargetSuffix(remaining)) {
+      targets.push(...pending);
+    }
+  }
+  for (const match of source.matchAll(/\bavoid\s+(?:changes?\s+(?:to|in)|changing|modifying|editing|updating|touching)\s+(?:the\s+)?|(?:不要|别|禁止|不得)\s*(?:动|碰|触碰)\s*/giu)) {
+    let remaining = source.slice((match.index ?? 0) + match[0].length).split(/[。；;\n]/u, 1)[0] ?? '';
+    let next = consumeLeadingWorkspaceTarget(remaining);
+    if (!next) continue;
+    targets.push(next.target);
+    remaining = next.rest;
+    while (remaining) {
+      const separator = workspaceTargetListSeparator(remaining);
+      if (!separator) break;
+      next = consumeLeadingWorkspaceTarget(remaining.slice(separator[0].length));
+      if (!next) break;
+      targets.push(next.target);
+      remaining = next.rest;
+    }
+  }
+  for (const match of source.matchAll(/\bpreserv(?:e|ing)\s+(?:the\s+)?/giu)) {
+    let remaining = source.slice((match.index ?? 0) + match[0].length).split(/[。；;\n]/u, 1)[0] ?? '';
+    let next = consumeLeadingWorkspaceTarget(remaining);
+    if (!next) continue;
+    targets.push(next.target);
+    remaining = next.rest;
+    while (remaining) {
+      const separator = workspaceTargetListSeparator(remaining);
+      if (!separator) break;
+      next = consumeLeadingWorkspaceTarget(remaining.slice(separator[0].length));
+      if (!next) break;
+      targets.push(next.target);
+      remaining = next.rest;
+    }
+  }
+  for (let index = 0; index < source.length; index += 1) {
+    if (index > 0 && !/[\s，,。；;:!?()\[\]{}“‘"'`]/u.test(source[index - 1])) continue;
+    const next = consumeLeadingWorkspaceTarget(source.slice(index));
+    if (!next) continue;
+    const consumed = source.slice(index).length - next.rest.length;
+    const suffix = source.slice(index + consumed);
+    if (isPreservedWorkspaceTargetSuffix(suffix)) {
+      targets.push(next.target);
+    }
+    index += Math.max(0, consumed - 1);
+  }
+  return uniqueStrings(targets);
+}
+
+function isPreservedWorkspaceTargetSuffix(value = '') {
+  const suffix = String(value);
+  return /^\s*(?:(?:completely\s+)?(?:unchanged|unmodified|untouched|intact)\b|(?:as(?:-|\s+)is|alone)\b|(?:(?:must|should)\s+)?(?:remain|stay|be\s+kept|remains|stays)\s+(?:completely\s+)?(?:unchanged|unmodified|untouched|intact)\b|(?:must|should)\s+not\s+(?:change|be\s+(?:changed|modified|edited|updated|touched))\b)/iu.test(suffix)
+    || /^\s*(?:(?:(?:应|应该|应当|必须)\s*)?(?:保持|维持)\s*(?:不变|原样)|(?:不要|别|不得|禁止|不能|不应)\s*(?:动|碰|改|修改|改动|编辑|更新|触碰)|不变|原样|保持原样|维持原样|原样保留)/u.test(suffix);
+}
+
+function lastWorkspaceClauseBoundaryBefore(source = '', limit = 0) {
+  let boundary = -1;
+  const prefix = String(source).slice(0, Math.max(0, Number(limit)));
+  for (const match of prefix.matchAll(/[!?;\n]|\.(?=\s|$)/gu)) {
+    boundary = match.index ?? boundary;
+  }
+  return boundary;
+}
+
+function workspaceTargetListSeparator(value = '') {
+  return String(value).match(/^\s*(?:(?:,|，)\s*(?:\b(?:and|or)\b|[和与或])|以及|、|，|,|和|与|或|\band\b|\bor\b)\s*/iu);
+}
+
 function consumeLeadingWorkspaceTarget(value = '') {
   const curved = String(value).match(/^\s*(?:“(?<double>[^”\n]+)”|‘(?<single>[^’\n]+)’)/u);
   const curvedValue = curved?.groups?.double ?? curved?.groups?.single;
-  if (curvedValue && /\.[\p{L}\p{N}_.-]+$/u.test(curvedValue.trim())) {
+  if (curvedValue && /(?:\/|\.[\p{L}\p{N}_.-]+)$/u.test(curvedValue.trim())) {
     const target = normalizeWorkspaceTarget(curvedValue);
     if (target) return { target, rest: String(value).slice(curved[0].length) };
   }
   const quoted = String(value).match(/^\s*([`'"])([^\n]+?)\1/u);
-  if (quoted && /\.[\p{L}\p{N}_.-]+$/u.test(quoted[2].trim())) {
+  if (quoted && /(?:\/|\.[\p{L}\p{N}_.-]+)$/u.test(quoted[2].trim())) {
     const target = normalizeWorkspaceTarget(quoted[2]);
     if (target) return { target, rest: String(value).slice(quoted[0].length) };
   }
-  const match = String(value).match(/^\s*[`'"]?((?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf|js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|json|jsonc|yml|yaml|toml))[`'"]?(?=$|\s|[，。；、：;,:.!！]|(?:中|里|内)(?:的)?)/iu);
+  const directory = String(value).match(/^\s*[`'"]?((?:\.\/|\/)?(?:[\p{L}\p{M}\p{N}_.-]+\/)+)[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/iu);
+  if (directory) {
+    const target = normalizeWorkspaceTarget(directory[1]);
+    if (target) return { target, rest: String(value).slice(directory[0].length) };
+  }
+  const match = String(value).match(/^\s*[`'"]?((?:[\p{L}\p{M}\p{N}_.-]+\/)*[\p{L}\p{M}\p{N}_.-]+?\.(?:md|mdx|rst|txt|tex|docx?|pdf|js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|json|jsonc|yml|yaml|toml))[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}]|(?:中|里|内)(?:的)?)/iu);
   if (!match) return null;
   const target = normalizeWorkspaceTarget(match[1]);
   return target ? { target, rest: String(value).slice(match[0].length) } : null;
@@ -1159,7 +1378,7 @@ function collectQuotedWorkspaceTargets(value = '', { negative = false } = {}) {
   for (const pattern of patterns) {
     for (const match of source.matchAll(pattern)) {
       const target = normalizeWorkspaceTarget(match.groups?.target ?? match.groups?.targetSingle ?? match[2]);
-      if (target && /\.[\p{L}\p{N}_.-]+$/u.test(target)) targets.push(target);
+      if (target && isWorkspacePathMention(target)) targets.push(target);
     }
   }
   return uniqueStrings(targets);
@@ -1167,27 +1386,106 @@ function collectQuotedWorkspaceTargets(value = '', { negative = false } = {}) {
 
 function maskScopedWorkspaceWriteNegatives(value = '') {
   return String(value)
+    .replace(/\b(?:do not|don't|never)\s+[^.;!\n]{0,160}?\b(?:or|and)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?(?:(?:project|repository|repo)\s+)?(?:configuration|config(?:uration)?\s+files?|package\.json|pyproject\.toml|cargo\.toml)\b/giu, ' ')
+    .replace(/(?:不要|不|别|不得|禁止)\s*[^，,。；;.!！\n]{0,80}(?:或|和|与|以及|、)\s*(?:修改|改动|编辑|更新|写入|触碰|更改)\s*(?:项目|工程|仓库)?\s*(?:配置(?:文件)?|package\.json|pyproject\.toml|cargo\.toml)/giu, ' ')
     .replace(/\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?(?:“[^”\n]+”|‘[^’\n]+’)/giu, ' ')
     .replace(/(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*(?:“[^”\n]+”|‘[^’\n]+’)/giu, ' ')
     .replace(/\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?([`'"])[^\n]+?\1/giu, ' ')
     .replace(/(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*([`'"])[^\n]+?\1/giu, ' ')
+    .replace(/\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?[`'"]?(?:\.\/|\/)?(?:[\p{L}\p{M}\p{N}_.-]+\/)+[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/giu, ' ')
+    .replace(/\bbut\s+(?:do\s+)?not\s+(?:(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+)?(?:the\s+)?[`'"]?(?:\.\/|\/)?(?:[\p{L}\p{M}\p{N}_.-]+\/)+[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/giu, ' ')
+    .replace(/(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*[`'"]?(?:\.\/|\/)?(?:[\p{L}\p{M}\p{N}_.-]+\/)+[`'"]?(?=$|[\s，。；、：;,:.!！?？()（）\[\]【】{}])/giu, ' ')
     .replace(/\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?[`'"]?[a-z0-9_./-]+\.[a-z0-9_.-]+[`'"]?/gi, ' ')
     .replace(/\bbut\s+(?:do\s+)?not\s+(?:(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+)?(?:the\s+)?[`'"]?[a-z0-9_./-]+\.[a-z0-9_.-]+[`'"]?/gi, ' ')
-    .replace(/(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*[`'"]?[a-z0-9_./-]+\.[a-z0-9_.-]+[`'"]?/gi, ' ');
+    .replace(/(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰)\s*[`'"]?[a-z0-9_./-]+\.[a-z0-9_.-]+[`'"]?/gi, ' ')
+    .replace(/\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?(?:(?:project|repository|repo)\s+)?(?:configuration|config(?:uration)?\s+files?|package\.json|pyproject\.toml|cargo\.toml)\b/giu, ' ')
+    .replace(/(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰|更改)\s*(?:项目|工程|仓库)?\s*(?:配置(?:文件)?|package\.json|pyproject\.toml|cargo\.toml)/giu, ' ');
 }
 
 function stripQuotedConstraintMentions(value = '') {
-  return String(value)
+  let source = String(value)
     .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/gu, ' ')
-    .replace(/^[\t ]*>[^\n]*(?:\n|$)/gmu, ' ')
-    .replace(/[“‘]([^”’\n]*)[”’]/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ')
-    .replace(/"([^"\n]*)"/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ')
-    .replace(/(?<![\p{L}\p{N}])'([^'\n]+)'(?![\p{L}\p{N}])/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ')
-    .replace(/`([^`\n]*)`/gu, (quoted, inner) => quotedPathMention(inner) ? quoted : ' ');
+    .replace(/^[\t ]*>[^\n]*(?:\n|$)/gmu, ' ');
+  const preserve = (quoted, inner, offset) => (
+    quotedPathMention(inner) || quotedWorkspaceDirectoryScopeMention(source, inner, offset)
+      ? quoted
+      : ' '
+  );
+  source = source.replace(/[“‘]([^”’\n]*)[”’]/gu, preserve);
+  source = source.replace(/"([^"\n]*)"/gu, preserve);
+  source = source.replace(/(?<![\p{L}\p{N}])'([^'\n]+)'(?![\p{L}\p{N}])/gu, preserve);
+  source = source.replace(/`([^`\n]*)`/gu, preserve);
+  return source;
+}
+
+function stripQuotedWorkspaceScopeData(value = '') {
+  let source = String(value)
+    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/gu, ' ')
+    .replace(/^[\t ]*>[^\n]*(?:\n|$)/gmu, ' ');
+  const preserve = (quoted, inner, offset) => (
+    isWorkspacePathMention(String(inner).trim())
+      && quotedWorkspacePathScopeMention(source, offset, quoted.length)
+      ? quoted
+      : ' '
+  );
+  source = source.replace(/[“‘]([^”’\n]*)[”’]/gu, preserve);
+  source = source.replace(/"([^"\n]*)"/gu, preserve);
+  source = source.replace(/(?<![\p{L}\p{N}])'([^'\n]+)'(?![\p{L}\p{N}])/gu, preserve);
+  source = source.replace(/`([^`\n]*)`/gu, preserve);
+  return source;
+}
+
+function quotedWorkspacePathScopeMention(source = '', offset = 0, quotedLength = 0) {
+  const prefix = String(source).slice(Math.max(0, Number(offset) - 160), Number(offset));
+  if (/(?:\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?|\b(?:only\s+)?(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:only\s+)?(?:the\s+)?|\bwithout\s+(?:modifying|editing|changing|updating|writing(?:\s+to)?|touching)\s+(?:the\s+)?|\b(?:leave|keep|preserve|preserving)\s+(?:the\s+)?|\bavoid\s+(?:changes?\s+(?:to|in)|changing|modifying|editing|updating|touching)\s+(?:the\s+)?|(?:保持|维持)\s*|(?:不要|别|禁止|不得)\s*(?:动|碰|触碰)\s*|(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰|改)\s*|(?:只|仅)\s*改(?:动)?\s*|(?:(?:只|仅)\s*)?(?:修复|更新|修改|编辑|调整|润色|改写|校对|修订)(?:一下|下)?\s*)$/iu.test(prefix)) {
+    return true;
+  }
+  const except = prefix.match(/\bexcept\s+(?:the\s+)?$/iu);
+  if (except) {
+    const beforeExcept = prefix.slice(0, prefix.length - except[0].length);
+    if (collectAffirmativeWorkspaceTargetLists(beforeExcept).length > 0) return true;
+  }
+  const continuation = prefix.match(/(?:\b(?:and|or)\b|[和与或、]|[,，])\s*$/iu);
+  if (continuation) {
+    const beforeContinuation = prefix.slice(0, prefix.length - continuation[0].length);
+    if (collectAffirmativeWorkspaceTargetLists(beforeContinuation).length > 0
+      || collectNegativeWorkspaceTargetLists(beforeContinuation).length > 0) return true;
+  }
+  const butNot = prefix.match(/\bbut\s+(?:do\s+)?not\s*$/iu);
+  if (butNot) {
+    const beforeButNot = prefix.slice(0, prefix.length - butNot[0].length);
+    if (collectAffirmativeWorkspaceTargetLists(beforeButNot).length > 0) return true;
+  }
+  const suffix = String(source).slice(Number(offset) + Number(quotedLength), Number(offset) + Number(quotedLength) + 32);
+  if (isPreservedWorkspaceTargetSuffix(suffix)) {
+    const clauseStart = lastWorkspaceClauseBoundaryBefore(prefix, prefix.length) + 1;
+    return collectAffirmativeWorkspaceTargetLists(prefix.slice(clauseStart)).length > 0
+      || collectAffirmativeWorkspaceTargetLists(prefix).length > 0;
+  }
+  return false;
 }
 
 function quotedPathMention(value = '') {
-  return /^(?:\.\/)?(?:[\p{L}\p{N}_.-]+[/\\])*[\p{L}\p{N}_.-]+\.[\p{L}\p{N}_.-]+$/u.test(String(value).trim());
+  return isWorkspaceFileMention(String(value).trim());
+}
+
+function isWorkspacePathMention(value = '') {
+  const target = String(value).trim();
+  if (!target || /[\r\n]/u.test(target)) return false;
+  if (target.endsWith('/')) return !/[<>:"|?*]/u.test(target);
+  return !/[<>:"|?*]/u.test(target) && /\.[\p{L}\p{M}\p{N}_.-]+$/u.test(target);
+}
+
+function isWorkspaceFileMention(value = '') {
+  const target = String(value).trim();
+  return /^(?:\.\/)?(?:[\p{L}\p{M}\p{N}_.-]+[/\\])*[\p{L}\p{M}\p{N}_.-]+\.[\p{L}\p{M}\p{N}_.-]+$/u.test(target);
+}
+
+function quotedWorkspaceDirectoryScopeMention(source = '', value = '', offset = 0) {
+  const target = String(value).trim();
+  if (!target.endsWith('/') || /[\r\n<>:"|?*]/u.test(target)) return false;
+  const prefix = String(source).slice(Math.max(0, Number(offset) - 120), Number(offset));
+  return /(?:\b(?:do not|don't|never)\s+(?:modify|edit|change|update|write(?:\s+to)?|touch)\s+(?:the\s+)?|\b(?:only\s+)?(?:fix|update|edit|modify|change|write(?:\s+to)?|polish|proofread|rewrite|revise|improve)\s+(?:only\s+)?(?:the\s+)?|\b(?:leave|keep|preserve|preserving)\s+(?:the\s+)?|(?:不要|不|别|不得|禁止)\s*(?:修改|改动|编辑|更新|写入|触碰|改)\s*|(?:只|仅)\s*改(?:动)?\s*|(?:(?:只|仅)\s*)?(?:修复|更新|修改|编辑|调整|润色|改写|校对|修订)(?:一下|下)?\s*)$/iu.test(prefix);
 }
 
 function externalWriteScopesFor(value = '') {
@@ -1262,6 +1560,12 @@ function maskIncidentalStatusReporting(value = '') {
   );
 }
 
+function maskRouteProbeScopedWorkspaceConstraints(value = '') {
+  return String(value)
+    .replace(/\b(?:do not|don't|never)\s+(?:write(?:\s+to)?|modify|edit|change)\s+(?:any\s+)?files?\s+during\s+(?:the\s+)?probe\b/giu, ' ')
+    .replace(/(?:探测|诊断|检查|审计|probe)(?:期间|过程中)\s*(?:不要|别|禁止|不得)\s*(?:写入|修改|编辑|改动)\s*(?:任何)?文件/gu, ' ');
+}
+
 function positiveSecurityDomainSignalText(value = '') {
   return positiveDomainSignalText(value)
     .replace(/(?:不要|别|无需|不用|禁止|不得|不\s*(?:要|做|进行|触发)?)[^，,。；;.! ！\n]{0,28}(?:代码)?安全(?:审查|审计|扫描)/g, ' ')
@@ -1315,6 +1619,112 @@ function hasExplicitNoDelegation(text) {
   const english = /\b(?:do not|don't|dont|never)\s+delegate\b|\b(?:without|no)\s+delegation\b|\bwithout\s+delegating\b|\bkeep\s+(?:all|the\s+entire)\s+(?:of\s+)?(?:the\s+)?work\s+(?:in|within|with)\s+(?:the\s+)?main\s+agent\b|\b(?:do not|don't|dont|never)\s+use\s+(?:(?:any|other)\s+)?agents?\b|\bwork\s+(?:entirely\s+)?alone(?:\s+on\s+(?:this|it|the\s+task))?\b|\b(?:handle|do|complete|finish|perform)\s+(?:this|it|everything|all(?:\s+of\s+)?(?:\s+the)?\s+work|the\s+(?:whole|entire)\s+(?:task|job))\s+(?:by\s+)?yourself\b/i;
   const chinese = /(?:不要|别|无需|不用|禁止|不得|不)\s*(?:再|进行|做|使用)?\s*(?:委派|分派|转交)|(?:所有|全部)(?:的)?(?:工作|任务)\s*(?:都|应当|应该|必须)?\s*(?:留在|交由|由)\s*(?:主代理|主\s*agent|main\s+agent)(?:\s*(?:完成|处理|执行))?|(?:不要|别|禁止|不得)\s*(?:把|将)?(?:这项|这个|该|任何|全部|所有)?\s*(?:工作|任务)?\s*(?:交给|交由|转给|分给|使用)\s*(?:任何|其他)?\s*(?:代理|agents?)|(?:请)?(?:你|主代理)\s*(?:自己|亲自|独自)\s*(?:完成|处理|执行|做)|(?:请)?\s*(?:自己|亲自|独自)\s*(?:完成|处理|执行|做)\s*(?:这项|这个|该)?\s*(?:工作|任务)?/i;
   return english.test(String(text)) || chinese.test(String(text));
+}
+
+function implementationDelegationConstraintFor(value = '') {
+  const text = String(value);
+  return implementationOnlyDelegationProhibitionPatterns().some((pattern) => pattern.test(text))
+    ? 'forbidden'
+    : 'unspecified';
+}
+
+function maskImplementationOnlyDelegationProhibitions(value = '') {
+  return implementationOnlyDelegationProhibitionPatterns().reduce(
+    (text, pattern) => text.replace(pattern, ' '),
+    String(value),
+  );
+}
+
+function implementationOnlyDelegationProhibitionPatterns() {
+  return [
+    /\b(?:do not|don't|dont|never)\s+(?:delegate\s+(?:(?:the|any)\s+)?(?:implementation|coding|development)(?:\s+(?:work|tasks?|phase|changes?))?(?:\s+to\s+(?:implementation\s+)?(?:subagents?|sub-agents?|agents?))?|use\s+(?:(?:any|other)\s+)?(?:implementation|coding|development)\s+(?:subagents?|sub-agents?|agents?))\s*(?=,?\s*but\b|[.;!?]|$)/giu,
+    /(?:不要|别|无需|不用|禁止|不得|不)\s*(?:再|进行|做)?\s*(?:委派|分派|转交)\s*(?:代码)?(?:实现|编码|开发)(?:工作|任务|部分|阶段)?\s*(?=[，,]?\s*(?:但|但是|不过|然而)|[。；;！？!]|$)/giu,
+  ];
+}
+
+function independentReviewConstraintFor(value = '') {
+  const text = String(value);
+  const englishSubject = '\\b(?:an?\\s+)?independent\\s+(?:review(?:er|ing)?|review\\s+agent)\\b';
+  const chineseSubject = '(?:独立\\s*(?:审查|审核|评审|复核|review(?:er|ing)?))';
+  const englishDoubleNegative = new RegExp(
+    `\\b(?:do not|don't|never)\\s+(?:skip|avoid|omit)\\s+${englishSubject}`
+      + '|\\b(?:do not|don\'t|never)\\s+(?:skip|avoid|omit)\\s+(?:an?\\s+)?(?:independent\\s+)?code\\s+review\\b'
+      + `|${englishSubject}\\s+(?:must|should|can)\\s+not\\s+be\\s+(?:skipped|avoided|omitted)`,
+    'iu',
+  );
+  const chineseDoubleNegative = new RegExp(
+    `(?:不要|别|禁止|不得)\\s*(?:跳过|省略|略过|避免)\\s*${chineseSubject}`
+      + `|${chineseSubject}[^。！？；;\\n]{0,16}(?:不能|不可|不得)\\s*(?:跳过|省略|略过)`,
+    'iu',
+  );
+  if (englishDoubleNegative.test(text) || chineseDoubleNegative.test(text)) return 'required';
+
+  const englishForbidden = new RegExp(
+    `\\b(?:do not|don't|never|without|no need to)\\s+(?:(?:use|add|spawn|request|perform|run|conduct|have)\\s+)?${englishSubject}`
+      + `|\\b(?:avoid|skip|omit)\\s+${englishSubject}`
+      + `|\\bno\\s+${englishSubject}`
+      + `|\\b(?:use\\s+)?no\\s+(?:independent\\s+)?reviewers?\\b`
+      + `|\\b(?:do not|don't|never|without|no need to)\\s+(?:(?:use|have)\\s+)?(?:any\\s+)?reviewers?\\b`
+      + '|\\b(?:without|with\\s+no|no\\s+need\\s+for)\\s+(?:an?\\s+)?(?:independent\\s+)?code\\s+review\\b'
+      + '|\\bcode\\s+review\\s+(?:is\\s+)?not\\s+(?:needed|required|necessary)\\b'
+      + `|${englishSubject}\\s+(?:is\\s+)?not\\s+(?:needed|required|necessary|mandatory)\\b`
+      + '|\\b(?:do not|don\'t|never|no need to)\\b[^.!?;\\n]{0,24}\\b(?:judge|check|review|inspect|analyze)\\b[^.!?;\\n]{0,16}\\b(?:the\\s+)?(?:code|source|implementation)\\b'
+      + '|\\bwithout\\s+(?:reviewing|inspecting|checking|analyzing)\\s+(?:the\\s+)?(?:code|source|implementation)\\b',
+    'iu',
+  );
+  const chineseForbidden = new RegExp(
+    `(?:不要|别|禁止|不得|无需|不用|不需要|不(?:再)?(?:使用|安排|进行|做))\\s*(?:(?:使用|安排|进行|做)\\s*)?${chineseSubject}`
+      + `|(?:避免|跳过|省略|略过)\\s*${chineseSubject}`
+      + '|(?:不要|别|禁止|不得|无需|不用|不需要|不)\\s*(?:再|进行|执行)?\\s*(?:判断|检查|审查|分析)\\s*(?:代码|源码|实现)(?:问题)?'
+      + '|(?:无需|不用|不需要|不做|不要做)\\s*(?:任何)?\\s*(?:代码|源码|实现)?\\s*(?:审查|审核|评审|复核)'
+      + '|(?:不使用|不用|无需|不需要)\\s*(?:任何)?\\s*(?:审查者|审核者|评审者|reviewers?)',
+    'iu',
+  );
+  if (englishForbidden.test(text) || chineseForbidden.test(text)) return 'forbidden';
+
+  const englishRequired = new RegExp(
+    `\\b(?:must\\s+(?:(?:use|have|request|perform|conduct)\\s+)?|need\\s+to\\s+(?:(?:use|have|request|perform|conduct)\\s+)?|require(?:s|d)?\\s+|use\\s+|add\\s+|spawn\\s+|request\\s+|perform\\s+|conduct\\s+|have\\s+)${englishSubject}`
+      + `|${englishSubject}\\s+(?:(?:is|remains)\\s+)?(?:required|mandatory|needed|necessary)\\b`
+      + '|\\bmust\\s+be\\s+independently\\s+reviewed\\b',
+    'iu',
+  );
+  const chineseRequired = new RegExp(
+    `(?:必须|需要|请|安排|使用|启动|要求)\\s*(?:(?:进行|使用|安排|启动)\\s*)?${chineseSubject}`
+      + `|${chineseSubject}\\s*(?:是|为)?\\s*(?:必须|必要|必需)`,
+    'iu',
+  );
+  return englishRequired.test(text) || chineseRequired.test(text) ? 'required' : 'unspecified';
+}
+
+function maskWorkspaceScopeTargetMentions(text, targets = []) {
+  return uniqueStrings(targets)
+    .sort((left, right) => right.length - left.length)
+    .reduce(
+      (source, target) => source.split(target.toLowerCase()).join('scoped-path'),
+      String(text),
+    );
+}
+
+function maskTestExecutionTargetMentions(text, targets = []) {
+  return uniqueStrings(targets)
+    .sort((left, right) => right.length - left.length)
+    .reduce(
+      (source, target) => source.split(target.toLowerCase()).join('test-target'),
+      String(text),
+    );
+}
+
+function maskWorkspaceTestPathMentions(text) {
+  const testPath = '(?:\\.\\/)?(?:[\\p{L}\\p{N}_.-]+\\/)*tests?\\/(?:[\\p{L}\\p{N}_.-]+(?:\\/[\\p{L}\\p{N}_.-]+)*)?';
+  return String(text)
+    .replace(
+      new RegExp("\\b(modify|edit|change|update|write(?:\\s+to)?|touch)\\s+(?:the\\s+)?[`'\"]?" + testPath + "[`'\"]?", 'giu'),
+      '$1 scoped-path',
+    )
+    .replace(
+      new RegExp("(修改|改动|编辑|更新|写入|触碰)\\s*[`'\"]?" + testPath + "[`'\"]?", 'giu'),
+      '$1作用域路径',
+    );
 }
 
 function maskAffirmativeTestPhrases(text) {
@@ -1557,6 +1967,14 @@ function englishSharedNegativeClauseIncludes(text, targetPattern) {
   return false;
 }
 
+function englishCoordinatedNegativeClauseIncludes(text, targetPattern) {
+  for (const match of String(text).matchAll(/\b(?:do not|don't|dont|never|no need to)\s+([^.;!\n]{1,200})/gi)) {
+    const items = match[1].split(/(?:,|\b(?:and|or|as well as)\b)/i).map((item) => item.trim()).filter(Boolean);
+    if (items.length > 1 && targetPattern.test(items.slice(1).join(' '))) return true;
+  }
+  return false;
+}
+
 function chineseNegativeClauseIncludes(text, targetPattern) {
   const prefix = /(?:不要|别|无需|不用|禁止|不得|不\s*(?:再|重新)?\s*(?=(?:运行|执行|跑|重跑|测试|提交|推送|发布|部署|上线|联网|上网|访问|浏览|搜索|使用|修改|改动|编辑|写入|修复|实现|判断|检查|审查|分析)))\s*([^，,。；;.!！\n]{1,200})/g;
   for (const match of String(text).matchAll(prefix)) {
@@ -1646,7 +2064,7 @@ function constraintsFor(signals, operation, domains) {
     && signals.workspaceWriteTargets.length > 0
     && /(?:润色|改写|校对|修订|翻译|更新|编辑|修改)|\b(?:polish|rewrite|proofread|translate|update|revise|edit|improve)\b/.test(signals.text);
   const codeOrDocumentWrite = operation === 'modify'
-    && (domains.includes('code') || domains.includes('document'))
+    && (domains.includes('code') || domains.includes('document') || domains.includes('config'))
     && !(signals.factWork && signals.writingWork && !signals.directModify && !explicitWritingFileEdit);
   const workspaceWrite = signals.noWorkspaceWrite
     ? 'forbidden'
@@ -1668,7 +2086,7 @@ function constraintsFor(signals, operation, domains) {
     : signals.directTestExecution || signals.directTestAuthoring
       ? 'required'
       : 'unspecified';
-  return {
+  const constraints = {
     workspaceWrite,
     testExecution,
     networkAccess: signals.noNetworkAccess || exclusiveLocalFactObservation || exclusiveReadObservation
@@ -1679,6 +2097,13 @@ function constraintsFor(signals, operation, domains) {
     externalWrite: signals.externalActionRequested || signals.irreversibleExternalOperation || signals.releaseRequested && ['modify', 'release'].includes(operation) ? 'required' : 'forbidden',
     subagents: signals.noSubagents || exclusiveLocalFactObservation || exclusiveReadObservation ? 'forbidden' : 'unspecified',
   };
+  if (signals.independentReviewConstraint !== 'unspecified') {
+    constraints.independentReview = signals.independentReviewConstraint;
+  }
+  if (signals.implementationDelegationConstraint === 'forbidden') {
+    constraints.implementationDelegation = 'forbidden';
+  }
+  return constraints;
 }
 
 function complexityFor(signals, operation, domains) {
@@ -1736,6 +2161,9 @@ function complexityFor(signals, operation, domains) {
     && !/(?:focused|直接|单个|一个|single|\bone\b|router\.js|routenaturallanguagetask|\bfunction\b)/.test(signals.text)) return 'broad';
   if (operation === 'modify'
     && /(?:大规模|全面|多个文件|跨文件|整个(?:项目|代码库)|全项目)|\b(?:large[- ]scale|multi[- ]file|cross[- ]file|codebase[- ]wide|repo[- ]wide|substantial refactor|multiple files|all affected imports)\b/.test(signals.text)) return 'broad';
+  if (['modify', 'create'].includes(operation)
+    && domains.includes('code')
+    && (signals.workspaceWriteTargets ?? []).filter((target) => target.endsWith('/')).length >= 2) return 'broad';
   if (domains.length === 1 && domains[0] === 'general') return 'simple';
   return 'focused';
 }
@@ -2023,10 +2451,17 @@ function legacyDescriptor(template) {
 
 function normalizeConstraints(value = {}) {
   const allowed = new Set(['forbidden', 'unspecified', 'required']);
-  return Object.fromEntries(Object.entries(DEFAULT_CONSTRAINTS).map(([key, fallback]) => [
+  const constraints = Object.fromEntries(Object.entries(DEFAULT_CONSTRAINTS).map(([key, fallback]) => [
     key,
     allowed.has(value?.[key]) ? value[key] : fallback,
   ]));
+  if (value?.independentReview === 'forbidden' || value?.independentReview === 'required') {
+    constraints.independentReview = value.independentReview;
+  }
+  if (value?.implementationDelegation === 'forbidden') {
+    constraints.implementationDelegation = 'forbidden';
+  }
+  return constraints;
 }
 
 function isCompletedGateStatusReport(text = '') {
