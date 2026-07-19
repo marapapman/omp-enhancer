@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { evaluateIndirectTestGate } from '../../../src/gates/indirectTestGate.js'
 import type { CandidateTest, ChangedTarget } from '../../../src/types.js'
 
-function target(kind: ChangedTarget['kind']): ChangedTarget {
+function target(kind: ChangedTarget['kind'], id = 'target-1'): ChangedTarget {
   return {
-    id: 'target-1',
+    id,
     sourceFile: 'src/user/UserService.ts',
     symbolName: 'UserService',
     kind,
@@ -43,6 +43,27 @@ describe('evaluateIndirectTestGate', () => {
     }])
   })
 
+  it('reports a candidate target id that is absent from the changed targets', () => {
+    const value = candidate("expect(result).toBe('ok')")
+    value.targetId = 'missing-target'
+
+    expect(evaluateIndirectTestGate({
+      targets: [target('service')],
+      candidate: value
+    })).toEqual([{
+      gate: 'indirect-test',
+      passed: false,
+      severity: 'critical',
+      summary: 'Candidate target was not found in changed targets.',
+      evidence: {
+        candidateId: 'candidate-1',
+        targetId: 'missing-target',
+        availableTargetIds: ['target-1']
+      },
+      repairHint: 'Use a target id returned by omp_test_analyze before reviewing the candidate tests.'
+    }])
+  })
+
   it('allows direct tests for public pure functions', () => {
     const result = evaluateIndirectTestGate({
       targets: [target('pure-function')],
@@ -52,6 +73,35 @@ describe('evaluateIndirectTestGate', () => {
     expect(result).toEqual([
       expect.objectContaining({ gate: 'indirect-test', passed: true })
     ])
+  })
+
+  it('evaluates only the target selected by candidate.targetId', () => {
+    const value = candidate("import { add } from '../internal/add'\nexpect(add(1, 2)).toBe(3)")
+    value.targetId = 'pure-target'
+
+    expect(evaluateIndirectTestGate({
+      targets: [target('service', 'service-target'), target('pure-function', 'pure-target')],
+      candidate: value
+    })).toEqual([
+      expect.objectContaining({ gate: 'indirect-test', passed: true })
+    ])
+  })
+
+  it('does not duplicate findings for unrelated additional targets', () => {
+    const value = candidate("import { helper } from '../internal/helper'\nexpect(helper()).toBe('ok')")
+    value.targetId = 'selected-service'
+
+    const result = evaluateIndirectTestGate({
+      targets: [target('service', 'selected-service'), target('service', 'other-service')],
+      candidate: value
+    })
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toEqual(expect.objectContaining({
+      gate: 'indirect-test',
+      passed: false,
+      summary: 'Test imports private or internal implementation details.'
+    }))
   })
 
   it('allows direct tests for parser validator and formatter targets', () => {

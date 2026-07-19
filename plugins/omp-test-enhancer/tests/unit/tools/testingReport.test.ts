@@ -49,7 +49,7 @@ const browserGate: GateResult = {
 
 describe('buildTestReport', () => {
   it('renders stable passed, warning, and failed markdown', () => {
-    expect(buildTestReport({ gateResults: [passed, warning] }).markdown).toBe([
+    expect(buildTestReport({ reviewResults: [passed, warning] }).markdown).toBe([
       '# OMP Testing Enhancer report',
       '',
       'Mode: advisory-only',
@@ -60,7 +60,7 @@ describe('buildTestReport', () => {
       '* test-command: warning, No matching host-observed test command evidence.'
     ].join('\n'))
 
-    expect(buildTestReport({ gateResults: [failed] }).markdown).toBe([
+    expect(buildTestReport({ reviewResults: [failed] }).markdown).toBe([
       '# OMP Testing Enhancer report',
       '',
       'Mode: advisory-only',
@@ -73,7 +73,7 @@ describe('buildTestReport', () => {
   })
 
   it('renders browser gate names from parsed gate results', () => {
-    expect(buildTestReport({ gateResults: [browserGate] }).markdown).toBe([
+    expect(buildTestReport({ reviewResults: [browserGate] }).markdown).toBe([
       '# OMP Testing Enhancer report',
       '',
       'Mode: advisory-only',
@@ -87,7 +87,7 @@ describe('buildTestReport', () => {
 
   it('renders browser evidence details and artifact paths', () => {
     expect(buildTestReport({
-      gateResults: [{
+      reviewResults: [{
         gate: 'browser-visual',
         passed: false,
         severity: 'critical',

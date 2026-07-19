@@ -5,15 +5,15 @@
     "name": "marapapman"
   },
   "metadata": {
-    "description": "OMP enhancement plugins for autonomous workflow orchestration, shared config context, writing support, test workflow support, and fact checking.",
-    "version": "1.0.22",
+    "description": "OMP enhancement plugins for optional workflow references, shared config context, writing support, testing evidence, and fact checking.",
+    "version": "1.0.23",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "omp-config",
       "description": "Optional OMP workflow references, configuration assets, uniquely named agents, notify-only hooks, opt-in hook templates, and diagnostics.",
-      "version": "0.1.33",
+      "version": "0.1.34",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -21,13 +21,11 @@
       "skills": [
         "./skills/astrbot-plugin-development",
         "./skills/beamer-to-powerpoint",
-        "./skills/brainstorming",
         "./skills/canvas-design",
         "./skills/caveman",
+        "./skills/code-development",
         "./skills/conventional-commits",
         "./skills/deepseek-tool-calling",
-        "./skills/diagnose",
-        "./skills/dispatching-parallel-agents",
         "./skills/docker-compose",
         "./skills/docx",
         "./skills/ecc",
@@ -286,7 +284,6 @@
         "./skills/ecc/windows-desktop-e2e",
         "./skills/ecc/workspace-surface-audit",
         "./skills/ecc/x-api",
-        "./skills/executing-plans",
         "./skills/finishing-a-development-branch",
         "./skills/frontend-design",
         "./skills/go-testing",
@@ -296,21 +293,11 @@
         "./skills/latex-beamer-slides",
         "./skills/omp-enhancer-workflows",
         "./skills/omp-marketplace-plugin-activation",
-        "./skills/plan-execute-review-commit",
         "./skills/prototype",
-        "./skills/receiving-code-review",
-        "./skills/requesting-code-review",
         "./skills/slides-storyline",
         "./skills/spike",
-        "./skills/subagent-driven-development",
         "./skills/svg-flowchart",
-        "./skills/systematic-debugging",
-        "./skills/tdd",
-        "./skills/test-driven-development",
         "./skills/using-git-worktrees",
-        "./skills/using-superpowers",
-        "./skills/verification-before-completion",
-        "./skills/writing-plans",
         "./skills/writing-skills",
         "./skills/zoom-out"
       ]
@@ -318,7 +305,7 @@
     {
       "name": "writing-helper",
       "description": "Standalone OMP writing helper with logic checks, quality checks, citation verification, writer/checker agents, and writing skills.",
-      "version": "0.2.13",
+      "version": "0.2.14",
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -356,8 +343,8 @@
     },
     {
       "name": "omp-testing-enhancer",
-      "description": "Plan, execute, and independently review OMP testing work with packaged agents, target analysis, public API context, browser evidence, coverage and mutation analyzers, advisory review, and reports.",
-      "version": "0.1.16",
+      "description": "Advisory OMP testing analysis, public API context, host-observed evidence, browser checks, coverage and mutation context, review, and reports.",
+      "version": "0.1.17",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -366,7 +353,7 @@
     {
       "name": "omp-fact-checker",
       "description": "Fact-checking workflow with claim planning, evidence collection, cross-agent validation, reports, and advisory completeness review.",
-      "version": "0.1.10",
+      "version": "0.1.11",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-fact-checker",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -380,8 +367,8 @@
     },
     {
       "name": "omp-enhancer-core",
-      "description": "OMP-native-first task-fact observer with opt-in workflow diagnostics and explicit extension-tool activation.",
-      "version": "0.1.126",
+      "description": "OMP-native-first task-fact observer with opt-in evidence reviews, exact-model DeepSeek/MiMo compatibility guidance, and explicit extension-tool activation.",
+      "version": "0.1.127",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",

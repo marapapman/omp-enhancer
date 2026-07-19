@@ -1,40 +1,36 @@
-import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const placeholderValues = new Set(['todo', 'tbd', '<required skill>', '<skill>', '[skill]', 'required skill']);
 const SKILL_NAMESPACE_PREFIXES = new Set(['ecc', 'omp', 'superpowers', 'vendor']);
-const PROJECT_SKILL_FAMILIES = new Map([
-  ['diagnose', new Set(['debugging', 'systematic-debugging'])],
-  ['systematic-debugging', new Set(['debugging', 'diagnose'])],
-]);
 let runtimeSkillAliases;
 
-export function validateSkillUsage({ requiredSkills = [], output = '', loadedSkills = [] } = {}) {
+export function validateSkillUsage({ suggestedSkills = [], output = '', loadedSkills = [] } = {}) {
   const text = String(output);
   const authoritative = findAuthoritativeSkillUsage(text);
-  const denied = findDeniedSkills(text, requiredSkills);
-  const externallyLoaded = normalizeLoadedSkills(loadedSkills, requiredSkills);
-  const outputLoaded = normalizeLoadedSkills(parseLoadedSkillEvidence(text), requiredSkills);
+  const denied = findDeniedSkills(text, suggestedSkills);
+  const externallyLoaded = normalizeLoadedSkills(loadedSkills, suggestedSkills);
+  const outputLoaded = normalizeLoadedSkills(parseLoadedSkillEvidence(text), suggestedSkills);
   const loadedEvidence = uniqueValues([
     ...outputLoaded,
     ...externallyLoaded,
   ]);
 
   if (!authoritative) {
-    const missing = findMissingSkills(requiredSkills, loadedEvidence);
+    const missing = findMissingSkills(suggestedSkills, loadedEvidence);
     const ok = missing.length === 0 && denied.length === 0;
 
     return {
       ok,
-      required: requiredSkills,
+      suggested: suggestedSkills,
       loaded: loadedEvidence,
       missing,
       invalid: [],
       denied,
       message: ok
-        ? (requiredSkills.length ? skillEvidenceMessage({ outputLoaded, externallyLoaded }) : 'No required skills.')
+        ? (suggestedSkills.length ? skillEvidenceMessage({ outputLoaded, externallyLoaded }) : 'No suggested skills.')
         : (missing.length ? missingSkillUsageMessage({ missing, output: text, hasLoadedEvidence: loadedEvidence.length > 0 }) : buildMessage({ missing, invalid: [], denied })),
     };
   }
@@ -43,16 +39,16 @@ export function validateSkillUsage({ requiredSkills = [], output = '', loadedSki
   const invalid = parsed.loaded.filter((entry) => isPlaceholder(entry));
   const effectiveLoaded = parsed.loaded.filter((entry) => !isPlaceholder(entry));
   const loaded = uniqueValues([
-    ...effectiveLoaded.map((entry) => canonicalizeSkillName(entry, requiredSkills)).filter(Boolean),
+    ...effectiveLoaded.map((entry) => canonicalizeSkillName(entry, suggestedSkills)).filter(Boolean),
     ...outputLoaded,
     ...externallyLoaded,
   ]);
-  const missing = findMissingSkills(requiredSkills, loaded);
+  const missing = findMissingSkills(suggestedSkills, loaded);
   const ok = missing.length === 0 && invalid.length === 0 && denied.length === 0;
 
   return {
     ok,
-    required: requiredSkills,
+    suggested: suggestedSkills,
     loaded,
     missing,
     invalid,
@@ -129,9 +125,9 @@ function parseSkillUsageBlock(block) {
   return { required: uniqueValues(required), loaded: uniqueValues(loaded) };
 }
 
-function findDeniedSkills(output, requiredSkills) {
+function findDeniedSkills(output, suggestedSkills) {
   const lower = output.toLowerCase();
-  return requiredSkills.filter((skill) => {
+  return suggestedSkills.filter((skill) => {
     return skillNameVariants(skill).some((variant) => {
       const escaped = escapeRegExp(variant);
       return new RegExp(`did not load\\s+${escaped}|without loading\\s+${escaped}|未加载\\s*${escaped}|没有加载\\s*${escaped}`).test(lower);
@@ -158,9 +154,6 @@ function parseLooseLoadedSkillEvidence(output) {
   lines.forEach((raw, index) => {
     const line = cleanMarkdownLine(raw);
     if (!line) return;
-
-    const gateComplete = line.match(/\bGATE\s+COMPLETE\b.*?\bskills?\s*\[([^\]]+)\]\s*loaded\b/i);
-    if (gateComplete) entries.push(...extractSkillEntries(gateComplete[1]));
 
     const inlineLoaded = line.match(/^["'`]?skills[_\s-]*loaded["'`]?\s*[:=]\s*(.*)$/i)
       || line.match(/^["'`]?loaded[_\s-]*skills["'`]?\s*[:=]\s*(.*)$/i)
@@ -434,7 +427,7 @@ function buildMessage({ missing, invalid, denied }) {
   const parts = [];
   if (missing.length) parts.push(`Missing loaded skills: ${missing.join(', ')}`);
   if (invalid.length) parts.push(`Invalid loaded skill entries: ${invalid.join(', ')}`);
-  if (denied.length) parts.push(`Denied required skill loading: ${denied.join(', ')}`);
+  if (denied.length) parts.push(`Declined suggested skill loading: ${denied.join(', ')}`);
   return parts.join('; ');
 }
 
@@ -505,56 +498,32 @@ export function normalizeSkillName(value) {
   return lookupSkillAlias(normalized) || normalized;
 }
 
-export function skillNamesEquivalent(requiredSkill, loadedSkill) {
-  const required = normalizeSkillName(requiredSkill);
+export function skillNamesEquivalent(expectedSkill, loadedSkill) {
+  const expected = normalizeSkillName(expectedSkill);
   const loaded = normalizeSkillName(loadedSkill);
-  if (!required || !loaded) return false;
-  if (required === loaded) return true;
+  if (!expected || !loaded) return false;
+  if (expected === loaded) return true;
 
-  const rawRequired = normalizeSkillToken(requiredSkill);
+  const rawExpected = normalizeSkillToken(expectedSkill);
   const rawLoaded = normalizeSkillToken(loadedSkill);
-  if (rawRequired && rawLoaded && rawRequired === rawLoaded) return true;
-  if (rawLoaded && hasNamespacedSuffix(rawLoaded, required)) return true;
-  if (rawRequired && hasNamespacedSuffix(rawRequired, loaded)) return true;
-  if (rawLoaded && skillNameVariants(required).includes(rawLoaded)) return true;
+  if (rawExpected && rawLoaded && rawExpected === rawLoaded) return true;
+  if (rawLoaded && hasNamespacedSuffix(rawLoaded, expected)) return true;
+  if (rawExpected && hasNamespacedSuffix(rawExpected, loaded)) return true;
+  if (rawLoaded && skillNameVariants(expected).includes(rawLoaded)) return true;
   return false;
 }
 
 export function skillReadNameCandidates(skill, { limit = 3, roots = defaultSkillAliasRoots() } = {}) {
   const normalized = normalizeSkillToken(skill);
   if (!normalized) return [];
-  const allowLegacyGateSkill = isLegacyGateCompatibilitySkill(normalized);
 
   const candidates = collectSkillAliasCandidates(roots)
     .filter((candidate) => skillNamesEquivalent(skill, candidate.name) || skillNamesEquivalent(skill, candidate.canonical))
-    .filter((candidate) => allowLegacyGateSkill || !isLegacyGateCompatibilitySkill(candidate.name))
     .sort((left, right) => skillCandidateScore(skill, left) - skillCandidateScore(skill, right))
     .map((candidate) => candidate.name);
 
   const fallback = normalizeSkillName(skill) || normalized;
   return uniqueValues([...candidates, fallback]).slice(0, limit);
-}
-
-export function preferredSkillReadTarget(skill, { workspaceRoot = '' } = {}) {
-  const projectRoot = safeRealpath(workspaceRoot);
-  if (projectRoot) {
-    const projectRoots = [
-      path.join(projectRoot, 'skills'),
-      path.join(projectRoot, '.omp', 'skills'),
-      path.join(projectRoot, '.pi', 'skills'),
-    ].filter((root) => existsSync(root));
-    const projectCandidates = collectSkillAliasCandidates(projectRoots)
-      .filter((candidate) => projectSkillMatches(skill, candidate))
-      .filter((candidate) => isProjectSkillFile(projectRoot, candidate.skillFile))
-      .sort((left, right) => projectSkillCandidateScore(skill, left) - projectSkillCandidateScore(skill, right));
-    const selected = projectCandidates[0];
-    if (selected) {
-      return path.relative(projectRoot, selected.skillFile).split(path.sep).join('/');
-    }
-  }
-
-  const preferred = skillReadNameCandidates(skill, { limit: 1 })[0] ?? normalizeSkillName(skill);
-  return preferred ? `skill://${preferred}` : '';
 }
 
 export function buildSkillAliasMapFromRoots(roots = []) {
@@ -579,21 +548,21 @@ function normalizeSkillToken(value) {
     .toLowerCase();
 }
 
-function canonicalizeSkillName(value, requiredSkills = []) {
+function canonicalizeSkillName(value, suggestedSkills = []) {
   const normalized = normalizeSkillToken(value);
   if (!normalized) return '';
-  const requiredMatch = requiredSkills.find((skill) => skillNamesEquivalent(skill, normalized));
-  if (requiredMatch) return normalizeSkillName(requiredMatch);
+  const suggestedMatch = suggestedSkills.find((skill) => skillNamesEquivalent(skill, normalized));
+  if (suggestedMatch) return normalizeSkillName(suggestedMatch);
   return lookupSkillAlias(normalized) || normalized;
 }
 
-function normalizeLoadedSkills(skills, requiredSkills = []) {
+function normalizeLoadedSkills(skills, suggestedSkills = []) {
   const values = Array.isArray(skills) || skills instanceof Set ? [...skills] : [];
-  return uniqueValues(values.map((entry) => canonicalizeSkillName(entry, requiredSkills)).filter(Boolean));
+  return uniqueValues(values.map((entry) => canonicalizeSkillName(entry, suggestedSkills)).filter(Boolean));
 }
 
-function findMissingSkills(requiredSkills, loadedSkills) {
-  return requiredSkills.filter((skill) => !loadedSkills.some((loaded) => skillNamesEquivalent(skill, loaded)));
+function findMissingSkills(suggestedSkills, loadedSkills) {
+  return suggestedSkills.filter((skill) => !loadedSkills.some((loaded) => skillNamesEquivalent(skill, loaded)));
 }
 
 function skillNameVariants(skill) {
@@ -714,45 +683,6 @@ function addSkillFileAliasCandidates(root, skillDir, skillFile, kind, candidates
   }
 }
 
-function projectSkillCandidateScore(skill, candidate) {
-  const requested = normalizeSkillToken(skill);
-  if (candidate.name === requested) return 0;
-  if (candidate.canonical === requested) return 1;
-  return 2;
-}
-
-function projectSkillMatches(skill, candidate) {
-  if (skillNamesEquivalent(skill, candidate.name) || skillNamesEquivalent(skill, candidate.canonical)) return true;
-  const requested = normalizeSkillToken(skill);
-  const family = PROJECT_SKILL_FAMILIES.get(requested);
-  if (!family) return false;
-  return [candidate.name, candidate.canonical]
-    .map(withoutKnownNamespace)
-    .some((value) => family.has(value));
-}
-
-function withoutKnownNamespace(value) {
-  const normalized = normalizeSkillToken(value);
-  const [prefix, ...rest] = normalized.split('-');
-  return SKILL_NAMESPACE_PREFIXES.has(prefix) && rest.length ? rest.join('-') : normalized;
-}
-
-function safeRealpath(value) {
-  if (!value) return '';
-  try {
-    return realpathSync(value);
-  } catch {
-    return '';
-  }
-}
-
-function isProjectSkillFile(projectRoot, skillFile) {
-  const resolved = safeRealpath(skillFile);
-  if (!resolved) return false;
-  const relativePath = path.relative(projectRoot, resolved);
-  return relativePath !== '' && !relativePath.startsWith(`..${path.sep}`) && relativePath !== '..' && !path.isAbsolute(relativePath);
-}
-
 function rootKind(root) {
   return String(root).includes(path.join('.omp', 'agent')) ? 'managed' : 'packaged';
 }
@@ -764,11 +694,6 @@ function skillCandidateScore(skill, candidate) {
   if (candidate.canonical === requested) return packaged ? 2 : 3;
   if (packaged) return candidate.name.includes('/') ? 5 : 4;
   return candidate.name.includes('/') ? 7 : 6;
-}
-
-function isLegacyGateCompatibilitySkill(value) {
-  const normalized = normalizeSkillToken(value);
-  return /(?:^|[-/])(?:omp-)?(?:(?:factcheck|testing|subagent)-)?gate-(?:satisfy|satisfaction|unblock)(?:$|[-/])/.test(normalized);
 }
 
 function collectSkillAliases(root, current, aliases) {

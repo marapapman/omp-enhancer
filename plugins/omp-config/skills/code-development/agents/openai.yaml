@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Development"
+  short_description: "Plan parallel task-owned TDD and review code"
+  default_prompt: "Use $code-development to inspect this codebase, make and review a detailed parallel-slice plan, delegate complete vertical TDD slices to native task, integrate and self-review the current tree, then provide bounded evidence to reviewer and repair supported findings."

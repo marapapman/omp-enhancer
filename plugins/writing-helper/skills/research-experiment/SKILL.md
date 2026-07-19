@@ -18,7 +18,7 @@ Read source code, configuration files, and any existing documentation in the pro
 - What claims the project makes (performance, correctness, efficiency)
 - What related work or baselines are referenced
 
-Use `read`, `grep`, `find` to gather context from the codebase.
+Use `read`, `grep`, and `glob` to gather context from the codebase.
 
 ### 2. Define Research Questions (2–4)
 

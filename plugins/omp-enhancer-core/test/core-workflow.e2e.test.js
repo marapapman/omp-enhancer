@@ -41,8 +41,9 @@ test('primary startup records task facts without changing the native prompt or a
   pi.pi = {
     SKILL_PROMPT_MESSAGE_TYPE: 'skill-prompt',
     getActiveSkills: () => [
+      { name: 'omp-enhancer-workflows', description: 'Select composable workflows.', filePath: '/skills/omp-enhancer-workflows/SKILL.md' },
       { name: 'writing-review', description: 'Review academic prose.', filePath: '/skills/writing-review/SKILL.md' },
-      { name: 'systematic-debugging', description: 'Trace concrete failures.', filePath: '/skills/systematic-debugging/SKILL.md' },
+      { name: 'code-development', description: 'Plan, test, and review code changes.', filePath: '/skills/code-development/SKILL.md' },
       { name: 'hidden-skill', description: 'Must remain hidden.', disableModelInvocation: true },
     ],
     buildSkillPromptMessage: async () => {
@@ -66,19 +67,21 @@ test('primary startup records task facts without changing the native prompt or a
   assert.deepEqual(startEvent, originalEvent);
 
   const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.equal(snapshot.lastRoute.intent, 'agent-selected');
-  assert.equal(snapshot.lastRoute.routePlan.mode, 'agent-selected');
-  assert.deepEqual(snapshot.lastRoute.routePlan.skills, []);
-  assert.deepEqual(snapshot.providedSkills, []);
+  assert.deepEqual(Object.keys(snapshot.lastTaskContext).sort(), [
+    'intent',
+    'taskDescriptor',
+  ]);
+  assert.equal(snapshot.lastTaskContext.intent, 'agent-selected');
 });
 
-test('DeepSeek Flash receives one hidden supplemental Skill and delegation reminder without replacing the native prompt', async () => {
+test('DeepSeek Flash receives a compact three-phase soft reminder without replacing the native prompt', async () => {
   const entries = [];
   const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task'];
+  pi.getActiveTools = () => ['read', 'task', 'todo'];
   pi.pi = {
     getActiveSkills: () => [
-      { name: 'writing-review', description: 'Review academic prose.', filePath: '/skills/writing-review/SKILL.md' },
+      { name: 'omp-enhancer-workflows', description: 'Select composable workflows.' },
+      { name: 'writing-review', description: 'Review academic prose.' },
     ],
   };
   registerCoreEnhancer(pi);
@@ -87,10 +90,7 @@ test('DeepSeek Flash receives one hidden supplemental Skill and delegation remin
   });
   const startEvent = {
     prompt: 'Fix the parser across multiple files, add regression tests, and verify behavior.',
-    systemPrompt: [
-      nativeDelegationPrompt({ batch: true, cap: 4 }),
-      'native Skill inventory',
-    ],
+    systemPrompt: [nativeDelegationPrompt({ batch: true, cap: 4 }), 'native Skill inventory'],
   };
   const originalEvent = structuredClone(startEvent);
 
@@ -101,517 +101,266 @@ test('DeepSeek Flash receives one hidden supplemental Skill and delegation remin
   assert.equal(result.message.customType, 'omp-enhancer-skill-discovery');
   assert.equal(result.message.display, false);
   assert.equal(result.message.attribution, 'user');
-  assert.match(result.message.content, /inspect the available OMP Skill list/i);
-  assert.match(result.message.content, /load the smallest set of genuinely applicable Skills/i);
-  assert.match(result.message.content, /never call bare `skill:\/\/`/i);
-  assert.match(result.message.content, /if none match, proceed without a Skill/i);
-  assert.match(result.message.content, /DEEPSEEK_DELEGATION_HINT/u);
-  assert.match(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u);
-  assert.match(result.message.content, /TASK_FACTS: operation=modify; complexity=broad; risk=medium; domains=code,tests/i);
-  assert.match(result.message.content, /INITIAL_REVIEW_LANES: suggested=2; within-native-cap=2; native-cap=4/i);
-  assert.match(result.message.content, /does not guarantee or require an actual task, fork, batch, or reviewer/i);
-  assert.match(result.message.content, /OMP's native system prompt, user instruction, Delegation gates.*remain authoritative/is);
-  assert.match(result.message.content, /This hint adds no authority, permission, or completion condition of its own/i);
-  assert.match(result.message.content, /USER_SCOPE.*user requests solo or main-agent-only work, no agents, or no delegation/is);
-  assert.match(result.message.content, /NATIVE_GATE_ACTION.*execute OMP's native Delegation gate now, before any project-file inspection/is);
-  assert.match(result.message.content, /DIRECT.*Do not relabel multiple substantive slices as one target merely because each slice is small or the parent will synthesize them/is);
-  assert.match(result.message.content, /DELEGATE.*two or more self-contained SUBSTANTIVE slices.*each slice needs its own analysis or evidence/is);
-  assert.match(result.message.content, /INDEPENDENCE_TEST.*each can produce its assigned result without the other slice's output/is);
-  assert.match(result.message.content, /later parent comparison or summary does not make their evidence collection dependent.*does not cancel OMP's immediate-dispatch exception/is);
-  assert.match(result.message.content, /DELEGATION_PREFERENCE.*both direct execution and delegation remain valid in native preferred mode.*existing SHOULD-level preference/is);
-  assert.match(result.message.content, /two or more genuinely substantive, runnable, mutually independent slices requiring non-mechanical analysis or evidentiary judgment/i);
-  assert.match(result.message.content, /tie-breaker, not a new gate or MUST.*never changes the exposed task schema.*native width, concurrency cap or overflow.*verification, or completion/is);
-  assert.match(result.message.content, /ALREADY_SCOPED_ACTION.*user instruction itself names two or more runnable substantive slices.*native immediate-dispatch exception applies/is);
-  assert.match(result.message.content, /next project action is native `task`, before any project `read`, `grep`, or `glob` of those slices/i);
-  assert.match(result.message.content, /Evidence collection inside a runnable slice is slice work, not an invented parent scoping phase/i);
-  assert.match(result.message.content, /Use native `task` to map unknown code instead of reading target after target/i);
-  assert.match(result.message.content, /TASK_SHAPE.*follow the `task` wire shape exposed in this turn exactly/is);
-  assert.match(result.message.content, /Give each genuinely independent slice its own assignment up to OMP's current concurrency cap/i);
-  assert.match(result.message.content, /Batch only when the exposed shape has `tasks\[\]`; otherwise use the exposed flat form/i);
-  assert.match(result.message.content, /Defer all width and grouping decisions to OMP's native independence and concurrency rules/i);
-  assert.match(result.message.content, /select only current Available Agent IDs/i);
-  assert.match(result.message.content, /PENDING_ACTION.*Do not duplicate a child's assigned work inline merely because it is slow/is);
-  assert.match(result.message.content, /perform every verification the user and OMP require/i);
-  assert.match(result.message.content, /inline prerequisite is needed only when its output is genuinely required to make assignments runnable/i);
-  assert.match(result.message.content, /shared manifest or catalog that an assignment can read as evidence is slice work/i);
-  assert.match(result.message.content, /does not replace a system prompt.*impose a batch size independently of OMP's native width, schema, or cap.*limit verification.*decide completion/is);
-  assert.match(result.message.content, /CURRENT_NATIVE_BATCH_ACTION.*canonical OMP Delegation section confirms batch `tasks\[\]` and native concurrency cap 4/is);
-  assert.match(result.message.content, /from 2 through 4 independent runnable SUBSTANTIVE slices.*EXACTLY ONE `task` call whose single `tasks\[\]` contains one assignment per slice/is);
-  assert.match(result.message.content, /verify `tasks\[\]\.length` equals the number of selected slices.*every selected slice appears exactly once/is);
-  assert.match(result.message.content, /if the array is incomplete, finish it before sending instead of repairing it with a later `task` call/i);
-  assert.match(result.message.content, /Never split that initial fan-out across multiple one-item batch calls/i);
-  assert.match(result.message.content, /For exactly two such slices this means one call with exactly two assignments/i);
-  assert.match(result.message.content, /current native width, shape, and cap, not a plugin-defined fan-out; above 4, defer to OMP's native overflow decision/i);
-  assert.doesNotMatch(result.message.content, /exactly two bounded assignments|at most four total parent project inspections|current trusted context/i);
-  assert.ok(
-    result.message.content.indexOf('Before acting, inspect the available OMP Skill list')
-      < result.message.content.indexOf('DEEPSEEK_DELEGATION_HINT'),
-    'Skill discovery should precede the delegation hint, matching the native Skills-to-Delegation order',
-  );
-  assert.ok(
-    result.message.content.indexOf('Before acting, inspect the available OMP Skill list')
-      < result.message.content.indexOf('DEEPSEEK_DYNAMIC_REVIEW_BUDGET'),
-    'Skill discovery should still precede the supplemental review context',
-  );
-  assert.ok(
-    result.message.content.indexOf('DEEPSEEK_DYNAMIC_REVIEW_BUDGET')
-      < result.message.content.indexOf('DEEPSEEK_DELEGATION_HINT'),
-    'The compact task-specific review context should precede the longer generic delegation reminder',
-  );
+  assert.equal(result.message.details.model, 'deepseek-v4-flash');
+  assert.match(result.message.content, /^DEEPSEEK_SOFT_PROTOCOL/u);
+  assert.match(result.message.content, /ENTRY \(soft\)[\s\S]*DIRECT is only a verbatim already-present field or heading[\s\S]*no judgment[\s\S]*Everything else is PROJECT/iu);
+  assert.match(result.message.content, /review, correction, comparison, verification, design, transformation, or planning regardless of target size or a named path/iu);
+  assert.match(result.message.content, /PROJECT DO NOW . DISCOVER:[\s\S]*named target waits[\s\S]*exactly one call[\s\S]*`read skill:\/\/omp-enhancer-workflows`[\s\S]*wait for the index/iu);
+  assert.match(result.message.content, /Do not add a project, Skill, reference, `todo`, or `task` call/iu);
+  assert.match(result.message.content, /PUBLIC CHECKPOINTS:[\s\S]*only visible assistant text counts[\s\S]*thinking, tool arguments, files, and `\.\.\.` do not[\s\S]*`PLAN URI:` is copy data until PLAN is visible/iu);
+  assert.match(result.message.content, /AFTER INDEX . choose values, then copy this fully filled block from thinking into visible assistant text before constructing any call[\s\S]*WORKFLOW PLAN\nPrimary:[\s\S]*Add-ons:[\s\S]*Skills:[\s\S]*Load order:[\s\S]*Actions:\n1\.[\s\S]*thinking, narration without the block, or `\.\.\.` does not count/iu);
+  assert.match(result.message.content, /separate numbered Action for each distinct requested checkpoint or evidence phase[\s\S]*do not collapse them into one catch-all line/iu);
+  assert.match(result.message.content, /first visible content item.+WORKFLOW PLAN.+resource calls may follow/iu);
+  assert.match(result.message.content, /AFTER ALL DECLARED RESOURCES AND ANY CATALOG EXTENSION[\s\S]*WORKFLOW READY \| primary=<id-or-none>[\s\S]*rebase the detailed numbered TODO/iu);
+  assert.match(result.message.content, /native `todo` is exposed.+only call.+TODO init.+end and wait.+project work starts in the next response/iu);
+  assert.match(result.message.content, /preserve every loaded card checkpoint and evidence boundary[\s\S]*plan-review or reviewer decision.+explicit TODO row/iu);
+  assert.match(result.message.content, /ORDER: index -> wait -> visible PLAN plus resource-only calls -> wait -> visible READY plus rebased TODO -> project work/iu);
+  assert.match(result.message.content, /guidance only:[\s\S]*Main selects resources[\s\S]*native OMP owns tools, permissions, delegation, and completion/iu);
+  assert.match(result.message.content, /COMPAT_REVIEW_CONTEXT \(soft, no quota\)/u);
+  assert.match(result.message.content, /DELEGATION AFTER READY \(soft, no quota\)/u);
+  assert.match(result.message.content, /selects no Agent, fork, reviewer count, dispatch, or completion condition/i);
+  assert.doesNotMatch(result.message.content, /suggested=|within-native-cap|native-cap=|NATIVE_BATCH_SHAPE|action=delegate|block:\s*true|continue:\s*true/u);
+  assert.ok(result.message.content.length < 3600, `compatibility context length=${result.message.content.length}`);
   assert.deepEqual(result.message.details.features, [
     'skill-discovery',
+    'workflow-selection',
     'delegation-decision',
     'dynamic-review-budget',
   ]);
 
-  const continued = await event(pi, 'before_agent_start')({
+  assert.equal(await event(pi, 'before_agent_start')({
     prompt: '继续',
-    systemPrompt: ['native OMP prompt', 'native Skill inventory'],
-  }, ctx);
-  assert.equal(continued, undefined, 'the reminder should appear at most once per active main task');
+    systemPrompt: ['native OMP prompt'],
+  }, ctx), undefined, 'the reminder is one-shot for the active task');
 });
 
-test('DeepSeek compatibility reminder exposes only capabilities active in the native runtime', async () => {
-  const nativeEvent = {
-    prompt: 'Audit two independent modules and report evidence.',
-    systemPrompt: ['native OMP prompt'],
+test('MiMo v2.5 receives the same exact-model three-phase reminder once', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task', 'todo'];
+  pi.pi = {
+    getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }],
   };
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries, process.cwd(), {
+    model: { provider: 'opencode-go', id: 'mimo-v2.5' },
+  });
+
+  const result = await event(pi, 'before_agent_start')({
+    prompt: 'Audit two modules and compare their evidence.',
+    systemPrompt: ['native OMP prompt'],
+  }, ctx);
+
+  assert.match(result.message.content, /^MIMO_SOFT_PROTOCOL/u);
+  assert.equal(result.message.details.model, 'mimo-v2.5');
+  assert.match(result.message.content, /PROJECT DO NOW . DISCOVER[\s\S]*`read skill:\/\/omp-enhancer-workflows`/iu);
+  assert.match(result.message.content, /PUBLIC CHECKPOINTS:[\s\S]*only visible assistant text counts[\s\S]*AFTER INDEX . choose values[\s\S]*copy this fully filled block/iu);
+  assert.match(result.message.content, /WORKFLOW PLAN\nPrimary:[\s\S]*WORKFLOW READY \| primary=<id-or-none>/iu);
+  assert.doesNotMatch(result.message.content, /suggested=|reviewer count=\d|fork width=\d|required fork|block:\s*true/iu);
+  assert.equal(await event(pi, 'before_agent_start')({
+    prompt: '继续',
+    systemPrompt: ['native OMP prompt'],
+  }, ctx), undefined);
+});
+
+test('staged reminder exposes only capabilities active in the native runtime', async () => {
+  const nativeEvent = { prompt: 'Audit two independent modules.', systemPrompt: ['native OMP prompt'] };
 
   const skillEntries = [];
-  const skillOnlyPi = new FakePi(skillEntries);
-  skillOnlyPi.getActiveTools = () => ['read'];
-  skillOnlyPi.pi = {
-    getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }],
-  };
-  registerCoreEnhancer(skillOnlyPi);
-  const skillOnly = await event(skillOnlyPi, 'before_agent_start')(
+  const skillPi = new FakePi(skillEntries);
+  skillPi.getActiveTools = () => ['read'];
+  skillPi.pi = { getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }] };
+  registerCoreEnhancer(skillPi);
+  const skillOnly = await event(skillPi, 'before_agent_start')(
     structuredClone(nativeEvent),
     extensionContext(skillEntries, process.cwd(), {
       model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
     }),
   );
-  assert.match(skillOnly.message.content, /inspect the available OMP Skill list/i);
-  assert.doesNotMatch(skillOnly.message.content, /DEEPSEEK_DELEGATION_HINT/u);
+  assert.match(skillOnly.message.content, /PHASE 1 . DECLARE:[\s\S]*visible OMP Skill inventory/iu);
+  assert.match(skillOnly.message.content, /PHASE 2 . LOAD BATCH:[\s\S]*exact `skill:\/\/<name>` URIs/iu);
+  assert.match(skillOnly.message.content, /PHASE 3 . READY \+ EXECUTE:[\s\S]*WORKFLOW READY/iu);
+  assert.doesNotMatch(skillOnly.message.content, /DELEGATION AFTER READY|COMPAT_REVIEW_CONTEXT/u);
   assert.deepEqual(skillOnly.message.details.features, ['skill-discovery']);
 
   const taskEntries = [];
-  const taskOnlyPi = new FakePi(taskEntries);
-  taskOnlyPi.getActiveTools = () => ['read', 'task'];
-  taskOnlyPi.pi = { getActiveSkills: () => [] };
-  registerCoreEnhancer(taskOnlyPi);
-  const taskOnly = await event(taskOnlyPi, 'before_agent_start')(
+  const taskPi = new FakePi(taskEntries);
+  taskPi.getActiveTools = () => ['read', 'task'];
+  taskPi.pi = { getActiveSkills: () => [] };
+  registerCoreEnhancer(taskPi);
+  const taskOnly = await event(taskPi, 'before_agent_start')(
     structuredClone(nativeEvent),
     extensionContext(taskEntries, process.cwd(), {
       model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
     }),
   );
-  assert.match(taskOnly.message.content, /DEEPSEEK_DELEGATION_HINT/u);
-  assert.doesNotMatch(taskOnly.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u);
-  assert.doesNotMatch(taskOnly.message.content, /inspect the available OMP Skill list/i);
-  assert.doesNotMatch(taskOnly.message.content, /CURRENT_NATIVE_BATCH_ACTION/u);
+  assert.match(taskOnly.message.content, /PHASE 1 . PLAN:[\s\S]*PHASE 2 . COMMIT:[\s\S]*PHASE 3 . EXECUTE/iu);
+  assert.match(taskOnly.message.content, /no fork or width is selected by this reminder/i);
+  assert.match(taskOnly.message.content, /DELEGATION AFTER READY \(soft, no quota\)/u);
   assert.deepEqual(taskOnly.message.details.features, ['delegation-decision']);
+});
 
-  const capOneEntries = [];
-  const capOnePi = new FakePi(capOneEntries);
-  capOnePi.getActiveTools = () => ['read', 'task'];
-  capOnePi.pi = { getActiveSkills: () => [] };
-  registerCoreEnhancer(capOnePi);
-  const capOne = await event(capOnePi, 'before_agent_start')({
-    prompt: 'Fix authentication across the API, add security regression tests, and publish the release.',
-    systemPrompt: [
-      nativeDelegationPrompt({ batch: true, cap: 1 }),
-    ],
-  }, extensionContext(capOneEntries, process.cwd(), {
+test('review and multi-target facts remain compact and never choose dispatch or width', async () => {
+  const reviewEntries = [];
+  const reviewPi = new FakePi(reviewEntries);
+  reviewPi.getActiveTools = () => ['read', 'task'];
+  reviewPi.pi = { getActiveSkills: () => [] };
+  registerCoreEnhancer(reviewPi);
+  const review = await event(reviewPi, 'before_agent_start')({
+    prompt: 'Fix the parser across multiple files, add tests, and require an independent review.',
+    systemPrompt: ['native OMP prompt'],
+  }, extensionContext(reviewEntries, process.cwd(), {
     model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
   }));
-  assert.match(capOne.message.content, /DEEPSEEK_DELEGATION_HINT/u);
-  assert.match(capOne.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u);
-  assert.match(capOne.message.content, /INITIAL_REVIEW_LANES: suggested=3; within-native-cap=1; native-cap=1/i);
-  assert.doesNotMatch(capOne.message.content, /CURRENT_NATIVE_BATCH_ACTION/u);
-});
+  assert.match(review.message.content, /COMPAT_REVIEW_CONTEXT \(soft, no quota\)/u);
+  assert.match(review.message.content, /possible-review-dimensions=correctness,test-adequacy/i);
+  assert.doesNotMatch(review.message.content, /suggested=|within-native-cap|native-cap=|reviewerLaneSuggestion/u);
 
-test('DeepSeek review-width suggestion follows task facts instead of defaulting to three reviewers', async () => {
-  const cases = [
-    {
-      prompt: 'Answer what this constant means.',
-      injectReviewBudget: false,
-    },
-    {
-      prompt: 'Perform a broad security audit of authentication across the API and tests. Do not modify files.',
-      injectReviewBudget: false,
-    },
-    {
-      prompt: 'Draft a concise email replying to Bob.',
-      injectReviewBudget: false,
-    },
-    {
-      prompt: '请写一封简短的邮件回复用户。',
-      injectReviewBudget: false,
-    },
-    {
-      prompt: 'Fix one typo in src/a.js.',
-      injectReviewBudget: false,
-      descriptor: {
-        operation: 'modify',
-        domains: ['code'],
-        complexity: 'focused',
-        workspaceWrite: 'required',
-      },
-    },
-    {
-      prompt: 'Fix the parser across multiple files, add regression tests, and verify behavior.',
-      injectReviewBudget: true,
-      profile: /operation=modify; complexity=broad; risk=medium; domains=code,tests/i,
-      suggestion: 2,
-    },
-    {
-      prompt: '在这个临时项目中，把配置加载器修到完全符合 CONTRACT.md 的公开行为，并补足能证明这些行为的回归测试。保持现有导出 API，只修改 src/ 和 test/，只运行 package.json 已有的 Node 测试命令。不要联网、安装依赖或改动项目配置。完成后报告改动、实际命令、结果和仍有限制。',
-      injectReviewBudget: true,
-      profile: /operation=modify; complexity=broad; risk=medium; domains=code,tests,document/i,
-      suggestion: 2,
-    },
-    {
-      prompt: 'In this temporary project, fix the configuration loader so it fully conforms to the public behavior in CONTRACT.md, and add regression tests that prove those behaviors. Preserve the existing export API, modify only src/ and test/, and run only the existing Node test command from package.json. Do not use the network, install dependencies, or change project configuration. Report the changes, actual command, results, and remaining limitations.',
-      injectReviewBudget: true,
-      profile: /operation=modify; complexity=broad; risk=medium; domains=code,tests,document/i,
-      suggestion: 2,
-    },
-    {
-      prompt: 'Fix authentication across the API, add security regression tests, and publish the release.',
-      injectReviewBudget: true,
-      profile: /operation=modify; complexity=broad; risk=critical; domains=code,tests,security,plugin/i,
-      suggestion: 3,
-    },
-    {
-      prompt: 'Harden authentication across the API and add security regression tests without publishing.',
-      injectReviewBudget: true,
-      profile: /operation=modify; complexity=broad; risk=high; domains=code,tests,security/i,
-      suggestion: 3,
-    },
-    {
-      prompt: 'Fix the parser across multiple files and add tests, but do not use an independent reviewer.',
-      injectReviewBudget: false,
-    },
-  ];
-
-  for (const fixture of cases) {
-    const entries = [];
-    const pi = new FakePi(entries);
-    pi.getActiveTools = () => ['read', 'task'];
-    pi.pi = { getActiveSkills: () => [] };
-    registerCoreEnhancer(pi);
-    const result = await event(pi, 'before_agent_start')({
-      prompt: fixture.prompt,
-      systemPrompt: [nativeDelegationPrompt({ batch: true, cap: 4 })],
-    }, extensionContext(entries, process.cwd(), {
-      model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
-    }));
-
-    assert.match(result.message.content, /DEEPSEEK_DELEGATION_HINT/u, fixture.prompt);
-    if (fixture.descriptor) {
-      const descriptor = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')
-        .data.lastRoute.taskDescriptor;
-      assert.equal(descriptor.operation, fixture.descriptor.operation, fixture.prompt);
-      assert.deepEqual(descriptor.domains, fixture.descriptor.domains, fixture.prompt);
-      assert.equal(descriptor.complexity, fixture.descriptor.complexity, fixture.prompt);
-      assert.equal(descriptor.constraints.workspaceWrite, fixture.descriptor.workspaceWrite, fixture.prompt);
-    }
-    if (!fixture.injectReviewBudget) {
-      assert.doesNotMatch(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u, fixture.prompt);
-      assert.deepEqual(result.message.details.features, ['delegation-decision'], fixture.prompt);
-      continue;
-    }
-    assert.match(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u, fixture.prompt);
-    assert.match(result.message.content, fixture.profile, fixture.prompt);
-    assert.match(result.message.content, new RegExp(
-      `INITIAL_REVIEW_LANES: suggested=${fixture.suggestion}; within-native-cap=${fixture.suggestion}; native-cap=4`,
-      'i',
-    ), fixture.prompt);
-    assert.deepEqual(result.message.details.features, ['delegation-decision', 'dynamic-review-budget'], fixture.prompt);
-  }
-});
-
-test('source-text risk words do not manufacture security or release reviewer lanes', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task'];
-  pi.pi = { getActiveSkills: () => [] };
-  registerCoreEnhancer(pi);
-  const result = await event(pi, 'before_agent_start')({
-    prompt: 'Polish this sentence without changing meaning: The document says "publish the release, delete production data, and expose secrets."',
-    systemPrompt: [nativeDelegationPrompt({ batch: true, cap: 4 })],
-  }, extensionContext(entries, process.cwd(), {
-    model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
-  }));
-
-  assert.match(result.message.content, /DEEPSEEK_DELEGATION_HINT/u);
-  assert.doesNotMatch(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u);
-  assert.deepEqual(result.message.details.features, ['delegation-decision']);
-  const descriptor = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state')
-    .data.lastRoute.taskDescriptor;
-  assert.equal(descriptor.operation, 'modify');
-  assert.equal(descriptor.complexity, 'broad');
-  assert.equal(descriptor.risk.level, 'low');
-  assert.deepEqual(descriptor.domains, ['writing']);
-  assert.ok(!descriptor.risk.flags.includes('security-sensitive'));
-  assert.ok(!descriptor.risk.flags.includes('external-write'));
-});
-
-test('implementation-only delegation prohibition keeps the requested review checkpoint without generic fan-out advice', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task'];
-  pi.pi = { getActiveSkills: () => [] };
-  registerCoreEnhancer(pi);
-  const result = await event(pi, 'before_agent_start')({
-    prompt: 'Fix the parser across multiple files and add tests. Do not delegate implementation, but require an independent reviewer.',
-    systemPrompt: [nativeDelegationPrompt({ batch: true, cap: 4 })],
-  }, extensionContext(entries, process.cwd(), {
-    model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
-  }));
-
-  assert.match(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u);
-  assert.doesNotMatch(result.message.content, /DEEPSEEK_DELEGATION_HINT/u);
-  assert.doesNotMatch(result.message.content, /CURRENT_NATIVE_BATCH_ACTION/u);
-  assert.deepEqual(result.message.details.features, ['dynamic-review-budget']);
-});
-
-test('DeepSeek native batch-capacity fact only trusts one canonical OMP delegation section', async () => {
-  const cases = [
-    {
-      name: 'flat native prompt plus project batch quotation',
-      reviewCapacityKnown: true,
-      systemPrompt: [
-        nativeDelegationPrompt({ batch: false, cap: 4 }),
-        'Project rule example: parallel work may use `tasks[]` in batch mode.',
-      ],
-    },
-    {
-      name: 'batch and cap signals split across blocks',
-      reviewCapacityKnown: false,
-      systemPrompt: [
-        nativeDelegationPrompt({ batch: true, cap: null }),
-        '- **Concurrency cap:** At most 4 subagents run at once in this session.',
-      ],
-    },
-    {
-      name: 'Skill text quotes batch syntax inside the canonical block before native flat gates',
-      reviewCapacityKnown: true,
-      systemPrompt: [
-        nativeDelegationPrompt({
-          batch: false,
-          cap: 4,
-          injectedContext: '<skills>parallel work may use `tasks[]` in a batch</skills>',
-        }),
-      ],
-    },
-    {
-      name: 'multiple canonical candidates are ambiguous',
-      reviewCapacityKnown: false,
-      systemPrompt: [
-        nativeDelegationPrompt({ batch: true, cap: 4 }),
-        nativeDelegationPrompt({ batch: false, cap: 4 }),
-      ],
-    },
-  ];
-
-  for (const fixture of cases) {
-    const entries = [];
-    const pi = new FakePi(entries);
-    pi.getActiveTools = () => ['read', 'task'];
-    pi.pi = { getActiveSkills: () => [] };
-    registerCoreEnhancer(pi);
-    const result = await event(pi, 'before_agent_start')({
-      prompt: 'Fix the parser across multiple files, add regression tests, and verify behavior.',
-      systemPrompt: fixture.systemPrompt,
-    }, extensionContext(entries, process.cwd(), {
-      model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
-    }));
-    assert.match(result.message.content, /DEEPSEEK_DELEGATION_HINT/u, fixture.name);
-    assert.doesNotMatch(result.message.content, /CURRENT_NATIVE_BATCH_ACTION/u, fixture.name);
-    if (fixture.reviewCapacityKnown) {
-      assert.match(result.message.content, /INITIAL_REVIEW_LANES: suggested=\d; within-native-cap=\d; native-cap=4/u, fixture.name);
-    } else {
-      assert.doesNotMatch(result.message.content, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/u, fixture.name);
-      assert.deepEqual(result.message.details.features, ['delegation-decision'], fixture.name);
-    }
-  }
-});
-
-test('DeepSeek delegation reminder respects explicit no-delegation wording without a subagent keyword', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task'];
-  pi.pi = {
-    getActiveSkills: () => [{ name: 'systematic-debugging', description: 'Trace concrete failures.' }],
+  const shapeEntries = [];
+  const shapePi = new FakePi(shapeEntries);
+  shapePi.getActiveTools = () => ['read', 'task'];
+  shapePi.pi = {
+    getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }],
   };
-  registerCoreEnhancer(pi);
+  registerCoreEnhancer(shapePi);
+  const shape = await event(shapePi, 'before_agent_start')({
+    prompt: 'Independently audit src/a.js and src/b.js. Give evidence for each and compare them. Do not modify files.',
+    systemPrompt: ['native OMP prompt'],
+  }, extensionContext(shapeEntries, process.cwd(), {
+    model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
+  }));
+  assert.match(shape.message.content, /COMPAT_TASK_SHAPE_FACTS/u);
+  assert.match(shape.message.content, /exact-inspection-targets=2/u);
+  assert.match(shape.message.content, /never a dispatch or fork-width decision/i);
+  assert.doesNotMatch(shape.message.content, /action=delegate|required fork|must delegate/iu);
+});
 
+test('explicit no-delegation wording keeps Skill guidance but removes delegation advice', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task'];
+  pi.pi = { getActiveSkills: () => [{ name: 'code-development', description: 'Plan, test, and review code changes.' }] };
+  registerCoreEnhancer(pi);
   const result = await event(pi, 'before_agent_start')({
-    prompt: 'Audit src/router.js and test/router.test.js independently, but keep all work in the main agent and do not delegate any part.',
+    prompt: 'Audit src/router.js, but keep all work in the main agent and do not delegate any part.',
     systemPrompt: ['native OMP prompt'],
   }, extensionContext(entries, process.cwd(), {
     model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
   }));
 
-  assert.match(result.message.content, /inspect the available OMP Skill list/i);
-  assert.doesNotMatch(result.message.content, /NATIVE_TASK_FIRST_ACTION/u);
+  assert.match(result.message.content, /PHASE 1 . DECLARE:[\s\S]*visible OMP Skill inventory/iu);
+  assert.doesNotMatch(result.message.content, /DELEGATION AFTER READY|COMPAT_REVIEW_CONTEXT/u);
   assert.deepEqual(result.message.details.features, ['skill-discovery']);
   const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.equal(snapshot.lastRoute.taskDescriptor.constraints.subagents, 'forbidden');
-
-  const noCapabilityEntries = [];
-  const noCapabilityPi = new FakePi(noCapabilityEntries);
-  noCapabilityPi.getActiveTools = () => ['read', 'task'];
-  noCapabilityPi.pi = { getActiveSkills: () => [] };
-  registerCoreEnhancer(noCapabilityPi);
-  assert.equal(await event(noCapabilityPi, 'before_agent_start')({
-    prompt: 'Audit src/router.js and test/router.test.js independently, but keep all work in the main agent and do not delegate any part.',
-    systemPrompt: ['native OMP prompt'],
-  }, extensionContext(noCapabilityEntries, process.cwd(), {
-    model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
-  })), undefined);
+  assert.equal(snapshot.lastTaskContext.taskDescriptor.constraints.subagents, 'forbidden');
 });
 
-test('DeepSeek delegation reminder yields to broad natural solo-agent wording', async () => {
-  for (const prompt of [
-    'Inspect both files, but handle everything yourself.',
-    'Work alone on this repository audit.',
-    'Inspect both files. Do not use agents.',
-    '检查这两个文件，请你自己完成。',
-    '检查这两个文件，不要交给其他代理。',
+test('DeepSeek and MiMo reminders are exact-model, primary-agent, and visible-capability gated', async () => {
+  const nativeEvent = { prompt: 'Review abstract.tex conservatively.', systemPrompt: ['native OMP prompt'] };
+  for (const model of [
+    { provider: 'opencode-go', id: 'deepseek-v3.2' },
+    { provider: 'opencode-go', id: 'deepseek-v4-flash-pro' },
+    { provider: 'another-provider', id: 'deepseek-v4-flash' },
+    { provider: 'opencode-go', id: 'mimo-v2.5-pro' },
+    { provider: 'xiaomi', id: 'mimo-v2.5' },
   ]) {
     const entries = [];
     const pi = new FakePi(entries);
-    pi.getActiveTools = () => ['read', 'task'];
-    pi.pi = { getActiveSkills: () => [] };
+    pi.getActiveTools = () => ['read'];
+    pi.pi = { getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }] };
     registerCoreEnhancer(pi);
-
-    const result = await event(pi, 'before_agent_start')({
-      prompt,
-      systemPrompt: ['native OMP prompt'],
-    }, extensionContext(entries, process.cwd(), {
-      model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
-    }));
-
-    assert.equal(result, undefined, prompt);
-    const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-    assert.equal(snapshot.lastRoute.taskDescriptor.constraints.subagents, 'forbidden', prompt);
+    assert.equal(await event(pi, 'before_agent_start')(
+      structuredClone(nativeEvent),
+      extensionContext(entries, process.cwd(), { model }),
+    ), undefined, `${model.provider}/${model.id}`);
   }
-});
-
-test('Skill discovery reminder remains once-per-task after a persisted session resume', async () => {
-  const entries = [];
-  const firstPi = new FakePi(entries);
-  firstPi.pi = {
-    getActiveSkills: () => [{ name: 'writing-review', description: 'Review academic prose.' }],
-  };
-  registerCoreEnhancer(firstPi);
-  const firstCtx = extensionContext(entries, process.cwd(), {
-    model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
-  });
-  const initial = await event(firstPi, 'before_agent_start')({
-    prompt: 'Review abstract.tex conservatively.',
-    systemPrompt: ['native OMP prompt'],
-  }, firstCtx);
-  assert.equal(initial.message.customType, 'omp-enhancer-skill-discovery');
-
-  const resumedPi = new FakePi(entries);
-  resumedPi.pi = firstPi.pi;
-  registerCoreEnhancer(resumedPi);
-  const resumedCtx = extensionContext(entries, process.cwd(), {
-    model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
-  });
-  await event(resumedPi, 'session_start')({}, resumedCtx);
-  assert.equal(await event(resumedPi, 'before_agent_start')({
-    prompt: '继续',
-    systemPrompt: ['native OMP prompt'],
-  }, resumedCtx), undefined);
-
-  const nextTask = await event(resumedPi, 'before_agent_start')({
-    prompt: 'Audit docker-compose.yml for production risks.',
-    systemPrompt: ['native OMP prompt'],
-  }, resumedCtx);
-  assert.equal(nextTask.message.customType, 'omp-enhancer-skill-discovery');
-});
-
-test('Skill discovery reminder remains exact-model, visible-inventory, and primary-agent gated', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task'];
-  pi.pi = {
-    getActiveSkills: () => [
-      { name: 'writing-review', description: 'Review academic prose.' },
-    ],
-  };
-  registerCoreEnhancer(pi);
-  const nativeEvent = {
-    prompt: 'Review abstract.tex conservatively.',
-    systemPrompt: ['native OMP prompt'],
-  };
-
-  const otherModelEvent = structuredClone(nativeEvent);
-  assert.equal(await event(pi, 'before_agent_start')(otherModelEvent, extensionContext(entries, process.cwd(), {
-    model: { provider: 'opencode-go', id: 'deepseek-v3.2' },
-  })), undefined);
-  assert.deepEqual(otherModelEvent, nativeEvent);
-  assert.equal(await event(pi, 'before_agent_start')(structuredClone(nativeEvent), extensionContext(entries, process.cwd(), {
-    model: { provider: 'opencode-go', id: 'deepseek-v4-flash-pro' },
-  })), undefined);
-  assert.equal(await event(pi, 'before_agent_start')(structuredClone(nativeEvent), extensionContext(entries, process.cwd(), {
-    model: { provider: 'another-provider', id: 'deepseek-v4-flash' },
-  })), undefined);
 
   const previousDisableCompat = process.env.OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT;
   process.env.OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT = '1';
   try {
-    const disabledEntries = [];
-    const disabledPi = new FakePi(disabledEntries);
-    disabledPi.getActiveTools = () => ['read', 'task'];
-    disabledPi.pi = pi.pi;
-    registerCoreEnhancer(disabledPi);
-    assert.equal(await event(disabledPi, 'before_agent_start')(
+    const entries = [];
+    const pi = new FakePi(entries);
+    pi.getActiveTools = () => ['read'];
+    pi.pi = { getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }] };
+    registerCoreEnhancer(pi);
+    assert.equal(await event(pi, 'before_agent_start')(
       structuredClone(nativeEvent),
-      extensionContext(disabledEntries, process.cwd(), {
+      extensionContext(entries, process.cwd(), {
         model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
       }),
     ), undefined);
+    const mimo = await event(pi, 'before_agent_start')(
+      structuredClone(nativeEvent),
+      extensionContext(entries, process.cwd(), {
+        model: { provider: 'opencode-go', id: 'mimo-v2.5' },
+      }),
+    );
+    assert.match(mimo.message.content, /^MIMO_SOFT_PROTOCOL/u);
   } finally {
     if (previousDisableCompat === undefined) delete process.env.OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT;
     else process.env.OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT = previousDisableCompat;
   }
 
+  const previousDisableMimo = process.env.OMP_ENHANCER_DISABLE_MIMO_COMPAT;
+  process.env.OMP_ENHANCER_DISABLE_MIMO_COMPAT = '1';
+  try {
+    const entries = [];
+    const pi = new FakePi(entries);
+    pi.getActiveTools = () => ['read'];
+    pi.pi = { getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }] };
+    registerCoreEnhancer(pi);
+    assert.equal(await event(pi, 'before_agent_start')(
+      structuredClone(nativeEvent),
+      extensionContext(entries, process.cwd(), {
+        model: { provider: 'opencode-go', id: 'mimo-v2.5' },
+      }),
+    ), undefined);
+    const deepseek = await event(pi, 'before_agent_start')(
+      structuredClone(nativeEvent),
+      extensionContext(entries, process.cwd(), {
+        model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
+      }),
+    );
+    assert.match(deepseek.message.content, /^DEEPSEEK_SOFT_PROTOCOL/u);
+  } finally {
+    if (previousDisableMimo === undefined) delete process.env.OMP_ENHANCER_DISABLE_MIMO_COMPAT;
+    else process.env.OMP_ENHANCER_DISABLE_MIMO_COMPAT = previousDisableMimo;
+  }
+
+  const subagentEntries = [{
+    type: 'session_init',
+    task: 'Complete the assignment below, thoroughly:\n\nReview abstract.tex conservatively.',
+    tools: ['read'],
+    spawns: '',
+  }];
+  const subagentPi = new FakePi(subagentEntries);
+  subagentPi.getActiveTools = () => ['read'];
+  subagentPi.pi = { getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }] };
+  registerCoreEnhancer(subagentPi);
   const subagentEvent = {
     prompt: 'Complete the assignment below, thoroughly:\n\nReview abstract.tex conservatively.',
     systemPrompt: ['native subagent prompt'],
   };
-  const originalSubagentEvent = structuredClone(subagentEvent);
-  assert.equal(await event(pi, 'before_agent_start')(subagentEvent, extensionContext([{
-    type: 'session_init',
-    task: subagentEvent.prompt,
-    tools: ['read'],
-    spawns: '',
-  }], process.cwd(), {
-    model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
-  })), undefined);
-  assert.deepEqual(subagentEvent, originalSubagentEvent);
+  assert.equal(await event(subagentPi, 'before_agent_start')(
+    structuredClone(subagentEvent),
+    extensionContext(subagentEntries, process.cwd(), {
+      model: { provider: 'opencode-go', id: 'mimo-v2.5' },
+    }),
+  ), undefined);
 
-  const hiddenOnlyEntries = [];
-  const hiddenOnlyPi = new FakePi(hiddenOnlyEntries);
-  hiddenOnlyPi.pi = {
-    getActiveSkills: () => [
-      { name: 'hidden-skill', description: 'Not model-visible.', hide: true },
-    ],
-  };
-  registerCoreEnhancer(hiddenOnlyPi);
-  assert.equal(await event(hiddenOnlyPi, 'before_agent_start')(structuredClone(nativeEvent), extensionContext(
-    hiddenOnlyEntries,
-    process.cwd(),
-    { model: { provider: 'opencode-go', id: 'deepseek-v4-flash' } },
-  )), undefined);
+  const hiddenEntries = [];
+  const hiddenPi = new FakePi(hiddenEntries);
+  hiddenPi.pi = { getActiveSkills: () => [{ name: 'hidden-skill', hide: true }] };
+  registerCoreEnhancer(hiddenPi);
+  assert.equal(await event(hiddenPi, 'before_agent_start')(
+    structuredClone(nativeEvent),
+    extensionContext(hiddenEntries, process.cwd(), {
+      model: { provider: 'opencode-go', id: 'mimo-v2.5' },
+    }),
+  ), undefined);
 });
 
-test('automatic startup never reads a writing target while the explicit route probe may inspect it', async () => {
+test('automatic startup never reads a writing target', async () => {
   const root = mkdtempSync(join(tmpdir(), 'omp-workflow-language-'));
   mkdirSync(join(root, 'tex'), { recursive: true });
   writeFileSync(join(root, 'tex', 'introduction.tex'), '\\section{Introduction}\nThis paper presents the system and its evaluation.');
@@ -622,20 +371,9 @@ test('automatic startup never reads a writing target while the explicit route pr
     }, extensionContext(entries, root));
 
     assert.equal(result, undefined);
-    const automatic = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.lastRoute;
+    const automatic = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.lastTaskContext;
     assert.equal(automatic.taskDescriptor.language, 'unknown');
     assert.equal(automatic.taskDescriptor.writingLanguageSource, 'pending-source');
-    assert.equal(automatic.writingSourceObservation, undefined);
-
-    const explicit = await pi.tools.get('omp_core_route_task').execute(
-      'explicit-writing-probe',
-      { prompt: '请润色 tex/introduction.tex。' },
-      undefined,
-      undefined,
-      extensionContext(entries, root),
-    );
-    assert.equal(explicit.details.route.taskDescriptor.language, 'en');
-    assert.deepEqual(explicit.details.route.writingSourceObservation.paths, ['tex/introduction.tex']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -643,29 +381,34 @@ test('automatic startup never reads a writing target while the explicit route pr
 
 test('real batch task assignments are observed without changing native task input', async () => {
   const { pi, ctx, entries } = registeredCore();
-  const prompt = 'Audit routing and testing in parallel, then integrate the findings.';
+  const prompt = 'Plan, implement, and review a routing regression in parallel, then integrate the evidence.';
   await event(pi, 'before_agent_start')({ prompt }, ctx);
 
   const taskEvent = {
     toolName: 'task',
     callId: 'audit-batch',
     input: {
-      context: '# Goal\nAudit routing and testing.\n# Constraints\nRead only.\n# Contract\nReturn evidence.',
+      context: '# Goal\nPlan, implement, and review a routing regression.\n# Constraints\nFollow each bounded assignment.\n# Contract\nReturn evidence.',
       tasks: [
         {
-          name: 'RouteScout',
-          agent: 'scout',
-          task: 'WR:code.review ST:step-1 TODO:Inspect-router SK:systematic-debugging\n# Target\nsrc/router.js\n# Acceptance\nFile-backed findings.',
+          name: 'RoutePlanner',
+          agent: 'plan',
+          task: 'WR:code.dev ST:step-plan-review TODO:Inspect-router SK:code-development\n# Target\nsrc/router.js\n# Acceptance\nFile-backed findings.',
+        },
+        {
+          name: 'RouteImplementer',
+          agent: 'task',
+          task: '[workflow=code.dev step=step-tdd todo=Implement-router skills=code-development]\n# Target\nsrc/router.js and test/router.test.js\n# Acceptance\nValid RED, minimal production change, same-command GREEN, and refactor evidence.',
         },
         {
           name: 'TestReviewer',
           agent: 'reviewer',
           task: [
-            'OMP_WORKFLOW: code.review,code.test',
-            'OMP_WORKFLOW_STEP: step-coverage-review',
+            'OMP_WORKFLOW: code.dev',
+            'OMP_WORKFLOW_STEP: step-review',
             'OMP_TODO_ITEM: Inspect the complete regression test matrix and return exact evidence',
             'OMP_SELECTED_SKILLS:',
-            '- verification-before-completion',
+            '- code-development',
             '# Target',
             'test/',
           ].join('\n'),
@@ -681,7 +424,7 @@ test('real batch task assignments are observed without changing native task inpu
   const afterDispatch = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
   assert.equal(afterDispatch.tasks.length, 1);
   assert.equal(afterDispatch.tasks[0].id, 'audit-batch');
-  assert.deepEqual(afterDispatch.tasks[0].roles, ['scout', 'reviewer']);
+  assert.deepEqual(afterDispatch.tasks[0].roles, ['plan', 'task', 'reviewer']);
 
   await event(pi, 'tool_result')({
     name: 'task',
@@ -689,13 +432,44 @@ test('real batch task assignments are observed without changing native task inpu
     result: {
       details: {
         results: [
-          { name: 'RouteScout', agent: 'scout', status: 'completed' },
+          { name: 'RoutePlanner', agent: 'plan', status: 'completed' },
+          { name: 'RouteImplementer', agent: 'task', status: 'completed' },
           { name: 'TestReviewer', agent: 'reviewer', status: 'completed' },
         ],
       },
     },
   }, ctx);
   assert.equal(await event(pi, 'session_stop')({ output: 'Integrated.' }, ctx), undefined);
+});
+
+test('task results without call IDs receive distinct fallback IDs', async () => {
+  const { pi, ctx, entries } = registeredCore();
+  await event(pi, 'before_agent_start')({ prompt: 'Observe two independently completed task results.' }, ctx);
+  const toolResult = event(pi, 'tool_result');
+
+  await toolResult({
+    name: 'task',
+    result: {
+      details: {
+        summary: 'First orphan result.',
+        results: [{ agent: 'scout', status: 'completed' }],
+      },
+    },
+  }, ctx);
+  await toolResult({
+    name: 'task',
+    result: {
+      details: {
+        summary: 'Second orphan result.',
+        results: [{ agent: 'reviewer', status: 'completed' }],
+      },
+    },
+  }, ctx);
+
+  const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
+  assert.deepEqual(snapshot.tasks.map(({ id }) => id), ['task-result-1', 'task-result-2']);
+  assert.deepEqual(snapshot.tasks.map(({ summary }) => summary), ['First orphan result.', 'Second orphan result.']);
+  assert.equal(snapshot.taskSequence, 2);
 });
 
 test('flat task assignments and spawned subagents keep native task and prompt events unchanged', async () => {
@@ -707,7 +481,7 @@ test('flat task assignments and spawned subagents keep native task and prompt ev
     input: {
       name: 'ParserReviewer',
       agent: 'reviewer',
-      task: '[workflow=code.review step=step-2 todo=Review parser diff skills=verification-before-completion]\n# Target\nsrc/parser.js',
+      task: '[workflow=code.dev step=step-review todo=Review parser diff skills=code-development]\n# Target\nsrc/parser.js',
     },
   };
   const originalTask = structuredClone(taskEvent);
@@ -727,37 +501,12 @@ test('flat task assignments and spawned subagents keep native task and prompt ev
   assert.deepEqual(subagentEvent, originalSubagentEvent);
 });
 
-test('classifier output remains a diagnostic probe and cannot replace the active agent-selected context', async () => {
-  const { pi, ctx, entries } = registeredCore();
-  await event(pi, 'before_agent_start')({ prompt: 'Polish the English Introduction in paper.tex.' }, ctx);
-  const before = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.lastRoute;
-
-  const result = await pi.tools.get('omp_core_resolve_classification').execute(
-    'classifier-probe',
-    {
-      prompt: 'ignored while an active task exists',
-      output: '{"intent":"writing.en","secondaryIntents":[],"language":"en","confidence":0.9,"riskFlags":[],"domainHints":["paper"],"reason":"English prose"}',
-    },
-    undefined,
-    undefined,
-    ctx,
-  );
-
-  const after = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.equal(result.details.activated, false);
-  assert.equal(result.details.probe_only, true);
-  assert.equal(after.lastRoute.intent, 'agent-selected');
-  assert.equal(after.lastRoute.routePlan.version, 3);
-  assert.deepEqual(after.lastRoute.routePlan.skills, []);
-  assert.deepEqual(after.lastRoute, before);
-  assert.equal(after.lastRouteProbe.changedActiveRoute, false);
-});
-
 test('advisor and autolearn host turns never reset the active user workflow state', async () => {
   const { pi, ctx, entries } = registeredCore();
   pi.getActiveTools = () => ['read', 'task'];
   await event(pi, 'before_agent_start')({ prompt: 'Review src/router.js and report findings.' }, ctx);
   const before = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
+  const entryCount = entries.length;
 
   const advisorPrompt = 'Check the workflow and TODO selection.';
   const advisorCtx = extensionContext([
@@ -773,9 +522,23 @@ test('advisor and autolearn host turns never reset the active user workflow stat
     model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
   });
   assert.equal(await event(pi, 'before_agent_start')({ prompt: advisorPrompt }, advisorCtx), undefined);
+  assert.equal(await event(pi, 'tool_call')({
+    toolName: 'task',
+    callId: 'advisor-task',
+    input: { agent: 'reviewer', task: 'Review the active workflow.' },
+  }, advisorCtx), undefined);
+  assert.equal(await event(pi, 'tool_result')({
+    name: 'read',
+    input: { path: 'skill://writing-review' },
+    result: { content: [{ type: 'text', text: '---\nname: writing-review\ndescription: Review prose.\n---\n' }] },
+  }, advisorCtx), undefined);
+  assert.equal(await event(pi, 'session_stop')({
+    output: 'SKILL_USAGE\nLoaded:\n- writing-review',
+  }, advisorCtx), undefined);
+
   const after = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.equal(after.lastPrompt, before.lastPrompt);
-  assert.equal(after.routeStartedAt, before.routeStartedAt);
+  assert.equal(entries.length, entryCount);
+  assert.deepEqual(after, before);
 });
 
 function registeredCore() {

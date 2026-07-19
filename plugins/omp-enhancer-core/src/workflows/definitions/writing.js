@@ -1,7 +1,7 @@
 export const writingWorkflows = [
   {
     "id": "writing.pending",
-    "chooseWhen": "A writing task names a target but the text being changed has not been observed yet.",
+    "chooseWhen": "Temporary Primary only when a named writing target has not been observed and its prose language is unknown; after one narrow source read, replace it with writing.zh or writing.en before substantive review or revision.",
     "composeWith": [
       "writing.latex",
       "slides.modify",
@@ -61,20 +61,20 @@ export const writingWorkflows = [
       },
       {
         "id": "step-2",
-        "text": "Have zh-writer draft or revise the requested natural Chinese prose."
+        "text": "Draft or revise the requested natural Chinese prose within the established meaning and preservation constraints."
       },
       {
         "id": "step-3",
-        "text": "Have zh-checker independently review the resulting revision for logic, tone, terminology, readability, and semantic drift without editing the source."
+        "text": "Independently review the resulting revision for logic, tone, terminology, readability, and semantic drift without editing the source."
       },
       {
         "id": "step-4",
-        "text": "Have zh-writer apply only parent-accepted findings once, then have the parent verify scope, voice consistency, semantic anchors, and requested format."
+        "text": "Apply only parent-accepted findings once, then have the parent verify scope, voice consistency, semantic anchors, and requested format."
       }
     ],
     "scopeNotes": [
-      "This route concerns prose rather than code implementation.",
-      "The language-matched writer owns prose edits, the checker remains independent and source-read-only, and the parent owns assignment boundaries and final reconciliation."
+      "This workflow concerns prose rather than code implementation.",
+      "When Main delegates, the language-matched writer owns prose edits and the checker remains independent and source-read-only; the parent always owns assignment boundaries and final reconciliation."
     ],
     "skills": [
       "plain-chinese-writing",
@@ -116,20 +116,20 @@ export const writingWorkflows = [
       },
       {
         "id": "step-2",
-        "text": "Have writer draft or revise the requested English prose."
+        "text": "Draft or revise the requested English prose within the established meaning and preservation constraints."
       },
       {
         "id": "step-3",
-        "text": "Have checker independently review the resulting revision for logic, tone, terminology, formatting, readability, and semantic drift without editing the source."
+        "text": "Independently review the resulting revision for logic, tone, terminology, formatting, readability, and semantic drift without editing the source."
       },
       {
         "id": "step-4",
-        "text": "Have writer apply only parent-accepted findings once, then have the parent verify scope, voice consistency, semantic anchors, and requested format."
+        "text": "Apply only parent-accepted findings once, then have the parent verify scope, voice consistency, semantic anchors, and requested format."
       }
     ],
     "scopeNotes": [
-      "This route concerns prose rather than code implementation.",
-      "The language-matched writer owns prose edits, the checker remains independent and source-read-only, and the parent owns assignment boundaries and final reconciliation."
+      "This workflow concerns prose rather than code implementation.",
+      "When Main delegates, the language-matched writer owns prose edits and the checker remains independent and source-read-only; the parent always owns assignment boundaries and final reconciliation."
     ],
     "skills": [
       "writing-review",
@@ -152,11 +152,12 @@ export const writingWorkflows = [
   },
   {
     "id": "writing.latex",
-    "chooseWhen": "The target artifact is LaTeX; compose this format workflow with the prose language workflow.",
+    "chooseWhen": "A requested writing, revision, or conversion source/output is LaTeX; compose with another matching format or prose workflow.",
     "composeWith": [
       "writing.pending",
       "writing.zh",
       "writing.en",
+      "writing.markdown",
       "slides.generate",
       "slides.modify",
       "research.web",
@@ -229,41 +230,41 @@ export const writingWorkflows = [
       },
       {
         "id": "step-5",
-        "text": "Generate Beamer frames from the confirmed template and outline, composing writing.zh or writing.en from the agreed output language."
+        "text": "Generate Beamer frames from the confirmed template and outline, applying the PLAN-selected writing.zh or writing.en method for the agreed output language."
       },
       {
         "id": "step-6",
-        "text": "Compile and render the draft deck so the designer receives an initial PDF and page images."
+        "text": "Compile and render the draft deck, retaining an initial PDF and page images for the layout pass."
       },
       {
         "id": "step-7",
-        "text": "Have the designer perform the final layout pass across the deck, correcting text and image overlap, crowding, clipping, undersized text, image cropping, alignment, spacing, and hierarchy without changing the confirmed story."
+        "text": "Perform the final layout pass across the deck, correcting text and image overlap, crowding, clipping, undersized text, image cropping, alignment, spacing, and hierarchy without changing the confirmed story."
       },
       {
         "id": "step-8",
-        "text": "Reconcile the designer revision against the confirmed outline, output language, source facts, semantic anchors, and LaTeX structure; restore unintended content or scope changes before rendering."
+        "text": "Reconcile the layout revision against the confirmed outline, output language, source facts, semantic anchors, and LaTeX structure; restore unintended content or scope changes before rendering."
       },
       {
         "id": "step-9",
-        "text": "Recompile and render the designer revision; bind the revision identifier, PDF, render directory, fresh renders of every page, and an overview or contact sheet."
+        "text": "Recompile and render the layout revision; bind the revision identifier, PDF, render directory, fresh renders of every page, and an overview or contact sheet."
       },
       {
         "id": "step-10",
-        "text": "Have the visioner independently inspect the latest rendered pages and overview or contact sheet for layout errors, overlap, crowding, clipping, readability, image treatment, margins, and cross-slide consistency, then return exactly APPROVED | CHANGES_REQUIRED | UNREVIEWABLE for that revision."
+        "text": "Independently inspect the latest rendered pages and overview or contact sheet for layout errors, overlap, crowding, clipping, readability, image treatment, margins, and cross-slide consistency, then record exactly APPROVED | CHANGES_REQUIRED | UNREVIEWABLE for that revision."
       },
       {
         "id": "step-11",
-        "text": "For each material finding, have the designer produce a new revision, have the parent reconcile content and scope, then recompile and create fresh renders before visioner review; use a maximum of three vision review rounds and never review an unchanged artifact."
+        "text": "For each material finding, produce a bounded new layout revision, have the parent reconcile content and scope, then recompile and create fresh renders before another independent visual review; use a maximum of three review rounds and never review an unchanged artifact."
       },
       {
         "id": "step-12",
-        "text": "Only when the user supplied a conversion command, run it after the final Beamer revision passes visioner review and verify the PowerPoint artifact."
+        "text": "Only when the user supplied a conversion command, run it after the final Beamer revision passes independent visual review and verify the PowerPoint artifact."
       }
     ],
     "scopeNotes": [
       "Template discussion precedes story discussion when configuration is incomplete.",
       "A familiar template or converter is not a substitute for the user-selected template or command.",
-      "The designer owns slide-layout changes and the visioner remains read-only; source inspection, compile success, or designer self-review does not replace current-revision visual evidence."
+      "When Main delegates, the designer owns slide-layout changes and the visioner remains read-only; source inspection, compile success, or author self-review does not replace current-revision visual evidence."
     ],
     "skills": [
       "latex-beamer-slides",
@@ -300,7 +301,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-2",
-        "text": "Compose writing.zh or writing.en from the slide body and preserve LaTeX structure and semantic anchors."
+        "text": "Apply the PLAN-selected writing.zh or writing.en method from the slide body while preserving LaTeX structure and semantic anchors."
       },
       {
         "id": "step-3",
@@ -312,30 +313,30 @@ export const writingWorkflows = [
       },
       {
         "id": "step-5",
-        "text": "Have the designer perform a final layout pass on the changed frames and affected pages, correcting text and image overlap, crowding, clipping, undersized text, image cropping, alignment, and spacing while preserving the existing visual style."
+        "text": "Perform a final layout pass on the changed frames and affected pages, correcting text and image overlap, crowding, clipping, undersized text, image cropping, alignment, and spacing while preserving the existing visual style."
       },
       {
         "id": "step-6",
-        "text": "Reconcile the designer revision against the requested semantic diff, LaTeX anchors, and authorized scope; restore any unintended wording, math, citation, frame-order, or unrelated change before rendering."
+        "text": "Reconcile the layout revision against the requested semantic diff, LaTeX anchors, and authorized scope; restore any unintended wording, math, citation, frame-order, or unrelated change before rendering."
       },
       {
         "id": "step-7",
-        "text": "Recompile and render the designer revision; bind the revision identifier, PDF, render directory, fresh high-resolution affected-page renders, and a current full-deck overview or contact sheet."
+        "text": "Recompile and render the layout revision; bind the revision identifier, PDF, render directory, fresh high-resolution affected-page renders, and a current full-deck overview or contact sheet."
       },
       {
         "id": "step-8",
-        "text": "Have the visioner independently review the latest renders for layout errors, overlap, crowding, clipping, readability, image treatment, margins, and consistency with the existing deck, then return exactly APPROVED | CHANGES_REQUIRED | UNREVIEWABLE for that revision."
+        "text": "Independently review the latest renders for layout errors, overlap, crowding, clipping, readability, image treatment, margins, and consistency with the existing deck, then record exactly APPROVED | CHANGES_REQUIRED | UNREVIEWABLE for that revision."
       },
       {
         "id": "step-9",
-        "text": "For each material finding, have the designer make only the necessary bounded fix, have the parent reconcile semantics and scope, then recompile and create fresh rerenders before visioner review; use a maximum of three vision review rounds and report any unresolved limitation."
+        "text": "For each material finding, make only the necessary bounded fix, have the parent reconcile semantics and scope, then recompile and create fresh rerenders before another independent visual review; use a maximum of three review rounds and report any unresolved limitation."
       }
     ],
     "scopeNotes": [
       "Do not reopen template selection or story planning for an ordinary modification.",
       "A path-only request remains language-pending until the target body is read.",
       "Do not widen scope to unrelated pre-existing layout defects; shared template or macro changes expand visual review to every page they can affect.",
-      "The designer owns bounded layout revisions and the visioner remains read-only; review only evidence from the current revision."
+      "When Main delegates, the designer owns bounded layout revisions and the visioner remains read-only; review only evidence from the current revision."
     ],
     "skills": [
       "latex-beamer-slides"
@@ -370,7 +371,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-2",
-        "text": "Have the designer create the standalone SVG in black and white using only simple shapes, straight or dashed lines, and orthogonal polylines, with no curved connectors."
+        "text": "Create the standalone SVG in black and white using only simple shapes, straight or dashed lines, and orthogonal polylines, with no curved connectors."
       },
       {
         "id": "step-3",
@@ -378,11 +379,11 @@ export const writingWorkflows = [
       },
       {
         "id": "step-4",
-        "text": "Have the visioner independently inspect the latest rasters for semantic accuracy, overlaps, text fit, connector collisions, crossings, spacing, and readability."
+        "text": "Independently inspect the latest rasters for semantic accuracy, overlaps, text fit, connector collisions, crossings, spacing, and readability."
       },
       {
         "id": "step-5",
-        "text": "For each material finding, have the designer produce a new revision, rerun validation and rendering, then have the visioner review that revision; use a maximum of three vision review rounds and relayout after repeated geometry failures."
+        "text": "For each material finding, produce a new revision, rerun validation and rendering, then perform another independent visual review of that revision; use a maximum of three review rounds and relayout after repeated geometry failures."
       },
       {
         "id": "step-6",
@@ -390,8 +391,8 @@ export const writingWorkflows = [
       }
     ],
     "scopeNotes": [
-      "The designer owns SVG changes and the visioner remains read-only; the main agent coordinates revisions.",
-      "Do not substitute source inspection or designer self-review for rendered visioner evidence.",
+      "When Main delegates, the designer owns SVG changes and the visioner remains read-only; the main agent coordinates revisions.",
+      "Do not substitute source inspection or author self-review for independent rendered evidence.",
       "Review only fresh revisions; do not rerun unchanged reviews."
     ],
     "skills": [
@@ -413,11 +414,12 @@ export const writingWorkflows = [
   },
   {
     "id": "writing.markdown",
-    "chooseWhen": "The target artifact is Markdown; compose this format workflow with the prose language workflow.",
+    "chooseWhen": "A requested writing, revision, or conversion source/output is Markdown; compose with another matching format or prose workflow.",
     "composeWith": [
       "writing.pending",
       "writing.zh",
       "writing.en",
+      "writing.latex",
       "research.web",
       "factcheck.document"
     ],

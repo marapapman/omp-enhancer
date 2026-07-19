@@ -564,7 +564,7 @@ When the project ships React Compiler, demote `rerender-*` manual memoization ru
 
 - Skills: [react-patterns](../react-patterns/SKILL.md), [react-testing](../react-testing/SKILL.md), [frontend-patterns](../frontend-patterns/SKILL.md), [accessibility](../accessibility/SKILL.md), [nextjs-turbopack](../nextjs-turbopack/SKILL.md)
 - Rules: [rules/react/](../../rules/react/)
-- Workflows: `performance.optimize` for measured optimization, `code.review` for independent review, `code.build` for build failures, and `code.test` for tests
+- Workflow: `code.dev` with this Skill for measured optimization, independent semantic diff review, build failures, and tests
 
 ## Attribution
 

@@ -1,6 +1,6 @@
 ---
 name: writing-mad-writer
-description: "Fast-mode section writing with one focused self-check and optional user-requested revision passes"
+description: Draft multiple English sections quickly with one focused self-check when the user wants a fast first pass. Not for conservative polishing, bounded review-only work, or strict evidence-matrix writing.
 ---
 # Writing Mad-Writer
 ## Purpose
@@ -11,7 +11,7 @@ Write document sections, run one focused inline check, fix clear local issues, a
 - **`.pi/research/literature.md`** (if exists) — related work context
 ## Workflow
 ### Iteration 0: Setup
-Read all inputs. Identify empty sections (blank or `[TODO]`/`[FILL]` markers). If related work missing: extract 3–8 keywords from storyline, `web_search_exa("<keyword> site:arxiv.org", max_results=3)` per keyword, `web_fetch_exa` abstracts, write summaries to `.pi/research/literature.md` (max 10 papers per session).
+Read all inputs. Identify empty sections (blank or `[TODO]`/`[FILL]` markers). If related work is missing, extract 3–8 keywords from the storyline, run `web_search` with `limit=3` for each keyword, then use `read` on the selected source URLs before writing summaries to `.pi/research/literature.md` (max 10 papers per session).
 ### Default pass: Write → Check → Fix
 **1. Write Sprint** — For each empty/sparse section: read context + `<!-- description: ... -->`, write topic sentence (Level-6 heading, ≤50 chars) + body (≤500 chars), cite literature.
 **2. Run Checkers (Inline)** — Run all 7 checks. Cite specific evidence per finding. No fabricated issues.

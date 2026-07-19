@@ -8,7 +8,17 @@ function normalizeTitle(value) {
 }
 
 function normalizeDoi(value) {
-  return normalizeWhitespace(value).replace(/^https?:\/\/(dx\.)?doi\.org\//iu, '').toLowerCase();
+  let normalized = normalizeWhitespace(value)
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//iu, '')
+    .replace(/[.,;:!?，。；：！？]+$/u, '');
+  while (normalized.endsWith(')') && countCharacter(normalized, ')') > countCharacter(normalized, '(')) {
+    normalized = normalized.slice(0, -1).replace(/[.,;:!?，。；：！？]+$/u, '');
+  }
+  return normalized.toLowerCase();
+}
+
+function countCharacter(value, character) {
+  return [...value].filter((candidate) => candidate === character).length;
 }
 
 function normalizeAuthorName(value) {
@@ -325,7 +335,7 @@ async function lookupArxiv(target, fetchImpl) {
 
 function externalLookupTargets(text, bibliography) {
   const bibEntries = parseBibEntries(bibliography);
-  return extractCitationTargets(text).flatMap((target) => {
+  const targets = extractCitationTargets(text).flatMap((target) => {
     if (target.kind !== 'key') return [target];
     const entry = bibEntries.get(target.key);
     if (!entry) return [target];
@@ -342,6 +352,14 @@ function externalLookupTargets(text, bibliography) {
     }
     /* node:coverage ignore next */
     return targets.length > 0 ? targets : [target];
+  });
+
+  const seen = new Set();
+  return targets.filter((target) => {
+    const key = `${target.kind}:${target.key}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 

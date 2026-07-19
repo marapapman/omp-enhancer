@@ -1,6 +1,6 @@
 ---
 name: format-template-latex
-description: "Apply LaTeX template — merge paper content with conference/journal template, handle formatting requirements"
+description: "Apply a named or provided LaTeX venue template and its formatting requirements. Use only when template application is requested. Not for ordinary LaTeX prose review, correction, conversion, or drafting."
 ---
 
 # Format Template LaTeX

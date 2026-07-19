@@ -3,11 +3,8 @@ export const mlWorkflows = [
     "id": "ml.review",
     "chooseWhen": "The user asks for a read-only review of a production machine-learning data, training, evaluation, artifact, inference, serving, monitoring, or rollback path.",
     "composeWith": [
-      "code.review",
-      "code.test",
       "security.review",
-      "factcheck.document",
-      "performance.optimize"
+      "factcheck.document"
     ],
     "steps": [
       {
@@ -28,13 +25,13 @@ export const mlWorkflows = [
       }
     ],
     "scopeNotes": [
-      "Use omp-target-auditor with ML skills for an existing bounded ML target; the OMP native reviewer remains reserved for a supplied patch or diff.",
+      "Main owns the bounded target review directly; the native reviewer remains reserved for an existing semantic diff or patch.",
       "Do not treat an offline metric, notebook output, or provider evaluation as proof of production behavior without matching data, artifact, and serving evidence."
     ],
     "skills": [
       "mle-workflow",
       "pytorch-patterns",
-      "verification-before-completion"
+      "code-development"
     ],
     "qualityChecks": [
       "prediction and data contract correspondence, temporal leakage analysis, training reproducibility, evaluation and slice validity, artifact and serving parity, fallback and monitoring coverage, rollback, and explicit evidence limitations"
@@ -42,22 +39,16 @@ export const mlWorkflows = [
     "riskNotes": [
       "Model and dataset artifacts may contain sensitive data or unsafe serialized objects; inspect them through project-approved paths and preserve provenance."
     ],
-    "roles": [
-      "omp-target-auditor"
-    ],
+    "roles": [],
     "delegation": [
-      "steps-2-4: omp-target-auditor independently audits the bounded ML system with selected ML skills and reports evidence-backed findings without editing code, data, or artifacts"
+      "steps-2-4: the parent directly audits the bounded ML system and evidence without editing code, data, or artifacts"
     ]
   },
   {
     "id": "ml.debug",
     "chooseWhen": "A training, evaluation, model loading, tensor, device, gradient, data loader, artifact, batch inference, or online inference path fails and the user wants diagnosis or an authorized fix.",
     "composeWith": [
-      "code.debug",
-      "code.dev",
-      "code.test",
-      "ml.review",
-      "performance.optimize"
+      "ml.review"
     ],
     "steps": [
       {
@@ -65,54 +56,79 @@ export const mlWorkflows = [
         "text": "Capture the exact command or request, code and dependency revision, model and dataset identifiers, device and precision, seed, environment, and current failure evidence."
       },
       {
-        "id": "step-2",
-        "text": "Trace the smallest failing path across data shape and dtype, device placement, preprocessing, model state, gradients, loaders, serialization, and train-serve parity."
+        "id": "step-search-local",
+        "text": "Main searches local entry points, callers, focused tests, configuration, model and data contracts, and artifact metadata, then traces the smallest failing path across shape, dtype, device, preprocessing, model state, gradients, loaders, serialization, and train-serve parity."
       },
       {
-        "id": "step-3",
-        "text": "Plan the smallest repair and a deterministic regression that fails for the diagnosed cause rather than merely reducing the symptom."
+        "id": "step-search-external",
+        "text": "When current framework, device, serialization, or serving behavior could change the diagnosis, Main checks versioned official documentation and bounded community failure experience, records applicability, and keeps it separate from local artifact and runtime evidence."
       },
       {
-        "id": "step-4",
-        "text": "When repair is authorized, add the focused regression and implement only the planned code or configuration change without rewriting data or model artifacts unnecessarily."
+        "id": "step-plan",
+        "text": "Main writes a detailed ML repair plan for parallel execution in dependency-ordered waves of vertical slices with non-overlapping write sets; every slice names exact files, dependencies, diagnosed cause, deterministic bounded test seam, exact command, expected valid RED, minimum production boundary, required Skills, device and resource budget, artifact exclusions, integration point, returned evidence, and affected serving contract."
       },
       {
-        "id": "step-5",
-        "text": "Rerun the smallest reproduction and relevant tests, then verify shapes, device, determinism, evaluation or inference behavior, resource limits, and any affected serving contract."
+        "id": "step-plan-review",
+        "text": "The currently exposed plan Agent independently reviews Main's supplied complete parallel plan, assignments, local and external anchors, diagnosed cause, deterministic test seams, resource budget, and artifact boundary before any authorized production mutation."
       },
       {
-        "id": "step-6",
-        "text": "Independently review the root-cause evidence, semantic diff, regression, model and data assumptions, reproducibility, and remaining operational risk."
+        "id": "step-plan-disposition",
+        "text": "Main records every accepted, rejected, and unresolved plan finding, rebases only affected slices, and freezes complete assignments with exclusive write ownership and explicit data, checkpoint, cache, and generated-model exclusions."
+      },
+      {
+        "id": "step-task-batch",
+        "text": "For each wave, Main submits all runnable independent slices in the same native task tasks[] batch; dependency-bound slices wait for their declared artifact or integration anchor, and each task stays within its bounded compute and write budget."
+      },
+      {
+        "id": "step-task-tdd",
+        "text": "Each task owns one complete vertical ML slice: change its focused deterministic public-behavior test first, prove the expected valid RED on a bounded fixture, make the minimum production code or configuration change without rewriting protected artifacts, rerun the same command for GREEN, refactor only while green, and return the bounded diff and exact resource-aware evidence."
+      },
+      {
+        "id": "step-main-review",
+        "text": "Main waits for task deliveries, integrates wave results, and verifies the smallest reproduction on the current tree; Main then examines the current tree, semantic diff, RED and GREEN evidence, root cause, shapes, device, determinism, evaluation or inference behavior, resource limits, serving correspondence, artifact provenance, and cross-slice interactions in an explicit MAIN REVIEW."
+      },
+      {
+        "id": "step-review",
+        "text": "After MAIN REVIEW, the native reviewer independently reviews the Main-reviewed bounded diff and supplied evidence for root cause, model and data assumptions, reproducibility, serving parity, artifact safety, and operational risk without reading the project or running a command."
+      },
+      {
+        "id": "step-repair",
+        "text": "Main validates each reviewer finding; for every material supported finding, task receives a bounded repair assignment, returns fresh affected evidence within the same artifact and compute limits, and Main refreshes verification and MAIN REVIEW before at most one fresh reviewer pass over the materially changed diff."
+      },
+      {
+        "id": "step-report",
+        "text": "Report the diagnosed cause, plan and review dispositions, task deliveries, exact bounded commands and exits, resource and artifact limitations, fresh verification, unresolved serving risk, and every data or model artifact left untouched."
       }
     ],
     "scopeNotes": [
       "Do not use a full training run when a small deterministic fixture can prove the repair.",
-      "Data, checkpoints, caches, and generated models remain outside the write scope unless explicitly included."
+      "Data, checkpoints, caches, and generated models remain outside the write scope unless explicitly included.",
+      "Slice count follows real independent vertical work, artifact dependencies, exclusive write ownership, bounded compute, and native capacity; one safe slice remains one task.",
+      "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path."
     ],
     "skills": [
       "mle-workflow",
       "pytorch-patterns",
-      "systematic-debugging",
-      "test-driven-development",
-      "verification-before-completion"
+      "code-development"
     ],
     "qualityChecks": [
-      "exact environment and artifact identity, current failure evidence, data and tensor contract trace, deterministic reproduction, root-cause regression, focused repair, current-revision execution, serving correspondence, and independent semantic review"
+      "exact environment and artifact identity, current failure evidence, data and tensor contract trace, deterministic reproduction, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, root-cause regression, focused repair, current-revision execution, Main self-review, reviewer reconciliation, serving correspondence, and artifact provenance"
     ],
     "riskNotes": [
       "ML debugging can consume substantial compute or mutate datasets and artifacts; use bounded fixtures and preserve provenance."
     ],
     "roles": [
-      "explore",
       "plan",
-      "implementation-task",
+      "task",
       "reviewer"
     ],
     "delegation": [
-      "steps-1-2: explore collects bounded read-only environment, code, data-contract, model, and failure-path evidence",
-      "step-3: plan owns the deterministic repair and verification plan without editing files or running expensive jobs",
-      "step-4: implementation-task owns only the authorized focused regression and repair",
-      "step-6: reviewer independently audits the root cause, ML assumptions, diff, regression, reproducibility, and operational risk"
+      "step-plan-review: plan independently reviews Main's supplied complete parallel deterministic repair plan, write sets, assignments, evidence seams, compute budget, and artifact boundary without editing files or running expensive jobs",
+      "step-task-batch: task receives all runnable independent ML slices for the wave in the same native tasks[] batch with exclusive write and resource budgets",
+      "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the deterministic test, minimum production repair, same-command evidence, and protected-artifact exclusions",
+      "step-main-review: Main waits, integrates, verifies the current tree, and completes MAIN REVIEW before reviewer is assigned",
+      "step-review: reviewer independently audits only the Main-reviewed bounded diff and supplied ML evidence without project reads, commands, edits, or expensive jobs",
+      "step-repair: task receives only a Main-validated supported finding as a bounded repair and returns fresh affected evidence for Main re-review"
     ]
   }
 ];

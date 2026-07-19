@@ -59,10 +59,22 @@ const NULLISH_VALUES = new Set([
  * 尝试从字符串中提取 JSON 值
  * 处理 DeepSeek 双重重编码问题
  */
-function tryExtractFromString(raw: unknown): unknown {
+function tryExtractFromString(raw: unknown, depth = 0): unknown {
   if (typeof raw !== "string") return raw;
   const trimmed = raw.trim();
   if (!trimmed) return raw;
+
+  if (depth < 3 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+    try {
+      const decoded = JSON.parse(trimmed);
+      if (typeof decoded === "string") {
+        const nested = decoded.trim();
+        if (nested.startsWith("{") || nested.startsWith("[") || nested.startsWith("\"")) {
+          return tryExtractFromString(decoded, depth + 1);
+        }
+      }
+    } catch {}
+  }
 
   if (
     trimmed.startsWith("{") ||
@@ -151,14 +163,6 @@ function fixReadArgs(args: Record<string, unknown>): boolean {
     }
   }
 
-  // 情况 3: read 的 path 是数组
-  if (Array.isArray(args.path)) {
-    if (args.path.length > 0 && typeof args.path[0] === "string") {
-      args.path = args.path[0];
-      changed = true;
-    }
-  }
-
   return changed;
 }
 
@@ -175,14 +179,6 @@ function fixWriteArgs(args: Record<string, unknown>): boolean {
       args.content = JSON.stringify(args.content, null, 2);
       changed = true;
     } catch {}
-  }
-
-  // path 是数组 → 取首个
-  if (Array.isArray(args.path)) {
-    if (args.path.length > 0 && typeof args.path[0] === "string") {
-      args.path = args.path[0];
-      changed = true;
-    }
   }
 
   return changed;
@@ -218,30 +214,6 @@ function fixBrowserArgs(args: Record<string, unknown>): boolean {
 }
 
 /**
- * 修复 lsp 工具的参数
- */
-function fixLspArgs(args: Record<string, unknown>): boolean {
-  let changed = false;
-
-  // line 是字符串 → 转数字
-  if (args.line !== undefined && typeof args.line === "string") {
-    const num = Number(args.line);
-    if (!isNaN(num) && isFinite(num) && Number.isInteger(num)) {
-      args.line = num;
-      changed = true;
-    }
-  }
-
-  // symbol 是 null → 删除
-  if (args.symbol === null) {
-    delete args.symbol;
-    changed = true;
-  }
-
-  return changed;
-}
-
-/**
  * 通用字段修复：path/input/content 等核心字段的格式归一化
  */
 function fixCommonArgs(args: Record<string, unknown>): boolean {
@@ -253,12 +225,6 @@ function fixCommonArgs(args: Record<string, unknown>): boolean {
       args.path = args.path[0];
       changed = true;
     }
-  }
-
-  // paths 是单个字符串 → 包装为数组
-  if (typeof args.paths === "string") {
-    args.paths = [args.paths];
-    changed = true;
   }
 
   return changed;
@@ -376,9 +342,6 @@ function repairArgs(args: Record<string, unknown>, toolName: string): {
     case "browser":
       if (fixBrowserArgs(result)) changed = true;
       break;
-    case "lsp":
-      if (fixLspArgs(result)) changed = true;
-      break;
   }
 
   return { repaired: result, changed };
@@ -388,31 +351,23 @@ function repairArgs(args: Record<string, unknown>, toolName: string): {
  * 修复顶层 arguments 字符串
  * DeepSeek 偶尔把整个参数对象编码为 JSON 字符串
  */
-function repairTopLevelArgs(rawArgs: unknown): Record<string, unknown> {
+function repairTopLevelArgs(rawArgs: unknown): {
+  repaired: Record<string, unknown>;
+  changed: boolean;
+} {
   if (typeof rawArgs === "string") {
-    const trimmed = rawArgs.trim();
-    if ((trimmed.startsWith("{") || trimmed.startsWith("[")) &&
-        (trimmed.endsWith("}") || trimmed.endsWith("]"))) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (typeof parsed === "object" && !Array.isArray(parsed)) {
-          return parsed as Record<string, unknown>;
-        }
-      } catch {
-        const healed = tryHealJson(trimmed);
-        if (healed && typeof healed === "object" && !Array.isArray(healed)) {
-          return healed as Record<string, unknown>;
-        }
-      }
+    const extracted = tryExtractFromString(rawArgs);
+    if (extracted && typeof extracted === "object" && !Array.isArray(extracted)) {
+      return { repaired: extracted as Record<string, unknown>, changed: true };
     }
-    return {};
+    return { repaired: {}, changed: false };
   }
 
   if (typeof rawArgs !== "object" || rawArgs === null || Array.isArray(rawArgs)) {
-    return {};
+    return { repaired: {}, changed: false };
   }
 
-  return rawArgs as Record<string, unknown>;
+  return { repaired: rawArgs as Record<string, unknown>, changed: false };
 }
 
 export default function (pi: HookAPI): void {
@@ -430,17 +385,20 @@ export default function (pi: HookAPI): void {
 
         for (const tc of toolCalls) {
           if (!tc || typeof tc !== "object") continue;
-          const rawArgs = (tc as any).arguments ?? (tc as any).args;
+          const functionCall = (tc as any).function && typeof (tc as any).function === "object"
+            ? (tc as any).function
+            : undefined;
+          const rawArgs = (tc as any).arguments ?? (tc as any).args ?? functionCall?.arguments;
           if (rawArgs === undefined || rawArgs === null) continue;
 
-          const args = repairTopLevelArgs(rawArgs);
-          const result = repairArgs(args, tc.name ?? "");
+          const topLevel = repairTopLevelArgs(rawArgs);
+          const result = repairArgs(topLevel.repaired, (tc as any).name ?? functionCall?.name ?? "");
 
-          if (result.changed) {
-            (tc as any).arguments = result.repaired;
-            if ((tc as any).function) {
-              (tc as any).function.arguments = JSON.stringify(result.repaired);
-            }
+          if (topLevel.changed || result.changed) {
+            if ((tc as any).arguments !== undefined) (tc as any).arguments = result.repaired;
+            else if ((tc as any).args !== undefined) (tc as any).args = result.repaired;
+            else if (!functionCall) (tc as any).arguments = result.repaired;
+            if (functionCall) functionCall.arguments = JSON.stringify(result.repaired);
             needsPatch = true;
           }
         }

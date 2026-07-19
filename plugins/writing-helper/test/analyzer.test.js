@@ -111,4 +111,14 @@ describe('analyzeWritingLogic', () => {
     assert.equal(result.issues.some((issue) => issue.dimension === 'logic'), true);
   });
 
+  it('matches English markers as words instead of substrings', () => {
+    const result = analyzeWritingLogic({
+      text: 'A small software system bestowed a label on each sample.',
+      language: 'en',
+      mode: 'standard',
+    });
+
+    assert.equal(result.summary.verdict, 'pass');
+  });
+
 });

@@ -149,20 +149,6 @@ export function normalizeExternalActionContract(value) {
   });
 }
 
-export function externalActionMatchesTool(externalActionContract, toolNameOrCall = '', inputValue) {
-  const expected = normalizeExternalActionContract(externalActionContract);
-  if (!expected || expected.state !== 'complete') return false;
-  const call = toolNameOrCall && typeof toolNameOrCall === 'object' && !Array.isArray(toolNameOrCall)
-    ? toolNameOrCall
-    : { toolName: toolNameOrCall, input: inputValue };
-  const input = parseInput(call.input ?? call.params ?? call.arguments);
-  if (!input) return false;
-  const actual = operationForToolCall(call.toolName ?? call.name ?? '', input);
-  if (!actual || actual.provider !== expected.provider || actual.action !== expected.action) return false;
-  const targets = targetsForToolInput(input, expected.provider, expected.target.kind);
-  return targets.length === 1 && targets[0] === expected.target.value;
-}
-
 function reversibleCandidates(source) {
   const specs = [
     {
@@ -314,103 +300,6 @@ function slackTargetsForPrompt(source) {
   return unique(values);
 }
 
-function operationForToolName(toolName = '') {
-  const name = canonicalToolName(toolName);
-  if (/(?:^|_)(?:gmail|outlook_email|email)(?:_|$)/.test(name)
-    && /(?:^|_)send(?:_email|_message)?(?:_|$)/.test(name)) return { provider: 'email', action: 'send' };
-  if (/(?:^|_)slack(?:_|$)/.test(name)
-    && /(?:^|_)(?:post|send)(?:_message)?(?:_|$)/.test(name)) return { provider: 'slack', action: 'post-message' };
-  if (/(?:^|_)(?:jira|atlassian_rovo)(?:_|$)/.test(name)
-    && /(?:^|_)create(?:_jira)?_?(?:issue|ticket)(?:_|$)/.test(name)) return { provider: 'jira', action: 'create-issue' };
-  if (/(?:^|_)(?:google_drive|drive)(?:_|$)/.test(name)
-    && /(?:^|_)upload(?:_file)?(?:_|$)/.test(name)) return { provider: 'google-drive', action: 'upload-file' };
-  if (/(?:^|_)calendar(?:_|$)/.test(name)
-    && /(?:^|_)(?:create|schedule|add)(?:_calendar)?_?event(?:_|$)/.test(name)) return { provider: 'calendar', action: 'create-event' };
-  if (/(?:^|_)notion(?:_|$)/.test(name)
-    && /(?:^|_)update(?:_notion)?_?page(?:_|$)/.test(name)) return { provider: 'notion', action: 'update-page' };
-  return null;
-}
-
-function operationForToolCall(toolName = '', input = {}) {
-  const named = operationForToolName(toolName);
-  if (named) return named;
-  const name = canonicalToolName(toolName);
-  if (/(?:^|_)slack(?:_|$)/.test(name) && /(?:^|_)(?:api|api_call|request|call)(?:_|$)/.test(name)) {
-    const operations = scalarRoleValues(input, new Set(['operation', 'method'])).map((value) => value.toLowerCase());
-    if (operations.length === 1 && operations[0] === 'chat.postmessage') {
-      return { provider: 'slack', action: 'post-message' };
-    }
-  }
-  if (/(?:^|_)notion(?:_|$)/.test(name) && /(?:^|_)(?:api|api_call|request|call)(?:_|$)/.test(name)) {
-    const methods = scalarRoleValues(input, new Set(['method', 'httpmethod'])).map((value) => value.toUpperCase());
-    const paths = scalarRoleValues(input, new Set(['path', 'url']));
-    if (methods.length === 1 && methods[0] === 'PATCH'
-      && paths.length === 1 && notionPageFromPath(paths[0])) {
-      return { provider: 'notion', action: 'update-page' };
-    }
-  }
-  return null;
-}
-
-function targetsForToolInput(input, provider, kind) {
-  const keys = {
-    email: new Set(['to', 'recipient', 'recipients', 'cc', 'bcc']),
-    slack: new Set(['channel', 'channelid']),
-    jira: new Set(['project', 'projectkey']),
-    'google-drive': new Set(['folder', 'folderid', 'parent', 'parentid', 'parents']),
-    calendar: new Set(['calendar', 'calendarid']),
-    notion: new Set(['page', 'pageid', 'path']),
-  }[provider] ?? new Set();
-  const rawValues = collectRoleValues(input, keys);
-  const values = [];
-  for (const raw of rawValues) {
-    const entries = Array.isArray(raw) ? raw : [raw];
-    for (const entry of entries) {
-      const scalar = entry && typeof entry === 'object' && provider === 'jira'
-        ? entry.key ?? entry.id
-        : entry;
-      if (typeof scalar !== 'string') continue;
-      if (provider === 'email') {
-        for (const address of scalar.match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) ?? []) {
-          values.push(normalizeTargetValue(kind, address));
-        }
-      } else {
-        const normalized = kind === 'page' && scalar.includes('/')
-          ? notionPageFromPath(scalar)
-          : normalizeTargetValue(kind, scalar);
-        if (normalized) values.push(normalized);
-      }
-    }
-  }
-  return unique(values.filter(Boolean));
-}
-
-function scalarRoleValues(input, keys) {
-  return unique(collectRoleValues(input, keys)
-    .flatMap((value) => Array.isArray(value) ? value : [value])
-    .filter((value) => typeof value === 'string')
-    .map((value) => value.trim())
-    .filter(Boolean));
-}
-
-function notionPageFromPath(value = '') {
-  const match = String(value).match(/(?:^|\/)pages\/([^/?#]+)(?:[/?#]|$)/i);
-  return match ? normalizeTargetValue('page', decodeURIComponent(match[1])) : '';
-}
-
-function collectRoleValues(value, allowedKeys, seen = new Set()) {
-  if (!value || typeof value !== 'object' || seen.has(value)) return [];
-  seen.add(value);
-  if (Array.isArray(value)) return value.flatMap((entry) => collectRoleValues(entry, allowedKeys, seen));
-  const values = [];
-  for (const [key, child] of Object.entries(value)) {
-    const canonicalKey = String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (allowedKeys.has(canonicalKey)) values.push(child);
-    if (child && typeof child === 'object') values.push(...collectRoleValues(child, allowedKeys, seen));
-  }
-  return values;
-}
-
 function normalizeContractTarget(value, provider) {
   if (!value || typeof value !== 'object') return null;
   const expectedKinds = {
@@ -507,21 +396,6 @@ function wordBoundaryIndex(value, word) {
 function isNegatedAt(source, index) {
   const prefix = String(source).slice(Math.max(0, index - 48), index);
   return /(?:\b(?:do not|don't|dont|never|without|not)\s+(?:(?:please|actually)\s+)?(?:\w+\s+){0,6}|(?:不要|不|别|不得|禁止)\s*(?:实际)?\s*)$/i.test(prefix);
-}
-
-function parseInput(value) {
-  if (value && typeof value === 'object') return value;
-  if (typeof value !== 'string') return null;
-  try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function canonicalToolName(value = '') {
-  return String(value).trim().toLowerCase().replace(/[./:\\]+/g, '_').replace(/_+/g, '_');
 }
 
 function dedupeCandidates(values) {

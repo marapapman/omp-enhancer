@@ -2,22 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import registerTestingEnhancer from '../../src/extension.js'
-import type { CommandDefinition, ExtensionAPI, ExtensionEventHandler, ExtensionToolContext, ToolDefinition } from '../../src/ompApi.js'
+import type { ExtensionAPI, ExtensionEventHandler, ExtensionToolContext, ToolDefinition } from '../../src/ompApi.js'
 
 class FakePi implements ExtensionAPI {
   readonly labels: string[] = []
-  readonly commands = new Map<string, CommandDefinition>()
   readonly tools = new Map<string, ToolDefinition>()
   readonly eventHandlers: Array<{ event: string; handler: ExtensionEventHandler }> = []
-  readonly userMessages: string[] = []
   readonly entries: Array<{ customType: string; data: unknown }> = []
   readonly zod = { z: fakeZod() }
 
   setLabel(label: string): void { this.labels.push(label) }
-  registerCommand(name: string, command: CommandDefinition): void { this.commands.set(name, command) }
   registerTool(tool: ToolDefinition): void { this.tools.set(tool.name, tool) }
   on(event: string, handler: ExtensionEventHandler): void { this.eventHandlers.push({ event, handler }) }
-  sendUserMessage(content: string): void { this.userMessages.push(content) }
   appendEntry(customType: string, data: unknown): void { this.entries.push({ customType, data }) }
 }
 
@@ -30,8 +26,8 @@ describe('plugin load smoke', () => {
     expect(pi.tools.has('omp_test_browser_check')).toBe(true)
     expect(pi.tools.has('omp_test_coverage_analyze')).toBe(true)
     expect(pi.tools.has('omp_test_mutation_context')).toBe(true)
-    const gate = pi.tools.get('omp_test_gate')
-    if (!gate) throw new Error('Missing omp_test_gate')
+    const gate = pi.tools.get('omp_test_review')
+    if (!gate) throw new Error('Missing omp_test_review')
 
     const result = await gate.execute('call', {
       targets: [{ id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }],

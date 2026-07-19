@@ -2,14 +2,10 @@ secrets:
   enabled: true
 skills: 
   enabled: true
-  customDirectories: 
-    - /root/.omp/skills
-    - /root/.omp/skills/ecc
-    - /root/.claude/skills
 modelRoles: 
   advisor: openai-codex/gpt-5.6-luna:xhigh
   commit: ollama-cloud/gemma3:4b
-  default: opencode-go/deepseek-v4-flash:medium
+  default: opencode-go/deepseek-v4-flash:max
   designer: ollama-cloud/glm-5.2:xhigh
   plan: ollama-cloud/deepseek-v4-pro:high
   slow: ollama-cloud/glm-5.2:xhigh
@@ -19,11 +15,6 @@ modelRoles:
   vision: ollama-cloud/kimi-k2.6:medium
 loopGuard:
   enabled: false
-  mainAgent:
-    modelPattern: deepseek-v4-flash
-    maxRepeatedSentence: 3
-    maxRepeatedPhrase: 2
-    minRepeatedChars: 30
 memory: 
   backend: mnemopi
 compaction: 

@@ -5,7 +5,6 @@ export const networkWorkflows = [
     "composeWith": [
       "network.review",
       "network.debug",
-      "code.plan",
       "security.review"
     ],
     "steps": [
@@ -113,7 +112,6 @@ export const networkWorkflows = [
     "composeWith": [
       "network.design",
       "network.debug",
-      "code.review",
       "security.review"
     ],
     "steps": [
@@ -161,7 +159,6 @@ export const networkWorkflows = [
     "composeWith": [
       "network.review",
       "network.design",
-      "code.debug",
       "security.review"
     ],
     "steps": [
@@ -193,8 +190,7 @@ export const networkWorkflows = [
     "skills": [
       "network-interface-health",
       "network-bgp-diagnostics",
-      "netmiko-ssh-automation",
-      "systematic-debugging"
+      "netmiko-ssh-automation"
     ],
     "qualityChecks": [
       "symptom correspondence, bounded read-only evidence, OSI and policy path coverage, hypothesis discrimination, root-cause completeness, safe verification, and explicit uncertainty"

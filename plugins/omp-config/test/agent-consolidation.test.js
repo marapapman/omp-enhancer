@@ -8,6 +8,10 @@ const AGENT_ROOT = path.join(PLUGIN_ROOT, 'agents');
 const SKILL_ROOT = path.join(PLUGIN_ROOT, 'skills');
 
 const REMOVED_AGENT_FILES = [
+  'config-librarian.md',
+  'explore.md',
+  'implementation-task.md',
+  'omp-target-auditor.md',
   'task.md',
   'quick_task.md',
   'designer.md',
@@ -78,15 +82,23 @@ test('legacy agent wrappers are removed after their knowledge moves to workflows
   }
 });
 
-test('orchestration and independent evidence agents keep bounded capability metadata', async () => {
-  for (const file of ['implementation-task.md', 'plan.md', 'omp-target-auditor.md']) {
-    const source = await readFile(path.join(AGENT_ROOT, file), 'utf8');
-    assert.doesNotMatch(source, /^spawns:\s*["']?\*["']?\s*$/m);
-    assert.match(source, /^spawns:\s*\[\]\s*$/m);
-  }
+test('ordinary code planning stays with plugin plan while implementation and review use native agents', async () => {
+  const plan = await readFile(path.join(AGENT_ROOT, 'plan.md'), 'utf8');
+  assert.doesNotMatch(plan, /^spawns:\s*["']?\*["']?\s*$/m);
+  assert.match(plan, /^spawns:\s*\[\]\s*$/m);
+  assert.match(plan, /^name:\s*plan$/m);
+  assert.match(plan, /Search local truth[\s\S]*entry points, callers, consumers, tests, configuration/i);
+  assert.match(plan, /official documentation[\s\S]*community issues, discussions, postmortems/i);
+  assert.match(plan, /PLAN REVIEW[\s\S]*exact RED\/GREEN commands/i);
+  assert.match(plan, /parallel waves[\s\S]*vertical slices[\s\S]*non-overlapping write sets/i);
+  assert.match(plan, /native `task` assignments?[\s\S]*test mutation[\s\S]*RED[\s\S]*GREEN[\s\S]*refactor/i);
+  assert.match(plan, /dependencies[\s\S]*later wave/i);
+  assert.match(plan, /operate as read-only/i);
+  const planTools = frontmatterList(plan, 'tools');
+  assert.equal(planTools.includes('edit'), false);
+  assert.equal(planTools.includes('write'), false);
 
   for (const file of [
-    'omp-target-auditor.md',
     'ecc-security-reviewer.md',
     'ecc-network-config-reviewer.md',
     'ecc-opensource-sanitizer.md',
@@ -96,15 +108,6 @@ test('orchestration and independent evidence agents keep bounded capability meta
     assert.equal(tools.includes('edit'), false, `${file} must not edit`);
     assert.equal(tools.includes('write'), false, `${file} must not write`);
   }
-
-  const auditor = await readFile(path.join(AGENT_ROOT, 'omp-target-auditor.md'), 'utf8');
-  assert.match(auditor, /^name:\s*omp-target-auditor$/m);
-  assert.match(auditor, /target audit/i);
-  assert.doesNotMatch(auditor, /patch review mode|introduced (?:by|in) (?:the )?patch/i);
-  assert.doesNotMatch(auditor, /report_finding/i);
-  assert.match(auditor, /incremental `yield`/i);
-  assert.match(auditor, /type:\s*\["findings"\]/i);
-  assert.match(auditor, /stop and let idle finalization assemble the result/i);
 });
 
 test('OMP native agent identities are not packaged by omp-config', async () => {
@@ -112,6 +115,13 @@ test('OMP native agent identities are not packaged by omp-config', async () => {
   for (const file of ['scout.md', 'task.md', 'sonic.md', 'designer.md', 'librarian.md', 'reviewer.md']) {
     assert.equal(present.has(file), false, `OMP native agent is shadowed by plugin asset: ${file}`);
   }
+});
+
+test('task implementation is native and never reintroduced as a plugin wrapper', async () => {
+  const present = new Set(await readdir(AGENT_ROOT));
+  assert.equal(present.has('task.md'), false);
+  assert.equal(present.has('implementation-task.md'), false);
+  assert.equal(present.has('quick_task.md'), false);
 });
 
 test('removed native-agent specialization remains available through skills', async () => {

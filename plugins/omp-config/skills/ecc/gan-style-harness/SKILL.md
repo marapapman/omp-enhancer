@@ -10,11 +10,10 @@ This skill is a composition pattern, not a standalone Agent loop. Main retains o
 
 ## Compose the Work
 
-1. Use `code.plan` so `explore` can gather context and `plan` can produce a testable implementation sequence.
-2. Use `code.dev` for each authorized, bounded implementation batch. `implementation-task` may edit only its assigned scope.
-3. Use `code.test` for public-behavior, integration, and browser evidence. The test planner, executor, and reviewer remain separate.
-4. For visual work, compose `design.visual`: `designer` establishes layout and style, while `visioner` performs the required independent visual inspection when the workflow calls for it.
-5. Use `code.review` for a final semantic diff review. The canonical `reviewer` reports findings and never repairs its own review target.
+1. Use `code.dev` and `code-development` for the complete ordinary code lifecycle. Main searches local code, gathers bounded current external evidence when decision-relevant, and writes the detailed plan.
+2. Give the complete plan to `plan` for a read-only `PLAN REVIEW`, then let Main execute each authorized vertical RED-GREEN-REFACTOR slice directly.
+3. For visual work, compose `design.visual`: `designer` establishes layout and style, while `visioner` performs the required independent visual inspection when the workflow calls for it.
+4. After fresh functional and browser evidence exists, give the bounded semantic diff to the native `reviewer`. Main validates findings and owns any repair.
 
 ## Cycle Contract
 

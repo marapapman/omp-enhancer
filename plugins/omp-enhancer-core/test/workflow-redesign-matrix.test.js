@@ -4,37 +4,24 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { routeNaturalLanguageTask } from '../src/router.js';
-import { workflowRouteCardSections, workflowRouteCatalog, workflowRouteNames } from '../src/workflow-routes.js';
+import { workflowCatalog, workflowIds } from '../src/workflows/catalog.js';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(testDir, '..', '..', '..');
-const workloadMatrix = JSON.parse(await readFile(path.join(testDir, 'fixtures', 'workload-matrix.json'), 'utf8'));
-const expectedSections = [
-  'WORKFLOW_GUIDE',
-  'Task type',
-  'Suggested steps',
-  'Skills',
-  'Optional roles',
-  'Quality checks',
-  'Scope and risk notes',
-];
-
-test('workflow catalog exposes advisory routes including language-pending writing', () => {
-  assert.ok(workflowRouteNames.includes('writing.pending'));
-  assert.ok(workflowRouteNames.includes('writing.zh'));
-  assert.ok(workflowRouteNames.includes('writing.en'));
-  assert.ok(workflowRouteNames.includes('slides.generate'));
-  assert.ok(workflowRouteNames.includes('slides.modify'));
-  assert.ok(workflowRouteNames.includes('diagram.svg'));
-  assert.ok(workflowRouteNames.includes('research.web'));
-  assert.deepEqual(workflowRouteCardSections(), expectedSections);
+test('workflow catalog exposes composable workflows including language-pending writing', () => {
+  assert.ok(workflowIds.includes('writing.pending'));
+  assert.ok(workflowIds.includes('writing.zh'));
+  assert.ok(workflowIds.includes('writing.en'));
+  assert.ok(workflowIds.includes('slides.generate'));
+  assert.ok(workflowIds.includes('slides.modify'));
+  assert.ok(workflowIds.includes('diagram.svg'));
+  assert.ok(workflowIds.includes('research.web'));
 });
 
 test('language writing workflows delegate prose edits and independent review to the matching subagents', () => {
-  const pending = workflowRouteCatalog['writing.pending'];
-  const chinese = workflowRouteCatalog['writing.zh'];
-  const english = workflowRouteCatalog['writing.en'];
+  const pending = workflowCatalog['writing.pending'];
+  const chinese = workflowCatalog['writing.zh'];
+  const english = workflowCatalog['writing.en'];
 
   assert.deepEqual(pending.roles, []);
   assert.match(pending.delegation.join(' '), /before.+body language.+do not delegate.+writer|do not delegate.+writer.+before.+body language/i);
@@ -55,27 +42,49 @@ test('language writing workflows delegate prose edits and independent review to 
   ]);
 
   for (const workflow of ['writing.latex', 'writing.markdown', 'doc.convert.word']) {
-    assert.deepEqual(workflowRouteCatalog[workflow].roles, [], `${workflow} must not guess a prose language role`);
+    assert.deepEqual(workflowCatalog[workflow].roles, [], `${workflow} must not guess a prose language role`);
   }
 });
 
-test('test workflow delegates planning, execution, and independent review to packaged testing agents', () => {
-  const testing = workflowRouteCatalog['code.test'];
+test('LaTeX and Markdown format workflows compose both ends of explicit conversion without selecting a prose language', () => {
+  const latex = workflowCatalog['writing.latex'];
+  const markdown = workflowCatalog['writing.markdown'];
 
-  assert.deepEqual(testing.roles, ['test-planner', 'test-executor', 'test-reviewer']);
-  assert.deepEqual(testing.delegation, [
-    'step-2: test-planner produces the target-to-behavior and evidence plan without editing files or running tests',
-    'step-3: test-executor owns bounded test and fixture changes when authoring is in scope',
-    'step-4: test-executor runs only host-authorized commands and records fresh execution evidence',
-    'step-5: test-reviewer independently audits the plan, test diff, public-behavior coverage, and current evidence without editing files or rerunning tests',
-  ]);
-  assert.match(testing.steps.join(' '), /plan.+public behavior.+risk/i);
-  assert.match(testing.steps.join(' '), /independently review.+current.+evidence/i);
-  assert.match(testing.scopeNotes.join(' '), /advisory.+not.+completion/i);
+  assert.ok(latex.composeWith.includes('writing.markdown'));
+  assert.ok(markdown.composeWith.includes('writing.latex'));
+  assert.match(latex.chooseWhen, /requested writing, revision, or conversion source\/output is LaTeX/i);
+  assert.match(markdown.chooseWhen, /requested writing, revision, or conversion source\/output is Markdown/i);
+  assert.deepEqual(latex.roles, []);
+  assert.deepEqual(markdown.roles, []);
 });
 
-test('web research workflow requires live reliable evidence and fact-check composition', () => {
-  const research = workflowRouteCatalog['research.web'];
+test('one code workflow drives parallel native task slices before Main and reviewer review', () => {
+  const development = workflowCatalog['code.dev'];
+  const steps = development.steps.join(' ');
+  const delegation = development.delegation.join(' ');
+
+  assert.deepEqual(development.roles, ['plan', 'task', 'reviewer']);
+  assert.deepEqual(development.skills, ['code-development']);
+  assert.match(steps, /search local code.+entry points.+callers.+tests.+configuration/i);
+  assert.match(steps, /official documentation.+community experience/i);
+  assert.match(steps, /detailed implementation and evidence plan.+parallel.+waves.+vertical slices.+exact files.+non-overlapping.+write sets/i);
+  assert.match(steps, /plan Agent.+challenge.+complete.+parallel.+plan.+assignment.+before.+production mutation/i);
+  assert.match(steps, /same.+tasks\[\].+batch.+runnable.+independent.+slice/i);
+  assert.match(steps, /task.+public-behavior test.+valid.+RED.+minimum.+production.+same command.+GREEN.+refactor/i);
+  assert.match(steps, /Main.+integrat.+current tree.+semantic diff.+RED and GREEN evidence.+review/i);
+  assert.match(steps, /reviewer.+Main-reviewed.+bounded semantic diff.+evidence.+without.+project.+read.+command/i);
+  assert.match(steps, /material supported.+finding.+task.+repair.+fresh affected evidence.+at most one.+fresh.+reviewer/i);
+  assert.match(delegation, /plan independently challenges Main's supplied complete parallel plan/i);
+  assert.match(delegation, /task.+vertical.+RED.+GREEN.+REFACTOR/i);
+  assert.match(delegation, /Main.+integrat.+review.+before.+reviewer/i);
+  assert.match(delegation, /reviewer independently reviews the Main-reviewed.+semantic diff/i);
+  assert.match(delegation, /task.+supported.+finding.+repair/i);
+  assert.doesNotMatch(`${steps} ${delegation}`, /fixed.+fanout|required fork|automatic.+loop/i);
+  assert.match(development.scopeNotes.join(' '), /plan-only, diagnosis-only, test-analysis, or read-only review.+does not authorize a production mutation/i);
+});
+
+test('web research workflow requires live reliable evidence and supports selected fact-check composition', () => {
+  const research = workflowCatalog['research.web'];
 
   assert.deepEqual(research.skills, [
     'research-ops',
@@ -104,7 +113,7 @@ test('web research workflow requires live reliable evidence and fact-check compo
   assert.match(research.steps[4], /staleness.+temporal-validity finding.+rather than a verdict/i);
   assert.match(research.steps[5], /strict SUPPORTED.+predetermined evidence requirements.+no unresolved PARTIAL.+CONFLICTED.+temporal-staleness finding/i);
   assert.match(research.steps[5], /final reviewer.+no material finding.+factual conclusions.+label unresolved uncertainty/i);
-  assert.match(research.steps[6], /fact-reviewer.+claim-evidence ledger.+fact from inference/i);
+  assert.match(research.steps[6], /independently audit.+claim-evidence ledger.+fact from inference/i);
   assert.match(research.steps[7], /browsing is unavailable.+incomplete.+do not fabricate or claim total correctness/i);
   assert.match(research.scopeNotes.join(' '), /Absolute correctness cannot be guaranteed/i);
   assert.match(research.scopeNotes.join(' '), /live source evidence.+model memory/i);
@@ -125,19 +134,20 @@ test('web research workflow requires live reliable evidence and fact-check compo
 });
 
 test('slides workflows separate template-and-story generation from bounded modification', () => {
-  const generate = workflowRouteCatalog['slides.generate'];
-  const modify = workflowRouteCatalog['slides.modify'];
+  const generate = workflowCatalog['slides.generate'];
+  const modify = workflowCatalog['slides.modify'];
 
   assert.deepEqual(generate.skills, ['latex-beamer-slides', 'slides-storyline', 'beamer-to-powerpoint']);
   assert.deepEqual(generate.roles, ['designer', 'visioner']);
   assert.match(generate.steps[1], /template readiness/i);
   assert.match(generate.steps[2], /discuss its style, logo, aspect ratio, typography, and layout/i);
   assert.match(generate.steps[3], /story outline.+obtain confirmation/i);
-  assert.match(generate.steps[6], /designer.+final layout pass.+text and image overlap.+crowding/i);
-  assert.match(generate.steps[7], /reconcile the designer revision.+confirmed outline.+semantic anchors.+LaTeX structure/i);
-  assert.match(generate.steps[8], /recompile and render the designer revision.+revision identifier.+PDF.+render directory/i);
-  assert.match(generate.steps[9], /visioner.+latest rendered pages.+overview or contact sheet.+APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/i);
-  assert.match(generate.steps[10], /reconcile.+fresh renders.+maximum of three vision review rounds/i);
+  assert.match(generate.steps[4], /PLAN-selected writing\.zh or writing\.en method/i);
+  assert.match(generate.steps[6], /final layout pass.+text and image overlap.+crowding/i);
+  assert.match(generate.steps[7], /reconcile the layout revision.+confirmed outline.+semantic anchors.+LaTeX structure/i);
+  assert.match(generate.steps[8], /recompile and render the layout revision.+revision identifier.+PDF.+render directory/i);
+  assert.match(generate.steps[9], /independently inspect.+latest rendered pages.+overview or contact sheet.+APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/i);
+  assert.match(generate.steps[10], /reconcile.+fresh renders.+maximum of three review rounds/i);
   assert.match(generate.steps.at(-1), /only when the user supplied a conversion command/i);
   assert.deepEqual(generate.delegation, [
     'step-7: designer owns the final layout pass and every layout revision',
@@ -149,11 +159,11 @@ test('slides workflows separate template-and-story generation from bounded modif
   assert.deepEqual(modify.roles, ['designer', 'visioner']);
   assert.match(modify.steps[1], /slide body/i);
   assert.match(modify.steps[2], /only the requested wording, language-norm, and existing-style changes/i);
-  assert.match(modify.steps[4], /designer.+final layout pass.+changed frames.+text and image overlap.+crowding/i);
-  assert.match(modify.steps[5], /reconcile the designer revision.+requested semantic diff.+LaTeX anchors.+authorized scope/i);
-  assert.match(modify.steps[6], /recompile and render the designer revision.+revision identifier.+PDF.+render directory/i);
-  assert.match(modify.steps[7], /visioner.+latest renders.+APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/i);
-  assert.match(modify.steps[8], /reconcile.+fresh rerenders.+maximum of three vision review rounds/i);
+  assert.match(modify.steps[4], /final layout pass.+changed frames.+text and image overlap.+crowding/i);
+  assert.match(modify.steps[5], /reconcile the layout revision.+requested semantic diff.+LaTeX anchors.+authorized scope/i);
+  assert.match(modify.steps[6], /recompile and render the layout revision.+revision identifier.+PDF.+render directory/i);
+  assert.match(modify.steps[7], /independently review.+latest renders.+APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/i);
+  assert.match(modify.steps[8], /reconcile.+fresh rerenders.+maximum of three review rounds/i);
   assert.match(modify.scopeNotes.join(' '), /Do not reopen template selection or story planning/i);
   assert.match(modify.scopeNotes.join(' '), /Do not widen scope to unrelated pre-existing layout defects/i);
   assert.deepEqual(modify.delegation, [
@@ -161,14 +171,15 @@ test('slides workflows separate template-and-story generation from bounded modif
     'step-8: visioner independently reviews the latest affected-page renders',
     'step-9: designer fixes material findings, the parent reconciles scope, and visioner reviews only fresh rerenders',
   ]);
+  assert.doesNotMatch(`${generate.steps.join(' ')} ${modify.steps.join(' ')}`, /\b(?:designer|visioner)\b/i);
   assert.match(
     `${generate.qualityChecks.join(' ')} ${modify.qualityChecks.join(' ')}`,
     /text and image overlap.+crowding.+clipping.+readable typography.+rendered evidence/i,
   );
 });
 
-test('SVG diagram workflow uses designer creation and independent visioner iteration', () => {
-  const diagram = workflowRouteCatalog['diagram.svg'];
+test('SVG diagram workflow keeps creation neutral and exposes optional independent visual review', () => {
+  const diagram = workflowCatalog['diagram.svg'];
 
   assert.deepEqual(diagram.skills, ['svg-flowchart']);
   assert.deepEqual(diagram.roles, ['designer', 'visioner']);
@@ -178,62 +189,16 @@ test('SVG diagram workflow uses designer creation and independent visioner itera
     'step-5: designer applies findings and visioner reviews only the resulting new revision',
   ]);
   assert.match(diagram.steps[0], /node and edge model.+flow direction/i);
-  assert.match(diagram.steps[1], /designer.+black and white.+straight.+dashed.+orthogonal polyline.+no curved connectors/i);
+  assert.match(diagram.steps[1], /standalone SVG.+black and white.+straight or dashed lines.+orthogonal polylines.+no curved connectors/i);
   assert.match(diagram.steps[2], /render.+full size.+60%/i);
-  assert.match(diagram.steps[3], /visioner.+independent/i);
-  assert.match(diagram.steps[4], /new revision.+maximum of three vision review rounds/i);
+  assert.match(diagram.steps[3], /independently inspect.+latest rasters/i);
+  assert.match(diagram.steps[4], /new revision.+maximum of three review rounds/i);
   assert.match(diagram.scopeNotes.join(' '), /designer owns SVG changes.+visioner remains read-only/i);
-  assert.match(diagram.scopeNotes.join(' '), /Do not substitute source inspection or designer self-review for rendered visioner evidence/i);
+  assert.match(diagram.scopeNotes.join(' '), /Do not substitute source inspection or author self-review for independent rendered evidence/i);
   assert.match(
     diagram.qualityChecks.join(' '),
     /node and edge completeness.+arrow direction.+overlap.+text clipping.+connector collision.+crossing.+font size.+spacing.+rendered evidence/i,
   );
-});
-
-test('broad workload matrix always produces an advisory workflow plan', () => {
-  assert.ok(workloadMatrix.length >= 60);
-  for (const item of workloadMatrix) {
-    const route = routeNaturalLanguageTask({ prompt: item.prompt, routerMode: 'enforce' });
-    assert.ok(workflowRouteNames.includes(route.workflowRoute), item.id);
-    assert.equal(route.advisoryOnly, true, item.id);
-    assert.equal(route.autoContinue, false, item.id);
-    assert.equal(route.routePlan.version, 2, item.id);
-    assert.equal(route.routePlan.mode, 'advisory', item.id);
-    assert.equal(route.routePlan.autoContinue, false, item.id);
-    assert.ok(Array.isArray(route.routePlan.steps), item.id);
-    assert.ok(Array.isArray(route.routePlan.skills), item.id);
-    assert.ok(Array.isArray(route.routePlan.tools), item.id);
-    assert.ok(Array.isArray(route.routePlan.roles), item.id);
-    assert.ok(Array.isArray(route.routePlan.qualityChecks), item.id);
-    assert.ok(Array.isArray(route.routePlan.riskNotes), item.id);
-    assert.equal(Object.hasOwn(route.routePlan, 'gateRequirements'), false, item.id);
-    assert.equal(Object.hasOwn(route, 'gateMode'), false, item.id);
-    assert.equal(Object.hasOwn(route, 'hardBlockReasons'), false, item.id);
-  }
-});
-
-test('body-less writing may defer language but never guesses from instruction language', () => {
-  for (const item of workloadMatrix.filter(({ expectedRoute }) => ['writing.zh', 'writing.en'].includes(expectedRoute))) {
-    const route = routeNaturalLanguageTask({ prompt: item.prompt, routerMode: 'enforce' });
-    if (route.intent !== 'writing.pending') continue;
-    assert.equal(route.taskDescriptor.language, 'unknown', item.id);
-    assert.ok(!route.routePlan.skills.includes('plain-chinese-writing'), item.id);
-    assert.ok(!route.routePlan.skills.includes('zh-writing-polish'), item.id);
-    assert.ok(!route.routePlan.skills.includes('writing-markdown-helper'), item.id);
-  }
-});
-
-test('route cards expose guidance sections and no gate section', () => {
-  for (const item of workloadMatrix) {
-    const route = routeNaturalLanguageTask({ prompt: item.prompt, routerMode: 'enforce' });
-    assert.match(route.routeCard, /^WORKFLOW_GUIDE\n/, item.id);
-    assert.match(route.routeCard, /\nSuggested steps:\n- /, item.id);
-    assert.match(route.routeCard, /\nSkills:\n- /, item.id);
-    assert.match(route.routeCard, /\nOptional roles:\n- /, item.id);
-    assert.match(route.routeCard, /\nScope and risk notes:\n- /, item.id);
-    assert.doesNotMatch(route.routeCard, /\nGate:\n|\nDo not:\n/i, item.id);
-    assert.deepEqual(route.routeCardSections, expectedSections, item.id);
-  }
 });
 
 test('every catalog role is OMP-native or marketplace-packaged and every selected skill remains packaged', async () => {
@@ -241,8 +206,8 @@ test('every catalog role is OMP-native or marketplace-packaged and every selecte
     registeredMarketplaceSkills(repoRoot),
     registeredMarketplaceAgents(repoRoot),
   ]);
-  const nativeAgents = new Set(['designer', 'librarian', 'reviewer']);
-  for (const [workflow, meta] of Object.entries(workflowRouteCatalog)) {
+  const nativeAgents = new Set(['task', 'designer', 'librarian', 'reviewer']);
+  for (const [workflow, meta] of Object.entries(workflowCatalog)) {
     for (const skill of meta.skills) {
       assert.equal(registeredSkills.has(skill), true, `${workflow}: ${skill}`);
     }
@@ -252,17 +217,6 @@ test('every catalog role is OMP-native or marketplace-packaged and every selecte
         true,
         `${workflow}: ${role}`,
       );
-    }
-  }
-  for (const item of workloadMatrix) {
-    const route = routeNaturalLanguageTask({ prompt: item.prompt, routerMode: 'enforce' });
-    for (const skill of route.routePlan.skills) {
-      assert.equal(registeredSkills.has(skill), true, `${item.id}: ${skill}`);
-    }
-    for (const role of route.routePlan.roles) {
-      for (const skill of role.skills ?? []) {
-        assert.equal(registeredSkills.has(skill), true, `${item.id}: ${role.agent}/${skill}`);
-      }
     }
   }
 });

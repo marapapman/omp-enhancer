@@ -1,7 +1,7 @@
 {
   "name": "omp-testing-enhancer",
-  "version": "0.1.16",
-  "description": "OMP plugin with test planning, execution, and independent review agents plus advisory testing tools and reports.",
+  "version": "0.1.17",
+  "description": "OMP plugin with advisory testing analysis, host-observed evidence, browser, coverage, mutation, review, and reporting tools.",
   "type": "module",
   "main": "./dist/extension.js",
   "exports": {
@@ -11,8 +11,6 @@
     "dist",
     "src",
     "tools",
-    "commands",
-    "agents",
     "package.json",
     "README.md"
   ],
@@ -20,8 +18,7 @@
     "build": "bunx tsc -p tsconfig.json",
     "typecheck": "bunx tsc --noEmit -p tsconfig.json",
     "test": "bunx vitest run",
-    "prepack": "bun run build",
-    "sync:marketplace": "bun scripts/sync-marketplace-release.ts"
+    "prepack": "bun run build"
   },
   "dependencies": {
     "pixelmatch": "latest",

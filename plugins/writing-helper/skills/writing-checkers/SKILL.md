@@ -1,6 +1,6 @@
 ---
 name: writing-checkers
-description: 7-dimension content quality review — problem clarity, novelty, technical depth, logic, clarity, evaluation protocol, data reproducibility
+description: Use for a comprehensive seven-dimension audit of an English manuscript or document covering problem clarity, novelty, technical depth, logic, expression, evaluation, and reproducibility. Not for a bounded passage review or direct drafting.
 ---
 
 # Writing Checkers
@@ -13,7 +13,7 @@ Review a document (paper, proposal, report) across 7 quality dimensions and prod
 
 ### Step 1: Read the Entire Document
 
-Use `read` to load the full document before any review. If it's a directory with multiple files, `grep`/`find` to locate the main content file. Understand the complete argument before evaluating any dimension.
+Use `read` to load the full document before any review. If it's a directory with multiple files, use `grep`/`glob` to locate the main content file. Understand the complete argument before evaluating any dimension.
 
 ### Step 2: Review in Order (One Dimension at a Time)
 
@@ -94,6 +94,6 @@ response. Do not create `.pi` or request write access solely for this skill.
 ## Pi Integration
 
 - **Use:** load `writing-checkers` through the runtime's normal skill mechanism; do not attempt an invented slash command.
-- **Tools used:** `read`, `grep`, `find` (to understand document structure and verify references).
+- **Tools used:** `read`, `grep`, `glob` (to understand document structure and verify references).
 - **Output:** use the permitted report path, or the final response in read-only mode. Create no other files.
 - **No HTML comments.** No `.pi/research/state.md`. No external CLI calls.

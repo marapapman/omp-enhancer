@@ -320,5 +320,5 @@ Use these examples as patterns, not as project-wide templates:
 
 ## See Also
 
-- Workflow: `code.review` with the canonical `reviewer`
+- Workflow: `code.dev` with `code-development`; use the native `reviewer` only after supplying an existing semantic diff
 - Skills: `python-patterns`, `python-testing`, and `api-design`

@@ -9,17 +9,16 @@ import { fileURLToPath } from 'node:url';
 import {
   buildSkillAliasMapFromRoots,
   parseLoadedSkillEvidence,
-  preferredSkillReadTarget,
   skillNamesEquivalent,
   skillReadNameCandidates,
   validateSkillUsage,
 } from '../src/skill-usage.js';
 
-const requiredWritingSkills = ['plain-chinese-writing', 'zh-writing-polish'];
+const suggestedWritingSkills = ['plain-chinese-writing', 'zh-writing-polish'];
 
-test('accepts a SKILL_USAGE block that lists every required skill as required and loaded', () => {
+test('accepts a SKILL_USAGE block that lists every suggested skill as loaded', () => {
   const result = validateSkillUsage({
-    requiredSkills: requiredWritingSkills,
+    suggestedSkills: suggestedWritingSkills,
     output: [
       '完成。',
       '',
@@ -34,15 +33,15 @@ test('accepts a SKILL_USAGE block that lists every required skill as required an
   });
 
   assert.equal(result.ok, true);
-  assert.deepEqual(result.required, requiredWritingSkills);
-  assert.deepEqual(result.loaded, requiredWritingSkills);
+  assert.deepEqual(result.suggested, suggestedWritingSkills);
+  assert.deepEqual(result.loaded, suggestedWritingSkills);
   assert.deepEqual(result.missing, []);
   assert.deepEqual(result.invalid, []);
 });
 
-test('rejects output when a required skill is absent from Loaded', () => {
+test('reports a suggestion that is absent from Loaded', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['test-driven-development', 'verification-before-completion'],
+    suggestedSkills: ['test-driven-development', 'verification-before-completion'],
     output: [
       'SKILL_USAGE',
       'Required:',
@@ -60,7 +59,7 @@ test('rejects output when a required skill is absent from Loaded', () => {
 
 test('rejects placeholder skill names instead of treating them as evidence', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['plain-chinese-writing'],
+    suggestedSkills: ['plain-chinese-writing'],
     output: [
       'SKILL_USAGE',
       'Required:',
@@ -76,9 +75,9 @@ test('rejects placeholder skill names instead of treating them as evidence', () 
   assert.deepEqual(result.invalid, ['<required skill>', 'TODO']);
 });
 
-test('rejects explicit denial of required skill loading', () => {
+test('reports explicit denial of suggested skill loading', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['plain-chinese-writing'],
+    suggestedSkills: ['plain-chinese-writing'],
     output: [
       'I did not load plain-chinese-writing because the rule is obvious.',
       '',
@@ -92,12 +91,12 @@ test('rejects explicit denial of required skill loading', () => {
 
   assert.equal(result.ok, false);
   assert.deepEqual(result.denied, ['plain-chinese-writing']);
-  assert.match(result.message, /denied/i);
+  assert.match(result.message, /declined suggested skill loading/i);
 });
 
 test('accepts read skill evidence when no SKILL_USAGE block is present', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+    suggestedSkills: ['plain-chinese-writing', 'zh-writing-polish'],
     output: '任务完成。',
     loadedSkills: ['skill://plain-chinese-writing', 'zh-writing-polish'],
   });
@@ -110,7 +109,7 @@ test('accepts read skill evidence when no SKILL_USAGE block is present', () => {
 
 test('does not let read skill evidence override explicit denial', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['plain-chinese-writing'],
+    suggestedSkills: ['plain-chinese-writing'],
     output: 'I did not load plain-chinese-writing.',
     loadedSkills: ['plain-chinese-writing'],
   });
@@ -122,7 +121,7 @@ test('does not let read skill evidence override explicit denial', () => {
 
 test('merges SKILL_USAGE block entries with read skill evidence', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
+    suggestedSkills: ['plain-chinese-writing', 'zh-writing-polish', 'zh-writing-checkers'],
     output: [
       'SKILL_USAGE',
       'Required:',
@@ -142,7 +141,7 @@ test('merges SKILL_USAGE block entries with read skill evidence', () => {
 
 test('accepts legacy ECC security skill aliases from read evidence', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['security-review', 'security-scan'],
+    suggestedSkills: ['security-review', 'security-scan'],
     output: 'Security review complete.',
     loadedSkills: ['skill://ecc-security-review', 'skill://ecc-security-scan'],
   });
@@ -154,7 +153,7 @@ test('accepts legacy ECC security skill aliases from read evidence', () => {
 
 test('accepts legacy ECC security skill aliases in SKILL_USAGE blocks', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['security-review', 'security-scan'],
+    suggestedSkills: ['security-review', 'security-scan'],
     output: [
       'SKILL_USAGE',
       'Required:',
@@ -173,7 +172,7 @@ test('accepts legacy ECC security skill aliases in SKILL_USAGE blocks', () => {
 
 test('accepts subagent skills_loaded evidence without a SKILL_USAGE block', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['security-review', 'security-scan'],
+    suggestedSkills: ['security-review', 'security-scan'],
     output: [
       '## SUBAGENT_USAGE',
       '```json',
@@ -191,7 +190,7 @@ test('accepts subagent skills_loaded evidence without a SKILL_USAGE block', () =
   assert.deepEqual(result.missing, []);
 });
 
-test('accepts YAML skills_loaded and GATE COMPLETE loaded evidence', () => {
+test('accepts YAML skills_loaded evidence', () => {
   const text = [
     'SUBAGENT_USAGE:',
     '  agent: ecc-security-reviewer',
@@ -199,13 +198,12 @@ test('accepts YAML skills_loaded and GATE COMPLETE loaded evidence', () => {
     '  skills_loaded:',
     '    - ecc-security-review',
     '    - ecc-security-scan',
-    'GATE COMPLETE: reviewer skills [security-review] loaded and applied.',
   ].join('\n');
 
-  assert.deepEqual(parseLoadedSkillEvidence(text), ['ecc-security-review', 'ecc-security-scan', 'security-review']);
+  assert.deepEqual(parseLoadedSkillEvidence(text), ['ecc-security-review', 'ecc-security-scan']);
 
   const result = validateSkillUsage({
-    requiredSkills: ['security-review', 'security-scan'],
+    suggestedSkills: ['security-review', 'security-scan'],
     output: text,
   });
 
@@ -216,7 +214,7 @@ test('accepts YAML skills_loaded and GATE COMPLETE loaded evidence', () => {
 
 test('does not treat missing loaded skills diagnostics as loaded evidence', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['security-review'],
+    suggestedSkills: ['security-review'],
     output: 'Missing loaded skills: security-review',
   });
 
@@ -227,10 +225,10 @@ test('does not treat missing loaded skills diagnostics as loaded evidence', () =
 
 test('does not let loose loaded evidence override explicit denial', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['security-review'],
+    suggestedSkills: ['security-review'],
     output: [
       'I did not load security-review.',
-      'GATE COMPLETE: reviewer skills [security-review] loaded and applied.',
+      'skills_loaded: [security-review]',
     ].join('\n'),
   });
 
@@ -241,7 +239,7 @@ test('does not let loose loaded evidence override explicit denial', () => {
 
 test('accepts generic namespaced aliases without per-skill hardcoding', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['security-review', 'verification-before-completion'],
+    suggestedSkills: ['security-review', 'verification-before-completion'],
     output: 'Done.',
     loadedSkills: ['skill://vendor-security-review', 'skill://vendor/verification-before-completion'],
   });
@@ -262,31 +260,7 @@ test('does not collapse language-specific writing skills into English skills', (
   assert.equal(skillNamesEquivalent('writing-markdown-helper', 'zh-writing-markdown-helper'), false);
 });
 
-test('prefers an existing project skill file over an unavailable namespaced URI', () => {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'omp-project-skill-target-'));
-  try {
-    writeFixtureSkill(path.join(root, 'skills'), 'superpowers-writing-plans', 'superpowers-writing-plans');
-    writeFixtureSkill(path.join(root, 'skills'), 'superpowers-debugging', 'superpowers-debugging');
-    writeFixtureSkill(path.join(root, 'skills'), 'zh-writing-review', 'zh-writing-review');
-
-    assert.equal(
-      preferredSkillReadTarget('writing-plans', { workspaceRoot: root }),
-      'skills/superpowers-writing-plans/SKILL.md',
-    );
-    assert.equal(
-      preferredSkillReadTarget('writing-review', { workspaceRoot: root }),
-      'skill://writing-review',
-    );
-    assert.equal(
-      preferredSkillReadTarget('diagnose', { workspaceRoot: root }),
-      'skills/superpowers-debugging/SKILL.md',
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('suggests installed namespaced read aliases for canonical required skills', () => {
+test('suggests installed namespaced read aliases for canonical skills', () => {
   const reviewCandidates = skillReadNameCandidates('security-review');
   const scanCandidates = skillReadNameCandidates('security-scan');
 
@@ -317,7 +291,7 @@ test('prefers a packaged exact name over a managed alias', () => {
 
 test('rejects explicit denial written with a namespaced skill alias', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['security-review'],
+    suggestedSkills: ['security-review'],
     output: [
       'I did not load vendor-security-review because I already know the checklist.',
       '',
@@ -331,12 +305,12 @@ test('rejects explicit denial written with a namespaced skill alias', () => {
 
   assert.equal(result.ok, false);
   assert.deepEqual(result.denied, ['security-review']);
-  assert.match(result.message, /denied/i);
+  assert.match(result.message, /declined suggested skill loading/i);
 });
 
 test('accepts marketplace skill path aliases discovered from frontmatter', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['gget', 'literature-review', 'pubmed-database'],
+    suggestedSkills: ['gget', 'literature-review', 'pubmed-database'],
     output: 'Done.',
     loadedSkills: [
       'skill://ecc/scientific-pkg-gget',
@@ -382,7 +356,7 @@ test('builds unambiguous aliases from every marketplace skill path', async () =>
 
 test('ignores fenced code blocks when finding the authoritative SKILL_USAGE block', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['plain-chinese-writing'],
+    suggestedSkills: ['plain-chinese-writing'],
     output: [
       'Example only:',
       '```text',
@@ -423,7 +397,7 @@ function writeFixtureSkill(root, directory, name) {
 
 test('accepts common model formatting variants for SKILL_USAGE evidence', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
+    suggestedSkills: ['plain-chinese-writing', 'zh-writing-polish'],
     output: [
       '最终校验如下：',
       '',
@@ -440,7 +414,7 @@ test('accepts common model formatting variants for SKILL_USAGE evidence', () => 
 
 test('falls back to a fenced final SKILL_USAGE block when no plain-text block exists', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['writing-markdown-helper', 'writing-checkers'],
+    suggestedSkills: ['writing-markdown-helper', 'writing-checkers'],
     output: [
       'Final evidence:',
       '```text',
@@ -461,7 +435,7 @@ test('falls back to a fenced final SKILL_USAGE block when no plain-text block ex
 
 test('accepts unbulleted skill lines after section labels', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['test-driven-development', 'verification-before-completion'],
+    suggestedSkills: ['test-driven-development', 'verification-before-completion'],
     output: [
       'SKILL_USAGE:',
       'Required:',
@@ -479,7 +453,7 @@ test('accepts unbulleted skill lines after section labels', () => {
 
 test('accepts single-line JSON SKILL_USAGE string evidence from plugin agents', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['diagnose'],
+    suggestedSkills: ['diagnose'],
     output: JSON.stringify({
       SKILL_USAGE: 'diagnose',
       SUBAGENT_USAGE: 'ecc-silent-failure-hunter',
@@ -494,7 +468,7 @@ test('accepts single-line JSON SKILL_USAGE string evidence from plugin agents', 
 
 test('accepts JSON SKILL_USAGE arrays and loaded objects from plugin agents', () => {
   const arrayResult = validateSkillUsage({
-    requiredSkills: ['test-driven-development', 'search-first', 'ai-regression-testing'],
+    suggestedSkills: ['test-driven-development', 'search-first', 'ai-regression-testing'],
     output: JSON.stringify({
       agent: 'ecc-tdd-guide',
       role: 'TDD Audit',
@@ -506,7 +480,7 @@ test('accepts JSON SKILL_USAGE arrays and loaded objects from plugin agents', ()
   assert.deepEqual(arrayResult.loaded, ['test-driven-development', 'search-first', 'ai-regression-testing']);
 
   const objectResult = validateSkillUsage({
-    requiredSkills: ['verification-before-completion'],
+    suggestedSkills: ['verification-before-completion'],
     output: JSON.stringify({
       review: 'Bug audit code review',
       SKILL_USAGE: {
@@ -520,14 +494,14 @@ test('accepts JSON SKILL_USAGE arrays and loaded objects from plugin agents', ()
   assert.deepEqual(objectResult.loaded, ['verification-before-completion']);
 });
 
-test('does not treat dispatch assignment requiredSkills metadata as loaded evidence', () => {
+test('does not treat dispatch assignment suggestedSkills metadata as loaded evidence', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['test-driven-development', 'search-first', 'ai-regression-testing'],
+    suggestedSkills: ['test-driven-development', 'search-first', 'ai-regression-testing'],
     output: JSON.stringify({
       agent: 'ecc-tdd-guide',
       role: 'TDD Audit',
       assignment: 'Bug audit test coverage guidance.',
-      requiredSkills: ['test-driven-development', 'search-first', 'ai-regression-testing'],
+      suggestedSkills: ['test-driven-development', 'search-first', 'ai-regression-testing'],
     }),
   });
 
@@ -539,7 +513,7 @@ test('does not treat dispatch assignment requiredSkills metadata as loaded evide
 
 test('accepts SKILL_USAGE blocks nested inside JSON string output envelopes', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['verification-before-completion'],
+    suggestedSkills: ['verification-before-completion'],
     output: JSON.stringify({
       agent: 'ecc-code-reviewer',
       result: {
@@ -563,7 +537,7 @@ test('accepts SKILL_USAGE blocks nested inside JSON string output envelopes', ()
 
 test('does not accept SKILL_USAGE examples nested only in assignment JSON fields', () => {
   const result = validateSkillUsage({
-    requiredSkills: ['verification-before-completion'],
+    suggestedSkills: ['verification-before-completion'],
     output: JSON.stringify({
       agent: 'ecc-code-reviewer',
       assignment: [

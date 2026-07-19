@@ -7,6 +7,11 @@ const passedEvidence: BrowserEvidence = {
   status: 'passed',
   runId: 'browser-run',
   baseUrl: 'http://localhost:5173',
+  targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+  scenarioCount: 1,
+  stepCount: 2,
+  captureCount: 1,
+  visualAssertionCount: 1,
   findings: []
 }
 
@@ -22,18 +27,18 @@ describe('evaluateBrowserEvidenceGate', () => {
       severity: 'critical',
       summary: 'Browser evidence is required for frontend targets.',
       evidence: { targetIds: ['src/ui/LoginForm.tsx#LoginForm'] },
-      repairHint: 'Run omp_test_browser_check and pass its browserEvidence into omp_test_gate for frontend targets.'
+      repairHint: 'Run omp_test_browser_check in the current task context before omp_test_review for frontend targets.'
     }])
   })
 
-  it('marks required missing browser evidence as passed when the configured severity is warning', () => {
+  it('keeps required missing browser evidence factually failed when severity is warning', () => {
     expect(evaluateBrowserEvidenceGate(undefined, { required: true, severity: 'warning', targetIds: ['src/ui/LoginForm.tsx#LoginForm'] })).toEqual([{
       gate: 'browser-interaction',
-      passed: true,
+      passed: false,
       severity: 'warning',
       summary: 'Browser evidence is required for frontend targets.',
       evidence: { targetIds: ['src/ui/LoginForm.tsx#LoginForm'] },
-      repairHint: 'Run omp_test_browser_check and pass its browserEvidence into omp_test_gate for frontend targets.'
+      repairHint: 'Run omp_test_browser_check in the current task context before omp_test_review for frontend targets.'
     }])
   })
 
@@ -56,6 +61,77 @@ describe('evaluateBrowserEvidenceGate', () => {
     ])
   })
 
+  it('does not pass interaction when no scenario executed', () => {
+    const evidence: BrowserEvidence = {
+      ...passedEvidence,
+      scenarioCount: 0,
+      stepCount: 0,
+      captureCount: 0,
+      visualAssertionCount: 0
+    }
+
+    expect(evaluateBrowserEvidenceGate(evidence)).toEqual([{
+      gate: 'browser-interaction',
+      passed: false,
+      severity: 'critical',
+      summary: 'Browser check did not execute any scenarios.',
+      evidence: { scenarioCount: 0, stepCount: 0, captureCount: 0, visualAssertionCount: 0, runId: 'browser-run' },
+      repairHint: 'Run at least one browser scenario with at least one interaction step in the current task context.'
+    }])
+  })
+
+  it('does not pass interaction when scenarios contain no executed steps', () => {
+    const evidence: BrowserEvidence = {
+      ...passedEvidence,
+      stepCount: 0,
+      captureCount: 0,
+      visualAssertionCount: 0
+    }
+
+    expect(evaluateBrowserEvidenceGate(evidence)).toEqual([expect.objectContaining({
+      gate: 'browser-interaction',
+      passed: false,
+      summary: 'Browser check did not execute any interaction steps.'
+    })])
+  })
+
+  it('omits a visual PASS when captures ran without a visual assertion', () => {
+    const evidence: BrowserEvidence = {
+      ...passedEvidence,
+      captureCount: 2,
+      visualAssertionCount: 0
+    }
+
+    expect(evaluateBrowserEvidenceGate(evidence)).toEqual([{
+      gate: 'browser-interaction',
+      passed: true,
+      severity: 'critical',
+      summary: 'Browser interactions passed.',
+      evidence
+    }])
+  })
+
+  it('rejects evidence that does not cover every reviewed frontend target', () => {
+    expect(evaluateBrowserEvidenceGate({
+      ...passedEvidence,
+      targetIds: ['src/ui/LoginForm.tsx#LoginForm']
+    }, {
+      required: true,
+      targetIds: ['src/ui/LoginForm.tsx#LoginForm', 'src/ui/Nav.tsx#Nav']
+    })).toEqual([{
+      gate: 'browser-interaction',
+      passed: false,
+      severity: 'critical',
+      summary: 'Browser evidence does not cover all reviewed frontend targets.',
+      evidence: {
+        requiredTargetIds: ['src/ui/LoginForm.tsx#LoginForm', 'src/ui/Nav.tsx#Nav'],
+        observedTargetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+        missingTargetIds: ['src/ui/Nav.tsx#Nav']
+      },
+      repairHint: 'Run omp_test_browser_check with targetIds covering every reviewed frontend target.'
+    }])
+  })
+
   it('reports a warning when browser evidence was explicitly skipped', () => {
     const skipped: BrowserEvidence = {
       ...passedEvidence,
@@ -64,7 +140,7 @@ describe('evaluateBrowserEvidenceGate', () => {
 
     expect(evaluateBrowserEvidenceGate(skipped)).toEqual([{
       gate: 'browser-interaction',
-      passed: true,
+      passed: false,
       severity: 'warning',
       summary: 'Browser check was skipped.',
       evidence: skipped,
@@ -94,7 +170,7 @@ describe('evaluateBrowserEvidenceGate', () => {
       status: 'skipped',
       findings: [{
         gate: 'browser-interaction',
-        passed: true,
+        passed: false,
         severity: 'warning',
         category: 'setup',
         summary: 'Playwright is not installed.',
@@ -122,10 +198,56 @@ describe('evaluateBrowserEvidenceGate', () => {
       gate: 'browser-interaction',
       passed: false,
       severity: 'critical',
-      summary: 'Browser check failed without structured findings.',
+      summary: 'Browser check failed without a failing structured finding.',
       evidence: failed,
-      repairHint: 'Report the browser-evidence gap; collect one additional observation only when it would materially improve the review.'
+      repairHint: 'Report the browser execution failure and collect a structured failing observation before accepting the review.'
     }])
+  })
+
+  it('adds a generic failure when failed evidence contains only passed findings', () => {
+    const failed: BrowserEvidence = {
+      ...passedEvidence,
+      status: 'failed',
+      findings: [{
+        gate: 'browser-interaction',
+        passed: true,
+        severity: 'warning',
+        category: 'setup',
+        summary: 'A non-failing note.',
+        evidence: {}
+      }]
+    }
+
+    expect(evaluateBrowserEvidenceGate(failed)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        gate: 'browser-interaction',
+        passed: false,
+        summary: 'Browser check failed without a failing structured finding.'
+      })
+    ]))
+  })
+
+  it('keeps the generic failed-status result when execution counts are also empty', () => {
+    const failed: BrowserEvidence = {
+      ...passedEvidence,
+      status: 'failed',
+      scenarioCount: 0,
+      stepCount: 0,
+      captureCount: 0,
+      visualAssertionCount: 0,
+      findings: []
+    }
+
+    expect(evaluateBrowserEvidenceGate(failed)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        passed: false,
+        summary: 'Browser check failed without a failing structured finding.'
+      }),
+      expect.objectContaining({
+        passed: false,
+        summary: 'Browser check did not execute any scenarios.'
+      })
+    ]))
   })
 
   it('uses structured findings even when evidence status is passed', () => {

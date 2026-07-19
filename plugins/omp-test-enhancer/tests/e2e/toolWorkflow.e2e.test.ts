@@ -3,24 +3,20 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import registerTestingEnhancer from '../../src/extension.js'
-import type { AgentToolResult, CommandDefinition, ExtensionAPI, ExtensionEventHandler, ExtensionToolContext, ToolDefinition } from '../../src/ompApi.js'
+import type { AgentToolResult, ExtensionAPI, ExtensionEventHandler, ExtensionToolContext, ToolDefinition } from '../../src/ompApi.js'
 import type { AnalyzeOutput, ContextOutput, ReportOutput, ReviewOutput } from '../../src/tools/testingTools.js'
 import type { ChangedTarget } from '../../src/types.js'
 
 class FakePi implements ExtensionAPI {
   readonly labels: string[] = []
-  readonly commands = new Map<string, CommandDefinition>()
   readonly tools = new Map<string, ToolDefinition>()
   readonly eventHandlers: Array<{ event: string; handler: ExtensionEventHandler }> = []
-  readonly userMessages: string[] = []
   readonly entries: Array<{ customType: string; data: unknown }> = []
   readonly zod = { z: fakeZod() }
 
   setLabel(label: string): void { this.labels.push(label) }
-  registerCommand(name: string, command: CommandDefinition): void { this.commands.set(name, command) }
   registerTool(tool: ToolDefinition): void { this.tools.set(tool.name, tool) }
   on(event: string, handler: ExtensionEventHandler): void { this.eventHandlers.push({ event, handler }) }
-  sendUserMessage(content: string): void { this.userMessages.push(content) }
   appendEntry(customType: string, data: unknown): void { this.entries.push({ customType, data }) }
 }
 
@@ -91,7 +87,7 @@ describe('omp-test-enhancer e2e workflow', () => {
       content: [{ type: 'text', text: '42 tests passed, 0 failed' }]
     }, ctx)
 
-    const gate = await executeTool<ReviewOutput>(pi, 'omp_test_gate', {
+    const gate = await executeTool<ReviewOutput>(pi, 'omp_test_review', {
       targets: [target],
       candidate: {
         id: 'candidate',
@@ -125,7 +121,7 @@ describe('omp-test-enhancer e2e workflow', () => {
     expect(report.details.markdown).toContain('Review effect: advisory guidance only')
   })
 
-  it('requires browser evidence for frontend targets and passes after structured browser evidence is supplied', async () => {
+  it('requires same-session observed browser evidence and ignores caller-supplied gate evidence', async () => {
     const cwd = await tempRepo()
     const pi = createRegisteredPlugin()
     const ctx = context(cwd)
@@ -150,7 +146,7 @@ describe('omp-test-enhancer e2e workflow', () => {
       }]
     }
 
-    const missingEvidenceGate = await executeTool<ReviewOutput>(pi, 'omp_test_gate', { targets: [target], candidate }, ctx)
+    const missingEvidenceGate = await executeTool<ReviewOutput>(pi, 'omp_test_review', { targets: [target], candidate }, ctx)
     expect(missingEvidenceGate.details).toMatchObject({
       passed: false,
       results: expect.arrayContaining([
@@ -162,20 +158,41 @@ describe('omp-test-enhancer e2e workflow', () => {
       framework: 'playwright',
       status: 'passed',
       runId: 'browser-ok',
+      targetIds: [target.id],
+      scenarioCount: 1,
+      stepCount: 1,
+      captureCount: 1,
+      visualAssertionCount: 1,
       findings: []
     }
-    const passingGate = await executeTool<ReviewOutput>(pi, 'omp_test_gate', { targets: [target], candidate, browserEvidence }, ctx)
-    expect(passingGate.details).toMatchObject({
-      passed: true,
+    const spoofedGate = await executeTool<ReviewOutput>(pi, 'omp_test_review', { targets: [target], candidate, browserEvidence }, ctx)
+    expect(spoofedGate.details).toMatchObject({
+      passed: false,
       results: expect.arrayContaining([
-        expect.objectContaining({ gate: 'browser-interaction', passed: true }),
-        expect.objectContaining({ gate: 'browser-visual', passed: true }),
-        expect.objectContaining({ gate: 'test-command', severity: 'warning' })
+        expect.objectContaining({ gate: 'browser-interaction', summary: 'Browser evidence is required for frontend targets.' })
+      ])
+    })
+
+    const observedBrowser = await executeTool(pi, 'omp_test_browser_check', {
+      baseUrl: 'http://127.0.0.1:3000',
+      artifactDir: '../escape',
+      targetIds: [target.id],
+      scenarios: [{ name: 'login', steps: [{ action: 'goto', url: '/', description: 'Open login' }] }]
+    }, ctx)
+    expect(observedBrowser.details).toMatchObject({ status: 'failed', scenarioCount: 0, stepCount: 0 })
+    const observedGate = await executeTool<ReviewOutput>(pi, 'omp_test_review', { targets: [target], candidate, browserEvidence }, ctx)
+    expect(observedGate.details).toMatchObject({
+      passed: false,
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          gate: 'browser-interaction',
+          summary: 'Browser artifact directory escapes the trusted artifact root or crosses a symbolic link.'
+        })
       ])
     })
 
     const report = await executeTool<ReportOutput>(pi, 'omp_test_report', {}, ctx)
-    expect(report.details.markdown).toContain('browser-interaction: passed')
+    expect(report.details.markdown).toContain('browser-interaction: critical finding')
   })
 
   it('runs a warning-only configured workflow without hiding review findings', async () => {
@@ -217,7 +234,7 @@ describe('omp-test-enhancer e2e workflow', () => {
       risk: 'medium'
     }
 
-    const gate = await executeTool<ReviewOutput>(pi, 'omp_test_gate', {
+    const gate = await executeTool<ReviewOutput>(pi, 'omp_test_review', {
       targets: [target],
       candidate: {
         id: 'candidate',
@@ -235,7 +252,7 @@ describe('omp-test-enhancer e2e workflow', () => {
       results: expect.arrayContaining([
         expect.objectContaining({ gate: 'test-file-scope', passed: false, severity: 'warning' }),
         expect.objectContaining({ gate: 'indirect-test', passed: false, severity: 'warning' }),
-        expect.objectContaining({ gate: 'browser-interaction', passed: true, severity: 'warning' }),
+        expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'warning' }),
         expect.objectContaining({ gate: 'test-command', passed: true, severity: 'warning', evidence: {} })
       ])
     })
@@ -291,7 +308,7 @@ describe('omp-test-enhancer e2e workflow', () => {
       isError: true
     }, ctx)
 
-    const failedGate = await executeTool<ReviewOutput>(pi, 'omp_test_gate', {
+    const failedGate = await executeTool<ReviewOutput>(pi, 'omp_test_review', {
       targets: [target],
       candidate,
       testCommand: 'npm test'
@@ -315,7 +332,7 @@ describe('omp-test-enhancer e2e workflow', () => {
       content: [{ type: 'text', text: '42 tests passed, 0 failed' }]
     }, ctx)
 
-    const repairedGate = await executeTool<ReviewOutput>(pi, 'omp_test_gate', {
+    const repairedGate = await executeTool<ReviewOutput>(pi, 'omp_test_review', {
       targets: [target],
       candidate,
       testCommand: 'npm test'

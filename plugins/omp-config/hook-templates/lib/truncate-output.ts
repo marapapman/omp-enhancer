@@ -1,5 +1,3 @@
-export const name = "truncate-output";
-export const event = "tool_result";
 export const MAX_LENGTH = 50000;
 
 const TRUNCATION_MARKER = `\n\n[... truncated to ${MAX_LENGTH} chars]`;
@@ -35,12 +33,4 @@ export function truncateToolResultContent(content: any[] = []) {
     }
   }
   return truncated;
-}
-
-export function execute(toolResult: any) {
-  if (typeof toolResult?.result !== "string") return;
-  if (toolResult.result.length > MAX_LENGTH) {
-    toolResult.result = toolResult.result.slice(0, MAX_LENGTH) +
-      TRUNCATION_MARKER;
-  }
 }

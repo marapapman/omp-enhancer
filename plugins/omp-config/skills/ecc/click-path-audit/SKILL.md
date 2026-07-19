@@ -193,7 +193,7 @@ Agent 1 MUST complete first. Its output is input for all other agents.
 
 ## When NOT to Use
 
-- For API-level bugs (wrong response shape, missing endpoint) — use systematic-debugging
+- For API-level bugs (wrong response shape, missing endpoint) — use the `code-development` diagnosis and vertical TDD method
 - For styling/layout issues — visual inspection
 - For performance issues — profiling tools
 
@@ -201,9 +201,9 @@ Agent 1 MUST complete first. Its output is input for all other agents.
 
 ## Integration with Other Skills
 
-- Run AFTER `/superpowers:systematic-debugging` (which finds the other 54 bug types)
-- Run BEFORE `/superpowers:verification-before-completion` (which verifies fixes work)
-- Feeds into `/superpowers:test-driven-development` — every bug found here should get a test
+- Run after the local-search and hypothesis phase in `code-development`.
+- Run before its final fresh verification and semantic diff review.
+- Feed each reproduced bug into a public-behavior RED/GREEN slice when a meaningful seam exists.
 
 ---
 

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 
 import {
@@ -10,7 +10,7 @@ import {
   formatFactCheckReport,
   normalizeWhitespace,
   strictClaimVerdict,
-  validateFactCheckGate,
+  validateFactCheckReview,
 } from './src/fact-check.js';
 import { fetchProviderEvidence } from './src/providers.js';
 
@@ -41,8 +41,13 @@ function loadInputText(input = {}, cwd = process.cwd()) {
     return { ok: false, error: 'Provide text or path for fact checking.' };
   }
   const filePath = resolveInputPath(input.path, cwd);
-  if (!existsSync(filePath)) return { ok: false, error: `File not found: ${input.path}` };
-  return { ok: true, text: readFileSync(filePath, 'utf8'), source: filePath };
+  try {
+    return { ok: true, text: readFileSync(filePath, 'utf8'), source: filePath };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { ok: false, error: `File not found: ${input.path}` };
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: `Unable to read ${input.path}: ${message}` };
+  }
 }
 
 function buildAnalyzeParameters(z) {
@@ -114,7 +119,7 @@ function buildEvidenceRecordSchema(z) {
   });
 }
 
-function buildGateParameters(z) {
+function buildReviewParameters(z) {
   return z.object({
     finalOutput: z.string(),
     riskLevel: z.enum(['low', 'standard', 'high']).optional(),
@@ -154,6 +159,10 @@ function formatCrossCheckBlock(crossChecks = []) {
 export default function factCheckerExtension(omp) {
   const z = omp.zod.z;
   const workflowStateFor = createWorkflowStateResolver();
+
+  omp.on?.('session_stop', async (_event = {}, ctx = {}) => {
+    workflowStateFor.clear(ctx);
+  });
 
   omp.registerTool({
     name: 'fact_check_analyze',
@@ -297,37 +306,37 @@ export default function factCheckerExtension(omp) {
   });
 
   omp.registerTool({
-    name: 'fact_check_gate',
+    name: 'fact_check_review',
     label: 'Fact Check Review',
-    description: 'Compatibility alias for an advisory completeness review. It reports missing or inconsistent evidence but never blocks tools or session completion.',
+    description: 'Review fact-check workflow evidence and report missing or inconsistent support. This advisory tool never blocks tools or session completion.',
     defaultInactive: true,
     approval: 'read',
-    parameters: buildGateParameters(z),
+    parameters: buildReviewParameters(z),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = paramsOrEmpty(params);
       const workflow = workflowStateFor(ctx);
       const riskLevel = workflow?.plan?.riskLevel ?? input.riskLevel ?? 'standard';
-      const textual = validateFactCheckGate({ ...input, riskLevel });
+      const textual = validateFactCheckReview({ ...input, riskLevel });
       const observed = workflow
         ? validateObservedWorkflow({ workflow, finalOutput: input.finalOutput, riskLevel })
         : {
           missingObserved: ['session workflow telemetry unavailable'],
           summary: { telemetry: 'stateless' },
         };
-      const complete = textual.ok && observed.missingObserved.length === 0;
-      const factualSupportComplete = complete && observed.summary.strictUnresolved === 0;
+      const ready = textual.ok && observed.missingObserved.length === 0;
+      const strictSupportReady = ready && observed.summary.strictUnresolved === 0;
       const result = {
         ...textual,
-        ok: complete,
-        complete,
-        factualSupportComplete,
+        ok: ready,
+        ready,
+        strictSupportReady,
         advisoryOnly: true,
         missingObserved: observed.missingObserved,
         observed: observed.summary,
       };
-      const report = factualSupportComplete
+      const report = strictSupportReady
         ? 'Fact-check advisory review: workflow ready; strict factual support complete.'
-        : complete
+        : ready
           ? `Fact-check advisory review: workflow ready; strict factual support unresolved (${observed.summary.strictUnresolved} claim(s)).`
         : `Fact-check advisory review: needs attention (${[...result.missing, ...result.missingObserved].join(', ')}).`;
       return {
@@ -339,12 +348,12 @@ export default function factCheckerExtension(omp) {
   });
 
   omp.registerCommand('fact-check', {
-    description: 'Run fact-check claim analysis for a document path or inline text.',
+    description: 'Run fact-check claim analysis for a document path or explicit --text input.',
     async handler(args, ctx) {
       const input = parseCommandArgs(typeof args === 'string' ? args : '');
       const loaded = loadInputText(input, cwdFromContext(ctx));
       if (!loaded.ok) return { ok: false, report: loaded.error };
-      const plan = buildFactCheckPlan({ text: loaded.text });
+      const plan = buildFactCheckPlan({ text: loaded.text, maxClaims: input.maxClaims });
       const report = formatFactCheckPlan(plan);
       ctx.ui?.notify?.(report, 'info');
       return { ok: true, report, details: plan };
@@ -355,7 +364,7 @@ export default function factCheckerExtension(omp) {
 function createWorkflowStateResolver() {
   const objectStates = new WeakMap();
   const sessionStates = new Map();
-  return (ctx = {}) => {
+  const resolveState = (ctx = {}) => {
     const owner = ctx?.sessionManager;
     if (!owner || (typeof owner !== 'object' && typeof owner !== 'function')) return null;
     const sessionId = stableSessionId(owner);
@@ -366,6 +375,15 @@ function createWorkflowStateResolver() {
     if (!objectStates.has(owner)) objectStates.set(owner, emptyWorkflowState());
     return objectStates.get(owner);
   };
+
+  resolveState.clear = (ctx = {}) => {
+    const owner = ctx?.sessionManager;
+    if (!owner || (typeof owner !== 'object' && typeof owner !== 'function')) return false;
+    const sessionId = stableSessionId(owner);
+    return sessionId ? sessionStates.delete(sessionId) : objectStates.delete(owner);
+  };
+
+  return resolveState;
 }
 
 function stableSessionId(owner) {
@@ -585,45 +603,46 @@ function escapeRegex(value = '') {
 }
 
 function mergeEvidence(localEvidence = [], providerEvidence = []) {
-  const byClaim = new Map();
-  for (const record of [...localEvidence, ...providerEvidence]) {
-    const key = `${record.claimId}:${record.lane}`;
-    const current = byClaim.get(key);
-    const rank = evidenceRank(record.status);
-    const currentRank = evidenceRank(current?.status);
-    if (!current
-      || rank > currentRank
-      || (rank === currentRank && evidenceSpecificity(record) > evidenceSpecificity(current))) {
-      byClaim.set(key, record);
-    }
-  }
-  return [...byClaim.values()];
+  const records = [...localEvidence, ...providerEvidence];
+  const nonPlaceholderLanes = new Set(records
+    .filter((record) => !isEmptyLocalPlaceholder(record))
+    .map((record) => `${record.claimId}:${record.lane}`));
+  const seen = new Set();
+  return records.filter((record) => {
+    const laneKey = `${record.claimId}:${record.lane}`;
+    if (isEmptyLocalPlaceholder(record) && nonPlaceholderLanes.has(laneKey)) return false;
+    const fingerprint = JSON.stringify(record);
+    if (seen.has(fingerprint)) return false;
+    seen.add(fingerprint);
+    return true;
+  });
 }
 
-function evidenceRank(status = '') {
-  return { CONTRADICTED: 4, SUPPORTED: 3, UNVERIFIABLE: 2, INSUFFICIENT: 1 }[String(status).toUpperCase()] ?? 0;
-}
-
-function evidenceSpecificity(record = {}) {
-  return Number(Boolean(normalizeWhitespace(record.source)))
-    + Number(Boolean(normalizeWhitespace(record.quote)))
-    + Number(Boolean(record.evidenceType));
+function isEmptyLocalPlaceholder(record = {}) {
+  return record.provider === 'local'
+    && record.status === 'INSUFFICIENT'
+    && !normalizeWhitespace(record.source)
+    && !normalizeWhitespace(record.quote)
+    && record.reason === 'No local evidence record matched this claim.';
 }
 
 function parseCommandArgs(args = '') {
-  const tokens = args.trim().split(/\s+/u).filter(Boolean);
+  let value = args.trim();
   const input = {};
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (token === '--max') {
-      const value = Number(tokens[index + 1]);
-      if (Number.isFinite(value)) input.maxClaims = value;
-      index += 1;
-      continue;
-    }
-    if (!input.path) input.path = token;
+
+  const maxMatch = value.match(/(?:^|\s)--max\s+(\d+(?:\.\d+)?)\s*$/u);
+  if (maxMatch) {
+    const maxClaims = Number(maxMatch[1]);
+    if (Number.isFinite(maxClaims)) input.maxClaims = maxClaims;
+    value = value.slice(0, maxMatch.index).trim();
   }
-  if (!input.path && args.trim()) input.text = args.trim();
+
+  if (value === '--text') input.text = '';
+  else if (value.startsWith('--text ')) input.text = value.slice('--text '.length).trim();
+  else if (value === '--path') input.path = '';
+  else if (value.startsWith('--path ')) input.path = value.slice('--path '.length).trim();
+  else if (value) input.path = value;
+
   return input;
 }
 
@@ -635,5 +654,5 @@ export {
   formatFactCheckPlan,
   formatFactCheckReport,
   strictClaimVerdict,
-  validateFactCheckGate,
+  validateFactCheckReview,
 };

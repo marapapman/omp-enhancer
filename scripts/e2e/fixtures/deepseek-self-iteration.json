@@ -1,0 +1,181 @@
+{
+  "version": 1,
+  "defaults": {
+    "model": "opencode-go/deepseek-v4-flash",
+    "thinking": "max",
+    "approvalMode": "yolo",
+    "advisor": false,
+    "executionMode": "rpc",
+    "taskEager": "preferred",
+    "tools": ["read", "grep", "glob", "write", "edit", "bash", "todo", "task", "hub"],
+    "repeat": 3,
+    "timeoutSeconds": 480,
+    "expectations": {
+      "noWeb": true,
+      "requireFinal": true,
+      "maxPrimaryFinals": 1,
+      "maxAdvisorMessages": 0,
+      "maxPostFinalAdvisorMessages": 0,
+      "noUnobservedSkillClaims": true,
+      "requireSuccessfulToolCalls": false,
+      "maxDuplicateFailedCalls": 0,
+      "maxDuplicateSkillReadAttempts": 0,
+      "requireWorkflowIndexOnlyFirstToolBatch": true,
+      "requireWorkflowPlanBeforeResourceLoads": true,
+      "requiredWorkflowPlanFormat": "block",
+      "minWorkflowPlanNumberedActions": 6,
+      "requireWorkflowPlanFirstVisibleContent": true,
+      "forbidResourceProjectSameBatch": true,
+      "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+      "requireWorkflowReadyTodoOnlyBatch": true,
+      "requireExactSelectedWorkflowReferences": true,
+      "requireWorkflowPlanSkillsUseDomainSkillUris": true,
+      "requireWorkflowReadyLoadedSkillsUseBareIds": true,
+      "requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills": true,
+      "pluginContinuationCount": 0,
+      "maxAbortedAssistants": 0,
+      "maxToolCalls": 50,
+      "maxSourceSearchCalls": 12
+    }
+  },
+  "scenarios": [
+    {
+      "id": "omp-self-iteration-tdd",
+      "category": "self-iteration/tdd-review-e2e",
+      "fixture": "self-iteration-tdd",
+      "prompt": "Treat this temporary project as the target of an OMP Enhancer self-development E2E harness. Improve two independent behaviors in one parallel wave: make normalizePluginName(' Plugin-Core ') return 'plugin-core' by modifying only src/normalize.js and test/normalize.test.js, and make isPluginEnabled(' OFF ') return false by modifying only src/enabled.js and test/enabled.test.js. Use omp.plugin and its single owning code-development Skill; do not load a second planning, debugging, TDD, or verification Skill. After the workflow index, make the full WORKFLOW PLAN block the first visible content before resource calls, and declare code-development before the final omp.plugin workflow reference in Load order. Give separate numbered Actions for Main's local code search, the official-and-community-search decision, Main's detailed vertical-slice and wave plan, PLAN REVIEW, parallel native task implementation, MAIN REVIEW, reviewer, supported-finding repair, and final report; do not collapse those phases into one Action. After resources load, put WORKFLOW READY and the native TODO init in a response with no project tools, then start project reads in the next response. Main must first search the local source and adjacent test for each behavior, record that network search is unavailable and unnecessary for this isolated behavior, and write a complete plan naming both slices, their non-overlapping write sets, focused commands, expected RED, production boundaries, integration, and returned evidence. Give that complete plan to one currently available read-only plan Agent for PLAN REVIEW without asking it to read files or run commands, and wait for its delivery before implementation. Then make one native `task` call whose same `tasks[]` batch contains both independent vertical slices. Give each task input explicit Target and Acceptance sections. Each native `task` assignment owns its test mutation, valid RED, minimal production change, the same focused command GREEN, refactor, and full bounded semantic diff delivery: use `npm test -- test/normalize.test.js` for the normalize slice and `npm test -- test/enabled.test.js` for the enabled slice. Each child delivery explicitly labels test mutation, RED exit 1, production mutation, GREEN exit 0, refactor, and bounded semantic diff. Main must not use edit or write or run any bash command for implementation; only the two task children mutate their exclusive files and run focused commands. After both complete deliveries, Main runs one broader verification whose bash command itself must be exactly `npm test`; do not prepend `cd` or append redirection. Main then writes a visible MAIN REVIEW covering the current tree, bounded semantic diff, both child RED and GREEN evidence, cross-slice interactions, and broader verification before assigning the native reviewer. The reviewer receives that Main review and bounded semantic diff only, without project reads, edits, or commands; any supported finding goes to native task as a bounded repair with affected evidence, followed by a second MAIN REVIEW and at most one fresh reviewer pass. Never repeat an unchanged review. Every delegated assignment text itself starts with exactly `[workflow=<selected-ids> step=<step-id> todo=<verbatim-parent-task> skills=<loaded-ids>]`. After the report TODO is complete, make the final response itself state both RED and GREEN command evidence, review dispositions, changed files, and limitations. Do not change AGENTS.md or package.json, use the network, publish, release, or upgrade anything.",
+      "expectations": {
+        "requiredWorkflowPrimary": "omp.plugin",
+        "requiredSelectedWorkflowIds": ["omp.plugin"],
+        "requiredObservedSkills": [
+          "code-development",
+          "omp-enhancer-workflows"
+        ],
+        "maxObservedSkills": 2,
+        "requireNativeTodoInit": true,
+        "minNativeTodoItems": 10,
+        "requireNativeTodoCompletion": true,
+        "requireNativeTodoInitBeforeSubstantiveTool": true,
+        "minNativeTaskAssignmentAttempts": 4,
+        "maxNativeTaskAssignmentAttempts": 6,
+        "requireNativeTaskCompletion": true,
+        "requireNativeTaskSubmissionForEveryAssignment": true,
+        "requiredNativeTaskAgents": [
+          "plan",
+          "task",
+          "reviewer"
+        ],
+        "requireNativeTaskMetadataPrefix": true,
+        "requiredNativeTaskWorkflows": ["omp.plugin"],
+        "requiredNativeTaskWorkflowsPerAssignment": ["omp.plugin"],
+        "requiredNativeTaskSkillsPerAssignment": ["code-development"],
+        "requireSubagentDrivenCode": {
+          "planReviewAgent": "plan",
+          "planReviewAssignmentPatterns": [
+            "complete.+plan|plan.+complete",
+            "wave\\s*1|first wave",
+            "runnable.+independent.+vertical slices|independent.+vertical slices.+runnable",
+            "(?:test/.+[\\s\\S]*src/|src/.+[\\s\\S]*test/)",
+            "RED[\\s\\S]*GREEN"
+          ],
+          "planReviewDeliveryPatterns": [
+            "PLAN REVIEW",
+            "runnable.+independent",
+            "input-complete|complete.+input"
+          ],
+          "implementationAgent": "task",
+          "reviewerAgent": "reviewer",
+          "repairAgent": "task",
+          "minImplementationSlices": 2,
+          "requireParallelImplementationBatch": true,
+          "requireCompleteAssignmentInput": true,
+          "implementationAssignmentPatterns": [
+            "target",
+            "acceptance",
+            "test mutation",
+            "valid RED",
+            "minimal production",
+            "same.+command.+GREEN",
+            "refactor"
+          ],
+          "implementationDeliveryPatterns": [
+            "test mutation",
+            "RED.+exit 1",
+            "production mutation",
+            "GREEN.+exit 0",
+            "refactor",
+            "bounded semantic diff"
+          ],
+          "mainReviewPattern": "^MAIN REVIEW\\b",
+          "mainReviewPatterns": [
+            "current tree",
+            "bounded semantic diff",
+            "RED[\\s\\S]*GREEN",
+            "cross-slice|no cross-slice conflict",
+            "broader verification"
+          ],
+          "mainVerificationCommandPattern": "^npm test$",
+          "reviewerAssignmentPatterns": [
+            "MAIN REVIEW",
+            "bounded semantic diff",
+            "RED[\\s\\S]*GREEN"
+          ],
+          "supportedFindingPattern": "\\bSUPPORTED\\b",
+          "repairAssignmentPatterns": [
+            "SUPPORTED",
+            "bounded repair",
+            "affected evidence"
+          ],
+          "maxFreshReviewerAssignments": 1,
+          "forbiddenParentTools": ["edit", "write"]
+        },
+        "requireExactNativeTaskMetadataPrefix": true,
+        "requiredFinalPatterns": ["RED", "GREEN", "review"]
+      },
+      "fixtureExpectations": {
+        "allowedChangedFiles": [
+          "src/normalize.js",
+          "test/normalize.test.js",
+          "src/enabled.js",
+          "test/enabled.test.js"
+        ],
+        "requiredChangedFiles": [
+          "src/normalize.js",
+          "test/normalize.test.js",
+          "src/enabled.js",
+          "test/enabled.test.js"
+        ],
+        "requiredPatterns": {
+          "src/normalize.js": ["toLowerCase\\(\\)"],
+          "test/normalize.test.js": ["Plugin-Core", "plugin-core"],
+          "src/enabled.js": ["toLowerCase\\(\\)", "off"],
+          "test/enabled.test.js": ["OFF", "false"]
+        }
+      }
+    },
+    {
+      "id": "omp-self-iteration-mechanical-control",
+      "category": "self-iteration/mechanical-negative-control",
+      "fixture": "self-iteration-tdd",
+      "prompt": "What is the exact package name value in package.json? Return only the value unchanged.",
+      "expectations": {
+        "requireWorkflowIndexOnlyFirstToolBatch": false,
+        "requireWorkflowPlanBeforeResourceLoads": false,
+        "requireWorkflowPlanFirstVisibleContent": false,
+        "requireWorkflowReadyAfterLoadsBeforeProjectTools": false,
+        "requireWorkflowReadyTodoOnlyBatch": false,
+        "requireExactSelectedWorkflowReferences": false,
+        "requireWorkflowPlanSkillsUseDomainSkillUris": false,
+        "requireWorkflowReadyLoadedSkillsUseBareIds": false,
+        "requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills": false,
+        "forbidWorkflowMarkers": true,
+        "maxObservedSkills": 0,
+        "maxNativeTodoCalls": 0,
+        "maxNativeTaskCalls": 0,
+        "maxToolCalls": 2,
+        "maxSourceSearchCalls": 2,
+        "requiredFinalPatterns": ["omp-self-iteration-fixture"]
+      }
+    }
+  ]
+}

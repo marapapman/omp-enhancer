@@ -1,393 +1,91 @@
 export const codeWorkflows = [
   {
-    "id": "code.plan",
-    "chooseWhen": "The deliverable is an implementation, repair, migration, or test plan rather than the change itself.",
-    "composeWith": [
-      "code.review",
-      "security.review"
-    ],
-    "steps": [
-      {
-        "id": "step-1",
-        "text": "Inspect minimal implementation and test context."
-      },
-      {
-        "id": "step-2",
-        "text": "Define scope and invariants."
-      },
-      {
-        "id": "step-3",
-        "text": "Decompose implementation and verification."
-      },
-      {
-        "id": "step-4",
-        "text": "Record dependencies and risks."
-      },
-      {
-        "id": "step-5",
-        "text": "Deliver an actionable plan without executing it."
-      }
-    ],
-    "scopeNotes": [
-      "Planning is advisory and does not imply permission to edit files or run tests."
-    ],
-    "skills": [
-      "brainstorming",
-      "writing-plans"
-    ],
-    "qualityChecks": [
-      "scope completeness, dependency order, and verification correspondence"
-    ],
-    "riskNotes": [],
-    "roles": [
-      "explore",
-      "plan"
-    ],
-    "delegation": [
-      "step-1: explore performs bounded read-only inspection of the implementation and test context",
-      "steps-2-5: plan owns the complete advisory implementation and verification plan without editing files or running tests"
-    ]
-  },
-  {
     "id": "code.dev",
-    "chooseWhen": "The user authorizes a code or configuration change, usually with verification.",
+    "chooseWhen": "The central task is substantive software work outside the complete OMP plugin or OMP Enhancer self-development condition: inspect or plan a codebase, diagnose or debug a failure, implement or refactor behavior, author or run tests, repair a build, measure performance, or review code or a diff. The requested scope determines whether work is read-only or may mutate files.",
     "composeWith": [
-      "code.debug",
-      "code.test",
-      "code.review",
       "security.review",
-      "omp.plugin"
+      "release.publish"
     ],
     "steps": [
       {
         "id": "step-1",
-        "text": "Inspect affected code, tests, and conventions."
+        "text": "Establish the requested outcome, mutation authority, acceptance criteria, repository instructions, dirty-tree boundary, exact failure or baseline evidence, and the smallest useful verification surface."
       },
       {
-        "id": "step-2",
-        "text": "Plan the smallest coherent change."
+        "id": "step-search-local",
+        "text": "Search local code actively before proposing changes: locate entry points with fast repository search, trace callers and consumers, inspect adjacent tests and configuration, and distinguish repository source from generated, packaged, installed, or runtime truth."
       },
       {
-        "id": "step-3",
-        "text": "Write or update focused tests where appropriate."
+        "id": "step-search-external",
+        "text": "When current library, toolchain, API, design, failure, or performance practice could change the decision and network use is available, search current official documentation and bounded community experience; keep external advice separate from local code evidence and record version and uncertainty."
       },
       {
-        "id": "step-4",
-        "text": "Implement."
+        "id": "step-plan",
+        "text": "Main writes a detailed implementation and evidence plan for parallel execution in dependency-ordered waves of vertical slices, naming for every slice its ID, acceptance target, dependencies, exact files and non-overlapping write sets, local anchors, public test seam, exact focused command, expected valid RED, minimum production boundary, required Skills, integration point, and evidence to return; mark every slice runnable or blocked and independent or dependent."
       },
       {
-        "id": "step-5",
-        "text": "Verify and review the semantic diff."
+        "id": "step-plan-review",
+        "text": "Use the currently exposed plan Agent to review and challenge Main's complete plan for parallel execution, including the plan assignment map, slice dependencies, write-set conflicts, inputs, and verification coverage, before any authorized production mutation."
+      },
+      {
+        "id": "step-plan-disposition",
+        "text": "Main records every accepted, rejected, and unresolved plan finding, rebases only affected TODO rows, and freezes complete bounded assignments with exclusive write ownership before dispatch."
+      },
+      {
+        "id": "step-task-batch",
+        "text": "For each wave, in the same native task tasks[] batch, Main sends all runnable independent slices, while dependent slices wait for their declared integration anchors and a single safe slice remains one task rather than manufactured parallelism."
+      },
+      {
+        "id": "step-task-tdd",
+        "text": "Each task owns one complete vertical slice: make its public-behavior test mutation first, run the exact focused command and return a valid RED assertion, make the minimum production change within its exclusive write set, rerun the same command for GREEN, refactor only while green, rerun affected evidence, and return the bounded diff and exact command results."
+      },
+      {
+        "id": "step-main-review",
+        "text": "Main waits for every task delivery, integrates the slices, resolves only evidenced conflicts, and runs focused and proportionate broader verification on the current tree; Main then examines the current tree, semantic diff, RED and GREEN evidence, acceptance coverage, scope, and cross-slice interactions in an explicit MAIN REVIEW before any reviewer assignment."
+      },
+      {
+        "id": "step-review",
+        "text": "Only after MAIN REVIEW, the native reviewer independently reviews the Main-reviewed bounded semantic diff and supplied evidence without a project read or command, returning concrete findings or an explicit no-finding result without repair or completion authority."
+      },
+      {
+        "id": "step-repair",
+        "text": "Main validates every reviewer finding against current evidence; for each material supported finding, Main gives task a bounded repair assignment, task repairs within an exclusive write set and returns fresh affected evidence, Main refreshes affected evidence and performs a fresh MAIN REVIEW, and at most one fresh reviewer reviews the materially changed Main-reviewed diff."
+      },
+      {
+        "id": "step-report",
+        "text": "Report changed and inspected paths, plan and review dispositions, task deliveries, RED and GREEN evidence, exact verification results, external-source limitations, unresolved risk, and untouched user changes; perform commit, push, release, deployment, or upgrade only when explicitly authorized."
       }
     ],
     "scopeNotes": [
-      "Release or deployment is a separate step when the user requests it."
+      "A plan-only, diagnosis-only, test-analysis, or read-only review request does not authorize a production mutation; Main follows the user's requested outcome inside the same lifecycle.",
+      "When no meaningful test seam exists, state why and use the strongest available contract, build, static, replay, or runtime evidence without fabricating a RED.",
+      "The number of slices follows real independent work, dependencies, exclusive write ownership, and native capacity; do not manufacture parallelism or split tests from their production slice.",
+      "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; missing delegation is not invented success.",
+      "This card is Agent-owned guidance, not a gate, router, fork mandate, completion controller, or self-repeating repair mechanism."
     ],
     "skills": [
-      "brainstorming",
-      "test-driven-development",
-      "subagent-driven-development",
-      "verification-before-completion"
+      "code-development"
     ],
     "qualityChecks": [
-      "focused tests, behavior preservation, semantic diff review, and user-scope compliance"
-    ],
-    "riskNotes": [],
-    "roles": [
-      "explore",
-      "plan",
-      "implementation-task",
-      "reviewer"
-    ],
-    "delegation": [
-      "step-1: explore performs bounded read-only inspection of affected code, tests, callers, and conventions",
-      "step-2: plan owns the bounded implementation and verification plan without editing files",
-      "steps-3-4: implementation-task owns the planned implementation and focused tests within its assigned scope",
-      "step-5: reviewer independently audits the semantic diff, tests, scope, and evidence without taking over integration"
-    ]
-  },
-  {
-    "id": "code.debug",
-    "chooseWhen": "The task is to reproduce, localize, or explain a concrete failure or mismatch.",
-    "composeWith": [
-      "code.dev",
-      "code.test",
-      "code.review"
-    ],
-    "steps": [
-      {
-        "id": "step-1",
-        "text": "Reproduce or localize the failure."
-      },
-      {
-        "id": "step-2",
-        "text": "Trace the concrete path and runtime truth."
-      },
-      {
-        "id": "step-3",
-        "text": "Form and test hypotheses."
-      },
-      {
-        "id": "step-4",
-        "text": "Explain the root cause with evidence."
-      },
-      {
-        "id": "step-5",
-        "text": "Compose code.dev only when a fix is requested."
-      }
-    ],
-    "scopeNotes": [
-      "Implementation is a follow-on step when a fix is in scope."
-    ],
-    "skills": [
-      "diagnose",
-      "systematic-debugging"
-    ],
-    "qualityChecks": [
-      "reproducible evidence, cause rather than symptom, and installed-versus-source consistency"
-    ],
-    "riskNotes": [],
-    "roles": [],
-    "delegation": [
-      "steps-1-4: keep diagnosis with the main agent; compose code.dev, code.test, security.review, or another specialized workflow before delegating a checkpoint to its exact listed role"
-    ]
-  },
-  {
-    "id": "code.test",
-    "chooseWhen": "The task requires designing, adding, running, or interpreting tests.",
-    "composeWith": [
-      "code.plan",
-      "code.dev",
-      "code.debug",
-      "code.review",
-      "omp.plugin"
-    ],
-    "steps": [
-      {
-        "id": "step-1",
-        "text": "Confirm the authorized test scope, project instructions, target revision, and whether the task requires test design, authoring, execution, or interpretation."
-      },
-      {
-        "id": "step-2",
-        "text": "Have test-planner inspect public behavior, existing tests, risk, fixtures, real project commands, and available browser, coverage, or mutation context, then produce a target-to-behavior and evidence plan without editing files or running tests."
-      },
-      {
-        "id": "step-3",
-        "text": "When authoring is in scope, have test-executor make only the planned bounded test-file and test-fixture changes through public behavior; route any required production-code change through code.dev."
-      },
-      {
-        "id": "step-4",
-        "text": "Have test-executor run only host-authorized real project commands and collect fresh route-specific execution, browser, coverage, or mutation evidence as applicable; omp_test_gate never executes commands."
-      },
-      {
-        "id": "step-5",
-        "text": "Have test-reviewer independently review the plan, test diff, public-behavior coverage, scope, and current evidence without editing files or rerunning tests, and return advisory findings rather than completion permission."
-      },
-      {
-        "id": "step-6",
-        "text": "Have the parent reconcile the independent review, report exact commands, exit status, failures, coverage limitations, and unreviewable evidence honestly, and never schedule an automatic repair turn."
-      }
-    ],
-    "scopeNotes": [
-      "The user-provided target list defines the intended testing scope.",
-      "The planner and reviewer are read-only; the executor may change only authorized tests and fixtures, and production changes require composition with code.dev.",
-      "All agent and omp_test_gate conclusions are advisory evidence, not execution authority or completion permission."
-    ],
-    "skills": [
-      "test-driven-development",
-      "verification-before-completion"
-    ],
-    "qualityChecks": [
-      "target-to-behavior plan coverage, public-behavior assertions, test-only change scope, command-to-target correspondence, current-revision non-empty execution, exact exit status, browser and coverage evidence when applicable, failure visibility, independent review, and explicit limitations"
-    ],
-    "riskNotes": [],
-    "roles": [
-      "test-planner",
-      "test-executor",
-      "test-reviewer"
-    ],
-    "delegation": [
-      "step-2: test-planner produces the target-to-behavior and evidence plan without editing files or running tests",
-      "step-3: test-executor owns bounded test and fixture changes when authoring is in scope",
-      "step-4: test-executor runs only host-authorized commands and records fresh execution evidence",
-      "step-5: test-reviewer independently audits the plan, test diff, public-behavior coverage, and current evidence without editing files or rerunning tests"
-    ]
-  },
-  {
-    "id": "code.review",
-    "chooseWhen": "The user asks for a read-only code review, bug audit, regression audit, or diff review.",
-    "composeWith": [
-      "code.plan",
-      "code.debug",
-      "code.test",
-      "security.review"
-    ],
-    "steps": [
-      {
-        "id": "step-1",
-        "text": "Inspect requested paths and surrounding contracts."
-      },
-      {
-        "id": "step-2",
-        "text": "Trace concrete callers and failure paths."
-      },
-      {
-        "id": "step-3",
-        "text": "Validate findings against tests or runtime evidence."
-      },
-      {
-        "id": "step-4",
-        "text": "Report prioritized findings with file and symbol evidence."
-      }
-    ],
-    "scopeNotes": [
-      "Speculative concerns should be labeled as hypotheses."
-    ],
-    "skills": [
-      "diagnose",
-      "verification-before-completion"
-    ],
-    "qualityChecks": [
-      "finding-to-code evidence, severity rationale, regression impact, and explicit hypotheses"
-    ],
-    "riskNotes": [],
-    "roles": [
-      "explore",
-      "reviewer",
-      "omp-target-auditor"
-    ],
-    "delegation": [
-      "steps-1-2: explore performs bounded read-only inspection of requested paths, surrounding contracts, callers, and failure paths",
-      "steps-3-4: reviewer independently validates and reports patch-anchored findings when the assignment supplies a diff, commit, or pull request",
-      "steps-3-4: omp-target-auditor independently validates and reports target-anchored findings when the assignment names an existing bounded target without a diff"
-    ]
-  },
-  {
-    "id": "code.build",
-    "chooseWhen": "A compiler, type checker, linker, bundler, package, or build command fails and the user wants diagnosis or an authorized repair.",
-    "composeWith": [
-      "code.debug",
-      "code.dev",
-      "code.test",
-      "code.review"
-    ],
-    "steps": [
-      {
-        "id": "step-1",
-        "text": "Capture the exact build command, target revision, environment, current failure evidence, and the smallest reproducible target."
-      },
-      {
-        "id": "step-2",
-        "text": "Inspect the relevant toolchain, configuration, dependency, source, and generated-file boundaries without changing them."
-      },
-      {
-        "id": "step-3",
-        "text": "Plan the smallest repair and the focused regression evidence that will distinguish the root cause from downstream symptoms."
-      },
-      {
-        "id": "step-4",
-        "text": "When repair is authorized, write or update a focused failing test where a meaningful seam exists, then implement only the planned change."
-      },
-      {
-        "id": "step-5",
-        "text": "Rerun the exact failing build command and the smallest relevant test set on the current revision, recording exit status and limitations."
-      },
-      {
-        "id": "step-6",
-        "text": "Independently review the semantic diff, build evidence, generated artifacts, dependency changes, and scope before reporting."
-      }
-    ],
-    "scopeNotes": [
-      "Do not upgrade dependencies, clear shared caches, regenerate broad artifacts, or modify lockfiles unless the evidence and user-authorized repair require it.",
-      "Compose code.debug for diagnosis-only work, code.dev for production changes, and code.test for independently planned test execution."
-    ],
-    "skills": [
-      "build-toolchain-diagnostics",
-      "systematic-debugging",
-      "test-driven-development",
-      "verification-before-completion"
-    ],
-    "qualityChecks": [
-      "exact build command correspondence, current failure evidence, root-cause evidence, focused regression coverage, successful current-revision rerun, semantic diff review, and explicit limitations"
+      "acceptance-to-file coverage, local entry-to-caller-to-test trace, current official and community evidence when decision-relevant, complete plan-review disposition, parallel vertical slices with non-overlapping write sets, task-owned RED-before-production and same-command GREEN evidence, Main self-review of the current semantic diff and cross-slice interactions, bounded reviewer evidence, finding reconciliation, and explicit authority and limitation reporting"
     ],
     "riskNotes": [
-      "Toolchain and dependency changes can widen the diff or invalidate reproducibility; keep them evidence-driven and reversible."
+      "External examples can be stale or inapplicable, and broad code searches can create noise; record versions, prefer primary documentation for behavior, and use community reports as leads rather than local truth.",
+      "Overlapping write sets, hidden dependencies, or horizontal test and production assignments can invalidate parallel evidence; change wave boundaries or keep the complete vertical slice with one task.",
+      "Repeated review without materially changed input wastes context and can create churn; request a fresh review only after the plan, semantic diff, or evidence changed."
     ],
     "roles": [
-      "explore",
       "plan",
-      "implementation-task",
+      "task",
       "reviewer"
     ],
     "delegation": [
-      "steps-1-2: explore collects bounded read-only build, toolchain, configuration, dependency, and source evidence",
-      "step-3: plan owns the minimal repair and verification plan without editing files",
-      "step-4: implementation-task owns only the authorized focused test and implementation changes",
-      "step-6: reviewer independently audits the diff and current build and test evidence"
-    ]
-  },
-  {
-    "id": "performance.optimize",
-    "chooseWhen": "The user wants a measured performance improvement with a preserved correctness contract rather than an unmeasured cleanup.",
-    "composeWith": [
-      "code.plan",
-      "code.dev",
-      "code.test",
-      "code.review"
-    ],
-    "steps": [
-      {
-        "id": "step-1",
-        "text": "Define the operation, metric, correctness gate, representative input, baseline environment, and bounded search budget."
-      },
-      {
-        "id": "step-2",
-        "text": "Measure a reproducible baseline and profile the actual bottleneck before proposing source changes."
-      },
-      {
-        "id": "step-3",
-        "text": "Plan one evidence-backed optimization hypothesis at a time with rollback and regression checks."
-      },
-      {
-        "id": "step-4",
-        "text": "Implement the smallest authorized variant while preserving the correctness gate and avoiding unrelated refactors."
-      },
-      {
-        "id": "step-5",
-        "text": "Repeat the benchmark under the same conditions, run correctness tests, and compare the result against baseline and measurement noise."
-      },
-      {
-        "id": "step-6",
-        "text": "Independently review the profiling evidence, semantic diff, correctness results, claimed delta, reproducibility, and rollback."
-      }
-    ],
-    "scopeNotes": [
-      "Do not claim a global optimum from a bounded search or accept a faster result that fails the correctness gate.",
-      "Load stack-specific performance skills only when they match the measured bottleneck."
-    ],
-    "skills": [
-      "benchmark",
-      "benchmark-optimization-loop",
-      "test-driven-development",
-      "verification-before-completion"
-    ],
-    "qualityChecks": [
-      "reproducible baseline, profile-backed bottleneck, bounded hypothesis, same-condition comparison, correctness preservation, repeated performance delta, semantic diff review, and rollback evidence"
-    ],
-    "riskNotes": [
-      "Benchmarks can mutate data, consume substantial compute, or mislead when environments differ; bound cost and record conditions."
-    ],
-    "roles": [
-      "explore",
-      "plan",
-      "implementation-task",
-      "reviewer"
-    ],
-    "delegation": [
-      "steps-1-2: explore gathers bounded read-only baseline, benchmark, profile, and relevant source context",
-      "step-3: plan owns the measurable optimization and rollback plan without editing files",
-      "step-4: implementation-task owns only the selected bounded optimization variant and focused tests",
-      "step-6: reviewer independently audits the baseline, profile, diff, correctness, claimed delta, and reproducibility"
+      "step-plan-review: plan independently challenges Main's supplied complete parallel plan, write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary without editing files",
+      "step-task-batch: task receives every runnable independent vertical slice for the wave in the same native tasks[] batch, with one task per exclusive write set and no child ownership of the parent TODO",
+      "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the public-behavior test mutation, valid RED, minimum production change, same-command GREEN, bounded refactor, and exact returned evidence",
+      "step-main-review: Main waits, integrates, verifies, and reviews the current tree, semantic diff, evidence, scope, and cross-slice interactions before reviewer is assigned",
+      "step-review: reviewer independently reviews the Main-reviewed bounded semantic diff and supplied evidence, does not read the project or run commands, and returns findings without repair or completion authority",
+      "step-repair: task receives only a Main-validated supported finding as a bounded repair assignment; Main refreshes affected evidence and re-reviews before at most one fresh affected reviewer pass"
     ]
   }
 ];

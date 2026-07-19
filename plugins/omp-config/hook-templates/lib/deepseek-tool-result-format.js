@@ -29,12 +29,7 @@ function formatSearchResult(text) {
   return text;
 }
 
-function formatBashResult(text, isError) {
-  if (isError) {
-    const cleaned = cleanBashOutput(text);
-    return cleaned || '[Command failed with no output]';
-  }
-
+function formatBashResult(text) {
   const cleaned = cleanBashOutput(text);
   if (!cleaned) return '[Command produced no output]';
 
@@ -45,11 +40,7 @@ function formatBashResult(text, isError) {
   return cleaned;
 }
 
-function formatEditResult(text, isError) {
-  if (isError) {
-    const msg = text.trim() || 'no details';
-    return `[Edit failed] ${msg}`;
-  }
+function formatEditResult(text) {
   if (!text.trim()) return '[Edit applied successfully]';
   return text;
 }
@@ -83,9 +74,8 @@ function formatError(text, toolName) {
   return `[${toolName} error] ${msg}`;
 }
 
-function ensureNonEmpty(text, toolName, isError) {
+function ensureNonEmpty(text, toolName) {
   if (text.trim()) return text;
-  if (isError) return `[${toolName} failed with no error details]`;
   return `[${toolName} completed with no output]`;
 }
 
@@ -137,11 +127,11 @@ export function formatToolResultEvent(rawEvent = {}) {
             text = formatSearchResult(text);
             break;
           case 'bash':
-            text = formatBashResult(text, false);
+            text = formatBashResult(text);
             break;
           case 'edit':
           case 'ast_edit':
-            text = formatEditResult(text, false);
+            text = formatEditResult(text);
             break;
           case 'find':
             text = formatFindResult(text);
@@ -153,7 +143,7 @@ export function formatToolResultEvent(rawEvent = {}) {
             text = formatBrowserResult(text);
             break;
         }
-        text = ensureNonEmpty(text, toolName, false);
+        text = ensureNonEmpty(text, toolName);
       }
     } else if (toolName === 'bash') {
       text = stripAnsi(text);

@@ -1,6 +1,6 @@
 ---
 name: source-evaluation
-description: Evaluate source reliability and evidence fit for fact checking.
+description: Supporting method for comparing source authority, freshness, independence, and exact evidence fit during fact checking. It is not a complete fact-check workflow and does not issue claim verdicts by itself.
 ---
 
 # Source Evaluation
@@ -19,6 +19,22 @@ Check:
 - Is the source independent when the task actually requires another evidence lane?
 - Does the evidence support the exact wording, or only a weaker adjacent claim?
 - Are units, dates, versions, authors, and titles aligned?
+
+Compare subject, predicate, object/value, scope, time/version, and quantifier.
+Evidence for a weaker or adjacent statement is `INSUFFICIENT`, not support for
+the broader claim. Evidence can contradict only the same aligned tuple; a
+different scope, date, version, or population is merely incomparable unless it
+directly negates the claim.
+
+Record concrete limitations before the verdict. A missing passage, unknown
+scope or date, incomplete search space, or metadata-only match constrains the
+verdict even when the source itself is authoritative.
+
+Do not silently bridge different subjects or containers: a catalog listing is
+not evidence about a release unless completeness and release identity are
+established. Treat absence evidence the same way. It can negate an existence
+claim only when the observed search space is exhaustive, current, and aligned
+to the claim; unknown coverage is `INSUFFICIENT`.
 
 For a focused check, inspect available local source text once before considering
 network evidence. Bibliography metadata, a DOI, or an arXiv identifier confirms

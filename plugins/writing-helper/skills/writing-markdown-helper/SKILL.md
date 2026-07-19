@@ -1,6 +1,6 @@
 ---
 name: writing-markdown-helper
-description: "English markdown drafting and revision, with optional user-requested paragraph-by-paragraph review"
+description: Draft or directly revise English Markdown when edited prose is the requested deliverable. Not for review-only findings, LaTeX targets, or fast multi-section first drafts; paragraph-by-paragraph confirmation is optional only when requested.
 ---
 
 # Writing Markdown Helper Skill

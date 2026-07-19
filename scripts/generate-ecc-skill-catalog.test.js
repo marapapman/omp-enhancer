@@ -28,10 +28,12 @@ test('ECC catalog generator exposes nested guides through one OMP-discoverable S
   const index = await readFile(path.join(root, 'SKILL.md'), 'utf8');
   const catalog = await readFile(path.join(root, 'catalog.md'), 'utf8');
   assert.match(index, /^---\nname: ecc-skill-catalog\n/m);
-  assert.match(index, /no directly visible OMP Skill adequately matches/i);
+  assert.match(index, /no directly visible subject-domain Skill applies/i);
+  assert.match(index, /writing or output-format Skill does not replace the subject guide/i);
   assert.match(index, /Pi-hole, BGP, Ktor, Laravel, or ClickHouse/);
   assert.match(index, /skill:\/\/ecc-skill-catalog\/catalog\.md/);
   assert.match(index, /smallest matching nested guide/i);
+  assert.match(index, /mark it unavailable only after that read fails/i);
   assert.doesNotMatch(index, /Alpha specialist guidance|Zeta specialist guidance/);
 
   assert.ok(catalog.indexOf('`alpha-guide`') < catalog.indexOf('`zeta-guide`'));

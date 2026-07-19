@@ -9,7 +9,7 @@ import { researchWorkflows } from './definitions/research.js';
 import { writingWorkflows } from './definitions/writing.js';
 import { defineWorkflowCatalog } from './schema.js';
 
-export const WORKFLOW_CATALOG_VERSION = 12;
+export const WORKFLOW_CATALOG_VERSION = 18;
 
 export const workflowDefinitions = defineWorkflowCatalog([
   generalWorkflows,
@@ -23,9 +23,9 @@ export const workflowDefinitions = defineWorkflowCatalog([
   operationWorkflows,
 ]);
 
-export const workflowRouteNames = Object.freeze(workflowDefinitions.map(({ id }) => id));
+export const workflowIds = Object.freeze(workflowDefinitions.map(({ id }) => id));
 
-export const workflowRouteCatalog = Object.freeze(Object.fromEntries(
+export const workflowCatalog = Object.freeze(Object.fromEntries(
   workflowDefinitions.map((definition) => [definition.id, Object.freeze({
     chooseWhen: definition.chooseWhen,
     composeWith: definition.composeWith,

@@ -5,9 +5,9 @@ export const ADVISOR_BLOCK_END = '<!-- OMP-ENHANCER-ADVISOR-WORKFLOW-CONTEXT:END
 export const CATALOG_BLOCK_START = '<!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->';
 export const CATALOG_BLOCK_END = '<!-- OMP-ENHANCER-WORKFLOW-CATALOG:END -->';
 
-// This is the exact guidance suffix shipped by the legacy WATCHDOG.yml asset.
-// Keep this byte-for-byte and adjacency-gated: a partial or user-edited copy is
-// user content and must survive workflow-context sync.
+// These retired identifiers are byte-for-byte migration fingerprints only and
+// are never emitted as current guidance. Keep the legacy suffix adjacency-gated:
+// a partial or user-edited copy is user content and must survive context sync.
 const LEGACY_ADVISOR_GUIDANCE_BLOCK = [
   "  Review the main agent as an advisory peer. Stay silent when the work is already correct or complete.",
   '',

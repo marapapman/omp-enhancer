@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
+import { readBrowserEvidenceValue } from '../browserSchemas.js';
 import { isRecord } from '../utils.js';
 export const TESTING_STATE_ENTRY = 'omp-testing-enhancer.state';
 export const TESTING_EVIDENCE_ENTRY = 'omp-testing-enhancer.evidence';
-export const TESTING_STATE_SCHEMA_VERSION = 4;
-export const TESTING_EVIDENCE_SCHEMA_VERSION = 2;
+export const TESTING_STATE_SCHEMA_VERSION = 5;
+export const TESTING_EVIDENCE_SCHEMA_VERSION = 3;
 export function createInitialTestingReviewState() {
     return {
         schemaVersion: TESTING_STATE_SCHEMA_VERSION,
@@ -23,9 +24,12 @@ export function restoreTestingReviewStateFromEntries(entries, options = {}) {
         const state = readTestingReviewState(entry.data);
         if (!state)
             continue;
-        if (options.requireCurrentRoute) {
-            const hasObservedReview = state.reviewRunId !== undefined || state.lastReviewResults.length > 0;
-            if (!options.routeIdentity || state.routeIdentity !== options.routeIdentity || !hasObservedReview)
+        if (options.requireCurrentTaskContext) {
+            const hasObservedReview = state.reviewRunId !== undefined
+                || state.lastReviewResults.length > 0
+                || state.lastObservedTestCommand !== undefined
+                || state.lastObservedBrowserEvidence !== undefined;
+            if (!options.taskContextIdentity || state.taskContextIdentity !== options.taskContextIdentity || !hasObservedReview)
                 continue;
         }
         restored = state;
@@ -39,7 +43,7 @@ export function startTestingReview(state, targets, scope = {}) {
         lastTargets: targets,
         lastReviewResults: [],
         evidenceRevision: state.evidenceRevision + 1,
-        ...(scope.routeIdentity !== undefined ? { routeIdentity: scope.routeIdentity } : {}),
+        ...(scope.taskContextIdentity !== undefined ? { taskContextIdentity: scope.taskContextIdentity } : {}),
         ...(scope.runId !== undefined ? { reviewRunId: scope.runId } : {})
     };
 }
@@ -52,20 +56,14 @@ export function completeTestingReview(state, reviewResults) {
         evidenceRevision: state.evidenceRevision + 1
     };
 }
-export function recordTestingReport(state, markdown) {
-    return {
-        ...state,
-        lastReportMarkdown: markdown
-    };
-}
 export function recordObservedTestCommand(state, evidence) {
-    if (state.routeIdentity && evidence.routeIdentity !== state.routeIdentity)
+    if (state.taskContextIdentity && evidence.taskContextIdentity !== state.taskContextIdentity)
         return state;
     return {
         ...state,
         lastObservedTestCommand: evidence,
         evidenceRevision: state.evidenceRevision + 1,
-        ...(state.routeIdentity ? {} : { routeIdentity: evidence.routeIdentity })
+        ...(state.taskContextIdentity ? {} : { taskContextIdentity: evidence.taskContextIdentity })
     };
 }
 export function invalidateObservedTestCommand(state) {
@@ -81,10 +79,35 @@ export function invalidateObservedTestCommand(state) {
         evidenceRevision: state.evidenceRevision + 1
     };
 }
-export function scopeTestingReviewToRoute(state, routeIdentity) {
-    if (state.routeIdentity === routeIdentity)
+export function recordObservedBrowserEvidence(state, observed) {
+    if (state.taskContextIdentity && observed.taskContextIdentity !== state.taskContextIdentity)
         return state;
-    return { ...createInitialTestingReviewState(), routeIdentity };
+    return {
+        ...state,
+        lastObservedBrowserEvidence: observed,
+        evidenceRevision: state.evidenceRevision + 1,
+        ...(state.taskContextIdentity ? {} : { taskContextIdentity: observed.taskContextIdentity })
+    };
+}
+export function invalidateObservedBrowserEvidence(state) {
+    if (!state.lastObservedBrowserEvidence)
+        return state;
+    const { lastObservedBrowserEvidence: _discarded, ...rest } = state;
+    const lastReviewResults = state.lastReviewResults.filter(result => result.gate !== 'browser-interaction' && result.gate !== 'browser-visual');
+    const hasActiveReview = state.reviewRunId !== undefined
+        || state.lastTargets.length > 0
+        || lastReviewResults.length > 0;
+    return {
+        ...rest,
+        lastReviewResults,
+        reviewStatus: hasActiveReview ? 'collecting' : state.reviewStatus,
+        evidenceRevision: state.evidenceRevision + 1
+    };
+}
+export function scopeTestingReviewToTaskContext(state, taskContextIdentity) {
+    if (state.taskContextIdentity === taskContextIdentity)
+        return state;
+    return { ...createInitialTestingReviewState(), taskContextIdentity };
 }
 export function hasTestingReviewData(state) {
     return state.reviewStatus !== 'idle'
@@ -94,7 +117,7 @@ export function hasTestingReviewData(state) {
 }
 export function buildTestingReviewEvidence(state, updatedAt = Date.now()) {
     const runId = state.reviewRunId ?? 'testing-unscoped';
-    const routeIdentity = state.routeIdentity ?? `testing:${runId}`;
+    const taskContextIdentity = state.taskContextIdentity ?? `testing:${runId}`;
     const reviewStatus = state.reviewStatus === 'idle' ? 'collecting' : state.reviewStatus;
     const criticalFindings = [...new Set(state.lastReviewResults
             .filter(result => !result.passed && result.severity === 'critical')
@@ -104,7 +127,7 @@ export function buildTestingReviewEvidence(state, updatedAt = Date.now()) {
         .sort((left, right) => left.gate.localeCompare(right.gate));
     const evidenceDigest = digest({
         schemaVersion: TESTING_EVIDENCE_SCHEMA_VERSION,
-        routeIdentity,
+        taskContextIdentity,
         runId,
         reviewStatus,
         criticalFindings,
@@ -112,7 +135,7 @@ export function buildTestingReviewEvidence(state, updatedAt = Date.now()) {
     });
     return {
         schemaVersion: TESTING_EVIDENCE_SCHEMA_VERSION,
-        routeIdentity,
+        taskContextIdentity,
         runId,
         reviewStatus,
         criticalFindings,
@@ -123,7 +146,7 @@ export function buildTestingReviewEvidence(state, updatedAt = Date.now()) {
     };
 }
 function readTestingReviewState(value) {
-    if (!isRecord(value) || value.schemaVersion !== TESTING_STATE_SCHEMA_VERSION)
+    if (!isRecord(value) || (value.schemaVersion !== TESTING_STATE_SCHEMA_VERSION && value.schemaVersion !== 4))
         return undefined;
     if (!isTestingReviewStatus(value.reviewStatus))
         return undefined;
@@ -138,15 +161,18 @@ function readTestingReviewState(value) {
             ? Number(value.evidenceRevision)
             : 0
     };
-    if (typeof value.routeIdentity === 'string' && value.routeIdentity.trim() !== '')
-        state.routeIdentity = value.routeIdentity;
+    const taskContextIdentity = readTaskContextIdentity(value, value.schemaVersion === 4);
+    if (taskContextIdentity)
+        state.taskContextIdentity = taskContextIdentity;
     if (typeof value.reviewRunId === 'string')
         state.reviewRunId = value.reviewRunId;
-    if (typeof value.lastReportMarkdown === 'string')
-        state.lastReportMarkdown = value.lastReportMarkdown;
     const observedTestCommand = readObservedTestCommandEvidence(value.lastObservedTestCommand);
-    if (observedTestCommand && (!state.routeIdentity || observedTestCommand.routeIdentity === state.routeIdentity)) {
+    if (observedTestCommand && (!state.taskContextIdentity || observedTestCommand.taskContextIdentity === state.taskContextIdentity)) {
         state.lastObservedTestCommand = observedTestCommand;
+    }
+    const observedBrowserEvidence = readObservedBrowserEvidence(value.lastObservedBrowserEvidence);
+    if (observedBrowserEvidence && (!state.taskContextIdentity || observedBrowserEvidence.taskContextIdentity === state.taskContextIdentity)) {
+        state.lastObservedBrowserEvidence = observedBrowserEvidence;
     }
     if (state.lastTargets.length !== value.lastTargets.length)
         return undefined;
@@ -155,9 +181,10 @@ function readTestingReviewState(value) {
     return state;
 }
 function readObservedTestCommandEvidence(value) {
-    if (!isRecord(value) || value.schemaVersion !== 1)
+    if (!isRecord(value) || (value.schemaVersion !== 2 && value.schemaVersion !== 1))
         return undefined;
-    if (typeof value.routeIdentity !== 'string' || !value.routeIdentity.trim())
+    const taskContextIdentity = readTaskContextIdentity(value, value.schemaVersion === 1);
+    if (!taskContextIdentity)
         return undefined;
     if (typeof value.commandDigest !== 'string' || !/^[0-9a-f]{64}$/.test(value.commandDigest))
         return undefined;
@@ -166,12 +193,40 @@ function readObservedTestCommandEvidence(value) {
     if (!Number.isFinite(value.observedAt) || Number(value.observedAt) <= 0)
         return undefined;
     return {
-        schemaVersion: 1,
-        routeIdentity: value.routeIdentity,
+        schemaVersion: 2,
+        taskContextIdentity,
         commandDigest: value.commandDigest,
         exitCode: Number(value.exitCode),
         observedAt: Number(value.observedAt)
     };
+}
+function readObservedBrowserEvidence(value) {
+    if (!isRecord(value) || (value.schemaVersion !== 2 && value.schemaVersion !== 1))
+        return undefined;
+    const taskContextIdentity = readTaskContextIdentity(value, value.schemaVersion === 1);
+    if (!taskContextIdentity)
+        return undefined;
+    if (!Number.isFinite(value.observedAt) || Number(value.observedAt) <= 0)
+        return undefined;
+    const evidence = readBrowserEvidenceValue(value.evidence);
+    if (!evidence)
+        return undefined;
+    return {
+        schemaVersion: 2,
+        taskContextIdentity,
+        evidence,
+        observedAt: Number(value.observedAt)
+    };
+}
+function readTaskContextIdentity(value, allowLegacyRouteName = false) {
+    if (typeof value.taskContextIdentity === 'string' && value.taskContextIdentity.trim()) {
+        return value.taskContextIdentity;
+    }
+    // State schema v4 and observation schema v1 used the retired route name.
+    if (allowLegacyRouteName && typeof value.routeIdentity === 'string' && value.routeIdentity.trim()) {
+        return value.routeIdentity.replace(/^route:/, 'task:');
+    }
+    return undefined;
 }
 function digest(value) {
     return createHash('sha256').update(JSON.stringify(value)).digest('hex');

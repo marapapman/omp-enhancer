@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import {
   analyzeExternalActionPrompt,
   analyzeExternalActionContracts,
-  externalActionMatchesTool,
   normalizeExternalActionContract,
 } from '../src/external-action-policy.js';
 
@@ -122,68 +121,9 @@ test('prompt target extraction is role-aware instead of treating body mentions a
   assert.equal(slack.target.value, 'c1');
 });
 
-test('externalActionMatchesTool requires exact provider, action, and role-bearing input target', () => {
-  const calls = [
-    [
-      analyzeExternalActionPrompt('Send email to alice@example.com.'),
-      'gmail.send_email',
-      { to: 'alice@example.com', body: 'Mention bob@example.com' },
-      { to: 'bob@example.com', body: 'Mention alice@example.com' },
-    ],
-    [
-      analyzeExternalActionPrompt('Post a Slack message to #C1.'),
-      'slack.post_message',
-      { channel: 'C1', text: 'Mention C2' },
-      { channel: 'C2', text: 'Mention C1' },
-    ],
-    [analyzeExternalActionPrompt('Create a Jira issue in project CORE.'), 'jira.create_issue', { projectKey: 'CORE' }, { projectKey: 'OTHER' }],
-    [analyzeExternalActionPrompt('Upload report.pdf to Google Drive folder reports.'), 'google_drive.upload_file', { folderId: 'reports' }, { folderId: 'archive' }],
-    [analyzeExternalActionPrompt('Schedule an event on team@example.com calendar.'), 'google_calendar.create_event', { calendarId: 'team@example.com' }, { calendarId: 'primary' }],
-    [analyzeExternalActionPrompt('Update Notion page roadmap.'), 'notion.update_page', { page_id: 'roadmap' }, { page_id: 'other' }],
-  ];
-
-  for (const [contract, toolName, goodInput, wrongInput] of calls) {
-    assert.equal(externalActionMatchesTool(contract, { toolName, input: goodInput }), true, toolName);
-    assert.equal(externalActionMatchesTool(contract, toolName, JSON.stringify(goodInput)), true, `${toolName} JSON`);
-    assert.equal(externalActionMatchesTool(contract, { toolName, input: wrongInput }), false, `${toolName} wrong target`);
-  }
-
-  const email = analyzeExternalActionPrompt('Send email to alice@example.com.');
-  assert.equal(externalActionMatchesTool(email, { toolName: 'slack.post_message', input: { channel: 'alice@example.com' } }), false);
-  assert.equal(externalActionMatchesTool(email, { toolName: 'gmail.create_draft', input: { to: 'alice@example.com' } }), false);
-  assert.equal(externalActionMatchesTool(analyzeExternalActionPrompt('Send an email.'), {
-    toolName: 'gmail.send_email', input: { to: 'alice@example.com' },
-  }), false);
-});
-
 test('normalization filters malformed contracts and preserves complete contracts across JSON', () => {
   const contract = analyzeExternalActionPrompt('Post a Slack message to #ops.');
   assert.deepEqual(normalizeExternalActionContract(JSON.parse(JSON.stringify(contract))), contract);
   assert.equal(normalizeExternalActionContract({ state: 'complete', provider: 'slack', action: 'post-message' }), null);
   assert.equal(normalizeExternalActionContract({ state: 'complete', provider: 'unknown', action: 'post-message', target: {} }), null);
-});
-
-test('generic Slack and Notion envelopes require exact operation, method, path, and target', () => {
-  const slack = analyzeExternalActionPrompt('Post a Slack message to #C1.');
-  assert.equal(externalActionMatchesTool(slack, {
-    toolName: 'mcp__slack__api_call',
-    input: { operation: 'chat.postMessage', channel: 'C1', text: 'Mention C2' },
-  }), true);
-  for (const input of [
-    { operation: 'chat.update', channel: 'C1' },
-    { operation: 'chat.postMessage', channel: 'C2', text: 'Mention C1' },
-    { operation: 'conversations.history', channel: 'C1' },
-  ]) assert.equal(externalActionMatchesTool(slack, { toolName: 'mcp__slack__api_call', input }), false);
-
-  const notion = analyzeExternalActionPrompt('Update Notion page roadmap.');
-  assert.equal(externalActionMatchesTool(notion, {
-    toolName: 'mcp__notion__request',
-    input: { method: 'PATCH', path: '/v1/pages/roadmap', body: { title: 'Roadmap' } },
-  }), true);
-  for (const input of [
-    { method: 'GET', path: '/v1/pages/roadmap' },
-    { method: 'POST', path: '/v1/pages/roadmap' },
-    { method: 'PATCH', path: '/v1/pages/other', body: { text: 'roadmap' } },
-    { method: 'PATCH', path: '/v1/databases/roadmap' },
-  ]) assert.equal(externalActionMatchesTool(notion, { toolName: 'mcp__notion__request', input }), false);
 });

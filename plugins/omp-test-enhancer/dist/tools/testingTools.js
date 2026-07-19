@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { browserCheckExecutionFailureEvidence, invalidBrowserCheckEvidence, parseBrowserCheckParams, readBrowserEvidenceValue } from '../browserSchemas.js';
 import { evaluateBrowserEvidenceGate } from '../gates/browserEvidenceGate.js';
 import { evaluateIndirectTestGate } from '../gates/indirectTestGate.js';
 import { evaluateTestCommandGate } from '../gates/testCommandGate.js';
@@ -57,11 +58,27 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
                 baseUrl: z.string(),
                 serverCommand: z.optional(z.string()),
                 artifactDir: z.optional(z.string()),
+                targetIds: z.optional(z.array(z.string())),
                 setup: z.optional(z.unknown()),
                 scenarios: z.array(z.unknown())
             }),
             execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-                const output = await (callbacks.runBrowserCheck ?? runDefaultBrowserCheck)(params, ctx);
+                const parsed = parseBrowserCheckParams(params);
+                let output;
+                if (!parsed.ok) {
+                    output = invalidBrowserCheckEvidence(params, parsed.error);
+                }
+                else {
+                    try {
+                        const rawOutput = await (callbacks.runBrowserCheck ?? runDefaultBrowserCheck)(parsed.value, ctx);
+                        output = readBrowserEvidenceValue(rawOutput)
+                            ?? invalidBrowserCheckEvidence(params, { path: '$.result', message: 'Browser runner returned malformed evidence.' });
+                    }
+                    catch (error) {
+                        output = browserCheckExecutionFailureEvidence(parsed.value, error);
+                    }
+                }
+                await callbacks.onBrowserCheck?.(output, ctx);
                 return textResult(output.status === 'passed' ? 'Browser check passed.' : output.status === 'skipped' ? 'Browser check skipped.' : 'Browser check failed.', output);
             }
         },
@@ -96,19 +113,20 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
             }
         },
         {
-            name: 'omp_test_gate',
+            name: 'omp_test_review',
             label: 'Review test evidence',
-            description: '兼容名称：运行建议型测试审查，报告间接测试、测试文件范围、浏览器证据和测试命令 findings；不会执行命令或阻止工具与会话',
+            description: '只读汇总当前 task context 中宿主已观察到的测试和浏览器证据；不会执行命令、阻止会话或触发修复',
             defaultInactive: true,
             approval: 'read',
             parameters: z.object({
                 targets: z.array(targetSchema),
                 candidate: candidateSchema,
-                testCommand: z.optional(z.string()),
-                browserEvidence: z.optional(z.unknown())
+                testCommand: z.optional(z.string())
             }),
             execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-                const output = await executeReview(params, ctx, callbacks.getObservedTestCommandEvidence?.());
+                const observedBrowserEvidence = callbacks.getObservedBrowserEvidence?.(ctx);
+                const observedTestCommandEvidence = callbacks.getObservedTestCommandEvidence?.();
+                const output = await executeReview(params, ctx, observedTestCommandEvidence, observedBrowserEvidence);
                 await callbacks.onReview?.(output, ctx);
                 return textResult(output.passed ? 'Test review is ready.' : 'Test review found critical findings.', output);
             }
@@ -120,18 +138,17 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
             defaultInactive: true,
             approval: 'read',
             parameters: z.object({
-                gateResults: z.optional(z.array(gateResultSchema)),
+                reviewResults: z.optional(z.array(gateResultSchema)),
                 runId: z.optional(z.string())
             }),
-            execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
+            execute: async (_toolCallId, params, _signal, _onUpdate, _ctx) => {
                 const reportParams = params;
-                const explicitResults = Array.isArray(reportParams.gateResults) ? reportParams.gateResults : undefined;
+                const explicitResults = Array.isArray(reportParams.reviewResults) ? reportParams.reviewResults : undefined;
                 const stateResults = explicitResults ?? callbacks.getRecentReviewResults?.();
                 if (!stateResults || stateResults.length === 0) {
                     return textResult('No test review result found.', { found: false });
                 }
-                const output = buildTestReport({ gateResults: stateResults });
-                await callbacks.onReport?.(output, ctx);
+                const output = buildTestReport({ reviewResults: stateResults });
                 return textResult(output.markdown, output);
             }
         }
@@ -150,10 +167,15 @@ async function runDefaultBrowserCheck(params, ctx) {
             status: 'skipped',
             runId: 'browser-check-unavailable',
             baseUrl: params.baseUrl,
+            targetIds: params.targetIds ?? [],
             browser: 'chromium',
+            scenarioCount: 0,
+            stepCount: 0,
+            captureCount: 0,
+            visualAssertionCount: 0,
             findings: [{
                     gate: 'browser-interaction',
-                    passed: true,
+                    passed: false,
                     severity: 'warning',
                     category: 'setup',
                     summary: 'Playwright is not installed.',
@@ -170,7 +192,7 @@ export function analyzeTestTargets(input) {
         runId: 'local-analysis',
         targets,
         warnings: [],
-        nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report']
+        nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_review', 'omp_test_report']
     };
 }
 export function buildTestContext(input) {
@@ -203,15 +225,14 @@ export function runTestReview(input, testCommandResult, options = {}) {
             targetIds: browserTargets.map(target => target.id)
         }),
         ...evaluateTestCommandGate(testCommandResult, {
-            severity: options.reviewSeverities?.testCommand ?? (testCommandResult ? 'critical' : 'warning'),
-            notEvaluatedDueToStaticFindings: Boolean(options.commandNotEvaluatedDueToStaticFindings)
+            severity: options.reviewSeverities?.testCommand ?? (testCommandResult ? 'critical' : 'warning')
         })
     ];
-    return buildAdvisoryGateOutput(results);
+    return buildAdvisoryReviewOutput(results);
 }
 export function buildTestReport(input) {
-    const gateResults = readGateResults(input);
-    const criticalFindings = gateResults.filter(result => !result.passed && result.severity === 'critical');
+    const reviewResults = readReviewResults(input);
+    const criticalFindings = reviewResults.filter(result => !result.passed && result.severity === 'critical');
     const lines = [
         '# OMP Testing Enhancer report',
         '',
@@ -220,7 +241,7 @@ export function buildTestReport(input) {
         'Review effect: advisory guidance only',
         ''
     ];
-    for (const result of gateResults) {
+    for (const result of reviewResults) {
         if (result.severity === 'warning') {
             lines.push(`* ${result.gate}: warning, ${result.summary}`);
             lines.push(...evidenceLines(result.evidence));
@@ -280,15 +301,15 @@ async function executeAnalyze(params, ctx) {
     else {
         const changedPaths = await readGitChangedPaths(ctx);
         if (changedPaths.length === 0)
-            warnings.push('No changed files detected. Pass files to /test <file> or omp_test_analyze.files.');
+            warnings.push('No changed files detected. Pass explicit workspace-relative paths through omp_test_analyze.files.');
         files = await readRepoFiles(cwd, changedPaths);
     }
     const targets = await enrichTargets(cwd, classifyChangedFiles(files));
     return {
-        runId: `test-${Date.now().toString(36)}`,
+        runId: `test-${randomUUID()}`,
         targets,
         warnings,
-        nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report']
+        nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_review', 'omp_test_report']
     };
 }
 async function executeContext(params, ctx) {
@@ -320,7 +341,7 @@ async function readJsonReport(cwd, reportPath) {
         return undefined;
     }
 }
-async function executeReview(params, ctx, observedTestCommand) {
+async function executeReview(params, ctx, observedTestCommand, observedBrowserEvidence) {
     const config = await readTestingEnhancerConfig(contextCwd(ctx));
     const severities = reviewSeveritiesFromConfig(config);
     const candidate = await readCandidateForReview(params, ctx);
@@ -330,28 +351,32 @@ async function executeReview(params, ctx, observedTestCommand) {
         ...evaluateTestFileScopeGate({ candidate, severity: severities.productionEdits }),
         ...evaluateIndirectTestGate({ candidate, targets, severity: severities.indirectTest })
     ];
-    const browserResults = evaluateBrowserEvidenceGate(readBrowserEvidence(params), {
+    const browserResults = evaluateBrowserEvidenceGate(observedBrowserEvidence, {
         required: browserTargets.length > 0,
         severity: severities.browserEvidence,
         targetIds: browserTargets.map(target => target.id)
     });
-    const hasStaticCriticalFinding = staticResults.some(result => !result.passed && result.severity === 'critical');
-    const expectedCommand = params.testCommand ?? config?.test.command;
-    const commandResult = !hasStaticCriticalFinding
+    const configuredCommand = normalizeCommand(config?.test.command);
+    const suppliedCommand = normalizeCommand(params.testCommand);
+    const expectedCommand = configuredCommand ?? suppliedCommand;
+    const hasCommandConflict = Boolean(configuredCommand && suppliedCommand && digestCommand(configuredCommand) !== digestCommand(suppliedCommand));
+    const commandResult = !hasCommandConflict
         ? observedTestCommandResult(observedTestCommand, expectedCommand)
         : undefined;
     const commandSeverity = expectedCommand || observedTestCommand || config ? severities.testCommand : 'warning';
+    const commandResults = hasCommandConflict && configuredCommand && suppliedCommand
+        ? [configuredCommandConflictResult(configuredCommand, suppliedCommand, commandSeverity)]
+        : evaluateTestCommandGate(commandResult, {
+            severity: commandSeverity
+        });
     const results = [
         ...staticResults,
         ...browserResults,
-        ...evaluateTestCommandGate(commandResult, {
-            severity: commandSeverity,
-            notEvaluatedDueToStaticFindings: Boolean((expectedCommand || observedTestCommand) && hasStaticCriticalFinding)
-        })
+        ...commandResults
     ];
-    return buildAdvisoryGateOutput(results);
+    return buildAdvisoryReviewOutput(results);
 }
-function buildAdvisoryGateOutput(results) {
+function buildAdvisoryReviewOutput(results) {
     const criticalFindings = [...new Set(results
             .filter(result => !result.passed && result.severity === 'critical')
             .map(result => result.gate))];
@@ -458,6 +483,23 @@ function observedTestCommandResult(evidence, expectedCommand) {
         stdout: '',
         stderr: ''
     };
+}
+function configuredCommandConflictResult(configuredCommand, suppliedCommand, severity) {
+    return {
+        gate: 'test-command',
+        passed: false,
+        severity,
+        summary: 'Tool testCommand conflicts with the project-configured test command.',
+        evidence: {
+            configuredCommandDigest: digestCommand(configuredCommand),
+            suppliedCommandDigest: digestCommand(suppliedCommand)
+        },
+        repairHint: 'Remove the tool-level testCommand override and use the command configured in .omp/testing-enhancer.yml.'
+    };
+}
+function normalizeCommand(command) {
+    const normalized = String(command ?? '').trim();
+    return normalized || undefined;
 }
 function digestCommand(command) {
     return createHash('sha256').update(String(command).trim()).digest('hex');
@@ -870,6 +912,7 @@ function buildBrowserPlanForTarget(target, existingTests) {
         return undefined;
     return {
         framework: 'playwright',
+        targetIds: [target.id],
         setup: {
             viewport: { width: 1280, height: 720 },
             trace: 'retain-on-failure',
@@ -1101,38 +1144,7 @@ function lineFromLocation(value) {
 function readBrowserEvidence(input) {
     if (!isRecord(input))
         return undefined;
-    if (!isRecord(input.browserEvidence))
-        return undefined;
-    const evidence = input.browserEvidence;
-    if (evidence.framework !== 'playwright')
-        return undefined;
-    if (evidence.status !== 'passed' && evidence.status !== 'failed' && evidence.status !== 'skipped')
-        return undefined;
-    if (!Array.isArray(evidence.findings))
-        return undefined;
-    if (!evidence.findings.every(isBrowserFindingValue))
-        return undefined;
-    return evidence;
-}
-function isBrowserFindingValue(value) {
-    if (!isRecord(value))
-        return false;
-    if (value.gate !== 'browser-interaction' && value.gate !== 'browser-visual')
-        return false;
-    if (typeof value.passed !== 'boolean')
-        return false;
-    if (value.severity !== 'critical' && value.severity !== 'warning')
-        return false;
-    if (value.category !== 'actionability' &&
-        value.category !== 'console-error' &&
-        value.category !== 'page-error' &&
-        value.category !== 'network-failure' &&
-        value.category !== 'accessibility' &&
-        value.category !== 'visual-diff' &&
-        value.category !== 'timeout' &&
-        value.category !== 'setup')
-        return false;
-    return typeof value.summary === 'string';
+    return readBrowserEvidenceValue(input.browserEvidence);
 }
 function readTarget(input) {
     const kind = readTargetKind(input.kind);
@@ -1174,13 +1186,13 @@ function readCandidate(input) {
     }
     return { id, targetId, files };
 }
-function readGateResults(input) {
+function readReviewResults(input) {
     if (!isRecord(input))
         return [];
-    if (!Array.isArray(input.gateResults))
+    if (!Array.isArray(input.reviewResults))
         return [];
     const results = [];
-    for (const item of input.gateResults) {
+    for (const item of input.reviewResults) {
         if (!isRecord(item))
             continue;
         if (!isGateNameValue(item.gate))

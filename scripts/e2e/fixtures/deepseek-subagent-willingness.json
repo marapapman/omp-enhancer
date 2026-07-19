@@ -19,6 +19,8 @@
       "maxDuplicateFailedCalls": 0,
       "maxToolCalls": 30,
       "maxSourceSearchCalls": 20,
+      "requiredWorkflowPlanFormat": "block",
+      "minWorkflowPlanNumberedActions": 1,
       "pluginContinuationCount": 0
     }
   },
@@ -30,7 +32,10 @@
       "prompt": "Read README.md and return only its first Markdown heading. Do not modify files or use the network.",
       "expectations": {
         "maxNativeTaskCalls": 0,
-        "maxNativeTaskAssignmentAttempts": 0
+        "maxNativeTaskAssignmentAttempts": 0,
+        "maxNativeTodoCalls": 0,
+        "forbidWorkflowMarkers": true,
+        "forbiddenSkills": ["omp-enhancer-workflows"]
       }
     },
     {
@@ -40,7 +45,13 @@
       "prompt": "Inspect all five workspace plugin package manifests and entry files, but keep all work in the main agent and do not delegate any part. Report only whether every declared entry exists. Do not modify files, run tests, or use the network.",
       "expectations": {
         "maxNativeTaskCalls": 0,
-        "maxNativeTaskAssignmentAttempts": 0
+        "maxNativeTaskAssignmentAttempts": 0,
+        "requiredObservedSkills": ["code-development", "omp-enhancer-workflows"],
+        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requireWorkflowPlanBeforeResourceLoads": true,
+        "forbidResourceProjectSameBatch": true,
+        "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+        "requireExactSelectedWorkflowReferences": true
       }
     },
     {
@@ -50,7 +61,10 @@
       "prompt": "Read plugins/omp-enhancer-core/package.json and plugins/omp-config/package.json and return only the name field from each file. Do not modify files or use the network.",
       "expectations": {
         "maxNativeTaskCalls": 0,
-        "maxNativeTaskAssignmentAttempts": 0
+        "maxNativeTaskAssignmentAttempts": 0,
+        "maxNativeTodoCalls": 0,
+        "forbidWorkflowMarkers": true,
+        "forbiddenSkills": ["omp-enhancer-workflows"]
       }
     },
     {
@@ -58,28 +72,53 @@
       "category": "positive/two-files",
       "cwd": ".",
       "timeoutSeconds": 480,
-      "prompt": "Independently audit plugins/omp-enhancer-core/src/governance.js and plugins/omp-enhancer-core/src/skill-usage.js. For each file, trace externally controlled text or metadata through parsing, normalization, filesystem access, and validation; cover at least three distinct input-boundary failure classes, rank the most consequential gap with line-linked call-chain evidence, and identify missing regression tests. Then compare the two files' containment and false-positive tradeoffs. Do not modify files, run tests, or use the network.",
+      "prompt": "Before any production change, independently challenge two complete implementation plans. Plan A covers plugins/omp-enhancer-core/src/external-action-policy.js; Plan B covers plugins/omp-enhancer-core/src/skill-usage.js. Each plan supplies acceptance criteria, exact local anchors, caller and test seams, one public-behavior assertion with the expected RED and GREEN command, broader verification, and known risks. Check requirement coverage, missing callers or tests, unsafe assumptions, and evidence gaps; no finding is valid when the supplied plan is complete. Compare the two review results and keep every disposition explicit. Do not modify files, run tests, or use the network.",
+      "expectations": {
+        "maxNativeTaskCalls": 1,
+        "maxProjectInspectionCallsBeforeNativeTask": 0,
+        "maxProjectInspectionCallsAfterNativeTask": 4,
+        "agentArtifactReadPolicy": "preview-once",
+        "maxAgentArtifactReadCalls": 2,
+        "minNativeTaskAssignmentAttempts": 2,
+        "maxNativeTaskAssignmentAttempts": 2,
+        "requireNativeTaskBatch": true,
+        "requireNativeTaskCompletion": true,
+        "requireNativeTaskSubmissionForEveryAssignment": true,
+        "requiredObservedSkills": ["code-development", "omp-enhancer-workflows"],
+        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requireWorkflowPlanBeforeResourceLoads": true,
+        "forbidResourceProjectSameBatch": true,
+        "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+        "requireExactSelectedWorkflowReferences": true,
+        "requireNativeTaskMetadataPrefix": true,
+        "requiredNativeTaskAgents": ["plan"],
+        "requiredNativeTaskWorkflows": ["code.dev"],
+        "requiredNativeTaskWorkflowsPerAssignment": ["code.dev"],
+        "requiredNativeTaskSkillsPerAssignment": ["code-development"]
+      }
+    },
+    {
+      "id": "cross-plugin-plan-natural",
+      "category": "positive/cross-plugin-plans",
+      "cwd": ".",
+      "prompt": "Before changing this marketplace, independently challenge two complete cross-plugin plans. The generated workflow parity plan covers plugins/omp-enhancer-core and plugins/omp-config; the public review-tool registration parity plan covers plugins/omp-test-enhancer and plugins/omp-fact-checker. Each plan supplies acceptance criteria, exact local anchors, generated or packaged consumers, a focused RED and GREEN command, broader marketplace and packaging checks, and known risks. Report only concrete plan gaps; no finding is valid when coverage is complete. Compare the two review dispositions without changing the plans. Do not modify files, run tests, or use the network.",
       "expectations": {
         "maxNativeTaskCalls": 1,
         "maxProjectInspectionCallsBeforeNativeTask": 0,
         "maxProjectInspectionCallsAfterNativeTask": 4,
         "minNativeTaskAssignmentAttempts": 2,
         "maxNativeTaskAssignmentAttempts": 2,
-        "requireNativeTaskCompletion": true
-      }
-    },
-    {
-      "id": "five-plugin-natural",
-      "category": "positive/five-plugins",
-      "cwd": ".",
-      "prompt": "For plugins/omp-enhancer-core, plugins/omp-config, plugins/writing-helper, plugins/omp-test-enhancer, and plugins/omp-fact-checker, independently audit how each declared entry file registers hooks, tools, or commands against its package and .omp-plugin/marketplace.json metadata. For every plugin, identify one plugin-specific integration risk or robustness gap with line evidence, then compare the five failure modes. Do not modify files, run tests, or use the network.",
-      "expectations": {
-        "maxNativeTaskCalls": 1,
-        "maxProjectInspectionCallsBeforeNativeTask": 1,
-        "maxProjectInspectionCallsAfterNativeTask": 4,
-        "minNativeTaskAssignmentAttempts": 5,
-        "maxNativeTaskAssignmentAttempts": 5,
-        "requireNativeTaskCompletion": true
+        "requireNativeTaskCompletion": true,
+        "requiredObservedSkills": ["code-development", "omp-enhancer-workflows"],
+        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requireWorkflowPlanBeforeResourceLoads": true,
+        "forbidResourceProjectSameBatch": true,
+        "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+        "requireExactSelectedWorkflowReferences": true,
+        "requiredNativeTaskAgents": ["plan"],
+        "requiredNativeTaskWorkflows": ["omp.plugin"],
+        "requiredNativeTaskWorkflowsPerAssignment": ["omp.plugin"],
+        "requiredNativeTaskSkillsPerAssignment": ["code-development"]
       }
     }
   ]

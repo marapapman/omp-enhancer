@@ -10,7 +10,11 @@ const DEFAULT_MAX_ISSUES = 30;
 
 function normalizeChecks(checks) {
   if (!Array.isArray(checks) || checks.length === 0) return DEFAULT_CHECKS;
-  return checks.filter((check) => VALID_CHECKS.has(check));
+  const invalidChecks = checks.filter((check) => !VALID_CHECKS.has(check));
+  if (invalidChecks.length > 0) {
+    throw new TypeError(`Unsupported writing checks: ${[...new Set(invalidChecks)].join(', ')}`);
+  }
+  return [...new Set(checks)];
 }
 
 function maxIssueCount(value) {
@@ -100,7 +104,19 @@ export function analyzeWritingQuality(input = {}) {
       : {
           compared: false,
           driftDetected: false,
-          findings: [],
+          findings: [{
+            category: 'preservation',
+            dimension: language === 'zh' ? '语义保真' : 'semantic preservation',
+            severity: 'IMPORTANT',
+            location: language === 'zh' ? '全文' : 'document',
+            problem: language === 'zh'
+              ? '缺少原文，无法执行语义保真比较。'
+              : 'The original text is missing, so semantic preservation cannot be compared.',
+            quote: '',
+            suggestion: language === 'zh'
+              ? '提供 originalText 后重新执行语义保真检查。'
+              : 'Provide originalText and rerun the preservation check.',
+          }],
           reason: 'originalText is required for a preservation comparison.',
         };
     issues.push(...preservation.findings);

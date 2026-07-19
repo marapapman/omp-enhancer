@@ -19,10 +19,17 @@
     "pack:all": "node scripts/pack-all.js",
     "check:marketplace": "node scripts/check-marketplace.js",
     "release": "node scripts/release.js",
+    "e2e:main": "node scripts/e2e/run-installed-deepseek-workflow.mjs",
+    "e2e:main:default-profile": "node scripts/e2e/assert-default-main-profile.mjs",
+    "e2e:main:skills": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-skill-discovery.json",
+    "e2e:main:subagents": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-subagent-willingness.json",
+    "e2e:main:advisor": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-advisor-stress.json",
+    "e2e:main:self-iteration": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-self-iteration.json",
     "e2e:deepseek": "node scripts/e2e/run-installed-deepseek-workflow.mjs",
     "e2e:deepseek:skills": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-skill-discovery.json",
     "e2e:deepseek:subagents": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-subagent-willingness.json",
     "e2e:deepseek:advisor": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-advisor-stress.json",
+    "e2e:deepseek:self-iteration": "node scripts/e2e/run-installed-deepseek-workflow.mjs --matrix scripts/e2e/fixtures/deepseek-self-iteration.json",
     "migrate:legacy-gate-skills": "node scripts/migrate-legacy-gate-skills.mjs"
   }
 }

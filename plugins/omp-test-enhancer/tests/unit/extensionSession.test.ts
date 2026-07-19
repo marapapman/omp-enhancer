@@ -3,33 +3,172 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { registerTestingEnhancer } from '../../src/extension.js'
-import { CORE_STATE_ENTRY } from '../../src/session/routeIdentity.js'
-import { TESTING_EVIDENCE_ENTRY } from '../../src/session/testingState.js'
-import type { CommandDefinition, ExtensionAPI, ExtensionCommandContext, ExtensionEventHandler, ExtensionToolContext, ToolDefinition } from '../../src/ompApi.js'
+import { CORE_STATE_ENTRY } from '../../src/session/taskContextIdentity.js'
+import { TESTING_EVIDENCE_ENTRY, TESTING_STATE_ENTRY } from '../../src/session/testingState.js'
+import type { ExtensionAPI, ExtensionEventHandler, ExtensionToolContext, ToolDefinition } from '../../src/ompApi.js'
 
 class FakePi implements ExtensionAPI {
   readonly labels: string[] = []
-  readonly commands = new Map<string, CommandDefinition>()
   readonly tools = new Map<string, ToolDefinition>()
   readonly eventHandlers: Array<{ event: string; handler: ExtensionEventHandler }> = []
-  readonly userMessages: string[] = []
   readonly entries: Array<{ type: string; customType: string; data: unknown }> = []
   readonly zod = { z: fakeZod() }
 
   setLabel(label: string): void { this.labels.push(label) }
-  registerCommand(name: string, command: CommandDefinition): void { this.commands.set(name, command) }
   registerTool(tool: ToolDefinition): void { this.tools.set(tool.name, tool) }
   on(event: string, handler: ExtensionEventHandler): void { this.eventHandlers.push({ event, handler }) }
-  sendUserMessage(content: string): void { this.userMessages.push(content) }
   appendEntry(customType: string, data: unknown): void { this.entries.push({ type: 'custom', customType, data }) }
 }
 
 describe('extension session state', () => {
-  it('binds omp_test_gate to a route-scoped host-observed shell test result', async () => {
+  it('ignores caller browserEvidence and persists only output observed from omp_test_browser_check', async () => {
+    const pi = new FakePi()
+    pi.entries.push(coreTaskContextEntry(91))
+    registerTestingEnhancer(pi)
+    const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-observed-browser-')))
+    await event(pi, 'session_start')({}, ctx)
+    const analyze = pi.tools.get('omp_test_analyze')
+    const browserCheck = pi.tools.get('omp_test_browser_check')
+    const gate = pi.tools.get('omp_test_review')
+    if (!analyze || !browserCheck || !gate) throw new Error('Missing testing tools')
+    await analyze.execute('analyze-browser', {
+      changedFiles: [{ path: 'src/ui/LoginForm.tsx', content: 'export function LoginForm() { return <button>Sign in</button> }' }]
+    }, undefined, undefined, ctx)
+
+    const callerEvidence = {
+      framework: 'playwright',
+      status: 'passed',
+      runId: 'caller-spoof',
+      targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+      scenarioCount: 1,
+      stepCount: 1,
+      captureCount: 1,
+      visualAssertionCount: 1,
+      findings: []
+    }
+    const spoofed = await gate.execute('gate-spoofed-browser', {
+      ...frontendGateParams(),
+      browserEvidence: callerEvidence
+    }, undefined, undefined, ctx)
+    expect(spoofed.details).toMatchObject({
+      passed: false,
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'browser-interaction', summary: 'Browser evidence is required for frontend targets.' })
+      ])
+    })
+
+    const observed = await browserCheck.execute('browser-observed', {
+      baseUrl: 'http://127.0.0.1:3000',
+      artifactDir: '../escape',
+      targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+      scenarios: [{ name: 'login', steps: [{ action: 'goto', url: '/', description: 'Open login' }] }]
+    }, undefined, undefined, ctx)
+    expect(observed.details).toMatchObject({
+      status: 'failed',
+      scenarioCount: 0,
+      stepCount: 0,
+      captureCount: 0,
+      visualAssertionCount: 0
+    })
+    expect(pi.entries.filter(entry => entry.customType === TESTING_STATE_ENTRY).at(-1)?.data).toMatchObject({
+      lastObservedBrowserEvidence: {
+        taskContextIdentity: 'task:91',
+        evidence: expect.objectContaining({ status: 'failed' })
+      }
+    })
+
+    const reviewed = await gate.execute('gate-observed-browser', {
+      ...frontendGateParams(),
+      browserEvidence: callerEvidence
+    }, undefined, undefined, ctx)
+    expect(reviewed.details).toMatchObject({
+      passed: false,
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          gate: 'browser-interaction',
+          summary: 'Browser artifact directory escapes the trusted artifact root or crosses a symbolic link.'
+        })
+      ])
+    })
+  })
+
+  it('invalidates observed browser evidence after workspace mutation and task context identity changes', async () => {
+    const pi = new FakePi()
+    pi.entries.push(coreTaskContextEntry(92))
+    registerTestingEnhancer(pi)
+    const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-browser-invalidation-')))
+    await event(pi, 'session_start')({}, ctx)
+    const analyze = pi.tools.get('omp_test_analyze')
+    const browserCheck = pi.tools.get('omp_test_browser_check')
+    const gate = pi.tools.get('omp_test_review')
+    if (!analyze || !browserCheck || !gate) throw new Error('Missing testing tools')
+    await analyze.execute('analyze-browser', {
+      changedFiles: [{ path: 'src/ui/LoginForm.tsx', content: 'export function LoginForm() { return <button>Sign in</button> }' }]
+    }, undefined, undefined, ctx)
+    const browserParams = {
+      baseUrl: 'http://127.0.0.1:3000',
+      artifactDir: '../escape',
+      targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+      scenarios: [{ name: 'login', steps: [{ action: 'goto', url: '/', description: 'Open login' }] }]
+    }
+    await browserCheck.execute('browser-before-mutation', browserParams, undefined, undefined, ctx)
+
+    await event(pi, 'tool_result')({
+      name: 'edit',
+      input: { path: 'src/ui/LoginForm.tsx' },
+      isError: false,
+      content: [{ type: 'text', text: 'updated file' }]
+    }, ctx)
+    expect(pi.entries.filter(entry => entry.customType === TESTING_STATE_ENTRY).at(-1)?.data).not.toHaveProperty('lastObservedBrowserEvidence')
+    expect((await gate.execute('gate-after-browser-mutation', frontendGateParams(), undefined, undefined, ctx)).details).toMatchObject({
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'browser-interaction', summary: 'Browser evidence is required for frontend targets.' })
+      ])
+    })
+
+    await browserCheck.execute('browser-before-task-context-change', browserParams, undefined, undefined, ctx)
+    pi.entries.push(coreTaskContextEntry(93))
+    expect((await gate.execute('review-after-browser-task-context-change', frontendGateParams(), undefined, undefined, ctx)).details).toMatchObject({
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'browser-interaction', summary: 'Browser evidence is required for frontend targets.' })
+      ])
+    })
+  })
+
+  it('clears observed browser evidence on session_stop without continuing the session', async () => {
+    const pi = new FakePi()
+    pi.entries.push(coreTaskContextEntry(94))
+    registerTestingEnhancer(pi)
+    const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-browser-session-stop-')))
+    await event(pi, 'session_start')({}, ctx)
+    const analyze = pi.tools.get('omp_test_analyze')
+    const browserCheck = pi.tools.get('omp_test_browser_check')
+    const gate = pi.tools.get('omp_test_review')
+    if (!analyze || !browserCheck || !gate) throw new Error('Missing testing tools')
+    await analyze.execute('analyze-browser', {
+      changedFiles: [{ path: 'src/ui/LoginForm.tsx', content: 'export function LoginForm() { return <button>Sign in</button> }' }]
+    }, undefined, undefined, ctx)
+    await browserCheck.execute('browser-before-stop', {
+      baseUrl: 'http://127.0.0.1:3000',
+      artifactDir: '../escape',
+      targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+      scenarios: [{ name: 'login', steps: [{ action: 'goto', url: '/', description: 'Open login' }] }]
+    }, undefined, undefined, ctx)
+
+    await expect(event(pi, 'session_stop')({}, ctx)).resolves.toBeUndefined()
+    expect(pi.entries.filter(entry => entry.customType === TESTING_STATE_ENTRY).at(-1)?.data).not.toHaveProperty('lastObservedBrowserEvidence')
+    expect((await gate.execute('gate-after-session-stop', frontendGateParams(), undefined, undefined, ctx)).details).toMatchObject({
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'browser-interaction', summary: 'Browser evidence is required for frontend targets.' })
+      ])
+    })
+  })
+
+  it('binds omp_test_review to a task-context-scoped host-observed shell test result', async () => {
     const pi = new FakePi()
     registerTestingEnhancer(pi)
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-observed-test-')))
-    pi.entries.push(coreRouteEntry(101))
+    pi.entries.push(coreTaskContextEntry(101))
     await event(pi, 'session_start')({}, ctx)
     await event(pi, 'tool_result')({
       name: 'functions.exec_command',
@@ -39,7 +178,7 @@ describe('extension session state', () => {
       content: [{ type: 'text', text: '42 tests passed, 0 failed' }]
     }, ctx)
 
-    const gate = pi.tools.get('omp_test_gate')
+    const gate = pi.tools.get('omp_test_review')
     if (!gate) throw new Error('Missing gate')
     const passed = await gate.execute('gate-observed', {
       ...passingGateParams(),
@@ -52,7 +191,7 @@ describe('extension session state', () => {
       ])
     })
 
-    pi.entries.push(coreRouteEntry(102))
+    pi.entries.push(coreTaskContextEntry(102))
     await event(pi, 'session_start')({}, ctx)
     const stale = await gate.execute('gate-stale', {
       ...passingGateParams(),
@@ -95,7 +234,7 @@ describe('extension session state', () => {
       const pi = new FakePi()
       registerTestingEnhancer(pi)
       const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), `omp-testing-enhancer-rejected-${item.name.replaceAll(' ', '-')}-`)))
-      pi.entries.push(coreRouteEntry(1000 + cases.indexOf(item)))
+      pi.entries.push(coreTaskContextEntry(1000 + cases.indexOf(item)))
       await event(pi, 'session_start')({}, ctx)
       await event(pi, 'tool_result')({
         name: item.toolName,
@@ -105,7 +244,7 @@ describe('extension session state', () => {
         content: [{ type: 'text', text: item.output }]
       }, ctx)
 
-      const gate = pi.tools.get('omp_test_gate')
+      const gate = pi.tools.get('omp_test_review')
       if (!gate) throw new Error('Missing gate')
       const result = await gate.execute(`gate-${item.name}`, {
         ...passingGateParams(),
@@ -169,13 +308,13 @@ describe('extension session state', () => {
       const pi = new FakePi()
       registerTestingEnhancer(pi)
       const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), `omp-testing-enhancer-framework-${index}-`)))
-      pi.entries.push(coreRouteEntry(2000 + index))
+      pi.entries.push(coreTaskContextEntry(2000 + index))
       await event(pi, 'session_start')({}, ctx)
       await event(pi, 'tool_result')({
         name: 'bash', input: { command }, exitCode: 0,
         content: [{ type: 'text', text: output }]
       }, ctx)
-      const gate = pi.tools.get('omp_test_gate')
+      const gate = pi.tools.get('omp_test_review')
       if (!gate) throw new Error('Missing gate')
       const result = await gate.execute(`gate-framework-${index}`, {
         ...passingGateParams(), testCommand: command
@@ -194,7 +333,7 @@ describe('extension session state', () => {
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-mutation-invalidation-')))
     await event(pi, 'session_start')({}, ctx)
     const analyze = pi.tools.get('omp_test_analyze')
-    const gate = pi.tools.get('omp_test_gate')
+    const gate = pi.tools.get('omp_test_review')
     if (!analyze || !gate) throw new Error('Missing testing tools')
     await analyze.execute('analyze-before-test', {
       changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
@@ -261,7 +400,7 @@ describe('extension session state', () => {
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-failed-rerun-')))
     await event(pi, 'session_start')({}, ctx)
     const analyze = pi.tools.get('omp_test_analyze')
-    const gate = pi.tools.get('omp_test_gate')
+    const gate = pi.tools.get('omp_test_review')
     if (!analyze || !gate) throw new Error('Missing testing tools')
     await analyze.execute('analyze-failed-rerun', {
       changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
@@ -308,7 +447,7 @@ describe('extension session state', () => {
       const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), `omp-testing-enhancer-write-${index}-`)))
       await event(pi, 'session_start')({}, ctx)
       const analyze = pi.tools.get('omp_test_analyze')
-      const gate = pi.tools.get('omp_test_gate')
+      const gate = pi.tools.get('omp_test_review')
       if (!analyze || !gate) throw new Error('Missing testing tools')
       await analyze.execute(`analyze-write-${index}`, {
         changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
@@ -335,7 +474,7 @@ describe('extension session state', () => {
     const readOnlyCtx = toolContext(readOnly, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-read-only-')))
     await event(readOnly, 'session_start')({}, readOnlyCtx)
     const analyze = readOnly.tools.get('omp_test_analyze')
-    const gate = readOnly.tools.get('omp_test_gate')
+    const gate = readOnly.tools.get('omp_test_review')
     if (!analyze || !gate) throw new Error('Missing testing tools')
     await analyze.execute('analyze-read-only', {
       changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
@@ -369,7 +508,7 @@ describe('extension session state', () => {
       changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
     }, undefined, undefined, ctx)
 
-    expect(pi.eventHandlers.map(item => item.event)).toEqual(['session_start', 'tool_result'])
+    expect(pi.eventHandlers.map(item => item.event)).toEqual(['session_start', 'tool_result', 'session_stop'])
     expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data).toMatchObject({
       reviewStatus: 'collecting',
       advisory: true
@@ -388,7 +527,7 @@ describe('extension session state', () => {
       changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
     }, undefined, undefined, ctx)
 
-    const gate = pi.tools.get('omp_test_gate')
+    const gate = pi.tools.get('omp_test_review')
     if (!gate) throw new Error('Missing gate')
     const findings = await gate.execute('call', {
       targets: [{ id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }],
@@ -413,6 +552,31 @@ describe('extension session state', () => {
     })
   })
 
+  it('rebuilds reports from review state without persisting report markdown or duplicate evidence', async () => {
+    const pi = new FakePi()
+    registerTestingEnhancer(pi)
+    const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-report-state-')))
+
+    await event(pi, 'session_start')({}, ctx)
+    const analyze = pi.tools.get('omp_test_analyze')
+    const gate = pi.tools.get('omp_test_review')
+    const report = pi.tools.get('omp_test_report')
+    if (!analyze || !gate || !report) throw new Error('Missing testing tools')
+    await analyze.execute('analyze', {
+      changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
+    }, undefined, undefined, ctx)
+    await gate.execute('gate', passingGateParams(), undefined, undefined, ctx)
+
+    const stateCount = pi.entries.filter(entry => entry.customType === TESTING_STATE_ENTRY).length
+    const evidenceCount = pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).length
+    const result = await report.execute('report', {}, undefined, undefined, ctx)
+    await event(pi, 'tool_result')({ name: 'omp_test_report', details: result.details }, ctx)
+
+    expect(result.content[0]?.text).toContain('# OMP Testing Enhancer report')
+    expect(pi.entries.filter(entry => entry.customType === TESTING_STATE_ENTRY)).toHaveLength(stateCount)
+    expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY)).toHaveLength(evidenceCount)
+  })
+
   it('reports distinct advisory findings without creating a repair budget', async () => {
     const pi = new FakePi()
     registerTestingEnhancer(pi)
@@ -420,7 +584,7 @@ describe('extension session state', () => {
 
     await event(pi, 'session_start')({}, ctx)
     const analyze = pi.tools.get('omp_test_analyze')
-    const gate = pi.tools.get('omp_test_gate')
+    const gate = pi.tools.get('omp_test_review')
     if (!analyze || !gate) throw new Error('Missing testing tools')
     await analyze.execute('call', {
       changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
@@ -439,7 +603,7 @@ describe('extension session state', () => {
     expect(productionEdit.details).toMatchObject({ status: 'findings', advisory: true })
   })
 
-  it('updates advisory analysis state without scheduling retries across repeated analyze calls', async () => {
+  it('resets local diagnostic scope across repeated analyze calls without scheduling retries', async () => {
     const pi = new FakePi()
     registerTestingEnhancer(pi)
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
@@ -452,24 +616,117 @@ describe('extension session state', () => {
     }
 
     await analyze.execute('call-1', analyzeParams, undefined, undefined, ctx)
+    const first = pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data
     await analyze.execute('call-2', analyzeParams, undefined, undefined, ctx)
+    const second = pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data
     await analyze.execute('call-3', analyzeParams, undefined, undefined, ctx)
+    const third = pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data
     expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data).toMatchObject({
       reviewStatus: 'collecting',
       advisory: true,
-      evidenceRevision: 3
+      evidenceRevision: 1
+    })
+    expect(new Set([first, second, third].map(value => isRecordValue(value) ? value.taskContextIdentity : undefined)).size).toBe(3)
+  })
+
+  it('does not carry test or browser observations into a new analysis without a Core task context', async () => {
+    const pi = new FakePi()
+    registerTestingEnhancer(pi)
+    const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-local-analysis-scope-')))
+    await event(pi, 'session_start')({}, ctx)
+    const analyze = pi.tools.get('omp_test_analyze')
+    const browserCheck = pi.tools.get('omp_test_browser_check')
+    const gate = pi.tools.get('omp_test_review')
+    if (!analyze || !browserCheck || !gate) throw new Error('Missing testing tools')
+    const analyzeParams = {
+      changedFiles: [{ path: 'src/ui/LoginForm.tsx', content: 'export function LoginForm() { return <button>Sign in</button> }' }]
+    }
+    await analyze.execute('first-analysis', analyzeParams, undefined, undefined, ctx)
+    await event(pi, 'tool_result')({
+      name: 'bash',
+      input: { command: 'npm test' },
+      exitCode: 0,
+      content: [{ type: 'text', text: '42 tests passed, 0 failed' }]
+    }, ctx)
+    await browserCheck.execute('first-browser', {
+      baseUrl: 'http://127.0.0.1:3000',
+      artifactDir: '../escape',
+      targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+      scenarios: [{ name: 'login', steps: [{ action: 'goto', url: '/', description: 'Open login' }] }]
+    }, undefined, undefined, ctx)
+    const before = pi.entries.filter(entry => entry.customType === TESTING_STATE_ENTRY).at(-1)?.data
+    expect(before).toMatchObject({
+      lastObservedTestCommand: expect.any(Object),
+      lastObservedBrowserEvidence: expect.any(Object)
+    })
+
+    await analyze.execute('second-analysis', analyzeParams, undefined, undefined, ctx)
+    const after = pi.entries.filter(entry => entry.customType === TESTING_STATE_ENTRY).at(-1)?.data
+    expect(after).not.toHaveProperty('lastObservedTestCommand')
+    expect(after).not.toHaveProperty('lastObservedBrowserEvidence')
+    expect(after).toMatchObject({ evidenceRevision: 1, reviewStatus: 'collecting' })
+
+    expect((await gate.execute('new-analysis-gate', {
+      ...frontendGateParams(),
+      testCommand: 'npm test'
+    }, undefined, undefined, ctx)).details).toMatchObject({
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'browser-interaction', summary: 'Browser evidence is required for frontend targets.' }),
+        expect.objectContaining({ gate: 'test-command', evidence: {} })
+      ])
     })
   })
 
-  it('does not replay passed evidence when the core route changes after a testing tool was observed', async () => {
+  it('resets local diagnostic scope even when the next analysis has no targets', async () => {
     const pi = new FakePi()
-    pi.entries.push(coreRouteEntry(3001))
+    registerTestingEnhancer(pi)
+    const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-empty-analysis-scope-')))
+    await event(pi, 'session_start')({}, ctx)
+    const analyze = pi.tools.get('omp_test_analyze')
+    const browserCheck = pi.tools.get('omp_test_browser_check')
+    if (!analyze || !browserCheck) throw new Error('Missing testing tools')
+
+    await analyze.execute('first-analysis', {
+      changedFiles: [{ path: 'src/ui/LoginForm.tsx', content: 'export function LoginForm() { return <button>Sign in</button> }' }]
+    }, undefined, undefined, ctx)
+    await event(pi, 'tool_result')({
+      name: 'bash',
+      input: { command: 'npm test' },
+      exitCode: 0,
+      content: [{ type: 'text', text: '42 tests passed, 0 failed' }]
+    }, ctx)
+    await browserCheck.execute('first-browser', {
+      baseUrl: 'http://127.0.0.1:3000',
+      artifactDir: '../escape',
+      targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+      scenarios: [{ name: 'login', steps: [{ action: 'goto', url: '/', description: 'Open login' }] }]
+    }, undefined, undefined, ctx)
+    const before = pi.entries.filter(entry => entry.customType === TESTING_STATE_ENTRY).at(-1)?.data
+    expect(before).toMatchObject({
+      lastObservedTestCommand: expect.any(Object),
+      lastObservedBrowserEvidence: expect.any(Object)
+    })
+
+    const emptyAnalysis = await analyze.execute('empty-analysis', { changedFiles: [] }, undefined, undefined, ctx)
+    const after = pi.entries.filter(entry => entry.customType === TESTING_STATE_ENTRY).at(-1)?.data
+    expect(after).not.toHaveProperty('lastObservedTestCommand')
+    expect(after).not.toHaveProperty('lastObservedBrowserEvidence')
+    expect(after).toMatchObject({
+      taskContextIdentity: `testing:${(emptyAnalysis.details as { runId: string }).runId}`,
+      reviewStatus: 'idle',
+      evidenceRevision: 0
+    })
+  })
+
+  it('does not replay passed evidence when the core task context changes after a testing tool was observed', async () => {
+    const pi = new FakePi()
+    pi.entries.push(coreTaskContextEntry(3001))
     registerTestingEnhancer(pi)
     const ctx = toolContext(pi, await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-session-')))
 
     await event(pi, 'session_start')({}, ctx)
     const analyze = pi.tools.get('omp_test_analyze')
-    const gate = pi.tools.get('omp_test_gate')
+    const gate = pi.tools.get('omp_test_review')
     if (!analyze || !gate) throw new Error('Missing testing tools')
     await analyze.execute('old-analyze', {
       changedFiles: [{ path: 'src/user/UserService.ts', content: 'export class UserService {}' }]
@@ -477,24 +734,24 @@ describe('extension session state', () => {
     await gate.execute('old-gate', passingGateParams(), undefined, undefined, ctx)
 
     const oldEvidence = pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data
-    expect(oldEvidence).toMatchObject({ routeIdentity: 'route:3001', reviewStatus: 'ready' })
+    expect(oldEvidence).toMatchObject({ taskContextIdentity: 'task:3001', reviewStatus: 'ready' })
     const evidenceCount = pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).length
 
-    pi.entries.push(coreRouteEntry(3002))
+    pi.entries.push(coreTaskContextEntry(3002))
     expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY)).toHaveLength(evidenceCount)
 
     await analyze.execute('new-analyze', {
       changedFiles: [{ path: 'src/order/OrderService.ts', content: 'export class OrderService {}' }]
     }, undefined, undefined, ctx)
     expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data).toMatchObject({
-      routeIdentity: 'route:3002',
+      taskContextIdentity: 'task:3002',
       reviewStatus: 'collecting',
       advisory: true
     })
 
     await gate.execute('new-gate', passingGateParams('src/order/OrderService.ts', 'OrderService'), undefined, undefined, ctx)
     expect(pi.entries.filter(entry => entry.customType === TESTING_EVIDENCE_ENTRY).at(-1)?.data).toMatchObject({
-      routeIdentity: 'route:3002',
+      taskContextIdentity: 'task:3002',
       reviewStatus: 'ready'
     })
   })
@@ -535,14 +792,14 @@ function toolContext(pi: FakePi, cwd: string): ExtensionToolContext {
   }
 }
 
-function coreRouteEntry(routeStartedAt: number): { type: 'custom'; customType: string; data: unknown } {
+function coreTaskContextEntry(taskStartedAt: number): { type: 'custom'; customType: string; data: unknown } {
   return {
     type: 'custom',
     customType: CORE_STATE_ENTRY,
     data: {
       schemaVersion: 2,
-      routeStartedAt,
-      lastRoute: { intent: 'code.dev' }
+      taskStartedAt,
+      lastTaskContext: { intent: 'agent-selected' }
     }
   }
 }
@@ -560,6 +817,23 @@ function passingGateParams(sourceFile = 'src/user/UserService.ts', symbolName = 
   }
 }
 
+function frontendGateParams() {
+  return {
+    targets: [{
+      id: 'src/ui/LoginForm.tsx#LoginForm',
+      sourceFile: 'src/ui/LoginForm.tsx',
+      symbolName: 'LoginForm',
+      kind: 'react-component',
+      risk: 'medium'
+    }],
+    candidate: {
+      id: 'browser-candidate',
+      targetId: 'src/ui/LoginForm.tsx#LoginForm',
+      files: [{ path: 'src/ui/LoginForm.test.tsx', action: 'create', content: 'test()' }]
+    }
+  }
+}
+
 function fakeZod() {
   return {
     object: (shape: Record<string, unknown>) => ({ type: 'object', shape }),
@@ -570,4 +844,8 @@ function fakeZod() {
     enum: (values: readonly [string, ...string[]]) => ({ type: 'enum', values }),
     optional: (schema: unknown) => ({ type: 'optional', schema })
   }
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

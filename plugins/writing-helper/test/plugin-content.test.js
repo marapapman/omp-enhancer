@@ -54,6 +54,19 @@ describe('bundled frugal-pi writing content', () => {
     }
   });
 
+  it('makes conversion and template Skill exclusions visible during Skill selection', () => {
+    for (const skill of [
+      'format-latex2markdown',
+      'format-markdown2latex',
+      'format-template-latex',
+    ]) {
+      const source = readFileSync(join(rootDir, 'skills', skill, 'SKILL.md'), 'utf8');
+      const frontmatter = source.match(/^---\n([\s\S]*?)\n---/u)?.[1] ?? '';
+      assert.match(frontmatter, /description:[\s\S]*Use only when/iu, `${skill} should state its positive trigger`);
+      assert.match(frontmatter, /Not for/iu, `${skill} should state its negative boundary`);
+    }
+  });
+
   it('ships writer and checker agents under their original compatibility names', () => {
     for (const agent of expectedAgents) {
       const agentPath = join(rootDir, 'agents', `${agent}.md`);
@@ -74,9 +87,48 @@ describe('bundled frugal-pi writing content', () => {
     for (const [agent, role] of expectedRoles) {
       const source = readFileSync(join(rootDir, 'agents', `${agent}.md`), 'utf8');
       assert.match(source, new RegExp(`model:\\s*\\n\\s*-\\s*pi/${role}(?:\\s|$)`));
-      if (role === 'task') {
-        assert.doesNotMatch(source, /max reasoning|最大推理力度/i, `${agent} must defer effort to the task role`);
-      }
+      assert.doesNotMatch(source, /^thinkingLevel:/m, `${agent} must inherit reasoning from pi/${role}`);
+      if (role === 'task') assert.doesNotMatch(source, /max reasoning|最大推理力度/i);
+    }
+  });
+
+  it('keeps each writer tool list consistent with its permission text', () => {
+    for (const agent of ['writer', 'zh-writer']) {
+      const source = readFileSync(join(rootDir, 'agents', `${agent}.md`), 'utf8');
+      const tools = source.match(/^tools:\s*([^\n]+)$/m)?.[1] ?? '';
+      assert.match(tools, /(?:^|,\s*)write(?:,|$)/);
+      assert.match(source, /read[、`,\s]+write[、`,\s]+edit[、`,\s]+grep[、`,\s]+glob/u);
+    }
+  });
+
+  it('declares only canonical OMP tools for writing agents', () => {
+    const expectedTools = new Map([
+      ['writer', ['read', 'write', 'edit', 'grep', 'glob']],
+      ['zh-writer', ['read', 'write', 'edit', 'grep', 'glob']],
+      ['checker', ['read', 'grep', 'glob', 'web_search']],
+      ['zh-checker', ['read', 'grep', 'glob', 'web_search']],
+    ]);
+
+    for (const [agent, expected] of expectedTools) {
+      const source = readFileSync(join(rootDir, 'agents', `${agent}.md`), 'utf8');
+      const tools = (source.match(/^tools:\s*([^\n]+)$/m)?.[1] ?? '')
+        .split(',')
+        .map((tool) => tool.trim())
+        .filter(Boolean);
+      assert.deepEqual(tools, expected, `${agent} must not rely on ignored or legacy aliases`);
+    }
+  });
+
+  it('keeps bundled writing instructions on canonical OMP tool names', () => {
+    const paths = [
+      ...expectedAgents.map((name) => `agents/${name}.md`),
+      ...expectedSkills.map((name) => `skills/${name}/SKILL.md`),
+    ];
+
+    for (const path of paths) {
+      const source = readFileSync(join(rootDir, path), 'utf8');
+      assert.doesNotMatch(source, /\b(?:web_search_exa|web_fetch_exa)\b/, `${path} names an internal provider tool`);
+      assert.doesNotMatch(source, /`(?:find|ls)`/, `${path} names a legacy or unavailable file tool`);
     }
   });
 

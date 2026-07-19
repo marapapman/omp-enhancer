@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "defaults": {
+    "model": "opencode-go/deepseek-v4-flash",
+    "thinking": "max",
+    "approvalMode": "yolo",
+    "executionMode": "rpc",
+    "tools": ["read"],
+    "repeat": 5,
+    "timeoutSeconds": 180,
+    "expectations": {
+      "noWeb": true,
+      "requireFinal": true,
+      "maxPrimaryFinals": 1,
+      "maxPostFinalAdvisorMessages": 0,
+      "noUnobservedSkillClaims": true,
+      "requireSuccessfulToolCalls": true,
+      "maxDuplicateFailedCalls": 0,
+      "maxDuplicateSkillReadAttempts": 0,
+      "maxProvidedSkills": 0,
+      "expectedProvisionMode": "none",
+      "requireWorkflowIndexOnlyFirstToolBatch": true,
+      "requireWorkflowPlanBeforeResourceLoads": true,
+      "requiredWorkflowPlanFormat": "block",
+      "minWorkflowPlanNumberedActions": 1,
+      "forbidResourceProjectSameBatch": true,
+      "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+      "requireExactSelectedWorkflowReferences": true,
+      "requireWorkflowPlanSkillsUseDomainSkillUris": true,
+      "requireWorkflowReadyLoadedSkillsUseBareIds": true,
+      "requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills": true,
+      "minWorkflowReferenceReads": 1,
+      "requiredSelectedWorkflowIds": ["writing.en", "writing.latex"],
+      "requiredAnySkills": ["writing-review", "polish-acm-latex-prose"],
+      "maxObservedSkills": 2,
+      "forbiddenSkills": ["plain-chinese-writing", "zh-writing-polish", "writing-markdown-helper"],
+      "maxToolCalls": 8,
+      "maxSourceSearchCalls": 8,
+      "maxAbortedAssistants": 0,
+      "pluginContinuationCount": 0
+    }
+  },
+  "scenarios": [
+    {
+      "id": "writing-main-only",
+      "category": "paired/main-only",
+      "fixture": "skill-discovery-readonly",
+      "advisor": false,
+      "prompt": "Read abstract.tex and propose a conservative correction of its single English sentence. Preserve all qualifiers, modality, negation, percentages, citations, and LaTeX commands. Do not modify files or use the network.",
+      "expectations": {
+        "maxAdvisorMessages": 0
+      }
+    },
+    {
+      "id": "writing-with-advisor",
+      "category": "paired/advisor",
+      "fixture": "skill-discovery-readonly",
+      "advisor": true,
+      "prompt": "Read abstract.tex and propose a conservative correction of its single English sentence. Preserve all qualifiers, modality, negation, percentages, citations, and LaTeX commands. Do not modify files or use the network.",
+      "expectations": {
+        "maxAdvisorMessages": 1
+      }
+    }
+  ]
+}

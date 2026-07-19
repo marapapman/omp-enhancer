@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import factCheckerExtension, {
   buildFactCheckPlan,
@@ -8,7 +9,7 @@ import factCheckerExtension, {
   collectLocalEvidence,
   crossCheckEvidence,
   strictClaimVerdict,
-  validateFactCheckGate,
+  validateFactCheckReview,
 } from '../index.js';
 import { fetchProviderEvidence } from '../src/providers.js';
 
@@ -22,10 +23,16 @@ const factAgent = (name) => readFileSync(
   'utf8',
 );
 
+const configAgent = (name) => readFileSync(
+  new URL(`../../omp-config/agents/${name}.md`, import.meta.url),
+  'utf8',
+);
+
 class FakeOmp {
   constructor() {
     this.tools = new Map();
     this.commands = new Map();
+    this.events = new Map();
     const z = fakeZod();
     this.zod = { z };
   }
@@ -37,6 +44,10 @@ class FakeOmp {
   registerCommand(name, command) {
     this.commands.set(name, command);
   }
+
+  on(name, handler) {
+    this.events.set(name, handler);
+  }
 }
 
 test('registers fact-check tools and command', () => {
@@ -47,13 +58,54 @@ test('registers fact-check tools and command', () => {
     'fact_check_analyze',
     'fact_check_evidence',
     'fact_check_report',
-    'fact_check_gate',
+    'fact_check_review',
   ]);
   assert.equal(omp.commands.has('fact-check'), true);
   for (const tool of omp.tools.values()) {
     assert.equal(tool.defaultInactive, true, `${tool.name} must be opt-in`);
     assert.equal(tool.approval, 'read', `${tool.name} must remain read-only`);
   }
+});
+
+test('fact-check command accepts explicit inline text and applies maxClaims', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const notifications = [];
+
+  const result = await omp.commands.get('fact-check').handler(
+    '--text The company was founded in 2020. Its headquarters are in Beijing. --max 1',
+    { ui: { notify: (message, level) => notifications.push({ message, level }) } },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.details.claims.length, 1);
+  assert.equal(result.details.claims[0].text, 'The company was founded in 2020.');
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0].level, 'info');
+});
+
+test('claim extraction splits adjacent Chinese sentences', () => {
+  const plan = buildFactCheckPlan({
+    text: '该公司成立于2020年。该公司总部位于北京市海淀区。',
+  });
+
+  assert.deepEqual(plan.claims.map(({ text }) => text), [
+    '该公司成立于2020年。',
+    '该公司总部位于北京市海淀区。',
+  ]);
+});
+
+test('fact-check analyze returns a structured read error for directory paths', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const pluginRoot = fileURLToPath(new URL('..', import.meta.url));
+
+  const result = await omp.tools.get('fact_check_analyze').execute(
+    'directory-read', { path: 'test' }, undefined, undefined, { cwd: pluginRoot },
+  );
+
+  assert.equal(result.isError, true);
+  assert.match(result.details.error, /Unable to read test/);
 });
 
 test('fact-check skills prescribe one bounded local pass without automatic lane retries', () => {
@@ -93,6 +145,31 @@ test('fact researcher A uses slow while researcher B uses plan', () => {
 
   assert.match(researcherA, /model:\s*\n\s*-\s*pi\/slow/);
   assert.match(researcherB, /model:\s*\n\s*-\s*pi\/plan/);
+  assert.doesNotMatch(researcherA, /^thinkingLevel:/m);
+  assert.doesNotMatch(researcherB, /^thinkingLevel:/m);
+});
+
+test('fact agents declare canonical OMP search tools', () => {
+  const expectedTools = new Map([
+    ['fact-planner', ['read', 'grep', 'glob']],
+    ['fact-researcher-a', ['read', 'grep', 'glob', 'web_search']],
+    ['fact-researcher-b', ['read', 'grep', 'glob', 'web_search']],
+    ['fact-cross-checker', ['read', 'grep', 'glob']],
+    ['fact-reviewer', ['read', 'grep', 'glob']],
+  ]);
+
+  for (const [name, expected] of expectedTools) {
+    const tools = (factAgent(name).match(/^tools:\s*([^\n]+)$/m)?.[1] ?? '')
+      .split(',')
+      .map((tool) => tool.trim())
+      .filter(Boolean);
+    assert.deepEqual(tools, expected);
+  }
+});
+
+test('fact package excludes development tests from published files', () => {
+  const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(packageJson.files.includes('test'), false);
 });
 
 test('fact planner assigns claim-specific freshness and evidence requirements', () => {
@@ -109,6 +186,56 @@ test('fact reviewer rejects unresolved or metadata-only claims from strict factu
   assert.match(agent, /metadata-only/i);
   assert.match(agent, /PARTIAL.*CONFLICTED.*temporal-staleness/is);
   assert.match(agent, /strict `SUPPORTED`/i);
+});
+
+test('fact-checking resources require exact claim entailment and verdict-limitation consistency', () => {
+  const workflow = factSkill('fact-checking');
+  const extraction = factSkill('claim-extraction');
+  const sources = factSkill('source-evaluation');
+
+  assert.match(extraction, /subject.*predicate.*object.*scope.*time.*quantifier/is);
+  assert.match(workflow, /SUPPORTED.*subject.*predicate.*object.*scope.*time.*quantifier/is);
+  assert.match(workflow, /CONTRADICTED.*same subject.*scope.*time.*quantifier/is);
+  assert.match(workflow, /limitation.*(?:controls|constrains|determines).*verdict/is);
+  assert.match(workflow, /does\s+not (?:establish|guarantee).*SUPPORTED.*CONTRADICTED/is);
+  assert.match(workflow, /record.*limitation.*before.*verdict/is);
+  assert.match(workflow, /### Claim <number>[\s\S]*Verdict: <SUPPORTED\|CONTRADICTED\|LOCAL_UNVERIFIED\|INSUFFICIENT>[\s\S]*Evidence:[\s\S]*Limitation:/is);
+  assert.match(workflow, /Keep `Verdict:` as a plain line[\s\S]*exactly one allowed uppercase status/is);
+  assert.match(workflow, /Do\s+not replace it with an arrow, a table cell, a bold standalone status/iu);
+  assert.match(workflow, /catalog lists.*release has.*INSUFFICIENT/is);
+  assert.match(workflow, /absence.*exhaustive.*current.*INSUFFICIENT/is);
+  assert.match(workflow, /final consistency.*downgrade/is);
+  assert.match(sources, /weaker|adjacent/i);
+  assert.match(sources, /INSUFFICIENT|LOCAL_UNVERIFIED/);
+  assert.match(sources, /absence.*exhaustive.*current/is);
+});
+
+test('fact-checking agents use an evidence ladder, bounded disconfirmation, and monotonic synthesis', () => {
+  const planner = factAgent('fact-planner');
+  const researchers = [factAgent('fact-researcher-a'), factAgent('fact-researcher-b')].join('\n');
+  const crossChecker = factAgent('fact-cross-checker');
+  const reviewer = factAgent('fact-reviewer');
+
+  assert.match(planner, /subject.*predicate.*object.*scope.*time.*quantifier/is);
+  assert.match(researchers, /PROVEN.*LIKELY.*HYPOTHESIS.*DISPROVED/is);
+  assert.match(researchers, /high-impact.*(?:cheapest|lowest-cost|low-cost).*disconfirm/is);
+  assert.match(researchers, /one.*(?:countercheck|counter-check|disconfirm)/is);
+  assert.match(crossChecker, /subject.*predicate.*object.*scope.*time.*quantifier/is);
+  assert.match(reviewer, /limitations?.*verdict/is);
+  assert.match(reviewer, /(?:Main|parent).*(?:must not|cannot).*upgrade.*(?:confidence|evidence level).*new evidence/is);
+  assert.match(reviewer, /zero findings.*valid/is);
+  assert.doesNotMatch(researchers, /(?:at least|minimum of)\s+\d+\s+(?:issues|findings|defects)/i);
+});
+
+test('the specialized security reviewer preserves bounded evidence confidence', () => {
+  const securityReviewer = configAgent('ecc-security-reviewer');
+
+  assert.match(securityReviewer, /PROVEN.*LIKELY.*HYPOTHESIS.*DISPROVED/is);
+  assert.match(securityReviewer, /zero findings.*valid/is);
+  assert.match(securityReviewer, /high-impact.*(?:cheapest|lowest-cost|low-cost).*disconfirm/is);
+  assert.match(securityReviewer, /path.*symbol.*(?:exact )?snippet/is);
+  assert.match(securityReviewer, /line (?:number|range).*optional/i);
+  assert.match(securityReviewer, /(?:Main|parent).*(?:must not|cannot).*upgrade.*(?:confidence|evidence level).*new evidence/is);
 });
 
 test('buildFactCheckPlan extracts prioritized factual claims', () => {
@@ -157,6 +284,102 @@ test('local evidence lanes cross-check to agreement and conflict', () => {
   const cross = crossCheckEvidence({ claims, evidenceRecords: [...supported, ...contradicted] });
 
   assert.equal(cross[0].status, 'CONFLICTED');
+  const reportWithoutCrossCheck = buildFactCheckReport({
+    claims,
+    evidenceRecords: [...supported, ...contradicted],
+  });
+  assert.equal(reportWithoutCrossCheck.results[0].verdict, 'CONFLICTED');
+  assert.equal(reportWithoutCrossCheck.results[0].strictVerdict, 'CONFLICTED');
+  assert.equal(strictClaimVerdict({
+    claim: claims[0],
+    evidenceRecords: [...supported, ...contradicted],
+  }), 'CONFLICTED');
+});
+
+test('explicit claim ids prevent evidence from leaking into a similar claim', () => {
+  const claims = [
+    { id: 'FC-001', text: 'Accuracy is 91%.' },
+    { id: 'FC-002', text: 'Accuracy is 87%.' },
+  ];
+  const records = collectLocalEvidence({
+    claims,
+    evidenceRecords: [{
+      claimId: 'FC-001',
+      lane: 'A',
+      status: 'SUPPORTED',
+      quote: 'Accuracy is 91%.',
+      source: 'table 1',
+    }],
+    lane: 'A',
+  });
+
+  assert.deepEqual(records.map(({ claimId, status }) => ({ claimId, status })), [
+    { claimId: 'FC-001', status: 'SUPPORTED' },
+    { claimId: 'FC-002', status: 'INSUFFICIENT' },
+  ]);
+});
+
+test('evidence tool preserves supporting and contradicting records from one lane', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const claims = buildFactCheckPlan({ text: 'The method improves accuracy by 12%.' }).claims;
+
+  const result = await omp.tools.get('fact_check_evidence').execute(
+    'multiple-evidence',
+    {
+      claims,
+      lane: 'A',
+      evidenceRecords: [
+        { claimId: 'FC-001', lane: 'A', status: 'SUPPORTED', source: 'table 1', quote: '12%' },
+        { claimId: 'FC-001', lane: 'A', status: 'CONTRADICTED', source: 'appendix', quote: '8%' },
+      ],
+    },
+    undefined,
+    undefined,
+    { cwd: process.cwd(), sessionManager: {} },
+  );
+
+  assert.equal(result.isError, false);
+  assert.deepEqual(result.details.records.map(({ status }) => status), ['SUPPORTED', 'CONTRADICTED']);
+
+  const crossCheck = crossCheckEvidence({ claims, evidenceRecords: result.details.records });
+  assert.equal(crossCheck[0].laneA, 'CONFLICTED');
+  assert.equal(crossCheck[0].status, 'CONFLICTED');
+
+  const report = buildFactCheckReport({
+    claims,
+    evidenceRecords: result.details.records,
+    crossChecks: crossCheck,
+  });
+  assert.equal(report.results[0].verdict, 'CONFLICTED');
+  assert.equal(report.results[0].strictVerdict, 'CONFLICTED');
+
+  const reportWithoutCrossCheck = buildFactCheckReport({
+    claims,
+    evidenceRecords: result.details.records,
+  });
+  assert.equal(reportWithoutCrossCheck.results[0].verdict, 'CONFLICTED');
+  assert.equal(reportWithoutCrossCheck.results[0].strictVerdict, 'CONFLICTED');
+  assert.equal(strictClaimVerdict({
+    claim: claims[0],
+    evidenceRecords: result.details.records,
+  }), 'CONFLICTED');
+});
+
+test('session_stop clears string-keyed workflow state without continuing', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { sessionManager: { getSessionId: () => 'fact-session' } };
+  const analyzeTool = omp.tools.get('fact_check_analyze');
+  const reviewTool = omp.tools.get('fact_check_review');
+
+  await analyzeTool.execute('plan', { text: 'The company was founded in 2020.' }, undefined, undefined, ctx);
+  const before = await reviewTool.execute('before', { finalOutput: '' }, undefined, undefined, ctx);
+  assert.equal(before.details.observed.plannedClaims, 1);
+
+  assert.equal(await omp.events.get('session_stop')({}, ctx), undefined);
+  const after = await reviewTool.execute('after', { finalOutput: '' }, undefined, undefined, ctx);
+  assert.equal(after.details.observed.plannedClaims, 0);
 });
 
 test('cross-check uses claim fields for real conflicts and ignores distinct source URLs', () => {
@@ -189,11 +412,11 @@ test('cross-check uses claim fields for real conflicts and ignores distinct sour
 });
 
 test('fact advisory review reports missing plan, evidence, cross-check, review, report, and usage', () => {
-  const failed = validateFactCheckGate({ finalOutput: 'FACT_CHECK_PLAN\nFACT_CHECK_REPORT' });
+  const failed = validateFactCheckReview({ finalOutput: 'FACT_CHECK_PLAN\nFACT_CHECK_REPORT' });
   assert.equal(failed.ok, false);
   assert.deepEqual(failed.missing.includes('FACT_REVIEW'), true);
 
-  const passed = validateFactCheckGate({
+  const passed = validateFactCheckReview({
     finalOutput: [
       'FACT_CHECK_PLAN',
       'FACT_EVIDENCE_A',
@@ -225,12 +448,12 @@ test('the registered review reports workflow inconsistencies without failing too
     'FACT_CHECK_USAGE',
   ].join('\n');
 
-  const premature = await omp.tools.get('fact_check_gate').execute(
-    'premature-gate', { finalOutput: completeOutput(), riskLevel: 'low' }, undefined, undefined, ctx,
+  const premature = await omp.tools.get('fact_check_review').execute(
+    'premature-review', { finalOutput: completeOutput(), riskLevel: 'low' }, undefined, undefined, ctx,
   );
   assert.equal(premature.isError, false);
   assert.equal(premature.details.advisoryOnly, true);
-  assert.equal(premature.details.complete, false);
+  assert.equal(premature.details.ready, false);
   assert.ok(premature.details.missingObserved.includes('host FACT_CHECK_PLAN'));
 
   const analyzed = await omp.tools.get('fact_check_analyze').execute(
@@ -289,27 +512,27 @@ test('the registered review reports workflow inconsistencies without failing too
   assert.equal(report.details.results[0].strictVerdict, 'INSUFFICIENT');
   assert.match(report.content[0].text, /Strict supported: 0/);
 
-  const passed = await omp.tools.get('fact_check_gate').execute(
-    'observed-gate', { finalOutput: completeOutput(), riskLevel: 'low' }, undefined, undefined, ctx,
+  const passed = await omp.tools.get('fact_check_review').execute(
+    'observed-review', { finalOutput: completeOutput(), riskLevel: 'low' }, undefined, undefined, ctx,
   );
   assert.equal(passed.isError, false);
   assert.equal(passed.details.ok, true);
-  assert.equal(passed.details.complete, true);
-  assert.equal(passed.details.factualSupportComplete, false);
+  assert.equal(passed.details.ready, true);
+  assert.equal(passed.details.strictSupportReady, false);
   assert.equal(passed.details.observed.strictSupported, 0);
   assert.deepEqual(passed.details.observed.strictUnresolvedClaimIds, ['FC-001']);
   assert.match(passed.content[0].text, /workflow ready.+strict factual support unresolved/i);
   assert.deepEqual(passed.details.missingObserved, []);
 
-  const inconsistent = await omp.tools.get('fact_check_gate').execute(
-    'inconsistent-gate', { finalOutput: completeOutput('CONTRADICTED'), riskLevel: 'low' }, undefined, undefined, ctx,
+  const inconsistent = await omp.tools.get('fact_check_review').execute(
+    'inconsistent-review', { finalOutput: completeOutput('CONTRADICTED'), riskLevel: 'low' }, undefined, undefined, ctx,
   );
   assert.equal(inconsistent.isError, false);
-  assert.equal(inconsistent.details.complete, false);
+  assert.equal(inconsistent.details.ready, false);
   assert.ok(inconsistent.details.missingObserved.includes('final verdicts matching host FACT_CHECK_REPORT'));
 
-  const conflicting = await omp.tools.get('fact_check_gate').execute(
-    'conflicting-gate', {
+  const conflicting = await omp.tools.get('fact_check_review').execute(
+    'conflicting-review', {
       finalOutput: `${completeOutput()}\nFC-001: CONTRADICTED`,
       riskLevel: 'low',
     }, undefined, undefined, ctx,
@@ -317,8 +540,8 @@ test('the registered review reports workflow inconsistencies without failing too
   assert.equal(conflicting.isError, false);
   assert.ok(conflicting.details.missingObserved.includes('final verdicts matching host FACT_CHECK_REPORT'));
 
-  const duplicated = await omp.tools.get('fact_check_gate').execute(
-    'duplicated-gate', {
+  const duplicated = await omp.tools.get('fact_check_review').execute(
+    'duplicated-review', {
       finalOutput: `${completeOutput()}\nFC-001: SUPPORTED`,
       riskLevel: 'low',
     }, undefined, undefined, ctx,
@@ -331,7 +554,7 @@ test('registered workflow supports stateless advisory use and isolates optional 
   const omp = new FakeOmp();
   factCheckerExtension(omp);
   const analyze = omp.tools.get('fact_check_analyze');
-  const gate = omp.tools.get('fact_check_gate');
+  const review = omp.tools.get('fact_check_review');
   const noIdentity = await analyze.execute(
     'no-identity', { text: 'The stable fact is 42.' }, undefined, undefined, { cwd: process.cwd() },
   );
@@ -343,8 +566,8 @@ test('registered workflow supports stateless advisory use and isolates optional 
   const ctxA = { cwd: process.cwd(), sessionManager: managerA };
   const ctxB = { cwd: process.cwd(), sessionManager: managerB };
   await analyze.execute('session-a-plan', { text: 'The stable fact is 42.' }, undefined, undefined, ctxA);
-  const isolated = await gate.execute(
-    'session-b-gate', {
+  const isolated = await review.execute(
+    'session-b-review', {
       finalOutput: [
         'FACT_CHECK_PLAN',
         'FACT_EVIDENCE_A',
@@ -358,11 +581,11 @@ test('registered workflow supports stateless advisory use and isolates optional 
     }, undefined, undefined, ctxB,
   );
   assert.equal(isolated.isError, false);
-  assert.equal(isolated.details.complete, false);
+  assert.equal(isolated.details.ready, false);
   assert.ok(isolated.details.missingObserved.includes('host FACT_CHECK_PLAN'));
 });
 
-test('analyze rejects ambiguous path plus text and gate ignores a lower model risk', async () => {
+test('analyze rejects ambiguous path plus text and review ignores a lower model risk', async () => {
   const omp = new FakeOmp();
   factCheckerExtension(omp);
   const ctx = { cwd: process.cwd(), sessionManager: {} };
@@ -402,8 +625,8 @@ test('analyze rejects ambiguous path plus text and gate ignores a lower model ri
     'high-risk-report', { claims, evidenceRecords: evidenceA.details.records }, undefined, undefined, ctx,
   );
   assert.equal(report.isError, false);
-  const gated = await omp.tools.get('fact_check_gate').execute(
-    'high-risk-gate', {
+  const reviewed = await omp.tools.get('fact_check_review').execute(
+    'high-risk-review', {
       finalOutput: [
         'FACT_CHECK_PLAN',
         'FACT_EVIDENCE_A',
@@ -416,9 +639,9 @@ test('analyze rejects ambiguous path plus text and gate ignores a lower model ri
       riskLevel: 'low',
     }, undefined, undefined, ctx,
   );
-  assert.equal(gated.isError, false);
-  assert.equal(gated.details.complete, false);
-  assert.ok(gated.details.missingObserved.includes('host FACT_EVIDENCE_B'));
+  assert.equal(reviewed.isError, false);
+  assert.equal(reviewed.details.ready, false);
+  assert.ok(reviewed.details.missingObserved.includes('host FACT_EVIDENCE_B'));
 });
 
 test('evidence rejects non-canonical statuses and unsupported deterministic citations', async () => {

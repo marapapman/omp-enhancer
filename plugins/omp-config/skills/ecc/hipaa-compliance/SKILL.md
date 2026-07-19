@@ -7,7 +7,7 @@ version: "1.1.0"
 
 # HIPAA Compliance Overlay
 
-Use `healthcare-phi-compliance` for PHI data-flow guidance and compose the ordinary `security.review`, `code.review`, `factcheck.document`, or research workflow needed by the user's actual request. There is no dedicated healthcare workflow or healthcare Agent.
+Use `healthcare-phi-compliance` for PHI data-flow guidance and compose the ordinary `security.review`, `code.dev`, `factcheck.document`, or research workflow needed by the user's actual request. There is no dedicated healthcare workflow or healthcare Agent.
 
 HIPAA obligations and agency guidance can change. For a high-stakes or current compliance conclusion, use reliable primary sources and an independent fact check, state the jurisdiction and date, and recommend qualified legal or compliance review. Do not present this skill as legal advice.
 

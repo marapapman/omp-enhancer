@@ -1,6 +1,3 @@
-export const name = "redact-secrets";
-export const event = "tool_result";
-
 const SECRET_PATTERNS = [
   /sk-[a-zA-Z0-9]{20,}/g,
   /(?:ghp|gho|ghu|ghs)_[a-zA-Z0-9]{36,}/g,
@@ -27,9 +24,4 @@ export function redactToolResultContent(content: any[] = []) {
     return { ...block, text };
   });
   return changed ? redacted : null;
-}
-
-export function execute(toolResult: any) {
-  if (typeof toolResult?.result !== "string") return;
-  toolResult.result = redactText(toolResult.result);
 }

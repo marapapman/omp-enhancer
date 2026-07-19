@@ -1,37 +1,45 @@
 import { createHash } from 'node:crypto'
-import type { ChangedTarget, GateResult } from '../types.js'
+import { readBrowserEvidenceValue } from '../browserSchemas.js'
+import type { BrowserEvidence, ChangedTarget, GateResult } from '../types.js'
 import { isRecord } from '../utils.js'
 
 export const TESTING_STATE_ENTRY = 'omp-testing-enhancer.state'
 export const TESTING_EVIDENCE_ENTRY = 'omp-testing-enhancer.evidence'
-export const TESTING_STATE_SCHEMA_VERSION = 4
-export const TESTING_EVIDENCE_SCHEMA_VERSION = 2
+export const TESTING_STATE_SCHEMA_VERSION = 5
+export const TESTING_EVIDENCE_SCHEMA_VERSION = 3
 
 export type TestingReviewStatus = 'idle' | 'collecting' | 'ready' | 'findings'
 
 export interface TestingReviewState {
   schemaVersion: typeof TESTING_STATE_SCHEMA_VERSION
   reviewStatus: TestingReviewStatus
-  routeIdentity?: string
+  taskContextIdentity?: string
   reviewRunId?: string
   lastTargets: ChangedTarget[]
   lastReviewResults: GateResult[]
-  lastReportMarkdown?: string
   evidenceRevision: number
   lastObservedTestCommand?: ObservedTestCommandEvidence
+  lastObservedBrowserEvidence?: ObservedBrowserEvidence
 }
 
 export interface ObservedTestCommandEvidence {
-  schemaVersion: 1
-  routeIdentity: string
+  schemaVersion: 2
+  taskContextIdentity: string
   commandDigest: string
   exitCode: number
   observedAt: number
 }
 
+export interface ObservedBrowserEvidence {
+  schemaVersion: 2
+  taskContextIdentity: string
+  evidence: BrowserEvidence
+  observedAt: number
+}
+
 export interface TestingReviewEvidence {
   schemaVersion: typeof TESTING_EVIDENCE_SCHEMA_VERSION
-  routeIdentity: string
+  taskContextIdentity: string
   runId: string
   reviewStatus: Exclude<TestingReviewStatus, 'idle'>
   criticalFindings: GateResult['gate'][]
@@ -42,12 +50,12 @@ export interface TestingReviewEvidence {
 }
 
 export interface RestoreTestingReviewStateOptions {
-  routeIdentity?: string
-  requireCurrentRoute?: boolean
+  taskContextIdentity?: string
+  requireCurrentTaskContext?: boolean
 }
 
 interface TestingReviewScope {
-  routeIdentity?: string
+  taskContextIdentity?: string
   runId?: string
 }
 
@@ -73,9 +81,12 @@ export function restoreTestingReviewStateFromEntries(
 
     const state = readTestingReviewState(entry.data)
     if (!state) continue
-    if (options.requireCurrentRoute) {
-      const hasObservedReview = state.reviewRunId !== undefined || state.lastReviewResults.length > 0
-      if (!options.routeIdentity || state.routeIdentity !== options.routeIdentity || !hasObservedReview) continue
+    if (options.requireCurrentTaskContext) {
+      const hasObservedReview = state.reviewRunId !== undefined
+        || state.lastReviewResults.length > 0
+        || state.lastObservedTestCommand !== undefined
+        || state.lastObservedBrowserEvidence !== undefined
+      if (!options.taskContextIdentity || state.taskContextIdentity !== options.taskContextIdentity || !hasObservedReview) continue
     }
     restored = state
   }
@@ -94,7 +105,7 @@ export function startTestingReview(
     lastTargets: targets,
     lastReviewResults: [],
     evidenceRevision: state.evidenceRevision + 1,
-    ...(scope.routeIdentity !== undefined ? { routeIdentity: scope.routeIdentity } : {}),
+    ...(scope.taskContextIdentity !== undefined ? { taskContextIdentity: scope.taskContextIdentity } : {}),
     ...(scope.runId !== undefined ? { reviewRunId: scope.runId } : {})
   }
 }
@@ -109,23 +120,16 @@ export function completeTestingReview(state: TestingReviewState, reviewResults: 
   }
 }
 
-export function recordTestingReport(state: TestingReviewState, markdown: string): TestingReviewState {
-  return {
-    ...state,
-    lastReportMarkdown: markdown
-  }
-}
-
 export function recordObservedTestCommand(
   state: TestingReviewState,
   evidence: ObservedTestCommandEvidence
 ): TestingReviewState {
-  if (state.routeIdentity && evidence.routeIdentity !== state.routeIdentity) return state
+  if (state.taskContextIdentity && evidence.taskContextIdentity !== state.taskContextIdentity) return state
   return {
     ...state,
     lastObservedTestCommand: evidence,
     evidenceRevision: state.evidenceRevision + 1,
-    ...(state.routeIdentity ? {} : { routeIdentity: evidence.routeIdentity })
+    ...(state.taskContextIdentity ? {} : { taskContextIdentity: evidence.taskContextIdentity })
   }
 }
 
@@ -142,9 +146,37 @@ export function invalidateObservedTestCommand(state: TestingReviewState): Testin
   }
 }
 
-export function scopeTestingReviewToRoute(state: TestingReviewState, routeIdentity: string): TestingReviewState {
-  if (state.routeIdentity === routeIdentity) return state
-  return { ...createInitialTestingReviewState(), routeIdentity }
+export function recordObservedBrowserEvidence(
+  state: TestingReviewState,
+  observed: ObservedBrowserEvidence
+): TestingReviewState {
+  if (state.taskContextIdentity && observed.taskContextIdentity !== state.taskContextIdentity) return state
+  return {
+    ...state,
+    lastObservedBrowserEvidence: observed,
+    evidenceRevision: state.evidenceRevision + 1,
+    ...(state.taskContextIdentity ? {} : { taskContextIdentity: observed.taskContextIdentity })
+  }
+}
+
+export function invalidateObservedBrowserEvidence(state: TestingReviewState): TestingReviewState {
+  if (!state.lastObservedBrowserEvidence) return state
+  const { lastObservedBrowserEvidence: _discarded, ...rest } = state
+  const lastReviewResults = state.lastReviewResults.filter(result => result.gate !== 'browser-interaction' && result.gate !== 'browser-visual')
+  const hasActiveReview = state.reviewRunId !== undefined
+    || state.lastTargets.length > 0
+    || lastReviewResults.length > 0
+  return {
+    ...rest,
+    lastReviewResults,
+    reviewStatus: hasActiveReview ? 'collecting' : state.reviewStatus,
+    evidenceRevision: state.evidenceRevision + 1
+  }
+}
+
+export function scopeTestingReviewToTaskContext(state: TestingReviewState, taskContextIdentity: string): TestingReviewState {
+  if (state.taskContextIdentity === taskContextIdentity) return state
+  return { ...createInitialTestingReviewState(), taskContextIdentity }
 }
 
 export function hasTestingReviewData(state: TestingReviewState): boolean {
@@ -159,7 +191,7 @@ export function buildTestingReviewEvidence(
   updatedAt = Date.now()
 ): TestingReviewEvidence {
   const runId = state.reviewRunId ?? 'testing-unscoped'
-  const routeIdentity = state.routeIdentity ?? `testing:${runId}`
+  const taskContextIdentity = state.taskContextIdentity ?? `testing:${runId}`
   const reviewStatus = state.reviewStatus === 'idle' ? 'collecting' : state.reviewStatus
   const criticalFindings = [...new Set(state.lastReviewResults
     .filter(result => !result.passed && result.severity === 'critical')
@@ -169,7 +201,7 @@ export function buildTestingReviewEvidence(
     .sort((left, right) => left.gate.localeCompare(right.gate))
   const evidenceDigest = digest({
     schemaVersion: TESTING_EVIDENCE_SCHEMA_VERSION,
-    routeIdentity,
+    taskContextIdentity,
     runId,
     reviewStatus,
     criticalFindings,
@@ -178,7 +210,7 @@ export function buildTestingReviewEvidence(
 
   return {
     schemaVersion: TESTING_EVIDENCE_SCHEMA_VERSION,
-    routeIdentity,
+    taskContextIdentity,
     runId,
     reviewStatus,
     criticalFindings,
@@ -190,7 +222,7 @@ export function buildTestingReviewEvidence(
 }
 
 function readTestingReviewState(value: unknown): TestingReviewState | undefined {
-  if (!isRecord(value) || value.schemaVersion !== TESTING_STATE_SCHEMA_VERSION) return undefined
+  if (!isRecord(value) || (value.schemaVersion !== TESTING_STATE_SCHEMA_VERSION && value.schemaVersion !== 4)) return undefined
   if (!isTestingReviewStatus(value.reviewStatus)) return undefined
   if (!Array.isArray(value.lastTargets) || !Array.isArray(value.lastReviewResults)) return undefined
 
@@ -204,12 +236,16 @@ function readTestingReviewState(value: unknown): TestingReviewState | undefined 
       : 0
   }
 
-  if (typeof value.routeIdentity === 'string' && value.routeIdentity.trim() !== '') state.routeIdentity = value.routeIdentity
+  const taskContextIdentity = readTaskContextIdentity(value, value.schemaVersion === 4)
+  if (taskContextIdentity) state.taskContextIdentity = taskContextIdentity
   if (typeof value.reviewRunId === 'string') state.reviewRunId = value.reviewRunId
-  if (typeof value.lastReportMarkdown === 'string') state.lastReportMarkdown = value.lastReportMarkdown
   const observedTestCommand = readObservedTestCommandEvidence(value.lastObservedTestCommand)
-  if (observedTestCommand && (!state.routeIdentity || observedTestCommand.routeIdentity === state.routeIdentity)) {
+  if (observedTestCommand && (!state.taskContextIdentity || observedTestCommand.taskContextIdentity === state.taskContextIdentity)) {
     state.lastObservedTestCommand = observedTestCommand
+  }
+  const observedBrowserEvidence = readObservedBrowserEvidence(value.lastObservedBrowserEvidence)
+  if (observedBrowserEvidence && (!state.taskContextIdentity || observedBrowserEvidence.taskContextIdentity === state.taskContextIdentity)) {
+    state.lastObservedBrowserEvidence = observedBrowserEvidence
   }
 
   if (state.lastTargets.length !== value.lastTargets.length) return undefined
@@ -219,18 +255,47 @@ function readTestingReviewState(value: unknown): TestingReviewState | undefined 
 }
 
 function readObservedTestCommandEvidence(value: unknown): ObservedTestCommandEvidence | undefined {
-  if (!isRecord(value) || value.schemaVersion !== 1) return undefined
-  if (typeof value.routeIdentity !== 'string' || !value.routeIdentity.trim()) return undefined
+  if (!isRecord(value) || (value.schemaVersion !== 2 && value.schemaVersion !== 1)) return undefined
+  const taskContextIdentity = readTaskContextIdentity(value, value.schemaVersion === 1)
+  if (!taskContextIdentity) return undefined
   if (typeof value.commandDigest !== 'string' || !/^[0-9a-f]{64}$/.test(value.commandDigest)) return undefined
   if (!Number.isInteger(value.exitCode)) return undefined
   if (!Number.isFinite(value.observedAt) || Number(value.observedAt) <= 0) return undefined
   return {
-    schemaVersion: 1,
-    routeIdentity: value.routeIdentity,
+    schemaVersion: 2,
+    taskContextIdentity,
     commandDigest: value.commandDigest,
     exitCode: Number(value.exitCode),
     observedAt: Number(value.observedAt)
   }
+}
+
+function readObservedBrowserEvidence(value: unknown): ObservedBrowserEvidence | undefined {
+  if (!isRecord(value) || (value.schemaVersion !== 2 && value.schemaVersion !== 1)) return undefined
+  const taskContextIdentity = readTaskContextIdentity(value, value.schemaVersion === 1)
+  if (!taskContextIdentity) return undefined
+  if (!Number.isFinite(value.observedAt) || Number(value.observedAt) <= 0) return undefined
+  const evidence = readBrowserEvidenceValue(value.evidence)
+  if (!evidence) return undefined
+  return {
+    schemaVersion: 2,
+    taskContextIdentity,
+    evidence,
+    observedAt: Number(value.observedAt)
+  }
+}
+
+function readTaskContextIdentity(value: Record<string, unknown>, allowLegacyRouteName = false): string | undefined {
+  if (typeof value.taskContextIdentity === 'string' && value.taskContextIdentity.trim()) {
+    return value.taskContextIdentity
+  }
+
+  // State schema v4 and observation schema v1 used the retired route name.
+  if (allowLegacyRouteName && typeof value.routeIdentity === 'string' && value.routeIdentity.trim()) {
+    return value.routeIdentity.replace(/^route:/, 'task:')
+  }
+
+  return undefined
 }
 
 function digest(value: unknown): string {

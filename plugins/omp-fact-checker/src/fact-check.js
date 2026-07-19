@@ -20,7 +20,7 @@ export function normalizeDoi(value = '') {
   return normalizeWhitespace(value).replace(/^https?:\/\/(?:dx\.)?doi\.org\//iu, '').replace(/[),.;]+$/u, '').toLowerCase();
 }
 
-export function extractFactClaims({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } = {}) {
+function extractFactClaims({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } = {}) {
   const source = String(text ?? '');
   const segments = sentenceSegments(source);
   const claims = [];
@@ -80,12 +80,12 @@ export function formatFactCheckPlan(plan = {}) {
 }
 
 export function collectLocalEvidence({ claims = [], evidenceRecords = [], lane = 'A' } = {}) {
-  return claims.map((claim) => {
+  return claims.flatMap((claim) => {
     const matches = evidenceRecords
       .filter((record) => evidenceRecordMatchesClaim(record, claim))
       .map((record) => normalizeEvidenceRecord(record, claim, lane));
-    if (matches.length > 0) return matches[0];
-    return {
+    if (matches.length > 0) return matches;
+    return [{
       claimId: claim.id,
       lane,
       provider: 'local',
@@ -93,7 +93,7 @@ export function collectLocalEvidence({ claims = [], evidenceRecords = [], lane =
       quote: '',
       source: '',
       reason: 'No local evidence record matched this claim.',
-    };
+    }];
   });
 }
 
@@ -108,8 +108,8 @@ export function crossCheckEvidence({ claims = [], evidenceRecords = [] } = {}) {
     }
     const laneARecords = lanes.get('A') ?? [];
     const laneBRecords = lanes.get('B') ?? [];
-    const laneA = strongestStatus(laneARecords);
-    const laneB = strongestStatus(laneBRecords);
+    const laneA = laneStatus(laneARecords);
+    const laneB = laneStatus(laneBRecords);
     const conflicts = conflictFields(laneARecords, laneBRecords, claim);
     const baseStatus = crossCheckStatus(laneA, laneB);
     return {
@@ -129,7 +129,7 @@ export function buildFactCheckReport({ claims = [], evidenceRecords = [], crossC
     const records = evidenceRecords.filter((record) => record.claimId === claim.id);
     const strongest = strongestStatus(records);
     const cross = crossByClaim.get(claim.id);
-    const verdict = finalVerdict(strongest, cross);
+    const verdict = finalVerdict(strongest, cross, records);
     const strict = strictClaimAssessment({ claim, evidenceRecords: records, crossCheck: cross });
     return {
       claimId: claim.id,
@@ -180,7 +180,7 @@ export function formatFactCheckReport(report = {}) {
   ].join('\n');
 }
 
-export function validateFactCheckGate({
+export function validateFactCheckReview({
   finalOutput = '',
   riskLevel = 'standard',
 } = {}) {
@@ -213,7 +213,7 @@ export function validateFactCheckGate({
 function sentenceSegments(text = '') {
   const normalized = String(text ?? '').replace(/\r\n/gu, '\n');
   const raw = normalized
-    .split(/(?<=[。！？.!?])\s+|\n+/u)
+    .split(/(?<=[。！？])|(?<=[.!?])\s+|\n+/u)
     .map((item) => normalizeWhitespace(item))
     .filter((item) => item.length >= 8);
   return raw.map((item, index) => ({ text: item, location: `segment ${index + 1}` }));
@@ -259,7 +259,7 @@ function requiredStagesFor({ claims = [] } = {}) {
 }
 
 function evidenceRecordMatchesClaim(record = {}, claim = {}) {
-  if (record.claimId && record.claimId === claim.id) return true;
+  if (record.claimId) return record.claimId === claim.id;
   const haystack = normalizeWhitespace([
     record.claim,
     record.title,
@@ -315,7 +315,18 @@ function strongestStatus(records = []) {
   return 'INSUFFICIENT';
 }
 
+function laneStatus(records = []) {
+  if (hasStatusConflict(records)) return 'CONFLICTED';
+  return strongestStatus(records);
+}
+
+function hasStatusConflict(records = []) {
+  const statuses = new Set(records.map((record) => normalizeEvidenceStatus(record.status)));
+  return statuses.has('SUPPORTED') && statuses.has('CONTRADICTED');
+}
+
 function crossCheckStatus(a, b) {
+  if (a === 'CONFLICTED' || b === 'CONFLICTED') return 'CONFLICTED';
   if (a === 'INSUFFICIENT' && b === 'INSUFFICIENT') return 'INSUFFICIENT';
   if (a === 'UNVERIFIABLE' || b === 'UNVERIFIABLE') return 'UNVERIFIABLE';
   if (a !== 'INSUFFICIENT' && b !== 'INSUFFICIENT' && a !== b) return 'CONFLICTED';
@@ -348,8 +359,8 @@ function comparableFieldValues(records = [], field = '') {
       : normalizeWhitespace(value).toLowerCase()));
 }
 
-function finalVerdict(strongest, cross) {
-  if (cross?.status === 'CONFLICTED') return 'CONFLICTED';
+function finalVerdict(strongest, cross, records = []) {
+  if (cross?.status === 'CONFLICTED' || hasStatusConflict(records)) return 'CONFLICTED';
   if (strongest === 'SUPPORTED') return 'SUPPORTED';
   if (strongest === 'CONTRADICTED') return 'CONTRADICTED';
   if (strongest === 'UNVERIFIABLE') return 'UNVERIFIABLE';
@@ -362,9 +373,9 @@ export function strictClaimVerdict(input = {}) {
 
 function strictClaimAssessment({ claim = {}, evidenceRecords = [], crossCheck } = {}) {
   const strongest = strongestStatus(evidenceRecords);
-  const compatibilityVerdict = finalVerdict(strongest, crossCheck);
+  const compatibilityVerdict = finalVerdict(strongest, crossCheck, evidenceRecords);
   if (compatibilityVerdict === 'CONFLICTED' || crossCheck?.status === 'CONFLICTED') {
-    return { verdict: 'CONFLICTED', reasons: ['independent evidence conflicts'] };
+    return { verdict: 'CONFLICTED', reasons: ['evidence conflicts'] };
   }
   if (hasStaleFinding(evidenceRecords, crossCheck)) {
     return { verdict: 'INSUFFICIENT', reasons: ['stale evidence cannot strictly support a current claim'] };

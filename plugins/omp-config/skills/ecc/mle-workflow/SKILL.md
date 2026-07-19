@@ -43,11 +43,10 @@ Treat datasets, model files, notebooks, prompts, feature logs, and serialized ob
 
 ## Canonical Delegation
 
-- `reviewer` performs the independent ML-aware review with this skill and relevant framework skills.
-- `plan` defines a bounded repair or experiment plan without editing.
-- `implementation-task` makes only an authorized scoped change.
-- `test-planner`, `test-executor`, and `test-reviewer` own test design, execution, and independent evidence when `code.test` is composed.
-- Use `performance.optimize` for measured latency, throughput, memory, accelerator utilization, or cost work; do not optimize against an unrecorded baseline.
+- Main performs bounded local and external search, owns authorized vertical TDD changes, runs exact commands, and validates every finding.
+- `plan` independently reviews the supplied bounded repair or experiment plan without editing.
+- `reviewer` performs the GREEN-after-diff ML-aware review with this skill and relevant framework skills.
+- Measured latency, throughput, memory, accelerator utilization, or cost work stays inside `ml.debug` or `code.dev`; never optimize against an unrecorded baseline.
 - Use `code-documentation` for runbooks and artifact/model-card updates supported by verified behavior.
 
 ## Evidence Contract

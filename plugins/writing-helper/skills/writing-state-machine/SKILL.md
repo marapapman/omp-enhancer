@@ -1,6 +1,6 @@
 ---
 name: writing-state-machine
-description: "Strict writing evidence matrix, with paragraph context isolation only when the user explicitly requests it"
+description: Use for hallucination-sensitive English drafting or revision where citations, numbers, and factual claims require an explicit source-to-text evidence matrix. Not for ordinary prose editing; isolate paragraph context only when explicitly requested.
 ---
 
 # Writing State Machine Skill

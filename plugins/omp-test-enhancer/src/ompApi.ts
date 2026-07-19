@@ -27,10 +27,6 @@ export interface ExtensionToolContext {
   }
 }
 
-export interface ExtensionCommandContext extends ExtensionToolContext {
-  waitForIdle(): Promise<void>
-}
-
 export type ExtensionEventHandler = (event: unknown, ctx: ExtensionToolContext) => Promise<unknown> | unknown
 
 export interface ToolDefinition<TParams = unknown> {
@@ -51,11 +47,6 @@ export interface ToolDefinition<TParams = unknown> {
   ): Promise<AgentToolResult>
 }
 
-export interface CommandDefinition {
-  description: string
-  handler(args: string, ctx: ExtensionCommandContext): Promise<void> | void
-}
-
 export interface ExtensionAPI {
   /** Shared by the per-extension API wrappers in the real OMP loader. */
   events?: object
@@ -72,12 +63,7 @@ export interface ExtensionAPI {
   }
   setLabel(label: string): void
   registerTool<TParams>(tool: ToolDefinition<TParams>): void
-  registerCommand(name: string, command: CommandDefinition): void
   registerMessageRenderer?(customType: string, renderer: unknown): void
   on(event: string, handler: ExtensionEventHandler): void
-  getAllTools?(): string[]
-  getActiveTools?(): string[]
-  setActiveTools?(names: string[]): Promise<void> | void
-  sendUserMessage(content: string, options?: { deliverAs?: 'steer' | 'followUp' | 'nextTurn' }): Promise<void> | void
   appendEntry(customType: string, data: unknown): Promise<void> | void
 }

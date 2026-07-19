@@ -83,6 +83,30 @@ test('tool repair template is a strict no-op for other models', async () => {
   assert.deepEqual(toolCall.arguments, { path: 'README.md' });
 });
 
+test('tool repair decodes complete, truncated, double-encoded, and OpenAI-style argument strings', async () => {
+  const handler = registeredHandler(registerDeepSeekToolRepair, 'context');
+  const complete = { name: 'read', arguments: '{"path":"README.md"}' };
+  const truncated = { name: 'read', arguments: '{"path":"README.md"' };
+  const doubleEncoded = {
+    name: 'read',
+    arguments: JSON.stringify(JSON.stringify({ path: ['README.md'] })),
+  };
+  const openAiStyle = {
+    type: 'function',
+    function: { name: 'read', arguments: '{"path":["README.md"]}' },
+  };
+  const messages = [{ role: 'assistant', tool_calls: [complete, truncated, doubleEncoded, openAiStyle] }];
+
+  const patched = await handler({ messages }, { model: flashModel });
+
+  assert.equal(patched.messages, messages);
+  assert.deepEqual(complete.arguments, { path: 'README.md' });
+  assert.deepEqual(truncated.arguments, { path: 'README.md' });
+  assert.deepEqual(doubleEncoded.arguments, { path: 'README.md' });
+  assert.equal(openAiStyle.function.arguments, '{"path":"README.md"}');
+  assert.equal(Object.hasOwn(openAiStyle, 'arguments'), false);
+});
+
 test('tool-result pipeline preserves non-text blocks and outcome metadata', async () => {
   const handler = registeredHandler(registerDeepSeekToolResultPipeline, 'tool_result');
   const image = { type: 'image', data: 'image-data', mimeType: 'image/png' };

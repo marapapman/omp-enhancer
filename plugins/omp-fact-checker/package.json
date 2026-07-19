@@ -1,6 +1,6 @@
 {
   "name": "omp-fact-checker",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "private": true,
   "type": "module",
   "description": "OMP fact-checking workflow with claim planning, evidence collection, cross-checking, reports, and advisory review.",
@@ -13,7 +13,6 @@
     "src",
     "agents",
     "skills",
-    "test",
     "package.json",
     "README.md"
   ],

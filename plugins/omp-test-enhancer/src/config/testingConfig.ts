@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export interface TestingEnhancerConfig {
@@ -21,22 +21,10 @@ export interface TestingEnhancerConfig {
   }
 }
 
-export function defaultTestingEnhancerConfig(packageManager: 'bun' | 'pnpm' | 'npm' | 'yarn' | 'unknown'): TestingEnhancerConfig {
-  const command = packageManager === 'bun'
-    ? 'bunx vitest run'
-    : packageManager === 'pnpm'
-      ? 'pnpm test'
-      : packageManager === 'npm'
-        ? 'npm test'
-        : packageManager === 'yarn'
-          ? 'yarn test'
-          : undefined
-
-  const test = command ? { command } : {}
-
+export function defaultTestingEnhancerConfig(): TestingEnhancerConfig {
   return {
     version: 2,
-    test,
+    test: {},
     coverage: {},
     browser: {
       headless: true,
@@ -57,7 +45,7 @@ export function renderTestingEnhancerConfig(config: TestingEnhancerConfig): stri
   return [
     'version: 2',
     'test:',
-    '  # Expected host-observed command; advisory omp_test_gate never executes it.',
+    '  # Expected host-observed command; advisory omp_test_review never executes it.',
     `  command: ${config.test.command ?? ''}`,
     'coverage:',
     `  command: ${config.coverage.command ?? ''}`,
@@ -78,7 +66,7 @@ export function renderTestingEnhancerConfig(config: TestingEnhancerConfig): stri
 }
 
 export function parseTestingEnhancerConfig(text: string): TestingEnhancerConfig {
-  const config = defaultTestingEnhancerConfig('unknown')
+  const config = defaultTestingEnhancerConfig()
   let section: 'test' | 'coverage' | 'browser' | 'review' | undefined
 
   for (const rawLine of text.split(/\r?\n/)) {
@@ -140,22 +128,6 @@ export async function readTestingEnhancerConfig(cwd: string): Promise<TestingEnh
     if (isNodeError(error) && error.code === 'ENOENT') return undefined
     throw error
   }
-}
-
-export async function writeTestingEnhancerConfig(cwd: string, config: TestingEnhancerConfig): Promise<string> {
-  const relativePath = '.omp/testing-enhancer.yml'
-  const configDir = join(cwd, '.omp')
-  const configPath = join(configDir, 'testing-enhancer.yml')
-
-  await mkdir(configDir, { recursive: true })
-
-  try {
-    await writeFile(configPath, renderTestingEnhancerConfig(config), { flag: 'wx' })
-  } catch (error: unknown) {
-    if (!isNodeError(error) || error.code !== 'EEXIST') throw error
-  }
-
-  return relativePath
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

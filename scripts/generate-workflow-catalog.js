@@ -1,12 +1,12 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { buildSharedWorkflowCatalogMarkdown } from '../plugins/omp-enhancer-core/src/workflows/render-shared-markdown.js';
 import {
-  buildSharedWorkflowCatalogMarkdown,
   buildWorkflowSkillIndexMarkdown,
   buildWorkflowSkillReferences,
-} from '../plugins/omp-enhancer-core/src/workflow-routes.js';
+} from '../plugins/omp-enhancer-core/src/workflows/render-skill.js';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -26,26 +26,6 @@ export const workflowSkillRoot = path.join(
   'omp-enhancer-workflows',
 );
 
-export async function checkWorkflowCatalog(target = workflowCatalogTarget) {
-  const expected = buildSharedWorkflowCatalogMarkdown();
-  const actual = await readFile(target, 'utf8').catch((error) => {
-    if (error?.code === 'ENOENT') return null;
-    throw error;
-  });
-  return {
-    ok: actual === expected,
-    target,
-    expected,
-    actual,
-  };
-}
-
-export async function writeWorkflowCatalog(target = workflowCatalogTarget) {
-  const content = buildSharedWorkflowCatalogMarkdown();
-  await writeFile(target, content, 'utf8');
-  return { ok: true, target, bytes: Buffer.byteLength(content) };
-}
-
 export async function checkWorkflowArtifacts({
   catalogTarget = workflowCatalogTarget,
   skillRoot = workflowSkillRoot,
@@ -58,6 +38,14 @@ export async function checkWorkflowArtifacts({
     });
     return { ...artifact, actual, ok: actual === artifact.expected };
   }));
+  const unexpected = await unexpectedWorkflowReferences(skillRoot, expected);
+  results.push(...unexpected.map((target) => ({
+    target,
+    expected: null,
+    actual: null,
+    ok: false,
+    unexpected: true,
+  })));
   return {
     ok: results.every((result) => result.ok),
     results,
@@ -69,6 +57,8 @@ export async function writeWorkflowArtifacts({
   skillRoot = workflowSkillRoot,
 } = {}) {
   const artifacts = workflowArtifacts({ catalogTarget, skillRoot });
+  const removed = await unexpectedWorkflowReferences(skillRoot, artifacts);
+  await Promise.all(removed.map((target) => unlink(target)));
   for (const artifact of artifacts) {
     await mkdir(path.dirname(artifact.target), { recursive: true });
     await writeFile(artifact.target, artifact.expected, 'utf8');
@@ -79,7 +69,22 @@ export async function writeWorkflowArtifacts({
       target: artifact.target,
       bytes: Buffer.byteLength(artifact.expected),
     })),
+    removed,
   };
+}
+
+async function unexpectedWorkflowReferences(skillRoot, artifacts) {
+  const referencesRoot = path.join(skillRoot, 'references');
+  const entries = await readdir(referencesRoot, { withFileTypes: true }).catch((error) => {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  });
+  const expectedTargets = new Set(artifacts.map(({ target }) => path.resolve(target)));
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+    .map((entry) => path.join(referencesRoot, entry.name))
+    .filter((target) => !expectedTargets.has(path.resolve(target)))
+    .sort();
 }
 
 function workflowArtifacts({ catalogTarget, skillRoot }) {
@@ -87,8 +92,8 @@ function workflowArtifacts({ catalogTarget, skillRoot }) {
   return [
     { target: catalogTarget, expected: buildSharedWorkflowCatalogMarkdown() },
     { target: path.join(skillRoot, 'SKILL.md'), expected: buildWorkflowSkillIndexMarkdown() },
-    ...Object.entries(references).map(([domain, expected]) => ({
-      target: path.join(skillRoot, 'references', `${domain}.md`),
+    ...Object.entries(references).map(([workflowId, expected]) => ({
+      target: path.join(skillRoot, 'references', `${workflowId}.md`),
       expected,
     })),
   ];
@@ -107,6 +112,9 @@ async function main(argv = process.argv.slice(2)) {
 
   if (write) {
     const result = await writeWorkflowArtifacts();
+    for (const target of result.removed) {
+      process.stdout.write(`Removed ${path.relative(repoRoot, target)}.\n`);
+    }
     for (const artifact of result.results) {
       process.stdout.write(`Generated ${path.relative(repoRoot, artifact.target)} (${artifact.bytes} bytes).\n`);
     }

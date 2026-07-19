@@ -1,13 +1,4 @@
 export function evaluateTestCommandGate(result, options = {}) {
-    if (options.notEvaluatedDueToStaticFindings) {
-        return [{
-                gate: 'test-command',
-                passed: true,
-                severity: 'warning',
-                summary: 'Host-observed test evidence was not evaluated because static critical findings remain.',
-                evidence: {}
-            }];
-    }
     const severity = options.severity ?? (result ? 'critical' : 'warning');
     if (!result) {
         return [{

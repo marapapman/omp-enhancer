@@ -20,6 +20,16 @@
       "maxDuplicateSkillReadAttempts": 0,
       "maxProvidedSkills": 0,
       "expectedProvisionMode": "none",
+      "requireWorkflowIndexOnlyFirstToolBatch": true,
+      "requireWorkflowPlanBeforeResourceLoads": true,
+      "requiredWorkflowPlanFormat": "block",
+      "minWorkflowPlanNumberedActions": 1,
+      "forbidResourceProjectSameBatch": true,
+      "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+      "requireExactSelectedWorkflowReferences": true,
+      "requireWorkflowPlanSkillsUseDomainSkillUris": true,
+      "requireWorkflowReadyLoadedSkillsUseBareIds": true,
+      "requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills": true,
       "maxToolCalls": 8,
       "maxSourceSearchCalls": 8,
       "maxAbortedAssistants": 0,
@@ -28,11 +38,34 @@
   },
   "scenarios": [
     {
+      "id": "fixture-xlsx-control",
+      "category": "harness-control",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Read skill://xlsx and return only its first Markdown heading. Do not read project files.",
+      "expectations": {
+        "requireWorkflowIndexOnlyFirstToolBatch": false,
+        "requireWorkflowPlanBeforeResourceLoads": false,
+        "forbidResourceProjectSameBatch": false,
+        "requireWorkflowReadyAfterLoadsBeforeProjectTools": false,
+        "requireWorkflowPlanSkillsUseDomainSkillUris": false,
+        "requireWorkflowReadyLoadedSkillsUseBareIds": false,
+        "requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills": false,
+        "forbidWorkflowMarkers": true,
+        "expectedToolSequence": ["read"],
+        "requiredObservedSkills": ["xlsx"],
+        "maxObservedSkills": 1,
+        "maxToolCalls": 1,
+        "forbiddenSkills": ["omp-enhancer-workflows"]
+      }
+    },
+    {
       "id": "natural-writing-en",
       "category": "writing-helper",
       "fixture": "skill-discovery-readonly",
       "prompt": "Read abstract.tex and propose a conservative correction of its single English sentence. Preserve all qualifiers, modality, negation, percentages, citations, and LaTeX commands. Do not modify files or use the network.",
       "expectations": {
+        "minWorkflowReferenceReads": 1,
+        "requiredSelectedWorkflowIds": ["writing.en", "writing.latex"],
         "requiredAnySkills": ["writing-review", "polish-acm-latex-prose"],
         "maxObservedSkills": 2,
         "forbiddenSkills": ["plain-chinese-writing", "zh-writing-polish", "writing-markdown-helper"]
@@ -44,9 +77,16 @@
       "fixture": "skill-discovery-readonly",
       "prompt": "Check the three claims in claims.md against evidence.md using only local evidence. Give a separate verdict for each claim and state limitations. Do not modify files or use the network.",
       "expectations": {
+        "minWorkflowReferenceReads": 1,
         "requiredObservedSkills": ["fact-checking"],
+        "requiredObservedSkillsBeforeProjectTools": ["fact-checking"],
         "maxObservedSkills": 4,
-        "forbiddenSkills": ["writing-review", "systematic-debugging"]
+        "forbiddenSkills": ["writing-review"],
+        "requiredClaimVerdicts": {
+          "1": ["INSUFFICIENT", "LOCAL_UNVERIFIED"],
+          "2": "CONTRADICTED",
+          "3": ["INSUFFICIENT", "LOCAL_UNVERIFIED"]
+        }
       }
     },
     {
@@ -55,8 +95,9 @@
       "fixture": "skill-discovery-readonly",
       "prompt": "Audit docker-compose.yml for production safety, current Compose syntax, secret handling, port exposure, persistence, and a health check. Return evidence-backed findings only; do not modify files or run containers.",
       "expectations": {
+        "minWorkflowReferenceReads": 1,
         "requiredObservedSkills": ["docker-compose"],
-        "maxObservedSkills": 1,
+        "maxObservedSkills": 2,
         "forbiddenSkills": ["frontend-design", "webapp-testing"]
       }
     },
@@ -66,6 +107,7 @@
       "fixture": "skill-discovery-readonly",
       "prompt": "Consult the optional OMP Enhancer workflow reference already available in this session, then create a compact, ordered release-readiness checklist for a five-plugin OMP marketplace. Cover implementation validation, independent security review, package verification, rollback readiness, and separate publish authorization. Explain which phases can be composed. Do not inspect or modify project files.",
       "expectations": {
+        "minWorkflowReferenceReads": 1,
         "requiredObservedSkills": ["omp-enhancer-workflows"],
         "maxObservedSkills": 6,
         "forbiddenSkills": ["writing-review", "docker-compose"]
@@ -77,8 +119,9 @@
       "fixture": "skill-discovery-readonly",
       "prompt": "Read sales.csv and specify the exact workbook structure, formulas, professional formatting, validation checks, and chart you would use to deliver sales.xlsx. This is a read-only planning run, so do not create the file.",
       "expectations": {
+        "minWorkflowReferenceReads": 1,
         "requiredObservedSkills": ["xlsx"],
-        "maxObservedSkills": 1,
+        "maxObservedSkills": 2,
         "forbiddenSkills": ["pdf", "pptx"]
       }
     },
@@ -88,8 +131,9 @@
       "fixture": "skill-discovery-readonly",
       "prompt": "Create a concise troubleshooting checklist for a home Pi-hole installation where DHCP clients intermittently bypass local DNS and DNS-over-HTTPS is enabled. Distinguish router, DHCP, client, upstream, and cache checks. Do not inspect files, change configuration, or use the network.",
       "expectations": {
+        "minWorkflowReferenceReads": 1,
         "requiredObservedSkills": ["ecc-skill-catalog", "homelab-pihole-dns"],
-        "maxObservedSkills": 2,
+        "maxObservedSkills": 3,
         "forbiddenSkills": ["docker-compose", "frontend-design", "xlsx"]
       }
     },
@@ -98,12 +142,23 @@
       "category": "omp-native-agent-control",
       "fixture": "skill-discovery-readonly",
       "prompt": "Use exactly one native scout subagent to read README.md and return its first Markdown heading. The parent must not read the file itself. Do not modify files or use the network.",
-      "tools": ["task", "read"],
+      "tools": ["task", "hub", "read"],
       "expectations": {
         "requireSuccessfulToolCalls": false,
+        "requireWorkflowIndexOnlyFirstToolBatch": false,
+        "requireWorkflowPlanBeforeResourceLoads": false,
+        "forbidResourceProjectSameBatch": false,
+        "requireWorkflowReadyAfterLoadsBeforeProjectTools": false,
+        "requireWorkflowPlanSkillsUseDomainSkillUris": false,
+        "requireWorkflowReadyLoadedSkillsUseBareIds": false,
+        "requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills": false,
+        "forbidWorkflowMarkers": true,
+        "maxNativeTodoCalls": 0,
         "maxObservedSkills": 0,
         "minNativeTaskCalls": 1,
+        "maxNativeTaskCalls": 1,
         "minNativeTaskForks": 1,
+        "maxNativeTaskAssignmentAttempts": 1,
         "requireNativeTaskCompletion": true,
         "forbiddenSkills": ["writing-review", "fact-checking", "docker-compose", "omp-enhancer-workflows", "xlsx", "ecc-skill-catalog"]
       }
@@ -113,7 +168,19 @@
       "category": "negative-control",
       "fixture": "skill-discovery-readonly",
       "prompt": "Read README.md and return only its first Markdown heading. Do not modify files.",
+      "tools": ["todo", "task", "hub", "read"],
       "expectations": {
+        "requireWorkflowIndexOnlyFirstToolBatch": false,
+        "requireWorkflowPlanBeforeResourceLoads": false,
+        "forbidResourceProjectSameBatch": false,
+        "requireWorkflowReadyAfterLoadsBeforeProjectTools": false,
+        "requireWorkflowPlanSkillsUseDomainSkillUris": false,
+        "requireWorkflowReadyLoadedSkillsUseBareIds": false,
+        "requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills": false,
+        "forbidWorkflowMarkers": true,
+        "expectedToolSequence": ["read"],
+        "maxNativeTodoCalls": 0,
+        "maxNativeTaskCalls": 0,
         "maxObservedSkills": 0,
         "forbiddenSkills": ["writing-review", "fact-checking", "docker-compose", "omp-enhancer-workflows", "xlsx", "pdf", "frontend-design", "webapp-testing", "ecc-skill-catalog"]
       }

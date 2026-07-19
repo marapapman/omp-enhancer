@@ -26,6 +26,7 @@ await Promise.all([mkdir(agentDir, { recursive: true }), mkdir(sessionDir, { rec
 
 const ompBin = process.env.OMP_BIN || 'omp';
 const ompVersion = readOmpVersion(ompBin);
+const ownsProcessGroup = process.platform !== 'win32';
 const child = spawn(ompBin, [
   '--mode', 'rpc',
   '--no-session',
@@ -34,6 +35,7 @@ const child = spawn(ompBin, [
   ...ompArgs,
 ], {
   stdio: ['pipe', 'pipe', 'pipe'],
+  detached: ownsProcessGroup,
   env: useHostInstallation
     ? { ...process.env }
     : {
@@ -54,6 +56,7 @@ let availableCommands = [];
 let setupAgentInvoked = null;
 let ready = false;
 let setupSent = false;
+let forceKillTimer;
 
 child.stdout.setEncoding('utf8');
 child.stderr.setEncoding('utf8');
@@ -66,7 +69,12 @@ child.on('error', (error) => finish(1, { error: error.message }));
 child.on('exit', (code) => {
   if (!settled) finish(code || 1, { error: `OMP exited before get_state (${code})`, stderr: tail(stderr) });
 });
-setTimeout(() => finish(1, { error: 'OMP RPC probe timed out', stderr: tail(stderr) }), 20_000).unref();
+const probeTimer = setTimeout(
+  () => finish(1, { error: 'OMP RPC probe timed out', stderr: tail(stderr) }),
+  20_000,
+);
+process.once('SIGTERM', () => terminateFromParentSignal('SIGTERM'));
+process.once('SIGINT', () => terminateFromParentSignal('SIGINT'));
 
 function drainLines() {
   while (stdout.includes('\n')) {
@@ -144,6 +152,13 @@ function summarizeState(state) {
     ompVersion: state.version ?? ompVersion,
     hostInstallation: useHostInstallation,
     setupAgentInvoked,
+    model: state.model && typeof state.model === 'object'
+      ? {
+        provider: state.model.provider ?? null,
+        id: state.model.id ?? null,
+      }
+      : null,
+    thinkingLevel: state.thinkingLevel ?? null,
     promptBlocks: prompts.map((block, index) => ({
       index,
       chars: String(block).length,
@@ -153,10 +168,12 @@ function summarizeState(state) {
     activeToolNames: tools.map((tool) => tool?.name).filter(Boolean).sort(),
     taskToolSha256: task ? hash(JSON.stringify(task)) : null,
     taskHasNativeAgents: Object.fromEntries(
-      ['scout', 'task', 'sonic', 'reviewer', 'designer', 'librarian']
+      ['scout', 'task', 'sonic', 'plan', 'reviewer', 'designer', 'librarian']
         .map((name) => [name, JSON.stringify(task ?? {}).includes(name)]),
     ),
-    taskHasOmpTargetAuditor: JSON.stringify(task ?? {}).includes('omp-target-auditor'),
+    taskHasCodeLifecycleAgents: Object.fromEntries(
+      ['plan', 'reviewer'].map((name) => [name, JSON.stringify(task ?? {}).includes(name)]),
+    ),
     forbiddenAutomaticGuidance: {
       firstToolTodo: /FIRST tool call|first tool call must initialize/i.test(joined),
       exactRoleWhitelist: /Invoke only roles|exact installed agent IDs for that workflow/i.test(joined),
@@ -180,8 +197,7 @@ function summarizeState(state) {
         'plain-chinese-writing',
         'fact-checking',
         'docker-compose',
-        'systematic-debugging',
-        'test-driven-development',
+        'code-development',
         'omp-enhancer-workflows',
         'xlsx',
         'pdf',
@@ -206,7 +222,11 @@ function tail(value) {
 }
 
 function readOmpVersion(binary) {
-  const result = spawnSync(binary, ['--version'], { encoding: 'utf8' });
+  const result = spawnSync(binary, ['--version'], {
+    encoding: 'utf8',
+    timeout: 5_000,
+    killSignal: 'SIGKILL',
+  });
   if (result.status !== 0) return null;
   return String(result.stdout || result.stderr || '').trim() || null;
 }
@@ -214,10 +234,14 @@ function readOmpVersion(binary) {
 function finish(code, value) {
   if (settled) return;
   settled = true;
+  clearTimeout(probeTimer);
   let outputFlushed = false;
   let childClosed = child.exitCode !== null || child.signalCode !== null;
   const exitWhenReady = () => {
-    if (outputFlushed && childClosed) process.exit(code);
+    if (outputFlushed && childClosed) {
+      clearTimeout(forceKillTimer);
+      process.exit(code);
+    }
   };
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`, () => {
     outputFlushed = true;
@@ -227,8 +251,42 @@ function finish(code, value) {
     childClosed = true;
     exitWhenReady();
   });
-  child.kill('SIGTERM');
-  setTimeout(() => {
-    if (!childClosed) child.kill('SIGKILL');
-  }, 1_000).unref();
+  signalChildTree('SIGTERM');
+  forceKillTimer = setTimeout(() => {
+    if (!childClosed) {
+      signalChildTree('SIGKILL');
+      child.stdin.destroy();
+      child.stdout.destroy();
+      child.stderr.destroy();
+      process.exit(code);
+    }
+  }, 1_000);
+}
+
+function signalChildTree(signal) {
+  if (child.exitCode !== null || child.signalCode !== null || !child.pid) return;
+  try {
+    if (ownsProcessGroup) process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch (error) {
+    if (error?.code !== 'ESRCH') throw error;
+  }
+}
+
+function terminateFromParentSignal(signal) {
+  clearTimeout(probeTimer);
+  signalChildTree('SIGTERM');
+  const exitCode = signal === 'SIGINT' ? 130 : 143;
+  const exitAfterKill = setTimeout(() => {
+    signalChildTree('SIGKILL');
+    process.exit(exitCode);
+  }, 1_000);
+  if (child.exitCode !== null || child.signalCode !== null) {
+    clearTimeout(exitAfterKill);
+    process.exit(exitCode);
+  }
+  child.once('close', () => {
+    clearTimeout(exitAfterKill);
+    process.exit(exitCode);
+  });
 }

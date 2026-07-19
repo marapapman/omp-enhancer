@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { detectPackageManager, findPublicEntryHints, findRelatedTests, readRepoFiles } from '../../../src/repo/repoScanner.js'
+import { findPublicEntryHints, findRelatedTests, readRepoFiles } from '../../../src/repo/repoScanner.js'
 
 async function tempRepo(): Promise<string> {
   const cwd = await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-repo-'))
@@ -67,14 +67,12 @@ describe('repoScanner', () => {
     ]))
   })
 
-  it('skips unsafe paths and detects bun', async () => {
+  it('skips unsafe paths', async () => {
     const cwd = await tempRepo()
-    await writeFile(join(cwd, 'bun.lock'), '')
 
     expect(await readRepoFiles(cwd, ['src/user/UserService.ts', '../outside.ts', '/tmp/outside.ts'])).toEqual([
       { path: 'src/user/UserService.ts', content: 'export class UserService {}' }
     ])
-    expect(await detectPackageManager(cwd)).toBe('bun')
   })
 
   it('does not follow repository symlinks that escape the workspace', async () => {

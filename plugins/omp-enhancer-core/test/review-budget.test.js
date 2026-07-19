@@ -2,19 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildTaskShapePrompt,
   buildDynamicReviewBudgetPrompt,
   resolveDynamicReviewBudget,
 } from '../src/review-budget.js';
 import { describeNaturalLanguageTask } from '../src/task-descriptor.js';
 
-test('dynamic review budget scales only change-review work with observed difficulty and risk', () => {
+test('review context exposes task facts without calculating a reviewer or fork quota', () => {
   const cases = [
     {
       descriptor: {
         operation: 'answer', domains: ['general'], complexity: 'simple',
         risk: { level: 'low', flags: [] }, constraints: {},
       },
-      suggestion: 0,
       applicability: 'primary-task-only',
     },
     {
@@ -22,56 +22,42 @@ test('dynamic review budget scales only change-review work with observed difficu
         operation: 'execute', domains: ['tests'], complexity: 'focused',
         risk: { level: 'medium', flags: ['test-execution'] }, constraints: {},
       },
-      suggestion: 0,
       applicability: 'primary-task-only',
-    },
-    {
-      descriptor: {
-        operation: 'modify', domains: ['code', 'tests'], complexity: 'focused',
-        risk: { level: 'medium', flags: ['workspace-write', 'test-execution'] }, constraints: {},
-      },
-      suggestion: 1,
-      applicability: 'independent-review-advisory',
     },
     {
       descriptor: {
         operation: 'modify', domains: ['code', 'tests'], complexity: 'broad',
         risk: { level: 'medium', flags: ['workspace-write', 'test-execution'] }, constraints: {},
       },
-      suggestion: 2,
       applicability: 'independent-review-advisory',
     },
     {
       descriptor: {
         operation: 'release', domains: ['code', 'tests', 'security', 'plugin'], complexity: 'broad',
-        risk: {
-          level: 'critical',
-          flags: ['external-write', 'security-sensitive', 'test-execution', 'workspace-write'],
-        },
-        constraints: {},
+        risk: { level: 'critical', flags: ['external-write', 'security-sensitive'] }, constraints: {},
       },
-      suggestion: 3,
       applicability: 'independent-review-advisory',
     },
     {
       descriptor: {
-        operation: 'inspect', domains: ['code', 'tests', 'security'], complexity: 'broad',
+        operation: 'inspect', domains: ['code', 'security'], complexity: 'broad',
         risk: { level: 'high', flags: ['security-sensitive'] }, constraints: {},
       },
-      suggestion: 0,
       applicability: 'primary-task-only',
     },
   ];
 
-  for (const { descriptor, suggestion, applicability } of cases) {
-    const budget = resolveDynamicReviewBudget(descriptor);
-    assert.equal(budget.reviewerLaneSuggestion, suggestion);
-    assert.equal(budget.reviewApplicability, applicability);
+  for (const { descriptor, applicability } of cases) {
+    const context = resolveDynamicReviewBudget(descriptor, { nativeConcurrencyCapacity: 4 });
+    assert.equal(context.reviewApplicability, applicability);
+    assert.equal(Object.hasOwn(context, 'reviewerLaneSuggestion'), false);
+    assert.equal(Object.hasOwn(context, 'heuristicReviewerLaneSuggestion'), false);
+    assert.equal(Object.hasOwn(context, 'nativeCapConstrainedSuggestion'), false);
   }
 });
 
-test('dynamic review budget honors subagent, reviewer, and native-capacity boundaries', () => {
-  const highRiskRelease = {
+test('review context honors native and user boundaries without choosing width', () => {
+  const descriptor = {
     operation: 'release',
     domains: ['code', 'tests', 'security', 'plugin'],
     complexity: 'broad',
@@ -79,58 +65,31 @@ test('dynamic review budget honors subagent, reviewer, and native-capacity bound
   };
 
   const noSubagents = resolveDynamicReviewBudget({
-    ...highRiskRelease,
+    ...descriptor,
     constraints: { subagents: 'forbidden' },
   }, { nativeConcurrencyCapacity: 4 });
-  assert.equal(noSubagents.reviewerLaneSuggestion, 0);
-  assert.equal(noSubagents.nativeCapConstrainedSuggestion, 0);
+  assert.equal(noSubagents.reviewApplicability, 'subagents-forbidden');
+  assert.equal(noSubagents.nativeConcurrencyCapacity, 4);
 
   const noReviewer = resolveDynamicReviewBudget({
-    ...highRiskRelease,
-    constraints: { subagents: 'unspecified', independentReview: 'forbidden' },
+    ...descriptor,
+    constraints: { independentReview: 'forbidden' },
   }, { nativeConcurrencyCapacity: 4 });
-  assert.equal(noReviewer.reviewerLaneSuggestion, 0);
   assert.equal(noReviewer.reviewApplicability, 'user-forbidden');
 
-  const explicitlyRequired = resolveDynamicReviewBudget({
+  const required = resolveDynamicReviewBudget({
     operation: 'modify',
     domains: ['code'],
     complexity: 'focused',
     risk: { level: 'low', flags: ['workspace-write'] },
     constraints: { independentReview: 'required' },
-  }, { nativeConcurrencyCapacity: 4 });
-  assert.equal(explicitlyRequired.reviewerLaneSuggestion, 1);
-
-  const capped = resolveDynamicReviewBudget({
-    ...highRiskRelease,
-    constraints: { subagents: 'unspecified' },
   }, { nativeConcurrencyCapacity: 2 });
-  assert.equal(capped.heuristicReviewerLaneSuggestion, 3);
-  assert.equal(capped.reviewerLaneSuggestion, 3);
-  assert.equal(capped.nativeCapConstrainedSuggestion, 2);
+  assert.equal(required.reviewApplicability, 'independent-review-advisory');
+  assert.equal(required.independentReview, 'required');
+  assert.equal(required.nativeConcurrencyCapacity, 2);
 });
 
-test('a normalized focused mechanical write keeps the reviewer suggestion at zero', () => {
-  for (const prompt of [
-    'Fix one typo in src/a.js.',
-    'Fix one typo in README.md.',
-    'Fix one typo in docs/a.md.',
-  ]) {
-    const descriptor = describeNaturalLanguageTask({ prompt });
-    assert.equal(descriptor.operation, 'modify', prompt);
-    assert.equal(descriptor.complexity, 'focused', prompt);
-    assert.deepEqual(descriptor.risk, { level: 'medium', flags: ['workspace-write'] }, prompt);
-
-    const budget = resolveDynamicReviewBudget(descriptor, { nativeConcurrencyCapacity: 4 });
-    assert.equal(budget.reviewerLaneSuggestion, 0, prompt);
-    assert.equal(buildDynamicReviewBudgetPrompt({
-      taskDescriptor: descriptor,
-      nativeConcurrencyCapacity: 4,
-    }), '', prompt);
-  }
-});
-
-test('response-only writing omits ordinary review advice while an explicit reviewer requirement wins', () => {
+test('response-only writing omits review context while an explicit review request remains advisory', () => {
   for (const prompt of [
     'Draft a concise email replying to Bob.',
     '请写一封简短的邮件回复用户。',
@@ -139,86 +98,107 @@ test('response-only writing omits ordinary review advice while an explicit revie
     const descriptor = describeNaturalLanguageTask({ prompt });
     assert.ok(descriptor.domains.includes('writing'), prompt);
     assert.equal(descriptor.constraints.workspaceWrite, 'forbidden', prompt);
-    const budget = resolveDynamicReviewBudget(descriptor, { nativeConcurrencyCapacity: 4 });
-    assert.equal(budget.reviewApplicability, 'primary-task-only', prompt);
-    assert.equal(budget.reviewerLaneSuggestion, 0, prompt);
-    assert.equal(buildDynamicReviewBudgetPrompt({
-      taskDescriptor: descriptor,
-      nativeConcurrencyCapacity: 4,
-    }), '', prompt);
+    assert.equal(buildDynamicReviewBudgetPrompt({ taskDescriptor: descriptor }), '', prompt);
   }
 
   const required = describeNaturalLanguageTask({
     prompt: 'Draft a concise email replying to Bob. Independent review is required.',
   });
-  const requiredBudget = resolveDynamicReviewBudget(required, { nativeConcurrencyCapacity: 4 });
-  assert.equal(required.constraints.independentReview, 'required');
-  assert.equal(requiredBudget.reviewApplicability, 'independent-review-advisory');
-  assert.equal(requiredBudget.reviewerLaneSuggestion, 1);
+  const context = buildDynamicReviewBudgetPrompt({ taskDescriptor: required });
+  assert.match(context, /COMPAT_REVIEW_CONTEXT/);
+  assert.match(context, /selects no reviewer count/i);
 });
 
-test('dynamic review prompt is compact, conditional, and explicit about advisory-only behavior', () => {
+test('a focused one-dimensional edit does not receive extra review context', () => {
+  for (const prompt of [
+    'Fix one typo in src/a.js.',
+    'Fix one typo in README.md.',
+    'Fix one typo in docs/a.md.',
+  ]) {
+    const descriptor = describeNaturalLanguageTask({ prompt });
+    assert.equal(descriptor.operation, 'modify', prompt);
+    assert.equal(descriptor.complexity, 'focused', prompt);
+    assert.equal(buildDynamicReviewBudgetPrompt({ taskDescriptor: descriptor }), '', prompt);
+  }
+});
+
+test('review prompt is compact and contains no reviewer or fork quota', () => {
   const prompt = buildDynamicReviewBudgetPrompt({
     taskDescriptor: {
       operation: 'modify',
       domains: ['code', 'tests'],
       complexity: 'broad',
       risk: { level: 'medium', flags: ['workspace-write', 'test-execution'] },
-      constraints: { subagents: 'unspecified' },
+      constraints: {},
     },
     nativeConcurrencyCapacity: 4,
   });
 
-  assert.match(prompt, /DEEPSEEK_DYNAMIC_REVIEW_BUDGET/);
-  assert.match(prompt, /TASK_FACTS: operation=modify; complexity=broad; risk=medium; domains=code,tests/i);
-  assert.match(prompt, /INITIAL_REVIEW_LANES: suggested=2; within-native-cap=2; native-cap=4/i);
-  assert.match(prompt, /existing independent-review checkpoint/i);
-  assert.match(prompt, /does not create, schedule, or move that checkpoint/i);
-  assert.match(prompt, /zero is valid/i);
-  assert.match(prompt, /only current Available Agent IDs/i);
-  assert.match(prompt, /does not guarantee or require an actual task, fork, batch, or reviewer/i);
-  assert.doesNotMatch(prompt, /Review changes from the user's perspective/i);
-  assert.doesNotMatch(prompt, /SPECIALIST_PLANNING_FIT|generic planner/i);
-  assert.ok(prompt.length < 2400, `prompt length=${prompt.length}`);
+  assert.match(prompt, /COMPAT_REVIEW_CONTEXT \(soft, no quota\)/);
+  assert.match(prompt, /FACTS: operation=modify; complexity=broad; risk=medium; domains=code,tests/i);
+  assert.match(prompt, /existing review checkpoint/i);
+  assert.match(prompt, /selects no reviewer count, Agent, fork, batch, checkpoint, dispatch, permission, or completion condition/i);
+  assert.doesNotMatch(prompt, /suggested=|within-native-cap|native-cap=|reviewerLaneSuggestion/i);
+  assert.ok(prompt.length < 900, `prompt length=${prompt.length}`);
 });
 
-test('dynamic review prompt is omitted when review advice is inapplicable or native capacity is unconfirmed', () => {
-  const cases = [
-    {
-      descriptor: {
-        operation: 'answer', domains: ['general'], complexity: 'simple',
-        risk: { level: 'low', flags: [] }, constraints: {},
-      },
-      capacity: 4,
-    },
-    {
-      descriptor: {
-        operation: 'execute', domains: ['tests'], complexity: 'focused',
-        risk: { level: 'medium', flags: ['test-execution'] }, constraints: {},
-      },
-      capacity: 4,
-    },
-    {
-      descriptor: {
-        operation: 'modify', domains: ['code', 'tests'], complexity: 'broad',
-        risk: { level: 'medium', flags: ['workspace-write'] }, constraints: {},
-      },
-      capacity: null,
-    },
-    {
-      descriptor: {
-        operation: 'modify', domains: ['code', 'tests'], complexity: 'broad',
-        risk: { level: 'medium', flags: ['workspace-write'] },
-        constraints: { independentReview: 'forbidden' },
-      },
-      capacity: 4,
-    },
-  ];
+test('multi-target task-shape prompt exposes observed facts without choosing delegation', () => {
+  const descriptor = describeNaturalLanguageTask({
+    prompt: 'Independently audit src/a.js and src/b.js for correctness and security risks. For each file provide concrete evidence and one countercheck, then compare them. Do not modify files, run tests, or use the network.',
+  });
+  const prompt = buildTaskShapePrompt(descriptor);
 
-  for (const { descriptor, capacity } of cases) {
-    assert.equal(buildDynamicReviewBudgetPrompt({
-      taskDescriptor: descriptor,
-      nativeConcurrencyCapacity: capacity,
-    }), '');
+  assert.match(prompt, /COMPAT_TASK_SHAPE_FACTS/);
+  assert.match(prompt, /operation=inspect; complexity=broad/);
+  assert.match(prompt, /exact-inspection-targets=2/);
+  assert.match(prompt, /independent-target-analysis=requested; per-target-evidence=requested; cross-target-comparison=requested/);
+  assert.match(prompt, /seed candidate slices before project inspection/i);
+  assert.match(prompt, /inspect enough local context.+dependencies.+exclusive write sets.+test seams.+assignment input complete before dispatch/i);
+  assert.match(prompt, /Complete the explicit plan before project action/i);
+  assert.match(prompt, /Target count is scope evidence, never a dispatch or fork-width decision/i);
+  assert.doesNotMatch(prompt, /action=|default action|must delegate|required fork/i);
+  assert.ok(prompt.length < 900, `prompt length=${prompt.length}`);
+
+  const workflowPrompt = buildTaskShapePrompt(descriptor, { workflowSkillVisible: true });
+  assert.match(workflowPrompt, /Complete the three staged workflow phases before project action/i);
+  assert.doesNotMatch(workflowPrompt, /block: true|continue: true|required fork|must delegate/i);
+});
+
+test('task-shape prompt stays absent for one target, lookup wording, and source-text paths', () => {
+  for (const prompt of [
+    'Review src/a.js and report findings only.',
+    'Look up the version in package.json and the license in LICENSE.',
+    'Polish this sentence: "Independently audit src/a.js and src/b.js, then compare them."',
+  ]) {
+    assert.equal(buildTaskShapePrompt(describeNaturalLanguageTask({ prompt })), '', prompt);
   }
+});
+
+test('review prompt is omitted only when review advice is inapplicable', () => {
+  for (const descriptor of [
+    {
+      operation: 'answer', domains: ['general'], complexity: 'simple',
+      risk: { level: 'low', flags: [] }, constraints: {},
+    },
+    {
+      operation: 'execute', domains: ['tests'], complexity: 'focused',
+      risk: { level: 'medium', flags: ['test-execution'] }, constraints: {},
+    },
+    {
+      operation: 'modify', domains: ['code'], complexity: 'broad',
+      risk: { level: 'medium', flags: ['workspace-write'] },
+      constraints: { independentReview: 'forbidden' },
+    },
+  ]) {
+    assert.equal(buildDynamicReviewBudgetPrompt({ taskDescriptor: descriptor }), '');
+  }
+
+  const capacityUnknown = buildDynamicReviewBudgetPrompt({
+    taskDescriptor: {
+      operation: 'modify', domains: ['code', 'tests'], complexity: 'broad',
+      risk: { level: 'medium', flags: ['workspace-write'] }, constraints: {},
+    },
+  });
+  assert.match(capacityUnknown, /selects no reviewer count/i);
+  assert.doesNotMatch(capacityUnknown, /native-cap=/i);
 });

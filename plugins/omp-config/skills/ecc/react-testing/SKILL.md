@@ -356,7 +356,7 @@ CI=true vitest run --coverage
 
 - Rules: [rules/react/testing.md](../../rules/react/testing.md)
 - Skills: [react-patterns](../react-patterns/SKILL.md), [accessibility](../accessibility/SKILL.md), [e2e-testing](../e2e-testing/SKILL.md), [tdd-workflow](../tdd-workflow/SKILL.md)
-- Workflows: `code.test` for TDD and independent test evidence; `code.review` with `react-patterns` for review
+- Workflow: `code.dev` owns TDD, test evidence, and semantic diff review; add `react-patterns` only for React-specific guidance
 
 ## Examples
 

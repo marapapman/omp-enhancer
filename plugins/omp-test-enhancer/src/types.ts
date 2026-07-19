@@ -81,6 +81,7 @@ export interface BrowserVisualCheck {
 
 export interface BrowserPlan {
   framework: 'playwright'
+  targetIds: string[]
   setup: {
     viewport: { width: number; height: number }
     trace: 'off' | 'retain-on-failure'
@@ -122,9 +123,14 @@ export interface BrowserEvidence {
   status: 'passed' | 'failed' | 'skipped'
   runId?: string
   baseUrl?: string
+  targetIds: string[]
   browser?: 'chromium'
   headless?: boolean
   viewport?: { width: number; height: number }
+  scenarioCount: number
+  stepCount: number
+  captureCount: number
+  visualAssertionCount: number
   findings: BrowserFinding[]
   artifacts?: BrowserArtifactRefs
 }

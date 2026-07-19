@@ -46,7 +46,12 @@ function locationFor(text, index, language) {
 
 function hasAny(value, words) {
   const lower = value.toLowerCase();
-  return words.some((word) => lower.includes(word.toLowerCase()));
+  return words.some((word) => {
+    const marker = word.toLowerCase();
+    if (!/^[a-z]+(?:\s+[a-z]+)*$/u.test(marker)) return lower.includes(marker);
+    const escaped = marker.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&').replace(/\s+/gu, '\\s+');
+    return new RegExp(`(?:^|[^a-z])${escaped}(?:$|[^a-z])`, 'u').test(lower);
+  });
 }
 
 function strongConclusionIssues(text, language) {

@@ -1,9 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 
-const fixtures = JSON.parse(await readFile(new URL('./fixtures/routing-adversarial.json', import.meta.url), 'utf8'));
 const descriptorModuleUrl = new URL('../src/task-descriptor.js', import.meta.url);
 
 async function loadDescriptorModule() {
@@ -12,37 +10,15 @@ async function loadDescriptorModule() {
   } catch (error) {
     assert.fail(
       `TaskDescriptor v1 is not implemented: expected ${descriptorModuleUrl.pathname} `
-      + `to export describeNaturalLanguageTask() and descriptorFromLegacyIntent(); `
+      + `to export describeNaturalLanguageTask(); `
       + `module load failed with ${error.code ?? error.name}: ${error.message}`,
     );
   }
 }
 
-function descriptorContract(descriptor, caseId) {
-  assert.ok(descriptor && typeof descriptor === 'object', `${caseId}: expected a TaskDescriptor object`);
-  return {
-    version: descriptor.version,
-    operation: descriptor.operation,
-    domains: descriptor.domains,
-    constraints: descriptor.constraints,
-    capabilities: descriptor.capabilities,
-    phases: descriptor.phases,
-    risk: descriptor.risk,
-    complexity: descriptor.complexity,
-    language: descriptor.language,
-  };
-}
-
-function semanticContract(descriptor) {
-  const contract = descriptorContract(descriptor, 'equivalence comparison');
-  delete contract.language;
-  return contract;
-}
-
-test('TaskDescriptor v1 exposes the planned construction and legacy compatibility API', async () => {
+test('TaskDescriptor v1 exposes the task-fact construction API', async () => {
   const module = await loadDescriptorModule();
   assert.equal(typeof module.describeNaturalLanguageTask, 'function', 'missing describeNaturalLanguageTask(input) export');
-  assert.equal(typeof module.descriptorFromLegacyIntent, 'function', 'missing descriptorFromLegacyIntent(intent, options) export');
 });
 
 test('a plan followed by explicit implementation remains a writable implementation task', async (t) => {
@@ -67,78 +43,6 @@ test('a plan followed by explicit implementation remains a writable implementati
         false,
       );
     });
-  }
-});
-
-test('an exclusive single route-tool probe describes the envelope instead of its embedded payload', async () => {
-  const { describeNaturalLanguageTask } = await loadDescriptorModule();
-  const prompt = 'Call omp_core_route_task exactly once with this prompt: Polish README.md to say do not push. Separately, push the release. Then report only constraints.externalWrite and whether a release phase is present. Do not execute the described release and do not use any other tools.';
-  const descriptor = describeNaturalLanguageTask({ prompt });
-
-  assert.equal(descriptor.operation, 'diagnose');
-  assert.deepEqual(descriptor.domains, ['plugin']);
-  assert.equal(descriptor.complexity, 'focused');
-  assert.deepEqual(descriptor.constraints, {
-    workspaceWrite: 'forbidden',
-    testExecution: 'forbidden',
-    networkAccess: 'forbidden',
-    externalWrite: 'forbidden',
-    subagents: 'forbidden',
-  });
-  assert.ok(descriptor.provenance.reasons.includes('exclusive route task diagnostic probe'));
-
-  const quoted = describeNaturalLanguageTask({
-    prompt: 'Translate this sentence into Chinese: "Only call omp_core_route_task exactly once and do not use any other tools."',
-  });
-  assert.equal(quoted.operation, 'modify');
-  assert.ok(quoted.domains.includes('writing'));
-  assert.equal(quoted.provenance.reasons.includes('exclusive route task diagnostic probe'), false);
-});
-
-test('describeNaturalLanguageTask returns exact advisory descriptors for the adversarial matrix', async (t) => {
-  const { describeNaturalLanguageTask } = await loadDescriptorModule();
-  assert.equal(typeof describeNaturalLanguageTask, 'function', 'missing describeNaturalLanguageTask(input) export');
-
-  for (const fixture of fixtures) {
-    await t.test(fixture.id, () => {
-      const actual = descriptorContract(
-        describeNaturalLanguageTask({ prompt: fixture.prompt }),
-        fixture.id,
-      );
-      const expected = structuredClone(fixture.expected.taskDescriptor);
-      // Writing language comes from the source prose, not the language used to
-      // ask for the edit. The fixture matrix predates sourceText and continues
-      // to verify every language-independent descriptor field.
-      if (actual.domains.includes('writing')) {
-        delete actual.language;
-        delete expected.language;
-      }
-      assert.deepEqual(
-        actual,
-        expected,
-        `${fixture.id}: descriptor must preserve task scope, workflow phases, and risk notes exactly`,
-      );
-    });
-  }
-});
-
-test('Chinese and English equivalents have identical semantics except language-specific resources', async () => {
-  const { describeNaturalLanguageTask } = await loadDescriptorModule();
-  const groups = Map.groupBy(
-    fixtures.filter((fixture) => fixture.equivalenceGroup),
-    (fixture) => fixture.equivalenceGroup,
-  );
-
-  for (const [group, members] of groups) {
-    assert.ok(members.length >= 2, `${group}: equivalence group needs at least two prompts`);
-    const baseline = semanticContract(describeNaturalLanguageTask({ prompt: members[0].prompt }));
-    for (const member of members.slice(1)) {
-      assert.deepEqual(
-        semanticContract(describeNaturalLanguageTask({ prompt: member.prompt })),
-        baseline,
-        `${group}: ${member.id} changed operation, constraints, capabilities, phases, risk, or complexity`,
-      );
-    }
   }
 });
 
@@ -172,26 +76,6 @@ test('writing language follows source prose instead of the instruction language'
     assert.equal(descriptor.writingLanguageSource, 'pending-source', prompt);
     assert.equal(descriptor.writingSourcePending, true, prompt);
   }
-});
-
-test('descriptorFromLegacyIntent applies conservative canonical advisory defaults', async () => {
-  const { descriptorFromLegacyIntent } = await loadDescriptorModule();
-  const review = descriptorFromLegacyIntent('code.review');
-  const development = descriptorFromLegacyIntent('code.dev');
-  const release = descriptorFromLegacyIntent('release');
-
-  assert.equal(review.operation, 'inspect');
-  assert.equal(review.constraints.workspaceWrite, 'forbidden');
-  assert.ok(!review.capabilities.includes('fs.write'));
-  assert.ok(!review.capabilities.includes('external.write'));
-
-  assert.equal(development.operation, 'modify');
-  assert.equal(development.constraints.workspaceWrite, 'required');
-  assert.ok(development.capabilities.includes('fs.write'));
-
-  assert.ok(release.phases.some((phase) => phase.kind === 'release'));
-  assert.notEqual(release.constraints.externalWrite, 'forbidden');
-  assert.ok(release.capabilities.includes('external.write'));
 });
 
 test('plugin identifier upgrades remain high-risk release workflows', async () => {
@@ -250,7 +134,7 @@ test('normalization filters capability recommendations without erasing advisory 
   ]);
 });
 
-test('normalization retains only coherent legacy method metadata for advisory compatibility', async () => {
+test('normalization retains only coherent exclusive tool metadata', async () => {
   const { normalizeTaskDescriptor } = await loadDescriptorModule();
   const command = 'node --test test/parser.test.js';
   const digest = (value) => createHash('sha256').update(value).digest('hex');
@@ -703,7 +587,6 @@ test('local git metadata commands describe workspace mutation without external w
     assert.ok(descriptor.capabilities.includes('shell.execute'), prompt);
     assert.ok(!descriptor.capabilities.includes('external.write'), prompt);
     assert.ok(descriptor.phases.some(({ kind, domain }) => kind === 'modify' && domain === 'code'), prompt);
-    assert.equal(descriptor.provenance.requiresPolicyRoute, true, prompt);
   }
 
   const explanation = describeNaturalLanguageTask({ prompt: 'Explain what git commit does.' });
@@ -756,8 +639,6 @@ test('common implicit code-change imperatives describe a focused modification', 
     assert.equal(descriptor.constraints.workspaceWrite, 'required', prompt);
     assert.ok(descriptor.capabilities.includes('fs.write'), prompt);
     assert.ok(descriptor.phases.some(({ kind, domain }) => kind === 'modify' && domain === 'code'), prompt);
-    assert.equal(descriptor.provenance.needsClassifier, false, prompt);
-    assert.equal(descriptor.provenance.requiresPolicyRoute, true, prompt);
   }
 });
 
@@ -799,6 +680,65 @@ test('one explicitly bounded test file review stays focused', async () => {
   assert.equal(descriptor.constraints.subagents, 'forbidden');
 });
 
+test('multi-target inspection facts preserve substantive independent audit shape', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const descriptor = describeNaturalLanguageTask({
+    prompt: 'Independently audit src/external-action-policy.js and src/skill-usage.js for correctness and security risks. For each file, trace controlled input and provide evidence plus one attempted countercheck, then compare the two files. Do not modify files, run tests, or use the network.',
+  });
+
+  assert.equal(descriptor.operation, 'inspect');
+  assert.equal(descriptor.complexity, 'broad');
+  assert.ok(descriptor.domains.includes('code'));
+  assert.ok(descriptor.domains.includes('security'));
+  assert.deepEqual(descriptor.inspectionTargets, [
+    'src/external-action-policy.js',
+    'src/skill-usage.js',
+  ]);
+  assert.deepEqual(descriptor.inspectionShape, {
+    independentTargetAnalysisRequested: true,
+    perTargetEvidence: true,
+    crossTargetComparison: true,
+  });
+  assert.equal(descriptor.constraints.workspaceWrite, 'forbidden');
+  assert.equal(descriptor.constraints.testExecution, 'forbidden');
+  assert.equal(descriptor.constraints.networkAccess, 'forbidden');
+  assert.ok(descriptor.capabilities.includes('subagents'));
+});
+
+test('quoted source content cannot manufacture multi-target inspection facts', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const descriptor = describeNaturalLanguageTask({
+    prompt: 'Polish this sentence without changing meaning: "Independently audit src/a.js and src/b.js; for each file provide evidence, then compare them."',
+  });
+
+  assert.deepEqual(descriptor.inspectionTargets, []);
+  assert.deepEqual(descriptor.inspectionShape, {
+    independentTargetAnalysisRequested: false,
+    perTargetEvidence: false,
+    crossTargetComparison: false,
+  });
+  assert.deepEqual(descriptor.domains, ['writing']);
+});
+
+test('inspection shape distinguishes separate targets from an explicit dependency', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const separate = describeNaturalLanguageTask({
+    prompt: '分别审计 src/a.js 和 src/b.js 的安全问题，每个文件都给出调用链、证据和一次反证，最后比较两者。不要修改文件。',
+  });
+  assert.deepEqual(separate.inspectionTargets, ['src/a.js', 'src/b.js']);
+  assert.deepEqual(separate.inspectionShape, {
+    independentTargetAnalysisRequested: true,
+    perTargetEvidence: true,
+    crossTargetComparison: true,
+  });
+  assert.equal(separate.complexity, 'broad');
+
+  const dependent = describeNaturalLanguageTask({
+    prompt: 'Independently audit src/a.js and src/b.js, but use the result from src/a.js to decide how to inspect src/b.js. For each file provide evidence.',
+  });
+  assert.equal(dependent.inspectionShape.independentTargetAnalysisRequested, false);
+});
+
 test('explicit cross-file English refactors remain broad while a single function stays focused', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   const broad = describeNaturalLanguageTask({
@@ -807,12 +747,12 @@ test('explicit cross-file English refactors remain broad while a single function
   assert.equal(broad.complexity, 'broad');
 
   const focused = describeNaturalLanguageTask({
-    prompt: 'Refactor the routeNaturalLanguageTask function and add one regression test.',
+    prompt: 'Refactor the describeNaturalLanguageTask function and add one regression test.',
   });
   assert.equal(focused.complexity, 'focused');
 });
 
-test('weak code-target imperatives request classification without preselecting a write workflow', async () => {
+test('weak code-target imperatives remain read-only', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [
     'Look into src/router.js.',
@@ -821,8 +761,6 @@ test('weak code-target imperatives request classification without preselecting a
     const descriptor = describeNaturalLanguageTask({ prompt });
     assert.equal(descriptor.constraints.workspaceWrite, 'forbidden', prompt);
     assert.ok(!descriptor.capabilities.includes('fs.write'), prompt);
-    assert.equal(descriptor.provenance.needsClassifier, true, prompt);
-    assert.equal(descriptor.provenance.requiresPolicyRoute, true, prompt);
   }
 });
 
@@ -834,7 +772,6 @@ test('code explanations and explicit reviews remain read-only', async () => {
   assert.equal(explanation.operation, 'answer');
   assert.equal(explanation.constraints.workspaceWrite, 'forbidden');
   assert.ok(!explanation.capabilities.includes('fs.write'));
-  assert.equal(explanation.provenance.needsClassifier, false);
 
   const review = describeNaturalLanguageTask({
     prompt: 'Review the TODO in src/router.js and report findings only.',
@@ -842,7 +779,6 @@ test('code explanations and explicit reviews remain read-only', async () => {
   assert.equal(review.operation, 'inspect');
   assert.equal(review.constraints.workspaceWrite, 'forbidden');
   assert.ok(!review.capabilities.includes('fs.write'));
-  assert.equal(review.provenance.needsClassifier, false);
 });
 
 test('answer-only side-effect advice remains a non-mutating advisory workflow', async () => {
@@ -887,7 +823,6 @@ test('bilingual local development commands compile as focused shell execution', 
     assert.ok(!descriptor.capabilities.includes('network.read'), prompt);
     assert.ok(!descriptor.capabilities.includes('external.write'), prompt);
     assert.ok(descriptor.phases.some(({ kind, domain }) => kind === 'execute' && domain === 'code'), prompt);
-    assert.equal(descriptor.provenance.requiresPolicyRoute, true, prompt);
   }
 });
 

@@ -1,21 +1,31 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { pluginWorkspaces } from './plugin-workspaces.js';
+import { applyRelease, planRelease } from './release.js';
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const releaseScript = join(repoRoot, 'scripts', 'release.js');
+const marketplaceCheckScript = join(repoRoot, 'scripts', 'check-marketplace.js');
 
-const pluginFixtures = [
-  { directory: 'omp-config', name: 'omp-config', version: '0.1.0' },
-  { directory: 'writing-helper', name: 'writing-helper', version: '0.2.1', ref: 'v0.2.1' },
-  { directory: 'omp-test-enhancer', name: 'omp-testing-enhancer', version: '0.1.3', ref: 'v0.1.3' },
-  { directory: 'omp-fact-checker', name: 'omp-fact-checker', version: '0.1.0' },
-  { directory: 'omp-enhancer-core', name: 'omp-enhancer-core', version: '0.1.0' },
-];
+const fixtureVersions = new Map([
+  ['omp-config', '0.1.0'],
+  ['writing-helper', '0.2.1'],
+  ['omp-testing-enhancer', '0.1.3'],
+  ['omp-fact-checker', '0.1.0'],
+  ['omp-enhancer-core', '0.1.0'],
+]);
+
+const pluginFixtures = pluginWorkspaces.map(({ directory, name }) => ({
+  directory,
+  name,
+  version: fixtureVersions.get(name),
+}));
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
@@ -123,13 +133,39 @@ async function snapshotReleaseFiles(root) {
   return snapshot;
 }
 
-function runRelease(root, args) {
+async function findReleaseArtifacts(root) {
+  const directories = [
+    root,
+    join(root, '.omp-plugin'),
+    ...pluginFixtures.map((plugin) => join(root, 'plugins', plugin.directory)),
+  ];
+  const artifacts = [];
+  for (const directory of directories) {
+    for (const name of await readdir(directory)) {
+      if (name.includes('.release-')) artifacts.push(join(directory, name));
+    }
+  }
+  return artifacts.sort();
+}
+
+function releaseOptions(overrides = {}) {
+  return {
+    plugin: 'writing-helper',
+    version: '0.3.0',
+    bump: null,
+    apply: true,
+    allowDowngrade: false,
+    ...overrides,
+  };
+}
+
+function runNodeScript(root, scriptPath, args = []) {
   return new Promise((resolveResult, reject) => {
     const childEnv = { ...process.env, NO_COLOR: '1' };
     for (const key of Object.keys(childEnv)) {
       if (key === 'NODE_CHANNEL_FD' || key.startsWith('NODE_TEST_')) delete childEnv[key];
     }
-    const child = spawn(process.execPath, [releaseScript, ...args], {
+    const child = spawn(process.execPath, [scriptPath, ...args], {
       cwd: root,
       env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -150,6 +186,10 @@ function runRelease(root, args) {
       resolveResult({ code, signal, stdout, stderr });
     });
   });
+}
+
+function runRelease(root, args) {
+  return runNodeScript(root, releaseScript, args);
 }
 
 function formatResult(result) {
@@ -194,8 +234,12 @@ test('--plugin writing-helper --version tracks main and syncs package, lock, and
     assert.equal(writingHelper.version, '0.3.0');
     assert.equal(Object.hasOwn(writingHelper, 'ref'), false);
     assert.equal(testingEnhancer.version, '0.1.3');
-    assert.equal(testingEnhancer.ref, 'v0.1.3');
+    assert.equal(Object.hasOwn(testingEnhancer, 'ref'), false);
     assert.equal(catalog.metadata.version, '1.0.0');
+
+    const marketplaceCheck = await runNodeScript(root, marketplaceCheckScript);
+    assertReleaseSucceeded(marketplaceCheck);
+    assert.deepEqual(await findReleaseArtifacts(root), []);
   });
 });
 
@@ -232,8 +276,9 @@ test('--plugin all --bump patch bumps every plugin package, every catalog entry,
   });
 });
 
-test('--pin-ref pins the selected plugin catalog entry to v<version>', async () => {
+test('--pin-ref is rejected and leaves release files unchanged', async () => {
   await withReleaseFixture(async (root) => {
+    const before = await snapshotReleaseFiles(root);
     const result = await runRelease(root, [
       '--plugin',
       'writing-helper',
@@ -243,18 +288,33 @@ test('--pin-ref pins the selected plugin catalog entry to v<version>', async () 
       '--apply',
     ]);
 
+    assertReleaseFailed(result, /unknown argument --pin-ref/i);
+    assert.deepEqual(await snapshotReleaseFiles(root), before);
+  });
+});
+
+test('--apply removes a legacy ref from the selected catalog entry', async () => {
+  await withReleaseFixture(async (root) => {
+    const catalogPath = join(root, '.omp-plugin', 'marketplace.json');
+    const catalog = await readJson(catalogPath);
+    catalog.plugins.find((plugin) => plugin.name === 'writing-helper').ref = 'v0.2.1';
+    await writeJson(catalogPath, catalog);
+
+    const result = await runRelease(root, [
+      '--plugin',
+      'writing-helper',
+      '--version',
+      '0.3.0',
+      '--apply',
+    ]);
+
     assertReleaseSucceeded(result);
+    assert.match(result.stdout, /writing-helper\.ref: v0\.2\.1 -> track-main/);
 
-    const catalog = await readCatalog(root);
-    const packageLock = await readPackageLock(root);
-    const writingHelper = catalog.plugins.find((plugin) => plugin.name === 'writing-helper');
-    const config = catalog.plugins.find((plugin) => plugin.name === 'omp-config');
-
-    assert.equal(writingHelper.version, '0.3.0');
-    assert.equal(packageLock.packages['plugins/writing-helper'].version, '0.3.0');
-    assert.equal(writingHelper.ref, 'v0.3.0');
-    assert.equal(config.version, '0.1.0');
-    assert.equal(Object.hasOwn(config, 'ref'), false);
+    const releasedCatalog = await readCatalog(root);
+    const writingHelper = releasedCatalog.plugins.find((plugin) => plugin.name === 'writing-helper');
+    assert.equal(Object.hasOwn(writingHelper, 'ref'), false);
+    assertReleaseSucceeded(await runNodeScript(root, marketplaceCheckScript));
   });
 });
 
@@ -271,6 +331,28 @@ test('--dry-run reports planned changes without writing release files', async ()
     assert.match(result.stdout, /package\.json/);
     assert.match(result.stdout, /package-lock\.json/);
     assert.match(result.stdout, /marketplace\.json/);
+    assert.deepEqual(await snapshotReleaseFiles(root), before);
+  });
+});
+
+test('--dry-run reports the catalog version as the marketplace change source', async () => {
+  await withReleaseFixture(async (root) => {
+    const catalogPath = join(root, '.omp-plugin', 'marketplace.json');
+    const catalog = await readJson(catalogPath);
+    catalog.plugins.find((plugin) => plugin.name === 'writing-helper').version = '0.2.0';
+    await writeJson(catalogPath, catalog);
+    const before = await snapshotReleaseFiles(root);
+
+    const result = await runRelease(root, [
+      '--plugin',
+      'writing-helper',
+      '--version',
+      '0.3.0',
+      '--dry-run',
+    ]);
+
+    assertReleaseSucceeded(result);
+    assert.match(result.stdout, /writing-helper\.version: 0\.2\.0 -> 0\.3\.0/);
     assert.deepEqual(await snapshotReleaseFiles(root), before);
   });
 });
@@ -322,6 +404,51 @@ test('version downgrade fails unless --allow-downgrade is explicit', async () =>
   });
 });
 
+test('downgrade guard uses the highest package, catalog, or lock version', async (t) => {
+  const cases = [
+    {
+      name: 'higher catalog version',
+      pattern: /highest current version 0\.4\.0.*catalog 0\.4\.0/s,
+      mutate: async (root) => {
+        const catalogPath = join(root, '.omp-plugin', 'marketplace.json');
+        const catalog = await readJson(catalogPath);
+        catalog.plugins.find((plugin) => plugin.name === 'writing-helper').version = '0.4.0';
+        await writeJson(catalogPath, catalog);
+      },
+    },
+    {
+      name: 'higher lock version',
+      pattern: /highest current version 0\.5\.0.*lock 0\.5\.0/s,
+      mutate: async (root) => {
+        const lockPath = join(root, 'package-lock.json');
+        const packageLock = await readJson(lockPath);
+        packageLock.packages['plugins/writing-helper'].version = '0.5.0';
+        await writeJson(lockPath, packageLock);
+      },
+    },
+  ];
+
+  for (const fixtureCase of cases) {
+    await t.test(fixtureCase.name, async () => {
+      await withReleaseFixture(async (root) => {
+        await fixtureCase.mutate(root);
+        const before = await snapshotReleaseFiles(root);
+        const result = await runRelease(root, [
+          '--plugin',
+          'writing-helper',
+          '--version',
+          '0.3.0',
+          '--apply',
+        ]);
+
+        assertReleaseFailed(result, fixtureCase.pattern);
+        assert.deepEqual(await snapshotReleaseFiles(root), before);
+        assert.deepEqual(await findReleaseArtifacts(root), []);
+      });
+    });
+  }
+});
+
 test('--apply repairs a stale selected workspace lock version without changing unselected entries', async () => {
   await withReleaseFixture(async (root) => {
     const lockPath = join(root, 'package-lock.json');
@@ -348,5 +475,154 @@ test('--apply repairs a stale selected workspace lock version without changing u
     assert.equal(packageLock.packages['plugins/omp-enhancer-core'].version, '0.1.1');
     assert.equal(packageLock.packages['plugins/writing-helper'].version, '0.2.1');
     assert.equal(core.version, '0.1.1');
+  });
+});
+
+test('release preflight rejects inconsistent plugin inventory before writing', async (t) => {
+  const cases = [
+    {
+      name: 'root workspace inventory',
+      pattern: /Root workspaces mismatch/,
+      mutate: async (root) => {
+        const packagePath = join(root, 'package.json');
+        const packageJson = await readJson(packagePath);
+        packageJson.workspaces.pop();
+        await writeJson(packagePath, packageJson);
+      },
+    },
+    {
+      name: 'package-lock workspace inventory',
+      pattern: /Package-lock plugin inventory mismatch/,
+      mutate: async (root) => {
+        const lockPath = join(root, 'package-lock.json');
+        const packageLock = await readJson(lockPath);
+        delete packageLock.packages['plugins/omp-config'];
+        await writeJson(lockPath, packageLock);
+      },
+    },
+    {
+      name: 'marketplace inventory',
+      pattern: /Marketplace plugin inventory mismatch/,
+      mutate: async (root) => {
+        const catalogPath = join(root, '.omp-plugin', 'marketplace.json');
+        const catalog = await readJson(catalogPath);
+        catalog.plugins.push({ name: 'unexpected-plugin', version: '1.0.0', source: './unexpected-plugin' });
+        await writeJson(catalogPath, catalog);
+      },
+    },
+    {
+      name: 'plugin package manifest identity',
+      pattern: /Plugin package name mismatch/,
+      mutate: async (root) => {
+        const packagePath = join(root, 'plugins', 'omp-config', 'package.json');
+        const packageJson = await readJson(packagePath);
+        packageJson.name = 'wrong-name';
+        await writeJson(packagePath, packageJson);
+      },
+    },
+  ];
+
+  for (const fixtureCase of cases) {
+    await t.test(fixtureCase.name, async () => {
+      await withReleaseFixture(async (root) => {
+        await fixtureCase.mutate(root);
+        const before = await snapshotReleaseFiles(root);
+        const result = await runRelease(root, [
+          '--plugin',
+          'writing-helper',
+          '--version',
+          '0.3.0',
+          '--apply',
+        ]);
+
+        assertReleaseFailed(result, fixtureCase.pattern);
+        assert.deepEqual(await snapshotReleaseFiles(root), before);
+      });
+    });
+  }
+});
+
+test('release transaction rolls back every target and removes artifacts on failure', async (t) => {
+  const cases = [
+    { name: 'prepare failure', phase: 'prepared', index: 0 },
+    { name: 'commit failure before a later target changes', phase: 'before-commit', index: 1 },
+    { name: 'commit failure after multiple targets changed', phase: 'committed', index: 1 },
+  ];
+
+  for (const fixtureCase of cases) {
+    await t.test(fixtureCase.name, async () => {
+      await withReleaseFixture(async (root) => {
+        const before = await snapshotReleaseFiles(root);
+        const plan = await planRelease(root, releaseOptions());
+
+        await assert.rejects(
+          () => applyRelease(plan, {
+            onStep: ({ phase, index }) => {
+              if (phase === fixtureCase.phase && index === fixtureCase.index) {
+                throw new Error(`injected ${fixtureCase.name}`);
+              }
+            },
+          }),
+          new RegExp(`injected ${fixtureCase.name}`),
+        );
+
+        assert.deepEqual(await snapshotReleaseFiles(root), before);
+        assert.deepEqual(await findReleaseArtifacts(root), []);
+        assertReleaseSucceeded(await runNodeScript(root, marketplaceCheckScript));
+      });
+    });
+  }
+});
+
+test('rollback falls back to original bytes when backup rename fails', async () => {
+  await withReleaseFixture(async (root) => {
+    const before = await snapshotReleaseFiles(root);
+    const plan = await planRelease(root, releaseOptions());
+
+    await assert.rejects(
+      () => applyRelease(plan, {
+        onStep: ({ phase, index }) => {
+          if (phase === 'committed' && index === 0) throw new Error('trigger rollback');
+          if (phase === 'before-backup-restore' && index === 0) {
+            throw new Error('injected backup rename failure');
+          }
+        },
+      }),
+      /trigger rollback/,
+    );
+
+    assert.deepEqual(await snapshotReleaseFiles(root), before);
+    assert.deepEqual(await findReleaseArtifacts(root), []);
+    assertReleaseSucceeded(await runNodeScript(root, marketplaceCheckScript));
+  });
+});
+
+test('cleanup failure reports committed state and preserves the unavailable backup', async () => {
+  await withReleaseFixture(async (root) => {
+    const plan = await planRelease(root, releaseOptions());
+
+    await assert.rejects(
+      () => applyRelease(plan, {
+        onStep: ({ phase, index }) => {
+          if (phase === 'before-cleanup' && index === 1) {
+            throw new Error('injected cleanup failure');
+          }
+        },
+      }),
+      /committed but cleanup was incomplete.*preserved backups/s,
+    );
+
+    const packageJson = await readPluginPackage(root, 'writing-helper');
+    const packageLock = await readPackageLock(root);
+    const catalog = await readCatalog(root);
+    const writingHelper = catalog.plugins.find((plugin) => plugin.name === 'writing-helper');
+    assert.equal(packageJson.version, '0.3.0');
+    assert.equal(packageLock.packages['plugins/writing-helper'].version, '0.3.0');
+    assert.equal(writingHelper.version, '0.3.0');
+
+    const artifacts = await findReleaseArtifacts(root);
+    assert.equal(artifacts.length, 1);
+    assert.match(artifacts[0], /\.bak$/);
+    assertReleaseSucceeded(await runNodeScript(root, marketplaceCheckScript));
   });
 });

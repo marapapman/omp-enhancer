@@ -1,7 +1,7 @@
 export const generalWorkflows = [
   {
     "id": "agentic.simple",
-    "chooseWhen": "The request is focused and does not benefit from a specialized workflow.",
+    "chooseWhen": "Only after checking the specialized cards and finding that none adds a material method, evidence, preservation, risk, format, or delegation contract; a small or focused target alone does not qualify.",
     "composeWith": [],
     "steps": [
       {

@@ -1,8 +1,6 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { releaseTagForVersion, syncMarketplaceCatalogRelease, syncMarketplaceRelease } from '../../../src/marketplace/marketplaceRelease.js'
 import type { ExtensionToolContext } from '../../../src/ompApi.js'
 import createMarketplaceTools from '../../../tools/testing-tools.js'
 
@@ -73,31 +71,14 @@ describe('marketplace catalog', () => {
     const packageJson = await readJson<PackageJson>(join(process.cwd(), 'package.json'))
 
     expect(packageJson.omp.extensions).toEqual(['./src/extension.ts'])
-    expect(packageJson.files).toEqual(expect.arrayContaining(['src', 'package.json', 'README.md', 'tools', 'commands', 'agents']))
+    expect(packageJson.files).toEqual(expect.arrayContaining(['src', 'package.json', 'README.md', 'tools']))
+    expect(packageJson.files).not.toContain('agents')
+    expect(packageJson.files).not.toContain('commands')
   })
 
-  it('ships explicit plan, execution, and independent review agents for the test workflow', async () => {
-    const expectedAgents = ['test-planner', 'test-executor', 'test-reviewer']
-
-    for (const agent of expectedAgents) {
-      const source = await readFile(join(process.cwd(), 'agents', `${agent}.md`), 'utf8')
-      expect(source).toMatch(new RegExp(`^name:\\s*${agent}$`, 'm'))
-      expect(source).toMatch(/advisory/i)
-    }
-
-    const planner = await readFile(join(process.cwd(), 'agents', 'test-planner.md'), 'utf8')
-    const executor = await readFile(join(process.cwd(), 'agents', 'test-executor.md'), 'utf8')
-    const reviewer = await readFile(join(process.cwd(), 'agents', 'test-reviewer.md'), 'utf8')
-
-    expect(planner).toMatch(/model:\s*\n\s*-\s*pi\/plan\s*\n\s*-\s*pi\/slow/)
-    expect(planner).toMatch(/read-only/i)
-    expect(executor).toMatch(/host-authorized/i)
-    expect(executor).toMatch(/test files? and fixtures?/i)
-    expect(reviewer).toMatch(/model:\s*\n\s*-\s*pi\/slow/)
-    expect(reviewer).toMatch(/independent/i)
-    expect(reviewer).toMatch(/read-only/i)
-    expect(`${planner}\n${executor}\n${reviewer}`).not.toMatch(/block:\s*true|continue:\s*true/i)
-    expect(`${planner}\n${executor}\n${reviewer}`).toMatch(/do not (?:schedule|start)[\s\S]{0,40}(?:repair turn|hidden retry)/i)
+  it('keeps phase-specific testing Agents out of the package surface', async () => {
+    const packageJson = await readJson<PackageJson>(join(process.cwd(), 'package.json'))
+    expect(packageJson.files).not.toContain('agents')
   })
 
   it('exposes marketplace tools through the custom tool wrapper', async () => {
@@ -109,16 +90,16 @@ describe('marketplace catalog', () => {
       'omp_test_browser_check',
       'omp_test_coverage_analyze',
       'omp_test_mutation_context',
-      'omp_test_gate',
+      'omp_test_review',
       'omp_test_report'
     ]))
 
-    const gate = tools.find(tool => tool.name === 'omp_test_gate')
+    const review = tools.find(tool => tool.name === 'omp_test_review')
     const report = tools.find(tool => tool.name === 'omp_test_report')
-    if (!gate) throw new Error('Missing marketplace gate tool')
+    if (!review) throw new Error('Missing marketplace review tool')
     if (!report) throw new Error('Missing marketplace report tool')
 
-    await gate.execute('call', {
+    await review.execute('call', {
       targets: [{ id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }],
       candidate: {
         id: 'candidate',
@@ -136,121 +117,15 @@ describe('marketplace catalog', () => {
     })
   })
 
-  it('derives release tags from package versions', () => {
-    expect(releaseTagForVersion('0.2.0')).toBe('v0.2.0')
-  })
-
-  it('syncs catalog plugin version and source ref without mutating the input', () => {
-    const catalog: MarketplaceCatalog = {
-      name: 'omp-test-enhancer',
-      owner: { name: 'marapapman' },
-      plugins: [
-        {
-          name: 'omp-testing-enhancer',
-          version: '0.1.1',
-          source: {
-            source: 'github',
-            repo: 'marapapman/omp-test-enhancer',
-            ref: 'v0.1.1'
-          }
-        }
-      ]
-    }
-
-    const synced = syncMarketplaceCatalogRelease(catalog, {
-      name: 'omp-testing-enhancer',
-      version: '0.2.0'
-    })
-
-    expect(synced.plugins[0]).toEqual({
-      name: 'omp-testing-enhancer',
-      version: '0.2.0',
-      source: {
-        source: 'github',
-        repo: 'marapapman/omp-test-enhancer',
-        ref: 'v0.2.0'
-      }
-    })
-    expect(catalog.plugins[0]?.version).toBe('0.1.1')
-    expect(catalog.plugins[0]?.source.ref).toBe('v0.1.1')
-  })
-
-  it('syncs the root monorepo marketplace catalog from the plugin workspace', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-marketplace-'))
-    const pluginDir = join(root, 'plugins', 'omp-test-enhancer')
-
-    try {
-      await mkdir(pluginDir, { recursive: true })
-      await mkdir(join(root, '.omp-plugin'))
-      await writeFile(
-        join(pluginDir, 'package.json'),
-        `${JSON.stringify({ name: 'omp-testing-enhancer', version: '0.2.0' }, null, 2)}\n`
-      )
-      await writeFile(
-        join(root, '.omp-plugin', 'marketplace.json'),
-        `${JSON.stringify({
-          name: 'omp-enhancer',
-          owner: { name: 'marapapman' },
-          metadata: { pluginRoot: 'plugins' },
-          plugins: [
-            {
-              name: 'other-plugin',
-              version: '9.9.9',
-              source: './other-plugin',
-              ref: 'v9.9.9'
-            },
-            {
-              name: 'omp-testing-enhancer',
-              version: '0.1.3',
-              category: 'development',
-              source: './omp-test-enhancer',
-              ref: 'v0.1.3'
-            }
-          ]
-        }, null, 2)}\n`
-      )
-
-      const result = await syncMarketplaceRelease(pluginDir)
-      const synced = await readJson<MarketplaceCatalog>(join(root, '.omp-plugin', 'marketplace.json'))
-
-      expect(result).toEqual({
-        version: '0.2.0',
-        ref: 'v0.2.0',
-        catalogPath: join(root, '.omp-plugin', 'marketplace.json')
-      })
-      expect(synced.plugins[0]).toEqual({
-        name: 'other-plugin',
-        version: '9.9.9',
-        source: './other-plugin',
-        ref: 'v9.9.9'
-      })
-      expect(synced.plugins[1]).toMatchObject({
-        name: 'omp-testing-enhancer',
-        version: '0.2.0',
-        source: './omp-test-enhancer',
-        ref: 'v0.2.0'
-      })
-      await expect(access(join(pluginDir, '.omp-plugin', 'marketplace.json'))).rejects.toThrow()
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  it('documents marketplace install flow, marketplace tools, and local-only /test commands', async () => {
+  it('documents installation, optional tools, and the command-free workflow', async () => {
     const root = process.cwd()
     const readme = await readFile(join(root, 'README.md'), 'utf8')
-    const command = await readFile(join(root, 'commands', 'test.md'), 'utf8')
-    const packageJson = await readJson<PackageJson>(join(root, 'package.json'))
-    const installSection = readme.slice(readme.indexOf('## 安装'), readme.indexOf('## 升级'))
-    const marketplaceWorkflowSection = readme.slice(readme.indexOf('## Marketplace 常用流程'), readme.indexOf('## 本地开发安装'))
-    const localWorkflowSection = readme.slice(readme.indexOf('## 本地开发安装'), readme.indexOf('## 门禁规则'))
+    const extensionSource = await readFile(join(root, 'src', 'extension.ts'), 'utf8')
 
     expect(readme).toContain('omp plugin marketplace add marapapman/omp-enhancer')
     expect(readme).toContain('omp plugin install omp-testing-enhancer@omp-enhancer')
-    expect(installSection).not.toContain('github:marapapman/omp-test-enhancer')
     expect(readme).toContain('omp plugin marketplace update omp-enhancer')
     expect(readme).toContain('omp plugin upgrade omp-testing-enhancer@omp-enhancer')
-    expect(readme).toContain('/omp-testing-enhancer:test')
     expect(readme).toContain('browserPlan')
     expect(readme).toContain('浏览器证据')
     expect(readme).toContain('omp_test_browser_check')
@@ -258,38 +133,10 @@ describe('marketplace catalog', () => {
     expect(readme).toContain('apiPlan')
     expect(readme).toContain('omp_test_coverage_analyze')
     expect(readme).toContain('omp_test_mutation_context')
-    expect(readme).toContain('## Marketplace 常用流程')
-    expect(installSection).not.toContain('/test init')
-    expect(installSection).not.toContain('/test check')
-    expect(installSection).not.toContain('/test report')
-
-    expect(marketplaceWorkflowSection).toContain('omp_test_analyze')
-    expect(marketplaceWorkflowSection).toContain('omp_test_context')
-    expect(marketplaceWorkflowSection).toContain('omp_test_gate')
-    expect(marketplaceWorkflowSection).toContain('omp_test_report')
-    expect(marketplaceWorkflowSection).toContain('浏览器证据')
-    expect(marketplaceWorkflowSection).toContain('omp_test_browser_check')
-    expect(marketplaceWorkflowSection).toContain('omp_test_coverage_analyze')
-    expect(marketplaceWorkflowSection).toContain('omp_test_mutation_context')
-    expect(marketplaceWorkflowSection).not.toContain('/test init')
-    expect(marketplaceWorkflowSection).not.toContain('/test check')
-    expect(marketplaceWorkflowSection).not.toContain('/test report')
-
-    expect(localWorkflowSection).toContain('omp plugin link .')
-    expect(localWorkflowSection).toContain('/test init')
-    expect(localWorkflowSection).toContain('/test check')
-    expect(localWorkflowSection).toContain('/test report')
-
-    expect(command).toContain('omp_test_analyze')
-    expect(command).toContain('omp_test_context')
-    expect(command).toContain('browserPlan')
-    expect(command).toContain('browser-observable behavior')
-    expect(command).toContain('omp_test_browser_check')
-    expect(command).toContain('propertyPlan')
-    expect(command).toContain('apiPlan')
-    expect(command).toContain('omp_test_coverage_analyze')
-    expect(command).toContain('omp_test_mutation_context')
-    expect(command).toContain('omp_test_gate')
-    expect(command).toContain('omp_test_report')
+    expect(readme).toContain('omp_test_review')
+    expect(readme).toContain('omp_test_report')
+    expect(readme).toContain('defaultInactive')
+    expect(readme).toContain('插件不注册命令')
+    expect(extensionSource).not.toContain('registerCommand')
   })
 })

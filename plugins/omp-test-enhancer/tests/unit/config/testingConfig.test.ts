@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
@@ -6,8 +6,7 @@ import {
   defaultTestingEnhancerConfig,
   parseTestingEnhancerConfig,
   readTestingEnhancerConfig,
-  renderTestingEnhancerConfig,
-  writeTestingEnhancerConfig
+  renderTestingEnhancerConfig
 } from '../../../src/config/testingConfig.js'
 
 async function tempDir(): Promise<string> {
@@ -16,12 +15,12 @@ async function tempDir(): Promise<string> {
 
 describe('testingConfig', () => {
   it('renders and parses the default advisory review config', () => {
-    const config = defaultTestingEnhancerConfig('bun')
+    const config = defaultTestingEnhancerConfig()
     const rendered = renderTestingEnhancerConfig(config)
 
     expect(rendered).toContain('version: 2')
-    expect(rendered).toContain('# Expected host-observed command; advisory omp_test_gate never executes it.')
-    expect(rendered).toContain('command: bunx vitest run')
+    expect(rendered).toContain('# Expected host-observed command; advisory omp_test_review never executes it.')
+    expect(rendered).toContain('  command: ')
     expect(rendered).toContain('browser:')
     expect(rendered).toContain('  headless: true')
     expect(rendered).toContain('  trace: retain-on-failure')
@@ -112,16 +111,12 @@ describe('testingConfig', () => {
     })
   })
 
-  it('writes config once and never overwrites existing content', async () => {
+  it('reads a manually created config and leaves missing config optional', async () => {
     const cwd = await tempDir()
-    const path = await writeTestingEnhancerConfig(cwd, defaultTestingEnhancerConfig('unknown'))
+    await mkdir(join(cwd, '.omp'), { recursive: true })
     await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), 'version: 2\ntest:\n  command: custom\ncoverage:\n  command: \nreview:\n  indirectTest: warning\n  productionEdits: warning\n  testCommand: warning\n')
 
-    const secondPath = await writeTestingEnhancerConfig(cwd, defaultTestingEnhancerConfig('bun'))
-
-    expect(path).toBe('.omp/testing-enhancer.yml')
-    expect(secondPath).toBe('.omp/testing-enhancer.yml')
-    expect(await readFile(join(cwd, '.omp', 'testing-enhancer.yml'), 'utf8')).toContain('command: custom')
     expect(await readTestingEnhancerConfig(cwd)).toMatchObject({ test: { command: 'custom' } })
+    expect(await readTestingEnhancerConfig(await tempDir())).toBeUndefined()
   })
 })

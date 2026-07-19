@@ -50,6 +50,7 @@ describe('analyzeWritingQuality', () => {
       text: 'The method improves accuracy by 14%.',
       language: 'en',
       checks: ['preservation'],
+      preservation: true,
     });
 
     assert.deepEqual(result.checks, ['preservation']);
@@ -59,7 +60,7 @@ describe('analyzeWritingQuality', () => {
     assert.equal(result.summary.verdict, 'needs_revision');
   });
 
-  it('supports the preservation flag and degrades safely without original text', () => {
+  it('supports the preservation flag and reports an unavailable comparison without original text', () => {
     const preserved = analyzeWritingQuality({
       originalText: '通常可能提升 12%。',
       text: '通常可能提升 12%。',
@@ -76,6 +77,31 @@ describe('analyzeWritingQuality', () => {
     });
     assert.equal(missingOriginal.preservation.compared, false);
     assert.match(missingOriginal.preservation.reason, /originalText/);
-    assert.equal(missingOriginal.summary.total, 0);
+    assert.equal(missingOriginal.summary.byCategory.preservation, 1);
+    assert.equal(missingOriginal.summary.verdict, 'needs_revision');
+
+    const missingChineseOriginal = analyzeWritingQuality({
+      text: '修订稿。',
+      language: 'zh',
+      checks: ['preservation'],
+    });
+    assert.match(missingChineseOriginal.issues[0].problem, /缺少原文/);
+    assert.match(missingChineseOriginal.issues[0].suggestion, /提供 originalText/);
+  });
+
+  it('rejects unsupported checks instead of returning a false pass', () => {
+    assert.throws(
+      () => analyzeWritingQuality({ text: 'Plain text.', checks: ['unknown'] }),
+      /Unsupported writing checks: unknown/,
+    );
+    assert.throws(
+      () => analyzeWritingQuality({ text: 'Plain text.', checks: ['logic', 'unknown'] }),
+      /Unsupported writing checks: unknown/,
+    );
+    assert.deepEqual(analyzeWritingQuality({ text: 'Plain text.', checks: [] }).checks, [
+      'logic',
+      'style',
+      'citation',
+    ]);
   });
 });

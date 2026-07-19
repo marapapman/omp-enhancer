@@ -85,18 +85,18 @@ describe('observed test evidence', () => {
     }
   })
 
-  it('builds route-scoped evidence from nested host results', () => {
+  it('builds task-context-scoped evidence from nested host results', () => {
     const startedAt = Date.now()
     const evidence = observedTestCommandFromHostEvent({
       name: 'functions.exec_command',
       input: { command: 'npm test' },
       isError: false,
       result: { content: [{ type: 'text', text: '12 tests passed, 0 failed' }] }
-    }, 'route:42')
+    }, 'task:42')
 
     expect(evidence).toEqual({
-      schemaVersion: 1,
-      routeIdentity: 'route:42',
+      schemaVersion: 2,
+      taskContextIdentity: 'task:42',
       commandDigest: createHash('sha256').update('npm test').digest('hex'),
       exitCode: 0,
       observedAt: expect.any(Number)
@@ -107,7 +107,7 @@ describe('observed test evidence', () => {
       name: 'bash',
       command: 'npm test',
       details: { result: { exitCode: 1, stdout: '12 tests passed, 0 failed' } }
-    }, 'route:42')).toBeUndefined()
+    }, 'task:42')).toBeUndefined()
   })
 
   it('classifies definite mutations independently from read-only and test commands', () => {

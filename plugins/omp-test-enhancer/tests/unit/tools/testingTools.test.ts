@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { analyzeCoverageReport, analyzeMutationReport, analyzeTestTargets, buildTestContext, createTestingEnhancerTools, runTestReview } from '../../../src/tools/testingTools.js'
 import type { ExtensionToolContext, ToolDefinition } from '../../../src/ompApi.js'
-import type { ChangedTarget } from '../../../src/types.js'
+import type { BrowserEvidence, ChangedTarget } from '../../../src/types.js'
 
 async function tempRepo(): Promise<string> {
   const cwd = await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-tools-'))
@@ -42,7 +42,7 @@ describe('pure testing tools', () => {
         { sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }
       ],
       warnings: [],
-      nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report']
+      nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_review', 'omp_test_report']
     })
   })
 
@@ -76,7 +76,7 @@ describe('pure testing tools', () => {
     expect(output).toMatchObject({
       runId: 'local-analysis',
       targets: [{ sourceFile: 'src/ui/LoginForm.tsx', symbolName: 'LoginForm', kind: 'react-component', risk: 'medium' }],
-      nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_gate', 'omp_test_report']
+      nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_review', 'omp_test_report']
     })
   })
 
@@ -96,6 +96,7 @@ describe('pure testing tools', () => {
     expect(output.preferredAssertions).toEqual(expect.arrayContaining(['visible UI output', 'role/name', 'user event result', 'browser error absence']))
     expect(output.browserPlan).toMatchObject({
       framework: 'playwright',
+      targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
       setup: { viewport: { width: 1280, height: 720 }, trace: 'retain-on-failure', screenshot: 'only-on-failure', serviceWorkers: 'block' },
       locatorPriority: ['role', 'label', 'text', 'placeholder', 'testId', 'css']
     })
@@ -319,6 +320,11 @@ describe('pure testing tools', () => {
       framework: 'playwright',
       status: 'failed',
       baseUrl: 'http://localhost:5173',
+      targetIds: [target.id],
+      scenarioCount: 1,
+      stepCount: 2,
+      captureCount: 1,
+      visualAssertionCount: 1,
       findings: [{
         gate: 'browser-visual',
         passed: false,
@@ -407,7 +413,12 @@ describe('pure testing tools', () => {
         status: 'passed',
         runId: 'browser-test',
         baseUrl: 'http://localhost:5173',
+        targetIds: [],
         browser: 'chromium',
+        scenarioCount: 1,
+        stepCount: 2,
+        captureCount: 1,
+        visualAssertionCount: 1,
         findings: []
       })
     })
@@ -418,6 +429,148 @@ describe('pure testing tools', () => {
 
     expect(result.content[0]?.text).toBe('Browser check passed.')
     expect(result.details).toMatchObject({ status: 'passed', runId: 'browser-test' })
+  })
+
+  it('returns structured failures for invalid browser scenario, action, locator, and visual schemas', async () => {
+    let runnerCalls = 0
+    const tools = createTestingEnhancerTools(fakeZod(), {
+      runBrowserCheck: async () => {
+        runnerCalls += 1
+        throw new Error('invalid input reached browser runner')
+      }
+    })
+    const validStep = { action: 'goto', url: '/', description: 'Open page' }
+    const cases = [
+      {
+        name: 'unknown action',
+        params: { baseUrl: 'http://localhost:5173', scenarios: [{ name: 'bad', steps: [{ ...validStep, action: 'teleport' }] }] },
+        path: '$.scenarios[0].steps[0].action'
+      },
+      {
+        name: 'unknown locator',
+        params: { baseUrl: 'http://localhost:5173', scenarios: [{ name: 'bad', steps: [{ action: 'click', description: 'Click', locator: { kind: 'shadow', value: '#go' } }] }] },
+        path: '$.scenarios[0].steps[0].locator.kind'
+      },
+      {
+        name: 'invalid visual assertion',
+        params: { baseUrl: 'http://localhost:5173', scenarios: [{ name: 'bad', steps: [validStep], visualChecks: [{ kind: 'locator', name: 'button' }] }] },
+        path: '$.scenarios[0].visualChecks[0].locator'
+      },
+      {
+        name: 'unknown scenario field',
+        params: { baseUrl: 'http://localhost:5173', scenarios: [{ name: 'bad', steps: [validStep], trusted: true }] },
+        path: '$.scenarios[0].trusted'
+      }
+    ]
+
+    for (const item of cases) {
+      const result = await tool(tools, 'omp_test_browser_check').execute(
+        `invalid-${item.name}`,
+        item.params,
+        undefined,
+        undefined,
+        context(process.cwd())
+      )
+      expect(result.details, item.name).toMatchObject({
+        status: 'failed',
+        targetIds: [],
+        scenarioCount: 0,
+        stepCount: 0,
+        captureCount: 0,
+        visualAssertionCount: 0,
+        findings: [expect.objectContaining({
+          passed: false,
+          category: 'setup',
+          summary: 'Invalid browser check parameters.',
+          evidence: expect.objectContaining({ path: item.path })
+        })]
+      })
+    }
+    expect(runnerCalls).toBe(0)
+  })
+
+  it('turns a browser runner exception into observed structured failed evidence', async () => {
+    const tools = createTestingEnhancerTools(fakeZod(), {
+      runBrowserCheck: async () => { throw new Error('browser crashed') }
+    })
+    const result = await tool(tools, 'omp_test_browser_check').execute('crash', {
+      baseUrl: 'http://localhost:5173',
+      targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+      scenarios: [{ name: 'login', steps: [{ action: 'goto', url: '/', description: 'Open login' }] }]
+    }, undefined, undefined, context(process.cwd()))
+
+    expect(result.details).toMatchObject({
+      status: 'failed',
+      targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+      findings: [expect.objectContaining({
+        passed: false,
+        summary: 'Browser check execution failed.',
+        evidence: { message: 'browser crashed' }
+      })]
+    })
+  })
+
+  it('ignores caller-supplied browserEvidence in the tool facade and uses only observed browser-check output', async () => {
+    const target: ChangedTarget = {
+      id: 'src/ui/LoginForm.tsx#LoginForm',
+      sourceFile: 'src/ui/LoginForm.tsx',
+      symbolName: 'LoginForm',
+      kind: 'react-component',
+      risk: 'medium'
+    }
+    const candidate = {
+      id: 'candidate',
+      targetId: target.id,
+      files: [{ path: 'src/ui/LoginForm.test.tsx', action: 'create', content: 'test()' }]
+    }
+    const browserEvidence: BrowserEvidence = {
+      framework: 'playwright',
+      status: 'passed',
+      runId: 'observed-browser-test',
+      targetIds: [target.id],
+      scenarioCount: 1,
+      stepCount: 2,
+      captureCount: 1,
+      visualAssertionCount: 1,
+      findings: []
+    }
+    let observedBrowserEvidence: BrowserEvidence | undefined
+    const tools = createTestingEnhancerTools(fakeZod(), {
+      runBrowserCheck: async () => browserEvidence,
+      onBrowserCheck: evidence => { observedBrowserEvidence = evidence },
+      getObservedBrowserEvidence: () => observedBrowserEvidence
+    })
+    const ctx = context(process.cwd())
+
+    const spoofed = await tool(tools, 'omp_test_review').execute('spoofed', {
+      targets: [target],
+      candidate,
+      browserEvidence
+    }, undefined, undefined, ctx)
+    expect(spoofed.details).toMatchObject({
+      passed: false,
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'browser-interaction', summary: 'Browser evidence is required for frontend targets.' })
+      ])
+    })
+
+    await tool(tools, 'omp_test_browser_check').execute('browser', {
+      baseUrl: 'http://localhost:5173',
+      targetIds: [target.id],
+      scenarios: [{ name: 'login', steps: [{ action: 'goto', url: '/', description: 'Open login' }] }]
+    }, undefined, undefined, ctx)
+    const observed = await tool(tools, 'omp_test_review').execute('observed', {
+      targets: [target],
+      candidate,
+      browserEvidence: { ...browserEvidence, scenarioCount: 0, stepCount: 0, captureCount: 0, visualAssertionCount: 0 }
+    }, undefined, undefined, ctx)
+    expect(observed.details).toMatchObject({
+      passed: true,
+      results: expect.arrayContaining([
+        expect.objectContaining({ gate: 'browser-interaction', passed: true }),
+        expect.objectContaining({ gate: 'browser-visual', passed: true })
+      ])
+    })
   })
 })
 
@@ -542,7 +695,7 @@ describe('createTestingEnhancerTools execute layer', () => {
     })
   })
 
-  it('blocks internal imports through omp_test_gate execute', async () => {
+  it('blocks internal imports through omp_test_review execute', async () => {
     const target: ChangedTarget = {
       id: 'src/user/UserService.ts#UserService',
       sourceFile: 'src/user/UserService.ts',
@@ -551,7 +704,7 @@ describe('createTestingEnhancerTools execute layer', () => {
       risk: 'high'
     }
 
-    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_gate').execute(
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_review').execute(
       'call',
       {
         targets: [target],
@@ -603,7 +756,7 @@ describe('createTestingEnhancerTools execute layer', () => {
       risk: 'medium'
     }
 
-    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_gate').execute(
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_review').execute(
       'call',
       {
         targets: [target],
@@ -623,7 +776,7 @@ describe('createTestingEnhancerTools execute layer', () => {
       results: expect.arrayContaining([
         expect.objectContaining({ gate: 'test-file-scope', passed: false, severity: 'warning' }),
         expect.objectContaining({ gate: 'indirect-test', passed: false, severity: 'warning' }),
-        expect.objectContaining({ gate: 'browser-interaction', passed: true, severity: 'warning' }),
+        expect.objectContaining({ gate: 'browser-interaction', passed: false, severity: 'warning' }),
         expect.objectContaining({ gate: 'test-command', passed: true, severity: 'warning' })
       ])
     })
@@ -644,7 +797,7 @@ describe('createTestingEnhancerTools execute layer', () => {
       exec: async () => ({ exitCode: 0, stdout: '', stderr: '' })
     }
 
-    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_gate').execute(
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_review').execute(
       'call',
       {
         targets: [target],
@@ -708,14 +861,14 @@ describe('createTestingEnhancerTools execute layer', () => {
 
     const tools = createTestingEnhancerTools(fakeZod(), {
       getObservedTestCommandEvidence: () => ({
-        schemaVersion: 1,
-        routeIdentity: 'route-1',
+        schemaVersion: 2,
+        taskContextIdentity: 'task-1',
         commandDigest: createHash('sha256').update(command).digest('hex'),
         exitCode: 0,
         observedAt: Date.now()
       })
     })
-    const result = await tool(tools, 'omp_test_gate').execute(
+    const result = await tool(tools, 'omp_test_review').execute(
       'call',
       {
         targets: [target],
@@ -743,7 +896,69 @@ describe('createTestingEnhancerTools execute layer', () => {
     })
   })
 
-  it('never executes a model-supplied or configured command inside omp_test_gate', async () => {
+  it('treats the project-configured test command as authoritative over a conflicting tool parameter', async () => {
+    const cwd = await tempRepo()
+    await mkdir(join(cwd, '.omp'), { recursive: true })
+    await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), [
+      'version: 2',
+      'test:',
+      '  command: npm test',
+      'review:',
+      '  indirectTest: critical',
+      '  productionEdits: critical',
+      '  testCommand: critical',
+      '  browserEvidence: critical',
+      ''
+    ].join('\n'))
+    const suppliedCommand = 'pytest'
+    const target: ChangedTarget = {
+      id: 'src/user/UserService.ts#UserService',
+      sourceFile: 'src/user/UserService.ts',
+      symbolName: 'UserService',
+      kind: 'service',
+      risk: 'high'
+    }
+    const tools = createTestingEnhancerTools(fakeZod(), {
+      getObservedTestCommandEvidence: () => ({
+        schemaVersion: 2,
+        taskContextIdentity: 'task-1',
+        commandDigest: createHash('sha256').update(suppliedCommand).digest('hex'),
+        exitCode: 0,
+        observedAt: Date.now()
+      })
+    })
+
+    const result = await tool(tools, 'omp_test_review').execute(
+      'call',
+      {
+        targets: [target],
+        candidate: {
+          id: 'candidate',
+          targetId: target.id,
+          files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: 'expect(result).toBe(true)' }]
+        },
+        testCommand: suppliedCommand
+      },
+      undefined,
+      undefined,
+      context(cwd)
+    )
+
+    expect(result.details).toMatchObject({
+      passed: false,
+      criticalFindings: ['test-command'],
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          gate: 'test-command',
+          passed: false,
+          severity: 'critical',
+          summary: 'Tool testCommand conflicts with the project-configured test command.'
+        })
+      ])
+    })
+  })
+
+  it('never executes a model-supplied or configured command inside omp_test_review', async () => {
     const cwd = await tempRepo()
     const marker = join(cwd, 'pwned.txt')
     const malicious = `${process.execPath} -e "require('fs').writeFileSync('${marker}', 'bad')"`
@@ -764,7 +979,7 @@ describe('createTestingEnhancerTools execute layer', () => {
       id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts',
       symbolName: 'UserService', kind: 'service', risk: 'high'
     }
-    const gate = tool(createTestingEnhancerTools(fakeZod()), 'omp_test_gate')
+    const gate = tool(createTestingEnhancerTools(fakeZod()), 'omp_test_review')
     for (const params of [
       {
         targets: [target], candidate: { id: 'candidate', targetId: target.id, files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: 'expect(result).toBe(true)' }] },

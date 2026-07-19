@@ -38,10 +38,10 @@ test('DeepSeek tool result hook returns error content arrays', async () => {
   });
 });
 
-test('DeepSeek tool result hook preserves structured gate outcome metadata', () => {
+test('DeepSeek tool result hook leaves structured review outcome metadata untouched', () => {
   const result = formatToolResultEvent({
-    toolName: 'omp_test_gate',
-    content: [{ type: 'text', text: 'Gate failed.' }],
+    toolName: 'omp_test_review',
+    content: [{ type: 'text', text: 'Review found critical findings.' }],
     details: { runId: 'run-1', passed: false, blockers: ['test-command'] },
     status: 'failed',
     ok: false,

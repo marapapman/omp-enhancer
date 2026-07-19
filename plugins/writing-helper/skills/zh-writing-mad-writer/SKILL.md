@@ -1,6 +1,6 @@
 ---
 name: zh-writing-mad-writer
-description: "中文快速写作，批量写章节并做一轮聚焦自检，用户明确要求时再追加修订"
+description: "用于快速批量起草多个中文章节并做一轮聚焦自检。不用于克制润色、只读审查或严格证据矩阵写作；用户明确要求时才追加修订。"
 ---
 
 # 中文快速写作技能
@@ -17,7 +17,7 @@ description: "中文快速写作，批量写章节并做一轮聚焦自检，用
 
 ### 第 0 轮：准备
 
-读取所有输入。识别空章节（空白或 `[TODO]`/`[FILL]` 标记）。如果缺少相关工作文献：从 storyline 提取 3-8 个关键词，每个关键词用 `web_search_exa("<关键词> site:arxiv.org", max_results=3)` 搜索，用 `web_fetch_exa` 获取摘要，写入 `.pi/research/literature.md`（每次最多 10 篇）。
+读取所有输入。识别空章节（空白或 `[TODO]`/`[FILL]` 标记）。如果缺少相关工作文献，从 storyline 提取 3-8 个关键词。每个关键词用 `web_search` 搜索，`limit` 设为 3。再用 `read` 读取选中的来源页面，确认摘要后写入 `.pi/research/literature.md`。每次最多 10 篇。
 
 ### 默认一轮：写 → 查 → 改
 

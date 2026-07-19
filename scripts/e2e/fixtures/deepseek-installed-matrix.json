@@ -81,9 +81,9 @@
       "category": "code-plan",
       "cwd": "/home/dingli/frugal-pi",
       "timeoutSeconds": 180,
-      "prompt": "为修复 agent-fleet 路由问题制定实现和测试计划，不修改文件，不运行测试。先遵循 AGENTS.md 并读取其中为实现计划指定的 exact skill，然后在 8 次以内的读取或搜索后交付有文件证据的计划。",
+      "prompt": "为修复 agent-fleet 路由问题制定实现和测试计划，不修改文件，不运行测试。遵循 AGENTS.md，使用通用 code-development Skill，先检索本地代码、调用者和现有测试，再在 8 次以内的读取或搜索后交付有文件证据的详细计划。",
       "expectations": {
-        "requiredSkills": ["superpowers-writing-plans"],
+        "requiredSkills": ["code-development"],
         "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing"],
         "maxSourceSearchCalls": 8
       }
@@ -93,10 +93,10 @@
       "category": "code-diagnosis",
       "cwd": "/home/dingli/frugal-pi",
       "timeoutSeconds": 180,
-      "prompt": "诊断 extensions/agent-fleet/strict-agent-model-routing.test.mjs 所覆盖的路由约束可能在哪里失配。遵循 AGENTS.md，先读取 exact debugging skill，只读检查并给出文件与行级证据，不修改文件、不运行测试，最多 8 次读取或搜索。",
+      "prompt": "诊断 extensions/agent-fleet/strict-agent-model-routing.test.mjs 所覆盖的路由约束可能在哪里失配。遵循 AGENTS.md，使用通用 code-development Skill，主动检索本地实现、调用者和相邻测试，只读给出文件与行级证据，不修改文件、不运行测试，最多 8 次读取或搜索。",
       "expectations": {
-        "requiredSkills": ["superpowers-debugging"],
-        "forbiddenSkills": ["systematic-debugging", "writing-markdown-helper", "plain-chinese-writing"],
+        "requiredSkills": ["code-development"],
+        "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing"],
         "maxSourceSearchCalls": 8
       }
     },
@@ -105,9 +105,9 @@
       "category": "code-plan",
       "cwd": "/home/dingli/frugal-pi",
       "timeoutSeconds": 180,
-      "prompt": "为 agent-fleet 的路由逻辑设计测试策略，不运行测试也不修改文件。遵循 AGENTS.md，读取实现计划所需的 exact project skill，给出 RED 矩阵、关键 fixture 和回滚验证，最多 8 次读取或搜索。",
+      "prompt": "为 agent-fleet 的路由逻辑设计测试策略，不运行测试也不修改文件。遵循 AGENTS.md，使用通用 code-development Skill，检索现有公开行为测试和 fixture，给出 RED 矩阵、关键 fixture 和回滚验证，最多 8 次读取或搜索。",
       "expectations": {
-        "requiredSkills": ["superpowers-writing-plans"],
+        "requiredSkills": ["code-development"],
         "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing"],
         "maxSourceSearchCalls": 8
       }
@@ -118,10 +118,10 @@
       "cwd": "/home/dingli/frugal-pi",
       "timeoutSeconds": 150,
       "repeat": 1,
-      "prompt": "只读审计 extensions/agent-fleet 的任务路由与失败收敛逻辑。遵循 AGENTS.md 并读取 exact debugging skill。在前 8 次读取或搜索内先形成至少一个文件证据化发现；若 150 秒不足，交付明确范围的部分结果，不修改文件、不运行测试。",
+      "prompt": "只读审计 extensions/agent-fleet 的任务路由与失败收敛逻辑。遵循 AGENTS.md 并使用通用 code-development Skill，主动检索入口、调用者、测试与配置。在前 8 次读取或搜索内先形成至少一个文件证据化发现；若 150 秒不足，交付明确范围的部分结果，不修改文件、不运行测试。",
       "expectations": {
-        "requiredSkills": ["superpowers-debugging"],
-        "forbiddenSkills": ["systematic-debugging", "writing-markdown-helper", "plain-chinese-writing"],
+        "requiredSkills": ["code-development"],
+        "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing"],
         "maxSourceSearchCalls": 12
       }
     },
@@ -131,10 +131,10 @@
       "cwd": "/home/dingli/frugal-pi",
       "timeoutSeconds": 150,
       "repeat": 1,
-      "prompt": "只读对比审计 extensions/agent-fleet/main-orchestration.ts 的阶段收敛与 extensions/agent-fleet/stop-rules.ts 的停止规则。按注入协议先选择 code.review，第一工具必须是 todo init；随后用 read 精确加载 skill://systematic-debugging，再进行任何项目读取。把这两个精确文件作为两个独立子任务放进同一次 task tasks[] 批量 fork；每个子任务开头使用完整 [workflow=... step=... todo=... skills=systematic-debugging] 前缀，只读对应一个文件并直接返回最多三条带行号证据，不写报告文件。task 会返回后台 job；等待结果自动送达，若必须检查状态只用一次 job poll/list，绝不能再调用 task 轮询。主 agent 不扩展到其他文件；逐项完成 todo 后给出简短对比结论。不修改文件、不运行测试、不联网。",
+      "prompt": "只读对比审阅两个已提供的代码变更计划：计划 A 涉及 extensions/agent-fleet/main-orchestration.ts 的阶段收敛，计划 B 涉及 extensions/agent-fleet/stop-rules.ts 的停止规则。选择 code.dev 并加载唯一通用 skill://code-development，用原生 todo 写明两个独立可运行的 PLAN REVIEW slice。不要在 Main 预读目标；把两个完整计划放进同一次 task tasks[] 批量调用，两个 assignment 都使用 plan。每个 assignment 必须直接给出精确目标和符号、验收条件、本地锚点、预期 RED/GREEN、扩大验证和风险，开头使用完整 [workflow=code.dev step=step-plan-review todo=... skills=code-development] 前缀，并要求只审阅所提供的计划，不读取项目文件、不运行命令，直接返回最多三条具体缺口或明确无发现。task 会返回后台 job；等待结果自动送达，若必须检查状态只用一次 job poll/list，绝不能再调用 task 轮询。主 agent 不扩展到其他文件；逐项完成 todo 后给出简短对比结论。不修改文件、不运行测试、不联网。",
       "tools": ["todo", "task", "job", "read", "grep", "glob"],
       "expectations": {
-        "requiredSkills": ["systematic-debugging"],
+        "requiredSkills": ["code-development"],
         "forbiddenSkills": ["writing-markdown-helper", "plain-chinese-writing", "omp-gate-satisfaction", "omp-gate-unblock"],
         "maxSourceSearchCalls": 8,
         "requireNativeTodoInit": true,
@@ -146,7 +146,11 @@
         "minNativeTaskForks": 2,
         "minNativeTaskBatchCalls": 1,
         "requireNativeTaskBatch": true,
-        "requireNativeTaskMetadataPrefix": true
+        "requireNativeTaskMetadataPrefix": true,
+        "requiredNativeTaskAgents": ["plan"],
+        "requiredNativeTaskWorkflows": ["code.dev"],
+        "requiredNativeTaskWorkflowsPerAssignment": ["code.dev"],
+        "requiredNativeTaskSkillsPerAssignment": ["code-development"]
       }
     },
     {

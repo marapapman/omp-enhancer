@@ -225,6 +225,51 @@ describe('verifyCitations', () => {
     assert.equal(result.citations[0].evidence.doi, '10.1145/3366423.3380124');
   });
 
+  it('removes sentence punctuation from direct DOI targets', () => {
+    const result = verifyCitations({
+      text: 'The paper is identified by DOI: 10.1145/3366423.3380124.',
+      evidenceRecords: [{ doi: '10.1145/3366423.3380124', provider: 'local-literature' }],
+    });
+
+    assert.equal(result.citations[0].key, '10.1145/3366423.3380124');
+    assert.equal(result.citations[0].status, 'VERIFIED');
+  });
+
+  it('removes an unmatched prose parenthesis without stripping balanced DOI parentheses', () => {
+    const parenthetical = verifyCitations({
+      text: 'See (DOI: 10.1145/3366423.3380124).',
+      evidenceRecords: [{ doi: '10.1145/3366423.3380124', provider: 'local-literature' }],
+    });
+    const balanced = verifyCitations({
+      text: 'See DOI: 10.1000/example(test).',
+      evidenceRecords: [{ doi: '10.1000/example(test)', provider: 'local-literature' }],
+    });
+
+    assert.equal(parenthetical.citations[0].key, '10.1145/3366423.3380124');
+    assert.equal(parenthetical.citations[0].status, 'VERIFIED');
+    assert.equal(balanced.citations[0].key, '10.1000/example(test)');
+    assert.equal(balanced.citations[0].status, 'VERIFIED');
+  });
+
+  it('deduplicates external lookups that resolve to the same DOI', async () => {
+    let calls = 0;
+    await fetchExternalCitationEvidence({
+      text: 'See [@first] and [@second].',
+      bibliography: [
+        '@article{first, doi={10.1145/3366423.3380124}}',
+        '@article{second, doi={10.1145/3366423.3380124}}',
+      ].join('\n'),
+      allowNetwork: true,
+      citationProviders: ['doi'],
+      fetchImpl: async () => {
+        calls += 1;
+        return { ok: false, async json() { return {}; } };
+      },
+    });
+
+    assert.equal(calls, 1);
+  });
+
   it('keeps direct DOI citations unverified when only bibliography matches', () => {
     const result = verifyCitations({
       text: 'The paper is identified by DOI: 10.1145/3366423.3380124',

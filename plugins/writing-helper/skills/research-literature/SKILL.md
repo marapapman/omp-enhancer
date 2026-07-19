@@ -18,14 +18,14 @@ Read `.pi/research/storyline.md`; extract 3–8 search keywords. Prefer specific
 ### 2. Search for Papers
 
 ```
-web_search_exa(query="<keyword> site:arxiv.org", max_results=5)
+web_search(query="<keyword> site:arxiv.org", limit=5)
 ```
 
 One query per keyword pair. Supplement with direct arXiv ID searches if the user has known seed papers.
 
 ### 3. Fetch Abstracts
 
-For each arXiv result, `web_fetch_exa("https://arxiv.org/abs/<id>")`. Extract: title, authors, year, venue, abstract.
+For each arXiv result, use `read` on `https://arxiv.org/abs/<id>`. Extract: title, authors, year, venue, abstract.
 
 ### 4. Extract Per-Paper Metadata
 
@@ -76,7 +76,7 @@ Add new papers above existing ones (newest-first). Regenerate the cross-index ta
 ## Pi Integration
 
 - **Use:** load `research-literature` through the runtime's normal skill mechanism.
-- **Tools:** `web_search_exa` (find papers), `web_fetch_exa` (retrieve abstracts), `research_paper_search` (academic paper search)
+- **Tools:** `web_search` (find papers) and `read` (retrieve source pages). Use any separately installed academic search tool only when it is actually available.
 - **Input:** `.pi/research/storyline.md` (optional — provides keywords)
 - **Output:** `.pi/research/literature.md` (append-only, incremental)
 - **No external CLI.** No `.pi/research/state.md`.
@@ -87,8 +87,8 @@ Add new papers above existing ones (newest-first). Regenerate the cross-index ta
 User: Find and organize the most relevant literature for this storyline.
 Agent:
 1. Read .pi/research/storyline.md → keywords: ["zero-shot classification", "vision-language models"]
-2. web_search_exa("zero-shot vision-language models site:arxiv.org") → 5 results
-3. web_fetch_exa("https://arxiv.org/abs/2103.00020") → CLIP paper
+2. web_search("zero-shot vision-language models site:arxiv.org") → 5 results
+3. read("https://arxiv.org/abs/2103.00020") → CLIP paper
 4. Assemble metadata for 3 papers
 5. Build cross-index: Contrastive Pretraining | Text Encoder | Image Encoder
 6. Write to .pi/research/literature.md

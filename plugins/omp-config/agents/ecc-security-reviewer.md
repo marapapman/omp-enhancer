@@ -66,7 +66,8 @@ npm audit --audit-level=high --ignore-scripts
 10. **Insufficient Logging** — Security events logged? Alerts configured?
 
 ### 3. Code Pattern Review
-Flag these patterns immediately:
+Treat these patterns as candidates. Trace controllable input through the caller,
+validation, and security-sensitive sink before reporting a vulnerability:
 
 | Pattern | Severity | Fix |
 |---------|----------|-----|
@@ -98,6 +99,33 @@ Flag these patterns immediately:
 
 **Always verify context before flagging.**
 
+## Evidence Reliability
+
+Classify each candidate before reporting it:
+
+- `PROVEN`: a complete input-to-caller-to-sink trace and observed or directly
+  guaranteed security impact.
+- `LIKELY`: strong trace evidence with one named, non-decisive uncertainty.
+- `HYPOTHESIS`: a plausible pattern with a missing reachability, validation, or
+  impact link; do not report it as a vulnerability.
+- `DISPROVED`: a caller, guard, sandbox, or bounded probe defeats the candidate;
+  omit it from the issue list.
+
+For every high-impact candidate, perform one cheapest authorized disconfirming
+countercheck: inspect the real caller, downstream validation, effective config,
+or a bounded non-mutating probe. If that check is unavailable, retain
+`HYPOTHESIS`; do not assign HIGH or CRITICAL severity and do not retry
+automatically.
+
+Anchor each reported issue with path, symbol, and an exact snippet. A line
+number or line range is optional and must be verified from the current file;
+never guess one. Zero findings is a valid result, even after checking every
+listed class. The checklist is coverage guidance, not a vulnerability quota.
+
+Main or the parent must not upgrade a child's confidence or evidence level
+without recording new evidence and a disconfirming countercheck. It may
+preserve or lower either value during synthesis.
+
 ## Emergency Response
 
 If you find a CRITICAL vulnerability:
@@ -115,11 +143,11 @@ If you find a CRITICAL vulnerability:
 
 ## Success Metrics
 
-- No CRITICAL issues found
-- All HIGH issues clearly reported with evidence and remediation guidance
-- No secrets in code
-- Dependencies up to date
-- Security checklist complete
+- Every reported issue has a demonstrated trace, evidence level, exact anchor,
+  and bounded remediation guidance.
+- Material hypotheses and disproved candidates are not presented as defects.
+- Checked classes and unresolved evidence limitations are explicit, including
+  when no vulnerability is found.
 
 ## Reference
 
@@ -127,4 +155,5 @@ For detailed vulnerability patterns, code examples, report templates, and PR rev
 
 ---
 
-**Remember**: Security is not optional. One vulnerability can cost users real financial losses. Be thorough, be paranoid, be proactive.
+**Remember**: Security impact can be serious, so calibrate every conclusion to
+the demonstrated evidence and preserve uncertainty explicitly.

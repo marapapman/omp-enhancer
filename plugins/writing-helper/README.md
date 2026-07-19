@@ -117,6 +117,7 @@ Model policy:
 
 - `writer` and `zh-writer` declare `pi/task` for drafting and bounded revision work.
 - `checker` and `zh-checker` declare `pi/slow` for independent quality review.
+- These agents do not set `thinkingLevel`; each inherits both the model and reasoning level from its configured role.
 
 ### Skills
 

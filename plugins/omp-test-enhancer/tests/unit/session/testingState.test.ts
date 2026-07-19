@@ -6,12 +6,13 @@ import {
   buildTestingReviewEvidence,
   completeTestingReview,
   createInitialTestingReviewState,
-  recordTestingReport,
+  invalidateObservedBrowserEvidence,
+  recordObservedBrowserEvidence,
   restoreTestingReviewStateFromEntries,
-  scopeTestingReviewToRoute,
+  scopeTestingReviewToTaskContext,
   startTestingReview
 } from '../../../src/session/testingState.js'
-import type { ChangedTarget, GateResult } from '../../../src/types.js'
+import type { BrowserEvidence, ChangedTarget, GateResult } from '../../../src/types.js'
 
 const target: ChangedTarget = {
   id: 'src/user/UserService.ts#UserService',
@@ -38,8 +39,20 @@ const criticalFinding: GateResult = {
   repairHint: 'Check the overlay covering the submit button.'
 }
 
+const passedBrowserEvidence: BrowserEvidence = {
+  framework: 'playwright',
+  status: 'passed',
+  runId: 'browser-run-1',
+  targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+  scenarioCount: 1,
+  stepCount: 2,
+  captureCount: 1,
+  visualAssertionCount: 0,
+  findings: []
+}
+
 describe('testing review state', () => {
-  it('creates an empty route-scoped advisory state', () => {
+  it('creates an empty task-context-scoped advisory state', () => {
     expect(createInitialTestingReviewState()).toEqual({
       schemaVersion: TESTING_STATE_SCHEMA_VERSION,
       reviewStatus: 'idle',
@@ -60,6 +73,22 @@ describe('testing review state', () => {
     ])).toEqual(second)
   })
 
+  it('ignores obsolete persisted report markdown when restoring review state', () => {
+    const state = completeTestingReview(
+      startTestingReview(createInitialTestingReviewState(), [target]),
+      [readyResult]
+    )
+
+    const restored = restoreTestingReviewStateFromEntries([{
+      type: 'custom',
+      customType: TESTING_STATE_ENTRY,
+      data: { ...state, lastReportMarkdown: '# obsolete report' }
+    }])
+
+    expect(restored).not.toHaveProperty('lastReportMarkdown')
+    expect(restored.lastReviewResults).toEqual([readyResult])
+  })
+
   it('ignores malformed and pre-advisory state data', () => {
     expect(restoreTestingReviewStateFromEntries([
       { type: 'custom', customType: TESTING_STATE_ENTRY, data: { schemaVersion: 3, reviewStatus: 'collecting', lastTargets: [], lastReviewResults: [] } },
@@ -67,15 +96,47 @@ describe('testing review state', () => {
     ])).toEqual(createInitialTestingReviewState())
   })
 
-  it('records collecting, findings, ready, and report diagnostics', () => {
+  it('migrates persisted schema-v4 route naming into task-context state', () => {
+    const restored = restoreTestingReviewStateFromEntries([{
+      type: 'custom',
+      customType: TESTING_STATE_ENTRY,
+      data: {
+        schemaVersion: 4,
+        reviewStatus: 'collecting',
+        routeIdentity: 'route:9',
+        reviewRunId: 'legacy-run',
+        lastTargets: [target],
+        lastReviewResults: [],
+        evidenceRevision: 2,
+        lastObservedTestCommand: {
+          schemaVersion: 1,
+          routeIdentity: 'route:9',
+          commandDigest: 'a'.repeat(64),
+          exitCode: 0,
+          observedAt: 1234
+        }
+      }
+    }])
+
+    expect(restored).toMatchObject({
+      schemaVersion: TESTING_STATE_SCHEMA_VERSION,
+      taskContextIdentity: 'task:9',
+      lastObservedTestCommand: {
+        schemaVersion: 2,
+        taskContextIdentity: 'task:9'
+      }
+    })
+  })
+
+  it('records collecting, findings, and ready diagnostics', () => {
     const collecting = startTestingReview(createInitialTestingReviewState(), [target], {
-      routeIdentity: 'route:1',
+      taskContextIdentity: 'task:1',
       runId: 'test-run-1'
     })
     expect(collecting).toMatchObject({
       reviewStatus: 'collecting',
       lastTargets: [target],
-      routeIdentity: 'route:1',
+      taskContextIdentity: 'task:1',
       reviewRunId: 'test-run-1',
       evidenceRevision: 1
     })
@@ -89,12 +150,77 @@ describe('testing review state', () => {
 
     const ready = completeTestingReview(findings, [readyResult])
     expect(ready).toMatchObject({ reviewStatus: 'ready', lastReviewResults: [readyResult] })
-    expect(recordTestingReport(ready, '# report')).toMatchObject({ lastReportMarkdown: '# report' })
+  })
+
+  it('records, restores, and invalidates task-context-scoped observed browser evidence', () => {
+    const collecting = startTestingReview(createInitialTestingReviewState(), [target], {
+      taskContextIdentity: 'task:1',
+      runId: 'test-run-1'
+    })
+    const observed = recordObservedBrowserEvidence(collecting, {
+      schemaVersion: 2,
+      taskContextIdentity: 'task:1',
+      evidence: passedBrowserEvidence,
+      observedAt: 1234
+    })
+
+    expect(restoreTestingReviewStateFromEntries([{
+      type: 'custom',
+      customType: TESTING_STATE_ENTRY,
+      data: observed
+    }], { taskContextIdentity: 'task:1', requireCurrentTaskContext: true })).toMatchObject({
+      lastObservedBrowserEvidence: {
+        taskContextIdentity: 'task:1',
+        evidence: passedBrowserEvidence,
+        observedAt: 1234
+      }
+    })
+
+    const reviewed = completeTestingReview(observed, [{
+      gate: 'browser-interaction',
+      passed: true,
+      severity: 'critical',
+      summary: 'Browser interactions passed.',
+      evidence: passedBrowserEvidence
+    }, readyResult])
+    expect(invalidateObservedBrowserEvidence(reviewed)).toMatchObject({
+      reviewStatus: 'collecting',
+      lastReviewResults: [readyResult]
+    })
+    expect(invalidateObservedBrowserEvidence(reviewed)).not.toHaveProperty('lastObservedBrowserEvidence')
+  })
+
+  it('rejects malformed persisted browser evidence and a different task context identity', () => {
+    const base = startTestingReview(createInitialTestingReviewState(), [target], {
+      taskContextIdentity: 'task:1',
+      runId: 'test-run-1'
+    })
+    const malformed = {
+      ...base,
+      lastObservedBrowserEvidence: {
+        schemaVersion: 2,
+        taskContextIdentity: 'task:1',
+        evidence: { ...passedBrowserEvidence, stepCount: -1 },
+        observedAt: 1234
+      }
+    }
+    expect(restoreTestingReviewStateFromEntries([{
+      type: 'custom',
+      customType: TESTING_STATE_ENTRY,
+      data: malformed
+    }])).not.toHaveProperty('lastObservedBrowserEvidence')
+
+    expect(recordObservedBrowserEvidence(base, {
+      schemaVersion: 2,
+      taskContextIdentity: 'task:2',
+      evidence: passedBrowserEvidence,
+      observedAt: 1234
+    })).toBe(base)
   })
 
   it('builds compact versioned advisory evidence without prose leakage', () => {
     const collecting = startTestingReview(createInitialTestingReviewState(), [target], {
-      routeIdentity: 'route:1',
+      taskContextIdentity: 'task:1',
       runId: 'test-run-1'
     })
     const findings = completeTestingReview(collecting, [criticalFinding])
@@ -102,8 +228,8 @@ describe('testing review state', () => {
 
     expect(TESTING_EVIDENCE_ENTRY).toBe('omp-testing-enhancer.evidence')
     expect(evidence).toEqual({
-      schemaVersion: 2,
-      routeIdentity: 'route:1',
+      schemaVersion: 3,
+      taskContextIdentity: 'task:1',
       runId: 'test-run-1',
       reviewStatus: 'findings',
       criticalFindings: ['browser-interaction'],
@@ -120,10 +246,10 @@ describe('testing review state', () => {
     expect(repeated.evidenceDigest).toBe(evidence.evidenceDigest)
   })
 
-  it('does not restore observations into a different route identity', () => {
+  it('does not restore observations into a different task context identity', () => {
     const oldState = completeTestingReview(
       startTestingReview(createInitialTestingReviewState(), [target], {
-        routeIdentity: 'route:1',
+        taskContextIdentity: 'task:1',
         runId: 'old-run'
       }),
       [readyResult]
@@ -131,21 +257,21 @@ describe('testing review state', () => {
 
     expect(restoreTestingReviewStateFromEntries([
       { type: 'custom', customType: TESTING_STATE_ENTRY, data: oldState }
-    ], { routeIdentity: 'route:2', requireCurrentRoute: true })).toEqual(createInitialTestingReviewState())
+    ], { taskContextIdentity: 'task:2', requireCurrentTaskContext: true })).toEqual(createInitialTestingReviewState())
   })
 
-  it('resets observations when the diagnostic route identity changes', () => {
+  it('resets observations when the diagnostic task context identity changes', () => {
     const oldState = completeTestingReview(
       startTestingReview(createInitialTestingReviewState(), [target], {
-        routeIdentity: 'route:1',
+        taskContextIdentity: 'task:1',
         runId: 'old-run'
       }),
       [readyResult]
     )
 
-    expect(scopeTestingReviewToRoute(oldState, 'route:2')).toEqual({
+    expect(scopeTestingReviewToTaskContext(oldState, 'task:2')).toEqual({
       ...createInitialTestingReviewState(),
-      routeIdentity: 'route:2'
+      taskContextIdentity: 'task:2'
     })
   })
 })

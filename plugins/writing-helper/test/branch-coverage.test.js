@@ -196,8 +196,14 @@ describe('coverage branch cases', () => {
     writeFileSync(absolutePath, 'plain text', 'utf8');
     assert.equal(loadWritingLogicDocument({ path: absolutePath }, process.cwd()).source, absolutePath);
 
-    const invalidQuality = analyzeWritingQuality({ text: 'plain text', checks: ['unknown'], maxIssues: Number.NaN });
-    assert.equal(invalidQuality.summary.verdict, 'pass');
+    assert.throws(
+      () => analyzeWritingQuality({ text: 'plain text', checks: ['unknown'], maxIssues: Number.NaN }),
+      /Unsupported writing checks/,
+    );
+    assert.equal(
+      analyzeWritingQuality({ text: 'plain text', checks: ['style'], maxIssues: Number.NaN }).summary.verdict,
+      'pass',
+    );
     assert.equal(analyzeWritingQuality().mode, 'redline');
 
     const cappedQuality = analyzeWritingQuality({

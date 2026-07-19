@@ -2,11 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  execute as executeLegacyRedaction,
   redactToolResultContent,
 } from '../hook-templates/lib/redact-secrets.ts';
 import {
-  execute as executeLegacyTruncation,
   MAX_LENGTH,
   truncateToolResultContent,
 } from '../hook-templates/lib/truncate-output.ts';
@@ -26,10 +24,6 @@ test('redact-secrets template helper rewrites visible text blocks only', async (
   assert.equal(result[1].text.includes('ghp_'), false);
   assert.equal((result[1].text.match(/\[REDACTED\]/g) ?? []).length, 2);
   assert.equal(redactToolResultContent([unchanged, image]), null);
-
-  const legacy = { result: 'api_key="abcdefghijklmnop1234"' };
-  executeLegacyRedaction(legacy);
-  assert.equal(legacy.result, '[REDACTED]');
 });
 
 test('truncate-output template helper caps aggregate text once', async () => {
@@ -47,9 +41,4 @@ test('truncate-output template helper caps aggregate text once', async () => {
   assert.equal((text.match(/\[\.\.\. truncated to 50000 chars\]/g) ?? []).length, 1);
   assert.equal(text.includes('discarded tail'), false);
   assert.equal(truncateToolResultContent([{ type: 'text', text: 'short' }, image]), null);
-
-  const legacy = { result: 'x'.repeat(MAX_LENGTH + 1) };
-  executeLegacyTruncation(legacy);
-  assert.equal(legacy.result.startsWith('x'.repeat(MAX_LENGTH)), true);
-  assert.match(legacy.result, /\[\.\.\. truncated to 50000 chars\]$/);
 });

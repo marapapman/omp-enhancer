@@ -2,16 +2,11 @@ import { spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const workspaces = [
-  'plugins/omp-config',
-  'plugins/writing-helper',
-  'plugins/omp-test-enhancer',
-  'plugins/omp-fact-checker',
-  'plugins/omp-enhancer-core'
-]
+import { pluginWorkspaces } from './plugin-workspaces.js'
 
-for (const workspace of workspaces) {
+const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+for (const { workspace } of pluginWorkspaces) {
   console.log(`\n=== npm pack --dry-run --workspace ${workspace} ===`)
 
   const result = spawnSync(

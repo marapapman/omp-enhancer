@@ -1,6 +1,6 @@
 ---
 name: writing-review
-description: Bounded English writing review that returns evidence-backed findings and only revises text when the user explicitly requests revision
+description: Use for a bounded review of existing English prose that returns evidence-backed findings; revise only when authorized. Not for first-draft authoring, direct Markdown drafting, or a broad seven-dimension manuscript audit.
 ---
 
 # Writing Review

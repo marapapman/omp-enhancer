@@ -1,6 +1,6 @@
 {
   "name": "writing-helper",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "private": true,
   "type": "module",
   "description": "Standalone OMP writing helper plugin with frugal-pi compatible writing skills, agents, logic, style, and citation checks",
@@ -13,14 +13,12 @@
     "src",
     "agents",
     "skills",
-    "scripts",
     "package.json",
     "README.md"
   ],
   "scripts": {
     "test": "node --test test/*.test.js",
-    "coverage": "node --experimental-test-coverage --test-coverage-include=index.js --test-coverage-include=src/**/*.js --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 --test test/*.test.js",
-    "sync:marketplace": "node scripts/sync-marketplace-release.js"
+    "coverage": "node --experimental-test-coverage --test-coverage-include=index.js --test-coverage-include=src/**/*.js --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 --test test/*.test.js"
   },
   "omp": {
     "extensions": [

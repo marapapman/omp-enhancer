@@ -52,29 +52,6 @@ describe('evaluateTestCommandGate', () => {
     }])
   })
 
-  it('reports when command evidence is not evaluated after static findings', () => {
-    expect(evaluateTestCommandGate(undefined, { severity: 'critical', notEvaluatedDueToStaticFindings: true })).toEqual([{
-      gate: 'test-command',
-      passed: true,
-      severity: 'warning',
-      summary: 'Host-observed test evidence was not evaluated because static critical findings remain.',
-      evidence: {}
-    }])
-  })
-
-  it('reports static findings before considering a failed command result', () => {
-    expect(evaluateTestCommandGate({ command: 'npm test', exitCode: 1, stdout: '', stderr: 'fail' }, {
-      severity: 'critical',
-      notEvaluatedDueToStaticFindings: true
-    })).toEqual([{
-      gate: 'test-command',
-      passed: true,
-      severity: 'warning',
-      summary: 'Host-observed test evidence was not evaluated because static critical findings remain.',
-      evidence: {}
-    }])
-  })
-
   it('reports timeout-style negative exit codes as critical findings', () => {
     expect(evaluateTestCommandGate({ command: 'npm test', exitCode: -1, stdout: '', stderr: 'timed out' })).toEqual([{
       gate: 'test-command',

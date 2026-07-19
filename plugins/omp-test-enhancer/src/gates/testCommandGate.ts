@@ -9,20 +9,9 @@ export interface TestCommandResult {
 
 export interface EvaluateTestCommandGateOptions {
   severity?: GateResult['severity']
-  notEvaluatedDueToStaticFindings?: boolean
 }
 
 export function evaluateTestCommandGate(result: TestCommandResult | undefined, options: EvaluateTestCommandGateOptions = {}): GateResult[] {
-  if (options.notEvaluatedDueToStaticFindings) {
-    return [{
-      gate: 'test-command',
-      passed: true,
-      severity: 'warning',
-      summary: 'Host-observed test evidence was not evaluated because static critical findings remain.',
-      evidence: {}
-    }]
-  }
-
   const severity = options.severity ?? (result ? 'critical' : 'warning')
 
   if (!result) {

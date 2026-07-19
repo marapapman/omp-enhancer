@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "defaults": {
+    "model": "opencode-go/deepseek-v4-flash",
+    "thinking": "max",
+    "approvalMode": "yolo",
+    "advisor": false,
+    "executionMode": "rpc",
+    "tools": ["read"],
+    "repeat": 10,
+    "timeoutSeconds": 180,
+    "expectations": {
+      "noWeb": true,
+      "requireFinal": true,
+      "maxPrimaryFinals": 1,
+      "maxAdvisorMessages": 0,
+      "maxPostFinalAdvisorMessages": 0,
+      "noUnobservedSkillClaims": true,
+      "requireSuccessfulToolCalls": true,
+      "maxDuplicateFailedCalls": 0,
+      "maxDuplicateSkillReadAttempts": 0,
+      "maxProvidedSkills": 0,
+      "expectedProvisionMode": "none",
+      "requireWorkflowIndexOnlyFirstToolBatch": true,
+      "requireWorkflowPlanBeforeResourceLoads": true,
+      "requiredWorkflowPlanFormat": "block",
+      "minWorkflowPlanNumberedActions": 1,
+      "forbidResourceProjectSameBatch": true,
+      "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+      "requireExactSelectedWorkflowReferences": true,
+      "requireWorkflowPlanSkillsUseDomainSkillUris": true,
+      "requireWorkflowReadyLoadedSkillsUseBareIds": true,
+      "requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills": true,
+      "minWorkflowReferenceReads": 1,
+      "maxObservedSkills": 2,
+      "maxToolCalls": 8,
+      "maxSourceSearchCalls": 8,
+      "maxAbortedAssistants": 0,
+      "pluginContinuationCount": 0
+    }
+  },
+  "scenarios": [
+    {
+      "id": "latex-conservative-correction",
+      "category": "writing-selection/correction",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Read abstract.tex and propose a conservative correction of its single English sentence. Preserve all qualifiers, modality, negation, percentages, citations, and LaTeX commands. Do not modify files or use the network.",
+      "expectations": {
+        "requiredSelectedWorkflowIds": ["writing.en", "writing.latex"],
+        "requiredObservedSkills": ["writing-review"],
+        "requiredObservedSkillsBeforeProjectTools": ["writing-review"],
+        "forbiddenSkills": ["format-markdown2latex", "format-latex2markdown", "format-template-latex"]
+      }
+    },
+    {
+      "id": "latex-to-markdown-conversion-plan",
+      "category": "writing-selection/conversion",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Read abstract.tex and plan an explicit conversion of its LaTeX content to Markdown for abstract.md. Describe the exact preservation, transformation, and verification steps, but do not perform the conversion, modify files, or use the network.",
+      "expectations": {
+        "requiredSelectedWorkflowIds": ["writing.latex", "writing.markdown"],
+        "forbiddenSelectedWorkflowIds": ["writing.pending", "writing.en", "writing.zh"],
+        "requiredObservedSkills": ["format-latex2markdown"],
+        "requiredObservedSkillsBeforeProjectTools": ["format-latex2markdown"],
+        "forbiddenSkills": ["format-markdown2latex", "format-template-latex", "writing-review", "writing-markdown-helper", "zh-writing-markdown-helper"]
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 name: zh-writing-markdown-helper
-description: "中文 Markdown 起草与润色，支持用户明确要求的可选逐段确认模式"
+description: "用于直接起草或修改中文 Markdown。不用于只读审查、LaTeX 目标或快速批量章节初稿；只有用户明确要求时才逐段确认。"
 ---
 
 # 中文 Markdown 写作技能

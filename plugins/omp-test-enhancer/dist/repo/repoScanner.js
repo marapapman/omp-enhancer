@@ -75,17 +75,6 @@ export async function findPublicEntryHints(cwd, sourceFile, symbolName) {
     }
     return hints;
 }
-export async function detectPackageManager(cwd) {
-    if (await exists(join(cwd, 'bun.lock')))
-        return 'bun';
-    if (await exists(join(cwd, 'pnpm-lock.yaml')))
-        return 'pnpm';
-    if (await exists(join(cwd, 'package-lock.json')))
-        return 'npm';
-    if (await exists(join(cwd, 'yarn.lock')))
-        return 'yarn';
-    return 'unknown';
-}
 async function findApiContextHints(cwd, sourceFile) {
     if (!/\/(api|routes|controllers?)\//i.test(sourceFile) && !/(api|route|controller|client)/i.test(sourceFile))
         return [];

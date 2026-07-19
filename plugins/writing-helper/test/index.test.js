@@ -501,6 +501,19 @@ describe('writing-logic extension', () => {
     assert.equal(result.details.summary.byCategory.citation, 0);
   });
 
+  it('quality slash command rejects unsupported checks', async () => {
+    const api = makeExtensionApi();
+    extension(api);
+    const tempDir = mkdtempSync(join(tmpdir(), 'omp-writing-quality-invalid-check-'));
+    writeFileSync(join(tempDir, 'draft.md'), 'Plain text.', 'utf8');
+
+    const command = api.registerCommand.mock.calls[1].arguments[1];
+    const result = await command.handler('draft.md --checks logic,bogus', { cwd: tempDir });
+
+    assert.equal(result.ok, false);
+    assert.match(result.report, /Unsupported writing checks: bogus/);
+  });
+
   it('declares OMP extension metadata and Pi skill roots', () => {
     const packageJson = JSON.parse(
       readFileSync(new URL('../package.json', import.meta.url), 'utf8'),

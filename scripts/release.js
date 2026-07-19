@@ -1,18 +1,14 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from 'node:fs/promises'
-import { writeSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { constants, writeSync } from 'node:fs'
+import { copyFile, lstat, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-const pluginDirectoryByName = new Map([
-  ['omp-config', 'omp-config'],
-  ['writing-helper', 'writing-helper'],
-  ['omp-testing-enhancer', 'omp-test-enhancer'],
-  ['omp-fact-checker', 'omp-fact-checker'],
-  ['omp-enhancer-core', 'omp-enhancer-core']
-])
+import { assertPluginWorkspaceInventory, pluginWorkspaces } from './plugin-workspaces.js'
 
-const pluginNames = [...pluginDirectoryByName.keys()]
+const pluginDirectoryByName = new Map(pluginWorkspaces.map(({ name, directory }) => [name, directory]))
+const pluginNames = pluginWorkspaces.map(({ name }) => name)
 
 async function main() {
   try {
@@ -39,7 +35,6 @@ export function parseArgs(args) {
     version: null,
     bump: null,
     apply: false,
-    pinRef: false,
     allowDowngrade: false
   }
 
@@ -50,7 +45,6 @@ export function parseArgs(args) {
     else if (arg === '--bump') options.bump = readValue(args, ++index, '--bump')
     else if (arg === '--apply') options.apply = true
     else if (arg === '--dry-run') options.apply = false
-    else if (arg === '--pin-ref') options.pinRef = true
     else if (arg === '--allow-downgrade') options.allowDowngrade = true
     else if (arg === '--help' || arg === '-h') {
       printHelp()
@@ -80,15 +74,27 @@ export async function planRelease(rootDir, options) {
   const rootPackagePath = path.join(rootDir, 'package.json')
   const packageLockPath = path.join(rootDir, 'package-lock.json')
   const catalogPath = path.join(rootDir, '.omp-plugin', 'marketplace.json')
-  const rootPackage = await readJson(rootPackagePath)
-  const packageLock = await readJson(packageLockPath)
-  const catalog = await readJson(catalogPath)
+  const [rootPackage, packageLock, catalog, packageManifests] = await Promise.all([
+    readJson(rootPackagePath),
+    readJson(packageLockPath),
+    readJson(catalogPath),
+    readPluginPackageManifests(rootDir),
+  ])
+  assertPluginWorkspaceInventory({
+    rootPackage,
+    packageLock,
+    catalog,
+    packageManifests,
+    checkVersions: false,
+    requireTrackMain: false,
+  })
+
   const selectedNames = resolveSelectedPlugins(options.plugin)
   const changes = []
 
-  const plannedRootPackage = structuredClone(rootPackage)
   const plannedPackageLock = structuredClone(packageLock)
   const plannedCatalog = structuredClone(catalog)
+  const plannedPackageManifests = new Map(packageManifests)
 
   if (options.plugin === 'all' && options.bump) {
     plannedCatalog.metadata = plannedCatalog.metadata ?? {}
@@ -99,59 +105,144 @@ export async function planRelease(rootDir, options) {
 
   for (const name of selectedNames) {
     const directory = pluginDirectoryByName.get(name)
-    const packagePath = path.join(rootDir, 'plugins', directory, 'package.json')
-    const packageJson = await readJson(packagePath)
-    const catalogPlugin = plannedCatalog.plugins?.find((plugin) => plugin.name === name)
-    if (!catalogPlugin) throw new Error(`marketplace entry for ${name} was not found`)
     const workspaceKey = `plugins/${directory}`
+    const packagePath = path.join(rootDir, workspaceKey, 'package.json')
+    const packageJson = packageManifests.get(workspaceKey)
+    const catalogPlugin = plannedCatalog.plugins?.find((plugin) => plugin.name === name)
     const lockWorkspace = plannedPackageLock.packages?.[workspaceKey]
-    if (!lockWorkspace || typeof lockWorkspace !== 'object' || Array.isArray(lockWorkspace)) {
-      throw new Error(`package-lock workspace entry ${workspaceKey} was not found`)
-    }
 
     const currentVersion = String(packageJson.version)
+    const currentCatalogVersion = String(catalogPlugin.version ?? '')
+    const currentLockVersion = String(lockWorkspace.version ?? '')
     const nextVersion = options.version ?? bumpVersion(currentVersion, options.bump)
-    assertValidVersion(nextVersion)
+    const currentVersions = [currentVersion, currentCatalogVersion, currentLockVersion]
+    for (const version of [...currentVersions, nextVersion]) assertValidVersion(version)
+    const highestCurrentVersion = currentVersions.reduce((highest, version) => (
+      compareVersions(version, highest) > 0 ? version : highest
+    ))
 
-    if (!options.allowDowngrade && compareVersions(nextVersion, currentVersion) < 0) {
-      throw new Error(`version downgrade for ${name} is not allowed: ${currentVersion} -> ${nextVersion}`)
+    if (!options.allowDowngrade && compareVersions(nextVersion, highestCurrentVersion) < 0) {
+      throw new Error(
+        `version downgrade for ${name} is not allowed: highest current version ${highestCurrentVersion} `
+        + `(package ${currentVersion}, catalog ${currentCatalogVersion}, lock ${currentLockVersion}) -> ${nextVersion}`,
+      )
     }
 
     const plannedPackage = structuredClone(packageJson)
     plannedPackage.version = nextVersion
+    plannedPackageManifests.set(workspaceKey, plannedPackage)
+    const currentRef = Object.hasOwn(catalogPlugin, 'ref') ? String(catalogPlugin.ref) : null
     catalogPlugin.version = nextVersion
-    const currentLockVersion = String(lockWorkspace.version ?? '')
     lockWorkspace.version = nextVersion
 
-    if (options.pinRef) catalogPlugin.ref = releaseTagForVersion(nextVersion)
-    else delete catalogPlugin.ref
+    delete catalogPlugin.ref
 
     changes.push({ file: `plugins/${directory}/package.json`, field: 'version', from: currentVersion, to: nextVersion, content: plannedPackage, path: packagePath })
     changes.push({ file: 'package-lock.json', field: `packages.${workspaceKey}.version`, from: currentLockVersion, to: nextVersion })
-    changes.push({ file: '.omp-plugin/marketplace.json', field: `${name}.version`, from: currentVersion, to: nextVersion })
-    changes.push({ file: '.omp-plugin/marketplace.json', field: `${name}.ref`, from: catalogPlugin.ref ?? 'track-main', to: options.pinRef ? releaseTagForVersion(nextVersion) : 'track-main' })
+    changes.push({ file: '.omp-plugin/marketplace.json', field: `${name}.version`, from: currentCatalogVersion, to: nextVersion })
+    if (currentRef !== null) {
+      changes.push({ file: '.omp-plugin/marketplace.json', field: `${name}.ref`, from: currentRef, to: 'track-main' })
+    }
   }
 
+  assertPluginWorkspaceInventory({
+    rootPackage,
+    packageLock: plannedPackageLock,
+    catalog: plannedCatalog,
+    packageManifests: plannedPackageManifests,
+  })
+
   return {
-    rootDir,
     options,
-    rootPackagePath,
     packageLockPath,
     catalogPath,
-    rootPackage: plannedRootPackage,
     packageLock: plannedPackageLock,
     catalog: plannedCatalog,
     changes
   }
 }
 
-export async function applyRelease(result) {
+export async function applyRelease(result, transactionOptions) {
   const packageChanges = result.changes.filter((change) => change.path && change.content)
-  for (const change of packageChanges) {
-    await writeJson(change.path, change.content)
+  await writeJsonFilesTransaction([
+    ...packageChanges.map(({ path: filePath, content }) => ({ path: filePath, value: content })),
+    { path: result.packageLockPath, value: result.packageLock },
+    { path: result.catalogPath, value: result.catalog },
+  ], transactionOptions)
+}
+
+export async function writeJsonFilesTransaction(files, { onStep } = {}) {
+  if (!Array.isArray(files) || files.length === 0) return
+  if (onStep !== undefined && typeof onStep !== 'function') {
+    throw new Error('release transaction onStep must be a function')
   }
-  await writeJson(result.packageLockPath, result.packageLock)
-  await writeJson(result.catalogPath, result.catalog)
+
+  const targetPaths = files.map(({ path: filePath }) => path.resolve(filePath))
+  if (new Set(targetPaths).size !== targetPaths.length) {
+    throw new Error('release transaction targets must be unique')
+  }
+
+  const transactionId = `${process.pid}-${randomUUID()}`
+  const entries = []
+
+  try {
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index]
+      const targetPath = targetPaths[index]
+      const directory = path.dirname(targetPath)
+      const artifactPrefix = `.${path.basename(targetPath)}.release-${transactionId}-${index}`
+      const fileStat = await lstat(targetPath)
+      if (!fileStat.isFile() || fileStat.isSymbolicLink()) {
+        throw new Error(`release transaction target must be a regular file: ${targetPath}`)
+      }
+      const entry = {
+        index,
+        targetPath,
+        directory,
+        tempPath: path.join(directory, `${artifactPrefix}.tmp`),
+        backupPath: path.join(directory, `${artifactPrefix}.bak`),
+        restorePath: path.join(directory, `${artifactPrefix}.restore`),
+        originalContent: null,
+        mode: fileStat.mode & 0o777,
+        tempReady: false,
+        backupReady: false,
+        restoreReady: false,
+        committed: false,
+      }
+      entries.push(entry)
+
+      await writeSyncedFile(entry.tempPath, `${JSON.stringify(file.value, null, 2)}\n`, entry.mode)
+      entry.tempReady = true
+      await copyFile(entry.targetPath, entry.backupPath, constants.COPYFILE_EXCL)
+      entry.backupReady = true
+      await syncFile(entry.backupPath)
+      entry.originalContent = await readFile(entry.backupPath)
+      await onStep?.({ phase: 'backed-up', index, path: targetPath })
+      await onStep?.({ phase: 'prepared', index, path: targetPath })
+    }
+
+    await syncReleaseDirectories(entries)
+
+    for (const entry of entries) {
+      await onStep?.({ phase: 'before-commit', index: entry.index, path: entry.targetPath })
+      await rename(entry.tempPath, entry.targetPath)
+      entry.tempReady = false
+      entry.committed = true
+      await syncDirectory(entry.directory)
+      await onStep?.({ phase: 'committed', index: entry.index, path: entry.targetPath })
+    }
+  } catch (error) {
+    const rollbackErrors = await rollbackReleaseEntries(entries, onStep)
+    if (rollbackErrors.length > 0) {
+      throw new AggregateError(
+        [error, ...rollbackErrors],
+        `release transaction failed and rollback was incomplete: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+    throw error
+  }
+
+  await cleanupReleaseEntries(entries, onStep)
 }
 
 function resolveSelectedPlugins(plugin) {
@@ -186,16 +277,190 @@ function parseVersion(version) {
   return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) }
 }
 
-function releaseTagForVersion(version) {
-  return String(version).startsWith('v') ? String(version) : `v${version}`
-}
-
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, 'utf8'))
 }
 
-async function writeJson(filePath, value) {
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`)
+async function readPluginPackageManifests(rootDir) {
+  return new Map(await Promise.all(pluginWorkspaces.map(async ({ workspace }) => [
+    workspace,
+    await readJson(path.join(rootDir, workspace, 'package.json')),
+  ])))
+}
+
+async function writeSyncedFile(filePath, content, mode) {
+  let created = false
+  let handle
+  try {
+    handle = await open(filePath, 'wx', mode)
+    created = true
+    await handle.writeFile(content)
+    await handle.sync()
+    await handle.close()
+    handle = null
+  } catch (error) {
+    const cleanupErrors = []
+    if (handle) {
+      try {
+        await handle.close()
+      } catch (closeError) {
+        cleanupErrors.push(closeError)
+      }
+    }
+    if (created) {
+      try {
+        await rm(filePath, { force: true })
+      } catch (removeError) {
+        cleanupErrors.push(removeError)
+      }
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError([error, ...cleanupErrors], `could not prepare ${filePath}`)
+    }
+    throw error
+  }
+}
+
+async function syncDirectory(directory) {
+  let handle
+  try {
+    handle = await open(directory, 'r')
+    await handle.sync()
+  } catch (error) {
+    if (process.platform !== 'win32' || !['EINVAL', 'ENOTSUP', 'EPERM'].includes(error?.code)) throw error
+  } finally {
+    await handle?.close()
+  }
+}
+
+async function syncFile(filePath) {
+  const handle = await open(filePath, 'r+')
+  try {
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
+}
+
+async function rollbackReleaseEntries(entries, onStep) {
+  const errors = []
+
+  for (const entry of [...entries].reverse()) {
+    let preserveBackup = false
+    if (entry.committed) {
+      try {
+        await restoreReleaseEntry(entry, onStep)
+      } catch (error) {
+        errors.push(error)
+        preserveBackup = true
+      }
+    }
+
+    for (const [artifactPath, readyKey] of [
+      [entry.tempPath, 'tempReady'],
+      [entry.restorePath, 'restoreReady'],
+    ]) {
+      if (!entry[readyKey]) continue
+      try {
+        await rm(artifactPath, { force: true })
+        entry[readyKey] = false
+      } catch (error) {
+        errors.push(error)
+      }
+    }
+
+    if (!preserveBackup && entry.backupReady) {
+      try {
+        await rm(entry.backupPath, { force: true })
+        entry.backupReady = false
+      } catch (error) {
+        errors.push(error)
+      }
+    }
+  }
+
+  await syncReleaseDirectories(entries, errors)
+  return errors
+}
+
+async function restoreReleaseEntry(entry, onStep) {
+  try {
+    if (!entry.backupReady) throw new Error('release backup is unavailable')
+    await onStep?.({ phase: 'before-backup-restore', index: entry.index, path: entry.targetPath })
+    await rename(entry.backupPath, entry.targetPath)
+    entry.backupReady = false
+  } catch (backupError) {
+    try {
+      if (!entry.originalContent) throw new Error('release backup content is unavailable')
+      await writeSyncedFile(entry.restorePath, entry.originalContent, entry.mode)
+      entry.restoreReady = true
+      await rm(entry.targetPath, { force: true })
+      await rename(entry.restorePath, entry.targetPath)
+      entry.restoreReady = false
+      await rm(entry.backupPath, { force: true })
+      entry.backupReady = false
+    } catch (restoreError) {
+      throw new AggregateError(
+        [backupError, restoreError],
+        `could not restore ${entry.targetPath}`,
+      )
+    }
+  }
+
+  entry.committed = false
+  await syncDirectory(entry.directory)
+}
+
+async function cleanupReleaseEntries(entries, onStep) {
+  const errors = []
+  for (const entry of entries) {
+    try {
+      await onStep?.({ phase: 'before-cleanup', index: entry.index, path: entry.targetPath })
+    } catch (error) {
+      errors.push(error)
+      continue
+    }
+
+    for (const [artifactPath, readyKey] of [
+      [entry.tempPath, 'tempReady'],
+      [entry.restorePath, 'restoreReady'],
+      [entry.backupPath, 'backupReady'],
+    ]) {
+      if (!entry[readyKey]) continue
+      try {
+        await rm(artifactPath, { force: true })
+        entry[readyKey] = false
+      } catch (error) {
+        errors.push(error)
+      }
+    }
+  }
+
+  await syncReleaseDirectories(entries, errors)
+  if (errors.length > 0) {
+    const preservedBackups = entries
+      .filter(({ backupReady }) => backupReady)
+      .map(({ backupPath }) => backupPath)
+    const suffix = preservedBackups.length > 0
+      ? `; preserved backups: ${preservedBackups.join(', ')}`
+      : ''
+    throw new AggregateError(
+      errors,
+      `release transaction committed but cleanup was incomplete${suffix}`,
+    )
+  }
+}
+
+async function syncReleaseDirectories(entries, errors = null) {
+  const directories = [...new Set(entries.map(({ directory }) => directory))]
+  for (const directory of directories) {
+    try {
+      await syncDirectory(directory)
+    } catch (error) {
+      if (errors) errors.push(error)
+      else throw error
+    }
+  }
 }
 
 function printPlan(result) {
@@ -206,7 +471,7 @@ function printPlan(result) {
 }
 
 function printHelp() {
-  writeLine(process.stdout, `Usage: node scripts/release.js --plugin <name|all> (--version <x.y.z>|--bump patch|minor|major) [--apply] [--pin-ref] [--allow-downgrade]\n\nDefault mode is track-main: catalog refs are removed so marketplace upgrade tracks the latest GitHub marketplace catalog.`)
+  writeLine(process.stdout, `Usage: node scripts/release.js --plugin <name|all> (--version <x.y.z>|--bump patch|minor|major) [--apply] [--allow-downgrade]\n\nThe marketplace always tracks GitHub main: catalog refs are removed from released entries.`)
 }
 
 function writeLine(stream, value) {

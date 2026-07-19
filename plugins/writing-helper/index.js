@@ -264,7 +264,17 @@ export async function runWritingQualityCheck(input, cwd) {
     text: loaded.text,
     evidenceRecords: localEvidenceRecords,
   };
-  let result = analyzeWritingQuality(localInput);
+  let result;
+  try {
+    result = analyzeWritingQuality(localInput);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      report: message,
+      details: { error: message },
+    };
+  }
 
   if (citationEvidenceMissing(result) && networkFallbackAllowed(enriched.input)) {
     const externalEvidence = await fetchExternalCitationEvidence({

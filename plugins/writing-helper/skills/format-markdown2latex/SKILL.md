@@ -1,6 +1,6 @@
 ---
 name: format-markdown2latex
-description: "Convert Markdown paper to LaTeX — handle figures, citations, tables, and math"
+description: "Convert Markdown to LaTeX with figures, citations, tables, and math. Use only when LaTeX output or format conversion is requested. Not for reviewing, correcting, or drafting prose without conversion."
 ---
 
 # Format Markdown → LaTeX

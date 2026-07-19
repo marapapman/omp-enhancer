@@ -73,111 +73,7 @@ export function describeNaturalLanguageTask(input = {}) {
   const directivePrompt = writingDirectivePromptForSignals(prompt);
   const operationalPrompt = writingOperationalPromptForSignals(directivePrompt);
   const text = operationalPrompt.toLowerCase();
-  const diagnosticEnvelopePrompt = maskRouteDiagnosticProbePayloads(prompt);
-  const diagnosticDirectivePrompt = writingDirectivePromptForSignals(diagnosticEnvelopePrompt);
-  const diagnosticText = diagnosticEnvelopePrompt.toLowerCase();
   const promptLanguage = languageFor(prompt);
-  if (isCompletedGateStatusReport(text)) {
-    return normalizeTaskDescriptor({
-      version: 1,
-      operation: 'diagnose',
-      domains: ['plugin'],
-      constraints: DEFAULT_CONSTRAINTS,
-      capabilities: ['fs.read', 'shell.execute'],
-      phases: [{ kind: 'inspect', domain: 'plugin' }, { kind: 'diagnose', domain: 'plugin' }],
-      risk: { level: 'low', flags: [] },
-      complexity: 'focused',
-      language: promptLanguage,
-      provenance: {
-        ruleConfidence: 0.99,
-        reasons: ['completed gate status report'],
-        requiresPolicyRoute: false,
-        needsClassifier: false,
-      },
-    });
-  }
-  if (isExclusiveRouteTaskDiagnosticProbe(diagnosticText)) {
-    const probePrompt = exclusiveRouteProbePrompt(prompt);
-    return normalizeTaskDescriptor({
-      version: 1,
-      operation: 'diagnose',
-      domains: ['plugin'],
-      constraints: {
-        workspaceWrite: 'forbidden',
-        testExecution: 'forbidden',
-        networkAccess: 'forbidden',
-        externalWrite: 'forbidden',
-        subagents: 'forbidden',
-      },
-      capabilities: ['fs.read'],
-      phases: [{ kind: 'inspect', domain: 'plugin' }, { kind: 'diagnose', domain: 'plugin' }],
-      risk: { level: 'low', flags: [] },
-      complexity: 'focused',
-      language: promptLanguage,
-      exclusiveToolContract: makeExclusiveToolContract('omp_core_route_task', {
-        kind: 'route-probe',
-        ...(probePrompt ? { digest: descriptorDigest(probePrompt) } : { status: 'ambiguous' }),
-      }),
-      provenance: {
-        ruleConfidence: 0.99,
-        reasons: ['exclusive route task diagnostic probe'],
-        requiresPolicyRoute: true,
-        needsClassifier: false,
-      },
-    });
-  }
-  if (isExclusiveSubagentStatusDiagnosticProbe(diagnosticText)) {
-    return normalizeTaskDescriptor({
-      version: 1,
-      operation: 'diagnose',
-      domains: ['plugin'],
-      constraints: {
-        workspaceWrite: 'forbidden',
-        testExecution: 'forbidden',
-        networkAccess: 'forbidden',
-        externalWrite: 'forbidden',
-        subagents: 'forbidden',
-      },
-      capabilities: ['fs.read'],
-      phases: [{ kind: 'inspect', domain: 'plugin' }, { kind: 'diagnose', domain: 'plugin' }],
-      risk: { level: 'low', flags: [] },
-      complexity: 'focused',
-      language: promptLanguage,
-      exclusiveToolContract: makeExclusiveToolContract('omp_core_subagent_status', {
-        kind: 'status-probe',
-        digest: descriptorDigest('{}'),
-      }),
-      provenance: {
-        ruleConfidence: 0.99,
-        reasons: ['exclusive subagent status diagnostic probe'],
-        requiresPolicyRoute: true,
-        needsClassifier: false,
-      },
-    });
-  }
-  if (isRouteStatusSkillDiagnosticProbe(
-    diagnosticText,
-    diagnosticDirectivePrompt,
-    diagnosticEnvelopePrompt,
-  )) {
-    return normalizeTaskDescriptor({
-      version: 1,
-      operation: 'diagnose',
-      domains: ['plugin'],
-      constraints: { ...DEFAULT_CONSTRAINTS, testExecution: 'forbidden' },
-      capabilities: ['fs.read', 'shell.execute'],
-      phases: [{ kind: 'inspect', domain: 'plugin' }, { kind: 'diagnose', domain: 'plugin' }],
-      risk: { level: 'low', flags: [] },
-      complexity: 'focused',
-      language: promptLanguage,
-      provenance: {
-        ruleConfidence: 0.99,
-        reasons: ['route status skill diagnostic probe'],
-        requiresPolicyRoute: true,
-        needsClassifier: false,
-      },
-    });
-  }
   const signals = collectSignals(text, operationalPrompt, {
     scopePrompt: directivePrompt,
     rawPrompt: directivePrompt,
@@ -197,13 +93,13 @@ export function describeNaturalLanguageTask(input = {}) {
   const capabilities = capabilitiesFor({ operation, domains, constraints, complexity });
   const phases = phasesFor({ operation, domains, constraints, signals });
   const risk = riskFor({ operation, domains, constraints, signals });
-  const requiresPolicyRoute = shouldUseDescriptorPolicy({ operation, domains, phases, signals });
-
   return normalizeTaskDescriptor({
     version: 1,
     operation,
     domains,
     constraints,
+    inspectionTargets: signals.inspectionTargets,
+    inspectionShape: signals.inspectionShape,
     writingSourceTargets: signals.writingSourceTargets,
     workspaceWriteTargets: signals.workspaceWriteTargets,
     workspaceWriteExclusions: signals.workspaceWriteExclusions,
@@ -226,91 +122,10 @@ export function describeNaturalLanguageTask(input = {}) {
     writingTaskKind: signals.writingTaskKind,
     writingConversion: signals.writingConversion,
     provenance: {
-      ruleConfidence: requiresPolicyRoute ? 0.94 : 0.72,
+      ruleConfidence: signals.ambiguous ? 0.72 : 0.94,
       reasons: signals.reasons,
-      requiresPolicyRoute,
-      needsClassifier: signals.ambiguous,
     },
   });
-}
-
-export function descriptorFromLegacyIntent(intent = 'unknown', options = {}) {
-  const normalized = String(intent || 'unknown');
-  const language = options.language ?? languageFor(options.prompt ?? '');
-  const focused = options.auditMode === 'focused';
-
-  if (normalized === 'testing' || normalized === 'code.test') {
-    return legacyDescriptor({
-      operation: 'execute',
-      domains: ['tests'],
-      constraints: { testExecution: 'required' },
-      phases: [{ kind: 'verify', domain: 'tests' }],
-      risk: { level: 'medium', flags: ['test-execution'] },
-      complexity: 'focused',
-      language,
-    });
-  }
-
-  const canonical = canonicalLegacyIntent(normalized);
-  const templates = {
-    'agentic.simple': {
-      operation: 'answer', domains: ['general'], phases: [{ kind: 'answer', domain: 'general' }],
-    },
-    'writing.pending': writingLegacyTemplate('unknown'),
-    'writing.zh': writingLegacyTemplate('zh'),
-    'writing.en': writingLegacyTemplate('en'),
-    'writing.latex': writingLegacyTemplate(language, 'document'),
-    'writing.markdown': writingLegacyTemplate(language, 'document'),
-    'doc.convert.word': {
-      operation: 'modify', domains: ['document'], constraints: { workspaceWrite: 'required' },
-      phases: [{ kind: 'inspect', domain: 'document' }, { kind: 'modify', domain: 'document' }, { kind: 'review', domain: 'document' }],
-    },
-    'factcheck.document': {
-      operation: 'inspect', domains: ['facts'], constraints: { networkAccess: 'required' },
-      phases: [{ kind: 'inspect', domain: 'facts' }], risk: { level: 'medium', flags: ['factual-claims', 'network-read'] }, complexity: 'broad',
-    },
-    'code.plan': {
-      operation: 'inspect', domains: ['code'], constraints: { testExecution: 'forbidden' },
-      phases: [{ kind: 'inspect', domain: 'code' }, { kind: 'answer', domain: 'code' }], complexity: 'focused',
-    },
-    'code.dev': {
-      operation: 'modify', domains: ['code', 'tests'], constraints: { workspaceWrite: 'required', testExecution: 'required' },
-      phases: [{ kind: 'inspect', domain: 'code' }, { kind: 'modify', domain: 'code' }, { kind: 'verify', domain: 'tests' }, { kind: 'review', domain: 'code' }],
-      risk: { level: 'medium', flags: ['test-execution', 'workspace-write'] }, complexity: focused ? 'focused' : 'broad',
-    },
-    'code.debug': {
-      operation: 'diagnose', domains: ['code'],
-      phases: [{ kind: 'inspect', domain: 'code' }, { kind: 'diagnose', domain: 'code' }], complexity: 'focused',
-    },
-    'code.review': {
-      operation: 'inspect', domains: ['code'],
-      phases: [{ kind: 'inspect', domain: 'code' }, { kind: 'review', domain: 'code' }], complexity: focused ? 'focused' : 'broad',
-    },
-    'omp.plugin': {
-      operation: 'inspect', domains: ['plugin'],
-      phases: [{ kind: 'inspect', domain: 'plugin' }], complexity: focused ? 'focused' : 'broad',
-    },
-    'security.review': {
-      operation: 'inspect', domains: ['security'],
-      phases: [{ kind: 'inspect', domain: 'security' }, { kind: 'review', domain: 'security' }],
-      risk: { level: 'high', flags: ['security-sensitive'] }, complexity: 'broad',
-    },
-    'design.visual': {
-      operation: 'create', domains: ['visual'], constraints: { workspaceWrite: 'required' },
-      phases: [{ kind: 'create', domain: 'visual' }, { kind: 'review', domain: 'visual' }], complexity: 'focused',
-    },
-    release: {
-      operation: 'release', domains: ['plugin'],
-      constraints: { networkAccess: 'required', externalWrite: 'required' },
-      phases: [{ kind: 'release', domain: 'plugin' }],
-      risk: { level: 'high', flags: ['external-write'] }, complexity: 'focused',
-    },
-    unknown: {
-      operation: 'answer', domains: ['general'], phases: [{ kind: 'answer', domain: 'general' }],
-    },
-  };
-
-  return legacyDescriptor({ ...(templates[canonical] ?? templates.unknown), language });
 }
 
 export function normalizeTaskDescriptor(value = {}) {
@@ -320,16 +135,17 @@ export function normalizeTaskDescriptor(value = {}) {
   const normalizedDomains = (value.domains?.length ? value.domains : ['general'])
     .filter((domain) => DOMAIN_VALUES.has(domain));
   const domains = orderedUnique(normalizedDomains.length ? normalizedDomains : ['general'], DOMAIN_ORDER);
+  const inspectionTargets = normalizeInspectionTargets(value.inspectionTargets);
+  const inspectionShape = normalizeInspectionShape(
+    value.inspectionShape,
+    inspectionTargets,
+  );
   const workspaceWriteTargets = constraints.workspaceWrite === 'required'
     ? normalizeScopedTargets(value.workspaceWriteTargets)
     : [];
   // Source targets are observed inputs, not write authorization. Preserve
-  // them even when workspace writes are forbidden. For one compatibility
-  // cycle, old writing descriptors may reuse their scoped write targets as
-  // source targets when the new field is absent.
-  const writingSourceTargets = normalizeScopedTargets(
-    value.writingSourceTargets ?? (domains.includes('writing') ? value.workspaceWriteTargets : []),
-  );
+  // them even when workspace writes are forbidden.
+  const writingSourceTargets = normalizeScopedTargets(value.writingSourceTargets);
   const workspaceWriteExclusions = normalizeScopedTargets(value.workspaceWriteExclusions);
   const externalWriteTargets = constraints.externalWrite === 'required'
     ? normalizeScopedTargets(value.externalWriteTargets)
@@ -381,7 +197,7 @@ export function normalizeTaskDescriptor(value = {}) {
     requestedCapabilities.filter((capability) => capabilityCeiling.has(capability)),
     CAPABILITY_ORDER,
   );
-  // Constraints describe the user's stated scope. They are routing signals,
+  // Constraints describe the user's stated scope. They are task facts,
   // not an execution authority layer, so they must not erase requested work
   // from the advisory phase plan.
   const phases = uniquePhases(value.phases ?? []);
@@ -394,6 +210,8 @@ export function normalizeTaskDescriptor(value = {}) {
     operation,
     domains,
     constraints,
+    inspectionTargets,
+    inspectionShape,
     writingSourceTargets,
     workspaceWriteTargets,
     workspaceWriteExclusions,
@@ -424,8 +242,6 @@ export function normalizeTaskDescriptor(value = {}) {
     provenance: {
       ruleConfidence: clamp(value.provenance?.ruleConfidence ?? 1),
       reasons: uniqueStrings(value.provenance?.reasons ?? []),
-      requiresPolicyRoute: value.provenance?.requiresPolicyRoute === true,
-      needsClassifier: value.provenance?.needsClassifier === true,
     },
   };
 }
@@ -437,6 +253,7 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
   const externalActionContracts = analyzeExternalActionContracts(prompt);
   const externalActionRequested = ['complete', 'incomplete', 'conflicting'].includes(externalActionContract?.state);
   const workspaceScopes = workspaceWriteScopesFor(scopePrompt);
+  const inspectionFacts = inspectionFactsFor(scopePrompt);
   const externalScopes = externalWriteScopesFor(prompt);
   const testExecutionBinding = testExecutionBindingFor(prompt);
   const testExecutionTargets = testExecutionBinding.ambiguous
@@ -451,9 +268,7 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
   const semanticSource = stripQuotedConstraintMentions(sourceText);
   const text = maskWorkspaceScopeTargetMentions(
     maskTestExecutionTargetMentions(
-      rawExclusiveCompanionMutation
-        ? maskRouteProbeScopedWorkspaceConstraints(semanticSource)
-        : semanticSource,
+      semanticSource,
       testExecutionTargets,
     ),
     [
@@ -936,6 +751,8 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
     noWorkspaceWrite,
     noActionExecution,
     advisory,
+    inspectionTargets: inspectionFacts.targets,
+    inspectionShape: inspectionFacts.shape,
     workspaceWriteTargets: workspaceScopes.targets,
     workspaceWriteExclusions: workspaceScopes.exclusions,
     noTestExecution,
@@ -1020,8 +837,8 @@ function isPatchReviewRequest(value = '') {
 }
 
 /**
- * Shared deterministic fact-check signal used by both descriptor and legacy
- * projections. File extensions, decimals, entity names, and percentages are
+ * Shared deterministic fact-check signal used by the task descriptor. File
+ * extensions, decimals, entity names, and percentages are
  * intentionally allowed between the directive and the claim/evidence object.
  */
 export function isFactCheckDirective(value = '') {
@@ -1055,6 +872,74 @@ export function writingSourceTargetsFor(value = '') {
     /(?:^|[\s([（{，,;；:：])((?:\.\/)?(?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+\.(?:md|mdx|rst|txt|tex|docx?|pdf))(?=$|[\s)\]）}，。；、：;,:.!！?？]|的|中|里|内|开头|开篇|结尾|末尾|首段|第一段|前文|后文)/giu,
   )) candidates.push(match[1]);
   return uniqueStrings(candidates.map(normalizeWritingSourceTarget).filter(Boolean));
+}
+
+function inspectionFactsFor(value = '') {
+  const source = stripQuotedConstraintMentions(String(value).normalize('NFKC'))
+    .replace(/\b(?:do\s+not|don't|dont|never|without)\s+(?:independently\s+)?(?:audit|review|inspect|analy[sz]e|check|trace)\b[^.!?;\n]*/giu, ' ')
+    .replace(/(?:^|[，,。；;.!！\n]\s*)(?:不要|别|无需|不用|禁止|不得|不)\s*(?:再|进行|执行|独立|分别)?\s*(?:审计|审查|检查|分析|排查|核对|跟踪)[^。！？；\n]*/gu, ' ');
+  const clauses = source.split(/[!?;\n。！？；]|\.(?=\s|$)/u);
+  const actionPattern = /\b(?:audit|review|inspect|analy[sz]e|check|trace)\b|(?:审计|审查|检查|分析|排查|核对|跟踪)/iu;
+  const pathPattern = /(?:^|[\s([（{，,、:：`'“‘"])((?:\.\/)?(?:[\p{L}\p{M}\p{N}_.-]+\/)*[\p{L}\p{M}\p{N}_.-]+\.(?:md|mdx|rst|txt|tex|js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h|hpp|rb|php|sh|sql|json|jsonc|ya?ml|toml))(?=$|[\s)\]）}，。；、：;,:.!！?？`'”’"])/giu;
+  const candidates = [];
+  for (const clause of clauses) {
+    if (!actionPattern.test(clause)) continue;
+    actionPattern.lastIndex = 0;
+    for (const match of clause.matchAll(pathPattern)) candidates.push(match[1]);
+  }
+  const targets = normalizeInspectionTargets(candidates);
+  const hasMultipleTargets = targets.length >= 2;
+  const dependentTargetAnalysis = hasMultipleTargets && (
+    /\b(?:use|using|after)\b[^;!?\n]{0,96}\b(?:result|output|finding|evidence)s?\s+(?:from|of)\b[^;!?\n]{0,96}\b(?:decide|determine|shape|guide)\b[^;!?\n]{0,80}\b(?:audit|review|inspect|analy[sz]e|check|trace)\b/iu.test(source)
+    || /(?:使用|根据|等到)[^。！？；\n]{0,64}(?:结果|输出|发现|证据)[^。！？；\n]{0,64}(?:决定|确定|指导|安排)[^。！？；\n]{0,48}(?:审计|审查|检查|分析|排查|核对|跟踪)/u.test(source)
+  );
+  const independentTargetAnalysisRequested = hasMultipleTargets && !dependentTargetAnalysis && (
+    /\bindependently\s+(?:audit|review|inspect|analy[sz]e|check|trace)\b/iu.test(source)
+    || /\bseparately\s+(?:audit|review|inspect|analy[sz]e|check|trace)\b/iu.test(source)
+    || /\b(?:audit|review|inspect|analy[sz]e|check|trace)\b[^.!?;\n]{0,160}\b(?:each|both)\b[^.!?;\n]{0,80}\bindependently\b/iu.test(source)
+    || /(?:分别|独立地?)\s*(?:审计|审查|检查|分析|排查|核对|跟踪)/u.test(source)
+  );
+  const perTargetEvidence = hasMultipleTargets && (
+    /\b(?:for\s+each|each)\s+(?:file|target|module|path)\b[^.!?;\n]{0,280}\b(?:evidence|findings?|trace|caller|countercheck|snippet|confidence|validation|impact)\b/iu.test(source)
+    || /(?:(?:每个|各个|逐个)\s*(?:文件|目标|模块|路径)|(?:对|针对)\s*(?:每个|各个)\s*(?:文件|目标|模块|路径))[^。！？；\n]{0,220}(?:证据|发现|调用链|反证|片段|置信度|验证|影响)/u.test(source)
+  );
+  const crossTargetComparison = hasMultipleTargets && (
+    /\b(?:compare|contrast)\b[^.!?;\n]{0,160}\b(?:both|two|files?|targets?|modules?|paths?|them)\b/iu.test(source)
+    || /\b(?:compare|contrast)\s+them\b/iu.test(source)
+    || /(?:比较|对比|权衡)[^。！？；\n]{0,120}(?:两个|两者|这些|文件|目标|模块|路径|它们)/u.test(source)
+  );
+  return {
+    targets,
+    shape: {
+      independentTargetAnalysisRequested,
+      perTargetEvidence,
+      crossTargetComparison,
+    },
+  };
+}
+
+function normalizeInspectionTargets(values) {
+  return uniqueStrings((Array.isArray(values) ? values : [])
+    .filter((value) => typeof value === 'string')
+    .map((value) => String(value).trim()
+      .replace(/^\.\//, '')
+      .replace(/\\/g, '/')
+      .replace(/^[`'"“”‘’]+|[`'"“”‘’，。；、：;,:.!！?？]+$/gu, ''))
+    .filter((value) => value.length > 0 && value.length <= 256)
+    .filter((value) => !/^(?:\/|~\/|[a-z]:\/|https?:\/\/)/iu.test(value))
+    .filter((value) => !/[\u0000-\u001f\u007f]/u.test(value))
+    .filter((value) => !value.split('/').some((segment) => !segment || segment === '..'))
+    .filter((value) => /\.(?:md|mdx|rst|txt|tex|js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h|hpp|rb|php|sh|sql|json|jsonc|ya?ml|toml)$/iu.test(value)));
+}
+
+function normalizeInspectionShape(value = {}, targets = []) {
+  const hasMultipleTargets = targets.length >= 2;
+  return {
+    independentTargetAnalysisRequested: hasMultipleTargets
+      && value?.independentTargetAnalysisRequested === true,
+    perTargetEvidence: hasMultipleTargets && value?.perTargetEvidence === true,
+    crossTargetComparison: hasMultipleTargets && value?.crossTargetComparison === true,
+  };
 }
 
 function normalizeWritingSourceTarget(value = '') {
@@ -1558,12 +1443,6 @@ function maskIncidentalStatusReporting(value = '') {
     /(?:,\s*)?\b(?:and|then)\s+report(?:\s+back)?(?:\s+(?:the\s+)?(?:result|outcome|change|changes))?\s+(?:briefly|concisely)(?=\s*[.!?]?(?:\s|$))/gi,
     ' ',
   );
-}
-
-function maskRouteProbeScopedWorkspaceConstraints(value = '') {
-  return String(value)
-    .replace(/\b(?:do not|don't|never)\s+(?:write(?:\s+to)?|modify|edit|change)\s+(?:any\s+)?files?\s+during\s+(?:the\s+)?probe\b/giu, ' ')
-    .replace(/(?:探测|诊断|检查|审计|probe)(?:期间|过程中)\s*(?:不要|别|禁止|不得)\s*(?:写入|修改|编辑|改动)\s*(?:任何)?文件/gu, ' ');
 }
 
 function positiveSecurityDomainSignalText(value = '') {
@@ -2112,6 +1991,8 @@ function complexityFor(signals, operation, domains) {
   if (signals.factWork && signals.exclusiveToolContract?.allowedTools?.some((tool) => ['read', 'grep'].includes(tool))) return 'focused';
   if (signals.focusedLocalFactWork) return 'focused';
   if (signals.primaryDirectTestAuthoring) return 'focused';
+  if ((signals.inspectionTargets?.length ?? 0) >= 2
+    && Object.values(signals.inspectionShape ?? {}).some(Boolean)) return 'broad';
   if (signals.securityProseWriting
     && /(?:起草|撰写|写).{0,32}(?:安全公告|安全政策|安全说明)|\b(?:draft|write)\b.{0,48}\bsecurity\s+(?:announcement|policy|notice|advisory)\b|\bsecurity\s+policy\b/.test(signals.text)) return 'broad';
   if (signals.factWork || signals.securityWork && (operation === 'modify' || operation === 'inspect')) return 'broad';
@@ -2156,9 +2037,9 @@ function complexityFor(signals, operation, domains) {
     && !signals.noSubagents
     && /\bagentically\b|(?:并行|使用|启动|调用|委派).{0,24}(?:子代理|subagents?|sub-agents?)|(?:fork|spawn|use|using|with|delegate\s+to).{0,24}(?:subagents?|sub-agents?)/.test(signals.text)) return 'broad';
   if (operation === 'inspect' && domains.includes('code') && domains.includes('tests')
-    && !/(?:focused|直接|单个|一个|single|\bone\b|router\.js|\bfunction\b)/.test(signals.text)) return 'broad';
+    && !hasFocusedInspectionScope(signals.text)) return 'broad';
   if (/(?:找|检查|审计|测试).{0,20}(?:bug|缺陷)|\b(?:find|hunt|check|audit|test)\b.{0,24}\b(?:bugs?|defects?)\b/.test(signals.text)
-    && !/(?:focused|直接|单个|一个|single|\bone\b|router\.js|routenaturallanguagetask|\bfunction\b)/.test(signals.text)) return 'broad';
+    && !hasFocusedInspectionScope(signals.text)) return 'broad';
   if (operation === 'modify'
     && /(?:大规模|全面|多个文件|跨文件|整个(?:项目|代码库)|全项目)|\b(?:large[- ]scale|multi[- ]file|cross[- ]file|codebase[- ]wide|repo[- ]wide|substantial refactor|multiple files|all affected imports)\b/.test(signals.text)) return 'broad';
   if (['modify', 'create'].includes(operation)
@@ -2166,6 +2047,11 @@ function complexityFor(signals, operation, domains) {
     && (signals.workspaceWriteTargets ?? []).filter((target) => target.endsWith('/')).length >= 2) return 'broad';
   if (domains.length === 1 && domains[0] === 'general') return 'simple';
   return 'focused';
+}
+
+function hasFocusedInspectionScope(value = '') {
+  const text = String(value);
+  return /(?:聚焦|直接)\s*(?:检查|审查|审计|分析|排查)?|(?:单个|一个)\s*(?:文件|函数|方法|模块|目标|测试文件)|\bfocused\s+(?:review|audit|inspection|analysis|check)\b|\b(?:single|one)\s+(?:file|function|method|module|target|test\s+file)\b|\b(?:router\.js|routenaturallanguagetask)\b/iu.test(text);
 }
 
 function capabilitiesFor({ operation, domains, constraints, complexity }) {
@@ -2363,90 +2249,10 @@ function riskFor({ operation, domains, constraints, signals = {} }) {
   return { level, flags: ordered };
 }
 
-function shouldUseDescriptorPolicy({ operation, domains, phases, signals }) {
-  return signals.planningWork
-    || signals.noWorkspaceWrite
-    || signals.advisory
-    || signals.noTestExecution
-    || signals.testExclusions.length > 0
-    || signals.noExternalWrite
-    || signals.noNetworkAccess
-    || signals.releaseRequested
-    || signals.irreversibleExternalOperation
-    || signals.localGitMetadata
-    || signals.implicitModify
-    || signals.bugReportCompanionCodeAction
-    || signals.ambiguous
-    || operation === 'execute'
-    || operation === 'diagnose'
-    || operation === 'answer' && domains.includes('tests')
-    || domains.includes('facts') && domains.includes('writing')
-    || domains.includes('security') && operation === 'modify'
-    || phases.length >= 4
-    || operation === 'inspect' && domains.some((domain) => domain === 'code' || domain === 'plugin');
-}
-
 function hasCodeTarget(text) {
   return /(?:^|[\s"'`(])(?:src|lib|app|packages|plugins|extensions|test|tests)\/[^\s"'`)]+/.test(text)
     || /\b[\w.-]+\.(?:js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h|hpp|rb|php|sh|sql|yml|yaml|json|toml)\b/.test(text)
     || /(?:^|[\s"'`(])(?:scripts|migrations|fixtures)\/[^\s"'`)]+/.test(text);
-}
-
-function canonicalLegacyIntent(intent) {
-  const aliases = {
-    'agentic.simple': 'agentic.simple',
-    unknown: 'unknown',
-    'writing.pending': 'writing.pending',
-    'writing.zh': 'writing.zh',
-    'writing.en': 'writing.en',
-    'writing.latex': 'writing.latex',
-    'writing.markdown': 'writing.markdown',
-    'doc.convert.word': 'doc.convert.word',
-    'factcheck.document': 'factcheck.document',
-    'fact-check': 'factcheck.document',
-    planning: 'code.plan',
-    'code.plan': 'code.plan',
-    'code.dev': 'code.dev',
-    'implementation-with-tests': 'code.dev',
-    'code.debug': 'code.debug',
-    diagnosis: 'code.debug',
-    'code.test': 'testing',
-    testing: 'testing',
-    'code.review': 'code.review',
-    'bug-audit': 'code.review',
-    'omp.plugin': 'omp.plugin',
-    'config-assets': 'omp.plugin',
-    'security.review': 'security.review',
-    'security-review': 'security.review',
-    'design.visual': 'design.visual',
-    release: 'release',
-  };
-  return aliases[intent] ?? 'unknown';
-}
-
-function writingLegacyTemplate(language, domain = 'writing') {
-  return {
-    operation: 'modify',
-    domains: [domain === 'document' ? 'writing' : domain, ...(domain === 'document' ? ['document'] : [])],
-    phases: [{ kind: 'inspect', domain: 'writing' }, { kind: 'modify', domain: 'writing' }, { kind: 'review', domain: 'writing' }],
-    language,
-  };
-}
-
-function legacyDescriptor(template) {
-  const constraints = normalizeConstraints(template.constraints);
-  const domains = orderedUnique(template.domains ?? ['general'], DOMAIN_ORDER);
-  const complexity = template.complexity ?? 'focused';
-  return normalizeTaskDescriptor({
-    ...template,
-    domains,
-    constraints,
-    capabilities: capabilitiesFor({ operation: template.operation, domains, constraints, complexity }),
-    complexity,
-    risk: template.risk ?? riskFor({ domains, constraints }),
-    language: template.language ?? 'unknown',
-    provenance: { ruleConfidence: 1, reasons: ['legacy intent compatibility'], requiresPolicyRoute: true },
-  });
 }
 
 function normalizeConstraints(value = {}) {
@@ -2462,171 +2268,6 @@ function normalizeConstraints(value = {}) {
     constraints.implementationDelegation = 'forbidden';
   }
   return constraints;
-}
-
-function isCompletedGateStatusReport(text = '') {
-  return /(?:gate validator|validator|门禁|验证器)/.test(text)
-    && /(?:报告已交付|无更多工作|审计完成|所有.{0,20}完成|gate complete|no more work)/.test(text);
-}
-
-function isRouteStatusSkillDiagnosticProbe(
-  text = '',
-  diagnosticDirectivePrompt = '',
-  diagnosticEnvelopePrompt = diagnosticDirectivePrompt,
-) {
-  // A route-tool example may itself contain writing verbs. Ignore only those
-  // sample payloads, then use the shared writing-directive parser for the outer
-  // request. This keeps real prose edits on writing routes without allowing a
-  // quoted sample to inject writing guidance into a diagnostic matrix.
-  const explicitDiagnosticLead = beginsWithExplicitRouteDiagnostic(diagnosticEnvelopePrompt);
-  if (isWritingTransformationDirective(diagnosticDirectivePrompt) && !explicitDiagnosticLead) return false;
-  if (hasRouteDiagnosticCompanionAction(diagnosticEnvelopePrompt)) return false;
-  const hasRouteAndStatusTools = /omp_core_route_task/.test(text)
-    && /omp_core_subagent_status/.test(text);
-  const asksForDiagnosticProbe = /(?:验证|检查|核对|诊断|审计|探测|probe|check|verify|audit|inspect).{0,120}(?:路由|状态|route|routing|status)|(?:路由|状态|route|routing|status).{0,120}(?:验证|检查|核对|诊断|审计|探测|probe|check|verify|audit|inspect)/.test(text);
-  const hasMultiRouteProbe = /omp_core_route_task/.test(text)
-    && /(?:exactly\s+twice|call(?:ing)?[^.!?\n]{0,48}\btwice\b|two\s+(?:route\s+)?probe\s+prompts?|调用[^。！？\n]{0,32}两次|分别[^。！？\n]{0,48}(?:调用|检查)|两个[^。！？\n]{0,24}(?:probe|路由样例|提示))/.test(text);
-  const namesDiagnosticMatrix = /(?:e2e|installed(?:-plugin)?|安装态).{0,120}(?:route|routing|路由)|(?:route|routing|路由).{0,120}(?:e2e|installed(?:-plugin)?|安装态)/.test(text);
-  const forbidsWorkspaceWrite = /(?:不|不要|禁止|不得).{0,16}(?:修改|改动|写入).{0,12}(?:文件|代码|项目)?|(?:do not|don't|without).{0,18}(?:modify|edit|write).{0,12}(?:files?|code|project)?/.test(text);
-  const forbidsTestExecution = /(?:不|不要|禁止|不得).{0,16}(?:运行|执行|跑).{0,12}测试|(?:do not|don't|without).{0,18}(?:run|execute).{0,12}tests?/.test(text);
-  return (hasRouteAndStatusTools && asksForDiagnosticProbe
-      && forbidsWorkspaceWrite && forbidsTestExecution
-    || hasMultiRouteProbe && (asksForDiagnosticProbe || namesDiagnosticMatrix)
-      && forbidsWorkspaceWrite);
-}
-
-function beginsWithExplicitRouteDiagnostic(value = '') {
-  const text = String(value).trim().toLowerCase();
-  const englishStart = text.match(/^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:verify|check|probe|diagnose|inspect|audit)\b/u);
-  if (englishStart) {
-    const remainder = text.slice(englishStart[0].length);
-    if (!/^\s*(?:and|then)\s+(?:polish|rewrite|proofread|translate|edit|revise|improve)\b/u.test(remainder)) {
-      const lead = remainder.split(/\bomp_core_(?:route_task|subagent_status)\b|[.!?\n]/u, 1)[0];
-      if (/\b(?:routes?|routing|routed|router)\b|\b(?:map(?:s|ped|ping)?\s+to|classif(?:y|ies|ied|ication))\b|\bwriting\.(?:en|zh|pending)\b/u.test(lead)) return true;
-    }
-  }
-
-  const chineseStart = text.match(/^(?:(?:请|帮我|麻烦)\s*)?(?:验证|检查|核对|诊断|审计|探测)(?:一下)?/u);
-  if (!chineseStart) return false;
-  const remainder = text.slice(chineseStart[0].length);
-  if (/^\s*(?:并|并且|然后|再)\s*(?:润色|改写|校对|翻译|编辑|修订|优化)/u.test(remainder)) return false;
-  const lead = remainder.split(/\bomp_core_(?:route_task|subagent_status)\b|[。！？\n]/u, 1)[0];
-  return /路由|映射|分类|writing\.(?:en|zh|pending)/u.test(lead);
-}
-
-function maskRouteDiagnosticProbePayloads(value = '') {
-  const source = stripQuotedConstraintMentions(
-    activateExplicitQuotedInstruction(String(value)),
-  );
-  return source.replace(
-    /\b(?:[a-z]|first|second)\s+(?:probe\s+)?(?:prompt|提示(?:词)?)\s*[:：][\s\S]*?(?=\b(?:[a-z]|first|second)\s+(?:probe\s+)?(?:prompt|提示(?:词)?)\s*[:：]|\b(?:return|report|respond|output)\b|(?:返回|报告|输出)|$)/giu,
-    ' __route_probe_payload__ ',
-  );
-}
-
-function isExclusiveRouteTaskDiagnosticProbe(text = '') {
-  const value = String(text).trim().toLowerCase();
-  if (!/\bomp_core_route_task\b/.test(value)) return false;
-  if (exclusiveRouteProbeHasCompanionMutation(value)) return false;
-  const oneShot = /^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?(?:call|invoke|use)\s+(?:only\s+)?omp_core_route_task\s+(?:exactly\s+once|once)\b/.test(value)
-    || /^(?:请|帮我|麻烦)?\s*只\s*(?:调用|使用)\s*(?:一次\s*)?omp_core_route_task(?:\s*一次)?(?:[，,:：\s]|$)/.test(value);
-  if (!oneShot) return false;
-  return /\b(?:do\s+not|don't|without)\s+(?:use|call|invoke|using|calling|invoking)\s+(?:any\s+)?other\s+tools?\b/.test(value)
-    || /\b(?:do\s+not|don't|without)\b[^.!?;\n]{0,160}(?:,\s*)?\b(?:and|or)\s+(?:use|call|invoke|using|calling|invoking)\s+(?:any\s+)?other\s+tools?\b/.test(value)
-    || /(?:不要|不得|禁止|别|不)\s*(?:使用|调用)\s*(?:任何)?\s*(?:其他|其它)\s*工具/.test(value)
-    || /只\s*调用\s*一次\s*omp_core_route_task/.test(value);
-}
-
-function exclusiveRouteProbeHasCompanionMutation(value = '') {
-  const source = String(value).normalize('NFKC');
-  const boundaries = [
-    ...source.matchAll(/\s+then\s+(?:report|return|respond)\b/gi),
-    ...source.matchAll(/(?:然后|接着|再)\s*(?:只|仅)?\s*(?:报告|返回|输出)/gi),
-  ].sort((left, right) => (left.index ?? -1) - (right.index ?? -1));
-  const last = boundaries.at(-1);
-  if (last?.index == null) return hasExclusiveCompanionMutation(source);
-  const outer = source.slice(last.index + last[0].length).replace(/^[^.!?。！？\n]*[.!?。！？]?/u, ' ');
-  return hasExclusiveCompanionMutation(outer);
-}
-
-function exclusiveRouteProbePrompt(value = '') {
-  const source = String(value).normalize('NFKC').trim();
-  const extractBeforeBoundary = (startPattern, explicitBoundaryPattern, fallbackBoundaryPattern, { first = false } = {}) => {
-    const start = source.match(startPattern);
-    if (!start || start.index == null) return '';
-    const tail = source.slice(start.index + start[0].length);
-    const explicitBoundaries = [...tail.matchAll(explicitBoundaryPattern)];
-    const boundaries = explicitBoundaries.length
-      ? explicitBoundaries
-      : [...tail.matchAll(fallbackBoundaryPattern)];
-    const boundary = first ? boundaries[0] : boundaries.at(-1);
-    if (boundary?.index == null) return '';
-    const payload = tail.slice(0, boundary.index).trim();
-    const quoted = payload.match(/^(?:"([\s\S]+)"|“([\s\S]+)”|'([\s\S]+)'|‘([\s\S]+)’|`([\s\S]+)`)$/u);
-    return String(quoted ? quoted.slice(1).find((part) => part != null) : payload).trim();
-  };
-  return extractBeforeBoundary(
-    /\b(?:with\s+)?prompt\s+exactly\s*:\s*/i,
-    /\s+(?:(?:then|next)\s+(?:report|return|respond)\b|(?:do\s+not|don't|never)\s+(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b)/gi,
-    /\s+(?:(?:report|return|respond)\b|(?:do\s+not|don't|never)\s+(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b)/gi,
-    { first: true },
-  ) || extractBeforeBoundary(
-    /\bwith\s+(?:this\s+)?prompt\s*:\s*/i,
-    /\s+then\s+(?:report|return|respond)\b/gi,
-    /\s+(?:report|return|respond)\b/gi,
-  ) || extractBeforeBoundary(
-    /(?:参数\s*)?prompt\s*(?:为|是)?\s*[:：]\s*/i,
-    /(?:然后|接着|再)\s*(?:只|仅)?\s*(?:报告|返回|输出)/gi,
-    /(?:只|仅)?\s*(?:报告|返回|输出)/gi,
-  );
-}
-
-function isExclusiveSubagentStatusDiagnosticProbe(text = '') {
-  const value = String(text).trim().toLowerCase();
-  if (!value || !/\bomp_core_subagent_status\b/.test(value)) return false;
-  const firstBoundary = value.search(/[.!?。！？\n]/u);
-  const firstClause = (firstBoundary === -1 ? value : value.slice(0, firstBoundary)).trim();
-  const remainder = firstBoundary === -1 ? '' : value.slice(firstBoundary + 1).trim();
-  const oneShot = /^(?:(?:please|can you|could you|would you)\s+)?(?:call|invoke|use)\s+(?:only\s+)?omp_core_subagent_status\s+(?:exactly\s+once(?:\s+only)?|once)\s+to\s+(?:inspect|check|report)\s+(?:the\s+)?(?:current\s+)?(?:route\s+)?status$/u.test(firstClause)
-    || /^(?:请|帮我|麻烦)?\s*只\s*(?:调用|使用)\s*(?:一次\s*)?omp_core_subagent_status\s*(?:一次)?\s*(?:来|以便)?\s*(?:检查|查看|报告)(?:当前)?(?:路由)?状态$/u.test(firstClause);
-  if (!oneShot) return false;
-  const noOtherTools = /\b(?:do\s+not|don't|without)\b[^.!?\n]{0,160}\b(?:use|call|invoke)\s+(?:any\s+)?other\s+tools?\b/.test(value)
-    || /(?:不要|不得|禁止|不)\s*(?:使用|调用)\s*(?:任何)?\s*(?:其他|其它)\s*工具/.test(value);
-  if (!noOtherTools || !remainder) return false;
-  const responseLiteral = String.raw`(?:[a-z0-9_.-]{1,48}\s*:\s*)?[a-z0-9_.-]{1,48}`;
-  const conditionalResponsePattern = new RegExp(
-    String.raw`^if\s+(?:it|(?:that|the)\s+(?:tool(?:\s+call)?|status(?:\s+(?:tool|call))?))\s+succeeds?\s*,\s*return\s+exactly\s+${responseLiteral}\s*[;；]\s*otherwise\s*,?\s*return\s+exactly\s+${responseLiteral}$`,
-    'u',
-  );
-  const chineseConditionalResponsePattern = new RegExp(
-    String.raw`^(?:如果|若)(?:该|这个)?(?:工具|状态(?:工具|调用)?)(?:调用)?(?:成功|执行成功)[，,]\s*(?:只)?(?:返回|输出)\s*${responseLiteral}\s*[;；]\s*(?:否则|不然)[，,]?\s*(?:只)?(?:返回|输出)\s*${responseLiteral}$`,
-    'u',
-  );
-  const directResponsePattern = new RegExp(
-    String.raw`^(?:return|respond|report)\s+exactly\s+${responseLiteral}$`,
-    'u',
-  );
-  const chineseDirectResponsePattern = new RegExp(
-    String.raw`^(?:只)?(?:返回|输出|报告)\s*${responseLiteral}$`,
-    'u',
-  );
-  const englishForbiddenItem = String.raw`(?:(?:start|use|fork)\s+(?:any\s+)?subagents?|(?:modify|edit|write(?:\s+to)?)\s+(?:any\s+)?(?:files?|code|project|workspace)|(?:run|execute)\s+(?:any\s+)?tests?|(?:access|use)\s+(?:the\s+)?network|(?:call|use|invoke)\s+(?:any\s+)?(?:other|additional)\s+tools?|(?:push|publish|deploy|release)(?:\s+(?:anything|the\s+(?:plugin|release)))?)`;
-  const englishNegativeConstraintPattern = new RegExp(
-    String.raw`^(?:do\s+not|don't|never)\s+${englishForbiddenItem}(?:\s*(?:,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+)${englishForbiddenItem})*$`,
-    'u',
-  );
-  const chineseForbiddenItem = String.raw`(?:(?:启动|使用)(?:任何)?子代理|修改(?:任何)?(?:文件|代码|项目|工作区)|运行(?:任何)?测试|访问网络|联网|调用(?:任何)?(?:其他|其它)工具|推送|发布|部署)`;
-  const chineseNegativeConstraintPattern = new RegExp(
-    String.raw`^(?:不要|不得|禁止|别)\s*${chineseForbiddenItem}(?:\s*(?:[，,、]\s*(?:(?:以及|并且|或)\s*)?|(?:以及|并且|或)\s*)${chineseForbiddenItem})*$`,
-    'u',
-  );
-  const remainderClauses = remainder.split(/[.!?。！？\n]+/u).map((clause) => clause.trim()).filter(Boolean);
-  return remainderClauses.length > 0 && remainderClauses.every((clause) => conditionalResponsePattern.test(clause)
-    || chineseConditionalResponsePattern.test(clause)
-    || directResponsePattern.test(clause)
-    || chineseDirectResponsePattern.test(clause)
-    || englishNegativeConstraintPattern.test(clause)
-    || chineseNegativeConstraintPattern.test(clause));
 }
 
 function orderedUnique(values, order) {
@@ -2708,8 +2349,6 @@ function normalizeExclusiveToolContract(value, {
     'exact-command': 'bash',
     'exact-path': 'read',
     'focused-claim-search': 'grep',
-    'route-probe': 'omp_core_route_task',
-    'status-probe': 'omp_core_subagent_status',
   };
   if (expectedToolByKind[input.kind] !== tool) return null;
   if (input.kind === 'exact-command') {
@@ -2721,8 +2360,6 @@ function normalizeExclusiveToolContract(value, {
       || input.status === 'bound' && input.digest !== descriptorDigest(input.target)) return null;
   } else if (input.kind === 'focused-claim-search') {
     if (operation !== 'inspect' || !domains.includes('facts') || input.status !== 'bound') return null;
-  } else if (input.kind === 'route-probe' || input.kind === 'status-probe') {
-    if (operation !== 'diagnose' || !domains.includes('plugin') || input.status !== 'bound') return null;
   }
   return {
     schemaVersion: 1,
@@ -2743,7 +2380,7 @@ function canonicalExclusiveToolName(value = '') {
 }
 
 function normalizeExclusiveToolInput(value) {
-  if (!value || !['exact-command', 'exact-path', 'focused-claim-search', 'route-probe', 'status-probe'].includes(value.kind)) return null;
+  if (!value || !['exact-command', 'exact-path', 'focused-claim-search'].includes(value.kind)) return null;
   const status = value.status === 'ambiguous' ? 'ambiguous' : 'bound';
   const digest = /^[a-f0-9]{64}$/.test(String(value.digest ?? '')) ? String(value.digest) : '';
   if (status === 'bound' && !digest) return null;
@@ -2858,7 +2495,7 @@ function maskRelationalWritingPayload(source = '') {
 }
 
 function containsAuthorityBearingWritingPayload(value = '') {
-  return /(?:测试|发布|提交|推送|部署|上线|联网|网络|子代理|代理|安全|漏洞|插件|代码|路由|门禁|工作流|安装)|\b(?:tests?|testing|e2e|publish|release|commit|push|deploy|network|internet|web|subagents?|agents?|security|vulnerabilit(?:y|ies)|plugins?|code|routes?|router|routing|gates?|workflows?|install(?:ed|ation)?)\b|\bomp_core_(?:route_task|subagent_status)\b/i.test(String(value));
+  return /(?:测试|发布|提交|推送|部署|上线|联网|网络|子代理|代理|安全|漏洞|插件|代码|路由|门禁|工作流|安装)|\b(?:tests?|testing|e2e|publish|release|commit|push|deploy|network|internet|web|subagents?|agents?|security|vulnerabilit(?:y|ies)|plugins?|code|routes?|router|routing|gates?|workflows?|install(?:ed|ation)?)\b/i.test(String(value));
 }
 
 function independentWritingContinuationBoundary(
@@ -2876,10 +2513,6 @@ function independentWritingContinuationBoundary(
     continuation ? start + (continuation.index ?? 0) : null,
   ].filter(Number.isInteger);
   return candidates.length ? Math.min(...candidates) : String(value).length;
-}
-
-function hasRouteDiagnosticCompanionAction(value = '') {
-  return Number.isInteger(independentOperationalContinuationIndex(value, 0));
 }
 
 function independentOperationalContinuationIndex(value = '', start = 0) {
@@ -2952,7 +2585,7 @@ function maskEmbeddedWritingAuthority(source = '') {
   protectedSource = protectStructuredWritingReferences(protectedSource, protect);
   protectedSource = protectedSource.replace(/(?:安全(?:政策|策略|公告|说明|文案|通知|草案|措辞)|插件\s*(?:readme|文档|说明)|发布(?:说明|公告)|测试(?:覆盖率)?报告|安装说明)|\b(?:security\s+(?:policy|announcement|notice|advisory|draft|wording)|plugin\s+(?:readme|documentation|docs?)|release\s+notes?|test(?:\s+coverage)?\s+report|coverage\s+report|installation\s+(?:guide|instructions?))\b/giu, (match) => protect(match));
   const sanitized = protectedSource
-    .replace(/\b(?:npm\s+test|tests?|testing|e2e|publish|release|push|deploy|commit|network|internet|web|subagents?|sub-agents?|security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|bypass|injection|secrets?|plugins?|code|routes?|router|routing|gates?|workflows?|install(?:ed|ation)?)\b|\bomp_core_(?:route_task|subagent_status)\b/giu, ' __embedded_content__ ')
+    .replace(/\b(?:npm\s+test|tests?|testing|e2e|publish|release|push|deploy|commit|network|internet|web|subagents?|sub-agents?|security|vulnerabilit(?:y|ies)|auth(?:entication|orization)?|permissions?|bypass|injection|secrets?|plugins?|code|routes?|router|routing|gates?|workflows?|install(?:ed|ation)?)\b/giu, ' __embedded_content__ ')
     .replace(/(?:测试|发布|提交|推送|部署|上线|联网|网络|互联网|网页|子代理|安全|审计|扫描|审查|漏洞|鉴权|认证|权限|越权|注入|密钥|插件|代码|路由|门禁|工作流|安装)/gu, ' __embedded_content__ ');
   let restored = sanitized;
   for (let index = protectedValues.length - 1; index >= 0; index -= 1) {

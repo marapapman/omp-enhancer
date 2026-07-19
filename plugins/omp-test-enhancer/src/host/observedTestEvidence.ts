@@ -42,7 +42,7 @@ const TRUSTED_DIRECT_WORKSPACE_MUTATORS = new Set([
 
 export function observedTestCommandFromHostEvent(
   event: Record<string, unknown>,
-  routeIdentity: string
+  taskContextIdentity: string
 ): ObservedTestCommandEvidence | undefined {
   const command = trustedHostCommand(event)
   if (!command) return undefined
@@ -62,8 +62,8 @@ export function observedTestCommandFromHostEvent(
   const resultText = hostToolResultText(event)
   if (exitCode !== 0 || !isExplicitPositiveTestOutput(resultText, command)) return undefined
   return {
-    schemaVersion: 1,
-    routeIdentity,
+    schemaVersion: 2,
+    taskContextIdentity,
     commandDigest: createHash('sha256').update(command).digest('hex'),
     exitCode,
     observedAt: Date.now()

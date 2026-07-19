@@ -1,6 +1,6 @@
 ---
 name: format-latex2markdown
-description: Convert LaTeX document to Markdown — preserves structure, citations, math
+description: "Convert LaTeX to Markdown while preserving structure, citations, and math. Use only when Markdown output or format conversion is requested. Not for reviewing, correcting, or drafting LaTeX prose without conversion."
 ---
 
 # LaTeX → Markdown Conversion Skill

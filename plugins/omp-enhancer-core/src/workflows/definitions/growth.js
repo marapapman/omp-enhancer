@@ -18,7 +18,7 @@ export const growthWorkflows = [
       },
       {
         "id": "step-2",
-        "text": "Compose research.web and factcheck.document when audience, competitor, market, or product claims require live evidence, and record the distinction between fact and positioning inference."
+        "text": "Apply research.web and factcheck.document only when they were selected in PLAN for live evidence or claim verdicts, and record the distinction between fact and positioning inference."
       },
       {
         "id": "step-3",
@@ -26,7 +26,7 @@ export const growthWorkflows = [
       },
       {
         "id": "step-4",
-        "text": "Compose writing.zh or writing.en from the requested output language and create only the authorized channel deliverables with language-matched writer and checker roles."
+        "text": "Apply the PLAN-selected writing.zh or writing.en method for the requested output language and create only the authorized channel deliverables."
       },
       {
         "id": "step-5",
@@ -65,9 +65,6 @@ export const growthWorkflows = [
     "composeWith": [
       "research.web",
       "factcheck.document",
-      "code.review",
-      "code.test",
-      "performance.optimize",
       "writing.zh",
       "writing.en",
       "design.visual"
@@ -110,7 +107,7 @@ export const growthWorkflows = [
     ],
     "roles": [],
     "delegation": [
-      "steps-1-4: keep SEO synthesis with the parent and compose research.web, code.review, code.test, performance.optimize, writing.zh, writing.en, or design.visual before using their exact roles",
+      "steps-1-4: keep SEO synthesis with the parent and compose research.web, writing.zh, writing.en, or design.visual before using their exact roles",
       "step-5: the parent reconciles crawl, index, render, performance, language, and evidence limitations"
     ]
   }

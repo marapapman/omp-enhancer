@@ -14,7 +14,7 @@
       "plugins/omp-fact-checker",
       "plugins/omp-enhancer-core"
     ],
-    "tools": ["todo", "task", "job", "read", "grep", "glob"],
+    "tools": ["todo", "task", "hub", "read", "grep", "glob"],
     "repeat": 1,
     "timeoutSeconds": 180,
     "expectations": {
@@ -28,54 +28,58 @@
       "maxAbortedAssistants": 0,
       "pluginContinuationCount": 0,
       "requireNativeTodoInit": true,
+      "requireNativeTodoFirstTool": true,
       "requireNativeTodoCompletion": true,
       "requireNativeTodoInitBeforeSubstantiveTool": true,
       "minNativeTaskCalls": 1,
+      "maxNativeTaskCalls": 1,
       "minNativeTaskBatchCalls": 1,
       "requiredNativeTaskContext": "single read-only checkpoint",
       "requireNativeTaskCompletion": true,
       "requireNativeTaskMetadataPrefix": true,
+      "maxProjectInspectionCallsBeforeNativeTask": 0,
+      "maxProjectInspectionCallsAfterNativeTask": 0,
       "maxSourceSearchCalls": 8
     }
   },
   "scenarios": [
     {
-      "id": "code-build-worktree-audit",
+      "id": "code-dev-plan-review",
       "category": "workflow-consolidation",
       "cwd": ".",
-      "prompt": "Audit one code.build contract checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"explore\"; do not use scout or any alias. Set the task batch context to \"single read-only checkpoint\". Its task text must begin with these exact first characters: [workflow=code.build step=step-1 todo=audit skills=build-toolchain-diagnostics]. Ask the child to read plugins/omp-enhancer-core/src/workflows/definitions/code.js and report whether code.build requires the exact build command and current failure evidence. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, run shell commands, or use the network.",
+      "prompt": "Audit one code.dev PLAN REVIEW checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"plan\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Its task text must begin with these exact first characters: [workflow=code.dev step=step-plan-review todo=audit skills=code-development]. Supply this complete plan directly in the assignment: update the code.dev definition through one public exported catalog seam, with Main-inspected anchors for the definition, renderer, generated Skill card, and adjacent contract test; skip external search because this is a repository-owned invariant; add one expected RED assertion, use the same focused command for GREEN, regenerate workflows, and run workflow, marketplace, packaging, and diff checks. Ask the child to audit the supplied plan without project reads or command execution. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, run shell commands, or use the network.",
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,
-        "requiredNativeTaskAgents": ["explore"],
-        "requiredNativeTaskWorkflows": ["code.build"],
-        "requiredNativeTaskSkills": ["build-toolchain-diagnostics"]
+        "requiredNativeTaskAgents": ["plan"],
+        "requiredNativeTaskWorkflows": ["code.dev"],
+        "requiredNativeTaskSkills": ["code-development"]
       }
     },
     {
-      "id": "technical-research-worktree-audit",
+      "id": "code-dev-diff-review",
       "category": "workflow-consolidation",
       "cwd": ".",
-      "prompt": "Audit one research.technical contract checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"librarian\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Its task text must begin with these exact first characters: [workflow=research.technical step=step-2 todo=audit skills=documentation-lookup]. Ask the child to read plugins/omp-enhancer-core/src/workflows/definitions/research.js and report whether the workflow binds evidence to version, signature, and source. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, run shell commands, browse, or use the network.",
+      "prompt": "Audit one code.dev semantic-diff review checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"reviewer\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Its task text must begin with these exact first characters: [workflow=code.dev step=step-review todo=audit skills=code-development]. Supply this bounded semantic diff and evidence directly in the assignment: code.dev now uses only code-development, assigns PLAN REVIEW to plan, has each native task own its vertical RED/GREEN slice, requires Main to integrate and write MAIN REVIEW, and gives reviewer only that Main-reviewed finished diff; the supplied evidence includes the focused RED, same-command GREEN, generated-workflow and marketplace checks, and the explicit local-invariant reason for skipping external search. Ask the child to audit that supplied diff without project reads or command execution and to allow one fresh review only after a material repair. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, run shell commands, browse, or use the network.",
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,
-        "requiredNativeTaskAgents": ["librarian"],
-        "requiredNativeTaskWorkflows": ["research.technical"],
-        "requiredNativeTaskSkills": ["documentation-lookup"]
+        "requiredNativeTaskAgents": ["reviewer"],
+        "requiredNativeTaskWorkflows": ["code.dev"],
+        "requiredNativeTaskSkills": ["code-development"]
       }
     },
     {
       "id": "database-migration-worktree-audit",
       "category": "workflow-consolidation",
       "cwd": ".",
-      "prompt": "Audit one database.migration.repair contract checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"reviewer\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Its task text must begin with these exact first characters: [workflow=database.migration.repair step=step-6 todo=audit skills=database-migrations,postgres-patterns]. Ask the child to read plugins/omp-enhancer-core/src/workflows/definitions/database.js and report whether backup, rollback, and current migration state are required evidence. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, run shell commands, or use the network.",
+      "prompt": "Audit one database.migration.repair semantic-diff checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"reviewer\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Its task text must begin with these exact first characters: [workflow=database.migration.repair step=step-6 todo=audit skills=code-development,database-migrations,postgres-patterns]. Supply this bounded semantic diff and evidence directly in the assignment: the migration repair adds required backup status, rollback path, current migration state, a failed-state RED regression, same-command GREEN, and no live-database execution. Ask the child to audit that supplied diff without project reads or command execution. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, run shell commands, or use the network.",
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,
         "requiredNativeTaskAgents": ["reviewer"],
         "requiredNativeTaskWorkflows": ["database.migration.repair"],
-        "requiredNativeTaskSkills": ["database-migrations", "postgres-patterns"]
+        "requiredNativeTaskSkills": ["code-development", "database-migrations", "postgres-patterns"]
       }
     },
     {

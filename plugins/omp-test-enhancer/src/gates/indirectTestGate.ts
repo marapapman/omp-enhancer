@@ -21,59 +21,73 @@ export function evaluateIndirectTestGate(input: EvaluateIndirectTestGateInput): 
     }]
   }
 
+  const target = input.targets.find(candidate => candidate.id === input.candidate.targetId)
+  if (!target) {
+    return [{
+      gate: 'indirect-test',
+      passed: false,
+      severity,
+      summary: 'Candidate target was not found in changed targets.',
+      evidence: {
+        candidateId: input.candidate.id,
+        targetId: input.candidate.targetId,
+        availableTargetIds: input.targets.map(candidate => candidate.id)
+      },
+      repairHint: 'Use a target id returned by omp_test_analyze before reviewing the candidate tests.'
+    }]
+  }
+
   for (const file of input.candidate.files) {
-    for (const target of input.targets) {
-      if (target.kind === 'pure-function' || target.kind === 'validator' || target.kind === 'parser' || target.kind === 'formatter') continue
+    if (target.kind === 'pure-function' || target.kind === 'validator' || target.kind === 'parser' || target.kind === 'formatter') continue
 
-      const privateImport = findPrivateImport(file.content)
-      if (privateImport) {
-        results.push({
-          gate: 'indirect-test',
-          passed: false,
-          severity,
-          summary: 'Test imports private or internal implementation details.',
-          evidence: { file: file.path, importPath: privateImport },
-          repairHint: 'Test through public behavior, such as a service method, route, UI output, or returned result.'
-        })
-      }
+    const privateImport = findPrivateImport(file.content)
+    if (privateImport) {
+      results.push({
+        gate: 'indirect-test',
+        passed: false,
+        severity,
+        summary: 'Test imports private or internal implementation details.',
+        evidence: { file: file.path, importPath: privateImport },
+        repairHint: 'Test through public behavior, such as a service method, route, UI output, or returned result.'
+      })
+    }
 
-      const privateAccess = findPrivateAccess(file.content)
-      if (privateAccess) {
-        results.push({
-          gate: 'indirect-test',
-          passed: false,
-          severity,
-          summary: 'Test accesses implementation details.',
-          evidence: { file: file.path, pattern: privateAccess },
-          repairHint: 'Avoid private fields, bracket access to internals, and component instance state. Assert public behavior instead.'
-        })
-      }
+    const privateAccess = findPrivateAccess(file.content)
+    if (privateAccess) {
+      results.push({
+        gate: 'indirect-test',
+        passed: false,
+        severity,
+        summary: 'Test accesses implementation details.',
+        evidence: { file: file.path, pattern: privateAccess },
+        repairHint: 'Avoid private fields, bracket access to internals, and component instance state. Assert public behavior instead.'
+      })
+    }
 
-      if (hasOnlyMockCallAssertions(file.content)) {
-        results.push({
-          gate: 'indirect-test',
-          passed: false,
-          severity,
-          summary: 'Test only asserts internal mock calls.',
-          evidence: { file: file.path },
-          repairHint: 'Add assertions on public behavior, returned values, thrown errors, DOM output, HTTP responses, or persisted state.'
-        })
-      }
+    if (hasOnlyMockCallAssertions(file.content)) {
+      results.push({
+        gate: 'indirect-test',
+        passed: false,
+        severity,
+        summary: 'Test only asserts internal mock calls.',
+        evidence: { file: file.path },
+        repairHint: 'Add assertions on public behavior, returned values, thrown errors, DOM output, HTTP responses, or persisted state.'
+      })
+    }
 
-      const stateAccess = target.kind === 'react-component'
-        ? findComponentStateAccess(file.content)
-        : undefined
+    const stateAccess = target.kind === 'react-component'
+      ? findComponentStateAccess(file.content)
+      : undefined
 
-      if (stateAccess) {
-        results.push({
-          gate: 'indirect-test',
-          passed: false,
-          severity,
-          summary: 'Component test inspects implementation state.',
-          evidence: { file: file.path, pattern: stateAccess },
-          repairHint: 'Use user interactions and visible output instead of component internals.'
-        })
-      }
+    if (stateAccess) {
+      results.push({
+        gate: 'indirect-test',
+        passed: false,
+        severity,
+        summary: 'Component test inspects implementation state.',
+        evidence: { file: file.path, pattern: stateAccess },
+        repairHint: 'Use user interactions and visible output instead of component internals.'
+      })
     }
   }
 

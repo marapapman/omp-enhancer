@@ -2,13 +2,19 @@ import { mkdir, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
+import { invalidBrowserCheckEvidence, parseBrowserCheckParams } from '../browserSchemas.js';
 import { comparePng } from './imageDiff.js';
 import { isRecord } from '../utils.js';
-export async function executeBrowserCheck(params, ctx) {
+export async function executeBrowserCheck(input, ctx) {
+    const parsed = parseBrowserCheckParams(input);
+    if (!parsed.ok)
+        return invalidBrowserCheckEvidence(input, parsed.error);
+    const params = parsed.value;
     const cwd = typeof ctx.cwd === 'string' && ctx.cwd.trim() !== '' ? ctx.cwd : process.cwd();
     const runId = `browser-${Date.now().toString(36)}`;
     const findings = [];
     const artifacts = {};
+    const executionCounts = { scenarioCount: 0, stepCount: 0, captureCount: 0, visualAssertionCount: 0 };
     const headless = params.setup?.headless ?? true;
     const viewport = params.setup?.viewport ?? { width: 1280, height: 720 };
     const artifactDir = await resolveSafeBrowserArtifactDir(cwd, params.artifactDir, runId);
@@ -22,7 +28,7 @@ export async function executeBrowserCheck(params, ctx) {
             evidence: {},
             repairHint: 'Use the default artifact directory or a path under .omp/testing-enhancer-artifacts without symbolic links.'
         });
-        return buildEvidence(params, runId, headless, viewport, findings, artifacts);
+        return buildEvidence(params, runId, headless, viewport, findings, artifacts, executionCounts);
     }
     let server;
     let serverClosed = false;
@@ -51,7 +57,7 @@ export async function executeBrowserCheck(params, ctx) {
                     evidence: {},
                     repairHint: 'Start the server separately or use npm, pnpm, yarn, or bun with start, dev, serve, or preview.'
                 });
-                return buildEvidence(params, runId, headless, viewport, findings, artifacts);
+                return buildEvidence(params, runId, headless, viewport, findings, artifacts, executionCounts);
             }
             const [program, ...args] = splitCommandLine(params.serverCommand);
             if (program) {
@@ -70,7 +76,7 @@ export async function executeBrowserCheck(params, ctx) {
                 await new Promise(resolve => setTimeout(resolve, 0));
                 if (serverError) {
                     findings.push(serverCommandFailureFinding(params.serverCommand, serverError));
-                    return buildEvidence(params, runId, headless, viewport, findings, artifacts);
+                    return buildEvidence(params, runId, headless, viewport, findings, artifacts, executionCounts);
                 }
             }
         }
@@ -85,7 +91,7 @@ export async function executeBrowserCheck(params, ctx) {
                 evidence: { baseUrl: params.baseUrl },
                 repairHint: 'Report that no reachable server was available; start one only when server execution is already in scope.'
             });
-            return buildEvidence(params, runId, headless, viewport, findings, artifacts);
+            return buildEvidence(params, runId, headless, viewport, findings, artifacts, executionCounts);
         }
         try {
             browser = await chromium.launch({ headless });
@@ -96,10 +102,12 @@ export async function executeBrowserCheck(params, ctx) {
                 status: 'skipped',
                 runId,
                 baseUrl: params.baseUrl,
+                targetIds: params.targetIds ?? [],
                 browser: 'chromium',
+                ...executionCounts,
                 findings: [{
                         gate: 'browser-interaction',
-                        passed: true,
+                        passed: false,
                         severity: 'warning',
                         category: 'setup',
                         summary: 'Playwright Chromium could not be launched.',
@@ -127,42 +135,12 @@ export async function executeBrowserCheck(params, ctx) {
             if (response.status() >= 400)
                 badResponses.push({ url: response.url(), status: response.status(), statusText: response.statusText() });
         });
-        for (const [scenarioIndex, scenario] of params.scenarios.entries()) {
-            if (scenario.steps[0]?.action !== 'goto')
-                await page.goto(params.baseUrl);
-            let scenarioFailed = false;
-            for (const [stepIndex, step] of scenario.steps.entries()) {
-                try {
-                    await executeStep(page, step, params.baseUrl, artifactDir, scenario.name, artifacts);
-                }
-                catch (error) {
-                    const message = error instanceof Error ? error.message : String(error);
-                    const failurePath = join(artifactDir, `failure-${scenarioIndex}-${stepIndex}.png`);
-                    await page.screenshot({ path: failurePath, fullPage: true }).catch(() => undefined);
-                    if (!artifacts.actualImagePath)
-                        artifacts.actualImagePath = failurePath;
-                    findings.push({
-                        gate: 'browser-interaction',
-                        passed: false,
-                        severity: 'critical',
-                        category: /timeout/i.test(message) ? 'timeout' : 'actionability',
-                        summary: `Browser step failed: ${step.description}`,
-                        evidence: { action: step.action, message },
-                        repairHint: 'Check locator actionability, route setup, and visible UI state.',
-                        artifacts: { actualImagePath: failurePath }
-                    });
-                    scenarioFailed = true;
-                    break;
-                }
-            }
-            if (!scenarioFailed) {
-                for (const visualCheck of scenario.visualChecks ?? []) {
-                    await executeVisualCheck(page, visualCheck, artifactDir, findings, artifacts);
-                }
-            }
-        }
+        const scenarioExecution = await executeBrowserScenarios(page, params, artifactDir);
+        findings.push(...scenarioExecution.findings);
+        Object.assign(artifacts, scenarioExecution.artifacts);
+        Object.assign(executionCounts, scenarioExecution.executionCounts);
         findings.push(...normalizeBrowserFindings({ consoleErrors, consoleWarnings, pageErrors, failedRequests, badResponses }));
-        return buildEvidence(params, runId, headless, viewport, findings, artifacts);
+        return buildEvidence(params, runId, headless, viewport, findings, artifacts, executionCounts);
     }
     finally {
         const hasCriticalFinding = findings.some(finding => !finding.passed && finding.severity === 'critical');
@@ -305,7 +283,82 @@ export function normalizeBrowserFindings(input) {
     }
     return findings;
 }
-async function executeStep(page, step, baseUrl, artifactDir, scenarioName, artifacts) {
+export async function executeBrowserScenarios(page, params, artifactDir) {
+    const findings = [];
+    const artifacts = {};
+    const executionCounts = { scenarioCount: 0, stepCount: 0, captureCount: 0, visualAssertionCount: 0 };
+    for (const [scenarioIndex, scenario] of params.scenarios.entries()) {
+        let scenarioFailed = false;
+        if (scenario.steps[0]?.action !== 'goto') {
+            try {
+                await page.goto(params.baseUrl);
+            }
+            catch (error) {
+                findings.push({
+                    gate: 'browser-interaction',
+                    passed: false,
+                    severity: 'critical',
+                    category: 'actionability',
+                    summary: `Browser scenario setup failed: ${scenario.name}`,
+                    evidence: { message: error instanceof Error ? error.message : String(error) },
+                    repairHint: 'Check the browser base URL and route setup before executing scenario steps.'
+                });
+                scenarioFailed = true;
+            }
+        }
+        for (const [stepIndex, step] of scenario.steps.entries()) {
+            if (scenarioFailed)
+                break;
+            try {
+                await executeStep(page, step, params.baseUrl, artifactDir, scenario.name, artifacts, executionCounts);
+                executionCounts.stepCount += 1;
+            }
+            catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                const failurePath = join(artifactDir, `failure-${scenarioIndex}-${stepIndex}.png`);
+                await page.screenshot({ path: failurePath, fullPage: true }).catch(() => undefined);
+                if (!artifacts.actualImagePath)
+                    artifacts.actualImagePath = failurePath;
+                findings.push({
+                    gate: 'browser-interaction',
+                    passed: false,
+                    severity: 'critical',
+                    category: /timeout/i.test(message) ? 'timeout' : 'actionability',
+                    summary: `Browser step failed: ${step.description}`,
+                    evidence: { action: step.action, message },
+                    repairHint: 'Check locator actionability, route setup, and visible UI state.',
+                    artifacts: { actualImagePath: failurePath }
+                });
+                scenarioFailed = true;
+                break;
+            }
+        }
+        if (!scenarioFailed) {
+            for (const visualCheck of scenario.visualChecks ?? []) {
+                try {
+                    await executeVisualCheck(page, visualCheck, artifactDir, findings, artifacts, executionCounts);
+                }
+                catch (error) {
+                    findings.push({
+                        gate: 'browser-visual',
+                        passed: false,
+                        severity: 'critical',
+                        category: 'setup',
+                        summary: `Browser visual check failed: ${visualCheck.name}`,
+                        evidence: { message: error instanceof Error ? error.message : String(error) },
+                        repairHint: 'Check the visual locator, expected baseline path, and image format.'
+                    });
+                    scenarioFailed = true;
+                    break;
+                }
+            }
+        }
+        if (!scenarioFailed)
+            executionCounts.scenarioCount += 1;
+    }
+    return { executionCounts, findings, artifacts };
+}
+async function executeStep(page, step, baseUrl, artifactDir, scenarioName, artifacts, executionCounts) {
     if (step.action === 'goto') {
         await page.goto(new URL(step.url ?? '/', baseUrl).toString());
         return;
@@ -319,6 +372,7 @@ async function executeStep(page, step, baseUrl, artifactDir, scenarioName, artif
             await page.screenshot({ path, fullPage: true });
         if (!artifacts.actualImagePath)
             artifacts.actualImagePath = path;
+        executionCounts.captureCount += 1;
         return;
     }
     if (!locator)
@@ -337,8 +391,11 @@ async function executeStep(page, step, baseUrl, artifactDir, scenarioName, artif
         await locator.selectOption(step.value ?? '');
     if (step.action === 'assertVisible')
         await locator.waitFor({ state: 'visible', timeout: 5000 });
+    if (!['click', 'fill', 'press', 'hover', 'check', 'select', 'assertVisible'].includes(step.action)) {
+        throw new Error(`Unsupported browser action: ${String(step.action)}`);
+    }
 }
-async function executeVisualCheck(page, visualCheck, artifactDir, findings, artifacts) {
+async function executeVisualCheck(page, visualCheck, artifactDir, findings, artifacts, executionCounts) {
     const actualImagePath = join(artifactDir, `${safeArtifactName(visualCheck.name)}.actual.png`);
     const locator = visualCheck.locator ? resolveLocator(page, visualCheck.locator) : undefined;
     if (visualCheck.kind === 'locator' && locator)
@@ -347,6 +404,7 @@ async function executeVisualCheck(page, visualCheck, artifactDir, findings, arti
         await page.screenshot({ path: actualImagePath, fullPage: true });
     if (!artifacts.actualImagePath)
         artifacts.actualImagePath = actualImagePath;
+    executionCounts.captureCount += 1;
     if (!visualCheck.expectedPath)
         return;
     const diffImagePath = join(artifactDir, `${safeArtifactName(visualCheck.name)}.diff.png`);
@@ -359,6 +417,7 @@ async function executeVisualCheck(page, visualCheck, artifactDir, findings, arti
     if (typeof visualCheck.maxDiffPixelRatio === 'number')
         compareOptions.maxDiffPixelRatio = visualCheck.maxDiffPixelRatio;
     const result = await comparePng(visualCheck.expectedPath, actualImagePath, compareOptions);
+    executionCounts.visualAssertionCount += 1;
     if (!result.passed) {
         findings.push({
             gate: 'browser-visual',
@@ -393,7 +452,9 @@ function resolveLocator(page, locator) {
         return page.getByTitle(locator.value ?? '', locatorExactOption(locator));
     if (locator.kind === 'testId')
         return page.getByTestId(locator.value ?? '');
-    return page.locator(locator.value ?? '');
+    if (locator.kind === 'css')
+        return page.locator(locator.value ?? '');
+    throw new Error(`Unsupported browser locator kind: ${String(locator.kind)}`);
 }
 function locatorExactOption(locator) {
     const option = {};
@@ -424,16 +485,19 @@ async function waitForReachable(baseUrl, timeoutMs) {
     }
     return false;
 }
-function buildEvidence(params, runId, headless, viewport, findings, artifacts) {
+function buildEvidence(params, runId, headless, viewport, findings, artifacts, executionCounts) {
     const hasCriticalFinding = findings.some(finding => !finding.passed && finding.severity === 'critical');
+    const hasRequiredInteractionExecution = executionCounts.scenarioCount > 0 && executionCounts.stepCount > 0;
     return {
         framework: 'playwright',
-        status: hasCriticalFinding ? 'failed' : 'passed',
+        status: hasCriticalFinding || !hasRequiredInteractionExecution ? 'failed' : 'passed',
         runId,
         baseUrl: params.baseUrl,
+        targetIds: params.targetIds ?? [],
         browser: 'chromium',
         headless,
         viewport,
+        ...executionCounts,
         findings,
         ...(artifacts && Object.keys(artifacts).length > 0 ? { artifacts } : {})
     };

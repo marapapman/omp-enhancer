@@ -1,6 +1,6 @@
 ---
 name: claim-extraction
-description: Extract atomic, checkable factual claims before fact checking.
+description: Supporting precheck for broad or multi-claim text that must be split into atomic claim tuples before verification. It does not collect evidence or issue fact-check verdicts.
 ---
 
 # Claim Extraction
@@ -9,6 +9,11 @@ Extract a focused, bounded set of atomic claims. Make each claim small enough
 that one piece of evidence could support or contradict it. For a named list of
 facts, extract only that list; do not expand into every factual sentence in the
 document.
+
+Represent each claim as an explicit tuple: `subject`, `predicate`,
+`object/value`, `scope`, `time/version`, and `quantifier`. Preserve words such
+as all, only, most, at least, and currently. Split a sentence when one evidence
+item could align with only part of that tuple.
 
 Prioritize:
 

@@ -14,7 +14,7 @@ Confirm the target market, legitimate purpose, geography, allowed sources, field
 
 ## Procedure
 
-1. Use `research.web` or `research.technical` to collect current public evidence from primary company, professional, regulatory, repository, or publication sources. Record source, date, and the exact claim each source supports.
+1. Use `research.web` to collect a current public-evidence deliverable, or keep version-specific technical lookup inside `code.dev`. Record source, date, and the exact claim each source supports.
 2. Use `factcheck.document` to cross-check identity, current role, organization, recent activity, and any claimed relationship. Do not merge people on name similarity alone.
 3. Define the scoring formula before ranking. Separate observed facts from inferred fit, report missing fields, and avoid protected or sensitive attributes.
 4. For warm paths, use only connections the user supplied or explicitly authorized tools expose. Label direct, one-hop, and inferred relationships distinctly.

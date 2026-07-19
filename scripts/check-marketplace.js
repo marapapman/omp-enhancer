@@ -1,39 +1,29 @@
 import { access, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { assertPluginWorkspaceInventory, pluginWorkspaces } from './plugin-workspaces.js'
+
 const args = process.argv.slice(2)
 if (args.some((arg) => arg !== '--write')) throw new Error(`Unknown argument: ${args.join(' ')}`)
 const write = args.includes('--write')
 const catalogPath = path.join(process.cwd(), '.omp-plugin', 'marketplace.json')
 const catalog = JSON.parse(await readFile(catalogPath, 'utf8'))
+const rootPackage = JSON.parse(await readFile(path.join(process.cwd(), 'package.json'), 'utf8'))
+const packageLock = JSON.parse(await readFile(path.join(process.cwd(), 'package-lock.json'), 'utf8'))
+const packageManifests = new Map(await Promise.all(pluginWorkspaces.map(async ({ workspace }) => [
+  workspace,
+  JSON.parse(await readFile(path.join(process.cwd(), workspace, 'package.json'), 'utf8')),
+])))
 
-const expected = [
-  ['omp-config', './omp-config'],
-  ['writing-helper', './writing-helper'],
-  ['omp-testing-enhancer', './omp-test-enhancer'],
-  ['omp-fact-checker', './omp-fact-checker'],
-  ['omp-enhancer-core', './omp-enhancer-core']
-]
+assertPluginWorkspaceInventory({ rootPackage, packageLock, catalog, packageManifests })
 
-if (catalog.name !== 'omp-enhancer') {
-  throw new Error(`Expected marketplace name omp-enhancer, got ${catalog.name}`)
-}
+for (let index = 0; index < pluginWorkspaces.length; index += 1) {
+  const { name, workspace } = pluginWorkspaces[index]
+  const plugin = catalog.plugins[index]
+  const pluginRoot = path.join(process.cwd(), workspace)
+  const packageJson = packageManifests.get(workspace)
 
-if (catalog.metadata?.pluginRoot !== 'plugins') {
-  throw new Error('Expected metadata.pluginRoot to equal plugins')
-}
-
-for (const [name, source] of expected) {
-  const plugin = catalog.plugins.find(entry => entry.name === name)
-  if (!plugin) throw new Error(`Missing plugin entry ${name}`)
-  if (plugin.source !== source) {
-    throw new Error(`Plugin ${name} source mismatch: expected ${source}, got ${plugin.source}`)
-  }
-  if (Object.hasOwn(plugin, 'ref')) {
-    throw new Error(`Plugin ${name} is pinned to ${plugin.ref}; remove ref so marketplace upgrade tracks main`)
-  }
-
-  const expectedSkills = await expectedSkillPathsForPlugin(source)
+  const expectedSkills = await expectedSkillPathsForPlugin(pluginRoot, packageJson)
   const actualSkills = plugin.skills ?? []
   if (write) {
     if (expectedSkills.length > 0) plugin.skills = expectedSkills
@@ -50,9 +40,7 @@ if (write) {
   console.log('marketplace catalog ok')
 }
 
-async function expectedSkillPathsForPlugin(source) {
-  const pluginRoot = path.join(process.cwd(), 'plugins', source.replace(/^\.\//, ''))
-  const packageJson = JSON.parse(await readFile(path.join(pluginRoot, 'package.json'), 'utf8'))
+async function expectedSkillPathsForPlugin(pluginRoot, packageJson) {
   const skillRoots = packageJson.pi?.skills ?? []
   if (!skillRoots.length) return []
 
