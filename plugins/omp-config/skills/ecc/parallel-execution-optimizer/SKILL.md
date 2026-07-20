@@ -1,31 +1,41 @@
 ---
 name: parallel-execution-optimizer
-description: Use when the user wants a task done much faster through parallel work, concurrent agents, batched tool calls, isolated worktrees, or many independent verification lanes without losing correctness.
+description: Use after Main commits a workflow when advisory dependency and write-surface analysis could identify safe parallel lanes without taking over orchestration.
 origin: ECC
-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
 # Parallel Execution Optimizer
 
-Use this skill when speed comes from doing independent work at the same time:
-repo inspection, file reads, API checks, browser checks, build/test lanes,
-deploy readbacks, or multi-worktree implementation passes.
+Use this Skill after Main has selected and committed a workflow. It reads the
+currently committed workflow and parent TODO, then returns advisory lane findings
+for repo inspection, file reads, API checks, browser checks, build/test lanes, or
+other independent evidence checkpoints.
+
+It does not replace the parent TODO, dispatch Agents, set fixed fanout, or create
+a parallel orchestration layer. Native OMP owns current Available Agents, live
+Agent availability, capacity, tools, permissions, and completion. Main owns Agent
+selection, concurrency, dependency waves, integration, and finding disposition.
+
+Host configuration, worktree creation or deletion, a background process, or a
+deploy is outside this advisory analysis. Each requires separate explicit user
+authorization and native permission. This Skill does not start tasks, commands,
+services, worktrees, deployments, or native `task` calls.
 
 ## Core Pattern
 
-Turn urgency into a dependency graph before acting.
+Map the committed work into a dependency graph before Main acts.
 
-1. Define the objective and done signal.
-2. Split work into lanes.
-3. Mark each lane as parallel, sequential, or gated.
-4. Run independent reads/checks together.
-5. Keep writes isolated by file, worktree, branch, service, or dataset.
-6. Merge only after evidence shows the lanes are compatible.
-7. End with a verification table, not a vague speed claim.
+1. Copy the objective and done signal from the committed plan and TODO.
+2. Map existing checkpoints into candidate lanes without adding assignments.
+3. Mark each lane as independent, dependency-bound, or write-conflicting.
+4. Identify reads or checks that Main could safely batch.
+5. Record each write surface by file, branch, service, or dataset.
+6. Recommend an integration order backed by compatibility evidence.
+7. Return a verification table, not a vague speed claim.
 
 ## Lane Matrix
 
-Before a large push, write a compact matrix:
+For a large committed checkpoint set, return a compact matrix:
 
 ```text
 Lane | Can run in parallel? | Write surface | Risk | Verification
@@ -35,20 +45,22 @@ Frontend patch | maybe | app/components | medium | browser screenshot
 Deploy readback | after build | remote service | high | live URL + logs
 ```
 
-Only run lanes in parallel when their write surfaces do not collide.
+Only recommend parallel lanes when their write surfaces do not collide. Main
+compiles any recommendation against current Available Agents, native capacity,
+dependencies, user constraints, and the committed TODO.
 
 ## Execution Rules
 
-- Batch file reads, searches, status checks, and metadata queries.
-- Use isolated worktrees for large unrelated implementation lanes.
-- Start long-running tests, builds, backfills, and deploys in separate sessions,
-  then poll them deliberately.
-- If a lane discovers a blocker that changes the plan, pause dependent lanes
-  and update the matrix.
-- Never let a background process outlive the turn unless the user explicitly
-  asked for a continuing service.
-- Do not parallelize destructive commands, migrations, writes to the same table,
-  or live customer-impacting deploys without an explicit gate.
+- Recommend batched file reads, searches, status checks, and metadata queries
+  only when the committed checkpoints are independent.
+- Treat an isolated worktree as an optional write-separation finding, not as
+  permission to create, mutate, merge, or delete one.
+- For a long-running command already authorized by the user and native host,
+  identify a polling dependency; Main decides whether and how to run it.
+- If evidence reveals a new dependency or write conflict, report the affected
+  lanes so Main can decide whether a permitted TODO rebase is needed.
+- Never infer authority for destructive commands, migrations, shared writes,
+  background services, or customer-impacting deploys.
 
 ## Output Shape
 
@@ -56,11 +68,11 @@ Use this when reporting:
 
 ```text
 Parallel execution result:
-- Lanes run: 5
-- Lanes completed: 4
-- Blocked lane: deploy readback, waiting on DNS propagation
+- Candidate independent lanes: <count and checkpoint IDs>
+- Dependency-bound lanes: <count and dependency IDs>
+- Write conflicts: <none or exact surfaces>
 - Fast path found: batched repo scan + focused tests
-- Verification: lint pass, unit pass, live smoke pass
+- Suggested verification: <evidence commands or observations>
 ```
 
 ## Failure Modes
@@ -68,5 +80,5 @@ Parallel execution result:
 - More concurrency that creates conflicting edits.
 - Benchmarking the tool instead of the task.
 - Treating "fast" as done before correctness is proven.
-- Forgetting to poll running sessions.
+- Omitting a polling dependency for an already-authorized running session.
 - Hiding skipped checks behind a success summary.

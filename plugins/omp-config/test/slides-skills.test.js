@@ -8,14 +8,14 @@ const conversionSkillUrl = new URL('../skills/beamer-to-powerpoint/SKILL.md', im
 const qualityReferenceUrl = new URL('../skills/latex-beamer-slides/references/beamer-quality.md', import.meta.url);
 const visionerUrl = new URL('../agents/visioner.md', import.meta.url);
 
-test('Beamer generation checks the template before confirming a story and authoring frames', async () => {
+test('Beamer generation checks the template before committing a story and authoring frames', async () => {
   const skill = await readFile(slidesSkillUrl, 'utf8');
   const generation = markdownSection(skill, 'Generate a new deck');
 
   const inspectTemplate = generation.indexOf('Inspect template readiness');
   const discussTemplate = generation.indexOf('If the template is not configured');
-  const discussStory = generation.indexOf('load `slides-storyline`');
-  const generateFrames = generation.indexOf('Generate the deck from the confirmed template and outline');
+  const discussStory = generation.indexOf('apply the PLAN-loaded `slides-storyline`');
+  const generateFrames = generation.indexOf('Generate the deck from the committed template and outline');
   const renderQa = generation.indexOf('Compile with the native engine');
   const designerLayout = generation.indexOf('Have `designer` perform the final layout pass');
   const reconcileDesigner = generation.indexOf('Reconcile the designer revision');
@@ -34,16 +34,39 @@ test('Beamer generation checks the template before confirming a story and author
   assert.ok(freshRerender < visionReview);
   assert.ok(designerLayout < visionReview);
   assert.match(generation, /visual character, logo or explicit no-logo choice, aspect ratio, fonts, colors/i);
-  assert.match(generation, /obtain user confirmation before authoring frames/i);
+  assert.match(generation, /ask the user only when a missing choice materially changes the deck/i);
   assert.match(generation, /only files carrying that marker/i);
   assert.match(generation, /fresh renders of every page.+overview or contact sheet/is);
   assert.match(generation, /revision identifier.+PDF.+render directory/is);
-  assert.match(generation, /confirmed outline.+output language.+semantic anchors.+LaTeX structure/is);
+  assert.match(generation, /committed outline.+output language.+semantic anchors.+LaTeX structure/is);
   assert.match(generation, /text and image overlap.+crowding.+clipping.+undersized text/is);
   assert.match(generation, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);
   assert.match(generation, /Do not accept `PASS` or `FAIL` as a substitute/i);
-  assert.match(generation, /maximum of three vision review rounds/i);
-  assert.match(generation, /Convert only after the final Beamer revision is approved/i);
+  assert.match(generation, /supported finding.+new bounded TODO checkpoint.+at most one fresh affected review/is);
+  assert.match(generation, /No review verdict grants permission to convert, publish, or complete/i);
+});
+
+test('Beamer dependencies stay inside staged PLAN and LOAD before READY', async () => {
+  const skill = await readFile(slidesSkillUrl, 'utf8');
+  const timing = markdownSection(skill, 'Stage dependent Skills before READY');
+  const generation = markdownSection(skill, 'Generate a new deck');
+
+  assert.match(timing, /WORKFLOW PLAN.+declare.+exact Skill URIs/is);
+  assert.match(
+    timing,
+    /language Skills.+`latex-beamer-slides`.+`slides-storyline`.+`beamer-to-powerpoint`.+workflow references/is,
+  );
+  assert.match(timing, /wait for every declared resource result.+before `WORKFLOW READY`/is);
+  assert.match(timing, /not visible.+skills-unavailable|unavailable.+skills-unavailable/is);
+  assert.match(timing, /After `WORKFLOW READY`.+do not.+(?:Skill read|PLAN \+ LOAD)/is);
+  assert.match(
+    timing,
+    /RESOURCE EXTENSION \| source=skill:\/\/latex-beamer-slides \| reads=skill:\/\/latex-beamer-slides\/references\/beamer-quality\.md/iu,
+  );
+  assert.match(timing, /this loaded Skill.+exact URI.+before.+workflow references/isu);
+  assert.match(generation, /Apply the PLAN-loaded `slides-storyline`/i);
+  assert.match(generation, /Apply the PLAN-loaded `beamer-to-powerpoint`/i);
+  assert.doesNotMatch(generation, /\bload `(?:slides-storyline|beamer-to-powerpoint)`/i);
 });
 
 test('Beamer modification stays bounded to language and existing style', async () => {
@@ -61,7 +84,7 @@ test('Beamer modification stays bounded to language and existing style', async (
   assert.match(modification, /text and image overlap.+crowding.+clipping.+undersized text/is);
   assert.match(modification, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);
   assert.match(modification, /Do not accept `PASS` or `FAIL` as a substitute/i);
-  assert.match(modification, /maximum of three vision review rounds/i);
+  assert.match(modification, /supported finding.+new bounded TODO checkpoint.+at most one fresh affected review/is);
   assert.match(modification, /Do not widen the edit to unrelated pre-existing layout defects/i);
   assert.match(modification, /Do not split, add, remove, or reorder frames without explicit user authorization/i);
   assert.match(skill, /choose Chinese or English writing skills from the body being changed, not from the instruction language/i);
@@ -69,14 +92,24 @@ test('Beamer modification stays bounded to language and existing style', async (
   assert.match(skill, /`writing-review`/);
 });
 
-test('slides storyline requires a user-confirmed numbered outline without inventing evidence', async () => {
+test('slides storyline commits a numbered outline and asks only on material ambiguity', async () => {
   const skill = await readFile(storylineSkillUrl, 'utf8');
 
   assert.match(skill, /audience, purpose, setting, duration or target slide count, output language/i);
   assert.match(skill, /Do not invent examples, citations, numbers, results, or quotations/i);
   assert.match(skill, /Present a numbered outline/i);
-  assert.match(skill, /Do not generate Beamer frames until the user confirms the outline/i);
+  assert.match(skill, /ask only when a missing choice materially changes the deck/i);
+  assert.match(skill, /explicit assumptions/i);
+  assert.doesNotMatch(skill, /until the user (?:confirms|approves)|ask the user to approve/i);
   assert.match(skill, /Do not use for ordinary edits to an existing deck/i);
+});
+
+test('Beamer visual review is advisory and never an automatic repair controller', async () => {
+  const skill = await readFile(slidesSkillUrl, 'utf8');
+
+  assert.match(skill, /Agent availability and capacity remain Main decisions/i);
+  assert.match(skill, /No review verdict grants permission to convert, publish, or complete/i);
+  assert.doesNotMatch(skill, /maximum of three|have `designer` address every|have `designer` make only the necessary bounded fix/i);
 });
 
 test('PowerPoint conversion uses only a user-supplied command and verifies the artifact', async () => {

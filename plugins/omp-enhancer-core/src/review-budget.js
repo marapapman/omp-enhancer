@@ -23,7 +23,7 @@ export function buildTaskShapePrompt(taskDescriptor = {}, {
   return [
     'COMPAT_TASK_SHAPE_FACTS (observed from the user instruction; non-binding):',
     `FACTS: operation=${operation}; complexity=${complexity}; domains=${domains}; exact-inspection-targets=${targets.length}; independent-target-analysis=${requestedOrNo(independentTargetAnalysisRequested)}; per-target-evidence=${requestedOrNo(perTargetEvidence)}; cross-target-comparison=${requestedOrNo(crossTargetComparison)}.`,
-    `USE: these named targets and acceptance evidence seed candidate slices before project inspection.${workflowSkillVisible ? ' Complete the three staged workflow phases before project action.' : ' Complete the explicit plan before project action.'} After READY, inspect enough local context to make dependencies, exclusive write sets, test seams, and assignment input complete before dispatch. Target count is scope evidence, never a dispatch or fork-width decision.`,
+    `USE: these named targets and acceptance evidence seed candidate slices before project inspection.${workflowSkillVisible ? ' Complete DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY before project action.' : ' Complete the explicit plan before project action.'} After READY, inspect enough local context to make dependencies, exclusive write sets, test seams, and assignment input complete before dispatch. Target count is scope evidence, never a dispatch or fork-width decision.`,
   ].join('\n');
 }
 
@@ -86,12 +86,11 @@ export function buildDynamicReviewBudgetPrompt({
   }
 
   const domains = budget.domains.join(',') || 'general';
-  const riskFlags = budget.riskFlags.join(',') || 'none';
   const reviewDimensions = budget.reviewDimensions.join(',') || 'none-observed';
   return [
     'COMPAT_REVIEW_CONTEXT (soft, no quota):',
-    `FACTS: operation=${budget.operation}; complexity=${budget.complexity}; risk=${budget.riskLevel}; domains=${domains}; risk-flags=${riskFlags}; independent-review=${budget.independentReview}; possible-review-dimensions=${reviewDimensions}.`,
-    'DECIDE: at an existing review checkpoint, Main may choose no review or the smallest useful set of distinct unanswered questions and currently exposed matching Agents. This context selects no reviewer count, Agent, fork, batch, checkpoint, dispatch, permission, or completion condition; native authority remains unchanged.',
+    `FACTS: operation=${budget.operation};complexity=${budget.complexity};risk=${budget.riskLevel};domains=${domains};review=${reviewDimensions}.`,
+    'DECIDE: Main may use an existing checkpoint; selects no count/Agent/fork/batch/dispatch/permission/completion condition.',
   ].join('\n');
 }
 

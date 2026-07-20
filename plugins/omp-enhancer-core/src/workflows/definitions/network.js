@@ -1,7 +1,7 @@
 export const networkWorkflows = [
   {
     "id": "network.design",
-    "chooseWhen": "The user wants a new or substantially changed enterprise, multi-site, cloud-connected, or segmented network architecture and an implementation plan rather than immediate device mutation.",
+    "chooseWhen": "A new or substantially changed enterprise, multi-site, cloud-connected, or segmented network architecture needs an implementation plan, not immediate device mutation.",
     "composeWith": [
       "network.review",
       "network.debug",
@@ -37,6 +37,10 @@ export const networkWorkflows = [
       "network-config-validation",
       "safety-guard"
     ],
+    "catalogSkills": [
+      "network-config-validation",
+      "safety-guard"
+    ],
     "qualityChecks": [
       "requirements and topology correspondence, addressing and segmentation consistency, failure-domain analysis, management access preservation, observability, phased validation, and rollback completeness"
     ],
@@ -52,7 +56,7 @@ export const networkWorkflows = [
   },
   {
     "id": "network.homelab",
-    "chooseWhen": "The user wants a safe home or small-lab network plan involving gateways, switches, access points, local services, segmentation, DNS, or remote access.",
+    "chooseWhen": "A home or small-lab network plan covers gateways, switching, Wi-Fi, local services, segmentation, DNS, or remote access.",
     "composeWith": [
       "network.design",
       "network.review",
@@ -86,6 +90,14 @@ export const networkWorkflows = [
       "Do not assume VLAN, managed-switch, custom-firmware, public-IP, or port-forwarding capability without evidence."
     ],
     "skills": [
+      "homelab-network-readiness",
+      "homelab-network-setup",
+      "homelab-pihole-dns",
+      "homelab-vlan-segmentation",
+      "homelab-wireguard-vpn",
+      "safety-guard"
+    ],
+    "catalogSkills": [
       "homelab-network-readiness",
       "homelab-network-setup",
       "homelab-pihole-dns",
@@ -140,6 +152,10 @@ export const networkWorkflows = [
       "network-config-validation",
       "safety-guard"
     ],
+    "catalogSkills": [
+      "network-config-validation",
+      "safety-guard"
+    ],
     "qualityChecks": [
       "frozen revision, concrete configuration evidence, reference and path consistency, severity rationale, management-plane safety, actionable validation, rollback, and explicit runtime limitations"
     ],
@@ -188,6 +204,11 @@ export const networkWorkflows = [
       "Do not collect broad device state when a smaller command set can distinguish the hypotheses."
     ],
     "skills": [
+      "network-interface-health",
+      "network-bgp-diagnostics",
+      "netmiko-ssh-automation"
+    ],
+    "catalogSkills": [
       "network-interface-health",
       "network-bgp-diagnostics",
       "netmiko-ssh-automation"

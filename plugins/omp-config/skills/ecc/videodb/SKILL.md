@@ -2,13 +2,27 @@
 name: videodb
 description: See, Understand, Act on video and audio. See- ingest from local files, URLs, RTSP/live feeds, or live record desktop; return realtime context and playable stream links. Understand- extract frames, build visual/semantic/temporal indexes, and search moments with timestamps and auto-clips. Act- transcode and normalize (codec, fps, resolution, aspect ratio), perform timeline edits (subtitles, text/image overlays, branding, audio overlays, dubbing, translation), generate media assets (image, audio, video), and create real time alerts for events from live streams or desktop capture.
 origin: ECC
-allowed-tools: Read Grep Glob Bash(python:*)
 argument-hint: "[task description]"
 ---
 
 # VideoDB Skill
 
 **Perception + memory + actions for video, live streams, and desktop sessions.**
+
+## Linked resource boundary
+
+This loaded Skill may reveal only its own exact linked resource URIs. Copy the
+smallest task-relevant URI from the reference list unchanged into the remaining
+linked-resource batch and wait for it before continuing:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/videodb/SKILL.md | reads=<only-needed-exact-URIs-listed-below>`
+
+Relative paths are not load instructions, and this Skill does not select or
+load another Skill.
+
+## Runtime and data authority
+
+The current host's exposed tool schemas, permissions, and approvals are the only execution contract. The examples below do not grant shell, filesystem, capture-device, credential, network, or publication access. Run VideoDB code, install dependencies, transfer media to a third party, start desktop/microphone capture, retain a recording, or create a public stream only when the user explicitly authorizes that source, target, and effect. An inspection, explanation, or local-file reference alone does not authorize upload or capture.
 
 ## When to use
 
@@ -341,18 +355,18 @@ recent_visual = [
 
 ## Additional docs
 
-Reference documentation is in the `reference/` directory adjacent to this SKILL.md file. Use the Glob tool to locate it if needed.
+Reference documentation is in the `reference/` directory adjacent to this SKILL.md file. Read only the smallest linked reference needed for the requested operation.
 
-- [reference/api-reference.md](reference/api-reference.md) - Complete VideoDB Python SDK API reference
-- [reference/search.md](reference/search.md) - In-depth guide to video search (spoken word and scene-based)
-- [reference/editor.md](reference/editor.md) - Timeline editing, assets, and composition
-- [reference/streaming.md](reference/streaming.md) - HLS streaming and instant playback
-- [reference/generative.md](reference/generative.md) - AI-powered media generation (images, video, audio)
-- [reference/rtstream.md](reference/rtstream.md) - Live stream ingestion workflow (RTSP/RTMP)
-- [reference/rtstream-reference.md](reference/rtstream-reference.md) - RTStream SDK methods and AI pipelines
-- [reference/capture.md](reference/capture.md) - Desktop capture workflow
-- [reference/capture-reference.md](reference/capture-reference.md) - Capture SDK and WebSocket events
-- [reference/use-cases.md](reference/use-cases.md) - Common video processing patterns and examples
+- reference/api-reference.md: `skill://ecc-skill-catalog/videodb/reference/api-reference.md` - Complete VideoDB Python SDK API reference
+- reference/search.md: `skill://ecc-skill-catalog/videodb/reference/search.md` - In-depth guide to video search (spoken word and scene-based)
+- reference/editor.md: `skill://ecc-skill-catalog/videodb/reference/editor.md` - Timeline editing, assets, and composition
+- reference/streaming.md: `skill://ecc-skill-catalog/videodb/reference/streaming.md` - HLS streaming and instant playback
+- reference/generative.md: `skill://ecc-skill-catalog/videodb/reference/generative.md` - AI-powered media generation (images, video, audio)
+- reference/rtstream.md: `skill://ecc-skill-catalog/videodb/reference/rtstream.md` - Live stream ingestion workflow (RTSP/RTMP)
+- reference/rtstream-reference.md: `skill://ecc-skill-catalog/videodb/reference/rtstream-reference.md` - RTStream SDK methods and AI pipelines
+- reference/capture.md: `skill://ecc-skill-catalog/videodb/reference/capture.md` - Desktop capture workflow
+- reference/capture-reference.md: `skill://ecc-skill-catalog/videodb/reference/capture-reference.md` - Capture SDK and WebSocket events
+- reference/use-cases.md: `skill://ecc-skill-catalog/videodb/reference/use-cases.md` - Common video processing patterns and examples
 
 **Do not use ffmpeg, moviepy, or local encoding tools** when VideoDB supports the operation. The following are all handled server-side by VideoDB — trimming, combining clips, overlaying audio or music, adding subtitles, text/image overlays, transcoding, resolution changes, aspect-ratio conversion, resizing for platform requirements, transcription, and media generation. Only fall back to local tools for operations listed under Limitations in reference/editor.md (transitions, speed changes, crop/zoom, colour grading, volume mixing).
 

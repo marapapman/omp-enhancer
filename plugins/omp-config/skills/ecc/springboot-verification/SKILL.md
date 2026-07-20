@@ -6,9 +6,13 @@ origin: ECC
 
 # Spring Boot Verification Loop
 
-Run before PRs, after major changes, and pre-deploy.
+Apply this verification method after it is selected and loaded for a Spring Boot task. It does not activate itself or act as a secondary router for the current OMP session.
 
-## When to Activate
+The command blocks are reference examples. Command execution is allowed only for the exact named target and operation with explicit user authorization plus native permission at execution time. Builds, tests, reports, live services, dependency access, filesystem cleanup, and repository writes remain separate effects.
+
+The `READY` / `NOT READY` result below is a Spring Boot domain verdict, not host completion, release permission, deploy permission, or approval to continue the session.
+
+## Selected task scope
 
 - Before opening a pull request for a Spring Boot service
 - After major refactoring or dependency upgrades
@@ -25,7 +29,8 @@ mvn -T 4 clean verify -DskipTests
 ```
 
 If the build fails, preserve the output and continue independent static checks.
-Make one focused repair when build repair is in scope.
+A focused repair is a separate mutation and may be made only when its exact
+write set has explicit user authorization and native permission.
 
 ## Phase 2: Static Analysis
 
@@ -186,12 +191,16 @@ grep -rn "e\.getMessage()" src/main/ --include="*.java"
 grep -rn "allowedOrigins.*\*" src/main/ --include="*.java"
 ```
 
-## Phase 5: Lint/Format (optional gate)
+## Phase 5: Lint/Format (optional mutation)
 
 ```bash
 mvn spotless:apply   # if using Spotless plugin
 ./gradlew spotlessApply
 ```
+
+The Spotless commands and any other repair are separate mutations requiring
+explicit user authorization for their exact targets and native permission;
+verification authority alone does not authorize them.
 
 ## Phase 6: Diff Review
 
@@ -224,9 +233,12 @@ Issues to Fix:
 2. ...
 ```
 
-## Continuous Mode
+## External continuous mode
 
-- Re-run phases on significant changes or every 30–60 minutes in long sessions
-- Keep a short loop: `mvn -T 4 test` + spotbugs for quick feedback
+A periodic rerun belongs only to an explicitly authorized external target
+system with an exact schedule and target plus native permission. It never
+continues, restarts, or controls the current OMP session. Within one authorized
+run, a target system may use `mvn -T 4 test` plus SpotBugs for quick feedback.
 
-**Remember**: Fast feedback beats late surprises. Keep the gate strict—treat warnings as defects in production systems.
+Fast feedback beats late surprises. Report warnings as domain findings under the
+target project's policy; they are not host completion gates.

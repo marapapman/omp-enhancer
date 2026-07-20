@@ -12,6 +12,10 @@ production database configuration. Prefer exact version checks before applying a
 feature-specific pattern because MySQL and MariaDB have diverged in several SQL
 details.
 
+## Authority Boundary
+
+The SQL, CLI, configuration, and client examples below are patterns, not authorization to connect to or mutate a live database. Authorization to edit repository migration or configuration files does not authorize applying those changes, opening a live connection, or running a live command. Any database side effect requires explicit user scope and the host's native permission path; otherwise keep work read-only or use a disposable environment.
+
 ## Activation
 
 - Designing MySQL or MariaDB tables, indexes, and constraints
@@ -409,4 +413,4 @@ When this skill is used for review, return:
 - Skill: `database-migrations` - migration planning and rollout safety
 - Skill: `backend-patterns` - API and service-layer patterns
 - Skill: `security-review` - secret handling, auth, and least privilege
-- Workflow: `database.review` with the canonical `reviewer` and this skill
+- Workflow: `database.review` with its bounded `task` read-only audit role and this Skill; native `reviewer` remains reserved for an existing semantic diff or patch

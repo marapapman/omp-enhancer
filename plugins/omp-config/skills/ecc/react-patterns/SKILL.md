@@ -8,6 +8,13 @@ origin: ECC
 
 Idiomatic React 18/19 patterns for building robust, accessible, performant component trees.
 
+## Workflow composition boundary
+
+Related Skills below are compatibility candidates only. Main may select their
+exact URIs in the initial `WORKFLOW PLAN` when useful and visible. This Skill
+does not select or load another Skill, traverse a relative `SKILL.md`, reroute
+the workflow, or emit a replacement plan after `WORKFLOW READY`.
+
 ## When to Activate
 
 - Writing or modifying React function components, custom hooks, or component trees
@@ -52,7 +59,7 @@ React has no inheritance model for components. Compose with `children`, render p
 
 ## Hooks Discipline
 
-See [rules/react/hooks.md](../../rules/react/hooks.md) for the full ruleset. Highlights:
+Apply these hook rules:
 
 - Top-level only, never conditional
 - Cleanup every subscription, interval, listener
@@ -249,8 +256,8 @@ Wrap a component in `React.memo` only when:
 - Every interactive element must be reachable by keyboard
 - Form inputs need labels — `<label htmlFor>` or `aria-label` if visually labeled by an icon
 - Manage focus on route changes and modal open/close
-- Run `axe` in component tests (see [skills/react-testing](../react-testing/SKILL.md))
-- Cross-link: [skills/accessibility/SKILL.md](../accessibility/SKILL.md) covers WCAG criteria and pattern libraries
+- Run `axe` in component tests (see `skill://ecc-skill-catalog/react-testing/SKILL.md`)
+- Cross-link: `skill://ecc-skill-catalog/accessibility/SKILL.md` covers WCAG criteria and pattern libraries
 
 ## Routing
 
@@ -259,13 +266,12 @@ This skill is router-agnostic. The patterns above work with React Router, TanSta
 ## Out of Scope (Pointer Sections)
 
 - **Next.js specifics**: App Router data loading, Route Handlers, Middleware, Parallel Routes — separate concern, use Next.js docs
-- **React Native**: Platform-specific patterns differ enough to warrant a separate `react-native-patterns` skill (not present yet)
+- **React Native**: This marketplace does not package a React Native-specific guide. Use the current official React Native documentation, or use a matching Skill only when the host currently exposes one.
 - **Remix**: Loader/action conventions overlap with RSC but follow Remix docs
 
 ## Related
 
-- Rules: [rules/react/](../../rules/react/) — coding-style, hooks, patterns, security, testing
-- Skills: [react-performance](../react-performance/SKILL.md) for the Vercel-derived performance ruleset, [frontend-patterns](../frontend-patterns/SKILL.md) for cross-framework UI concerns, [accessibility](../accessibility/SKILL.md), [angular-developer](../angular-developer/SKILL.md) for framework comparison
+- Skills: `skill://ecc-skill-catalog/react-performance/SKILL.md` for the Vercel-derived performance ruleset, `skill://ecc-skill-catalog/frontend-patterns/SKILL.md` for cross-framework UI concerns, `skill://ecc-skill-catalog/accessibility/SKILL.md`, `skill://ecc-skill-catalog/angular-developer/SKILL.md` for framework comparison
 - Workflow: `code.dev` with this Skill for React review, build or bundler failures, tests, and authorized implementation
 
 ## Examples

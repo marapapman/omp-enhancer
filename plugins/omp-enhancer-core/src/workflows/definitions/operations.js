@@ -1,7 +1,7 @@
 export const operationWorkflows = [
   {
     "id": "omp.plugin",
-    "chooseWhen": "The target is an OMP plugin, the omp-enhancer monorepo, or an isolated OMP Enhancer self-development fixture, including a workflow, Skill, Agent, prompt, reminder, hook, config asset, packaging path, or E2E harness.",
+    "chooseWhen": "The target is an OMP plugin, the omp-enhancer monorepo, or an isolated self-development fixture: workflows, Skills, Agents, prompts, reminders, hooks, config assets, packaging, or E2E.",
     "composeWith": [
       "release.publish"
     ],
@@ -130,6 +130,10 @@ export const operationWorkflows = [
       "security-review",
       "security-scan"
     ],
+    "catalogSkills": [
+      "security-review",
+      "security-scan"
+    ],
     "qualityChecks": [
       "caller-to-sink evidence, exploit preconditions, impact, and remediation feasibility"
     ],
@@ -147,7 +151,7 @@ export const operationWorkflows = [
   },
   {
     "id": "design.visual",
-    "chooseWhen": "The requested output is a UI, visual asset, diagram, layout, or interaction design.",
+    "chooseWhen": "A UI, visual asset, layout, or interaction design is requested; standalone diagram.svg and slides.* keep their specialized Primary unless separate visual-design work is requested.",
     "composeWith": [
       "diagram.svg",
       "slides.generate",
@@ -244,6 +248,10 @@ export const operationWorkflows = [
       "safety-guard",
       "code-development"
     ],
+    "catalogSkills": [
+      "opensource-pipeline",
+      "safety-guard"
+    ],
     "qualityChecks": [
       "source and staging separation, complete transformation ledger, no exposed secret or PII, current final-revision sanitization evidence, license and documentation correspondence, clean package and test evidence, independent diff review, explicit limitations, and separate publish authorization"
     ],
@@ -308,9 +316,13 @@ export const operationWorkflows = [
     "riskNotes": [
       "Use host approval and the user-authorized target for irreversible or externally visible actions."
     ],
-    "roles": [],
+    "roles": [
+      "task"
+    ],
     "delegation": [
-      "steps-3-4: the parent alone owns the authorized release mutation and independently verifies the exact bounded remote, marketplace, deployed, or installed state",
+      "step-2: task owns a bounded read-only preflight slice and returns exact evidence without changing release state",
+      "step-3: Main retains exclusive ownership of the user-authorized release mutation and performs it once through host-authorized tools",
+      "step-4: task owns a bounded read-only post-mutation verification slice for the exact remote, marketplace, deployed, or installed state",
       "step-5: the parent reconciles the verified target and reports the exact final state"
     ]
   }

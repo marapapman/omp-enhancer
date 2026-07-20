@@ -8,20 +8,26 @@ origin: ECC
 
 Manage a multi-layered knowledge system for ingesting, organizing, syncing, and retrieving knowledge across multiple stores.
 
+## Runtime and authority boundary
+
+The paths and MCP names below describe possible target systems, not tools guaranteed by the current OMP host. Use only capabilities currently exposed by the host. Reading or searching a knowledge system does not authorize writing to it. Schedules, persistent memory writes, dispatch, GitHub or Linear updates, database changes, commit, push, and other external effects require, for the exact named target and operation, explicit user authorization and native permission at execution time.
+
+This Skill does not choose or reselect a workflow or Skill, activate a tool, or grant an effect. The scope examples below apply only after Main has selected and loaded this resource through the current OMP workflow plan.
+
 Prefer the live workspace model:
 - code work lives in the real cloned repos
 - active execution context lives in GitHub, Linear, and repo-local working-context files
 - broader human-facing notes can live in a non-repo context/archive folder
 - durable cross-machine memory belongs in the knowledge base, not in a shadow repo workspace
 
-## When to Activate
+## Selected task examples
 
 - User wants to save information to their knowledge base
 - Ingesting documents, conversations, or data into structured storage
 - Syncing knowledge across systems (local files, MCP memory, Supabase, Git repos)
 - Deduplicating or organizing existing knowledge
 - User says "save this to KB", "sync knowledge", "what do I know about X", "ingest this", "update the knowledge base"
-- Any knowledge management task beyond simple memory recall
+- Knowledge management that requires ingestion, organization, sync, deduplication, or retrieval rather than simple recall
 
 ## Knowledge Architecture
 
@@ -35,7 +41,7 @@ Prefer the live workspace model:
 - **Format:** Markdown files with frontmatter
 - **Types:** user preferences, feedback, project context, reference
 - **Use for:** quick-access context that persists across conversations
-- **Automatically loaded at session start**
+- **External-host behavior:** This is an external Claude Code host example. A separately configured host may load its own memory at session start; current OMP does not assume that behavior, visibility, or filesystem access.
 
 ### Layer 3: MCP Memory Server (Structured Knowledge Graph)
 - **Access:** MCP memory tools (create_entities, create_relations, add_observations, search_nodes)
@@ -77,10 +83,10 @@ Check if this knowledge already exists:
 
 ### 3. Store
 Write to appropriate layer(s):
-- Always update Claude Code memory for quick access
-- Use MCP memory for semantic searchability and relationship mapping
-- Update GitHub / Linear first when the information changes live project truth
-- Commit to the knowledge base repo for durable long-form additions
+- Update a quick-access memory layer only when that write was requested and the current host exposes it
+- Use an exposed MCP memory capability only when the requested operation includes that target
+- Update GitHub or Linear only when explicitly authorized for the named project item
+- Commit to the knowledge base repo only when explicitly authorized; pushing is a separate authorization
 
 ### 4. Index
 Update any relevant indexes or summary files.
@@ -92,7 +98,7 @@ Periodically sync conversation history into the knowledge base:
 - Sources: Claude session files, Codex sessions, other agent sessions
 - Destination: knowledge base repo
 - Generate a session index for quick browsing
-- Commit and push
+- Prepare the requested local changes; commit and push only when each effect is explicitly authorized
 
 ### Workspace State Sync
 Mirror important workspace configuration and scripts to the knowledge base:
@@ -112,13 +118,13 @@ Pull knowledge from multiple sources into one place:
 - Claude/ChatGPT/Grok conversation exports
 - Browser bookmarks
 - GitHub activity events
-- Write status summary, commit and push
+- Write the requested status summary; commit and push only when each effect is explicitly authorized
 
 ## Memory Patterns
 
 ```
 # Short-term: current session context
-Use TodoWrite for in-session task tracking
+Use the current host's native TODO only when it is exposed; otherwise track the bounded operation in the named knowledge artifact
 
 # Medium-term: project memory files
 Write to ~/.claude/projects/*/memory/ for cross-session recall
@@ -144,9 +150,9 @@ Use mcp__memory__search_nodes to find existing knowledge
 - Use consistent naming conventions for knowledge files (lowercase-kebab-case).
 - Tag entries with topics/categories for easier retrieval.
 
-## Quality Gate
+## Quality review
 
-Before completing any knowledge operation:
+Review the operation against these checks. Unmet checks are findings, not completion permission:
 - no duplicate entries created
 - sensitive data redacted from any Git-tracked files
 - indexes and summaries updated

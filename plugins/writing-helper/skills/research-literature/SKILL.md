@@ -1,95 +1,80 @@
 ---
 name: research-literature
-description: Literature search and analysis — find related papers, summarize contributions, build cross-index of papers×concepts
+description: Find and analyze academic literature, summarize source-supported contributions, and build a papers-by-concepts cross-index when a task needs literature research.
 ---
 
 # Research Literature
 
-## Purpose
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or an explicitly capable generic
+`task` owns authorized effects.
 
-Find and analyze academic papers related to the current project. Produces a structured literature survey with per-paper summaries and a cross-index table mapping papers to technical concepts.
+Build a focused literature survey whose metadata, summaries, and comparisons remain traceable to retrieved sources.
 
 ## Workflow
 
-### 1. Extract Keywords
+### 1. Establish the topic
 
-Read `.pi/research/storyline.md`; extract 3–8 search keywords. Prefer specific technical terms (e.g. "neural radiance fields" over "computer vision"). If no storyline exists, ask the user for their research topic.
+Derive the research question and 3–8 specific search terms from the user request and in-scope project material. Read `.pi/research/storyline.md` only when it exists and is relevant; never assume that path is present. Ask for the topic only when the available context is genuinely insufficient.
 
-### 2. Search for Papers
+### 2. Collect sources
 
-```
-web_search(query="<keyword> site:arxiv.org", limit=5)
-```
+Search the network only when the current task requires external research and native network permission allows it. Use the currently available native search and browsing tools rather than assuming a fixed tool name. Prefer primary papers and authoritative publisher or repository pages; use known seed papers when supplied.
 
-One query per keyword pair. Supplement with direct arXiv ID searches if the user has known seed papers.
+For every retained paper, record the source URL or stable identifier and retrieve enough primary text to support the fields being reported. A search snippet alone does not establish authorship, venue, method details, or results.
 
-### 3. Fetch Abstracts
+### 3. Extract evidence
 
-For each arXiv result, use `read` on `https://arxiv.org/abs/<id>`. Extract: title, authors, year, venue, abstract.
+For each paper assemble:
 
-### 4. Extract Per-Paper Metadata
+- title, authors, year, and venue, each tied to the retrieved source;
+- core contribution and technical approach, clearly separated from your interpretation;
+- concrete relevance to the current project;
+- limitations or unresolved metadata.
 
-For each paper assemble: **Title** | **Authors** | **Year** | **Venue** | **Core contribution** (1 sentence) | **Technical approach** (key method) | **Relevance** (relation to user's work).
+Never fabricate. If a source fails, conflicts, or lacks a field, mark that field unresolved or omit the paper. Do not infer a venue, result, or method detail from a title.
 
-Never fabricate. If fetch fails or returns insufficient data, skip the paper.
+### 4. Cross-index concepts
 
-### 5. Build Cross-Index Table
+Identify 3–6 well-defined concepts supported by the source material. Build a GFM table with one concept per column. Distinguish explicit source support from analyst interpretation; use `unknown` instead of guessing.
 
-Identify 3–6 technical concepts that appear across multiple papers. Build a GFM table with ✓/✗/shorthand and brief notes:
-
-```
+```markdown
 ## Cross-Index
 
-| Paper | Contrastive Pretraining | Vision Transformer | Multi-modal Fusion |
+| Paper | [Concept A] | [Concept B] | [Concept C] |
 |---|---|---|---|
-| CLIP (Radford 2021) | ✓ core method | ✓ encoder | ✓ text+image |
-| ALIGN (Jia 2021) | ✓ core method | ✓ encoder | ✓ noisy pairs |
-| LiT (Zhai 2022) | ✓ fine-tuning | ✓ frozen | ✗ text-only |
+| [Verified paper] | supported | unknown | interpreted: [brief basis] |
 ```
 
-### 6. Write Output
+### 5. Deliver the survey
 
-Append to `.pi/research/literature.md`. Structure:
+Return the survey in the response by default. Write only when the current task explicitly requests file output and native filesystem permission allows it. Use the requested safe path; use `.pi/research/literature.md` only when the user requests that path or the current project already establishes it as the intended artifact. Re-read an existing target before an authorized incremental update and preserve unrelated content.
+
+Suggested structure:
 
 ```markdown
 # Literature Survey: [Project Topic]
 _Search date: YYYY-MM-DD_
 
-## Paper: [Full Title]
-- **Authors:** [names]
-- **Year:** [year], **Venue:** [venue]
-- **Core contribution:** [one sentence]
-- **Technical approach:** [key method or architecture]
-- **Relevance:** [how this relates to your work]
+## Paper: [Verified title]
+- **Source:** [stable URL or identifier]
+- **Authors:** [source-supported names]
+- **Year / venue:** [supported value or unresolved]
+- **Core contribution:** [source-supported summary]
+- **Technical approach:** [source-supported method]
+- **Relevance:** [clearly labeled analysis]
+- **Limitations:** [source or evidence gap]
 ```
 
-Add new papers above existing ones (newest-first). Regenerate the cross-index table to include all papers.
+## Quality rules
 
-## Rules
+1. Keep the set focused; ten papers is a useful session ceiling, not a completeness claim.
+2. Never fabricate citations, metadata, methods, or results.
+3. Preserve source-to-claim traceability for every factual field.
+4. Use `unknown` for missing evidence and surface contradictory sources.
+5. Treat file output and network retrieval as separate effects, each governed by the current task and native permissions.
 
-1. **Max 10 papers per session.** Keeps the survey focused.
-2. **Update incrementally.** Re-read `.pi/research/literature.md` and append/update rather than overwrite.
-3. **Never fabricate.** Skip the paper if search or fetch fails.
-4. **One concept per column.** Each cross-index column = one well-defined technique/paradigm.
-5. **Cite relevance concretely.** "Direct baseline" or "Same dataset" beats "Related approach."
-
-## Pi Integration
-
-- **Use:** load `research-literature` through the runtime's normal skill mechanism.
-- **Tools:** `web_search` (find papers) and `read` (retrieve source pages). Use any separately installed academic search tool only when it is actually available.
-- **Input:** `.pi/research/storyline.md` (optional — provides keywords)
-- **Output:** `.pi/research/literature.md` (append-only, incremental)
-- **No external CLI.** No `.pi/research/state.md`.
-
-## Example Session
-
-```
-User: Find and organize the most relevant literature for this storyline.
-Agent:
-1. Read .pi/research/storyline.md → keywords: ["zero-shot classification", "vision-language models"]
-2. web_search("zero-shot vision-language models site:arxiv.org") → 5 results
-3. read("https://arxiv.org/abs/2103.00020") → CLIP paper
-4. Assemble metadata for 3 papers
-5. Build cross-index: Contrastive Pretraining | Text Encoder | Image Encoder
-6. Write to .pi/research/literature.md
-```
+This body is already loaded for the current method; do not read
+`research-literature` again. A separately installed academic search provider is
+optional and may be used only when currently available and authorized.

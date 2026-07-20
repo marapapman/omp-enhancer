@@ -16,13 +16,20 @@ uncertain verdict. High-impact audit candidates use the separate
 authorized countercheck; zero findings is valid. A parent cannot increase a
 child's confidence or evidence level without new evidence and a countercheck.
 
+Structured strict assessment uses a `claimTuple` and `evidenceTuple`. Their
+canonical fields are `subject`, `basePredicate`, `objectValue`, `scope`,
+`timeVersion`, and `quantifier`, with explicit materiality. Evidence additionally
+records `ENTAILS`, `NEGATES`, `ADJACENT`, or `UNKNOWN`, plus strength, limitation,
+and countercheck objects. Missing or mismatched tuples fail closed; legacy
+compatibility verdicts remain available but do not become strict proof.
+
 Provider metadata from Crossref, arXiv, OpenAlex, DataCite, and Google Fact Check is discovery or identity evidence only. It is returned as `INSUFFICIENT` until an agent reads the underlying passage, table, or dataset.
 
 ## Tools
 
 - `fact_check_analyze` extracts claim candidates and builds a `FACT_CHECK_PLAN`.
-- `fact_check_evidence` collects local or provider evidence for claims.
-- `fact_check_report` summarizes backward-compatible verdicts and a fail-closed `strictVerdict` into `FACT_CHECK_REPORT`. Strict support requires direct evidence in every supporting lane, the planned evidence and independence requirements, claim-specific freshness, no unresolved conflict, and current evidence when the claim requires it. Staleness remains a temporal finding rather than a compatibility verdict.
+- `fact_check_evidence` collects local or provider evidence for claims and preserves structured tuple, strength, limitation, and countercheck assessments.
+- `fact_check_report` summarizes backward-compatible verdicts and a fail-closed `strictVerdict` into `FACT_CHECK_REPORT`. Strict support requires same-tuple `ENTAILS / PROVEN` evidence, direct evidence in every supporting lane, the planned evidence and independence requirements, claim-specific freshness, no material limitation, and current evidence when the claim requires it. High-priority support also requires a completed countercheck with no disconfirming evidence. Strict contradiction requires same-tuple `NEGATES / DISPROVED` evidence with the negated predicate or object/value identified; a high-priority contradiction also requires a completed countercheck. Staleness remains a temporal finding rather than a compatibility verdict.
 - `fact_check_review` performs a non-blocking workflow evidence review. `ready` means the expected workflow artifacts are present; `strictSupportReady` separately reports whether every claim has strict factual support. Missing evidence is returned as findings and never controls session completion.
 
 The plugin does not block tools, retry work automatically, or prevent session completion. Invalid parameters and real file/network execution errors still use normal error results.

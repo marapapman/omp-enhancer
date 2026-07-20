@@ -10,6 +10,23 @@ Use this skill when an agent run is failing repeatedly, consuming tokens without
 
 This is a workflow skill, not a hidden runtime. It teaches the agent to debug itself systematically before escalating to a human.
 
+## Workflow composition boundary
+
+Main selects supporting Skills in the initial `WORKFLOW PLAN` when they are
+visible. This Skill does not select or auto-load another Skill, reroute the
+workflow, or emit a replacement plan after `WORKFLOW READY`.
+
+If this already-loaded guide reveals a needed follow-up method that was not
+visible before PLAN, the remaining linked-method batch may read only a matching
+exact same-namespace URI listed here:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/agent-introspection-debugging/SKILL.md | reads=<only-needed-exact-URI-or-URIs-listed-below>`
+
+- `skill://ecc-skill-catalog/verification-loop/SKILL.md`
+- `skill://ecc-skill-catalog/continuous-learning-v2/SKILL.md`
+- `skill://ecc-skill-catalog/council/SKILL.md`
+- `skill://ecc-skill-catalog/workspace-surface-audit/SKILL.md`
+
 ## When to Activate
 
 - Maximum tool call / loop-limit failures
@@ -27,7 +44,7 @@ Activate this skill for:
 - producing a structured human-readable debug report
 
 Do not use this skill as the primary source for:
-- feature verification after code changes; use `verification-loop`
+- feature verification after code changes; that scope belongs to a committed `verification-loop` candidate
 - framework-specific debugging when a narrower ECC skill already exists
 - runtime promises the current harness cannot enforce automatically
 
@@ -135,12 +152,12 @@ Good pattern:
 - run one direct check
 - change the plan only if the check supports it
 
-## Integration with ECC
+## Integration with already committed ECC methods
 
-- Use `verification-loop` after recovery if code was changed.
-- Use `continuous-learning-v2` when the failure pattern is worth turning into an instinct or later skill.
-- Use `council` when the issue is not technical failure but decision ambiguity.
-- Use `workspace-surface-audit` if the failure came from conflicting local state or repo drift.
+- After recovery, apply a loaded `verification-loop` candidate if code changed.
+- A loaded `continuous-learning-v2` candidate can capture a pattern worth turning into an instinct or later Skill.
+- A loaded `council` candidate can handle decision ambiguity rather than technical failure.
+- A loaded `workspace-surface-audit` candidate can inspect conflicting local state or repo drift.
 
 ## Output Standard
 

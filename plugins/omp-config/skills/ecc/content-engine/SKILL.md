@@ -8,6 +8,22 @@ origin: ECC
 
 Build platform-native content without flattening the author's real voice into platform slop.
 
+## Workflow composition boundary
+
+Main selects supporting Skills in the initial `WORKFLOW PLAN` when they are
+visible. This Skill does not select or auto-load another Skill, reroute the
+workflow, or emit a replacement plan after `WORKFLOW READY`.
+
+If this already-loaded guide reveals a needed method that was not visible before
+PLAN, the remaining linked-method batch may read only a matching exact
+same-namespace URI listed here:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/content-engine/SKILL.md | reads=<only-needed-exact-URI-or-URIs-listed-below>`
+
+- `skill://ecc-skill-catalog/brand-voice/SKILL.md`
+- `skill://ecc-skill-catalog/crosspost/SKILL.md`
+- `skill://ecc-skill-catalog/x-api/SKILL.md`
+
 ## When to Activate
 
 - writing X posts or threads
@@ -36,20 +52,21 @@ Before drafting, identify the source set:
 - prior posts from the same author
 
 If the user wants a specific voice, build a voice profile from real examples before writing.
-Use `brand-voice` as the canonical workflow when voice consistency matters across more than one output.
+When the committed plan already includes the `brand-voice` candidate, treat its
+returned profile as canonical when consistency matters across outputs.
 
 ## Voice Handling
 
-`brand-voice` is the canonical voice layer.
-
-Run it first when:
+An already-declared and loaded `brand-voice` is the canonical voice layer when:
 
 - there are multiple downstream outputs
 - the user explicitly cares about writing style
 - the content is launch, outreach, or reputation-sensitive
 
 Reuse the resulting `VOICE PROFILE` here instead of rebuilding a second voice model.
-If the user wants Affaan / ECC voice specifically, still treat `brand-voice` as the source of truth and feed it the best live or source-derived material available.
+If the user wants Affaan / ECC voice specifically and `brand-voice` is already
+declared and loaded, still treat its profile as the source of truth and feed it
+the best live or source-derived material available.
 
 ## Hard Bans
 
@@ -126,6 +143,6 @@ Before delivering:
 
 ## Related Skills
 
-- `brand-voice` for source-derived voice profiles
-- `crosspost` for platform-specific distribution
-- `x-api` for sourcing recent posts and publishing approved X output
+- `brand-voice` for source-derived voice profiles, only when selected during PLAN or by the bounded exact extension above
+- `crosspost` for platform-specific distribution under the same composition boundary
+- `x-api` for sourcing recent posts and publishing approved X output under the same composition and permission boundaries

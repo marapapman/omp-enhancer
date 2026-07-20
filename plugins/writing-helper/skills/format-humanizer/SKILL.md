@@ -5,10 +5,14 @@ description: "Remove AI writing traces — identify and replace overused AI phra
 
 # Format Humanizer
 
-Scan a document for AI-generated writing patterns and apply authorized,
+Scan a document for AI-generated writing patterns and produce authorized,
 meaning-preserving replacements in one focused pass. Use one-at-a-time
 confirmation only when the user explicitly requests interactive review or a
 replacement would alter meaning.
+
+This writer child is always proposal-only. Return the complete revised text,
+using SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer.
+Main retains permission decisions and actual file changes.
 
 ## Trigger
 
@@ -42,8 +46,8 @@ Use when the user asks to "humanize", "de-AI", "remove AI traces", "make this so
    - Suggested replacement
    - Whether it is a safe expression-only replacement or needs an author decision
 
-3. **Apply.** Apply safe replacements within existing edit authorization.
-   Present only substantive decisions to the user.
+3. **Revise.** Include safe replacements in the complete proposal. Present only
+   substantive decisions to the user; Main owns any authorized persistence.
 
 4. **Output comparison.** After all findings are processed, show:
    - **Before** — full original text

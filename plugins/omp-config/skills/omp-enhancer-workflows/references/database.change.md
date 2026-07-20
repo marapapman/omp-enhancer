@@ -1,11 +1,13 @@
+READY NEXT (soft): SENTINEL 1/2 — no plugin enforcement. Next assistant response byte 0 = `W` of filled `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<ids-or-none> | skills-unavailable=<ids-or-none>`; no other visible text; the same response calls native TODO init only. Rebase TODO from loaded resources; end/wait.
 # `database.change` workflow reference
 
 Optional reference only. OMP native runtime instructions and settings remain authoritative.
 RESOURCE HANDOFF (soft): load only remaining declared resources and wait. Do not start project work in a resource-result response.
+Derive TODO internally. Each delegated native TODO `items[]` string is the exact Delegate row; use no role-colon shorthand. Its checkpoint is one metadata-safe line without `]`, `workflow=`, `step=`, `todo=`, `skills=`, or `checkpoint=`.
 
 ## `database.change`
 
-- Primary when: The user authorizes a schema, query, index, constraint, data-migration, or database-configuration change with verification.
+- Primary when: An authorized schema, query, index, constraint, data-migration, or database-config change needs verification.
 - Reference steps:
   1. [step-1] Confirm the engine and version, current schema and migration state, data scale, compatibility window, target environments, backup evidence, and authorization boundary.
   2. [step-search-local] Main searches the local schema, migration graph, query and application callers, focused tests, deployment configuration, and generated or installed copies before choosing the canonical change surface.
@@ -19,8 +21,8 @@ RESOURCE HANDOFF (soft): load only remaining declared resources and wait. Do not
   10. [step-review] After MAIN REVIEW, the native reviewer independently reviews the Main-reviewed bounded diff and supplied evidence for backup, rollback, lock, data, compatibility, and release risk without reading the project or running a command.
   11. [step-repair] Main validates each reviewer finding; for every material supported finding, task receives a bounded repair assignment, returns fresh affected evidence without live application, and Main refreshes verification and MAIN REVIEW before at most one fresh reviewer pass over the materially changed diff.
   12. [step-report] Report plan dispositions, task deliveries, exact commands and exits, backup and migration assumptions, current-tree evidence, review dispositions, unresolved operational risk, and the unexecuted live or release boundary.
-- Optional Agent candidates: `plan`, `task`, `reviewer`.
-- Optional delegation ideas:
+- Agent candidates: `plan`, `task`, `reviewer`.
+- Delegated checkpoints:
   - step-plan-review: plan independently reviews Main's supplied complete parallel plan, write sets, compatibility sequence, migration validation, release order, rollback, and live-operation exclusions without editing or applying changes
   - step-task-batch: task receives all runnable independent database slices for the wave in the same native tasks[] batch with exclusive write ownership
   - step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the focused test, minimum production and migration changes, same-command evidence, and prohibition on unapproved live application
@@ -31,10 +33,20 @@ RESOURCE HANDOFF (soft): load only remaining declared resources and wait. Do not
   - current migration state, backup evidence, plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, compatibility order, bounded lock and downtime impact, data invariants, clean upgrade tests, rollback or forward-repair evidence, Main self-review, reviewer reconciliation, and exact execution boundary
 - Scope notes:
   - Repository migration changes do not authorize applying them to staging or production.
+  - Confirm the database engine first, then select only the matching engine-specific Skill: postgres-patterns for PostgreSQL or mysql-patterns for MySQL or MariaDB; do not load both by default.
   - Separate schema expansion, data backfill, application cutover, and contraction when compatibility or scale requires it.
   - Slice count follows real independent vertical work, dependency order, exclusive write ownership, and native capacity; one safe slice remains one task.
   - If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path.
 - Risk notes:
   - Schema and data changes can be destructive or irreversible; use the host approval path and never infer authority over a live database.
 
-NEXT CHECKPOINT: after all declared resources and any catalog extension have returned or were marked unavailable, start visible assistant text with `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<bare-ids-or-none> | skills-unavailable=<bare-ids-or-none>`. When native `todo` is exposed, this response calls only TODO init and waits; project work starts in the next response.
+EXECUTION DEFAULT (soft): `subagent-driven` — Main chooses a currently visible matching Agent and width for each safe complete checkpoint. After every parent-owned pre-dispatch prerequisite named by this card completes, the committed `task` is the next project action; runnable independent checkpoints share a batch and dependent ones wait. Main integrates and verifies deliveries. Only a new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase a row; direct fallback is limited to one concrete user or native constraint, Agent availability or capacity, incomplete assignment input, unresolved dependency or write-set overlap, safety risk, or native parent-owned action. Size, latency, read-only output, integrated delivery, overhead, or no explicit delegation request alone are not fallbacks. This selects no Agent or fork width and creates no fork requirement, gate, retry, or completion condition.
+
+TODO COMPILE (soft): Rebase TODO from this card. For a subagent-driven card, complete input + safe checkpoint + visible matching Agent => one exact Delegate row; otherwise `fallback=<one matched permitted limitation>`. Parent VERIFY rows remain separate. Every delegated row is exactly `Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>`; workflow and skills copy frozen W=<Primary,Add-ons> and S=<bare loaded Skill IDs>.
+TASK COPY (soft, later response): copy one committed Delegate row; do not redraft its metadata.
+- Set native item `agent` to the row Agent and native item `todo` to the row checkpoint verbatim.
+- Assignment body byte 0 = `[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>]`. Never begin `# Target` or `# Goal`.
+- The native `tasks[].task` itself begins at byte 0 with that complete four-key prefix. Every native `task` call sets a non-empty top-level `context` summarizing the shared batch purpose. That common `context`, name, label, or an instruction telling the child to output metadata cannot substitute for an item body or its byte-0 prefix.
+- Keep later-wave metadata stable and put delivery material in the body. Fill required native fields, copy direct user constraints verbatim, and add bounded scope and acceptance evidence. After dispatch, end and wait for native auto-delivery; do not poll with `hub`. Only a new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase the row; otherwise use one concrete user or native constraint, Agent availability or capacity, incomplete assignment input, unresolved dependency or write-set overlap, safety risk, or native parent-owned action.
+
+READY NEXT (soft): SENTINEL 2/2 — no plugin enforcement. Next assistant response byte 0 = `W` of filled `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<ids-or-none> | skills-unavailable=<ids-or-none>`; no other visible text; native TODO init only; end/wait.

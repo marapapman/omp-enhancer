@@ -8,6 +8,16 @@ origin: ECC
 
 Reference for the `uc` CLI — a decentralised self-hosting platform using Docker containers, WireGuard mesh networking, and Caddy reverse proxy.
 
+## Execution and effect boundary
+
+Commands below are reference syntax, not execution authority. Every external
+effect requires explicit user authorization for the exact target and effect plus
+current native permission. Read-only inspection is distinct from mutation;
+deploy, scale, push, context switch, machine or volume mutation, and removal are
+separate effects. Confirm the active cluster/context and bounded target before
+any authorized mutation, and never infer deployment or deletion permission from
+a request for explanation, planning, or review.
+
 ## When to Activate
 
 Use this skill when working with Uncloud clusters, especially when:

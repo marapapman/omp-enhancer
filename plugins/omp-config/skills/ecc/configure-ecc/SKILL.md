@@ -6,6 +6,17 @@ origin: ECC
 
 # Configure Everything Claude Code (ECC)
 
+## Runtime and authority boundary
+
+Treat target-specific paths, slash commands, hooks, routers, model tiers, SHIP, or auto-fix behavior in this Skill as guidance for an external target system or runtime only if the user explicitly requests that target. For the current OMP session, this Skill does not route, hook, command, gate, control, grant permission, or decide completion; inspection, planning, and read-only review authorize no mutation. Any installation, configuration, file write, command, network call, upload, publication, payment, mutation, or other external effect requires explicit user authorization for the exact target and effect plus current native permission. Preserve fail-closed safety rules inside authorized target work; target safety is not an OMP gate or completion condition.
+
+A request to configure ECC does not authorize the entire procedure as one
+effect. Network clone, installation target creation, host configuration, each
+copied or edited file set, every command, and cleanup deletion are distinct
+effects. Execute each only after its exact user authorization and current
+native permission; otherwise describe the proposed action and stop at the
+authorized boundary. Cleanup is never automatic.
+
 An interactive, step-by-step installation wizard for the Everything Claude Code project. Uses `AskUserQuestion` to guide users through selective installation of skills and rules, then verifies correctness and offers optimization.
 
 ## When to Activate
@@ -25,7 +36,9 @@ This skill must be accessible to Claude Code before activation. Two ways to boot
 
 ## Step 0: Clone ECC Repository
 
-Before any installation, clone the latest ECC source to `/tmp`:
+Only after the user authorizes the exact repository, network clone, replacement
+of the exact `/tmp/everything-claude-code` path, and current native permission,
+use this example:
 
 ```bash
 rm -rf /tmp/everything-claude-code
@@ -55,7 +68,8 @@ Store the choice as `INSTALL_LEVEL`. Set the target directory:
 - Project-level: `TARGET=.claude` (relative to current project root)
 - Both: `TARGET_USER=~/.claude`, `TARGET_PROJECT=.claude`
 
-Create the target directories if they don't exist:
+After the user confirms the exact installation target and authorizes its
+directory writes, create missing directories with native permission:
 ```bash
 mkdir -p $TARGET/skills $TARGET/rules
 ```
@@ -143,8 +157,8 @@ For each selected category, print the full list of skills below and ask the user
 
 | Skill | Description |
 |-------|-------------|
-| `continuous-learning` | Legacy v1 Stop-hook session pattern extraction; prefer `continuous-learning-v2` for new installs |
-| `continuous-learning-v2` | Instinct-based learning with confidence scoring, evolves into skills, agents, and optional legacy command shims |
+| `continuous-learning` | Legacy v1 Stop-hook session pattern extraction; install only when the user explicitly requests legacy Stop-hook compatibility |
+| `continuous-learning-v2` | Default continuous learning: instinct-based learning with confidence scoring that evolves into skills, agents, and optional legacy command shims |
 | `eval-harness` | Formal evaluation framework for eval-driven development (EDD) |
 | `iterative-retrieval` | Progressive context refinement for subagent context problem |
 | `security-review` | Security checklist: auth, input, secrets, API, payment features |
@@ -199,7 +213,8 @@ For each selected category, print the full list of skills below and ask the user
 
 ### 2d: Execute Installation
 
-For each selected skill, copy the entire skill directory from the correct source root:
+After the user confirms the exact selected Skill set, source, destination, and
+copy effect, copy the entire Skill directory with native permission:
 
 ```bash
 # Core skills live under .agents/skills/
@@ -215,7 +230,7 @@ When iterating over globbed source directories, never pass a trailing-slash sour
 cp -R "${src%/}" "$TARGET/skills/$(basename "${src%/}")"
 ```
 
-Note: `continuous-learning` and `continuous-learning-v2` have extra files (config.json, hooks, scripts) — ensure the entire directory is copied, not just SKILL.md.
+Note: `continuous-learning-v2` has extra files (config.json, hooks, scripts) — ensure the entire directory is copied, not just SKILL.md. If the user explicitly selects legacy `continuous-learning`, copy that entire directory too.
 
 ---
 
@@ -232,7 +247,8 @@ Options:
   - "Go" — "Go patterns, table-driven tests, gofmt/staticcheck (5 files)"
 ```
 
-Execute installation:
+After the user confirms the exact selected rule set, source, destination, and
+copy effect, execute the installation with native permission:
 ```bash
 # Common rules
 cp -r $ECC_ROOT/rules/common $TARGET/rules/common
@@ -250,7 +266,8 @@ cp -r $ECC_ROOT/rules/golang $TARGET/rules/golang            # if selected
 
 ## Step 4: Post-Installation Verification
 
-After installation, perform these automated checks:
+After installation, run only the verification commands included in the
+authorized command boundary; otherwise report the proposed checks:
 
 ### 4a: Verify File Existence
 
@@ -317,7 +334,7 @@ Options:
 1. Read each installed SKILL.md
 2. Ask the user what their project's tech stack is (if not already known)
 3. For each skill, suggest removals of irrelevant sections
-4. Edit the SKILL.md files in-place at the installation target (NOT the source repo)
+4. After exact file-set authorization and native permission, edit the SKILL.md files in-place at the installation target (NOT the source repo)
 5. Fix any path issues found in Step 4
 
 ### If optimizing rules:
@@ -327,7 +344,7 @@ Options:
    - Preferred formatting tools
    - Git workflow conventions
    - Security requirements
-3. Edit the rule files in-place at the installation target
+3. After exact file-set authorization and native permission, edit the rule files in-place at the installation target
 
 **Critical**: Only modify files in the installation target (`$TARGET/`), NEVER modify files in the source ECC repository (`$ECC_ROOT/`).
 
@@ -335,7 +352,9 @@ Options:
 
 ## Step 6: Installation Summary
 
-Clean up the cloned repository from `/tmp`:
+Cleanup is optional and separately authorized. Delete only the exact temporary
+clone after explicit user authorization for that deletion and current native
+permission; otherwise leave it in place and report the path:
 
 ```bash
 rm -rf /tmp/everything-claude-code

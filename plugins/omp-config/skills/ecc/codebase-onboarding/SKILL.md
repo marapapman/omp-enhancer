@@ -8,6 +8,16 @@ origin: ECC
 
 Systematically analyze an unfamiliar codebase and produce a structured onboarding guide. Designed for developers joining a new project or setting up Claude Code in an existing repo for the first time.
 
+## Current OMP authority and effects
+
+This Skill supplies a codebase-reading and onboarding method; it grants no
+filesystem, command, network, or host-configuration authority. Read-only
+onboarding returns the guide and a starter `CLAUDE.md` proposal in the response.
+Creating or updating an actual `CLAUDE.md` is a file write. Project commands,
+network access, and every file write each require explicit user authorization
+for the exact target and effect plus current native permission. Example output
+paths and commands are evidence templates, not authorization to execute them.
+
 ## When to Use
 
 - First time opening a project with Claude Code
@@ -169,7 +179,11 @@ Produce two outputs:
 
 #### Output 2: Starter CLAUDE.md
 
-Generate or update a project-specific CLAUDE.md based on detected conventions. If `CLAUDE.md` already exists, read it first and enhance it — preserve existing project-specific instructions and clearly call out what was added or changed.
+When the exact file write is authorized, generate or update a project-specific
+CLAUDE.md based on detected conventions. If `CLAUDE.md` already exists, read it
+first and enhance it while preserving existing project-specific instructions
+and clearly calling out what changed. Without write authorization, return the
+complete proposed content in the response.
 
 ```markdown
 # Project Instructions
@@ -220,7 +234,7 @@ Generate or update a project-specific CLAUDE.md based on detected conventions. I
 ### Example 1: First time in a new repo
 **User**: "Onboard me to this codebase"
 **Action**: Run full 4-phase workflow → produce Onboarding Guide + Starter CLAUDE.md
-**Output**: Onboarding Guide printed directly to the conversation, plus a `CLAUDE.md` written to the project root
+**Output**: Onboarding Guide in the response, plus either an explicitly authorized `CLAUDE.md` write or its complete proposed content
 
 ### Example 2: Generate CLAUDE.md for existing project
 **User**: "Generate a CLAUDE.md for this project"

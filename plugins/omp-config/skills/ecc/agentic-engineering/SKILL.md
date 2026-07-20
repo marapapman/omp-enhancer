@@ -1,63 +1,25 @@
 ---
 name: agentic-engineering
-description: Operate as an agentic engineer using eval-first execution, decomposition, and cost-aware model routing.
-origin: ECC
+description: Use eval-first decomposition, dependency-aware parallel planning, and cost/risk analysis for agent-assisted engineering while preserving the current OMP workflow and authority boundaries.
 ---
 
 # Agentic Engineering
 
-Use this skill for engineering workflows where AI agents perform most implementation work and humans enforce quality and risk controls.
+Build a self-contained plan that makes dependencies, parallel execution, eval design, cost, and risk explicit before implementation.
 
-## Operating Principles
+## Current OMP boundary
 
-1. Define completion criteria before execution.
-2. Decompose work into agent-sized units.
-3. Route model tiers by task complexity.
-4. Measure with evals and regression checks.
+- For a current OMP code task, preserve the existing lifecycle: Main discovers local and relevant external evidence, writes the detailed plan, gives it to plugin `plan`, delegates complete vertical slices through native `task` for task-owned TDD, integrates and records `MAIN REVIEW`, then sends the bounded reviewed diff and evidence to native `reviewer`.
+- This Skill does not choose a model tier, Agent count, fanout, or completion authority. Main chooses among currently exposed Available Agents and native capacity using the loaded workflow and Skill guidance.
+- Do not write a plan file or memory without explicit user authorization. Do not run a command, use git or gh, create a commit, push, or open a PR without explicit user authorization. Every write and external effect keeps its own authorization boundary.
 
-## Eval-First Loop
+## Method
 
-1. Define capability eval and regression eval.
-2. Run baseline and capture failure signatures.
-3. Execute implementation.
-4. Re-run evals and compare deltas.
+1. Define the observable outcome, constraints, non-goals, and acceptance evidence.
+2. Capture a baseline eval and its failure signature before proposing implementation.
+3. Decompose into cohesive, independently verifiable vertical units. Keep each test with its production boundary and name dependencies and non-overlapping write sets.
+4. Place independent units in the same candidate wave and dependent units in later waves. Treat this as plan data; Main makes dispatch decisions from current runtime availability.
+5. For each unit record its dominant risk, cheapest uncertainty-reducing check, focused eval, regression surface, integration point, and estimated cost range.
+6. Compare post-change evals with the baseline. Report regressions, ambiguous evidence, and remaining risk without converting them into a new lifecycle or completion rule.
 
-## Task Decomposition
-
-Apply the 15-minute unit rule:
-- each unit should be independently verifiable
-- each unit should have a single dominant risk
-- each unit should expose a clear done condition
-
-## Model Routing
-
-- Haiku: classification, boilerplate transforms, narrow edits
-- Sonnet: implementation and refactors
-- Opus: architecture, root-cause analysis, multi-file invariants
-
-## Session Strategy
-
-- Continue session for closely-coupled units.
-- Start fresh session after major phase transitions.
-- Compact after milestone completion, not during active debugging.
-
-## Review Focus for AI-Generated Code
-
-Prioritize:
-- invariants and edge cases
-- error boundaries
-- security and auth assumptions
-- hidden coupling and rollout risk
-
-Do not waste review cycles on style-only disagreements when automated format/lint already enforce style.
-
-## Cost Discipline
-
-Track per task:
-- model
-- token estimate
-- retries
-- wall-clock time
-- success/failure
-
-Escalate model tier only when lower tier fails with a clear reasoning gap.
+Review invariants, edge cases, error boundaries, security assumptions, hidden coupling, and rollout risk. Prefer measurable evidence over model prestige, fixed staffing, or repeated unchanged attempts.

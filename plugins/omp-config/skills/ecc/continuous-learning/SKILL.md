@@ -1,14 +1,18 @@
 ---
 name: continuous-learning
-description: "[DEPRECATED - use continuous-learning-v2] Legacy v1 stop-hook skill extractor. v2 is a strict superset with instinct-based, project-scoped, hook-reliable learning. Do not invoke v1; route continuous learning, session learning, and pattern extraction requests to continuous-learning-v2."
+description: "[DEPRECATED - use continuous-learning-v2] Legacy v1 Stop-hook extraction guidance. Use only when the user explicitly requests compatibility work for an existing v1 Stop-hook setup; new continuous-learning design uses the separately available v2 method."
 origin: ECC
 ---
 
 # Continuous Learning Skill - DEPRECATED
 
+## Runtime and authority boundary
+
+Treat target-specific paths, slash commands, hooks, routers, model tiers, SHIP, or auto-fix behavior in this Skill as guidance for an external target system or runtime only if the user explicitly requests that target. For the current OMP session, this Skill does not route, hook, command, gate, control, grant permission, or decide completion; inspection, planning, and read-only review authorize no mutation. Any installation, configuration, file write, command, network call, upload, publication, payment, mutation, or other external effect requires explicit user authorization for the exact target and effect plus current native permission. Preserve fail-closed safety rules inside authorized target work; target safety is not an OMP gate or completion condition.
+
 > **DEPRECATED 2026-04-28.** Use `continuous-learning-v2` instead. v2 is a strict superset: stop-hook observation becomes PreToolUse/PostToolUse observation, full skills become atomic instincts with confidence scoring, and global-only storage becomes project-scoped plus global promotion.
 >
-> This file is kept for archival reference and backward compatibility with existing installs.
+> This file is kept only for archival reference and explicit legacy Stop-hook compatibility.
 
 ---
 
@@ -16,17 +20,13 @@ origin: ECC
 
 Automatically evaluates Claude Code sessions on end to extract reusable patterns that can be saved as learned skills.
 
-## When to Activate
+## Legacy Compatibility Only
 
-- Setting up automatic pattern extraction from Claude Code sessions
-- Configuring the Stop hook for session evaluation
-- Reviewing or curating learned skills in `~/.claude/skills/learned/`
-- Adjusting extraction thresholds or pattern categories
-- Comparing v1 (this) vs v2 (instinct-based) approaches
+Do not select v1 for new continuous-learning work. Use this v1 Skill only for explicit legacy Stop-hook compatibility, such as preserving an existing Stop-hook installation or an older learned-skill workflow.
 
 ## Status
 
-This v1 skill is still supported, but `continuous-learning-v2` is the preferred path for new installs. Keep v1 when you explicitly want the simpler Stop-hook extraction flow or need compatibility with older learned-skill workflows.
+For new continuous-learning work, read `skill://ecc-skill-catalog/continuous-learning-v2/SKILL.md` and use v2.
 
 ## How It Works
 
@@ -128,4 +128,4 @@ Homunculus v2 takes a more sophisticated approach:
 4. **Domain tagging** - code-style, testing, git, debugging, etc.
 5. **Evolution path** - Cluster related instincts into skills/commands
 
-See: `docs/continuous-learning-v2-spec.md` for full spec.
+See `skill://ecc-skill-catalog/continuous-learning-v2/SKILL.md` for the packaged v2 guide.

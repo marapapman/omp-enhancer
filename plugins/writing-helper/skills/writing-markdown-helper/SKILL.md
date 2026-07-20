@@ -5,52 +5,53 @@ description: Draft or directly revise English Markdown when edited prose is the 
 
 # Writing Markdown Helper Skill
 
-Draft or revise academic-style markdown directly within the scope the user authorized. The writer agent works directly, without subagents. Use one focused pass by default. Paragraph-by-paragraph confirmation is an optional interaction mode only when the user explicitly requests it.
+Draft or revise academic-style markdown within the scope the user authorized. Use one focused pass by default. Paragraph-by-paragraph confirmation is an optional interaction mode only when the user explicitly requests it.
+
+## Executor Boundary
+
+This Skill body is the assigned writer child's bounded local method after Main selects the workflow and Skill. It does not select or dispatch Agents. The writer's local self-check does not replace the independent checker. Main owns the parent TODO, finding disposition, integration, final verification, and user-visible delivery. When no matching writer is available, capacity is unavailable, or a safe complete assignment cannot be formed, Main records the limitation and may use the workflow's safe direct fallback.
+
+This writer child is always proposal-only. Return complete proposed text, using
+SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer. Main
+retains permission decisions and actual file changes. Do not create or persist
+the Markdown target or auxiliary workflow files.
 
 ## When to Use
 
 - User wants to draft or revise an English markdown document
 - User explicitly requests paragraph-by-paragraph or line-by-line review
 
-## Default Direct Workflow
+## Default Writer Workflow
 
 For ordinary requests such as "polish the abstract" or "revise this section":
 
-1. Read the exact target text and only the nearby context required for the edit.
-   Do not repeat a successful complete read before editing unless it contains
+1. Read the exact target text and only the nearby context required for the revision.
+   Do not repeat a successful complete read before drafting unless it contains
    an explicit truncation marker or an incomplete requested range.
-2. Apply the requested revision directly under the existing user authorization.
+2. Return the complete proposed revision or a bounded patch to Main.
 3. Review meaning, structure, citations, and formatting once.
 4. Report material limitations. Do not require a new confirmation merely because this skill was loaded.
 
-Before editing, record semantic anchors: frequency and intensity qualifiers,
+Before revising, record semantic anchors: frequency and intensity qualifiers,
 modality, scope, negation, comparison and causal direction, numbers and units,
 citations and identifiers, and LaTeX math, cross-references, commands, and
 structure. Preserve them unless the user or evidence explicitly authorizes a
 change. Compare source and result once. Report drift without starting another
-rewrite automatically. For a read-only task, return the proposed revision in
-the final response and do not create workflow files.
+rewrite automatically. Compare the complete proposed result with the source once.
 
 An explicit edit request normally calls for at least one concrete,
 meaning-preserving improvement when the source contains a correctable defect.
 Semantic anchors protect their meaning; they do not freeze all surrounding
 wording. If one candidate would alter an anchor, discard that candidate and
-look for a safe lexical or structural edit outside the anchors. Leave the file
-unchanged only when no such improvement exists, and report that limitation
+look for a safe lexical or structural revision outside the anchors. Return the
+source unchanged only when no such improvement exists, and report that limitation
 without performing extra verification reads.
 
 Evaluate candidates independently. Before returning a no-op, check at least
 one anchor-neutral correction for duplication, grammar, collocation, or
 redundant wording. Rejecting one unsafe candidate rejects only that candidate;
 for example, one occurrence of an accidentally repeated adjacent word can be
-removed when the remaining occurrence preserves the meaning. Run the single
-verification read only after a successful edit result.
-
-For a `.tex` target, preserve valid LaTeX escaping as part of the anchor. A
-percentage is written as `\%`; never turn it into a bare `%` comment marker.
-After the single verification read, report every observed change accurately,
-including escaping or formatting changes, and keep the user-facing result
-concise. Do not claim that only one word changed if the file diff shows more.
+removed when the remaining occurrence preserves the meaning.
 
 Use the fine-mode workflow below only when the user asks for interactive approval at each paragraph or when a genuinely material ambiguity requires a choice.
 
@@ -107,13 +108,13 @@ Ask: *"Accept, Modify (provide feedback), or Rewrite completely?"*
 
 In user-requested fine mode, wait for the response.
 
-### Step 5: Apply & Loop
+### Step 5: Handoff & Loop
 
-- **Accept**: Edit `paper.md` to insert the new `######` node under the target section. Return to Step 2.
+- **Accept**: Return a bounded insertion patch for the new `######` node to Main. Return to Step 2.
 - **Modify**: Take the user's feedback, revise the paragraph, and re-present (back to Step 4).
 - **Rewrite**: Discard and draft anew (back to Step 3).
 
-When fine mode was explicitly requested, do not auto-advance to the next paragraph without confirmation at Steps 1, 2, and 4. In the default direct workflow, complete the requested scope in one focused pass.
+When fine mode was explicitly requested, do not auto-advance to the next paragraph without confirmation at Steps 1, 2, and 4. In the default writer workflow, complete the requested scope in one focused pass.
 
 ## Anti-Patterns
 

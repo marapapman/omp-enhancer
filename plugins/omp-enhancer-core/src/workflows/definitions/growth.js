@@ -1,7 +1,7 @@
 export const growthWorkflows = [
   {
     "id": "marketing.campaign",
-    "chooseWhen": "The user wants an evidence-backed multi-channel campaign plan or campaign content tied to a product, audience, positioning, claims, language, and review process.",
+    "chooseWhen": "An evidence-backed multi-channel campaign plan or content is requested for a defined product, audience, positioning, claims, and language.",
     "composeWith": [
       "research.web",
       "factcheck.document",
@@ -38,10 +38,15 @@ export const growthWorkflows = [
       }
     ],
     "scopeNotes": [
-      "The workflow owns campaign structure but has no language-neutral marketing Agent; use exact roles inherited from the selected research, fact-check, writing, slide, or visual workflow.",
+      "The workflow owns campaign structure; task may own a complete bounded channel slice, but prefer exact domain roles inherited from the selected research, fact-check, writing, slide, or visual workflow.",
       "Content creation is not permission to send email, post to social platforms, buy ads, or publish a site."
     ],
     "skills": [
+      "marketing-campaign",
+      "market-research",
+      "brand-voice"
+    ],
+    "catalogSkills": [
       "marketing-campaign",
       "market-research",
       "brand-voice"
@@ -52,16 +57,18 @@ export const growthWorkflows = [
     "riskNotes": [
       "Unsupported claims, fabricated urgency, privacy-sensitive targeting, and unapproved publication can create legal and reputational harm."
     ],
-    "roles": [],
+    "roles": [
+      "task"
+    ],
     "delegation": [
       "steps-1-3: keep campaign scope, positioning, claim boundaries, and workflow composition with the parent",
-      "steps-2-5: use only exact roles inherited from composed research.web, factcheck.document, writing.zh, writing.en, slides.generate, or design.visual workflows",
+      "steps-2-5: task owns one complete bounded channel deliverable and evidence slice only when no composed domain Agent is a closer match; a composed domain Agent is preferred when its workflow owns the requested research, fact-check, prose, slide, or visual method",
       "step-6: the parent reconciles facts, language, channel scope, artifacts, and publication boundaries"
     ]
   },
   {
     "id": "seo.audit",
-    "chooseWhen": "The user wants an evidence-backed technical, on-page, structured-data, performance, or content-intent SEO audit without implicit remediation or publication.",
+    "chooseWhen": "An evidence-backed technical, on-page, structured-data, performance, or content-intent SEO audit is requested without implicit remediation.",
     "composeWith": [
       "research.web",
       "factcheck.document",
@@ -92,10 +99,14 @@ export const growthWorkflows = [
       }
     ],
     "scopeNotes": [
-      "Keep the audit with the parent and use exact roles only through composed research, review, test, writing, performance, or visual workflows.",
+      "Main owns audit scope and final synthesis; task may own a complete bounded URL slice, but prefer exact domain roles from composed research, writing, or visual workflows when they match.",
       "SEO recommendations do not authorize site edits, deployment, analytics changes, outreach, or publication."
     ],
     "skills": [
+      "seo",
+      "benchmark"
+    ],
+    "catalogSkills": [
       "seo",
       "benchmark"
     ],
@@ -105,9 +116,11 @@ export const growthWorkflows = [
     "riskNotes": [
       "Search-engine behavior and third-party metrics change over time; label estimates and retrieve current primary evidence where material."
     ],
-    "roles": [],
+    "roles": [
+      "task"
+    ],
     "delegation": [
-      "steps-1-4: keep SEO synthesis with the parent and compose research.web, writing.zh, writing.en, or design.visual before using their exact roles",
+      "steps-1-4: task owns one complete bounded URL and evidence slice only when no composed domain Agent is a closer match; a composed domain Agent is preferred when its workflow owns the requested research, prose, or visual method",
       "step-5: the parent reconciles crawl, index, render, performance, language, and evidence limitations"
     ]
   }

@@ -11,6 +11,35 @@ const CLAIM_CATEGORY_RULES = [
 
 const HIGH_RISK_PATTERN = /(?:medical|clinical|health|drug|dose|legal|law|policy|financial|investment|stock|crypto|safety|security|医学|临床|药物|剂量|法律|法规|政策|金融|投资|股票|加密|安全)/iu;
 const CURRENT_CLAIM_PATTERN = /\b(?:currently|current|latest|today|now|presently|as of)\b|(?:当前|目前|最新|现在|今天|截至|现任|本年度)/iu;
+const CANONICAL_TUPLE_FIELDS = [
+  'subject',
+  'basePredicate',
+  'objectValue',
+  'scope',
+  'timeVersion',
+  'quantifier',
+];
+export const FACT_ASSESSMENT_CONTRACT = Object.freeze({
+  tupleMaterialities: Object.freeze(['MATERIAL', 'NOT_APPLICABLE']),
+  tupleRelations: Object.freeze(['ENTAILS', 'NEGATES', 'ADJACENT', 'UNKNOWN']),
+  negatedFields: Object.freeze(['BASE_PREDICATE', 'OBJECT_VALUE']),
+  strengths: Object.freeze(['PROVEN', 'DISPROVED', 'LIKELY', 'HYPOTHESIS']),
+  limitationLevels: Object.freeze(['NONE', 'NON_MATERIAL', 'MATERIAL']),
+  countercheckStatuses: Object.freeze(['NOT_REQUIRED', 'COMPLETED', 'INCONCLUSIVE', 'UNAVAILABLE']),
+  countercheckOutcomes: Object.freeze([
+    'NOT_APPLICABLE',
+    'NO_DISCONFIRMING_EVIDENCE',
+    'DISCONFIRMING_EVIDENCE',
+    'NO_RESULT',
+  ]),
+});
+const TUPLE_MATERIALITIES = new Set(FACT_ASSESSMENT_CONTRACT.tupleMaterialities);
+const TUPLE_RELATIONS = new Set(FACT_ASSESSMENT_CONTRACT.tupleRelations);
+const NEGATED_FIELDS = new Set(FACT_ASSESSMENT_CONTRACT.negatedFields);
+const EVIDENCE_STRENGTHS = new Set(FACT_ASSESSMENT_CONTRACT.strengths);
+const LIMITATION_LEVELS = new Set(FACT_ASSESSMENT_CONTRACT.limitationLevels);
+const COUNTERCHECK_STATUSES = new Set(FACT_ASSESSMENT_CONTRACT.countercheckStatuses);
+const COUNTERCHECK_OUTCOMES = new Set(FACT_ASSESSMENT_CONTRACT.countercheckOutcomes);
 
 export function normalizeWhitespace(value = '') {
   return String(value ?? '').replace(/\s+/gu, ' ').trim();
@@ -18,6 +47,90 @@ export function normalizeWhitespace(value = '') {
 
 export function normalizeDoi(value = '') {
   return normalizeWhitespace(value).replace(/^https?:\/\/(?:dx\.)?doi\.org\//iu, '').replace(/[),.;]+$/u, '').toLowerCase();
+}
+
+export function normalizeClaimTuple(tuple = {}) {
+  return Object.fromEntries(CANONICAL_TUPLE_FIELDS.map((field) => [
+    field,
+    normalizeTupleField(tuple?.[field]),
+  ]));
+}
+
+export function normalizeEvidenceTuple(tuple = {}) {
+  const normalized = {
+    ...normalizeClaimTuple(tuple),
+    relation: String(tuple?.relation ?? '').toUpperCase(),
+  };
+  const negatedField = String(tuple?.negatedField ?? '').toUpperCase();
+  if (negatedField) normalized.negatedField = negatedField;
+  return normalized;
+}
+
+export function isValidClaimTuple(tuple) {
+  return tuple && typeof tuple === 'object' && !Array.isArray(tuple)
+    && CANONICAL_TUPLE_FIELDS.every((field) => isValidTupleField(tuple[field]));
+}
+
+export function isValidEvidenceTuple(tuple) {
+  if (!isValidClaimTuple(tuple) || !TUPLE_RELATIONS.has(String(tuple.relation ?? '').toUpperCase())) return false;
+  const relation = String(tuple.relation).toUpperCase();
+  const negatedField = String(tuple.negatedField ?? '').toUpperCase();
+  return relation === 'NEGATES'
+    ? NEGATED_FIELDS.has(negatedField)
+    : !negatedField;
+}
+
+export function isValidStrength(value) {
+  return EVIDENCE_STRENGTHS.has(String(value ?? '').toUpperCase());
+}
+
+export function isValidLimitation(value) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    && LIMITATION_LEVELS.has(String(value.level ?? '').toUpperCase())
+    && (value.reason === undefined || typeof value.reason === 'string');
+}
+
+export function isValidCountercheck(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const status = String(value.status ?? '').toUpperCase();
+  const outcome = String(value.outcome ?? '').toUpperCase();
+  if (!COUNTERCHECK_STATUSES.has(status) || !COUNTERCHECK_OUTCOMES.has(outcome)) return false;
+  if (value.note !== undefined && typeof value.note !== 'string') return false;
+  if (status === 'COMPLETED') {
+    return outcome === 'NO_DISCONFIRMING_EVIDENCE' || outcome === 'DISCONFIRMING_EVIDENCE';
+  }
+  if (status === 'NOT_REQUIRED') return outcome === 'NOT_APPLICABLE';
+  return outcome === 'NO_RESULT';
+}
+
+export function formatCanonicalTuple(tuple = {}) {
+  const normalized = normalizeClaimTuple(tuple);
+  const labels = {
+    subject: 'subject',
+    basePredicate: 'base-predicate',
+    objectValue: 'object-value',
+    scope: 'scope',
+    timeVersion: 'time-version',
+    quantifier: 'quantifier',
+  };
+  return CANONICAL_TUPLE_FIELDS.map((field) => (
+    `${labels[field]}=${normalized[field].value || 'none'} [${normalized[field].materiality || 'UNKNOWN'}]`
+  )).join('; ');
+}
+
+function normalizeTupleField(field = {}) {
+  return {
+    value: normalizeWhitespace(field?.value ?? ''),
+    materiality: String(field?.materiality ?? '').toUpperCase(),
+  };
+}
+
+function isValidTupleField(field) {
+  if (!field || typeof field !== 'object' || Array.isArray(field)) return false;
+  const materiality = String(field.materiality ?? '').toUpperCase();
+  return TUPLE_MATERIALITIES.has(materiality)
+    && typeof field.value === 'string'
+    && (materiality !== 'MATERIAL' || Boolean(normalizeWhitespace(field.value)));
 }
 
 function extractFactClaims({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } = {}) {
@@ -44,14 +157,21 @@ function extractFactClaims({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } = {}) {
   return claims;
 }
 
-export function buildFactCheckPlan({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } = {}) {
+export function buildFactCheckPlan({
+  text = '',
+  maxClaims = DEFAULT_MAX_CLAIMS,
+  crossCheckRequested = false,
+} = {}) {
   const allClaims = extractFactClaims({ text, maxClaims: Number.POSITIVE_INFINITY });
   const claims = allClaims.slice(0, normalizeMaxClaims(maxClaims));
   const highPriority = allClaims.filter((claim) => claim.priority === 'high').length;
   return {
     claims,
     riskLevel: highPriority > 0 ? 'high' : allClaims.length > 2 ? 'standard' : 'low',
-    requiredStages: requiredStagesFor({ claims: allClaims }),
+    requiredStages: requiredStagesFor({
+      claims: allClaims,
+      crossCheckRequested: crossCheckRequested === true,
+    }),
   };
 }
 
@@ -112,12 +232,17 @@ export function crossCheckEvidence({ claims = [], evidenceRecords = [] } = {}) {
     const laneB = laneStatus(laneBRecords);
     const conflicts = conflictFields(laneARecords, laneBRecords, claim);
     const baseStatus = crossCheckStatus(laneA, laneB);
+    const gaps = [
+      ...(!laneARecords.length ? ['FACT_EVIDENCE_A not supplied'] : []),
+      ...(!laneBRecords.length ? ['FACT_EVIDENCE_B not supplied'] : []),
+    ];
     return {
       claimId: claim.id,
       status: conflicts.length > 0 && baseStatus === 'AGREED' ? 'CONFLICTED' : baseStatus,
       laneA,
       laneB,
       conflicts,
+      gaps,
       findings: hasStaleFinding(records) ? ['STALE_EVIDENCE'] : [],
     };
   });
@@ -134,11 +259,13 @@ export function buildFactCheckReport({ claims = [], evidenceRecords = [], crossC
     return {
       claimId: claim.id,
       claim: claim.text,
+      claimTuple: claim.claimTuple ? normalizeClaimTuple(claim.claimTuple) : undefined,
       category: claim.category,
       priority: claim.priority,
       verdict,
       strictVerdict: strict.verdict,
       strictReasons: strict.reasons,
+      strictAssessment: strict,
       crossCheck: cross?.status ?? 'NOT_RUN',
       evidence: records.map((record) => ({
         lane: record.lane,
@@ -150,6 +277,10 @@ export function buildFactCheckReport({ claims = [], evidenceRecords = [], crossC
         freshness: record.freshness,
         requirementsMet: record.requirementsMet,
         sourceLineage: record.sourceLineage,
+        evidenceTuple: record.evidenceTuple ? normalizeEvidenceTuple(record.evidenceTuple) : undefined,
+        strength: record.strength === undefined ? undefined : normalizeStrength(record.strength),
+        limitation: record.limitation ? normalizeLimitation(record.limitation) : undefined,
+        countercheck: record.countercheck ? normalizeCountercheck(record.countercheck) : undefined,
         observed: record.observed,
       })),
     };
@@ -174,10 +305,22 @@ export function formatFactCheckReport(report = {}) {
       `  strict-verdict: ${result.strictVerdict ?? result.verdict}`,
       ...(result.strictReasons?.length ? [`  strict-reasons: ${result.strictReasons.join('; ')}`] : []),
       `  claim: ${result.claim}`,
+      ...(result.claimTuple ? [`  claim-tuple: ${formatCanonicalTuple(result.claimTuple)}`] : []),
       `  cross-check: ${result.crossCheck}`,
-      `  evidence: ${result.evidence.length ? result.evidence.map((item) => `${item.lane ?? '?'}:${item.provider}:${item.status}`).join('; ') : 'none'}`,
+      `  evidence: ${result.evidence.length ? result.evidence.map(formatReportEvidenceSummary).join('; ') : 'none'}`,
+      ...result.evidence.flatMap((item) => [
+        item.limitation ? `  evidence-limitation-${item.lane ?? '?'}: ${item.limitation.level}${item.limitation.reason ? ` - ${item.limitation.reason}` : ''}` : null,
+        item.countercheck ? `  countercheck-${item.lane ?? '?'}: ${item.countercheck.status}/${item.countercheck.outcome}${item.countercheck.note ? ` - ${item.countercheck.note}` : ''}` : null,
+      ].filter(Boolean)),
     ]),
   ].join('\n');
+}
+
+function formatReportEvidenceSummary(item = {}) {
+  const assessment = item.evidenceTuple?.relation && item.strength
+    ? `:${item.evidenceTuple.relation}/${item.strength}`
+    : '';
+  return `${item.lane ?? '?'}:${item.provider}:${item.status}${assessment}`;
 }
 
 export function validateFactCheckReview({
@@ -246,13 +389,13 @@ function freshnessRequirementFor(text = '') {
   return CURRENT_CLAIM_PATTERN.test(text) ? 'CURRENT' : 'NOT_APPLICABLE';
 }
 
-function requiredStagesFor({ claims = [] } = {}) {
+function requiredStagesFor({ claims = [], crossCheckRequested = false } = {}) {
   const highRisk = claims.some((claim) => claim.priority === 'high');
-  const multiClaim = claims.length > 2;
+  const broad = claims.length > 2;
   return [
     'fact-planner',
-    highRisk || multiClaim ? 'fact-researcher-a' : 'main-agent evidence pass',
-    highRisk || multiClaim ? 'fact-researcher-b' : 'optional second evidence pass',
+    'fact-researcher-a',
+    ...(broad || highRisk || crossCheckRequested ? ['fact-researcher-b'] : []),
     'fact-cross-checker',
     'fact-reviewer',
   ];
@@ -286,6 +429,30 @@ function normalizeEvidenceRecord(record = {}, claim = {}, lane = 'A') {
     freshness: normalizeFreshness(record.freshness),
     requirementsMet: record.requirementsMet === true,
     sourceLineage: normalizeWhitespace(record.sourceLineage ?? ''),
+    evidenceTuple: record.evidenceTuple ? normalizeEvidenceTuple(record.evidenceTuple) : undefined,
+    strength: record.strength === undefined ? undefined : normalizeStrength(record.strength),
+    limitation: record.limitation ? normalizeLimitation(record.limitation) : undefined,
+    countercheck: record.countercheck ? normalizeCountercheck(record.countercheck) : undefined,
+  };
+}
+
+function normalizeStrength(value) {
+  const normalized = String(value ?? '').toUpperCase();
+  return EVIDENCE_STRENGTHS.has(normalized) ? normalized : '';
+}
+
+function normalizeLimitation(value = {}) {
+  return {
+    level: String(value?.level ?? '').toUpperCase(),
+    reason: normalizeWhitespace(value?.reason ?? ''),
+  };
+}
+
+function normalizeCountercheck(value = {}) {
+  return {
+    status: String(value?.status ?? '').toUpperCase(),
+    outcome: String(value?.outcome ?? '').toUpperCase(),
+    note: normalizeWhitespace(value?.note ?? ''),
   };
 }
 
@@ -389,6 +556,8 @@ function strictClaimAssessment({ claim = {}, evidenceRecords = [], crossCheck } 
     if (!freshnessRequirementSatisfied(claim, directContradicted)) {
       return { verdict: 'INSUFFICIENT', reasons: ['current evidence is required for this time-sensitive claim'] };
     }
+    const semanticFailure = strictContradictionFailure(claim, directContradicted);
+    if (semanticFailure) return { verdict: 'INSUFFICIENT', reasons: [semanticFailure] };
     return { verdict: 'CONTRADICTED', reasons: [] };
   }
   if (compatibilityVerdict === 'UNVERIFIABLE') {
@@ -417,6 +586,8 @@ function strictClaimAssessment({ claim = {}, evidenceRecords = [], crossCheck } 
   if (new Set(directEvidence.map(evidenceLane)).size < 2) {
     return { verdict: 'INSUFFICIENT', reasons: ['independent direct-evidence lane agreement is missing'] };
   }
+  const semanticFailure = strictSupportFailure(claim, directEvidence);
+  if (semanticFailure) return { verdict: 'INSUFFICIENT', reasons: [semanticFailure] };
   if (!freshnessRequirementSatisfied(claim, directEvidence)) {
     return { verdict: 'INSUFFICIENT', reasons: ['current evidence is required for this time-sensitive claim'] };
   }
@@ -442,6 +613,82 @@ function strictClaimAssessment({ claim = {}, evidenceRecords = [], crossCheck } 
   }
 
   return { verdict: 'SUPPORTED', reasons: [] };
+}
+
+function strictSupportFailure(claim = {}, records = []) {
+  if (!isValidClaimTuple(claim.claimTuple)) return 'a valid exact claim tuple is required';
+  for (const record of records) {
+    if (!isValidEvidenceTuple(record.evidenceTuple)) return 'a valid exact evidence tuple is required';
+    if (String(record.evidenceTuple.relation).toUpperCase() !== 'ENTAILS') {
+      return 'support requires same-tuple ENTAILS evidence';
+    }
+    if (!materialTupleFieldsMatch(claim.claimTuple, record.evidenceTuple)) {
+      return 'evidence does not match every material claim-tuple field';
+    }
+    if (normalizeStrength(record.strength) !== 'PROVEN') {
+      return 'strict support requires PROVEN evidence strength';
+    }
+    if (!isValidLimitation(record.limitation)) return 'a structured limitation assessment is required';
+    if (String(record.limitation.level).toUpperCase() === 'MATERIAL') {
+      return 'a material limitation prevents a definitive verdict';
+    }
+    if (record.countercheck !== undefined && !isValidCountercheck(record.countercheck)) {
+      return 'a supplied countercheck must use a valid status/outcome pair';
+    }
+    const countercheck = record.countercheck ? normalizeCountercheck(record.countercheck) : null;
+    if (countercheck?.outcome === 'DISCONFIRMING_EVIDENCE') {
+      return 'a disconfirming countercheck prevents strict support';
+    }
+    if (String(claim.priority ?? '').toLowerCase() === 'high'
+      && (countercheck?.status !== 'COMPLETED'
+        || countercheck?.outcome !== 'NO_DISCONFIRMING_EVIDENCE')) {
+      return 'high-priority strict support requires a completed non-disconfirming countercheck';
+    }
+  }
+  return '';
+}
+
+function strictContradictionFailure(claim = {}, records = []) {
+  if (!isValidClaimTuple(claim.claimTuple)) return 'a valid exact claim tuple is required';
+  for (const record of records) {
+    if (!isValidEvidenceTuple(record.evidenceTuple)) return 'a valid exact evidence tuple is required';
+    if (String(record.evidenceTuple.relation).toUpperCase() !== 'NEGATES'
+      || !NEGATED_FIELDS.has(String(record.evidenceTuple.negatedField).toUpperCase())) {
+      return 'contradiction requires same-tuple NEGATES evidence with a valid negated field';
+    }
+    if (!materialTupleFieldsMatch(claim.claimTuple, record.evidenceTuple)) {
+      return 'contradicting evidence does not identify the same material claim tuple';
+    }
+    if (normalizeStrength(record.strength) !== 'DISPROVED') {
+      return 'strict contradiction requires DISPROVED evidence strength';
+    }
+    if (!isValidLimitation(record.limitation)
+      || String(record.limitation.level).toUpperCase() === 'MATERIAL') {
+      return 'a missing or material limitation prevents a definitive contradiction';
+    }
+    if (record.countercheck !== undefined && !isValidCountercheck(record.countercheck)) {
+      return 'a supplied countercheck must use a valid status/outcome pair';
+    }
+    if (String(claim.priority ?? '').toLowerCase() === 'high'
+      && normalizeCountercheck(record.countercheck).status !== 'COMPLETED') {
+      return 'high-priority strict contradiction requires a completed countercheck';
+    }
+  }
+  return '';
+}
+
+function materialTupleFieldsMatch(claimTuple = {}, evidenceTuple = {}) {
+  const claim = normalizeClaimTuple(claimTuple);
+  const evidence = normalizeClaimTuple(evidenceTuple);
+  return CANONICAL_TUPLE_FIELDS.every((field) => {
+    if (claim[field].materiality !== 'MATERIAL') return true;
+    return evidence[field].materiality === 'MATERIAL'
+      && canonicalTupleValue(evidence[field].value) === canonicalTupleValue(claim[field].value);
+  });
+}
+
+function canonicalTupleValue(value) {
+  return normalizeWhitespace(value).toLocaleLowerCase('en-US');
 }
 
 function everyClaimedLaneHasDirectEvidence(records = [], directRecords = []) {

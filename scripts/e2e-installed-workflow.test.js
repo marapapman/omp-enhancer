@@ -14,6 +14,7 @@ import {
   summarizeWorkflowEvents,
 } from './e2e/workflow-events.mjs';
 import {
+  attributeFixtureMutations,
   createMonotonicDuration,
   createBoundedNdjsonCapture,
   assertNoProjectPluginConflicts,
@@ -1423,6 +1424,267 @@ test('workflow evaluation can require successful observed Skill reads before pro
   assert.equal(failedRead.pass, false);
 });
 
+test('workflow summary observes bare reads of declared Skill URIs and unsupported Advisor absence claims', () => {
+  const summary = summarizeWorkflowEvents([
+    { type: 'agent_start' },
+    assistantToolMessage([
+      { id: 'workflow-index', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows' } },
+    ]),
+    successfulToolEnd('workflow-index', 'read', '---\nname: omp-enhancer-workflows\n---'),
+    assistantToolMessage([
+      { id: 'bare-skill-read', name: 'read', arguments: { path: 'zh-writing-polish' } },
+    ], [
+      'WORKFLOW PLAN',
+      'Primary: writing.zh',
+      'Add-ons: none',
+      'Skills: skill://plain-chinese-writing, skill://zh-writing-polish',
+      'Load order: skill://plain-chinese-writing, skill://zh-writing-polish, skill://omp-enhancer-workflows/references/writing.zh.md',
+      'Actions:',
+      '1. Load the Chinese writing Skills and apply their exact preservation rules.',
+    ].join('\n')),
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'bare-skill-read',
+      toolName: 'read',
+      result: { isError: true, content: [{ type: 'text', text: 'File not found: zh-writing-polish' }] },
+    },
+    {
+      type: 'message_end',
+      message: {
+        role: 'custom',
+        customType: 'advisor',
+        content: '项目中不存在 `zh-writing-polish`（`.agents/skills/` 目录已核实）。',
+        display: true,
+      },
+    },
+    {
+      type: 'message_end',
+      message: {
+        role: 'custom',
+        customType: 'advisor',
+        content: 'Correction: `zh-writing-polish` is not missing; the earlier project-path read was misaddressed.',
+        display: true,
+      },
+    },
+    {
+      type: 'message_end',
+      message: {
+        role: 'custom',
+        customType: 'advisor',
+        content: '补充：`zh-writing-polish` 并非不存在；不能用项目目录代表全局清单。',
+        display: true,
+      },
+    },
+    { type: 'agent_end' },
+  ], { exitCode: 0 });
+
+  assert.deepEqual(summary.observedSkills, ['omp-enhancer-workflows']);
+  assert.deepEqual(summary.misaddressedDeclaredSkillReads, [{
+    callId: 'bare-skill-read',
+    declaredUri: 'skill://zh-writing-polish',
+    skill: 'zh-writing-polish',
+    target: 'zh-writing-polish',
+    eventIndex: 3,
+    completionEventIndex: 4,
+    completed: true,
+    isError: true,
+  }]);
+  assert.deepEqual(summary.unsupportedAdvisorSkillAbsenceClaims, [{
+    skill: 'zh-writing-polish',
+    declaredUri: 'skill://zh-writing-polish',
+    eventIndex: 5,
+    reason: 'no-prior-exact-skill-uri-resolver-failure',
+  }]);
+
+  const evaluation = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredObservedSkills: ['zh-writing-polish'],
+    requiredExactSkillUrisBeforeProjectTools: ['skill://zh-writing-polish'],
+    forbidMisaddressedDeclaredSkillReads: true,
+    forbidUnsupportedAdvisorSkillAbsenceClaims: true,
+  });
+  assert.equal(evaluation.pass, false);
+  assert.match(evaluation.failures.join('\n'), /required observed skill was not read successfully: zh-writing-polish/iu);
+  assert.match(evaluation.failures.join('\n'), /required exact Skill URI was not read successfully before project tools: skill:\/\/zh-writing-polish/iu);
+  assert.match(evaluation.failures.join('\n'), /misaddressed declared Skill read.*zh-writing-polish/iu);
+  assert.match(evaluation.failures.join('\n'), /unsupported Advisor Skill absence claim.*zh-writing-polish/iu);
+});
+
+test('Advisor Skill availability notes accept only a prior exact declared URI resolver failure', () => {
+  const summary = summarizeWorkflowEvents([
+    { type: 'agent_start' },
+    assistantToolMessage([
+      { id: 'workflow-index', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows' } },
+    ]),
+    successfulToolEnd('workflow-index', 'read', '---\nname: omp-enhancer-workflows\n---'),
+    assistantToolMessage([
+      { id: 'exact-skill-read', name: 'read', arguments: { path: 'skill://zh-writing-polish' } },
+    ], [
+      'WORKFLOW PLAN',
+      'Primary: writing.zh',
+      'Add-ons: none',
+      'Skills: skill://zh-writing-polish',
+      'Load order: skill://zh-writing-polish, skill://omp-enhancer-workflows/references/writing.zh.md',
+      'Actions:',
+      '1. Load the exact Skill URI before applying the writing workflow.',
+    ].join('\n')),
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'exact-skill-read',
+      toolName: 'read',
+      result: { isError: true, content: [{ type: 'text', text: 'Skill resolver could not load skill://zh-writing-polish' }] },
+    },
+    {
+      type: 'message_end',
+      message: {
+        role: 'custom',
+        customType: 'advisor',
+        content: 'Availability note: `zh-writing-polish` is unavailable after the exact Skill URI resolver failed.',
+        display: true,
+      },
+    },
+    { type: 'agent_end' },
+  ], { exitCode: 0 });
+
+  assert.deepEqual(summary.misaddressedDeclaredSkillReads, []);
+  assert.deepEqual(summary.unsupportedAdvisorSkillAbsenceClaims, []);
+  assert.equal(evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    forbidMisaddressedDeclaredSkillReads: true,
+    forbidUnsupportedAdvisorSkillAbsenceClaims: true,
+  }).pass, true);
+});
+
+test('bare Skill read diagnostics accept exact nested URIs revealed by a loaded declared catalog', () => {
+  const summary = summarizeWorkflowEvents([
+    assistantToolMessage([
+      { id: 'workflow-index', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows' } },
+    ]),
+    successfulToolEnd('workflow-index', 'read', '---\nname: omp-enhancer-workflows\n---'),
+    assistantToolMessage([
+      { id: 'skill-catalog', name: 'read', arguments: { path: 'skill://ecc-skill-catalog' } },
+    ], [
+      'WORKFLOW PLAN',
+      'Primary: writing.zh',
+      'Add-ons: none',
+      'Skills: skill://ecc-skill-catalog',
+      'Load order: skill://ecc-skill-catalog, skill://omp-enhancer-workflows/references/writing.zh.md',
+      'Actions:',
+      '1. Load the declared catalog and any exact nested Skill URI it reveals.',
+    ].join('\n')),
+    successfulToolEnd(
+      'skill-catalog',
+      'read',
+      [
+        '---',
+        'name: ecc-skill-catalog',
+        'description: On-demand index for nested guides.',
+        '---',
+        '# ECC Skill catalog',
+        'Nested resource: skill://ecc-skill-catalog/zh-writing-polish/SKILL.md',
+      ].join('\n'),
+    ),
+    assistantToolMessage([
+      { id: 'bare-nested-skill', name: 'read', arguments: { path: 'zh-writing-polish' } },
+    ]),
+  ]);
+
+  assert.deepEqual(summary.misaddressedDeclaredSkillReads, [{
+    callId: 'bare-nested-skill',
+    declaredUri: 'skill://ecc-skill-catalog/zh-writing-polish/SKILL.md',
+    skill: 'zh-writing-polish',
+    target: 'zh-writing-polish',
+    eventIndex: 4,
+    completionEventIndex: null,
+    completed: false,
+    isError: null,
+  }]);
+});
+
+test('ordinary loaded Skills can expose exact same-namespace linked resource URIs', () => {
+  const summary = summarizeWorkflowEvents([
+    assistantToolMessage([
+      { id: 'workflow-index', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows' } },
+    ]),
+    successfulToolEnd('workflow-index', 'read', '---\nname: omp-enhancer-workflows\n---'),
+    assistantToolMessage([
+      { id: 'ordinary-skill', name: 'read', arguments: { path: 'skill://ordinary-writing-skill' } },
+    ], [
+      'WORKFLOW PLAN',
+      'Primary: writing.zh',
+      'Add-ons: none',
+      'Skills: skill://ordinary-writing-skill',
+      'Load order: skill://ordinary-writing-skill, skill://omp-enhancer-workflows/references/writing.zh.md',
+      'Actions:',
+      '1. Load the declared writing Skill before the workflow reference.',
+    ].join('\n')),
+    successfulToolEnd(
+      'ordinary-skill',
+      'read',
+      [
+        '---',
+        'name: ordinary-writing-skill',
+        'description: Applies a focused writing method.',
+        '---',
+        '# Ordinary writing skill',
+        'Related resource: skill://ordinary-writing-skill/other-writing-skill/SKILL.md',
+      ].join('\n'),
+    ),
+    assistantToolMessage([
+      { id: 'bare-related-skill', name: 'read', arguments: { path: 'other-writing-skill' } },
+    ]),
+  ]);
+
+  assert.deepEqual(summary.misaddressedDeclaredSkillReads, [{
+    callId: 'bare-related-skill',
+    declaredUri: 'skill://ordinary-writing-skill/other-writing-skill/SKILL.md',
+    skill: 'other-writing-skill',
+    target: 'other-writing-skill',
+    eventIndex: 4,
+    completionEventIndex: null,
+    completed: false,
+    isError: null,
+  }]);
+});
+
+test('bare Skill read diagnostics ignore ambiguous nested resources with the same leaf', () => {
+  const summary = summarizeWorkflowEvents([
+    assistantToolMessage([
+      { id: 'workflow-index', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows' } },
+    ]),
+    successfulToolEnd('workflow-index', 'read', '---\nname: omp-enhancer-workflows\n---'),
+    assistantToolMessage([
+      { id: 'skill-catalog', name: 'read', arguments: { path: 'skill://ecc-skill-catalog' } },
+    ], [
+      'WORKFLOW PLAN',
+      'Primary: writing.zh',
+      'Add-ons: none',
+      'Skills: skill://ecc-skill-catalog',
+      'Load order: skill://ecc-skill-catalog, skill://omp-enhancer-workflows/references/writing.zh.md',
+      'Actions:',
+      '1. Load the declared catalog and any exact nested Skill URI it reveals.',
+    ].join('\n')),
+    successfulToolEnd(
+      'skill-catalog',
+      'read',
+      [
+        '---',
+        'name: ecc-skill-catalog',
+        'description: On-demand index for nested guides.',
+        '---',
+        '# ECC Skill catalog',
+        'First: skill://ecc-skill-catalog/first/shared-writing/SKILL.md',
+        'Second: skill://ecc-skill-catalog/second/shared-writing/SKILL.md',
+      ].join('\n'),
+    ),
+    assistantToolMessage([
+      { id: 'bare-ambiguous-skill', name: 'read', arguments: { path: 'shared-writing' } },
+    ]),
+  ]);
+
+  assert.deepEqual(summary.misaddressedDeclaredSkillReads, []);
+});
+
 test('staged workflow evaluation accepts a dedicated index batch, declared loads, and ready-before-project trace', () => {
   const summary = summarizeWorkflowEvents([
     { type: 'agent_start' },
@@ -1471,6 +1733,9 @@ test('staged workflow evaluation accepts a dedicated index batch, declared loads
       'skill://code-development',
       'skill://omp-enhancer-workflows/references/code.dev.md',
     ],
+    loadNow: [],
+    loadThen: [],
+    structuredLoadOrder: false,
     skillsLoaded: [],
     skillsUnavailable: [],
   });
@@ -1482,6 +1747,9 @@ test('staged workflow evaluation accepts a dedicated index batch, declared loads
     selectedWorkflowIds: ['code.dev'],
     skills: [],
     loadOrder: [],
+    loadNow: [],
+    loadThen: [],
+    structuredLoadOrder: false,
     skillsLoaded: ['code-development'],
     skillsUnavailable: [],
   });
@@ -1494,6 +1762,11 @@ test('staged workflow evaluation accepts a dedicated index batch, declared loads
     requireWorkflowPlanSkillsUseDomainSkillUris: true,
     requireWorkflowReadyLoadedSkillsUseBareIds: true,
     requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills: true,
+    requiredWorkflowLoadOrder: [
+      'skill://code-development',
+      'skill://omp-enhancer-workflows/references/code.dev.md',
+    ],
+    requireWorkflowResourceCallsMatchLoadOrder: true,
   })).pass, true);
 
   const missingActions = evaluateWorkflowSummary({
@@ -1572,6 +1845,9 @@ test('workflow declaration parsing uses visible markers, accepts bold wrappers, 
       'skill://omp-enhancer-workflows/references/writing.latex.md',
       'skill://writing-review',
     ],
+    loadNow: [],
+    loadThen: [],
+    structuredLoadOrder: false,
     skillsLoaded: [],
     skillsUnavailable: [],
   };
@@ -1583,6 +1859,9 @@ test('workflow declaration parsing uses visible markers, accepts bold wrappers, 
     selectedWorkflowIds: ['writing.en', 'writing.latex'],
     skills: [],
     loadOrder: [],
+    loadNow: [],
+    loadThen: [],
+    structuredLoadOrder: false,
     skillsLoaded: ['writing-review'],
     skillsUnavailable: [],
   };
@@ -1599,6 +1878,17 @@ test('workflow declaration parsing uses visible markers, accepts bold wrappers, 
     requireWorkflowReadyLoadedSkillsUseBareIds: true,
     requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills: true,
   })).pass, true);
+
+  const wrongResourceOrder = evaluateWorkflowSummary(summary, stagedWorkflowExpectations({
+    requiredWorkflowLoadOrder: [
+      'skill://writing-review',
+      'skill://omp-enhancer-workflows/references/writing.latex.md',
+      'skill://omp-enhancer-workflows/references/writing.en.md',
+    ],
+    requireWorkflowResourceCallsMatchLoadOrder: true,
+  }));
+  assert.equal(wrongResourceOrder.pass, false);
+  assert.match(wrongResourceOrder.failures.join('\n'), /WORKFLOW PLAN load order was[\s\S]*expected/iu);
 
   const missingAddOn = evaluateWorkflowSummary(summary, stagedWorkflowExpectations({
     requiredWorkflowAddOns: ['factcheck.document'],
@@ -1639,6 +1929,18 @@ test('structured workflow PLAN requires the exact heading and four unique non-em
     'skill://skill_with_underscore',
   ]);
 
+  const semicolonSeparated = summarizeWorkflowEvents([assistantTextMessage([
+    'WORKFLOW PLAN',
+    'Primary: code.dev',
+    'Add-ons: none',
+    'Skills: `skill://a`; `skill://b`',
+    'Load order: `skill://a`; `skill://b`',
+  ].join('\n'))]);
+  assert.deepEqual(semicolonSeparated.assistantBatches[0].workflowPlanDeclaration.loadOrder, [
+    'skill://a',
+    'skill://b',
+  ]);
+
   const flexibleActionHeading = summarizeWorkflowEvents([assistantTextMessage([
     'WORKFLOW PLAN',
     'Primary: code.dev',
@@ -1650,6 +1952,104 @@ test('structured workflow PLAN requires the exact heading and four unique non-em
     '2) Verify the result.',
   ].join('\n'))]);
   assert.equal(flexibleActionHeading.assistantBatches[0].workflowPlanDeclaration.numberedActionCount, 2);
+});
+
+test('structured workflow load phases preserve flattened compatibility and enforce NOW then THEN execution', () => {
+  const addOnReference = 'skill://omp-enhancer-workflows/references/writing.latex.md';
+  const primaryReference = 'skill://omp-enhancer-workflows/references/writing.en.md';
+  const loadNow = ['skill://writing-review'];
+  const loadThen = [addOnReference, primaryReference];
+  const summary = structuredWorkflowLoadSummary({
+    loadOrder: `NOW=[${loadNow.join('; ')}] THEN=[${loadThen.join('; ')}]`,
+    planTargets: loadNow,
+    laterTargets: loadThen,
+  });
+
+  assert.deepEqual(summary.workflowPreparation.workflowPlanDeclaration, {
+    format: 'block',
+    numberedActionCount: 1,
+    primary: 'writing.en',
+    addOns: ['writing.latex'],
+    selectedWorkflowIds: ['writing.en', 'writing.latex'],
+    skills: ['skill://writing-review'],
+    loadOrder: [...loadNow, ...loadThen],
+    loadNow,
+    loadThen,
+    structuredLoadOrder: true,
+    skillsLoaded: [],
+    skillsUnavailable: [],
+  });
+  assert.equal(evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requireStructuredWorkflowLoadPhases: true,
+    requiredWorkflowLoadOrder: [...loadNow, ...loadThen],
+  }).pass, true);
+
+  const emptyNow = structuredWorkflowLoadSummary({
+    loadOrder: `NOW=[none] THEN=[${loadThen.join('; ')}]`,
+    planTargets: loadThen,
+    laterTargets: [],
+  });
+  assert.deepEqual(emptyNow.workflowPreparation.workflowPlanDeclaration.loadNow, []);
+  assert.deepEqual(emptyNow.workflowPreparation.workflowPlanDeclaration.loadThen, loadThen);
+  assert.equal(evaluateWorkflowSummary(emptyNow, {
+    requireFinal: false,
+    requireStructuredWorkflowLoadPhases: true,
+  }).pass, true);
+});
+
+test('structured workflow load phase evaluation rejects legacy syntax, namespace swaps, and call drift', () => {
+  const skill = 'skill://writing-review';
+  const addOnReference = 'skill://omp-enhancer-workflows/references/writing.latex.md';
+  const primaryReference = 'skill://omp-enhancer-workflows/references/writing.en.md';
+  const loadThen = [addOnReference, primaryReference];
+  const expectation = { requireFinal: false, requireStructuredWorkflowLoadPhases: true };
+
+  const legacy = structuredWorkflowLoadSummary({
+    loadOrder: [skill, ...loadThen].join(', '),
+    planTargets: [skill],
+    laterTargets: loadThen,
+  });
+  const legacyEvaluation = evaluateWorkflowSummary(legacy, expectation);
+  assert.equal(legacyEvaluation.pass, false);
+  assert.match(legacyEvaluation.failures.join('\n'), /structured NOW=.*THEN=.*syntax/iu);
+
+  const swappedNamespaces = structuredWorkflowLoadSummary({
+    loadOrder: `NOW=[${addOnReference}] THEN=[${skill}; ${primaryReference}]`,
+    planTargets: [addOnReference],
+    laterTargets: [skill, primaryReference],
+  });
+  const namespaceEvaluation = evaluateWorkflowSummary(swappedNamespaces, expectation);
+  assert.equal(namespaceEvaluation.pass, false);
+  assert.match(namespaceEvaluation.failures.join('\n'), /NOW contained non-domain Skill URI/iu);
+  assert.match(namespaceEvaluation.failures.join('\n'), /THEN contained non-workflow reference URI/iu);
+
+  const primaryNotLast = structuredWorkflowLoadSummary({
+    loadOrder: `NOW=[${skill}] THEN=[${primaryReference}; ${addOnReference}]`,
+    planTargets: [skill],
+    laterTargets: [primaryReference, addOnReference],
+  });
+  const primaryNotLastEvaluation = evaluateWorkflowSummary(primaryNotLast, expectation);
+  assert.equal(primaryNotLastEvaluation.pass, false);
+  assert.match(primaryNotLastEvaluation.failures.join('\n'), /did not put the Primary workflow reference last/iu);
+
+  const wrongNowCalls = structuredWorkflowLoadSummary({
+    loadOrder: `NOW=[${skill}] THEN=[${loadThen.join('; ')}]`,
+    planTargets: ['skill://different-writing-skill'],
+    laterTargets: loadThen,
+  });
+  const wrongNowEvaluation = evaluateWorkflowSummary(wrongNowCalls, expectation);
+  assert.equal(wrongNowEvaluation.pass, false);
+  assert.match(wrongNowEvaluation.failures.join('\n'), /PLAN response resource calls were.*expected NOW/iu);
+
+  const wrongThenCalls = structuredWorkflowLoadSummary({
+    loadOrder: `NOW=[${skill}] THEN=[${loadThen.join('; ')}]`,
+    planTargets: [skill],
+    laterTargets: [primaryReference, addOnReference],
+  });
+  const wrongThenEvaluation = evaluateWorkflowSummary(wrongThenCalls, expectation);
+  assert.equal(wrongThenEvaluation.pass, false);
+  assert.match(wrongThenEvaluation.failures.join('\n'), /non-extension workflow reference calls were.*expected THEN/iu);
 });
 
 test('workflow resource declaration checks reject namespace confusion and loaded-set drift', () => {
@@ -1852,6 +2252,7 @@ test('staged workflow evaluation can require PLAN first-visible and a READY TODO
   const ready = 'WORKFLOW READY | primary=code.dev | add-ons=none | skills-loaded=none | skills-unavailable=none';
   const expectations = stagedWorkflowExpectations({
     requireWorkflowPlanFirstVisibleContent: true,
+    requireWorkflowReadyFirstVisibleContent: true,
     requireWorkflowReadyTodoOnlyBatch: true,
   });
 
@@ -1867,13 +2268,14 @@ test('staged workflow evaluation can require PLAN first-visible and a READY TODO
     assistantToolMessage([
       { id: 'todo-init', name: 'todo', arguments: { op: 'init', items: ['diagnose'] } },
       { id: 'project-read', name: 'read', arguments: { path: 'src/failure.js' } },
-    ], ready),
+    ], `Resources loaded.\n${ready}`),
     successfulToolEnd('todo-init', 'todo', 'initialized'),
     successfulToolEnd('project-read', 'read', 'source'),
   ]);
   const invalidEvaluation = evaluateWorkflowSummary(invalid, expectations);
   assert.equal(invalidEvaluation.pass, false);
-  assert.match(invalidEvaluation.failures.join('\n'), /WORKFLOW PLAN was not the first visible content/i);
+  assert.match(invalidEvaluation.failures.join('\n'), /WORKFLOW PLAN was not the first nonempty visible text item/i);
+  assert.match(invalidEvaluation.failures.join('\n'), /WORKFLOW READY was not the first nonempty visible text item/i);
   assert.match(invalidEvaluation.failures.join('\n'), /WORKFLOW READY batch did not contain only native TODO init/i);
 
   const valid = summarizeWorkflowEvents([
@@ -1895,6 +2297,380 @@ test('staged workflow evaluation can require PLAN first-visible and a READY TODO
     successfulToolEnd('project-read', 'read', 'source'),
   ]);
   assert.equal(evaluateWorkflowSummary(valid, expectations).pass, true);
+
+  const validAfterHiddenThinking = summarizeWorkflowEvents([
+    assistantToolMessage([
+      { id: 'workflow-index', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows' } },
+    ]),
+    successfulToolEnd('workflow-index', 'read', '---\nname: omp-enhancer-workflows\n---'),
+    assistantToolMessageAfterThinking([
+      { id: 'workflow-reference', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows/references/code.dev.md' } },
+    ], 'I have selected code.dev and will now emit the visible plan.', plan),
+    successfulToolEnd('workflow-reference', 'read', '# code.dev workflow reference'),
+    assistantToolMessage([
+      { id: 'todo-init', name: 'todo', arguments: { op: 'init', items: ['diagnose'] } },
+    ], ready),
+    successfulToolEnd('todo-init', 'todo', 'initialized'),
+    assistantToolMessage([
+      { id: 'project-read', name: 'read', arguments: { path: 'src/failure.js' } },
+    ]),
+    successfulToolEnd('project-read', 'read', 'source'),
+  ]);
+  assert.equal(evaluateWorkflowSummary(validAfterHiddenThinking, expectations).pass, true);
+
+  const hiddenThinkingOnly = summarizeWorkflowEvents([
+    assistantToolMessage([
+      { id: 'workflow-index', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows' } },
+    ]),
+    successfulToolEnd('workflow-index', 'read', '---\nname: omp-enhancer-workflows\n---'),
+    assistantToolMessageAfterThinking([
+      { id: 'workflow-reference', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows/references/code.dev.md' } },
+    ], plan),
+    successfulToolEnd('workflow-reference', 'read', '# code.dev workflow reference'),
+  ]);
+  const hiddenThinkingOnlyEvaluation = evaluateWorkflowSummary(hiddenThinkingOnly, expectations);
+  assert.equal(hiddenThinkingOnlyEvaluation.pass, false);
+  assert.match(hiddenThinkingOnlyEvaluation.failures.join('\n'), /WORKFLOW PLAN was not observed/iu);
+});
+
+test('workflow PLAN supports only declared, revealed, bounded linked-resource extensions before references', () => {
+  const plan = [
+    'WORKFLOW PLAN',
+    'Primary: writing.en',
+    'Add-ons: none',
+    'Skills: skill://writing-review',
+    'Load order: skill://writing-review, skill://omp-enhancer-workflows/references/writing.en.md',
+    'Actions:',
+    '1. Load the writing Skill and workflow reference.',
+  ].join('\n');
+  const indexEvents = [
+    assistantToolMessage([
+      { id: 'workflow-index', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows' } },
+    ]),
+    successfulToolEnd('workflow-index', 'read', '---\nname: omp-enhancer-workflows\n---'),
+  ];
+  const expectations = {
+    requireFinal: false,
+    requireWorkflowPlanLoadCallsSameBatch: true,
+    requireWorkflowResourceCallsMatchLoadOrder: true,
+  };
+
+  const stagedLoads = summarizeWorkflowEvents([
+    ...indexEvents,
+    assistantToolMessage([
+      { id: 'writing-skill', name: 'read', arguments: { path: 'skill://writing-review' } },
+    ], plan),
+    successfulToolEnd('writing-skill', 'read', '---\nname: writing-review\n---'),
+    assistantToolMessage([
+      {
+        id: 'writing-reference',
+        name: 'read',
+        arguments: { path: 'skill://omp-enhancer-workflows/references/writing.en.md' },
+      },
+    ]),
+    successfulToolEnd('writing-reference', 'read', '# writing.en workflow reference'),
+  ]);
+  assert.equal(evaluateWorkflowSummary(stagedLoads, expectations).pass, true);
+
+  const sameBatchLoads = summarizeWorkflowEvents([
+    ...indexEvents,
+    assistantToolMessage([
+      { id: 'writing-skill', name: 'read', arguments: { path: 'skill://writing-review' } },
+      {
+        id: 'writing-reference',
+        name: 'read',
+        arguments: { path: 'skill://omp-enhancer-workflows/references/writing.en.md' },
+      },
+    ], plan),
+    successfulToolEnd('writing-skill', 'read', '---\nname: writing-review\n---'),
+    successfulToolEnd('writing-reference', 'read', '# writing.en workflow reference'),
+  ]);
+  const sameBatchEvaluation = evaluateWorkflowSummary(sameBatchLoads, expectations);
+  assert.equal(sameBatchEvaluation.pass, false);
+  assert.match(sameBatchEvaluation.failures.join('\n'), /references.+final resource-only batch/iu);
+
+  const exactNestedUri = 'skill://ecc-skill-catalog/network-config-validation/SKILL.md';
+  const directNestedPlan = [
+    'WORKFLOW PLAN',
+    'Primary: network.design',
+    'Add-ons: none',
+    `Skills: ${exactNestedUri}`,
+    `Load order: NOW=[${exactNestedUri}] THEN=[skill://omp-enhancer-workflows/references/network.design.md]`,
+    'Actions:',
+    '1. LOAD: read the exact nested Skill now, wait, then read the workflow reference and wait.',
+    '2. COMMIT: emit READY and initialize TODO only.',
+    '3. SPLIT + EXECUTE: use the loaded card with the current Agents.',
+    '4. VERIFY: integrate the returned design evidence.',
+  ].join('\n');
+  const directNested = summarizeWorkflowEvents([
+    assistantToolMessage([
+      { id: 'workflow-index', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows' } },
+    ]),
+    successfulToolEnd('workflow-index', 'read', [
+      '---',
+      'name: omp-enhancer-workflows',
+      '---',
+      `C=[\`${exactNestedUri}\`]`,
+    ].join('\n')),
+    assistantToolMessage([
+      { id: 'nested-network-skill', name: 'read', arguments: { path: exactNestedUri } },
+    ], directNestedPlan),
+    successfulToolEnd('nested-network-skill', 'read', '---\nname: network-config-validation\n---'),
+    assistantToolMessage([{
+      id: 'network-reference',
+      name: 'read',
+      arguments: { path: 'skill://omp-enhancer-workflows/references/network.design.md' },
+    }]),
+    successfulToolEnd('network-reference', 'read', '# network.design workflow reference'),
+  ]);
+  assert.equal(evaluateWorkflowSummary(directNested, expectations).pass, true);
+  assert.ok(directNested.observedSkills.includes('network-config-validation'));
+  assert.equal(directNested.observedSkills.includes('ecc-skill-catalog'), false);
+
+  const catalogPlan = [
+    'WORKFLOW PLAN',
+    'Primary: network.design',
+    'Add-ons: none',
+    'Skills: skill://ecc-skill-catalog',
+    'Load order: skill://ecc-skill-catalog, skill://omp-enhancer-workflows/references/network.design.md',
+    'Actions:',
+    '1. Load the catalog, its selected nested Skill, and the workflow reference.',
+  ].join('\n');
+  const catalogExtension = summarizeWorkflowEvents([
+    ...indexEvents,
+    assistantToolMessage([
+      { id: 'ecc-catalog', name: 'read', arguments: { path: 'skill://ecc-skill-catalog' } },
+    ], catalogPlan),
+    successfulToolEnd('ecc-catalog', 'read', [
+      '---',
+      'name: ecc-skill-catalog',
+      'description: On-demand index for nested guides.',
+      '---',
+      '# ECC Skill catalog',
+      'ADAPTER: skill://ecc-skill-catalog/catalog.md',
+    ].join('\n')),
+    assistantToolMessage([
+      {
+        id: 'ecc-catalog-body',
+        name: 'read',
+        arguments: { path: 'skill://ecc-skill-catalog/catalog.md' },
+      },
+    ], 'RESOURCE EXTENSION | source=skill://ecc-skill-catalog | reads=skill://ecc-skill-catalog/catalog.md'),
+    successfulToolEnd('ecc-catalog-body', 'read', [
+      '# Large catalog',
+      'x'.repeat(1_200),
+      'Read: skill://ecc-skill-catalog/network-config-validation/SKILL.md',
+    ].join('\n')),
+    assistantToolMessage([
+      {
+        id: 'nested-network-skill',
+        name: 'read',
+        arguments: { path: 'skill://ecc-skill-catalog/network-config-validation/SKILL.md' },
+      },
+    ], 'RESOURCE EXTENSION | source=skill://ecc-skill-catalog/catalog.md | reads=skill://ecc-skill-catalog/network-config-validation/SKILL.md'),
+    successfulToolEnd('nested-network-skill', 'read', '---\nname: network-config-validation\n---'),
+    assistantToolMessage([{
+      id: 'network-reference',
+      name: 'read',
+      arguments: { path: 'skill://omp-enhancer-workflows/references/network.design.md' },
+    }]),
+    successfulToolEnd('network-reference', 'read', '# network.design workflow reference'),
+  ]);
+  assert.equal(evaluateWorkflowSummary(catalogExtension, expectations).pass, true);
+
+  const undeclaredNestedRead = summarizeWorkflowEvents([
+    ...indexEvents,
+    assistantToolMessage([
+      { id: 'ecc-catalog', name: 'read', arguments: { path: 'skill://ecc-skill-catalog' } },
+    ], catalogPlan),
+    successfulToolEnd('ecc-catalog', 'read', '---\nname: ecc-skill-catalog\n---\nRead skill://ecc-skill-catalog/catalog.md'),
+    assistantToolMessage([{
+      id: 'guessed-guide',
+      name: 'read',
+      arguments: { path: 'skill://ecc-skill-catalog/network-config-validation/SKILL.md' },
+    }]),
+    successfulToolEnd('guessed-guide', 'read', '---\nname: network-config-validation\n---'),
+  ]);
+  const undeclaredEvaluation = evaluateWorkflowSummary(undeclaredNestedRead, expectations);
+  assert.equal(undeclaredEvaluation.pass, false);
+  assert.match(undeclaredEvaluation.failures.join('\n'), /linked-resource.+not declared|undeclared linked-resource/iu);
+
+  const unrevealedNestedRead = summarizeWorkflowEvents([
+    ...indexEvents,
+    assistantToolMessage([
+      { id: 'ecc-catalog', name: 'read', arguments: { path: 'skill://ecc-skill-catalog' } },
+    ], catalogPlan),
+    successfulToolEnd('ecc-catalog', 'read', '---\nname: ecc-skill-catalog\n---\nRead skill://ecc-skill-catalog/catalog.md'),
+    assistantToolMessage([{
+      id: 'unrevealed-guide',
+      name: 'read',
+      arguments: { path: 'skill://ecc-skill-catalog/guessed/SKILL.md' },
+    }], 'RESOURCE EXTENSION | source=skill://ecc-skill-catalog | reads=skill://ecc-skill-catalog/guessed/SKILL.md'),
+    successfulToolEnd('unrevealed-guide', 'read', '---\nname: guessed\n---'),
+  ]);
+  const unrevealedEvaluation = evaluateWorkflowSummary(unrevealedNestedRead, expectations);
+  assert.equal(unrevealedEvaluation.pass, false);
+  assert.match(unrevealedEvaluation.failures.join('\n'), /was not revealed by loaded source/iu);
+
+  assert.equal(catalogExtension.workflowPreparation.resourceExtensionMarkerCount, 2);
+  assert.deepEqual(catalogExtension.workflowPreparation.resourceExtensionReadUris, [
+    'skill://ecc-skill-catalog/catalog.md',
+    'skill://ecc-skill-catalog/network-config-validation/SKILL.md',
+  ]);
+
+  const crossNamespace = summarizeWorkflowEvents([
+    ...indexEvents,
+    assistantToolMessage([{
+      id: 'source-skill', name: 'read', arguments: { path: 'skill://writing-review' },
+    }], plan),
+    successfulToolEnd('source-skill', 'read', '---\nname: writing-review\n---\nRead skill://other-skill/reference.md'),
+    assistantToolMessage([{
+      id: 'escaped-resource', name: 'read', arguments: { path: 'skill://other-skill/reference.md' },
+    }], 'RESOURCE EXTENSION | source=skill://writing-review | reads=skill://other-skill/reference.md'),
+    successfulToolEnd('escaped-resource', 'read', '# Cross namespace'),
+  ]);
+  const crossNamespaceEvaluation = evaluateWorkflowSummary(crossNamespace, expectations);
+  assert.equal(crossNamespaceEvaluation.pass, false);
+  assert.match(crossNamespaceEvaluation.failures.join('\n'), /escaped loaded source namespace/iu);
+
+  const repeatPlan = catalogPlan.replace(
+    'Skills: skill://ecc-skill-catalog',
+    'Skills: skill://ecc-skill-catalog, skill://ecc-skill-catalog/catalog.md',
+  ).replace(
+    'Load order: skill://ecc-skill-catalog,',
+    'Load order: skill://ecc-skill-catalog, skill://ecc-skill-catalog/catalog.md,',
+  );
+  const repeatedLoaded = summarizeWorkflowEvents([
+    ...indexEvents,
+    assistantToolMessage([
+      { id: 'repeat-source', name: 'read', arguments: { path: 'skill://ecc-skill-catalog' } },
+      { id: 'already-loaded', name: 'read', arguments: { path: 'skill://ecc-skill-catalog/catalog.md' } },
+    ], repeatPlan),
+    successfulToolEnd('repeat-source', 'read', '---\nname: ecc-skill-catalog\n---\nRead skill://ecc-skill-catalog/catalog.md'),
+    successfulToolEnd('already-loaded', 'read', '# Catalog'),
+    assistantToolMessage([{
+      id: 'repeat-linked', name: 'read', arguments: { path: 'skill://ecc-skill-catalog/catalog.md' },
+    }], 'RESOURCE EXTENSION | source=skill://ecc-skill-catalog | reads=skill://ecc-skill-catalog/catalog.md'),
+    successfulToolEnd('repeat-linked', 'read', '# Catalog again'),
+  ]);
+  const repeatedLoadedEvaluation = evaluateWorkflowSummary(repeatedLoaded, expectations);
+  assert.equal(repeatedLoadedEvaluation.pass, false);
+  assert.match(repeatedLoadedEvaluation.failures.join('\n'), /repeated a linked-resource URI/iu);
+
+  const overBoundedEvents = [
+    ...indexEvents,
+    assistantToolMessage([{
+      id: 'bounded-source', name: 'read', arguments: { path: 'skill://ecc-skill-catalog' },
+    }], catalogPlan),
+    successfulToolEnd('bounded-source', 'read', '---\nname: ecc-skill-catalog\n---\nRead skill://ecc-skill-catalog/hop-1.md'),
+  ];
+  for (let hop = 1; hop <= 4; hop += 1) {
+    const source = hop === 1 ? 'skill://ecc-skill-catalog' : `skill://ecc-skill-catalog/hop-${hop - 1}.md`;
+    const target = `skill://ecc-skill-catalog/hop-${hop}.md`;
+    overBoundedEvents.push(
+      assistantToolMessage([{
+        id: `bounded-hop-${hop}`, name: 'read', arguments: { path: target },
+      }], `RESOURCE EXTENSION | source=${source} | reads=${target}`),
+      successfulToolEnd(`bounded-hop-${hop}`, 'read', `# Hop ${hop}\nRead skill://ecc-skill-catalog/hop-${hop + 1}.md`),
+    );
+  }
+  const overBounded = evaluateWorkflowSummary(
+    summarizeWorkflowEvents(overBoundedEvents),
+    expectations,
+  );
+  assert.equal(overBounded.pass, false);
+  assert.match(overBounded.failures.join('\n'), /extension batches 4 exceeded 3/iu);
+});
+
+test('writing.pending permits one narrow language read and one stable replacement PLAN only', () => {
+  const initialPlan = [
+    'WORKFLOW PLAN',
+    'Primary: writing.pending',
+    'Add-ons: writing.latex',
+    'Skills: skill://format-template-latex',
+    'Load order: skill://format-template-latex, skill://omp-enhancer-workflows/references/writing.latex.md, skill://omp-enhancer-workflows/references/writing.pending.md',
+    'Actions:',
+    '1. Resolve only the target body language, then replace pending once.',
+  ].join('\n');
+  const replacementPlan = [
+    'WORKFLOW PLAN',
+    'Primary: writing.en',
+    'Add-ons: writing.latex',
+    'Skills: skill://writing-review',
+    'Load order: skill://writing-review, skill://omp-enhancer-workflows/references/writing.en.md',
+    'Actions:',
+    '1. Apply the English writing method while retaining the loaded LaTeX companion.',
+  ].join('\n');
+  const events = [
+    assistantToolMessage([{
+      id: 'workflow-index', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows' },
+    }]),
+    successfulToolEnd('workflow-index', 'read', '---\nname: omp-enhancer-workflows\n---'),
+    assistantToolMessage([{
+      id: 'latex-format', name: 'read', arguments: { path: 'skill://format-template-latex' },
+    }], initialPlan),
+    successfulToolEnd('latex-format', 'read', '---\nname: format-template-latex\n---'),
+    assistantToolMessage([
+      { id: 'latex-ref', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows/references/writing.latex.md' } },
+      { id: 'pending-ref', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows/references/writing.pending.md' } },
+    ]),
+    successfulToolEnd('latex-ref', 'read', '# writing.latex'),
+    successfulToolEnd('pending-ref', 'read', '# writing.pending'),
+    assistantToolMessage([{
+      id: 'pending-todo', name: 'todo', arguments: { op: 'init', items: ['Resolve language'] },
+    }], 'WORKFLOW READY | primary=writing.pending | add-ons=writing.latex | skills-loaded=format-template-latex | skills-unavailable=none'),
+    successfulToolEnd('pending-todo', 'todo', 'initialized'),
+    assistantToolMessage([{
+      id: 'language-read', name: 'read', arguments: { path: 'abstract.tex' },
+    }]),
+    successfulToolEnd('language-read', 'read', 'This paper presents a method.'),
+    assistantToolMessage([{
+      id: 'writing-review', name: 'read', arguments: { path: 'skill://writing-review' },
+    }], replacementPlan),
+    successfulToolEnd('writing-review', 'read', '---\nname: writing-review\n---'),
+    assistantToolMessage([{
+      id: 'english-ref', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows/references/writing.en.md' },
+    }]),
+    successfulToolEnd('english-ref', 'read', '# writing.en'),
+    assistantToolMessage([{
+      id: 'english-todo', name: 'todo', arguments: { op: 'init', items: ['Delegate writer', 'Verify'] },
+    }], 'WORKFLOW READY | primary=writing.en | add-ons=writing.latex | skills-loaded=format-template-latex,writing-review | skills-unavailable=none'),
+    successfulToolEnd('english-todo', 'todo', 'initialized'),
+    assistantToolMessage([{
+      id: 'writer-task', name: 'task', arguments: { agent: 'writer', task: 'Revise supplied English prose.' },
+    }]),
+    successfulToolEnd('writer-task', 'task', 'spawned'),
+  ];
+  const summary = summarizeWorkflowEvents(events);
+  const expectations = stagedWorkflowExpectations({
+    requiredWorkflowPrimary: 'writing.en',
+    requiredWorkflowAddOns: ['writing.latex'],
+    requireWorkflowPlanFirstVisibleContent: true,
+    requireWorkflowReadyFirstVisibleContent: true,
+    requireWorkflowReadyTodoOnlyBatch: true,
+    requireWorkflowPlanLoadCallsSameBatch: true,
+    requireWorkflowResourceCallsMatchLoadOrder: true,
+    requireWorkflowPlanSkillsUseDomainSkillUris: true,
+    requireWorkflowReadyLoadedSkillsUseBareIds: true,
+    requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills: true,
+  });
+  assert.equal(evaluateWorkflowSummary(summary, expectations).pass, true);
+  assert.equal(summary.workflowPreparation.pendingLanguageTransition?.valid, true);
+  assert.equal(summary.workflowPreparation.pendingLanguageTransition?.languageReadCallId, 'language-read');
+  assert.equal(summary.firstProjectToolCallEventIndex, events.findIndex((event) => (
+    event?.toolCallId === 'writer-task'
+  )) - 1);
+
+  const unstableCompanionEvents = structuredClone(events);
+  const replacementMessage = unstableCompanionEvents.find((event) => (
+    event?.type === 'message_end'
+    && event.message?.content?.some((item) => item?.id === 'writing-review')
+  ));
+  replacementMessage.message.content[0].text = replacementMessage.message.content[0].text
+    .replace('Add-ons: writing.latex', 'Add-ons: writing.markdown');
+  const unstable = evaluateWorkflowSummary(summarizeWorkflowEvents(unstableCompanionEvents), expectations);
+  assert.equal(unstable.pass, false);
+  assert.match(unstable.failures.join('\n'), /writing\.pending.+companions.+changed/iu);
 });
 
 test('assistant batch provenance is recovered when execution-start events arrive before the assistant message', () => {
@@ -1988,6 +2764,20 @@ function assistantToolMessage(calls, text = '') {
   };
 }
 
+function assistantToolMessageAfterThinking(calls, thinking, text = '') {
+  return {
+    type: 'message_end',
+    message: {
+      role: 'assistant',
+      content: [
+        { type: 'thinking', thinking },
+        ...(text ? [{ type: 'text', text }] : []),
+        ...calls.map((call) => ({ type: 'toolCall', ...call })),
+      ],
+    },
+  };
+}
+
 function assistantTextMessage(text) {
   return {
     type: 'message_end',
@@ -2014,6 +2804,46 @@ function stagedWorkflowExpectations(overrides = {}) {
     requireExactSelectedWorkflowReferences: true,
     ...overrides,
   };
+}
+
+function structuredWorkflowLoadSummary({ loadOrder, planTargets, laterTargets }) {
+  const callsFor = (prefix, targets) => targets.map((target, index) => ({
+    id: `${prefix}-${index + 1}`,
+    name: 'read',
+    arguments: { path: target },
+  }));
+  const endsFor = (prefix, targets) => targets.map((target, index) => successfulToolEnd(
+    `${prefix}-${index + 1}`,
+    'read',
+    target.includes('/references/')
+      ? `# ${target.split('/').at(-1)} workflow reference`
+      : `---\nname: ${target.replace(/^skill:\/\//u, '')}\n---`,
+  ));
+  const planCalls = callsFor('plan-resource', planTargets);
+  const laterCalls = callsFor('then-resource', laterTargets);
+  return summarizeWorkflowEvents([
+    assistantToolMessage([
+      { id: 'workflow-index', name: 'read', arguments: { path: 'skill://omp-enhancer-workflows' } },
+    ]),
+    successfulToolEnd('workflow-index', 'read', '---\nname: omp-enhancer-workflows\n---'),
+    assistantToolMessage(planCalls, [
+      'WORKFLOW PLAN',
+      'Primary: writing.en',
+      'Add-ons: writing.latex',
+      'Skills: skill://writing-review',
+      `Load order: ${loadOrder}`,
+      'Actions:',
+      '1. Load the declared phases and apply the selected writing workflows.',
+    ].join('\n')),
+    ...endsFor('plan-resource', planTargets),
+    ...(laterCalls.length > 0 ? [
+      assistantToolMessage(laterCalls),
+      ...endsFor('then-resource', laterTargets),
+    ] : []),
+    assistantTextMessage(
+      'WORKFLOW READY | primary=writing.en | add-ons=writing.latex | skills-loaded=writing-review | skills-unavailable=none',
+    ),
+  ]);
 }
 
 test('native autoload precedes project tools and successful project calls follow the exact sequence', () => {
@@ -2454,6 +3284,68 @@ test('semantic-edit-en fixture and sentinels require legal escaped LaTeX percent
   }
 });
 
+test('temporary read-only fixtures ignore reads and attribute unauthorized mutations', async () => {
+  const prepared = await prepareScenario({
+    id: 'substantive-writing-en-readonly-integrity',
+    fixture: 'substantive-writing-en-readonly',
+    prompt: 'Read section.tex without modifying it.',
+  });
+  try {
+    assert.equal(prepared.verifyRoot, prepared.cwd);
+    const beforeFiles = await snapshotTree(prepared.verifyRoot);
+    await readFile(path.join(prepared.cwd, 'section.tex'), 'utf8');
+
+    const unchanged = await verifyFixture(prepared.verifyRoot, beforeFiles, {
+      allowedChangedFiles: [],
+    });
+    assert.equal(unchanged.pass, true);
+    assert.deepEqual(unchanged.changedFiles, []);
+    assert.deepEqual(
+      attributeFixtureMutations({ tddTrace: { mutationCalls: [] } }, unchanged),
+      {
+        classification: 'none',
+        parentObservedFiles: [],
+        unattributedFiles: [],
+        files: [],
+      },
+    );
+
+    await writeFile(path.join(prepared.cwd, 'section.tex'), 'unauthorized rewrite\n');
+
+    const result = await verifyFixture(prepared.verifyRoot, beforeFiles, {
+      allowedChangedFiles: [],
+    });
+    assert.equal(result.pass, false);
+    assert.deepEqual(result.changedFiles, ['section.tex']);
+    assert.match(result.failures.join('\n'), /unexpected fixture file change: section\.tex/iu);
+
+    const unattributed = attributeFixtureMutations({ tddTrace: { mutationCalls: [] } }, result);
+    assert.equal(unattributed.classification, 'unattributed-shared-workspace');
+    assert.deepEqual(unattributed.parentObservedFiles, []);
+    assert.deepEqual(unattributed.unattributedFiles, ['section.tex']);
+    assert.deepEqual(unattributed.files, [{
+      path: 'section.tex',
+      attribution: 'unattributed-shared-workspace',
+      parentMutationCallIds: [],
+    }]);
+    assert.notEqual(unattributed.classification, 'none');
+
+    const parentObserved = attributeFixtureMutations({
+      tddTrace: { mutationCalls: [{ id: 'edit-section', target: 'section.tex' }] },
+    }, result);
+    assert.equal(parentObserved.classification, 'parent-observed');
+    assert.deepEqual(parentObserved.parentObservedFiles, ['section.tex']);
+    assert.deepEqual(parentObserved.unattributedFiles, []);
+    assert.deepEqual(parentObserved.files, [{
+      path: 'section.tex',
+      attribution: 'parent-observed',
+      parentMutationCallIds: ['edit-section'],
+    }]);
+  } finally {
+    await prepared.cleanup();
+  }
+});
+
 test('English Introduction fixture requires the unique conservative edit exactly', async () => {
   const matrix = JSON.parse(await readFile(
     new URL('./e2e/fixtures/deepseek-installed-matrix.json', import.meta.url),
@@ -2551,7 +3443,8 @@ test('self-iteration E2E fixture is a bounded real Node project with a green bas
   assert.equal(scenario.fixture, 'self-iteration-tdd');
   assert.match(scenario.prompt, /OMP Enhancer self-development E2E harness/iu);
   assert.match(scenario.prompt, /bash command itself must be exactly `npm test`.+do not prepend `cd` or append redirection/isu);
-  assert.match(scenario.prompt, /assignment text itself starts with exactly `\[workflow=/iu);
+  assert.match(scenario.prompt, /READY TODO[\s\S]*delegated row uses `Delegate Agent=<chosen-agent> workflow=<selected-ids> step=<step-id> skills=<loaded-ids> checkpoint=<complete-one-line-task-label>`/iu);
+  assert.match(scenario.prompt, /copy each delegated row's Agent exactly into the native task item `agent`[\s\S]*mechanically copy the other four fields[\s\S]*assignment text byte 0 starts exactly `\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]`/iu);
   assert.match(scenario.prompt, /declare code-development before the final omp\.plugin workflow reference in Load order/iu);
   assert.match(scenario.prompt, /separate numbered Actions?.+local code search.+official-and-community-search decision.+detailed.+slice.+wave.+plan.+PLAN REVIEW.+parallel.+task.+MAIN REVIEW.+reviewer.+repair.+final report/isu);
   assert.match(scenario.prompt, /search the local source and adjacent test.+network search is unavailable and unnecessary/isu);
@@ -2564,6 +3457,7 @@ test('self-iteration E2E fixture is a bounded real Node project with a green bas
   assert.match(scenario.prompt, /After the report TODO is complete.+final response.+RED.+GREEN.+review dispositions/isu);
   assert.equal(matrix.defaults.expectations.requireWorkflowPlanFirstVisibleContent, true);
   assert.equal(matrix.defaults.expectations.requireWorkflowReadyTodoOnlyBatch, true);
+  assert.equal(matrix.defaults.expectations.requireSuccessfulToolCalls, true);
   assert.equal(scenario.expectations.requiredWorkflowPrimary, 'omp.plugin');
   assert.deepEqual(scenario.expectations.requiredObservedSkills, [
     'code-development',
@@ -2578,6 +3472,7 @@ test('self-iteration E2E fixture is a bounded real Node project with a green bas
   assert.equal(scenario.expectations.minNativeTaskAssignmentAttempts, 4);
   assert.equal(scenario.expectations.maxNativeTaskAssignmentAttempts, 6);
   assert.equal(scenario.expectations.requireExactNativeTaskMetadataPrefix, true);
+  assert.equal(scenario.expectations.requireNativeTaskMetadataMatchesDelegatedTodoRows, true);
   assert.deepEqual(scenario.expectations.requiredNativeTaskSkillsPerAssignment, [
     'code-development',
   ]);
@@ -2704,10 +3599,11 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   assert.equal(matrix.defaults.expectations.maxProvidedSkills, 0);
   assert.equal(matrix.defaults.expectations.expectedProvisionMode, 'none');
   assert.equal(matrix.defaults.expectations.requiredWorkflowPlanFormat, 'block');
-  assert.equal(matrix.defaults.expectations.minWorkflowPlanNumberedActions, 1);
+  assert.equal(matrix.defaults.expectations.minWorkflowPlanNumberedActions, 4);
   for (const expectation of [
     'requireWorkflowIndexOnlyFirstToolBatch',
     'requireWorkflowPlanBeforeResourceLoads',
+    'requireStructuredWorkflowLoadPhases',
     'forbidResourceProjectSameBatch',
     'requireWorkflowReadyAfterLoadsBeforeProjectTools',
     'requireWorkflowPlanSkillsUseDomainSkillUris',
@@ -2726,9 +3622,9 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
 
   const nested = matrix.scenarios.find(({ id }) => id === 'natural-ecc-nested');
   assert.deepEqual(nested.expectations.requiredObservedSkills, [
-    'ecc-skill-catalog',
     'homelab-pihole-dns',
   ]);
+  assert.ok(nested.expectations.forbiddenSkills.includes('ecc-skill-catalog'));
   const writing = matrix.scenarios.find(({ id }) => id === 'natural-writing-en');
   assert.deepEqual(writing.expectations.requiredSelectedWorkflowIds, ['writing.en', 'writing.latex']);
   const fact = matrix.scenarios.find(({ id }) => id === 'natural-fact-check');
@@ -2746,10 +3642,12 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   assert.equal(docker.expectations.maxObservedSkills, 2);
   const subagent = matrix.scenarios.find(({ id }) => id === 'natural-subagent-isolation');
   assert.equal(subagent.expectations.requireNativeTaskCompletion, true);
+  assert.equal(subagent.expectations.requireSuccessfulToolCalls, false);
   assert.deepEqual(subagent.tools, ['task', 'hub', 'read']);
   assert.equal(subagent.expectations.maxNativeTaskCalls, 1);
   assert.equal(subagent.expectations.maxNativeTaskAssignmentAttempts, 1);
   assert.equal(subagent.expectations.requireWorkflowIndexOnlyFirstToolBatch, false);
+  assert.equal(subagent.expectations.requireStructuredWorkflowLoadPhases, false);
   assert.equal(subagent.expectations.requireWorkflowPlanSkillsUseDomainSkillUris, false);
   assert.equal(subagent.expectations.requireWorkflowReadyLoadedSkillsUseBareIds, false);
   assert.equal(subagent.expectations.requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills, false);
@@ -2763,6 +3661,7 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   assert.equal(negative.expectations.maxNativeTaskCalls, 0);
   assert.equal(negative.expectations.forbidWorkflowMarkers, true);
   assert.equal(negative.expectations.requireWorkflowIndexOnlyFirstToolBatch, false);
+  assert.equal(negative.expectations.requireStructuredWorkflowLoadPhases, false);
   assert.equal(negative.expectations.requireWorkflowPlanSkillsUseDomainSkillUris, false);
   assert.equal(negative.expectations.requireWorkflowReadyLoadedSkillsUseBareIds, false);
   assert.equal(negative.expectations.requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills, false);
@@ -2787,7 +3686,8 @@ test('DeepSeek writing-selection and Advisor paired matrices enable strict workf
 
   for (const matrix of matrices) {
     assert.equal(matrix.defaults.expectations.requiredWorkflowPlanFormat, 'block');
-    assert.equal(matrix.defaults.expectations.minWorkflowPlanNumberedActions, 1);
+    assert.equal(matrix.defaults.expectations.minWorkflowPlanNumberedActions, 4);
+    assert.equal(matrix.defaults.expectations.requireStructuredWorkflowLoadPhases, true);
     assert.equal(matrix.defaults.expectations.requireWorkflowPlanSkillsUseDomainSkillUris, true);
     assert.equal(matrix.defaults.expectations.requireWorkflowReadyLoadedSkillsUseBareIds, true);
     assert.equal(
@@ -2805,27 +3705,67 @@ test('DeepSeek writing-selection and Advisor paired matrices enable strict workf
     'format-template-latex',
   ]);
   assert.deepEqual(conversion.expectations.requiredObservedSkills, ['format-latex2markdown']);
+
+  const advisorPaired = matrices[1];
+  const chineseSkillPath = advisorPaired.scenarios.find(({
+    id,
+  }) => id === 'zh-writing-skill-uri-with-advisor');
+  assert.ok(chineseSkillPath);
+  assert.equal(chineseSkillPath.advisor, true);
+  assert.equal(chineseSkillPath.repeat, 1);
+  assert.equal(chineseSkillPath.fixture, 'semantic-edit-zh');
+  assert.deepEqual(chineseSkillPath.expectations.requiredObservedSkills, [
+    'plain-chinese-writing',
+    'zh-writing-polish',
+  ]);
+  assert.deepEqual(chineseSkillPath.expectations.requiredObservedSkillsBeforeProjectTools, [
+    'plain-chinese-writing',
+    'zh-writing-polish',
+  ]);
+  assert.deepEqual(chineseSkillPath.expectations.requiredExactSkillUrisBeforeProjectTools, [
+    'skill://plain-chinese-writing',
+    'skill://zh-writing-polish',
+  ]);
+  assert.equal(chineseSkillPath.expectations.forbidMisaddressedDeclaredSkillReads, true);
+  assert.equal(chineseSkillPath.expectations.forbidUnsupportedAdvisorSkillAbsenceClaims, true);
 });
 
-test('DeepSeek subagent-willingness matrix keeps native task and hub semantics with natural controls', async () => {
+test('DeepSeek subagent default matrix keeps native task and hub semantics with natural controls', async () => {
   const matrix = JSON.parse(await readFile(
     new URL('./e2e/fixtures/deepseek-subagent-willingness.json', import.meta.url),
     'utf8',
   ));
 
   assert.equal(matrix.defaults.model, 'opencode-go/deepseek-v4-flash');
+  assert.equal(matrix.defaults.thinking, 'max');
+  assert.equal(matrix.defaults.expectations.requireSuccessfulToolCalls, true);
   assert.equal(matrix.defaults.taskEager, 'preferred');
   assert.deepEqual(matrix.defaults.tools, ['task', 'hub', 'read', 'grep', 'glob']);
   assert.equal(matrix.defaults.advisor, false);
   assert.equal(matrix.defaults.repeat, 3);
   assert.equal(matrix.defaults.timeoutSeconds, 360);
   assert.equal(matrix.defaults.expectations.requiredWorkflowPlanFormat, 'block');
-  assert.equal(matrix.defaults.expectations.minWorkflowPlanNumberedActions, 1);
+  assert.equal(matrix.defaults.expectations.minWorkflowPlanNumberedActions, 4);
+  assert.equal(matrix.defaults.expectations.requireStructuredWorkflowLoadPhases, true);
+  assert.equal(matrix.defaults.expectations.requireWorkflowPlanSkillsUseDomainSkillUris, true);
+  assert.equal(matrix.defaults.expectations.requireWorkflowReadyLoadedSkillsUseBareIds, true);
+  assert.equal(
+    matrix.defaults.expectations.requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills,
+    true,
+  );
 
   const single = matrix.scenarios.find(({ id }) => id === 'single-read-direct');
   const forbidden = matrix.scenarios.find(({ id }) => id === 'explicit-main-only');
   const trivialBatch = matrix.scenarios.find(({ id }) => id === 'two-trivial-lookups-direct');
+  const simple = matrix.scenarios.find(({ id }) => id === 'non-mechanical-agentic-simple');
+  const writing = matrix.scenarios.find(({ id }) => id === 'natural-writing-en-subagent-default');
+  const network = matrix.scenarios.find(({ id }) => id === 'natural-network-design-subagent-default');
   const positives = matrix.scenarios.filter(({ category }) => category.startsWith('positive/'));
+  for (const scenario of matrix.scenarios.filter(({ expectations }) => (
+    expectations.requireWorkflowPlanBeforeResourceLoads === true
+  ))) {
+    assert.equal(scenario.expectations.requireWorkflowPlanFirstVisibleContent, true, scenario.id);
+  }
   assert.equal(single.expectations.maxNativeTaskAssignmentAttempts, 0);
   assert.equal(forbidden.expectations.maxNativeTaskAssignmentAttempts, 0);
   assert.equal(trivialBatch.expectations.maxNativeTaskAssignmentAttempts, 0);
@@ -2835,18 +3775,123 @@ test('DeepSeek subagent-willingness matrix keeps native task and hub semantics w
   for (const scenario of [single, trivialBatch]) {
     assert.equal(scenario.expectations.maxNativeTodoCalls, 0, scenario.id);
     assert.equal(scenario.expectations.forbidWorkflowMarkers, true, scenario.id);
+    assert.equal(scenario.expectations.requireStructuredWorkflowLoadPhases, false, scenario.id);
+    assert.equal(scenario.expectations.requireWorkflowPlanSkillsUseDomainSkillUris, false, scenario.id);
+    assert.equal(scenario.expectations.requireWorkflowReadyLoadedSkillsUseBareIds, false, scenario.id);
+    assert.equal(
+      scenario.expectations.requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills,
+      false,
+      scenario.id,
+    );
     assert.deepEqual(scenario.expectations.forbiddenSkills, ['omp-enhancer-workflows'], scenario.id);
   }
   assert.deepEqual(forbidden.expectations.requiredObservedSkills, [
     'code-development',
     'omp-enhancer-workflows',
   ]);
+  assert.ok(forbidden.tools.includes('todo'));
+  assert.equal(forbidden.expectations.requiredWorkflowPrimary, 'omp.plugin');
+  assert.deepEqual(forbidden.expectations.requiredSelectedWorkflowIds, ['omp.plugin']);
+  assert.deepEqual(forbidden.expectations.requiredWorkflowLoadOrder, [
+    'skill://code-development',
+    'skill://omp-enhancer-workflows/references/omp.plugin.md',
+  ]);
+  assert.equal(forbidden.expectations.requireWorkflowResourceCallsMatchLoadOrder, true);
   assert.equal(forbidden.expectations.requireWorkflowIndexOnlyFirstToolBatch, true);
   assert.equal(forbidden.expectations.requireWorkflowPlanBeforeResourceLoads, true);
   assert.equal(forbidden.expectations.forbidResourceProjectSameBatch, true);
   assert.equal(forbidden.expectations.requireWorkflowReadyAfterLoadsBeforeProjectTools, true);
+  assert.equal(forbidden.expectations.requireWorkflowReadyFirstVisibleContent, true);
+  assert.equal(forbidden.expectations.requireWorkflowReadyTodoOnlyBatch, true);
+  assert.equal(forbidden.expectations.requireNativeTodoInit, true);
+  assert.equal(forbidden.expectations.minNativeTodoItems, 2);
+  assert.equal(forbidden.expectations.minNativeTodoCompletionTransitions, 1);
+  assert.equal(forbidden.expectations.requireNativeTodoCompletion, true);
+  assert.equal(forbidden.expectations.requireNativeTodoInitBeforeSubstantiveTool, true);
+  assert.deepEqual(forbidden.expectations.requiredNativeTodoItemPatterns, [
+    '(?:^|\\s)fallback=(?=[^\\r\\n]*(?:user(?:\\s+or\\s+native)?\\s+constraint|native(?:\\s+user)?\\s+constraint|user\\s+request|explicit\\s+user\\s+instruction|user\\s+explicitly\\s+(?:required|requested|instructed)))(?=[^\\r\\n]*(?:do\\s+not\\s+delegate|no[- ]delegation|main(?:\\s+agent)?[- ]only|keep\\s+all\\s+work\\s+in\\s+(?:the\\s+)?main\\s+agent))[^\\r\\n]+',
+  ]);
   assert.doesNotMatch(forbidden.prompt, /subagents?|sub-agents?/iu);
   assert.match(forbidden.prompt, /do not delegate/iu);
+  assert.equal(simple.expectations.maxNativeTaskCalls, 0);
+  assert.equal(simple.expectations.maxNativeTaskAssignmentAttempts, 0);
+  assert.equal(simple.expectations.requireNativeTodoInit, true);
+  assert.equal(simple.expectations.requireNativeTodoInitBeforeSubstantiveTool, true);
+  assert.equal(simple.expectations.requiredWorkflowPrimary, 'agentic.simple');
+  assert.deepEqual(simple.expectations.requiredSelectedWorkflowIds, ['agentic.simple']);
+  assert.deepEqual(simple.expectations.requiredObservedSkills, ['omp-enhancer-workflows']);
+  assert.equal(simple.expectations.requireWorkflowReadyTodoOnlyBatch, true);
+
+  assert.equal(writing.fixture, 'substantive-writing-en-readonly');
+  assert.match(writing.prompt, /two English LaTeX paragraphs/iu);
+  assert.match(writing.prompt, /claim-evidence relationship/iu);
+  assert.deepEqual(writing.expectations.requiredSelectedWorkflowIds, ['writing.en', 'writing.latex']);
+  assert.deepEqual(writing.expectations.requiredNativeTaskAgents, ['writer', 'checker']);
+  assert.deepEqual(writing.expectations.requiredNativeTaskAgentSequence, ['writer', 'checker']);
+  assert.deepEqual(writing.expectations.requiredNativeTaskWorkflowsPerAssignment, [
+    'writing.en',
+    'writing.latex',
+  ]);
+  assert.deepEqual(writing.expectations.requiredNativeTaskSkillsPerAssignment, ['writing-review']);
+  assert.deepEqual(writing.expectations.forbiddenSkills, [
+    'format-markdown2latex',
+    'format-latex2markdown',
+    'format-template-latex',
+    'writing-checkers',
+    'writing-markdown-helper',
+    'plain-chinese-writing',
+    'zh-format-humanizer',
+    'zh-writing-checkers',
+    'zh-writing-logic-check',
+    'zh-writing-mad-writer',
+    'zh-writing-markdown-helper',
+    'zh-writing-polish',
+    'zh-writing-review',
+    'zh-writing-state-machine',
+  ]);
+  assert.deepEqual(writing.expectations.requiredWorkflowLoadOrder, [
+    'skill://writing-review',
+    'skill://omp-enhancer-workflows/references/writing.latex.md',
+    'skill://omp-enhancer-workflows/references/writing.en.md',
+  ]);
+  assert.equal(writing.expectations.requireWorkflowResourceCallsMatchLoadOrder, true);
+  assert.equal(writing.expectations.requireWorkflowPlanLoadCallsSameBatch, true);
+  assert.equal(writing.expectations.requireNativeTaskMetadataPrefix, true);
+  assert.equal(writing.expectations.requireExactNativeTaskMetadataPrefix, true);
+  assert.equal(writing.expectations.requireNativeTaskMetadataMatchesDelegatedTodoRows, true);
+  assert.equal(writing.expectations.requireNativeTaskCompletion, true);
+  assert.equal(writing.expectations.requireNativeTaskSubmissionForEveryAssignment, true);
+  assert.equal(writing.expectations.requireNativeTodoInit, true);
+  assert.equal(writing.expectations.requireNativeTodoCompletion, true);
+  assert.equal(writing.expectations.maxProjectInspectionCallsBeforeNativeTask, 0);
+  assert.doesNotMatch(writing.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
+
+  assert.equal(network.expectations.requiredWorkflowPrimary, 'network.design');
+  assert.deepEqual(network.expectations.requiredSelectedWorkflowIds, ['network.design']);
+  assert.deepEqual(network.expectations.requiredNativeTaskAgents, ['ecc-network-architect']);
+  assert.deepEqual(network.expectations.requiredNativeTaskWorkflowsPerAssignment, ['network.design']);
+  assert.deepEqual(network.expectations.requiredNativeTaskSkillsPerAssignment, [
+    'network-config-validation',
+    'safety-guard',
+  ]);
+  assert.deepEqual(network.expectations.requiredWorkflowLoadOrder, [
+    'skill://ecc-skill-catalog/network-config-validation/SKILL.md',
+    'skill://ecc-skill-catalog/safety-guard/SKILL.md',
+    'skill://omp-enhancer-workflows/references/network.design.md',
+  ]);
+  assert.equal(network.expectations.requireWorkflowResourceCallsMatchLoadOrder, true);
+  assert.deepEqual(network.expectations.forbiddenSkills, ['ecc-skill-catalog']);
+  assert.equal(network.expectations.requireNativeTaskMetadataPrefix, true);
+  assert.equal(network.expectations.requireExactNativeTaskMetadataPrefix, true);
+  assert.equal(network.expectations.requireNativeTaskMetadataMatchesDelegatedTodoRows, true);
+  assert.equal(network.expectations.requireNativeTaskCompletion, true);
+  assert.equal(network.expectations.requireNativeTaskSubmissionForEveryAssignment, true);
+  assert.equal(network.expectations.maxProjectInspectionCallsBeforeNativeTask, 0);
+  assert.equal(network.expectations.maxProjectInspectionCallsAfterNativeTask, 0);
+  assert.equal(network.timeoutSeconds, 480);
+  assert.match(network.prompt, /pre-deployment configuration-validation checklist/iu);
+  assert.match(network.prompt, /advisory migration-risk review/iu);
+  assert.doesNotMatch(network.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
   assert.equal(positives.length, 2);
   for (const scenario of positives) {
     const expectedWidth = 2;
@@ -2877,18 +3922,36 @@ test('DeepSeek subagent-willingness matrix keeps native task and hub semantics w
   }
   const twoFile = matrix.scenarios.find(({ id }) => id === 'two-file-natural');
   assert.equal(twoFile.timeoutSeconds, 480);
+  assert.deepEqual(twoFile.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob']);
   assert.deepEqual(twoFile.expectations.requiredObservedSkills, [
     'code-development',
     'omp-enhancer-workflows',
   ]);
+  assert.equal(twoFile.expectations.requiredWorkflowPrimary, 'omp.plugin');
+  assert.deepEqual(twoFile.expectations.requiredSelectedWorkflowIds, ['omp.plugin']);
+  assert.deepEqual(twoFile.expectations.requiredWorkflowLoadOrder, [
+    'skill://code-development',
+    'skill://omp-enhancer-workflows/references/omp.plugin.md',
+  ]);
+  assert.equal(twoFile.expectations.requireWorkflowResourceCallsMatchLoadOrder, true);
+  assert.equal(twoFile.expectations.requireWorkflowPlanLoadCallsSameBatch, true);
   assert.equal(twoFile.expectations.requireNativeTaskBatch, true);
   assert.equal(twoFile.expectations.requireNativeTaskMetadataPrefix, true);
+  assert.equal(twoFile.expectations.requireWorkflowReadyTodoOnlyBatch, true);
+  assert.equal(twoFile.expectations.requireWorkflowReadyFirstVisibleContent, true);
+  assert.equal(twoFile.expectations.requireNativeTodoInit, true);
+  assert.equal(twoFile.expectations.minNativeTodoItems, 3);
+  assert.deepEqual(twoFile.expectations.requiredNativeTodoItemPatterns, [
+    '^(?!Delegate\\s)(?=[^\\r\\n]*(?:Main|parent)(?:[- ]owned)?)(?=[^\\r\\n]*(?:compar(?:e|ison)|integrat(?:e|ion)|verif(?:y|ication)))[^\\r\\n]+',
+  ]);
+  assert.equal(twoFile.expectations.requireNativeTodoInitBeforeSubstantiveTool, true);
+  assert.equal(twoFile.expectations.requireNativeTodoCompletion, true);
   assert.equal(twoFile.expectations.requireNativeTaskSubmissionForEveryAssignment, true);
   assert.equal(twoFile.expectations.agentArtifactReadPolicy, 'preview-once');
   assert.equal(twoFile.expectations.maxAgentArtifactReadCalls, 2);
   assert.deepEqual(twoFile.expectations.requiredNativeTaskAgents, ['plan']);
-  assert.deepEqual(twoFile.expectations.requiredNativeTaskWorkflows, ['code.dev']);
-  assert.deepEqual(twoFile.expectations.requiredNativeTaskWorkflowsPerAssignment, ['code.dev']);
+  assert.deepEqual(twoFile.expectations.requiredNativeTaskWorkflows, ['omp.plugin']);
+  assert.deepEqual(twoFile.expectations.requiredNativeTaskWorkflowsPerAssignment, ['omp.plugin']);
   assert.deepEqual(twoFile.expectations.requiredNativeTaskSkillsPerAssignment, ['code-development']);
   assert.match(twoFile.prompt, /independently challenge two complete implementation plans/iu);
   assert.match(twoFile.prompt, /local anchors/iu);
@@ -2904,6 +3967,90 @@ test('DeepSeek subagent-willingness matrix keeps native task and hub semantics w
   assert.match(crossPlugin.prompt, /generated workflow parity/iu);
   assert.match(crossPlugin.prompt, /public review-tool registration parity/iu);
   assert.match(crossPlugin.prompt, /no finding is valid/iu);
+});
+
+test('dependency-ordered workflow assignments require successful prior Agent delivery', () => {
+  const assignment = (id, agent, jobId) => [
+    toolCallEvent(id, 'task', {
+      agent,
+      task: `[workflow=writing.en,writing.latex step=step-${agent} todo=revise skills=writing-review] ${agent} checkpoint.`,
+    }),
+    toolResultEvent(id, 'task', {
+      isError: false,
+      details: { async: { jobId, state: 'running', type: 'task' } },
+    }),
+  ];
+  const delivery = (jobId, status = 'completed', body = `${jobId} delivery`) => ({
+    type: 'message_end',
+    message: {
+      role: 'custom',
+      customType: 'async-result',
+      content: `<task-result id="${jobId}" status="${status}">${body}</task-result>`,
+    },
+  });
+  const expectations = {
+    requireFinal: false,
+    requiredNativeTaskAgentSequence: ['writer', 'checker'],
+  };
+
+  const ordered = summarizeWorkflowEvents([
+    ...assignment('writer-task', 'writer', 'WriterJob'),
+    delivery('WriterJob'),
+    ...assignment('checker-task', 'checker', 'CheckerJob'),
+    delivery('CheckerJob'),
+  ]);
+  assert.equal(evaluateWorkflowSummary(ordered, expectations).pass, true);
+
+  const overlapped = summarizeWorkflowEvents([
+    ...assignment('writer-task', 'writer', 'WriterJob'),
+    ...assignment('checker-task', 'checker', 'CheckerJob'),
+    delivery('WriterJob'),
+    delivery('CheckerJob'),
+  ]);
+  const overlappedEvaluation = evaluateWorkflowSummary(overlapped, expectations);
+  assert.equal(overlappedEvaluation.pass, false);
+  assert.match(overlappedEvaluation.failures.join('\n'), /checker.+before.+writer.+successful delivery/iu);
+
+  const failedWriter = summarizeWorkflowEvents([
+    ...assignment('writer-task', 'writer', 'WriterJob'),
+    delivery('WriterJob', 'failed'),
+    ...assignment('checker-task', 'checker', 'CheckerJob'),
+    delivery('CheckerJob'),
+  ]);
+  const failedWriterEvaluation = evaluateWorkflowSummary(failedWriter, expectations);
+  assert.equal(failedWriterEvaluation.pass, false);
+  assert.match(failedWriterEvaluation.failures.join('\n'), /writer.+did not complete successfully/iu);
+
+  const completedWithoutDelivery = summarizeWorkflowEvents([
+    ...assignment('writer-task', 'writer', 'WriterJob'),
+    delivery('WriterJob', 'completed', ''),
+    ...assignment('checker-task', 'checker', 'CheckerJob'),
+    delivery('CheckerJob'),
+  ]);
+  const completedWithoutDeliveryEvaluation = evaluateWorkflowSummary(
+    completedWithoutDelivery,
+    expectations,
+  );
+  assert.equal(completedWithoutDeliveryEvaluation.pass, false);
+  assert.match(
+    completedWithoutDeliveryEvaluation.failures.join('\n'),
+    /writer.+did not return a successful delivery/iu,
+  );
+
+  const prematureChecker = summarizeWorkflowEvents([
+    ...assignment('premature-checker-task', 'checker', 'PrematureCheckerJob'),
+    ...assignment('writer-task', 'writer', 'WriterJob'),
+    delivery('WriterJob'),
+    ...assignment('checker-task', 'checker', 'CheckerJob'),
+    delivery('PrematureCheckerJob'),
+    delivery('CheckerJob'),
+  ]);
+  const prematureCheckerEvaluation = evaluateWorkflowSummary(prematureChecker, expectations);
+  assert.equal(prematureCheckerEvaluation.pass, false);
+  assert.match(
+    prematureCheckerEvaluation.failures.join('\n'),
+    /checker.+before.+writer.+successful delivery/iu,
+  );
 });
 
 test('mandatory matrix isolates plugin compliance from the explicit advisor stress matrix', async () => {
@@ -2990,7 +4137,30 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
     assert.ok(advisorWorkflow);
     assert.equal(advisorWorkflow.taskEager, 'preferred');
     assert.equal(advisorWorkflow.fixture, 'workflow-two-code-files');
+    assert.deepEqual(advisorWorkflow.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob']);
     assert.equal(advisorWorkflow.expectations.requireNativeTaskMetadataPrefix, true);
+    assert.equal(advisorWorkflow.expectations.requiredWorkflowPrimary, 'code.dev');
+    assert.deepEqual(advisorWorkflow.expectations.requiredSelectedWorkflowIds, ['code.dev']);
+    assert.deepEqual(advisorWorkflow.expectations.requiredWorkflowLoadOrder, [
+      'skill://code-development',
+      'skill://omp-enhancer-workflows/references/code.dev.md',
+    ]);
+    assert.equal(advisorWorkflow.expectations.requireWorkflowResourceCallsMatchLoadOrder, true);
+    assert.equal(advisorWorkflow.expectations.requireWorkflowIndexOnlyFirstToolBatch, true);
+    assert.equal(advisorWorkflow.expectations.requireWorkflowPlanBeforeResourceLoads, true);
+    assert.equal(advisorWorkflow.expectations.requireWorkflowPlanFirstVisibleContent, true);
+    assert.equal(advisorWorkflow.expectations.requireWorkflowPlanLoadCallsSameBatch, true);
+    assert.equal(advisorWorkflow.expectations.requireWorkflowReadyAfterLoadsBeforeProjectTools, true);
+    assert.equal(advisorWorkflow.expectations.requireWorkflowReadyFirstVisibleContent, true);
+    assert.equal(advisorWorkflow.expectations.requireWorkflowReadyTodoOnlyBatch, true);
+    assert.equal(advisorWorkflow.expectations.requireExactSelectedWorkflowReferences, true);
+    assert.equal(advisorWorkflow.expectations.requireNativeTodoInit, true);
+    assert.equal(advisorWorkflow.expectations.minNativeTodoItems, 3);
+    assert.deepEqual(advisorWorkflow.expectations.requiredNativeTodoItemPatterns, [
+      '^(?!Delegate\\s)(?=[^\\r\\n]*(?:Main|parent)(?:[- ]owned)?)(?=[^\\r\\n]*(?:compar(?:e|ison)|integrat(?:e|ion)|verif(?:y|ication)))[^\\r\\n]+',
+    ]);
+    assert.equal(advisorWorkflow.expectations.requireNativeTodoInitBeforeSubstantiveTool, true);
+    assert.equal(advisorWorkflow.expectations.requireNativeTodoCompletion, true);
     assert.equal(advisorWorkflow.expectations.maxAgentArtifactReadCalls, 0);
     assert.deepEqual(advisorWorkflow.expectations.requiredObservedSkills, [
       'code-development',
@@ -3137,6 +4307,8 @@ test('workflow consolidation matrix covers representative non-medical workflows 
   assert.equal(matrix.defaults.expectations.requireNativeTodoFirstTool, true);
   assert.equal(matrix.defaults.expectations.maxNativeTaskCalls, 1);
   assert.equal(matrix.defaults.expectations.minNativeTaskBatchCalls, 1);
+  assert.equal(matrix.defaults.expectations.requireExactNativeTaskMetadataPrefix, true);
+  assert.equal(matrix.defaults.expectations.requireNativeTaskMetadataMatchesDelegatedTodoRows, true);
   assert.equal(matrix.defaults.expectations.maxProjectInspectionCallsBeforeNativeTask, 0);
   assert.equal(matrix.defaults.expectations.maxProjectInspectionCallsAfterNativeTask, 0);
   assert.equal(matrix.defaults.expectations.maxSourceSearchCalls, 8);
@@ -3595,7 +4767,93 @@ test('installed workflow summary tracks native todo initialization and completio
     minNativeTodoCompletionTransitions: 2,
     requireNativeTodoCompletion: true,
     requireNativeTodoInitBeforeSubstantiveTool: true,
+    requiredNativeTodoItemPatterns: [
+      'Inspect\\s+workflow',
+      'Run\\s+tests',
+    ],
   }).pass, true);
+
+  const requiredFallbackPattern = '(?:^|\\s)fallback=(?=[^\\r\\n]*(?:user(?:\\s+or\\s+native)?\\s+constraint|native(?:\\s+user)?\\s+constraint|user\\s+request|explicit\\s+user\\s+instruction|user\\s+explicitly\\s+(?:required|requested|instructed)))(?=[^\\r\\n]*(?:do\\s+not\\s+delegate|no[- ]delegation|main(?:\\s+agent)?[- ]only|keep\\s+all\\s+work\\s+in\\s+(?:the\\s+)?main\\s+agent))[^\\r\\n]+';
+  for (const fallback of [
+    'fallback=user constraint: keep all work in the main agent and do not delegate',
+    'fallback=explicit user instruction: do not delegate any part',
+    'fallback=user explicitly required main-only execution',
+    'fallback=native user constraint: no delegation is allowed',
+  ]) {
+    const acceptedFallback = evaluateWorkflowSummary({
+      ...summary,
+      nativeTodo: {
+        ...summary.nativeTodo,
+        initializedItems: [
+          ...summary.nativeTodo.initializedItems,
+          `Inspect plugin manifests ${fallback}`,
+        ],
+      },
+    }, {
+      requireFinal: false,
+      requiredNativeTodoItemPatterns: [requiredFallbackPattern],
+    });
+    assert.equal(acceptedFallback.pass, true, fallback);
+  }
+
+  for (const fallback of [
+    'nonfallback=user constraint: keep all work in the main agent and do not delegate',
+    'fallback=explicit user instruction: inspect locally',
+    'fallback=no delegation because coordination overhead is unnecessary',
+    'fallback=user constraint: delegation remains preferred',
+  ]) {
+    const rejectedFallback = evaluateWorkflowSummary({
+      ...summary,
+      nativeTodo: {
+        ...summary.nativeTodo,
+        initializedItems: [
+          ...summary.nativeTodo.initializedItems,
+          `Inspect plugin manifests ${fallback}`,
+        ],
+      },
+    }, {
+      requireFinal: false,
+      requiredNativeTodoItemPatterns: [requiredFallbackPattern],
+    });
+    assert.equal(rejectedFallback.pass, false, fallback);
+  }
+
+  const missingRequiredItemPattern = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredNativeTodoItemPatterns: [requiredFallbackPattern],
+  });
+  assert.equal(missingRequiredItemPattern.pass, false);
+  assert.match(
+    missingRequiredItemPattern.failures.join('\n'),
+    /native todo initialization had no item matching required pattern/iu,
+  );
+
+  const requiredParentIntegrationPattern = '^(?!Delegate\\s)(?=[^\\r\\n]*(?:Main|parent)(?:[- ]owned)?)(?=[^\\r\\n]*(?:compar(?:e|ison)|integrat(?:e|ion)|verif(?:y|ication)))[^\\r\\n]+';
+  const delegatedLookalike = evaluateWorkflowSummary({
+    ...summary,
+    nativeTodo: {
+      ...summary.nativeTodo,
+      initializedItems: [
+        'Delegate Agent=plan workflow=omp.plugin step=step-plan-review skills=code-development checkpoint=Main verifies both plans',
+      ],
+    },
+  }, {
+    requireFinal: false,
+    requiredNativeTodoItemPatterns: [requiredParentIntegrationPattern],
+  });
+  assert.equal(delegatedLookalike.pass, false);
+
+  const parentIntegration = evaluateWorkflowSummary({
+    ...summary,
+    nativeTodo: {
+      ...summary.nativeTodo,
+      initializedItems: ['Parent-owned comparison integrates and verifies both plan reviews'],
+    },
+  }, {
+    requireFinal: false,
+    requiredNativeTodoItemPatterns: [requiredParentIntegrationPattern],
+  });
+  assert.equal(parentIntegration.pass, true);
 
   const skillBeforeTodo = evaluateWorkflowSummary({
     ...summary,
@@ -4108,9 +5366,9 @@ test('installed workflow evaluation places plan review before production and dif
     toolCallEvent('todo-init', 'todo', {
       op: 'init',
       items: [
-        { id: 'plan', text: 'review-plan' },
+        { id: 'plan', text: 'Delegate Agent=plan workflow=omp.plugin step=step-plan-review skills=code-development checkpoint=review-plan' },
         { id: 'change', text: 'TDD change' },
-        { id: 'diff', text: 'review-diff' },
+        { id: 'diff', text: 'Delegate Agent=reviewer workflow=omp.plugin step=step-4 skills=code-development checkpoint=review-diff' },
       ],
     }),
     toolResultEvent('todo-init', 'todo', {
@@ -4195,6 +5453,57 @@ test('installed workflow evaluation places plan review before production and dif
   };
 
   assert.equal(evaluateWorkflowSummary(summary, expectations).pass, true);
+  assert.equal(evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requireNativeTaskMetadataMatchesDelegatedTodoRows: true,
+  }).pass, true);
+
+  const duplicateAssignmentReusingOneTodoRow = structuredClone(summary);
+  const planAssignment = duplicateAssignmentReusingOneTodoRow.nativeTask.assignments
+    .find(({ agent }) => agent === 'plan');
+  duplicateAssignmentReusingOneTodoRow.nativeTask.assignments = [
+    planAssignment,
+    {
+      ...structuredClone(planAssignment),
+      callId: 'duplicate-plan-review',
+      index: 1,
+      eventIndex: planAssignment.eventIndex + 1,
+    },
+  ];
+  duplicateAssignmentReusingOneTodoRow.nativeTodo.initializedItems = [
+    'Delegate Agent=plan workflow=omp.plugin step=step-plan-review skills=code-development checkpoint=review-plan',
+    'Parent verifies the combined review evidence',
+  ];
+  const duplicateAssignmentEvaluation = evaluateWorkflowSummary(
+    duplicateAssignmentReusingOneTodoRow,
+    {
+      requireFinal: false,
+      requireNativeTaskMetadataMatchesDelegatedTodoRows: true,
+    },
+  );
+  assert.equal(duplicateAssignmentEvaluation.pass, false);
+  assert.match(duplicateAssignmentEvaluation.failures.join('\n'), /delegated TODO row/iu);
+
+  const plainTodoRows = structuredClone(summary);
+  plainTodoRows.nativeTodo.initializedItems = ['review-plan', 'TDD change', 'review-diff'];
+  const plainTodoRowsEvaluation = evaluateWorkflowSummary(plainTodoRows, {
+    requireFinal: false,
+    requireNativeTaskMetadataMatchesDelegatedTodoRows: true,
+  });
+  assert.equal(plainTodoRowsEvaluation.pass, false);
+  assert.match(plainTodoRowsEvaluation.failures.join('\n'), /delegated TODO row/iu);
+
+  for (const unsafeCheckpoint of ['review-plan skills=reserved', 'review-plan]unsafe']) {
+    const unsafeTodoRow = structuredClone(summary);
+    unsafeTodoRow.nativeTodo.initializedItems[0] = `Delegate Agent=plan workflow=omp.plugin step=step-plan-review skills=code-development checkpoint=${unsafeCheckpoint}`;
+    unsafeTodoRow.nativeTask.assignments.find(({ agent }) => agent === 'plan').metadata.todo = unsafeCheckpoint;
+    const unsafeTodoRowEvaluation = evaluateWorkflowSummary(unsafeTodoRow, {
+      requireFinal: false,
+      requireNativeTaskMetadataMatchesDelegatedTodoRows: true,
+    });
+    assert.equal(unsafeTodoRowEvaluation.pass, false, unsafeCheckpoint);
+    assert.match(unsafeTodoRowEvaluation.failures.join('\n'), /delegated TODO row/iu);
+  }
   assert.equal(
     summary.nativeTask.assignments.find(({ agent }) => agent === 'plan').jobCompletionEventIndex,
     4,
@@ -4260,6 +5569,12 @@ test('installed workflow evaluation places plan review before production and dif
   const mismatchedTodoEvaluation = evaluateWorkflowSummary(mismatchedTodo, expectations);
   assert.equal(mismatchedTodoEvaluation.pass, false);
   assert.match(mismatchedTodoEvaluation.failures.join('\n'), /parent TODO item/iu);
+
+  const mismatchedCopiedField = structuredClone(summary);
+  mismatchedCopiedField.nativeTask.assignments.find(({ agent }) => agent === 'plan').metadata.skills = 'other-skill';
+  const mismatchedCopiedFieldEvaluation = evaluateWorkflowSummary(mismatchedCopiedField, expectations);
+  assert.equal(mismatchedCopiedFieldEvaluation.pass, false);
+  assert.match(mismatchedCopiedFieldEvaluation.failures.join('\n'), /parent TODO item/iu);
 });
 
 test('installed workflow summary checks bounded metadata and exact compact assignment prefixes', () => {
@@ -4308,9 +5623,19 @@ test('installed workflow summary checks bounded metadata and exact compact assig
     minNativeTaskBatchCalls: 1,
     requireNativeTaskBatch: true,
     requireNativeTaskMetadataPrefix: true,
+    requireNonemptyNativeTaskContext: true,
     requiredNativeTaskContext: 'Inspect independently and return evidence.',
     requiredNativeTaskWorkflowsPerAssignment: ['code.dev'],
   }).pass, true);
+
+  const emptyContext = structuredClone(summary);
+  for (const assignment of emptyContext.nativeTask.assignments) assignment.context = '';
+  const emptyContextEvaluation = evaluateWorkflowSummary(emptyContext, {
+    requireFinal: false,
+    requireNonemptyNativeTaskContext: true,
+  });
+  assert.equal(emptyContextEvaluation.pass, false);
+  assert.match(emptyContextEvaluation.failures.join('\n'), /nonempty native task context/iu);
 
   const wrongWorkflowPerAssignment = evaluateWorkflowSummary(summary, {
     requireFinal: false,

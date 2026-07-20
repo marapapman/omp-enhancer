@@ -33,7 +33,7 @@ The architectural review is rendered as a single self-contained HTML file in the
 
 ## Candidate card
 
-The diagrams carry the weight. Prose is sparse, plain, and uses the glossary terms ([LANGUAGE.md](LANGUAGE.md)) without ceremony.
+The diagrams carry the weight. Prose is sparse, plain, and uses the glossary terms ([LANGUAGE.md](skill://improve-codebase-architecture/LANGUAGE.md)) without ceremony.
 
 Each candidate is one `<article>`:
 
@@ -79,4 +79,4 @@ Before: a tree of function calls rendered as nested boxes. After: the same tree 
 
 ## Tone
 
-Plain English, concise — but the architectural nouns and verbs come straight from [LANGUAGE.md](LANGUAGE.md). Use exactly: module, interface, implementation, depth, deep, shallow, seam, adapter, leverage, locality. Never substitute: component, service, unit, API, signature, boundary, layer, wrapper.
+Plain English, concise — but the architectural nouns and verbs come straight from [LANGUAGE.md](skill://improve-codebase-architecture/LANGUAGE.md). Use exactly: module, interface, implementation, depth, deep, shallow, seam, adapter, leverage, locality. Never substitute: component, service, unit, API, signature, boundary, layer, wrapper.

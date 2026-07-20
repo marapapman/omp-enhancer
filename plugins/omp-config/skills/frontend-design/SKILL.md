@@ -5,6 +5,11 @@ description: Design or refine production web interfaces with clear visual hierar
 
 # Frontend design
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or a separate explicitly capable
+Main-selected Agent owns authorized effects.
+
 Use this when the requested deliverable is visual UI design or UI polish.
 
 ## Work from the product system

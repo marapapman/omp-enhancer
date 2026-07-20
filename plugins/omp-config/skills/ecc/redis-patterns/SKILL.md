@@ -8,6 +8,10 @@ origin: ECC
 
 Quick reference for Redis best practices across common backend use cases.
 
+## Authority Boundary
+
+The SQL, CLI, configuration, and client examples below are patterns, not authorization to connect to or mutate a live database. Authorization to edit repository migration or configuration files does not authorize applying those changes, opening a live connection, or running a live command. Any database side effect requires explicit user scope and the host's native permission path; otherwise keep work read-only or use a disposable environment.
+
 ## How It Works
 
 Redis is an in-memory data structure store that supports strings, hashes, lists, sets, sorted sets, streams, and more. Individual Redis commands are atomic on a single instance; multi-step workflows require Lua scripts, MULTI/EXEC transactions, or explicit synchronization to stay atomic. Data is optionally persisted via RDB snapshots or AOF logs. Clients communicate over TCP using the RESP protocol; connection pools are essential to avoid per-request handshake overhead.
@@ -400,4 +404,4 @@ Use Pub/Sub for fire-and-forget. Switch to Streams if you need guaranteed delive
 - Skill: `backend-patterns` — API and service layer patterns
 - Skill: `database-migrations` — schema versioning
 - Skill: `django-patterns` — Django cache framework integration
-- Workflow: `database.review` with the canonical `reviewer` and this skill
+- Workflow: `database.review` with its bounded `task` read-only audit role and this Skill; native `reviewer` remains reserved for an existing semantic diff or patch

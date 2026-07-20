@@ -8,6 +8,13 @@ origin: ECC
 
 Performance optimization patterns for React 18/19 and Next.js, adapted from [Vercel Labs `react-best-practices`](https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices) (MIT, v1.0.0). This skill organizes rules by priority and provides decision-tree guidance for active code review and refactoring.
 
+## Workflow composition boundary
+
+Related Skills below are compatibility candidates only. Main may select their
+exact URIs in the initial `WORKFLOW PLAN` when useful and visible. This Skill
+does not select or load another Skill, traverse a relative `SKILL.md`, reroute
+the workflow, or emit a replacement plan after `WORKFLOW READY`.
+
 ## When to Activate
 
 - Writing or reviewing React/Next.js code for performance
@@ -562,8 +569,7 @@ When the project ships React Compiler, demote `rerender-*` manual memoization ru
 
 ## Related
 
-- Skills: [react-patterns](../react-patterns/SKILL.md), [react-testing](../react-testing/SKILL.md), [frontend-patterns](../frontend-patterns/SKILL.md), [accessibility](../accessibility/SKILL.md), [nextjs-turbopack](../nextjs-turbopack/SKILL.md)
-- Rules: [rules/react/](../../rules/react/)
+- Skills: `skill://ecc-skill-catalog/react-patterns/SKILL.md`, `skill://ecc-skill-catalog/react-testing/SKILL.md`, `skill://ecc-skill-catalog/frontend-patterns/SKILL.md`, `skill://ecc-skill-catalog/accessibility/SKILL.md`, `skill://ecc-skill-catalog/nextjs-turbopack/SKILL.md`
 - Workflow: `code.dev` with this Skill for measured optimization, independent semantic diff review, build failures, and tests
 
 ## Attribution

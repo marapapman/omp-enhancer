@@ -6,8 +6,15 @@ import {
   buildFactCheckReport,
   collectLocalEvidence,
   crossCheckEvidence,
+  FACT_ASSESSMENT_CONTRACT,
+  formatCanonicalTuple,
   formatFactCheckPlan,
   formatFactCheckReport,
+  isValidClaimTuple,
+  isValidCountercheck,
+  isValidEvidenceTuple,
+  isValidLimitation,
+  isValidStrength,
   normalizeWhitespace,
   strictClaimVerdict,
   validateFactCheckReview,
@@ -99,6 +106,7 @@ function buildClaimSchema(z) {
     location: z.string().optional(),
     evidencePlan: z.array(z.string()).optional(),
     freshnessRequirement: z.enum(['CURRENT', 'NOT_APPLICABLE']).optional(),
+    claimTuple: buildCanonicalTupleSchema(z).optional(),
   });
 }
 
@@ -116,7 +124,41 @@ function buildEvidenceRecordSchema(z) {
     requirementsMet: z.boolean().optional(),
     sourceLineage: z.string().optional(),
     observed: z.any().optional(),
+    evidenceTuple: z.object({
+      ...buildCanonicalTupleShape(z),
+      relation: z.enum(FACT_ASSESSMENT_CONTRACT.tupleRelations),
+      negatedField: z.enum(FACT_ASSESSMENT_CONTRACT.negatedFields).optional(),
+    }).optional(),
+    strength: z.enum(FACT_ASSESSMENT_CONTRACT.strengths).optional(),
+    limitation: z.object({
+      level: z.enum(FACT_ASSESSMENT_CONTRACT.limitationLevels),
+      reason: z.string().optional(),
+    }).optional(),
+    countercheck: z.object({
+      status: z.enum(FACT_ASSESSMENT_CONTRACT.countercheckStatuses),
+      outcome: z.enum(FACT_ASSESSMENT_CONTRACT.countercheckOutcomes),
+      note: z.string().optional(),
+    }).optional(),
   });
+}
+
+function buildCanonicalTupleSchema(z) {
+  return z.object(buildCanonicalTupleShape(z));
+}
+
+function buildCanonicalTupleShape(z) {
+  const tupleField = () => z.object({
+    value: z.string(),
+    materiality: z.enum(FACT_ASSESSMENT_CONTRACT.tupleMaterialities),
+  });
+  return {
+    subject: tupleField(),
+    basePredicate: tupleField(),
+    objectValue: tupleField(),
+    scope: tupleField(),
+    timeVersion: tupleField(),
+    quantifier: tupleField(),
+  };
 }
 
 function buildReviewParameters(z) {
@@ -138,6 +180,12 @@ function formatEvidenceBlock(lane, records = []) {
       record.freshness ? `  freshness: ${record.freshness}` : null,
       record.requirementsMet === true ? '  evidence-plan: satisfied' : null,
       record.sourceLineage ? `  source-lineage: ${record.sourceLineage}` : null,
+      record.evidenceTuple ? `  evidence-tuple: ${formatCanonicalTuple(record.evidenceTuple)}` : null,
+      record.evidenceTuple?.relation ? `  relation: ${record.evidenceTuple.relation}` : null,
+      record.evidenceTuple?.negatedField ? `  negated-field: ${record.evidenceTuple.negatedField}` : null,
+      record.strength ? `  evidence-strength: ${record.strength}` : null,
+      record.limitation ? `  limitation: ${record.limitation.level}${record.limitation.reason ? ` - ${record.limitation.reason}` : ''}` : null,
+      record.countercheck ? `  countercheck: ${record.countercheck.status}/${record.countercheck.outcome}${record.countercheck.note ? ` - ${record.countercheck.note}` : ''}` : null,
       record.reason ? `  reason: ${record.reason}` : null,
     ].filter(Boolean).join('\n')) : ['- none']),
   ].join('\n');
@@ -208,7 +256,7 @@ export default function factCheckerExtension(omp) {
       const warnings = [];
       let claims = Array.isArray(input.claims) ? input.claims : [];
       if (claims.length && !isValidClaimList(claims)) {
-        return errorResult('Fact-check claims must contain non-empty id and text fields.');
+        return errorResult('Fact-check claims must contain non-empty id/text fields and a valid claimTuple when one is supplied.');
       }
       if (claims.length && (input.path || input.text) && !Array.isArray(input.evidenceRecords)) {
         return errorResult('When claims are provided, supply structured evidenceRecords; path/text are only used to derive claims when claims are omitted.');
@@ -224,7 +272,7 @@ export default function factCheckerExtension(omp) {
       const lane = input.lane ?? 'A';
       if (Array.isArray(input.evidenceRecords)
         && !isValidEvidenceInputList(input.evidenceRecords, claims, lane)) {
-        return errorResult('Fact-check evidenceRecords require a planned claimId, the active lane, a canonical status, and non-empty source and quote for deterministic verdicts.');
+        return errorResult('Fact-check evidenceRecords require a planned claimId, the active lane, a canonical status, required source/quote fields, and valid structured tuple/assessment fields when supplied.');
       }
       const localEvidence = collectLocalEvidence({
         claims,
@@ -238,7 +286,7 @@ export default function factCheckerExtension(omp) {
         providers: input.providers,
       });
       const records = mergeEvidence(localEvidence, providerEvidence);
-      if (workflow?.plan && sameClaims(workflow.plan.claims, claims)) {
+      if (workflow?.plan && sameClaimIdentities(workflow.plan.claims, claims)) {
         workflow.evidenceByLane.set(lane, structuredClone(records));
       }
       return {
@@ -269,10 +317,10 @@ export default function factCheckerExtension(omp) {
       const claims = Array.isArray(input.claims) ? input.claims : [];
       const evidenceRecords = Array.isArray(input.evidenceRecords) ? input.evidenceRecords : [];
       if (!isValidClaimList(claims)) {
-        return errorResult('Fact-check report claims must contain non-empty id and text fields.');
+        return errorResult('Fact-check report claims must contain non-empty id/text fields and a valid claimTuple when one is supplied.');
       }
       if (!isValidEvidenceRecordList(evidenceRecords, claims)) {
-        return errorResult('Fact-check report evidenceRecords must contain valid claimId, lane, canonical status, and required source/quote fields for planned claims.');
+        return errorResult('Fact-check report evidenceRecords must contain valid claimId, lane, canonical status, required source/quote fields, and valid structured tuple/assessment fields when supplied.');
       }
       if (!workflow?.plan || !sameClaims(workflow.plan.claims, claims)) {
         warnings.push('No matching session plan was observed; the report was built from the supplied structured claims.');
@@ -412,10 +460,17 @@ function isValidClaimList(claims) {
     claim && typeof claim === 'object'
     && typeof claim.id === 'string' && claim.id.trim()
     && typeof claim.text === 'string' && claim.text.trim()
+    && (claim.claimTuple === undefined || isValidClaimTuple(claim.claimTuple))
   ));
 }
 
 function sameClaims(expected = [], observed = []) {
+  return sameClaimIdentities(expected, observed) && expected.every((claim, index) => (
+    normalizeStructuredValue(claim.claimTuple) === normalizeStructuredValue(observed[index]?.claimTuple)
+  ));
+}
+
+function sameClaimIdentities(expected = [], observed = []) {
   if (!isValidClaimList(expected) || !isValidClaimList(observed) || expected.length !== observed.length) return false;
   return expected.every((claim, index) => (
     claim.id === observed[index]?.id
@@ -431,6 +486,7 @@ function isValidEvidenceRecordList(records, claims) {
     && ['A', 'B'].includes(String(record.lane ?? '').toUpperCase())
     && isCanonicalEvidenceStatus(record.status)
     && evidenceHasRequiredCitation(record)
+    && evidenceAssessmentIsValid(record)
   ));
 }
 
@@ -442,8 +498,16 @@ function isValidEvidenceInputList(records, claims, lane) {
       && claimIds.has(record.claimId)
       && recordLane === lane
       && isCanonicalEvidenceStatus(record.status)
-      && evidenceHasRequiredCitation(record);
+      && evidenceHasRequiredCitation(record)
+      && evidenceAssessmentIsValid(record);
   });
+}
+
+function evidenceAssessmentIsValid(record = {}) {
+  return (record.evidenceTuple === undefined || isValidEvidenceTuple(record.evidenceTuple))
+    && (record.strength === undefined || isValidStrength(record.strength))
+    && (record.limitation === undefined || isValidLimitation(record.limitation))
+    && (record.countercheck === undefined || isValidCountercheck(record.countercheck));
 }
 
 function isCanonicalEvidenceStatus(status) {
@@ -479,12 +543,31 @@ function sameEvidenceRecords(expected = [], observed = []) {
     freshness: record?.freshness ?? '',
     requirementsMet: record?.requirementsMet === true,
     sourceLineage: normalizeWhitespace(record?.sourceLineage ?? ''),
+    evidenceTuple: normalizeStructuredValue(record?.evidenceTuple),
+    strength: String(record?.strength ?? '').toUpperCase(),
+    limitation: normalizeStructuredValue(record?.limitation),
+    countercheck: normalizeStructuredValue(record?.countercheck),
     observed: normalizeObserved(record?.observed),
   });
   const left = expected.map(normalize).sort();
   const right = observed.map(normalize).sort();
   return left.length === right.length
     && left.every((value, index) => value === right[index]);
+}
+
+function normalizeStructuredValue(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  return JSON.stringify(stableStructuredValue(value));
+}
+
+function stableStructuredValue(value) {
+  if (Array.isArray(value)) return value.map(stableStructuredValue);
+  if (!value || typeof value !== 'object') {
+    return typeof value === 'string' ? normalizeWhitespace(value) : value;
+  }
+  return Object.fromEntries(Object.entries(value)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, nested]) => [key, stableStructuredValue(nested)]));
 }
 
 function normalizeObserved(observed) {

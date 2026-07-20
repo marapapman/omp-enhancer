@@ -3,7 +3,7 @@ import { access, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { analyzeCoverageReport, analyzeMutationReport, analyzeTestTargets, buildTestContext, createTestingEnhancerTools, runTestReview } from '../../../src/tools/testingTools.js'
+import { analyzeCoverageReport, analyzeMutationReport, createTestingEnhancerTools } from '../../../src/tools/testingTools.js'
 import type { ExtensionToolContext, ToolDefinition } from '../../../src/ompApi.js'
 import type { BrowserEvidence, ChangedTarget } from '../../../src/types.js'
 
@@ -27,16 +27,18 @@ function context(cwd: string): ExtensionToolContext {
   return { cwd, ui: { notify: () => undefined }, hasUI: false }
 }
 
-describe('pure testing tools', () => {
-  it('analyzes TS and TSX changes into test targets and next tool steps', () => {
-    expect(analyzeTestTargets({
+describe('testing tools', () => {
+  it('analyzes TS and TSX changes into test targets and next tool steps through omp_test_analyze', async () => {
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_analyze').execute('analyze', {
       changedFiles: [
         { path: 'src/auth/parseToken.ts', content: 'export function parseToken() { return true }' },
         { path: 'src/user/UserService.ts', content: 'export class UserService {}' },
         { path: 'src/user/UserService.test.ts', content: 'test()' }
       ]
-    })).toMatchObject({
-      runId: 'local-analysis',
+    }, undefined, undefined, context(process.cwd()))
+
+    expect(result.details).toMatchObject({
+      runId: expect.stringMatching(/^test-/),
       targets: [
         { sourceFile: 'src/auth/parseToken.ts', symbolName: 'parseToken', kind: 'parser', risk: 'low' },
         { sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }
@@ -46,8 +48,8 @@ describe('pure testing tools', () => {
     })
   })
 
-  it('returns focused context for a chosen target', () => {
-    const output = buildTestContext({
+  it('returns focused context for a chosen target through omp_test_context', async () => {
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_context').execute('context', {
       target: {
         id: 'src/user/UserService.ts#UserService',
         sourceFile: 'src/user/UserService.ts',
@@ -57,31 +59,31 @@ describe('pure testing tools', () => {
         relatedTests: ['src/user/UserService.test.ts'],
         publicEntryHints: ['src/user/index.ts#UserService']
       }
-    })
+    }, undefined, undefined, context(process.cwd()))
 
-    expect(output).toMatchObject({
+    expect(result.details).toMatchObject({
       targetId: 'src/user/UserService.ts#UserService',
       testingStyle: 'indirect',
       existingTests: ['src/user/UserService.test.ts'],
       publicEntryHints: ['src/user/index.ts#UserService']
     })
-    expect(output.browserPlan).toBeUndefined()
+    expect((result.details as { browserPlan?: unknown }).browserPlan).toBeUndefined()
   })
 
-  it('classifies a TSX source as react-component while keeping the required next tools unchanged', () => {
-    const output = analyzeTestTargets({
+  it('classifies a TSX source as react-component while keeping the required next tools unchanged', async () => {
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_analyze').execute('analyze-tsx', {
       changedFiles: [{ path: 'src/ui/LoginForm.tsx', content: 'export function LoginForm() { return null }' }]
-    })
+    }, undefined, undefined, context(process.cwd()))
 
-    expect(output).toMatchObject({
-      runId: 'local-analysis',
+    expect(result.details).toMatchObject({
+      runId: expect.stringMatching(/^test-/),
       targets: [{ sourceFile: 'src/ui/LoginForm.tsx', symbolName: 'LoginForm', kind: 'react-component', risk: 'medium' }],
       nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_review', 'omp_test_report']
     })
   })
 
-  it('returns browser planning guidance for react-component targets', () => {
-    const output = buildTestContext({
+  it('returns browser planning guidance for react-component targets', async () => {
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_context').execute('browser-context', {
       target: {
         id: 'src/ui/LoginForm.tsx#LoginForm',
         sourceFile: 'src/ui/LoginForm.tsx',
@@ -90,21 +92,23 @@ describe('pure testing tools', () => {
         risk: 'medium',
         relatedTests: ['tests/e2e/LoginForm.spec.ts']
       }
-    })
+    }, undefined, undefined, context(process.cwd()))
 
-    expect(output.testingStyle).toBe('indirect')
-    expect(output.preferredAssertions).toEqual(expect.arrayContaining(['visible UI output', 'role/name', 'user event result', 'browser error absence']))
-    expect(output.browserPlan).toMatchObject({
-      framework: 'playwright',
-      targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
-      setup: { viewport: { width: 1280, height: 720 }, trace: 'retain-on-failure', screenshot: 'only-on-failure', serviceWorkers: 'block' },
-      locatorPriority: ['role', 'label', 'text', 'placeholder', 'testId', 'css']
+    expect(result.details).toMatchObject({
+      testingStyle: 'indirect',
+      preferredAssertions: expect.arrayContaining(['visible UI output', 'role/name', 'user event result', 'browser error absence']),
+      browserPlan: {
+        framework: 'playwright',
+        targetIds: ['src/ui/LoginForm.tsx#LoginForm'],
+        setup: { viewport: { width: 1280, height: 720 }, trace: 'retain-on-failure', screenshot: 'only-on-failure', serviceWorkers: 'block' },
+        locatorPriority: ['role', 'label', 'text', 'placeholder', 'testId', 'css'],
+        scenarios: [expect.objectContaining({ name: 'LoginForm user-visible behavior' })]
+      }
     })
-    expect(output.browserPlan?.scenarios[0]?.name).toBe('LoginForm user-visible behavior')
   })
 
-  it('returns property testing guidance for pure functions', () => {
-    const output = buildTestContext({
+  it('returns property testing guidance for pure functions', async () => {
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_context').execute('property-context', {
       target: {
         id: 'src/math/clamp.ts#clamp',
         sourceFile: 'src/math/clamp.ts',
@@ -112,22 +116,24 @@ describe('pure testing tools', () => {
         kind: 'pure-function',
         risk: 'low'
       }
-    })
+    }, undefined, undefined, context(process.cwd()))
 
-    expect(output.propertyPlan).toMatchObject({
-      frameworkSuggestion: 'fast-check',
-      properties: expect.arrayContaining([
-        expect.objectContaining({
-          name: 'range bound',
-          repairHint: 'Generate values around min, max, and outside the range; assert the result never leaves the allowed range.'
-        })
-      ])
+    expect(result.details).toMatchObject({
+      propertyPlan: {
+        frameworkSuggestion: 'fast-check',
+        properties: expect.arrayContaining([
+          expect.objectContaining({
+            name: 'range bound',
+            repairHint: 'Generate values around min, max, and outside the range; assert the result never leaves the allowed range.'
+          })
+        ])
+      },
+      preferredAssertions: expect.arrayContaining(['property invariant'])
     })
-    expect(output.preferredAssertions).toEqual(expect.arrayContaining(['property invariant']))
   })
 
-  it('returns api testing guidance for provider targets', () => {
-    const output = buildTestContext({
+  it('returns api testing guidance for provider targets', async () => {
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_context').execute('api-context', {
       target: {
         id: 'src/routes/orders.ts#createOrder',
         sourceFile: 'src/routes/orders.ts',
@@ -136,16 +142,18 @@ describe('pure testing tools', () => {
         risk: 'high',
         publicEntryHints: ['openapi.yaml#paths', 'tests/contracts/orders.pact.ts']
       }
-    })
+    }, undefined, undefined, context(process.cwd()))
 
-    expect(output.apiPlan).toMatchObject({
-      contractSources: ['openapi.yaml#paths', 'tests/contracts/orders.pact.ts'],
-      cases: expect.arrayContaining([
-        expect.objectContaining({ status: '2xx', assertion: 'successful response shape matches the public contract' }),
-        expect.objectContaining({ status: '401/403', assertion: 'unauthorized or forbidden requests are rejected through the public endpoint' })
-      ])
+    expect(result.details).toMatchObject({
+      apiPlan: {
+        contractSources: ['openapi.yaml#paths', 'tests/contracts/orders.pact.ts'],
+        cases: expect.arrayContaining([
+          expect.objectContaining({ status: '2xx', assertion: 'successful response shape matches the public contract' }),
+          expect.objectContaining({ status: '401/403', assertion: 'unauthorized or forbidden requests are rejected through the public endpoint' })
+        ])
+      },
+      preferredAssertions: expect.arrayContaining(['HTTP status', 'response body', 'contract fields'])
     })
-    expect(output.preferredAssertions).toEqual(expect.arrayContaining(['HTTP status', 'response body', 'contract fields']))
   })
 
   it('extracts coverage gaps from Istanbul coverage JSON', () => {
@@ -237,7 +245,7 @@ describe('pure testing tools', () => {
     expect(mutation.details).toMatchObject({ status: 'available', survivedMutants: [expect.objectContaining({ line: 9 })] })
   })
 
-  it('runs all gates against candidate test files', () => {
+  it('runs all gates against candidate test files through omp_test_review', async () => {
     const target: ChangedTarget = {
       id: 'src/user/UserService.ts#UserService',
       sourceFile: 'src/user/UserService.ts',
@@ -246,14 +254,16 @@ describe('pure testing tools', () => {
       risk: 'high'
     }
 
-    expect(runTestReview({
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_review').execute('review', {
       targets: [target],
       candidate: {
         id: 'candidate',
         targetId: target.id,
         files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: "import { helper } from '../internal/helper'" }]
       }
-    })).toMatchObject({
+    }, undefined, undefined, context(process.cwd()))
+
+    expect(result.details).toMatchObject({
       passed: false,
       results: expect.arrayContaining([
         expect.objectContaining({ gate: 'test-file-scope', passed: true }),
@@ -263,7 +273,7 @@ describe('pure testing tools', () => {
     })
   })
 
-  it('blocks gate execution when candidate files are empty', () => {
+  it('reports missing candidate files through omp_test_review', async () => {
     const target: ChangedTarget = {
       id: 'src/user/UserService.ts#UserService',
       sourceFile: 'src/user/UserService.ts',
@@ -272,14 +282,16 @@ describe('pure testing tools', () => {
       risk: 'high'
     }
 
-    expect(runTestReview({
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_review').execute('empty-candidate', {
       targets: [target],
       candidate: {
         id: 'candidate',
         targetId: target.id,
         files: []
       }
-    })).toMatchObject({
+    }, undefined, undefined, context(process.cwd()))
+
+    expect(result.details).toMatchObject({
       passed: false,
       results: expect.arrayContaining([
         expect.objectContaining({ gate: 'test-file-scope', passed: false, summary: 'Candidate includes no test files.' })
@@ -287,15 +299,17 @@ describe('pure testing tools', () => {
     })
   })
 
-  it('blocks gate execution when changed targets are missing', () => {
-    expect(runTestReview({
+  it('reports missing changed targets through omp_test_review', async () => {
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_review').execute('missing-targets', {
       targets: [],
       candidate: {
         id: 'candidate',
         targetId: 'missing',
         files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: 'expect(result).toBe(true)' }]
       }
-    })).toMatchObject({
+    }, undefined, undefined, context(process.cwd()))
+
+    expect(result.details).toMatchObject({
       passed: false,
       results: expect.arrayContaining([
         expect.objectContaining({ gate: 'indirect-test', passed: false, summary: 'No changed targets supplied for indirect-test gate.' })
@@ -303,7 +317,7 @@ describe('pure testing tools', () => {
     })
   })
 
-  it('adds browser gate results from structured browser evidence', () => {
+  it('adds browser gate results from host-observed browser evidence', async () => {
     const target: ChangedTarget = {
       id: 'src/ui/LoginForm.tsx#LoginForm',
       sourceFile: 'src/ui/LoginForm.tsx',
@@ -316,7 +330,7 @@ describe('pure testing tools', () => {
       targetId: target.id,
       files: [{ path: 'src/ui/LoginForm.test.tsx', action: 'create', content: 'test()' }]
     }
-    const browserEvidence = {
+    const browserEvidence: BrowserEvidence = {
       framework: 'playwright',
       status: 'failed',
       baseUrl: 'http://localhost:5173',
@@ -337,7 +351,15 @@ describe('pure testing tools', () => {
       }]
     }
 
-    expect(runTestReview({ targets: [target], candidate, browserEvidence })).toMatchObject({
+    const tools = createTestingEnhancerTools(fakeZod(), {
+      getObservedBrowserEvidence: () => browserEvidence
+    })
+    const result = await tool(tools, 'omp_test_review').execute('browser-review', {
+      targets: [target],
+      candidate
+    }, undefined, undefined, context(process.cwd()))
+
+    expect(result.details).toMatchObject({
       passed: false,
       results: expect.arrayContaining([
         expect.objectContaining({ gate: 'test-file-scope', passed: true }),
@@ -348,7 +370,7 @@ describe('pure testing tools', () => {
     })
   })
 
-  it('blocks frontend targets when browser evidence is missing', () => {
+  it('reports frontend targets when host browser evidence is missing', async () => {
     const target: ChangedTarget = {
       id: 'src/ui/LoginForm.tsx#LoginForm',
       sourceFile: 'src/ui/LoginForm.tsx',
@@ -357,14 +379,16 @@ describe('pure testing tools', () => {
       risk: 'medium'
     }
 
-    expect(runTestReview({
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_review').execute('missing-browser', {
       targets: [target],
       candidate: {
         id: 'candidate',
         targetId: target.id,
         files: [{ path: 'src/ui/LoginForm.test.tsx', action: 'create', content: 'test()' }]
       }
-    })).toMatchObject({
+    }, undefined, undefined, context(process.cwd()))
+
+    expect(result.details).toMatchObject({
       passed: false,
       results: expect.arrayContaining([
         expect.objectContaining({
@@ -375,35 +399,6 @@ describe('pure testing tools', () => {
         })
       ])
     })
-  })
-
-  it('ignores malformed browser evidence findings', () => {
-    const target: ChangedTarget = {
-      id: 'src/ui/LoginForm.tsx#LoginForm',
-      sourceFile: 'src/ui/LoginForm.tsx',
-      symbolName: 'LoginForm',
-      kind: 'react-component',
-      risk: 'medium'
-    }
-    const output = runTestReview({
-      targets: [target],
-      candidate: {
-        id: 'candidate',
-        targetId: target.id,
-        files: [{ path: 'src/ui/LoginForm.test.tsx', action: 'create', content: 'test()' }]
-      },
-      browserEvidence: {
-        framework: 'playwright',
-        status: 'failed',
-        findings: [{}]
-      }
-    })
-
-    expect(output.results.map(result => result.gate)).not.toContain(undefined)
-    expect(output.results).not.toEqual(expect.arrayContaining([expect.objectContaining({ gate: 'browser-visual' })]))
-    expect(output.results).toEqual(expect.arrayContaining([
-      expect.objectContaining({ gate: 'browser-interaction', summary: 'Browser evidence is required for frontend targets.' })
-    ]))
   })
 
   it('runs browser check through an injected callback', async () => {
@@ -575,6 +570,21 @@ describe('pure testing tools', () => {
 })
 
 describe('createTestingEnhancerTools execute layer', () => {
+  it('keeps helper-only facades out of the public module surface', async () => {
+    const module = await import('../../../src/tools/testingTools.js')
+
+    expect(module).not.toHaveProperty('analyzeTestTargets')
+    expect(module).not.toHaveProperty('buildTestContext')
+    expect(module).not.toHaveProperty('runTestReview')
+  })
+
+  it('accepts only runtime-consumed report parameters', () => {
+    const report = tool(createTestingEnhancerTools(fakeZod()), 'omp_test_report')
+    const parameters = report.parameters as { shape: Record<string, unknown> }
+
+    expect(Object.keys(parameters.shape)).toEqual(['reviewResults'])
+  })
+
   it('returns text content and structured details', async () => {
     const cwd = await tempRepo()
     const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_analyze').execute(
@@ -782,7 +792,7 @@ describe('createTestingEnhancerTools execute layer', () => {
     })
   })
 
-  it('checks candidate test content from the workspace when ctx.exec is available', async () => {
+  it('checks an explicit candidate path from the workspace without command execution', async () => {
     const cwd = await tempRepo()
     await writeFile(join(cwd, 'src', 'user', 'UserService.test.ts'), "import { helper } from '../internal/helper'\nexpect(helper()).toBe(true)")
     const target: ChangedTarget = {
@@ -792,9 +802,13 @@ describe('createTestingEnhancerTools execute layer', () => {
       kind: 'service',
       risk: 'high'
     }
+    let commandCalls = 0
     const ctx: ExtensionToolContext = {
       ...context(cwd),
-      exec: async () => ({ exitCode: 0, stdout: '', stderr: '' })
+      exec: async () => {
+        commandCalls += 1
+        return { exitCode: 0, stdout: '', stderr: '' }
+      }
     }
 
     const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_review').execute(
@@ -812,6 +826,7 @@ describe('createTestingEnhancerTools execute layer', () => {
       ctx
     )
 
+    expect(commandCalls).toBe(0)
     expect(result.details).toMatchObject({
       passed: false,
       results: expect.arrayContaining([
@@ -824,26 +839,27 @@ describe('createTestingEnhancerTools execute layer', () => {
     })
   })
 
-  it('includes untracked source files when analyzing git changes', async () => {
+  it('reads an explicitly requested untracked source file without invoking git discovery', async () => {
     const cwd = await tempRepo()
     await writeFile(join(cwd, 'src', 'user', 'NewService.ts'), 'export class NewService {}')
+    let commandCalls = 0
     const ctx: ExtensionToolContext = {
       ...context(cwd),
-      exec: async (_program, args) => ({
-        exitCode: 0,
-        stdout: args[0] === 'ls-files' ? 'src/user/NewService.ts\n' : '',
-        stderr: ''
-      })
+      exec: async () => {
+        commandCalls += 1
+        return { exitCode: 0, stdout: '', stderr: '' }
+      }
     }
 
     const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_analyze').execute(
       'call',
-      {},
+      { files: ['src/user/NewService.ts'] },
       undefined,
       undefined,
       ctx
     )
 
+    expect(commandCalls).toBe(0)
     expect(result.details).toMatchObject({
       targets: [expect.objectContaining({ sourceFile: 'src/user/NewService.ts', symbolName: 'NewService' })]
     })

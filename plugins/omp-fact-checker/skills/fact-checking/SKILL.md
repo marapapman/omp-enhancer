@@ -1,9 +1,15 @@
 ---
 name: fact-checking
-description: Primary workflow for requests to verify claims, facts, numbers, dates, freshness, citations, or source support in prose and documents. Produces claim-by-claim verdicts with limitations; not for citation formatting, claim extraction alone, or source ranking alone.
+description: Domain method for verifying claims, facts, numbers, dates, freshness, citations, or source support in prose and documents. Use it to produce claim-by-claim verdicts with limitations after Main selects a workflow such as factcheck.document; this Skill is not a workflow ID and is not for citation formatting, claim extraction alone, or source ranking alone.
 ---
 
 # Fact Checking Workflow
+
+When this Skill is listed in a `writer` or `zh-writer` assignment, it is
+evidence context only for that prose checkpoint. The writer consumes fact
+findings already supplied by Main and returns a proposal; it does not run this
+fact-checking method, invoke Fact Checker tools, collect evidence, or issue a
+verdict. Main or a separate selected fact Agent owns the fact-check checkpoint.
 
 Return every checked claim in this literal, parse-stable block before any overall limitations:
 
@@ -36,6 +42,40 @@ Compare the exact claim tuple before assigning a verdict:
 - Use `LOCAL_UNVERIFIED` when local identity evidence exists but the content
   needed for alignment is unavailable. Use `INSUFFICIENT` for adjacent, weaker,
   incomplete, or incomparable evidence.
+
+When passing structured claims to the Fact Checker tools, use `claimTuple` with
+exactly these canonical fields: `subject`, `basePredicate`, `objectValue`,
+`scope`, `timeVersion`, and `quantifier`. Every field is an object containing a
+normalized string `value` and `materiality: MATERIAL|NOT_APPLICABLE`; a
+`MATERIAL` field must have a value. Do not replace this tuple with an
+`aligned: true` assertion.
+
+Each structured evidence record uses `evidenceTuple` with the same canonical
+fields plus `relation: ENTAILS|NEGATES|ADJACENT|UNKNOWN`. `NEGATES` also names
+`negatedField: BASE_PREDICATE|OBJECT_VALUE`; its canonical field values still
+name the same proposition being negated. Different predicate or object values
+are `ADJACENT` or `UNKNOWN`, not a same-tuple contradiction. Runtime comparison,
+not the caller's status or a bare alignment flag, determines exact matching.
+
+Preserve these separate assessment objects on every strict candidate:
+
+- `strength: PROVEN|DISPROVED|LIKELY|HYPOTHESIS`;
+- `limitation: { level: NONE|NON_MATERIAL|MATERIAL, reason: ... }`;
+- `countercheck: { status: NOT_REQUIRED|COMPLETED|INCONCLUSIVE|UNAVAILABLE,
+  outcome: NOT_APPLICABLE|NO_DISCONFIRMING_EVIDENCE|DISCONFIRMING_EVIDENCE|NO_RESULT,
+  note: ... }`.
+
+A countercheck outcome is relative to the original claim. `COMPLETED` pairs
+only with `NO_DISCONFIRMING_EVIDENCE` or `DISCONFIRMING_EVIDENCE`;
+`NOT_REQUIRED` pairs with `NOT_APPLICABLE`; `INCONCLUSIVE` and `UNAVAILABLE`
+pair with `NO_RESULT`. High-priority strict support requires
+`COMPLETED / NO_DISCONFIRMING_EVIDENCE`; high-priority strict contradiction
+also requires `COMPLETED`, with either valid completed outcome interpreted
+relative to the original claim. Same-tuple `ENTAILS + PROVEN` may support;
+same-tuple `NEGATES + DISPROVED` may contradict. `LIKELY`,
+`HYPOTHESIS`, missing tuples, `ADJACENT`, `UNKNOWN`, tuple mismatches, and
+material limitations remain non-definitive. Compatibility verdicts remain
+available, but they never upgrade the strict verdict.
 
 The limitation controls the verdict. If a limitation says the evidence does
 not establish or guarantee the claim, leaves scope or time unknown, or admits

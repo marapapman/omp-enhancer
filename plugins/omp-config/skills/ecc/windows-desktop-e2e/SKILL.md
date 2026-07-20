@@ -8,6 +8,22 @@ origin: ECC
 
 End-to-end testing for Windows native desktop applications using **pywinauto** backed by Windows UI Automation (UIA). Covers WPF, WinForms, Win32/MFC, and Qt (5.x / 6.x) — with Qt-specific guidance as a dedicated section.
 
+## OMP Composition Boundary
+
+Main owns cross-Skill composition: it selects every supporting workflow and Skill
+in the initial `WORKFLOW PLAN` and loads each declared Skill before
+`WORKFLOW READY`. After load, this loaded Skill does not reselect, reroute,
+auto-load, or hand off to another Skill. It does not replace the parent TODO or
+Main's Agent choice. An exact same-namespace
+`skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI explicitly exposed here may be
+read in one `RESOURCE EXTENSION` before `COMMIT`; cross-namespace candidates
+remain initial-PLAN only.
+
+Package installation, application launch, CI changes, artifact writes, and
+cleanup require explicit user authorization for the exact target and effect plus
+current native permission. The installation examples are reference commands,
+not setup authorization.
+
 ## When to Activate
 
 - Writing or running E2E tests for a Windows native desktop application
@@ -18,7 +34,8 @@ End-to-end testing for Windows native desktop applications using **pywinauto** b
 
 ### When NOT to Use
 
-- Web applications → use `e2e-testing` skill (Playwright)
+- Web applications are outside this UIA method. The non-routing Playwright PLAN
+  candidate is `skill://ecc-skill-catalog/e2e-testing/SKILL.md`.
 - Electron / CEF / WebView2 apps → the HTML layer needs browser automation, not UIA
 - Mobile apps → use platform-specific tools (UIAutomator, XCUITest)
 - Pure unit or integration tests that don't need a running GUI
@@ -880,8 +897,8 @@ pip install pytest-repeat
 pytest tests/test_login.py --count=5 -v
 ```
 
-## Related Skills
+## Non-Routing PLAN Candidates
 
-- `e2e-testing` — Playwright E2E for web applications
-- `cpp-testing` — C++ unit/integration testing with GoogleTest
-- `cpp-coding-standards` — C++ code style and patterns
+- Playwright E2E for web applications: `skill://ecc-skill-catalog/e2e-testing/SKILL.md`
+- C++ unit and integration testing: `skill://ecc-skill-catalog/cpp-testing/SKILL.md`
+- C++ coding standards: `skill://ecc-skill-catalog/cpp-coding-standards/SKILL.md`

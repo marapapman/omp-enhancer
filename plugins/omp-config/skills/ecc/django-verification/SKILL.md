@@ -6,9 +6,13 @@ origin: ECC
 
 # Django Verification Loop
 
-Run before PRs, after major changes, and pre-deploy to ensure Django application quality and security.
+Apply this verification method after it is selected and loaded for a Django task. It does not activate itself or act as a secondary router for the current OMP session.
 
-## When to Activate
+The command blocks are reference examples. Command execution is allowed only for the exact named target and operation with explicit user authorization plus native permission at execution time. Auto-fix, `makemigrations`, `migrate`, dependency installation, live database or cache access, test-environment writes, generated static assets, logs, and any persistent report or schema are each a separate mutation or external effect; authority for one does not authorize another.
+
+The `READY` / `NOT READY` result below is a Django domain verdict, not host completion, release permission, deploy permission, or approval to continue the session.
+
+## Selected task scope
 
 - Before opening a pull request for a Django project
 - After major model changes, migration updates, or dependency upgrades
@@ -40,15 +44,13 @@ depend on that configuration. Repair it only when environment changes are in sco
 mypy . --config-file pyproject.toml
 
 # Linting with ruff
-ruff check . --fix
+ruff check .
 
 # Formatting with black
 black . --check
-black .  # Auto-fix
 
 # Import sorting
 isort . --check-only
-isort .  # Auto-fix
 
 # Django-specific checks
 python manage.py check --deploy
@@ -60,6 +62,10 @@ Common issues:
 - Unsorted imports
 - Debug settings left in production configuration
 
+When a formatting repair is explicitly authorized for its exact write set, the
+corresponding auto-fix forms such as `ruff check . --fix`, `black .`, or
+`isort .` may be used and then checked again.
+
 ## Phase 3: Migrations
 
 ```bash
@@ -67,7 +73,7 @@ Common issues:
 python manage.py showmigrations
 
 # Create missing migrations
-python manage.py makemigrations --check
+python manage.py makemigrations --check --dry-run
 
 # Dry-run migration application
 python manage.py migrate --plan
@@ -78,6 +84,12 @@ python manage.py migrate
 # Check for migration conflicts
 python manage.py makemigrations --merge  # Only if conflicts exist
 ```
+
+Treat `showmigrations` and `migrate --plan` as live-database access when they
+connect to a configured database. Creating migrations, merging migrations, or
+running `migrate` is separately effectful even in a test environment; execute
+each only when its exact database, filesystem target, and operation are
+authorized.
 
 Report:
 - Number of pending migrations
@@ -190,7 +202,6 @@ Report:
 ```bash
 # Check for npm dependencies (if using npm)
 npm audit
-npm audit fix
 
 # Build static files (if using webpack/vite)
 npm run build
@@ -294,7 +305,7 @@ Phase 1: Environment Check
 
 Phase 2: Code Quality
   ✓ mypy: No type errors
-  ✗ ruff: 3 issues found (auto-fixed)
+  ✗ ruff: 3 issues found (repair applied under separate authorization)
   ✓ black: No formatting issues
   ✓ isort: Imports properly sorted
   ✓ manage.py check: No issues
@@ -389,6 +400,11 @@ NEXT STEPS:
 
 ### GitHub Actions Example
 
+This CI example is configuration data for an explicitly authorized external
+target system. It does not schedule or continue work in the current OMP session;
+creating the workflow file and enabling its triggers are separate persistent
+effects under the authority boundary above.
+
 ```yaml
 # .github/workflows/django-verification.yml
 name: Django Verification
@@ -460,7 +476,7 @@ jobs:
 | Type checking | `mypy .` |
 | Linting | `ruff check .` |
 | Formatting | `black . --check` |
-| Migrations | `python manage.py makemigrations --check` |
+| Migrations | `python manage.py makemigrations --check --dry-run` |
 | Tests | `pytest --cov=apps` |
 | Security | `pip-audit && bandit -r .` |
 | Django check | `python manage.py check --deploy` |

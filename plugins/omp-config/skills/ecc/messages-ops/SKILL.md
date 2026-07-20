@@ -8,16 +8,20 @@ origin: ECC
 
 Use this when the task is live-message retrieval: iMessage, DMs, recent one-time codes, or thread inspection before a follow-up.
 
-This is not email work. If the dominant surface is a mailbox, use `email-ops`.
+This is not email work. For a mailbox-dominant request, `skill://ecc-skill-catalog/email-ops/SKILL.md` is the applicable initial method.
 
-## Skill Stack
+## Method Selection
 
-Pull these ECC-native skills into the workflow when relevant:
+Main selects supporting methods in the initial `WORKFLOW PLAN` when their Skills are visible. Later, Main loads a method only when an already loaded source explicitly reveals its exact same-namespace `skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI. This Skill provides domain guidance; it does not reroute the task, emit a replacement `WORKFLOW PLAN`, or auto-load another Skill.
 
-- `email-ops` when the message task is really mailbox work
-- `connections-optimizer` when the DM thread belongs to outbound network work
-- `lead-intelligence` when the live thread should inform targeting or warm-path outreach
-- `knowledge-ops` when the thread contents need to be captured into durable context
+## Candidate Methods
+
+This source explicitly reveals these exact same-namespace resources for selection under that boundary:
+
+- `skill://ecc-skill-catalog/email-ops/SKILL.md` when the message task is really mailbox work
+- `skill://ecc-skill-catalog/connections-optimizer/SKILL.md` when the DM thread belongs to outbound network work
+- `skill://ecc-skill-catalog/lead-intelligence/SKILL.md` when the live thread should inform targeting or warm-path outreach
+- `skill://ecc-skill-catalog/knowledge-ops/SKILL.md` when the thread contents need to be captured into durable context
 
 ## When to Use
 

@@ -10,9 +10,23 @@ Baseline coding conventions applicable across projects.
 
 This skill is the shared floor, not the detailed framework playbook.
 
-- Use `frontend-patterns` for React, state, forms, rendering, and UI architecture.
-- Use `backend-patterns` or `api-design` for repository/service layers, endpoint design, validation, and server-specific concerns.
-- Use `rules/common/coding-style.md` when you need the shortest reusable rule layer instead of a full skill walkthrough.
+## OMP Composition Boundary
+
+Main owns cross-Skill composition: it selects every supporting workflow and Skill
+in the initial `WORKFLOW PLAN` and loads each declared Skill before
+`WORKFLOW READY`. After load, this loaded Skill does not reselect, reroute,
+auto-load, or hand off to another Skill. It does not replace the parent TODO or
+Main's Agent choice. An exact same-namespace
+`skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI explicitly exposed here may be
+read in one `RESOURCE EXTENSION` before `COMMIT`; cross-namespace candidates
+remain initial-PLAN only.
+
+When narrower framework guidance independently matches, Main may consider these
+non-routing PLAN candidates:
+
+- React and UI architecture: `skill://ecc-skill-catalog/frontend-patterns/SKILL.md`
+- Backend architecture: `skill://ecc-skill-catalog/backend-patterns/SKILL.md`
+- Endpoint contracts: `skill://ecc-skill-catalog/api-design/SKILL.md`
 
 ## When to Activate
 

@@ -8,19 +8,23 @@ origin: ECC
 
 Use this skill when the user suspects the ECC Tools GitHub App is burning cost, over-creating PRs, bypassing usage limits, or routing free users into premium analysis paths.
 
-This is a focused operator workflow for the sibling [ECC-Tools](../../ECC-Tools) repo. It is not a generic billing skill and it is not a repo-wide code review pass.
+This is a focused operator workflow for the optional sibling `ECC-Tools` repo when it is available. It is not a generic billing skill and it is not a repo-wide code review pass.
 
-## Skill Stack
+## Method Selection
 
-Pull these ECC-native skills into the workflow when relevant:
+Main selects supporting methods in the initial `WORKFLOW PLAN` when their Skills are visible. Later, Main loads a method only when an already loaded source explicitly reveals its exact same-namespace `skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI. This Skill provides domain guidance; it does not reroute the task, emit a replacement `WORKFLOW PLAN`, or auto-load another Skill.
 
-- `autonomous-loops` for bounded multi-step audits that cross webhooks, queues, billing, and retries
-- `agentic-engineering` for tracing the request path into discrete, provable units
-- `customer-billing-ops` when repo behavior and customer-impact math must be separated cleanly
-- `search-first` before inventing helpers or re-implementing repo-local utilities
-- `security-review` when auth, usage gates, entitlements, or secrets are touched
-- `verification-loop` for proving rerun safety and exact post-fix state
-- `tdd-workflow` when the fix needs regression coverage in the worker, router, or billing paths
+## Candidate Methods
+
+This source explicitly reveals these exact same-namespace resources for selection under that boundary:
+
+- `skill://ecc-skill-catalog/autonomous-loops/SKILL.md` for bounded multi-step audits that cross webhooks, queues, billing, and retries
+- `skill://ecc-skill-catalog/agentic-engineering/SKILL.md` for tracing the request path into discrete, provable units
+- `skill://ecc-skill-catalog/customer-billing-ops/SKILL.md` when repo behavior and customer-impact math must be separated cleanly
+- `skill://ecc-skill-catalog/search-first/SKILL.md` before inventing helpers or re-implementing repo-local utilities
+- `skill://ecc-skill-catalog/security-review/SKILL.md` when auth, usage gates, entitlements, or secrets are touched
+- `skill://ecc-skill-catalog/verification-loop/SKILL.md` for proving rerun safety and exact post-fix state
+- `skill://ecc-skill-catalog/tdd-workflow/SKILL.md` when the fix needs regression coverage in the worker, router, or billing paths
 
 ## When To Use
 

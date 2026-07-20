@@ -1,7 +1,7 @@
 # RTStream Reference
 
-Code-level details for RTStream operations. For workflow guide, see [rtstream.md](rtstream.md).
-For usage guidance and workflow selection, start with [../SKILL.md](../SKILL.md).
+Code-level details for RTStream operations. For workflow guide, see [rtstream.md](skill://ecc-skill-catalog/videodb/reference/rtstream.md).
+For usage guidance and workflow selection, start with [the VideoDB Skill](skill://ecc-skill-catalog/videodb/SKILL.md).
 
 Based on [docs.videodb.io](https://docs.videodb.io/pages/ingest/live-streams/realtime-apis.md).
 
@@ -511,7 +511,7 @@ All real-time AI results are delivered via WebSocket. Pass `ws_connection_id` to
 | `audio_index` | `index_audio()` | Audio analysis results |
 | `alert` | `create_alert()` | Alert notifications |
 
-For WebSocket event structures and ws_listener usage, see [capture-reference.md](capture-reference.md).
+For WebSocket event structures and ws_listener usage, see [capture-reference.md](skill://ecc-skill-catalog/videodb/reference/capture-reference.md).
 
 ---
 

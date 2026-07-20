@@ -1,11 +1,13 @@
+READY NEXT (soft): SENTINEL 1/2 — no plugin enforcement. Next assistant response byte 0 = `W` of filled `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<ids-or-none> | skills-unavailable=<ids-or-none>`; no other visible text; the same response calls native TODO init only. Rebase TODO from loaded resources; end/wait.
 # `ml.debug` workflow reference
 
 Optional reference only. OMP native runtime instructions and settings remain authoritative.
 RESOURCE HANDOFF (soft): load only remaining declared resources and wait. Do not start project work in a resource-result response.
+Derive TODO internally. Each delegated native TODO `items[]` string is the exact Delegate row; use no role-colon shorthand. Its checkpoint is one metadata-safe line without `]`, `workflow=`, `step=`, `todo=`, `skills=`, or `checkpoint=`.
 
 ## `ml.debug`
 
-- Primary when: A training, evaluation, model loading, tensor, device, gradient, data loader, artifact, batch inference, or online inference path fails and the user wants diagnosis or an authorized fix.
+- Primary when: A training, evaluation, model, tensor, device, data-loader, artifact, batch, or online-inference failure needs diagnosis or an authorized fix.
 - Reference steps:
   1. [step-1] Capture the exact command or request, code and dependency revision, model and dataset identifiers, device and precision, seed, environment, and current failure evidence.
   2. [step-search-local] Main searches local entry points, callers, focused tests, configuration, model and data contracts, and artifact metadata, then traces the smallest failing path across shape, dtype, device, preprocessing, model state, gradients, loaders, serialization, and train-serve parity.
@@ -19,8 +21,8 @@ RESOURCE HANDOFF (soft): load only remaining declared resources and wait. Do not
   10. [step-review] After MAIN REVIEW, the native reviewer independently reviews the Main-reviewed bounded diff and supplied evidence for root cause, model and data assumptions, reproducibility, serving parity, artifact safety, and operational risk without reading the project or running a command.
   11. [step-repair] Main validates each reviewer finding; for every material supported finding, task receives a bounded repair assignment, returns fresh affected evidence within the same artifact and compute limits, and Main refreshes verification and MAIN REVIEW before at most one fresh reviewer pass over the materially changed diff.
   12. [step-report] Report the diagnosed cause, plan and review dispositions, task deliveries, exact bounded commands and exits, resource and artifact limitations, fresh verification, unresolved serving risk, and every data or model artifact left untouched.
-- Optional Agent candidates: `plan`, `task`, `reviewer`.
-- Optional delegation ideas:
+- Agent candidates: `plan`, `task`, `reviewer`.
+- Delegated checkpoints:
   - step-plan-review: plan independently reviews Main's supplied complete parallel deterministic repair plan, write sets, assignments, evidence seams, compute budget, and artifact boundary without editing files or running expensive jobs
   - step-task-batch: task receives all runnable independent ML slices for the wave in the same native tasks[] batch with exclusive write and resource budgets
   - step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the deterministic test, minimum production repair, same-command evidence, and protected-artifact exclusions
@@ -37,4 +39,13 @@ RESOURCE HANDOFF (soft): load only remaining declared resources and wait. Do not
 - Risk notes:
   - ML debugging can consume substantial compute or mutate datasets and artifacts; use bounded fixtures and preserve provenance.
 
-NEXT CHECKPOINT: after all declared resources and any catalog extension have returned or were marked unavailable, start visible assistant text with `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<bare-ids-or-none> | skills-unavailable=<bare-ids-or-none>`. When native `todo` is exposed, this response calls only TODO init and waits; project work starts in the next response.
+EXECUTION DEFAULT (soft): `subagent-driven` — Main chooses a currently visible matching Agent and width for each safe complete checkpoint. After every parent-owned pre-dispatch prerequisite named by this card completes, the committed `task` is the next project action; runnable independent checkpoints share a batch and dependent ones wait. Main integrates and verifies deliveries. Only a new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase a row; direct fallback is limited to one concrete user or native constraint, Agent availability or capacity, incomplete assignment input, unresolved dependency or write-set overlap, safety risk, or native parent-owned action. Size, latency, read-only output, integrated delivery, overhead, or no explicit delegation request alone are not fallbacks. This selects no Agent or fork width and creates no fork requirement, gate, retry, or completion condition.
+
+TODO COMPILE (soft): Rebase TODO from this card. For a subagent-driven card, complete input + safe checkpoint + visible matching Agent => one exact Delegate row; otherwise `fallback=<one matched permitted limitation>`. Parent VERIFY rows remain separate. Every delegated row is exactly `Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>`; workflow and skills copy frozen W=<Primary,Add-ons> and S=<bare loaded Skill IDs>.
+TASK COPY (soft, later response): copy one committed Delegate row; do not redraft its metadata.
+- Set native item `agent` to the row Agent and native item `todo` to the row checkpoint verbatim.
+- Assignment body byte 0 = `[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>]`. Never begin `# Target` or `# Goal`.
+- The native `tasks[].task` itself begins at byte 0 with that complete four-key prefix. Every native `task` call sets a non-empty top-level `context` summarizing the shared batch purpose. That common `context`, name, label, or an instruction telling the child to output metadata cannot substitute for an item body or its byte-0 prefix.
+- Keep later-wave metadata stable and put delivery material in the body. Fill required native fields, copy direct user constraints verbatim, and add bounded scope and acceptance evidence. After dispatch, end and wait for native auto-delivery; do not poll with `hub`. Only a new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase the row; otherwise use one concrete user or native constraint, Agent availability or capacity, incomplete assignment input, unresolved dependency or write-set overlap, safety risk, or native parent-owned action.
+
+READY NEXT (soft): SENTINEL 2/2 — no plugin enforcement. Next assistant response byte 0 = `W` of filled `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<ids-or-none> | skills-unavailable=<ids-or-none>`; no other visible text; native TODO init only; end/wait.

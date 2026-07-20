@@ -2,12 +2,21 @@
 name: agent-eval
 description: Head-to-head comparison of coding agents (Claude Code, Aider, Codex, etc.) on custom tasks with pass rate, cost, time, and consistency metrics
 origin: ECC
-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
 # Agent Eval Skill
 
 A lightweight CLI tool for comparing coding agents head-to-head on reproducible tasks. Every "which coding agent is best?" comparison runs on vibes — this tool systematizes it.
+
+## Current OMP authority and effects
+
+This Skill supplies an evaluation method; it grants no tool, filesystem,
+process, network, budget, or child-agent authority. Installation,
+task-definition writes, worktree creation, agent or judge commands, and API
+spend are distinct effects. Each requires explicit user authorization for the
+exact target and effect plus current native permission. Read-only planning may
+define tasks, metrics, and a proposed run matrix without performing those
+effects. The command blocks below are reference examples, not authorization.
 
 ## When to Activate
 
@@ -18,7 +27,9 @@ A lightweight CLI tool for comparing coding agents head-to-head on reproducible 
 
 ## Installation
 
-> **Note:** Install agent-eval from its repository after reviewing the source.
+> **Reference only:** Install agent-eval only when the user authorizes that
+> exact installation target and network or package effects and native
+> permission is available.
 
 ## Core Concepts
 
@@ -58,6 +69,10 @@ Each agent run gets its own git worktree — no Docker required. This provides r
 | Consistency | Pass rate across repeated runs (e.g., 3/3 = 100%) |
 
 ## Workflow
+
+Use the following execution steps only for the exact task files, agents, run
+count, commands, worktrees, and spend boundary the user authorized. Otherwise,
+return the proposed evaluation design and commands without running them.
 
 ### 1. Define Tasks
 

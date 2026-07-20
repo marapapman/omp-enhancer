@@ -6,6 +6,12 @@ origin: ECC
 
 # Market Research
 
+When this Skill is listed in a `writer` or `zh-writer` assignment, it is
+context only for that prose checkpoint. The writer consumes evidence already
+supplied by Main and returns a proposal; it does not search the web, invoke
+research tools, or issue independent research findings. Main or a separate
+selected research Agent owns the research checkpoint.
+
 Produce research that supports decisions, not research theater.
 
 ## When to Activate

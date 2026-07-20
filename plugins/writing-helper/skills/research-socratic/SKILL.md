@@ -5,17 +5,30 @@ description: Socratic discussion engine — 5-layer questioning (clarify→assum
 
 # Research Socratic Discussion
 
-A structured questioning engine for stress-testing research claims through a systematic 5-layer Socratic method. Designed for the main agent to probe claims when the user wants to surface hidden assumptions, blind spots, and weak evidence.
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or an explicitly capable generic
+`task` owns authorized effects.
+
+A structured questioning engine for stress-testing research claims through a
+systematic 5-layer Socratic method. This is an assigned child-local method; it
+does not require Main to execute the method directly. Do not recursively fork,
+spawn, or delegate. Main retains the parent TODO, user interaction, and
+integration.
 
 ## Usage
 
-The main agent loads `research-socratic` through the runtime's normal skill mechanism.
+After Main has loaded this Skill, it may assign a bounded claim checkpoint. The
+child uses this body without reading `research-socratic` again.
 
 When the user makes a claim or asks to "probe this claim", "stress-test this", "play socratic", "challenge this", or similar.
 
 ## The 5 Layers
 
-Each layer asks one or two targeted questions. Ask them in order. Do not skip layers. Do not reorder.
+Each layer formulates one or two targeted questions. Process them in order. Do
+not skip or reorder layers. Return any interactive question to Main and stop;
+Main decides whether to ask the user. A later bounded assignment can carry the
+answer and advance to the next layer.
 
 ### Layer 1 — Clarification
 *"Define this term precisely. What are its boundaries?"*
@@ -55,13 +68,13 @@ Each layer asks one or two targeted questions. Ask them in order. Do not skip la
 ## Rules
 
 1. **Max 5 rounds per claim (one per layer).** If the claim is not resolved (confirmed, refined, or abandoned) after 5 rounds (one per layer), record it as an open risk.
-2. **Max 5 claims per session.** After 5 claims, tell the user you've reached the limit and summarize the open risks.
-3. **One question at a time.** Wait for the user's answer before proceeding to the next question.
+2. **Max 5 claims per session.** After 5 claims, return the limit and open-risk summary to Main for integration.
+3. **One question at a time.** Wait through Main for a supplied answer before proceeding to the next question.
 4. **Stay neutral.** Do not express agreement or disagreement. Only ask questions and record answers.
 
 ## Output Format
 
-Append results to `.pi/research/discussion.md`. Create this file if it does not exist. Use the following structure:
+Produce results in the following structure:
 
 ```markdown
 # Socratic Discussion Log
@@ -93,9 +106,14 @@ Append results to `.pi/research/discussion.md`. Create this file if it does not 
 
 If fewer than 5 rounds were needed, omit the remaining rounds. Mark status as `resolved` if the user revised or clarified the claim satisfactorily. Mark as `open_risk` if unresolved after 5 rounds or if the user declined to answer.
 
+Write to `.pi/research/discussion.md` only when the user requested persistent
+output and the host authorizes that safe path. Otherwise, return the complete
+result in the conversation. During an authorized write, create the file when
+needed and append the new result without overwriting unrelated content.
+
 ## Session Summary
 
-At the end of a session (max 5 claims or user says "done"), append:
+At the end of a session (max 5 claims or user says "done"), include:
 
 ```markdown
 ## Session Summary
@@ -109,7 +127,8 @@ At the end of a session (max 5 claims or user says "done"), append:
 - Claim 2: [reason it remained unresolved]
 ```
 
-## Coordination with Other Skills
+## Evidence Needs
 
-- For literature retrieval, load `research-literature` to find supporting or contradicting sources for evidence questions.
-- For structured debates, load the available brainstorming skill to generate counter-arguments.
+- If an evidence question needs literature retrieval or structured debate,
+  report that need to Main. This Skill does not choose, load, or route another
+  Skill.

@@ -5,24 +5,29 @@ description: Expert guidance on Docker Compose V2 syntax, best practices, and co
 
 # Docker Compose V2 Expert
 
-You are an expert in modern Docker Compose (V2+). Help users write correct, production-ready docker-compose.yml files using current syntax and best practices.
+Help users write and review modern Docker Compose files while following repository conventions and target deployment requirements.
 
-## Preferred Configuration Patterns
+## Authority and project fit
+
+Inspect the repository's existing Compose files, environment examples, deployment docs, and supported Compose implementation before recommending changes. Network mode, timezone, volume type, port exposure, and resource limits are deployment decisions, not universal defaults.
+
+Edit a Compose or environment file only when that effect is within the current task and native filesystem permission allows it. Run `docker compose`, pull or build images, start services, or contact registries only when the current task requests or requires it and native execution and network permission allow it. Examples below are patterns, not authorization to execute commands or mutate files.
+
+## Context-dependent configuration patterns
 
 ### Network Mode
 
-Prefer `network_mode: bridge` over custom networks for single-stack deployments. Create custom networks only when network isolation between services is required or containers need to communicate using explicit container names across different compose files.
+Preserve the repository's existing network design. Compose's implicit default network normally supports service-name discovery. Use named networks for required isolation or topology, and use `network_mode` only when the target runtime specifically requires it.
 
 ```yaml
 services:
   app:
     image: myapp
-    network_mode: bridge
 ```
 
 ### Port Binding Security
 
-Always bind ports to `127.0.0.1` for security unless external access is explicitly required:
+Derive host binding from the deployment threat model. A localhost binding can suit a local-only service; an explicitly public service needs a reviewed external binding, firewall, and proxy posture.
 
 ```yaml
 services:
@@ -33,14 +38,14 @@ services:
 
 ### Timezone Configuration
 
-Set `TZ=Asia/Shanghai` for consistent logging and application behavior across containers.
+Use the application's established timezone policy. Do not add `TZ` when the image or deployment already handles time correctly; when it is required, use the operator-provided target value.
 
 ```yaml
 services:
   app:
     image: myapp
     environment:
-      TZ: Asia/Shanghai
+      TZ: ${TZ}
 ```
 
 ## Critical Syntax Rules (V2+)
@@ -103,7 +108,7 @@ docker compose down
 
 ## Service Dependencies with Health Checks
 
-### Basic depends_on (NOT recommended)
+### Basic `depends_on`
 
 ```yaml
 services:
@@ -113,7 +118,7 @@ services:
       - db # Only waits for container to START, not be READY
 ```
 
-### Health-aware dependencies (RECOMMENDED)
+### Health-aware dependency example
 
 ```yaml
 services:
@@ -167,7 +172,7 @@ healthcheck:
 
 ## Environment Variables
 
-### Using env_file (RECOMMENDED)
+### Using `env_file`
 
 ```yaml
 services:
@@ -186,7 +191,7 @@ services:
     image: myapp
     environment:
       NODE_ENV: production
-      TZ: Asia/Shanghai
+      TZ: ${TZ}
       DATABASE_URL: postgres://user:${DB_PASSWORD}@db:5432/mydb
       LOG_LEVEL: ${LOG_LEVEL:-info} # Default if not set
 ```
@@ -200,9 +205,9 @@ services:
 
 ## Volumes: Bind Mounts vs Named Volumes
 
-### Bind Mounts (Preferred)
+### Bind mounts
 
-Bind mounts are the standard approach for volume management:
+Use bind mounts when the host must directly provide or inspect files, commonly during local development. Consider ownership, portability, and read-only flags:
 
 ```yaml
 services:
@@ -213,9 +218,9 @@ services:
       - ./logs:/app/logs
 ```
 
-### Named Volumes (Only when explicitly requested)
+### Named volumes
 
-Named volumes will only be used when explicitly requested:
+Use named volumes when Docker-managed persistent data matches the target deployment and backup plan:
 
 ```yaml
 services:
@@ -289,8 +294,8 @@ services:
 
 **Best Practices:**
 
-- Always set memory limits to prevent OOM crashes
-- Use `mem_reservation` for soft limits
+- Set resource limits only when supported by the target Compose/runtime path and informed by workload or deployment constraints
+- Use `mem_reservation` only when its runtime semantics match the deployment
 - CPU limits as decimal strings: "0.5", "1.5", "2.0"
 - Memory units: `b`, `k`, `m`, `g`
 

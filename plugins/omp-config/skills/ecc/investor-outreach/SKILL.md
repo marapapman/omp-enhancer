@@ -8,6 +8,10 @@ origin: ECC
 
 Write investor communication that is short, concrete, and easy to act on.
 
+## Method Selection
+
+Main selects supporting methods in the initial `WORKFLOW PLAN` when their Skills are visible. Later, Main loads a method only when an already loaded source explicitly reveals its exact same-namespace `skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI. This Skill provides domain guidance; it does not reroute the task, emit a replacement `WORKFLOW PLAN`, or auto-load another Skill.
+
 ## When to Activate
 
 - writing a cold email to an investor
@@ -26,7 +30,7 @@ Write investor communication that is short, concrete, and easy to act on.
 
 ## Voice Handling
 
-If the user's voice matters, run `brand-voice` first and reuse its `VOICE PROFILE`.
+When Method Selection loaded `skill://ecc-skill-catalog/brand-voice/SKILL.md` for the user's voice, reuse its `VOICE PROFILE`.
 This skill should keep the investor-specific structure and ask discipline, not recreate its own parallel voice system.
 
 ## Hard Bans

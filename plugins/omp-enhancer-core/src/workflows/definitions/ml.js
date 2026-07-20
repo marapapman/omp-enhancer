@@ -1,7 +1,7 @@
 export const mlWorkflows = [
   {
     "id": "ml.review",
-    "chooseWhen": "The user asks for a read-only review of a production machine-learning data, training, evaluation, artifact, inference, serving, monitoring, or rollback path.",
+    "chooseWhen": "A read-only review of a production ML data, training, evaluation, artifact, inference, serving, monitoring, or rollback path.",
     "composeWith": [
       "security.review",
       "factcheck.document"
@@ -25,7 +25,7 @@ export const mlWorkflows = [
       }
     ],
     "scopeNotes": [
-      "Main owns the bounded target review directly; the native reviewer remains reserved for an existing semantic diff or patch.",
+      "Main owns the bounded review scope and final reconciliation; task may own a complete read-only audit slice, while the native reviewer remains reserved for an existing semantic diff or patch.",
       "Do not treat an offline metric, notebook output, or provider evaluation as proof of production behavior without matching data, artifact, and serving evidence."
     ],
     "skills": [
@@ -33,20 +33,26 @@ export const mlWorkflows = [
       "pytorch-patterns",
       "code-development"
     ],
+    "catalogSkills": [
+      "mle-workflow",
+      "pytorch-patterns"
+    ],
     "qualityChecks": [
       "prediction and data contract correspondence, temporal leakage analysis, training reproducibility, evaluation and slice validity, artifact and serving parity, fallback and monitoring coverage, rollback, and explicit evidence limitations"
     ],
     "riskNotes": [
       "Model and dataset artifacts may contain sensitive data or unsafe serialized objects; inspect them through project-approved paths and preserve provenance."
     ],
-    "roles": [],
+    "roles": [
+      "task"
+    ],
     "delegation": [
-      "steps-2-4: the parent directly audits the bounded ML system and evidence without editing code, data, or artifacts"
+      "steps-2-4: task owns a bounded read-only ML audit slice and returns concrete system and evidence findings without editing or mutating code, data, or artifacts; the parent reconciles scope and conclusions"
     ]
   },
   {
     "id": "ml.debug",
-    "chooseWhen": "A training, evaluation, model loading, tensor, device, gradient, data loader, artifact, batch inference, or online inference path fails and the user wants diagnosis or an authorized fix.",
+    "chooseWhen": "A training, evaluation, model, tensor, device, data-loader, artifact, batch, or online-inference failure needs diagnosis or an authorized fix.",
     "composeWith": [
       "ml.review"
     ],
@@ -110,6 +116,10 @@ export const mlWorkflows = [
       "mle-workflow",
       "pytorch-patterns",
       "code-development"
+    ],
+    "catalogSkills": [
+      "mle-workflow",
+      "pytorch-patterns"
     ],
     "qualityChecks": [
       "exact environment and artifact identity, current failure evidence, data and tensor contract trace, deterministic reproduction, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, root-cause regression, focused repair, current-revision execution, Main self-review, reviewer reconciliation, serving correspondence, and artifact provenance"

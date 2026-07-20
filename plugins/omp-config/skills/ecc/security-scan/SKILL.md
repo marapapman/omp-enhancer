@@ -6,6 +6,11 @@ origin: ECC
 
 # Security Scan Skill
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or a separate explicitly capable
+Main-selected Agent owns authorized effects.
+
 Audit your Claude Code configuration for security issues using [AgentShield](https://github.com/affaan-m/agentshield).
 
 ## When to Activate

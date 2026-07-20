@@ -21,8 +21,9 @@
       "expectedProvisionMode": "none",
       "requireWorkflowIndexOnlyFirstToolBatch": true,
       "requireWorkflowPlanBeforeResourceLoads": true,
+      "requireStructuredWorkflowLoadPhases": true,
       "requiredWorkflowPlanFormat": "block",
-      "minWorkflowPlanNumberedActions": 1,
+      "minWorkflowPlanNumberedActions": 4,
       "forbidResourceProjectSameBatch": true,
       "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
       "requireExactSelectedWorkflowReferences": true,
@@ -59,6 +60,28 @@
       "prompt": "Read abstract.tex and propose a conservative correction of its single English sentence. Preserve all qualifiers, modality, negation, percentages, citations, and LaTeX commands. Do not modify files or use the network.",
       "expectations": {
         "maxAdvisorMessages": 1
+      }
+    },
+    {
+      "id": "zh-writing-skill-uri-with-advisor",
+      "category": "paired/advisor-zh",
+      "fixture": "semantic-edit-zh",
+      "advisor": true,
+      "repeat": 1,
+      "prompt": "Read paper.md and propose a conservative Chinese polish. Preserve every fact, qualifier, citation, number, and Markdown structure. Do not modify files or use the network.",
+      "expectations": {
+        "maxAdvisorMessages": 1,
+        "requiredWorkflowPrimary": "writing.zh",
+        "requiredSelectedWorkflowIds": ["writing.zh"],
+        "forbiddenSelectedWorkflowIds": ["writing.en", "writing.latex"],
+        "requiredAnySkills": [],
+        "requiredObservedSkills": ["plain-chinese-writing", "zh-writing-polish"],
+        "requiredObservedSkillsBeforeProjectTools": ["plain-chinese-writing", "zh-writing-polish"],
+        "requiredExactSkillUrisBeforeProjectTools": ["skill://plain-chinese-writing", "skill://zh-writing-polish"],
+        "maxObservedSkills": 3,
+        "forbiddenSkills": ["writing-review", "polish-acm-latex-prose", "writing-markdown-helper"],
+        "forbidMisaddressedDeclaredSkillReads": true,
+        "forbidUnsupportedAdvisorSkillAbsenceClaims": true
       }
     }
   ]

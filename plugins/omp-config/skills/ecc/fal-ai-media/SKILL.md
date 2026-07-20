@@ -10,6 +10,17 @@ origin: ECC
 > change quickly. Search or fetch the current model metadata before promising a
 > specific model, parameter, output format, or cost.
 
+## Current OMP authority and effects
+
+This Skill supplies a media-generation method and tool reference; it grants no
+host, credential, command, network, spending, or upload authority. Host MCP
+configuration, cost-bearing generation, job cancellation, and local-file upload
+are distinct effects. Each requires explicit user authorization for the exact
+target and effect plus current native permission. A named local file does not
+authorize its upload or disclosure to fal.ai. The configuration and tool calls
+below are reference examples, not authorization, and secrets must not be logged
+or exposed.
+
 Generate images, videos, and audio using fal.ai models via MCP.
 
 ## When to Activate
@@ -22,7 +33,9 @@ Generate images, videos, and audio using fal.ai models via MCP.
 
 ## MCP Requirement
 
-fal.ai MCP server must be configured. Add to `~/.claude.json`:
+A fal.ai MCP server must already be exposed, or the user must separately
+authorize the exact host configuration. The following `~/.claude.json` fragment
+is a reference example:
 
 ```json
 "fal-ai": {
@@ -93,6 +106,9 @@ generate(
 
 ### Image Editing
 Use Nano Banana 2 with an input image for inpainting, outpainting, or style transfer:
+
+Use `upload` only when the user explicitly authorizes the exact local file and
+fal.ai destination and current native permission allows that disclosure.
 
 ```
 # First upload the source image

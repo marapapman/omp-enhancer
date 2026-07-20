@@ -6,7 +6,24 @@ origin: ECC
 
 # Machine-Learning Engineering
 
-Load this skill through `ml.review` or `ml.debug`, and compose normal code, test, security, database, performance, and fact-check workflows as the deliverable requires. ML expertise changes the evidence, not the Agent permission boundary.
+## OMP Composition Boundary
+
+Main owns cross-Skill composition: it selects every supporting workflow and Skill
+in the initial `WORKFLOW PLAN` and loads each declared Skill before
+`WORKFLOW READY`. After load, this loaded Skill does not reselect, reroute,
+auto-load, or hand off to another Skill. It does not replace the parent TODO or
+Main's Agent choice. An exact same-namespace
+`skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI explicitly exposed here may be
+read in one `RESOURCE EXTENSION` before `COMMIT`; cross-namespace candidates
+remain initial-PLAN only.
+
+Main chooses the Primary and Add-ons in the initial `WORKFLOW PLAN`. Typical fit
+is a read-only production-ML review (`ml.review`), a concrete failure or fix
+(`ml.debug`), and a new build or implementation (`code.dev`); these are
+non-routing fit hints, not instructions to change the committed workflow. Compose
+security, database, performance, and fact-check evidence only when the matching
+Add-ons were already selected. ML expertise changes the evidence, not the Agent
+permission boundary.
 
 ## Scope First
 
@@ -39,15 +56,17 @@ Compare training and serving schemas and transforms. Inspect batching, timeouts,
 
 ### Security and Supply Chain
 
-Treat datasets, model files, notebooks, prompts, feature logs, and serialized objects as untrusted inputs. Check secrets, provenance, unsafe deserialization, dependency integrity, access control, poisoning exposure, and data exfiltration. Compose `security.review` for independent security evidence.
+Treat datasets, model files, notebooks, prompts, feature logs, and serialized objects as untrusted inputs. Check secrets, provenance, unsafe deserialization, dependency integrity, access control, poisoning exposure, and data exfiltration. Include independent `security.review` evidence only when Main selected that Add-on in the initial plan.
 
 ## Canonical Delegation
 
-- Main performs bounded local and external search, owns authorized vertical TDD changes, runs exact commands, and validates every finding.
-- `plan` independently reviews the supplied bounded repair or experiment plan without editing.
-- `reviewer` performs the GREEN-after-diff ML-aware review with this skill and relevant framework skills.
+- Only substantive mutation under `ml.debug` or `code.dev` uses the code lifecycle: Main writes the dependency-aware implementation plan, plugin `plan` reviews it, native `task` owns the complete vertical RED-GREEN-REFACTOR slice, Main integrates and writes `MAIN REVIEW`, and native `reviewer` receives the Main-reviewed bounded diff and evidence.
+- Under `ml.review`, delegate project inspection as a bounded read-only native `task`: it may inspect and report but does not mutate the project.
+- Native `reviewer` is only for an existing semantic diff or patch plus bounded evidence; it is not the project-reading Agent for a read-only ML audit.
+- Main validates every finding and records plan-review dispositions. A supported mutation repair returns to native `task` as a new bounded assignment; unavailable or unsafe delegation is recorded before any host-authorized direct fallback.
+- Main chooses Agents from the current dynamic Available Agents and chooses fork width from real independence, dependencies, write ownership, and capacity.
 - Measured latency, throughput, memory, accelerator utilization, or cost work stays inside `ml.debug` or `code.dev`; never optimize against an unrecorded baseline.
-- Use `code-documentation` for runbooks and artifact/model-card updates supported by verified behavior.
+- For independently requested runbooks or artifact/model-card updates, the non-routing PLAN candidate is `skill://ecc-skill-catalog/code-documentation/SKILL.md`.
 
 ## Evidence Contract
 

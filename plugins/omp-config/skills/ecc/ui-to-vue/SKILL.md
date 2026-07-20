@@ -8,6 +8,14 @@ origin: community
 
 Batch-convert UI design screenshots into Vue 3 Composition API component code.
 
+## Effect boundary
+
+Commands in this guide are references. Every external effect requires explicit
+user authorization for the exact target and effect plus current native
+permission. Treat package download or installation, sending a screenshot to an
+external API, generated source writes, command execution, and commit as separate
+effects. Do not use `npx` or a global install as an automatic fallback.
+
 ## When to Use
 
 - The user provides a directory of design screenshots or design-export images.
@@ -124,7 +132,7 @@ If a local config file is required, keep it out of version control:
 | Issue | Check |
 | --- | --- |
 | `401` or authentication error | Confirm `DASHSCOPE_API_KEY` is set in the shell running the command. |
-| `command not found: ui-to-vue` | Use the `npx ui-to-vue-converter@1.0.2` form or install the package globally. |
+| `command not found: ui-to-vue` | Offer the pinned `npx ui-to-vue-converter@1.0.2` form or a global install only after the user authorizes that installation and network effect. |
 | Cut images are ignored | Confirm the asset directory name is supported and nested under the matching page or module. |
 | Components ignore the requested UI library | Re-run with an explicit `--ui` value and inspect the generated imports. |
 | Generated layout dimensions look wrong | Confirm the screenshot export width matches the target library baseline. |

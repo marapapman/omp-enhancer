@@ -37,6 +37,8 @@
       "requiredNativeTaskContext": "single read-only checkpoint",
       "requireNativeTaskCompletion": true,
       "requireNativeTaskMetadataPrefix": true,
+      "requireExactNativeTaskMetadataPrefix": true,
+      "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
       "maxProjectInspectionCallsBeforeNativeTask": 0,
       "maxProjectInspectionCallsAfterNativeTask": 0,
       "maxSourceSearchCalls": 8
@@ -47,7 +49,7 @@
       "id": "code-dev-plan-review",
       "category": "workflow-consolidation",
       "cwd": ".",
-      "prompt": "Audit one code.dev PLAN REVIEW checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"plan\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Its task text must begin with these exact first characters: [workflow=code.dev step=step-plan-review todo=audit skills=code-development]. Supply this complete plan directly in the assignment: update the code.dev definition through one public exported catalog seam, with Main-inspected anchors for the definition, renderer, generated Skill card, and adjacent contract test; skip external search because this is a repository-owned invariant; add one expected RED assertion, use the same focused command for GREEN, regenerate workflows, and run workflow, marketplace, packaging, and diff checks. Ask the child to audit the supplied plan without project reads or command execution. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, run shell commands, or use the network.",
+      "prompt": "Audit one code.dev PLAN REVIEW checkpoint. Your first tool call must be native todo with exactly one pending item whose id is audit and whose text is `Delegate Agent=plan workflow=code.dev step=step-plan-review skills=code-development checkpoint=audit-code-dev-plan`. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"plan\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Mechanically copy the TODO metadata so its task text begins with these exact first characters: [workflow=code.dev step=step-plan-review todo=audit-code-dev-plan skills=code-development]. Supply this complete plan directly in the assignment: update the code.dev definition through one public exported catalog seam, with Main-inspected anchors for the definition, renderer, generated Skill card, and adjacent contract test; skip external search because this is a repository-owned invariant; add one expected RED assertion, use the same focused command for GREEN, regenerate workflows, and run workflow, marketplace, packaging, and diff checks. Ask the child to audit the supplied plan without project reads or command execution. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, run shell commands, or use the network.",
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,

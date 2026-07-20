@@ -20,11 +20,12 @@ test('SVG flowchart skill defines strict geometry, spacing, and bounded rendered
   assert.match(skill, /32 px outer margin.+24 px between nodes.+16 px.+unrelated.+12 px internal text padding/i);
   assert.match(skill, /16 px minimum/i);
   assert.match(skill, /designer.+visioner.+full-size.+60%/is);
-  assert.match(skill, /maximum of three vision review rounds/i);
-  assert.match(skill, /same geometry issue survives two revisions.+relayout/i);
+  assert.match(skill, /Agent availability and capacity remain Main decisions/i);
+  assert.match(skill, /supported finding.+new bounded TODO checkpoint.+at most one fresh affected review/is);
   assert.match(skill, /Do not review an unchanged artifact again/i);
   assert.match(skill, /Do not claim visual approval from source inspection or the static checker alone/i);
-  assert.doesNotMatch(skill, /retry until|repeat until|block:\s*true|continue:\s*true/i);
+  assert.match(skill, /No review verdict grants permission to publish or complete/i);
+  assert.doesNotMatch(skill, /maximum of three|finish with zero|have `designer` address every|retry until|repeat until|block:\s*true|continue:\s*true/i);
 });
 
 test('SVG skill supplies the explicit pure black and white diagram constraint', async () => {

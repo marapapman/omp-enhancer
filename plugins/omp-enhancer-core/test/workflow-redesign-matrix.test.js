@@ -24,26 +24,33 @@ test('language writing workflows delegate prose edits and independent review to 
   const english = workflowCatalog['writing.en'];
 
   assert.deepEqual(pending.roles, []);
-  assert.match(pending.delegation.join(' '), /before.+body language.+do not delegate.+writer|do not delegate.+writer.+before.+body language/i);
-  assert.match(pending.delegation.join(' '), /compose writing\.zh or writing\.en/i);
+  assert.match(pending.delegation.join(' '), /narrow language-only read after initial READY[\s\S]*delegates no prose work before replacement READY/i);
+  assert.match(pending.delegation.join(' '), /after replacement READY[\s\S]*selected writing\.zh or writing\.en[\s\S]*language-matched subagents/i);
 
   assert.deepEqual(chinese.roles, ['zh-writer', 'zh-checker']);
   assert.deepEqual(chinese.delegation, [
-    'step-2: zh-writer owns the requested Chinese drafting or prose revision',
-    'step-3: zh-checker independently reviews the resulting revision without editing the source',
-    'step-4: zh-writer applies only parent-accepted findings once, then the parent verifies scope and semantic anchors',
+    'step-2: zh-writer is the first project actor and reads the exact target before owning the requested Chinese drafting or prose revision',
+    'step-3: zh-checker independently reviews source and revision after the writer delivery without editing the source',
+    'step-4: zh-writer returns one corrected proposal for parent-accepted findings',
   ]);
 
   assert.deepEqual(english.roles, ['writer', 'checker']);
   assert.deepEqual(english.delegation, [
-    'step-2: writer owns the requested English drafting or prose revision',
-    'step-3: checker independently reviews the resulting revision without editing the source',
-    'step-4: writer applies only parent-accepted findings once, then the parent verifies scope and semantic anchors',
+    'step-2: writer is the first project actor and reads the exact target before owning the requested English drafting or prose revision',
+    'step-3: checker independently reviews source and revision after the writer delivery without editing the source',
+    'step-4: writer returns one corrected proposal for parent-accepted findings',
   ]);
+  for (const workflow of [chinese, english]) {
+    assert.match(workflow.scopeNotes.join(' '), /Main owns any authorized file change[\s\S]*parent-owned integration and verification/iu);
+  }
 
   for (const workflow of ['writing.latex', 'writing.markdown', 'doc.convert.word']) {
-    assert.deepEqual(workflowCatalog[workflow].roles, [], `${workflow} must not guess a prose language role`);
+    assert.deepEqual(workflowCatalog[workflow].roles, ['task'], `${workflow} uses a language-neutral format task`);
   }
+
+  const latexContract = workflowCatalog['writing.latex'].delegation.join(' ');
+  assert.match(latexContract, /task owns only.+format-only.+writer selected.+owns every prose revision checkpoint/i);
+  assert.match(latexContract, /task may return only.+compile evidence.+language checker owns every semantic-check checkpoint/i);
 });
 
 test('LaTeX and Markdown format workflows compose both ends of explicit conversion without selecting a prose language', () => {
@@ -52,10 +59,10 @@ test('LaTeX and Markdown format workflows compose both ends of explicit conversi
 
   assert.ok(latex.composeWith.includes('writing.markdown'));
   assert.ok(markdown.composeWith.includes('writing.latex'));
-  assert.match(latex.chooseWhen, /requested writing, revision, or conversion source\/output is LaTeX/i);
-  assert.match(markdown.chooseWhen, /requested writing, revision, or conversion source\/output is Markdown/i);
-  assert.deepEqual(latex.roles, []);
-  assert.deepEqual(markdown.roles, []);
+  assert.match(latex.chooseWhen, /LaTeX source\/output[\s\S]*LaTeX prose[\s\S]*preserved commands[\s\S]*Add-on[\s\S]*Primary only/iu);
+  assert.match(markdown.chooseWhen, /Markdown source\/output[\s\S]*Add-on[\s\S]*Primary only/iu);
+  assert.deepEqual(latex.roles, ['task']);
+  assert.deepEqual(markdown.roles, ['task']);
 });
 
 test('one code workflow drives parallel native task slices before Main and reviewer review', () => {
@@ -103,7 +110,7 @@ test('web research workflow requires live reliable evidence and supports selecte
   ]);
   assert.match(research.steps[0], /research question.+scope.+freshness cutoff.+output language/i);
   assert.match(research.steps[1], /claim.+evidence ledger.+authoritative.+primary evidence/i);
-  assert.match(research.steps[2], /live web.+independent source lanes.+primary.+official.+publication or update date.+access date/i);
+  assert.match(research.steps[2], /live web.+one bounded.+source lane.+focused.+second.+broad.+high-risk.+explicit.+cross-check.+primary.+official.+publication or update date.+access date/i);
   assert.match(research.steps[3], /source statements from inference.+near-claim citations.+freshness.+uncertainty/i);
   assert.match(research.steps[4], /factcheck\.document.+primary source.+two independent reliable sources.+conflicts.+dates.+units.+definitions.+citation authenticity/i);
   assert.match(research.steps[4], /provider verdict.+bibliographic metadata.+underlying passage or data/i);
@@ -123,10 +130,15 @@ test('web research workflow requires live reliable evidence and supports selecte
   assert.match(research.scopeNotes.join(' '), /fixed source count.+blanket recency window.+not completion targets/i);
   assert.deepEqual(research.delegation, [
     'step-2: fact-planner defines atomic research questions, claims, risk, and evidence requirements',
-    'step-3: fact-researcher-a and fact-researcher-b search independent source lanes without copying conclusions',
+    'step-3: fact-researcher-a owns the first bounded source lane; fact-researcher-b owns an independent second lane only for a broad task, a high-risk claim, or explicit cross-checking, without copying conclusions',
     'step-5: fact-cross-checker classifies agreement, conflicts, temporal-staleness findings, and insufficient evidence without inventing resolution',
     'step-7: fact-reviewer audits the final claim-to-evidence mapping and overclaiming',
   ]);
+  assert.match(research.scopeNotes.join(' '), /focused.+one research lane.+second lane.+broad.+high-risk.+explicit cross-checking.+fork width.+Main/iu);
+
+  const factcheck = workflowCatalog['factcheck.document'];
+  assert.match(factcheck.steps[1], /one bounded evidence lane.+focused.+independent second lane.+broad.+high-risk.+explicit cross-checking/iu);
+  assert.match(factcheck.delegation.join(' '), /fact-researcher-a.+first bounded evidence lane.+fact-researcher-b.+independent second lane.+only.+broad.+high-risk.+explicit cross-checking/iu);
   assert.match(
     research.qualityChecks.join(' '),
     /question coverage.+source authority.+independence.+freshness.+claim-to-passage.+conflict classification and explicit handling.+citation authenticity.+fact-versus-inference.+uncertainty/i,
@@ -141,13 +153,13 @@ test('slides workflows separate template-and-story generation from bounded modif
   assert.deepEqual(generate.roles, ['designer', 'visioner']);
   assert.match(generate.steps[1], /template readiness/i);
   assert.match(generate.steps[2], /discuss its style, logo, aspect ratio, typography, and layout/i);
-  assert.match(generate.steps[3], /story outline.+obtain confirmation/i);
+  assert.match(generate.steps[3], /commit.+numbered.+working outline.+ask only.+missing choice.+materially changes/i);
   assert.match(generate.steps[4], /PLAN-selected writing\.zh or writing\.en method/i);
   assert.match(generate.steps[6], /final layout pass.+text and image overlap.+crowding/i);
-  assert.match(generate.steps[7], /reconcile the layout revision.+confirmed outline.+semantic anchors.+LaTeX structure/i);
+  assert.match(generate.steps[7], /reconcile the layout revision.+committed outline.+semantic anchors.+LaTeX structure/i);
   assert.match(generate.steps[8], /recompile and render the layout revision.+revision identifier.+PDF.+render directory/i);
   assert.match(generate.steps[9], /independently inspect.+latest rendered pages.+overview or contact sheet.+APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/i);
-  assert.match(generate.steps[10], /reconcile.+fresh renders.+maximum of three review rounds/i);
+  assert.match(generate.steps[10], /accepted by Main.+bounded new layout revision.+at most one fresh affected.+do not review an unchanged artifact/i);
   assert.match(generate.steps.at(-1), /only when the user supplied a conversion command/i);
   assert.deepEqual(generate.delegation, [
     'step-7: designer owns the final layout pass and every layout revision',
@@ -163,7 +175,7 @@ test('slides workflows separate template-and-story generation from bounded modif
   assert.match(modify.steps[5], /reconcile the layout revision.+requested semantic diff.+LaTeX anchors.+authorized scope/i);
   assert.match(modify.steps[6], /recompile and render the layout revision.+revision identifier.+PDF.+render directory/i);
   assert.match(modify.steps[7], /independently review.+latest renders.+APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/i);
-  assert.match(modify.steps[8], /reconcile.+fresh rerenders.+maximum of three review rounds/i);
+  assert.match(modify.steps[8], /accepted by Main.+bounded fix.+at most one fresh affected.+report.+unresolved/i);
   assert.match(modify.scopeNotes.join(' '), /Do not reopen template selection or story planning/i);
   assert.match(modify.scopeNotes.join(' '), /Do not widen scope to unrelated pre-existing layout defects/i);
   assert.deepEqual(modify.delegation, [
@@ -192,7 +204,9 @@ test('SVG diagram workflow keeps creation neutral and exposes optional independe
   assert.match(diagram.steps[1], /standalone SVG.+black and white.+straight or dashed lines.+orthogonal polylines.+no curved connectors/i);
   assert.match(diagram.steps[2], /render.+full size.+60%/i);
   assert.match(diagram.steps[3], /independently inspect.+latest rasters/i);
-  assert.match(diagram.steps[4], /new revision.+maximum of three review rounds/i);
+  assert.match(diagram.steps[4], /accepted by Main.+new revision.+at most one fresh affected.+unchanged/i);
+  assert.match(diagram.steps[5], /Report.+source validation.+rendered evidence.+remaining.+limitations.+no verdict.+completion/i);
+  assert.doesNotMatch(diagram.steps.join(' '), /Deliver only after|maximum of three/i);
   assert.match(diagram.scopeNotes.join(' '), /designer owns SVG changes.+visioner remains read-only/i);
   assert.match(diagram.scopeNotes.join(' '), /Do not substitute source inspection or author self-review for independent rendered evidence/i);
   assert.match(

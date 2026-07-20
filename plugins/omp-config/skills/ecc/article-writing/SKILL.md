@@ -8,6 +8,10 @@ origin: ECC
 
 Write long-form content that sounds like an actual person with a point of view, not an LLM smoothing itself into paste.
 
+## Method Selection
+
+Main selects supporting methods in the initial `WORKFLOW PLAN` when their Skills are visible. Later, Main loads a method only when an already loaded source explicitly reveals its exact same-namespace `skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI. This Skill provides domain guidance; it does not reroute the task, emit a replacement `WORKFLOW PLAN`, or auto-load another Skill.
+
 ## When to Activate
 
 - drafting blog posts, essays, launch posts, guides, tutorials, or newsletter issues
@@ -25,7 +29,7 @@ Write long-form content that sounds like an actual person with a point of view, 
 
 ## Voice Handling
 
-If the user wants a specific voice, run `brand-voice` first and reuse its `VOICE PROFILE`.
+When Method Selection loaded `skill://ecc-skill-catalog/brand-voice/SKILL.md` for a requested voice, reuse its `VOICE PROFILE`.
 Do not duplicate a second style-analysis pass here unless the user explicitly asks for one.
 
 If no voice references are given, default to a sharp operator voice: concrete, unsentimental, useful.

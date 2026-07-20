@@ -1,11 +1,23 @@
 ---
 name: healthcare-eval-harness
-description: Patient safety evaluation harness for healthcare application deployments. Automated test suites for CDSS accuracy, PHI exposure, clinical workflow integrity, and integration compliance. Blocks deployments on safety failures.
+description: Design or review a user-requested healthcare target CI harness for CDSS accuracy, PHI exposure, clinical workflow integrity, and integration compliance; target CI may block its target deployment on safety failures.
 origin: Health1 Super Speciality Hospitals — contributed by Dr. Keyur Patel
 version: "1.0.0"
 ---
 
 # Healthcare Eval Harness — Patient Safety Verification
+
+## Current OMP and effect boundary
+
+Treat this Skill as guidance for an external target system only when the user
+explicitly requests that target. For the current OMP session it does not route,
+run tests, deploy, grant permission, block completion, or control lifecycle.
+Inspection, planning, and read-only review authorize no mutation. Any
+installation, configuration, file write, command, network call, deployment,
+publication, mutation, or other external effect requires explicit user authorization
+for the exact target and effect plus current native permission.
+Target patient-safety rules may block a target deployment; they are not an OMP
+gate or completion condition.
 
 Automated verification system for healthcare application deployments. A single CRITICAL failure blocks deployment. Patient safety is non-negotiable.
 

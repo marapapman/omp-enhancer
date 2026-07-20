@@ -1,67 +1,44 @@
 ---
 name: ralphinho-rfc-pipeline
-description: RFC-driven multi-agent DAG execution pattern with quality gates, merge queues, and work unit orchestration.
+description: RFC decomposition reference for turning a large feature into dependency-aware, independently verifiable work units within the selected code workflow.
 origin: ECC
 ---
 
-# Ralphinho RFC Pipeline
+# RFC Work-Unit Decomposition
 
-Inspired by [humanplane](https://github.com/humanplane) style RFC decomposition patterns and multi-unit orchestration workflows.
+Use this guide when a large feature needs a dependency graph before implementation. Main owns the parent plan, native TODO, integration, review, and final response. This guide supplies decomposition fields; it is not a second router, merge queue, repair loop, or completion controller.
 
-Use this skill when a feature is too large for a single agent pass and must be split into independently verifiable work units.
+## Unit contract
 
-## Pipeline Stages
+Each proposed work unit records:
 
-1. RFC intake
-2. DAG decomposition
-3. Unit assignment
-4. Unit implementation
-5. Unit validation
-6. Merge queue and integration
-7. Final system verification
+- `id` and exact scope;
+- `depends_on` with the concrete reason for each dependency;
+- assignment inputs and direct constraints;
+- acceptance tests and expected RED/GREEN evidence;
+- integration anchors and rollback notes;
+- files or components it may mutate.
 
-## Unit Spec Template
+Prefer vertical behavior slices over separate test and production-code units. Keep shared generators or mechanical integration as dependency-ordered Main slices when parallel mutation would conflict.
 
-Each work unit should include:
-- `id`
-- `depends_on`
-- `scope`
-- `acceptance_tests`
-- `risk_level`
-- `rollback_plan`
+## Main-owned execution
 
-## Complexity Tiers
+Main maps accepted units into its detailed TODO and checks which are runnable and independent. It chooses from dynamic Available Agents and current capacity; a matching domain Agent is preferred, otherwise native `task` may own a safe complete unit. Runnable independent units may be submitted together, while dependent units wait for their anchors.
 
-- Tier 1: isolated file edits, deterministic tests
-- Tier 2: multi-file behavior changes, moderate integration risk
-- Tier 3: schema/auth/perf/security changes
+Every implementation child owns one complete vertical TDD slice and returns evidence. Main integrates successful deliveries, performs visible review, and sends the bounded diff and evidence to a reviewer when the parent plan calls for review. No fixed Agent count, mandatory branch-per-unit scheme, or automatic redispatch follows from this guide.
 
-## Quality Pipeline per Unit
+## Stalls and integration findings
 
-1. research
-2. implementation plan
-3. implementation
-4. tests
-5. review
-6. merge-ready report
+A stalled, conflicting, or incomplete unit returns its partial evidence and limitation to Main. Main decides whether the parent TODO needs a narrower replacement slice; the guide does not retry automatically.
 
-## Merge Queue Rules
+Branch creation, commit, rebase, merge, push, and publication require explicit user authorization for the named effect. Dependency failures and review findings remain visible evidence, not permission to merge or a plugin-owned completion gate.
 
-- Never merge a unit with unresolved dependency failures.
-- Always rebase unit branches on latest integration branch.
-- Re-run integration tests after each queued merge.
+## Output
 
-## Recovery
+Return only the decomposition material the parent plan needs:
 
-If a unit stalls:
-- evict from active queue
-- snapshot findings
-- regenerate narrowed unit scope
-- retry with updated constraints
-
-## Outputs
-
-- RFC execution log
-- unit scorecards
-- dependency graph snapshot
-- integration risk summary
+- dependency graph or ordered unit table;
+- unit contracts;
+- integration risks and shared anchors;
+- proposed validation evidence;
+- unresolved assumptions.

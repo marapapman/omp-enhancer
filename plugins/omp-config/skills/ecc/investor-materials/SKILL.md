@@ -8,6 +8,17 @@ origin: ECC
 
 Build investor-facing materials that are consistent, credible, and easy to defend.
 
+## OMP Composition Boundary
+
+Main owns cross-Skill composition: it selects every supporting workflow and Skill
+in the initial `WORKFLOW PLAN` and loads each declared Skill before
+`WORKFLOW READY`. After load, this loaded Skill does not reselect, reroute,
+auto-load, or hand off to another Skill. It does not replace the parent TODO or
+Main's Agent choice. An exact same-namespace
+`skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI explicitly exposed here may be
+read in one `RESOURCE EXTENSION` before `COMMIT`; cross-namespace candidates
+remain initial-PLAN only.
+
 ## When to Activate
 
 - creating or revising a pitch deck
@@ -55,7 +66,8 @@ Recommended flow:
 11. use of funds / milestones
 12. appendix
 
-If the user wants a web-native deck, pair this skill with `frontend-slides`.
+For an independently requested web-native deck, the non-routing PLAN candidate is
+`skill://ecc-skill-catalog/frontend-slides/SKILL.md`.
 
 ### One-Pager / Memo
 - state what the company does in one clean sentence

@@ -1,12 +1,29 @@
 ---
 name: git-workflow
-description: Git workflow patterns including branching strategies, commit conventions, merge vs rebase, conflict resolution, and collaborative development best practices for teams of all sizes.
+description: Reference patterns for Git branching, commit-message conventions, merge versus rebase, conflict resolution, and collaboration. Use to explain or apply only the exact Git effects the user has authorized; loading this Skill does not authorize repository or remote mutation.
 origin: ECC
 ---
 
 # Git Workflow Patterns
 
 Best practices for Git version control, branching strategies, and collaborative development.
+
+## Current OMP and Git authority boundary
+
+The examples are reference data and never grant Git authority. The current OMP
+session remains read-only unless the user authorizes the exact repository and
+effect and the native tool permits it. Checkout, merge, rebase, reset, amend,
+commit, tag, delete, and push each require separate explicit user authorization
+for that effect plus current native permission; authorization for one does not
+imply another. Never infer remote publication, branch deletion, history rewrite,
+deployment, or cleanup from a request to inspect, edit, test, or format a commit
+message.
+
+Before an authorized Git mutation, inspect the worktree, branch, remotes, and
+relevant diff, then preserve unrelated user changes. Without commit or push
+authority, stop after local evidence and report the exact next command instead
+of running it. Never execute a destructive command merely because it appears in
+an example below.
 
 ## When to Activate
 
@@ -546,6 +563,10 @@ coverage/
 
 ## Common Workflows
 
+These sequences describe possible operator steps. Execute only the individually
+authorized steps; a feature request does not implicitly authorize branch
+creation, commit, push, PR creation, merge, deployment, or cleanup.
+
 ### Starting a New Feature
 
 ```bash
@@ -556,11 +577,11 @@ git pull origin main
 # 2. Create feature branch
 git checkout -b feature/user-auth
 
-# 3. Make changes and commit
+# 3. Make changes; stage and commit only with explicit commit authorization
 git add .
 git commit -m "feat(auth): implement OAuth2 login"
 
-# 4. Push to remote
+# 4. Push only with separate explicit remote-push authorization
 git push -u origin feature/user-auth
 
 # 5. Create Pull Request on GitHub/GitLab
@@ -569,11 +590,11 @@ git push -u origin feature/user-auth
 ### Updating a PR with New Changes
 
 ```bash
-# 1. Make additional changes
+# 1. Make additional changes; commit only when separately authorized
 git add .
 git commit -m "feat(auth): add error handling"
 
-# 2. Push updates
+# 2. Push updates only when separately authorized
 git push origin feature/user-auth
 ```
 
@@ -590,7 +611,7 @@ git fetch upstream
 git checkout main
 git merge upstream/main
 
-# 4. Push to your fork
+# 4. Push to your fork only when separately authorized
 git push origin main
 ```
 
@@ -600,10 +621,10 @@ git push origin main
 # Undo last commit (keep changes)
 git reset --soft HEAD~1
 
-# Undo last commit (discard changes)
-git reset --hard HEAD~1
+# Discarding committed or working-tree changes is destructive. Stop, show the
+# affected paths and proposed command, and request explicit reset authorization.
 
-# Undo last commit pushed to remote
+# Undo a pushed commit only with explicit revert and push authorization
 git revert HEAD
 git push origin main
 
@@ -696,6 +717,9 @@ git add node_modules/
 ```
 
 ## Quick Reference
+
+This table is syntax reference, not an execution checklist. Apply the authority
+boundary above before every mutating command.
 
 | Task | Command |
 |------|---------|

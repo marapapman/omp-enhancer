@@ -81,3 +81,30 @@ test('current documentation links the self-development and E2E methods without e
   assert.ok(readme.split('\n').length <= 110, 'root README remains concise');
   assert.ok(Buffer.byteLength(readme) <= 6500, 'root README keeps development detail under docs');
 });
+
+test('current documentation defines the bounded phase-local protocol coach without making it a gate', async () => {
+  const [agents, architecture, development, optimization, e2e] = await Promise.all([
+    read('AGENTS.md'),
+    read('docs/ARCHITECTURE.md'),
+    read('docs/DEVELOPMENT.md'),
+    read('docs/DEEPSEEK_PROMPT_OPTIMIZATION.md'),
+    read('docs/WORKFLOW_E2E_TESTING.md'),
+  ]);
+
+  for (const [path, content] of [
+    ['AGENTS.md', agents],
+    ['docs/ARCHITECTURE.md', architecture],
+    ['docs/DEVELOPMENT.md', development],
+    ['docs/DEEPSEEK_PROMPT_OPTIMIZATION.md', optimization],
+    ['docs/WORKFLOW_E2E_TESTING.md', e2e],
+  ]) {
+    assert.match(content, /PRE_PLAN[\s\S]*PRE_READY[\s\S]*PRE_DISPATCH/iu, path);
+    assert.match(content, /OMP_ENHANCER_DISABLE_PROTOCOL_COACH/iu, path);
+    assert.match(content, /(?:next natural|下一次自然).*?(?:request|请求)/isu, path);
+    assert.match(content, /(?:no|不|不得|不会).+(?:block|gate|router|路由|门禁|completion|完成控制)/isu, path);
+  }
+
+  assert.match(development, /writing\.pending[\s\S]*(?:不|不得|不会|does not).+PRE_DISPATCH/iu);
+  assert.match(e2e, /deterministic[\s\S]*context[\s\S]*(?:single|单次).+(?:sample|样本)/isu);
+  assert.doesNotMatch(optimization, /No plugin observes or enforces either sentinel|No hook observes or enforces these markers/iu);
+});

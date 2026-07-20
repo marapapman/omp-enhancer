@@ -13,6 +13,21 @@ Copy-paste patterns for the most common UI animation needs.
 Every pattern here is built on `motion-foundations` tokens and springs.
 Do not define new duration or easing values here — import them.
 
+## Workflow composition boundary
+
+Main selects supporting Skills in the initial `WORKFLOW PLAN` when they are
+visible. This Skill does not select or auto-load another Skill, reroute the
+workflow, or emit a replacement plan after `WORKFLOW READY`.
+
+If this already-loaded guide reveals a needed dependency that was not visible
+before PLAN, the remaining linked-method batch may read only a matching exact
+same-namespace URI listed here:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/motion-patterns/SKILL.md | reads=<only-needed-exact-URI-or-URIs-listed-below>`
+
+- `skill://ecc-skill-catalog/motion-foundations/SKILL.md`
+- `skill://ecc-skill-catalog/motion-advanced/SKILL.md`
+
 ## When to Activate
 
 - Animating a button, card, modal, or toast notification
@@ -409,11 +424,11 @@ export function AnimatedList({ items, onRemove }: {
 
 This skill does **not** cover:
 
-- Token and spring definitions → see `motion-foundations`
-- Drag interactions, swipe gestures, reorderable lists → see `motion-advanced`
-- Text animations (word/character reveal, counters) → see `motion-advanced`
-- SVG path drawing or morphing → see `motion-advanced`
-- Custom animation hooks → see `motion-advanced`
+- Token and spring definitions belong to the already-declared `motion-foundations` compatibility candidate.
+- Drag interactions, swipe gestures, reorderable lists belong to the already-declared `motion-advanced` compatibility candidate.
+- Text animations (word/character reveal, counters) belong to that same advanced candidate.
+- SVG path drawing or morphing belongs to that same advanced candidate.
+- Custom animation hooks belong to that same advanced candidate.
 - CSS-only transitions not using `motion/react`
 
 ## Anti-Patterns
@@ -431,5 +446,5 @@ This skill does **not** cover:
 
 ## Related Skills
 
-- **`motion-foundations`** — defines all tokens, springs, the `useSafeMotion` hook, and SSR guards that every pattern here imports. Must be set up first.
-- **`motion-advanced`** — extends these patterns with drag, gestures, SVG, text, custom hooks, and imperative sequencing. Does not redefine any patterns from this skill.
+- **`motion-foundations`** — compatibility candidate defining the tokens, springs, `useSafeMotion` hook, and SSR guards used by these patterns; select its exact URI during PLAN or through the bounded extension above.
+- **`motion-advanced`** — compatibility candidate for drag, gestures, SVG, text, custom hooks, and imperative sequencing; it does not redefine these patterns.

@@ -1,7 +1,8 @@
 export const writingWorkflows = [
   {
     "id": "writing.pending",
-    "chooseWhen": "Temporary Primary only when a named writing target has not been observed and its prose language is unknown; after one narrow source read, replace it with writing.zh or writing.en before substantive review or revision.",
+    "delegationDefault": "defer-until-composed",
+    "chooseWhen": "Temporary Primary when a named writing target's body language is unknown; after one narrow language read, replace once with writing.zh or writing.en before substantive work.",
     "composeWith": [
       "writing.latex",
       "slides.modify",
@@ -11,24 +12,27 @@ export const writingWorkflows = [
     "steps": [
       {
         "id": "step-1",
-        "text": "Read the exact text or document section."
+        "text": "After the initial READY, Main performs exactly one narrow source read of the user-named target for body language only; no substantive review or revision."
       },
       {
         "id": "step-2",
-        "text": "Detect its body language."
+        "text": "Emit one replacement `WORKFLOW PLAN` at visible byte 0, replacing `writing.pending` with `writing.zh` or `writing.en` while retaining the same format Add-ons."
       },
       {
         "id": "step-3",
-        "text": "Compose writing.zh or writing.en with any format companion."
+        "text": "Load only newly required language Skills and the selected language workflow reference last; do not reread loaded format companions or other loaded resources, then wait and emit replacement `WORKFLOW READY`."
       },
       {
         "id": "step-4",
-        "text": "Revise and review."
+        "text": "Rebase TODO from the selected language workflow and follow its subagent-driven writer and checker sequence."
       }
     ],
     "scopeNotes": [
       "The instruction language is not evidence of the document language.",
-      "Language-specific skills remain undecided until source text is available."
+      "Language-specific skills remain undecided until source text is available.",
+      "This is the only one-time replacement PLAN transition: it resolves new language evidence and does not create a router, gate, retry, or general permission to repeat PLAN.",
+      "No substantive review or revision occurs between the initial READY and replacement READY.",
+      "If the narrow read cannot determine the requested language, ask the user; never repeat the transition or guess."
     ],
     "skills": [],
     "qualityChecks": [
@@ -37,8 +41,8 @@ export const writingWorkflows = [
     "riskNotes": [],
     "roles": [],
     "delegation": [
-      "step-1: before the body language is observed, do not delegate to writer, checker, zh-writer, or zh-checker",
-      "step-3: after detecting the body language, compose writing.zh or writing.en and use only that workflow's language-matched subagents"
+      "step-1: Main agent owns the one narrow language-only read after initial READY and delegates no prose work before replacement READY",
+      "step-4: after replacement READY, use only the selected writing.zh or writing.en workflow's language-matched subagents"
     ]
   },
   {
@@ -57,30 +61,35 @@ export const writingWorkflows = [
     "steps": [
       {
         "id": "step-1",
-        "text": "Establish meaning, preservation constraints, and the bounded assignment."
+        "text": "Form the bounded assignment from the user-named target, requested Chinese operation, preservation constraints, and acceptance evidence without Main `read` or `glob` merely to enrich the assignment."
       },
       {
         "id": "step-2",
-        "text": "Draft or revise the requested natural Chinese prose within the established meaning and preservation constraints."
+        "text": "Make zh-writer the first project actor; it reads the exact target, records semantic anchors, and drafts or revises the requested natural Chinese prose within the preservation constraints."
       },
       {
         "id": "step-3",
-        "text": "Independently review the resulting revision for logic, tone, terminology, readability, and semantic drift without editing the source."
+        "text": "After the writer delivery, have zh-checker independently compare the source and revision for logic, tone, terminology, readability, and semantic drift without editing the source."
       },
       {
         "id": "step-4",
-        "text": "Apply only parent-accepted findings once, then have the parent verify scope, voice consistency, semantic anchors, and requested format."
+        "text": "Resolve the frozen conditional row in exactly one branch. Branch A: Main alone performs finding disposition and accepts at least one checker finding; dispatch the original frozen step-4 zh-writer row, then use native TODO `done` for that same row only after its complete corrected-proposal terminal delivery. Branch B: Main accepts zero checker findings; do not dispatch, and use native TODO `done` on the same frozen row with `resolved-no-repair`; never rewrite, drop, or abandon it. Main then applies any authorized file change and verifies scope, voice consistency, semantic anchors, and requested format."
       }
     ],
     "scopeNotes": [
       "This workflow concerns prose rather than code implementation.",
-      "When Main delegates, the language-matched writer owns prose edits and the checker remains independent and source-read-only; the parent always owns assignment boundaries and final reconciliation."
+      "A user-named target plus the requested operation, preservation constraints, and acceptance evidence normally forms complete assignment input before Main reads it; the language-matched writer owns the target read and prose revision, the checker remains independent and source-read-only, and the parent owns final reconciliation.",
+      "The zh-writer is proposal-only and returns a complete proposed revision or bounded patch; Main owns any authorized file change, and assignment size leaves the actor sequence unchanged.",
+      "A request directly addressed to Main, an integrated final delivery, and no explicit delegation request leave the zh-writer then zh-checker sequence unchanged when those safe roles are visible.",
+      "With visible safe roles and complete input, READY TODO contains dependency-ordered exact rows for step-2 zh-writer, step-3 zh-checker, and conditional step-4 corrected-proposal, followed by parent-owned integration and verification; this initial READY TODO freezes three exact Delegate rows. Step-3 stays pending until complete writer delivery, and step-4 stays pending through Main's finding disposition before exactly one completion branch resolves it.",
+      "Keep the later-wave checker checkpoint stable before and after writer delivery: say that source and revision will be supplied in the assignment body; do not invent artifact:// URIs or rewrite the checkpoint when delivery arrives.",
+      "Normal writer delivery itself does not rebase that checkpoint; only a new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase it.",
+      "Branch A: Main alone performs finding disposition and accepts at least one checker finding, dispatches the original frozen step-4 row, and uses native TODO `done` for that same row only after a complete corrected-proposal terminal delivery. Branch B: Main accepts zero checker findings, does not dispatch, and uses native TODO `done` on the same frozen row with `resolved-no-repair`; never rewrite, drop, or abandon it. This no-op branch is parent TODO condition resolution, not child delivery, a successful fork, or permission. Every dispatched row mechanically copies its frozen Agent, workflow, step, skills, and checkpoint metadata.",
+      "In a writing.zh plus writing.latex composition, both rows keep workflow metadata exactly writing.zh,writing.latex for the step-2 and step-3 pair; the conditional step-4 row copies the same workflow metadata. Each prose-revision item uses visible zh-writer and the dependent semantic-check item uses zh-checker."
     ],
     "skills": [
       "plain-chinese-writing",
-      "zh-writing-review",
-      "zh-writing-polish",
-      "zh-writing-checkers"
+      "zh-writing-review"
     ],
     "qualityChecks": [
       "meaning and semantic-anchor preservation, Chinese logic and style, terminology consistency, independent checker evidence, parent scope reconciliation, and requested format"
@@ -91,9 +100,9 @@ export const writingWorkflows = [
       "zh-checker"
     ],
     "delegation": [
-      "step-2: zh-writer owns the requested Chinese drafting or prose revision",
-      "step-3: zh-checker independently reviews the resulting revision without editing the source",
-      "step-4: zh-writer applies only parent-accepted findings once, then the parent verifies scope and semantic anchors"
+      "step-2: zh-writer is the first project actor and reads the exact target before owning the requested Chinese drafting or prose revision",
+      "step-3: zh-checker independently reviews source and revision after the writer delivery without editing the source",
+      "step-4: zh-writer returns one corrected proposal for parent-accepted findings"
     ]
   },
   {
@@ -112,29 +121,34 @@ export const writingWorkflows = [
     "steps": [
       {
         "id": "step-1",
-        "text": "Establish meaning, preservation constraints, and the bounded assignment."
+        "text": "Form the bounded assignment from the user-named target, requested English operation, preservation constraints, and acceptance evidence without Main `read` or `glob` merely to enrich the assignment."
       },
       {
         "id": "step-2",
-        "text": "Draft or revise the requested English prose within the established meaning and preservation constraints."
+        "text": "Make writer the first project actor; it reads the exact target, records semantic anchors, and drafts or revises the requested English prose within the preservation constraints."
       },
       {
         "id": "step-3",
-        "text": "Independently review the resulting revision for logic, tone, terminology, formatting, readability, and semantic drift without editing the source."
+        "text": "After the writer delivery, have checker independently compare the source and revision for logic, tone, terminology, formatting, readability, and semantic drift without editing the source."
       },
       {
         "id": "step-4",
-        "text": "Apply only parent-accepted findings once, then have the parent verify scope, voice consistency, semantic anchors, and requested format."
+        "text": "Resolve the frozen conditional row in exactly one branch. Branch A: Main alone performs finding disposition and accepts at least one checker finding; dispatch the original frozen step-4 writer row, then use native TODO `done` for that same row only after its complete corrected-proposal terminal delivery. Branch B: Main accepts zero checker findings; do not dispatch, and use native TODO `done` on the same frozen row with `resolved-no-repair`; never rewrite, drop, or abandon it. Main then applies any authorized file change and verifies scope, voice consistency, semantic anchors, and requested format."
       }
     ],
     "scopeNotes": [
       "This workflow concerns prose rather than code implementation.",
-      "When Main delegates, the language-matched writer owns prose edits and the checker remains independent and source-read-only; the parent always owns assignment boundaries and final reconciliation."
+      "A user-named target plus the requested operation, preservation constraints, and acceptance evidence normally forms complete assignment input before Main reads it; the language-matched writer owns the target read and prose revision, the checker remains independent and source-read-only, and the parent owns final reconciliation.",
+      "The writer is proposal-only and returns a complete proposed revision or bounded patch; Main owns any authorized file change, and assignment size leaves the actor sequence unchanged.",
+      "A request directly addressed to Main, an integrated final response, and no explicit delegation request leave the writer then checker sequence unchanged when those safe roles are visible.",
+      "With visible safe roles and complete input, READY TODO contains dependency-ordered exact rows for step-2 writer, step-3 checker, and conditional step-4 corrected-proposal, followed by parent-owned integration and verification; this initial READY TODO freezes three exact Delegate rows. Step-3 stays pending until complete writer delivery, and step-4 stays pending through Main's finding disposition before exactly one completion branch resolves it.",
+      "Keep the later-wave checker checkpoint stable before and after writer delivery: say that source and revision will be supplied in the assignment body; do not invent artifact:// URIs or rewrite the checkpoint when delivery arrives.",
+      "Normal writer delivery itself does not rebase that checkpoint; only a new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase it.",
+      "Branch A: Main alone performs finding disposition and accepts at least one checker finding, dispatches the original frozen step-4 row, and uses native TODO `done` for that same row only after a complete corrected-proposal terminal delivery. Branch B: Main accepts zero checker findings, does not dispatch, and uses native TODO `done` on the same frozen row with `resolved-no-repair`; never rewrite, drop, or abandon it. This no-op branch is parent TODO condition resolution, not child delivery, a successful fork, or permission. Every dispatched row mechanically copies its frozen Agent, workflow, step, skills, and checkpoint metadata.",
+      "In a writing.en plus writing.latex composition, both rows keep workflow metadata exactly writing.en,writing.latex for the step-2 and step-3 pair; the conditional step-4 row copies the same workflow metadata. Each prose-revision item uses visible writer and the dependent semantic-check item uses checker."
     ],
     "skills": [
-      "writing-review",
-      "writing-checkers",
-      "writing-markdown-helper"
+      "writing-review"
     ],
     "qualityChecks": [
       "meaning and semantic-anchor preservation, English logic and style, terminology consistency, independent checker evidence, parent scope reconciliation, and requested venue or format"
@@ -145,14 +159,14 @@ export const writingWorkflows = [
       "checker"
     ],
     "delegation": [
-      "step-2: writer owns the requested English drafting or prose revision",
-      "step-3: checker independently reviews the resulting revision without editing the source",
-      "step-4: writer applies only parent-accepted findings once, then the parent verifies scope and semantic anchors"
+      "step-2: writer is the first project actor and reads the exact target before owning the requested English drafting or prose revision",
+      "step-3: checker independently reviews source and revision after the writer delivery without editing the source",
+      "step-4: writer returns one corrected proposal for parent-accepted findings"
     ]
   },
   {
     "id": "writing.latex",
-    "chooseWhen": "A requested writing, revision, or conversion source/output is LaTeX; compose with another matching format or prose workflow.",
+    "chooseWhen": "LaTeX source/output, LaTeX prose, or preserved commands: Add-on to matching prose; Primary only for format/structure work. A preservation-only Add-on selects zero format Skills; explicit conversion or template selects one matching candidate.",
     "composeWith": [
       "writing.pending",
       "writing.zh",
@@ -166,7 +180,7 @@ export const writingWorkflows = [
     "steps": [
       {
         "id": "step-1",
-        "text": "Read the relevant source and local macros."
+        "text": "The owning workflow checkpoint actor reads the relevant source and local macros; when composed with a language workflow, the language writer owns the prose target read."
       },
       {
         "id": "step-2",
@@ -174,15 +188,17 @@ export const writingWorkflows = [
       },
       {
         "id": "step-3",
-        "text": "Make the requested change."
+        "text": "Make only the requested format conversion or LaTeX-structure change; a composed language writer owns prose revision."
       },
       {
         "id": "step-4",
-        "text": "Inspect the diff and compile when in scope."
+        "text": "Use a language-neutral task only for bounded compile evidence; the composed language checker owns semantic review."
       }
     ],
     "scopeNotes": [
-      "Compilation and publication are separate workflow steps when requested."
+      "Compilation and publication are separate workflow steps when requested.",
+      "When composed with writing.en or writing.zh as a preservation-only Add-on, it contributes LaTeX preservation constraints only: select zero format Skills and create no generic `task` Delegate row.",
+      "Its generic `task` candidate is only for an explicitly requested format conversion, LaTeX-structure change, or compile-evidence checkpoint; it is not a candidate for prose revision or semantic check when a language workflow is composed."
     ],
     "skills": [
       "format-markdown2latex",
@@ -193,10 +209,12 @@ export const writingWorkflows = [
       "LaTeX structure, active-text boundaries, reference integrity, and compile evidence when requested"
     ],
     "riskNotes": [],
-    "roles": [],
+    "roles": [
+      "task"
+    ],
     "delegation": [
-      "step-3: for prose changes, use the writer from the composed writing.zh or writing.en workflow; keep format-only conversion language-neutral",
-      "step-4: use the composed language checker for prose review; otherwise the parent owns compile evidence unless another explicitly composed workflow supplies an exact role"
+      "step-3: task owns only an explicitly requested format-only conversion or LaTeX-structure change; the writer selected from composed writing.zh or writing.en owns every prose revision checkpoint",
+      "step-4: task may return only explicitly requested compile evidence; the selected composed language checker owns every semantic-check checkpoint, while the parent reconciles structure and scope"
     ]
   },
   {
@@ -226,11 +244,11 @@ export const writingWorkflows = [
       },
       {
         "id": "step-4",
-        "text": "Discuss the purpose, audience, duration, output language, and numbered story outline with the user and obtain confirmation."
+        "text": "Commit a numbered working outline from the supplied purpose, audience, duration, output language, evidence, and safe explicit assumptions; ask only when a missing choice materially changes the deck and cannot be resolved from the request or project context."
       },
       {
         "id": "step-5",
-        "text": "Generate Beamer frames from the confirmed template and outline, applying the PLAN-selected writing.zh or writing.en method for the agreed output language."
+        "text": "Generate Beamer frames from the committed template and working outline, applying the PLAN-selected writing.zh or writing.en method for the agreed output language."
       },
       {
         "id": "step-6",
@@ -238,11 +256,11 @@ export const writingWorkflows = [
       },
       {
         "id": "step-7",
-        "text": "Perform the final layout pass across the deck, correcting text and image overlap, crowding, clipping, undersized text, image cropping, alignment, spacing, and hierarchy without changing the confirmed story."
+        "text": "Perform the final layout pass across the deck, correcting text and image overlap, crowding, clipping, undersized text, image cropping, alignment, spacing, and hierarchy without changing the committed story."
       },
       {
         "id": "step-8",
-        "text": "Reconcile the layout revision against the confirmed outline, output language, source facts, semantic anchors, and LaTeX structure; restore unintended content or scope changes before rendering."
+        "text": "Reconcile the layout revision against the committed outline, output language, source facts, semantic anchors, and LaTeX structure; restore unintended content or scope changes before rendering."
       },
       {
         "id": "step-9",
@@ -254,7 +272,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-11",
-        "text": "For each material finding, produce a bounded new layout revision, have the parent reconcile content and scope, then recompile and create fresh renders before another independent visual review; use a maximum of three review rounds and never review an unchanged artifact."
+        "text": "For each material finding accepted by Main, produce a bounded new layout revision, have the parent reconcile content and scope, then recompile and create fresh renders before at most one fresh affected visual review; do not review an unchanged artifact and report remaining findings."
       },
       {
         "id": "step-12",
@@ -272,7 +290,7 @@ export const writingWorkflows = [
       "beamer-to-powerpoint"
     ],
     "qualityChecks": [
-      "template readiness, confirmed story outline, post-layout semantic and LaTeX preservation, output-language writing compliance, Beamer structure, zero unintended text and image overlap, no crowding or clipping, readable typography, undistorted images, balanced spacing, current-revision rendered evidence, compile evidence, and user-command conversion evidence when requested"
+      "template readiness, committed story outline, post-layout semantic and LaTeX preservation, output-language writing compliance, Beamer structure, zero unintended text and image overlap, no crowding or clipping, readable typography, undistorted images, balanced spacing, current-revision rendered evidence, compile evidence, and user-command conversion evidence when requested"
     ],
     "riskNotes": [],
     "roles": [
@@ -329,7 +347,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-9",
-        "text": "For each material finding, make only the necessary bounded fix, have the parent reconcile semantics and scope, then recompile and create fresh rerenders before another independent visual review; use a maximum of three review rounds and report any unresolved limitation."
+        "text": "For each material finding accepted by Main, make only the necessary bounded fix, have the parent reconcile semantics and scope, then recompile and create fresh rerenders before at most one fresh affected visual review; do not review an unchanged artifact and report any unresolved limitation."
       }
     ],
     "scopeNotes": [
@@ -383,11 +401,11 @@ export const writingWorkflows = [
       },
       {
         "id": "step-5",
-        "text": "For each material finding, produce a new revision, rerun validation and rendering, then perform another independent visual review of that revision; use a maximum of three review rounds and relayout after repeated geometry failures."
+        "text": "For each material finding accepted by Main, produce a new revision, rerun validation and rendering, then perform at most one fresh affected independent visual review; do not review an unchanged artifact and report remaining geometry failures."
       },
       {
         "id": "step-6",
-        "text": "Deliver only after final source validation and current-revision rendered evidence; otherwise report the remaining layout or review limitation."
+        "text": "Report final source validation and current-revision rendered evidence together with any remaining layout or review limitations; no verdict decides completion."
       }
     ],
     "scopeNotes": [
@@ -414,7 +432,7 @@ export const writingWorkflows = [
   },
   {
     "id": "writing.markdown",
-    "chooseWhen": "A requested writing, revision, or conversion source/output is Markdown; compose with another matching format or prose workflow.",
+    "chooseWhen": "Markdown source/output: Add-on to matching prose; Primary only for Markdown conversion or structure work.",
     "composeWith": [
       "writing.pending",
       "writing.zh",
@@ -442,7 +460,8 @@ export const writingWorkflows = [
       }
     ],
     "scopeNotes": [
-      "Code mentioned inside prose does not by itself make this a code implementation task."
+      "Code mentioned inside prose does not by itself make this a code implementation task.",
+      "For prose work, select only the Markdown helper matching the composed writing.zh or writing.en body language; never load both language helpers."
     ],
     "skills": [
       "writing-markdown-helper",
@@ -452,15 +471,17 @@ export const writingWorkflows = [
       "Markdown structure, link and fence integrity, and consistent prose"
     ],
     "riskNotes": [],
-    "roles": [],
+    "roles": [
+      "task"
+    ],
     "delegation": [
-      "step-2: for prose changes, use the writer from the composed writing.zh or writing.en workflow; keep format-only conversion language-neutral",
-      "step-3: use the composed language checker for prose review while the parent reconciles Markdown structure"
+      "step-2: task owns only a bounded format-only conversion and Markdown-structure preservation slice; for prose changes, prefer the writer from the composed writing.zh or writing.en workflow",
+      "step-3: prefer the composed language checker for prose review; task may return bounded structure evidence, while the parent reconciles Markdown scope"
     ]
   },
   {
     "id": "doc.convert.word",
-    "chooseWhen": "The requested output is a Word document or a conversion to or from Word.",
+    "chooseWhen": "Word source/output: Add-on to matching prose; Primary only for Word conversion or structure work.",
     "composeWith": [
       "writing.pending",
       "writing.zh",
@@ -497,10 +518,12 @@ export const writingWorkflows = [
     "riskNotes": [
       "Confirm the intended output path before replacing an existing document."
     ],
-    "roles": [],
+    "roles": [
+      "task"
+    ],
     "delegation": [
-      "step-3: keep pure conversion language-neutral; when prose changes are requested, use the writer from the composed writing.zh or writing.en workflow",
-      "step-4: use the composed language checker for revised prose; otherwise the parent owns document-structure and visual review unless another explicitly composed workflow supplies an exact role"
+      "step-3: task owns only a bounded format conversion and document-structure preservation slice; for prose changes, prefer the writer from the composed writing.zh or writing.en workflow",
+      "step-4: prefer the composed language checker for revised prose; task may return bounded structure evidence, while the parent reconciles document scope and visual review"
     ]
   }
 ];

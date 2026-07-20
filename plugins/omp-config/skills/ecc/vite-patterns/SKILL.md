@@ -1,6 +1,6 @@
 ---
 name: vite-patterns
-description: Vite build tool patterns including config, plugins, HMR, env variables, proxy setup, SSR, library mode, dependency pre-bundling, and build optimization. Activate when working with vite.config.ts, Vite plugins, or Vite-based projects.
+description: Use for Vite-specific configuration, plugins, HMR, environment variables, proxy setup, SSR, library mode, dependency pre-bundling, or build optimization.
 origin: ECC
 ---
 
@@ -444,6 +444,10 @@ import.meta.hot.data.count = 0                 // CORRECT
 
 ## Related Skills
 
-- `frontend-patterns` — React component patterns
-- `docker-patterns` — containerized dev with Vite
-- `nextjs-turbopack` — alternative bundler for Next.js
+These are compatibility candidates for Main's initial `WORKFLOW PLAN` only when
+they independently match the user task and are visible. This loaded Skill does
+not select or load them after COMMIT:
+
+- `skill://ecc-skill-catalog/frontend-patterns/SKILL.md` — React component patterns
+- `skill://ecc-skill-catalog/docker-patterns/SKILL.md` — containerized dev with Vite
+- `skill://ecc-skill-catalog/nextjs-turbopack/SKILL.md` — alternative bundler for Next.js

@@ -8,6 +8,10 @@ origin: ECC
 
 Distribute content across platforms without turning it into the same fake post in four costumes.
 
+## Method Selection
+
+Main selects supporting methods in the initial `WORKFLOW PLAN` when their Skills are visible. Later, Main loads a method only when an already loaded source explicitly reveals its exact same-namespace `skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI. This Skill provides domain guidance; it does not reroute the task, emit a replacement `WORKFLOW PLAN`, or auto-load another Skill.
+
 ## When to Activate
 
 - the user wants to publish the same underlying idea across multiple platforms
@@ -33,11 +37,11 @@ Pick the strongest source version first:
 - the thread
 - the memo or changelog
 
-Use `content-engine` first if the source still needs voice shaping.
+When Method Selection loaded `skill://ecc-skill-catalog/content-engine/SKILL.md`, use its output if the source still needs voice shaping.
 
 ### Step 2: Capture the Voice Fingerprint
 
-Run `brand-voice` first if the source voice is not already captured in the current session.
+When Method Selection loaded `skill://ecc-skill-catalog/brand-voice/SKILL.md`, reuse its source-derived voice profile when the current session does not already contain one.
 
 Reuse the resulting `VOICE PROFILE` directly.
 Do not build a second ad hoc voice checklist here unless the user explicitly wants a fresh override for this campaign.
@@ -104,8 +108,10 @@ Before delivering:
 - no copy is duplicated verbatim across platforms
 - any extra context added for LinkedIn or newsletter use is actually necessary
 
-## Related Skills
+## Candidate Methods
 
-- `brand-voice` for reusable source-derived voice capture
-- `content-engine` for voice capture and source shaping
-- `x-api` for X publishing workflows
+This source explicitly reveals these exact same-namespace resources for selection under the Method Selection boundary:
+
+- `skill://ecc-skill-catalog/brand-voice/SKILL.md` for reusable source-derived voice capture
+- `skill://ecc-skill-catalog/content-engine/SKILL.md` for voice capture and source shaping
+- `skill://ecc-skill-catalog/x-api/SKILL.md` for X publishing workflows

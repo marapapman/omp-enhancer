@@ -10,6 +10,21 @@ Create zero-dependency, animation-rich HTML presentations that run entirely in t
 
 Inspired by the visual exploration approach showcased in work by zarazhangrui (credit: @zarazhangrui).
 
+## Resource and effect boundary
+
+The only packaged preset resource is
+`skill://ecc-skill-catalog/frontend-slides/STYLE_PRESETS.md`. If this Skill was
+loaded without that needed resource, disclose it through one remaining batch and
+wait:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/frontend-slides/SKILL.md | reads=skill://ecc-skill-catalog/frontend-slides/STYLE_PRESETS.md`
+
+Every external effect requires explicit user authorization for the exact target
+and effect plus current native permission. Preview or deliverable writes,
+browser opening, dependency installation, font network access, and temporary
+preview deletion are separate filesystem or external effects. Examples below do
+not authorize them.
+
 ## When to Activate
 
 - Creating a talk deck, pitch deck, workshop deck, or internal presentation
@@ -25,7 +40,7 @@ Inspired by the visual exploration approach showcased in work by zarazhangrui (c
 4. **Distinctive design**: avoid generic purple-gradient, Inter-on-white, template-looking decks.
 5. **Production quality**: keep code commented, accessible, responsive, and performant.
 
-Before generating, read `STYLE_PRESETS.md` for the viewport-safe CSS base, density limits, preset catalog, and CSS gotchas.
+Before generating, read `skill://ecc-skill-catalog/frontend-slides/STYLE_PRESETS.md` for the viewport-safe CSS base, density limits, preset catalog, and CSS gotchas.
 
 ## Workflow
 
@@ -57,7 +72,7 @@ Otherwise:
 3. Each preview must be self-contained, show typography/color/motion clearly, and stay under roughly 100 lines of slide content.
 4. Ask the user which preview to keep or what elements to mix.
 
-Use the preset guide in `STYLE_PRESETS.md` when mapping mood to style.
+Use the preset guide in `skill://ecc-skill-catalog/frontend-slides/STYLE_PRESETS.md` when mapping mood to style.
 
 ### 4. Build the Presentation
 
@@ -69,7 +84,7 @@ Use an `assets/` folder only when the deck contains extracted or user-supplied i
 
 Required structure:
 - semantic slide sections
-- a viewport-safe CSS base from `STYLE_PRESETS.md`
+- a viewport-safe CSS base from `skill://ecc-skill-catalog/frontend-slides/STYLE_PRESETS.md`
 - CSS custom properties for theme values
 - a presentation controller class for keyboard, wheel, and touch navigation
 - Intersection Observer for reveal animations
@@ -86,7 +101,7 @@ Rules:
 - never solve overflow by shrinking text below readable sizes
 - never allow scrollbars inside a slide
 
-Use the density limits and mandatory CSS block in `STYLE_PRESETS.md`.
+Use the density limits and mandatory CSS block in `skill://ecc-skill-catalog/frontend-slides/STYLE_PRESETS.md`.
 
 ### 6. Validate
 
@@ -102,7 +117,8 @@ If browser automation is available, use it to verify no slide overflows and that
 ### 7. Deliver
 
 At handoff:
-- delete temporary preview files unless the user wants to keep them
+- delete temporary preview files only when that exact cleanup was authorized;
+  temporary preview deletion is a separate filesystem effect
 - open the deck with the platform-appropriate opener when useful
 - summarize file path, preset used, slide count, and easy theme customization points
 
@@ -170,9 +186,13 @@ Use these maxima unless the user explicitly asks for denser slides and readabili
 
 ## Related ECC Skills
 
-- `frontend-patterns` for component and interaction patterns around the deck
-- `liquid-glass-design` when a presentation intentionally borrows Apple glass aesthetics
-- `e2e-testing` if you need automated browser verification for the final deck
+These are compatibility candidates for Main's initial `WORKFLOW PLAN` only when
+they independently match the request and are visible. This loaded Skill does not
+select or load them after COMMIT:
+
+- `skill://ecc-skill-catalog/frontend-patterns/SKILL.md` for component and interaction patterns around the deck
+- `skill://ecc-skill-catalog/liquid-glass-design/SKILL.md` when a presentation intentionally borrows Apple glass aesthetics
+- `skill://ecc-skill-catalog/e2e-testing/SKILL.md` when the request needs automated browser verification for the final deck
 
 ## Deliverable Checklist
 

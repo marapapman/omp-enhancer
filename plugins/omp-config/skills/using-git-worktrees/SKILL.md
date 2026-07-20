@@ -11,6 +11,8 @@ Ensure work happens in an isolated workspace. Prefer your platform's native work
 
 **Core principle:** Detect existing isolation first. Then use native tools. Then fall back to git. Never fight the harness.
 
+**Effect boundary:** Worktree consent does not authorize modifying or committing `.gitignore`, dependency installation, downloads, network access, or branch cleanup. Obtain the user authorization required for each extra effect; native isolation or worktree creation does not broaden it.
+
 **Announce at start:** "I'm using the using-git-worktrees skill to set up an isolated workspace."
 
 ## Step 0: Detect Existing Isolation
@@ -21,7 +23,11 @@ Ensure work happens in an isolated workspace. Prefer your platform's native work
 GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
 GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
 BRANCH=$(git branch --show-current)
+git status --short
+git rev-parse HEAD
 ```
+
+Record the current branch or detached state, commit, and dirty tree evidence before creating or entering isolation. Preserve user changes; isolation does not authorize cleaning either checkout.
 
 **Submodule guard:** `GIT_DIR != GIT_COMMON` is also true inside git submodules. Before concluding "already in a worktree," verify you are not in a submodule:
 
@@ -52,7 +58,7 @@ Honor any existing declared preference without asking. If the user declines cons
 
 The user has asked for an isolated workspace (Step 0 consent). Do you already have a way to create a worktree? It might be a tool with a name like `EnterWorktree`, `WorktreeCreate`, a `/worktree` command, or a `--worktree` flag. If you do, use it and skip to Step 3.
 
-Native tools handle directory placement, branch creation, and cleanup automatically. Using `git worktree add` when you have a native tool creates phantom state your harness can't see or manage.
+Native tools handle directory placement and lifecycle under the host's own contract. Using `git worktree add` when you have a native tool creates phantom state your harness can't see or manage. Do not perform separate branch cleanup unless the user authorizes it.
 
 Only proceed to Step 1b if you have no native worktree tool available.
 
@@ -80,7 +86,7 @@ Follow this priority order. Explicit user preference always beats observed files
    ```
    If found, use it (backward compatibility with legacy global path).
 
-4. **If there is no other guidance available**, default to `.worktrees/` at the project root.
+4. **If there is no other guidance available**, use a safe location outside the repository, such as the existing global directory convention. Do not create a project-local directory merely to establish a default.
 
 #### Safety Verification (project-local directories only)
 
@@ -90,7 +96,7 @@ Follow this priority order. Explicit user preference always beats observed files
 git check-ignore -q .worktrees 2>/dev/null || git check-ignore -q worktrees 2>/dev/null
 ```
 
-**If NOT ignored:** Add to .gitignore, commit the change, then proceed.
+**If the project-local directory is not ignored:** Choose a safe location outside the repository or request single-effect authorization for the exact `.gitignore` modification. Worktree consent alone does not permit that edit or a commit.
 
 **Why critical:** Prevents accidentally committing worktree contents to repository.
 
@@ -109,30 +115,17 @@ git worktree add "$path" -b "$BRANCH_NAME"
 cd "$path"
 ```
 
-**Sandbox fallback:** If `git worktree add` fails with a permission error (sandbox denial), tell the user the sandbox blocked worktree creation and you're working in the current directory instead. Then run setup and baseline tests in place.
+**Sandbox fallback:** If `git worktree add` fails with a permission error, report that isolation was unavailable and work in the current directory only when allowed. Continue with the same effect-bounded setup and baseline rules below.
 
 ## Step 3: Project Setup
 
-Auto-detect and run appropriate setup:
+Detect the project's existing setup instructions without running them automatically. A setup command may install dependencies, write build artifacts, download content, or use the network. Run a setup command only when the current host, exposed tool, permission state, and user effect boundary all allow its effects. Otherwise report the exact command and effect that was not run; do not treat worktree consent as authorization.
 
-```bash
-# Node.js
-if [ -f package.json ]; then npm install; fi
-
-# Rust
-if [ -f Cargo.toml ]; then cargo build; fi
-
-# Python
-if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-if [ -f pyproject.toml ]; then poetry install; fi
-
-# Go
-if [ -f go.mod ]; then go mod download; fi
-```
+Prefer an already-present dependency tree and an offline, read-only inspection when that can establish the needed baseline. Never invent a package-manager command from a manifest alone.
 
 ## Step 4: Verify Clean Baseline
 
-Run tests to ensure workspace starts clean:
+Run a project-documented, host-authorized test command when it stays inside the allowed effect boundary. Capture the command, starting commit, dirty tree state, exit status, and concise output as baseline evidence. If tests cannot be run, report the missing baseline evidence and why.
 
 ```bash
 # Use project-appropriate command
@@ -162,12 +155,12 @@ Ready to implement <feature-name>
 | `.worktrees/` exists | Use it (verify ignored) |
 | `worktrees/` exists | Use it (verify ignored) |
 | Both exist | Use `.worktrees/` |
-| Neither exists | Check instruction file, then default `.worktrees/` |
+| Neither exists | Check instructions, then use a safe location outside the repository |
 | Global path exists | Use it (backward compat) |
-| Directory not ignored | Add to .gitignore + commit |
+| Project-local directory not ignored | Use an outside location or request one exact edit |
 | Permission error on create | Sandbox fallback, work in place |
 | Tests fail during baseline | Report failures + ask |
-| No package.json/Cargo.toml | Skip dependency install |
+| Setup effects not authorized | Report the command and do not run it |
 
 ## Common Mistakes
 
@@ -189,7 +182,7 @@ Ready to implement <feature-name>
 ### Assuming directory location
 
 - **Problem:** Creates inconsistency, violates project conventions
-- **Fix:** Follow priority: existing > global legacy > instruction file > default
+- **Fix:** Follow the declared preference, safe existing paths, global path, then an explicitly authorized alternative
 
 ### Proceeding with failing tests
 
@@ -203,13 +196,13 @@ Ready to implement <feature-name>
 - Use `git worktree add` when you have a native worktree tool (e.g., `EnterWorktree`). This is the #1 mistake — if you have it, use it.
 - Skip Step 1a by jumping straight to Step 1b's git commands
 - Create worktree without verifying it's ignored (project-local)
-- Skip baseline test verification
+- Omit baseline evidence without reporting why it is unavailable
 - Proceed with failing tests without asking
 
 **Always:**
 - Run Step 0 detection first
 - Prefer native tools over git fallback
-- Follow directory priority: existing > global legacy > instruction file > default
+- Follow directory priority: declared preference > existing safe path > global path > authorized alternative
 - Verify directory is ignored for project-local
-- Auto-detect and run project setup
-- Verify clean test baseline
+- Respect the user effect boundary for setup, network, commits, and cleanup
+- Capture baseline evidence or report why it is unavailable

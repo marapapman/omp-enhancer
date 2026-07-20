@@ -4,7 +4,7 @@
 
 RTStream enables real-time ingestion of live video streams (RTSP/RTMP) and desktop capture sessions. Once connected, you can record, index, search, and export content from live sources.
 
-For code-level details (SDK methods, parameters, examples), see [rtstream-reference.md](rtstream-reference.md).
+For code-level details (SDK methods, parameters, examples), see [rtstream-reference.md](skill://ecc-skill-catalog/videodb/reference/rtstream-reference.md).
 
 ## Use Cases
 
@@ -54,7 +54,7 @@ displays = session.get_rtstream("screen")
 system_audios = session.get_rtstream("system_audio")
 ```
 
-For capture session workflow, see [capture.md](capture.md).
+For capture session workflow, see [capture.md](skill://ecc-skill-catalog/videodb/reference/capture.md).
 
 ---
 

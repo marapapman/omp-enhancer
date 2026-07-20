@@ -1055,6 +1055,7 @@ async function runScenario({
     const fileEvaluation = beforeFiles && prepared.verifyRoot
       ? await verifyFixture(prepared.verifyRoot, beforeFiles, scenario.fixtureExpectations ?? {})
       : { pass: true, failures: [], changedFiles: [] };
+    const mutationAttribution = attributeFixtureMutations(summary, fileEvaluation);
     const evaluation = evaluateWorkflowSummary(summary, expectations);
     evaluation.failures.push(...fileEvaluation.failures);
     evaluation.pass = evaluation.failures.length === 0;
@@ -1073,6 +1074,7 @@ async function runScenario({
       eventCapture: execution.capture,
       summary,
       fileEvaluation,
+      mutationAttribution,
       evaluation,
       outcome,
     };
@@ -1253,6 +1255,19 @@ export async function prepareScenario(scenario) {
       path.join(cwd, 'paper.md'),
       '该方法通常可以显著降低错误率——但可能仅将错误率从 37.5% 降至 12.5%，并不能完全消除错误，相关结论见 [@smith2025]。\n',
     );
+  } else if (scenario.fixture === 'substantive-writing-en-readonly') {
+    await writeFile(
+      path.join(cwd, 'section.tex'),
+      [
+        '\\section{Results}',
+        '\\label{sec:results}',
+        '',
+        'Across five seeded runs, \\method{} typically reduced the median failure rate from 37.5\\% to 12.5\\%, but it did not eliminate failures and the confidence intervals overlapped on the smallest workload~\\cite{smith2025}. This improvement was larger on the two cached workloads, although those workloads also contained fewer long requests.',
+        '',
+        'The baseline used the same 8-hour budget, whereas \\method{} stopped early when validation loss failed to improve for three rounds. Because the saved compute was not reassigned, the comparison supports a lower observed failure rate under this stopping rule but does not establish that the method would retain the advantage under an equal-compute retraining protocol.',
+        '',
+      ].join('\n'),
+    );
   } else if (scenario.fixture === 'skill-discovery-readonly') {
     await Promise.all([
       writeFile(
@@ -1377,9 +1392,7 @@ export async function prepareScenario(scenario) {
     cwd,
     displayCwd: `<temporary:${scenario.fixture}>`,
     prompt: scenario.prompt,
-    verifyRoot: scenario.fixture.startsWith('semantic-edit-') || scenario.fixture === 'self-iteration-tdd'
-      ? cwd
-      : null,
+    verifyRoot: cwd,
     cleanup: async () => rm(cwd, { recursive: true, force: true }),
   };
 }
@@ -1471,6 +1484,59 @@ export async function verifyFixture(root, beforeFiles, expectations) {
     }
   }
   return { pass: failures.length === 0, failures, changedFiles };
+}
+
+export function attributeFixtureMutations(summary = {}, fileEvaluation = {}) {
+  const reportedChanges = Array.isArray(fileEvaluation?.changedFiles) ? fileEvaluation.changedFiles : [];
+  const changedFiles = [...new Set(reportedChanges
+    .map(normalizeFixtureReportPath)
+    .filter(Boolean))]
+    .sort();
+  const mutationCallsByTarget = new Map();
+  const parentMutationCalls = Array.isArray(summary?.tddTrace?.mutationCalls)
+    ? summary.tddTrace.mutationCalls
+    : [];
+  for (const call of parentMutationCalls) {
+    const target = normalizeFixtureReportPath(call?.target);
+    if (!target) continue;
+    const calls = mutationCallsByTarget.get(target) ?? [];
+    calls.push(call);
+    mutationCallsByTarget.set(target, calls);
+  }
+
+  const files = changedFiles.map((file) => {
+    const matchingCalls = mutationCallsByTarget.get(file) ?? [];
+    const callIds = [...new Set(matchingCalls
+      .map(({ id }) => typeof id === 'string' ? id.trim() : '')
+      .filter(Boolean))]
+      .sort();
+    return {
+      path: file,
+      attribution: matchingCalls.length ? 'parent-observed' : 'unattributed-shared-workspace',
+      parentMutationCallIds: callIds,
+    };
+  });
+  const parentObservedFiles = files
+    .filter(({ attribution }) => attribution === 'parent-observed')
+    .map(({ path: file }) => file);
+  const unattributedFiles = files
+    .filter(({ attribution }) => attribution === 'unattributed-shared-workspace')
+    .map(({ path: file }) => file);
+  const classification = files.length === 0
+    ? 'none'
+    : parentObservedFiles.length === files.length
+      ? 'parent-observed'
+      : unattributedFiles.length === files.length
+        ? 'unattributed-shared-workspace'
+        : 'mixed';
+
+  return { classification, parentObservedFiles, unattributedFiles, files };
+}
+
+function normalizeFixtureReportPath(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().replaceAll('\\', '/').replace(/^\.\/+/u, '');
+  return normalized || null;
 }
 
 export async function snapshotTree(root) {

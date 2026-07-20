@@ -6,9 +6,17 @@ origin: ECC
 
 # Nutrient Document Processing
 
+## Runtime and authority boundary
+
+Treat target-specific paths, slash commands, hooks, routers, model tiers, SHIP, or auto-fix behavior in this Skill as guidance for an external target system or runtime only if the user explicitly requests that target. For the current OMP session, this Skill does not route, hook, command, gate, control, grant permission, or decide completion; inspection, planning, and read-only review authorize no mutation. Any installation, configuration, file write, command, network call, upload, publication, payment, mutation, or other external effect requires explicit user authorization for the exact target and effect plus current native permission. Preserve fail-closed safety rules inside authorized target work; target safety is not an OMP gate or completion condition.
+
 > **Note:** This skill integrates with the Nutrient commercial API. Review their terms before use.
 
 Process documents with the [Nutrient DWS Processor API](https://www.nutrient.io/api/). Convert formats, extract text and tables, OCR scanned documents, redact PII, add watermarks, digitally sign, and fill PDF forms.
+
+## Data, credential, and signing boundary
+
+A request for inspection or local planning does not authorize an upload to Nutrient or another third party. Name the exact documents, service, purpose, and output before transfer; minimize the payload and redact locally when practical. Treat the API key as a secret: never print, log, expose, or place it in generated examples or reports. A digital signature requires explicit confirmation of the document, signer identity, signing authority, and intended effect; do not represent an example or self-signed result as independently verified or legally sufficient.
 
 ## Setup
 
@@ -111,6 +119,8 @@ curl -X POST https://api.nutrient.io/build \
 ```
 
 ### Digital Signatures
+
+Do not run this operation until the user has confirmed the exact document, signer, signing authority, and destination under the boundary above.
 
 ```bash
 # Self-signed CMS signature

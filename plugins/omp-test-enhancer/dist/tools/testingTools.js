@@ -23,7 +23,7 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
         {
             name: 'omp_test_analyze',
             label: 'Analyze test targets',
-            description: '分析改动并找出需要补测的目标',
+            description: '从显式文件路径或文件内容分析改动并找出需要补测的目标；不会执行命令',
             defaultInactive: true,
             approval: 'read',
             parameters: z.object({
@@ -138,8 +138,7 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
             defaultInactive: true,
             approval: 'read',
             parameters: z.object({
-                reviewResults: z.optional(z.array(gateResultSchema)),
-                runId: z.optional(z.string())
+                reviewResults: z.optional(z.array(gateResultSchema))
             }),
             execute: async (_toolCallId, params, _signal, _onUpdate, _ctx) => {
                 const reportParams = params;
@@ -185,20 +184,6 @@ async function runDefaultBrowserCheck(params, ctx) {
         };
     }
 }
-export function analyzeTestTargets(input) {
-    const changedFiles = readChangedFiles(input);
-    const targets = classifyChangedFiles(changedFiles);
-    return {
-        runId: 'local-analysis',
-        targets,
-        warnings: [],
-        nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_review', 'omp_test_report']
-    };
-}
-export function buildTestContext(input) {
-    const target = readTargetInput(input);
-    return buildContextForTarget(target, target.relatedTests ?? [], target.publicEntryHints ?? []);
-}
 export function analyzeCoverageReport(input) {
     const params = readCoverageParams(input);
     if (!params.coverageReport)
@@ -210,25 +195,6 @@ export function analyzeMutationReport(input) {
     if (!params.mutationReport)
         return { status: 'missing-report', survivedMutants: [] };
     return { status: 'available', survivedMutants: collectMutationSurvivors(params.mutationReport), ...(params.reportPath ? { reportPath: params.reportPath } : {}) };
-}
-export function runTestReview(input, testCommandResult, options = {}) {
-    const candidate = readCandidate(input);
-    const targets = readTargets(input);
-    const severities = normalizeReviewSeverities(options.reviewSeverities);
-    const browserTargets = targets.filter(requiresBrowserEvidence);
-    const results = [
-        ...evaluateTestFileScopeGate({ candidate, severity: severities.productionEdits }),
-        ...evaluateIndirectTestGate({ candidate, targets, severity: severities.indirectTest }),
-        ...evaluateBrowserEvidenceGate(readBrowserEvidence(input), {
-            required: browserTargets.length > 0,
-            severity: severities.browserEvidence,
-            targetIds: browserTargets.map(target => target.id)
-        }),
-        ...evaluateTestCommandGate(testCommandResult, {
-            severity: options.reviewSeverities?.testCommand ?? (testCommandResult ? 'critical' : 'warning')
-        })
-    ];
-    return buildAdvisoryReviewOutput(results);
 }
 export function buildTestReport(input) {
     const reviewResults = readReviewResults(input);
@@ -299,10 +265,7 @@ async function executeAnalyze(params, ctx) {
             warnings.push('Some requested files were skipped because they are missing or outside the repository.');
     }
     else {
-        const changedPaths = await readGitChangedPaths(ctx);
-        if (changedPaths.length === 0)
-            warnings.push('No changed files detected. Pass explicit workspace-relative paths through omp_test_analyze.files.');
-        files = await readRepoFiles(cwd, changedPaths);
+        warnings.push('No explicit changed-file evidence provided. Pass workspace-relative paths through omp_test_analyze.files or content through changedFiles.');
     }
     const targets = await enrichTargets(cwd, classifyChangedFiles(files));
     return {
@@ -392,9 +355,8 @@ async function readCandidateForReview(params, ctx) {
     const candidate = readCandidate(params);
     if (!ctx.exec)
         return candidate;
-    const changedTestPaths = (await readGitChangedPaths(ctx)).filter(isTestFilePath);
     const candidatePaths = candidate.files.map(file => file.path);
-    const paths = uniqueStrings([...candidatePaths, ...changedTestPaths]);
+    const paths = uniqueStrings(candidatePaths);
     if (paths.length === 0)
         return candidate;
     const workspaceFiles = await readRepoFiles(contextCwd(ctx), paths);
@@ -450,14 +412,6 @@ async function enrichTargets(cwd, targets) {
         });
     }
     return enriched;
-}
-async function readGitChangedPaths(ctx) {
-    if (!ctx.exec)
-        return [];
-    return uniqueStrings([
-        ...await readGitPathList(ctx, ['diff', '--name-only', 'HEAD']),
-        ...await readGitPathList(ctx, ['ls-files', '--others', '--exclude-standard'])
-    ]);
 }
 async function readGitPathList(ctx, args) {
     if (!ctx.exec)
@@ -974,28 +928,8 @@ function classifyChangedFiles(changedFiles) {
 function textResult(text, details) {
     return { content: [{ type: 'text', text }], details };
 }
-function readChangedFiles(input) {
-    if (!isRecord(input))
-        return [];
-    const value = input.changedFiles;
-    if (!Array.isArray(value))
-        return [];
-    const files = [];
-    for (const item of value) {
-        if (isChangedFileInput(item))
-            files.push(item);
-    }
-    return files;
-}
 function isChangedFileInput(value) {
     return isRecord(value) && typeof value.path === 'string' && typeof value.content === 'string';
-}
-function readTargetInput(input) {
-    if (!isRecord(input))
-        return fallbackTarget();
-    if (!isRecord(input.target))
-        return fallbackTarget();
-    return readTarget(input.target);
 }
 function readTargets(input) {
     if (!isRecord(input))
@@ -1141,11 +1075,6 @@ function lineFromLocation(value) {
         return value.line;
     return undefined;
 }
-function readBrowserEvidence(input) {
-    if (!isRecord(input))
-        return undefined;
-    return readBrowserEvidenceValue(input.browserEvidence);
-}
 function readTarget(input) {
     const kind = readTargetKind(input.kind);
     const risk = readRisk(input.risk, kind);
@@ -1274,15 +1203,6 @@ function readRisk(input, kind) {
     if (input === 'low' || input === 'medium' || input === 'high')
         return input;
     return inferRisk(kind);
-}
-function fallbackTarget() {
-    return {
-        id: 'unknown#unknown',
-        sourceFile: 'unknown',
-        symbolName: 'unknown',
-        kind: 'unknown',
-        risk: 'medium'
-    };
 }
 function fallbackCandidate() {
     return {

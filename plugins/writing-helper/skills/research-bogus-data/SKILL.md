@@ -1,78 +1,63 @@
 ---
 name: research-bogus-data
-description: "Generate placeholder experiment data (tables, figures) with clear warnings — must be replaced by real results before submission"
+description: Design clearly incomplete experiment-result scaffolds with symbolic placeholders and an evidence-acquisition plan, without inventing measurements or facts.
 ---
 
-# Research Bogus Data
+# Research Result Placeholders
 
-Generate realistic-looking placeholder tables and figures for experiment sections when real data isn't available yet.
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or an explicitly capable generic
+`task` owns authorized effects.
 
-## Rules
+Prepare an empty result structure only when the current task explicitly requests an output scaffold before real evidence exists. This Skill does not generate synthetic experiment data.
 
-1. **Never present as real** — every placeholder gets `> **⚠️ BOGUS DATA — replace with real results before submission**`
-2. **Document what real data is needed** — include a note describing the actual experiment required
-3. **Suggest scripts** — recommend a command or script that would generate real results
-4. **Be realistic** — use domain-appropriate metric ranges (never 100% accuracy)
+## Evidence boundary
 
-## Placeholder Formats
+- Never invent numeric, statistical, bibliographic, or factual values.
+- Never write a trend, comparison, significance claim, or conclusion without supporting evidence.
+- Use symbolic placeholders such as `[MEASURED_ACCURACY]`, `[COMPUTED_P_VALUE]`, `[VERIFIED_CITATION]`, and `[FIGURE_AFTER_RUN]`; do not substitute plausible-looking values.
+- Mark the whole scaffold `INCOMPLETE — replace every symbolic placeholder with observed and verified evidence before review or submission`.
+- Keep every unresolved field visible. Do not turn a missing measurement into an estimate.
+
+## Workflow
+
+1. Identify the requested claims, tables, figures, metrics, and ablations.
+2. Build a schema containing labels and symbolic placeholders only.
+3. Map each placeholder to the experiment, source artifact, computation, or verification needed to fill it.
+4. Name an executable command only when that command is confirmed in the current repository. Otherwise describe the required procedure without inventing a script path or CLI.
+5. Return the scaffold in the response by default. Write a file only when the current task explicitly requests file output, gives or establishes a safe target, and native filesystem permission allows it.
+6. Run no experiment or command unless the current task requests execution and native execution permission allows it.
+
+## Safe formats
 
 ### Table
 
 ```markdown
-> **⚠️ BOGUS DATA — replace with real results before submission**
-| Method | Accuracy (%) | F1-Score |
-|--------|-------------|----------|
-| Baseline | 74.2 | 0.71 |
-| Baseline+ | 81.5 | 0.79 |
-| Ours | 89.3 | 0.87 |
+> **INCOMPLETE — SYMBOLIC PLACEHOLDERS, NOT RESULTS**
+| Method | Accuracy | F1 score |
+|---|---:|---:|
+| Baseline | [MEASURED_BASELINE_ACCURACY] | [MEASURED_BASELINE_F1] |
+| Proposed method | [MEASURED_PROPOSED_ACCURACY] | [MEASURED_PROPOSED_F1] |
 
-<!-- NOTE: Requires running eval.py --dataset test --split 5-fold on the curated dataset -->
+Evidence needed: run [CONFIRMED_EVALUATION_PROCEDURE] on [VERIFIED_DATASET_AND_SPLIT].
 ```
 
 ### Figure
 
 ```markdown
-> **⚠️ BOGUS DATA — replace with real results before submission**
-![Placeholder: Accuracy vs. Training Steps](/path/to/generated/figure.png)
+> **INCOMPLETE — FIGURE DOES NOT EXIST YET**
+![Result figure generated after the experiment]([FIGURE_AFTER_RUN])
 
-<!-- NOTE: Real figure comes from: python scripts/plot_learning_curves.py --log-dir runs/experiment-001 -->
+Evidence needed: use [CONFIRMED_RESULT_ARTIFACTS] with [CONFIRMED_PLOTTING_PROCEDURE].
 ```
 
-### Inline Result
+### Claim slot
 
 ```markdown
-Our method achieves **92.3% accuracy** (> **⚠️ BOGUS DATA — replace with real results before submission**), outperforming the baseline by **12.1 percentage points** (> **⚠️ BOGUS DATA — replace with real results before submission**).
+[METHOD] achieves [MEASURED_VALUE] on [VERIFIED_DATASET_AND_SPLIT].
+
+Status: unresolved until the referenced run artifact and calculation are verified.
 ```
 
-### Ablation Row
-
-```markdown
-| Variant | Metric | Δ |
-|---------|--------|---|
-| Full model | **89.3%** (> **⚠️ BOGUS DATA — replace with real results before submission**) | — |
-| w/o Component X | **82.1%** (> **⚠️ BOGUS DATA — replace with real results before submission**) | −7.2 |
-| w/o Component Y | **85.6%** (> **⚠️ BOGUS DATA — replace with real results before submission**) | −3.7 |
-```
-
-## Workflow
-
-1. **Identify** which metrics/tables the experiment section needs (accuracy, F1, latency, ablation, etc.)
-2. **Generate** realistic placeholder values (see typical ranges below)
-3. **Mark** every synthetic value with `> **⚠️ BOGUS DATA — replace with real results before submission**`
-4. **Annotate** each block with what real experiment produces it
-5. **Suggest** the script or command that would generate authentic results
-
-## Typical Metric Ranges
-
-| Metric | Plausible Range |
-|--------|----------------|
-| Accuracy | 65–95% |
-| F1-Score | 0.60–0.94 |
-| Precision/Recall | 60–95% |
-| AUC | 0.75–0.97 |
-| p-value | < 0.05 (significance) |
-| Latency | problem-dependent |
-
-## Critical Warning
-
-**ALL DATA GENERATED BY THIS SKILL IS SYNTHETIC. Every `> **⚠️ BOGUS DATA — replace with real results before submission**` marker must be removed and replaced with real experimental results before any submission. Do not publish papers with placeholder data.**
+The scaffold remains non-evidence and must not enter a fact-checking chain as support for any claim.

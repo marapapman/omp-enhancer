@@ -5,6 +5,12 @@ description: Use when verifying bibliography identity, DOI or URL metadata, and 
 
 # Citation Authenticity
 
+When this Skill is listed in a `writer` or `zh-writer` assignment, it is
+evidence context only for that prose checkpoint. The writer consumes fact
+findings already supplied by Main and returns a proposal; it does not run this
+fact-checking method, invoke Fact Checker tools, collect evidence, or issue a
+verdict. Main or a separate selected fact Agent owns the fact-check checkpoint.
+
 Verify:
 
 - DOI, arXiv id, PMID, ISBN, or URL resolves to the cited item.

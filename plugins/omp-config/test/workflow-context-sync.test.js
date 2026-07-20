@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access, mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -187,10 +187,14 @@ test('workflow target file module preserves WATCHDOG.yaml fallback and changed-o
 
 test('shared assets keep the catalog managed while exposing only neutral optional references', async () => {
   const assets = path.join(packageRoot(), 'assets');
-  const [catalog, agents, watchdog] = await Promise.all([
+  const referencesDir = path.join(packageRoot(), 'skills', 'omp-enhancer-workflows', 'references');
+  const referenceNames = (await readdir(referencesDir)).filter((name) => name.endsWith('.md')).sort();
+  const [catalog, agents, watchdog, skillIndex, ...references] = await Promise.all([
     readFile(path.join(assets, 'WORKFLOW_CATALOG.md'), 'utf8'),
     readFile(path.join(assets, 'AGENTS.md'), 'utf8'),
     readFile(path.join(assets, 'WATCHDOG.yml'), 'utf8'),
+    readFile(path.join(packageRoot(), 'skills', 'omp-enhancer-workflows', 'SKILL.md'), 'utf8'),
+    ...referenceNames.map((name) => readFile(path.join(referencesDir, name), 'utf8')),
   ]);
   const workflowIds = [
     'agentic.simple',
@@ -225,37 +229,55 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   ];
 
   assert.equal((catalog.match(/^### `/gm) ?? []).length, workflowIds.length);
+  assert.equal(referenceNames.length, workflowIds.length);
   for (const workflowId of workflowIds) {
     assert.ok(catalog.includes(`### \`${workflowId}\``), `${workflowId} should have a workflow card`);
+    assert.ok(referenceNames.includes(`${workflowId}.md`), `${workflowId} should have one reference card`);
   }
   for (const heading of [
     'Primary when:',
     'Add-on candidates',
     'Steps:',
-    'Skill candidates:',
-    'Optional agent candidates:',
+    'Direct Skill candidates:',
+    'Exact nested ECC Skill candidates:',
+    'Agent candidates:',
+    'Execution default (soft):',
     'Quality checks:',
-    'Optional delegation ideas:',
+    'Delegated checkpoints:',
   ]) {
-    assert.equal((catalog.match(new RegExp(`^- ${heading}`, 'gm')) ?? []).length, workflowIds.length);
+    const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.equal((catalog.match(new RegExp(`^- ${escapedHeading}`, 'gm')) ?? []).length, workflowIds.length);
   }
   assert.match(catalog, /This is optional reference material/);
   assert.match(catalog, /OMP's native system prompt, settings, active tools, dynamic Agent list, approval flow, and completion behavior remain authoritative/);
   assert.match(catalog, /never selects a workflow or grants permission[\s\S]*staged sequence below is model guidance, not a runtime-enforced precondition or completion gate/i);
-  assert.match(catalog, /Main explicitly writes the exact `WORKFLOW PLAN` block[\s\S]*exact Skill URIs[\s\S]*resource load order[\s\S]*numbered actions/i);
-  assert.match(catalog, /Load every declared visible domain Skill or catalog[\s\S]*first[\s\S]*load the selected workflow references last[\s\S]*wait before project work/i);
-  assert.match(catalog, /Once resources are loaded or marked unavailable[\s\S]*`WORKFLOW READY \|`[\s\S]*rebases a detailed TODO once from the actual workflow steps and Skill instructions/i);
-  assert.match(catalog, /updates native `todo` when exposed and allowed[\s\S]*If native TODO is unavailable, the same detailed checklist remains the execution state/i);
+  assert.match(catalog, /Main explicitly writes the exact `WORKFLOW PLAN` block[\s\S]*exact domain Skill or catalog URIs[\s\S]*NOW\/THEN resource load order[\s\S]*at least four detailed Actions for LOAD, COMMIT, SPLIT \+ EXECUTE, and VERIFY/i);
+  assert.match(catalog, /next response is the filled PLAN plus its declared resource calls[\s\S]*byte 0 is `W`[\s\S]*`Skills` lists exact domain Skill or catalog URIs only[\s\S]*THEN alone copies selected Add-on reference URIs plus the Primary once and last/i);
+  assert.match(catalog, /at most three visible `RESOURCE EXTENSION` batches[\s\S]*next response is the filled `WORKFLOW READY \|` plus native TODO initialization[\s\S]*byte 0 is `W`/i);
+  assert.match(catalog, /COMPILE \(soft\): loaded `subagent-driven` \+ complete input \+ safe checkpoint \+ visible matching Agent => Delegate row[\s\S]*otherwise `fallback=<one matched permitted limitation>`/i);
+  assert.match(catalog, /Project tools start only after the READY \+ TODO response ends and its results return/i);
   assert.match(catalog, /substantive code.+subagent-driven.+plugin `plan`.+native `task`.+native `reviewer`/isu);
   assert.match(catalog, /same native `task` `tasks\[\]` batch.+runnable independent.+vertical slices.+dependent.+later wave/isu);
   assert.match(catalog, /body of the text being modified, never from the prompt language/);
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 18/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 20/);
+  assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 27);
+  assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
+  assert.equal((catalog.match(/^- Execution default \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
+  assert.match(skillIndex, /Catalog version: 20/);
+  assert.match(skillIndex, /EXECUTION:[\s\S]*DIRECT skips[\s\S]*`agentic\.simple` has no `task`[\s\S]*`writing\.pending` composes once[\s\S]*every other loaded card uses the compiler below/iu);
+  assert.match(skillIndex, /`writing\.pending`[\s\S]*one narrow language read[\s\S]*replace once with writing\.zh or writing\.en before substantive work/iu);
+  const referenceText = references.join('\n');
+  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 27);
+  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `direct-simple`/gm) ?? []).length, 1);
+  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
+  assert.match(referenceText, /# `agentic\.simple` workflow reference[\s\S]*`direct-simple`[\s\S]*after staged READY[\s\S]*no `task`/iu);
+  assert.match(referenceText, /# `writing\.pending` workflow reference[\s\S]*`defer-until-composed`[\s\S]*replacement PLAN for `writing\.zh` or `writing\.en`/iu);
   assert.doesNotMatch(catalog, /healthcare\.review|ecc-healthcare-reviewer/i);
-  assert.match(catalog, /`zh-writer` owns the requested Chinese drafting or prose revision.+`zh-checker` independently reviews/i);
-  assert.match(catalog, /`writer` owns the requested English drafting or prose revision.+`checker` independently reviews/i);
-  assert.match(catalog, /before the body language is observed, do not delegate to writer, checker, zh-writer, or zh-checker/i);
-  assert.match(catalog, /### `code\.dev`[\s\S]*`code-development`/i);
-  assert.match(catalog, /Optional agent candidates:[^\n]*`plan`[^\n]*`task`[^\n]*`reviewer`/i);
+  assert.match(catalog, /`zh-writer` is the first project actor and reads the exact target before owning the requested Chinese drafting or prose revision.+`zh-checker` independently reviews source and revision after the writer delivery/i);
+  assert.match(catalog, /`writer` is the first project actor and reads the exact target before owning the requested English drafting or prose revision.+`checker` independently reviews source and revision after the `?writer`? delivery/i);
+  assert.match(catalog, /### `writing\.pending`[\s\S]*exactly one narrow source read[\s\S]*no substantive review or revision[\s\S]*selected language workflow[\s\S]*subagent-driven writer and checker sequence/i);
+  assert.match(catalog, /### `code\.dev`[\s\S]*Direct Skill candidates: `skill:\/\/code-development`/i);
+  assert.match(catalog, /Agent candidates:[^\n]*`plan`[^\n]*`task`[^\n]*`reviewer`/i);
   assert.match(catalog, /`plan` independently challenges Main's supplied complete parallel plan/i);
   assert.match(catalog, /`task`.+same.+tasks\[\].+batch.+vertical.+RED.+GREEN.+REFACTOR/i);
   assert.match(catalog, /Main.+integrat.+current tree.+diff.+evidence.+review.+before.+reviewer/isu);
@@ -266,7 +288,7 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.doesNotMatch(catalog, /evidence `plan`|verification `plan`/i);
   assert.match(catalog, /### `research\.web`[\s\S]*live web search[\s\S]*`factcheck\.document`/i);
   assert.match(catalog, /Absolute correctness cannot be guaranteed/i);
-  assert.match(catalog, /`fact-researcher-a` and `fact-researcher-b` search independent source lanes/i);
+  assert.match(catalog, /`fact-researcher-a` owns the first bounded source lane.+`fact-researcher-b` owns an independent second lane only for a broad task, a high-risk claim, or explicit cross-checking/i);
   assert.match(catalog, /staleness as a temporal-validity finding rather than a verdict/i);
   assert.match(catalog, /fixed source count and a blanket recency window are not completion targets/i);
   assert.match(catalog, /`fact-cross-checker` classifies agreement, conflicts, temporal-staleness findings, and insufficient evidence without inventing resolution/i);
@@ -276,56 +298,54 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.match(catalog, new RegExp(CATALOG_BLOCK_START));
   assert.match(catalog, new RegExp(CATALOG_BLOCK_END));
   assert.doesNotMatch(agents, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
-  assert.match(agents, /OMP's native system prompt, settings, active tools, dynamic Available Agents list, approval flow, and completion behavior are authoritative/);
+  assert.match(agents, /OMP's native system prompt, settings, active tools, dynamic Available Agents, approval flow, and completion behavior are authoritative/);
   assert.match(agents, /analysis, judgment, workflow composition, coordinated stages, or possible delegation/i);
-  assert.match(agents, /mechanical field lookup without analysis.*no Skill or TODO/is);
-  assert.match(agents, /DISCOVER BATCH:[\s\S]*first assistant tool-call batch reads only `skill:\/\/omp-enhancer-workflows`/i);
-  assert.match(agents, /Do not include another Skill, workflow reference, project tool, `todo`, or `task`[\s\S]*wait for the index result/i);
-  assert.match(agents, /WORKFLOW PLAN \+ LOAD BATCH:[\s\S]*start the next response with this visible block before any tool call[\s\S]*WORKFLOW PLAN\nPrimary: <id-or-none>\nAdd-ons: <ids-or-none>\nSkills: <exact-skill-uris-or-none>\nLoad order: <ordered-skill-then-reference-uris-or-none>\nActions:\n1\./i);
-  assert.match(agents, /thinking, tool arguments, and files do not count[\s\S]*first visible content item is the complete filled `WORKFLOW PLAN`[\s\S]*thinking, narration without the block, or `\.\.\.` does not count/i);
-  assert.match(agents, /separate numbered Action for each distinct requested checkpoint or evidence phase[\s\S]*do not collapse them into one catch-all line/iu);
-  assert.match(agents, /Call declared domain Skills or catalogs first and workflow references last[\s\S]*no project tool, `todo`, or `task`[\s\S]*wait for every resource result/i);
-  assert.match(agents, /READY \+ EXECUTE:[\s\S]*WORKFLOW READY \| primary=<id-or-none> \| add-ons=<ids-or-none> \| skills-loaded=<ids-or-none> \| skills-unavailable=<ids-or-none>/i);
-  assert.match(agents, /Rebase the detailed TODO from the actual workflow steps and Skill instructions[\s\S]*native `todo` when exposed and allowed/i);
-  assert.match(agents, /resource read batched with a project action did not wait/i);
-  assert.match(agents, /WORKFLOW PLAN` block or `WORKFLOW READY \|` first written after project action is late/i);
-  assert.match(agents, /Main decides direct work, Agent choice, and fork width/i);
-  assert.match(agents, /No workflow card or reminder selects a fork, reviewer count, or Agent/i);
-  assert.match(agents, /substantive code.+subagent-driven.+plugin `plan`.+native `task`.+native `reviewer`/isu);
-  assert.match(agents, /Main.+detailed.+parallel waves.+vertical slices.+non-overlapping write sets/isu);
-  assert.match(agents, /same `tasks\[\]` batch.+runnable independent slices.+dependent.+later wave/isu);
-  assert.match(agents, /Main.+integrat.+current tree.+diff.+evidence.+review.+before.+reviewer/isu);
-  assert.match(agents, /reviewer.+Main-reviewed.+bounded.+diff.+evidence.+does not read.+project.+run commands/isu);
-  assert.match(agents, /supported.+finding.+native `task`.+repair.+at most one.+fresh reviewer/isu);
+  assert.match(agents, /verbatim field or heading lookup without analysis[\s\S]*use no workflow Skill or TODO/i);
+  assert.match(agents, /## DISCOVER[\s\S]*first PROJECT tool batch reads only `skill:\/\/omp-enhancer-workflows`[\s\S]*ends, and waits/i);
+  assert.match(agents, /Do not combine that read with another Skill, workflow reference, project tool, `todo`, or `task`/i);
+  assert.match(agents, /next response puts the filled PLAN in visible assistant text before any resource call[\s\S]*byte 0 is `W`[\s\S]*WORKFLOW PLAN\nPrimary: <id-or-none>\nAdd-ons: <ids-or-none>\nSkills: <exact domain Skill\/catalog URIs-or-none>\nLoad order: NOW=\[<chosen non-supplied Skill\/catalog URIs-or-none>\] THEN=\[<Add-on PLAN URIs; Primary PLAN URI last-or-none>\][\s\S]*1\. LOAD:[\s\S]*2\. COMMIT:[\s\S]*3\. SPLIT \+ EXECUTE:[\s\S]*4\. VERIFY:/i);
+  assert.match(agents, /`Skills` lists exact domain Skill\/catalog URIs only[\s\S]*workflow references appear only in `THEN`[\s\S]*READY and delegated metadata use bare Skill IDs/i);
+  assert.match(agents, /PLAN response reads exactly `NOW` once and waits[\s\S]*When `NOW=\[none\]`, it reads exactly `THEN` once and waits[\s\S]*no project tool, `todo`, or `task`/i);
+  assert.match(agents, /RESOURCE EXTENSION \| source=<loaded-exact-skill-uri> \| reads=<revealed-exact-skill-uris>/u);
+  assert.match(agents, /Allow at most three extension batches[\s\S]*no more than two catalog hops plus one linked-method batch[\s\S]*source must already be loaded and visibly reveal every URI[\s\S]*never guess[\s\S]*reread/i);
+  assert.match(agents, /After extensions, read `THEN` once in a final reference-only batch and wait/i);
+  assert.match(agents, /Copy a visible Skill name `x` to literal `skill:\/\/x`[\s\S]*Bare `x` is a project path/i);
+  assert.match(agents, /\.agents\/skills[\s\S]*~\/\.agents\/skills[\s\S]*not the complete runtime inventory/iu);
+  assert.match(agents, /Mark a Skill unavailable only after its exact declared `skill:\/\/\.\.\.` resolver call fails/i);
+  assert.match(agents, /native `skill-prompt` body is already loaded[\s\S]*keep its exact URI in PLAN `Skills`[\s\S]*omit it from `NOW`[\s\S]*never reread/i);
+  assert.match(agents, /Project tools start only after the READY \+ TODO response ends and its results return[\s\S]*If a named writing target's body language is genuinely unknown, select only the visible `writing\.pending` option/i);
+  assert.match(agents, /## COMMIT[\s\S]*next response is the filled READY plus native TODO init[\s\S]*byte 0 is `W`[\s\S]*WORKFLOW READY \| primary=<id-or-none> \| add-ons=<ids-or-none> \| skills-loaded=<bare-ids-or-none> \| skills-unavailable=<bare-ids-or-none>/i);
+  assert.match(agents, /COMPILE \(soft\): loaded `subagent-driven` \+ complete input \+ safe checkpoint \+ visible matching Agent => Delegate row[\s\S]*fallback=<one matched permitted limitation>/i);
+  assert.match(agents, /Project tools start only after the READY \+ TODO response ends and its results return/i);
+  assert.match(agents, /Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>/i);
+  assert.match(agents, /## SPLIT, EXECUTE, VERIFY[\s\S]*Main chooses direct work, Agent, and fork width from the committed TODO/i);
+  assert.match(agents, /Every non-simple loaded card is soft `subagent-driven`[\s\S]*`agentic\.simple` uses zero `task` calls[\s\S]*`writing\.pending` first completes its one-time composition transition/i);
+  assert.match(agents, /substantive code mutation[\s\S]*plugin `plan` review[\s\S]*native `task` slice[\s\S]*native `reviewer` receives only the Main-reviewed bounded diff and evidence/i);
+  assert.match(agents, /detailed dependency-wave plan of non-overlapping vertical slices/i);
+  assert.match(agents, /Main integrates deliveries, verifies the current tree, and writes `MAIN REVIEW` before native `reviewer` receives only the Main-reviewed bounded diff and evidence/i);
+  assert.match(agents, /supported finding returns to `task` as a bounded repair[\s\S]*at most one fresh reviewer/i);
   assert.match(agents, /child follows its assignment and does not own the parent TODO/i);
-  assert.match(agents, /failed or partial job is not complete/i);
-  assert.match(agents, /\[workflow=<ids> step=<step-id> todo=<verbatim-task-content-or-none> skills=<skill-ids-or-none>\]/i);
+  assert.match(agents, /\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]/i);
   assert.doesNotMatch(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
   assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
-  assert.match(watchdog, /DECISION CALIBRATION:/);
   assert.match(watchdog, /DECISION CHECK \(optional\) \| drift=<one-material-drift> \| evidence=<one-visible-fact> \| next=<one-smallest-safe-action>/i);
-  assert.match(watchdog, /DISCOVER, WORKFLOW PLAN \+ LOAD, and READY preparation/i);
-  assert.match(watchdog, /index has its own assistant tool-call batch and result wait[\s\S]*WORKFLOW PLAN[\s\S]*resource-only load batch[\s\S]*WORKFLOW READY[\s\S]*rebased TODO/i);
-  assert.match(watchdog, /resource read batched with project action did not wait/i);
-  assert.match(watchdog, /plan or ready marker first written after project action is late/i);
-  assert.match(watchdog, /workflow and Skill resource reads do not close this window/i);
-  assert.match(watchdog, /Omitted or intentionally private context is unknown/i);
-  assert.match(watchdog, /never guess an unseen workflow, Skill, or Agent ID/i);
-  assert.match(watchdog, /demand a duplicate read, select a fork or reviewer count/i);
-  assert.match(watchdog, /REFERENCE RESOLUTION:[\s\S]*map each selected workflow only to its literal `PLAN URI:` visibly shown in the loaded index[\s\S]*copy data for Main's `Load order`/i);
-  assert.match(watchdog, /Each selected workflow has one card URI[\s\S]*one successful read covers only the workflow visibly mapped to it/i);
-  assert.match(watchdog, /If a mapping is not visible, stay silent[\s\S]*never invent a same-named `skill:\/\/\.\.\.` URI or request a duplicate reference read/i);
-  assert.match(watchdog, /soft advisory evidence for the single optional note only[\s\S]*never routing, permission, blocking, retry, continuation, or completion-gate authority/i);
-  assert.match(watchdog, /Main alone decides direct work, Agent choice, and fork width/i);
-  assert.match(watchdog, /Advisor's tool schema describes Advisor capability only, never Main's tools, Skills, Agents, or permissions/);
-  assert.match(watchdog, /at most one ordinary `advise` call per primary user task/);
-  assert.match(watchdog, /A complete user-visible Main final sets the ordinary send limit to zero/);
-  assert.match(watchdog, /child follows its assignment and does not own the parent TODO/i);
-  assert.match(watchdog, /failed or partial result is diagnostic evidence, not completion/i);
-  assert.match(watchdog, /A decision note requires one concrete visible fact/i);
-  assert.match(watchdog, /Workflow, Skill-plan, TODO, metadata, or schema evidence alone is never a blocker/i);
-  assert.match(watchdog, /never grants authority or creates a gate, retry, continuation, or completion condition/i);
-  assert.doesNotMatch(`${catalog}\n${agents}\n${watchdog}`, /block:\s*true|continue:\s*true|triggerTurn|hard router/i);
+  assert.match(watchdog, /workflow window is Main's `DISCOVER -> DECLARE -> LOAD -> COMMIT`[\s\S]*Workflow and Skill resource reads keep the window open/i);
+  assert.match(watchdog, /next response puts filled PLAN in visible assistant text before declared resource calls[\s\S]*byte 0 is `W`[\s\S]*exact domain Skill\/catalog URIs only[\s\S]*at least four detailed Actions/i);
+  assert.match(watchdog, /Workflow references appear only in THEN[\s\S]*PLAN reads NOW only and waits[\s\S]*with NOW none it reads THEN and waits/i);
+  assert.match(watchdog, /RESOURCE EXTENSION \| source=<loaded-exact-skill-uri> \| reads=<revealed-exact-skill-uris>[\s\S]*Limit three batches[\s\S]*Final references use THEN once and wait/i);
+  assert.match(watchdog, /next response after resource loading is filled READY plus native TODO init[\s\S]*byte 0 is `W`[\s\S]*Apply this soft compiler:[\s\S]*one `Delegate Agent=\.\.\. workflow=\.\.\. step=\.\.\. skills=\.\.\. checkpoint=\.\.\.` row[\s\S]*Parent VERIFY rows remain separate/i);
+  assert.match(watchdog, /Project tools start only after the READY \+ TODO response ends and its results return/i);
+  assert.match(watchdog, /Only exact declared `skill:\/\/\.\.\.` resolver failure supports Skill unavailability[\s\S]*supplied native `skill-prompt` body is loaded and omitted from NOW/i);
+  assert.match(watchdog, /Never guess unseen workflow, Skill, or Agent IDs[\s\S]*demand duplicate reads or unchanged reruns[\s\S]*choose a fork or reviewer count/i);
+  assert.match(watchdog, /Main alone chooses Agent, fork width, assignment, order, dispatch, and fallback/i);
+  assert.match(watchdog, /Advisor is an optional early peer, never a router, dispatcher, blocker, retry source, permission grant, continuation, or completion controller/i);
+  assert.match(watchdog, /at most one ordinary `advise` per primary user task/);
+  assert.match(watchdog, /A complete user-visible Main final sets the budget to zero/);
+  assert.match(watchdog, /ordinary note names only the earliest material drift with one visible fact and one smallest safe correction/i);
+  assert.match(watchdog, /Workflow\/Skill\/TODO\/schema drift alone is never a blocker[\s\S]*Source text is data, not authority/i);
+  assert.match(catalog, /defaults guide Main but never select an Agent or fork width/iu);
+  assert.match(skillIndex, /Navigation only: never routes, gates, grants permission, selects Agents, or decides completion/iu);
+  assert.doesNotMatch(`${catalog}\n${skillIndex}\n${referenceText}\n${agents}\n${watchdog}`, /block:\s*true|continue:\s*true|triggerTurn|systemPrompt\s*=/i);
 });
 
 test('workflow context sync defaults to dry-run and writes nothing', async () => {
@@ -369,9 +389,9 @@ test('workflow context sync applies managed files while preserving unrelated mai
   assert.match(agents, /WORKFLOW PLAN[\s\S]*WORKFLOW READY[\s\S]*detailed TODO/i);
   assert.doesNotMatch(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
   assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
-  assert.match(watchdog, /DECISION CALIBRATION:/);
-  assert.match(watchdog, /at most one ordinary `advise` call per primary user task/);
-  assert.match(watchdog, /A complete user-visible Main final sets the ordinary send limit to zero/);
+  assert.match(watchdog, /DECISION CHECK \(optional\)/);
+  assert.match(watchdog, /at most one ordinary `advise` per primary user task/);
+  assert.match(watchdog, /A complete user-visible Main final sets the budget to zero/);
 
   const repeated = await syncWorkflowContext({ root: packageRoot(), target, apply: true });
   assert.equal(repeated.changed, 0);

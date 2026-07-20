@@ -1,10 +1,10 @@
 ---
 name: search-first
-description: Research-before-coding workflow. Search for existing tools, libraries, and patterns before writing custom code. Invokes the researcher agent.
+description: Research-before-coding workflow. Search for existing tools, libraries, and patterns before writing custom code, with bounded delegation when independent ecosystems justify it.
 origin: ECC
 ---
 
-# /search-first — Research Before You Code
+# Search First — Research Before You Code
 
 Systematizes the "search for existing solutions before implementing" workflow.
 
@@ -28,7 +28,7 @@ Use this skill when:
 │     Define what functionality is needed      │
 │     Identify language/framework constraints  │
 ├─────────────────────────────────────────────┤
-│  2. PARALLEL SEARCH (researcher agent)      │
+│  2. BOUNDED SEARCH ACROSS RELEVANT CHANNELS │
 │     ┌──────────┐ ┌──────────┐ ┌──────────┐  │
 │     │  npm /   │ │  MCP /   │ │  GitHub / │  │
 │     │  PyPI    │ │  Skills  │ │  Web      │  │
@@ -72,7 +72,7 @@ that are relevant to the task and project in front of you.
 | Package registry | `npm --version`, `python -m pip --version`, or project package manager | Use web/docs search and avoid claiming registry coverage |
 | GitHub CLI | `gh auth status` | Use public web or local git history only |
 | MCP/docs tools | Available tool list or local MCP config | Fall back to official docs/web search |
-| Skills directory | `ls ~/.claude/skills ~/.codex/skills` where applicable | Say no local skill catalog was available |
+| Skills | Inspect the current native Skill inventory; if a declared catalog is loaded, follow only exact nested URIs it reveals | Say which visible inventory or catalog was unavailable |
 
 ### Quick Mode (inline)
 
@@ -80,27 +80,27 @@ Before writing a utility or adding functionality, mentally run through:
 
 0. Does this already exist in the repo? → `rg` through relevant modules/tests first
 1. Is this a common problem? → Search npm/PyPI
-2. Is there an MCP for this? → Check `~/.claude/settings.json` and search
-3. Is there a skill for this? → Check `~/.claude/skills/`
+2. Is there an MCP for this? → Check the tools currently exposed by the host
+3. Is there a Skill for this? → Check the current native Skill inventory and declared catalogs
 4. Is there a GitHub implementation/template? → Run GitHub code search for maintained OSS before writing net-new code
 
-### Full Mode (agent)
+### Full Mode (delegated research)
 
-For non-trivial functionality, launch the researcher agent:
+For non-trivial functionality, Main writes one bounded research assignment with
+the needed behavior, language/framework, license, maintenance, security, and
+integration constraints. Consult the current dynamic Available Agents: prefer a
+matching research Agent, otherwise use native `task`.
 
-```
-Agent(subagent_type="general-purpose", prompt="
-  Research existing tools for: [DESCRIPTION]
-  Language/framework: [LANG]
-  Constraints: [ANY]
+The assignment searches the applicable npm/PyPI registry, official docs,
+available MCP surfaces, current Skill inventory, and maintained GitHub
+implementations, then returns a structured comparison with source links and a
+recommendation. Main chooses whether the search needs delegation and its fork
+width from independent ecosystems, capacity, and cost; it owns synthesis,
+local-fit validation, dependency decisions, implementation planning, and any
+recorded fallback when delegation is unavailable or unsafe.
 
-  Search: npm/PyPI, MCP servers, Claude Code skills, GitHub
-  Return: Structured comparison with recommendation
-")
-```
-
-Older Claude Code docs may call this `Task(...)`; use the current agent/subagent
-tool name exposed by the active harness.
+Search and comparison do not authorize package installation, configuration
+mutation, network publication, or production changes.
 
 ## Search Shortcuts by Category
 
@@ -126,14 +126,14 @@ tool name exposed by the active harness.
 
 ## Integration Points
 
-### With planner agent
-The planner should invoke researcher before Phase 1 (Architecture Review):
-- Researcher identifies available tools
-- Planner incorporates them into the implementation plan
+### With implementation planning
+Complete relevant research before freezing the implementation plan:
+- delegated research identifies available tools
+- Main incorporates verified candidates into the implementation plan
 - Avoids "reinventing the wheel" in the plan
 
-### With architect agent
-The architect should consult researcher for:
+### With architecture decisions
+Use verified research evidence for:
 - Technology stack decisions
 - Integration pattern discovery
 - Existing reference architectures

@@ -1,11 +1,18 @@
 ---
 name: svg-flowchart
-description: Create and revise standalone monochrome SVG workflow diagrams with simple geometry, straight, dashed, or orthogonal connectors, deterministic source checks, and bounded designer and visioner render-review iteration. Use whenever a user requests an SVG flowchart, workflow box diagram, process diagram, block diagram, or similar black-and-white schematic.
+description: Create and revise standalone monochrome SVG workflow diagrams with simple geometry, straight, dashed, or orthogonal connectors, deterministic source checks, and bounded designer and visioner render-review iteration. Use when the task is to create or revise an SVG flowchart, workflow box diagram, process diagram, block diagram, or similar black-and-white schematic.
 ---
 
 # SVG flowchart
 
-Create a semantically correct, spacious, readable SVG. Keep `designer` as the SVG editor and use `visioner` for independent review of fresh raster renders.
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or a separate explicitly capable
+Main-selected Agent owns authorized effects.
+
+Create a semantically correct, spacious, readable SVG. Within a selected diagram workflow, prefer a currently exposed `designer` as the SVG editor and a currently exposed `visioner` for independent review of fresh raster renders.
+
+Agent availability and capacity remain Main decisions. Use `designer` and `visioner` only when currently exposed and a safe complete assignment can be formed; otherwise Main records the limitation and uses the workflow's direct fallback. Static and visual findings are evidence, not a plugin-owned repair or completion controller.
 
 ## Establish the flow model
 
@@ -16,7 +23,7 @@ Create a semantically correct, spacious, readable SVG. Keep `designer` as the SV
 
 ## Author with designer
 
-Assign `designer` ownership of SVG creation and revision. Require all of the following:
+When Main selects an exposed `designer`, give that Agent ownership of SVG creation and revision with all of the following task-local constraints:
 
 - Produce a valid standalone SVG with `xmlns`, a positive `viewBox`, `<title>`, and `<desc>`. Do not embed scripts, remote fonts, raster images, gradients, filters, masks, patterns, or external assets.
 - Use only black (`#000` or `#000000`), white (`#fff` or `#ffffff`), and `fill="none"`.
@@ -50,11 +57,10 @@ Render the current SVG revision at its full declared size and at 60% scale using
 
 ## Iterate with visioner
 
-1. Have `designer` self-check the first render against the flow model and layout baseline.
-2. Have `visioner` independently inspect the latest full-size and 60% renders for missing or incorrect flow, wrong arrow direction, overlap, text clipping, connector-node or connector-label collision, avoidable crossings, small text, cramped spacing, and unclear hierarchy.
+1. When exposed, have `designer` self-check the first render against the flow model and layout baseline.
+2. When exposed, have `visioner` independently inspect the latest full-size and 60% renders for missing or incorrect flow, wrong arrow direction, overlap, text clipping, connector-node or connector-label collision, avoidable crossings, small text, cramped spacing, and unclear hierarchy.
 3. Require `visioner` to return `APPROVED`, `CHANGES_REQUIRED`, or `UNREVIEWABLE`. Each finding must include severity, element IDs, visible region, violated criterion, impact, and requested correction.
-4. For `CHANGES_REQUIRED`, have `designer` address every blocker and major finding, create a new revision, rerun the checker, and produce new renders before another vision review. Do not review an unchanged artifact again.
-5. If the same geometry issue survives two revisions, relayout the affected region instead of applying another local nudge.
-6. Use a maximum of three vision review rounds. If material findings remain after the third round, report the exact remaining limitation without presenting the diagram as approved.
+4. Return `CHANGES_REQUIRED` to Main as advisory evidence. A supported finding selected for repair becomes a new bounded TODO checkpoint; Main may assign the affected geometry slice to an exposed `designer`, rerun the checker and renderer, and request at most one fresh affected review. Do not redispatch automatically. Do not review an unchanged artifact again.
+5. If a material geometry issue remains, report its exact element IDs, impact, and limitation instead of claiming visual approval.
 
-Finish with zero blocker or major findings, a passing static check, and visioner evidence tied to the final revision. Preserve review renders only when project convention or the user requires them.
+Report the static-check result and any visioner evidence tied to the final revision. No review verdict grants permission to publish or complete. Preserve review renders only when project convention or the user requires them.

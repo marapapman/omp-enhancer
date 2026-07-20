@@ -9,7 +9,7 @@ import { researchWorkflows } from './definitions/research.js';
 import { writingWorkflows } from './definitions/writing.js';
 import { defineWorkflowCatalog } from './schema.js';
 
-export const WORKFLOW_CATALOG_VERSION = 18;
+export const WORKFLOW_CATALOG_VERSION = 20;
 
 export const workflowDefinitions = defineWorkflowCatalog([
   generalWorkflows,
@@ -32,9 +32,11 @@ export const workflowCatalog = Object.freeze(Object.fromEntries(
     steps: Object.freeze(definition.steps.map(({ text }) => text)),
     scopeNotes: definition.scopeNotes,
     skills: definition.skills,
+    catalogSkills: definition.catalogSkills,
     qualityChecks: definition.qualityChecks,
     riskNotes: definition.riskNotes,
     roles: definition.roles,
     delegation: definition.delegation,
+    delegationDefault: definition.delegationDefault,
   })]),
 ));

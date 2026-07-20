@@ -94,6 +94,7 @@ describe('writing-logic extension', () => {
     assert.equal(qualityTool.parameters.shape.allowNetwork.kind, 'boolean');
     assert.deepEqual(qualityTool.parameters.shape.citationProviders.item.values, ['local', 'doi', 'arxiv', 'crossref']);
     assert.match(qualityTool.description, /UNVERIFIED/);
+    assert.match(qualityTool.promptGuidelines.join('\n'), /allowNetwork.*authorized.*activation alone is not network permission/i);
   });
 
   it('quality tool exposes an optional advisory preservation comparison', async () => {
@@ -167,7 +168,46 @@ describe('writing-logic extension', () => {
     assert.equal(response.details.summary.byCategory.citation > 0, true);
   });
 
-  it('quality check falls back to network evidence when local evidence is missing', async () => {
+  it('quality check leaves missing citation evidence unresolved when network opt-in is omitted', async () => {
+    const oldFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return {
+        ok: true,
+        async json() {
+          return {
+            message: {
+              title: ['Learning Transferable Visual Models From Natural Language Supervision'],
+              author: [{ given: 'Alec', family: 'Radford' }],
+              issued: { 'date-parts': [[2021]] },
+            },
+          };
+        },
+      };
+    };
+
+    try {
+      const output = await runWritingQualityCheck(
+        {
+          text: 'CLIP is a common baseline [@radford2021clip].',
+          language: 'en',
+          checks: ['citation'],
+          bibliography: '@inproceedings{radford2021clip, title={Learning Transferable Visual Models From Natural Language Supervision}, author={Radford, Alec}, year={2021}, doi={10.48550/arXiv.2103.00020}}',
+          citationProviders: ['doi'],
+        },
+        process.cwd(),
+      );
+
+      assert.equal(calls, 0);
+      assert.equal(output.details.citations[0].status, 'UNVERIFIED');
+      assert.equal(output.details.summary.byCategory.citation, 1);
+    } finally {
+      globalThis.fetch = oldFetch;
+    }
+  });
+
+  it('quality check fetches network evidence when explicitly allowed', async () => {
     const oldFetch = globalThis.fetch;
     const requestedUrls = [];
     globalThis.fetch = async (url) => {
@@ -193,6 +233,7 @@ describe('writing-logic extension', () => {
           language: 'en',
           checks: ['citation'],
           bibliography: '@inproceedings{radford2021clip, title={Learning Transferable Visual Models From Natural Language Supervision}, author={Radford, Alec}, year={2021}, doi={10.48550/arXiv.2103.00020}}',
+          allowNetwork: true,
           citationProviders: ['doi'],
         },
         process.cwd(),

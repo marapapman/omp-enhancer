@@ -63,7 +63,7 @@
       "taskEager": "preferred",
       "timeoutSeconds": 300,
       "prompt": "Independently audit alpha.js and beta.js. For each file, trace untrusted input through every branch, identify the highest-confidence correctness or false-positive gap with exact line evidence, and specify one missing regression test. Then compare their false-positive containment. Do not modify files, run tests, or use the network.",
-      "tools": ["task", "hub", "read", "grep", "glob"],
+      "tools": ["todo", "task", "hub", "read", "grep", "glob"],
       "expectations": {
         "maxNativeTaskCalls": 1,
         "maxProjectInspectionCallsBeforeNativeTask": 0,
@@ -75,7 +75,31 @@
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requiredObservedSkills": ["code-development", "omp-enhancer-workflows"],
+        "requiredWorkflowPrimary": "code.dev",
+        "requiredSelectedWorkflowIds": ["code.dev"],
+        "requiredWorkflowLoadOrder": [
+          "skill://code-development",
+          "skill://omp-enhancer-workflows/references/code.dev.md"
+        ],
+        "requireWorkflowResourceCallsMatchLoadOrder": true,
+        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requireWorkflowPlanBeforeResourceLoads": true,
+        "requireWorkflowPlanFirstVisibleContent": true,
+        "requireWorkflowPlanLoadCallsSameBatch": true,
+        "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+        "requireWorkflowReadyFirstVisibleContent": true,
+        "requireWorkflowReadyTodoOnlyBatch": true,
+        "requireExactSelectedWorkflowReferences": true,
+        "requireNativeTodoInit": true,
+        "minNativeTodoItems": 3,
+        "requiredNativeTodoItemPatterns": [
+          "^(?!Delegate\\s)(?=[^\\r\\n]*(?:Main|parent)(?:[- ]owned)?)(?=[^\\r\\n]*(?:compar(?:e|ison)|integrat(?:e|ion)|verif(?:y|ication)))[^\\r\\n]+"
+        ],
+        "requireNativeTodoCompletion": true,
+        "requireNativeTodoInitBeforeSubstantiveTool": true,
         "requireNativeTaskMetadataPrefix": true,
+        "requireExactNativeTaskMetadataPrefix": true,
+        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
         "requiredNativeTaskWorkflows": ["code.dev"],
         "requiredNativeTaskWorkflowsPerAssignment": ["code.dev"],
         "requiredNativeTaskSkillsPerAssignment": ["code-development"]

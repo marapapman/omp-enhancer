@@ -1,27 +1,46 @@
+READY NEXT (soft): SENTINEL 1/2 — no plugin enforcement. Next assistant response byte 0 = `W` of filled `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<ids-or-none> | skills-unavailable=<ids-or-none>`; no other visible text; the same response calls native TODO init only. Rebase TODO from loaded resources; end/wait.
 # `writing.en` workflow reference
 
 Optional reference only. OMP native runtime instructions and settings remain authoritative.
 RESOURCE HANDOFF (soft): load only remaining declared resources and wait. Do not start project work in a resource-result response.
+Derive TODO internally. Each delegated native TODO `items[]` string is the exact Delegate row; use no role-colon shorthand. Its checkpoint is one metadata-safe line without `]`, `workflow=`, `step=`, `todo=`, `skills=`, or `checkpoint=`.
 
 ## `writing.en`
 
 - Primary when: The prose being drafted or revised is English, regardless of the instruction language.
 - Reference steps:
-  1. [step-1] Establish meaning, preservation constraints, and the bounded assignment.
-  2. [step-2] Draft or revise the requested English prose within the established meaning and preservation constraints.
-  3. [step-3] Independently review the resulting revision for logic, tone, terminology, formatting, readability, and semantic drift without editing the source.
-  4. [step-4] Apply only parent-accepted findings once, then have the parent verify scope, voice consistency, semantic anchors, and requested format.
-- Optional Agent candidates: `writer`, `checker`.
-- Optional delegation ideas:
-  - step-2: writer owns the requested English drafting or prose revision
-  - step-3: checker independently reviews the resulting revision without editing the source
-  - step-4: writer applies only parent-accepted findings once, then the parent verifies scope and semantic anchors
+  1. [step-1] Form the bounded assignment from the user-named target, requested English operation, preservation constraints, and acceptance evidence without Main `read` or `glob` merely to enrich the assignment.
+  2. [step-2] Make writer the first project actor; it reads the exact target, records semantic anchors, and drafts or revises the requested English prose within the preservation constraints.
+  3. [step-3] After the writer delivery, have checker independently compare the source and revision for logic, tone, terminology, formatting, readability, and semantic drift without editing the source.
+  4. [step-4] Resolve the frozen conditional row in exactly one branch. Branch A: Main alone performs finding disposition and accepts at least one checker finding; dispatch the original frozen step-4 writer row, then use native TODO `done` for that same row only after its complete corrected-proposal terminal delivery. Branch B: Main accepts zero checker findings; do not dispatch, and use native TODO `done` on the same frozen row with `resolved-no-repair`; never rewrite, drop, or abandon it. Main then applies any authorized file change and verifies scope, voice consistency, semantic anchors, and requested format.
+- Agent candidates: `writer`, `checker`.
+- Delegated checkpoints:
+  - step-2: writer is the first project actor and reads the exact target before owning the requested English drafting or prose revision
+  - step-3: checker independently reviews source and revision after the writer delivery without editing the source
+  - step-4: writer returns one corrected proposal for parent-accepted findings
 - Quality checks:
   - meaning and semantic-anchor preservation, English logic and style, terminology consistency, independent checker evidence, parent scope reconciliation, and requested venue or format
 - Scope notes:
   - This workflow concerns prose rather than code implementation.
-  - When Main delegates, the language-matched writer owns prose edits and the checker remains independent and source-read-only; the parent always owns assignment boundaries and final reconciliation.
+  - A user-named target plus the requested operation, preservation constraints, and acceptance evidence normally forms complete assignment input before Main reads it; the language-matched writer owns the target read and prose revision, the checker remains independent and source-read-only, and the parent owns final reconciliation.
+  - The writer is proposal-only and returns a complete proposed revision or bounded patch; Main owns any authorized file change, and assignment size leaves the actor sequence unchanged.
+  - A request directly addressed to Main, an integrated final response, and no explicit delegation request leave the writer then checker sequence unchanged when those safe roles are visible.
+  - With visible safe roles and complete input, READY TODO contains dependency-ordered exact rows for step-2 writer, step-3 checker, and conditional step-4 corrected-proposal, followed by parent-owned integration and verification; this initial READY TODO freezes three exact Delegate rows. Step-3 stays pending until complete writer delivery, and step-4 stays pending through Main's finding disposition before exactly one completion branch resolves it.
+  - Keep the later-wave checker checkpoint stable before and after writer delivery: say that source and revision will be supplied in the assignment body; do not invent artifact:// URIs or rewrite the checkpoint when delivery arrives.
+  - Normal writer delivery itself does not rebase that checkpoint; only a new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase it.
+  - Branch A: Main alone performs finding disposition and accepts at least one checker finding, dispatches the original frozen step-4 row, and uses native TODO `done` for that same row only after a complete corrected-proposal terminal delivery. Branch B: Main accepts zero checker findings, does not dispatch, and uses native TODO `done` on the same frozen row with `resolved-no-repair`; never rewrite, drop, or abandon it. This no-op branch is parent TODO condition resolution, not child delivery, a successful fork, or permission. Every dispatched row mechanically copies its frozen Agent, workflow, step, skills, and checkpoint metadata.
+  - In a writing.en plus writing.latex composition, both rows keep workflow metadata exactly writing.en,writing.latex for the step-2 and step-3 pair; the conditional step-4 row copies the same workflow metadata. Each prose-revision item uses visible writer and the dependent semantic-check item uses checker.
 - Risk notes:
   - none
 
-NEXT CHECKPOINT: after all declared resources and any catalog extension have returned or were marked unavailable, start visible assistant text with `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<bare-ids-or-none> | skills-unavailable=<bare-ids-or-none>`. When native `todo` is exposed, this response calls only TODO init and waits; project work starts in the next response.
+EXECUTION DEFAULT (soft): `subagent-driven` — Main chooses a currently visible matching Agent and width for each safe complete checkpoint. After every parent-owned pre-dispatch prerequisite named by this card completes, the committed `task` is the next project action; runnable independent checkpoints share a batch and dependent ones wait. Main integrates and verifies deliveries. Only a new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase a row; direct fallback is limited to one concrete user or native constraint, Agent availability or capacity, incomplete assignment input, unresolved dependency or write-set overlap, safety risk, or native parent-owned action. Size, latency, read-only output, integrated delivery, overhead, or no explicit delegation request alone are not fallbacks. This selects no Agent or fork width and creates no fork requirement, gate, retry, or completion condition.
+
+TODO COMPILE (soft): Rebase TODO from this card. For a subagent-driven card, complete input + safe checkpoint + visible matching Agent => one exact Delegate row; otherwise `fallback=<one matched permitted limitation>`. Parent VERIFY rows remain separate. Every delegated row is exactly `Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>`; workflow and skills copy frozen W=<Primary,Add-ons> and S=<bare loaded Skill IDs>.
+TASK COPY (soft, later response): copy one committed Delegate row; do not redraft its metadata.
+- Set native item `agent` to the row Agent and native item `todo` to the row checkpoint verbatim.
+- Assignment body byte 0 = `[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>]`. Never begin `# Target` or `# Goal`.
+- The native `tasks[].task` itself begins at byte 0 with that complete four-key prefix. Every native `task` call sets a non-empty top-level `context` summarizing the shared batch purpose. That common `context`, name, label, or an instruction telling the child to output metadata cannot substitute for an item body or its byte-0 prefix.
+- Keep later-wave metadata stable and put delivery material in the body. Fill required native fields, copy direct user constraints verbatim, and add bounded scope and acceptance evidence. After dispatch, end and wait for native auto-delivery; do not poll with `hub`. Only a new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase the row; otherwise use one concrete user or native constraint, Agent availability or capacity, incomplete assignment input, unresolved dependency or write-set overlap, safety risk, or native parent-owned action.
+AFTER TODO RESULT: the writer `task` is the next project action; use the committed row; no Main `read` or `glob` to confirm or enrich its complete input. Initial TODO freezes three exact Delegate rows: step-2 writer, step-3 checker, and conditional step-4 corrected-proposal. Keep the later rows unchanged and put delivery text after the prefix. Branch A: Main alone performs finding disposition and accepts at least one checker finding; dispatch the original frozen step-4 row and use native TODO `done` for that same row only after a complete corrected-proposal terminal delivery. Branch B: Main accepts zero checker findings; do not dispatch; use native TODO `done` on the same frozen row with `resolved-no-repair`; never rewrite, drop, or abandon it. This no-op branch is parent TODO condition resolution, not child delivery, a successful fork, or permission. Each dispatch mechanically copies its frozen Agent, workflow, step, skills, and checkpoint metadata.
+
+READY NEXT (soft): SENTINEL 2/2 — no plugin enforcement. Next assistant response byte 0 = `W` of filled `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<ids-or-none> | skills-unavailable=<ids-or-none>`; no other visible text; native TODO init only; end/wait.

@@ -8,6 +8,13 @@ origin: ECC
 
 Comprehensive React testing patterns for behavior-focused component tests, custom hook tests, accessibility assertions, and network-level mocking.
 
+## Workflow composition boundary
+
+Related Skills below are compatibility candidates only. Main may select their
+exact URIs in the initial `WORKFLOW PLAN` when useful and visible. This Skill
+does not select or load another Skill, traverse a relative `SKILL.md`, reroute
+the workflow, or emit a replacement plan after `WORKFLOW READY`.
+
 ## When to Activate
 
 - Writing tests for React components, custom hooks, or pages
@@ -243,7 +250,7 @@ Run axe in component tests for every interactive component. Catches:
 - Missing alt text on images
 - Heading order violations
 
-Cross-link: [skills/accessibility/SKILL.md](../accessibility/SKILL.md) for the broader a11y testing playbook.
+Cross-link: `skill://ecc-skill-catalog/accessibility/SKILL.md` for the broader a11y testing playbook.
 
 ## When NOT to Use Snapshot Tests
 
@@ -270,7 +277,7 @@ JSDOM (used by Vitest/Jest) cannot:
 - Handle iframes, popups, downloads, cross-origin flows
 - Run real network in a controlled environment with full DevTools support
 
-For any of those, use Playwright Component Testing (component test in real browser) or full E2E. See [e2e-testing skill](../e2e-testing/SKILL.md).
+For any of those, use Playwright Component Testing (component test in real browser) or full E2E. See `skill://ecc-skill-catalog/e2e-testing/SKILL.md`.
 
 Decision boundary:
 
@@ -354,8 +361,7 @@ CI=true vitest run --coverage
 
 ## Related
 
-- Rules: [rules/react/testing.md](../../rules/react/testing.md)
-- Skills: [react-patterns](../react-patterns/SKILL.md), [accessibility](../accessibility/SKILL.md), [e2e-testing](../e2e-testing/SKILL.md), [tdd-workflow](../tdd-workflow/SKILL.md)
+- Skills: `skill://ecc-skill-catalog/react-patterns/SKILL.md`, `skill://ecc-skill-catalog/accessibility/SKILL.md`, `skill://ecc-skill-catalog/e2e-testing/SKILL.md`, `skill://ecc-skill-catalog/tdd-workflow/SKILL.md`
 - Workflow: `code.dev` owns TDD, test evidence, and semantic diff review; add `react-patterns` only for React-specific guidance
 
 ## Examples

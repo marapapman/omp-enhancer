@@ -12,6 +12,17 @@ human for review.
 
 This skill describes architecture and workflow. It does not run live trading.
 
+## OMP Composition Boundary
+
+Main owns cross-Skill composition: it selects every supporting workflow and Skill
+in the initial `WORKFLOW PLAN` and loads each declared Skill before
+`WORKFLOW READY`. After load, this loaded Skill does not reselect, reroute,
+auto-load, or hand off to another Skill. It does not replace the parent TODO or
+Main's Agent choice. An exact same-namespace
+`skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI explicitly exposed here may be
+read in one `RESOURCE EXTENSION` before `COMMIT`; cross-namespace candidates
+remain initial-PLAN only.
+
 ## Guardrails
 
 - Keep all execution behind explicit human approval.
@@ -43,13 +54,15 @@ Use four lanes:
 4. Produce editable parameters rather than executable orders.
 5. Store an audit trail: inputs, model output, sources, and human decision.
 
-## Useful Skill Chains
+## Non-Routing PLAN Candidates
 
-- `deep-research` for source collection.
-- `x-api` for current social/event signal.
-- `ito-market-intelligence` for venue and underlier context.
-- `ito-basket-compare` for user knowledge-base matching.
-- `prediction-market-risk-review` before any execution-capable integration.
+Main may select these only when their independent selection conditions match:
+
+- Source collection: `skill://ecc-skill-catalog/deep-research/SKILL.md`
+- Current social or event signals: `skill://ecc-skill-catalog/x-api/SKILL.md`
+- Venue and underlier context: `skill://ecc-skill-catalog/ito-market-intelligence/SKILL.md`
+- User knowledge-base matching: `skill://ecc-skill-catalog/ito-basket-compare/SKILL.md`
+- Execution-integration risk evidence: `skill://ecc-skill-catalog/prediction-market-risk-review/SKILL.md`
 
 ## Output Contract
 

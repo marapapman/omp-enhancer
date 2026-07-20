@@ -1,113 +1,83 @@
 ---
 name: marketing-campaign
-description: End-to-end marketing campaign planning and execution. Covers audience research, positioning, campaign angle definition, landing page copy, email sequences, social posts, ad copy, short-form video scripts, and content calendars. Use as the orchestration layer for multi-channel product launches.
+description: Marketing campaign domain method for audience research, positioning, channel selection, claim design, scoped content, calendars, and measurement. Use after Main selects a marketing workflow and only for campaign deliverables the user requests or authorizes; it does not own orchestration or publishing.
 origin: ECC
 ---
 
 # Marketing Campaign
 
-Plan and execute launch campaigns that convert — not just campaigns that ship.
+When this Skill is listed in a `writer` or `zh-writer` assignment, it is
+context only for that prose checkpoint. The writer consumes evidence already
+supplied by Main and returns a proposal; it does not search the web, invoke
+research tools, or issue independent research findings. Main or a separate
+selected research Agent owns the research checkpoint.
+In that writer assignment, Main or a separate selected campaign Agent owns
+audience research, channel selection, and measurement planning.
 
-## When to Activate
+Use this Skill as a domain method inside the workflow Main selected. Main owns workflow selection, orchestration, delegation, integration, and completion. This Skill does not auto-dispatch, retry, publish, or create a parallel orchestration layer.
 
-- planning a product or feature launch
-- building a full content suite from a single product brief
-- defining positioning and campaign angle before writing any copy
-- orchestrating multiple content types across channels
-- reviewing copy for conversion quality and brand consistency
+## Scope and authority
 
-## Non-Negotiables
+- Produce only the deliverables the user explicitly requests or authorizes. There is no fixed full-campaign bundle or minimum deliverable count.
+- Treat a requested end-to-end plan as permission to draft the in-scope artifacts, not as permission to mutate files, send messages, schedule posts, buy ads, change a live campaign, or publish.
+- Every external effect requires explicit user authorization. A review verdict, stakeholder assumption, or loaded Skill does not supply that authorization.
+- Review findings are advisory evidence. Main records their disposition; no finding or verdict grants completion or permission to ship.
+- Use related Skills only when Main declared and loaded them. Their names below are candidates, not dispatch instructions.
 
-1. Define positioning before writing any copy. All copy flows from the angle.
-2. Research the audience before assuming you know their language or fears.
-3. Each deliverable must serve one clear purpose in the campaign arc.
-4. Specificity beats adjectives in every format and on every channel.
-5. The same voice must run across every channel and every piece.
-6. No copy ships without passing the quality gate.
+## Campaign method
 
-## Campaign Workflow
+### 1. Establish scope and evidence
 
-### Phase 1: Research
+Record the campaign objective, product, target audience, market and time scope, requested channels, requested deliverables, allowed effects, and acceptance evidence. Separate sourced facts from user-provided assumptions and unresolved questions.
 
-Use `market-research` to:
-- profile the target audience (jobs-to-be-done, fears, language, alternatives they use)
-- map 3+ direct or adjacent competitors (positioning, gaps, messaging weaknesses)
-- identify 1–3 audience insights the campaign angle will exploit
+Run audience research before inventing language or fears. Examine jobs-to-be-done, desired outcomes, objections, alternatives, buying context, and the phrases the audience actually uses. Compare enough direct or adjacent competitors to identify positioning gaps without turning a competitor count into a completion condition.
 
-Deliverable: a short research brief (audience profile + competitive summary + key insights).
+### 2. Define positioning
 
-### Phase 2: Positioning
+Develop the smallest positioning set needed by the requested artifacts:
 
-Produce:
-- core benefit statement (one sentence, no feature list, no jargon)
-- positioning formula: "[Product] helps [audience] [achieve outcome] by [mechanism]"
-- campaign angle: the specific tension, insight, or moment the whole campaign lives in
-- tone profile: lock before writing (delegate to `brand-voice` for durable, session-reusable voice capture)
+- a concrete benefit tied to the audience and outcome;
+- the mechanism or credible reason to believe;
+- a campaign angle based on a real tension or insight;
+- a tone profile grounded in supplied brand evidence;
+- a claim register containing each claim, its support, scope, time frame, and limitation.
 
-Do not write any copy until positioning and angle are approved.
+Missing approval is not a hard stop. If the user asked for a complete draft and the uncertainty is safe to carry, state the working assumption and proceed. Surface a decision only when it materially changes the requested result or external effect.
 
-### Phase 3: Content Production
+### 3. Select channels and draft scoped content
 
-Produce in this order — each layer informs the next:
+Use only channels and artifact types that serve the stated objective. For each requested item, identify its audience stage, single purpose, core claim, supporting proof, call to action, and dependency on another item.
 
-1. **Landing page copy** (all sections: hero, problem, solution, features, how it works, proof, CTA)
-2. **Email sequence** (each email has one purpose; follow the arc: problem → education → agitation → solution → proof → urgency → final CTA)
-3. **Social posts** (platform-native via `content-engine`; LinkedIn and X are different formats, not the same copy resized)
-4. **Short-form video scripts** (timestamp-blocked; written for screen and ear, not the page)
-5. **Ad copy variants** (3–4 variants testing different angles or audience segments)
-6. **Content calendar** (day-by-day schedule with channel, type, timing, and dependencies)
+Adapt the message to the channel instead of resizing identical copy. Landing-page sections should preserve a clear problem, outcome, mechanism, proof, and next action when those sections are in scope. Email, social, ad, and video drafts should match their medium, audience state, and evidence. Do not invent urgency, testimonials, performance numbers, or product capabilities.
 
-### Phase 4: Review
+### 4. Build the calendar and measurement plan when requested
 
-Gate every deliverable:
-- 5-second test on all hero / above-fold copy (clear who it's for, what it does, why act now)
-- CTA audit (one per piece, specific, earned — not demanded)
-- Tone consistency check across all channels
-- Claim audit (every claim is specific and supportable)
-- Cross-channel consistency (ad claims match landing page; email body matches subject)
+For a requested content calendar, map dates or relative timing, channel, artifact, dependency, owner when known, and status. Do not schedule or publish from the calendar without separate explicit authorization.
 
-## Output Contract
+For measurement, connect each campaign objective to a metric, baseline when known, target or decision threshold, attribution window, instrumentation source, and review cadence. Mark missing telemetry and attribution limits instead of fabricating precision.
 
-A full campaign delivers:
+### 5. Review and report
 
-1. **Positioning brief** — angle, core benefit statement, tone profile
-2. **Landing page copy** — hero, problem, solution, features, how it works, proof, CTA
-3. **Email sequence** — subject + preview + body + CTA for each email, labelled by day and purpose
-4. **LinkedIn posts** — 3+ platform-native posts with distinct angles
-5. **X posts** — 5+ standalone posts + 1 thread
-6. **Short-form video scripts** — 2+ timestamp-blocked scripts with visual direction notes
-7. **Ad copy variants** — short headline / long headline / body per variant
-8. **Content calendar** — day-by-day schedule with channel, content type, timing, and dependencies
-9. **Copy review summary** — flagged issues and open questions before anything goes live
+Review the requested artifacts for:
 
-## Quality Gate
+- audience and positioning consistency;
+- clarity of hero or opening copy;
+- channel-native structure and tone;
+- specific, earned calls to action;
+- same-tuple support for factual and performance claims;
+- cross-channel claim consistency;
+- calendar dependencies and measurement coverage.
 
-Before delivering any piece:
+Return material issues, limitations, cheapest plausible counterchecks, and open decisions as advisory findings. Revise content only within the user's authorized deliverables and effect boundary.
 
-- every deliverable sounds like the same author
-- no hollow superlatives or filler adjectives remain
-- every CTA is specific and earned (never "learn more" or "click here")
-- no copy is duplicated verbatim across platforms
-- hero copy passes the 5-second test
-- email subjects match email body (no bait-and-switch)
-- ad claims match landing page claims exactly
-- no copy would work unchanged for any other product in the category
+## Writing heuristics
 
-## Hard Bans
+Prefer specific mechanisms and evidence over adjectives. Avoid hollow superlatives, generic landscape openings, fake urgency, unsupported social proof, bait-and-switch subjects, and generic calls to action. Follow an explicitly supplied brand voice when it conflicts with these defaults, except where doing so would create a false or unsupported claim.
 
-Delete and rewrite any:
+## Optional related Skills
 
-- "game-changing", "revolutionary", "world-class", "cutting-edge"
-- "In today's competitive landscape"
-- fake urgency not backed by a real deadline
-- hollow social proof without specifics ("thousands trust us")
-- generic CTAs ("learn more", "find out more", "click here")
-- copy that could be unplugged and dropped into a competitor's campaign unchanged
-
-## Related Skills
-
-- `brand-voice` — source-derived voice capture (run before content production)
-- `content-engine` — platform-native content production
-- `crosspost` — multi-platform distribution
-- `market-research` — audience and competitive intelligence
-- `seo` — on-page optimisation for landing page copy
+- `market-research` for audience and competitive evidence
+- `brand-voice` for source-derived voice capture
+- `content-engine` for platform-native content production
+- `seo` for on-page search considerations
+- `crosspost` only when distribution itself is explicitly requested and authorized

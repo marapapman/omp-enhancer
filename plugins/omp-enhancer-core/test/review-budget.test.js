@@ -106,7 +106,7 @@ test('response-only writing omits review context while an explicit review reques
   });
   const context = buildDynamicReviewBudgetPrompt({ taskDescriptor: required });
   assert.match(context, /COMPAT_REVIEW_CONTEXT/);
-  assert.match(context, /selects no reviewer count/i);
+  assert.match(context, /no count\/Agent\/fork/i);
 });
 
 test('a focused one-dimensional edit does not receive extra review context', () => {
@@ -135,9 +135,9 @@ test('review prompt is compact and contains no reviewer or fork quota', () => {
   });
 
   assert.match(prompt, /COMPAT_REVIEW_CONTEXT \(soft, no quota\)/);
-  assert.match(prompt, /FACTS: operation=modify; complexity=broad; risk=medium; domains=code,tests/i);
-  assert.match(prompt, /existing review checkpoint/i);
-  assert.match(prompt, /selects no reviewer count, Agent, fork, batch, checkpoint, dispatch, permission, or completion condition/i);
+  assert.match(prompt, /FACTS: operation=modify;complexity=broad;risk=medium;domains=code,tests;review=correctness,test-adequacy/i);
+  assert.match(prompt, /existing checkpoint/i);
+  assert.match(prompt, /selects no count\/Agent\/fork\/batch\/dispatch\/permission\/completion condition/i);
   assert.doesNotMatch(prompt, /suggested=|within-native-cap|native-cap=|reviewerLaneSuggestion/i);
   assert.ok(prompt.length < 900, `prompt length=${prompt.length}`);
 });
@@ -160,8 +160,12 @@ test('multi-target task-shape prompt exposes observed facts without choosing del
   assert.ok(prompt.length < 900, `prompt length=${prompt.length}`);
 
   const workflowPrompt = buildTaskShapePrompt(descriptor, { workflowSkillVisible: true });
-  assert.match(workflowPrompt, /Complete the three staged workflow phases before project action/i);
-  assert.doesNotMatch(workflowPrompt, /block: true|continue: true|required fork|must delegate/i);
+  assert.match(
+    workflowPrompt,
+    /Complete DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY before project action/i,
+  );
+  assert.doesNotMatch(workflowPrompt, /three staged workflow phases/i);
+  assert.doesNotMatch(workflowPrompt, /hard router|hard gate|block: true|continue: true|required fork|must delegate/i);
 });
 
 test('task-shape prompt stays absent for one target, lookup wording, and source-text paths', () => {
@@ -199,6 +203,6 @@ test('review prompt is omitted only when review advice is inapplicable', () => {
       risk: { level: 'medium', flags: ['workspace-write'] }, constraints: {},
     },
   });
-  assert.match(capacityUnknown, /selects no reviewer count/i);
+  assert.match(capacityUnknown, /no count\/Agent\/fork/i);
   assert.doesNotMatch(capacityUnknown, /native-cap=/i);
 });

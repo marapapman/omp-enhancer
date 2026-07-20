@@ -16,11 +16,11 @@ omp_test_review
 omp_test_report
 ```
 
-- `omp_test_analyze` 从显式文件或当前 workspace diff 识别测试目标。
+- `omp_test_analyze` 只从显式 `files` 路径或 `changedFiles` 内容识别测试目标；缺少输入时返回空证据提示，不调用 Git 或其他命令。
 - `omp_test_context` 提供公开入口、相关测试，以及可选的 `propertyPlan`、`apiPlan` 和 `browserPlan`。
 - `omp_test_browser_check` 执行已授权的前端场景并记录交互、console、pageerror、network 和视觉证据。
 - coverage 与 mutation 工具只读取现有报告并给出补测线索。
-- `omp_test_review` 只读审查测试文件范围、公开行为覆盖、浏览器证据和宿主已观察到的测试结果。
+- `omp_test_review` 只读审查显式 candidate 文件、公开行为覆盖、浏览器证据和宿主已观察到的测试结果；不会通过 Git 自动扩展 candidate。
 - 各类证据独立汇总；一种 finding 不会抑制另一类已观察证据的评估。
 - `omp_test_report` 汇总最近的审查结果。
 
@@ -72,14 +72,6 @@ omp plugin link .
 version: 2
 test:
   command: npm test
-coverage:
-  command:
-browser:
-  baseUrl:
-  headless: true
-  trace: retain-on-failure
-  screenshot: only-on-failure
-  serviceWorkers: block
 review:
   indirectTest: critical
   productionEdits: critical
@@ -88,6 +80,7 @@ review:
 ```
 
 `test.command` 只是与宿主观测证据比较的预期值。`omp_test_review` 不会执行配置或参数中的命令。
+覆盖率报告路径和浏览器运行参数不是项目配置：分别在调用 `omp_test_coverage_analyze` 和 `omp_test_browser_check` 时传入。旧配置文件中的 `coverage`、`browser` 或其他额外字段会被忽略。
 
 ## 证据与安全边界
 

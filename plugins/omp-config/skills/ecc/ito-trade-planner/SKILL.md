@@ -12,6 +12,17 @@ idea, basket adjustment, venue comparison, or manual execution plan.
 The skill is intentionally non-executing. It produces checklists and parameter
 tables the user can review manually.
 
+## Workflow composition boundary
+
+Main selects supporting Skills in the initial `WORKFLOW PLAN` when they are
+visible. This Skill does not select or auto-load another Skill, reroute the
+workflow, or emit a replacement plan after `WORKFLOW READY`.
+
+If this already-loaded guide reveals the risk method after PLAN, the remaining
+linked-method batch may read only this exact same-namespace URI:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/ito-trade-planner/SKILL.md | reads=skill://ecc-skill-catalog/prediction-market-risk-review/SKILL.md`
+
 ## Guardrails
 
 - Do not say a trade is good, bad, optimal, or recommended.
@@ -37,8 +48,9 @@ tables the user can review manually.
    - liquidity caveat
    - open questions
    - manual action link or next review step
-5. Run `prediction-market-risk-review` before discussing automation, keys,
-   venue auth, or capital constraints.
+5. Discuss automation, keys, venue auth, or capital constraints only when the
+   committed plan includes the loaded `prediction-market-risk-review` method;
+   otherwise stop at the manual worksheet and report that limitation.
 
 ## Allowed Language
 

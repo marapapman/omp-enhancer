@@ -8,6 +8,26 @@ origin: ECC
 
 Reorganize the user's network instead of treating outbound as a one-way prospecting list.
 
+## Workflow composition boundary
+
+Main selects supporting Skills in the initial `WORKFLOW PLAN` when they are
+visible. This Skill does not select or auto-load another Skill, reroute the
+workflow, or emit a replacement plan after `WORKFLOW READY`.
+
+If this already-loaded guide reveals a needed method that was not visible before
+PLAN, the remaining linked-method batch may read only a matching exact
+same-namespace URI listed here:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/connections-optimizer/SKILL.md | reads=<only-needed-exact-URI-or-URIs-listed-below>`
+
+- `skill://ecc-skill-catalog/lead-intelligence/SKILL.md`
+- `skill://ecc-skill-catalog/x-api/SKILL.md`
+- `skill://ecc-skill-catalog/social-graph-ranker/SKILL.md`
+- `skill://ecc-skill-catalog/exa-search/SKILL.md`
+- `skill://ecc-skill-catalog/deep-research/SKILL.md`
+- `skill://ecc-skill-catalog/brand-voice/SKILL.md`
+- `skill://ecc-skill-catalog/content-engine/SKILL.md`
+
 This skill handles:
 
 - X following cleanup and expansion
@@ -38,13 +58,13 @@ If the user does not specify a mode, use `default`.
 
 ## Tool Requirements
 
-### Preferred
+### PLAN-stage compatibility candidates
 
-- `x-api` for X graph inspection and recent activity
-- `lead-intelligence` for target discovery and warm-path ranking
-- `social-graph-ranker` when the user wants bridge value scored independently of the broader lead workflow
-- Exa / deep research for person and company enrichment
-- `brand-voice` before drafting outbound
+- A committed `x-api` candidate can supply X graph inspection and recent activity.
+- A committed `lead-intelligence` candidate can supply target discovery and warm-path ranking.
+- A committed `social-graph-ranker` candidate can score bridge value independently of the broader lead workflow.
+- A committed `exa-search` or `deep-research` candidate can supply person and company enrichment.
+- A committed `brand-voice` candidate can supply a reusable voice profile before drafting outbound.
 
 ### Fallbacks
 
@@ -127,12 +147,12 @@ Mutuals and real warm-path bridges should be penalized less aggressively than on
 2. Pull the current following / connection inventory.
 3. Score prune candidates with explicit reasons.
 4. Score keep candidates with explicit reasons.
-5. Use `lead-intelligence` plus research surfaces to rank expansion candidates.
+5. When `lead-intelligence` was selected and loaded under the composition boundary, use its returned evidence with research surfaces to rank expansion candidates.
 6. Match the right channel:
    - X DM for warm, fast social touch points
    - LinkedIn message for professional graph adjacency
    - Apple Mail draft for higher-context intros or outreach
-7. Run `brand-voice` before drafting messages.
+7. When `brand-voice` was selected and loaded under the composition boundary, reuse its voice profile before drafting messages.
 8. Return a review pack before any apply step.
 
 ## Review Pack Format
@@ -182,8 +202,8 @@ Drafts
 
 ## Related Skills
 
-- `brand-voice` for the reusable voice profile
-- `social-graph-ranker` for the standalone bridge-scoring and warm-path math
-- `lead-intelligence` for weighted target and warm-path discovery
-- `x-api` for X graph access, drafting, and optional apply flows
-- `content-engine` when the user also wants public launch content around network moves
+- `brand-voice` for the reusable voice profile, when committed under the composition boundary
+- `social-graph-ranker` for standalone bridge-scoring and warm-path math, under the same boundary
+- `lead-intelligence` for weighted target and warm-path discovery, under the same boundary
+- `x-api` for X graph access, drafting, and separately authorized apply flows, under the same boundary
+- `content-engine` for separately requested public launch content, under the same boundary

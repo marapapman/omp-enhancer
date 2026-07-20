@@ -16,8 +16,13 @@ forecasting input, oracle-like signal, or decision-intelligence layer.
 - Separate venue mechanics, liquidity, incentives, and resolution rules from the
   implied signal.
 - Call out manipulation, thin liquidity, stale markets, and ambiguous outcomes.
-- For on-chain or execution-linked systems, run `llm-trading-agent-security`
-  before granting any write authority.
+- For an on-chain or execution-linked target, the initial PLAN should declare
+  the exact URI
+  `skill://ecc-skill-catalog/llm-trading-agent-security/SKILL.md` when that
+  method is needed. If this loaded source is the first place that exposes it,
+  Main may use the ordinary exact-URI RESOURCE EXTENSION before COMMIT. This
+  research method neither grants write authority nor loads another Skill by
+  itself.
 
 ## Research Workflow
 

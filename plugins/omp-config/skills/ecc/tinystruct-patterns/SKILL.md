@@ -8,6 +8,17 @@ origin: ECC
 
 Architecture and implementation patterns for building modules with the **tinystruct** Java framework – a lightweight, high-performance framework that treats CLI and HTTP as equal citizens, requiring no `main()` method and minimal configuration.
 
+## Linked resource boundary
+
+This loaded Skill may reveal only its own exact linked resource URIs. Copy the
+smallest task-relevant URI from the reference list unchanged into the remaining
+linked-resource batch and wait for it before continuing:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/tinystruct-patterns/SKILL.md | reads=<only-needed-exact-URIs-listed-below>`
+
+Relative paths are not load instructions, and this Skill does not select or
+load another Skill.
+
 ## Core Principle
 
 **CLI and HTTP are equal citizens.** Every method annotated with `@Action` should ideally be runnable from both a terminal and a web browser without modification. This "dual-mode" capability is the core design philosophy of tinystruct.
@@ -179,12 +190,12 @@ String port = this.getConfiguration("server.port");
 
 Detailed guides are available in the `references/` directory:
 
-- [Architecture & Config](references/architecture.md) — Abstractions, Package Map, Properties
-- [Routing & @Action](references/routing.md) — Annotation details, Modes, Parameters
-- [Data Handling](references/data-handling.md) — Builder, Builders, JSON serialization & parsing
-- [Database Persistence](references/database.md) — AbstractData POJOs, CRUD, mapping XML, POJO generation
-- [System & Usage](references/system-usage.md) — Context, Sessions, SSE, File Uploads, Events, Networking
-- [Testing Patterns](references/testing.md) — JUnit 5 unit and HTTP integration testing
+- Architecture & Config: `skill://ecc-skill-catalog/tinystruct-patterns/references/architecture.md` — Abstractions, Package Map, Properties
+- Routing & @Action: `skill://ecc-skill-catalog/tinystruct-patterns/references/routing.md` — Annotation details, Modes, Parameters
+- Data Handling: `skill://ecc-skill-catalog/tinystruct-patterns/references/data-handling.md` — Builder, Builders, JSON serialization & parsing
+- Database Persistence: `skill://ecc-skill-catalog/tinystruct-patterns/references/database.md` — AbstractData POJOs, CRUD, mapping XML, POJO generation
+- System & Usage: `skill://ecc-skill-catalog/tinystruct-patterns/references/system-usage.md` — Context, Sessions, SSE, File Uploads, Events, Networking
+- Testing Patterns: `skill://ecc-skill-catalog/tinystruct-patterns/references/testing.md` — JUnit 5 unit and HTTP integration testing
 
 ## Reference Source Files (Internal)
 

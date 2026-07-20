@@ -8,6 +8,17 @@ origin: community
 
 Production-oriented patterns for FastAPI services.
 
+## OMP Composition Boundary
+
+Main owns cross-Skill composition: it selects every supporting workflow and Skill
+in the initial `WORKFLOW PLAN` and loads each declared Skill before
+`WORKFLOW READY`. After load, this loaded Skill does not reselect, reroute,
+auto-load, or hand off to another Skill. It does not replace the parent TODO or
+Main's Agent choice. An exact same-namespace
+`skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI explicitly exposed here may be
+read in one `RESOURCE EXTENSION` before `COMMIT`; cross-namespace candidates
+remain initial-PLAN only.
+
 ## When to Use
 
 - Building or reviewing a FastAPI app.
@@ -318,7 +329,12 @@ Use these examples as patterns, not as project-wide templates:
 - Dependency override: tests override `get_db` directly.
 - OpenAPI customization: assign `app.openapi = custom_openapi`.
 
-## See Also
+## Non-Routing PLAN Candidates
 
-- Workflow: `code.dev` with `code-development`; use the native `reviewer` only after supplying an existing semantic diff
-- Skills: `python-patterns`, `python-testing`, and `api-design`
+- For an already selected `code.dev` workflow: `skill://code-development`
+- Python implementation patterns: `skill://ecc-skill-catalog/python-patterns/SKILL.md`
+- Python tests: `skill://ecc-skill-catalog/python-testing/SKILL.md`
+- HTTP contract design: `skill://ecc-skill-catalog/api-design/SKILL.md`
+
+Native `reviewer` receives only an existing Main-reviewed semantic diff and its
+bounded evidence; this Skill does not select or dispatch that Agent.

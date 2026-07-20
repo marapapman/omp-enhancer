@@ -4,90 +4,86 @@ description: Use this skill to measure performance baselines, detect regressions
 origin: ECC
 ---
 
-# Benchmark — Performance Baseline & Regression Detection
+# Benchmark
 
-## When to Use
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or a separate explicitly capable
+Main-selected Agent owns authorized effects.
 
-- Before and after a PR to measure performance impact
-- Setting up performance baselines for a project
-- When users report "it feels slow"
-- Before a launch — ensure you meet performance targets
-- Comparing your stack against alternatives
+Measure the requested target with a reproducible workload and make the evidence,
+comparison, and limitations visible. Do not turn a measurement request into an
+implicit install, mutation, or publication workflow.
 
-## How It Works
+## Capability and effect boundary
 
-### Mode 1: Page Performance
+Use only capabilities currently exposed by the host. Browser automation, an MCP,
+and a benchmark command or runner are optional examples of live capabilities,
+not prerequisites or names to invent. If no suitable live capability exists,
+design the benchmark or analyze supplied and existing artifacts, then report the
+missing observation rather than simulating a result.
 
-Measures real browser metrics via browser MCP:
+A read-only `seo.audit` or benchmark request does not authorize a
+`.ecc/benchmarks/` write, repository edit, baseline commit, or publication.
+Installing a runner, command execution, a filesystem write, and a network request
+each require explicit user authorization for the named target and effect plus
+permission from the host. The request itself may provide that authorization for
+the specifically requested measurement; it does not widen the target or effects.
 
-```
-1. Navigate to each target URL
-2. Measure Core Web Vitals:
-   - LCP (Largest Contentful Paint) — target < 2.5s
-   - CLS (Cumulative Layout Shift) — target < 0.1
-   - INP (Interaction to Next Paint) — target < 200ms
-   - FCP (First Contentful Paint) — target < 1.8s
-   - TTFB (Time to First Byte) — target < 800ms
-3. Measure resource sizes:
-   - Total page weight (target < 1MB)
-   - JS bundle size (target < 200KB gzipped)
-   - CSS size
-   - Image weight
-   - Third-party script weight
-4. Count network requests
-5. Check for render-blocking resources
-```
+## Method
 
-### Mode 2: API Performance
+### 1. Baseline
 
-Benchmarks API endpoints:
+Identify the exact target, revision, environment, dataset or URL set, workload,
+warm-up policy, cache state, and comparison question. Prefer an existing trusted
+baseline when it corresponds to the same tuple. Otherwise collect a fresh
+authorized baseline or label the comparison as unavailable.
 
-```
-1. Hit each endpoint 100 times
-2. Measure: p50, p95, p99 latency
-3. Track: response size, status codes
-4. Test under load: 10 concurrent requests
-5. Compare against SLA targets
-```
+### 2. Metrics
 
-### Mode 3: Build Performance
+Choose metrics that answer the question:
 
-Measures development feedback loop:
+- Page: LCP, CLS, INP, FCP, TTFB, resource size, request count, and blocking work.
+- API: latency, throughput, status distribution, response size, and error rate.
+- Build: cold build, warm rebuild or HMR, tests, typecheck, lint, and image build.
+- Resource or cost: CPU, memory, I/O, network transfer, and measured cost where
+  corresponding evidence is available.
 
-```
-1. Cold build time
-2. Hot reload time (HMR)
-3. Test suite duration
-4. TypeScript check time
-5. Lint time
-6. Docker build time
-```
+Treat targets and thresholds as task-specific or source-backed. Do not silently
+promote an illustrative value into the user's SLA.
 
-### Mode 4: Before/After Comparison
+### 3. Statistics
 
-Run before and after a change to measure impact:
+Choose the sample count, concurrency, measurement budget, target capacity, and
+load risk together. Do not use a fixed request count or concurrency for every
+system. Record warm-up and outlier handling, then report the useful distribution
+such as median, p95, p99, spread or confidence interval, failures, and sample size.
+Avoid destructive or production load unless the exact load is separately
+authorized and the host permits it.
 
-```
-/benchmark baseline    # saves current metrics
-# ... make changes ...
-/benchmark compare     # compares against baseline
-```
+### 4. Comparison
 
-Output:
-```
-| Metric | Before | After | Delta | Verdict |
-|--------|--------|-------|-------|---------|
-| LCP | 1.2s | 1.4s | +200ms | WARNING: WARN |
-| Bundle | 180KB | 175KB | -5KB | ✓ BETTER |
-| Build | 12s | 14s | +2s | WARNING: WARN |
-```
+Keep baseline and candidate conditions corresponding. Show absolute values,
+delta, direction, practical significance, and whether noise or environment drift
+could explain the result.
 
-## Output
+| Metric | Baseline | Candidate | Delta | Interpretation |
+|---|---:|---:|---:|---|
+| `<metric>` | `<value>` | `<value>` | `<value>` | better, worse, or inconclusive |
 
-Stores baselines in `.ecc/benchmarks/` as JSON. Git-tracked so the team shares baselines.
+Do not call a change a regression solely because one unreplicated sample moved.
 
-## Integration
+### 5. Limitations
 
-- CI: run `/benchmark compare` on every PR
-- Pair with `/canary-watch` for post-deploy monitoring
-- Pair with `/browser-qa` for full pre-ship checklist
+Report unavailable capabilities, missing baseline correspondence, sample size,
+environment drift, caching effects, external-service variance, load constraints,
+and the cheapest safe next measurement. Distinguish observed values from
+inference and never fabricate measurements.
+
+## Output and optional persistence
+
+Return the benchmark inline by default with the target tuple, method, raw or
+summarized evidence, statistics, comparison, verdict, and limitations. Persist a
+JSON or table artifact only when the user authorizes that write and supplies or
+accepts a safe path. Treat committing or sharing that artifact as another
+separately authorized effect.

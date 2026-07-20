@@ -10,16 +10,16 @@ This skill is a composition pattern, not a standalone Agent loop. Main retains o
 
 ## Compose the Work
 
-1. Use `code.dev` and `code-development` for the complete ordinary code lifecycle. Main searches local code, gathers bounded current external evidence when decision-relevant, and writes the detailed plan.
-2. Give the complete plan to `plan` for a read-only `PLAN REVIEW`, then let Main execute each authorized vertical RED-GREEN-REFACTOR slice directly.
+1. Use `code.dev` for the complete ordinary code lifecycle. Main searches local code, gathers bounded current external evidence when decision-relevant, and writes the detailed plan.
+2. Give the complete plan to `plan` for a read-only `PLAN REVIEW`. After Main records finding dispositions, native `task` owns each complete vertical RED-GREEN-REFACTOR slice and returns the bounded diff and evidence.
 3. For visual work, compose `design.visual`: `designer` establishes layout and style, while `visioner` performs the required independent visual inspection when the workflow calls for it.
-4. After fresh functional and browser evidence exists, give the bounded semantic diff to the native `reviewer`. Main validates findings and owns any repair.
+4. Main integrates task deliveries, reruns proportionate verification, and writes `MAIN REVIEW`. After fresh functional and browser evidence exists, give the bounded semantic diff and evidence to the native `reviewer`. Main validates findings; any supported repair is a new bounded `task` assignment.
 
 ## Cycle Contract
 
 Before implementation, record the user stories, non-goals, exact acceptance checks, target routes, supported viewports, accessibility needs, and visual references. After one implementation batch, collect fresh tests, browser interactions, screenshots, console errors, and visual findings.
 
-If evidence shows defects, Main may authorize one bounded repair checkpoint and repeat only the affected verification. Further cycles require an explicit TODO and a reason the next pass can resolve the remaining issue. Never run an unattended repeat-until-score loop, fabricate a numeric quality threshold, or continue merely because a reviewer found something.
+If evidence shows defects, Main may authorize one bounded repair checkpoint and repeat only the affected verification. Further cycles require an explicit TODO and a reason the next pass can resolve the remaining issue. Main chooses roles from the current dynamic Available Agents and uses native `task` as the implementation fallback; unavailable or unsafe delegation is recorded before direct fallback. Never run an unattended repeat-until-score loop, fabricate a numeric quality threshold, or continue merely because a reviewer found something.
 
 ## Completion Evidence
 

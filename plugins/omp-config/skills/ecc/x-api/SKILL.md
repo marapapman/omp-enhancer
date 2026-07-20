@@ -12,6 +12,23 @@ origin: ECC
 
 Programmatic interaction with X (Twitter) for posting, reading, searching, and analytics.
 
+## Workflow composition boundary
+
+Main selects supporting Skills in the initial `WORKFLOW PLAN` when they are
+visible. This Skill does not select or auto-load another Skill, reroute the
+workflow, or emit a replacement plan after `WORKFLOW READY`.
+
+If this already-loaded guide reveals a needed content method that was not
+visible before PLAN, the remaining linked-method batch may read only a matching
+exact same-namespace URI listed here:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/x-api/SKILL.md | reads=<only-needed-exact-URI-or-URIs-listed-below>`
+
+- `skill://ecc-skill-catalog/brand-voice/SKILL.md`
+- `skill://ecc-skill-catalog/content-engine/SKILL.md`
+- `skill://ecc-skill-catalog/crosspost/SKILL.md`
+- `skill://ecc-skill-catalog/connections-optimizer/SKILL.md`
+
 ## When to Activate
 
 - User wants to post tweets or threads programmatically
@@ -217,7 +234,9 @@ else:
 
 ## Integration with Content Engine
 
-Use `brand-voice` plus `content-engine` to generate platform-native content, then post via X API:
+When both content candidates were selected and loaded under the composition
+boundary, reuse their returned voice profile and platform-native draft before
+an authorized X API post:
 1. Pull recent original posts when voice matching matters
 2. Build or reuse a `VOICE PROFILE`
 3. Generate content with `content-engine` in X-native format
@@ -228,7 +247,7 @@ Use `brand-voice` plus `content-engine` to generate platform-native content, the
 
 ## Related Skills
 
-- `brand-voice` — Build a reusable voice profile from real X and site/source material
-- `content-engine` — Generate platform-native content for X
-- `crosspost` — Distribute content across X, LinkedIn, and other platforms
-- `connections-optimizer` — Reorganize the X graph before drafting network-driven outreach
+- A committed `brand-voice` candidate can build a reusable voice profile from real X and site/source material.
+- A committed `content-engine` candidate can generate platform-native content for X.
+- A committed `crosspost` candidate can prepare distribution across X, LinkedIn, and other platforms.
+- A committed `connections-optimizer` candidate can reorganize the X graph before drafting network-driven outreach.

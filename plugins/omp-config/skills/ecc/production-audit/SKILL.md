@@ -12,6 +12,10 @@ maintainer-safe rewrite of the stale community production-audit idea: it keeps
 the useful production-readiness lens and removes unpinned external execution and
 third-party data sharing.
 
+## Method Selection
+
+Main selects supporting methods in the initial `WORKFLOW PLAN` when their Skills are visible. Later, Main loads a method only when an already loaded source explicitly reveals its exact same-namespace `skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI. This Skill provides domain guidance; it does not reroute the task, emit a replacement `WORKFLOW PLAN`, or auto-load another Skill.
+
 ## When to Use
 
 - The user asks "is this production-ready", "what would break in prod", "what
@@ -24,8 +28,8 @@ third-party data sharing.
 
 ## When Not to Use
 
-- During active implementation when the right lens is line-level secure coding;
-  use `security-review` first.
+- During active implementation when the right lens is line-level secure coding,
+  `skill://ecc-skill-catalog/security-review/SKILL.md` is the applicable initial method.
 - For pure libraries, templates, docs-only repos, or scaffolds unless the user
   wants packaging/release readiness rather than application readiness.
 - When the user asks for a formal compliance audit. This skill is engineering
@@ -197,10 +201,12 @@ Next action: Want me to patch webhook idempotency first?
 - Treating green CI as production readiness.
 - Ending with a generic "let me know what you want to do."
 
-## See Also
+## Candidate Methods
 
-- Skill: `security-review`
-- Skill: `deployment-patterns`
-- Skill: `e2e-testing`
-- Skill: `tdd-workflow`
-- Skill: `verification-loop`
+This source explicitly reveals these exact same-namespace resources for selection under the Method Selection boundary:
+
+- `skill://ecc-skill-catalog/security-review/SKILL.md`
+- `skill://ecc-skill-catalog/deployment-patterns/SKILL.md`
+- `skill://ecc-skill-catalog/e2e-testing/SKILL.md`
+- `skill://ecc-skill-catalog/tdd-workflow/SKILL.md`
+- `skill://ecc-skill-catalog/verification-loop/SKILL.md`

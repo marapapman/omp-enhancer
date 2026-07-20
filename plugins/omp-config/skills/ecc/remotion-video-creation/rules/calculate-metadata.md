@@ -15,7 +15,7 @@ Use `calculateMetadata` on a `<Composition>` to dynamically set duration, dimens
 
 ## Setting duration based on a video
 
-Use the `getMediaMetadata()` function from the mediabunny/metadata skill to get the video duration:
+Use the packaged [get-video-duration](skill://ecc-skill-catalog/remotion-video-creation/rules/get-video-duration.md) and [get-video-dimensions](skill://ecc-skill-catalog/remotion-video-creation/rules/get-video-dimensions.md) rules to implement a local `getMediaMetadata()` helper:
 
 ```tsx
 import {CalculateMetadataFunction} from 'remotion';

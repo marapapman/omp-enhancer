@@ -5,6 +5,11 @@ description: Create static visual artifacts such as posters, images, and layouts
 
 # Canvas design
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or a separate explicitly capable
+Main-selected Agent owns authorized effects.
+
 Use this when the user asks for a poster, static visual artifact, or exportable visual layout.
 
 1. Define the artifact size, audience, message, and visual hierarchy.

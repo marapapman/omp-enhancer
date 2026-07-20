@@ -42,8 +42,8 @@ Supported command flags:
 | `--checks logic,style,citation` | quality | Select quality-check categories. |
 | `--bib path/to/refs.bib` | quality | Load BibTeX bibliography evidence. |
 | `--literature path/to/literature.md` | quality | Load local literature evidence records. |
-| `--allow-network` | quality | Explicitly allow the default external citation lookup behavior. |
-| `--no-network` | quality | Disable external citation lookup. |
+| `--allow-network` | quality | Request external citation lookup for this invocation when host and user permissions already allow it. |
+| `--no-network` | quality | Explicitly keep external citation lookup disabled. |
 | `--disable-network` | quality | Alias for `--no-network`. |
 | `--citation-providers doi,arxiv,crossref` | quality | Select external lookup providers. |
 
@@ -69,9 +69,14 @@ The checker uses local evidence first:
    - `references.bib`
    - `paper.bib`
    - `literature.md`
-4. External DOI/arXiv/Crossref lookup when citations remain unverified and network lookup has not been disabled.
+4. External DOI/arXiv/Crossref lookup only when citations remain unverified and the caller explicitly passes tool input `allowNetwork: true` or the `--allow-network` command flag.
 
-External lookup is enabled by default after local evidence is exhausted. Disable it with `--no-network`, `--disable-network`, or tool input `allowNetwork: false`.
+External lookup is disabled by default. `allowNetwork: true` and `--allow-network`
+express the caller's request for remote lookup; they do not grant network access
+or replace OMP host and user permissions. Exposing the tool through
+`/enhancer-tools` is likewise not network permission. The compatibility flags
+`--no-network` and `--disable-network`, or tool input `allowNetwork: false`, keep
+lookup disabled explicitly.
 
 ## Supported citation forms
 
@@ -118,6 +123,36 @@ Model policy:
 - `writer` and `zh-writer` declare `pi/task` for drafting and bounded revision work.
 - `checker` and `zh-checker` declare `pi/slow` for independent quality review.
 - These agents do not set `thinkingLevel`; each inherits both the model and reasoning level from its configured role.
+- `writer` and `zh-writer` expose only `read`, `grep`, and `glob` and are always
+  proposal-only: even when the assignment authorizes a file change, they return
+  a complete proposed replacement, SEARCH/REPLACE block, or unified diff.
+  `checker` and `zh-checker` additionally expose `web_search` for evidence
+  verification, subject to current host and user network permission; they have
+  no `write` or `edit`, remain read-only, and return reports in-band. Main alone
+  decides whether a proposed change or report may be persisted and performs the
+  authorized file mutation.
+
+Composed workflows freeze one shared Skill list for assignment metadata, so it
+may include methods owned by sibling checkpoints. Each writing child treats
+those bodies as context rather than a new assignment and applies only the
+method needed by its byte-0 `step` and `todo`. It never executes another
+checkpoint's command, delegation, revision, publication, or file effect;
+checker `web_search` remains limited to its own parent-selected review mode.
+
+`writing.en` and `writing.zh` follow the marketplace-wide subagent-driven soft
+default when their matching roles are exposed. Main gives the language-matched
+writer a complete bounded drafting or revision assignment and receives a
+proposal, then gives the language-matched checker the source, proposal, and
+exact acceptance anchors for an independent in-band review. Main validates each
+finding; accepted findings may return once to the writer for one corrected
+proposal. Main alone applies any authorized file change and then verifies
+content anchors, format, and the resulting artifact. Writer and checker are
+dependency-ordered rather than parallel. `writing.pending` delegates nothing
+until the source language is known and Main composes `writing.en` or
+`writing.zh`. If the user requires Main-only work, a role/capacity is
+unavailable, or the artifact/assignment is incomplete or unsafe to split, Main
+records the direct fallback. This remains Agent-selected soft guidance, not a
+fork requirement, router, gate, or automatic repair loop.
 
 ### Skills
 

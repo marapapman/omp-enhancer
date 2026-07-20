@@ -1,21 +1,23 @@
 ---
 name: agent-sort
-description: Build an evidence-backed ECC install plan for a specific repo by sorting skills, commands, rules, hooks, and extras into DAILY vs LIBRARY buckets using parallel repo-aware review passes. Use when ECC should be trimmed to what a project actually needs instead of loading the full bundle.
+description: Build an evidence-backed ECC install plan for a specific repo by sorting skills, commands, rules, hooks, and extras into DAILY vs LIBRARY buckets through repo-aware review. Use when the task is to trim ECC to what a project actually needs instead of keeping the full bundle active.
 origin: ECC
 ---
 
 # Agent Sort
 
-Use this skill when a repo needs a project-specific ECC surface instead of the default full install.
+Apply this method after Main selects and loads it for a project-specific ECC inventory task.
 
 The goal is not to guess what "feels useful." The goal is to classify ECC components with evidence from the actual codebase.
 
-## When to Use
+Returning a response-local plan is the default. Any persistent install plan, inventory, index, file, hook, rule, script, installation, removal, or configuration change is allowed only for the exact named target and operation with explicit user authorization plus native permission at execution time. This method does not create or recommend a secondary Skill router and does not alter the current OMP Skill inventory.
+
+## Selected task scope
 
 - A project only needs a subset of ECC and full installs are too noisy
 - The repo stack is clear, but nobody wants to hand-curate skills one by one
 - A team wants a repeatable install decision backed by grep evidence instead of opinion
-- You need to separate always-loaded daily workflow surfaces from searchable library/reference surfaces
+- The requested inventory needs to distinguish frequently relevant surfaces from on-demand library/reference surfaces
 - A repo has drifted into the wrong language, rule, or hook set and needs cleanup
 
 ## Non-Negotiable Rules
@@ -34,18 +36,18 @@ Produce these artifacts in order:
 2. LIBRARY inventory
 3. install plan
 4. verification report
-5. optional `skill-library` router if the project wants one
+5. optional response-local searchable index
 
 ## Classification Model
 
 Use two buckets only:
 
 - `DAILY`
-  - should load every session for this repo
+  - candidate for frequent task-local selection; it is never automatically loaded at session start
   - strongly matched to the repo's language, framework, workflow, or operator surface
 - `LIBRARY`
-  - useful to retain, but not worth loading by default
-  - should remain reachable through search, router skill, or selective manual use
+  - useful to retain for explicit on-demand selection
+  - should remain reachable through the host's existing inventory or an authorized plain index
 
 ## Evidence Sources
 
@@ -71,9 +73,9 @@ cat pubspec.yaml
 cat go.mod
 ```
 
-## Parallel Review Passes
+## Review dimensions
 
-If parallel subagents are available, split the review into these passes:
+The six headings below are review dimensions, not a fixed assignment count or fanout. Main groups safe independent slices dynamically from current Available Agents, native capacity, dependencies, complete assignment input, and write-set overlap. It may delegate one or more bounded slices or evaluate dependent dimensions sequentially.
 
 1. Agents
    - classify `agents/*`
@@ -88,7 +90,7 @@ If parallel subagents are available, split the review into these passes:
 6. Extras
    - classify contexts, examples, MCP configs, templates, and guidance docs
 
-If subagents are not available, run the same passes sequentially.
+Do not create one task per heading merely because the list has six entries.
 
 ## Core Workflow
 
@@ -128,7 +130,7 @@ rules/python/*           | rules | LIBRARY | zero Python source files           
 Promote to `DAILY` when:
 
 - the repo clearly uses the matching stack
-- the component is general enough to help every session
+- the component is general enough to be a frequent task-local candidate
 - the repo already depends on the corresponding runtime or workflow
 
 Demote to `LIBRARY` when:
@@ -145,23 +147,19 @@ Translate the classification into action:
 - DAILY commands -> keep as explicit shims only if still useful
 - DAILY rules -> install only matching language sets
 - DAILY hooks/scripts -> keep only compatible ones
-- LIBRARY surfaces -> keep accessible through search or `skill-library`
+- LIBRARY surfaces -> keep accessible through the existing inventory or an authorized plain index
 
 If the repo already uses selective installs, update that plan instead of creating another system.
 
-### 5. Create the optional library router
+### 5. Prepare an optional searchable index
 
-If the project wants a searchable library surface, create:
-
-- `.claude/skills/skill-library/SKILL.md`
-
-That router should contain:
+When the user requests a searchable summary, return a plain response-local index containing:
 
 - a short explanation of DAILY vs LIBRARY
 - grouped trigger keywords
-- where the library references live
+- exact existing Skill identities or resource locations
 
-Do not duplicate every skill body inside the router.
+Do not create another Skill, router, or trigger layer. Persist the index only under the authority boundary above.
 
 ### 6. Verify the result
 
@@ -179,19 +177,15 @@ Return a compact report with:
 - removed stale surfaces
 - open questions
 
-## Handoffs
+## Optional next-method candidates
 
-If the next step is interactive installation or repair, hand off to:
+These exact Skill URIs are candidates for a new `WORKFLOW PLAN` chosen by Main. Never automatically load or hand off to them from this body:
 
-- `configure-ecc`
+- interactive installation or repair: `skill://ecc-skill-catalog/configure-ecc/SKILL.md`
+- overlap cleanup or catalog review: `skill://ecc-skill-catalog/skill-stocktake/SKILL.md`
+- broader context trimming: `skill://ecc-skill-catalog/strategic-compact/SKILL.md`
 
-If the next step is overlap cleanup or catalog review, hand off to:
-
-- `skill-stocktake`
-
-If the next step is broader context trimming, hand off to:
-
-- `strategic-compact`
+If Main does not select one in a later plan, leave the recommendation as report data.
 
 ## Output Format
 
@@ -202,13 +196,13 @@ STACK
 - language/framework/runtime summary
 
 DAILY
-- always-loaded items with evidence
+- frequent task-local candidates with evidence
 
 LIBRARY
 - searchable/reference items with evidence
 
 INSTALL PLAN
-- what should be installed, removed, or routed
+- what could be installed, removed, or indexed when authorized
 
 VERIFICATION
 - checks run and remaining gaps

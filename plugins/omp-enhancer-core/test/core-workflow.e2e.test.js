@@ -74,7 +74,7 @@ test('primary startup records task facts without changing the native prompt or a
   assert.equal(snapshot.lastTaskContext.intent, 'agent-selected');
 });
 
-test('DeepSeek Flash receives a compact three-phase soft reminder without replacing the native prompt', async () => {
+test('DeepSeek Flash receives the compact seven-stage soft reminder without replacing the native prompt', async () => {
   const entries = [];
   const pi = new FakePi(entries);
   pi.getActiveTools = () => ['read', 'task', 'todo'];
@@ -102,25 +102,25 @@ test('DeepSeek Flash receives a compact three-phase soft reminder without replac
   assert.equal(result.message.display, false);
   assert.equal(result.message.attribution, 'user');
   assert.equal(result.message.details.model, 'deepseek-v4-flash');
-  assert.match(result.message.content, /^DEEPSEEK_SOFT_PROTOCOL/u);
-  assert.match(result.message.content, /ENTRY \(soft\)[\s\S]*DIRECT is only a verbatim already-present field or heading[\s\S]*no judgment[\s\S]*Everything else is PROJECT/iu);
-  assert.match(result.message.content, /review, correction, comparison, verification, design, transformation, or planning regardless of target size or a named path/iu);
-  assert.match(result.message.content, /PROJECT DO NOW . DISCOVER:[\s\S]*named target waits[\s\S]*exactly one call[\s\S]*`read skill:\/\/omp-enhancer-workflows`[\s\S]*wait for the index/iu);
-  assert.match(result.message.content, /Do not add a project, Skill, reference, `todo`, or `task` call/iu);
-  assert.match(result.message.content, /PUBLIC CHECKPOINTS:[\s\S]*only visible assistant text counts[\s\S]*thinking, tool arguments, files, and `\.\.\.` do not[\s\S]*`PLAN URI:` is copy data until PLAN is visible/iu);
-  assert.match(result.message.content, /AFTER INDEX . choose values, then copy this fully filled block from thinking into visible assistant text before constructing any call[\s\S]*WORKFLOW PLAN\nPrimary:[\s\S]*Add-ons:[\s\S]*Skills:[\s\S]*Load order:[\s\S]*Actions:\n1\.[\s\S]*thinking, narration without the block, or `\.\.\.` does not count/iu);
-  assert.match(result.message.content, /separate numbered Action for each distinct requested checkpoint or evidence phase[\s\S]*do not collapse them into one catch-all line/iu);
-  assert.match(result.message.content, /first visible content item.+WORKFLOW PLAN.+resource calls may follow/iu);
-  assert.match(result.message.content, /AFTER ALL DECLARED RESOURCES AND ANY CATALOG EXTENSION[\s\S]*WORKFLOW READY \| primary=<id-or-none>[\s\S]*rebase the detailed numbered TODO/iu);
-  assert.match(result.message.content, /native `todo` is exposed.+only call.+TODO init.+end and wait.+project work starts in the next response/iu);
-  assert.match(result.message.content, /preserve every loaded card checkpoint and evidence boundary[\s\S]*plan-review or reviewer decision.+explicit TODO row/iu);
-  assert.match(result.message.content, /ORDER: index -> wait -> visible PLAN plus resource-only calls -> wait -> visible READY plus rebased TODO -> project work/iu);
-  assert.match(result.message.content, /guidance only:[\s\S]*Main selects resources[\s\S]*native OMP owns tools, permissions, delegation, and completion/iu);
+  assert.match(result.message.content, /^DEEPSEEK_WORKFLOW_ENTRY/u);
+  assert.match(result.message.content, /^DEEPSEEK_WORKFLOW_ENTRY[^\n]*\nFIRST RESPONSE:[^\n]*\n- DIRECT ONLY[^\n]*\n- OTHERWISE \(PROJECT\): INDEX STATUS=NOT SUPPLIED/iu);
+  assert.match(result.message.content, /DIRECT ONLY[\s\S]*verbatim, no-judgment field\/heading lookup[\s\S]*Review, correction, comparison, verification, design, transformation, planning[\s\S]*are PROJECT/iu);
+  assert.match(result.message.content, /PROJECT at any size/iu);
+  assert.match(result.message.content, /call only `read` with `path=skill:\/\/omp-enhancer-workflows`[\s\S]*end the response and wait[\s\S]*Do not read a project path/iu);
+  assert.match(result.message.content, /Available Skills metadata and this reminder are not the body/iu);
+  assert.match(result.message.content, /AFTER THE INDEX RETURNS:[\s\S]*DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY/iu);
+  assert.match(result.message.content, /byte-0 `WORKFLOW PLAN`[\s\S]*structured NOW\/THEN[\s\S]*at least four detailed Actions/iu);
+  assert.match(result.message.content, /resource-only load batches[\s\S]*byte-0 `WORKFLOW READY` \+ rebased detailed TODO only[\s\S]*project tools/iu);
+  assert.match(result.message.content, /loaded non-simple card[\s\S]*current matching Agent[\s\S]*parent VERIFY/iu);
+  assert.doesNotMatch(result.message.content, /character 1/iu);
+  assert.doesNotMatch(result.message.content, /TASK COPY:|Delegate Writer:|generic Draft\/Check|checkpoint=<verbatim-task-content>/iu);
+  assert.match(result.message.content, /Main selects[\s\S]*OMP owns tools, permissions, delegation, and completion/iu);
   assert.match(result.message.content, /COMPAT_REVIEW_CONTEXT \(soft, no quota\)/u);
-  assert.match(result.message.content, /DELEGATION AFTER READY \(soft, no quota\)/u);
-  assert.match(result.message.content, /selects no Agent, fork, reviewer count, dispatch, or completion condition/i);
-  assert.doesNotMatch(result.message.content, /suggested=|within-native-cap|native-cap=|NATIVE_BATCH_SHAPE|action=delegate|block:\s*true|continue:\s*true/u);
-  assert.ok(result.message.content.length < 3600, `compatibility context length=${result.message.content.length}`);
+  assert.match(result.message.content, /soft one-shot for top-level Main[\s\S]*selects no workflow, Skill, Agent, or fork width/iu);
+  assert.match(result.message.content, /no runtime gate, router, retry, permission, or completion control/iu);
+  assert.doesNotMatch(result.message.content, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
+  assert.doesNotMatch(result.message.content, /suggested=|within-native-cap|native-cap=|NATIVE_BATCH_SHAPE|action=delegate|block:\s*true|continue:\s*true|hard router|automatic retry/u);
+  assert.ok(result.message.content.length < 1800, `compatibility context length=${result.message.content.length}`);
   assert.deepEqual(result.message.details.features, [
     'skill-discovery',
     'workflow-selection',
@@ -134,7 +134,149 @@ test('DeepSeek Flash receives a compact three-phase soft reminder without replac
   }, ctx), undefined, 'the reminder is one-shot for the active task');
 });
 
-test('MiMo v2.5 receives the same exact-model three-phase reminder once', async () => {
+test('workflow entry observes an already supplied native workflow index and never asks for a duplicate read', async () => {
+  const entries = [{
+    type: 'custom',
+    customType: 'skill-prompt',
+    content: '---\nname: omp-enhancer-workflows\n---\n# OMP Enhancer workflows',
+    details: {
+      name: 'omp-enhancer-workflows',
+      path: '/skills/omp-enhancer-workflows/SKILL.md',
+    },
+    attribution: 'user',
+  }];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task', 'todo'];
+  pi.pi = {
+    getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }],
+  };
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries, process.cwd(), {
+    model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
+  });
+
+  const result = await event(pi, 'before_agent_start')({
+    prompt: 'Review the report and propose a revision.',
+    systemPrompt: ['native OMP prompt'],
+  }, ctx);
+
+  assert.match(result.message.content, /INDEX STATUS=SUPPLIED BY EXACT NATIVE `skill-prompt`/iu);
+  assert.match(result.message.content, /do not reread it[\s\S]*next response starts at byte 0 with a filled `WORKFLOW PLAN`/iu);
+  assert.doesNotMatch(result.message.content, /call only `read` with `path=skill:\/\/omp-enhancer-workflows`/iu);
+});
+
+test('workflow entry treats unsafe, empty, stale, or legacy prompt evidence as not supplied', async () => {
+  const cases = [
+    {
+      label: 'throwing branch getter',
+      entries: [],
+      mutateContext: (ctx) => {
+        ctx.sessionManager.getBranch = () => {
+          throw new Error('branch unavailable');
+        };
+      },
+    },
+    {
+      label: 'empty body metadata',
+      entries: [{
+        type: 'custom',
+        customType: 'skill-prompt',
+        content: '   ',
+        details: { name: 'omp-enhancer-workflows' },
+        attribution: 'user',
+      }],
+    },
+    {
+      label: 'stale prior-turn body',
+      entries: [
+        {
+          type: 'custom',
+          customType: 'skill-prompt',
+          content: '---\nname: omp-enhancer-workflows\n---\nold body',
+          details: { name: 'omp-enhancer-workflows' },
+          attribution: 'user',
+        },
+        { type: 'message', message: { role: 'assistant', content: [{ type: 'text', text: 'old answer' }] } },
+        { type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'new request' }] } },
+      ],
+    },
+    {
+      label: 'legacy Core autoload',
+      entries: [{
+        type: 'custom',
+        customType: 'skill-prompt',
+        content: '---\nname: omp-enhancer-workflows\n---\nlegacy body',
+        details: {
+          name: 'omp-enhancer-workflows',
+          provisionProvider: 'omp-enhancer-core',
+          provisionSchemaVersion: 1,
+        },
+      }],
+    },
+    {
+      label: 'stale prior-turn body in event messages',
+      entries: [],
+      messages: [
+        {
+          type: 'custom',
+          customType: 'skill-prompt',
+          content: '---\nname: omp-enhancer-workflows\n---\nold event body',
+          details: { name: 'omp-enhancer-workflows' },
+          attribution: 'user',
+        },
+        { role: 'assistant', content: [{ type: 'text', text: 'old answer' }] },
+        { role: 'user', content: [{ type: 'text', text: 'new request' }] },
+      ],
+    },
+  ];
+
+  for (const { label, entries, messages, mutateContext } of cases) {
+    const pi = new FakePi(entries);
+    pi.getActiveTools = () => ['read', 'task', 'todo'];
+    pi.pi = {
+      getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }],
+    };
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext(entries, process.cwd(), {
+      model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
+    });
+    mutateContext?.(ctx);
+
+    const result = await event(pi, 'before_agent_start')({
+      prompt: 'Review the report.',
+      systemPrompt: ['native OMP prompt'],
+      ...(messages ? { messages } : {}),
+    }, ctx);
+
+    assert.match(result.message.content, /INDEX STATUS=NOT SUPPLIED/iu, label);
+  }
+});
+
+test('workflow entry records fallback guidance when native delegation is unavailable or forbidden', async () => {
+  for (const { label, tools, prompt } of [
+    { label: 'task unavailable', tools: ['read', 'todo'], prompt: 'Review the report.' },
+    { label: 'delegation forbidden', tools: ['read', 'task', 'todo'], prompt: 'Review the report, but keep all work in the main agent and do not delegate.' },
+  ]) {
+    const entries = [];
+    const pi = new FakePi(entries);
+    pi.getActiveTools = () => tools;
+    pi.pi = {
+      getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }],
+    };
+    registerCoreEnhancer(pi);
+    const result = await event(pi, 'before_agent_start')({
+      prompt,
+      systemPrompt: ['native OMP prompt'],
+    }, extensionContext(entries, process.cwd(), {
+      model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
+    }));
+
+    assert.match(result.message.content, /record the concrete permitted fallback[\s\S]*parent VERIFY/iu, label);
+    assert.doesNotMatch(result.message.content, /assign at least one safe complete checkpoint/iu, label);
+  }
+});
+
+test('MiMo v2.5 receives the same exact-model seven-stage reminder once', async () => {
   const entries = [];
   const pi = new FakePi(entries);
   pi.getActiveTools = () => ['read', 'task', 'todo'];
@@ -151,11 +293,12 @@ test('MiMo v2.5 receives the same exact-model three-phase reminder once', async 
     systemPrompt: ['native OMP prompt'],
   }, ctx);
 
-  assert.match(result.message.content, /^MIMO_SOFT_PROTOCOL/u);
+  assert.match(result.message.content, /^MIMO_WORKFLOW_ENTRY/u);
   assert.equal(result.message.details.model, 'mimo-v2.5');
-  assert.match(result.message.content, /PROJECT DO NOW . DISCOVER[\s\S]*`read skill:\/\/omp-enhancer-workflows`/iu);
-  assert.match(result.message.content, /PUBLIC CHECKPOINTS:[\s\S]*only visible assistant text counts[\s\S]*AFTER INDEX . choose values[\s\S]*copy this fully filled block/iu);
-  assert.match(result.message.content, /WORKFLOW PLAN\nPrimary:[\s\S]*WORKFLOW READY \| primary=<id-or-none>/iu);
+  assert.match(result.message.content, /INDEX STATUS=NOT SUPPLIED[\s\S]*path=skill:\/\/omp-enhancer-workflows/iu);
+  assert.match(result.message.content, /DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY/iu);
+  assert.match(result.message.content, /byte-0 `WORKFLOW PLAN`[\s\S]*byte-0 `WORKFLOW READY`/iu);
+  assert.doesNotMatch(result.message.content, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
   assert.doesNotMatch(result.message.content, /suggested=|reviewer count=\d|fork width=\d|required fork|block:\s*true/iu);
   assert.equal(await event(pi, 'before_agent_start')({
     prompt: '继续',
@@ -177,9 +320,12 @@ test('staged reminder exposes only capabilities active in the native runtime', a
       model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
     }),
   );
-  assert.match(skillOnly.message.content, /PHASE 1 . DECLARE:[\s\S]*visible OMP Skill inventory/iu);
-  assert.match(skillOnly.message.content, /PHASE 2 . LOAD BATCH:[\s\S]*exact `skill:\/\/<name>` URIs/iu);
-  assert.match(skillOnly.message.content, /PHASE 3 . READY \+ EXECUTE:[\s\S]*WORKFLOW READY/iu);
+  assert.match(skillOnly.message.content, /^DEEPSEEK_SOFT_PROTOCOL[^\n]*\nENTRY \(soft\):[\s\S]*DIRECT is a verbatim, no-judgment field\/heading lookup[\s\S]*no Skill\/TODO/iu);
+  assert.match(skillOnly.message.content, /PROJECT ONLY . DECLARE:[\s\S]*PROJECT ONLY . LOAD:[\s\S]*PROJECT ONLY . COMMIT:/iu);
+  assert.match(skillOnly.message.content, /DECLARE:[\s\S]*visible WORKFLOW PLAN block[\s\S]*Load order: NOW=\[<non-supplied Skill URIs-or-none>\] THEN=\[none\]/iu);
+  assert.match(skillOnly.message.content, /LOAD:[\s\S]*read only NOW exact Skill URIs[\s\S]*wait/iu);
+  assertSkillUriIdentity(skillOnly.message.content);
+  assert.match(skillOnly.message.content, /COMMIT:[\s\S]*first visible bytes are `WORKFLOW READY \| workflows=unavailable[\s\S]*TODO init only/iu);
   assert.doesNotMatch(skillOnly.message.content, /DELEGATION AFTER READY|COMPAT_REVIEW_CONTEXT/u);
   assert.deepEqual(skillOnly.message.details.features, ['skill-discovery']);
 
@@ -194,9 +340,11 @@ test('staged reminder exposes only capabilities active in the native runtime', a
       model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
     }),
   );
+  assert.match(taskOnly.message.content, /^DEEPSEEK_SOFT_PROTOCOL[^\n]*\nENTRY \(soft\):[\s\S]*DIRECT is a verbatim, no-judgment field\/heading lookup[\s\S]*no Skill\/TODO/iu);
+  assert.match(taskOnly.message.content, /PROJECT ONLY . PHASE 1 . PLAN:[\s\S]*PROJECT ONLY . PHASE 2 . COMMIT:[\s\S]*PROJECT ONLY . PHASE 3 . EXECUTE/iu);
   assert.match(taskOnly.message.content, /PHASE 1 . PLAN:[\s\S]*PHASE 2 . COMMIT:[\s\S]*PHASE 3 . EXECUTE/iu);
   assert.match(taskOnly.message.content, /no fork or width is selected by this reminder/i);
-  assert.match(taskOnly.message.content, /DELEGATION AFTER READY \(soft, no quota\)/u);
+  assert.match(taskOnly.message.content, /DELEGATION AFTER READY \(soft\):[\s\S]*non-simple work defaults to delegation if native state permits/iu);
   assert.deepEqual(taskOnly.message.details.features, ['delegation-decision']);
 });
 
@@ -213,7 +361,7 @@ test('review and multi-target facts remain compact and never choose dispatch or 
     model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
   }));
   assert.match(review.message.content, /COMPAT_REVIEW_CONTEXT \(soft, no quota\)/u);
-  assert.match(review.message.content, /possible-review-dimensions=correctness,test-adequacy/i);
+  assert.match(review.message.content, /review=correctness,test-adequacy/i);
   assert.doesNotMatch(review.message.content, /suggested=|within-native-cap|native-cap=|reviewerLaneSuggestion/u);
 
   const shapeEntries = [];
@@ -248,7 +396,7 @@ test('explicit no-delegation wording keeps Skill guidance but removes delegation
     model: { provider: 'opencode-go', id: 'deepseek-v4-flash' },
   }));
 
-  assert.match(result.message.content, /PHASE 1 . DECLARE:[\s\S]*visible OMP Skill inventory/iu);
+  assert.match(result.message.content, /PROJECT ONLY . DECLARE:[\s\S]*visible WORKFLOW PLAN block[\s\S]*Load order: NOW=\[<non-supplied Skill URIs-or-none>\] THEN=\[none\]/iu);
   assert.doesNotMatch(result.message.content, /DELEGATION AFTER READY|COMPAT_REVIEW_CONTEXT/u);
   assert.deepEqual(result.message.details.features, ['skill-discovery']);
   const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
@@ -546,6 +694,12 @@ function registeredCore() {
   const pi = new FakePi(entries);
   registerCoreEnhancer(pi);
   return { pi, entries, ctx: extensionContext(entries) };
+}
+
+function assertSkillUriIdentity(content) {
+  assert.match(content, /SKILL URI:[\s\S]*visible `x` -> `skill:\/\/x`[\s\S]*nested only from a loaded source revealing the exact URI/iu);
+  assert.match(content, /Use `read\.path`[\s\S]*Bare `x` is a project path, not Skill absence[\s\S]*only exact-URI failure = unavailable/iu);
+  assert.match(content, /`\.agents\/skills` is not the inventory/iu);
 }
 
 function event(pi, name) {

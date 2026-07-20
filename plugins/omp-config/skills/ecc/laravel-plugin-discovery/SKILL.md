@@ -8,6 +8,16 @@ origin: ECC
 
 Find, evaluate, and choose healthy Laravel packages using the LaraPlugins.io MCP server.
 
+## Current OMP authority and effects
+
+This Skill supplies a package-discovery method and tool reference; it grants no
+host, command, installation, or network authority. Host MCP configuration and
+each network query are distinct external effects. Each requires explicit user
+authorization for the exact target and effect plus current native permission.
+The configuration snippet is reference data and does not authorize changing
+host config or contacting LaraPlugins.io. Package discovery never authorizes
+installing a returned package.
+
 ## When to Use
 
 - User wants to find Laravel packages for a specific feature (e.g. "auth", "permissions", "admin panel")
@@ -18,7 +28,9 @@ Find, evaluate, and choose healthy Laravel packages using the LaraPlugins.io MCP
 
 ## MCP Requirement
 
-LaraPlugins MCP server must be configured. Add to your `~/.claude.json` mcpServers:
+A LaraPlugins MCP server must already be exposed, or the user must separately
+authorize the exact host configuration. The following `~/.claude.json` fragment
+is a reference example:
 
 ```json
 "laraplugins": {

@@ -12,9 +12,11 @@ purposeful, polished, and appropriate to the product domain.
 Source: salvaged from stale community PR #1659 by `linus707`.
 
 Note: ECC intentionally does not rebundle the canonical Anthropic
-`frontend-design` skill. Install that from `anthropics/skills` when you want the
-official upstream skill. This skill is the ECC-specific design-direction salvage
-of the useful local guidance from #1659.
+`frontend-design` skill. That upstream package may be noted as an alternative,
+but this guide does not instruct Main to install another Skill. Installation,
+network access, and host configuration require explicit user authorization for
+the exact target and effect plus current native permission. This Skill is the
+ECC-specific design-direction salvage of the useful local guidance from #1659.
 
 ## When to Use
 

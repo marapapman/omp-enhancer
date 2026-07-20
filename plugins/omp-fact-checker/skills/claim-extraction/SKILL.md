@@ -5,6 +5,12 @@ description: Supporting precheck for broad or multi-claim text that must be spli
 
 # Claim Extraction
 
+When this Skill is listed in a `writer` or `zh-writer` assignment, it is
+evidence context only for that prose checkpoint. The writer consumes fact
+findings already supplied by Main and returns a proposal; it does not run this
+fact-checking method, invoke Fact Checker tools, collect evidence, or issue a
+verdict. Main or a separate selected fact Agent owns the fact-check checkpoint.
+
 Extract a focused, bounded set of atomic claims. Make each claim small enough
 that one piece of evidence could support or contradict it. For a named list of
 facts, extract only that list; do not expand into every factual sentence in the

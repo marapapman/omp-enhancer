@@ -10,6 +10,16 @@ origin: ECC
 > change. Confirm the exposed tool surface and current Exa docs before relying
 > on a specific search mode, category, or livecrawl behavior.
 
+## Current OMP authority and effects
+
+This Skill supplies a search method and tool reference; it grants no host,
+credential, command, or network authority. Host MCP configuration and every
+network search are distinct external effects. Each requires explicit user
+authorization for the exact target and effect plus current native permission.
+The configuration snippet is reference data and does not authorize changing
+host config, installing a package, obtaining a key, or exposing a secret.
+Inspection or planning may return proposed queries without sending them.
+
 Neural search for web content, code, companies, and people via the Exa MCP server.
 
 ## When to Activate
@@ -23,7 +33,9 @@ Neural search for web content, code, companies, and people via the Exa MCP serve
 
 ## MCP Requirement
 
-Exa MCP server must be configured. Add to `~/.claude.json`:
+An Exa MCP server must already be exposed, or the user must separately authorize
+the exact host configuration. The following `~/.claude.json` fragment is a
+reference example:
 
 ```json
 "exa-web-search": {

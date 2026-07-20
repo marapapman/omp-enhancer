@@ -6,6 +6,11 @@ origin: ECC
 
 # SEO
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or a separate explicitly capable
+Main-selected Agent owns authorized effects.
+
 Improve search visibility through technical correctness, performance, and content relevance, not gimmicks.
 
 ## When to Use

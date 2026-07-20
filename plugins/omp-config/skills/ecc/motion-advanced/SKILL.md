@@ -1,6 +1,6 @@
 ---
 name: motion-advanced
-description: Advanced motion patterns for React / Next.js — drag & drop, gestures, text animations, SVG path drawing, custom hooks, imperative sequences (useAnimate), loaders, and the full API decision tree. Requires motion-foundations.
+description: Advanced React and Next.js motion patterns for drag and drop, gestures, text animation, SVG paths, imperative sequences, and loaders. Use only with the foundation resource at skill://ecc-skill-catalog/motion-foundations/SKILL.md declared in PLAN or explicitly revealed by this Skill before READY.
 version: 1.0
 tags: [motion, animation, advanced, gestures, svg]
 category: frontend
@@ -10,8 +10,22 @@ author: jeff
 # Motion Advanced
 
 Complex, interactive, and physics-based animation patterns.
-Requires `motion-foundations` to be set up first.
-Use these when `motion-patterns` is not enough.
+
+## Staged dependency
+
+The required foundation is
+`skill://ecc-skill-catalog/motion-foundations/SKILL.md`. If Main did not already
+declare and load that exact URI, this loaded Skill may reveal it before
+`WORKFLOW READY`. At visible byte 0 emit the following record, read the one URI
+in a resource-only batch, then wait:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/motion-advanced/SKILL.md | reads=skill://ecc-skill-catalog/motion-foundations/SKILL.md`
+
+Use the dependency only after its successful load. Never late-load a bare Skill
+name, guess a path, leave the `ecc-skill-catalog` namespace, repeat PLAN, or
+begin project work in the extension batch. Standard patterns at
+`skill://ecc-skill-catalog/motion-patterns/SKILL.md` are optional and may be
+used only when that exact URI was already selected and loaded before READY.
 
 ## When to Activate
 
@@ -570,8 +584,8 @@ export function DismissibleSheet({
 
 This skill does **not** cover:
 
-- Token and spring definitions → see `motion-foundations`
-- Standard UI patterns (button, modal, stagger, page transitions) → see `motion-patterns`
+- Token and spring definitions → `skill://ecc-skill-catalog/motion-foundations/SKILL.md`
+- Standard UI patterns (button, modal, stagger, page transitions) → `skill://ecc-skill-catalog/motion-patterns/SKILL.md` when already declared and loaded
 - CSS-only animations or Tailwind `animate-*` without `motion/react`
 - Canvas or WebGL-based animation (Three.js, Pixi, etc.)
 - Full drag-and-drop systems with external state managers (dnd-kit, react-beautiful-dnd)
@@ -592,5 +606,5 @@ This skill does **not** cover:
 
 ## Related Skills
 
-- **`motion-foundations`** — defines all tokens, springs, `useSafeMotion`, and SSR guards imported here. Must be set up before using this skill.
-- **`motion-patterns`** — handles standard UI patterns (button, modal, stagger, page transitions, scroll reveals). Use it before reaching for the advanced patterns here.
+- **`skill://ecc-skill-catalog/motion-foundations/SKILL.md`** — required tokens, springs, `useSafeMotion`, and SSR guards; load through the declared or source-revealed path above.
+- **`skill://ecc-skill-catalog/motion-patterns/SKILL.md`** — optional standard UI patterns; use only when it was independently selected and loaded before READY.

@@ -1,7 +1,7 @@
 export const codeWorkflows = [
   {
     "id": "code.dev",
-    "chooseWhen": "The central task is substantive software work outside the complete OMP plugin or OMP Enhancer self-development condition: inspect or plan a codebase, diagnose or debug a failure, implement or refactor behavior, author or run tests, repair a build, measure performance, or review code or a diff. The requested scope determines whether work is read-only or may mutate files.",
+    "chooseWhen": "Substantive code inspection, planning, diagnosis, implementation, refactoring, testing, build repair, performance, or review when no OMP plugin, database, ML, network, writing, research, design, or release card better owns the central deliverable.",
     "composeWith": [
       "security.review",
       "release.publish"

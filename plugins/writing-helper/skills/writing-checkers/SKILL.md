@@ -87,13 +87,14 @@ After all 7 dimensions, output:
 
 ## Output Destination
 
-Write to `.pi/research/checker_report.md` only when the user permits that report
-file. For a read-only review, return the same structured report in the final
-response. Do not create `.pi` or request write access solely for this skill.
+This checker method is read-only and report-only. Return the complete structured report in
+the final response. Main decides persistence when the user requested a report
+file; the checker neither creates `.pi` nor requests write access.
 
 ## Pi Integration
 
-- **Use:** load `writing-checkers` through the runtime's normal skill mechanism; do not attempt an invented slash command.
+- **Skill body:** already loaded for this checkpoint; do not read
+  `writing-checkers` again or attempt an invented slash command.
 - **Tools used:** `read`, `grep`, `glob` (to understand document structure and verify references).
-- **Output:** use the permitted report path, or the final response in read-only mode. Create no other files.
+- **Output:** return the complete report in the final response. Main owns any authorized persistence; the checker creates no files.
 - **No HTML comments.** No `.pi/research/state.md`. No external CLI calls.

@@ -147,6 +147,8 @@
         "minNativeTaskBatchCalls": 1,
         "requireNativeTaskBatch": true,
         "requireNativeTaskMetadataPrefix": true,
+        "requireExactNativeTaskMetadataPrefix": true,
+        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
         "requiredNativeTaskAgents": ["plan"],
         "requiredNativeTaskWorkflows": ["code.dev"],
         "requiredNativeTaskWorkflowsPerAssignment": ["code.dev"],

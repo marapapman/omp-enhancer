@@ -1,15 +1,15 @@
 ---
 name: deepseek-tool-calling
-description: |
-  DeepSeek 模型工具调用最佳实践引导。
-  帮助 DeepSeek V4 系列模型正确格式化工具调用参数，
-  减少因 JSON 格式错误导致的调用失败。
-alwaysApply: true
+description: Use when a DeepSeek V4 model is preparing a tool call or recovering from a JSON argument or tool-schema validation error.
 hide: true
 tags: [deepseek, tool-calling, compatibility]
 ---
 
 # DeepSeek Tool Calling Guide
+
+## 当前工具契约优先
+
+当前会话实际暴露的工具名称、描述和 JSON Schema 是唯一参数契约。本文的字段名、调用形状和示例仅提供兼容性诊断线索，不授权调用工具，也不替代 host/provider 的实时契约。若示例与实际暴露的 schema 冲突，以实际暴露的 schema 优先；不要补猜字段、沿用旧工具名或混合不同 schema 的形状。
 
 ## 为什么需要这个 skill
 
@@ -162,7 +162,9 @@ Unexpected end of JSON input
 
 如果是这种情况，需要等待完整输出再发送工具调用请求，或者使用更短的参数值。
 
-## 各工具参数速查
+## 历史工具参数速查（非契约）
+
+下表只帮助识别常见类型错误。构造调用前先读取当前暴露的工具说明和 schema；不要仅凭此表决定工具是否存在或参数形状。
 
 | 工具 | 必需字段 | 数组字段 | 数字字段 | 可选字段 |
 |---|---|---|---|---|
@@ -209,13 +211,15 @@ Unexpected end of JSON input
 ### todo 工具
 - OMP 17 的原生工具名是 `todo`，不是 `todo_write`
 - 每次只传一个操作：`op` 可为 `init`, `start`, `done`, `drop`, `rm`, `append`, `view`
-- 初始化阶段计划：`{"op":"init","list":[{"phase":"Implementation","items":["Inspect target","Apply change","Verify result"]}]}`
+- 对已选择的非简单工作流，委派项保留 canonical 行：`{"op":"init","list":[{"phase":"Delegated work","items":["Delegate Agent=<current-exposed-agent> workflow=<selected-ids> step=<step-id> skills=<loaded-ids-or-none> checkpoint=<complete-one-line-task>"]}]}`
 - 完成任务时，`task` 必须逐字复用初始化时的完整任务文本；不存在 `task-1` 一类自动 ID
 
 ### task 工具
 - 先遵循当前暴露的 schema，不要把 flat 和 batch 形状混用
-- flat 形状：`{"name":"RouteScout","agent":"scout","task":"完整任务说明"}`
-- batch 形状：`{"context":"共享目标与约束","tasks":[{"name":"RouteScout","agent":"scout","task":"完整任务说明"}]}`
+- 将 TODO 行的 Agent 原样复制到 native task item 的 `agent` 字段，再把 workflow、step、skills 与 checkpoint 复制到 assignment byte 0：`[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>]`
+- flat 形状：`{"name":"<stable-name>","agent":"<copy-TODO-Agent>","task":"[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>]\n# Target\n<bounded target>\n# Constraints\n<direct constraints and allowed effects>\n# Acceptance\n<evidence>"}`
+- batch 形状：`{"context":"共享背景，不替代逐项约束","tasks":[{"name":"<stable-name>","agent":"<copy-TODO-Agent>","task":"[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>]\n# Target\n<bounded target>\n# Constraints\n<direct constraints and allowed effects>\n# Acceptance\n<evidence>"}]}`
+- 每个 task 正文逐字复制全部直接用户约束且不添加约束示例，再携带允许效果与验收证据；outer context、name 或 label 不能替代逐项内容
 - `name` 是稳定子进程标识，`agent` 是运行类型，`task` 是完整 assignment；不要使用旧的 `role` 或 `assignment` 字段
 
 ## 思考模式 + 工具调用

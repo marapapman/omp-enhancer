@@ -10,15 +10,19 @@ Use this when the real task is mailbox work: triage, drafting, replying, sending
 
 This is not a generic writing skill. It is an operator workflow around the actual mail surface.
 
-## Skill Stack
+## Method Selection
 
-Pull these ECC-native skills into the workflow when relevant:
+Main selects supporting methods in the initial `WORKFLOW PLAN` when their Skills are visible. Later, Main loads a method only when an already loaded source explicitly reveals its exact same-namespace `skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI. This Skill provides domain guidance; it does not reroute the task, emit a replacement `WORKFLOW PLAN`, or auto-load another Skill.
 
-- `brand-voice` before drafting anything user-facing
-- `investor-outreach` for investor, partner, or sponsor-facing mail
-- `customer-billing-ops` when the thread is a billing/support incident rather than generic correspondence
-- `knowledge-ops` when the message or thread should be captured into durable context afterward
-- `research-ops` when a reply depends on fresh external facts
+## Candidate Methods
+
+This source explicitly reveals these exact same-namespace resources for selection under that boundary:
+
+- `skill://ecc-skill-catalog/brand-voice/SKILL.md` before drafting anything user-facing
+- `skill://ecc-skill-catalog/investor-outreach/SKILL.md` for investor, partner, or sponsor-facing mail
+- `skill://ecc-skill-catalog/customer-billing-ops/SKILL.md` when the thread is a billing/support incident rather than generic correspondence
+- `skill://ecc-skill-catalog/knowledge-ops/SKILL.md` when the message or thread should be captured into durable context afterward
+- `skill://ecc-skill-catalog/research-ops/SKILL.md` when a reply depends on fresh external facts
 
 ## When to Use
 
@@ -33,7 +37,7 @@ Pull these ECC-native skills into the workflow when relevant:
 - never claim a message was sent without a real Sent-folder or client-side confirmation
 - do not switch sender accounts casually; choose the account that matches the project and recipient
 - do not delete uncertain business mail during cleanup
-- if the task is really DM or iMessage work, hand off to `messages-ops`
+- for a DM- or iMessage-dominant request, `skill://ecc-skill-catalog/messages-ops/SKILL.md` is the applicable initial method
 
 ## Workflow
 
@@ -58,7 +62,7 @@ If creating a new outbound:
 
 - identify warmth level
 - select the correct channel and sender account
-- pull `brand-voice` before drafting
+- when Method Selection loaded `skill://ecc-skill-catalog/brand-voice/SKILL.md`, apply its voice profile before drafting
 
 ### 3. Draft, then verify
 

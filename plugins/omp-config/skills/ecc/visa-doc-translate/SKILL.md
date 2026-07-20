@@ -3,11 +3,17 @@ name: visa-doc-translate
 description: Translate visa application documents (images) to English and create a bilingual PDF with original and translation
 ---
 
+# Visa Document Translation
+
+## Runtime and authority boundary
+
+Treat target-specific paths, slash commands, hooks, routers, model tiers, SHIP, or auto-fix behavior in this Skill as guidance for an external target system or runtime only if the user explicitly requests that target. For the current OMP session, this Skill does not route, hook, command, gate, control, grant permission, or decide completion; inspection, planning, and read-only review authorize no mutation. Any installation, configuration, file write, command, network call, upload, publication, payment, mutation, or other external effect requires explicit user authorization for the exact target and effect plus current native permission. Preserve fail-closed safety rules inside authorized target work; target safety is not an OMP gate or completion condition.
+
 You are helping translate visa application documents for visa applications.
 
 ## Instructions
 
-When the user provides an image file path, AUTOMATICALLY execute the following steps WITHOUT asking for confirmation:
+A supplied image path identifies the candidate input; it does not authorize dependency installation, conversion or OCR commands, network transfer, or output writes. Start with read-only inspection when available. Before any mutating step, obtain explicit authorization for the intended output and exact effects, then follow current native permissions. Once that bounded pipeline is authorized, do not interrupt it with redundant confirmations unless scope or risk changes.
 
 1. **Image Conversion**: If the file is HEIC, convert it to PNG using `sips -s format png <input> --out <output>`
 
@@ -40,7 +46,7 @@ When the user provides an image file path, AUTOMATICALLY execute the following s
      - Title centered and bold
      - Content left-aligned with appropriate spacing
      - Professional layout suitable for official documents
-   - Add a note at the bottom: "This is a certified English translation of the original document"
+   - Add a note at the bottom: "Machine-assisted English translation; not independently certified"
    - Execute the script to generate the PDF
 
 6. **Output**: Create a PDF file named `<original_filename>_Translated.pdf` in the same directory
@@ -57,6 +63,8 @@ When the user provides an image file path, AUTOMATICALLY execute the following s
 - Other official documents
 
 ## Technical Implementation
+
+The commands below are reference options, not automatic installation instructions. Prefer already available tools; install a dependency only under the runtime and authority boundary above.
 
 ### OCR Methods (tried in order)
 
@@ -90,12 +98,13 @@ pip install pyobjc-framework-Vision pyobjc-framework-Quartz
 
 ## Important Guidelines
 
-- DO NOT ask for user confirmation at each step
-- Automatically determine the best rotation angle
+- Confirm the complete mutating pipeline once, then avoid repeated confirmation while its scope remains unchanged
+- Determine the best rotation angle within that authorized pipeline
 - Try multiple OCR methods if one fails
 - Ensure all numbers, dates, and amounts are accurately translated
 - Use clean, professional formatting
-- Complete the entire process and report the final PDF location
+- Clearly label generated output as machine-assisted and not independently certified
+- Complete only the authorized process and report the final PDF location
 
 ## Example Usage
 

@@ -27,6 +27,25 @@ limitations constrain the verdict: wording such as "does not establish",
 "scope or date unknown", "source unavailable", or "search incomplete" is
 incompatible with a definitive `SUPPORTED` or `CONTRADICTED` verdict.
 
+Audit the structured contract, not a bare alignment assertion. `claimTuple`
+uses `subject`, `basePredicate`, `objectValue`, `scope`, `timeVersion`, and
+`quantifier`, each with normalized `value` and `MATERIAL|NOT_APPLICABLE`.
+`evidenceTuple` repeats those fields and adds
+`ENTAILS|NEGATES|ADJACENT|UNKNOWN`; `NEGATES` requires
+`BASE_PREDICATE|OBJECT_VALUE` while its canonical value still names the same
+proposition. Strict support requires exact `ENTAILS / PROVEN`; strict
+contradiction requires exact `NEGATES / DISPROVED`. Missing tuples, different
+predicate/value, `ADJACENT`, `UNKNOWN`, `LIKELY`, or `HYPOTHESIS` fail closed.
+
+Preserve `limitation: NONE|NON_MATERIAL|MATERIAL` and `countercheck:
+NOT_REQUIRED|COMPLETED|INCONCLUSIVE|UNAVAILABLE` with its outcome. The
+countercheck is relative to the original claim. High-priority strict support
+requires `COMPLETED / NO_DISCONFIRMING_EVIDENCE`; any
+`DISCONFIRMING_EVIDENCE` defeats support and may corroborate a genuine
+same-tuple contradiction. A high-priority strict contradiction also requires a
+`COMPLETED` countercheck; either valid completed outcome remains evidence about
+the original claim and can coexist with independently established negation.
+
 Run the same check after the report is drafted. A catalog listing cannot prove
 release contents without a completeness and identity bridge. Absence can
 contradict existence only after an exhaustive, current, scope-aligned search.
@@ -49,12 +68,7 @@ Findings:
 Open items:
 - none, or exact missing evidence
 
-Optional skill summary:
-Recommended:
-- fact-checking
-- source-evaluation
-- citation-authenticity
-Loaded:
-- fact-checking
-- source-evaluation
-- citation-authenticity
+Skill trace: Copy only the exact Skill identifiers present in assignment
+metadata into a `Loaded:` section. If assignment metadata is unknown or says
+none, omit `Loaded:`. Never infer Skill availability or claim that a Skill was
+loaded merely because this prompt mentions it.

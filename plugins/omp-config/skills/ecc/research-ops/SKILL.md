@@ -6,13 +6,21 @@ origin: ECC
 
 # Research Ops
 
-Use this when the user asks to research something current, compare options, enrich people or companies, or turn repeated lookups into a monitored workflow.
+When this Skill is listed in a `writer` or `zh-writer` assignment, it is
+context only for that prose checkpoint. The writer consumes evidence already
+supplied by Main and returns a proposal; it does not search the web, invoke
+research tools, or issue independent research findings. Main or a separate
+selected research Agent owns the research checkpoint.
+
+Apply this method only after Main's visible `WORKFLOW PLAN` declares its exact Skill URI and Main loads it before `WORKFLOW READY`. This is a research method, not an orchestrator: it does not select, load, or dispatch any other Skill or Agent and never creates a second router.
+
+Use the method when the user asks to research something current, compare options, enrich people or companies, or turn repeated lookups into a monitored workflow.
 
 This is the operator wrapper around the repo's research stack. It is not a replacement for `deep-research`, `exa-search`, or `market-research`; it tells you when and how to use them together.
 
 ## Skill Stack
 
-Pull these ECC-native skills into the workflow when relevant:
+The following roles are compatibility hints, not instructions to load or dispatch anything. Apply a role only when Main already declared its exact URI, the current host exposes it, and it was loaded in the pre-READY resource batch:
 
 - `exa-search` for fast current-web discovery
 - `deep-research` for multi-source synthesis with citations
@@ -49,9 +57,9 @@ Normalize any supplied material into:
 
 Do not restart the analysis from zero if the user already built part of the model.
 
-### 2. Classify the ask
+### 2. Classify the research mode
 
-Choose the right lane before searching:
+Classify the evidence need before searching; this is not workflow, Skill, or Agent routing:
 
 - quick factual answer
 - comparison or decision memo
@@ -60,10 +68,12 @@ Choose the right lane before searching:
 
 ### 3. Take the lightest useful evidence path first
 
-- use `exa-search` for fast discovery
-- escalate to `deep-research` when synthesis or multiple sources matter
-- use `market-research` when the outcome should end in a recommendation
-- hand off to `lead-intelligence` when the real ask is target ranking or warm-path discovery
+Within the declared and loaded methods only:
+
+- apply `exa-search` for fast discovery
+- apply `deep-research` when synthesis or multiple sources matter
+- apply `market-research` when the outcome should end in a recommendation
+- apply `lead-intelligence` when the real ask is target ranking or warm-path discovery
 
 ### 4. Report with explicit evidence boundaries
 

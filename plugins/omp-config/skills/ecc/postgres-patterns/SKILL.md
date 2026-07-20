@@ -6,7 +6,11 @@ origin: ECC
 
 # PostgreSQL Patterns
 
-Quick reference for PostgreSQL best practices. For a detailed independent review, use `database.review` with the canonical `reviewer` and this skill.
+Quick reference for PostgreSQL best practices. For a detailed independent review, use `database.review` with its bounded `task` read-only audit role and this Skill; native `reviewer` remains reserved for an existing semantic diff or patch.
+
+## Authority Boundary
+
+The SQL, CLI, configuration, and client examples below are patterns, not authorization to connect to or mutate a live database. Authorization to edit repository migration or configuration files does not authorize applying those changes, opening a live connection, or running a live command. Any database side effect requires explicit user scope and the host's native permission path; otherwise keep work read-only or use a disposable environment.
 
 ## When to Activate
 
@@ -138,7 +142,7 @@ SELECT pg_reload_conf();
 
 ## Related
 
-- Workflow: `database.review` - Full read-only database review with canonical `reviewer`
+- Workflow: `database.review` - Full bounded `task` read-only audit; native `reviewer` remains reserved for an existing semantic diff or patch
 - Skill: `clickhouse-io` - ClickHouse analytics patterns
 - Skill: `backend-patterns` - API and backend patterns
 

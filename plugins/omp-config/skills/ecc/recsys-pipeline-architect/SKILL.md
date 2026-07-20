@@ -1,6 +1,6 @@
 ---
 name: recsys-pipeline-architect
-description: Design composable recommendation, ranking, and feed pipelines using the six-stage Source→Hydrator→Filter→Scorer→Selector→SideEffect framework popularized by xAI's open-sourced For You algorithm. Use this skill whenever the user is building any system that picks "the top K items for a (user, context)" — social feeds, content CMSs, RAG rerankers, task prioritizers, notification triage, search reranking, ad ranking.
+description: Design composable recommendation, ranking, and feed pipelines using the six-stage Source→Hydrator→Filter→Scorer→Selector→SideEffect framework popularized by xAI's open-sourced For You algorithm. Use for a requested top-K recommendation, feed, RAG reranking, prioritization, notification-triage, search-reranking, or ad-ranking pipeline design or scaffold.
 origin: community
 ---
 
@@ -9,6 +9,17 @@ origin: community
 A spec-and-scaffold skill for building composable recommendation, ranking, and feed pipelines. It encodes the **six-stage pattern** — Source → Hydrator → Filter → Scorer → Selector → SideEffect — popularized by xAI's open-sourced [For You algorithm](https://github.com/xai-org/x-algorithm) (Apache 2.0). This skill is an independent reimplementation of the pattern (MIT) — no code copied from the original.
 
 Upstream: <https://github.com/mturac/recsys-pipeline-architect>
+
+## Current OMP authority and effects
+
+This Skill supplies a pipeline-design and scaffolding method; it grants no
+installation, file, command, network, deployment, or production-runtime
+authority. Scaffold writes and runtime cache, event, counter, or analytics side
+effects are target-design examples, not current-session actions. Installation,
+scaffold or test-file writes, commands, network or API calls, deployment, and
+runtime side effects each require explicit user authorization for the exact
+target and effect plus current native permission. A read-only request returns a
+design or proposed scaffold in the response.
 
 ## When to Use
 
@@ -55,8 +66,8 @@ Walk the user through these eight steps:
 4. **List the filters**: duplicate, self, age, block/mute, previously-served, eligibility. Order matters — cheap before expensive.
 5. **Design the scorer chain**: primary (ML) → combiner (multi-action with weights) → diversity → business rules
 6. **Selector**: sort descending by final score, take top K (or stratified mix for in-network/out-of-network)
-7. **SideEffects**: cache served IDs, emit impression events, update counters, log analytics — all fire-and-forget
-8. **Generate the scaffold** in the user's stack
+7. **SideEffects**: design cache, impression-event, counter, and analytics behavior as non-blocking target-system work; do not operate it from this guidance
+8. **Produce the scaffold** in the authorized delivery mode: write only an explicitly authorized target, otherwise return a proposed scaffold
 
 ## Key trade-offs to surface (don't default silently)
 
@@ -111,4 +122,6 @@ The upstream repository at <https://github.com/mturac/recsys-pipeline-architect>
 - v0.1.0 release tagged
 - MIT license; pattern attributed to xAI X For You algorithm (Apache 2.0)
 
-Install via skills.sh: `npx skills add mturac/recsys-pipeline-architect`
+Upstream installation reference: `npx skills add mturac/recsys-pipeline-architect`.
+Do not run it unless the exact installation and network effects are authorized
+and native permission is available.

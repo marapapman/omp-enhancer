@@ -10,15 +10,19 @@ Use this when the user wants to understand money, pricing, refunds, team-seat lo
 
 This is broader than `customer-billing-ops`. That skill is for customer remediation. This skill is for operator truth: revenue state, pricing decisions, team billing, and code-backed billing behavior.
 
-## Skill Stack
+## Method Selection
 
-Pull these ECC-native skills into the workflow when relevant:
+Main selects supporting methods in the initial `WORKFLOW PLAN` when their Skills are visible. Later, Main loads a method only when an already loaded source explicitly reveals its exact same-namespace `skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI. This Skill provides domain guidance; it does not reroute the task, emit a replacement `WORKFLOW PLAN`, or auto-load another Skill.
 
-- `customer-billing-ops` for customer-specific remediation and follow-up
-- `research-ops` when competitor pricing or current market evidence matters
-- `market-research` when the answer should end in a pricing recommendation
-- `github-ops` when the billing truth depends on code, backlog, or release state in sibling repos
-- `verification-loop` when the answer depends on proving checkout, seat handling, or entitlement behavior
+## Candidate Methods
+
+This source explicitly reveals these exact same-namespace resources for selection under that boundary:
+
+- `skill://ecc-skill-catalog/customer-billing-ops/SKILL.md` for customer-specific remediation and follow-up
+- `skill://ecc-skill-catalog/research-ops/SKILL.md` when competitor pricing or current market evidence matters
+- `skill://ecc-skill-catalog/market-research/SKILL.md` when the answer should end in a pricing recommendation
+- `skill://ecc-skill-catalog/github-ops/SKILL.md` when the billing truth depends on code, backlog, or release state in sibling repos
+- `skill://ecc-skill-catalog/verification-loop/SKILL.md` when the answer depends on proving checkout, seat handling, or entitlement behavior
 
 ## When to Use
 

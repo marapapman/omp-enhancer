@@ -8,6 +8,23 @@ origin: ECC
 
 Canonical weighted graph-ranking layer for network-aware outreach.
 
+## Workflow composition boundary
+
+Main selects supporting Skills in the initial `WORKFLOW PLAN` when they are
+visible. This Skill does not select or auto-load another Skill, reroute the
+workflow, or emit a replacement plan after `WORKFLOW READY`.
+
+If this already-loaded guide reveals a needed method that was not visible before
+PLAN, the remaining linked-method batch may read only a matching exact
+same-namespace URI listed here:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/social-graph-ranker/SKILL.md | reads=<only-needed-exact-URI-or-URIs-listed-below>`
+
+- `skill://ecc-skill-catalog/lead-intelligence/SKILL.md`
+- `skill://ecc-skill-catalog/connections-optimizer/SKILL.md`
+- `skill://ecc-skill-catalog/brand-voice/SKILL.md`
+- `skill://ecc-skill-catalog/x-api/SKILL.md`
+
 Use this when the user needs to:
 
 - rank existing mutuals or connections by intro value
@@ -25,10 +42,11 @@ Choose this skill when the user primarily wants the ranking engine:
 - "map my graph against this ICP"
 - "show me the bridge math"
 
-Do not use this by itself when the user really wants:
+This method is insufficient by itself for the following scopes; Main should
+select the matching candidate during PLAN when it is visible:
 
-- full lead generation and outbound sequencing -> use `lead-intelligence`
-- pruning, rebalancing, and growing the network -> use `connections-optimizer`
+- full lead generation and outbound sequencing -> `lead-intelligence`
+- pruning, rebalancing, and growing the network -> `connections-optimizer`
 
 ## Inputs
 
@@ -148,7 +166,7 @@ No Warm Path
 
 ## Related Skills
 
-- `lead-intelligence` uses this ranking model inside the broader target-discovery and outreach pipeline
-- `connections-optimizer` uses the same bridge logic when deciding who to keep, prune, or add
-- `brand-voice` should run before drafting any intro request or direct outreach
-- `x-api` provides X graph access and optional execution paths
+- A committed `lead-intelligence` candidate may use this ranking model inside the broader target-discovery and outreach pipeline.
+- A committed `connections-optimizer` candidate may use the same bridge logic when deciding who to keep, prune, or add.
+- Reuse a `brand-voice` profile before drafting only when that candidate was selected and loaded under the composition boundary.
+- A committed `x-api` candidate can provide X graph access; any execution path remains separately authorized.

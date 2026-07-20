@@ -5,6 +5,11 @@ description: "Pre-submission checklist — verify all formatting, citations, fig
 
 # Format Submission Precheck
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or an explicitly capable generic
+`task` owns authorized effects.
+
 Checklist-based pre-submission review. Run all 8 checks, report PASS/FAIL per item with specific issues.
 
 ## Checks

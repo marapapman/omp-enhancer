@@ -1,6 +1,6 @@
 # Use Cases
 
-Common workflows and what VideoDB enables. For code details, see [api-reference.md](api-reference.md), [capture.md](capture.md), [editor.md](editor.md), and [search.md](search.md).
+Common workflows and what VideoDB enables. For code details, see [api-reference.md](skill://ecc-skill-catalog/videodb/reference/api-reference.md), [capture.md](skill://ecc-skill-catalog/videodb/reference/capture.md), [editor.md](skill://ecc-skill-catalog/videodb/reference/editor.md), and [search.md](skill://ecc-skill-catalog/videodb/reference/search.md).
 
 ---
 

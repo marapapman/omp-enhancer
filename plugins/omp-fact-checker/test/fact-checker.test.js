@@ -28,6 +28,60 @@ const configAgent = (name) => readFileSync(
   'utf8',
 );
 
+const tupleField = (value, materiality = 'MATERIAL') => ({ value, materiality });
+
+function exactClaimTuple(overrides = {}) {
+  return {
+    subject: tupleField('Atlas method'),
+    basePredicate: tupleField('improves accuracy by'),
+    objectValue: tupleField('12%'),
+    scope: tupleField('benchmark X'),
+    timeVersion: tupleField('version 2.0'),
+    quantifier: tupleField('exactly'),
+    ...overrides,
+  };
+}
+
+function exactEvidenceTuple({ relation = 'ENTAILS', negatedField, ...overrides } = {}) {
+  return {
+    ...exactClaimTuple(overrides),
+    relation,
+    ...(negatedField ? { negatedField } : {}),
+  };
+}
+
+function exactClaim(overrides = {}) {
+  return {
+    id: 'FC-001',
+    text: 'Atlas method improves accuracy by exactly 12% on benchmark X in version 2.0.',
+    priority: 'low',
+    evidencePlan: ['primary source', 'independent secondary source'],
+    freshnessRequirement: 'NOT_APPLICABLE',
+    claimTuple: exactClaimTuple(),
+    ...overrides,
+  };
+}
+
+function exactEvidence(lane, overrides = {}) {
+  return {
+    claimId: 'FC-001',
+    lane,
+    provider: lane === 'A' ? 'primary-study' : 'independent-review',
+    status: 'SUPPORTED',
+    source: `${lane.toLowerCase()}.md`,
+    quote: 'Atlas method improves accuracy by exactly 12% on benchmark X in version 2.0.',
+    evidenceType: lane === 'A' ? 'table' : 'passage',
+    freshness: 'NOT_APPLICABLE',
+    requirementsMet: true,
+    sourceLineage: `lineage-${lane}`,
+    evidenceTuple: exactEvidenceTuple(),
+    strength: 'PROVEN',
+    limitation: { level: 'NONE', reason: '' },
+    countercheck: { status: 'NOT_REQUIRED', outcome: 'NOT_APPLICABLE', note: '' },
+    ...overrides,
+  };
+}
+
 class FakeOmp {
   constructor() {
     this.tools = new Map();
@@ -128,6 +182,32 @@ test('fact-check skills prescribe one bounded local pass without automatic lane 
   assert.doesNotMatch(workflow, /FACT_EVIDENCE_B or CROSS_CHECK_DEGRADED/);
 });
 
+test('fact-checking Skill metadata identifies a domain method rather than a workflow ID', () => {
+  const frontmatter = factSkill('fact-checking').split('---')[1];
+
+  assert.match(frontmatter, /description:\s*Domain method/i);
+  assert.match(frontmatter, /factcheck\.document/i);
+  assert.match(frontmatter, /not a workflow ID/i);
+  assert.doesNotMatch(frontmatter, /Primary workflow/i);
+});
+
+test('fact-checking Skills remain evidence context inside language-writer assignments', () => {
+  for (const name of [
+    'fact-checking',
+    'claim-extraction',
+    'source-evaluation',
+    'citation-authenticity',
+  ]) {
+    const skill = factSkill(name);
+
+    assert.match(
+      skill,
+      /When this Skill is listed in a `writer` or `zh-writer` assignment[\s\S]*consumes fact\s+findings already supplied by Main[\s\S]*does not run this\s+fact-checking method, invoke Fact Checker tools, collect evidence, or issue a\s+verdict[\s\S]*Main or a separate selected fact Agent owns the fact-check checkpoint/iu,
+      `${name}: fact actor guard`,
+    );
+  }
+});
+
 test('fact researchers treat scholarly metadata as discovery rather than claim support', () => {
   for (const name of ['fact-researcher-a', 'fact-researcher-b']) {
     const agent = factAgent(name);
@@ -165,6 +245,36 @@ test('fact agents declare canonical OMP search tools', () => {
       .filter(Boolean);
     assert.deepEqual(tools, expected);
   }
+});
+
+test('fact agents report only assignment-provided loaded Skill metadata', () => {
+  const names = [
+    'fact-planner',
+    'fact-researcher-a',
+    'fact-researcher-b',
+    'fact-cross-checker',
+    'fact-reviewer',
+  ];
+
+  for (const name of names) {
+    const agent = factAgent(name);
+    assert.match(agent, /copy only.*assignment metadata.*Loaded/is);
+    assert.match(agent, /unknown.*omit `Loaded:`/is);
+    assert.doesNotMatch(agent, /^Loaded:\s*\n\s*-\s+\S+/m);
+  }
+});
+
+test('fact lane prompts make A the first bounded lane and keep B conditional', () => {
+  const planner = factAgent('fact-planner');
+  const researcherA = factAgent('fact-researcher-a');
+  const researcherB = factAgent('fact-researcher-b');
+  const crossChecker = factAgent('fact-cross-checker');
+
+  assert.match(planner, /lane A.*first bounded evidence lane/is);
+  assert.match(researcherA, /first bounded evidence lane/i);
+  assert.match(researcherB, /only.*broad.*high-risk.*explicit.*cross-check/is);
+  assert.match(crossChecker, /FACT_EVIDENCE_B.*optional/is);
+  assert.match(crossChecker, /missing.*FACT_EVIDENCE_B.*PARTIAL.*gap/is);
 });
 
 test('fact package excludes development tests from published files', () => {
@@ -205,6 +315,9 @@ test('fact-checking resources require exact claim entailment and verdict-limitat
   assert.match(workflow, /catalog lists.*release has.*INSUFFICIENT/is);
   assert.match(workflow, /absence.*exhaustive.*current.*INSUFFICIENT/is);
   assert.match(workflow, /final consistency.*downgrade/is);
+  assert.match(workflow, /claimTuple.*basePredicate.*objectValue.*timeVersion/is);
+  assert.match(workflow, /evidenceTuple.*ENTAILS.*NEGATES.*ADJACENT.*UNKNOWN/is);
+  assert.match(workflow, /COMPLETED.*NO_DISCONFIRMING_EVIDENCE/is);
   assert.match(sources, /weaker|adjacent/i);
   assert.match(sources, /INSUFFICIENT|LOCAL_UNVERIFIED/);
   assert.match(sources, /absence.*exhaustive.*current/is);
@@ -221,10 +334,15 @@ test('fact-checking agents use an evidence ladder, bounded disconfirmation, and 
   assert.match(researchers, /high-impact.*(?:cheapest|lowest-cost|low-cost).*disconfirm/is);
   assert.match(researchers, /one.*(?:countercheck|counter-check|disconfirm)/is);
   assert.match(crossChecker, /subject.*predicate.*object.*scope.*time.*quantifier/is);
+  assert.match(planner, /claimTuple.*basePredicate.*objectValue.*timeVersion/is);
+  assert.match(researchers, /evidenceTuple.*ENTAILS.*NEGATES.*ADJACENT.*UNKNOWN/is);
+  assert.match(researchers, /limitation.*NONE.*NON_MATERIAL.*MATERIAL/is);
+  assert.match(researchers, /countercheck.*NOT_REQUIRED.*COMPLETED.*INCONCLUSIVE.*UNAVAILABLE/is);
   assert.match(reviewer, /limitations?.*verdict/is);
   assert.match(reviewer, /(?:Main|parent).*(?:must not|cannot).*upgrade.*(?:confidence|evidence level).*new evidence/is);
   assert.match(reviewer, /zero findings.*valid/is);
   assert.doesNotMatch(researchers, /(?:at least|minimum of)\s+\d+\s+(?:issues|findings|defects)/i);
+  assert.doesNotMatch(researchers, /^\s+alignment:/m);
 });
 
 test('the specialized security reviewer preserves bounded evidence confidence', () => {
@@ -247,6 +365,46 @@ test('buildFactCheckPlan extracts prioritized factual claims', () => {
   assert.equal(plan.claims[0].category, 'date');
   assert.equal(plan.claims[1].category, 'numeric');
   assert.deepEqual(plan.requiredStages.includes('fact-cross-checker'), true);
+});
+
+test('fact plans always start evidence with bounded lane A and add B only for broad or high-risk scope', () => {
+  const lowRisk = buildFactCheckPlan({ text: 'The company was founded in 2020.' });
+  assert.deepEqual(lowRisk.requiredStages, [
+    'fact-planner',
+    'fact-researcher-a',
+    'fact-cross-checker',
+    'fact-reviewer',
+  ]);
+  assert.equal(lowRisk.requiredStages.includes('main-agent evidence pass'), false);
+
+  const broad = buildFactCheckPlan({
+    text: 'The first value is 1. The second value is 2. The third value is 3.',
+  });
+  assert.ok(broad.requiredStages.indexOf('fact-researcher-a') < broad.requiredStages.indexOf('fact-researcher-b'));
+
+  const explicit = buildFactCheckPlan({
+    text: 'The company was founded in 2020.',
+    crossCheckRequested: true,
+  });
+  assert.ok(explicit.requiredStages.includes('fact-researcher-b'));
+});
+
+test('cross-check records a partial result and explicit gap when optional lane B is absent', () => {
+  const claim = { id: 'FC-001', text: 'The company was founded in 2020.' };
+  const result = crossCheckEvidence({
+    claims: [claim],
+    evidenceRecords: [{
+      claimId: claim.id,
+      lane: 'A',
+      status: 'SUPPORTED',
+      source: 'official history',
+      quote: 'Founded in 2020.',
+    }],
+  });
+
+  assert.equal(result[0].status, 'PARTIAL');
+  assert.equal(result[0].laneB, 'INSUFFICIENT');
+  assert.deepEqual(result[0].gaps, ['FACT_EVIDENCE_B not supplied']);
 });
 
 test('buildFactCheckPlan computes risk from the untruncated text', () => {
@@ -823,34 +981,25 @@ test('provider outage remains unresolved and cannot become strict support', asyn
 });
 
 test('strict claim verdict fails closed without changing compatibility verdicts', () => {
-  const claim = {
-    id: 'FC-001',
+  const claim = exactClaim({
     text: 'The method improves accuracy by 12%.',
     evidencePlan: ['primary source', 'independent secondary source'],
-  };
+  });
   const currentPassages = [
-    {
-      claimId: claim.id,
-      lane: 'A',
+    exactEvidence('A', {
       provider: 'primary-study',
-      status: 'SUPPORTED',
       source: 'https://example.test/study',
       quote: 'Accuracy improved by 12%.',
       evidenceType: 'table',
       freshness: 'CURRENT',
-      requirementsMet: true,
-    },
-    {
-      claimId: claim.id,
-      lane: 'B',
+    }),
+    exactEvidence('B', {
       provider: 'independent-review',
-      status: 'SUPPORTED',
       source: 'https://independent.test/review',
       quote: 'The reported gain is 12%.',
       evidenceType: 'passage',
       freshness: 'CURRENT',
-      requirementsMet: true,
-    },
+    }),
   ];
 
   assert.equal(strictClaimVerdict({
@@ -942,17 +1091,271 @@ test('strict claim verdict fails closed without changing compatibility verdicts'
   assert.equal(compatibilityReport.results[0].strictVerdict, 'INSUFFICIENT');
 });
 
-function fakeZod() {
-  const chain = {
-    optional: () => chain,
+test('strict verdict derives exact tuple entailment and negation instead of trusting caller status', () => {
+  const claim = exactClaim();
+  const entailing = [exactEvidence('A'), exactEvidence('B')];
+
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: entailing,
+    crossCheck: { status: 'AGREED' },
+  }), 'SUPPORTED');
+  assert.equal(strictClaimVerdict({
+    claim: { ...claim, claimTuple: undefined },
+    evidenceRecords: entailing,
+    crossCheck: { status: 'AGREED' },
+  }), 'INSUFFICIENT');
+
+  const unrelated = entailing.map((record) => ({
+    ...record,
+    evidenceTuple: exactEvidenceTuple({
+      subject: tupleField('Unrelated method'),
+      objectValue: tupleField('3%'),
+    }),
+  }));
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: unrelated,
+    crossCheck: { status: 'AGREED' },
+  }), 'INSUFFICIENT');
+
+  const compatibilityReport = buildFactCheckReport({
+    claims: [claim],
+    evidenceRecords: unrelated,
+    crossChecks: [{
+      claimId: claim.id,
+      status: 'AGREED',
+      laneA: 'SUPPORTED',
+      laneB: 'SUPPORTED',
+      conflicts: [],
+    }],
+  });
+  assert.equal(compatibilityReport.results[0].verdict, 'SUPPORTED');
+  assert.equal(compatibilityReport.results[0].strictVerdict, 'INSUFFICIENT');
+
+  for (const evidenceRecords of [
+    entailing.map(({ evidenceTuple: _tuple, ...record }) => ({ ...record, aligned: true })),
+    entailing.map((record) => ({ ...record, evidenceTuple: exactEvidenceTuple({ relation: 'UNKNOWN' }) })),
+    entailing.map((record) => ({ ...record, evidenceTuple: exactEvidenceTuple({ relation: 'ADJACENT' }) })),
+    entailing.map((record) => ({
+      ...record,
+      evidenceTuple: exactEvidenceTuple({ objectValue: tupleField('8%') }),
+    })),
+    entailing.map((record) => ({ ...record, strength: 'LIKELY' })),
+    entailing.map((record) => ({ ...record, strength: 'HYPOTHESIS' })),
+    entailing.map((record) => ({
+      ...record,
+      limitation: { level: 'MATERIAL', reason: 'Scope is unresolved.' },
+    })),
+  ]) {
+    assert.equal(strictClaimVerdict({
+      claim,
+      evidenceRecords,
+      crossCheck: { status: 'AGREED' },
+    }), 'INSUFFICIENT');
+  }
+
+  const contradicted = exactEvidence('A', {
+    status: 'CONTRADICTED',
+    evidenceTuple: exactEvidenceTuple({ relation: 'NEGATES', negatedField: 'OBJECT_VALUE' }),
+    strength: 'DISPROVED',
+  });
+  assert.equal(strictClaimVerdict({ claim, evidenceRecords: [contradicted] }), 'CONTRADICTED');
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: [{
+      ...contradicted,
+      evidenceTuple: exactEvidenceTuple({ relation: 'NEGATES', negatedField: 'BASE_PREDICATE' }),
+    }],
+  }), 'CONTRADICTED');
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: [{
+      ...contradicted,
+      evidenceTuple: exactEvidenceTuple({
+        relation: 'NEGATES',
+        negatedField: 'BASE_PREDICATE',
+        basePredicate: tupleField('reduces error by'),
+      }),
+    }],
+  }), 'INSUFFICIENT');
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: [{ ...contradicted, evidenceTuple: exactEvidenceTuple({ relation: 'NEGATES' }) }],
+  }), 'INSUFFICIENT');
+});
+
+test('high-priority strict support requires a completed non-disconfirming countercheck', () => {
+  const claim = exactClaim({ priority: 'high' });
+  const supported = [exactEvidence('A'), exactEvidence('B')];
+
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: supported.map((record) => ({
+      ...record,
+      countercheck: { status: 'COMPLETED', outcome: 'NO_DISCONFIRMING_EVIDENCE', note: 'Checked current source.' },
+    })),
+    crossCheck: { status: 'AGREED' },
+  }), 'SUPPORTED');
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: supported.map((record) => ({
+      ...record,
+      countercheck: { status: 'UNAVAILABLE', outcome: 'NO_RESULT', note: 'Source unavailable.' },
+    })),
+    crossCheck: { status: 'AGREED' },
+  }), 'INSUFFICIENT');
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: supported.map((record) => ({
+      ...record,
+      countercheck: { status: 'COMPLETED', outcome: 'DISCONFIRMING_EVIDENCE', note: 'Found a defeating caller.' },
+    })),
+    crossCheck: { status: 'AGREED' },
+  }), 'INSUFFICIENT');
+});
+
+test('high-priority strict contradiction requires a completed countercheck', () => {
+  const claim = exactClaim({ priority: 'high' });
+  const contradicted = exactEvidence('A', {
+    status: 'CONTRADICTED',
+    evidenceTuple: exactEvidenceTuple({ relation: 'NEGATES', negatedField: 'OBJECT_VALUE' }),
+    strength: 'DISPROVED',
+  });
+
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: [{ ...contradicted, countercheck: undefined }],
+  }), 'INSUFFICIENT');
+  assert.equal(strictClaimVerdict({
+    claim,
+    evidenceRecords: [{
+      ...contradicted,
+      countercheck: { status: 'UNAVAILABLE', outcome: 'NO_RESULT', note: 'No authorized probe.' },
+    }],
+  }), 'INSUFFICIENT');
+  for (const outcome of ['DISCONFIRMING_EVIDENCE', 'NO_DISCONFIRMING_EVIDENCE']) {
+    assert.equal(strictClaimVerdict({
+      claim,
+      evidenceRecords: [{
+        ...contradicted,
+        countercheck: { status: 'COMPLETED', outcome, note: 'Checked the original claim.' },
+      }],
+    }), 'CONTRADICTED');
+  }
+});
+
+test('fact tools expose and round-trip the structured tuple assessment contract', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const evidenceParameters = omp.tools.get('fact_check_evidence').parameters;
+  const claimShape = evidenceParameters.shape.claims.item.shape;
+  const evidenceShape = evidenceParameters.shape.evidenceRecords.item.shape;
+  assert.ok(claimShape.claimTuple.shape.basePredicate);
+  assert.ok(claimShape.claimTuple.shape.objectValue);
+  assert.ok(evidenceShape.evidenceTuple.shape.relation);
+  assert.ok(evidenceShape.evidenceTuple.shape.negatedField);
+  assert.ok(evidenceShape.strength);
+  assert.ok(evidenceShape.limitation.shape.level);
+  assert.ok(evidenceShape.countercheck.shape.status);
+  assert.equal('aligned' in evidenceShape, false);
+
+  const claim = exactClaim();
+  const record = exactEvidence('A');
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+  const evidence = await omp.tools.get('fact_check_evidence').execute(
+    'structured-evidence', {
+      claims: [claim],
+      lane: 'A',
+      allowNetwork: false,
+      evidenceRecords: [record],
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(evidence.isError, false);
+  assert.deepEqual(evidence.details.records[0].evidenceTuple, record.evidenceTuple);
+  assert.equal(evidence.details.records[0].strength, 'PROVEN');
+  assert.deepEqual(evidence.details.records[0].limitation, record.limitation);
+  assert.deepEqual(evidence.details.records[0].countercheck, record.countercheck);
+  assert.match(evidence.content[0].text, /relation: ENTAILS/);
+  assert.match(evidence.content[0].text, /evidence-strength: PROVEN/);
+  assert.match(evidence.content[0].text, /limitation: NONE/);
+  assert.match(evidence.content[0].text, /countercheck: NOT_REQUIRED\/NOT_APPLICABLE/);
+
+  const invalidCountercheck = await omp.tools.get('fact_check_evidence').execute(
+    'invalid-countercheck', {
+      claims: [claim],
+      lane: 'A',
+      allowNetwork: false,
+      evidenceRecords: [{
+        ...record,
+        countercheck: { status: 'COMPLETED', outcome: 'NO_RESULT' },
+      }],
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(invalidCountercheck.isError, true);
+
+  const report = await omp.tools.get('fact_check_report').execute(
+    'structured-report', {
+      claims: [claim],
+      evidenceRecords: [record],
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(report.isError, false);
+  assert.deepEqual(report.details.results[0].claimTuple, claim.claimTuple);
+  assert.deepEqual(report.details.results[0].evidence[0].evidenceTuple, record.evidenceTuple);
+  assert.equal(report.details.results[0].evidence[0].strength, 'PROVEN');
+  assert.match(report.content[0].text, /claim-tuple:/);
+  assert.match(report.content[0].text, /ENTAILS\/PROVEN/);
+});
+
+test('session telemetry compares tuple and assessment fields while accepting claim enrichment', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+  const analyzed = await omp.tools.get('fact_check_analyze').execute(
+    'tuple-plan', { text: exactClaim().text }, undefined, undefined, ctx,
+  );
+  const claim = {
+    ...analyzed.details.claims[0],
+    claimTuple: exactClaimTuple(),
   };
+  const record = exactEvidence('A');
+  const evidence = await omp.tools.get('fact_check_evidence').execute(
+    'tuple-evidence', {
+      claims: [claim],
+      lane: 'A',
+      allowNetwork: false,
+      evidenceRecords: [record],
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(evidence.isError, false);
+  assert.ok(evidence.details.warnings.some((warning) => /claims differ/i.test(warning)));
+
+  const report = await omp.tools.get('fact_check_report').execute(
+    'assessment-drift', {
+      claims: [claim],
+      evidenceRecords: evidence.details.records.map((item) => ({ ...item, strength: 'LIKELY' })),
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(report.isError, false);
+  assert.ok(report.details.warnings.some((warning) => /evidence differs/i.test(warning)));
+});
+
+function fakeZod() {
+  const schema = (kind, fields = {}) => ({
+    kind,
+    ...fields,
+    optional() {
+      return { ...this, isOptional: true };
+    },
+  });
   return {
-    string: () => chain,
-    number: () => chain,
-    boolean: () => chain,
-    any: () => chain,
-    enum: () => chain,
-    array: () => chain,
-    object: () => chain,
+    string: () => schema('string'),
+    number: () => schema('number'),
+    boolean: () => schema('boolean'),
+    any: () => schema('any'),
+    enum: (values) => schema('enum', { values }),
+    array: (item) => schema('array', { item }),
+    object: (shape) => schema('object', { shape }),
   };
 }

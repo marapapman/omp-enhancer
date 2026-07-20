@@ -271,7 +271,7 @@ stream_url = timeline.generate_stream()
 print(f"Stream: {stream_url}")
 ```
 
-For more streaming options (segment streams, search-to-stream, audio playback), see [streaming.md](streaming.md).
+For more streaming options (segment streams, search-to-stream, audio playback), see [streaming.md](skill://ecc-skill-catalog/videodb/reference/streaming.md).
 
 ## Complete Workflow Examples
 

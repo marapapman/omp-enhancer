@@ -8,6 +8,19 @@ origin: ECC
 
 Suggests manual `/compact` at strategic points in your workflow rather than relying on arbitrary auto-compaction.
 
+This is a target-runtime guide. Invoke `/compact` or install the illustrated Claude hook only when the current host exposes that command or hook schema and the user has authorized the named configuration change. It does not authorize editing host settings, installing hooks, assuming persistence semantics, or replacing the current host's native TODO and lifecycle contracts.
+
+## OMP Composition Boundary
+
+Main owns cross-Skill composition: it selects every supporting workflow and Skill
+in the initial `WORKFLOW PLAN` and loads each declared Skill before
+`WORKFLOW READY`. After load, this loaded Skill does not reselect, reroute,
+auto-load, or hand off to another Skill. It does not replace the parent TODO or
+Main's Agent choice. An exact same-namespace
+`skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI explicitly exposed here may be
+read in one `RESOURCE EXTENSION` before `COMMIT`; cross-namespace candidates
+remain initial-PLAN only.
+
 ## When to Activate
 
 - Running long sessions that approach context limits (200K+ tokens)
@@ -69,7 +82,7 @@ Use this table to decide when to compact:
 | Phase Transition | Compact? | Why |
 |-----------------|----------|-----|
 | Research → Planning | Yes | Research context is bulky; plan is the distilled output |
-| Planning → Implementation | Yes | Plan is in TodoWrite or a file; free up context for code |
+| Planning → Implementation | Yes | Plan is in the host's native TODO when exposed or in a file; free up context for code |
 | Implementation → Testing | Maybe | Keep if tests reference recent code; compact if switching focus |
 | Debugging → Next feature | Yes | Debug traces pollute context for unrelated work |
 | Mid-implementation | No | Losing variable names, file paths, and partial state is costly |
@@ -82,14 +95,14 @@ Understanding what persists helps you compact with confidence:
 | Persists | Lost |
 |----------|------|
 | CLAUDE.md instructions | Intermediate reasoning and analysis |
-| TodoWrite task list | File contents you previously read |
+| Native TODO state, only when the current host documents it as persistent | File contents you previously read |
 | Memory files (`~/.claude/memory/`) | Multi-step conversation context |
 | Git state (commits, branches) | Tool call history and counts |
 | Files on disk | Nuanced user preferences stated verbally |
 
 ## Best Practices
 
-1. **Compact after planning** — Once plan is finalized in TodoWrite, compact to start fresh
+1. **Compact after planning** — Once the plan is finalized in native TODO when exposed or in a file, compact to start fresh
 2. **Compact after debugging** — Clear error-resolution context before continuing
 3. **Don't compact mid-implementation** — Preserve context for related changes
 4. **Read the suggestion** — The hook tells you *when*, you decide *if*
@@ -99,13 +112,16 @@ Understanding what persists helps you compact with confidence:
 ## Token Optimization Patterns
 
 ### Trigger-Table Lazy Loading
-Instead of loading full skill content at session start, use a trigger table that maps keywords to skill paths. Skills load only when triggered, reducing baseline context by 50%+:
+This is an external target-runtime design example for a system that owns its own
+router. It does not trigger or load a current OMP Skill, reopen the committed
+plan, or override native discovery. A target system can reduce baseline context
+by mapping its own metadata signals to its own catalog entries:
 
-| Trigger | Skill | Load When |
-|---------|-------|-----------|
-| "test", "tdd", "coverage" | tdd-workflow | User mentions testing |
-| "security", "auth", "xss" | security-review | Security-related work |
-| "deploy", "ci/cd" | deployment-patterns | Deployment context |
+| Illustrative signal | Non-routing catalog candidate | Target-system condition |
+|---------------------|-------------------------------|-------------------------|
+| "test", "tdd", "coverage" | `skill://ecc-skill-catalog/tdd-workflow/SKILL.md` | Target system identifies testing scope |
+| "security", "auth", "xss" | `skill://ecc-skill-catalog/security-review/SKILL.md` | Target system identifies security scope |
+| "deploy", "ci/cd" | `skill://ecc-skill-catalog/deployment-patterns/SKILL.md` | Target system identifies deployment scope |
 
 ### Context Composition Awareness
 Monitor what's consuming your context window:
@@ -128,4 +144,5 @@ Common sources of duplicate context:
 
 - [The Longform Guide](https://x.com/affaanmustafa/status/2014040193557471352) — Token optimization section
 - Memory persistence hooks — For state that survives compaction
-- `continuous-learning` skill — Extracts patterns before session ends
+- Non-routing PLAN candidate for pattern extraction:
+  `skill://ecc-skill-catalog/continuous-learning-v2/SKILL.md`

@@ -1,11 +1,14 @@
 ---
 name: skill-comply
-description: Visualize whether skills, rules, and agent definitions are actually followed — auto-generates scenarios at 3 prompt strictness levels, runs agents, classifies behavioral sequences, and reports compliance rates with full tool call timelines
+description: Design and review compliance evaluations for Skill, rule, and Agent definitions, including scenarios, behavioral sequences, classifications, and evidence reports. Use when the user asks to measure or analyze instruction-following behavior.
 origin: ECC
-tools: Read, Bash
 ---
 
 # skill-comply: Automated Compliance Measurement
+
+## Runtime and authority boundary
+
+Treat target-specific paths, slash commands, hooks, routers, model tiers, SHIP, or auto-fix behavior in this Skill as guidance for an external target system or runtime only if the user explicitly requests that target. For the current OMP session, this Skill does not route, hook, command, gate, control, grant permission, or decide completion; inspection, planning, and read-only review authorize no mutation. Any installation, configuration, file write, command, network call, upload, publication, payment, mutation, or other external effect requires explicit user authorization for the exact target and effect plus current native permission. Preserve fail-closed safety rules inside authorized target work; target safety is not an OMP gate or completion condition.
 
 Measures whether coding agents actually follow skills, rules, or agent definitions by:
 1. Auto-generating expected behavioral sequences (specs) from any .md file

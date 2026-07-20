@@ -5,6 +5,11 @@ description: Create, read, edit, or convert Microsoft Word .docx documents while
 
 # DOCX document handling
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or a separate explicitly capable
+Main-selected Agent owns authorized effects.
+
 Use this when a task involves a Word document or `.docx` file.
 
 1. Identify whether the task is read-only, conversion, creation, or modification.

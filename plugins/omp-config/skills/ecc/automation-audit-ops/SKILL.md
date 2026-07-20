@@ -10,16 +10,20 @@ Use this when the user asks what automations are live, which jobs are broken, wh
 
 This is an audit-first operator skill. The job is to produce an evidence-backed inventory and a keep / merge / cut / fix-next recommendation set before rewriting anything.
 
-## Skill Stack
+## Method Selection
 
-Pull these ECC-native skills into the workflow when relevant:
+Main selects supporting methods in the initial `WORKFLOW PLAN` when their Skills are visible. Later, Main loads a method only when an already loaded source explicitly reveals its exact same-namespace `skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI. This Skill provides domain guidance; it does not reroute the task, emit a replacement `WORKFLOW PLAN`, or auto-load another Skill.
 
-- `workspace-surface-audit` for connector, MCP, hook, and app inventory
-- `knowledge-ops` when the audit needs to reconcile live repo truth with durable context
-- `github-ops` when the answer depends on CI, scheduled workflows, issues, or PR automation
-- `ecc-tools-cost-audit` when the real problem is webhook fanout, queued jobs, or billing burn in the sibling app repo
-- `research-ops` when local inventory must be compared against current platform support or public docs
-- `verification-loop` for proving post-fix state instead of relying on assumed recovery
+## Candidate Methods
+
+This source explicitly reveals these exact same-namespace resources for selection under that boundary:
+
+- `skill://ecc-skill-catalog/workspace-surface-audit/SKILL.md` for connector, MCP, hook, and app inventory
+- `skill://ecc-skill-catalog/knowledge-ops/SKILL.md` when the audit needs to reconcile live repo truth with durable context
+- `skill://ecc-skill-catalog/github-ops/SKILL.md` when the answer depends on CI, scheduled workflows, issues, or PR automation
+- `skill://ecc-skill-catalog/ecc-tools-cost-audit/SKILL.md` when the real problem is webhook fanout, queued jobs, or billing burn in the sibling app repo
+- `skill://ecc-skill-catalog/research-ops/SKILL.md` when local inventory must be compared against current platform support or public docs
+- `skill://ecc-skill-catalog/verification-loop/SKILL.md` for proving post-fix state instead of relying on assumed recovery
 
 ## When to Use
 

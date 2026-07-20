@@ -4,7 +4,7 @@ VideoDB generates streams on-demand, returning HLS-compatible URLs that play ins
 
 ## Prerequisites
 
-Videos **must be uploaded** to a collection before streams can be generated. For search-based streams, the video must also be **indexed** (spoken words and/or scenes). See [search.md](search.md) for indexing details.
+Videos **must be uploaded** to a collection before streams can be generated. For search-based streams, the video must also be **indexed** (spoken words and/or scenes). See [search.md](skill://ecc-skill-catalog/videodb/reference/search.md) for indexing details.
 
 ## Core Concepts
 
@@ -100,7 +100,7 @@ print(f"Composed stream: {stream_url}")
 
 **Important:** `add_inline()` only accepts `VideoAsset`. Use `add_overlay()` for `AudioAsset`, `ImageAsset`, and `TextAsset`.
 
-For detailed timeline editing, see [editor.md](editor.md).
+For detailed timeline editing, see [editor.md](skill://ecc-skill-catalog/videodb/reference/editor.md).
 
 ## Streaming Search Results
 

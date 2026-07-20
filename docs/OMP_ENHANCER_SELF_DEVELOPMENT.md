@@ -28,19 +28,23 @@ OMP Enhancer 自开发使用现有 `omp.plugin` 作为 Primary workflow，并加
 
 ## 从发现到执行
 
-实质 OMP Enhancer 任务使用同一个软协议：
+实质 OMP Enhancer 任务使用同一个七阶段软协议：`DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY`。
 
-1. `DISCOVER`：Main 在独立 batch 中读取 `skill://omp-enhancer-workflows` 并等待。
-2. `WORKFLOW PLAN`：Main 公开写出 exact Primary、Add-ons、Skills、Load order 和详细编号 Actions。
-3. `LOAD`：先读取 `skill://code-development`，再读取它声明的 `skill://code-development/references/omp-enhancer.md`，最后读取 `omp.plugin` workflow reference，并等待全部结果。
-4. `WORKFLOW READY`：Main 报告实际 loaded/unavailable 资源。
-5. `TODO`：Main 根据真实卡片与 Skill 重写详细执行状态，再开始项目动作。
+1. `DISCOVER`：如果 OMP 尚未提供 workflow index 正文，Main 在独立 batch 中只读取 `skill://omp-enhancer-workflows` 并等待；只有 exact native `skill-prompt` body named `omp-enhancer-workflows` 才算 supplied index，managed context、Available Skills 描述或其他 Skill body 都不算。该 exact body 已提供时，Main 不重读索引。
+2. `DECLARE`：Main 的下一 response 在 byte 0 从 `W` 开始公开写出 exact `WORKFLOW PLAN`：Primary、Add-ons、仅含 exact domain Skill/catalog URI 的 Skills，以及至少四个详细编号 Actions：`LOAD`、`COMMIT`、`SPLIT + EXECUTE`、`VERIFY`。`Load order: NOW=[skill://code-development] THEN=[skill://omp-enhancer-workflows/references/omp.plugin.md]` 把 workflow reference 仅放在 `THEN`；若宿主已通过 native `skill-prompt` 提供 `code-development` 正文，则仍在 `Skills` 中声明它，但从 `NOW` 省略。
+3. `LOAD`：PLAN response 读取 `NOW` 一次并等待。`skill://code-development` 的完整结果明确披露 exact `skill://code-development/references/omp-enhancer.md` 后，Main 用一次可见 `RESOURCE EXTENSION` 读取它并等待；最后读取 `THEN` 一次。全局上限是最多两次 catalog hop 加一次 linked-method resource batch，任何已由宿主提供或已成功读取的 URI 都不得重读。
+4. `COMMIT`：资源全部返回或标记 unavailable 后，Main 的下一 response 在 byte 0 从 `W` 开始公开输出 exact `WORKFLOW READY | ...`，根据真实 workflow card 与 Skill 指令初始化详细 TODO，冻结后续 assignment 使用的 workflow/Skill 元数据，然后结束等待且不调用项目工具。Loaded-card soft compiler 在 `omp.plugin` 为 `subagent-driven`、input 完整、checkpoint 安全且 matching Agent 可见时产生 exact `Delegate` TODO row；否则记录一个匹配的许可 fallback，parent-owned `VERIFY` rows 保持独立。
+5. `SPLIT`：Main 完成本地与决策相关的外部检索、细粒度 dependency-wave 计划和插件 `plan` 审阅，再把安全、完整、写集不重叠的 vertical TDD slices 组成并行 wave。
+6. `EXECUTE`：native `task` 分片依次完成 test mutation、valid RED、最小 production change、同命令 GREEN 和 refactor；Main 集成 delivery、运行 broader verification，并在 reviewer 前公开 `MAIN REVIEW`。
+7. `VERIFY`：native `reviewer` 只接收 Main-reviewed bounded diff/evidence；Main disposition finding，并仅对 supported finding 进行有界修复和至多一次 fresh affected review，最后交付验证证据。
+
+本流程中的 `skill://code-development` 是 workflow index 的顶层 exact `D` PLAN/NOW URI。通用索引里的 `C` 则是已枚举的 nested ECC exact URI，同样直接进入 PLAN/NOW 而不先读取 catalog；只有未枚举长尾才使用 `skill://ecc-skill-catalog`。这一区分缩短发现链，不改变 Main 的选择权。
 
 Advisor 只能在这个准备窗口内使用至多一次普通 `DECISION CHECK` 指出最早的可见漂移，例如 loaded card 的 PLAN REVIEW、RED、GREEN、E2E 或独立 review checkpoint 被 TODO 丢失。它不能替 Main 选 workflow、Skill、Agent、fork width 或 reviewer count，也不能要求重复读取或重启已经有效的工作。
 
 ## 详细 TODO 的最小内容
 
-READY 后的 TODO 应保留以下行，而不是把它们压缩为笼统的“实现”和“测试”：
+READY 后的 TODO 应保留以下语义，而不是把它们压缩为笼统的“实现”和“测试”。Loaded-card soft compiler 对每个 `subagent-driven` checkpoint 独立判断：input 完整、checkpoint 安全且 matching Agent 当前可见时使用 exact `Delegate` row，否则写入一个匹配的许可 fallback；Main 自己的集成、审查和验收使用独立的 parent-owned `VERIFY` rows：
 
 1. `BASELINE`：验收条件、架构不变量、仓库指令、dirty-tree 边界、canonical source、生成物、插件边界与安装态。
 2. `SEARCH`：用本地代码检索定位入口、调用者、测试、配置和 source/generated/package/installed 差异；只有当前 API、工具链或社区故障经验可能影响决策时，才补充有界的官方资料与社区检索，并记录版本与适用性。
@@ -121,7 +125,7 @@ Shared generator 是一个明确依赖边界：当命令会重写整组 workflow
 
 `explore`、`implementation-task`、`config-librarian`、`omp-target-auditor`、`test-planner`、`test-executor` 和 `test-reviewer` 已退出普通代码阶段。当前通用角色只有插件 `plan`、native `task` 和 native `reviewer`；Main 保留本地检索、计划、集成、finding validation、TODO 和 final conclusion。
 
-每个 assignment 自身必须从首字符开始使用 `[workflow=<ids> step=<step-id> todo=<verbatim-parent-task-or-none> skills=<ids-or-none>]`；正文携带 write set、non-goals、anchors、command、验收和 evidence return 等完整 bounded input。Batch outer context 不能替代 per-job input。失败、取消或 partial child work 不算 delivery。Agent 缺失、capacity 不足、input 不完整或无法形成安全 exclusive write sets 时，Main 记录具体 limitation，并只采用 OMP 权限允许的最安全 fallback；它不是 hard fork requirement、fixed fan-out 或 completion gate。
+每个委派 TODO 行先使用 `Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>`；checkpoint 是完整、单行且 metadata-safe 的任务标签。Dispatch 时机械复制 workflow、step、skills，并把 checkpoint 原样复制到 `todo`，因此 assignment byte 0 使用 `[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>]`，不能先写 `# Target` 或 `# Goal`；正文携带 write set、non-goals、anchors、command、验收和 evidence return 等完整 bounded input。Child 只消费冻结的 assignment Skills，不重新执行 workflow/Skill discovery，不自行选择或加载另一套 Skill；缺少方法或输入时返回具体 limitation，由 Main 决定是否 rebase。Batch outer context 不能替代 per-job input。失败、取消或 partial child work 不算 delivery。Agent 缺失、capacity 不足、input 不完整或无法形成安全 exclusive write sets 时，Main 记录具体 limitation，并只采用 OMP 权限允许的最安全 fallback；它不是 hard fork requirement、fixed fan-out 或 completion gate。
 
 ## Review reconciliation
 

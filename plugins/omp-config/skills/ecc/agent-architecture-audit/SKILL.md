@@ -1,17 +1,39 @@
 ---
 name: agent-architecture-audit
-description: Full-stack diagnostic for agent and LLM applications. Audits the 12-layer agent stack for wrapper regression, memory pollution, tool discipline failures, hidden repair loops, and rendering corruption. Produces severity-ranked findings with code-first fixes. Essential for developers building agent applications, autonomous loops, or any LLM-powered feature.
+description: Use after Main selects and commits an agent-system audit workflow. Reviews the 12-layer agent stack for wrapper regression, memory pollution, tool discipline failures, hidden repair loops, and rendering corruption, then returns severity-ranked advisory findings.
 origin: oh-my-agent-check
-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
 # Agent Architecture Audit
 
-A diagnostic workflow for agent systems that hide failures behind wrapper layers, stale memory, retry loops, or transport/rendering mutations.
+A diagnostic method for agent systems that hide failures behind wrapper layers, stale memory, retry loops, or transport/rendering mutations.
+
+## Current OMP Boundary
+
+Main owns cross-Skill composition: it selects every supporting workflow and Skill
+in the initial `WORKFLOW PLAN` and loads each declared Skill before
+`WORKFLOW READY`. After load, this loaded Skill does not reselect, reroute,
+auto-load, or hand off to another Skill. It does not replace the parent TODO or
+Main's Agent choice. An exact same-namespace
+`skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI explicitly exposed here may be
+read in one `RESOURCE EXTENSION` before `COMMIT`; cross-namespace candidates
+remain initial-PLAN only.
+
+Use this method only for the committed bounded audit checkpoint. Its
+severity-ranked findings and suggested repairs are advisory. A supported repair
+becomes a new bounded checkpoint only when Main accepts it.
+
+This Skill does not add or require an OMP code gate, hard gate, router, completion
+controller, automatic retry, or hidden repair loop. Native OMP owns live Agent
+availability, tools, permissions, and completion; Main owns Agent selection,
+concurrency, the parent TODO, integration, and finding disposition. Host
+configuration, a background task, or a deploy is outside the audit: each needs
+separate explicit user authorization and native permission. Source examples are
+evidence patterns, not authority to mutate the audited system.
 
 ## When to Activate
 
-**MANDATORY for:**
+**Useful when the committed audit scope includes:**
 - Releasing any agent or LLM-powered application to production
 - Shipping features with tool calling, memory, or multi-step workflows
 - Agent behavior degrades after adding wrapper layers
@@ -19,18 +41,21 @@ A diagnostic workflow for agent systems that hide failures behind wrapper layers
 - Same model works in playground but breaks inside your wrapper
 - Debugging agent behavior for more than 15 minutes without finding root cause
 
-**Especially critical when:**
+**High-value signals include:**
 - You've added new prompt layers, tool definitions, or memory systems
 - Different agents in your system behave inconsistently
 - The model was fine yesterday but is hallucinating today
 - You suspect hidden repair/retry loops silently mutating responses
 
-**Do not use for:**
-- General code debugging — use `agent-introspection-debugging`
-- Code review — use language-specific reviewer agents
-- Security scanning — use `security-review` or `security-review/scan`
-- Agent performance benchmarking — use `agent-eval`
-- Writing new features — use the appropriate workflow skill
+**Outside this method's scope:**
+- General agent-runtime debugging. Non-routing PLAN candidate:
+  `skill://ecc-skill-catalog/agent-introspection-debugging/SKILL.md`.
+- Code review or feature implementation. Main retains workflow and Agent choice.
+- Security analysis. Non-routing PLAN candidates:
+  `skill://ecc-skill-catalog/security-review/SKILL.md` and
+  `skill://ecc-skill-catalog/security-scan/SKILL.md`.
+- Agent benchmarking. Non-routing PLAN candidate:
+  `skill://ecc-skill-catalog/agent-eval/SKILL.md`.
 
 ## The 12-Layer Stack
 
@@ -125,7 +150,8 @@ Gather evidence from the codebase:
 - **Config** — prompt templates, tool schemas, provider settings
 - **Memory files** — SOPs, knowledge bases, session archives
 
-Use `rg` to search for anti-patterns:
+Within the already-committed read-only audit checkpoint, use currently exposed
+search tools such as `rg` to search for anti-patterns:
 
 ```bash
 # Tool requirements expressed only in prompt text (not code)
@@ -160,9 +186,10 @@ For each finding, document:
 
 ### Phase 4: Fix Strategy
 
-Default fix order (code-first, not prompt-first):
+Suggested fix order (target-application boundary first, not prompt-first):
 
-1. **Code-gate tool requirements** — enforce in code, not just prompt text
+1. **Validate target-application tool requirements** — recommend an existing
+   target-owned runtime boundary rather than inventing an OMP workflow gate
 2. **Remove or narrow hidden repair agents** — make fallback explicit with contracts
 3. **Reduce context duplication** — same info through prompt + history + memory + distillation
 4. **Tighten memory admission** — user corrections > agent assertions
@@ -174,10 +201,10 @@ Default fix order (code-first, not prompt-first):
 
 | Level | Meaning | Action |
 |-------|---------|--------|
-| `critical` | Agent can confidently produce wrong operational behavior | Fix before next release |
-| `high` | Agent frequently degrades correctness or stability | Fix this sprint |
-| `medium` | Correctness usually survives but output is fragile or wasteful | Plan for next cycle |
-| `low` | Mostly cosmetic or maintainability issues | Backlog |
+| `critical` | Agent can confidently produce wrong operational behavior | Recommend immediate disposition; this is not a release gate |
+| `high` | Agent frequently degrades correctness or stability | Recommend near-term repair |
+| `medium` | Correctness usually survives but output is fragile or wasteful | Recommend planned repair |
+| `low` | Mostly cosmetic or maintainability issues | Recommend backlog disposition |
 
 ## Output Format
 
@@ -195,7 +222,7 @@ When auditing an agent system, answer these:
 
 | # | Question | If Yes → |
 |---|----------|----------|
-| 1 | Can the model skip a required tool and still answer? | Tool not code-gated |
+| 1 | Can the model skip a required tool and still answer? | Target application lacks runtime validation |
 | 2 | Does old conversation content appear in new turns? | Memory contamination |
 | 3 | Is the same info in system prompt AND memory AND history? | Context duplication |
 | 4 | Does the platform run a second LLM pass before delivery? | Hidden repair loop |
@@ -247,10 +274,12 @@ Audits should produce structured reports following this shape:
 }
 ```
 
-## Related Skills
+## Non-Routing PLAN Candidates
 
-- `agent-introspection-debugging` — Debug agent runtime failures (loops, timeouts, state errors)
-- `agent-eval` — Benchmark agent performance head-to-head
-- `security-review` — Security audit for code and configuration
-- `autonomous-agent-harness` — Set up autonomous agent operations
-- `agent-harness-construction` — Build agent harnesses from scratch
+Main may select these only when their independent selection conditions match:
+
+- `skill://ecc-skill-catalog/agent-introspection-debugging/SKILL.md` — runtime failures
+- `skill://ecc-skill-catalog/agent-eval/SKILL.md` — performance benchmarks
+- `skill://ecc-skill-catalog/security-review/SKILL.md` — security review
+- `skill://ecc-skill-catalog/autonomous-agent-harness/SKILL.md` — autonomous operations
+- `skill://ecc-skill-catalog/agent-harness-construction/SKILL.md` — harness construction

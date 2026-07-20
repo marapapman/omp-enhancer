@@ -6,6 +6,10 @@ origin: community
 
 # repo-scan
 
+## Runtime and authority boundary
+
+Treat target-specific paths, slash commands, hooks, routers, model tiers, SHIP, or auto-fix behavior in this Skill as guidance for an external target system or runtime only if the user explicitly requests that target. For the current OMP session, this Skill does not route, hook, command, gate, control, grant permission, or decide completion; inspection, planning, and read-only review authorize no mutation. Any installation, configuration, file write, command, network call, upload, publication, payment, mutation, or other external effect requires explicit user authorization for the exact target and effect plus current native permission. Preserve fail-closed safety rules inside authorized target work; target safety is not an OMP gate or completion condition.
+
 > Every ecosystem has its own dependency manager, but no tool looks across C++, Android, iOS, and Web to tell you: how much code is actually yours, what's third-party, and what's dead weight.
 
 ## When to Use
@@ -15,20 +19,9 @@ origin: community
 - Auditing third-party dependencies embedded directly in source (not declared in package managers)
 - Preparing architecture decision records for monorepo reorganization
 
-## Installation
+## Packaged use
 
-```bash
-# Fetch only the pinned commit for reproducibility
-mkdir -p ~/.claude/skills/repo-scan
-git init repo-scan
-cd repo-scan
-git remote add origin https://github.com/haibindev/repo-scan.git
-git fetch --depth 1 origin 2742664
-git checkout --detach FETCH_HEAD
-cp -r . ~/.claude/skills/repo-scan
-```
-
-> Review the source before installing any agent skill.
+This guide is already included in the ECC catalog; do not duplicate-install it under `~/.claude/skills`. Treat the upstream repository as reference material. Fetch or install external tooling only when the user explicitly selects that external target, authorizes the network and file effects, and the source has been reviewed at a pinned revision.
 
 ## Core Capabilities
 

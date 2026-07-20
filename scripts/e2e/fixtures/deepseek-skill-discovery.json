@@ -22,8 +22,9 @@
       "expectedProvisionMode": "none",
       "requireWorkflowIndexOnlyFirstToolBatch": true,
       "requireWorkflowPlanBeforeResourceLoads": true,
+      "requireStructuredWorkflowLoadPhases": true,
       "requiredWorkflowPlanFormat": "block",
-      "minWorkflowPlanNumberedActions": 1,
+      "minWorkflowPlanNumberedActions": 4,
       "forbidResourceProjectSameBatch": true,
       "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
       "requireExactSelectedWorkflowReferences": true,
@@ -45,6 +46,7 @@
       "expectations": {
         "requireWorkflowIndexOnlyFirstToolBatch": false,
         "requireWorkflowPlanBeforeResourceLoads": false,
+        "requireStructuredWorkflowLoadPhases": false,
         "forbidResourceProjectSameBatch": false,
         "requireWorkflowReadyAfterLoadsBeforeProjectTools": false,
         "requireWorkflowPlanSkillsUseDomainSkillUris": false,
@@ -132,9 +134,9 @@
       "prompt": "Create a concise troubleshooting checklist for a home Pi-hole installation where DHCP clients intermittently bypass local DNS and DNS-over-HTTPS is enabled. Distinguish router, DHCP, client, upstream, and cache checks. Do not inspect files, change configuration, or use the network.",
       "expectations": {
         "minWorkflowReferenceReads": 1,
-        "requiredObservedSkills": ["ecc-skill-catalog", "homelab-pihole-dns"],
-        "maxObservedSkills": 3,
-        "forbiddenSkills": ["docker-compose", "frontend-design", "xlsx"]
+        "requiredObservedSkills": ["homelab-pihole-dns"],
+        "forbiddenSkills": ["ecc-skill-catalog", "docker-compose", "frontend-design", "xlsx"],
+        "maxObservedSkills": 3
       }
     },
     {
@@ -147,6 +149,7 @@
         "requireSuccessfulToolCalls": false,
         "requireWorkflowIndexOnlyFirstToolBatch": false,
         "requireWorkflowPlanBeforeResourceLoads": false,
+        "requireStructuredWorkflowLoadPhases": false,
         "forbidResourceProjectSameBatch": false,
         "requireWorkflowReadyAfterLoadsBeforeProjectTools": false,
         "requireWorkflowPlanSkillsUseDomainSkillUris": false,
@@ -172,6 +175,7 @@
       "expectations": {
         "requireWorkflowIndexOnlyFirstToolBatch": false,
         "requireWorkflowPlanBeforeResourceLoads": false,
+        "requireStructuredWorkflowLoadPhases": false,
         "forbidResourceProjectSameBatch": false,
         "requireWorkflowReadyAfterLoadsBeforeProjectTools": false,
         "requireWorkflowPlanSkillsUseDomainSkillUris": false,

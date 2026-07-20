@@ -5,6 +5,11 @@ description: "Apply a named or provided LaTeX venue template and its formatting 
 
 # Format Template LaTeX
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or an explicitly capable generic
+`task` owns authorized effects.
+
 Apply a conference or journal LaTeX template to an existing paper markdown. Merge content sections into the template, handle double-column formatting, author blocks, citation style, and bibliography wiring.
 
 ## Workflow

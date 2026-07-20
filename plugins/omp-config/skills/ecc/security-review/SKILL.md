@@ -8,6 +8,10 @@ origin: ECC
 
 This skill ensures all code follows security best practices and identifies potential vulnerabilities.
 
+## Authority Boundary
+
+The examples below are security patterns, not permission to perform their effects. Under a read-only `security.review`, inspect and report only: do not edit files, install or update dependencies, run a mutating fix, stage or commit changes, push, or publish. Run a mutating command only when explicit user authorization and native permission cover that exact effect; keep commit and publication authority separate.
+
 ## When to Activate
 
 - Implementing authentication or authorization
@@ -403,10 +407,10 @@ async function verifyTransaction(transaction: Transaction) {
 # Check for vulnerabilities
 npm audit
 
-# Fix automatically fixable issues
+# Only with explicit mutation authorization: fix eligible issues
 npm audit fix
 
-# Update dependencies
+# Only with explicit dependency-update authorization
 npm update
 
 # Check for outdated packages
@@ -415,7 +419,7 @@ npm outdated
 
 #### Lock Files
 ```bash
-# ALWAYS commit lock files
+# Only when explicit commit authorization covers this lock file
 git add package-lock.json
 
 # Use in CI/CD for reproducible builds
@@ -425,7 +429,7 @@ npm ci  # Instead of npm install
 #### Verification Steps
 - [ ] Dependencies up to date
 - [ ] No known vulnerabilities (npm audit clean)
-- [ ] Lock files committed
+- [ ] Lock-file changes are included only in an explicitly authorized commit, or reported as pending
 - [ ] Dependabot enabled on GitHub
 - [ ] Regular security updates
 

@@ -6,7 +6,20 @@ origin: ECC
 
 # Brand Voice
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or a separate explicitly capable
+Main-selected Agent owns authorized effects.
+
 Build a durable voice profile from real source material, then use that profile everywhere instead of re-deriving style from scratch or defaulting to generic AI copy.
+
+Use `x-api` and downstream Skills only when each exact URI is already declared in `WORKFLOW PLAN`, currently visible, and loaded before `WORKFLOW READY`. This Skill does not select or load another Skill or Agent.
+
+For the voice-profile schema only, this loaded Skill explicitly reveals its own
+exact linked resource. Read it through the remaining linked-resource batch and
+wait before applying the schema:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/brand-voice/SKILL.md | reads=skill://ecc-skill-catalog/brand-voice/references/voice-profile-schema.md`
 
 ## When to Activate
 
@@ -31,7 +44,7 @@ Do not use generic platform exemplars as source material.
 1. Gather 5 to 20 representative samples when available.
 2. Prefer recent material over old material unless the user says the older writing is more canonical.
 3. Separate "public launch voice" from "private working voice" if the source set clearly splits.
-4. If live X access is available, use `x-api` to pull recent original posts before drafting.
+4. If declared and loaded `x-api` access is available, pull recent original posts before drafting.
 5. If site copy matters, include the current ECC landing page and repo/plugin framing.
 
 ## What to Extract
@@ -48,7 +61,7 @@ Do not use generic platform exemplars as source material.
 
 ## Output Contract
 
-Produce a reusable `VOICE PROFILE` block that downstream skills can consume directly. Use the schema in [references/voice-profile-schema.md](references/voice-profile-schema.md).
+Produce a reusable `VOICE PROFILE` block that downstream skills can consume directly. Use the schema in `skill://ecc-skill-catalog/brand-voice/references/voice-profile-schema.md`.
 
 Keep the profile structured and short enough to reuse in session context. The point is not literary criticism. The point is operational reuse.
 
@@ -86,7 +99,7 @@ Delete and rewrite any of these:
 
 ## Downstream Use
 
-Use this skill before or inside:
+Pass the resulting `VOICE PROFILE` to a downstream Skill only when that Skill was already declared, visible, and loaded. Possible consumers include:
 
 - `content-engine`
 - `crosspost`
@@ -94,4 +107,4 @@ Use this skill before or inside:
 - article or launch writing
 - cold or warm outbound across X, LinkedIn, and email
 
-If another skill already has a partial voice capture section, this skill is the canonical source of truth.
+This list is compatibility guidance, not a request to load or dispatch those Skills. If another loaded Skill already has a partial voice capture section, this Skill is the canonical source of truth.

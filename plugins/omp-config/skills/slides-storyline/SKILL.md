@@ -1,11 +1,16 @@
 ---
 name: slides-storyline
-description: Develop and confirm the narrative for a new presentation before slide authoring. Use when a user wants a new deck, talk, lecture, pitch, or report presentation and the agent needs to discuss audience, purpose, duration, language, key takeaway, evidence, narrative arc, and a numbered slide-by-slide outline. Do not use for ordinary edits to an existing deck.
+description: Develop the narrative and a numbered working outline for a new presentation. Use when a user wants a new deck, talk, lecture, pitch, or report presentation and the agent needs to establish audience, purpose, duration, language, key takeaway, evidence, and narrative arc. Do not use for ordinary edits to an existing deck.
 ---
 
 # Slides Storyline
 
-Turn the user's material into an agreed presentation story before authoring slides.
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or a separate explicitly capable
+Main-selected Agent owns authorized effects.
+
+Turn the user's material into an explicit presentation story before authoring slides.
 
 ## Establish the brief
 
@@ -20,8 +25,8 @@ Turn the user's material into an agreed presentation story before authoring slid
 3. Budget time and density. Reserve space for title, transitions, examples, demonstrations, recap, discussion, and references when they serve the talk.
 4. Keep claims, terminology, examples, and visual ideas traceable to the user's sources or mark them as decisions still needed.
 
-## Confirm before authoring
+## Commit the working outline
 
-Present a numbered outline with, for each slide, its working title, narrative job, key content or evidence, and likely visual form. Then ask the user to approve or revise it.
+Present a numbered outline with, for each slide, its working title, narrative job, key content or evidence, and likely visual form. State explicit assumptions and decisions that remain reversible.
 
-Do not generate Beamer frames until the user confirms the outline. Do not write a storyline file unless the user requests one or the project already uses one. For Chinese outlines, follow `plain-chinese-writing`; for English outlines, apply the current English writing rules.
+When the user requested the complete deck and the supplied brief is sufficient, commit this working outline to Main's plan and continue. Ask only when a missing choice materially changes the deck and cannot be resolved from the request or project context. User feedback may revise the outline, but a second approval is not an automatic completion gate. Do not write a storyline file unless the user requests one or the project already uses one. For Chinese outlines, follow `plain-chinese-writing`; for English outlines, apply the current English writing rules.

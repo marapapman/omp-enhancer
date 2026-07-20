@@ -5,6 +5,11 @@ description: "Convert Markdown to LaTeX with figures, citations, tables, and mat
 
 # Format Markdown → LaTeX
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or an explicitly capable generic
+`task` owns authorized effects.
+
 Convert a Markdown document to a compilable `.tex` file using pandoc via bash. Handle figures, citations, tables, math, and Chinese characters.
 
 ## Trigger

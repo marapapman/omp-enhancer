@@ -1,203 +1,89 @@
 ---
 name: council
-description: Convene a four-voice council for ambiguous decisions, tradeoffs, and go/no-go calls. Use when multiple valid paths exist and you need structured disagreement before choosing.
+description: Surface structured disagreement for ambiguous decisions, tradeoffs, and go/no-go calls. Use when multiple credible paths remain after relevant facts are gathered and the decision benefits from independent perspectives.
 origin: ECC
 ---
 
 # Council
 
-Convene four advisors for ambiguous decisions:
-- the in-context Claude voice
-- a Skeptic subagent
-- a Pragmatist subagent
-- a Critic subagent
+Use distinct decision lenses to challenge framing and make tradeoffs legible.
+Council is not code review, implementation planning, factual verification, or a
+vote that decides completion.
 
-This is for **decision-making under ambiguity**, not code review, implementation planning, or architecture design.
+## Decision packet
 
-## When to Use
+Reduce the decision to:
 
-Use council when:
-- a decision has multiple credible paths and no obvious winner
-- you need explicit tradeoff surfacing
-- the user asks for second opinions, dissent, or multiple perspectives
-- conversational anchoring is a real risk
-- a go / no-go call would benefit from adversarial challenge
+- the exact question;
+- credible options;
+- constraints and non-goals;
+- success criteria and decision owner;
+- compact relevant evidence;
+- uncertainty that evidence cannot resolve.
 
-Examples:
-- monorepo vs polyrepo
-- ship now vs hold for polish
-- feature flag vs full rollout
-- simplify scope vs keep strategic breadth
+Ask one narrow clarification only when a missing answer would change the option
+set. For repository-specific decisions, gather just the relevant local anchors
+before assigning a perspective.
 
-## When NOT to Use
+## Perspective lenses
 
-| Instead of council | Use |
-| --- | --- |
-| Verifying whether output is correct | `santa-method` |
-| Breaking a feature into implementation steps | `code.dev` with a `plan` review |
-| Designing system architecture | `code.dev` with the relevant architecture Skill |
-| Reviewing code for bugs or security | `code.dev`, `security.review`, or `santa-method` |
-| Straight factual questions | just answer directly |
-| Obvious execution tasks | just do the task |
+Choose only lenses that add material disagreement:
 
-## Roles
-
-| Voice | Lens |
+| Lens | Contribution |
 | --- | --- |
 | Architect | correctness, maintainability, long-term implications |
 | Skeptic | premise challenge, simplification, assumption breaking |
-| Pragmatist | shipping speed, user impact, operational reality |
-| Critic | edge cases, downside risk, failure modes |
+| Pragmatist | delivery speed, user impact, operational reality |
+| Critic | downside risk, edge cases, failure modes |
 
-The three external voices should be launched as fresh subagents with **only the question and relevant context**, not the full ongoing conversation. That is the anti-anchoring mechanism.
+These are lenses, not required Agent identities. One assignment may cover a
+complete lens, or one independent assignment may cover several lenses when
+separation adds no value.
 
-## Workflow
+## Delegation
 
-### 1. Extract the real question
+Main records its initial position and main risk before seeing delegated
+opinions. It then consults the current dynamic Available Agents, prefers a
+matching decision or domain Agent when visible, and otherwise uses native `task`.
+Main chooses the lenses, Agent choice, and fork width from ambiguity,
+independence, capacity, and cost. Batch only runnable independent perspectives;
+keep evidence-gathering dependencies in an earlier wave.
 
-Reduce the decision to one explicit prompt:
-- what are we deciding?
-- what constraints matter?
-- what counts as success?
+Each assignment receives only the decision packet and its lens, then returns:
 
-If the question is vague, ask one clarifying question before convening the council.
+1. position;
+2. strongest reasons;
+3. largest risk;
+4. premise challenge or overlooked fact;
+5. evidence and uncertainty.
 
-### 2. Gather only the necessary context
+Main owns the question, plan, synthesis, verification, fallback when delegation
+is unavailable or unsafe, and final recommendation.
 
-If the decision is codebase-specific:
-- collect the relevant files, snippets, issue text, or metrics
-- keep it compact
-- include only the context needed to make the decision
+## Synthesis
 
-If the decision is strategic/general:
-- skip repo snippets unless they materially change the answer
-
-### 3. Form the Architect position first
-
-Before reading other voices, write down:
-- your initial position
-- the three strongest reasons for it
-- the main risk in your preferred path
-
-Do this first so the synthesis does not simply mirror the external voices.
-
-### 4. Launch three independent voices in parallel
-
-Each subagent gets:
-- the decision question
-- compact context if needed
-- a strict role
-- no unnecessary conversation history
-
-Prompt shape:
-
-```text
-You are the [ROLE] on a four-voice decision council.
-
-Question:
-[decision question]
-
-Context:
-[only the relevant snippets or constraints]
-
-Respond with:
-1. Position — 1-2 sentences
-2. Reasoning — 3 concise bullets
-3. Risk — biggest risk in your recommendation
-4. Surprise — one thing the other voices may miss
-
-Be direct. No hedging. Keep it under 300 words.
-```
-
-Role emphasis:
-- Skeptic: challenge framing, question assumptions, propose the simplest credible alternative
-- Pragmatist: optimize for speed, simplicity, and real-world execution
-- Critic: surface downside risk, edge cases, and reasons the plan could fail
-
-### 5. Synthesize with bias guardrails
-
-You are both a participant and the synthesizer, so use these rules:
-- do not dismiss an external view without explaining why
-- if an external voice changed your recommendation, say so explicitly
-- always include the strongest dissent, even if you reject it
-- if two voices align against your initial position, treat that as a real signal
-- keep the raw positions visible before the verdict
-
-### 6. Present a compact verdict
-
-Use this output shape:
+Present the raw positions before the recommendation. Do not discard a dissent
+without explaining why, and say when new evidence changed the initial view.
 
 ```markdown
-## Council: [short decision title]
+## Council: [decision]
 
-**Architect:** [1-2 sentence position]
-[1 line on why]
+### Perspectives
+- **[lens]:** [position, reason, risk]
 
-**Skeptic:** [1-2 sentence position]
-[1 line on why]
-
-**Pragmatist:** [1-2 sentence position]
-[1 line on why]
-
-**Critic:** [1-2 sentence position]
-[1 line on why]
-
-### Verdict
-- **Consensus:** [where they align]
-- **Strongest dissent:** [most important disagreement]
-- **Premise check:** [did the Skeptic challenge the question itself?]
-- **Recommendation:** [the synthesized path]
+### Synthesis
+- **Agreement:** [shared ground]
+- **Strongest dissent:** [material disagreement]
+- **Premise check:** [whether the question should change]
+- **Recommendation:** [path and rationale]
+- **Uncertainty:** [what remains unresolved]
 ```
 
-Keep it scannable on a phone screen.
+The decision owner may accept, adjust, or reject the recommendation. Council
+creates no vote threshold, retry, publication authority, or completion gate.
 
-## Persistence Rule
+## Persistence
 
-Do **not** write ad-hoc notes to `~/.claude/notes` or other shadow paths from this skill.
-
-If the council materially changes the recommendation:
-- use `knowledge-ops` to store the lesson in the right durable location
-- or use `/save-session` if the outcome belongs in session memory
-- or update the relevant GitHub / Linear issue directly if the decision changes active execution truth
-
-Only persist a decision when it changes something real.
-
-## Multi-Round Follow-up
-
-Default is one round.
-
-If the user wants another round:
-- keep the new question focused
-- include the previous verdict only if it is necessary
-- keep the Skeptic as clean as possible to preserve anti-anchoring value
-
-## Anti-Patterns
-
-- using council for code review
-- using council when the task is just implementation work
-- feeding the subagents the entire conversation transcript
-- hiding disagreement in the final verdict
-- persisting every decision as a note regardless of importance
-
-## Related Skills
-
-- `santa-method` — adversarial verification
-- `knowledge-ops` — persist durable decision deltas correctly
-- `search-first` — gather external reference material before the council if needed
-- `architecture-decision-records` — formalize the outcome when the decision becomes long-lived system policy
-
-## Example
-
-Question:
-
-```text
-Should we ship ECC 2.0 as alpha now, or hold until the control-plane UI is more complete?
-```
-
-Likely council shape:
-- Architect pushes for structural integrity and avoiding a confused surface
-- Skeptic questions whether the UI is actually the gating factor
-- Pragmatist asks what can be shipped now without harming trust
-- Critic focuses on support burden, expectation debt, and rollout confusion
-
-The value is not unanimity. The value is making the disagreement legible before choosing.
+Do not create shadow notes. Persist a decision only when the user authorizes it
+or the current workflow already owns that artifact, and record the rationale in
+the project's established decision surface.

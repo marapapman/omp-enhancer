@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { ExtensionToolContext } from '../../../src/ompApi.js'
-import createMarketplaceTools from '../../../tools/testing-tools.js'
 
 interface PackageJson {
   name: string
   version: string
+  main: string
+  exports: Record<string, string>
   files: string[]
   omp: { extensions: string[] }
 }
@@ -22,34 +22,8 @@ interface MarketplaceCatalog {
   }>
 }
 
-const baseContext: ExtensionToolContext = {
-  cwd: process.cwd(),
-  ui: { notify: () => undefined },
-  hasUI: false
-}
-
 async function readJson<T>(path: string): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T
-}
-
-function fakeZod(): {
-  object(shape: Record<string, unknown>): unknown
-  string(): unknown
-  boolean(): unknown
-  unknown(): unknown
-  array(schema: unknown): unknown
-  enum(values: readonly [string, ...string[]]): unknown
-  optional(schema: unknown): unknown
-} {
-  return {
-    object: shape => ({ type: 'object', shape }),
-    string: () => ({ type: 'string' }),
-    boolean: () => ({ type: 'boolean' }),
-    unknown: () => ({ type: 'unknown' }),
-    array: schema => ({ type: 'array', schema }),
-    enum: values => ({ type: 'enum', values }),
-    optional: schema => ({ type: 'optional', schema })
-  }
 }
 
 describe('marketplace catalog', () => {
@@ -67,11 +41,14 @@ describe('marketplace catalog', () => {
     expect(plugin?.source).toBe('./omp-test-enhancer')
   })
 
-  it('ships marketplace conventional directories alongside the source extension entry', async () => {
+  it('publishes one canonical built extension entry', async () => {
     const packageJson = await readJson<PackageJson>(join(process.cwd(), 'package.json'))
+    const extensionEntries = [packageJson.main, packageJson.exports['.'], ...packageJson.omp.extensions]
 
-    expect(packageJson.omp.extensions).toEqual(['./src/extension.ts'])
-    expect(packageJson.files).toEqual(expect.arrayContaining(['src', 'package.json', 'README.md', 'tools']))
+    expect(new Set(extensionEntries)).toEqual(new Set(['./dist/extension.js']))
+    expect(packageJson.omp.extensions).toEqual(['./dist/extension.js'])
+    expect(packageJson.files).toEqual(expect.arrayContaining(['dist', 'src', 'package.json', 'README.md']))
+    expect(packageJson.files).not.toContain('tools')
     expect(packageJson.files).not.toContain('agents')
     expect(packageJson.files).not.toContain('commands')
   })
@@ -79,42 +56,6 @@ describe('marketplace catalog', () => {
   it('keeps phase-specific testing Agents out of the package surface', async () => {
     const packageJson = await readJson<PackageJson>(join(process.cwd(), 'package.json'))
     expect(packageJson.files).not.toContain('agents')
-  })
-
-  it('exposes marketplace tools through the custom tool wrapper', async () => {
-    const tools = createMarketplaceTools({ zod: fakeZod() })
-
-    expect(tools.map(tool => tool.name)).toEqual(expect.arrayContaining([
-      'omp_test_analyze',
-      'omp_test_context',
-      'omp_test_browser_check',
-      'omp_test_coverage_analyze',
-      'omp_test_mutation_context',
-      'omp_test_review',
-      'omp_test_report'
-    ]))
-
-    const review = tools.find(tool => tool.name === 'omp_test_review')
-    const report = tools.find(tool => tool.name === 'omp_test_report')
-    if (!review) throw new Error('Missing marketplace review tool')
-    if (!report) throw new Error('Missing marketplace report tool')
-
-    await review.execute('call', {
-      targets: [{ id: 'src/user/UserService.ts#UserService', sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }],
-      candidate: {
-        id: 'candidate',
-        targetId: 'src/user/UserService.ts#UserService',
-        files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: 'expect(result).toBe(true)' }]
-      }
-    }, undefined, baseContext, undefined)
-
-    const result = await report.execute('call', {}, undefined, baseContext, undefined)
-
-    expect(result.content[0]?.text).not.toBe('No test review result found.')
-    expect(result.content[0]?.text).toContain('# OMP Testing Enhancer report')
-    expect(result.details).toMatchObject({
-      markdown: expect.stringContaining('# OMP Testing Enhancer report')
-    })
   })
 
   it('documents installation, optional tools, and the command-free workflow', async () => {

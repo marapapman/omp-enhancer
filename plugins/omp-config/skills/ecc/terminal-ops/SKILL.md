@@ -10,15 +10,19 @@ Use this when the user wants real repo execution: run commands, inspect git stat
 
 This skill is intentionally narrower than general coding guidance. It is an operator workflow for evidence-first terminal execution.
 
-## Skill Stack
+## Method Selection
 
-Pull these ECC-native skills into the workflow when relevant:
+Main selects supporting methods in the initial `WORKFLOW PLAN` when their Skills are visible. Later, Main loads a method only when an already loaded source explicitly reveals its exact same-namespace `skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI. This Skill provides domain guidance; it does not reroute the task, emit a replacement `WORKFLOW PLAN`, or auto-load another Skill.
 
-- `verification-loop` for exact proving steps after changes
-- `tdd-workflow` when the right fix needs regression coverage
-- `security-review` when secrets, auth, or external inputs are involved
-- `github-ops` when the task depends on CI runs, PR state, or release status
-- `knowledge-ops` when the verified outcome needs to be captured into durable project context
+## Candidate Methods
+
+This source explicitly reveals these exact same-namespace resources for selection under that boundary:
+
+- `skill://ecc-skill-catalog/verification-loop/SKILL.md` for exact proving steps after changes
+- `skill://ecc-skill-catalog/tdd-workflow/SKILL.md` when the right fix needs regression coverage
+- `skill://ecc-skill-catalog/security-review/SKILL.md` when secrets, auth, or external inputs are involved
+- `skill://ecc-skill-catalog/github-ops/SKILL.md` when the task depends on CI runs, PR state, or release status
+- `skill://ecc-skill-catalog/knowledge-ops/SKILL.md` when the verified outcome needs to be captured into durable project context
 
 ## When to Use
 

@@ -5,8 +5,8 @@
 ## Contents
 
 - `assets/CLAUDE.md` and root or agent config templates.
-- `assets/WORKFLOW_CATALOG.md` is the generated catalog version 17 for explicit synchronization and human inspection. Its semantic source lives in `omp-enhancer-core/src/workflows/definitions`; do not edit this asset by hand.
-- `skills/omp-enhancer-workflows/` publishes a compact selection table and one on-demand reference card per workflow. The table keeps exact IDs, full Primary conditions, and literal card URIs while Skill ownership comes from OMP's native visible descriptions. It guides Main to declare its workflow/Skill plan, load selected resources, and rebase its own detailed TODO; it does not select a workflow, create a runtime gate, require delegation, activate tools, grant permission, or decide completion.
+- `assets/WORKFLOW_CATALOG.md` is the generated catalog version 19 for explicit synchronization and human inspection. Its semantic source lives in `omp-enhancer-core/src/workflows/definitions`; do not edit this asset by hand.
+- `skills/omp-enhancer-workflows/` publishes a compact selection table and one on-demand reference card per workflow. The table keeps exact IDs, full Primary conditions, literal card URIs, top-level `D` Skill URIs, and enumerated nested ECC `C` Skill URIs. It guides Main to declare its workflow/Skill plan, load selected resources, and rebase its own detailed TODO; it does not select a workflow, create a runtime gate, require delegation, activate tools, grant permission, or decide completion.
 - `skills/ecc/SKILL.md` publishes one top-level `ecc-skill-catalog` adapter, and `skills/ecc/catalog.md` indexes 255 nested ECC guides for exact, on-demand reads.
 - `assets/AGENTS.md` adds a compact Agent-owned staged plan/load/TODO contract and conditional handoff trace. `assets/WATCHDOG.yml` lets Advisor spend one early ordinary note coaching that contract while retaining its evidence and send limits. Neither imports `OMP_ENHANCER_WORKFLOW_CATALOG.md` nor appends the full catalog to a system prompt.
 - `assets/config.yml`, `assets/models.yml`, and `assets/mcp.json` remain templates only. `models.yml` contains DeepSeek provider-compatibility overrides, not a complete supported-model inventory.
@@ -39,16 +39,35 @@ and system safety policy remain independent of this plugin.
 The packaged Main and Advisor blocks explicitly defer to OMP's native system
 prompt, settings, active tools, dynamic Available Agents list, approval flow,
 and completion behavior. For analysis, judgment, workflow composition,
-coordinated stages, or possible delegation, Main uses three soft phases. An
-index-only `DISCOVER` batch reads `skill://omp-enhancer-workflows` as navigation
-and waits; a mechanical field lookup without analysis uses no Skill, marker, or
-TODO. Main then writes the exact `WORKFLOW PLAN` block with Primary/Add-ons,
-    Skill URIs, load order, and detailed numbered actions. The following resource-only load sequence
-    reads declared owning domain Skills or catalogs first, resolves only exact nested Skill URIs they reveal,
-    then reads one literal `PLAN URI` card per selected workflow last and waits for every result. Main then writes the exact `WORKFLOW READY |` marker with
-Primary/Add-ons and loaded or unavailable Skills, rebases its detailed TODO, and
-begins `READY + EXECUTE`. Native `todo` is used only when exposed and allowed; otherwise the same
-checklist remains the execution state. An Add-on never replaces the Primary.
+coordinated stages, or possible delegation, Main follows the soft sequence
+`DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY`. Only an
+exact native `skill-prompt` body named `omp-enhancer-workflows` counts as a
+supplied index. If that body was not supplied, an index-only `DISCOVER` batch
+reads `skill://omp-enhancer-workflows` as navigation and waits; managed context,
+an Available Skills description, or another Skill body cannot replace it. A
+mechanical field lookup without analysis uses no Skill, marker, or TODO. The
+next response starts at byte 0 with the exact `WORKFLOW PLAN`:
+Primary/Add-ons, exact domain Skill/catalog URIs only, structured
+`Load order: NOW=[...] THEN=[...]`, and at least four detailed Actions for LOAD,
+COMMIT, SPLIT + EXECUTE, and VERIFY. Workflow references appear only in THEN;
+NOW contains non-supplied Skill/catalog URIs. Selected index `D` entries are
+top-level exact URIs and selected `C` entries are enumerated nested ECC exact
+URIs; both go directly into PLAN/NOW. The full `skill://ecc-skill-catalog` chain
+is reserved for unlisted long-tail discovery. Main loads the declared resource
+batches and waits, following only exact linked Skill URIs revealed by a loaded
+source before reading Add-on references and the Primary reference last. After
+all resources return, the next response starts at byte 0 with exact
+`WORKFLOW READY | ...` and initializes the rebased TODO only, then ends and
+waits. The loaded-card soft compiler emits an exact `Delegate` row when a
+`subagent-driven` card has complete input, a safe checkpoint, and a visible
+matching Agent; otherwise it records one matched permitted fallback. Parent
+VERIFY rows remain separate. Native `todo` is used only when exposed and
+allowed; otherwise the same checklist remains the execution state. Project
+tools start in the following response. An Add-on never replaces the Primary,
+and the guidance creates
+no runtime route, gate, permission, dispatch, or completion decision.
+
+Every selected non-simple workflow has a `subagent-driven` soft default when a matching Agent is exposed and can own a safe, complete, bounded checkpoint. Main prefers a domain Agent named by the selected cards, then generic native `task`; it batches runnable independent checkpoints and preserves dependency order for sequential checkpoints. Main retains the parent TODO, integration, final verification, permissions, and external effects. Mechanical work bypasses the staged workflow; `agentic.simple` stages and then stays direct; `writing.pending` waits for language and composes `writing.zh` or `writing.en` before any delegation. User-required Main-only work, unavailable Agent/capacity, incomplete assignment input, or unsafe dependencies/write overlap must be recorded as a direct-fallback limitation. This chooses no Agent or fork width and creates no gate.
 
 For substantive code mutation, Main searches enough local code and, when relevant, current official/community evidence to write a detailed plan of dependency-ordered waves and non-overlapping vertical slices. Plugin `plan` reviews the complete plan first. Main submits all runnable independent slices in one wave through one native `task` `tasks[]` batch; each task owns test mutation, valid RED, minimal production, same-command GREEN, and refactor. Main waits, integrates and runs broader current-tree verification, then writes visible `MAIN REVIEW` before native `reviewer` receives the Main-reviewed bounded diff/evidence. Main validates findings; supported material repair returns to native `task`, followed by refreshed evidence, another Main review, and at most one fresh affected reviewer. Missing Agents/capacity or an unsafe split produces an explicit fallback limitation, not a fixed fan-out, router, gate, or automatic loop.
 
@@ -59,10 +78,10 @@ at Main's first native `task` call or substantive project action, and suppresses
 late nits after a complete Main final while preserving native `blocker` delivery.
 It may emit one `DECISION CHECK (optional)` tuple identifying a missing plan,
 undeclared resource, Skill-plan or TODO-plan mismatch, missing Primary,
-collapsed Add-on, reopened fork decision, or assignment-schema risk. Main may
+collapsed Add-on, reopened fork decision, missing delegation-or-fallback disposition for a selected subagent-driven card, or assignment-schema risk. Main may
 accept, adjust, or ignore it. The Advisor cannot guess unseen IDs, choose an
 Agent or fork width, or require redispatch solely for metadata. These are model-behavior instructions, not a
-runtime guarantee. The blocks do not change host approval, block a tool call,
+runtime guarantee; live workflow, Skill, TODO, and fork observations remain stochastic model samples. The blocks do not change host approval, block a tool call,
 or schedule an Agent continuation.
 
 When Main visibly treats multiple exact targets as indivisible only because it
@@ -74,12 +93,17 @@ The companion Core plugin has two exact-model exceptions that do not alter this
 package's prompt assets. For a top-level Main task using exact
 `opencode-go/deepseek-v4-flash` or exact `opencode-go/mimo-v2.5`, it may append at
 most one hidden custom-hook compatibility message per active task. The labels are
-model-specific, but both messages reinforce the same three soft phases:
-index-only `DISCOVER`, the exact `WORKFLOW PLAN` followed by a resource-only
-load batch, and `WORKFLOW READY | ...` before `READY + EXECUTE`. Its stored
-attribution is `user`, while OMP presents ordinary custom-hook messages as
-supplemental developer context, so it explicitly yields to the user instruction
-and native OMP contracts.
+model-specific, but both messages reinforce
+`DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY`: index-only
+discovery unless the exact native `skill-prompt` body named
+`omp-enhancer-workflows` was supplied, a byte-0 `WORKFLOW PLAN` whose Skills
+contain only selected `D`/`C` exact Skill URIs or a long-tail catalog URI and
+whose workflow references appear only in structured THEN, four detailed
+Actions, bounded NOW/THEN loading, and a byte-0 `WORKFLOW READY | ...` with delegated TODO
+rows plus parent VERIFY before project work. Its stored attribution is `user`,
+while OMP presents ordinary custom-hook messages as supplemental developer
+context, so it explicitly yields to the user instruction and native OMP
+contracts.
 
 The message includes workflow navigation only when that Skill is visible, other
 Skill discovery only when OMP exposes visible Skills, and task-shape or review
@@ -95,7 +119,7 @@ Set `OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT=1` or
 the corresponding exact model while leaving Core and the rest of OMP loaded.
 The default behavior remains enabled under the capability checks above.
 
-`/model` changes the active session model. Selecting MiMo v2.5 this way is explicit and does not rewrite the packaged DeepSeek Main default. The primary request path does not run a plugin router or inject a catalog. OMP owns the request workflow. Analytical, judgment, composition, coordination, and possible-delegation work uses `omp-enhancer-workflows` only as the first navigation index, then loads an owning visible domain Skill when useful; mechanical field lookup uses no Skill. Main still chooses every workflow, Agent, Skill, and execution action.
+`/model` changes the active session model. Selecting MiMo v2.5 this way is explicit and does not rewrite the packaged DeepSeek Main default. The primary request path does not run a plugin router or inject a catalog. OMP owns the request workflow. Analytical, judgment, composition, coordination, and possible-delegation work uses `omp-enhancer-workflows` only as the first navigation index, then loads the smallest selected exact `D`/`C` domain Skill set or an unlisted long-tail catalog chain when useful; mechanical field lookup uses no Skill. Main still chooses every workflow, Agent, Skill, and execution action.
 
 ## Commands
 
@@ -114,11 +138,13 @@ prompt-visible Skill.
 
 For this reason, OMP sees `skills/ecc/SKILL.md` as the single top-level
 `ecc-skill-catalog`. Its 255 nested guides stay out of the permanent system
-prompt. First inspect OMP's directly visible Skill descriptions. Only when none
-adequately matches, read `skill://ecc-skill-catalog/catalog.md`, then read the
-smallest exact URI listed there, such as
-`skill://ecc-skill-catalog/accessibility/SKILL.md`. Do not bulk-load the guides
-or guess a nested URI.
+prompt. The compact workflow index may nevertheless enumerate a relevant nested
+guide as an exact `C` URI such as
+`skill://ecc-skill-catalog/network-config-validation/SKILL.md`; Main copies a
+selected `C` directly into PLAN/NOW without first reading the full catalog. Only
+an unlisted long-tail need starts with `skill://ecc-skill-catalog`, then follows
+exact URIs visibly disclosed by that loaded source. Do not bulk-load the guides or guess a
+nested URI.
 
 The marketplace `skills` array still recursively lists every directory that
 contains `SKILL.md`, including nested ECC paths. That recursive inventory is

@@ -10,6 +10,13 @@ collect repeated rollouts, reflect on failures, aggregate only well-supported
 edits, select on separate tasks, and keep a rejected-candidate buffer. It does
 not add a runtime router, hard gate, automatic retry, or completion controller.
 
+The section **Current staged organization, 2026-07-20** summarizes the current
+runtime-facing prompt contract. Sections explicitly labeled **Historical
+snapshot** preserve the prompt and measurements used by earlier experiments;
+their phase names, sizes, load order, and acceptance status are not current
+runtime instructions. The canonical current contract remains
+[Architecture and runtime contracts](ARCHITECTURE.md).
+
 ## Objective and invariants
 
 The optimization target is stable autonomous behavior across task families:
@@ -52,9 +59,10 @@ review is evaluation evidence, not permission to block or continue a session.
 This is an offline development loop. The installed runtime neither rewrites its
 own prompt nor uses evaluation outcomes as a gate.
 
-## Previously accepted candidate
+## Historical snapshot: previously accepted candidate
 
-The retained candidate uses two short, ordered decisions:
+At that point in the experiment, the retained candidate used two short, ordered
+decisions:
 
 - `DISCOVER`: analytical or judgment work reads and waits for the compact
   workflow index before project work; a mechanical field lookup proceeds
@@ -67,54 +75,111 @@ VERIFY` record. Verification used a finite reason set and direct successful
 child delivery; a narrow project read needs a named evidence reason, while an
 artifact read is reserved for an explicit material preview or truncation.
 
-The candidate was selected because it preserved all workflow-reference and
+That candidate was selected because it preserved all workflow-reference and
 mechanical negative controls while recovering the important two-file native
 fan-out. The Core reminder deliberately keeps the concise child-integration
 wording that performed better than repeated finite-reason rewrites; the shared
 context owns the full finite verification contract.
 
-## Current staged-planning candidate
+## Current staged organization, 2026-07-20
 
-On 2026-07-18 the prompt was intentionally changed after the expanded live run
-was stopped. The current candidate replaces the private decision record with
-three explicit soft phases and two visible checkpoints:
+The current prompt uses the soft sequence
+`DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY` and keeps
+all choices with Main:
 
-- index-only `DISCOVER`, which waits for the compact workflow index;
-- a complete exact `WORKFLOW PLAN` block, after workflow-index discovery and before workflow-reference,
-  domain-Skill, or project tools, lists exact Primary/Add-ons, exact Skills,
-  resource load order, and detailed numbered actions describing workflow/Skill
-  use, ownership, evidence, and verification;
-- `WORKFLOW READY | ...`, after declared resources load or are marked unavailable,
-  rewrites the detailed TODO from the actual workflow steps and Skill bodies.
-  Native `todo` is updated when exposed and allowed; otherwise the same detailed
-  checklist remains the execution state.
+- Core gives only exact `opencode-go/deepseek-v4-flash` and exact
+  `opencode-go/mimo-v2.5` a compact, state-aware, top-level one-shot bootstrap.
+  It chooses the smallest entry from current workflow-Skill visibility, other
+  Skills, native `task`, delegation permission, and exact supplied-index
+  provenance; it does not repeat the catalog or choose a workflow.
+- `DISCOVER` is complete without a resolver read only when OMP supplied the
+  exact native `skill-prompt` body named `omp-enhancer-workflows`. Managed
+  context, an Available Skills description, or another Skill body does not
+  count. The bootstrap therefore labels the project entry either supplied, in
+  which case Main does not reread it, or not supplied, in which case Main reads
+  only `skill://omp-enhancer-workflows` and waits.
+- The generated index front-loads `DECLARE HANDOFF (soft)` before its domain rows.
+  Its result therefore first tells Main that the next response begins at byte 0
+  with a filled `WORKFLOW PLAN`, then provides the selection table. PLAN lists
+  one Primary, independently matched Add-ons, exact Skill/catalog URIs,
+  structured `NOW`/`THEN`, and detailed LOAD, COMMIT, SPLIT + EXECUTE, and
+  VERIFY actions.
+- Index `D` entries are top-level exact Skill URIs and index `C` entries are
+  enumerated nested ECC exact Skill URIs. They are optional candidates, never
+  load sets: Main selects only URIs matching the requested method, evidence
+  rule, verdict, or format. A selected D/C entry goes directly into PLAN and,
+  when not natively supplied, NOW. Main does not read the full ECC catalog
+  first. `skill://ecc-skill-catalog` is reserved for an unlisted long-tail need
+  and may reveal further exact same-namespace URIs through the bounded
+  resource-extension chain. A preservation-only `writing.latex` Add-on selects
+  zero format Skills; an explicit conversion or template selects one matching
+  candidate.
+- Workflow references appear only in THEN, with Add-ons first and the Primary
+  last. Main waits after each declared resource batch and never guesses or
+  rereads a URI.
+- Every workflow reference carries two `READY NEXT (soft)` sentinels, one before
+  and one after its detailed body. Both redundantly cue the next response to
+  begin at byte 0 with `WORKFLOW READY | ...`, contain no other visible text,
+  initialize native TODO only, and end/wait before any project tool. The
+  generated sentinels remain non-enforcing. A bounded Core coach may observe
+  Main-declared phase facts and host results, then restate the next syntax
+  boundary on the next natural request; it neither validates semantic choices
+  nor controls progression.
+- Every delegated native TODO `items[]` string is the complete exact
+  `Delegate Agent=... workflow=... step=... skills=... checkpoint=...` row.
+  Native `tasks[].task` itself begins at byte 0 with the mechanically copied
+  `[workflow=... step=... todo=... skills=...]` four-key prefix. Every native
+  `task` call also carries nonempty top-level `context`. Batch
+  `context`, name, label, or a request that the child output metadata cannot
+  substitute for that body prefix.
+- For `writing.en` and `writing.zh`, initial TODO freezes exact step-2 writer,
+  step-3 checker, and conditional step-4 corrected-proposal Delegate rows.
+  Main dispatches step 4 only after accepting at least one checker finding;
+  otherwise it resolves/completes that no-op checkpoint rather than dropping or
+  abandoning it. Writer proposals and checker reports are directly usable and
+  complete in terminal child delivery, never status-only or artifact-reference-only,
+  using the host's current terminal handoff when exposed or the ordinary final
+  response otherwise; this contract is host-neutral.
+
+The generated compact index for this organization is checked against its prompt
+budget by the current generation contract. This document intentionally avoids a
+fixed byte count because the exact artifact changes when rows or handoff wording
+are regenerated.
 
 Execution advances committed phases in order, while genuinely independent
 sibling items may still use one native batch. Replanning requires a new concrete
 dependency, scope, permission, tool, Agent, schema, capacity, Skill-load, or
 contradictory-project fact. Advisor uses its existing one-note early budget to
-check only visible plan/load/TODO drift. No hook observes or enforces these
-markers, so the change remains prompt discipline rather than a router or gate.
+check only visible plan/load/TODO drift. The phase-local coach can observe the
+mechanical marker and host-result sequence, but it only appends `PRE_PLAN`,
+`PRE_READY`, or `PRE_DISPATCH` to the copied context of the next natural
+request. A normal task receives at most one of each; the single
+`writing.pending` replacement may add one second-generation `PRE_READY`.
+`OMP_ENHANCER_DISABLE_PROTOCOL_COACH=1` disables this path. It does not trigger
+a turn, select a workflow, Skill, Agent, or fork, or create a router, gate,
+retry, permission, or completion controller.
 
-The current same-matrix DeepSeek/MiMo evidence and model decision are recorded
+The 2026-07-18 same-matrix DeepSeek/MiMo evidence and model decision are recorded
 in [Main Model Workflow Evaluation, 2026-07-18](MAIN_MODEL_WORKFLOW_EVALUATION_2026-07-18.md).
 
-## Progressive-disclosure candidate, 2026-07-19
+## Historical snapshot: progressive-disclosure candidate, 2026-07-19
 
-The next candidate reduces decision load without deleting workflow semantics or
-adding a router:
+This snapshot records the candidate evaluated on 2026-07-19. It reduced
+decision load without deleting workflow semantics or adding a router:
 
-- the 36-row index keeps only exact workflow IDs, complete selection conditions,
-  and literal `PLAN URI` values; its generated size is 12,843 bytes, about 22%
-  below the earlier 16,483-byte snapshot;
+- the index keeps only exact workflow IDs, complete selection conditions, and
+  literal `PLAN URI` values; the evaluated candidate materially reduced the
+  generated index relative to its predecessor and stayed within the configured
+  budget, while exact byte counts remain generation-time evidence rather than a
+  durable documentation contract;
 - each selected workflow loads one card with line-separated execution steps,
   optional Agent/delegation ideas, checks, scope, risk, and an exact READY
   handoff; per-card references no longer reopen Add-on or Skill selection;
 - workflow steps describe capabilities rather than requiring an optional Agent,
   and a late workflow method applies only when that workflow was selected in PLAN;
-- resource order is domain Skills or catalogs first, exact nested Skills next when
-  a declared catalog reveals them, and workflow references last so the final
-  resource result directly cues READY;
+- at that time, resource order was domain Skills or catalogs first, exact nested
+  Skills next when a declared catalog revealed them, and workflow references
+  last so the final resource result directly cued READY;
 - PLAN and READY must appear in visible assistant text. Thinking, tool arguments,
   files, placeholders, and `...` do not count. The output bridge tells Main to
   copy the filled PLAN block before constructing any tool call.
@@ -130,10 +195,11 @@ not improve compliance, so the packaged default remains `max`.
 
 Two reference-last retry attempts encountered provider HTTP 500 errors or hung
 before producing usable behavior evidence. They are excluded rather than counted
-as model failures. This candidate is therefore still under evaluation; no 90%
-stability claim follows from the partial batches.
+as model failures. That candidate remained under evaluation; no 90% stability
+claim follows from the partial batches. Its catalog-first nested-Skill path was
+later replaced by the current direct `C` URI path described above.
 
-## Measured rollouts
+## Historical snapshot: measured rollouts
 
 All rows below are real isolated RPC runs with DeepSeek Flash at high thinking.
 Counts describe observed behavior, not a plugin guarantee.
@@ -191,13 +257,27 @@ Local reports from this experiment are under:
 ## Evaluator requirements
 
 The evaluator uses event evidence rather than model self-report. It records
-assistant batch and content provenance, successful Skill reads and their order relative to project tools, native task
-batches and assignments, workflow metadata, child completion, project reads
-before and after delegation, artifact preview reads, and final-answer count.
-It verifies index-only discovery, PLAN and READY event intervals, and
-resource/project batch separation. Mechanical controls reject workflow markers,
-Skills, TODO, and delegation. Assistant `stopReason=error` is reported as a
-model or transport error so it cannot masquerade as workflow noncompliance.
+assistant batch and content provenance, successful Skill reads and their order
+relative to project tools, native task batches and assignments, workflow
+metadata, child completion, project reads before and after delegation, artifact
+preview reads, and final-answer count. It treats only the exact native
+`skill-prompt` body named `omp-enhancer-workflows` as a supplied index;
+otherwise it verifies index-only discovery. It also verifies byte-0 PLAN and
+READY event intervals, request-matched selected `D`/`C` URI loading, absence of
+an unnecessary full ECC catalog read for enumerated `C`, preservation-only
+LaTeX compositions with zero format Skill reads, the bounded long-tail catalog
+chain, exact delegated TODO `items[]` strings, native `tasks[].task` byte-0
+four-key prefixes, nonempty top-level `context` on every native task call,
+and resource/project batch separation. Outer `context`, name, label, or child
+self-report cannot satisfy the assignment-body check. Writing traces separately
+check the three frozen step-2/step-3/conditional-step-4 rows, conditional
+step-4 dispatch, and complete terminal writer/checker deliveries. Deterministic
+prompt tests separately verify that the exact-model
+bootstrap is one-shot and state-aware, and generated-asset tests prove the
+index PLAN handoff and reference READY handoff precede their selection/card
+bodies. Mechanical controls reject workflow markers, Skills, TODO, and delegation. Assistant
+`stopReason=error` is reported as a model or transport error so it cannot
+masquerade as workflow noncompliance.
 
 Fact-check scenarios additionally require a verdict per numbered claim. Verdict
 parsing accepts Markdown headings, bold labels, a following standalone status,
@@ -215,9 +295,9 @@ The generic aliases accept an explicit model; the older `e2e:deepseek:*` aliases
 remain available for compatibility:
 
 ```bash
-npm run e2e:main:skills -- --model opencode-go/deepseek-v4-flash --thinking high --repeat 3 --output .omp/e2e-results/candidate-deepseek-skills
-npm run e2e:main:skills -- --model opencode-go/mimo-v2.5 --thinking high --repeat 3 --output .omp/e2e-results/candidate-mimo-skills
-npm run e2e:main:subagents -- --model opencode-go/deepseek-v4-flash --thinking high --repeat 3 --output .omp/e2e-results/candidate-deepseek-subagents
+npm run e2e:main:skills -- --model opencode-go/deepseek-v4-flash --thinking max --repeat 3 --output .omp/e2e-results/candidate-deepseek-skills
+npm run e2e:main:skills -- --model opencode-go/mimo-v2.5 --thinking max --repeat 3 --output .omp/e2e-results/candidate-mimo-skills
+npm run e2e:main:subagents -- --model opencode-go/deepseek-v4-flash --thinking max --repeat 3 --output .omp/e2e-results/candidate-deepseek-subagents
 ```
 
 Then validate generated context and parsers:
@@ -230,4 +310,7 @@ node --test scripts/generate-workflow-catalog.test.js scripts/workflow-context-p
 
 When comparing candidates, keep the same fixtures and runtime configuration,
 inspect both successful and failed trajectories, and reject any edit that only
-moves the failure into another task family.
+moves the failure into another task family. A protocol-coach A/B keeps the
+model, bootstrap reminder, fixture, thinking level, plugins, and evaluator
+fixed and changes only `OMP_ENHANCER_DISABLE_PROTOCOL_COACH=1`; each invocation
+still produces a stochastic sample, not proof of stable improvement.

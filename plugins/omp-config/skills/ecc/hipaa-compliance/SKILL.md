@@ -7,7 +7,13 @@ version: "1.1.0"
 
 # HIPAA Compliance Overlay
 
-Use `healthcare-phi-compliance` for PHI data-flow guidance and compose the ordinary `security.review`, `code.dev`, `factcheck.document`, or research workflow needed by the user's actual request. There is no dedicated healthcare workflow or healthcare Agent.
+When PHI data-flow guidance is part of the requested method, the initial PLAN
+should select the exact URI
+`skill://ecc-skill-catalog/healthcare-phi-compliance/SKILL.md` and the ordinary
+workflow already matching the user's actual request. This overlay consumes
+that committed PLAN; it does not reselect a workflow or change the committed
+PLAN after loading. There is no dedicated healthcare workflow or healthcare
+Agent.
 
 HIPAA obligations and agency guidance can change. For a high-stakes or current compliance conclusion, use reliable primary sources and an independent fact check, state the jurisdiction and date, and recommend qualified legal or compliance review. Do not present this skill as legal advice.
 

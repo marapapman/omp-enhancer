@@ -11,6 +11,14 @@ description: "Throwaway experiments to validate an idea before build"
 - Testing performance characteristics
 - Confirming whether a design works
 
+## Effect boundary
+
+Skipping production TDD is allowed only for a user-authorized, isolated scratch or non-production exploration. Declare the scratch write set before writing and keep production code, tests, configuration, and fixtures outside it.
+
+Never automatically absorb, extend, or promote spike code into production. To formally adopt the conclusion, create a new `code-development` vertical TDD slice with a public-behavior RED, minimal production change, and GREEN evidence.
+
+Delete spike artifacts only inside the declared scratch write set and with explicit deletion authorization. Never automatically delete or commit them; otherwise return their paths and a cleanup recommendation.
+
 ## Procedure
 
 ### 1. Define the Question
@@ -19,24 +27,26 @@ Write down exactly what you need to learn:
 - "Will approach Z achieve acceptable performance?"
 - "Is pattern W feasible in this codebase?"
 
+State a 30–60 minute timebox and the evidence that would answer the question.
+
 ### 2. Build Minimal Experiment
-- Create isolated prototype (new file/scratch directory)
+- Create one runnable experiment inside the authorized isolated scratch write set
 - Minimal code to answer the question — nothing else
-- Hardcode inputs, skip error handling, no tests
-- This is throwaway code — quality doesn't matter
+- Hardcode inputs and add only the handling needed to run it
+- Use already-available tools; dependency installation or network access needs its own authorization
 
 ### 3. Run and Learn
 - Execute the experiment
-- Collect data, timings, outputs
-- Document the answer to your question
+- Collect evidence: inputs, outputs, timings, limitations, and the cheapest countercheck
+- Record the answer to the question
 
 ### 4. Decide
-- **Proceed:** Approach validated → delete spike code, implement properly
+- **Proceed:** Approach validated → propose a separate `code-development` vertical TDD slice
 - **Pivot:** Approach doesn't work → try alternative
-- **Abandon:** Feature not feasible → document and move on
+- **Abandon:** Feature not feasible → return the evidence and conclusion
 
 ## Rules
 - **Spike code is throwaway.** Never evolve it into production code.
 - **Timebox.** Set a timer (30-60 min). If not answered, simplify question.
-- **Delete when done.** Keep only the learnings, not the code.
-- **Document decision.** Write down what you learned and why.
+- **Keep effects bounded.** Do not modify, delete, or commit outside explicit user authorization.
+- **Return the decision.** Report the question, command, evidence, limitations, conclusion, artifact paths, and recommended next step.

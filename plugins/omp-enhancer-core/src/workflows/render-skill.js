@@ -1,4 +1,21 @@
 import { WORKFLOW_CATALOG_VERSION, workflowDefinitions } from './catalog.js';
+import { workflowExecutionDefault } from './render-shared-markdown.js';
+import {
+  ECC_CATALOG_SKILL_URI,
+  directSkillCandidates,
+  exactNestedEccSkillCandidates,
+} from './skill-discovery.js';
+import {
+  DELEGATION_COMPILE_RULE,
+  DELEGATED_TODO_TEMPLATE,
+  DIRECT_FALLBACK_REASONS,
+  NATIVE_TASK_PREFIX_TEMPLATE,
+  TODO_REBASE_REASONS,
+  WORKFLOW_PLAN_TEMPLATE,
+  WORKFLOW_PROJECT_START_RULE,
+  WORKFLOW_READY_TEMPLATE,
+  WORKFLOW_STATE_LINE,
+} from './staged-contract.js';
 
 export const WORKFLOW_SKILL_NAME = 'omp-enhancer-workflows';
 
@@ -13,71 +30,74 @@ const DOMAIN_ORDER = Object.freeze([
   'growth',
   'operations',
 ]);
+const WRITING_INDEX_GROUPS = Object.freeze([
+  Object.freeze(['language', Object.freeze(['writing.pending', 'writing.zh', 'writing.en'])]),
+  Object.freeze(['format overlays', Object.freeze(['writing.latex', 'writing.markdown', 'doc.convert.word'])]),
+  Object.freeze(['specialized outputs', Object.freeze(['slides.generate', 'slides.modify', 'diagram.svg'])]),
+]);
 
 export function buildWorkflowSkillIndexMarkdown() {
   const grouped = groupDefinitions();
   const lines = [
     '---',
     `name: ${WORKFLOW_SKILL_NAME}`,
-    'description: Workflow navigation for analysis, judgment, staged work, or delegation.',
+    'description: Workflow index for staged project work.',
     '---',
     '',
-    '# OMP Enhancer workflows',
+    'DECLARE HANDOFF (soft): Next visible response MUST start byte 0 with `WORKFLOW PLAN` and contain only this form plus resource calls. Select internally; state stays silent; no project path; user text suffices:',
+    WORKFLOW_PLAN_TEMPLATE,
+    'PLAN reads NOW/waits. THEN is one final unsplit resource-only batch/wait; NOW=none reads THEN with PLAN. Give each evidence checkpoint an Action.',
+    'AFTER NOW: empty revealed URI set => no text/marker; call the THEN batch. Otherwise RESOURCE EXTENSION MUST list >=1 exact revealed URI; `reads=none` is invalid.',
     '',
     `Catalog version: ${WORKFLOW_CATALOG_VERSION}.`,
     '',
-    'This Skill is navigation, not a domain method. It does not route tasks, select Agents, create gates, change tools, grant permission, or decide completion.',
+    'Navigation only: never routes, gates, grants permission, selects Agents, or decides completion.',
     '',
     '## Staged protocol',
     '',
-    '1. **DISCOVER** — For non-mechanical work, read this index alone before project work and wait. A mechanical field lookup without analysis uses no Skill or TODO.',
+    `STATE: ${WORKFLOW_STATE_LINE}.`,
     '',
-    '2. **PLAN + LOAD** — Choose from the requested operation, source, and output. Emit the exact block below, load only its resources, and wait; project facts wait until READY.',
+    '1. **DISCOVER** — This body is the completed DISCOVER result; do not read `skill://omp-enhancer-workflows` again. A verbatim field lookup needs no Skill or TODO.',
     '',
-    '3. **READY + EXECUTE** — After resources, emit READY, commit the loaded method to detailed native TODO when exposed, wait, then execute it.',
+    `2. **DECLARE + LOAD** — Choose by operation, source, and output. Emit PLAN first; load NOW, wait, then load THEN and wait. ${WORKFLOW_PROJECT_START_RULE}`,
     '',
-    'Delegation is Main-owned; OMP native settings, tools, permissions, TODO, dynamic Agents, and completion remain authoritative.',
+    '3. **COMMIT + EXECUTE** — Emit READY first; commit loaded methods to detailed native TODO, wait, then split, execute, and verify.',
     '',
-    'WORKFLOW MATCH: test every whole Primary condition, not words like plan. Choose one for the central requested operation or deliverable; put every other independently matching requested operation or output in Add-ons. Do not add a workflow merely for an internal phase already covered by the Primary. Format-conversion plans match source/output rows, not `code.dev`. LaTeX prose correction keeps `writing.latex` + its language workflow; no converter/template unless requested.',
+    'Main owns delegation; OMP owns tools, permissions, TODO, Agents, and completion.',
+    '',
+    'PROSE: English draft/revision -> `writing.en`; Chinese -> `writing.zh`; unknown body -> `writing.pending`. Other central operation => language Add-on. Language Primary + `.tex` target, LaTeX prose, or preserved LaTeX commands => `writing.latex` Add-on; Markdown/Word add format. Format-only => format Primary. Converters/templates only when requested. Loaded language card + target/constraints/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read.',
     '',
     '## Domain index',
     '',
-    'SELECTION TABLE ONLY: choose here, emit PLAN, then read its literal PLAN URIs. A PLAN URI is `Load order` text, not an early call. Choose Skills from native descriptions and `Not for` boundaries, never for awareness.',
+    'SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select only a URI that matches the requested method, evidence rule, verdict, or format. `D` is direct; `C` is exact nested ECC revealed here. An enumerated `C` URI goes directly in PLAN/NOW; skip the full catalog. `'
+      + ECC_CATALOG_SKILL_URI
+      + '` remains only for unlisted niche discovery. Choose the smallest method/evidence/verdict/format set; refs stay in THEN.',
     '',
   ];
 
   for (const domain of DOMAIN_ORDER) {
     const definitions = grouped.get(domain) ?? [];
-    lines.push(
-      `### ${domain}`,
-      '',
-      ...definitions.map((definition) => (
-        `- \`${definition.id}\` — Primary: ${definition.chooseWhen} PLAN URI: \`${workflowReferenceUri(definition.id)}\`.`
-      )),
-      '',
-    );
+    lines.push(`### ${domain}`, '');
+    if (domain === 'writing') lines.push(...renderWritingIndex(definitions));
+    else lines.push(...definitions.map(renderIndexRow), '');
   }
 
   lines.push(
     '## State handoff',
     '',
-    'SOFT, MAIN-OWNED TRACE: no plugin enforces this order. Only visible assistant text counts; thinking, tool arguments, and files do not.',
+    'SELECTION: Primary = central deliverable; independent requested operations/outputs = Add-ons. Skills own methods/evidence/format; references do not.',
     '',
-    'SELECTION: Primary is exactly one central workflow ID. Put every other independently matching operation or output in Add-ons, never joined with `+`. From the native inventory, exclude every `Not for` match and choose the smallest Skill set positively owning the requested method, evidence, verdict, or format, never one for awareness. Format-only conversion loads its converter, not a target-format prose Skill unless content editing is requested. A workflow reference is not a domain Skill.',
+    'EXECUTION: DIRECT skips; `agentic.simple` has no `task`; `writing.pending` composes once; every other loaded card uses the compiler below.',
     '',
-    'LOAD ORDER: list every declared exact domain Skill or catalog `skill://...` URI first, then copy each selected row\'s literal workflow `PLAN URI:` once and last. This makes the final card cue READY. Resolve an exact nested Skill URI revealed by a declared catalog before the workflow references; name it, read it, wait, and do not repeat PLAN.',
+    'FALLBACK: only a concrete user/native, Agent/capacity, input/dependency/write-set, safety, or parent-owned limit; never size, latency, read-only, overhead, or no delegation request.',
     '',
-    'NEXT VISIBLE ASSISTANT TEXT — plain, unquoted, fully filled before any tool call:',
-    'WORKFLOW PLAN',
-    'Primary: <one-workflow-id-or-none>',
-    'Add-ons: <comma-separated-workflow-ids-or-none>',
-    'Skills: <comma-separated-exact-domain-skill-uris-or-none>',
-    'Load order: <comma-separated-skill-then-reference-uris-or-none>',
-    'Actions:',
-    '1. <how every selected workflow and Skill will be applied and verified>',
-    'OUTPUT BRIDGE: the first visible content item is this full `WORKFLOW PLAN`; resource calls follow it. Use a separate numbered Action for each distinct requested checkpoint or evidence phase; do not collapse them into one catch-all line. Thinking, narration without the block, or `...` does not count. Call every Load order URI and nothing else, end, and wait; no project tool, `todo`, `task`, or final.',
+    'SKILL URI: D is direct; C is exact nested and revealed here. Other nested URIs need a loaded source. Supplied bodies stay in PLAN/READY, not NOW; only exact failure means unavailable.',
     '',
-    'AFTER ALL DECLARED RESOURCES AND ANY CATALOG EXTENSION HAVE RETURNED, start visible assistant text with `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<bare-ids-or-none> | skills-unavailable=<bare-ids-or-none>`; then rebase the detailed TODO once before the first project action. When native `todo` is exposed, the only call in this response is TODO init; end and wait, then start project work in the next response.',
+    'LOAD: Skills=exact domain Skill/catalog URIs; refs=THEN. NOW=non-supplied Skills/catalogs; THEN=Add-on refs then Primary. Load/wait each; max 2 catalog + 1 method extensions. NOW none => THEN with PLAN. Never guess/reread/re-PLAN except `writing.pending`.',
+    '',
+    `COMMIT HANDOFF (soft): after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable, next response begins \`W\`, fills \`${WORKFLOW_READY_TEMPLATE}\` with bare IDs, initializes native TODO only, ends, and waits. Freeze W=<Primary,Add-ons> and S=<bare loaded IDs>; delegated metadata copies W/S. ${DELEGATION_COMPILE_RULE} ${WORKFLOW_PROJECT_START_RULE}`,
+    '',
+    'NEXT VISIBLE BYTES MUST BE `WORKFLOW PLAN`; no preface; no plugin enforces this format.',
     '',
   );
 
@@ -88,15 +108,33 @@ export function buildWorkflowSkillReferenceMarkdown(workflowId) {
   const definition = workflowDefinitions.find(({ id }) => id === workflowId);
   if (!definition) throw new Error(`Unknown workflow skill reference: ${workflowId}.`);
   const lines = [
+    `READY NEXT (soft): SENTINEL 1/2 — no plugin enforcement. Next assistant response byte 0 = \`W\` of filled \`${WORKFLOW_READY_TEMPLATE}\`; no other visible text; the same response calls native TODO init only. Rebase TODO from loaded resources; end/wait.`,
     `# \`${workflowId}\` workflow reference`,
     '',
     'Optional reference only. OMP native runtime instructions and settings remain authoritative.',
     'RESOURCE HANDOFF (soft): load only remaining declared resources and wait. Do not start project work in a resource-result response.',
+    `Derive TODO internally.${definition.delegationDefault === 'subagent-driven' ? ' Each delegated native TODO `items[]` string is the exact Delegate row; use no role-colon shorthand. Its checkpoint is one metadata-safe line without `]`, `workflow=`, `step=`, `todo=`, `skills=`, or `checkpoint=`.' : ''}`,
     '',
     ...renderCard(definition),
     '',
-    'NEXT CHECKPOINT: after all declared resources and any catalog extension have returned or were marked unavailable, start visible assistant text with `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<bare-ids-or-none> | skills-unavailable=<bare-ids-or-none>`. When native `todo` is exposed, this response calls only TODO init and waits; project work starts in the next response.',
+    `EXECUTION DEFAULT (soft): ${workflowExecutionDefault(definition)}`,
     '',
+    `TODO COMPILE (soft): Rebase TODO from this card. For a subagent-driven card, complete input + safe checkpoint + visible matching Agent => one exact Delegate row; otherwise \`fallback=<one matched permitted limitation>\`. Parent VERIFY rows remain separate. Every delegated row is exactly \`${DELEGATED_TODO_TEMPLATE}\`; workflow and skills copy frozen W=<Primary,Add-ons> and S=<bare loaded Skill IDs>.`,
+    ...(definition.delegationDefault === 'defer-until-composed' ? [
+      'PENDING TRANSITION: after initial READY/TODO, make exactly one narrow body-language read with no substantive review. Next visible bytes are WORKFLOW PLAN: replace pending with `writing.zh` or `writing.en`, retain format Add-ons, put only new language Skills in NOW and its Primary reference last in THEN, load/wait, then emit replacement READY and TODO/wait. If ambiguous, ask; never loop or guess.',
+    ] : []),
+    ...(definition.delegationDefault === 'subagent-driven' ? [
+      'TASK COPY (soft, later response): copy one committed Delegate row; do not redraft its metadata.',
+      '- Set native item `agent` to the row Agent and native item `todo` to the row checkpoint verbatim.',
+      `- Assignment body byte 0 = \`${NATIVE_TASK_PREFIX_TEMPLATE}\`. Never begin \`# Target\` or \`# Goal\`.`,
+      '- The native `tasks[].task` itself begins at byte 0 with that complete four-key prefix. Every native `task` call sets a non-empty top-level `context` summarizing the shared batch purpose. That common `context`, name, label, or an instruction telling the child to output metadata cannot substitute for an item body or its byte-0 prefix.',
+      `- Keep later-wave metadata stable and put delivery material in the body. Fill required native fields, copy direct user constraints verbatim, and add bounded scope and acceptance evidence. After dispatch, end and wait for native auto-delivery; do not poll with \`hub\`. Only a ${TODO_REBASE_REASONS} may rebase the row; otherwise use ${DIRECT_FALLBACK_REASONS}.`,
+    ] : []),
+    ...(/^writing\.(?:en|zh)$/u.test(definition.id) ? [
+      `AFTER TODO RESULT: the ${definition.id === 'writing.zh' ? 'zh-writer' : 'writer'} \`task\` is the next project action; use the committed row; no Main \`read\` or \`glob\` to confirm or enrich its complete input. Initial TODO freezes three exact Delegate rows: step-2 ${definition.id === 'writing.zh' ? 'zh-writer' : 'writer'}, step-3 ${definition.id === 'writing.zh' ? 'zh-checker' : 'checker'}, and conditional step-4 corrected-proposal. Keep the later rows unchanged and put delivery text after the prefix. Branch A: Main alone performs finding disposition and accepts at least one checker finding; dispatch the original frozen step-4 row and use native TODO \`done\` for that same row only after a complete corrected-proposal terminal delivery. Branch B: Main accepts zero checker findings; do not dispatch; use native TODO \`done\` on the same frozen row with \`resolved-no-repair\`; never rewrite, drop, or abandon it. This no-op branch is parent TODO condition resolution, not child delivery, a successful fork, or permission. Each dispatch mechanically copies its frozen Agent, workflow, step, skills, and checkpoint metadata.`,
+    ] : []),
+    '',
+    `READY NEXT (soft): SENTINEL 2/2 — no plugin enforcement. Next assistant response byte 0 = \`W\` of filled \`${WORKFLOW_READY_TEMPLATE}\`; no other visible text; native TODO init only; end/wait.`,
   ];
   return lines.join('\n');
 }
@@ -138,8 +176,8 @@ function renderCard(definition) {
     `- Primary when: ${definition.chooseWhen}`,
     '- Reference steps:',
     ...definition.steps.map(({ id, text }, index) => `  ${index + 1}. [${id}] ${text}`),
-    `- Optional Agent candidates: ${definition.roles.length ? definition.roles.map(code).join(', ') : 'none suggested'}.`,
-    ...renderSublist('Optional delegation ideas', definition.delegation),
+    `- Agent candidates: ${definition.roles.length ? definition.roles.map(code).join(', ') : 'none suggested'}.`,
+    ...renderSublist('Delegated checkpoints', definition.delegation),
     ...renderSublist('Quality checks', definition.qualityChecks),
     ...renderSublist('Scope notes', definition.scopeNotes, 'none'),
     ...renderSublist('Risk notes', definition.riskNotes, 'none'),
@@ -148,6 +186,35 @@ function renderCard(definition) {
 
 function code(value) {
   return `\`${value}\``;
+}
+
+function renderIndexRow(definition) {
+  return `- \`${definition.id}\` — ${definition.chooseWhen} ${renderSkillDiscovery(definition)} PLAN URI: \`${workflowReferenceUri(definition.id)}\`.`;
+}
+
+function renderWritingIndex(definitions) {
+  const byId = new Map(definitions.map((definition) => [definition.id, definition]));
+  const expectedIds = WRITING_INDEX_GROUPS.flatMap(([, ids]) => ids);
+  if (definitions.length !== expectedIds.length || expectedIds.some((id) => !byId.has(id))) {
+    throw new Error('Writing workflow index groups must cover every writing workflow exactly once.');
+  }
+  return WRITING_INDEX_GROUPS.flatMap(([label, ids]) => [
+    `#### ${label}`,
+    '',
+    ...ids.map((id) => renderIndexRow(byId.get(id))),
+    '',
+  ]);
+}
+
+function renderSkillDiscovery(definition) {
+  const direct = directSkillCandidates(definition)
+    .map((skill) => code(`skill://${skill}`));
+  const catalog = exactNestedEccSkillCandidates(definition).map(code);
+  if (!direct.length && !catalog.length) return 'S=[none].';
+  return [
+    ...(direct.length ? [`D=[${direct.join(', ')}]`] : []),
+    ...(catalog.length ? [`C=[${catalog.join(', ')}]`] : []),
+  ].join(' ') + '.';
 }
 
 function renderSublist(label, values, fallback = '') {

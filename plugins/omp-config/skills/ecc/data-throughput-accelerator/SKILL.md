@@ -2,14 +2,21 @@
 name: data-throughput-accelerator
 description: Use when large data ingestion, backfill, export, ETL, warehouse loading, manifest catch-up, or table synchronization needs to become much faster while preserving data correctness.
 origin: ECC
-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
 # Data Throughput Accelerator
 
-Use this skill when the bottleneck is moving, transforming, or saving lots of
-data. The goal is not just speed. The goal is faster correct data landing in the
-right place with proof.
+Apply this method after Main selects and loads it for a bottleneck in moving,
+transforming, or saving large data volumes. The goal is not just speed. The goal
+is faster correct data landing in the right place with proof.
+
+Any live source or target read, catch-up, benchmark, file, database, or network
+write, job execution, or external query is allowed only for the exact named
+target and operation with explicit user authorization plus native permission at
+execution time. Creating a schedule or a persistent CLI, workflow, or runbook is
+a separate effect and needs separate authorization. A recurring rerun belongs
+only to an explicitly authorized external target system and never continues,
+restarts, or controls the current OMP session.
 
 ## First Distinction
 
@@ -44,12 +51,15 @@ than the final catch-up window.
 4. Compare variants: batch size, worker count, warehouse SQL, file grouping,
    staging shape, and manifest update method.
 5. Promote only the fastest path that keeps counts and timestamps coherent.
-6. Codify the path as a CLI, scheduled job, workflow, or runbook.
-7. Rerun final accounting after the codified path executes.
+6. Describe how the path could be codified as a CLI, scheduled job, workflow, or
+   runbook; create or schedule it only under the authority boundary above.
+7. Perform final accounting after an authorized execution, or state that the
+   execution evidence is unavailable.
 
 ## Accounting Output
 
-Use a hard accounting block:
+Use a domain accounting block. A domain accounting check is evidence only, not
+a host completion gate, release decision, or permission to run another effect:
 
 ```text
 Data throughput result:
@@ -59,7 +69,7 @@ Data throughput result:
 - Derived rows added: 8,917,585
 - Remaining tail: 24 files at readback time
 - Runtime: 38.7s
-- Correctness gate: manifest counts and table max timestamps match
+- Domain accounting check: manifest counts and table max timestamps match
 ```
 
 ## Guardrails
@@ -67,6 +77,8 @@ Data throughput result:
 - Do not delete raw data to make a metric look better.
 - Do not skip failed files silently.
 - Do not mix historical backfill status with live-tail freshness.
-- Do not call a pipeline complete until the target tables and manifest agree.
+- Report the pipeline's domain accounting status as incomplete while target
+  tables and manifest disagree; this does not decide current OMP completion.
 - For finance, healthcare, regulated, or customer-impacting data, preserve
-  replay evidence and approval gates.
+  replay evidence and identify target-system approval policies. Those policies
+  are not host lifecycle gates.

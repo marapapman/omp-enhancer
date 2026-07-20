@@ -8,9 +8,9 @@ origin: ECC
 
 This skill turns product intent into explicit engineering constraints.
 
-Use it when the gap is not "what should we build?" but "what exactly must be true before implementation starts?"
+Apply it after Main selects and loads this resource for the gap between "what should we build?" and "what exactly must be true before implementation starts?"
 
-## When to Use
+## Selected task scope
 
 - A PRD, roadmap item, discussion, or founder note exists, but the implementation constraints are still implicit
 - A feature crosses multiple services, repos, or teams and needs a capability contract before coding
@@ -20,9 +20,11 @@ Use it when the gap is not "what should we build?" but "what exactly must be tru
 
 ## Canonical Artifact
 
-If the repo has a durable product-context file such as `PRODUCT.md`, `docs/product/`, or a program-spec directory, update it there.
+Keep the capability result response-local by default. A persistent capability artifact may be created or updated only for the exact named path and operation with explicit user authorization plus native permission at execution time.
 
-If no capability manifest exists yet, create one using the template at:
+If that authority names an existing durable product-context file such as `PRODUCT.md`, `docs/product/`, or a program-spec directory, update only the named target.
+
+If no capability manifest exists, return the proposed content in the response. Use this project template only when it exists and the authorized write names the destination:
 
 - `docs/examples/product-capability-template.md`
 
@@ -92,20 +94,22 @@ Produce an SRS-style capability plan with:
 
 ### 4. Translate into execution
 
-End with the exact handoff:
+End with one capability-readiness finding:
 
 - ready for direct implementation
 - needs architecture review first
 - needs product clarification first
 
-If useful, point to the next ECC-native lane:
+Capability readiness is a domain finding, not host completion, release permission, implementation permission, or approval to start another task.
 
-- `project-flow-ops`
-- `workspace-surface-audit`
-- `api-connector-builder`
-- `dashboard-builder`
-- `tdd-workflow`
-- `verification-loop`
+Each exact Skill URI below is only a candidate for a new `WORKFLOW PLAN` chosen by Main; this body does not automatically load, hand off to, or reselect any of them:
+
+- `skill://ecc-skill-catalog/project-flow-ops/SKILL.md`
+- `skill://ecc-skill-catalog/workspace-surface-audit/SKILL.md`
+- `skill://ecc-skill-catalog/api-connector-builder/SKILL.md`
+- `skill://ecc-skill-catalog/dashboard-builder/SKILL.md`
+- `skill://ecc-skill-catalog/tdd-workflow/SKILL.md`
+- `skill://ecc-skill-catalog/verification-loop/SKILL.md`
 
 ## Output Format
 
@@ -130,8 +134,8 @@ NON-GOALS
 OPEN QUESTIONS
 - blockers or product decisions still required
 
-HANDOFF
-- what should happen next and which ECC lane should take it
+NEXT-METHOD CANDIDATES
+- exact Skill URIs that Main may consider in a new plan
 ```
 
 ## Good Outcomes

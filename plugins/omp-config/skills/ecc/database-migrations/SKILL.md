@@ -8,6 +8,10 @@ origin: ECC
 
 Safe, reversible database schema changes for production systems.
 
+## Authority Boundary
+
+The SQL, CLI, configuration, and client examples below are patterns, not authorization to connect to or mutate a live database. Authorization to edit repository migration or configuration files does not authorize applying those changes, opening a live connection, or running a live command. Any database side effect requires explicit user scope and the host's native permission path; otherwise keep work read-only or use a disposable environment.
+
 ## When to Activate
 
 - Creating or altering database tables

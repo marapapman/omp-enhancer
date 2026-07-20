@@ -8,7 +8,20 @@ origin: ECC
 
 This lane owns product diagnosis, not implementation-ready specification writing.
 
-If the user needs a durable PRD-to-SRS or capability-contract artifact, hand off to `product-capability`.
+## OMP Composition Boundary
+
+Main owns cross-Skill composition: it selects every supporting workflow and Skill
+in the initial `WORKFLOW PLAN` and loads each declared Skill before
+`WORKFLOW READY`. After load, this loaded Skill does not reselect, reroute,
+auto-load, or hand off to another Skill. It does not replace the parent TODO or
+Main's Agent choice. An exact same-namespace
+`skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI explicitly exposed here may be
+read in one `RESOURCE EXTENSION` before `COMMIT`; cross-namespace candidates
+remain initial-PLAN only.
+
+A durable PRD-to-SRS or capability-contract artifact is outside this diagnostic
+method. When independently requested, its non-routing PLAN candidate is
+`skill://ecc-skill-catalog/product-capability/SKILL.md`.
 
 ## When to Use
 
@@ -34,9 +47,12 @@ Like YC office hours but automated. Asks the hard questions:
 7. How do you know it's working? (metric, not vibes)
 ```
 
-Output: a `PRODUCT-BRIEF.md` with answers, risks, and a go/no-go recommendation.
+By default, return a concise chat report with answers, risks, and a go/no-go
+recommendation. Write `PRODUCT-BRIEF.md` only when the user requests that
+artifact and supplies or authorizes a safe path.
 
-If the result is "yes, build this," the next lane is `product-capability`, not more founder-theater.
+If the result is "yes, build this," report that disposition to Main; this loaded
+Skill does not change lanes or dispatch implementation work.
 
 ### Mode 2: Founder Review
 
@@ -59,7 +75,9 @@ Reviews your current project through a founder lens:
 Maps the actual user experience:
 
 ```
-1. Clone/install the product as a new user
+1. Review the existing checkout, supplied environment, or already available
+   onboarding evidence as a new user. Clone or install only after the user
+   explicitly authorizes that effect and an isolated target.
 2. Document every friction point (confusing steps, errors, missing docs)
 3. Time each step
 4. Compare to competitor onboarding
@@ -81,12 +99,15 @@ When you have 10 ideas and need to pick 2:
 
 ## Output
 
-All modes output actionable docs, not essays. Every recommendation has a specific next step.
+All modes produce an actionable chat report by default, not an essay. Every
+recommendation has a specific next step. Write a durable artifact only when the
+user requests it and authorizes its target.
 
-## Integration
+## Non-Routing PLAN Candidates
 
-Pair with:
-- `/browser-qa` to verify the user journey audit findings
-- `/design-system audit` for visual polish assessment
-- `/canary-watch` for post-launch monitoring
-- `product-capability` when the product brief needs to become an implementation-ready capability plan
+Main may select these only when their independent selection conditions match:
+
+- Journey verification: `skill://ecc-skill-catalog/browser-qa/SKILL.md`
+- Visual-polish assessment: `skill://ecc-skill-catalog/design-system/SKILL.md`
+- Post-launch monitoring: `skill://ecc-skill-catalog/canary-watch/SKILL.md`
+- Implementation-ready capability planning: `skill://ecc-skill-catalog/product-capability/SKILL.md`

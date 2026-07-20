@@ -5,8 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   defaultTestingEnhancerConfig,
   parseTestingEnhancerConfig,
-  readTestingEnhancerConfig,
-  renderTestingEnhancerConfig
+  readTestingEnhancerConfig
 } from '../../../src/config/testingConfig.js'
 
 async function tempDir(): Promise<string> {
@@ -14,25 +13,21 @@ async function tempDir(): Promise<string> {
 }
 
 describe('testingConfig', () => {
-  it('renders and parses the default advisory review config', () => {
-    const config = defaultTestingEnhancerConfig()
-    const rendered = renderTestingEnhancerConfig(config)
-
-    expect(rendered).toContain('version: 2')
-    expect(rendered).toContain('# Expected host-observed command; advisory omp_test_review never executes it.')
-    expect(rendered).toContain('  command: ')
-    expect(rendered).toContain('browser:')
-    expect(rendered).toContain('  headless: true')
-    expect(rendered).toContain('  trace: retain-on-failure')
-    expect(rendered).toContain('  screenshot: only-on-failure')
-    expect(rendered).toContain('  serviceWorkers: block')
-    expect(rendered).toContain('review:')
-    expect(rendered).toContain('  browserEvidence: critical')
-    expect(parseTestingEnhancerConfig(rendered)).toEqual(config)
+  it('defaults only runtime-consumed project settings', () => {
+    expect(defaultTestingEnhancerConfig()).toEqual({
+      version: 2,
+      test: {},
+      review: {
+        indirectTest: 'critical',
+        productionEdits: 'critical',
+        testCommand: 'critical',
+        browserEvidence: 'critical'
+      }
+    })
   })
 
-  it('round-trips browser and review values', () => {
-    const rendered = [
+  it('parses test and review settings while ignoring legacy and unknown sections', () => {
+    const text = [
       'version: 2',
       'test:',
       '  command: bunx vitest run',
@@ -50,21 +45,20 @@ describe('testingConfig', () => {
       '  productionEdits: critical',
       '  testCommand: critical',
       '  browserEvidence: warning',
+      'unknown:',
+      '  key: value',
       ''
     ].join('\n')
 
-    expect(parseTestingEnhancerConfig(rendered)).toMatchObject({
+    expect(parseTestingEnhancerConfig(text)).toEqual({
       version: 2,
       test: { command: 'bunx vitest run' },
-      browser: {
-        baseUrl: 'http://localhost:5173',
-        timeoutMs: 15000,
-        headless: false,
-        trace: 'off',
-        screenshot: 'off',
-        serviceWorkers: 'allow'
-      },
-      review: expect.objectContaining({ browserEvidence: 'warning' })
+      review: {
+        indirectTest: 'critical',
+        productionEdits: 'critical',
+        testCommand: 'critical',
+        browserEvidence: 'warning'
+      }
     })
   })
 
@@ -95,13 +89,6 @@ describe('testingConfig', () => {
     expect(parsed).toEqual({
       version: 2,
       test: {},
-      coverage: {},
-      browser: {
-        headless: true,
-        trace: 'retain-on-failure',
-        screenshot: 'only-on-failure',
-        serviceWorkers: 'block'
-      },
       review: {
         indirectTest: 'critical',
         productionEdits: 'warning',
@@ -114,9 +101,18 @@ describe('testingConfig', () => {
   it('reads a manually created config and leaves missing config optional', async () => {
     const cwd = await tempDir()
     await mkdir(join(cwd, '.omp'), { recursive: true })
-    await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), 'version: 2\ntest:\n  command: custom\ncoverage:\n  command: \nreview:\n  indirectTest: warning\n  productionEdits: warning\n  testCommand: warning\n')
+    await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), 'version: 2\ntest:\n  command: custom\ncoverage:\n  command: ignored\nbrowser:\n  baseUrl: http://localhost:5173\nreview:\n  indirectTest: warning\n  productionEdits: warning\n  testCommand: warning\n')
 
-    expect(await readTestingEnhancerConfig(cwd)).toMatchObject({ test: { command: 'custom' } })
+    expect(await readTestingEnhancerConfig(cwd)).toEqual({
+      version: 2,
+      test: { command: 'custom' },
+      review: {
+        indirectTest: 'warning',
+        productionEdits: 'warning',
+        testCommand: 'warning',
+        browserEvidence: 'critical'
+      }
+    })
     expect(await readTestingEnhancerConfig(await tempDir())).toBeUndefined()
   })
 })

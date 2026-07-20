@@ -14,6 +14,9 @@ export const TASK_METADATA_PREFIX_CHAR_LIMIT = 120;
 const TASK_ASSIGNMENT_METADATA_FIELDS = ['workflow', 'step', 'todo', 'skills'];
 const WORKFLOW_PLAN_PATTERN = /^[ \t]*(?:#{1,6}[ \t]+)?(?:\*{1,3}|_{1,3})?WORKFLOW[ \t]+PLAN(?:\*{1,3}|_{1,3})?[ \t]*(?=\||\r?$)/gimu;
 const WORKFLOW_READY_PATTERN = /\bWORKFLOW\s+READY(?:\s*(?:\*{1,3}|_{1,3}))?\s*\|/iu;
+const RESOURCE_EXTENSION_PATTERN = /^[ \t]*RESOURCE[ \t]+EXTENSION[ \t]*(?=\|)/gimu;
+const MAX_RESOURCE_EXTENSION_BATCHES = 3;
+const MAX_RESOURCE_EXTENSION_READS = 6;
 const WORKFLOW_INDEX_URI_PATTERN = /^skill:\/\/omp-enhancer-workflows(?:\/SKILL\.md)?(?:[?#].*)?$/iu;
 const WORKFLOW_REFERENCE_URI_PATTERN = /^skill:\/\/omp-enhancer-workflows\/references\/[^\s?#]+(?:[?#].*)?$/iu;
 const CLAIM_VERDICTS = new Set([
@@ -57,6 +60,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
   const providedSkillEvidence = new Map();
   const claimedSkills = new Set();
   const agentArtifactPreviews = [];
+  const visibleAdvisorMessages = [];
   let pendingTurnKind = 'user';
   let activeTurnKind = 'user';
   let agentStarts = 0;
@@ -79,6 +83,12 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
         && sawPrimaryFinal
         && event?.type === 'message_end') {
         postFinalAdvisorMessageCount += 1;
+      }
+      if (custom.customType === 'advisor' && custom.display !== false) {
+        visibleAdvisorMessages.push({
+          eventIndex,
+          text: customContentTextFromEvent(event),
+        });
       }
       for (const evidence of custom.providedSkillEvidence) {
         const locatedEvidence = {
@@ -130,6 +140,9 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
         workflowReadyContentIndex: null,
         workflowReadyCharacterIndex: null,
         workflowReadyDeclaration: null,
+        resourceExtensionContentIndex: null,
+        resourceExtensionCharacterIndex: null,
+        resourceExtensionDeclaration: null,
         firstVisibleTextContentIndex: null,
         toolCallIds: [],
         toolNames: [],
@@ -144,6 +157,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
           }
           const workflowPlanMarker = workflowPlanMarkerFromVisibleText(itemText);
           const workflowReadyCharacterIndex = itemText.search(WORKFLOW_READY_PATTERN);
+          const resourceExtensionMarker = resourceExtensionMarkerFromVisibleText(itemText);
           if (batch.workflowPlanContentIndex == null && workflowPlanMarker) {
             batch.workflowPlanContentIndex = contentIndex;
             batch.workflowPlanCharacterIndex = workflowPlanMarker.characterIndex;
@@ -156,6 +170,11 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
               itemText,
               workflowReadyCharacterIndex,
             );
+          }
+          if (batch.resourceExtensionContentIndex == null && resourceExtensionMarker) {
+            batch.resourceExtensionContentIndex = contentIndex;
+            batch.resourceExtensionCharacterIndex = resourceExtensionMarker.characterIndex;
+            batch.resourceExtensionDeclaration = resourceExtensionMarker.declaration;
           }
           continue;
         }
@@ -213,7 +232,9 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
         call.completed = true;
         call.isError = isError;
         call.completionEventIndex = eventIndex;
-        call.resultPreview = resultText(result).slice(0, 1000);
+        const fullResultText = resultText(result);
+        call.resultPreview = fullResultText.slice(0, 1000);
+        call.revealedSkillUris = exactSkillUrisFromText(fullResultText);
         if (!isError && call.name === 'todo') {
           call.todoResult = summarizeTodoResult(result?.details);
         }
@@ -257,12 +278,33 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
     .filter(({ name }) => hasEquivalentSkill(providedSkills, name));
   for (const call of calls) call.workflowStageKind = workflowStageKindFromCall(call);
   const workflowPreparation = summarizeWorkflowPreparation(calls, assistantBatches);
-  const projectToolCalls = calls.filter((call) => !nonProjectResourceReadFromCall(call));
+  const skillPathDiagnostics = summarizeSkillPathDiagnostics(
+    calls,
+    workflowPreparation,
+    visibleAdvisorMessages,
+  );
+  const pendingPreparationCallIds = new Set();
+  if (workflowPreparation.pendingLanguageTransition?.valid === true) {
+    pendingPreparationCallIds.add(workflowPreparation.pendingLanguageTransition.languageReadCallId);
+    for (const batchIndex of [
+      workflowPreparation.pendingLanguageTransition.initialReadyBatchIndex,
+      workflowPreparation.pendingLanguageTransition.replacementReadyBatchIndex,
+    ]) {
+      for (const call of calls.filter(({ assistantBatchIndex }) => assistantBatchIndex === batchIndex)) {
+        pendingPreparationCallIds.add(call.id);
+      }
+    }
+  }
+  const projectToolCalls = calls.filter((call) => (
+    !nonProjectResourceReadFromCall(call) && !pendingPreparationCallIds.has(call.id)
+  ));
   const firstProjectToolCallEventIndex = projectToolCalls.length
     ? Math.min(...projectToolCalls.map(({ eventIndex }) => eventIndex))
     : null;
   const substantiveToolCalls = calls.filter((call) => (
-    !nonProjectResourceReadFromCall(call) && !ORCHESTRATION_TOOLS.has(call.name)
+    !nonProjectResourceReadFromCall(call)
+    && !ORCHESTRATION_TOOLS.has(call.name)
+    && !pendingPreparationCallIds.has(call.id)
   ));
   const firstSubstantiveToolCallEventIndex = substantiveToolCalls.length
     ? Math.min(...substantiveToolCalls.map(({ eventIndex }) => eventIndex))
@@ -316,6 +358,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
     duplicateSkillReads,
     skillReadAttempts,
     duplicateSkillReadAttempts,
+    ...skillPathDiagnostics,
     firstProjectToolCallEventIndex,
     firstSubstantiveToolCallEventIndex,
     nativeTodo,
@@ -386,6 +429,9 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     );
   }
   const workflowPreparation = summary.workflowPreparation ?? {};
+  if (workflowPreparation.pendingLanguageTransition?.valid === false) {
+    failures.push(...workflowPreparation.pendingLanguageTransition.failures);
+  }
   if (expectations.requireWorkflowIndexOnlyFirstToolBatch === true
     && workflowPreparation.indexOnlyFirstToolBatch !== true) {
     failures.push('workflow index was not the only successful call in the first assistant tool batch');
@@ -406,7 +452,13 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   }
   if (expectations.requireWorkflowPlanFirstVisibleContent === true
     && workflowPreparation.workflowPlanFirstVisibleContent !== true) {
-    failures.push('WORKFLOW PLAN was not the first visible content in its assistant response');
+    failures.push('WORKFLOW PLAN was not the first nonempty visible text item in its assistant response');
+  }
+  if (expectations.requireWorkflowPlanLoadCallsSameBatch === true) {
+    failures.push(...workflowPlanLoadBatchFailures(summary, workflowPreparation));
+  }
+  if (expectations.requireStructuredWorkflowLoadPhases === true) {
+    failures.push(...structuredWorkflowLoadPhaseFailures(summary, workflowPreparation));
   }
   if (expectations.forbidResourceProjectSameBatch === true
     && (workflowPreparation.mixedResourceProjectBatchIndexes?.length ?? 0) > 0) {
@@ -416,12 +468,18 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     && workflowPreparation.readyAfterLoadsBeforeProjectTools !== true) {
     failures.push('WORKFLOW READY was not observed after resource loads completed and before project tools');
   }
+  if (expectations.requireWorkflowReadyFirstVisibleContent === true
+    && workflowPreparation.workflowReadyFirstVisibleContent !== true) {
+    failures.push('WORKFLOW READY was not the first nonempty visible text item in its assistant response');
+  }
   if (expectations.requireWorkflowReadyTodoOnlyBatch === true
     && workflowPreparation.workflowReadyOnlyTodoInitCall !== true) {
     failures.push('WORKFLOW READY batch did not contain only native TODO init followed by a wait');
   }
   failures.push(...workflowSelectionFailures(workflowPreparation, expectations));
   failures.push(...workflowResourceDeclarationFailures(summary, workflowPreparation, expectations));
+  failures.push(...linkedResourceExtensionFailures(summary, workflowPreparation));
+  failures.push(...workflowLoadOrderFailures(summary, workflowPreparation, expectations));
   if (expectations.requireExactSelectedWorkflowReferences === true) {
     failures.push(...exactWorkflowReferenceFailures(summary, workflowPreparation));
   }
@@ -464,6 +522,22 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     ));
     if (!observedBeforeProjectTools) {
       failures.push(`required observed skill was not read successfully before project tools: ${skill}`);
+    }
+  }
+  for (const uri of expectations.requiredExactSkillUrisBeforeProjectTools ?? []) {
+    const expectedUri = stripOuterMarkdown(uri);
+    const firstProjectTool = summary.firstProjectToolCallEventIndex;
+    const exactReadBeforeProjectTools = (summary.toolCalls ?? []).some((call) => (
+      call.name === 'read'
+      && readTargetFromCall(call) === expectedUri
+      && call.completed === true
+      && call.isError === false
+      && Number.isFinite(firstProjectTool)
+      && Number.isFinite(call.eventIndex)
+      && call.eventIndex < firstProjectTool
+    ));
+    if (!exactReadBeforeProjectTools) {
+      failures.push(`required exact Skill URI was not read successfully before project tools: ${expectedUri}`);
     }
   }
   if (Array.isArray(expectations.requiredAnySkills)
@@ -598,6 +672,16 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   if (expectations.noUnobservedSkillClaims === true && summary.unobservedClaims.length) {
     failures.push(`unobserved skill claims: ${summary.unobservedClaims.join(', ')}`);
   }
+  if (expectations.forbidMisaddressedDeclaredSkillReads === true
+    && (summary.misaddressedDeclaredSkillReads?.length ?? 0) > 0) {
+    const skills = uniqueSorted(summary.misaddressedDeclaredSkillReads.map(({ skill }) => skill));
+    failures.push(`misaddressed declared Skill read(s): ${skills.join(', ')}`);
+  }
+  if (expectations.forbidUnsupportedAdvisorSkillAbsenceClaims === true
+    && (summary.unsupportedAdvisorSkillAbsenceClaims?.length ?? 0) > 0) {
+    const skills = uniqueSorted(summary.unsupportedAdvisorSkillAbsenceClaims.map(({ skill }) => skill));
+    failures.push(`unsupported Advisor Skill absence claim(s): ${skills.join(', ')}`);
+  }
   if (Number.isFinite(expectations.maxDuplicateFailedCalls)
     && summary.duplicateFailedCalls.some(({ count }) => count - 1 > expectations.maxDuplicateFailedCalls)) {
     failures.push('an unchanged failed tool call was repeated too many times');
@@ -649,6 +733,11 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     && nativeTodo.initializedBeforeFirstSubstantiveTool !== true) {
     failures.push('native todo was not initialized before the first substantive tool call');
   }
+  evaluateRequiredNativeTodoItemPatterns(
+    nativeTodo.initializedItems ?? [],
+    expectations.requiredNativeTodoItemPatterns,
+    failures,
+  );
 
   const tddCycle = evaluateRequiredTddCycle(summary, expectations.requireTddCycle, failures);
   evaluateRequiredReviewStages(summary, expectations.requireReviewStages, tddCycle, failures);
@@ -703,6 +792,14 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
       failures.push(`${mismatched.length || 'all'} native task assignment(s) omitted the required native task context: ${expectations.requiredNativeTaskContext}`);
     }
   }
+  if (expectations.requireNonemptyNativeTaskContext === true) {
+    const missing = (nativeTask.assignments ?? []).filter(({ context }) => (
+      typeof context !== 'string' || !context.trim()
+    ));
+    if (!nativeTask.assignments?.length || missing.length) {
+      failures.push(`${missing.length || 'all'} native task assignment(s) omitted nonempty native task context`);
+    }
+  }
   if (expectations.requireNativeTaskCompletion === true) {
     const jobs = nativeTask.jobStatuses ?? [];
     if (!jobs.length) {
@@ -724,6 +821,11 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   for (const agent of expectations.forbiddenNativeTaskAgents ?? []) {
     if (nativeTaskAgents.has(agent)) failures.push(`forbidden native task agent was observed: ${agent}`);
   }
+  evaluateRequiredNativeTaskAgentSequence(
+    nativeTask,
+    expectations.requiredNativeTaskAgentSequence,
+    failures,
+  );
   for (const workflow of expectations.requiredNativeTaskWorkflows ?? []) {
     if (!nativeTaskWorkflows.has(workflow)) failures.push(`required native task workflow was not observed: ${workflow}`);
   }
@@ -771,6 +873,14 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
       failures.push(`${inexact.length || 'all'} native task assignment(s) omitted the exact compact metadata prefix`);
     }
   }
+  if (expectations.requireNativeTaskMetadataMatchesDelegatedTodoRows === true) {
+    const assignments = nativeTask.assignments ?? [];
+    const initializedItems = summary.nativeTodo?.initializedItems ?? [];
+    const mismatched = unmatchedAssignmentsForDelegatedTodoRows(initializedItems, assignments);
+    if (!assignments.length || mismatched.length) {
+      failures.push(`${mismatched.length || 'all'} native task assignment(s) did not mechanically match an initialized delegated TODO row`);
+    }
+  }
   if (expectations.requireNativeTaskSubmissionForEveryAssignment === true
     && nativeTask.submittedJobCount !== nativeTask.assignmentAttemptCount) {
     failures.push(`native task submitted jobs ${nativeTask.submittedJobCount} did not match assignment attempts ${nativeTask.assignmentAttemptCount}`);
@@ -780,6 +890,76 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   if (summary.timedOut) failures.push('runner hard timeout was reached');
 
   return { pass: failures.length === 0, failures };
+}
+
+function evaluateRequiredNativeTodoItemPatterns(initializedItems, specifications, failures) {
+  if (specifications == null) return;
+  if (!Array.isArray(specifications)) {
+    failures.push('requiredNativeTodoItemPatterns must be an array of regular-expression strings');
+    return;
+  }
+
+  for (const specification of specifications) {
+    if (typeof specification !== 'string' || specification.length === 0) {
+      failures.push('requiredNativeTodoItemPatterns contained an empty or non-string pattern');
+      continue;
+    }
+
+    let matcher;
+    try {
+      matcher = new RegExp(specification, 'iu');
+    } catch (error) {
+      failures.push(`requiredNativeTodoItemPatterns contained an invalid pattern ${JSON.stringify(specification)}: ${error.message}`);
+      continue;
+    }
+
+    if (!initializedItems.some((item) => matcher.test(String(item)))) {
+      failures.push(`native todo initialization had no item matching required pattern: ${JSON.stringify(specification)}`);
+    }
+  }
+}
+
+function evaluateRequiredNativeTaskAgentSequence(nativeTask, specification, failures) {
+  if (specification == null) return;
+  const agents = Array.isArray(specification)
+    ? specification.map((value) => String(value ?? '').trim()).filter(Boolean)
+    : [];
+  if (agents.length < 2 || agents.length !== specification.length) {
+    failures.push('required native task Agent sequence expectation was invalid');
+    return;
+  }
+
+  const assignments = [...(nativeTask.assignments ?? [])]
+    .sort((left, right) => left.eventIndex - right.eventIndex || left.index - right.index);
+  const selected = [];
+  const occurrences = new Map();
+  for (const agent of agents) {
+    const occurrence = occurrences.get(agent) ?? 0;
+    const assignment = assignments.filter((candidate) => candidate.agent === agent)[occurrence];
+    if (!assignment) {
+      failures.push(`required native task Agent sequence was missing assignment: ${agent}`);
+      return;
+    }
+    selected.push(assignment);
+    occurrences.set(agent, occurrence + 1);
+  }
+
+  for (let index = 1; index < selected.length; index += 1) {
+    const prior = selected[index - 1];
+    const current = selected[index];
+    if (prior.jobStatus !== 'completed' || !Number.isFinite(prior.jobCompletionEventIndex)) {
+      failures.push(`required native task Agent ${prior.agent} did not complete successfully before ${current.agent} assignment`);
+      continue;
+    }
+    if (!prior.deliveryText || !Number.isFinite(prior.deliveryEventIndex)) {
+      failures.push(`required native task Agent ${prior.agent} did not return a successful delivery before ${current.agent} assignment`);
+      continue;
+    }
+    if (!Number.isFinite(current.eventIndex)
+      || current.eventIndex <= prior.deliveryEventIndex) {
+      failures.push(`required native task Agent ${current.agent} started before ${prior.agent} successful delivery`);
+    }
+  }
 }
 
 export function classifyWorkflowRun(summary = {}, evaluation = {}) {
@@ -1263,9 +1443,60 @@ function evaluateAssignmentPatterns(summary, assignment, patterns, label, failur
 function evaluateAssignmentTodoMatch(summary, assignment, label, failures) {
   if (!assignment) return;
   const initializedItems = summary.nativeTodo?.initializedItems ?? [];
-  if (!initializedItems.includes(assignment.metadata?.todo)) {
-    failures.push(`${label} assignment todo did not match an initialized parent TODO item`);
+  const metadata = assignment.metadata ?? {};
+  const matches = initializedItems.includes(metadata.todo)
+    || assignmentMatchesDelegatedTodoRow(initializedItems, assignment);
+  if (!matches) {
+    failures.push(`${label} assignment metadata did not match an initialized parent TODO item or delegated row`);
   }
+}
+
+function assignmentMatchesDelegatedTodoRow(initializedItems, assignment) {
+  return initializedItems.some((item) => {
+    const delegated = delegatedTodoMetadata(item);
+    return delegatedTodoMatchesAssignment(delegated, assignment);
+  });
+}
+
+function unmatchedAssignmentsForDelegatedTodoRows(initializedItems, assignments) {
+  const delegatedRows = initializedItems.map(delegatedTodoMetadata);
+  const consumedRowIndexes = new Set();
+  return assignments.filter((assignment) => {
+    const matchingRowIndex = delegatedRows.findIndex((delegated, index) => (
+      !consumedRowIndexes.has(index) && delegatedTodoMatchesAssignment(delegated, assignment)
+    ));
+    if (matchingRowIndex === -1) return true;
+    consumedRowIndexes.add(matchingRowIndex);
+    return false;
+  });
+}
+
+function delegatedTodoMatchesAssignment(delegated, assignment) {
+  const metadata = assignment?.metadata ?? {};
+  return delegated
+    && delegated.agent === normalizeMetadataValue(assignment?.agent)
+    && delegated.workflow === metadata.workflow
+    && delegated.step === metadata.step
+    && delegated.skills === metadata.skills
+    && delegated.todo === metadata.todo;
+}
+
+function delegatedTodoMetadata(value) {
+  const match = /^Delegate Agent=([^\s]+) workflow=([^\s]+) step=([^\s]+) skills=([^\s]+) checkpoint=(.+)$/u.exec(
+    String(value ?? '').trim(),
+  );
+  if (!match) return null;
+  const checkpoint = match[5].trim();
+  if (!checkpoint
+    || checkpoint.includes(']')
+    || /\s(?:workflow|step|skills|checkpoint)=/iu.test(checkpoint)) return null;
+  return {
+    agent: normalizeMetadataValue(match[1]),
+    workflow: normalizeMetadataValue(match[2]),
+    step: normalizeMetadataValue(match[3]),
+    skills: normalizeOptionalMetadataValue(match[4]),
+    todo: normalizeOptionalMetadataValue(checkpoint),
+  };
 }
 
 function assignmentInputText(summary, assignment) {
@@ -1630,6 +1861,20 @@ function customMessageFromEvent(event) {
   return null;
 }
 
+function customContentTextFromEvent(event) {
+  const value = event?.type === 'session_custom'
+    ? event.entry
+    : event?.type === 'message_end'
+      ? event.message
+      : event;
+  if (typeof value?.content === 'string') return value.content;
+  if (!Array.isArray(value?.content)) return '';
+  return value.content
+    .filter((item) => item?.type === 'text')
+    .map((item) => String(item.text ?? ''))
+    .join('\n');
+}
+
 function asyncJobResultsFromEvent(event) {
   const message = event?.type === 'message_end' ? event.message : event;
   const customAsyncResult = message?.role === 'custom' && message?.customType === 'async-result';
@@ -1888,6 +2133,125 @@ function skillReadAttemptFromCall(call) {
   };
 }
 
+function summarizeSkillPathDiagnostics(calls, workflowPreparation, advisorMessages) {
+  const plan = workflowPreparation?.workflowPlanDeclaration;
+  const resourcesByUri = new Map();
+  const resourcesBySkill = new Map();
+  const addResource = (value) => {
+    const resource = skillResourceFromUri(value);
+    if (!resource || resourcesByUri.has(resource.uri)) return;
+    resourcesByUri.set(resource.uri, resource);
+    if (!resourcesBySkill.has(resource.skill)) resourcesBySkill.set(resource.skill, new Map());
+    resourcesBySkill.get(resource.skill).set(resource.uri, resource);
+  };
+  for (const rawUri of [...(plan?.skills ?? []), ...(plan?.loadOrder ?? [])]) {
+    addResource(rawUri);
+  }
+  const knownUris = new Set(resourcesByUri.keys());
+  for (const call of [...calls].sort(compareCallPositions)) {
+    const target = readTargetFromCall(call);
+    if (call?.name !== 'read'
+      || call.completed !== true
+      || call.isError !== false
+      || !knownUris.has(target)) continue;
+    for (const uri of call.revealedSkillUris ?? []) {
+      addResource(uri);
+      knownUris.add(uri);
+    }
+  }
+  const declaredBySkill = new Map([...resourcesBySkill]
+    .flatMap(([skill, resources]) => (
+      resources.size === 1 ? [[skill, resources.values().next().value]] : []
+    )));
+
+  const misaddressedDeclaredSkillReads = calls.flatMap((call) => {
+    const target = call?.name === 'read' ? readTargetFromCall(call) : '';
+    const resource = isBareSkillId(target) && declaredBySkill.get(normalizeSkillName(target));
+    return resource ? [{
+      callId: call.id,
+      declaredUri: resource.uri,
+      skill: resource.skill,
+      target,
+      eventIndex: call.eventIndex,
+      completionEventIndex: call.completionEventIndex,
+      completed: call.completed,
+      isError: call.isError,
+    }] : [];
+  });
+
+  const unsupportedAdvisorSkillAbsenceClaims = [];
+  for (const message of advisorMessages) {
+    for (const resource of declaredBySkill.values()) {
+      if (!advisorTextClaimsSkillAbsent(message.text, resource)) continue;
+      const supported = calls.some((call) => (
+        call?.name === 'read'
+        && readTargetFromCall(call) === resource.uri
+        && call.completed === true
+        && call.isError === true
+        && Number.isFinite(call.completionEventIndex)
+        && call.completionEventIndex < message.eventIndex
+      ));
+      if (supported) continue;
+      unsupportedAdvisorSkillAbsenceClaims.push({
+        skill: resource.skill,
+        declaredUri: resource.uri,
+        eventIndex: message.eventIndex,
+        reason: 'no-prior-exact-skill-uri-resolver-failure',
+      });
+    }
+  }
+  return { misaddressedDeclaredSkillReads, unsupportedAdvisorSkillAbsenceClaims };
+}
+
+function skillResourceFromUri(value) {
+  const uri = stripOuterMarkdown(value);
+  if (!isDomainSkillUri(uri)) return null;
+  const match = /^skill:\/\/([a-z0-9._-]+(?:\/[a-z0-9._-]+)*)(?:[?#].*)?$/iu.exec(uri);
+  if (!match) return null;
+  const segments = match[1].split('/');
+  if (/^SKILL\.md$/iu.test(segments.at(-1) ?? '')) segments.pop();
+  const skill = normalizeSkillName(segments.at(-1));
+  return isBareSkillId(skill) ? { uri, skill } : null;
+}
+
+function exactSkillUrisFromText(text) {
+  const uris = [];
+  for (const match of String(text ?? '').matchAll(/skill:\/\/[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*/giu)) {
+    const uri = match[0].replace(/[.,;:!?]+$/gu, '');
+    if (isExactSkillUri(uri) && !uris.includes(uri)) uris.push(uri);
+  }
+  return uris;
+}
+
+function isExactSkillUri(value) {
+  return /^skill:\/\/[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*$/iu.test(
+    stripOuterMarkdown(value),
+  );
+}
+
+function skillUriNamespace(value) {
+  return /^skill:\/\/([a-z0-9][a-z0-9._-]*)(?:\/|$)/iu.exec(
+    stripOuterMarkdown(value),
+  )?.[1]?.toLowerCase() ?? '';
+}
+
+function advisorTextClaimsSkillAbsent(text, resource) {
+  const absencePattern = /(?:不存在|未(?:能)?找到|找不到|不可用|无法(?:加载|读取|解析)|does\s+not\s+exist|doesn't\s+exist|not\s+found|unavailable|missing|cannot\s+(?:load|read|resolve)|failed\s+to\s+(?:load|read|resolve))/iu;
+  const negatedAbsencePattern = /(?:(?:并非|不是|并不)\s*(?:不存在|不可用|缺失|未(?:能)?找到)|\bnot\s+(?:missing|unavailable)\b)/iu;
+  return String(text ?? '')
+    .split(/[\r\n.!?。！？;；]+/u)
+    .some((statement) => !negatedAbsencePattern.test(statement)
+      && absencePattern.test(statement)
+      && statementMentionsSkillResource(statement, resource));
+}
+
+function statementMentionsSkillResource(statement, resource) {
+  const text = String(statement ?? '');
+  if (text.toLowerCase().includes(resource.uri.toLowerCase())) return true;
+  const escaped = resource.skill.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}_-])${escaped}(?:$|[^\\p{L}\\p{N}_-])`, 'iu').test(text);
+}
+
 function nonProjectResourceReadFromCall(call) {
   if (call?.name !== 'read') return false;
   const target = String(
@@ -1914,11 +2278,20 @@ function workflowStageKindFromCall(call) {
 function exactWorkflowReferenceFailures(summary, workflowPreparation) {
   const failures = [];
   const selected = new Set(workflowPreparation.workflowPlanDeclaration?.selectedWorkflowIds ?? []);
+  const allowed = new Set((workflowPreparation.workflowPlanPhases ?? [])
+    .flatMap(({ declaration }) => declaration?.selectedWorkflowIds ?? []));
+  if (allowed.size === 0) for (const workflowId of selected) allowed.add(workflowId);
   const expectedUris = new Map([...selected].map((id) => [
     id,
     `skill://omp-enhancer-workflows/references/${id}.md`,
   ]));
-  const declaredLoadOrder = new Set(workflowPreparation.workflowPlanDeclaration?.loadOrder ?? []);
+  const declaredLoadOrder = new Set((workflowPreparation.workflowPlanPhases ?? [])
+    .flatMap(({ declaration }) => declaration?.loadOrder ?? []));
+  if (declaredLoadOrder.size === 0) {
+    for (const uri of workflowPreparation.workflowPlanDeclaration?.loadOrder ?? []) {
+      declaredLoadOrder.add(uri);
+    }
+  }
   const successfulReferenceIds = new Set();
 
   for (const call of summary.toolCalls ?? []) {
@@ -1932,7 +2305,7 @@ function exactWorkflowReferenceFailures(summary, workflowPreparation) {
       continue;
     }
     successfulReferenceIds.add(workflowId);
-    if (!selected.has(workflowId)) {
+    if (!allowed.has(workflowId)) {
       failures.push(`successful workflow reference was read for an unselected workflow: ${workflowId}`);
     }
   }
@@ -2002,6 +2375,9 @@ function summarizeWorkflowPreparation(calls, assistantBatches) {
   const readyMarkers = primaryBatches
     .filter(({ workflowReadyContentIndex }) => Number.isFinite(workflowReadyContentIndex))
     .map((batch) => markerFromBatch(batch, 'ready'));
+  const resourceExtensionMarkers = primaryBatches
+    .filter(({ resourceExtensionContentIndex }) => Number.isFinite(resourceExtensionContentIndex))
+    .map((batch) => markerFromBatch(batch, 'extension'));
   const successfulIndexCalls = preparationCalls
     .filter(({ workflowStageKind, completed, isError }) => (
       workflowStageKind === 'workflow-index' && completed === true && isError === false
@@ -2016,22 +2392,35 @@ function summarizeWorkflowPreparation(calls, assistantBatches) {
   const callsAfterDiscoveryGate = discoveryIndexCall
     ? primaryCalls.filter(({ id }) => id !== discoveryIndexCall.id)
     : primaryCalls;
-  const validPlanMarker = discoveryIndexCall
+  const initialValidPlanMarker = discoveryIndexCall
     ? planMarkers.find((marker) => (
       Number.isFinite(discoveryIndexCall.completionEventIndex)
       && discoveryIndexCall.completionEventIndex < marker.eventIndex
       && callsAfterDiscoveryGate.every((call) => markerBeforeCall(marker, call))
     )) ?? null
     : null;
-  const validReadyMarker = readyMarkers.find((marker) => (
+  const pendingLanguageTransition = summarizePendingLanguageTransition({
+    planMarkers,
+    readyMarkers,
+    initialPlanMarker: initialValidPlanMarker,
+    primaryCalls,
+    preparationCalls,
+    callsByBatch,
+  });
+  const validPlanMarker = pendingLanguageTransition?.valid
+    ? pendingLanguageTransition.replacementPlanMarker
+    : initialValidPlanMarker;
+  const validReadyMarker = pendingLanguageTransition?.valid
+    ? pendingLanguageTransition.replacementReadyMarker
+    : readyMarkers.find((marker) => (
     preparationCalls.every((call) => (
       call.completed === true
       && Number.isFinite(call.completionEventIndex)
       && call.completionEventIndex < marker.eventIndex
     ))
     && projectCalls.every((call) => markerBeforeCall(marker, call))
-    && (!validPlanMarker || markerBeforeMarker(validPlanMarker, marker))
-  )) ?? null;
+      && (!validPlanMarker || markerBeforeMarker(validPlanMarker, marker))
+    )) ?? null;
   const readyBatchCalls = validReadyMarker
     ? callsByBatch.get(validReadyMarker.batchIndex) ?? []
     : [];
@@ -2047,6 +2436,17 @@ function summarizeWorkflowPreparation(calls, assistantBatches) {
     firstToolBatchIndex: firstToolBatch?.batchIndex ?? null,
     workflowPlanMarkerCount: planMarkers.length,
     workflowReadyMarkerCount: readyMarkers.length,
+    resourceExtensionMarkerCount: resourceExtensionMarkers.length,
+    resourceExtensions: resourceExtensionMarkers.map((marker) => ({
+      batchIndex: marker.batchIndex,
+      eventIndex: marker.eventIndex,
+      firstVisibleContent: marker.firstVisibleContent,
+      source: marker.declaration?.source ?? null,
+      reads: [...(marker.declaration?.reads ?? [])],
+      valid: marker.declaration != null,
+    })),
+    resourceExtensionReadUris: resourceExtensionMarkers
+      .flatMap(({ declaration }) => declaration?.reads ?? []),
     workflowIndexCallIds: preparationCalls
       .filter(({ workflowStageKind }) => workflowStageKind === 'workflow-index')
       .map(({ id }) => id),
@@ -2065,7 +2465,196 @@ function summarizeWorkflowPreparation(calls, assistantBatches) {
     workflowReadyOnlyTodoInitCall: readyOnlyTodoInitCall,
     workflowPlanDeclaration: workflowDeclarationSummary(validPlanMarker?.declaration),
     workflowReadyDeclaration: workflowDeclarationSummary(validReadyMarker?.declaration),
+    initialWorkflowPlanDeclaration: workflowDeclarationSummary(initialValidPlanMarker?.declaration),
+    pendingLanguageTransition: pendingLanguageTransition ? {
+      valid: pendingLanguageTransition.valid,
+      failures: [...pendingLanguageTransition.failures],
+      languageReadCallId: pendingLanguageTransition.languageReadCall?.id ?? null,
+      initialPlanBatchIndex: pendingLanguageTransition.initialPlanMarker?.batchIndex ?? null,
+      initialReadyBatchIndex: pendingLanguageTransition.initialReadyMarker?.batchIndex ?? null,
+      replacementPlanBatchIndex: pendingLanguageTransition.replacementPlanMarker?.batchIndex ?? null,
+      replacementReadyBatchIndex: pendingLanguageTransition.replacementReadyMarker?.batchIndex ?? null,
+    } : null,
+    workflowPlanPhases: workflowPlanPhases({
+      pendingLanguageTransition,
+      validPlanMarker,
+      validReadyMarker,
+    }),
   };
+}
+
+function summarizePendingLanguageTransition({
+  planMarkers,
+  readyMarkers,
+  initialPlanMarker,
+  primaryCalls,
+  preparationCalls,
+  callsByBatch,
+}) {
+  const initialPrimary = initialPlanMarker?.declaration?.primary ?? null;
+  if (initialPrimary !== 'writing.pending') {
+    if (planMarkers.length <= 1) return null;
+    return {
+      valid: false,
+      failures: ['repeated WORKFLOW PLAN is allowed only for writing.pending language resolution'],
+      initialPlanMarker,
+      initialReadyMarker: null,
+      replacementPlanMarker: planMarkers.at(1) ?? null,
+      replacementReadyMarker: null,
+      languageReadCall: null,
+    };
+  }
+
+  const failures = [];
+  if (planMarkers.length !== 2) {
+    failures.push(`writing.pending requires exactly one replacement WORKFLOW PLAN; observed ${Math.max(0, planMarkers.length - 1)}`);
+  }
+  if (readyMarkers.length !== 2) {
+    failures.push(`writing.pending requires initial and replacement WORKFLOW READY; observed ${readyMarkers.length}`);
+  }
+  const replacementPlanMarker = planMarkers.at(1) ?? null;
+  const initialReadyMarker = readyMarkers.find((marker) => (
+    initialPlanMarker
+    && markerBeforeMarker(initialPlanMarker, marker)
+    && (!replacementPlanMarker || markerBeforeMarker(marker, replacementPlanMarker))
+  )) ?? null;
+  const replacementReadyMarker = readyMarkers.find((marker) => (
+    replacementPlanMarker && markerBeforeMarker(replacementPlanMarker, marker)
+  )) ?? null;
+  if (!initialReadyMarker) failures.push('writing.pending initial WORKFLOW READY was missing before language resolution');
+  if (!replacementPlanMarker) failures.push('writing.pending replacement WORKFLOW PLAN was missing');
+  if (!replacementReadyMarker) failures.push('writing.pending replacement WORKFLOW READY was missing');
+
+  for (const [label, marker] of [
+    ['initial WORKFLOW PLAN', initialPlanMarker],
+    ['initial WORKFLOW READY', initialReadyMarker],
+    ['replacement WORKFLOW PLAN', replacementPlanMarker],
+    ['replacement WORKFLOW READY', replacementReadyMarker],
+  ]) {
+    if (marker && marker.firstVisibleContent !== true) {
+      failures.push(`writing.pending ${label} was not visible at byte 0`);
+    }
+  }
+
+  const initialPlan = initialPlanMarker?.declaration ?? null;
+  const initialReady = initialReadyMarker?.declaration ?? null;
+  const replacementPlan = replacementPlanMarker?.declaration ?? null;
+  const replacementReady = replacementReadyMarker?.declaration ?? null;
+  if (initialReady && !declarationsShareSelection(initialPlan, initialReady)) {
+    failures.push('writing.pending initial READY did not preserve the pending selection');
+  }
+  if (replacementPlan && !['writing.en', 'writing.zh'].includes(replacementPlan.primary)) {
+    failures.push(`writing.pending replacement primary was ${replacementPlan.primary ?? '<none>'}, expected writing.en or writing.zh`);
+  }
+  if (replacementPlan && !sameStringList(initialPlan?.addOns, replacementPlan.addOns)) {
+    failures.push('writing.pending format companions changed in the replacement PLAN');
+  }
+  if (replacementReady && !declarationsShareSelection(replacementPlan, replacementReady)) {
+    failures.push('writing.pending replacement READY did not preserve the replacement selection');
+  }
+
+  const callsBetween = (startMarker, endMarker) => (
+    !startMarker || !endMarker ? [] : primaryCalls.filter((call) => (
+      Number.isFinite(call.eventIndex)
+      && call.eventIndex > startMarker.eventIndex
+      && call.eventIndex < endMarker.eventIndex
+    ))
+  );
+  const transitionCalls = callsBetween(initialReadyMarker, replacementPlanMarker);
+  const languageReads = transitionCalls.filter((call) => (
+    call.name === 'read' && call.workflowStageKind === 'project'
+  ));
+  const languageReadCall = languageReads.length === 1 ? languageReads[0] : null;
+  if (transitionCalls.length !== 1 || !languageReadCall) {
+    failures.push('writing.pending transition must contain exactly one narrow project read and no substantive companion action');
+  } else if (languageReadCall.completed !== true
+    || languageReadCall.isError !== false
+    || !Number.isFinite(languageReadCall.completionEventIndex)
+    || languageReadCall.completionEventIndex >= replacementPlanMarker.eventIndex) {
+    failures.push('writing.pending language-only read did not complete successfully before replacement PLAN');
+  }
+
+  const beforeInitialReady = preparationCalls.filter((call) => (
+    initialPlanMarker
+    && initialReadyMarker
+    && markerBeforeCall(initialPlanMarker, call)
+    && Number.isFinite(call.completionEventIndex)
+    && call.completionEventIndex < initialReadyMarker.eventIndex
+  ));
+  const loadedBeforeTransition = new Set(beforeInitialReady
+    .filter((call) => call.completed === true && call.isError === false)
+    .map(readTargetFromCall));
+  const repeated = (replacementPlan?.loadOrder ?? [])
+    .map(stripOuterMarkdown)
+    .filter((uri) => loadedBeforeTransition.has(uri));
+  if (repeated.length > 0) {
+    failures.push(`writing.pending replacement PLAN reread loaded companion resource(s): ${repeated.join(', ')}`);
+  }
+  const languageReference = replacementPlan?.primary
+    ? `skill://omp-enhancer-workflows/references/${replacementPlan.primary}.md`
+    : '';
+  if (replacementPlan && replacementPlan.loadOrder.at(-1) !== languageReference) {
+    failures.push(`writing.pending replacement PLAN did not put its language reference last: ${languageReference || '<none>'}`);
+  }
+
+  const replacementWindowCalls = callsBetween(replacementPlanMarker, replacementReadyMarker);
+  const invalidReplacementCalls = replacementWindowCalls.filter((call) => (
+    !isWorkflowPreparationResourceKind(call.workflowStageKind)
+  ));
+  if (invalidReplacementCalls.length > 0) {
+    failures.push('writing.pending performed substantive work between replacement PLAN and replacement READY');
+  }
+  for (const [label, marker] of [
+    ['initial', initialReadyMarker],
+    ['replacement', replacementReadyMarker],
+  ]) {
+    if (!marker) continue;
+    const batchCalls = callsByBatch.get(marker.batchIndex) ?? [];
+    const todoOnly = batchCalls.length === 1
+      && batchCalls[0].name === 'todo'
+      && batchCalls[0].arguments?.op === 'init'
+      && batchCalls[0].completed === true
+      && batchCalls[0].isError === false;
+    if (!todoOnly) failures.push(`writing.pending ${label} READY batch was not TODO-init-only`);
+  }
+
+  return {
+    valid: failures.length === 0,
+    failures,
+    initialPlanMarker,
+    initialReadyMarker,
+    replacementPlanMarker,
+    replacementReadyMarker,
+    languageReadCall,
+  };
+}
+
+function workflowPlanPhases({ pendingLanguageTransition, validPlanMarker, validReadyMarker }) {
+  const phases = pendingLanguageTransition?.valid ? [
+    {
+      planMarker: pendingLanguageTransition.initialPlanMarker,
+      readyMarker: pendingLanguageTransition.initialReadyMarker,
+    },
+    {
+      planMarker: pendingLanguageTransition.replacementPlanMarker,
+      readyMarker: pendingLanguageTransition.replacementReadyMarker,
+    },
+  ] : [{ planMarker: validPlanMarker, readyMarker: validReadyMarker }];
+  return phases.filter(({ planMarker }) => planMarker).map(({ planMarker, readyMarker }) => ({
+    planBatchIndex: planMarker.batchIndex,
+    planEventIndex: planMarker.eventIndex,
+    readyBatchIndex: readyMarker?.batchIndex ?? null,
+    readyEventIndex: readyMarker?.eventIndex ?? null,
+    declaration: workflowDeclarationSummary(planMarker.declaration),
+  }));
+}
+
+function declarationsShareSelection(left, right) {
+  return left?.primary === right?.primary && sameStringList(left?.addOns, right?.addOns);
+}
+
+function sameStringList(left = [], right = []) {
+  return JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());
 }
 
 function isWorkflowPreparationResourceKind(kind) {
@@ -2075,10 +2664,14 @@ function isWorkflowPreparationResourceKind(kind) {
 function markerFromBatch(batch, type) {
   const contentIndex = type === 'plan'
     ? batch.workflowPlanContentIndex
-    : batch.workflowReadyContentIndex;
+    : type === 'ready'
+      ? batch.workflowReadyContentIndex
+      : batch.resourceExtensionContentIndex;
   const characterIndex = type === 'plan'
     ? batch.workflowPlanCharacterIndex
-    : batch.workflowReadyCharacterIndex;
+    : type === 'ready'
+      ? batch.workflowReadyCharacterIndex
+      : batch.resourceExtensionCharacterIndex;
   return {
     batchIndex: batch.batchIndex,
     eventIndex: batch.eventIndex,
@@ -2088,7 +2681,9 @@ function markerFromBatch(batch, type) {
       && characterIndex === 0,
     declaration: type === 'plan'
       ? batch.workflowPlanDeclaration
-      : batch.workflowReadyDeclaration,
+      : type === 'ready'
+        ? batch.workflowReadyDeclaration
+        : batch.resourceExtensionDeclaration,
   };
 }
 
@@ -2128,6 +2723,7 @@ function workflowDeclarationFromVisibleMarker(text, characterIndex) {
 
   const primary = workflowIdsFromDeclarationField(fields.get('primary')).at(0) ?? null;
   const addOns = workflowIdsFromDeclarationField(fields.get('add-ons'));
+  const loadPhases = loadPhasesFromDeclarationField(fields.get('load-order'));
   return {
     format: legacy ? 'legacy' : 'block',
     numberedActionCount: workflowPlanNumberedActionCount(tail),
@@ -2135,9 +2731,33 @@ function workflowDeclarationFromVisibleMarker(text, characterIndex) {
     addOns,
     selectedWorkflowIds: [...new Set([primary, ...addOns].filter(Boolean))],
     skills: declarationListFromField(fields.get('skills')),
-    loadOrder: declarationListFromField(fields.get('load-order')),
+    loadOrder: loadPhases.loadOrder,
+    loadNow: loadPhases.loadNow,
+    loadThen: loadPhases.loadThen,
+    structuredLoadOrder: loadPhases.structuredLoadOrder,
     skillsLoaded: declarationListFromField(fields.get('skills-loaded')),
     skillsUnavailable: declarationListFromField(fields.get('skills-unavailable')),
+  };
+}
+
+function loadPhasesFromDeclarationField(value) {
+  const normalized = stripOuterMarkdown(value);
+  const match = /^NOW\s*=\s*\[([^\]]*)\]\s+THEN\s*=\s*\[([^\]]*)\]$/iu.exec(normalized);
+  if (!match) {
+    return {
+      loadOrder: declarationListFromField(normalized),
+      loadNow: [],
+      loadThen: [],
+      structuredLoadOrder: false,
+    };
+  }
+  const loadNow = declarationListFromField(match[1]);
+  const loadThen = declarationListFromField(match[2]);
+  return {
+    loadOrder: [...loadNow, ...loadThen],
+    loadNow,
+    loadThen,
+    structuredLoadOrder: true,
   };
 }
 
@@ -2157,11 +2777,38 @@ function workflowPlanMarkerFromVisibleText(text) {
   return null;
 }
 
+function resourceExtensionMarkerFromVisibleText(text) {
+  for (const match of String(text ?? '').matchAll(RESOURCE_EXTENSION_PATTERN)) {
+    return {
+      characterIndex: match.index,
+      declaration: resourceExtensionDeclarationFromVisibleMarker(text, match.index),
+    };
+  }
+  return null;
+}
+
+function resourceExtensionDeclarationFromVisibleMarker(text, characterIndex) {
+  if (!Number.isFinite(characterIndex) || characterIndex < 0) return null;
+  const [line] = String(text ?? '').slice(characterIndex).split(/\r?\n/u);
+  const fields = new Map();
+  for (const segment of line.split('|').slice(1)) {
+    const match = /^(source|reads)\s*=\s*(.*?)\s*$/iu.exec(stripOuterMarkdown(segment));
+    if (!match || fields.has(match[1].toLowerCase())) return null;
+    fields.set(match[1].toLowerCase(), stripOuterMarkdown(match[2]));
+  }
+  const source = stripOuterMarkdown(fields.get('source'));
+  const reads = declarationListFromField(fields.get('reads'));
+  if (!isExactSkillUri(source)
+    || reads.length === 0
+    || reads.some((uri) => !isExactSkillUri(uri))) return null;
+  return { source, reads };
+}
+
 function declarationListFromField(value) {
   const normalized = stripOuterMarkdown(value);
   if (!normalized || /^(?:none|n\/a)$/iu.test(normalized)) return [];
   return [...new Set(normalized
-    .split(/[\s,，+]+/u)
+    .split(/[\s,，+;；]+/u)
     .map((item) => stripOuterMarkdown(item)
       .replace(/^["'([{]+/u, '')
       .replace(/["')\]},;]+$/u, '')
@@ -2197,6 +2844,9 @@ function workflowDeclarationSummary(declaration) {
     selectedWorkflowIds: [...(declaration.selectedWorkflowIds ?? [])],
     skills: [...(declaration.skills ?? [])],
     loadOrder: [...(declaration.loadOrder ?? [])],
+    loadNow: [...(declaration.loadNow ?? [])],
+    loadThen: [...(declaration.loadThen ?? [])],
+    structuredLoadOrder: declaration.structuredLoadOrder === true,
     skillsLoaded: [...(declaration.skillsLoaded ?? [])],
     skillsUnavailable: [...(declaration.skillsUnavailable ?? [])],
   };
@@ -2256,6 +2906,328 @@ function workflowResourceDeclarationFailures(summary, workflowPreparation, expec
   }
 
   return failures;
+}
+
+function workflowPlanLoadBatchFailures(summary, workflowPreparation) {
+  const phases = workflowPreparation.workflowPlanPhases?.length
+    ? workflowPreparation.workflowPlanPhases
+    : [{
+      planBatchIndex: workflowPreparation.workflowPlanBatchIndex,
+      declaration: workflowPreparation.workflowPlanDeclaration,
+    }];
+  return phases.flatMap((phase) => workflowPlanPhaseLoadBatchFailures(summary, phase));
+}
+
+function workflowPlanPhaseLoadBatchFailures(summary, phase) {
+  const planBatchIndex = phase.planBatchIndex;
+  const declaredLoadOrder = (phase.declaration?.loadOrder ?? [])
+    .map(stripOuterMarkdown);
+  if (!Number.isFinite(planBatchIndex)) {
+    return ['WORKFLOW PLAN was unavailable for the same assistant response batch check'];
+  }
+
+  const primaryCalls = (summary.toolCalls ?? [])
+    .filter(({ turnKind }) => turnKind !== 'autolearn-capture');
+  const declaredTargets = new Set(declaredLoadOrder);
+  const declaredCalls = primaryCalls.filter((call) => (
+    call.name === 'read' && declaredTargets.has(readTargetFromCall(call))
+  ));
+  const declaredSkillCalls = declaredCalls.filter(({ workflowStageKind }) => (
+    workflowStageKind === 'domain-skill'
+  ));
+  const declaredReferenceCalls = declaredCalls.filter(({ workflowStageKind }) => (
+    workflowStageKind === 'workflow-reference'
+  ));
+  if (declaredSkillCalls.length === 0) {
+    const lateDeclaredCalls = declaredCalls.filter(({ assistantBatchIndex }) => (
+      assistantBatchIndex !== planBatchIndex
+    ));
+    return lateDeclaredCalls.length > 0
+      ? [`WORKFLOW PLAN and declared resource reads did not share the same assistant response batch: ${lateDeclaredCalls.map(readTargetFromCall).join(', ')}`]
+      : [];
+  }
+
+  const misplacedDeclaredSkills = declaredSkillCalls.filter((call) => (
+    call.assistantBatchIndex !== planBatchIndex
+  ));
+  if (misplacedDeclaredSkills.length > 0) {
+    return [
+      `WORKFLOW PLAN and declared top-level Skill reads did not share the same assistant response batch: ${misplacedDeclaredSkills.map(readTargetFromCall).join(', ')}`,
+    ];
+  }
+  const referenceBatchIndexes = new Set(declaredReferenceCalls.map(({ assistantBatchIndex }) => (
+    assistantBatchIndex
+  )));
+  if (declaredReferenceCalls.some(({ assistantBatchIndex }) => assistantBatchIndex === planBatchIndex)
+    || referenceBatchIndexes.size > 1) {
+    return ['declared workflow references were not one final resource-only batch after the top-level Skill prefix'];
+  }
+  const referenceBatchIndex = [...referenceBatchIndexes].at(0);
+  if (Number.isFinite(referenceBatchIndex)) {
+    const referenceBatchCalls = primaryCalls.filter(({ assistantBatchIndex }) => (
+      assistantBatchIndex === referenceBatchIndex
+    ));
+    if (referenceBatchCalls.some(({ workflowStageKind }) => workflowStageKind !== 'workflow-reference')) {
+      return ['declared workflow reference batch contained a non-reference call'];
+    }
+  }
+  return [];
+}
+
+function structuredWorkflowLoadPhaseFailures(summary, workflowPreparation) {
+  const phases = workflowPreparation.workflowPlanPhases?.length
+    ? workflowPreparation.workflowPlanPhases
+    : [{
+      planBatchIndex: workflowPreparation.workflowPlanBatchIndex,
+      readyBatchIndex: workflowPreparation.workflowReadyBatchIndex,
+      declaration: workflowPreparation.workflowPlanDeclaration,
+    }];
+  const primaryCalls = [...(summary.toolCalls ?? [])]
+    .filter(({ turnKind }) => turnKind !== 'autolearn-capture')
+    .sort(compareCallPositions);
+  const extensionTargets = new Set(workflowPreparation.resourceExtensionReadUris ?? []);
+  const failures = [];
+
+  for (const [index, phase] of phases.entries()) {
+    const label = phases.length > 1 ? `WORKFLOW PLAN phase ${index + 1}` : 'WORKFLOW PLAN';
+    const declaration = phase.declaration;
+    if (!declaration || declaration.structuredLoadOrder !== true) {
+      failures.push(`${label} Load order did not use structured NOW=[...] THEN=[...] syntax`);
+      continue;
+    }
+
+    const loadNow = (declaration.loadNow ?? []).map(stripOuterMarkdown);
+    const loadThen = (declaration.loadThen ?? []).map(stripOuterMarkdown);
+    const invalidNow = loadNow.filter((uri) => !isDomainSkillUri(uri));
+    const invalidThen = loadThen.filter((uri) => !WORKFLOW_REFERENCE_URI_PATTERN.test(uri));
+    if (invalidNow.length > 0) {
+      failures.push(`${label} NOW contained non-domain Skill URI(s): ${invalidNow.join(', ')}`);
+    }
+    if (invalidThen.length > 0) {
+      failures.push(`${label} THEN contained non-workflow reference URI(s): ${invalidThen.join(', ')}`);
+    }
+
+    const primaryReference = declaration.primary
+      ? `skill://omp-enhancer-workflows/references/${declaration.primary}.md`
+      : null;
+    if (primaryReference && loadThen.at(-1) !== primaryReference) {
+      failures.push(`${label} THEN did not put the Primary workflow reference last: ${primaryReference}`);
+    }
+    const addOnReferences = new Set((declaration.addOns ?? []).map((workflowId) => (
+      `skill://omp-enhancer-workflows/references/${workflowId}.md`
+    )));
+    const precedingThen = primaryReference ? loadThen.slice(0, -1) : loadThen;
+    const unselectedAddOnReferences = precedingThen.filter((uri) => !addOnReferences.has(uri));
+    if (unselectedAddOnReferences.length > 0) {
+      failures.push(`${label} THEN contained reference(s) that were not selected Add-ons before Primary: ${unselectedAddOnReferences.join(', ')}`);
+    }
+
+    if (!Number.isFinite(phase.planBatchIndex)) {
+      failures.push(`${label} batch was unavailable for structured load-phase evaluation`);
+      continue;
+    }
+    const phaseCalls = primaryCalls.filter((call) => (
+      Number.isFinite(call.assistantBatchIndex)
+      && call.assistantBatchIndex >= phase.planBatchIndex
+      && (!Number.isFinite(phase.readyBatchIndex)
+        || call.assistantBatchIndex < phase.readyBatchIndex)
+    ));
+    const planResourceCalls = phaseCalls.filter((call) => (
+      call.assistantBatchIndex === phase.planBatchIndex
+      && (call.workflowStageKind === 'domain-skill'
+        || call.workflowStageKind === 'workflow-reference')
+    ));
+    const actualPlanTargets = planResourceCalls.map(readTargetFromCall);
+    const validPlanTargets = loadNow.length > 0
+      ? JSON.stringify(actualPlanTargets) === JSON.stringify(loadNow)
+      : actualPlanTargets.length === 0
+        || JSON.stringify(actualPlanTargets) === JSON.stringify(loadThen);
+    if (!validPlanTargets) {
+      const expected = loadNow.length > 0
+        ? loadNow
+        : [`<none or complete THEN: ${loadThen.join(' -> ') || '<none>'}>`];
+      failures.push(`${label} response resource calls were ${actualPlanTargets.join(' -> ') || '<none>'}, expected NOW ${expected.join(' -> ') || '<none>'}`);
+    }
+
+    const actualThen = phaseCalls
+      .filter((call) => (
+        call.workflowStageKind === 'workflow-reference'
+        && !extensionTargets.has(readTargetFromCall(call))
+      ))
+      .map(readTargetFromCall);
+    if (JSON.stringify(actualThen) !== JSON.stringify(loadThen)) {
+      failures.push(`${label} non-extension workflow reference calls were ${actualThen.join(' -> ') || '<none>'}, expected THEN ${loadThen.join(' -> ') || '<none>'}`);
+    }
+  }
+  return failures;
+}
+
+function linkedResourceExtensionFailures(summary, workflowPreparation) {
+  const phases = workflowPreparation.workflowPlanPhases ?? [];
+  const plans = phases.map(({ declaration }) => declaration).filter(Boolean);
+  if (plans.length === 0 && workflowPreparation.workflowPlanDeclaration) {
+    plans.push(workflowPreparation.workflowPlanDeclaration);
+  }
+  if (plans.length === 0) return [];
+  const failures = [];
+  const extensions = workflowPreparation.resourceExtensions ?? [];
+  const primaryCalls = (summary.toolCalls ?? [])
+    .filter(({ turnKind }) => turnKind !== 'autolearn-capture');
+  const declaredTargets = new Set(plans.flatMap(({ loadOrder }) => (
+    (loadOrder ?? []).map(stripOuterMarkdown)
+  )));
+  const extensionTargets = new Set(extensions.flatMap(({ reads }) => reads ?? []));
+  const undeclaredSkillCalls = primaryCalls.filter((call) => (
+    call.workflowStageKind === 'domain-skill'
+    && !declaredTargets.has(readTargetFromCall(call))
+    && !extensionTargets.has(readTargetFromCall(call))
+  ));
+  if (undeclaredSkillCalls.length > 0) {
+    failures.push(`undeclared linked-resource read(s): ${undeclaredSkillCalls.map(readTargetFromCall).join(', ')}`);
+  }
+  if (extensions.length === 0) return failures;
+  if (extensions.length > MAX_RESOURCE_EXTENSION_BATCHES) {
+    failures.push(`linked-resource extension batches ${extensions.length} exceeded ${MAX_RESOURCE_EXTENSION_BATCHES}`);
+  }
+  const totalReads = extensions.reduce((count, extension) => count + (extension.reads?.length ?? 0), 0);
+  if (totalReads > MAX_RESOURCE_EXTENSION_READS) {
+    failures.push(`linked-resource extension reads ${totalReads} exceeded ${MAX_RESOURCE_EXTENSION_READS}`);
+  }
+
+  const firstExtensionEventIndex = extensions.at(0)?.eventIndex ?? Number.MAX_SAFE_INTEGER;
+  const seenTargets = new Set(primaryCalls
+    .filter((call) => (
+      call.workflowStageKind === 'domain-skill'
+      && declaredTargets.has(readTargetFromCall(call))
+      && call.completed === true
+      && call.isError === false
+      && Number.isFinite(call.completionEventIndex)
+      && call.completionEventIndex < firstExtensionEventIndex
+    ))
+    .map(readTargetFromCall));
+  for (const [index, extension] of extensions.entries()) {
+    const label = `linked-resource extension ${index + 1}`;
+    if (extension.valid !== true || !extension.source || extension.reads.length === 0) {
+      failures.push(`${label} declaration was malformed`);
+      continue;
+    }
+    if (extension.firstVisibleContent !== true) {
+      failures.push(`${label} was not the first nonempty visible text at byte 0`);
+    }
+    const batchCalls = primaryCalls
+      .filter(({ assistantBatchIndex }) => assistantBatchIndex === extension.batchIndex)
+      .sort(compareCallPositions);
+    const actualTargets = batchCalls.map(readTargetFromCall);
+    if (batchCalls.some((call) => (
+      call.name !== 'read' || call.workflowStageKind !== 'domain-skill'
+    ))) {
+      failures.push(`${label} was not a resource-only domain Skill read batch`);
+    }
+    if (JSON.stringify(actualTargets) !== JSON.stringify(extension.reads)) {
+      failures.push(`${label} calls were ${actualTargets.join(' -> ') || '<none>'}, expected ${extension.reads.join(' -> ')}`);
+    }
+    const sourceCalls = primaryCalls
+      .filter((call) => (
+        call.name === 'read'
+        && readTargetFromCall(call) === extension.source
+        && call.completed === true
+        && call.isError === false
+        && Number.isFinite(call.completionEventIndex)
+        && call.completionEventIndex < extension.eventIndex
+      ))
+      .sort(compareCallPositions);
+    const sourceCall = sourceCalls.at(-1);
+    if (!sourceCall || sourceCall.workflowStageKind !== 'domain-skill') {
+      failures.push(`${label} source was not loaded successfully before declaration: ${extension.source}`);
+      continue;
+    }
+    const revealed = new Set(sourceCall.revealedSkillUris ?? []);
+    const sourceNamespace = skillUriNamespace(extension.source);
+    for (const uri of extension.reads) {
+      if (uri === extension.source || seenTargets.has(uri)) {
+        failures.push(`${label} repeated a linked-resource URI: ${uri}`);
+      }
+      if (WORKFLOW_REFERENCE_URI_PATTERN.test(uri)) {
+        failures.push(`${label} attempted to treat a workflow reference as a linked Skill resource: ${uri}`);
+      }
+      if (!sourceNamespace || skillUriNamespace(uri) !== sourceNamespace) {
+        failures.push(`${label} URI escaped loaded source namespace ${sourceNamespace || '<invalid>'}: ${uri}`);
+      }
+      if (!revealed.has(uri)) {
+        failures.push(`${label} URI was not revealed by loaded source ${extension.source}: ${uri}`);
+      }
+      seenTargets.add(uri);
+    }
+  }
+
+  for (const [phaseIndex, phase] of phases.entries()) {
+    const phaseEnd = Number.isFinite(phase.readyEventIndex)
+      ? phase.readyEventIndex
+      : Number.MAX_SAFE_INTEGER;
+    const phaseExtensions = extensions.filter(({ eventIndex }) => (
+      eventIndex > phase.planEventIndex && eventIndex < phaseEnd
+    ));
+    const referenceCalls = primaryCalls.filter((call) => (
+      call.workflowStageKind === 'workflow-reference'
+      && call.eventIndex > phase.planEventIndex
+      && call.eventIndex < phaseEnd
+    ));
+    if (phaseExtensions.length === 0) continue;
+    const referenceBatchIndexes = new Set(referenceCalls.map(({ assistantBatchIndex }) => assistantBatchIndex));
+    if (referenceCalls.length > 0 && referenceBatchIndexes.size !== 1) {
+      failures.push(`workflow references after linked-resource extensions in phase ${phaseIndex + 1} were split across batches`);
+    }
+    const lastExtension = phaseExtensions.at(-1);
+    if (referenceCalls.some((call) => (
+      !Number.isFinite(call.eventIndex) || call.eventIndex <= lastExtension.eventIndex
+    ))) {
+      failures.push(`workflow reference read occurred before linked-resource phase ${phaseIndex + 1} finished`);
+    }
+  }
+  return failures;
+}
+
+function workflowLoadOrderFailures(summary, workflowPreparation, expectations) {
+  const failures = [];
+  const declared = (workflowPreparation.workflowPlanDeclaration?.loadOrder ?? [])
+    .map(stripOuterMarkdown);
+  const executionDeclared = workflowPreparation.pendingLanguageTransition?.valid === true
+    ? (workflowPreparation.workflowPlanPhases ?? []).flatMap(({ declaration }) => (
+      (declaration?.loadOrder ?? []).map(stripOuterMarkdown)
+    ))
+    : declared;
+  const required = Array.isArray(expectations.requiredWorkflowLoadOrder)
+    ? expectations.requiredWorkflowLoadOrder.map(stripOuterMarkdown)
+    : null;
+
+  if (required && JSON.stringify(declared) !== JSON.stringify(required)) {
+    failures.push(`WORKFLOW PLAN load order was ${declared.join(' -> ') || '<none>'}, expected ${required.join(' -> ') || '<none>'}`);
+  }
+
+  if (expectations.requireWorkflowResourceCallsMatchLoadOrder === true) {
+    const extensionUris = new Set(workflowPreparation.resourceExtensionReadUris ?? []);
+    const actual = [...(summary.toolCalls ?? [])]
+      .filter((call) => (
+        call.turnKind !== 'autolearn-capture'
+        && (call.workflowStageKind === 'domain-skill'
+          || call.workflowStageKind === 'workflow-reference')
+        && !extensionUris.has(readTargetFromCall(call))
+      ))
+      .sort((left, right) => (
+        numericSortValue(left.assistantBatchIndex) - numericSortValue(right.assistantBatchIndex)
+        || numericSortValue(left.contentIndex) - numericSortValue(right.contentIndex)
+        || numericSortValue(left.eventIndex) - numericSortValue(right.eventIndex)
+      ))
+      .map(readTargetFromCall);
+    if (JSON.stringify(actual) !== JSON.stringify(executionDeclared)) {
+      failures.push(`workflow resource call order was ${actual.join(' -> ') || '<none>'}, expected declared Load order ${executionDeclared.join(' -> ') || '<none>'}`);
+    }
+  }
+  return failures;
+}
+
+function numericSortValue(value) {
+  return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
 }
 
 function isDomainSkillUri(value) {

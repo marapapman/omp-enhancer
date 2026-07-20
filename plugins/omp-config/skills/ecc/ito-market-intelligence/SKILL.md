@@ -12,6 +12,24 @@ venue comparison, basket theme exploration, or an Itô API-backed market brief.
 This is a public teaser skill. It can work with public sources by default. Any
 Itô-backed data call requires explicit API access through `ITO_API_KEY`.
 
+## Workflow composition boundary
+
+Main selects supporting Skills in the initial `WORKFLOW PLAN` when they are
+visible. This Skill does not select or auto-load another Skill, reroute the
+workflow, or emit a replacement plan after `WORKFLOW READY`.
+
+If this already-loaded guide reveals a needed method that was not visible before
+PLAN, the remaining linked-method batch may read only a matching exact
+same-namespace URI listed here:
+
+`RESOURCE EXTENSION | source=skill://ecc-skill-catalog/ito-market-intelligence/SKILL.md | reads=<only-needed-exact-URI-or-URIs-listed-below>`
+
+- `skill://ecc-skill-catalog/deep-research/SKILL.md`
+- `skill://ecc-skill-catalog/exa-search/SKILL.md`
+- `skill://ecc-skill-catalog/x-api/SKILL.md`
+- `skill://ecc-skill-catalog/market-research/SKILL.md`
+- `skill://ecc-skill-catalog/prediction-market-risk-review/SKILL.md`
+
 ## Guardrails
 
 - Do not provide investment, legal, tax, or trading advice.
@@ -36,13 +54,12 @@ Itô-backed data call requires explicit API access through `ITO_API_KEY`.
    - relevant news/source context
    - open questions before any user action
 
-## Useful Skill Chains
+## PLAN-stage compatibility candidates
 
-- Use `deep-research` or `exa-search` for source discovery.
-- Use `x-api` for public social signal discovery when X access is configured.
-- Use `market-research` for market sizing, competitors, or business use cases.
-- Use `prediction-market-risk-review` before any workflow touches user capital,
-  portfolio data, or execution-capable credentials.
+- A committed `deep-research` or `exa-search` candidate can supply source discovery.
+- A committed `x-api` candidate can supply public social signals when X access is configured and authorized.
+- A committed `market-research` candidate can supply market sizing, competitor, or business-use-case methods.
+- Before any authorized workflow touches user capital, portfolio data, or execution-capable credentials, the committed plan must include the `prediction-market-risk-review` method; otherwise stop at the read-only brief and report the limitation.
 
 ## Output Contract
 

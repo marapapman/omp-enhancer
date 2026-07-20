@@ -1,24 +1,29 @@
 ---
 name: token-budget-advisor
 description: >-
-  Offers the user an informed choice about how much response depth to
-  consume before answering. Use this skill when the user explicitly
-  wants to control response length, depth, or token budget.
-  TRIGGER when: "token budget", "token count", "token usage", "token limit",
-  "response length", "answer depth", "short version", "brief answer",
-  "detailed answer", "exhaustive answer", "respuesta corta vs larga",
-  "cuántos tokens", "ahorrar tokens", "responde al 50%", "dame la versión
-  corta", "quiero controlar cuánto usas", or clear variants where the
-  user is explicitly asking to control answer size or depth.
-  DO NOT TRIGGER when: user has already specified a level in the current
-  session (maintain it), the request is clearly a one-word answer, or
-  "token" refers to auth/session/payment tokens rather than response size.
+  Use only when the user explicitly wants to control or compare response
+  length, depth, or token budget. Do not use for authentication, session,
+  payment, or other non-response tokens.
 origin: community
 ---
 
 # Token Budget Advisor (TBA)
 
-Intercept the response flow to offer the user a choice about response depth **before** Claude answers.
+Provide task-local response-depth advice without taking over the response flow.
+Offer a menu only when the user explicitly asks to compare or choose depth
+options. If the user already specifies a length or depth, apply it without
+another question.
+
+## Workflow composition boundary
+
+`context-budget` is a compatibility candidate only. In the initial `WORKFLOW PLAN`,
+Main may select `skill://ecc-skill-catalog/context-budget/SKILL.md` when its
+broader context-management method is useful and visible. This Skill does not select
+or load another Skill, traverse a relative
+`SKILL.md`, reroute the workflow, or emit a replacement plan after
+`WORKFLOW READY`.
+This advice does not precede or replace the committed workflow stages, native
+TODO, project work, or Main's final-answer responsibility.
 
 ## When to Use
 
@@ -27,7 +32,8 @@ Intercept the response flow to offer the user a choice about response depth **be
 - User says "short version", "tldr", "brief", "al 25%", "exhaustive", etc.
 - Any time the user wants to choose depth/detail level upfront
 
-**Do not trigger** when: user already set a level this session (maintain it silently), or the answer is trivially one line.
+Do not use for unrelated mentions of tokens. When the user already set a level
+for the current task, maintain it without another question.
 
 ## How It Works
 
@@ -35,7 +41,7 @@ Intercept the response flow to offer the user a choice about response depth **be
 
 Use the repository's canonical context-budget heuristics to estimate the prompt's token count mentally.
 
-Use the same calibration guidance as [context-budget](../context-budget/SKILL.md):
+Use the same calibration guidance as `skill://ecc-skill-catalog/context-budget/SKILL.md`:
 
 - prose: `words × 1.3`
 - code-heavy or mixed/code blocks: `chars / 4`
@@ -56,9 +62,11 @@ Classify the prompt, then apply the multiplier range to get the full response wi
 
 Response window = `input_tokens × mult_min` to `input_tokens × mult_max` (but don’t exceed your model’s configured output-token limit).
 
-### Step 3 — Present depth options
+### Step 3 — Present depth options when requested
 
-Present this block **before** answering, using the actual estimated numbers:
+Only when the user explicitly asks to compare or choose depth options and has
+not selected one, present a concise version of this block at the next
+workflow-permitted user interaction point:
 
 ```
 Analyzing your prompt...
@@ -94,7 +102,7 @@ Level token estimates (within the response window):
 
 ## Shortcuts — skip the question
 
-If the user already signals a level, respond at that level immediately without asking:
+If the user already signals a level, apply that level without asking:
 
 | What they say                                      | Level |
 |----------------------------------------------------|-------|

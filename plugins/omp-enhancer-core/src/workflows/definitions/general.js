@@ -1,7 +1,8 @@
 export const generalWorkflows = [
   {
     "id": "agentic.simple",
-    "chooseWhen": "Only after checking the specialized cards and finding that none adds a material method, evidence, preservation, risk, format, or delegation contract; a small or focused target alone does not qualify.",
+    "delegationDefault": "direct-simple",
+    "chooseWhen": "Only when no specialized card adds material method, evidence, preservation, risk, format, or delegation; target size alone never qualifies.",
     "composeWith": [],
     "steps": [
       {

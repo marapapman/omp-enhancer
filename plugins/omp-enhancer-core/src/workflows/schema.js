@@ -1,6 +1,11 @@
 const WORKFLOW_ID = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const RESOURCE_ID = /^[a-z0-9][a-z0-9._/-]*$/;
 const STEP_ID = /^step-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const DELEGATION_DEFAULTS = new Set([
+  'subagent-driven',
+  'direct-simple',
+  'defer-until-composed',
+]);
 const RESERVED_MANAGED_MARKER = /<!--\s*OMP-ENHANCER-(?:WORKFLOW-CATALOG|WORKFLOW-CONTEXT|ADVISOR-WORKFLOW-CONTEXT):(?:START|END)\s*-->/i;
 const WORKFLOW_FIELDS = new Set([
   'id',
@@ -9,10 +14,12 @@ const WORKFLOW_FIELDS = new Set([
   'steps',
   'scopeNotes',
   'skills',
+  'catalogSkills',
   'qualityChecks',
   'riskNotes',
   'roles',
   'delegation',
+  'delegationDefault',
 ]);
 const STEP_FIELDS = new Set(['id', 'text']);
 
@@ -47,6 +54,17 @@ function normalizeWorkflow(raw, seen) {
   seen.add(id);
 
   const steps = normalizeSteps(raw.steps, id);
+  const skills = frozenUniqueIdentifiers(raw.skills, `${id}.skills`, RESOURCE_ID);
+  const catalogSkills = frozenUniqueIdentifiers(
+    raw.catalogSkills,
+    `${id}.catalogSkills`,
+    RESOURCE_ID,
+  );
+  for (const skill of catalogSkills) {
+    if (!skills.includes(skill)) {
+      throw new Error(`${id}.catalogSkills contains non-candidate ${skill}.`);
+    }
+  }
 
   return Object.freeze({
     id,
@@ -54,11 +72,13 @@ function normalizeWorkflow(raw, seen) {
     composeWith: frozenUniqueIdentifiers(raw.composeWith, `${id}.composeWith`, WORKFLOW_ID),
     steps: Object.freeze(steps),
     scopeNotes: frozenStrings(raw.scopeNotes, `${id}.scopeNotes`),
-    skills: frozenUniqueIdentifiers(raw.skills, `${id}.skills`, RESOURCE_ID),
+    skills,
+    catalogSkills,
     qualityChecks: requiredStrings(raw.qualityChecks, `${id}.qualityChecks`),
     riskNotes: frozenStrings(raw.riskNotes, `${id}.riskNotes`),
     roles: frozenUniqueIdentifiers(raw.roles, `${id}.roles`, RESOURCE_ID),
     delegation: requiredStrings(raw.delegation, `${id}.delegation`),
+    delegationDefault: normalizeDelegationDefault(raw.delegationDefault, `${id}.delegationDefault`),
   });
 }
 
@@ -87,6 +107,9 @@ function normalizeSteps(values, workflowId) {
 function validateDelegation(definition) {
   const text = definition.delegation.join(' ');
   const stepIds = new Set(definition.steps.map(({ id }) => id));
+  if (definition.delegationDefault === 'subagent-driven' && definition.roles.length === 0) {
+    throw new Error(`Workflow ${definition.id} is subagent-driven but has no bounded role.`);
+  }
   for (const role of definition.roles) {
     if (!definition.delegation.some((line) => containsActorId(line, role))) {
       throw new Error(`Workflow ${definition.id} does not assign role ${role} in delegation.`);
@@ -106,6 +129,15 @@ function validateDelegation(definition) {
   }
 
   for (const line of definition.delegation) validateDelegationStepReference(definition.id, line, stepIds);
+}
+
+function normalizeDelegationDefault(value, field) {
+  if (value === undefined) return 'subagent-driven';
+  const delegationDefault = requiredText(value, field);
+  if (!DELEGATION_DEFAULTS.has(delegationDefault)) {
+    throw new Error(`${field} contains invalid delegation default ${delegationDefault}.`);
+  }
+  return delegationDefault;
 }
 
 function validateDelegationStepReference(workflowId, line, stepIds) {

@@ -1,10 +1,22 @@
 ---
 name: data-scraper-agent
-description: Build a fully automated AI-powered data collection agent for any public source — job boards, prices, news, GitHub, sports, anything. Scrapes on a schedule, enriches data with a free LLM (Gemini Flash), stores results in Notion/Sheets/Supabase, and learns from user feedback. Runs 100% free on GitHub Actions. Use when the user wants to monitor, collect, or track any public data automatically.
+description: Design a user-requested scheduled data-collection target with source, enrichment, storage, feedback, and deployment choices. This guide does not run, deploy, publish, or grant access by itself.
 origin: community
 ---
 
 # Data Scraper Agent
+
+## Current OMP and effect boundary
+
+Treat this Skill as guidance for an external target system only when the user
+explicitly requests that target. For the current OMP session it does not route,
+schedule, deploy, publish, grant permission, or decide completion. Inspection,
+planning, and read-only review authorize no mutation. Any installation,
+configuration, file write, command, network call, upload, publication, secret
+use, mutation, or other external effect requires explicit user authorization
+for the exact target and effect plus current native permission. Target-system
+safety and crawl policy constrain that target; they are not an OMP gate or
+completion condition.
 
 Build a production-ready, AI-powered data collection agent for any public data source.
 Runs on a schedule, enriches results with a free LLM, stores to a database, and improves over time.
@@ -536,6 +548,12 @@ if __name__ == "__main__":
 ---
 
 ### Step 9: GitHub Actions Workflow
+
+Generate this target workflow only when the user requested deployment
+configuration. Include its feedback-history commit step only when the user
+explicitly authorizes that target bot to write to the repository; otherwise
+omit the write permission and commit step. Creating the workflow does not
+authorize publishing it or enabling remote schedules.
 
 ```yaml
 # .github/workflows/scraper.yml

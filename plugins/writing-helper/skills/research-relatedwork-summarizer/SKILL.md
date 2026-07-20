@@ -5,12 +5,21 @@ description: "Summarize downloaded papers — extract core contribution, method,
 
 # Research Related Work Summarizer
 
-Summarize downloaded paper files into structured entries, appended to `.pi/research/literature.md`.
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or an explicitly capable generic
+`task` owns authorized effects.
+
+Summarize downloaded paper files into structured related-work entries.
+
+This is an assigned child-local method; it does not require Main to execute the
+method directly. Do not recursively fork, spawn, or delegate. Main retains the
+parent TODO, user interaction, and integration.
 
 ## When to Use
 
 - User asks to summarize downloaded papers, build literature notes, or organize related work.
-- After papers have been downloaded, for example with the `research-literature` workflow.
+- After source papers have been made available to the assignment.
 
 ## Inputs
 
@@ -21,14 +30,21 @@ Summarize downloaded paper files into structured entries, appended to `.pi/resea
 
 ## Instructions
 
-1. **Identify targets.** Ask the user which paper(s) to summarize — a specific one or all found under `.pi/research/papers/`. If none exist, refuse and explain.
+1. **Identify targets.** Use the paper paths in the assignment. If the target is
+   ambiguous or absent, return an interactive question to Main. Main decides
+   whether to ask the user. If no source exists, report that limitation.
 
-2. **Read paper.** For PDF files, use bash: pdftotext to extract text first, then summarize the text. For text files, use the read tool directly. Read cover to cover if size permits; otherwise skim abstract, intro, method, results, conclusion.
+2. **Read paper.** Use an available document reader for PDFs and the read tool
+   for text files. Use `pdftotext` only when a live shell is exposed and the user
+   or host has authorized that command. Otherwise, use an available document
+   reader or report the extraction limitation. Read cover to cover if size
+   permits; otherwise inspect the abstract, introduction, method, results, and
+   conclusion.
 
 3. **Extract metadata.** From the paper, determine:
    - Title, authors, venue, year
 
-4. **Write structured summary.** For each paper, append a block to `.pi/research/literature.md` with this format:
+4. **Build structured summary.** For each paper, produce a block with this format:
 
 ```markdown
 ## [Title]
@@ -43,13 +59,20 @@ Summarize downloaded paper files into structured entries, appended to `.pi/resea
 ```
 
 5. **Process sequentially, deliver as a batch.** Summarize papers one at a time
-   internally, then complete the user-requested set and report the batch. Pause
-   after each paper only when the user explicitly requests interactive review.
+   internally, then complete the user-requested set and report the batch. If
+   interactive review was requested, return the current checkpoint to Main;
+   Main decides whether to ask the user before assigning the next paper.
 
 6. **Cross-reference (optional).** If the user has `.pi/research/storyline.md`, compare covered technical points vs. gaps and offer to report coverage.
 
+7. **Deliver or persist.** Write to `.pi/research/literature.md` only when the
+   user requested persistent output and the host authorizes that safe path.
+   Otherwise, return the complete result in the conversation.
+
 ## Notes
 
-- Do not edit existing entries in `literature.md` — always append.
-- Use direct agent work (read, write, edit tools). No subagent spawning, no CLI, no external services.
+- During an authorized write, do not edit existing entries in `literature.md`;
+  append the new entries.
+- Use only tools exposed and authorized for the assignment. A content request
+  does not itself authorize file, shell, network, or external-service effects.
 - Keep summaries factual and concise. Each entry targets ~10-15 lines of markdown.

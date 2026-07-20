@@ -8,6 +8,17 @@ origin: ECC
 
 Backend architecture patterns and best practices for scalable server-side applications.
 
+## OMP Composition Boundary
+
+Main owns cross-Skill composition: it selects every supporting workflow and Skill
+in the initial `WORKFLOW PLAN` and loads each declared Skill before
+`WORKFLOW READY`. After load, this loaded Skill does not reselect, reroute,
+auto-load, or hand off to another Skill. It does not replace the parent TODO or
+Main's Agent choice. An exact same-namespace
+`skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI explicitly exposed here may be
+read in one `RESOURCE EXTENSION` before `COMMIT`; cross-namespace candidates
+remain initial-PLAN only.
+
 ## When to Activate
 
 - Designing REST or GraphQL API endpoints
@@ -436,8 +447,10 @@ production APIs: they reset on deploy, split across replicas, and fail open in
 serverless or multi-instance environments.
 
 Keep the backend layer responsible for choosing the integration point and error
-shape; use `api-design` for the HTTP contract and `security-review` for abuse
-case review.
+shape. When independently matched, the HTTP-contract and abuse-case methods are
+non-routing PLAN candidates:
+`skill://ecc-skill-catalog/api-design/SKILL.md` and
+`skill://ecc-skill-catalog/security-review/SKILL.md`.
 
 ## Background Jobs & Queues
 

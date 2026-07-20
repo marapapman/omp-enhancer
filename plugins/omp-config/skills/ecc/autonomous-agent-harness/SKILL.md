@@ -1,20 +1,22 @@
 ---
 name: autonomous-agent-harness
-description: Transform Claude Code into a fully autonomous agent system with persistent memory, scheduled operations, computer use, and task queuing. Replaces standalone agent frameworks (Hermes, AutoGPT) by leveraging Claude Code's native crons, dispatch, MCP tools, and memory. Use when the user wants continuous autonomous operation, scheduled tasks, or a self-directing agent loop.
+description: Design a specifically scoped external autonomous-agent harness with persistent memory, scheduled operations, computer use, and task queuing through capabilities exposed by the target host. Use when the task is to plan or configure user-requested continuous operation, scheduled tasks, or a self-directing agent loop.
 origin: ECC
 ---
 
 # Autonomous Agent Harness
 
-Turn Claude Code into a persistent, self-directing agent system using only native features and MCP servers.
+Use this as a target-system design guide for an external Claude Code host with separately configured native features and MCP servers. It does not describe capabilities guaranteed in the current OMP session.
 
 ## Consent and Safety Boundaries
 
-Autonomous operation must be explicitly requested and scoped by the user. Do not create schedules, dispatch remote agents, write persistent memory, use computer control, post externally, modify third-party resources, or act on private communications unless the user has approved that capability and the target workspace for the current setup.
+Autonomous operation must be explicitly requested and scoped by the user. Any schedule, persistent memory write, dispatch, remote-agent action, computer control, external post, or third-party mutation requires explicit user authorization for the exact named target and operation plus native permission at execution time.
+
+This Skill does not choose or reselect a workflow or Skill, activate a tool, start a loop, dispatch work, or grant authority in the current OMP session. The scope examples and commands below are external-host reference data after this Skill is selected, not current-session instructions.
 
 Prefer dry-run plans and local queue files before enabling recurring or event-driven actions. Keep credentials, private workspace exports, personal datasets, and account-specific automations out of reusable ECC artifacts.
 
-## When to Activate
+## Selected task examples
 
 - User wants an agent that runs continuously or on a schedule
 - Setting up automated workflows that trigger periodically
@@ -60,7 +62,7 @@ Use Claude Code's built-in memory system enhanced with MCP memory server for str
 **Built-in memory** (`~/.claude/projects/*/memory/`):
 - User preferences, feedback, project context
 - Stored as markdown files with frontmatter
-- Automatically loaded at session start
+- External Claude Code host example: a separately configured host may load its own memory at session start; current OMP does not assume that behavior, visibility, or filesystem access
 
 **MCP memory server** (structured knowledge graph):
 - Entities, relations, observations
@@ -71,7 +73,7 @@ Use Claude Code's built-in memory system enhanced with MCP memory server for str
 
 ```
 # Short-term: current session context
-Use TodoWrite for in-session task tracking
+Use the current host's native TODO only when it is exposed; otherwise keep the explicitly authorized task queue in the named memory file
 
 # Medium-term: project memory files
 Write to ~/.claude/projects/*/memory/ for cross-session recall
@@ -178,12 +180,14 @@ description: Persistent task queue for autonomous operation
 | Gateway/Router | Claude Code dispatch + crons | Scheduled tasks trigger agent sessions |
 | Memory System | Claude memory + MCP memory server | Built-in persistence + knowledge graph |
 | Tool Registry | MCP servers | Dynamically loaded tool providers |
-| Orchestration | ECC skills + agents | Skill definitions direct agent behavior |
+| Orchestration | ECC skills + agents | Target-host configuration supplies domain methods |
 | Computer Use | computer-use MCP | Native browser and desktop control |
 | Context Manager | Session management + memory | ECC 2.0 session lifecycle |
-| Task Queue | Memory-persisted task list | TodoWrite + memory files |
+| Task Queue | Memory-persisted task list | Live native TODO when exposed + memory files |
 
 ## Setup Guide
+
+Treat every command and configuration below as an external target-host example. Inspecting the example is read-only; applying any configuration or command still requires the exact authorization and native permission stated above.
 
 ### Step 1: Configure MCP Servers
 

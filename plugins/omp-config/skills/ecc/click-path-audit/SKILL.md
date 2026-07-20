@@ -4,7 +4,7 @@ description: "Trace every user-facing button/touchpoint through its full state c
 origin: community
 ---
 
-# /click-path-audit — Behavioural Flow Audit
+# Click-Path Audit — Behavioural Flow Audit
 
 Find bugs that static code reading misses: state interaction side effects, race conditions between sequential calls, and handlers that silently undo each other.
 
@@ -162,24 +162,20 @@ CLICK-PATH-NNN: [severity: CRITICAL/HIGH/MEDIUM/LOW]
 
 This audit is expensive. Scope it appropriately:
 
-- **Full app audit:** Use when launching or after major refactor. Launch parallel agents per page.
+- **Full app audit:** Use when launching or after major refactor. Map shared stores first, then partition independent page or feature traces only where their inputs do not overlap.
 - **Single page audit:** Use after building a new page or after a user reports a broken button.
 - **Store-focused audit:** Use after modifying a Zustand store — audit all consumers of the changed actions.
 
-### Recommended agent split for full app:
+### Delegation shape for a full app
 
-```
-Agent 1: Map ALL state stores (Step 1) — this is shared context for all other agents
-Agent 2: Dashboard (Tasks, Notes, Journal, Ideas)
-Agent 3: Chat (DanteChatColumn, JustChatPage)
-Agent 4: Emails (ThreadList, DraftArea, EmailsPage)
-Agent 5: Projects (ProjectsPage, ProjectOverviewTab, NewProjectWizard)
-Agent 6: CRM (all sub-tabs)
-Agent 7: Profile, Settings, Vault, Notifications
-Agent 8: Management Suite (all pages)
-```
-
-Agent 1 MUST complete first. Its output is input for all other agents.
+Main owns the audit scope and first obtains the shared state-store map. After
+that dependency is satisfied, consult the current dynamic Available Agents and
+give each safe independent page or feature slice to a matching Agent, otherwise
+native `task`. Main chooses the grouping and fork width from actual page
+coupling, shared-store overlap, capacity, and available context; no page count
+implies an Agent count. Batch runnable independent slices, keep dependent slices
+in later waves, and have Main reconcile cross-page state interactions and final
+severity.
 
 ---
 
@@ -193,7 +189,7 @@ Agent 1 MUST complete first. Its output is input for all other agents.
 
 ## When NOT to Use
 
-- For API-level bugs (wrong response shape, missing endpoint) — use the `code-development` diagnosis and vertical TDD method
+- For API-level bugs (wrong response shape, missing endpoint) — use the `code.dev` diagnosis and vertical TDD method
 - For styling/layout issues — visual inspection
 - For performance issues — profiling tools
 
@@ -201,9 +197,9 @@ Agent 1 MUST complete first. Its output is input for all other agents.
 
 ## Integration with Other Skills
 
-- Run after the local-search and hypothesis phase in `code-development`.
+- Run after the local-search and hypothesis phase in `code.dev`.
 - Run before its final fresh verification and semantic diff review.
-- Feed each reproduced bug into a public-behavior RED/GREEN slice when a meaningful seam exists.
+- Feed each reproduced bug into a native `task`-owned public-behavior RED/GREEN slice when a meaningful seam exists. Main integrates, verifies, and reviews the current tree; unavailable or unsafe delegation is recorded before direct fallback.
 
 ---
 

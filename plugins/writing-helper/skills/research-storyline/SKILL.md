@@ -1,21 +1,38 @@
 ---
 name: research-storyline
-description: Interactive storyline construction — guides through problem→importance→insight→design→evaluation, section by section, outputting to .pi/research/storyline.md
+description: Interactive storyline construction — guides assigned problem→importance→insight→design→evaluation checkpoints and returns or, when authorized, persists each section
 ---
 
 # Research Storyline Skill
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or an explicitly capable generic
+`task` owns authorized effects.
+
 ## Purpose
 
-Help the user build a complete research storyline following the 20-section framework. The agent guides section by section, asking 1–2 questions per section, capturing user input, and writing a polished narrative to `.pi/research/storyline.md`. The agent never invents content — it only writes what the user provides.
+Help build a complete research storyline following the 20-section framework.
+This is an assigned child-local method; it does not require Main to execute the
+method directly. The assigned child does not own orchestration: do not
+recursively fork, spawn, or delegate. Main retains the parent TODO, user
+interaction, and integration. The child never invents content and only polishes
+what the user provided.
 
 ## Workflow
 
-1. **Check output directory**: Ensure `.pi/research/` exists (create if missing).
-2. **Read any existing storyline**: If `.pi/research/storyline.md` exists, read it to resume from the last completed section.
-3. **Walk through sections one at a time**: For each section, present the section name, its key question, and ask 1–2 targeted questions. Wait for the user's answer before proceeding.
-4. **Write after each section**: Append the user's answer (formatted as bullet points under `## Section Name`) to `.pi/research/storyline.md`.
-5. **Always wait for user input** before moving to the next section. Do not auto-generate content or proceed without a response.
+1. **Read any supplied storyline**: If an authorized assignment exposes
+   `.pi/research/storyline.md`, read it to find the last completed section.
+2. **Handle one section at a time**: Identify the next section and its key
+   question. If its answer is absent, formulate 1–2 targeted questions.
+3. **Return interaction to Main**: Return any interactive question to Main and
+   stop. Main decides whether to ask the user and may later assign the answer as
+   a new bounded checkpoint.
+4. **Polish supplied answers**: Format the user's supplied answer as bullet
+   points under `## Section Name`, without adding facts, claims, or numbers.
+5. **Deliver or persist**: Write to `.pi/research/storyline.md` only when the
+   user requested persistent output and the host authorizes that safe path.
+   Otherwise, return the complete result in the conversation.
 
 ## The 20 Sections
 
@@ -44,7 +61,8 @@ Help the user build a complete research storyline following the 20-section frame
 
 ## Output Format
 
-Each section is written as follows in `.pi/research/storyline.md`:
+Return each section in this form; use the same form in
+`.pi/research/storyline.md` when persistence is authorized:
 
 ```markdown
 ## Section Name
@@ -54,15 +72,19 @@ Each section is written as follows in `.pi/research/storyline.md`:
 - (Agent may rephrase for clarity, but never add new content)
 ```
 
-Separate sections with a blank line. The file accumulates each section as the user progresses.
+Separate sections with a blank line. An authorized persistent artifact
+accumulates supplied sections as the user progresses through Main.
 
 ## Rules
 
 - **One section at a time.** Complete the current section before prompting for the next.
-- **Wait for the user.** Do not auto-advance or generate content without a response.
+- **Wait through Main.** Do not auto-advance or generate content without a supplied response.
 - **Never invent.** Rephrase for clarity and polish, but do not add facts, claims, or numbers the user did not provide.
-- **Save after each section.** Every answer is written to `.pi/research/storyline.md` immediately.
+- **Honor effect authority.** Content-revision permission alone does not authorize a file write.
 
 ## Pi Compatibility
 
-This skill uses only `read` and `write` tools — no subagent spawning, no `.pi/research/state.md`, and no file editing outside `.pi/research/`. Load `research-storyline` through the runtime's normal skill mechanism.
+Use only tools exposed for the assignment. Do not read or edit
+`.pi/research/state.md`, and never write outside an explicitly authorized safe
+path. This body is already loaded for the assignment; do not read
+`research-storyline` again.

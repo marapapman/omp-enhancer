@@ -1,16 +1,24 @@
 ---
 name: deep-research
-description: Multi-source deep research using firecrawl and exa MCPs. Searches the web, synthesizes findings, and delivers cited reports with source attribution. Use when the user wants thorough research on any topic with evidence and citations.
+description: Multi-source deep research using currently exposed web search and page-reading methods. Synthesizes findings and delivers cited reports with source attribution when the user wants thorough research with evidence and citations.
 origin: ECC
 ---
 
 # Deep Research
 
-> **Drift-prone skill.** Firecrawl/Exa MCP tool names, quotas, and result
-> shapes change. Verify the configured MCP tools and current API docs before
-> promising coverage or quoting live source counts.
+When this Skill is listed in a `writer` or `zh-writer` assignment, it is
+context only for that prose checkpoint. The writer consumes evidence already
+supplied by Main and returns a proposal; it does not search the web, invoke
+research tools, or issue independent research findings. Main or a separate
+selected research Agent owns the research checkpoint.
 
-Produce thorough, cited research reports from multiple web sources using firecrawl and exa MCP tools.
+> **Drift-prone skill.** Web tool names, quotas, and result shapes change.
+> Inspect the current host-exposed methods and applicable official API docs
+> before promising coverage or quoting live source counts.
+
+Produce thorough, cited research reports from multiple web sources using the
+currently exposed web search and page-reading methods. Firecrawl and Exa are
+examples only when exposed by the host; they are not prerequisites.
 
 ## When to Activate
 
@@ -20,13 +28,14 @@ Produce thorough, cited research reports from multiple web sources using firecra
 - Any question requiring synthesis from multiple sources
 - User says "research", "deep dive", "investigate", or "what's the current state of"
 
-## MCP Requirements
+## Tool Availability
 
-At least one of:
-- **firecrawl** — `firecrawl_search`, `firecrawl_scrape`, `firecrawl_crawl`
-- **exa** — `web_search_exa`, `web_search_advanced_exa`, `crawling_exa`
-
-Both together give the best coverage. Configure in `~/.claude.json` or `~/.codex/config.toml`.
+Use only search and page-reading tools currently exposed by the host. Named
+Firecrawl or Exa calls below are optional examples only when those exact tools
+are visible. Do not configure an MCP, edit host configuration, or install a
+provider during the active task merely to satisfy this guide. Use the available
+method and report concrete coverage limitations when a useful capability is
+absent.
 
 ## Workflow
 
@@ -50,7 +59,8 @@ Break the topic into 3-5 research sub-questions. Example:
 
 ### Step 3: Execute Multi-Source Search
 
-For EACH sub-question, search using available MCP tools:
+For each sub-question, search using the available host tools. If the exact
+named examples are currently exposed, representative calls are:
 
 **With firecrawl:**
 ```
@@ -73,7 +83,8 @@ web_search_advanced_exa(query: "<keywords>", numResults: 5, startPublishedDate: 
 
 ### Step 4: Deep-Read Key Sources
 
-For the most promising URLs, fetch full content:
+For the most promising URLs, fetch full content with the current page-reading
+method. The named calls below apply only when exposed:
 
 **With firecrawl:**
 ```
@@ -125,21 +136,26 @@ Sub-questions investigated: [list]
 
 ### Step 6: Deliver
 
-- **Short topics**: Post the full report in chat
-- **Long reports**: Post the executive summary + key takeaways, save full report to a file
+- **Short topics**: Post the full report in chat.
+- **Long reports**: Adapt the structure and length to the user request and
+  deliver it in chat by default. Save a report only when the user requests a
+  file and supplies or authorizes a safe path; otherwise keep delivery in chat.
 
-## Parallel Research with Subagents
+## Delegated Research
 
-For broad topics, use Claude Code's Task tool to parallelize:
+For a broad topic, Main defines bounded sub-questions, evidence requirements, and
+the source matrix before delegation. Consult the current dynamic Available Agents:
+prefer a matching research Agent when one can own a complete
+sub-question, otherwise use native `task`. Main chooses the Agent and fork width
+from real independence, source overlap, available capacity, and cost; do not
+manufacture a fixed fanout.
 
-```
-Launch 3 research agents in parallel:
-1. Agent 1: Research sub-questions 1-2
-2. Agent 2: Research sub-questions 3-4
-3. Agent 3: Research sub-question 5 + cross-cutting themes
-```
-
-Each agent searches, reads sources, and returns findings. The main session synthesizes into the final report.
+Send runnable independent sub-questions together and keep dependent follow-ups
+for a later wave. Each assignment returns searched queries, sources read in
+full, claim-level findings, confidence, and unresolved gaps. Main owns the
+research plan, cross-reference pass, synthesis, citation verification, fallback
+when delegation is unavailable or unsafe, and the final distinction between
+fact and inference.
 
 ## Quality Rules
 

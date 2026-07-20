@@ -1,7 +1,7 @@
 export const databaseWorkflows = [
   {
     "id": "database.review",
-    "chooseWhen": "The user asks for a read-only review of database schema, SQL, indexes, transactions, locks, permissions, or a migration plan.",
+    "chooseWhen": "A read-only review of database schema, SQL, indexes, transactions, locks, permissions, or a migration plan.",
     "composeWith": [
       "security.review"
     ],
@@ -24,13 +24,20 @@ export const databaseWorkflows = [
       }
     ],
     "scopeNotes": [
-      "Main owns the bounded target review directly; the native reviewer remains reserved for an existing semantic diff or patch.",
+      "Main owns the bounded review scope and final reconciliation; task may own a complete read-only audit slice, while the native reviewer remains reserved for an existing semantic diff or patch.",
+      "Confirm the database engine first, then select only the matching engine-specific Skill: postgres-patterns for PostgreSQL or mysql-patterns for MySQL or MariaDB; do not load both by default.",
       "Do not run mutating SQL or production EXPLAIN ANALYZE as part of a read-only review."
     ],
     "skills": [
       "postgres-patterns",
+      "mysql-patterns",
       "database-migrations",
       "code-development"
+    ],
+    "catalogSkills": [
+      "postgres-patterns",
+      "mysql-patterns",
+      "database-migrations"
     ],
     "qualityChecks": [
       "engine and version correspondence, query and schema evidence, migration-order consistency, lock and transaction impact, security boundary review, severity rationale, and explicit runtime limitations"
@@ -38,14 +45,16 @@ export const databaseWorkflows = [
     "riskNotes": [
       "Database diagnostics can expose sensitive data or acquire locks; prefer static plans and safe non-production evidence."
     ],
-    "roles": [],
+    "roles": [
+      "task"
+    ],
     "delegation": [
-      "steps-2-4: the parent directly audits the bounded database artifacts and evidence without editing or applying changes"
+      "steps-2-4: task owns a bounded read-only database audit slice and returns concrete artifact and evidence findings without editing, mutating, or applying changes; the parent reconciles scope and conclusions"
     ]
   },
   {
     "id": "database.change",
-    "chooseWhen": "The user authorizes a schema, query, index, constraint, data-migration, or database-configuration change with verification.",
+    "chooseWhen": "An authorized schema, query, index, constraint, data-migration, or database-config change needs verification.",
     "composeWith": [
       "database.review",
       "security.review",
@@ -103,6 +112,7 @@ export const databaseWorkflows = [
     ],
     "scopeNotes": [
       "Repository migration changes do not authorize applying them to staging or production.",
+      "Confirm the database engine first, then select only the matching engine-specific Skill: postgres-patterns for PostgreSQL or mysql-patterns for MySQL or MariaDB; do not load both by default.",
       "Separate schema expansion, data backfill, application cutover, and contraction when compatibility or scale requires it.",
       "Slice count follows real independent vertical work, dependency order, exclusive write ownership, and native capacity; one safe slice remains one task.",
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path."
@@ -110,7 +120,14 @@ export const databaseWorkflows = [
     "skills": [
       "database-migrations",
       "postgres-patterns",
+      "mysql-patterns",
       "code-development",
+      "safety-guard"
+    ],
+    "catalogSkills": [
+      "database-migrations",
+      "postgres-patterns",
+      "mysql-patterns",
       "safety-guard"
     ],
     "qualityChecks": [
@@ -135,7 +152,7 @@ export const databaseWorkflows = [
   },
   {
     "id": "database.migration.repair",
-    "chooseWhen": "A database migration failed, diverged, partially applied, or left environments at inconsistent states and the user wants diagnosis and an authorized repair.",
+    "chooseWhen": "A migration failed, diverged, or was partly applied, and the user wants diagnosis and an authorized repair.",
     "composeWith": [
       "database.review",
       "security.review"
@@ -192,6 +209,7 @@ export const databaseWorkflows = [
     ],
     "scopeNotes": [
       "Diagnose from recorded state and disposable reproductions first; repository repair does not authorize a live recovery command.",
+      "Confirm the database engine first, then select only the matching engine-specific Skill: postgres-patterns for PostgreSQL or mysql-patterns for MySQL or MariaDB; do not load both by default.",
       "Do not rewrite already deployed migration history unless the exact tool, environment state, and user authorization make that operation safe and necessary.",
       "Slice count follows real independent vertical work, migration-state dependencies, exclusive write ownership, and native capacity; one safe slice remains one task.",
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path."
@@ -199,7 +217,14 @@ export const databaseWorkflows = [
     "skills": [
       "database-migrations",
       "postgres-patterns",
+      "mysql-patterns",
       "code-development",
+      "safety-guard"
+    ],
+    "catalogSkills": [
+      "database-migrations",
+      "postgres-patterns",
+      "mysql-patterns",
       "safety-guard"
     ],
     "qualityChecks": [

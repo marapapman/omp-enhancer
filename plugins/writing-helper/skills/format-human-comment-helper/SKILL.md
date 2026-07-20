@@ -5,7 +5,11 @@ description: "Process human review comments — parse, categorize, and suggest r
 
 # Format Human Comment Helper
 
-Help process human review comments on a document. Parse feedback, categorize each point, suggest responses, and estimate effort. If the user already authorized revisions, apply non-substantive wording fixes directly; confirm changes to core claims, evidence, or scope.
+Help process human review comments on a document. Parse feedback, categorize each point, suggest responses, and estimate effort. If the user already authorized revisions, include non-substantive wording fixes in the proposal; confirm changes to core claims, evidence, or scope.
+
+This writer child is always proposal-only. Return the complete revised text,
+using SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer.
+Main retains permission decisions and actual file changes.
 
 ## Trigger
 
@@ -58,7 +62,7 @@ If the user has not authorized edits, ask: **"Shall I draft the changes for any 
 
 ### Step 5: Draft on Request
 
-When the user picks a numbered item, or has already asked for the review comments to be addressed, propose concrete document edits. Apply wording fixes within that authorization; ask again only before changing core claims, evidence, or scope.
+When the user picks a numbered item, or has already asked for the review comments to be addressed, propose concrete document edits. Include wording fixes in the complete proposal; ask again only before changing core claims, evidence, or scope.
 
 ## Guidelines
 

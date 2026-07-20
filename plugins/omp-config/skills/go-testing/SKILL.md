@@ -1,41 +1,29 @@
 ---
 name: go-testing
-description: "Handles Golang testing tasks including running tests, writing new tests, and fixing failures, while following the repository's existing assertion conventions."
+description: Handle Go testing tasks by following the repository's current test framework, package layout, assertion conventions, and focused verification commands.
 ---
 
-# Go Testing Skill
+# Go Testing
 
-Provides guidance and automation for Golang testing tasks.
+Follow the repository's existing test framework, helpers, package style, fixtures, and commands before introducing a new pattern. Inspect nearby tests and module configuration first.
 
-## Testing Philosophy
+## Testing method
 
-- Use `require` (from github.com/stretchr/testify/require) for assertions that should stop test execution on failure
-- Use `assert` (from github.com/stretchr/testify/assert) for non-critical assertions where test should continue
-- Choose internal vs external package testing based on what needs to be tested
-- Test internal functions by placing test files in the same package (no `_test` suffix)
-- Avoid creating externally facing functions solely for testing purposes
-- Use table-driven tests for repetitive cases
-- Test behavior, not implementation details
-- Separate IO from business logic for easier testing
-- Check errors explicitly in tests
+- Test observable behavior at the narrowest useful behavioral seam, not private implementation details.
+- Choose internal or external test packages from the behavior that needs access and the repository's convention.
+- Keep error handling explicit and avoid exporting production symbols solely for tests.
+- Use table-driven tests with `t.Run` when cases share setup and assertions; use separate tests when that makes failures clearer.
+- Separate I/O from business logic only when the production design benefits, not solely to satisfy a test style.
+- Consider concurrency when the target behavior is concurrent. Run `-race` only when relevant, affordable, and supported by the focused environment.
 
-## Special Rules
+## Framework and dependency boundary
 
-- Avoid to run tests for all packages(`go test ./...`) if not necessary, use `go test ./<package>` is preferred
-- Always consider concurrency when writing tests if some components are likely to be concurrent
-- Always check race conditions for concurrent code(with `-race` flag)
-- For related edge case testing, group cases in a single test function using a table-driven approach and iterate with `t.Run` to keep code concise and avoid multiple near-duplicate test functions.
+Use the standard library when that is the repository's convention. If the repository already uses `testify`, follow its local `require` and `assert` conventions. Do not add or install `testify`, another assertion library, a mock generator, or any dependency unless the current task explicitly requests or requires that change and native package-install permission allows it.
 
-## Test File Organization Standards
+## Placement and commands
 
-- Unit tests for each Go file must be placed in the corresponding `<file>_test.go`
-- Benchmark tests must be placed in `<file>_bench_test.go`
-- Only non-unit tests (such as integration tests, scenario tests) should be placed in the main module's test files
+Follow existing test placement rather than requiring one test file per source file. Put a test where the repository's package structure and behavioral seam make ownership clearest; preserve established benchmark and integration-test locations.
 
-## When to Use This Skill
+Prefer the smallest command that proves the changed behavior, such as a package-focused `go test` invocation. Expand to broader package, module, or race verification in proportion to risk. Run any command only when it is within the current task and native execution permission allows it; examples are not authorization to execute.
 
-- Running unit tests with `go test`
-- Writing new test files and test cases
-- Debugging and fixing failing tests
-- Implementing test fixtures and mocks
-- Improving test coverage
+When fixing a failure, preserve valid RED evidence, make the smallest production change, rerun the same focused command for GREEN, and then run the justified broader check from the loaded code workflow.

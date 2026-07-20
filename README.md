@@ -1,35 +1,32 @@
 # OMP Enhancer
 
-OMP Enhancer is an OMP marketplace stack for optional workflow guidance, shared configuration, writing QA, testing QA, and fact checking.
+OMP Enhancer is an OMP marketplace for optional workflows, shared config, writing, testing, and fact checking.
 
-The stack is OMP-native-first. Main receives the available Skills and Agents through OMP and chooses how to work. Plugins do not hard-route a request, force a workflow, block tool calls, keep a session open, or start automatic repair turns.
+OMP exposes available Skills and Agents; Main chooses under native permissions. Plugins neither hard-route nor block, continue sessions, or auto-repair.
 
 ## Plugins
 
 | Plugin | Purpose |
 | --- | --- |
-| `omp-enhancer-core` | Safe task facts, optional tool activation, and scoped model reminders. |
-| `omp-config` | Shared config, workflow references, Agents, Skills, hooks, and diagnostics. |
-| `writing-helper` | Writing, citation, style, and polish tools for English and Chinese. |
-| `omp-testing-enhancer` | Testing, browser, coverage, mutation, and advisory review tools. |
-| `omp-fact-checker` | Claim planning, evidence, cross-checking, reporting, and advisory review. |
-
-Each plugin can be installed independently.
+| `omp-enhancer-core` | Task facts, tool activation, and scoped reminders. |
+| `omp-config` | Config, workflow references, Agents, Skills, and diagnostics. |
+| `writing-helper` | English and Chinese writing, citation, style, and polish. |
+| `omp-testing-enhancer` | Testing evidence and advisory review. |
+| `omp-fact-checker` | Claim evidence, cross-checking, and advisory review. |
 
 ## Workflows
 
 Describe the task naturally. Main remains responsible for selecting Skills, Agents, tools, and execution steps under the user instruction and OMP's native permissions.
 
-`omp-config` exposes `omp-enhancer-workflows` as an optional Skill. Its compact selection table keeps only exact workflow IDs, complete matching conditions, and per-workflow `PLAN URI` values to copy into the plan before loading. Main loads only the selected cards and chooses domain Skills from OMP's native visible Skill descriptions. The cards cover:
+`omp-config` exposes the optional `omp-enhancer-workflows` index. Only the exact native `skill-prompt` body named `omp-enhancer-workflows` counts as supplied; managed context, a Skill list, or another body does not. Otherwise Main reads `skill://omp-enhancer-workflows` alone first. It covers writing, research, fact checking, code, infrastructure, design, security, and release work.
 
-- writing, documents, slides, diagrams, and conversion;
-- web research, citations, and fact checking;
-- one consolidated `code.dev` lifecycle for substantive software work;
-- network, database, ML, marketing, SEO, visual design, OMP plugin, security, and release work.
+Its discovery columns are explicit: `D` is a top-level Skill exact URI; `C` is an enumerated nested ECC exact URI. A selected `D` or `C` URI goes directly into `WORKFLOW PLAN` and `NOW`; only an unenumerated long-tail ECC method requires `skill://ecc-skill-catalog`. Workflow references stay in `THEN`.
 
-Substantive code work is subagent-driven when matching Agents are available: Main writes a reviewed parallel-slice plan; native `task` owns each vertical RED/GREEN slice; Main integrates, verifies, and writes `MAIN REVIEW`; native `reviewer` checks the supplied bounded evidence; supported repairs return to `task`. This is soft guidance, not a fixed fan-out, gate, router, or automatic loop. OMP Enhancer uses `omp.plugin` with the same `code-development` Skill.
+Writing choices are grouped as language, format overlays, and specialized outputs. For prose, `writing.en` or `writing.zh` is Primary and a requested format such as LaTeX is an Add-on; a format workflow is Primary only for format- or structure-only work.
 
-For analysis, judgment, workflow composition, coordinated stages, or possible delegation, Main reads the compact workflow index first. It emits the exact `WORKFLOW PLAN` block before a resource-only load sequence, with domain Skills or catalogs first and workflow references last. It then emits `WORKFLOW READY | ...`, rebases the detailed TODO, and starts work. Native TODO is used when exposed and allowed; otherwise the same checklist remains the execution state. Mechanical field lookups without analysis use no Skill or TODO. The full catalog is not automatically injected into Main or Advisor context.
+The PLAN response starts at byte 0 with `WORKFLOW PLAN`, loads declared resources, and waits. After loading, the READY response starts at byte 0 with `WORKFLOW READY | ...`, rebases the detailed TODO, initializes native TODO only when available, and waits before project work. Mechanical field lookups without analysis use no Skill or TODO.
+
+Non-simple workflows softly default to subagent-driven execution when matching Agents are available. Main owns integration, verification, permissions, and effects; independent work may run in parallel. A concrete safety, capacity, input, or dependency limit records direct fallback. Code adds RED/GREEN slices, `MAIN REVIEW`, and reviewer reconciliation. This is not a gate, router, fixed fan-out, or automatic loop.
 
 You may name workflow IDs to constrain a request, for example:
 
@@ -76,7 +73,7 @@ Common optional tools include:
 - fact analysis, evidence, report, and `fact_check_review` tools;
 - config diagnostics and managed-context synchronization.
 
-The review tools return structured findings. They do not execute project commands, block later work, or decide whether a session may finish. Fact checking aligns each verdict to the exact subject, predicate plus object/value, scope, time/version, and quantifier; it preserves limitations and counterchecks and treats zero findings as valid. Testing commands are run through the host-authorized shell; there is no plugin `/test` command. `/fact-check` remains available for explicit claim analysis.
+Review tools return advisory findings; they do not execute project commands, block work, or decide completion. Testing commands use the host-authorized shell; there is no plugin `/test` command. `/fact-check` remains available for explicit claim analysis.
 
 To preview and apply the optional managed Main/Advisor context after enabling Config tools:
 
@@ -85,7 +82,7 @@ Call omp_config_sync_workflow_context with apply=false.
 Review the proposed changes, then call it with apply=true if desired.
 ```
 
-The sync preserves unrelated `AGENTS.md` and `WATCHDOG.yml` content. The packaged configuration keeps Main on `opencode-go/deepseek-v4-flash:max` and Advisor on `openai-codex/gpt-5.6-luna:xhigh`; MiMo v2.5 remains an explicit model choice. Model-specific reminders and Advisor guidance are advisory and never select a workflow, fork, or completion condition.
+Sync preserves unrelated `AGENTS.md` and `WATCHDOG.yml` content. Defaults are `opencode-go/deepseek-v4-flash:max` for Main and `openai-codex/gpt-5.6-luna:xhigh` for Advisor; MiMo v2.5 is an explicit alternative. Reminders remain advisory.
 
 ## Upgrade
 

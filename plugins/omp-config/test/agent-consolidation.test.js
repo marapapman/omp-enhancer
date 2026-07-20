@@ -163,6 +163,10 @@ test('open-source pipeline uses exact OMP roles and returns sanitizer evidence i
   assert.match(skill, /ecc-opensource-forker/);
   assert.match(skill, /ecc-opensource-sanitizer/);
   assert.match(skill, /ecc-opensource-packager/);
+  assert.match(skill, /Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>/i);
+  assert.match(skill, /native task item `agent` to the row Agent/i);
+  assert.match(skill, /\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]/i);
+  assert.match(skill, /task body.+direct user constraints.+allowed effects.+acceptance evidence[\s\S]*outer context, name, or label.+not.+substitute/iu);
   assert.doesNotMatch(skill, /\bAgent\s*\(/);
   assert.doesNotMatch(skill, /maximum 3 retry attempts|最多三次|maximum of 3/i);
   assert.doesNotMatch(skill, /gh repo create[^\n]*--push/);

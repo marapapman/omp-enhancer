@@ -16,7 +16,6 @@ describe('marketplace install metadata', () => {
     const root = process.cwd();
     const packageJson = await readJson(join(root, 'package.json'));
     const catalog = await readJson(join(root, '..', '..', '.omp-plugin', 'marketplace.json'));
-    const previousCatalog = await readJson(join(root, 'docs', 'previous-marketplace.json'));
     const plugin = catalog.plugins.find((candidate) => candidate.name === packageJson.name);
 
     assert.equal(catalog.name, 'omp-enhancer');
@@ -28,7 +27,6 @@ describe('marketplace install metadata', () => {
     assert.equal(plugin.repository, 'https://github.com/marapapman/omp-enhancer');
     assert.equal(plugin.source, './writing-helper');
     assert.deepEqual(plugin.skills, await bundledSkillPaths(root));
-    assert.equal(previousCatalog.name, 'omp-writing-helper');
   });
 
   it('ships all files needed by marketplace and package installs', async () => {
@@ -64,7 +62,7 @@ describe('marketplace install metadata', () => {
     assert.match(readme, /npm pack --dry-run --workspace plugins\/writing-helper/);
   });
 
-  it('keeps writing workflows direct by default and free of invented slash commands', async () => {
+  it('keeps writing Skills one-pass and free of invented slash commands', async () => {
     const root = process.cwd();
     const files = [
       'skills/writing-markdown-helper/SKILL.md',
@@ -78,8 +76,8 @@ describe('marketplace install metadata', () => {
       const content = await readText(join(root, relative));
       assert.doesNotMatch(content, /\/skill:/, relative);
     }
-    assert.match(await readText(join(root, 'skills/writing-review/SKILL.md')), /Default One-Pass Workflow/);
-    assert.match(await readText(join(root, 'skills/zh-writing-review/SKILL.md')), /默认单轮流程/);
+    assert.match(await readText(join(root, 'skills/writing-review/SKILL.md')), /Assigned Writer One-Pass Method/);
+    assert.match(await readText(join(root, 'skills/zh-writing-review/SKILL.md')), /受派 Writer 子 Agent 单轮方法/);
   });
 
 });

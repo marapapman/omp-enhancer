@@ -8,6 +8,23 @@ origin: ECC
 
 AI-assisted editing for real footage. Not generation from prompts. Editing existing video fast.
 
+## OMP Composition Boundary
+
+Main owns cross-Skill composition: it selects every supporting workflow and Skill
+in the initial `WORKFLOW PLAN` and loads each declared Skill before
+`WORKFLOW READY`. After load, this loaded Skill does not reselect, reroute,
+auto-load, or hand off to another Skill. It does not replace the parent TODO or
+Main's Agent choice. An exact same-namespace
+`skill://ecc-skill-catalog/<skill-id>/SKILL.md` URI explicitly exposed here may be
+read in one `RESOURCE EXTENSION` before `COMMIT`; cross-namespace candidates
+remain initial-PLAN only.
+
+API calls, generated assets, renders, and file writes are separate effects. Each
+requires explicit user authorization for the exact target and effect plus current
+native permission. Supplied examples describe the domain method; they do not
+authorize network calls, credential use, package installation, or filesystem
+mutation.
+
 ## When to Activate
 
 - User wants to edit, cut, or structure video footage
@@ -39,7 +56,8 @@ Each layer has a specific job. Do not skip layers. Do not try to make one tool d
 Collect the source material:
 - **Screen Studio**: polished screen recordings for app demos, coding sessions, browser workflows
 - **Raw camera footage**: vlog footage, interviews, event recordings
-- **Desktop capture via VideoDB**: session recording with real-time context (see `videodb` skill)
+- **Desktop capture via VideoDB**: session recording with real-time context. Its
+  non-routing PLAN candidate is `skill://ecc-skill-catalog/videodb/SKILL.md`.
 
 Output: raw files ready for organization.
 
@@ -194,7 +212,8 @@ with open("voiceover.mp3", "wb") as f:
 
 ### Music and SFX with fal.ai
 
-Use the `fal-ai-media` skill for:
+When its independently matched Skill was selected in the initial plan,
+`skill://ecc-skill-catalog/fal-ai-media/SKILL.md` can provide:
 - Background music generation
 - Sound effects (ThinkSound model for video-to-audio)
 - Transition sounds
@@ -303,8 +322,8 @@ identify the 5 most engaging 30-second clips for social media."
 5. **Generate selectively.** Only use AI generation for assets that don't exist, not for everything.
 6. **Taste is the last layer.** AI clears repetitive work. You make the final creative calls.
 
-## Related Skills
+## Non-Routing PLAN Candidates
 
-- `fal-ai-media` — AI image, video, and audio generation
-- `videodb` — Server-side video processing, indexing, and streaming
-- `content-engine` — Platform-native content distribution
+- AI image, video, and audio generation: `skill://ecc-skill-catalog/fal-ai-media/SKILL.md`
+- Server-side video processing, indexing, and streaming: `skill://ecc-skill-catalog/videodb/SKILL.md`
+- Platform-native content distribution: `skill://ecc-skill-catalog/content-engine/SKILL.md`

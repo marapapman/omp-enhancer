@@ -10,14 +10,14 @@ function tool(tools: ToolDefinition[], name: string): ToolDefinition {
 }
 
 describe('advisory review order for omp_test_review', () => {
-  it('evaluates observed command evidence independently from static findings', async () => {
-    let testCommandCalls = 0
+  it('evaluates observed command evidence without invoking the host command runner', async () => {
+    let commandCalls = 0
     const ctx: ExtensionToolContext = {
       cwd: process.cwd(),
       hasUI: false,
       ui: { notify: () => undefined },
-      exec: async (program) => {
-        if (program !== 'git') testCommandCalls += 1
+      exec: async () => {
+        commandCalls += 1
         return { exitCode: 0, stdout: '', stderr: '' }
       }
     }
@@ -37,13 +37,40 @@ describe('advisory review order for omp_test_review', () => {
       candidate: { id: 'candidate', targetId: 'src/user/UserService.ts#UserService', files: [{ path: 'src/user/UserService.ts', action: 'modify', content: 'export class UserService {}' }] }
     }, undefined, undefined, ctx)
 
-    expect(testCommandCalls).toBe(0)
+    expect(commandCalls).toBe(0)
     expect(result.details).toMatchObject({
       passed: false,
       results: expect.arrayContaining([
         expect.objectContaining({ gate: 'test-file-scope', passed: false }),
         expect.objectContaining({ gate: 'test-command', passed: true, summary: 'Matching host-observed test command passed.' })
       ])
+    })
+  })
+
+  it('reports missing explicit analyze evidence without invoking the host command runner', async () => {
+    let commandCalls = 0
+    const ctx: ExtensionToolContext = {
+      cwd: process.cwd(),
+      hasUI: false,
+      ui: { notify: () => undefined },
+      exec: async () => {
+        commandCalls += 1
+        return { exitCode: 0, stdout: '', stderr: '' }
+      }
+    }
+
+    const result = await tool(createTestingEnhancerTools(fakeZod()), 'omp_test_analyze').execute(
+      'call',
+      {},
+      undefined,
+      undefined,
+      ctx
+    )
+
+    expect(commandCalls).toBe(0)
+    expect(result.details).toMatchObject({
+      targets: [],
+      warnings: ['No explicit changed-file evidence provided. Pass workspace-relative paths through omp_test_analyze.files or content through changedFiles.']
     })
   })
 })

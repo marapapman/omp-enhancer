@@ -1,6 +1,6 @@
 ---
 name: motion-foundations
-description: Motion tokens, spring presets, performance rules, device adaptation, accessibility enforcement, and SSR safety for React / Next.js using motion/react. Foundation layer — all other motion skills depend on this.
+description: Define motion tokens, spring presets, performance rules, device adaptation, accessibility constraints, and SSR safety with motion/react. Use when a committed workflow needs a shared React / Next.js motion foundation.
 version: 1.0
 tags: [motion, animation, performance, accessibility]
 category: frontend
@@ -9,17 +9,26 @@ author: jeff
 
 # Motion Foundations
 
-The base layer of the motion system. Defines every value, constraint, and
-rule that downstream skills (`motion-patterns`, `motion-advanced`) inherit.
-Load this skill before any animation work begins.
+The base layer of the motion system. It defines values and constraints that
+loaded motion methods such as `motion-patterns` and `motion-advanced` can use.
 
-## When to Activate
+Use this resource only through staged Skill selection. When its exact URI is in
+the current visible OMP Skill inventory, list that URI in the initial
+`WORKFLOW PLAN` before reading it. Alternatively, an already-loaded motion Skill
+may reveal the exact URI through a bounded `RESOURCE EXTENSION` before
+`WORKFLOW READY`. A native `skill-prompt` body is already loaded and is not read
+again. This resource does not select itself and does not automatically reselect
+a workflow or Skill, add another resource, or rewrite the parent TODO.
 
-- Starting any animated component from scratch
-- Setting up tokens, spring presets, or easing values
-- Implementing `prefers-reduced-motion` support
-- Debugging hydration mismatches from animation initial states
-- Evaluating whether an animation should exist at all
+## Task-local scope
+
+After this resource is loaded, apply its method to:
+
+- animated components that need shared foundations
+- token, spring-preset, or easing setup
+- `prefers-reduced-motion` support
+- hydration mismatches caused by animation initial states
+- decisions about whether a proposed animation should exist
 
 ## Outputs
 

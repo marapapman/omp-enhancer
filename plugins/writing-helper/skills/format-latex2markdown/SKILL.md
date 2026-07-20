@@ -5,6 +5,11 @@ description: "Convert LaTeX to Markdown while preserving structure, citations, a
 
 # LaTeX → Markdown Conversion Skill
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that child
+remains proposal-only: it runs no command and writes no file, and returns the
+complete proposed artifact or diff. Main or an explicitly capable generic
+`task` owns authorized effects.
+
 Use `pandoc -f latex -t markdown` to convert a `.tex` file to `.md`, then verify and fix three common problems.
 
 ## When to Use

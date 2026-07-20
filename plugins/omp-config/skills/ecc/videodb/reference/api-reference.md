@@ -1,6 +1,6 @@
 # Complete API Reference
 
-Reference material for the VideoDB skill. For usage guidance and workflow selection, start with [../SKILL.md](../SKILL.md).
+Reference material for the VideoDB skill. For usage guidance and workflow selection, start with [the VideoDB Skill](skill://ecc-skill-catalog/videodb/SKILL.md).
 
 ## Connection
 
@@ -26,11 +26,11 @@ conn = videodb.connect(
 | `conn.check_usage()` | `dict` | Get account usage stats |
 | `conn.upload(source, media_type, name, ...)` | `Video\|Audio\|Image` | Upload to default collection |
 | `conn.record_meeting(meeting_url, bot_name, ...)` | `Meeting` | Record a meeting |
-| `conn.create_capture_session(...)` | `CaptureSession` | Create a capture session (see [capture-reference.md](capture-reference.md)) |
+| `conn.create_capture_session(...)` | `CaptureSession` | Create a capture session (see [capture-reference.md](skill://ecc-skill-catalog/videodb/reference/capture-reference.md)) |
 | `conn.youtube_search(query, result_threshold, duration)` | `list[dict]` | Search YouTube |
 | `conn.transcode(source, callback_url, mode, ...)` | `str` | Transcode video (returns job ID) |
 | `conn.get_transcode_details(job_id)` | `dict` | Get transcode job status and details |
-| `conn.connect_websocket(collection_id)` | `WebSocketConnection` | Connect to WebSocket (see [capture-reference.md](capture-reference.md)) |
+| `conn.connect_websocket(collection_id)` | `WebSocketConnection` | Connect to WebSocket (see [capture-reference.md](skill://ecc-skill-catalog/videodb/reference/capture-reference.md)) |
 
 ### Transcode
 
@@ -124,9 +124,9 @@ coll = conn.get_collection()
 | `coll.generate_text(prompt, model_name="basic", response_type="text")` | `dict` | LLM text generation — access result via `["output"]` |
 | `coll.dub_video(video_id, language_code)` | `Video` | Dub video into another language |
 | `coll.record_meeting(meeting_url, bot_name, ...)` | `Meeting` | Record a live meeting |
-| `coll.create_capture_session(...)` | `CaptureSession` | Create a capture session (see [capture-reference.md](capture-reference.md)) |
-| `coll.get_capture_session(...)` | `CaptureSession` | Retrieve capture session (see [capture-reference.md](capture-reference.md)) |
-| `coll.connect_rtstream(url, name, ...)` | `RTStream` | Connect to a live stream (see [rtstream-reference.md](rtstream-reference.md)) |
+| `coll.create_capture_session(...)` | `CaptureSession` | Create a capture session (see [capture-reference.md](skill://ecc-skill-catalog/videodb/reference/capture-reference.md)) |
+| `coll.get_capture_session(...)` | `CaptureSession` | Retrieve capture session (see [capture-reference.md](skill://ecc-skill-catalog/videodb/reference/capture-reference.md)) |
+| `coll.connect_rtstream(url, name, ...)` | `RTStream` | Connect to a live stream (see [rtstream-reference.md](skill://ecc-skill-catalog/videodb/reference/rtstream-reference.md)) |
 | `coll.make_public()` | `None` | Make collection public |
 | `coll.make_private()` | `None` | Make collection private |
 | `coll.delete_video(video_id)` | `None` | Delete a video |
@@ -362,7 +362,7 @@ asset = CaptionAsset(
 )
 ```
 
-See [editor.md](editor.md#caption-overlays) for full CaptionAsset usage with the Editor API.
+See [editor.md](skill://ecc-skill-catalog/videodb/reference/editor.md#caption-overlays) for full CaptionAsset usage with the Editor API.
 
 ## Video Search Parameters
 
@@ -383,7 +383,7 @@ results = video.search(
 >
 > **Important:** `video.search()` raises `InvalidRequestError` with message `"No results found"` when there are no matches. Always wrap search calls in try/except. For scene search, use `score_threshold=0.3` or higher to filter low-relevance noise.
 
-For scene search, use `search_type=SearchType.semantic` with `index_type=IndexType.scene`. Pass `scene_index_id` when targeting a specific scene index. See [search.md](search.md) for details.
+For scene search, use `search_type=SearchType.semantic` with `index_type=IndexType.scene`. Pass `scene_index_id` when targeting a specific scene index. See [search.md](skill://ecc-skill-catalog/videodb/reference/search.md) for details.
 
 ## SearchResult Object
 
@@ -450,9 +450,9 @@ meeting = coll.record_meeting(
 
 ## RTStream & Capture
 
-For RTStream (live ingestion, indexing, transcription), see [rtstream-reference.md](rtstream-reference.md).
+For RTStream (live ingestion, indexing, transcription), see [rtstream-reference.md](skill://ecc-skill-catalog/videodb/reference/rtstream-reference.md).
 
-For capture sessions (desktop recording, CaptureClient, channels), see [capture-reference.md](capture-reference.md).
+For capture sessions (desktop recording, CaptureClient, channels), see [capture-reference.md](skill://ecc-skill-catalog/videodb/reference/capture-reference.md).
 
 ## Enums & Constants
 
