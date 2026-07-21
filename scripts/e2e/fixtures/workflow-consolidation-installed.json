@@ -12,7 +12,8 @@
       "plugins/writing-helper",
       "plugins/omp-test-enhancer",
       "plugins/omp-fact-checker",
-      "plugins/omp-enhancer-core"
+      "plugins/omp-enhancer-core",
+      "plugins/tikz-helper"
     ],
     "tools": ["todo", "task", "hub", "read", "grep", "glob"],
     "repeat": 1,

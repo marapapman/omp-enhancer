@@ -53,7 +53,7 @@ test('workflow artifact generator writes the optional workflow skill and one ref
     'generated Skill must place the PLAN handoff before catalog prose',
   );
   assert.match(skill, /Next visible response MUST start byte 0 with `WORKFLOW PLAN`[\s\S]*contain only this form[\s\S]*Select internally[\s\S]*state stays silent/iu);
-  assert.match(skill, /EXECUTION:[\s\S]*DIRECT skips[\s\S]*`agentic\.simple` has no `task`[\s\S]*`writing\.pending` composes once[\s\S]*every other loaded card uses the compiler below/iu);
+  assert.match(skill, /EXECUTION:[\s\S]*DIRECT skips[\s\S]*`agentic\.simple` has no `task`[\s\S]*`writing\.pending` composes once[\s\S]*(?:every )?other (?:loaded )?cards? uses? the compiler(?: below)?/iu);
   assert.match(skill, /1\. \*\*DISCOVER\*\*[\s\S]*completed DISCOVER result[\s\S]*do not read `skill:\/\/omp-enhancer-workflows` again/i);
   assert.match(skill, /2\. \*\*DECLARE \+ LOAD\*\*[\s\S]*operation, source, and output[\s\S]*Emit PLAN first[\s\S]*load NOW[\s\S]*load THEN[\s\S]*Project tools start only after the READY \+ TODO response ends and its results return/i);
   assert.match(skill, /3\. \*\*COMMIT \+ EXECUTE\*\*[\s\S]*Emit READY first[\s\S]*detailed native TODO[\s\S]*split, execute, and verify/iu);
@@ -63,17 +63,18 @@ test('workflow artifact generator writes the optional workflow skill and one ref
   assert.doesNotMatch(skill, /Exclude every `Not for`|Honor `Not for`/iu);
   assert.match(skill, /Format-only => format Primary/i);
   assert.match(skill, /LOAD:[\s\S]*Skills=exact domain Skill\/catalog URIs[\s\S]*NOW=non-supplied Skills\/catalogs[\s\S]*THEN=Add-on refs then Primary[\s\S]*max 2 catalog \+ 1 method extensions[\s\S]*Never guess\/reread\/re-PLAN/iu);
-  assert.match(skill, /SKILL URI:[\s\S]*D is direct[\s\S]*C is exact nested and revealed here[\s\S]*Other nested URIs need a loaded source[\s\S]*Supplied bodies stay in PLAN\/READY, not NOW[\s\S]*only exact failure means unavailable/iu);
+  assert.match(skill, /SKILL URI:[\s\S]*D(?:=| is )direct[\s\S]*C(?:=| is )exact nested[\s\S]*(?:others|Other nested URIs) need a loaded source[\s\S]*Supplied bodies stay in PLAN\/READY, not NOW[\s\S]*only exact failure (?:marks|means) unavailable/iu);
   assert.match(skill, /DECLARE HANDOFF \(soft\):[\s\S]*Next visible response MUST start byte 0 with `WORKFLOW PLAN`[\s\S]*contain only this form[^\n]*\nWORKFLOW PLAN\nPrimary: <id-or-none>\nAdd-ons: <ids-or-none>\nSkills: <exact domain Skill\/catalog URIs-or-none>\nLoad order: NOW=\[<chosen non-supplied Skill\/catalog URIs-or-none>\] THEN=\[<Add-on PLAN URIs; Primary PLAN URI last-or-none>\]\nActions:\n1\. LOAD:[\s\S]*2\. COMMIT:[\s\S]*3\. SPLIT \+ EXECUTE:[\s\S]*4\. VERIFY:/i);
   assert.doesNotMatch(skill, /assistant content\[0\]/iu);
-  assert.match(skill, /PLAN reads NOW\/waits[\s\S]*THEN is one final unsplit resource-only batch\/wait[\s\S]*NOW=none[\s\S]*Give each evidence checkpoint an Action/iu);
+  assert.match(skill, /PLAN text alone is incomplete[\s\S]*same response calls NOW and waits[\s\S]*calls THEN if NOW=none[\s\S]*THEN is one final resource-only batch[\s\S]*Give each evidence checkpoint an Action/iu);
+  assert.match(skill, /PLAN text alone is incomplete[\s\S]*same response calls NOW[\s\S]*waits[\s\S]*calls THEN if NOW=none/iu);
   assert.match(skill, /AFTER NOW:[^\n]*empty revealed URI set[^\n]*no text\/marker[^\n]*call the THEN batch[^\n]*RESOURCE EXTENSION MUST list >=1 exact revealed URI[^\n]*`reads=none` is invalid/iu);
   assert.match(skill, /COMMIT HANDOFF \(soft\):[\s\S]*after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable[\s\S]*next response begins `W`[\s\S]*bare IDs[\s\S]*initializes native TODO only[\s\S]*Project tools start only after the READY \+ TODO response ends and its results return/i);
   assert.match(skill, /SELECTION:[\s\S]*Primary = central deliverable[\s\S]*independent requested operations\/outputs = Add-ons/iu);
   assert.match(skill, /PROSE:[\s\S]*English draft\/revision[\s\S]*Other central operation => language Add-on[\s\S]*`\.tex` target[\s\S]*LaTeX prose[\s\S]*`writing\.latex` Add-on[\s\S]*Format-only => format Primary/iu);
   assert.match(skill, /`writing\.latex`[^\n]*preservation-only Add-on selects zero format Skills[^\n]*explicit conversion or template selects one matching candidate[^\n]*D=\[`skill:\/\/format-markdown2latex`, `skill:\/\/format-latex2markdown`, `skill:\/\/format-template-latex`\]/iu);
   assert.doesNotMatch(skill, /slices=<|assignment-input=|Composition example:|\[workflow=<ids>/i);
-  assert.match(skill, /SKILL DISCOVERY:[\s\S]*enumerated `C` URI goes directly in PLAN\/NOW[\s\S]*skip the full catalog[\s\S]*`skill:\/\/ecc-skill-catalog` remains only for unlisted niche discovery/iu);
+  assert.match(skill, /SKILL DISCOVERY:[\s\S]*enumerated `C` URI goes directly in PLAN\/NOW[\s\S]*`skill:\/\/ecc-skill-catalog` remains only for unlisted niche discovery/iu);
   assert.match(skill, /`writing\.en`[^\n]*D=\[`skill:\/\/writing-review`\][^\n]*PLAN URI:/iu);
   assert.match(skill, /`network\.design`[^\n]*C=\[`skill:\/\/ecc-skill-catalog\/network-config-validation\/SKILL\.md`, `skill:\/\/ecc-skill-catalog\/safety-guard\/SKILL\.md`\][^\n]*PLAN URI:/iu);
   assert.ok(Buffer.byteLength(skill) < 15_000, 'workflow Skill index should stay below 15k');

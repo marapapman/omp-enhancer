@@ -14,10 +14,10 @@ Actions:
 2. COMMIT: After all resources, emit READY + detailed TODO from loaded steps only; end and wait; zero project tools.
 3. SPLIT + EXECUTE: After READY wait, apply loaded defaults/checkpoints to current Agents and dependency order; Delegate or record one permitted fallback.
 4. VERIFY: <requested acceptance evidence and parent delivery integration>
-PLAN reads NOW/waits. THEN is one final unsplit resource-only batch/wait; NOW=none reads THEN with PLAN. Give each evidence checkpoint an Action.
+PLAN text alone is incomplete: same response calls NOW and waits, or calls THEN if NOW=none. THEN is one final resource-only batch. Give each evidence checkpoint an Action.
 AFTER NOW: empty revealed URI set => no text/marker; call the THEN batch. Otherwise RESOURCE EXTENSION MUST list >=1 exact revealed URI; `reads=none` is invalid.
 
-Catalog version: 20.
+Catalog version: 21.
 
 Navigation only: never routes, gates, grants permission, selects Agents, or decides completion.
 
@@ -33,11 +33,11 @@ STATE: DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY.
 
 Main owns delegation; OMP owns tools, permissions, TODO, Agents, and completion.
 
-PROSE: English draft/revision -> `writing.en`; Chinese -> `writing.zh`; unknown body -> `writing.pending`. Other central operation => language Add-on. Language Primary + `.tex` target, LaTeX prose, or preserved LaTeX commands => `writing.latex` Add-on; Markdown/Word add format. Format-only => format Primary. Converters/templates only when requested. Loaded language card + target/constraints/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read.
+PROSE: English draft/revision -> `writing.en`; Chinese -> `writing.zh`; unknown body -> `writing.pending`. Other central operation => language Add-on. Language Primary + `.tex` target, LaTeX prose, or preserved LaTeX commands => `writing.latex` Add-on. Direct standalone SVG -> `diagram.svg`; editable TikZ `.tex`/PDF/SVG/PNG -> `diagram.tikz`. TikZ source alone does not add `writing.latex`. Format-only => format Primary. Converters/templates only when requested. Loaded language card + target/constraints/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read.
 
 ## Domain index
 
-SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select only a URI that matches the requested method, evidence rule, verdict, or format. `D` is direct; `C` is exact nested ECC revealed here. An enumerated `C` URI goes directly in PLAN/NOW; skip the full catalog. `skill://ecc-skill-catalog` remains only for unlisted niche discovery. Choose the smallest method/evidence/verdict/format set; refs stay in THEN.
+SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select only a URI that matches the requested method, evidence rule, verdict, or format. `D` is direct; `C` is exact nested ECC. An enumerated `C` URI goes directly in PLAN/NOW. `skill://ecc-skill-catalog` remains only for unlisted niche discovery; refs stay in THEN.
 
 ### general
 
@@ -62,6 +62,7 @@ SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select on
 - `slides.generate` — The user wants a new LaTeX Beamer deck, with template and story decisions completed before frame authoring. D=[`skill://latex-beamer-slides`, `skill://slides-storyline`, `skill://beamer-to-powerpoint`]. PLAN URI: `skill://omp-enhancer-workflows/references/slides.generate.md`.
 - `slides.modify` — The user wants bounded wording, language, or existing-style changes to a current LaTeX Beamer deck. D=[`skill://latex-beamer-slides`]. PLAN URI: `skill://omp-enhancer-workflows/references/slides.modify.md`.
 - `diagram.svg` — The user wants a standalone SVG workflow, process, block, or box diagram with strict monochrome geometry and rendered visual QA. D=[`skill://svg-flowchart`]. PLAN URI: `skill://omp-enhancer-workflows/references/diagram.svg.md`.
+- `diagram.tikz` — TikZ paper diagrams need editable source plus PDF/SVG/PNG evidence. D=[`skill://tikz-diagram`]. PLAN URI: `skill://omp-enhancer-workflows/references/diagram.tikz.md`.
 
 ### research
 
@@ -99,22 +100,22 @@ SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select on
 
 - `omp.plugin` — The target is an OMP plugin, the omp-enhancer monorepo, or an isolated self-development fixture: workflows, Skills, Agents, prompts, reminders, hooks, config assets, packaging, or E2E. D=[`skill://code-development`]. PLAN URI: `skill://omp-enhancer-workflows/references/omp.plugin.md`.
 - `security.review` — The task explicitly reviews security trust boundaries, vulnerability impact, or remediation. C=[`skill://ecc-skill-catalog/security-review/SKILL.md`, `skill://ecc-skill-catalog/security-scan/SKILL.md`]. PLAN URI: `skill://omp-enhancer-workflows/references/security.review.md`.
-- `design.visual` — A UI, visual asset, layout, or interaction design is requested; standalone diagram.svg and slides.* keep their specialized Primary unless separate visual-design work is requested. D=[`skill://frontend-design`, `skill://canvas-design`]. PLAN URI: `skill://omp-enhancer-workflows/references/design.visual.md`.
+- `design.visual` — UI/visual/layout/interaction design; standalone diagram.svg and slides.* keep their specialized Primary unless separate visual-design work is requested; likewise diagram.tikz. D=[`skill://frontend-design`, `skill://canvas-design`]. PLAN URI: `skill://omp-enhancer-workflows/references/design.visual.md`.
 - `release.opensource` — The user wants to prepare a private or internal project as a sanitized, documented public-release candidate in a separate staging area. D=[`skill://code-development`] C=[`skill://ecc-skill-catalog/opensource-pipeline/SKILL.md`, `skill://ecc-skill-catalog/safety-guard/SKILL.md`]. PLAN URI: `skill://omp-enhancer-workflows/references/release.opensource.md`.
 - `release.publish` — The user explicitly asks to commit, push, publish, deploy, version, upgrade, or synchronize an installed artifact. D=[`skill://conventional-commits`, `skill://finishing-a-development-branch`]. PLAN URI: `skill://omp-enhancer-workflows/references/release.publish.md`.
 
 ## State handoff
 
-SELECTION: Primary = central deliverable; independent requested operations/outputs = Add-ons. Skills own methods/evidence/format; references do not.
+SELECTION: Primary = central deliverable; independent requested operations/outputs = Add-ons. Skills own methods/evidence/format; refs do not.
 
-EXECUTION: DIRECT skips; `agentic.simple` has no `task`; `writing.pending` composes once; every other loaded card uses the compiler below.
+EXECUTION: DIRECT skips; `agentic.simple` has no `task`; `writing.pending` composes once; other cards use the compiler.
 
-FALLBACK: only a concrete user/native, Agent/capacity, input/dependency/write-set, safety, or parent-owned limit; never size, latency, read-only, overhead, or no delegation request.
+FALLBACK: concrete user/native, Agent/capacity, input/dependency/write-set, safety, or parent ownership only; never size, latency, read-only, overhead, or no delegation request.
 
-SKILL URI: D is direct; C is exact nested and revealed here. Other nested URIs need a loaded source. Supplied bodies stay in PLAN/READY, not NOW; only exact failure means unavailable.
+SKILL URI: D=direct; C=exact nested; others need a loaded source. Supplied bodies stay in PLAN/READY, not NOW; only exact failure marks unavailable.
 
-LOAD: Skills=exact domain Skill/catalog URIs; refs=THEN. NOW=non-supplied Skills/catalogs; THEN=Add-on refs then Primary. Load/wait each; max 2 catalog + 1 method extensions. NOW none => THEN with PLAN. Never guess/reread/re-PLAN except `writing.pending`.
+LOAD: Skills=exact domain Skill/catalog URIs; NOW=non-supplied Skills/catalogs; THEN=Add-on refs then Primary. Load/wait each; max 2 catalog + 1 method extensions. NOW none loads THEN with PLAN. Never guess/reread/re-PLAN except `writing.pending`.
 
-COMMIT HANDOFF (soft): after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable, next response begins `W`, fills `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<ids-or-none> | skills-unavailable=<ids-or-none>` with bare IDs, initializes native TODO only, ends, and waits. Freeze W=<Primary,Add-ons> and S=<bare loaded IDs>; delegated metadata copies W/S. COMPILE (soft): loaded `subagent-driven` + complete input + safe checkpoint + visible matching Agent => Delegate row; otherwise `fallback=<one matched permitted limitation>`. PLAN defers this final disposition until the card loads; no plugin enforces it. Project tools start only after the READY + TODO response ends and its results return.
+COMMIT HANDOFF (soft): after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable, next response begins `W`, fills `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<ids-or-none> | skills-unavailable=<ids-or-none>` with bare IDs, initializes native TODO only, and ends/waits. Freeze W/S. COMPILE (soft): loaded `subagent-driven` + complete input + safe checkpoint + visible matching Agent => Delegate row; otherwise `fallback=<one matched permitted limitation>`. Project tools start only after the READY + TODO response ends and its results return.
 
 NEXT VISIBLE BYTES MUST BE `WORKFLOW PLAN`; no preface; no plugin enforces this format.

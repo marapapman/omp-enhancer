@@ -19,6 +19,7 @@ const fixtureVersions = new Map([
   ['omp-testing-enhancer', '0.1.3'],
   ['omp-fact-checker', '0.1.0'],
   ['omp-enhancer-core', '0.1.0'],
+  ['tikz-helper', '0.1.0'],
 ]);
 
 const pluginFixtures = pluginWorkspaces.map(({ directory, name }) => ({
@@ -153,11 +154,35 @@ function releaseOptions(overrides = {}) {
     plugin: 'writing-helper',
     version: '0.3.0',
     bump: null,
+    catalogBump: null,
     apply: true,
     allowDowngrade: false,
     ...overrides,
   };
 }
+
+test('--catalog-bump updates marketplace metadata during a scoped plugin release', async () => {
+  await withReleaseFixture(async (root) => {
+    const result = await runRelease(root, [
+      '--plugin',
+      'tikz-helper',
+      '--bump',
+      'patch',
+      '--catalog-bump',
+      'patch',
+      '--apply',
+    ]);
+
+    assertReleaseSucceeded(result);
+
+    const catalog = await readCatalog(root);
+    const tikzHelper = catalog.plugins.find((plugin) => plugin.name === 'tikz-helper');
+    const core = catalog.plugins.find((plugin) => plugin.name === 'omp-enhancer-core');
+    assert.equal(catalog.metadata.version, '1.0.1');
+    assert.equal(tikzHelper.version, '0.1.1');
+    assert.equal(core.version, '0.1.0');
+  });
+});
 
 function runNodeScript(root, scriptPath, args = []) {
   return new Promise((resolveResult, reject) => {
@@ -257,6 +282,7 @@ test('--plugin all --bump patch bumps every plugin package, every catalog entry,
       ['omp-testing-enhancer', { directory: 'omp-test-enhancer', version: '0.1.4' }],
       ['omp-fact-checker', { directory: 'omp-fact-checker', version: '0.1.1' }],
       ['omp-enhancer-core', { directory: 'omp-enhancer-core', version: '0.1.1' }],
+      ['tikz-helper', { directory: 'tikz-helper', version: '0.1.1' }],
     ]);
 
     assert.equal(catalog.metadata.version, '1.0.1');

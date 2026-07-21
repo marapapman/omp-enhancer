@@ -33,6 +33,20 @@ test('one plugin workspace inventory matches npm and marketplace metadata', asyn
   }))
 })
 
+test('canonical inventory includes the independently installable TikZ helper last', () => {
+  assert.deepEqual(
+    pluginWorkspaces.map(({ name, workspace }) => ({ name, workspace })),
+    [
+      { name: 'omp-config', workspace: 'plugins/omp-config' },
+      { name: 'writing-helper', workspace: 'plugins/writing-helper' },
+      { name: 'omp-testing-enhancer', workspace: 'plugins/omp-test-enhancer' },
+      { name: 'omp-fact-checker', workspace: 'plugins/omp-fact-checker' },
+      { name: 'omp-enhancer-core', workspace: 'plugins/omp-enhancer-core' },
+      { name: 'tikz-helper', workspace: 'plugins/tikz-helper' },
+    ],
+  )
+})
+
 test('root release script is the sole marketplace version writer', async () => {
   for (const definition of pluginWorkspaces) {
     const packageJson = await readJson(`${definition.workspace}/package.json`)

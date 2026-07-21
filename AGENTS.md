@@ -2,13 +2,14 @@
 
 ## Project scope
 
-This npm workspace is the OMP Enhancer marketplace monorepo. It packages five independently installable plugins:
+This npm workspace is the OMP Enhancer marketplace monorepo. It packages six independently installable plugins:
 
 - `omp-enhancer-core`: safe task facts, session-scoped extension-tool activation, and exact-model DeepSeek Flash and MiMo v2.5 compatibility reminders plus bounded phase-local protocol coaching.
 - `omp-config`: shared config assets, optional workflow references, Agents, Skills, notify-only guards, hook templates, and diagnostics.
 - `writing-helper`: writing logic, style, citation, and polish tools plus English and Chinese writing resources.
 - `omp-testing-enhancer` (source directory `plugins/omp-test-enhancer`): testing analysis, host-observed evidence, browser/coverage/mutation context, Agents, advisory review, and reports.
 - `omp-fact-checker`: claim planning, evidence collection, cross-checking, reporting, and advisory review.
+- `tikz-helper`: pinned OpenTikZ resources, semantic TikZ authoring, optional OMP imagegen node assets, and bounded render evidence.
 
 Current architecture is documented in `docs/ARCHITECTURE.md`; development and release procedures are in `docs/DEVELOPMENT.md`; workflow schema and generation rules are in `docs/WORKFLOW_DEVELOPMENT.md`.
 
@@ -88,7 +89,7 @@ For ECC Skill inventory changes, use `npm run generate:ecc-skills` and `npm run 
 ## Code conventions
 
 - Use ES modules throughout.
-- Core, Config, Writing Helper, and Fact Checker are direct Node JavaScript; avoid unnecessary build steps.
+- Core, Config, Writing Helper, Fact Checker, and TikZ Helper are direct Node JavaScript; avoid unnecessary build steps.
 - Testing Enhancer uses strict TypeScript with NodeNext/ES2022 and builds `src/` to `dist/`.
 - Match local semicolon style: JavaScript normally uses semicolons; Testing Enhancer TypeScript commonly does not.
 - Public tool names use snake_case; internal functions use camelCase.
@@ -119,6 +120,7 @@ npm test --workspace plugins/omp-config
 npm test --workspace plugins/writing-helper
 npm run coverage --workspace plugins/writing-helper
 npm test --workspace plugins/omp-fact-checker
+npm test --workspace plugins/tikz-helper
 cd plugins/omp-test-enhancer && bun run typecheck && bun run build && bun run test
 ```
 
@@ -146,6 +148,8 @@ Use the root release script as the only writer for plugin versions, lockfile ver
 npm run release -- --plugin <name> --bump patch --dry-run
 npm run release -- --plugin <name> --bump patch --apply
 ```
+
+For a scoped release that also changes public marketplace inventory or metadata, add `--catalog-bump patch` to the same release transaction.
 
 Use `--plugin all` only when every plugin changed. The marketplace tracks GitHub `main` and does not support catalog `ref` pins. After applying a release, rerun root tests, marketplace validation, packaging, and `git diff --check`.
 

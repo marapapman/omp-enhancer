@@ -48,7 +48,7 @@ Core definitions 是唯一语义来源。Config 不在运行时依赖 Core；它
 
 每张 generated workflow reference 在详细 card body 前后各有一个 `READY NEXT (soft)` sentinel。两者冗余地声明同一个软边界：下一 assistant response 在 byte 0 输出 filled `WORKFLOW READY | ...`，不含其他 visible text，只初始化 native TODO，然后 end/wait；任何插件都不观察或 enforcement 该 sentinel。
 
-所有 definition 都必须规范化 `delegationDefault`。当前 29 张卡片中，27 张非简单卡片采用 `subagent-driven`；`agentic.simple` 采用 `direct-simple`；`writing.pending` 采用 `defer-until-composed`。Subagent-driven 卡片在 matching Agent 可用且 assignment 安全完整时默认委派至少一个 bounded checkpoint，领域 Agent 优先于 generic `task`；同 wave 独立 checkpoints 批量提交，依赖项等待前序成功 delivery。Main 保留 parent TODO、集成、最终验证、权限与 external effects。不可用 capacity、不完整 input、依赖/write overlap 或用户 Main-only 要求必须写成 direct-fallback limitation；默认不能变成 router、hard fork、gate 或 retry。
+所有 definition 都必须规范化 `delegationDefault`。当前 30 张卡片中，28 张非简单卡片采用 `subagent-driven`；`agentic.simple` 采用 `direct-simple`；`writing.pending` 采用 `defer-until-composed`。Subagent-driven 卡片在 matching Agent 可用且 assignment 安全完整时默认委派至少一个 bounded checkpoint，领域 Agent 优先于 generic `task`；同 wave 独立 checkpoints 批量提交，依赖项等待前序成功 delivery。Main 保留 parent TODO、集成、最终验证、权限与 external effects。不可用 capacity、不完整 input、依赖/write overlap 或用户 Main-only 要求必须写成 direct-fallback limitation；默认不能变成 router、hard fork、gate 或 retry。
 
 ## Definition 结构
 
@@ -303,7 +303,7 @@ Parity 测试负责检查：
 - 生成 Markdown 与 Core renderer 完整一致；
 - 普通代码目录只保留 `code.dev`，其唯一通用过程 Skill 是 `code-development`，roles 只有插件 `plan`、native `task` 与 native `reviewer`；`omp.plugin` 与 `code.dev` 不互相 compose，退役 workflow、Skill 和阶段型 Agent 不再出现在当前 inventory；
 - optional Skill 的选择索引暴露 exact ID、完整 choose 条件、literal `PLAN URI`、`D` 顶层 exact URI、`C` nested ECC exact URI，以及 writing 的 `language`、`format overlays`、`specialized outputs` 三组；每个单 workflow reference 只暴露分行 steps、可选 roles/delegation、quality、scope、risk 和 exact READY handoff，不再暴露 compose 图或晚期 Skill selection；
-- definitions、catalog、index 和单卡保持 `delegationDefault` parity：27 张非简单卡片是 `subagent-driven`，显式例外只有 `agentic.simple` 与 `writing.pending`；
+- definitions、catalog、index 和单卡保持 `delegationDefault` parity：28 张非简单卡片是 `subagent-driven`，显式例外只有 `agentic.simple` 与 `writing.pending`；
 - OMP 17 只原生发现一个 `ecc-skill-catalog` adapter；workflow 已枚举的 nested ECC 候选由索引 exact `C` URI 直接读取，未枚举长尾才从 `catalog.md` 的 exact URI 按需发现；
 - Main 与 Advisor managed blocks 都不导入共享目录；Main 提供 `DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY`、exact native `skill-prompt` body named `omp-enhancer-workflows` supplied-index 去重、PLAN/READY byte-zero、结构化 `NOW/THEN`、TODO 与条件式 trace，Advisor 提供至多一次、仅限首次 native `task` 或实质项目操作前的 `DECISION CHECK` 与低噪声 evidence/send-limit 指导，但不创建 gate 或 continuation；
 - 所有打包 Agent/Skill 的 frontmatter 名全局唯一；插件角色在 marketplace 中恰好有一个打包所有者，OMP 原生 `designer`、`librarian`、`reviewer` 不得被插件打包；

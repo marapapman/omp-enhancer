@@ -92,6 +92,9 @@ test('enhancer tools stay inactive until the user explicitly enables a group', a
     'writing_logic_check',
     'fact_check_analyze',
     'omp_test_analyze',
+    'tikz_catalog_search',
+    'tikz_prepare_asset',
+    'tikz_render',
   ];
   pi.activeTools = ['read'];
   registerCoreEnhancer(pi);
@@ -103,6 +106,15 @@ test('enhancer tools stay inactive until the user explicitly enables a group', a
   assert.equal(pi.activeTools.includes('omp_config_doctor'), false);
 
   await command.handler('disable core', ctx);
+  assert.deepEqual(pi.activeTools, ['read']);
+
+  await command.handler('enable tikz', ctx);
+  assert.deepEqual(
+    pi.activeTools,
+    ['read', 'tikz_catalog_search', 'tikz_prepare_asset', 'tikz_render'],
+  );
+
+  await command.handler('disable tikz', ctx);
   assert.deepEqual(pi.activeTools, ['read']);
 
   await command.handler('enable all', ctx);

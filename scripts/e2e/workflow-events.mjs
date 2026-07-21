@@ -3424,7 +3424,7 @@ function claimedSkillNames(text) {
     if (!/(?:loaded|read|used|applied|followed|加载|读取|使用|采用|遵循)/i.test(line)) continue;
     for (const match of line.matchAll(/skill:\/\/([a-z0-9][a-z0-9/_-]*(?:\.md)?)/gi)) {
       const resource = match[1].toLowerCase();
-      if (resource.startsWith('omp-enhancer-workflows/references/')) continue;
+      if (resource.includes('/references/')) continue;
       names.push(normalizeSkillName(resource).split('/').at(-1));
     }
     for (const match of line.matchAll(/\bskills?\s*(?:named\s*)?[:：]?\s*[`'"]([a-z0-9][a-z0-9/_-]*)[`'"]/gi)) {

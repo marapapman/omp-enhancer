@@ -7,7 +7,7 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 
 ## `design.visual`
 
-- Primary when: A UI, visual asset, layout, or interaction design is requested; standalone diagram.svg and slides.* keep their specialized Primary unless separate visual-design work is requested.
+- Primary when: UI/visual/layout/interaction design; standalone diagram.svg and slides.* keep their specialized Primary unless separate visual-design work is requested; likewise diagram.tikz.
 - Reference steps:
   1. [step-1] Inspect existing visual context and constraints.
   2. [step-2] Choose a direction.
@@ -17,7 +17,7 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 - Agent candidates: `designer`.
 - Delegated checkpoints:
   - steps-1-4: designer owns the bounded visual direction, implementation, and refinement while preserving the requested scope
-  - step-5: the parent reconciles rendered evidence and composes diagram.svg, slides.generate, or slides.modify when independent medium-specific review is required
+  - step-5: the parent reconciles rendered evidence and composes diagram.svg, diagram.tikz, slides.generate, or slides.modify when independent medium-specific review is required
 - Quality checks:
   - visual coherence, responsive behavior, accessibility, and rendered evidence
 - Scope notes:

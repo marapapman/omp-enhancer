@@ -51,7 +51,7 @@
       "category": "negative/user-constraint",
       "cwd": ".",
       "tools": ["todo", "task", "hub", "read", "grep", "glob"],
-      "prompt": "Inspect all five workspace plugin package manifests and entry files, but keep all work in the main agent and do not delegate any part. Report only whether every declared entry exists. Do not modify files, run tests, or use the network.",
+      "prompt": "Inspect all six workspace plugin package manifests and entry files, but keep all work in the main agent and do not delegate any part. Report only whether every declared entry exists. Do not modify files, run tests, or use the network.",
       "expectations": {
         "maxNativeTaskCalls": 0,
         "maxNativeTaskAssignmentAttempts": 0,

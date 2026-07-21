@@ -1,6 +1,6 @@
 {
   "name": "omp-enhancer-core",
-  "version": "0.1.128",
+  "version": "0.1.129",
   "private": true,
   "type": "module",
   "description": "OMP-native-first task-fact observer with opt-in evidence reviews, exact-model DeepSeek/MiMo compatibility guidance, and explicit extension-tool activation.",

@@ -107,12 +107,25 @@
       "id": "natural-workflow-reference",
       "category": "omp-config",
       "fixture": "skill-discovery-readonly",
-      "prompt": "Consult the optional OMP Enhancer workflow reference already available in this session, then create a compact, ordered release-readiness checklist for a five-plugin OMP marketplace. Cover implementation validation, independent security review, package verification, rollback readiness, and separate publish authorization. Explain which phases can be composed. Do not inspect or modify project files.",
+      "prompt": "Consult the optional OMP Enhancer workflow reference already available in this session, then create a compact, ordered release-readiness checklist for a six-plugin OMP marketplace. Cover implementation validation, independent security review, package verification, rollback readiness, and separate publish authorization. Explain which phases can be composed. Do not inspect or modify project files.",
       "expectations": {
         "minWorkflowReferenceReads": 1,
         "requiredObservedSkills": ["omp-enhancer-workflows"],
         "maxObservedSkills": 6,
         "forbiddenSkills": ["writing-review", "docker-compose"]
+      }
+    },
+    {
+      "id": "natural-tikz-diagram",
+      "category": "tikz-helper",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Plan an editable TikZ approval flowchart with six labeled nodes, one decision branch, and one missing custom pictogram. Use the packaged OpenTikZ material, assume image generation is unavailable, preserve all labels and topology in TikZ, and require current-revision compile plus independent visual evidence. Do not inspect or modify project files and do not use the network.",
+      "expectations": {
+        "minWorkflowReferenceReads": 1,
+        "requiredSelectedWorkflowIds": ["diagram.tikz"],
+        "requiredObservedSkills": ["tikz-diagram"],
+        "maxObservedSkills": 6,
+        "forbiddenSkills": ["svg-writing", "writing-review", "writing-markdown-helper"]
       }
     },
     {

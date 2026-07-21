@@ -1,0 +1,45 @@
+{
+  "name": "tikz-helper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OMP TikZ and OpenTikZ workflow resources with opt-in catalog, asset preparation, and isolated rendering tools.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "skills",
+    "vendor",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "sharp": "^0.35.3"
+  },
+  "omp": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "keywords": [
+    "pi-package",
+    "omp",
+    "omp-plugin",
+    "tikz",
+    "latex",
+    "opentikz",
+    "diagrams"
+  ],
+  "license": "UNLICENSED"
+}

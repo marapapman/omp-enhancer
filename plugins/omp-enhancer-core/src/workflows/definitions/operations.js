@@ -151,9 +151,10 @@ export const operationWorkflows = [
   },
   {
     "id": "design.visual",
-    "chooseWhen": "A UI, visual asset, layout, or interaction design is requested; standalone diagram.svg and slides.* keep their specialized Primary unless separate visual-design work is requested.",
+    "chooseWhen": "UI/visual/layout/interaction design; standalone diagram.svg and slides.* keep their specialized Primary unless separate visual-design work is requested; likewise diagram.tikz.",
     "composeWith": [
       "diagram.svg",
+      "diagram.tikz",
       "slides.generate",
       "slides.modify"
     ],
@@ -195,7 +196,7 @@ export const operationWorkflows = [
     ],
     "delegation": [
       "steps-1-4: designer owns the bounded visual direction, implementation, and refinement while preserving the requested scope",
-      "step-5: the parent reconciles rendered evidence and composes diagram.svg, slides.generate, or slides.modify when independent medium-specific review is required"
+      "step-5: the parent reconciles rendered evidence and composes diagram.svg, diagram.tikz, slides.generate, or slides.modify when independent medium-specific review is required"
     ]
   },
   {

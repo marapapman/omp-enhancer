@@ -1,6 +1,6 @@
 # OMP Enhancer
 
-OMP Enhancer is an OMP marketplace for optional workflows, shared config, writing, testing, and fact checking.
+OMP Enhancer is an OMP marketplace for optional workflows, shared config, writing, testing, fact checking, and editable TikZ diagrams.
 
 OMP exposes available Skills and Agents; Main chooses under native permissions. Plugins neither hard-route nor block, continue sessions, or auto-repair.
 
@@ -13,12 +13,13 @@ OMP exposes available Skills and Agents; Main chooses under native permissions. 
 | `writing-helper` | English and Chinese writing, citation, style, and polish. |
 | `omp-testing-enhancer` | Testing evidence and advisory review. |
 | `omp-fact-checker` | Claim evidence, cross-checking, and advisory review. |
+| `tikz-helper` | Pinned OpenTikZ resources, semantic TikZ authoring, imagegen node assets, and rendered review evidence. |
 
 ## Workflows
 
 Describe the task naturally. Main remains responsible for selecting Skills, Agents, tools, and execution steps under the user instruction and OMP's native permissions.
 
-`omp-config` exposes the optional `omp-enhancer-workflows` index. Only the exact native `skill-prompt` body named `omp-enhancer-workflows` counts as supplied; managed context, a Skill list, or another body does not. Otherwise Main reads `skill://omp-enhancer-workflows` alone first. It covers writing, research, fact checking, code, infrastructure, design, security, and release work.
+`omp-config` exposes the optional `omp-enhancer-workflows` index. Only the exact native `skill-prompt` body named `omp-enhancer-workflows` counts as supplied; managed context, a Skill list, or another body does not. Otherwise Main reads `skill://omp-enhancer-workflows` alone first. It covers writing, research, fact checking, code, infrastructure, SVG/TikZ diagrams, design, security, and release work.
 
 Its discovery columns are explicit: `D` is a top-level Skill exact URI; `C` is an enumerated nested ECC exact URI. A selected `D` or `C` URI goes directly into `WORKFLOW PLAN` and `NOW`; only an unenumerated long-tail ECC method requires `skill://ecc-skill-catalog`. Workflow references stay in `THEN`.
 
@@ -42,14 +43,14 @@ Add the GitHub marketplace and install the full stack:
 
 ```bash
 omp plugin marketplace add marapapman/omp-enhancer
-omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer
+omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer tikz-helper@omp-enhancer
 ```
 
 For a local checkout:
 
 ```bash
 omp plugin marketplace add /path/to/omp-enhancer
-omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer
+omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer tikz-helper@omp-enhancer
 ```
 
 Start a new OMP session after installing or upgrading plugins that change config, Agents, or Skills.
@@ -60,8 +61,8 @@ All extension tools are inactive by default so they do not enlarge the normal pr
 
 ```text
 /enhancer-tools status
-/enhancer-tools enable <core|config|writing|fact|test|all>
-/enhancer-tools disable <core|config|writing|fact|test|all>
+/enhancer-tools enable <core|config|writing|fact|test|tikz|all>
+/enhancer-tools disable <core|config|writing|fact|test|tikz|all>
 ```
 
 Activation only exposes tool schemas. It does not grant filesystem, command, network, or publication permission.
@@ -72,6 +73,7 @@ Common optional tools include:
 - testing analysis, browser, coverage, mutation, `omp_test_review`, and report tools;
 - fact analysis, evidence, report, and `fact_check_review` tools;
 - config diagnostics and managed-context synchronization.
+- TikZ catalog search, imagegen-asset preparation, and bounded rendering through `tikz_catalog_search`, `tikz_prepare_asset`, and `tikz_render`.
 
 Review tools return advisory findings; they do not execute project commands, block work, or decide completion. Testing commands use the host-authorized shell; there is no plugin `/test` command. `/fact-check` remains available for explicit claim analysis.
 
@@ -100,5 +102,6 @@ The marketplace always tracks GitHub `main`; catalog `ref` pins are not part of 
 - [Workflow definition and generation guide](docs/WORKFLOW_DEVELOPMENT.md)
 - [OMP Enhancer self-development method](docs/OMP_ENHANCER_SELF_DEVELOPMENT.md)
 - [Workflow and Skill E2E testing](docs/WORKFLOW_E2E_TESTING.md)
-- Plugin guides: [Config](plugins/omp-config/README.md), [Writing](plugins/writing-helper/README.md), [Testing](plugins/omp-test-enhancer/README.md), and [Fact checking](plugins/omp-fact-checker/README.md)
+- Plugin guides: [Config](plugins/omp-config/README.md), [Writing](plugins/writing-helper/README.md), [Testing](plugins/omp-test-enhancer/README.md), [Fact checking](plugins/omp-fact-checker/README.md), and [TikZ](plugins/tikz-helper/README.md)
+- [TikZ Helper architecture and E2E plan](docs/TIKZ_PLUGIN.md)
 - [Historical design archive](docs/superpowers/README.md)

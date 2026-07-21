@@ -21,6 +21,7 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
   - LaTeX structure, active-text boundaries, reference integrity, and compile evidence when requested
 - Scope notes:
   - Compilation and publication are separate workflow steps when requested.
+  - A TikZ figure source alone selects diagram.tikz, not writing.latex; compose this card only for an independently requested LaTeX prose, document-format, template, or structure operation.
   - When composed with writing.en or writing.zh as a preservation-only Add-on, it contributes LaTeX preservation constraints only: select zero format Skills and create no generic `task` Delegate row.
   - Its generic `task` candidate is only for an explicitly requested format conversion, LaTeX-structure change, or compile-evidence checkpoint; it is not a candidate for prose revision or semantic check when a language workflow is composed.
 - Risk notes:

@@ -1,6 +1,6 @@
 {
   "name": "omp-config",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "private": true,
   "type": "module",
   "description": "Optional OMP workflow references, config assets, uniquely named agents, notify-only hooks, opt-in hook templates, and diagnostics.",

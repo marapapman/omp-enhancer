@@ -34,6 +34,7 @@ export function parseArgs(args) {
     plugin: null,
     version: null,
     bump: null,
+    catalogBump: null,
     apply: false,
     allowDowngrade: false
   }
@@ -43,6 +44,7 @@ export function parseArgs(args) {
     if (arg === '--plugin') options.plugin = readValue(args, ++index, '--plugin')
     else if (arg === '--version') options.version = readValue(args, ++index, '--version')
     else if (arg === '--bump') options.bump = readValue(args, ++index, '--bump')
+    else if (arg === '--catalog-bump') options.catalogBump = readValue(args, ++index, '--catalog-bump')
     else if (arg === '--apply') options.apply = true
     else if (arg === '--dry-run') options.apply = false
     else if (arg === '--allow-downgrade') options.allowDowngrade = true
@@ -59,6 +61,9 @@ export function parseArgs(args) {
   if (options.version && options.bump) throw new Error('use either --version or --bump, not both')
   if (options.bump && !['major', 'minor', 'patch'].includes(options.bump)) {
     throw new Error(`invalid --bump ${options.bump}`)
+  }
+  if (options.catalogBump && !['major', 'minor', 'patch'].includes(options.catalogBump)) {
+    throw new Error(`invalid --catalog-bump ${options.catalogBump}`)
   }
 
   return options
@@ -96,10 +101,11 @@ export async function planRelease(rootDir, options) {
   const plannedCatalog = structuredClone(catalog)
   const plannedPackageManifests = new Map(packageManifests)
 
-  if (options.plugin === 'all' && options.bump) {
+  const catalogBump = options.catalogBump ?? (options.plugin === 'all' ? options.bump : null)
+  if (catalogBump) {
     plannedCatalog.metadata = plannedCatalog.metadata ?? {}
     const currentMetadataVersion = String(plannedCatalog.metadata.version ?? '0.0.0')
-    plannedCatalog.metadata.version = bumpVersion(currentMetadataVersion, options.bump)
+    plannedCatalog.metadata.version = bumpVersion(currentMetadataVersion, catalogBump)
     changes.push({ file: '.omp-plugin/marketplace.json', field: 'metadata.version', from: currentMetadataVersion, to: plannedCatalog.metadata.version })
   }
 
@@ -471,7 +477,7 @@ function printPlan(result) {
 }
 
 function printHelp() {
-  writeLine(process.stdout, `Usage: node scripts/release.js --plugin <name|all> (--version <x.y.z>|--bump patch|minor|major) [--apply] [--allow-downgrade]\n\nThe marketplace always tracks GitHub main: catalog refs are removed from released entries.`)
+  writeLine(process.stdout, `Usage: node scripts/release.js --plugin <name|all> (--version <x.y.z>|--bump patch|minor|major) [--catalog-bump patch|minor|major] [--apply] [--allow-downgrade]\n\nThe marketplace always tracks GitHub main: catalog refs are removed from released entries. A scoped public catalog change may bump marketplace metadata explicitly with --catalog-bump.`)
 }
 
 function writeLine(stream, value) {

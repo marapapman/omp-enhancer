@@ -879,6 +879,45 @@ test('installed workflow summary does not treat an incidental loaded-skills phra
   assert.deepEqual(summary.unobservedClaims, []);
 });
 
+test('linked Skill references are resources rather than independent Skill claims', () => {
+  const summary = summarizeWorkflowEvents([
+    { type: 'agent_start' },
+    {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{
+          type: 'text',
+          text: 'RESOURCE EXTENSION | source=skill://tikz-diagram | reads=skill://tikz-diagram/references/opentikz-contract.md, skill://tikz-diagram/references/render-review.md',
+        }],
+      },
+    },
+    {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{
+          type: 'toolCall',
+          id: 'read-tikz-skill',
+          name: 'read',
+          arguments: { path: 'skill://tikz-diagram' },
+        }],
+      },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'read-tikz-skill',
+      toolName: 'read',
+      result: { isError: false, content: [{ type: 'text', text: '---\nname: tikz-diagram\n---' }] },
+    },
+    { type: 'agent_end' },
+  ], { exitCode: 0 });
+
+  assert.deepEqual(summary.observedSkills, ['tikz-diagram']);
+  assert.deepEqual(summary.claimedSkills, ['tikz-diagram']);
+  assert.deepEqual(summary.unobservedClaims, []);
+});
+
 test('installed workflow summary normalizes a nested Skill URI instead of claiming the SKILL.md leaf', () => {
   const events = [
     { type: 'agent_start' },
@@ -3612,7 +3651,7 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   ]) {
     assert.equal(matrix.defaults.expectations[expectation], true, expectation);
   }
-  assert.equal(matrix.scenarios.length, 9);
+  assert.equal(matrix.scenarios.length, 10);
   const controls = matrix.scenarios.filter(({ category }) => category === 'harness-control');
   assert.deepEqual(controls.map(({ id }) => id), ['fixture-xlsx-control']);
   for (const scenario of matrix.scenarios.filter(({ category }) => category !== 'harness-control')) {
@@ -3640,6 +3679,10 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   assert.equal(fact.expectations.forbiddenFinalPatterns, undefined);
   const docker = matrix.scenarios.find(({ id }) => id === 'natural-docker-compose');
   assert.equal(docker.expectations.maxObservedSkills, 2);
+  const tikz = matrix.scenarios.find(({ id }) => id === 'natural-tikz-diagram');
+  assert.deepEqual(tikz.expectations.requiredSelectedWorkflowIds, ['diagram.tikz']);
+  assert.deepEqual(tikz.expectations.requiredObservedSkills, ['tikz-diagram']);
+  assert.ok(tikz.expectations.forbiddenSkills.includes('svg-writing'));
   const subagent = matrix.scenarios.find(({ id }) => id === 'natural-subagent-isolation');
   assert.equal(subagent.expectations.requireNativeTaskCompletion, true);
   assert.equal(subagent.expectations.requireSuccessfulToolCalls, false);
@@ -4301,6 +4344,7 @@ test('workflow consolidation matrix covers representative non-medical workflows 
     'plugins/omp-test-enhancer',
     'plugins/omp-fact-checker',
     'plugins/omp-enhancer-core',
+    'plugins/tikz-helper',
   ]);
   assert.deepEqual(matrix.defaults.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob']);
   assert.equal(matrix.defaults.expectations.requireNativeTaskCompletion, true);

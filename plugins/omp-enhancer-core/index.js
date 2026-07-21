@@ -53,6 +53,7 @@ const ENHANCER_TOOL_GROUPS = Object.freeze({
   writing: ['writing_'],
   fact: ['fact_check_'],
   test: ['omp_test_'],
+  tikz: ['tikz_'],
 });
 
 export default function registerCoreEnhancer(pi) {
@@ -467,7 +468,7 @@ function registerEnhancerToolsCommand(pi) {
       const prefixes = enhancerToolPrefixes(group);
       if (!['status', 'enable', 'disable'].includes(action) || !prefixes) {
         await ctx.ui?.notify?.(
-          'Usage: /enhancer-tools status | enable <core|config|writing|fact|test|all> | disable <group>',
+          'Usage: /enhancer-tools status | enable <core|config|writing|fact|test|tikz|all> | disable <group>',
           'warn',
         );
         return;

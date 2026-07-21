@@ -1,0 +1,35 @@
+[
+  {
+    "id": "flowchart",
+    "name": "Flowchart",
+    "type": "template",
+    "domain": ["general"],
+    "tags": ["flowchart", "decision"],
+    "description": "A decision flow with a retry loop.",
+    "path": "templates/flowchart",
+    "preview": "preview.svg",
+    "license": "CC0-1.0"
+  },
+  {
+    "id": "server",
+    "name": "Server icon",
+    "type": "icon",
+    "domain": ["systems"],
+    "tags": ["server", "infrastructure"],
+    "description": "A generic server node icon.",
+    "path": "icons/server",
+    "preview": "preview.svg",
+    "license": "CC0-1.0"
+  },
+  {
+    "id": "unsafe",
+    "name": "Unsafe fixture",
+    "type": "icon",
+    "domain": ["general"],
+    "tags": ["unsafe"],
+    "description": "A deliberately invalid catalog entry.",
+    "path": "../outside",
+    "preview": "preview.svg",
+    "license": "CC0-1.0"
+  }
+]

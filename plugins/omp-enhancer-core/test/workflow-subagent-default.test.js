@@ -61,9 +61,9 @@ test('schema accepts only the three delegation defaults and requires roles only 
   );
 });
 
-test('catalog v20 projects explicit exception defaults and 27 substantive subagent-driven contracts', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 20);
-  assert.equal(workflowDefinitions.length, 29);
+test('catalog v21 projects explicit exception defaults and 28 substantive subagent-driven contracts', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 21);
+  assert.equal(workflowDefinitions.length, 30);
 
   const rawSimple = generalWorkflows.find(({ id }) => id === 'agentic.simple');
   const rawPending = writingWorkflows.find(({ id }) => id === 'writing.pending');
@@ -75,7 +75,7 @@ test('catalog v20 projects explicit exception defaults and 27 substantive subage
   }
 
   const substantive = workflowDefinitions.filter(({ id }) => !NON_SUBSTANTIVE_DEFAULTS.has(id));
-  assert.equal(substantive.length, 27);
+  assert.equal(substantive.length, 28);
   for (const workflow of substantive) {
     assert.equal(workflow.delegationDefault, 'subagent-driven', workflow.id);
     assert.equal(workflowCatalog[workflow.id].delegationDefault, 'subagent-driven', workflow.id);

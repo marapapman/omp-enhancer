@@ -140,7 +140,7 @@ test('packaged Skill Markdown uses exact URIs for same-package Markdown navigati
     }
   }
 
-  assert.equal(markdownFiles.length, 447, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
+  assert.equal(markdownFiles.length, 453, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
   assert.deepEqual(
     violations,
     [],

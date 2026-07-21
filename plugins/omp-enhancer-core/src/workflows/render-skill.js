@@ -6,7 +6,6 @@ import {
   exactNestedEccSkillCandidates,
 } from './skill-discovery.js';
 import {
-  DELEGATION_COMPILE_RULE,
   DELEGATED_TODO_TEMPLATE,
   DIRECT_FALLBACK_REASONS,
   NATIVE_TASK_PREFIX_TEMPLATE,
@@ -33,7 +32,7 @@ const DOMAIN_ORDER = Object.freeze([
 const WRITING_INDEX_GROUPS = Object.freeze([
   Object.freeze(['language', Object.freeze(['writing.pending', 'writing.zh', 'writing.en'])]),
   Object.freeze(['format overlays', Object.freeze(['writing.latex', 'writing.markdown', 'doc.convert.word'])]),
-  Object.freeze(['specialized outputs', Object.freeze(['slides.generate', 'slides.modify', 'diagram.svg'])]),
+  Object.freeze(['specialized outputs', Object.freeze(['slides.generate', 'slides.modify', 'diagram.svg', 'diagram.tikz'])]),
 ]);
 
 export function buildWorkflowSkillIndexMarkdown() {
@@ -46,7 +45,7 @@ export function buildWorkflowSkillIndexMarkdown() {
     '',
     'DECLARE HANDOFF (soft): Next visible response MUST start byte 0 with `WORKFLOW PLAN` and contain only this form plus resource calls. Select internally; state stays silent; no project path; user text suffices:',
     WORKFLOW_PLAN_TEMPLATE,
-    'PLAN reads NOW/waits. THEN is one final unsplit resource-only batch/wait; NOW=none reads THEN with PLAN. Give each evidence checkpoint an Action.',
+    'PLAN text alone is incomplete: same response calls NOW and waits, or calls THEN if NOW=none. THEN is one final resource-only batch. Give each evidence checkpoint an Action.',
     'AFTER NOW: empty revealed URI set => no text/marker; call the THEN batch. Otherwise RESOURCE EXTENSION MUST list >=1 exact revealed URI; `reads=none` is invalid.',
     '',
     `Catalog version: ${WORKFLOW_CATALOG_VERSION}.`,
@@ -65,13 +64,13 @@ export function buildWorkflowSkillIndexMarkdown() {
     '',
     'Main owns delegation; OMP owns tools, permissions, TODO, Agents, and completion.',
     '',
-    'PROSE: English draft/revision -> `writing.en`; Chinese -> `writing.zh`; unknown body -> `writing.pending`. Other central operation => language Add-on. Language Primary + `.tex` target, LaTeX prose, or preserved LaTeX commands => `writing.latex` Add-on; Markdown/Word add format. Format-only => format Primary. Converters/templates only when requested. Loaded language card + target/constraints/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read.',
+    'PROSE: English draft/revision -> `writing.en`; Chinese -> `writing.zh`; unknown body -> `writing.pending`. Other central operation => language Add-on. Language Primary + `.tex` target, LaTeX prose, or preserved LaTeX commands => `writing.latex` Add-on. Direct standalone SVG -> `diagram.svg`; editable TikZ `.tex`/PDF/SVG/PNG -> `diagram.tikz`. TikZ source alone does not add `writing.latex`. Format-only => format Primary. Converters/templates only when requested. Loaded language card + target/constraints/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read.',
     '',
     '## Domain index',
     '',
-    'SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select only a URI that matches the requested method, evidence rule, verdict, or format. `D` is direct; `C` is exact nested ECC revealed here. An enumerated `C` URI goes directly in PLAN/NOW; skip the full catalog. `'
+    'SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select only a URI that matches the requested method, evidence rule, verdict, or format. `D` is direct; `C` is exact nested ECC. An enumerated `C` URI goes directly in PLAN/NOW. `'
       + ECC_CATALOG_SKILL_URI
-      + '` remains only for unlisted niche discovery. Choose the smallest method/evidence/verdict/format set; refs stay in THEN.',
+      + '` remains only for unlisted niche discovery; refs stay in THEN.',
     '',
   ];
 
@@ -85,17 +84,17 @@ export function buildWorkflowSkillIndexMarkdown() {
   lines.push(
     '## State handoff',
     '',
-    'SELECTION: Primary = central deliverable; independent requested operations/outputs = Add-ons. Skills own methods/evidence/format; references do not.',
+    'SELECTION: Primary = central deliverable; independent requested operations/outputs = Add-ons. Skills own methods/evidence/format; refs do not.',
     '',
-    'EXECUTION: DIRECT skips; `agentic.simple` has no `task`; `writing.pending` composes once; every other loaded card uses the compiler below.',
+    'EXECUTION: DIRECT skips; `agentic.simple` has no `task`; `writing.pending` composes once; other cards use the compiler.',
     '',
-    'FALLBACK: only a concrete user/native, Agent/capacity, input/dependency/write-set, safety, or parent-owned limit; never size, latency, read-only, overhead, or no delegation request.',
+    'FALLBACK: concrete user/native, Agent/capacity, input/dependency/write-set, safety, or parent ownership only; never size, latency, read-only, overhead, or no delegation request.',
     '',
-    'SKILL URI: D is direct; C is exact nested and revealed here. Other nested URIs need a loaded source. Supplied bodies stay in PLAN/READY, not NOW; only exact failure means unavailable.',
+    'SKILL URI: D=direct; C=exact nested; others need a loaded source. Supplied bodies stay in PLAN/READY, not NOW; only exact failure marks unavailable.',
     '',
-    'LOAD: Skills=exact domain Skill/catalog URIs; refs=THEN. NOW=non-supplied Skills/catalogs; THEN=Add-on refs then Primary. Load/wait each; max 2 catalog + 1 method extensions. NOW none => THEN with PLAN. Never guess/reread/re-PLAN except `writing.pending`.',
+    'LOAD: Skills=exact domain Skill/catalog URIs; NOW=non-supplied Skills/catalogs; THEN=Add-on refs then Primary. Load/wait each; max 2 catalog + 1 method extensions. NOW none loads THEN with PLAN. Never guess/reread/re-PLAN except `writing.pending`.',
     '',
-    `COMMIT HANDOFF (soft): after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable, next response begins \`W\`, fills \`${WORKFLOW_READY_TEMPLATE}\` with bare IDs, initializes native TODO only, ends, and waits. Freeze W=<Primary,Add-ons> and S=<bare loaded IDs>; delegated metadata copies W/S. ${DELEGATION_COMPILE_RULE} ${WORKFLOW_PROJECT_START_RULE}`,
+    `COMMIT HANDOFF (soft): after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable, next response begins \`W\`, fills \`${WORKFLOW_READY_TEMPLATE}\` with bare IDs, initializes native TODO only, and ends/waits. Freeze W/S. COMPILE (soft): loaded \`subagent-driven\` + complete input + safe checkpoint + visible matching Agent => Delegate row; otherwise \`fallback=<one matched permitted limitation>\`. ${WORKFLOW_PROJECT_START_RULE}`,
     '',
     'NEXT VISIBLE BYTES MUST BE `WORKFLOW PLAN`; no preface; no plugin enforces this format.',
     '',

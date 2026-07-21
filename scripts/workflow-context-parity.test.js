@@ -21,9 +21,9 @@ import { exactNestedEccSkillUri } from '../plugins/omp-enhancer-core/src/workflo
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
 
-test('catalog v20 assigns exactly one direct, one deferred, and 27 subagent-driven defaults', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 20);
-  assert.equal(workflowDefinitions.length, 29);
+test('catalog v21 assigns exactly one direct, one deferred, and 28 subagent-driven defaults', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 21);
+  assert.equal(workflowDefinitions.length, 30);
   assert.deepEqual(
     [...new Set(workflowDefinitions.map(({ delegationDefault }) => delegationDefault))].sort(),
     ['defer-until-composed', 'direct-simple', 'subagent-driven'],
@@ -38,7 +38,7 @@ test('catalog v20 assigns exactly one direct, one deferred, and 27 subagent-driv
   );
   assert.equal(
     workflowDefinitions.filter(({ delegationDefault }) => delegationDefault === 'subagent-driven').length,
-    27,
+    28,
   );
   assert.deepEqual(
     Object.entries(workflowCatalog).map(([id, { delegationDefault }]) => [id, delegationDefault]),
@@ -46,7 +46,7 @@ test('catalog v20 assigns exactly one direct, one deferred, and 27 subagent-driv
   );
 });
 
-test('packaged catalog, index, and all references expose catalog v20 execution defaults', async () => {
+test('packaged catalog, index, and all references expose catalog v21 execution defaults', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -54,16 +54,17 @@ test('packaged catalog, index, and all references expose catalog v20 execution d
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 20/);
-  assert.match(skillIndex, /Catalog version: 20/);
-  assert.equal(referenceNames.length, 29);
-  assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 27);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 21/);
+  assert.match(skillIndex, /Catalog version: 21/);
+  assert.equal(referenceNames.length, 30);
+  assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 28);
   assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
   assert.equal((catalog.match(/^- Execution default \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
-  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 27);
+  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 28);
   assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `direct-simple`/gm) ?? []).length, 1);
   assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
-  assert.match(skillIndex, /EXECUTION:[\s\S]*DIRECT skips[\s\S]*`agentic\.simple` has no `task`[\s\S]*`writing\.pending` composes once[\s\S]*every other loaded card uses the compiler below/iu);
+  assert.match(skillIndex, /EXECUTION:[\s\S]*DIRECT skips[\s\S]*`agentic\.simple` has no `task`[\s\S]*`writing\.pending` composes once[\s\S]*(?:every )?other (?:loaded )?cards? uses? the compiler(?: below)?/iu);
+  assert.match(skillIndex, /PLAN text alone is incomplete[\s\S]*same response calls NOW[\s\S]*calls THEN if NOW=none/iu);
   assert.match(skillIndex, /Navigation only[\s\S]*never routes[\s\S]*gates[\s\S]*selects Agents[\s\S]*decides completion/iu);
   assert.doesNotMatch(`${catalog}\n${skillIndex}\n${referenceText}`, /block:\s*true|continue:\s*true|triggerTurn|systemPrompt\s*=/i);
 });
@@ -78,7 +79,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   const skillReferences = Object.values(referencesByWorkflow).join('\n');
 
   assert.equal(catalog, buildSharedWorkflowCatalogMarkdown());
-  assert.equal(WORKFLOW_CATALOG_VERSION, 20);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 21);
   assert.equal(Number(catalog.match(/OMP_WORKFLOW_CATALOG_VERSION:\s*(\d+)/)?.[1]), WORKFLOW_CATALOG_VERSION);
   assert.deepEqual([...catalog.matchAll(/^### `([^`]+)`$/gm)].map((match) => match[1]), workflowIds);
   const indexedWorkflowIds = [...skillIndex.matchAll(/^- `([^`]+)` —/gm)].map((match) => match[1]);
@@ -97,7 +98,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.match(skillIndex, /LOAD:[\s\S]*Skills=exact domain Skill\/catalog URIs[\s\S]*NOW=non-supplied Skills\/catalogs[\s\S]*THEN=Add-on refs then Primary[\s\S]*max 2 catalog \+ 1 method extensions[\s\S]*Never guess\/reread\/re-PLAN/i);
   assert.match(skillIndex, /DECLARE HANDOFF \(soft\):[\s\S]*Next visible response MUST start byte 0 with `WORKFLOW PLAN`[\s\S]*contain only this form[^\n]*\nWORKFLOW PLAN\nPrimary: <id-or-none>\nAdd-ons: <ids-or-none>\nSkills: <exact domain Skill\/catalog URIs-or-none>\nLoad order: NOW=\[<chosen non-supplied Skill\/catalog URIs-or-none>\] THEN=\[<Add-on PLAN URIs; Primary PLAN URI last-or-none>\]\nActions:\n1\. LOAD:[\s\S]*2\. COMMIT:[\s\S]*3\. SPLIT \+ EXECUTE:[\s\S]*4\. VERIFY:/i);
   assert.doesNotMatch(skillIndex, /assistant content\[0\]/iu);
-  assert.match(skillIndex, /PLAN reads NOW\/waits[\s\S]*THEN is one final unsplit resource-only batch\/wait[\s\S]*NOW=none[\s\S]*Give each evidence checkpoint an Action/iu);
+  assert.match(skillIndex, /PLAN text alone is incomplete[\s\S]*same response calls NOW and waits[\s\S]*calls THEN if NOW=none[\s\S]*THEN is one final resource-only batch[\s\S]*Give each evidence checkpoint an Action/iu);
   assert.match(skillIndex, /AFTER NOW:[^\n]*empty revealed URI set[^\n]*no text\/marker[^\n]*call the THEN batch[^\n]*RESOURCE EXTENSION MUST list >=1 exact revealed URI[^\n]*`reads=none` is invalid/iu);
   assert.match(skillIndex, /COMMIT HANDOFF \(soft\):[\s\S]*after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable[\s\S]*next response begins `W`[\s\S]*initializes native TODO only[\s\S]*Project tools start only after the READY \+ TODO response ends and its results return/iu);
   assert.match(skillIndex, /SELECTION:[\s\S]*Primary = central deliverable[\s\S]*independent requested operations\/outputs = Add-ons/iu);
@@ -105,7 +106,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.match(skillIndex, /3\. \*\*COMMIT \+ EXECUTE\*\*[\s\S]*Emit READY first[\s\S]*commit loaded methods to detailed native TODO[\s\S]*split, execute, and verify/i);
   assert.doesNotMatch(skillIndex, /slices=<|assignment-input=|Composition example:|\[workflow=<ids>/i);
   assert.doesNotMatch(skillIndex, /^- `[^`]+`[^\n]+\b(?:Add-ons|Skills):/gmu);
-  assert.match(skillIndex, /SKILL DISCOVERY:[\s\S]*enumerated `C` URI goes directly in PLAN\/NOW[\s\S]*skip the full catalog[\s\S]*`skill:\/\/ecc-skill-catalog` remains only for unlisted niche discovery/iu);
+  assert.match(skillIndex, /SKILL DISCOVERY:[\s\S]*enumerated `C` URI goes directly in PLAN\/NOW[\s\S]*`skill:\/\/ecc-skill-catalog` remains only for unlisted niche discovery/iu);
   assert.match(skillIndex, /`network\.design`[^\n]*C=\[`skill:\/\/ecc-skill-catalog\/network-config-validation\/SKILL\.md`, `skill:\/\/ecc-skill-catalog\/safety-guard\/SKILL\.md`\][^\n]*PLAN URI:/iu);
   assert.ok(Buffer.byteLength(skillIndex) < 15_000, 'Main workflow index should stay below 15k');
   assert.match(skillIndex, /Navigation only[\s\S]*never routes[\s\S]*gates[\s\S]*decides completion/i);

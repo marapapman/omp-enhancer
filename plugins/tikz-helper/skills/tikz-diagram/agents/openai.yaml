@@ -1,0 +1,4 @@
+interface:
+  display_name: "TikZ Diagram"
+  short_description: "Create editable TikZ diagrams from semantic flow specifications"
+  default_prompt: "Use $tikz-diagram to create an editable, rendered, and reviewed TikZ flowchart."
