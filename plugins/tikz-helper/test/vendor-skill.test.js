@@ -216,6 +216,30 @@ test('tikz-diagram has concise frontmatter and all exact one-level reference URI
   assert.doesNotMatch(ui, /^\s*dependencies:/mu);
 });
 
+test('linked TikZ resources use one byte-zero extension handoff before the final workflow reference', () => {
+  const skill = read('skills/tikz-diagram/SKILL.md');
+  const marker = 'RESOURCE EXTENSION | source=skill://tikz-diagram | reads=<applicable-exact-linked-URIs-in-listed-order>';
+
+  assert.equal(skill.split(marker).length - 1, 1, 'the exact linked-resource marker template must appear once');
+  assert.match(
+    skill,
+    /next linked-resource response.+start(?:s)? at byte 0.+RESOURCE EXTENSION \| source=skill:\/\/tikz-diagram \| reads=<applicable-exact-linked-URIs-in-listed-order>/is,
+  );
+  assert.match(
+    skill,
+    /same response.+read exactly.+applicable.+URI.+listed order.+end and wait.+before THEN/is,
+  );
+  assert.match(skill, /at most one linked-method batch.+never reread/is);
+  assert.match(
+    skill,
+    /marker.+before.+resource reads.+never.+after.+reads.+never.+final workflow reference/is,
+  );
+  assert.doesNotMatch(
+    skill,
+    /block:\s*true|continue:\s*true|retry until|repeat until|hard (?:gate|router)|completion authority/is,
+  );
+});
+
 test('Skill and references preserve host authority, copy safety, imagegen boundaries, and soft review', () => {
   const skill = read('skills/tikz-diagram/SKILL.md');
   const references = readdirSync(join(skillRoot, 'references'))
@@ -244,4 +268,54 @@ test('Skill and references preserve host authority, copy safety, imagegen bounda
   assert.match(contract, /group.+findings.+bounded revision|split.+findings.+bounded revisions/is);
   assert.match(contract, /no.+(?:gate|completion permission|automatic loop)/is);
   assert.doesNotMatch(contract, /block:\s*true|continue:\s*true|retry until|repeat until|must delegate|mandatory fork/i);
+});
+
+test('selected TikZ work compiles designer, Main render, and visioner in dependency order with explicit evidence gaps', () => {
+  const skill = read('skills/tikz-diagram/SKILL.md');
+  const designDoc = readFileSync(resolve(pluginRoot, '../../docs/TIKZ_PLUGIN.md'), 'utf8');
+
+  const designerCheckpoint = skill.indexOf('1. **Designer checkpoint**');
+  const mainRender = skill.indexOf('2. **Main integration and render**');
+  const visionerCheckpoint = skill.indexOf('3. **Visioner checkpoint**');
+  assert.ok(designerCheckpoint >= 0, 'the normal compiled chain must name the designer checkpoint');
+  assert.ok(mainRender > designerCheckpoint, 'Main integration/render must follow designer delivery');
+  assert.ok(visionerCheckpoint > mainRender, 'visioner review must follow fresh Main rendering');
+
+  assert.match(
+    skill,
+    /selected non-simple `diagram\.tikz`.+normal compiled dependency chain.+`designer`.+Main.+`visioner`/is,
+  );
+  assert.match(
+    skill,
+    /`designer` owns.+complete.+design.+source revision checkpoint/is,
+  );
+  assert.match(
+    skill,
+    /Main.+integrates.+designer delivery.+exact current revision.+`tikz_render`.+full-size.+60%/is,
+  );
+  assert.match(
+    skill,
+    /`visioner`.+independently.+read-only.+layout.+legibility.+fresh.+current-revision/is,
+  );
+  assert.match(
+    skill,
+    /designer.+unavailable.+TODO.+unfulfilled designer checkpoint.+Agent-availability fallback.+Main.+cannot claim designer evidence/is,
+  );
+  assert.match(
+    skill,
+    /visioner.+unavailable.+missing independent current-revision visual evidence.+compile.+source.+static checks.+designer.+Main self-review.+do not replace/is,
+  );
+  assert.doesNotMatch(
+    skill,
+    /mandatory runtime fork|fixed fanout|automatic retry|hard (?:gate|router)|completion authority/is,
+  );
+
+  assert.match(
+    designDoc,
+    /non-simple visual workflows.+`designer`.+complete design.+`visioner`.+fresh current-revision render/is,
+  );
+  assert.match(
+    designDoc,
+    /designer (?:is )?unavailable.+unfulfilled checkpoint.+Agent-availability fallback.+visioner (?:is )?unavailable.+missing independent current-revision visual evidence/is,
+  );
 });

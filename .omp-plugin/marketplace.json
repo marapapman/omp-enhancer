@@ -13,7 +13,7 @@
     {
       "name": "omp-config",
       "description": "Optional OMP workflow references, configuration assets, uniquely named agents, notify-only hooks, opt-in hook templates, and diagnostics.",
-      "version": "0.1.36",
+      "version": "0.1.37",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -368,7 +368,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "OMP-native-first task-fact observer with opt-in evidence reviews, exact-model DeepSeek/MiMo compatibility guidance, and explicit extension-tool activation.",
-      "version": "0.1.129",
+      "version": "0.1.130",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -377,7 +377,7 @@
     {
       "name": "tikz-helper",
       "description": "Pinned OpenTikZ resources, semantic TikZ workflow guidance, generated icon asset preparation, and bounded render evidence.",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/tikz-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",

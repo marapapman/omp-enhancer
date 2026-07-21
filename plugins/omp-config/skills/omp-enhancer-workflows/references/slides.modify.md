@@ -7,7 +7,7 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 
 ## `slides.modify`
 
-- Primary when: The user wants bounded wording, language, or existing-style changes to a current LaTeX Beamer deck.
+- Primary when: Bounded wording, language, or existing-style changes to a current LaTeX Beamer deck.
 - Reference steps:
   1. [step-1] Read the exact target, body language, current template and style, and local build commands.
   2. [step-2] Apply the PLAN-selected writing.zh or writing.en method from the slide body while preserving LaTeX structure and semantic anchors.
@@ -26,6 +26,8 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 - Quality checks:
   - requested-scope preservation after every layout revision, source-language writing compliance, semantic and LaTeX anchor preservation, existing visual-style consistency, Beamer structure, zero unintended text and image overlap, no crowding or clipping, readable typography, undistorted images, balanced spacing, current-revision rendered evidence, and compile evidence when in scope
 - Scope notes:
+  - Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
+  - When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop.
   - Do not reopen template selection or story planning for an ordinary modification.
   - A path-only request remains language-pending until the target body is read.
   - Do not widen scope to unrelated pre-existing layout defects; shared template or macro changes expand visual review to every page they can affect.

@@ -7,7 +7,7 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 
 ## `diagram.svg`
 
-- Primary when: The user wants a standalone SVG workflow, process, block, or box diagram with strict monochrome geometry and rendered visual QA.
+- Primary when: Standalone monochrome SVG workflow/process/block/box diagram with rendered visual QA.
 - Reference steps:
   1. [step-1] Establish the output path, display size, node and edge model, labels, branch semantics, dashed-line meaning, and primary flow direction.
   2. [step-2] Create the standalone SVG in black and white using only simple shapes, straight or dashed lines, and orthogonal polylines, with no curved connectors.
@@ -23,6 +23,8 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 - Quality checks:
   - node and edge completeness, arrow direction, zero unintended overlap or text clipping, zero connector collision or avoidable crossing, readable font size, balanced spacing, strict monochrome geometry, and current-revision rendered evidence
 - Scope notes:
+  - Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
+  - When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop.
   - When Main delegates, the designer owns SVG changes and the visioner remains read-only; the main agent coordinates revisions.
   - Do not substitute source inspection or author self-review for independent rendered evidence.
   - Review only fresh revisions; do not rerun unchanged reviews.

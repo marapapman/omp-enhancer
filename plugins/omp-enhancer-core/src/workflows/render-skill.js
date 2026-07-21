@@ -64,11 +64,12 @@ export function buildWorkflowSkillIndexMarkdown() {
     '',
     'Main owns delegation; OMP owns tools, permissions, TODO, Agents, and completion.',
     '',
-    'PROSE: English draft/revision -> `writing.en`; Chinese -> `writing.zh`; unknown body -> `writing.pending`. Other central operation => language Add-on. Language Primary + `.tex` target, LaTeX prose, or preserved LaTeX commands => `writing.latex` Add-on. Direct standalone SVG -> `diagram.svg`; editable TikZ `.tex`/PDF/SVG/PNG -> `diagram.tikz`. TikZ source alone does not add `writing.latex`. Format-only => format Primary. Converters/templates only when requested. Loaded language card + target/constraints/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read.',
+    'PROSE: English draft/revision -> `writing.en`; Chinese -> `writing.zh`; unknown body -> `writing.pending`. Other central operation => language Add-on. Language Primary + `.tex` target/LaTeX prose/preserved LaTeX commands => `writing.latex` Add-on. Direct standalone SVG -> `diagram.svg`; editable TikZ `.tex`/PDF/SVG/PNG -> `diagram.tikz`; TikZ source alone does not add `writing.latex`. Format-only => format Primary. Converters/templates only when requested. Loaded language card + target/constraints/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read.',
+    'VISUAL: Non-visual Primary + independently requested UI/layout/static-visual deliverable => `design.visual` Add-on. Standalone slide/SVG/TikZ stays specialized Primary; add `design.visual` only for separate visual-design work/output.',
     '',
     '## Domain index',
     '',
-    'SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select only a URI that matches the requested method, evidence rule, verdict, or format. `D` is direct; `C` is exact nested ECC. An enumerated `C` URI goes directly in PLAN/NOW. `'
+    'SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select only a URI that matches the requested method, evidence rule, verdict, or format. An enumerated `C` URI goes directly in PLAN/NOW. `'
       + ECC_CATALOG_SKILL_URI
       + '` remains only for unlisted niche discovery; refs stay in THEN.',
     '',

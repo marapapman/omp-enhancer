@@ -16,6 +16,12 @@ Read these directly linked resources once per top-level Main task when their sta
 - Read `skill://tikz-diagram/references/imagegen-assets.md` when custom node artwork is requested or a missing-icon generation-versus-fallback decision is needed, even if imagegen may be unavailable.
 - Read `skill://tikz-diagram/references/render-review.md` before rendering and visual review.
 
+After choosing only the applicable resources above, the next linked-resource response must start at byte 0 with this one visible handoff:
+
+`RESOURCE EXTENSION | source=skill://tikz-diagram | reads=<applicable-exact-linked-URIs-in-listed-order>`
+
+In that same response, read exactly the applicable exact URIs once in their listed order as one resource-only batch, then end and wait before THEN. Use at most one linked-method batch and never reread a linked URI. The marker appears before the resource reads; never emit it after those reads, and never emit it together with the final workflow reference or defer it to THEN. This is syntax and timing guidance only: it does not block, route, dispatch, retry, grant permission, or decide completion.
+
 ## Create or revise a figure
 
 1. Capture the requested audience, output path, format, size, labels, topology, preservation constraints, and acceptance evidence. Ask only when an ambiguity changes the graph or meaning; state reversible visual defaults.
@@ -27,6 +33,15 @@ Read these directly linked resources once per top-level Main task when their sta
 7. Render the project source with `tikz_render` when exposed and authorized. Review the latest source plus revision-bound PDF, SVG, full-size PNG, and reduced PNG evidence; do not infer visual quality from source alone.
 8. Deliver editable TikZ source, requested rendered artifacts, assumptions, provenance, validation evidence, and unresolved limitations. Do not publish or perform another external effect without host authorization.
 
-## Delegate softly
+## Compile the dependent Agent chain
 
-`designer` is a soft delegation candidate for one complete, bounded source-design or revision checkpoint when that Agent is visible, input is complete, and delegation is safe. `visioner` is a soft read-only candidate for inspecting fresh rendered artifacts. Use only native Available Agents already visible; never probe or guess an Agent URI or inventory. Main chooses whether and when to delegate, retains the semantic graph, project integration, permissions, finding disposition, verification, and final response. No review is a gate or completion permission, and no automatic repair loop or fixed fanout follows from this Skill.
+For a selected non-simple `diagram.tikz` workflow, the normal compiled dependency chain is `designer` -> Main -> `visioner` when those matching Agents are exposed, assignment input is complete, and delegation is safe. Use only native Available Agents already visible; never probe or guess an Agent URI or inventory.
+
+1. **Designer checkpoint** — `designer` owns one complete, bounded design and source revision checkpoint. It returns the editable project-owned TikZ source, semantic figure spec, asset manifest, preserved edit-contract facts, and dependency list; a partial sketch is not a completed delivery.
+2. **Main integration and render** — Main integrates the designer delivery, reconciles project paths and any optional imagegen asset, binds the exact current revision, and invokes `tikz_render` when exposed and authorized. Main produces fresh revision-bound PDF, SVG, full-size PNG, and 60% PNG before visual review.
+3. **Visioner checkpoint** — Only after the designer delivery is integrated and those renders exist, `visioner` independently and read-only checks layout and legibility on the fresh current-revision full-size and 60% renders against the semantic spec and asset manifest.
+4. **Main disposition** — Main validates findings and retains project integration, permissions, optional imagegen, finding disposition, verification, and final response. One accepted material finding may create one bounded designer revision followed by fresh rendering and at most one affected visioner review.
+
+If `designer` is unavailable, the affected TODO and final evidence record the precise unfulfilled designer checkpoint and the permitted Agent-availability fallback. Main cannot claim designer evidence by silently substituting itself. If `visioner` is unavailable, record missing independent current-revision visual evidence. Compile, source, and static checks, designer self-review, or Main self-review do not replace it.
+
+This chain is Agent-owned planning guidance, not host enforcement: it neither dispatches, fixes fanout, gates, routes, retries, grants permission, nor decides completion. No review is a gate or completion permission, and no automatic repair loop follows from this Skill.

@@ -1,6 +1,6 @@
 {
   "name": "tikz-helper",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "OMP TikZ and OpenTikZ workflow resources with opt-in catalog, asset preparation, and isolated rendering tools.",

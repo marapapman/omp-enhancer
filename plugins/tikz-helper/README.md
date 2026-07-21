@@ -2,7 +2,7 @@
 
 TikZ Helper packages a pinned OpenTikZ snapshot, one `tikz-diagram` Skill, and opt-in tools for catalog discovery, generated-node-icon asset preparation, and bounded rendering.
 
-Use the `diagram.tikz` workflow for editable TikZ or LaTeX diagrams. It builds a semantic node-and-edge specification first, copies an OpenTikZ template into the user project, keeps labels and topology in TikZ, renders the current revision, and uses independent visual evidence when a matching reviewer is available.
+Use the `diagram.tikz` workflow for editable TikZ or LaTeX diagrams. Its normal available-Agent chain gives the complete design/source checkpoint to `designer`, lets Main integrate and render that exact revision, and then gives fresh full-size and 60% renders to read-only `visioner`. If either matching Agent is unavailable, the result preserves the unfulfilled checkpoint or independent-review evidence gap instead of silently substituting Main evidence.
 
 OMP's native `generate_image` can supply a missing node pictogram when it is currently enabled and the user and host authorize the provider and write effects. The plugin does not invoke imagegen itself. Generated files are copied out of temporary storage, normalized, hashed, and recorded in a separate project-local manifest; they are raster assets and are not OpenTikZ CC0 content or editable vectors.
 

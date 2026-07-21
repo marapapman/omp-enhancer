@@ -1,3 +1,8 @@
+const VISUAL_AGENT_SCOPE_NOTES = [
+  "Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.",
+  "When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop."
+];
+
 export const operationWorkflows = [
   {
     "id": "omp.plugin",
@@ -151,7 +156,7 @@ export const operationWorkflows = [
   },
   {
     "id": "design.visual",
-    "chooseWhen": "UI/visual/layout/interaction design; standalone diagram.svg and slides.* keep their specialized Primary unless separate visual-design work is requested; likewise diagram.tikz.",
+    "chooseWhen": "Independent UI/layout/interaction/static visual work/output.",
     "composeWith": [
       "diagram.svg",
       "diagram.tikz",
@@ -161,26 +166,27 @@ export const operationWorkflows = [
     "steps": [
       {
         "id": "step-1",
-        "text": "Inspect existing visual context and constraints."
+        "text": "Main inspects the requested scope, existing visual context, implementation boundary, and constraints."
       },
       {
         "id": "step-2",
-        "text": "Choose a direction."
+        "text": "Have designer choose a bounded visual direction from the supplied context and constraints."
       },
       {
         "id": "step-3",
-        "text": "Create or refine the design."
+        "text": "Have designer create or refine one design or source revision without taking ownership of non-visual stages."
       },
       {
         "id": "step-4",
-        "text": "Review hierarchy, spacing, typography, responsiveness, accessibility, and states."
+        "text": "Main reconciles that revision against scope and implementation constraints, then binds or renders one identified current revision."
       },
       {
         "id": "step-5",
-        "text": "Verify in the relevant renderer."
+        "text": "Have visioner independently and read-only review the current render or layout for hierarchy, spacing, typography, responsiveness, accessibility, and states."
       }
     ],
     "scopeNotes": [
+      ...VISUAL_AGENT_SCOPE_NOTES,
       "Publication and deployment are separate workflow steps."
     ],
     "skills": [
@@ -192,11 +198,14 @@ export const operationWorkflows = [
     ],
     "riskNotes": [],
     "roles": [
-      "designer"
+      "designer",
+      "visioner"
     ],
     "delegation": [
-      "steps-1-4: designer owns the bounded visual direction, implementation, and refinement while preserving the requested scope",
-      "step-5: the parent reconciles rendered evidence and composes diagram.svg, diagram.tikz, slides.generate, or slides.modify when independent medium-specific review is required"
+      "step-2: designer owns the bounded visual direction",
+      "step-3: designer owns the design or source revision while preserving the requested scope",
+      "step-4: the parent reconciles scope and binds or renders one identified current revision",
+      "step-5: visioner independently and read-only reviews that current render or layout"
     ]
   },
   {

@@ -7,7 +7,7 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 
 ## `slides.generate`
 
-- Primary when: The user wants a new LaTeX Beamer deck, with template and story decisions completed before frame authoring.
+- Primary when: New LaTeX Beamer deck requiring template/story decisions before frame authoring.
 - Reference steps:
   1. [step-1] Inspect project instructions, the template, compiler, and any explicitly supplied conversion command.
   2. [step-2] Validate template readiness through the Beamer entry point, theme, logo decision, layout assets, and a compile smoke.
@@ -29,6 +29,8 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 - Quality checks:
   - template readiness, committed story outline, post-layout semantic and LaTeX preservation, output-language writing compliance, Beamer structure, zero unintended text and image overlap, no crowding or clipping, readable typography, undistorted images, balanced spacing, current-revision rendered evidence, compile evidence, and user-command conversion evidence when requested
 - Scope notes:
+  - Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
+  - When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop.
   - Template discussion precedes story discussion when configuration is incomplete.
   - A familiar template or converter is not a substitute for the user-selected template or command.
   - When Main delegates, the designer owns slide-layout changes and the visioner remains read-only; source inspection, compile success, or author self-review does not replace current-revision visual evidence.

@@ -7,7 +7,7 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 
 ## `diagram.tikz`
 
-- Primary when: TikZ paper diagrams need editable source plus PDF/SVG/PNG evidence.
+- Primary when: Editable TikZ paper diagram with PDF/SVG/PNG evidence.
 - Reference steps:
   1. [step-1] Main confirms the user-project output path, intended paper or slide context, fixed pdfLaTeX compatibility, and target width, then requires a semantic figure spec with stable node and edge IDs, labels, branch semantics, groups, primary flow direction, accessibility text, and an asset manifest.
   2. [step-2] Have designer search the pinned OpenTikZ catalog, select the smallest matching icon, template, or example, copy it into the user project without modifying the library, read the chosen template's edit_contract, and prepare the semantic figure spec plus asset manifest while preserving parameters, invariants, palette roles, and semantic node naming.
@@ -26,6 +26,8 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 - Quality checks:
   - semantic completeness and stable IDs, OpenTikZ edit-contract and dependency preservation, asset provenance and portability, safe standalone compile, revision-bound PDF and SVG, current-revision full-size and 60% raster evidence, independent visual review, icon legibility, explicit raster disclosure, Main finding disposition, and requested paper or slide fit
 - Scope notes:
+  - Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
+  - When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop.
   - The pinned OpenTikZ library is read-only; copy selected content into the declared user-project target before editing it.
   - Main retains exclusive ownership of optional OMP imagegen calls, host permission and external-effect decisions, prepared-asset acceptance, integration, and final verification; designer and visioner do not gain that authority.
   - Imagegen is optional and its visibility or activation is not permission, a workflow requirement, or a reason to invent an asset; a native TikZ or OpenTikZ fallback remains valid.

@@ -97,7 +97,7 @@ test('compact workflow Skill teaches primary-plus-add-on composition with exact 
   assert.match(index, /COMMIT HANDOFF \(soft\):[\s\S]*after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable[\s\S]*next response begins `W`[\s\S]*bare IDs[\s\S]*initializes native TODO only[\s\S]*Project tools start only after the READY \+ TODO response ends and its results return/i);
   assert.doesNotMatch(index, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
   assert.match(index, /`code\.dev` — [^\n]*no OMP plugin, database, ML, network, writing, research, design, or release card better owns the central deliverable/iu);
-  assert.match(index, /`design\.visual` — [^\n]*standalone `?diagram\.svg`? and `?slides\.\*`? keep their specialized Primary[^\n]*separate visual-design work/iu);
+  assert.match(index, /VISUAL:[^\n]*non-visual Primary[^\n]*`design\.visual` Add-on[^\n]*standalone slide\/SVG\/TikZ[^\n]*specialized Primary[^\n]*separate visual-design work\/output/iu);
   assert.match(index, /Format-only => format Primary/iu);
   assert.match(index, /Converters\/templates only when requested/iu);
   assert.match(
@@ -252,7 +252,8 @@ test('compact workflow Skill teaches primary-plus-add-on composition with exact 
 test('the consolidated code lifecycle uses plan plus native task and reviewer', () => {
   assert.deepEqual(workflowCatalog['code.dev'].roles, ['plan', 'task', 'reviewer']);
   assert.deepEqual(workflowCatalog['code.dev'].skills, ['code-development']);
-  assert.deepEqual(workflowCatalog['design.visual'].roles, ['designer']);
+  assert.equal(workflowCatalog['design.visual'].roles.includes('designer'), true);
+  assert.equal(workflowCatalog['design.visual'].roles.includes('visioner'), true);
 });
 
 test('workflow Skill discovery distinguishes direct URIs from exact nested ECC URIs', () => {

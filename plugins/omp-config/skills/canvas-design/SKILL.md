@@ -1,6 +1,6 @@
 ---
 name: canvas-design
-description: Create static visual artifacts such as posters, images, and layouts with intentional composition, typography, and export constraints.
+description: Create static visual artifacts with designer-owned revisions, current export evidence, and independent visioner visual QA.
 ---
 
 # Canvas design
@@ -11,6 +11,18 @@ complete proposed artifact or diff. Main or a separate explicitly capable
 Main-selected Agent owns authorized effects.
 
 Use this when the user asks for a poster, static visual artifact, or exportable visual layout.
+
+## Coordinate design and current-export review
+
+For every static visual design or revision, use a currently exposed `designer`
+for the design checkpoint and a currently exposed `visioner` for the later
+independent review when each assignment is safe and complete.
+
+1. `designer` owns the design and revision checkpoint. Supply the artifact brief, intended dimensions, audience, message, existing visual system, output constraints, and preservation requirements. The designer returns a bounded design revision, not completion permission.
+2. Main reconciles and integrates that revision within the authorized scope. Main binds one revision identifier to the source and its exact current revision, then produces a fresh intended-size export plus a useful reduced preview when relevant. Carry that one revision identifier through the source, exports, preview, and review request; never mix pre-designer, stale, or differently identified evidence.
+3. `visioner` independently reviews only that current-revision evidence, read-only, for hierarchy, composition, alignment, spacing, typography, clipping, contrast, image treatment, and export fidelity. Main review, source checks, static checks, and designer self-review do not count as independent visioner evidence.
+
+If `designer` is unavailable, record the specific unfulfilled design checkpoint and the Agent fallback reason. If `visioner` is unavailable, record the missing independent current-revision visual evidence. Findings remain advisory for Main to disposition. This evidence chain does not route, block, select a fanout, launch repairs, or decide completion.
 
 1. Define the artifact size, audience, message, and visual hierarchy.
 2. Use original composition, color, typography, and spacing.

@@ -64,7 +64,11 @@ The subagent-driven card performs these stages:
 7. Main dispositions findings. A supported material finding may produce one bounded designer repair and at most one fresh affected visual review.
 8. Deliver `.tex`, semantic spec, local assets and manifest, current renders, commands/evidence, assumptions, alt text, and unresolved limitations.
 
-`designer` owns bounded source revisions when visible. `visioner` is read-only. Main owns project integration, native imagegen calls, permissions, external effects, finding disposition, final verification, and delivery. Missing Agents or capabilities produce a concrete fallback reason; they do not create a gate.
+For `diagram.tikz`, the normal compiled dependency chain is `designer` -> Main -> `visioner` when the matching Agents are exposed, assignment input is complete, and delegation is safe. `designer` owns a complete design and source-revision checkpoint. Main integrates that delivery, resolves optional imagegen assets and permissions, binds and renders the exact current revision, and only then gives its fresh full-size and 60% evidence to `visioner` for an independent read-only layout and legibility check. Main retains finding disposition, final verification, and delivery.
+
+The same ownership pattern applies across the current non-simple visual workflows: `design.visual`, `diagram.svg`, `diagram.tikz`, `slides.generate`, and `slides.modify` use `designer` for a complete design or revision checkpoint, Main for integration and fresh rendering, and `visioner` for a fresh current-revision render check. Each selected workflow still supplies its own medium-specific spec, renderer, evidence, and acceptance criteria; this pattern does not collapse those workflows into TikZ.
+
+If designer is unavailable, the affected TODO and final evidence preserve the precise unfulfilled checkpoint and permitted Agent-availability fallback; Main does not silently relabel its own work as designer evidence. If visioner is unavailable, record missing independent current-revision visual evidence. Compile, source, and static checks, designer self-review, and Main self-review do not replace that evidence. These are explicit evidence gaps rather than host enforcement: no dispatch, fixed fanout, routing, retry, permission, or completion decision is created by the Skill or workflow card.
 
 ## Imagegen asset branch
 

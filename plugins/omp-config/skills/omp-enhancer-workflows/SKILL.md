@@ -33,11 +33,12 @@ STATE: DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY.
 
 Main owns delegation; OMP owns tools, permissions, TODO, Agents, and completion.
 
-PROSE: English draft/revision -> `writing.en`; Chinese -> `writing.zh`; unknown body -> `writing.pending`. Other central operation => language Add-on. Language Primary + `.tex` target, LaTeX prose, or preserved LaTeX commands => `writing.latex` Add-on. Direct standalone SVG -> `diagram.svg`; editable TikZ `.tex`/PDF/SVG/PNG -> `diagram.tikz`. TikZ source alone does not add `writing.latex`. Format-only => format Primary. Converters/templates only when requested. Loaded language card + target/constraints/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read.
+PROSE: English draft/revision -> `writing.en`; Chinese -> `writing.zh`; unknown body -> `writing.pending`. Other central operation => language Add-on. Language Primary + `.tex` target/LaTeX prose/preserved LaTeX commands => `writing.latex` Add-on. Direct standalone SVG -> `diagram.svg`; editable TikZ `.tex`/PDF/SVG/PNG -> `diagram.tikz`; TikZ source alone does not add `writing.latex`. Format-only => format Primary. Converters/templates only when requested. Loaded language card + target/constraints/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read.
+VISUAL: Non-visual Primary + independently requested UI/layout/static-visual deliverable => `design.visual` Add-on. Standalone slide/SVG/TikZ stays specialized Primary; add `design.visual` only for separate visual-design work/output.
 
 ## Domain index
 
-SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select only a URI that matches the requested method, evidence rule, verdict, or format. `D` is direct; `C` is exact nested ECC. An enumerated `C` URI goes directly in PLAN/NOW. `skill://ecc-skill-catalog` remains only for unlisted niche discovery; refs stay in THEN.
+SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select only a URI that matches the requested method, evidence rule, verdict, or format. An enumerated `C` URI goes directly in PLAN/NOW. `skill://ecc-skill-catalog` remains only for unlisted niche discovery; refs stay in THEN.
 
 ### general
 
@@ -59,10 +60,10 @@ SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select on
 
 #### specialized outputs
 
-- `slides.generate` — The user wants a new LaTeX Beamer deck, with template and story decisions completed before frame authoring. D=[`skill://latex-beamer-slides`, `skill://slides-storyline`, `skill://beamer-to-powerpoint`]. PLAN URI: `skill://omp-enhancer-workflows/references/slides.generate.md`.
-- `slides.modify` — The user wants bounded wording, language, or existing-style changes to a current LaTeX Beamer deck. D=[`skill://latex-beamer-slides`]. PLAN URI: `skill://omp-enhancer-workflows/references/slides.modify.md`.
-- `diagram.svg` — The user wants a standalone SVG workflow, process, block, or box diagram with strict monochrome geometry and rendered visual QA. D=[`skill://svg-flowchart`]. PLAN URI: `skill://omp-enhancer-workflows/references/diagram.svg.md`.
-- `diagram.tikz` — TikZ paper diagrams need editable source plus PDF/SVG/PNG evidence. D=[`skill://tikz-diagram`]. PLAN URI: `skill://omp-enhancer-workflows/references/diagram.tikz.md`.
+- `slides.generate` — New LaTeX Beamer deck requiring template/story decisions before frame authoring. D=[`skill://latex-beamer-slides`, `skill://slides-storyline`, `skill://beamer-to-powerpoint`]. PLAN URI: `skill://omp-enhancer-workflows/references/slides.generate.md`.
+- `slides.modify` — Bounded wording, language, or existing-style changes to a current LaTeX Beamer deck. D=[`skill://latex-beamer-slides`]. PLAN URI: `skill://omp-enhancer-workflows/references/slides.modify.md`.
+- `diagram.svg` — Standalone monochrome SVG workflow/process/block/box diagram with rendered visual QA. D=[`skill://svg-flowchart`]. PLAN URI: `skill://omp-enhancer-workflows/references/diagram.svg.md`.
+- `diagram.tikz` — Editable TikZ paper diagram with PDF/SVG/PNG evidence. D=[`skill://tikz-diagram`]. PLAN URI: `skill://omp-enhancer-workflows/references/diagram.tikz.md`.
 
 ### research
 
@@ -100,7 +101,7 @@ SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select on
 
 - `omp.plugin` — The target is an OMP plugin, the omp-enhancer monorepo, or an isolated self-development fixture: workflows, Skills, Agents, prompts, reminders, hooks, config assets, packaging, or E2E. D=[`skill://code-development`]. PLAN URI: `skill://omp-enhancer-workflows/references/omp.plugin.md`.
 - `security.review` — The task explicitly reviews security trust boundaries, vulnerability impact, or remediation. C=[`skill://ecc-skill-catalog/security-review/SKILL.md`, `skill://ecc-skill-catalog/security-scan/SKILL.md`]. PLAN URI: `skill://omp-enhancer-workflows/references/security.review.md`.
-- `design.visual` — UI/visual/layout/interaction design; standalone diagram.svg and slides.* keep their specialized Primary unless separate visual-design work is requested; likewise diagram.tikz. D=[`skill://frontend-design`, `skill://canvas-design`]. PLAN URI: `skill://omp-enhancer-workflows/references/design.visual.md`.
+- `design.visual` — Independent UI/layout/interaction/static visual work/output. D=[`skill://frontend-design`, `skill://canvas-design`]. PLAN URI: `skill://omp-enhancer-workflows/references/design.visual.md`.
 - `release.opensource` — The user wants to prepare a private or internal project as a sanitized, documented public-release candidate in a separate staging area. D=[`skill://code-development`] C=[`skill://ecc-skill-catalog/opensource-pipeline/SKILL.md`, `skill://ecc-skill-catalog/safety-guard/SKILL.md`]. PLAN URI: `skill://omp-enhancer-workflows/references/release.opensource.md`.
 - `release.publish` — The user explicitly asks to commit, push, publish, deploy, version, upgrade, or synchronize an installed artifact. D=[`skill://conventional-commits`, `skill://finishing-a-development-branch`]. PLAN URI: `skill://omp-enhancer-workflows/references/release.publish.md`.
 

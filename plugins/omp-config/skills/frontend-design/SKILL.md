@@ -1,6 +1,6 @@
 ---
 name: frontend-design
-description: Design or refine production web interfaces with clear visual hierarchy, layout, typography, color, and interaction states.
+description: Design or refine production web interfaces with designer-owned revisions, current responsive render evidence, and independent visioner visual QA.
 ---
 
 # Frontend design
@@ -11,6 +11,18 @@ complete proposed artifact or diff. Main or a separate explicitly capable
 Main-selected Agent owns authorized effects.
 
 Use this when the requested deliverable is visual UI design or UI polish.
+
+## Coordinate design and current-render review
+
+For every visual UI design or revision, use a currently exposed `designer` for
+the design checkpoint and a currently exposed `visioner` for the later
+independent review when each assignment is safe and complete.
+
+1. `designer` owns the design and revision checkpoint. Supply the product intent, existing visual system, requested scope, responsive targets, reachable interaction states, and preservation constraints. The designer returns a bounded design revision, not completion permission.
+2. Main reconciles and integrates that revision within the authorized scope. Main binds one revision identifier to the integrated UI and its exact current revision, runs it in the intended renderer, and captures fresh evidence for the required responsive viewports and relevant interaction states. Carry that one revision identifier through the implementation, screenshots, state labels, and review request; never mix pre-designer, stale, or differently identified evidence.
+3. `visioner` independently reviews only that current-revision evidence, read-only, for hierarchy, alignment, spacing, typography, clipping, overflow, contrast, state clarity, and cross-viewport consistency. Main review, source checks, static checks, and designer self-review do not count as independent visioner evidence.
+
+If `designer` is unavailable, record the specific unfulfilled design checkpoint and the Agent fallback reason. If `visioner` is unavailable, record the missing independent current-revision visual evidence. Findings remain advisory for Main to disposition. This evidence chain does not route, block, select a fanout, launch repairs, or decide completion.
 
 ## Work from the product system
 

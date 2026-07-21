@@ -1,3 +1,8 @@
+const VISUAL_AGENT_SCOPE_NOTES = [
+  "Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.",
+  "When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop."
+];
+
 export const writingWorkflows = [
   {
     "id": "writing.pending",
@@ -222,7 +227,7 @@ export const writingWorkflows = [
   },
   {
     "id": "slides.generate",
-    "chooseWhen": "The user wants a new LaTeX Beamer deck, with template and story decisions completed before frame authoring.",
+    "chooseWhen": "New LaTeX Beamer deck requiring template/story decisions before frame authoring.",
     "composeWith": [
       "writing.zh",
       "writing.en",
@@ -284,6 +289,7 @@ export const writingWorkflows = [
       }
     ],
     "scopeNotes": [
+      ...VISUAL_AGENT_SCOPE_NOTES,
       "Template discussion precedes story discussion when configuration is incomplete.",
       "A familiar template or converter is not a substitute for the user-selected template or command.",
       "When Main delegates, the designer owns slide-layout changes and the visioner remains read-only; source inspection, compile success, or author self-review does not replace current-revision visual evidence."
@@ -309,7 +315,7 @@ export const writingWorkflows = [
   },
   {
     "id": "slides.modify",
-    "chooseWhen": "The user wants bounded wording, language, or existing-style changes to a current LaTeX Beamer deck.",
+    "chooseWhen": "Bounded wording, language, or existing-style changes to a current LaTeX Beamer deck.",
     "composeWith": [
       "writing.pending",
       "writing.zh",
@@ -356,6 +362,7 @@ export const writingWorkflows = [
       }
     ],
     "scopeNotes": [
+      ...VISUAL_AGENT_SCOPE_NOTES,
       "Do not reopen template selection or story planning for an ordinary modification.",
       "A path-only request remains language-pending until the target body is read.",
       "Do not widen scope to unrelated pre-existing layout defects; shared template or macro changes expand visual review to every page they can affect.",
@@ -380,7 +387,7 @@ export const writingWorkflows = [
   },
   {
     "id": "diagram.svg",
-    "chooseWhen": "The user wants a standalone SVG workflow, process, block, or box diagram with strict monochrome geometry and rendered visual QA.",
+    "chooseWhen": "Standalone monochrome SVG workflow/process/block/box diagram with rendered visual QA.",
     "composeWith": [
       "design.visual",
       "slides.generate",
@@ -414,6 +421,7 @@ export const writingWorkflows = [
       }
     ],
     "scopeNotes": [
+      ...VISUAL_AGENT_SCOPE_NOTES,
       "When Main delegates, the designer owns SVG changes and the visioner remains read-only; the main agent coordinates revisions.",
       "Do not substitute source inspection or author self-review for independent rendered evidence.",
       "Review only fresh revisions; do not rerun unchanged reviews."
@@ -437,7 +445,7 @@ export const writingWorkflows = [
   },
   {
     "id": "diagram.tikz",
-    "chooseWhen": "TikZ paper diagrams need editable source plus PDF/SVG/PNG evidence.",
+    "chooseWhen": "Editable TikZ paper diagram with PDF/SVG/PNG evidence.",
     "composeWith": [
       "design.visual",
       "slides.generate",
@@ -480,6 +488,7 @@ export const writingWorkflows = [
       }
     ],
     "scopeNotes": [
+      ...VISUAL_AGENT_SCOPE_NOTES,
       "The pinned OpenTikZ library is read-only; copy selected content into the declared user-project target before editing it.",
       "Main retains exclusive ownership of optional OMP imagegen calls, host permission and external-effect decisions, prepared-asset acceptance, integration, and final verification; designer and visioner do not gain that authority.",
       "Imagegen is optional and its visibility or activation is not permission, a workflow requirement, or a reason to invent an asset; a native TikZ or OpenTikZ fallback remains valid.",
