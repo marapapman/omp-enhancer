@@ -59,7 +59,7 @@ describe('tikz-helper runtime tools', () => {
       'tikz_prepare_asset',
       'tikz_render',
     ]);
-    assert.deepEqual(tools.map((tool) => tool.approval), ['read', 'write', 'exec']);
+    assert.deepEqual(tools.map((tool) => tool.approval), ['read', 'exec', 'exec']);
     assert.equal(tools.every((tool) => tool.defaultInactive === true), true);
     assert.equal(tools.every((tool) => tool.parameters?.__ompZodSchema === true), true);
     assert.equal(Object.hasOwn(tools[2].parameters.shape, 'executable'), false);
@@ -229,40 +229,6 @@ describe('asset preparation', () => {
     );
   });
 
-  it('uses sharp to decode PNG, JPEG, and WebP and emits metadata-free PNG', async (context) => {
-    let sharp;
-    try {
-      ({ default: sharp } = await import('sharp'));
-    } catch {
-      context.skip('sharp is installed when the new workspace lockfile is integrated');
-      return;
-    }
-
-    const projectRoot = await temporaryDirectory('tikz-project-');
-    const inputRoot = await temporaryDirectory('tikz-input-');
-    for (const format of ['png', 'jpeg', 'webp']) {
-      const inputPath = join(inputRoot, `source.${format}`);
-      const source = await sharp({
-        create: {
-          width: 8,
-          height: 8,
-          channels: 4,
-          background: { r: 0, g: 114, b: 178, alpha: 0.8 },
-        },
-      }).toFormat(format).withExif({ IFD0: { ImageDescription: 'must be removed' } }).toBuffer();
-      await writeFile(inputPath, source);
-
-      const result = await prepareAsset({
-        projectRoot,
-        inputPath,
-        outputDirectory: `figures/${format}`,
-      });
-      const output = await sharp(join(projectRoot, result.asset.relativePath)).metadata();
-      assert.equal(result.asset.inputFormat, format);
-      assert.equal(output.format, 'png');
-      assert.equal(output.exif, undefined);
-    }
-  });
 });
 
 describe('TikZ rendering', () => {

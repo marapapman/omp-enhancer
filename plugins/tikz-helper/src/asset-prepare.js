@@ -1,17 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
 import {
   lstat,
+  open,
   readFile,
   realpath,
   rename,
   rm,
-  stat,
   writeFile,
 } from 'node:fs/promises';
 import { isAbsolute, win32 } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { sharpImageProcessor } from './image-processor.js';
+import { imageMagickImageProcessor } from './image-processor.js';
 import {
   assertWritableProjectFile,
   ensureProjectDirectory,
@@ -26,6 +27,7 @@ const DEFAULT_OUTPUT_DIRECTORY = 'figures/tikz/assets';
 const MANIFEST_NAME = 'assets.manifest.json';
 const MAX_INPUT_BYTES = 25 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
+const SOURCE_READ_CHUNK_BYTES = 64 * 1024;
 
 function optionalText(value, label, maxLength) {
   if (value === undefined || value === null || value === '') return undefined;
@@ -74,15 +76,89 @@ async function resolveInputImage(projectRoot, inputPath) {
   return resolved;
 }
 
-async function readBoundedFile(path, maximumBytes, code) {
-  const metadata = await stat(path);
-  if (metadata.size > maximumBytes) {
-    throw new TikzRuntimeError(code, `File exceeds the ${maximumBytes}-byte safety limit.`, {
-      bytes: metadata.size,
-      maximumBytes,
+function throwIfSourceReadAborted(signal) {
+  if (signal?.aborted) {
+    throw new TikzRuntimeError('IMAGE_READ_ABORTED', 'Reading the input image was aborted.');
+  }
+}
+
+function sourceOpenFlags() {
+  const noFollow = process.platform === 'win32' ? 0 : (fsConstants.O_NOFOLLOW ?? 0);
+  return fsConstants.O_RDONLY | noFollow;
+}
+
+async function readBoundedSource(path, options = {}) {
+  const maximumBytes = Number.isInteger(options.maximumBytes)
+    && options.maximumBytes > 0
+    && options.maximumBytes <= MAX_INPUT_BYTES
+    ? options.maximumBytes
+    : MAX_INPUT_BYTES;
+  throwIfSourceReadAborted(options.signal);
+
+  let fileHandle;
+  try {
+    fileHandle = await open(path, sourceOpenFlags());
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ELOOP') {
+      throw new TikzRuntimeError('INPUT_SYMLINK', 'inputPath must not be a symbolic link.');
+    }
+    const missing = error && typeof error === 'object' && error.code === 'ENOENT';
+    throw new TikzRuntimeError(missing ? 'FILE_NOT_FOUND' : 'IMAGE_READ_FAILED', `Unable to open inputPath: ${path}`, {
+      cause: error instanceof Error ? error.message : String(error),
     });
   }
-  return readFile(path);
+
+  let operationFailed = false;
+  try {
+    const metadata = await fileHandle.stat();
+    if (!metadata.isFile()) {
+      throw new TikzRuntimeError('INVALID_FILE', 'inputPath must identify a regular file.');
+    }
+    if (metadata.size > maximumBytes) {
+      throw new TikzRuntimeError('IMAGE_TOO_LARGE', `File exceeds the ${maximumBytes}-byte safety limit.`, {
+        bytes: metadata.size,
+        maximumBytes,
+      });
+    }
+    await options.afterStat?.({ fileHandle, metadata, path });
+
+    const chunks = [];
+    let bytes = 0;
+    while (bytes <= maximumBytes) {
+      throwIfSourceReadAborted(options.signal);
+      const remaining = maximumBytes + 1 - bytes;
+      if (remaining === 0) break;
+      const chunk = Buffer.allocUnsafe(Math.min(SOURCE_READ_CHUNK_BYTES, remaining));
+      const { bytesRead } = await fileHandle.read(chunk, 0, chunk.length, null);
+      throwIfSourceReadAborted(options.signal);
+      if (bytesRead === 0) break;
+      chunks.push(chunk.subarray(0, bytesRead));
+      bytes += bytesRead;
+    }
+    if (bytes > maximumBytes) {
+      throw new TikzRuntimeError('IMAGE_TOO_LARGE', `File exceeds the ${maximumBytes}-byte safety limit.`, {
+        bytes,
+        maximumBytes,
+      });
+    }
+    return Buffer.concat(chunks, bytes);
+  } catch (error) {
+    operationFailed = true;
+    if (error instanceof TikzRuntimeError) throw error;
+    throw new TikzRuntimeError('IMAGE_READ_FAILED', 'Unable to read the input image safely.', {
+      cause: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    try {
+      await fileHandle.close();
+    } catch (error) {
+      if (!operationFailed) {
+        throw new TikzRuntimeError('IMAGE_READ_FAILED', 'Unable to close the input image safely.', {
+          cause: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
 }
 
 async function writeContentAddressedFile(path, buffer) {
@@ -170,10 +246,13 @@ export async function prepareAsset(input = {}, options = {}) {
   const prompt = optionalText(input.prompt, 'prompt', 8_000);
   const provider = optionalText(input.provider, 'provider', 160);
   const model = optionalText(input.model, 'model', 160);
-  const processor = options.processor ?? sharpImageProcessor;
+  const processor = options.processor ?? imageMagickImageProcessor;
 
-  const sourceBuffer = await readBoundedFile(inputPath, MAX_INPUT_BYTES, 'IMAGE_TOO_LARGE');
-  const normalized = await processor.normalize(sourceBuffer);
+  const sourceBuffer = await readBoundedSource(inputPath, {
+    ...options.sourceRead,
+    signal: options.signal,
+  });
+  const normalized = await processor.normalize(sourceBuffer, { signal: options.signal });
   if (!normalized || !Buffer.isBuffer(normalized.buffer)) {
     throw new TikzRuntimeError('IMAGE_NORMALIZATION_FAILED', 'The image processor returned no PNG buffer.');
   }
@@ -231,7 +310,8 @@ export async function prepareAsset(input = {}, options = {}) {
     operations: {
       networkAccess: false,
       imageGeneration: false,
-      normalizedWith: 'sharp',
+      normalizedWith: 'imagemagick',
+      command: normalized.evidence ?? null,
     },
   };
 }

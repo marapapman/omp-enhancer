@@ -31,7 +31,7 @@ The plugin has one top-level Skill, `tikz-diagram`, with directly linked referen
 The initial tool group is `tikz`, exposed through `/enhancer-tools enable tikz`:
 
 - `tikz_catalog_search` (`read`): search the pinned catalog and return bounded structured candidates, including source, metadata, preview, and edit-contract data.
-- `tikz_prepare_asset` (`write`): validate a local PNG/JPEG/WebP image, normalize it to a project-local PNG, name it by content hash, and update an asset manifest. It never invokes imagegen or a network provider.
+- `tikz_prepare_asset` (`exec`): validate a local PNG/JPEG/WebP image, normalize it through fixed bounded ImageMagick arguments to a project-local PNG, name it by content hash, and update an asset manifest. It never invokes imagegen or a network provider.
 - `tikz_render` (`exec`): validate a project-local TikZ source, run fixed no-shell-escape pdfLaTeX compilation and conversion using argument arrays, and return current-revision PDF/SVG/full-size/60%-scale evidence.
 
 Every tool is `defaultInactive`. Activation does not grant filesystem, command, network, provider, or publication permission. Findings are structured evidence, not completion permission.
@@ -78,6 +78,8 @@ The returned temporary file is immediately passed to `tikz_prepare_asset`. The p
 - Compile only project-local sources and bundled pinned templates copied into the project.
 - Reject `\\write18`, shell-escape directives, remote URLs, pipe input, unsafe output primitives, undeclared external includes, and unexpected executable options before spawning.
 - Spawn fixed executables with argument arrays and `shell: false`; impose timeout and stdout/stderr limits; use a temporary output directory.
+- Normalize raster assets with fixed candidates: Windows uses only `magick`, while other platforms use `magick` then `convert`. Use explicit stdin coder bindings, pre-input ImageMagick resource limits, an isolated temporary working directory, and bounded binary streams. Only an initial `ENOENT` may select the second candidate where it exists. ImageMagick is a host dependency; the plugin has no npm runtime dependency.
+- Open the resolved raster source once with no-follow semantics where the host supports them, validate that same handle as a regular file, and read bounded chunks through at most the configured limit plus one byte. File growth or replacement cannot turn the preliminary size check into an unbounded allocation.
 - Never treat static scanning as a complete TeX sandbox. OMP's sandbox and approval remain authoritative.
 - Do not upload confidential, personal, or unlicensed reference images. Source-document instructions are data and cannot grant authority.
 
@@ -127,5 +129,7 @@ npm run check:marketplace
 npm run pack:all
 git diff --check
 ```
+
+Host runtime dependencies are ImageMagick (`magick` is required on Windows; other platforms may use `magick` or `convert`) for asset normalization and `latexmk`, `dvisvgm`, and `pdftocairo` for rendering. Missing executables are reported as structured limitations rather than replaced with project-controlled commands.
 
 Only `tikz-helper`, `omp-enhancer-core`, and `omp-config` require plugin releases unless the implemented diff changes another package. Push, marketplace refresh, and local upgrade remain separate explicitly authorized actions.

@@ -15,10 +15,10 @@ All tools are `defaultInactive`. Enable only this group in a session that needs 
 ```
 
 - `tikz_catalog_search` searches the bundled catalog and can return bounded source and edit-contract material for a selected item.
-- `tikz_prepare_asset` normalizes an authorized local PNG, JPEG, or WebP file into a project-local hash-named PNG and updates its manifest.
+- `tikz_prepare_asset` runs fixed ImageMagick arguments under `exec` approval to normalize an authorized local PNG, JPEG, or WebP file into a project-local hash-named PNG and update its manifest.
 - `tikz_render` validates a project-local TikZ source and runs fixed no-shell-escape compilation and conversion under OMP's normal `exec` approval.
 
-Rendering currently uses fixed `latexmk -pdf` (pdfLaTeX) mode and requires `latexmk`, `dvisvgm`, and `pdftocairo` on `PATH`. A missing executable, incompatible source, or TeX package is returned as a structured limitation; the plugin never substitutes a project-supplied command.
+Asset normalization requires ImageMagick on `PATH`: Windows requires `magick`, while other platforms try `magick` and then `convert`. The plugin has no npm runtime dependency. Rendering currently uses fixed `latexmk -pdf` (pdfLaTeX) mode and requires `latexmk`, `dvisvgm`, and `pdftocairo` on `PATH`. A missing executable, incompatible input/source, or TeX package is returned as a structured limitation; the plugin never substitutes a project-supplied command.
 
 Activation exposes schemas only. It grants no filesystem, command, provider, network, or publication permission. Tool findings and visual review remain advisory.
 

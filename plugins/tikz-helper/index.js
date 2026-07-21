@@ -105,7 +105,7 @@ export default function registerTikzHelper(omp) {
     label: 'Prepare TikZ Node Asset',
     description: 'Normalize an existing PNG, JPEG, or WebP as a metadata-free, content-addressed PNG inside the project and merge its provenance manifest. This tool never generates an image or uses the network.',
     defaultInactive: true,
-    approval: 'write',
+    approval: 'exec',
     promptSnippet: 'Import and normalize an already-produced node icon for a TikZ figure.',
     promptGuidelines: [
       'Call image generation separately only when the current native tool is available and the user has authorized it.',
@@ -113,12 +113,12 @@ export default function registerTikzHelper(omp) {
       'Keep labels in TikZ rather than baking text into the raster asset.',
     ],
     parameters: assetParameters(z),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       try {
         return successResponse(await prepareAsset({
           ...objectParams(params),
           projectRoot: projectRoot(ctx),
-        }));
+        }, { signal }));
       } catch (error) {
         return errorResponse(error);
       }

@@ -1,6 +1,6 @@
 {
   "name": "tikz-helper",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "OMP TikZ and OpenTikZ workflow resources with opt-in catalog, asset preparation, and isolated rendering tools.",
@@ -18,9 +18,6 @@
   ],
   "scripts": {
     "test": "node --test test/*.test.js"
-  },
-  "dependencies": {
-    "sharp": "^0.35.3"
   },
   "omp": {
     "extensions": [
