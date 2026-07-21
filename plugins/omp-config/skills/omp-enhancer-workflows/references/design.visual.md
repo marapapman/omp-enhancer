@@ -12,18 +12,18 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
   1. [step-1] Main inspects the requested scope, existing visual context, implementation boundary, and constraints.
   2. [step-2] Have designer choose a bounded visual direction from the supplied context and constraints.
   3. [step-3] Have designer create or refine one design or source revision without taking ownership of non-visual stages.
-  4. [step-4] Main reconciles that revision against scope and implementation constraints, then binds or renders one identified current revision.
+  4. [step-4] Task renders one identified current revision. Designer reconciles that revision against scope and implementation constraints.
   5. [step-5] Have visioner independently and read-only review the current render or layout for hierarchy, spacing, typography, responsiveness, accessibility, and states.
-- Agent candidates: `designer`, `visioner`.
+- Agent candidates: `designer`, `task`, `visioner`.
 - Delegated checkpoints:
   - step-2: designer owns the bounded visual direction
   - step-3: designer owns the design or source revision while preserving the requested scope
-  - step-4: the parent reconciles scope and binds or renders one identified current revision
+  - step-4: task renders one identified current revision; designer reconciles scope
   - step-5: visioner independently and read-only reviews that current render or layout
 - Quality checks:
   - visual coherence, responsive behavior, accessibility, and rendered evidence
 - Scope notes:
-  - Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
+  - Visual-stage chain: designer owns the design or source revision; task owns rendering, compilation, and optional imagegen execution; visioner independently and read-only reviews the current render or layout. Main authorizes external-effect decisions during initial setup and accepts the final delivery. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
   - When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop.
   - Publication and deployment are separate workflow steps.
 - Risk notes:

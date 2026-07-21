@@ -150,7 +150,7 @@ test('slides workflows separate template-and-story generation from bounded modif
   const modify = workflowCatalog['slides.modify'];
 
   assert.deepEqual(generate.skills, ['latex-beamer-slides', 'slides-storyline', 'beamer-to-powerpoint']);
-  assert.deepEqual(generate.roles, ['designer', 'visioner']);
+  assert.deepEqual(generate.roles, ['designer', 'task', 'visioner']);
   assert.match(generate.steps[1], /template readiness/i);
   assert.match(generate.steps[2], /discuss its style, logo, aspect ratio, typography, and layout/i);
   assert.match(generate.steps[3], /commit.+numbered.+working outline.+ask only.+missing choice.+materially changes/i);
@@ -159,29 +159,35 @@ test('slides workflows separate template-and-story generation from bounded modif
   assert.match(generate.steps[7], /reconcile the layout revision.+committed outline.+semantic anchors.+LaTeX structure/i);
   assert.match(generate.steps[8], /recompile and render the layout revision.+revision identifier.+PDF.+render directory/i);
   assert.match(generate.steps[9], /independently inspect.+latest rendered pages.+overview or contact sheet.+APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/i);
-  assert.match(generate.steps[10], /accepted by Main.+bounded new layout revision.+at most one fresh affected.+do not review an unchanged artifact/i);
+  assert.match(generate.steps[10], /visual review finding.+bounded new layout revision.+recompile.+fresh rerenders.+reviewed at most once/i);
   assert.match(generate.steps.at(-1), /only when the user supplied a conversion command/i);
   assert.deepEqual(generate.delegation, [
+    'step-6: task owns compilation and rendering of every deck revision',
     'step-7: designer owns the final layout pass and every layout revision',
+    'step-8: designer reconciles the layout revision against committed scope',
+    'step-9: task recompiles and rerenders after every layout revision',
     'step-10: visioner independently reviews the latest rendered pages and deck overview',
-    'step-11: designer fixes material findings, the parent reconciles scope, and visioner reviews only fresh rerenders',
+    'step-11: designer fixes visioner findings, task rerenders, and visioner reviews only fresh rerenders',
   ]);
 
   assert.deepEqual(modify.skills, ['latex-beamer-slides']);
-  assert.deepEqual(modify.roles, ['designer', 'visioner']);
+  assert.deepEqual(modify.roles, ['designer', 'task', 'visioner']);
   assert.match(modify.steps[1], /slide body/i);
   assert.match(modify.steps[2], /only the requested wording, language-norm, and existing-style changes/i);
   assert.match(modify.steps[4], /final layout pass.+changed frames.+text and image overlap.+crowding/i);
   assert.match(modify.steps[5], /reconcile the layout revision.+requested semantic diff.+LaTeX anchors.+authorized scope/i);
   assert.match(modify.steps[6], /recompile and render the layout revision.+revision identifier.+PDF.+render directory/i);
   assert.match(modify.steps[7], /independently review.+latest renders.+APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/i);
-  assert.match(modify.steps[8], /accepted by Main.+bounded fix.+at most one fresh affected.+report.+unresolved/i);
+  assert.match(modify.steps[8], /visual review finding.+bounded fix.+recompile.+fresh rerenders.+reviewed at most once/i);
   assert.match(modify.scopeNotes.join(' '), /Do not reopen template selection or story planning/i);
   assert.match(modify.scopeNotes.join(' '), /Do not widen scope to unrelated pre-existing layout defects/i);
   assert.deepEqual(modify.delegation, [
+    'step-4: task owns compilation and rendering of every deck revision',
     'step-5: designer owns the bounded final layout pass and any resulting source revision',
+    'step-6: designer reconciles the layout revision against committed scope',
+    'step-7: task recompiles and rerenders after every layout revision',
     'step-8: visioner independently reviews the latest affected-page renders',
-    'step-9: designer fixes material findings, the parent reconciles scope, and visioner reviews only fresh rerenders',
+    'step-9: designer fixes visioner findings, task rerenders, and visioner reviews only fresh rerenders',
   ]);
   assert.doesNotMatch(`${generate.steps.join(' ')} ${modify.steps.join(' ')}`, /\b(?:designer|visioner)\b/i);
   assert.match(
@@ -194,20 +200,21 @@ test('SVG diagram workflow keeps creation neutral and exposes optional independe
   const diagram = workflowCatalog['diagram.svg'];
 
   assert.deepEqual(diagram.skills, ['svg-flowchart']);
-  assert.deepEqual(diagram.roles, ['designer', 'visioner']);
+  assert.deepEqual(diagram.roles, ['designer', 'task', 'visioner']);
   assert.deepEqual(diagram.delegation, [
     'step-2: designer creates the SVG and owns every source revision',
+    'step-3: task runs the static checker and renders full-size and 60% rasters',
     'step-4: visioner independently reviews the fresh full-size and 60% raster renders',
-    'step-5: designer applies findings and visioner reviews only the resulting new revision',
+    'step-5: designer applies visioner findings, task rerenders, and visioner reviews only the resulting new revision',
   ]);
   assert.match(diagram.steps[0], /node and edge model.+flow direction/i);
   assert.match(diagram.steps[1], /standalone SVG.+black and white.+straight or dashed lines.+orthogonal polylines.+no curved connectors/i);
   assert.match(diagram.steps[2], /render.+full size.+60%/i);
   assert.match(diagram.steps[3], /independently inspect.+latest rasters/i);
-  assert.match(diagram.steps[4], /accepted by Main.+new revision.+at most one fresh affected.+unchanged/i);
+  assert.match(diagram.steps[4], /visual review finding.+new revision.+rerun.+rendering.+reviewed at most once/i);
   assert.match(diagram.steps[5], /Report.+source validation.+rendered evidence.+remaining.+limitations.+no verdict.+completion/i);
   assert.doesNotMatch(diagram.steps.join(' '), /Deliver only after|maximum of three/i);
-  assert.match(diagram.scopeNotes.join(' '), /designer owns SVG changes.+visioner remains read-only/i);
+  assert.match(diagram.scopeNotes.join(' '), /Designer creates or revises the SVG, task renders, visioner reviews the renders/i);
   assert.match(diagram.scopeNotes.join(' '), /Do not substitute source inspection or author self-review for independent rendered evidence/i);
   assert.match(
     diagram.qualityChecks.join(' '),

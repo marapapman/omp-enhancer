@@ -15,23 +15,26 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
   4. [step-4] Compile and render the affected deck, then inspect the semantic diff and identify the changed frames and any pages whose layout they can influence.
   5. [step-5] Perform a final layout pass on the changed frames and affected pages, correcting text and image overlap, crowding, clipping, undersized text, image cropping, alignment, and spacing while preserving the existing visual style.
   6. [step-6] Reconcile the layout revision against the requested semantic diff, LaTeX anchors, and authorized scope; restore any unintended wording, math, citation, frame-order, or unrelated change before rendering.
-  7. [step-7] Recompile and render the layout revision; bind the revision identifier, PDF, render directory, fresh high-resolution affected-page renders, and a current full-deck overview or contact sheet.
+  7. [step-7] Have task recompile and render the layout revision; bind the revision identifier, PDF, render directory, fresh high-resolution affected-page renders, and a current full-deck overview or contact sheet.
   8. [step-8] Independently review the latest renders for layout errors, overlap, crowding, clipping, readability, image treatment, margins, and consistency with the existing deck, then record exactly APPROVED | CHANGES_REQUIRED | UNREVIEWABLE for that revision.
-  9. [step-9] For each material finding accepted by Main, make only the necessary bounded fix, have the parent reconcile semantics and scope, then recompile and create fresh rerenders before at most one fresh affected visual review; do not review an unchanged artifact and report any unresolved limitation.
-- Agent candidates: `designer`, `visioner`.
+  9. [step-9] For each visual review finding, make a bounded fix, recompile and create fresh rerenders, then the fresh rerenders are reviewed at most once; do not review an unchanged artifact and report any unresolved limitation.
+- Agent candidates: `designer`, `task`, `visioner`.
 - Delegated checkpoints:
+  - step-4: task owns compilation and rendering of every deck revision
   - step-5: designer owns the bounded final layout pass and any resulting source revision
+  - step-6: designer reconciles the layout revision against committed scope
+  - step-7: task recompiles and rerenders after every layout revision
   - step-8: visioner independently reviews the latest affected-page renders
-  - step-9: designer fixes material findings, the parent reconciles scope, and visioner reviews only fresh rerenders
+  - step-9: designer fixes visioner findings, task rerenders, and visioner reviews only fresh rerenders
 - Quality checks:
   - requested-scope preservation after every layout revision, source-language writing compliance, semantic and LaTeX anchor preservation, existing visual-style consistency, Beamer structure, zero unintended text and image overlap, no crowding or clipping, readable typography, undistorted images, balanced spacing, current-revision rendered evidence, and compile evidence when in scope
 - Scope notes:
-  - Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
+  - Visual-stage chain: designer owns the design or source revision; task owns rendering, compilation, and optional imagegen execution; visioner independently and read-only reviews the current render or layout. Main authorizes external-effect decisions during initial setup and accepts the final delivery. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
   - When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop.
   - Do not reopen template selection or story planning for an ordinary modification.
   - A path-only request remains language-pending until the target body is read.
   - Do not widen scope to unrelated pre-existing layout defects; shared template or macro changes expand visual review to every page they can affect.
-  - When Main delegates, the designer owns bounded layout revisions and the visioner remains read-only; review only evidence from the current revision.
+  - Designer owns bounded layout revisions, task renders, visioner reviews renders. Review only evidence from the current revision.
 - Risk notes:
   - none
 

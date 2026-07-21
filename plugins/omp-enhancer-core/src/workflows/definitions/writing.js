@@ -1,5 +1,5 @@
 const VISUAL_AGENT_SCOPE_NOTES = [
-  "Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.",
+  "Visual-stage chain: designer owns the design or source revision; task owns rendering, compilation, and optional imagegen execution; visioner independently and read-only reviews the current render or layout. Main authorizes external-effect decisions during initial setup and accepts the final delivery. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.",
   "When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop."
 ];
 
@@ -261,7 +261,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-6",
-        "text": "Compile and render the draft deck, retaining an initial PDF and page images for the layout pass."
+        "text": "Have task compile and render the draft deck, retaining an initial PDF and page images for the layout pass."
       },
       {
         "id": "step-7",
@@ -273,7 +273,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-9",
-        "text": "Recompile and render the layout revision; bind the revision identifier, PDF, render directory, fresh renders of every page, and an overview or contact sheet."
+        "text": "Have task recompile and render the layout revision; bind the revision identifier, PDF, render directory, fresh renders of every page, and an overview or contact sheet."
       },
       {
         "id": "step-10",
@@ -281,7 +281,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-11",
-        "text": "For each material finding accepted by Main, produce a bounded new layout revision, have the parent reconcile content and scope, then recompile and create fresh renders before at most one fresh affected visual review; do not review an unchanged artifact and report remaining findings."
+        "text": "For each visual review finding, produce a bounded new layout revision, recompile and create fresh renders, then the fresh rerenders are reviewed at most once; do not review an unchanged artifact and report remaining findings."
       },
       {
         "id": "step-12",
@@ -292,7 +292,7 @@ export const writingWorkflows = [
       ...VISUAL_AGENT_SCOPE_NOTES,
       "Template discussion precedes story discussion when configuration is incomplete.",
       "A familiar template or converter is not a substitute for the user-selected template or command.",
-      "When Main delegates, the designer owns slide-layout changes and the visioner remains read-only; source inspection, compile success, or author self-review does not replace current-revision visual evidence."
+      "The designer-visioner-task loop is self-contained: designer owns layout changes, task renders, visioner reviews renders. Source inspection or compile success does not replace current-revision visual evidence."
     ],
     "skills": [
       "latex-beamer-slides",
@@ -305,12 +305,16 @@ export const writingWorkflows = [
     "riskNotes": [],
     "roles": [
       "designer",
+      "task",
       "visioner"
     ],
     "delegation": [
+      "step-6: task owns compilation and rendering of every deck revision",
       "step-7: designer owns the final layout pass and every layout revision",
+      "step-8: designer reconciles the layout revision against committed scope",
+      "step-9: task recompiles and rerenders after every layout revision",
       "step-10: visioner independently reviews the latest rendered pages and deck overview",
-      "step-11: designer fixes material findings, the parent reconciles scope, and visioner reviews only fresh rerenders"
+      "step-11: designer fixes visioner findings, task rerenders, and visioner reviews only fresh rerenders"
     ]
   },
   {
@@ -350,7 +354,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-7",
-        "text": "Recompile and render the layout revision; bind the revision identifier, PDF, render directory, fresh high-resolution affected-page renders, and a current full-deck overview or contact sheet."
+        "text": "Have task recompile and render the layout revision; bind the revision identifier, PDF, render directory, fresh high-resolution affected-page renders, and a current full-deck overview or contact sheet."
       },
       {
         "id": "step-8",
@@ -358,15 +362,15 @@ export const writingWorkflows = [
       },
       {
         "id": "step-9",
-        "text": "For each material finding accepted by Main, make only the necessary bounded fix, have the parent reconcile semantics and scope, then recompile and create fresh rerenders before at most one fresh affected visual review; do not review an unchanged artifact and report any unresolved limitation."
-      }
+        "text": "For each visual review finding, make a bounded fix, recompile and create fresh rerenders, then the fresh rerenders are reviewed at most once; do not review an unchanged artifact and report any unresolved limitation."
+      },
     ],
     "scopeNotes": [
       ...VISUAL_AGENT_SCOPE_NOTES,
       "Do not reopen template selection or story planning for an ordinary modification.",
       "A path-only request remains language-pending until the target body is read.",
       "Do not widen scope to unrelated pre-existing layout defects; shared template or macro changes expand visual review to every page they can affect.",
-      "When Main delegates, the designer owns bounded layout revisions and the visioner remains read-only; review only evidence from the current revision."
+      "Designer owns bounded layout revisions, task renders, visioner reviews renders. Review only evidence from the current revision."
     ],
     "skills": [
       "latex-beamer-slides"
@@ -377,12 +381,16 @@ export const writingWorkflows = [
     "riskNotes": [],
     "roles": [
       "designer",
+      "task",
       "visioner"
     ],
     "delegation": [
+      "step-4: task owns compilation and rendering of every deck revision",
       "step-5: designer owns the bounded final layout pass and any resulting source revision",
+      "step-6: designer reconciles the layout revision against committed scope",
+      "step-7: task recompiles and rerenders after every layout revision",
       "step-8: visioner independently reviews the latest affected-page renders",
-      "step-9: designer fixes material findings, the parent reconciles scope, and visioner reviews only fresh rerenders"
+      "step-9: designer fixes visioner findings, task rerenders, and visioner reviews only fresh rerenders"
     ]
   },
   {
@@ -405,7 +413,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-3",
-        "text": "Run the static checker, render the current revision at full size and 60% scale, and retain fresh raster evidence."
+        "text": "Have task run the static checker, render the current revision at full size and 60% scale, and retain fresh raster evidence."
       },
       {
         "id": "step-4",
@@ -413,7 +421,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-5",
-        "text": "For each material finding accepted by Main, produce a new revision, rerun validation and rendering, then perform at most one fresh affected independent visual review; do not review an unchanged artifact and report remaining geometry failures."
+        "text": "For each visual review finding, produce a new revision, rerun validation and rendering, then the fresh rerenders are reviewed at most once; do not review an unchanged artifact and report remaining geometry failures."
       },
       {
         "id": "step-6",
@@ -422,7 +430,7 @@ export const writingWorkflows = [
     ],
     "scopeNotes": [
       ...VISUAL_AGENT_SCOPE_NOTES,
-      "When Main delegates, the designer owns SVG changes and the visioner remains read-only; the main agent coordinates revisions.",
+      "Designer creates or revises the SVG, task renders, visioner reviews the renders. No Main coordination required between revisions.",
       "Do not substitute source inspection or author self-review for independent rendered evidence.",
       "Review only fresh revisions; do not rerun unchanged reviews."
     ],
@@ -435,12 +443,14 @@ export const writingWorkflows = [
     "riskNotes": [],
     "roles": [
       "designer",
+      "task",
       "visioner"
     ],
     "delegation": [
       "step-2: designer creates the SVG and owns every source revision",
+      "step-3: task runs the static checker and renders full-size and 60% rasters",
       "step-4: visioner independently reviews the fresh full-size and 60% raster renders",
-      "step-5: designer applies findings and visioner reviews only the resulting new revision"
+      "step-5: designer applies visioner findings, task rerenders, and visioner reviews only the resulting new revision"
     ]
   },
   {
@@ -464,7 +474,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-3",
-        "text": "Main alone may use optional OMP imagegen for a missing node icon only when imagegen is visible, useful, authorized, and consistent with the request; never write into the OpenTikZ library. Main passes a returned local image through tikz_prepare_asset to create a normalized SHA-256-named project asset and records prompt, provider, model, hash, relative path, and raster disclosure in the asset manifest; otherwise retain a TikZ or OpenTikZ fallback."
+        "text": "Task may use optional OMP imagegen for a missing node icon only when imagegen is visible, useful, authorized by Main, and consistent with the request; never write into the OpenTikZ library. Task passes a returned local image through tikz_prepare_asset to create a normalized SHA-256-named project asset and records prompt, provider, model, hash, relative path, and raster disclosure in the asset manifest; otherwise retain a TikZ or OpenTikZ fallback."
       },
       {
         "id": "step-4",
@@ -472,7 +482,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-5",
-        "text": "Main invokes tikz_render with its fixed pdfLaTeX argument-vector renderer: validate project-relative paths, copy the dependency graph to a temporary workspace, use shell false and no shell escape with no network or user-supplied command, then publish revision-bound PDF, SVG, full-size PNG, and 60% PNG plus structured command evidence for the same current revision."
+        "text": "Task invokes tikz_render with its fixed pdfLaTeX argument-vector renderer: validate project-relative paths, copy the dependency graph to a temporary workspace, use shell false and no shell escape with no network or user-supplied command, then publish revision-bound PDF, SVG, full-size PNG, and 60% PNG plus structured command evidence for the same current revision."
       },
       {
         "id": "step-6",
@@ -480,7 +490,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-7",
-        "text": "Main performs finding disposition. For each material finding accepted by Main, give designer one bounded new revision, rerun the fixed renderer, and request at most one fresh affected visioner review of the changed current revision; never review an unchanged artifact or continue automatically."
+        "text": "For each visual review finding, produce one bounded new revision, rerun the fixed renderer, then the changed current revision is reviewed at most once; never review an unchanged artifact or continue automatically."
       },
       {
         "id": "step-8",
@@ -490,17 +500,17 @@ export const writingWorkflows = [
     "scopeNotes": [
       ...VISUAL_AGENT_SCOPE_NOTES,
       "The pinned OpenTikZ library is read-only; copy selected content into the declared user-project target before editing it.",
-      "Main retains exclusive ownership of optional OMP imagegen calls, host permission and external-effect decisions, prepared-asset acceptance, integration, and final verification; designer and visioner do not gain that authority.",
+      "Main authorizes optional OMP imagegen calls and external-effect decisions during initial task setup; task executes imagegen and rendering under that authorization. Designer and visioner do not independently authorize external effects.",
       "Imagegen is optional and its visibility or activation is not permission, a workflow requirement, or a reason to invent an asset; a native TikZ or OpenTikZ fallback remains valid.",
       "The fixed renderer never runs a user-supplied or project-configured command and never treats compile success as visual approval.",
       "Direct standalone SVG authoring remains diagram.svg; an SVG preview rendered from editable TikZ remains evidence for diagram.tikz.",
-      "This card creates no gate, router, permission, completion controller, retry, or automatic correction loop; Main owns disposition and may leave supported limitations visible."
+      "This card creates no gate, router, permission, completion controller, retry, or automatic correction loop. The designer-visioner-task loop resolves findings without Main disposition; supported limitations remain visible."
     ],
     "skills": [
       "tikz-diagram"
     ],
     "qualityChecks": [
-      "semantic completeness and stable IDs, OpenTikZ edit-contract and dependency preservation, asset provenance and portability, safe standalone compile, revision-bound PDF and SVG, current-revision full-size and 60% raster evidence, independent visual review, icon legibility, explicit raster disclosure, Main finding disposition, and requested paper or slide fit"
+      "semantic completeness and stable IDs, OpenTikZ edit-contract and dependency preservation, asset provenance and portability, safe standalone compile, revision-bound PDF and SVG, current-revision full-size and 60% raster evidence, independent visual review, icon legibility, explicit raster disclosure, and requested paper or slide fit"
     ],
     "riskNotes": [
       "Generated raster icons reduce all-vector scalability and remain separate project assets whose provenance and raster status must stay visible.",
@@ -508,13 +518,16 @@ export const writingWorkflows = [
     ],
     "roles": [
       "designer",
+      "task",
       "visioner"
     ],
     "delegation": [
       "step-2: designer owns bounded OpenTikZ discovery, copy selection, semantic figure spec, asset manifest, and missing-icon identification without modifying the library",
+      "step-3: task owns optional imagegen and prepared-asset execution when authorized by Main",
       "step-4: designer owns the project TikZ source and manifest-listed asset integration while preserving the selected edit contract",
+      "step-5: task invokes the fixed tikz_render renderer for every revision",
       "step-6: visioner independently reviews the fresh full-size and 60% raster evidence for the current revision against the supplied spec and manifest",
-      "step-7: designer applies only Main-accepted findings, while visioner performs at most one fresh affected review after rerendering"
+      "step-7: designer applies visioner findings, task rerenders, and visioner performs at most one fresh affected review after rerendering"
     ]
   },
   {

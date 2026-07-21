@@ -11,21 +11,22 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 - Reference steps:
   1. [step-1] Establish the output path, display size, node and edge model, labels, branch semantics, dashed-line meaning, and primary flow direction.
   2. [step-2] Create the standalone SVG in black and white using only simple shapes, straight or dashed lines, and orthogonal polylines, with no curved connectors.
-  3. [step-3] Run the static checker, render the current revision at full size and 60% scale, and retain fresh raster evidence.
+  3. [step-3] Have task run the static checker, render the current revision at full size and 60% scale, and retain fresh raster evidence.
   4. [step-4] Independently inspect the latest rasters for semantic accuracy, overlaps, text fit, connector collisions, crossings, spacing, and readability.
-  5. [step-5] For each material finding accepted by Main, produce a new revision, rerun validation and rendering, then perform at most one fresh affected independent visual review; do not review an unchanged artifact and report remaining geometry failures.
+  5. [step-5] For each visual review finding, produce a new revision, rerun validation and rendering, then the fresh rerenders are reviewed at most once; do not review an unchanged artifact and report remaining geometry failures.
   6. [step-6] Report final source validation and current-revision rendered evidence together with any remaining layout or review limitations; no verdict decides completion.
-- Agent candidates: `designer`, `visioner`.
+- Agent candidates: `designer`, `task`, `visioner`.
 - Delegated checkpoints:
   - step-2: designer creates the SVG and owns every source revision
+  - step-3: task runs the static checker and renders full-size and 60% rasters
   - step-4: visioner independently reviews the fresh full-size and 60% raster renders
-  - step-5: designer applies findings and visioner reviews only the resulting new revision
+  - step-5: designer applies visioner findings, task rerenders, and visioner reviews only the resulting new revision
 - Quality checks:
   - node and edge completeness, arrow direction, zero unintended overlap or text clipping, zero connector collision or avoidable crossing, readable font size, balanced spacing, strict monochrome geometry, and current-revision rendered evidence
 - Scope notes:
-  - Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
+  - Visual-stage chain: designer owns the design or source revision; task owns rendering, compilation, and optional imagegen execution; visioner independently and read-only reviews the current render or layout. Main authorizes external-effect decisions during initial setup and accepts the final delivery. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
   - When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop.
-  - When Main delegates, the designer owns SVG changes and the visioner remains read-only; the main agent coordinates revisions.
+  - Designer creates or revises the SVG, task renders, visioner reviews the renders. No Main coordination required between revisions.
   - Do not substitute source inspection or author self-review for independent rendered evidence.
   - Review only fresh revisions; do not rerun unchanged reviews.
 - Risk notes:

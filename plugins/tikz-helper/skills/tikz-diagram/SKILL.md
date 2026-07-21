@@ -35,12 +35,12 @@ In that same response, read exactly the applicable exact URIs once in their list
 
 ## Compile the dependent Agent chain
 
-For a selected non-simple `diagram.tikz` workflow, the normal compiled dependency chain is `designer` -> Main -> `visioner` when those matching Agents are exposed, assignment input is complete, and delegation is safe. Use only native Available Agents already visible; never probe or guess an Agent URI or inventory.
+For a selected non-simple `diagram.tikz` workflow, the normal compiled dependency chain is `designer` -> `task` -> `visioner` when those matching Agents are exposed, assignment input is complete, and delegation is safe. Use only native Available Agents already visible; never probe or guess an Agent URI or inventory.
 
 1. **Designer checkpoint** — `designer` owns one complete, bounded design and source revision checkpoint. It returns the editable project-owned TikZ source, semantic figure spec, asset manifest, preserved edit-contract facts, and dependency list; a partial sketch is not a completed delivery.
-2. **Main integration and render** — Main integrates the designer delivery, reconciles project paths and any optional imagegen asset, binds the exact current revision, and invokes `tikz_render` when exposed and authorized. Main produces fresh revision-bound PDF, SVG, full-size PNG, and 60% PNG before visual review.
-3. **Visioner checkpoint** — Only after the designer delivery is integrated and those renders exist, `visioner` independently and read-only checks layout and legibility on the fresh current-revision full-size and 60% renders against the semantic spec and asset manifest.
-4. **Main disposition** — Main validates findings and retains project integration, permissions, optional imagegen, finding disposition, verification, and final response. One accepted material finding may create one bounded designer revision followed by fresh rendering and at most one affected visioner review.
+2. **Task render checkpoint** — `task` invokes `tikz_render` when exposed and authorized: validates project-relative paths, copies the dependency graph to a temporary workspace, and publishes revision-bound PDF, SVG, full-size PNG, and 60% PNG plus structured command evidence. `task` may also use optional imagegen for a missing node icon when authorized by Main during initial setup.
+3. **Visioner checkpoint** — Only after the designer delivery is integrated and task renders exist, `visioner` independently and read-only checks layout and legibility on the fresh current-revision full-size and 60% renders against the semantic spec and asset manifest.
+4. **Designer-visioner loop** — `designer` applies visioner findings, `task` rerenders, and `visioner` reviews only fresh rerenders at most once per revision. Main authorizes external-effect decisions during initial setup and accepts the final delivery; it does not mediate the design loop.
 
 If `designer` is unavailable, the affected TODO and final evidence record the precise unfulfilled designer checkpoint and the permitted Agent-availability fallback. Main cannot claim designer evidence by silently substituting itself. If `visioner` is unavailable, record missing independent current-revision visual evidence. Compile, source, and static checks, designer self-review, or Main self-review do not replace it.
 

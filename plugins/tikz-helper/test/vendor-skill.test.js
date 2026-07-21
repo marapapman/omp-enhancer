@@ -270,20 +270,20 @@ test('Skill and references preserve host authority, copy safety, imagegen bounda
   assert.doesNotMatch(contract, /block:\s*true|continue:\s*true|retry until|repeat until|must delegate|mandatory fork/i);
 });
 
-test('selected TikZ work compiles designer, Main render, and visioner in dependency order with explicit evidence gaps', () => {
+test('selected TikZ work compiles designer, task render, and visioner in dependency order with explicit evidence gaps', () => {
   const skill = read('skills/tikz-diagram/SKILL.md');
   const designDoc = readFileSync(resolve(pluginRoot, '../../docs/TIKZ_PLUGIN.md'), 'utf8');
 
   const designerCheckpoint = skill.indexOf('1. **Designer checkpoint**');
-  const mainRender = skill.indexOf('2. **Main integration and render**');
+  const taskRender = skill.indexOf('2. **Task render checkpoint**');
   const visionerCheckpoint = skill.indexOf('3. **Visioner checkpoint**');
   assert.ok(designerCheckpoint >= 0, 'the normal compiled chain must name the designer checkpoint');
-  assert.ok(mainRender > designerCheckpoint, 'Main integration/render must follow designer delivery');
-  assert.ok(visionerCheckpoint > mainRender, 'visioner review must follow fresh Main rendering');
+  assert.ok(taskRender > designerCheckpoint, 'task render must follow designer delivery');
+  assert.ok(visionerCheckpoint > taskRender, 'visioner review must follow fresh task rendering');
 
   assert.match(
     skill,
-    /selected non-simple `diagram\.tikz`.+normal compiled dependency chain.+`designer`.+Main.+`visioner`/is,
+    /selected non-simple `diagram\.tikz`.+normal compiled dependency chain.+`designer`.+`task`.+`visioner`/is,
   );
   assert.match(
     skill,
@@ -291,7 +291,7 @@ test('selected TikZ work compiles designer, Main render, and visioner in depende
   );
   assert.match(
     skill,
-    /Main.+integrates.+designer delivery.+exact current revision.+`tikz_render`.+full-size.+60%/is,
+    /`task`.+invokes.+`tikz_render`.+full-size.+60%/is,
   );
   assert.match(
     skill,

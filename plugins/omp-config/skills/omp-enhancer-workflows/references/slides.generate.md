@@ -14,26 +14,29 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
   3. [step-3] If the template is not ready, discuss its style, logo, aspect ratio, typography, and layout with the user and configure it first.
   4. [step-4] Commit a numbered working outline from the supplied purpose, audience, duration, output language, evidence, and safe explicit assumptions; ask only when a missing choice materially changes the deck and cannot be resolved from the request or project context.
   5. [step-5] Generate Beamer frames from the committed template and working outline, applying the PLAN-selected writing.zh or writing.en method for the agreed output language.
-  6. [step-6] Compile and render the draft deck, retaining an initial PDF and page images for the layout pass.
+  6. [step-6] Have task compile and render the draft deck, retaining an initial PDF and page images for the layout pass.
   7. [step-7] Perform the final layout pass across the deck, correcting text and image overlap, crowding, clipping, undersized text, image cropping, alignment, spacing, and hierarchy without changing the committed story.
   8. [step-8] Reconcile the layout revision against the committed outline, output language, source facts, semantic anchors, and LaTeX structure; restore unintended content or scope changes before rendering.
-  9. [step-9] Recompile and render the layout revision; bind the revision identifier, PDF, render directory, fresh renders of every page, and an overview or contact sheet.
+  9. [step-9] Have task recompile and render the layout revision; bind the revision identifier, PDF, render directory, fresh renders of every page, and an overview or contact sheet.
   10. [step-10] Independently inspect the latest rendered pages and overview or contact sheet for layout errors, overlap, crowding, clipping, readability, image treatment, margins, and cross-slide consistency, then record exactly APPROVED | CHANGES_REQUIRED | UNREVIEWABLE for that revision.
-  11. [step-11] For each material finding accepted by Main, produce a bounded new layout revision, have the parent reconcile content and scope, then recompile and create fresh renders before at most one fresh affected visual review; do not review an unchanged artifact and report remaining findings.
+  11. [step-11] For each visual review finding, produce a bounded new layout revision, recompile and create fresh renders, then the fresh rerenders are reviewed at most once; do not review an unchanged artifact and report remaining findings.
   12. [step-12] Only when the user supplied a conversion command, run it after the final Beamer revision passes independent visual review and verify the PowerPoint artifact.
-- Agent candidates: `designer`, `visioner`.
+- Agent candidates: `designer`, `task`, `visioner`.
 - Delegated checkpoints:
+  - step-6: task owns compilation and rendering of every deck revision
   - step-7: designer owns the final layout pass and every layout revision
+  - step-8: designer reconciles the layout revision against committed scope
+  - step-9: task recompiles and rerenders after every layout revision
   - step-10: visioner independently reviews the latest rendered pages and deck overview
-  - step-11: designer fixes material findings, the parent reconciles scope, and visioner reviews only fresh rerenders
+  - step-11: designer fixes visioner findings, task rerenders, and visioner reviews only fresh rerenders
 - Quality checks:
   - template readiness, committed story outline, post-layout semantic and LaTeX preservation, output-language writing compliance, Beamer structure, zero unintended text and image overlap, no crowding or clipping, readable typography, undistorted images, balanced spacing, current-revision rendered evidence, compile evidence, and user-command conversion evidence when requested
 - Scope notes:
-  - Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
+  - Visual-stage chain: designer owns the design or source revision; task owns rendering, compilation, and optional imagegen execution; visioner independently and read-only reviews the current render or layout. Main authorizes external-effect decisions during initial setup and accepts the final delivery. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
   - When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop.
   - Template discussion precedes story discussion when configuration is incomplete.
   - A familiar template or converter is not a substitute for the user-selected template or command.
-  - When Main delegates, the designer owns slide-layout changes and the visioner remains read-only; source inspection, compile success, or author self-review does not replace current-revision visual evidence.
+  - The designer-visioner-task loop is self-contained: designer owns layout changes, task renders, visioner reviews renders. Source inspection or compile success does not replace current-revision visual evidence.
 - Risk notes:
   - none
 

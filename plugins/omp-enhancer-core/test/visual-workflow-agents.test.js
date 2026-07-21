@@ -16,11 +16,11 @@ const VISUAL_WORKFLOW_IDS = [
 ];
 
 const VISUAL_CHECKPOINTS = {
-  'design.visual': { designer: 'step-3', parent: 'step-4', visioner: 'step-5' },
-  'slides.generate': { designer: 'step-7', parent: 'step-9', visioner: 'step-10' },
-  'slides.modify': { designer: 'step-5', parent: 'step-7', visioner: 'step-8' },
-  'diagram.svg': { designer: 'step-2', parent: 'step-3', visioner: 'step-4' },
-  'diagram.tikz': { designer: 'step-4', parent: 'step-5', visioner: 'step-6' },
+  'design.visual': { designer: 'step-3', task: 'step-4', visioner: 'step-5' },
+  'slides.generate': { designer: 'step-7', task: 'step-9', visioner: 'step-10' },
+  'slides.modify': { designer: 'step-5', task: 'step-7', visioner: 'step-8' },
+  'diagram.svg': { designer: 'step-2', task: 'step-3', visioner: 'step-4' },
+  'diagram.tikz': { designer: 'step-4', task: 'step-5', visioner: 'step-6' },
 };
 
 test('every visual workflow exposes designer then parent-bound render then visioner', () => {
@@ -42,13 +42,13 @@ test('every visual workflow exposes designer then parent-bound render then visio
       `${id} must assign independent current-render review to visioner`,
     );
     assert.ok(
-      stepIds.indexOf(checkpoints.designer) < stepIds.indexOf(checkpoints.parent)
-        && stepIds.indexOf(checkpoints.parent) < stepIds.indexOf(checkpoints.visioner),
-      `${id} must keep designer -> Main render binding -> visioner dependency order`,
+      stepIds.indexOf(checkpoints.designer) < stepIds.indexOf(checkpoints.task)
+        && stepIds.indexOf(checkpoints.task) < stepIds.indexOf(checkpoints.visioner),
+      `${id} must keep designer -> task render -> visioner dependency order`,
     );
     assert.match(
       scope,
-      /designer owns the design or source revision.+Main reconciles.+binds or renders one current revision.+visioner then independently and read-only reviews that current render or layout/iu,
+      /designer owns the design or source revision.+task owns rendering.+visioner independently.+reviews.+current render or layout/iu,
       `${id} must name the visual-stage ownership chain`,
     );
     assert.match(

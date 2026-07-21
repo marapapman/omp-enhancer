@@ -15,6 +15,140 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 `docs/superpowers/` is a historical archive. Its dated plans, specs, and reports may describe retired hard gates and routers. Never treat them as current runtime instructions.
 
+## Architecture & Data Flow
+
+**Monorepo pattern.** npm workspaces with 6 plugins under `plugins/`. Each plugin registers with the OMP harness via a `registerOmpPlugin(pi)` function receiving an `ExtensionAPI` object:
+
+- `pi.registerTool(tool)` — register ToolDefinition objects
+- `pi.on('event', handler)` — subscribe to `session_start`, `tool_result`, `session_stop`
+- `pi.appendEntry(type, data)` — persist custom state across turns
+
+**Core data flow:**
+
+1. User prompt → `task-descriptor.js` extracts domains, language, risk, operation type
+2. Workflow protocol coach (`workflow-protocol-coach.js`) observes assistant output to guide the `DISCOVER → DECLARE → LOAD → COMMIT → SPLIT → EXECUTE → VERIFY` lifecycle
+3. `skill://omp-enhancer-workflows` loads and guides workflow selection
+4. Plugin tools execute during the EXECUTE phase, observing tool_results and persisting state
+
+**Plugin responsibilities:**
+
+| Plugin | Role | Entry point |
+|--------|------|-------------|
+| `omp-enhancer-core` | Workflow routing, task analysis, protocol coaching, skill/subagent validation | `index.js` (largest plugin) |
+| `omp-config` | Shared config assets, workflow references, Agents, Skills, hooks, templates, diagnostics | `index.js` |
+| `writing-helper` | Prose quality analysis (logic, style, citations, preservation), bilingual (zh/en) | `index.js` |
+| `omp-test-enhancer` | Testing analysis, browser evidence, coverage/mutation context, advisory review gates | `src/extension.ts` |
+| `omp-fact-checker` | Claim extraction, multi-lane evidence verification, cross-checking, verdict reports | `index.js` |
+| `tikz-helper` | LaTeX/TikZ compilation pipeline, OpenTikZ catalog search, image processing | `index.js` |
+
+**Key architectural invariants (from docs/ARCHITECTURE.md):**
+
+- No hard routers, hard gates, classifier preflights, or plugin-owned completion controllers
+- All marketplace tools are `defaultInactive` — users activate via `/enhancer-tools`
+- Fact conclusions preserve exact claim tuples (subject, predicate, scope, time, quantifier)
+- Review tools are advisory only — they don't execute commands, block, or gate completion
+
+## Key Directories
+
+| Path | Purpose |
+|------|---------|
+| `plugins/omp-enhancer-core/src/` | Core plugin: routing, workflow definitions, protocol coach, task descriptor (195KB), skill/subagent validation |
+| `plugins/omp-enhancer-core/src/workflows/` | Workflow catalog (v21), schema, renderers, definitions (code, writing, research, network, database, ml, growth, operations) |
+| `plugins/omp-test-enhancer/src/` | Testing enhancer TypeScript source: gates, tools, browser check, session state, host observation |
+| `plugins/writing-helper/src/` | Quality analysis: logic, style, citations, preservation, language detection, report formatting |
+| `plugins/omp-fact-checker/src/` | Fact-check pipeline: claim extraction, evidence collection (A/B lanes), cross-checking, providers |
+| `plugins/tikz-helper/src/` | TikZ rendering: latexmk/dvisvgm pipeline, OpenTikZ catalog search, image processing, path policy |
+| `plugins/omp-config/` | Shared config assets, ~40+ skills, 9 agents, hooks, hook-templates |
+| `docs/` | Architecture, development, workflow docs (current) |
+| `docs/superpowers/` | **Historical archive only** — dated plans/specs/reports, NOT current runtime instructions |
+| `scripts/` | Generator scripts, release orchestrator, E2E runners, migration tools, tests |
+
+## Important Files
+
+| File | Significance |
+|------|-------------|
+| `plugins/omp-enhancer-core/index.js` | Largest plugin entry (~1121 lines): tool registration, lifecycle hooks, DeepSeek/MiMo compatibility reminders |
+| `plugins/omp-enhancer-core/src/task-descriptor.js` | 195KB task analysis — signal extraction, domain classification, risk assessment, language detection |
+| `plugins/omp-enhancer-core/src/workflow-protocol-coach.js` | Protocol state machine observing DISCOVER→DECLARE→LOAD→COMMIT→SPLIT→EXECUTE→VERIFY lifecycle |
+| `plugins/omp-enhancer-core/src/workflows/catalog.js` | Workflow catalog v21: assembles all domain workflow definitions |
+| `plugins/omp-enhancer-core/src/workflows/definitions/` | Canonical workflow definitions (code.js, writing.js, research.js, operations.js, etc.) |
+| `plugins/omp-enhancer-core/src/skill-usage.js` | `<skill-usage>` block parsing, denied/missing skills detection |
+| `plugins/omp-test-enhancer/src/extension.ts` | Testing Enhancer entry: tool factory (53KB, 6 tools), gate orchestration, session state |
+| `plugins/writing-helper/src/quality.js` | Main quality orchestrator: runs logic, style, citation, preservation checks |
+| `plugins/omp-fact-checker/src/fact-check.js` | Complete fact-check pipeline (31KB): tuple-based claim model, A/B evidence lanes |
+| `plugins/tikz-helper/src/render-tikz.js` | LaTeX/TikZ compilation with security constraints, resource limits, timeout, symlink detection |
+| `.omp-plugin/marketplace.json` | Marketplace catalog: 6 plugins with names, versions, source paths, skills arrays |
+| `scripts/plugin-workspaces.js` | Canonical frozen inventory: 6-entry plugin name→directory mapping, cross-file consistency asserts |
+
+## Development Commands
+
+**Package manager:** npm (v3 lockfile), ESM throughout (`"type": "module"`). Bun is optional (used for TS build).
+
+| Command | Purpose |
+|---------|---------|
+| `npm test` | Full validation: `check:workflows` → `check:ecc-skills` → `node --test scripts/*.test.js` → workspace tests |
+| `npm run generate:workflows` | Regenerate workflow catalog (from definitions to markdown assets in omp-config) |
+| `npm run generate:ecc-skills` | Regenerate ECC skill index/catalog from nested SKILL.md files |
+| `npm run generate:marketplace` | Rewrite marketplace.json skill paths to match filesystem |
+| `npm run check:workflows` | Validate workflow artifacts are current (CI safety gate) |
+| `npm run check:ecc-skills` | Validate ECC skill artifacts are current |
+| `npm run check:marketplace` | Validate marketplace.json skill paths match disk |
+| `npm run pack:all` | `npm pack --dry-run` across all 6 workspaces |
+| `npm run release -- --plugin <name> --bump <type>` | Version bump transaction (dry-run default, --apply to write) |
+| `npm run coverage -w plugins/writing-helper` | 100% line/branch/function coverage check |
+
+**Per-plugin test commands:**
+
+| Plugin | Command |
+|--------|---------|
+| omp-enhancer-core | `node --test test/*.test.js` |
+| omp-config | `node --test test/*.test.js` |
+| writing-helper | `node --test test/*.test.js` |
+| omp-fact-checker | `node --test test/*.test.js` |
+| tikz-helper | `node --test test/*.test.js` |
+| omp-test-enhancer | `cd plugins/omp-test-enhancer && bun run typecheck && bun run build && bun run test` |
+
+## Testing & QA
+
+**Two test frameworks:**
+
+- **`node:test`** for all JavaScript plugins (core, config, writing-helper, fact-checker, tikz-helper) and root scripts
+- **Vitest** exclusively for the TypeScript `omp-test-enhancer` plugin
+
+**Test organization:** Each plugin has its own `test/` directory (or `tests/` for test-enhancer). Root scripts have co-located `.test.js` in `scripts/`. No root test config.
+
+**Two dominant patterns:**
+
+1. **Extension API tests** — Create a `FakePi`/`FakeOmp` class implementing ExtensionAPI, register the enhancer, assert tool names, approvals, parameters, command registrations
+2. **Content-contract tests** — Read SKILL.md, documentation files, or AGENTS.md via `readFileSync`, assert specific phrasing patterns exist or are forbidden
+
+**Coverage:** Only `writing-helper` enforces coverage (100% lines/branches/functions). No other plugin has coverage thresholds.
+
+**E2E tests:**
+
+- `scripts/e2e/run-installed-deepseek-workflow.mjs` — real model E2E with isolated OMP HOME, matrix scenarios
+- `scripts/e2e/workflow-events.mjs` — NDJSON event log evaluator for PLAN/READY/TODO/task/reviewer sequences
+- `scripts/e2e/omp17-rpc-probe.mjs` — static OMP 17 probe for plugin lifecycle without model interaction
+
+**Testing enhancer gates** (advisory only, no blocking):
+
+- `testCommandGate` — validates test command execution evidence
+- `indirectTestGate` — ensures tests test public behavior (not private internals)
+- `testFileScopeGate` — ensures candidate changes limited to test files
+- `browserEvidenceGate` — validates Playwright browser evidence coverage
+
+## Runtime & Tooling Preferences
+
+- **Node.js:** `^20.19.0 || >=22.12.0` (from package-lock, not declared in package.json)
+- **Package manager:** npm (v3 lockfile); Bun available for TS build (bunx tsc)
+- **Module system:** ESM everywhere (`"type": "module"`)
+- **JavaScript vs TypeScript:** 5 of 6 plugins are pure JavaScript (no build step). Only `omp-test-enhancer` uses TypeScript (NodeNext/ES2022, strict mode, builds to `dist/`)
+- **No root tsconfig** — each TS project is self-contained
+- **No editorconfig** — follow local semicolon style
+- **Import paths:** Node ESM with `.js` extensions (no `.ts` in output paths)
+- **No lint/format config** in root — the repo relies on code review for consistency
+- **Mock pattern:** Each plugin defines its own `FakePi` class locally in test files
+
 ## Runtime contracts
 
 The default Main path is `agent-selected`:
@@ -88,18 +222,52 @@ For ECC Skill inventory changes, use `npm run generate:ecc-skills` and `npm run 
 
 ## Code conventions
 
-- Use ES modules throughout.
-- Core, Config, Writing Helper, Fact Checker, and TikZ Helper are direct Node JavaScript; avoid unnecessary build steps.
-- Testing Enhancer uses strict TypeScript with NodeNext/ES2022 and builds `src/` to `dist/`.
-- Match local semicolon style: JavaScript normally uses semicolons; Testing Enhancer TypeScript commonly does not.
-- Public tool names use snake_case; internal functions use camelCase.
-- Prefer small pure functions and plain JSON-compatible state.
-- Validate and normalize tool parameters before use.
-- Return structured `details` in tool results, not text alone.
-- Ordinary review findings use `isError: false`; real parameter, I/O, or execution failures retain normal error results.
-- Preserve user changes in a dirty worktree. Stage only reviewed paths and never reset unrelated work.
+**Module system & imports:**
+- ES modules throughout (`"type": "module"`, `import`/`export`)
+- Node ESM with `.js` extensions in import paths
+- No CommonJS, no dual publish
+- Core, Config, Writing Helper, Fact Checker, and TikZ Helper are pure JavaScript; avoid unnecessary build steps
+- Testing Enhancer uses strict TypeScript with NodeNext/ES2022; builds `src/` to `dist/`
 
-Agent and Skill names must be globally unique across the marketplace. A workflow may list an Agent or Skill only as an optional candidate. At runtime, use an Agent only when OMP currently exposes it and load a Skill only when it is useful and available.
+**Naming:**
+- Public tool names use `snake_case` (`omp_test_review`, `tikz_render`, etc.)
+- Internal functions use camelCase
+- Agent and Skill names must be globally unique across the marketplace
+
+**Functions & state:**
+- Prefer small pure functions over classes — all modules export functions operating on plain data
+- Default parameter pattern: `function foo({ a = '', b = [], c = {} } = {})`
+- `Object.freeze` for constants, enums, and validation sets (e.g. `pluginWorkspaces` in `plugin-workspaces.js`)
+- Return structured `details` in tool results, not text alone
+- Validate and normalize tool parameters before use
+
+**Error handling:**
+- Ordinary review findings use `isError: false`; real parameter, I/O, or execution failures retain normal error results
+- Custom error classes for domain errors (e.g. `TikzRuntimeError` with `code`/`message`/`details`)
+- Early returns with validation, functional validation patterns
+
+**TypeScript patterns (omp-test-enhancer only):**
+- Custom type-guard functions (`isRecord()`) for safe `unknown → Record` conversion
+- No Zod or runtime schema library — manual validation in `browserSchemas.ts`
+- Strict mode with `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
+
+**Plugin patterns:**
+- Each plugin is self-contained with no external npm dependencies between plugins
+- Registration pattern: `export default function registerOmpPlugin(pi) { pi.registerTool(...); pi.on(...); }`
+- State persisted across turns via `pi.appendEntry(customType, data)`; restored on `session_start`
+- All marketplace tools are `defaultInactive` — users must activate via `/enhancer-tools`
+- A workflow may list an Agent or Skill only as an optional candidate; at runtime use only what OMP currently exposes
+
+**Workflow & generated assets:**
+- Never hand-edit generated files: `WORKFLOW_CATALOG.md`, `omp-enhancer-workflows/SKILL.md`, reference markdowns, ECC skill catalogs, marketplace.json
+- After changing workflow definitions or renderers, run `npm run generate:workflows && npm run check:workflows`
+- After changing ECC inventory, run `npm run generate:ecc-skills && npm run check:ecc-skills`
+- Preserve user changes in a dirty worktree. Stage only reviewed paths and never reset unrelated work
+
+**Semicolons:**
+- Match local style: JavaScript normally uses semicolons; Testing Enhancer TypeScript commonly does not
+
+**No lint/format config** — rely on code review for consistency
 
 ## Validation
 

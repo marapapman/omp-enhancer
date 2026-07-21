@@ -20,7 +20,7 @@ test('diagram.tikz is one bounded subagent-driven OpenTikZ workflow', () => {
   assert.equal(workflow.delegationDefault, 'subagent-driven');
   assert.deepEqual(workflow.skills, ['tikz-diagram']);
   assert.deepEqual(workflow.catalogSkills, []);
-  assert.deepEqual(workflow.roles, ['designer', 'visioner']);
+  assert.deepEqual(workflow.roles, ['designer', 'task', 'visioner']);
   assert.match(workflow.chooseWhen, /TikZ.+paper|paper.+TikZ/iu);
 
   const steps = workflow.steps.join(' ');
@@ -30,21 +30,21 @@ test('diagram.tikz is one bounded subagent-driven OpenTikZ workflow', () => {
 
   assert.match(steps, /semantic figure spec.+node.+edge.+branch.+group.+flow direction.+asset manifest/iu);
   assert.match(steps, /OpenTikZ.+catalog.+copy.+user.+project.+edit_contract.+parameter.+invariant.+node nam/iu);
-  assert.match(steps, /Main.+optional.+OMP.+imagegen.+missing node icon.+visible.+useful/iu);
+  assert.match(steps, /Task.+optional.+OMP.+imagegen.+missing node icon.+visible.+useful/iu);
   assert.match(steps, /imagegen.+never.+OpenTikZ.+library.+asset manifest.+raster disclosure/iu);
   assert.match(steps, /tikz_prepare_asset.+normalized.+SHA-256|SHA-256.+tikz_prepare_asset/iu);
   assert.match(steps, /tikz_render.+fixed.+argument.+shell false.+no shell escape/iu);
   assert.match(steps, /temporary workspace.+PDF.+SVG.+full-size.+60%/iu);
   assert.match(steps, /current revision.+semantic figure spec.+asset manifest.+icon legibility.+raster disclosure/iu);
-  assert.match(steps, /Main.+disposition.+accepted.+bounded new revision.+at most one fresh affected.+unchanged/iu);
+  assert.match(steps, /visual review finding.+produce one bounded new revision.+rerun.+renderer.+reviewed at most once/iu);
   assert.match(steps, /report.+source.+spec.+asset manifest.+render.+review.+limitations.+no verdict.+completion/iu);
 
   assert.match(delegation, /step-2: designer.+OpenTikZ.+semantic figure spec.+asset manifest/iu);
   assert.match(delegation, /step-4: designer.+TikZ source.+asset/iu);
   assert.match(delegation, /step-6: visioner.+full-size.+60%.+current revision/iu);
-  assert.match(delegation, /step-7: designer.+Main-accepted.+visioner.+at most one.+fresh/iu);
+  assert.match(delegation, /step-7: designer applies visioner findings, task rerenders, and visioner performs at most one fresh affected review after rerendering/iu);
 
-  assert.match(scope, /Main.+exclusive.+imagegen.+host.+permission/iu);
+  assert.match(scope, /Main.+authorizes.+imagegen.+task.+executes/iu);
   assert.match(scope, /imagegen.+optional.+not.+permission|optional.+imagegen.+not.+permission/iu);
   assert.match(scope, /OpenTikZ.+read-only.+copy/iu);
   assert.match(scope, /fixed renderer.+never.+user-supplied.+project-configured.+command/iu);
@@ -87,6 +87,6 @@ test('workflow Skill classifies TikZ as a specialized output distinct from SVG a
   assert.match(index, /TikZ source alone.+not.+`writing\.latex`/iu);
   assert.match(index, /`diagram\.tikz`[^\n]*D=\[`skill:\/\/tikz-diagram`\][^\n]*PLAN URI/iu);
   assert.match(reference, /# `diagram\.tikz` workflow reference/iu);
-  assert.match(reference, /Agent candidates: `designer`, `visioner`/iu);
+  assert.match(reference, /Agent candidates: `designer`, `task`, `visioner`/iu);
   assert.doesNotMatch(reference, /hard gate|hard router|automatic retry|retry until|repeat until/iu);
 });

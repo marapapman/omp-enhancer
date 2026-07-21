@@ -1,5 +1,5 @@
 const VISUAL_AGENT_SCOPE_NOTES = [
-  "Visual-stage chain: designer owns the design or source revision; Main reconciles requested scope and binds or renders one current revision; visioner then independently and read-only reviews that current render or layout. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.",
+  "Visual-stage chain: designer owns the design or source revision; task owns rendering, compilation, and optional imagegen execution; visioner independently and read-only reviews the current render or layout. Main authorizes external-effect decisions during initial setup and accepts the final delivery. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.",
   "When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop."
 ];
 
@@ -178,7 +178,7 @@ export const operationWorkflows = [
       },
       {
         "id": "step-4",
-        "text": "Main reconciles that revision against scope and implementation constraints, then binds or renders one identified current revision."
+        "text": "Task renders one identified current revision. Designer reconciles that revision against scope and implementation constraints."
       },
       {
         "id": "step-5",
@@ -199,12 +199,13 @@ export const operationWorkflows = [
     "riskNotes": [],
     "roles": [
       "designer",
+      "task",
       "visioner"
     ],
     "delegation": [
       "step-2: designer owns the bounded visual direction",
       "step-3: designer owns the design or source revision while preserving the requested scope",
-      "step-4: the parent reconciles scope and binds or renders one identified current revision",
+      "step-4: task renders one identified current revision; designer reconciles scope",
       "step-5: visioner independently and read-only reviews that current render or layout"
     ]
   },
