@@ -13,9 +13,11 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
   2. [step-2] Inspect data timing and lineage, leakage boundaries, split logic, preprocessing parity, training determinism, artifact identity, evaluation slices, serving fallbacks, and monitoring.
   3. [step-3] Validate material findings against tests, reproducible runs, recorded experiments, model and dataset metadata, or serving evidence without rerunning expensive work unless authorized.
   4. [step-4] Report prioritized findings with concrete code or artifact evidence, affected decision, trigger, impact, reproducibility limits, remediation, and verification.
-- Agent candidates: `task`.
+  5. [step-review] Reviewer independently audits the main-reviewed bounded diff and evidence without editing or mutating.
+- Agent candidates: `task`, `reviewer`.
 - Delegated checkpoints:
   - steps-2-4: task owns a bounded read-only ML audit slice and returns concrete system and evidence findings without editing or mutating code, data, or artifacts; the parent reconciles scope and conclusions
+  - step-review: reviewer independently audits only the Main-reviewed bounded diff and evidence without project reads, commands, edits, or expensive jobs; parent reconciles scope and conclusions
 - Quality checks:
   - prediction and data contract correspondence, temporal leakage analysis, training reproducibility, evaluation and slice validity, artifact and serving parity, fallback and monitoring coverage, rollback, and explicit evidence limitations
 - Scope notes:

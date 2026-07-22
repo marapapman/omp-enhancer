@@ -198,6 +198,7 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   ]);
   const workflowIds = [
     'agentic.simple',
+    'general.subagent',
     'writing.pending',
     'writing.zh',
     'writing.en',
@@ -260,15 +261,15 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.match(catalog, /substantive code.+subagent-driven.+plugin `plan`.+native `task`.+native `reviewer`/isu);
   assert.match(catalog, /same native `task` `tasks\[\]` batch.+runnable independent.+vertical slices.+dependent.+later wave/isu);
   assert.match(catalog, /body of the text being modified, never from the prompt language/);
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 21/);
-  assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 28);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 22/);
+  assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 29);
   assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
   assert.equal((catalog.match(/^- Execution default \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
-  assert.match(skillIndex, /Catalog version: 21/);
+  assert.match(skillIndex, /Catalog version: 22/);
   assert.match(skillIndex, /EXECUTION:[\s\S]*DIRECT skips[\s\S]*`agentic\.simple` has no `task`[\s\S]*`writing\.pending` composes once[\s\S]*other cards use the compiler/iu);
   assert.match(skillIndex, /`writing\.pending`[\s\S]*one narrow language read[\s\S]*replace once with writing\.zh or writing\.en before substantive work/iu);
   const referenceText = references.join('\n');
-  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 28);
+  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 29);
   assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `direct-simple`/gm) ?? []).length, 1);
   assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
   assert.match(referenceText, /# `agentic\.simple` workflow reference[\s\S]*`direct-simple`[\s\S]*after staged READY[\s\S]*no `task`/iu);

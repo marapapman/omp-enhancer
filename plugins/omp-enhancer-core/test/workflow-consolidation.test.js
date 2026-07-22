@@ -121,7 +121,7 @@ test('compact workflow Skill teaches primary-plus-add-on composition with exact 
   assert.doesNotMatch(networkIndexRow, /C=\[`network-config-validation`/u);
   assert.doesNotMatch(networkIndexRow, /via `skill:\/\/ecc-skill-catalog`/u);
   assert.doesNotMatch(index, /\bHints:/u);
-  assert.ok(Buffer.byteLength(index) < 15_000, 'workflow Skill index should stay below 15k');
+  assert.ok(Buffer.byteLength(index) < 16_000, 'workflow Skill index should stay below 16k');
   assert.doesNotMatch(index, /slices=<|assignment-input=|Composition example:|\[workflow=<ids>/i);
   assert.match(index, /PLAN URI: `skill:\/\/omp-enhancer-workflows\/references\/code\.dev\.md`/i);
   assert.doesNotMatch(index, /PLAN URI: `references\//u);
@@ -308,10 +308,10 @@ test('new workflows use bounded exact roles', () => {
     'network.homelab': ['ecc-network-architect'],
     'network.review': ['ecc-network-config-reviewer'],
     'network.debug': ['ecc-network-troubleshooter'],
-    'database.review': ['task'],
+    'database.review': ['task', 'reviewer'],
     'database.change': ['plan', 'task', 'reviewer'],
     'database.migration.repair': ['plan', 'task', 'reviewer'],
-    'ml.review': ['task'],
+    'ml.review': ['task', 'reviewer'],
     'ml.debug': ['plan', 'task', 'reviewer'],
     'release.opensource': [
       'ecc-opensource-forker',
@@ -320,7 +320,7 @@ test('new workflows use bounded exact roles', () => {
       'reviewer',
     ],
     'marketing.campaign': ['task'],
-    'seo.audit': ['task'],
+    'seo.audit': ['task', 'reviewer'],
     'omp.plugin': ['plan', 'task', 'reviewer'],
   };
 

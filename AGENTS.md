@@ -34,10 +34,10 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 | Plugin | Role | Entry point |
 |--------|------|-------------|
-| `omp-enhancer-core` | Workflow routing, task analysis, protocol coaching, skill/subagent validation | `index.js` (largest plugin) |
+| `omp-enhancer-core` | Task facts, session state, extension-tool activation, protocol coaching, and skill/subagent validation | `index.js` (largest plugin) |
 | `omp-config` | Shared config assets, workflow references, Agents, Skills, hooks, templates, diagnostics | `index.js` |
 | `writing-helper` | Prose quality analysis (logic, style, citations, preservation), bilingual (zh/en) | `index.js` |
-| `omp-test-enhancer` | Testing analysis, browser evidence, coverage/mutation context, advisory review gates | `src/extension.ts` |
+| `omp-test-enhancer` | Seven default-inactive advisory tools for testing analysis, browser evidence, coverage/mutation context, review, and reporting | `dist/extension.js` (built from `src/extension.ts`) |
 | `omp-fact-checker` | Claim extraction, multi-lane evidence verification, cross-checking, verdict reports | `index.js` |
 | `tikz-helper` | LaTeX/TikZ compilation pipeline, OpenTikZ catalog search, image processing | `index.js` |
 
@@ -45,16 +45,17 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 - No hard routers, hard gates, classifier preflights, or plugin-owned completion controllers
 - All marketplace tools are `defaultInactive` — users activate via `/enhancer-tools`
-- Fact conclusions preserve exact claim tuples (subject, predicate, scope, time, quantifier)
+- Visual delivery gives `designer` the design or source revision, `task` the rendering, compilation, export, and optional imagegen execution, and `visioner` fresh current-revision evidence in a read-only review. Main retains setup authorization and final acceptance only and does not mediate the visual loop.
+- Fact conclusions preserve exact claim tuples (subject, predicate/object, scope, time/version, quantifier); the backward-compatible `verdict` cannot upgrade compatibility evidence into proof, while fail-closed `strictVerdict` controls factual conclusions.
 - Review tools are advisory only — they don't execute commands, block, or gate completion
 
 ## Key Directories
 
 | Path | Purpose |
 |------|---------|
-| `plugins/omp-enhancer-core/src/` | Core plugin: routing, workflow definitions, protocol coach, task descriptor (195KB), skill/subagent validation |
-| `plugins/omp-enhancer-core/src/workflows/` | Workflow catalog (v21), schema, renderers, definitions (code, writing, research, network, database, ml, growth, operations) |
-| `plugins/omp-test-enhancer/src/` | Testing enhancer TypeScript source: gates, tools, browser check, session state, host observation |
+| `plugins/omp-enhancer-core/src/` | Core plugin: task facts, workflow definitions, protocol coach, task descriptor, and skill/subagent validation |
+| `plugins/omp-enhancer-core/src/workflows/` | Workflow catalog (v22), schema, renderers, definitions (code, writing, research, network, database, ml, growth, operations) |
+| `plugins/omp-test-enhancer/src/` | Testing enhancer TypeScript source: advisory tools, browser check, session state, and host observation |
 | `plugins/writing-helper/src/` | Quality analysis: logic, style, citations, preservation, language detection, report formatting |
 | `plugins/omp-fact-checker/src/` | Fact-check pipeline: claim extraction, evidence collection (A/B lanes), cross-checking, providers |
 | `plugins/tikz-helper/src/` | TikZ rendering: latexmk/dvisvgm pipeline, OpenTikZ catalog search, image processing, path policy |
@@ -70,10 +71,10 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 | `plugins/omp-enhancer-core/index.js` | Largest plugin entry (~1121 lines): tool registration, lifecycle hooks, DeepSeek/MiMo compatibility reminders |
 | `plugins/omp-enhancer-core/src/task-descriptor.js` | 195KB task analysis — signal extraction, domain classification, risk assessment, language detection |
 | `plugins/omp-enhancer-core/src/workflow-protocol-coach.js` | Protocol state machine observing DISCOVER→DECLARE→LOAD→COMMIT→SPLIT→EXECUTE→VERIFY lifecycle |
-| `plugins/omp-enhancer-core/src/workflows/catalog.js` | Workflow catalog v21: assembles all domain workflow definitions |
+| `plugins/omp-enhancer-core/src/workflows/catalog.js` | Workflow catalog v22: assembles all domain workflow definitions |
 | `plugins/omp-enhancer-core/src/workflows/definitions/` | Canonical workflow definitions (code.js, writing.js, research.js, operations.js, etc.) |
 | `plugins/omp-enhancer-core/src/skill-usage.js` | `<skill-usage>` block parsing, denied/missing skills detection |
-| `plugins/omp-test-enhancer/src/extension.ts` | Testing Enhancer entry: tool factory (53KB, 6 tools), gate orchestration, session state |
+| `plugins/omp-test-enhancer/src/extension.ts` | Testing Enhancer source registration for seven default-inactive advisory tools, lifecycle observation, and session state; the built runtime entry is `dist/extension.js` |
 | `plugins/writing-helper/src/quality.js` | Main quality orchestrator: runs logic, style, citation, preservation checks |
 | `plugins/omp-fact-checker/src/fact-check.js` | Complete fact-check pipeline (31KB): tuple-based claim model, A/B evidence lanes |
 | `plugins/tikz-helper/src/render-tikz.js` | LaTeX/TikZ compilation with security constraints, resource limits, timeout, symlink detection |
@@ -130,7 +131,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 - `scripts/e2e/workflow-events.mjs` — NDJSON event log evaluator for PLAN/READY/TODO/task/reviewer sequences
 - `scripts/e2e/omp17-rpc-probe.mjs` — static OMP 17 probe for plugin lifecycle without model interaction
 
-**Testing enhancer gates** (advisory only, no blocking):
+**Testing enhancer checks** (advisory only, no blocking):
 
 - `testCommandGate` — validates test command execution evidence
 - `indirectTestGate` — ensures tests test public behavior (not private internals)
@@ -191,7 +192,7 @@ All marketplace tools are `defaultInactive`. Users explicitly expose a group wit
 
 The public testing and fact completeness tools are `omp_test_review` and `fact_check_review`. Legacy gate-named aliases are not supported. Testing Enhancer does not register `/test`; it must never execute a supplied or project-configured test command. Host-authorized shell execution remains outside the review tool.
 
-Fact conclusions must preserve the exact claim tuple: subject, predicate plus object/value, scope, time/version, and quantifier. `SUPPORTED` or `CONTRADICTED` requires same-tuple entailment; limitations, a cheapest plausible countercheck, and unresolved proof gaps remain visible instead of being converted into a completion gate.
+Fact conclusions must preserve the exact claim tuple: subject, predicate plus object/value, scope, time/version, and quantifier. The backward-compatible `verdict` cannot upgrade compatibility evidence into proof. Factual conclusions use fail-closed `strictVerdict`: `SUPPORTED` requires same-tuple `ENTAILS + PROVEN`, while `CONTRADICTED` requires same-tuple `NEGATES + DISPROVED` with a valid negated field. Limitations, a cheapest plausible countercheck, and unresolved proof gaps remain visible instead of being converted into a completion gate.
 
 ## Workflow source and generated assets
 

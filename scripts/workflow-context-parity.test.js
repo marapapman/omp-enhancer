@@ -21,9 +21,9 @@ import { exactNestedEccSkillUri } from '../plugins/omp-enhancer-core/src/workflo
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
 
-test('catalog v21 assigns exactly one direct, one deferred, and 28 subagent-driven defaults', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 21);
-  assert.equal(workflowDefinitions.length, 30);
+test('catalog v22 assigns exactly one direct, one deferred, and 29 subagent-driven defaults', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 22);
+  assert.equal(workflowDefinitions.length, 31);
   assert.deepEqual(
     [...new Set(workflowDefinitions.map(({ delegationDefault }) => delegationDefault))].sort(),
     ['defer-until-composed', 'direct-simple', 'subagent-driven'],
@@ -38,7 +38,7 @@ test('catalog v21 assigns exactly one direct, one deferred, and 28 subagent-driv
   );
   assert.equal(
     workflowDefinitions.filter(({ delegationDefault }) => delegationDefault === 'subagent-driven').length,
-    28,
+    29,
   );
   assert.deepEqual(
     Object.entries(workflowCatalog).map(([id, { delegationDefault }]) => [id, delegationDefault]),
@@ -46,7 +46,7 @@ test('catalog v21 assigns exactly one direct, one deferred, and 28 subagent-driv
   );
 });
 
-test('packaged catalog, index, and all references expose catalog v21 execution defaults', async () => {
+test('packaged catalog, index, and all references expose catalog v22 execution defaults', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -54,13 +54,13 @@ test('packaged catalog, index, and all references expose catalog v21 execution d
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 21/);
-  assert.match(skillIndex, /Catalog version: 21/);
-  assert.equal(referenceNames.length, 30);
-  assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 28);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 22/);
+  assert.match(skillIndex, /Catalog version: 22/);
+  assert.equal(referenceNames.length, 31);
+  assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 29);
   assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
   assert.equal((catalog.match(/^- Execution default \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
-  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 28);
+  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 29);
   assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `direct-simple`/gm) ?? []).length, 1);
   assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
   assert.match(skillIndex, /EXECUTION:[\s\S]*DIRECT skips[\s\S]*`agentic\.simple` has no `task`[\s\S]*`writing\.pending` composes once[\s\S]*(?:every )?other (?:loaded )?cards? uses? the compiler(?: below)?/iu);
@@ -79,7 +79,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   const skillReferences = Object.values(referencesByWorkflow).join('\n');
 
   assert.equal(catalog, buildSharedWorkflowCatalogMarkdown());
-  assert.equal(WORKFLOW_CATALOG_VERSION, 21);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 22);
   assert.equal(Number(catalog.match(/OMP_WORKFLOW_CATALOG_VERSION:\s*(\d+)/)?.[1]), WORKFLOW_CATALOG_VERSION);
   assert.deepEqual([...catalog.matchAll(/^### `([^`]+)`$/gm)].map((match) => match[1]), workflowIds);
   const indexedWorkflowIds = [...skillIndex.matchAll(/^- `([^`]+)` —/gm)].map((match) => match[1]);
@@ -108,7 +108,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.doesNotMatch(skillIndex, /^- `[^`]+`[^\n]+\b(?:Add-ons|Skills):/gmu);
   assert.match(skillIndex, /SKILL DISCOVERY:[\s\S]*enumerated `C` URI goes directly in PLAN\/NOW[\s\S]*`skill:\/\/ecc-skill-catalog` remains only for unlisted niche discovery/iu);
   assert.match(skillIndex, /`network\.design`[^\n]*C=\[`skill:\/\/ecc-skill-catalog\/network-config-validation\/SKILL\.md`, `skill:\/\/ecc-skill-catalog\/safety-guard\/SKILL\.md`\][^\n]*PLAN URI:/iu);
-  assert.ok(Buffer.byteLength(skillIndex) < 15_000, 'Main workflow index should stay below 15k');
+  assert.ok(Buffer.byteLength(skillIndex) < 16_000, 'Main workflow index should stay below 16k');
   assert.match(skillIndex, /Navigation only[\s\S]*never routes[\s\S]*gates[\s\S]*decides completion/i);
   assert.doesNotMatch(skillIndex, /block:\s*true|continue:\s*true|hard router|automatic retry/iu);
   assert.doesNotMatch(skillIndex, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
@@ -340,8 +340,8 @@ test('ordinary code work uses plan plus native task and reviewer without plugin 
   assert.deepEqual(workflowCatalog['database.migration.repair'].roles, ['plan', 'task', 'reviewer']);
   assert.deepEqual(workflowCatalog['ml.debug'].roles, ['plan', 'task', 'reviewer']);
   assert.deepEqual(workflowCatalog['omp.plugin'].roles, ['plan', 'task', 'reviewer']);
-  assert.deepEqual(workflowCatalog['database.review'].roles, ['task']);
-  assert.deepEqual(workflowCatalog['ml.review'].roles, ['task']);
+  assert.deepEqual(workflowCatalog['database.review'].roles, ['task', 'reviewer']);
+  assert.deepEqual(workflowCatalog['ml.review'].roles, ['task', 'reviewer']);
   assert.deepEqual(workflowCatalog['security.review'].roles, ['ecc-security-reviewer']);
   assert.deepEqual(workflowCatalog['release.publish'].roles, ['task']);
 

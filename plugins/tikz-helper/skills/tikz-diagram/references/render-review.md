@@ -5,14 +5,14 @@ Review a fresh, revision-bound render; source inspection alone is not visual evi
 ## Produce evidence
 
 1. Confirm the project copy uses only project-relative inputs and has no shell escape or remote resource.
-2. Run `tikz_render` when exposed and authorized. It should compile in an isolated temporary workspace and return the source revision plus PDF, SVG, full-size PNG, reduced PNG, and bounded command evidence.
+2. Have `task` run `tikz_render` when exposed and authorized. It compiles in an isolated temporary workspace and returns the source revision plus PDF, SVG, full-size PNG, reduced PNG, and bounded command evidence.
 3. Treat a missing engine, package, converter, or artifact as a visible limitation. Do not substitute an older render or claim success from a source-only check.
-4. Main compares the rendered revision with the current source and semantic graph before requesting any independent review.
+4. `task` binds the rendered artifacts to the exact current source revision and semantic graph before requesting independent review.
 
 ## Review checkpoints
 
 Check semantic fidelity first: all nodes, edges, arrow directions, decision branches, conditions, labels, loops, groups, and requested emphasis. Then check clipping, overlaps, text legibility, icon-label separation, spacing, crossings, color/contrast, and readability at both full and reduced size.
 
-`designer` is a soft delegation candidate for a bounded project-source revision. `visioner` is a soft read-only review candidate and receives the latest full-size and reduced raster paths plus the semantic acceptance list. Agent availability, capacity, dispatch, and finding disposition remain Main decisions.
+`designer` owns each complete bounded project-source revision. `task` invokes `tikz_render` and binds fresh artifacts to that exact revision. `visioner` is a soft read-only review candidate and receives only the latest full-size and reduced raster paths plus the semantic acceptance list.
 
-Main may group compatible findings into one bounded revision or split non-overlapping findings into bounded revisions. Change the project copy, rerender, and review only the affected fresh artifacts. Do not review an unchanged artifact again and do not create an automatic retry loop. No reviewer verdict is a gate, permission to publish, or authority to declare completion; Main integrates evidence and reports unresolved limitations.
+For supported findings, `designer` returns one bounded source revision, `task` rerenders it, and `visioner` reviews only fresh rerendered evidence, at most once for that changed revision. Do not review an unchanged artifact again and do not create an automatic retry loop. Main only authorizes external effects during initial setup and accepts final delivery; it does not render, modify, reconcile, or mediate the visual loop. No reviewer verdict is a gate, permission to publish, or authority to declare completion; unresolved limitations remain visible.

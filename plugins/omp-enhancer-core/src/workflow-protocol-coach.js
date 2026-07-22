@@ -1,3 +1,9 @@
+import {
+  DELEGATION_COMPILE_RULE,
+  DELEGATED_TODO_TEMPLATE,
+  NATIVE_TASK_PREFIX_TEMPLATE,
+} from './workflows/staged-contract.js';
+
 const COACH_STATE_VERSION = 1;
 const MAX_OBSERVED_TEXT_BYTES = 64 * 1024;
 const MAX_DIAGNOSTICS = 16;
@@ -6,9 +12,41 @@ const CUE_KINDS = new Set(['PRE_PLAN', 'PRE_READY', 'PRE_DISPATCH']);
 const URI_PATTERN = /^skill:\/\/[A-Za-z0-9._~!$&'()*+:=@%/-]+$/u;
 
 const CUE_CONTENT = Object.freeze({
-  PRE_PLAN: 'OMP PROTOCOL COACH (soft, phase=DECLARE): Start the next visible assistant response at byte 0 with a filled WORKFLOW PLAN. Treat index D/C entries as optional candidates, choose the smallest matching exact URI set, and declare structured NOW/THEN loads. This cue selects no workflow, Skill, Agent, or fork and grants no authority.',
-  PRE_READY: 'OMP PROTOCOL COACH (soft, phase=COMMIT): Start the next visible assistant response at byte 0 with WORKFLOW READY, mechanically copy the committed declaration and actual load outcomes, initialize or rebase TODO only, then end and wait. Add no preface and generate no missing values; this cue grants no authority.',
-  PRE_DISPATCH: 'OMP PROTOCOL COACH (soft, phase=SPLIT): When Main uses the committed `tasks[]` batch form, supply one nonempty top-level `context`; each item uses only exposed fields. For each committed Delegate row, mechanically copy its Agent into `agent`, then put this unique prefix at byte 0 of the `task` string in this exact key order: [workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>]. Request a complete terminal child delivery with directly usable artifact/evidence; status-only or artifact-reference-only is incomplete. If a conditional repair checkpoint has no accepted finding and needs no dispatch, mark it resolved/completed, not drop/abandon. This cue selects no Agent, fork, dispatch, retry, or completion and grants no authority.',
+  PRE_PLAN: [
+    'OMP PROTOCOL COACH (soft, DECLARE)',
+    "CONTINUE PROJECT: Main's exact index read/supply initiated this path.",
+    'DIRECT only = verbatim no-judgment field/heading lookup.',
+    'Read-only, small, or comparison cannot downgrade this started PROJECT.',
+    'Main autonomously selects from the loaded index one matched exact Primary; only when no row matches use Primary none.',
+    'Next visible response byte 0 WORKFLOW PLAN:',
+    '1. LOAD: declare exact resource URIs, load in order, wait.',
+    '2. COMMIT: READY + detailed TODO only; end/wait.',
+    '3. SPLIT + EXECUTE: apply loaded steps and current native state.',
+    '4. VERIFY: parent integration and acceptance evidence.',
+    'Advisory only; selection and authority remain Main/native.',
+  ].join('\n'),
+  PRE_READY: [
+    'OMP PROTOCOL COACH (soft)',
+    'byte 0 WORKFLOW READY; copy. Same response: native todo(op=init) only; end/wait.',
+    DELEGATION_COMPILE_RULE,
+    'EACH MATCHED DELEGATE items[] STRING MUST USE THE FILLED FORM OF:',
+    DELEGATED_TODO_TEMPLATE,
+    'Filled workflow excludes sentinel `none`; `Add-ons=none`=>`workflow=Primary` only.',
+    'Fill every placeholder; checkpoint=complete runnable one-line. Ban role/step shorthand/summary label/literal `Delegate step-task:`. Empty Skills=>`skills=none`, not blank/omitted.',
+    'TODO>=2: 1 filled Delegate + 1 separate parent-owned integration/VERIFY.',
+    'No choice/authority/gate',
+  ].join('\n'),
+  PRE_DISPATCH: [
+    'OMP PROTOCOL COACH (soft, SPLIT)',
+    'SELF-CHECK IF AND ONLY IF all hold: loaded `subagent-driven`; Main independently confirms complete input + safe checkpoint + visible matching Agent; Main chose Delegate; no permitted fallback; committed TODO lacks this filled row:',
+    DELEGATED_TODO_TEMPLATE,
+    'Then native todo(op=init) rebase only, never op=done; end/wait; same response no task.',
+    'Otherwise direct-simple, parent-only, or permitted fallback: ignore self-check and generate no `task`.',
+    'LATER NATURAL RESPONSE: only if filled committed row still exists: explicitly copy row Agent to item `agent` despite default match; nonempty top-level `context`; task byte 0:',
+    NATIVE_TASK_PREFIX_TEMPLATE,
+    'Copy literal `skills=none` unchanged, never empty. Complete terminal delivery; status/reference-only incomplete. No accepted repair finding=>resolve TODO, no `task`.',
+    'No block/router/gate/retry/authority/choice.',
+  ].join('\n'),
 });
 
 export function createWorkflowProtocolCoachState() {

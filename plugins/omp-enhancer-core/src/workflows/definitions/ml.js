@@ -22,6 +22,10 @@ export const mlWorkflows = [
       {
         "id": "step-4",
         "text": "Report prioritized findings with concrete code or artifact evidence, affected decision, trigger, impact, reproducibility limits, remediation, and verification."
+      },
+      {
+        "id": "step-review",
+        "text": "Reviewer independently audits the main-reviewed bounded diff and evidence without editing or mutating."
       }
     ],
     "scopeNotes": [
@@ -44,10 +48,12 @@ export const mlWorkflows = [
       "Model and dataset artifacts may contain sensitive data or unsafe serialized objects; inspect them through project-approved paths and preserve provenance."
     ],
     "roles": [
-      "task"
+      "task",
+      "reviewer"
     ],
     "delegation": [
-      "steps-2-4: task owns a bounded read-only ML audit slice and returns concrete system and evidence findings without editing or mutating code, data, or artifacts; the parent reconciles scope and conclusions"
+      "steps-2-4: task owns a bounded read-only ML audit slice and returns concrete system and evidence findings without editing or mutating code, data, or artifacts; the parent reconciles scope and conclusions",
+      "step-review: reviewer independently audits only the Main-reviewed bounded diff and evidence without project reads, commands, edits, or expensive jobs; parent reconciles scope and conclusions"
     ]
   },
   {

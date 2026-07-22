@@ -1268,6 +1268,35 @@ export async function prepareScenario(scenario) {
         '',
       ].join('\n'),
     );
+  } else if (scenario.fixture === 'general-subagent-analysis-readonly') {
+    await Promise.all([
+      writeFile(
+        path.join(cwd, 'brief.txt'),
+        [
+          'Workshop brief',
+          'The workshop should prioritize hands-on practice, balanced participation, and a useful closing synthesis.',
+          'Attendees value a predictable midday break more than extra presentation time.',
+          '',
+        ].join('\n'),
+      ),
+      writeFile(
+        path.join(cwd, 'options.txt'),
+        [
+          'Option A: one 75-minute lecture, a 45-minute group exercise, lunch at 12:30, and a 20-minute closing discussion.',
+          'Option B: two 25-minute briefings, two 40-minute group exercises, lunch at 13:00, and a 10-minute closing recap.',
+          '',
+        ].join('\n'),
+      ),
+      writeFile(
+        path.join(cwd, 'constraints.txt'),
+        [
+          'The schedule must fit between 09:30 and 15:00.',
+          'Lunch must start no later than 12:45 and last at least 45 minutes.',
+          'Every attendee must have a structured opportunity to contribute before the closing synthesis.',
+          '',
+        ].join('\n'),
+      ),
+    ]);
   } else if (scenario.fixture === 'skill-discovery-readonly') {
     await Promise.all([
       writeFile(

@@ -19,10 +19,7 @@ const NEW_TASK_WORKFLOWS = [
   'writing.latex',
   'writing.markdown',
   'doc.convert.word',
-  'database.review',
-  'ml.review',
   'marketing.campaign',
-  'seo.audit',
   'release.publish',
 ];
 
@@ -61,9 +58,9 @@ test('schema accepts only the three delegation defaults and requires roles only 
   );
 });
 
-test('catalog v21 projects explicit exception defaults and 28 substantive subagent-driven contracts', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 21);
-  assert.equal(workflowDefinitions.length, 30);
+test('catalog v22 projects explicit exception defaults and 29 substantive subagent-driven contracts', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 22);
+  assert.equal(workflowDefinitions.length, 31);
 
   const rawSimple = generalWorkflows.find(({ id }) => id === 'agentic.simple');
   const rawPending = writingWorkflows.find(({ id }) => id === 'writing.pending');
@@ -75,12 +72,49 @@ test('catalog v21 projects explicit exception defaults and 28 substantive subage
   }
 
   const substantive = workflowDefinitions.filter(({ id }) => !NON_SUBSTANTIVE_DEFAULTS.has(id));
-  assert.equal(substantive.length, 28);
+  assert.equal(substantive.length, 29);
   for (const workflow of substantive) {
     assert.equal(workflow.delegationDefault, 'subagent-driven', workflow.id);
     assert.equal(workflowCatalog[workflow.id].delegationDefault, 'subagent-driven', workflow.id);
     assert.ok(workflow.roles.length > 0, `${workflow.id} must expose at least one bounded role`);
   }
+});
+
+test('general.subagent is a generic task-owned checkpoint with no code lifecycle', () => {
+  const general = generalWorkflows.find(({ id }) => id === 'general.subagent');
+  assert.ok(general);
+  assert.equal(general.delegationDefault, 'subagent-driven');
+  assert.deepEqual(general.skills, []);
+  assert.deepEqual(general.roles, ['task']);
+
+  const contract = [
+    general.chooseWhen,
+    ...general.steps.map(({ text }) => text),
+    ...general.scopeNotes,
+    ...general.qualityChecks,
+    ...general.riskNotes,
+    ...general.delegation,
+  ].join(' ');
+  assert.match(
+    contract,
+    /complete user-named inputs[\s\S]*task is the first project actor[\s\S]*reads the exact (?:user-)?named sources itself/iu,
+  );
+  assert.match(
+    contract,
+    /task[\s\S]*owns one complete bounded[\s\S]*analysis[\s\S]*investigation[\s\S]*multi-step modification[\s\S]*creation[\s\S]*returns directly usable (?:evidence|artifact)/iu,
+  );
+  assert.match(
+    contract,
+    /read-only[\s\S]*size[\s\S]*overhead[\s\S]*no explicit delegation request[\s\S]*not fallback/iu,
+  );
+  assert.match(
+    contract,
+    /Main owns integration[\s\S]*final verification[\s\S]*permission[\s\S]*external-effect/iu,
+  );
+  assert.doesNotMatch(
+    contract,
+    /code-development|code\.dev|code-specific|repository|local code|\bTDD\b|\bRED\b|\bGREEN\b|test coverage|plan review|reviewer|semantic diff|production changes|vertical slices/iu,
+  );
 });
 
 test('writing.pending owns one bounded language-resolution transition before the language subagent workflow', () => {

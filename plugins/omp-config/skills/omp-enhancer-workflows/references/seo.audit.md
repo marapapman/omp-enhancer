@@ -14,10 +14,12 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
   3. [step-3] Map each finding to a concrete URL, source or render artifact, observed behavior, affected search or user intent, severity, and reproducible validation.
   4. [step-4] Separate demonstrated technical defects from content hypotheses, keyword opportunities, third-party estimates, and recommendations that require live experiments.
   5. [step-5] Deliver a prioritized audit with crawl and index evidence, current render and performance limitations, safe remediation order, and the workflows required for authorized code or prose changes.
-- Agent candidates: `task`.
+  6. [step-review] Reviewer independently audits the main-reviewed bounded diff and evidence without editing or mutating.
+- Agent candidates: `task`, `reviewer`.
 - Delegated checkpoints:
   - steps-1-4: task owns one complete bounded URL and evidence slice only when no composed domain Agent is a closer match; a composed domain Agent is preferred when its workflow owns the requested research, prose, or visual method
   - step-5: the parent reconciles crawl, index, render, performance, language, and evidence limitations
+  - step-review: reviewer independently audits only the Main-reviewed bounded diff and evidence without project reads, commands, edits, or site changes; parent reconciles scope and conclusions
 - Quality checks:
   - crawl boundary, index and canonical evidence, URL-to-finding correspondence, current render evidence, structured-data correspondence, measured performance evidence, language and search-intent fit, prioritization rationale, and explicit limitations
 - Scope notes:

@@ -7,7 +7,7 @@ Derive TODO internally.
 
 ## `agentic.simple`
 
-- Primary when: Only when no specialized card adds material method, evidence, preservation, risk, format, or delegation; target size alone never qualifies.
+- Primary when: Only for trivial one-step operations: a simple command execution, a one-line code/text change, a direct factual answer, or a single read-only lookup needing no analysis, investigation, or subagent work.
 - Reference steps:
   1. [step-1] Understand the outcome and inspect minimal context.
   2. [step-2] Perform the requested work.

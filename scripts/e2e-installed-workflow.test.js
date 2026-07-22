@@ -3800,7 +3800,7 @@ test('DeepSeek subagent default matrix keeps native task and hub semantics with 
   const single = matrix.scenarios.find(({ id }) => id === 'single-read-direct');
   const forbidden = matrix.scenarios.find(({ id }) => id === 'explicit-main-only');
   const trivialBatch = matrix.scenarios.find(({ id }) => id === 'two-trivial-lookups-direct');
-  const simple = matrix.scenarios.find(({ id }) => id === 'non-mechanical-agentic-simple');
+  const general = matrix.scenarios.find(({ id }) => id === 'non-mechanical-general-subagent');
   const writing = matrix.scenarios.find(({ id }) => id === 'natural-writing-en-subagent-default');
   const network = matrix.scenarios.find(({ id }) => id === 'natural-network-design-subagent-default');
   const positives = matrix.scenarios.filter(({ category }) => category.startsWith('positive/'));
@@ -3856,14 +3856,76 @@ test('DeepSeek subagent default matrix keeps native task and hub semantics with 
   ]);
   assert.doesNotMatch(forbidden.prompt, /subagents?|sub-agents?/iu);
   assert.match(forbidden.prompt, /do not delegate/iu);
-  assert.equal(simple.expectations.maxNativeTaskCalls, 0);
-  assert.equal(simple.expectations.maxNativeTaskAssignmentAttempts, 0);
-  assert.equal(simple.expectations.requireNativeTodoInit, true);
-  assert.equal(simple.expectations.requireNativeTodoInitBeforeSubstantiveTool, true);
-  assert.equal(simple.expectations.requiredWorkflowPrimary, 'agentic.simple');
-  assert.deepEqual(simple.expectations.requiredSelectedWorkflowIds, ['agentic.simple']);
-  assert.deepEqual(simple.expectations.requiredObservedSkills, ['omp-enhancer-workflows']);
-  assert.equal(simple.expectations.requireWorkflowReadyTodoOnlyBatch, true);
+  assert.ok(general);
+  assert.equal(
+    matrix.scenarios.some(({ id }) => id === 'non-mechanical-agentic-simple'),
+    false,
+  );
+  assert.equal(general.fixture, 'general-subagent-analysis-readonly');
+  assert.equal(general.category, 'control/non-mechanical-general');
+  assert.match(general.prompt, /brief\.txt/iu);
+  assert.match(general.prompt, /options\.txt/iu);
+  assert.match(general.prompt, /constraints\.txt/iu);
+  assert.match(general.prompt, /analy[sz]e.+recommend|recommend.+analy[sz]e/iu);
+  assert.doesNotMatch(general.prompt, /\b(?:code|package|plugin|repository|software)\b/iu);
+  assert.doesNotMatch(general.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
+  assert.equal(general.expectations.minNativeTaskCalls, 1);
+  assert.equal(general.expectations.maxNativeTaskCalls, 1);
+  assert.equal(general.expectations.minNativeTaskAssignmentAttempts, 1);
+  assert.equal(general.expectations.maxNativeTaskAssignmentAttempts, 1);
+  assert.equal(general.expectations.requireNativeTaskCompletion, true);
+  assert.equal(general.expectations.requireNativeTaskSubmissionForEveryAssignment, true);
+  assert.equal(general.expectations.requireNativeTaskMetadataPrefix, true);
+  assert.equal(general.expectations.requireExactNativeTaskMetadataPrefix, true);
+  assert.equal(general.expectations.requireNativeTaskMetadataMatchesDelegatedTodoRows, true);
+  assert.deepEqual(general.expectations.requiredNativeTaskAgents, ['task']);
+  assert.deepEqual(general.expectations.requiredNativeTaskWorkflows, ['general.subagent']);
+  assert.deepEqual(general.expectations.requiredNativeTaskWorkflowsPerAssignment, [
+    'general.subagent',
+  ]);
+  assert.equal(general.expectations.requiredNativeTaskSkillsPerAssignment, undefined);
+  assert.deepEqual(general.expectations.requiredObservedSkills, ['omp-enhancer-workflows']);
+  assert.deepEqual(general.expectations.forbiddenSkills, ['code-development']);
+  assert.equal(general.expectations.maxObservedSkills, 1);
+  assert.equal(general.expectations.requiredWorkflowPrimary, 'general.subagent');
+  assert.deepEqual(general.expectations.requiredSelectedWorkflowIds, ['general.subagent']);
+  assert.deepEqual(general.expectations.requiredWorkflowLoadOrder, [
+    'skill://omp-enhancer-workflows/references/general.subagent.md',
+  ]);
+  assert.equal(general.expectations.requireWorkflowResourceCallsMatchLoadOrder, true);
+  assert.equal(general.expectations.requireWorkflowIndexOnlyFirstToolBatch, true);
+  assert.equal(general.expectations.requireWorkflowPlanBeforeResourceLoads, true);
+  assert.equal(general.expectations.requireWorkflowPlanFirstVisibleContent, true);
+  assert.equal(general.expectations.requireWorkflowPlanLoadCallsSameBatch, true);
+  assert.equal(general.expectations.forbidResourceProjectSameBatch, true);
+  assert.equal(general.expectations.requireWorkflowReadyAfterLoadsBeforeProjectTools, true);
+  assert.equal(general.expectations.requireWorkflowReadyFirstVisibleContent, true);
+  assert.equal(general.expectations.requireWorkflowReadyTodoOnlyBatch, true);
+  assert.equal(general.expectations.requireExactSelectedWorkflowReferences, true);
+  assert.equal(general.expectations.requireNativeTodoInit, true);
+  assert.equal(general.expectations.requireNativeTodoCompletion, true);
+  assert.equal(general.expectations.requireNativeTodoInitBeforeSubstantiveTool, true);
+  assert.deepEqual(general.expectations.requiredNativeTodoItemPatterns, [
+    '^Delegate Agent=task workflow=general\\.subagent step=step-task skills=none checkpoint=.+$',
+  ]);
+  assert.equal(general.expectations.maxProjectInspectionCallsBeforeNativeTask, 0);
+  assert.equal(general.expectations.maxProjectInspectionCallsAfterNativeTask, 3);
+
+  const preparedGeneral = await prepareScenario(general);
+  try {
+    assert.equal(preparedGeneral.displayCwd, '<temporary:general-subagent-analysis-readonly>');
+    assert.equal(preparedGeneral.verifyRoot, preparedGeneral.cwd);
+    assert.deepEqual((await readdir(preparedGeneral.cwd)).sort(), [
+      'brief.txt',
+      'constraints.txt',
+      'options.txt',
+    ]);
+    assert.match(await readFile(path.join(preparedGeneral.cwd, 'brief.txt'), 'utf8'), /workshop/iu);
+    assert.match(await readFile(path.join(preparedGeneral.cwd, 'options.txt'), 'utf8'), /Option A/iu);
+    assert.match(await readFile(path.join(preparedGeneral.cwd, 'constraints.txt'), 'utf8'), /must/iu);
+  } finally {
+    await preparedGeneral.cleanup();
+  }
 
   assert.equal(writing.fixture, 'substantive-writing-en-readonly');
   assert.match(writing.prompt, /two English LaTeX paragraphs/iu);

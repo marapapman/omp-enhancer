@@ -38,6 +38,10 @@ test('workflow artifact generator writes the optional workflow skill and one ref
   assert.equal((await checkWorkflowArtifacts({ catalogTarget, skillRoot })).ok, true);
   const skill = await readFile(path.join(skillRoot, 'SKILL.md'), 'utf8');
   const sharedCatalog = await readFile(catalogTarget, 'utf8');
+  const generalReference = await readFile(
+    path.join(skillRoot, 'references', 'general.subagent.md'),
+    'utf8',
+  );
   assert.match(skill, /^---\nname: omp-enhancer-workflows\n/m);
   assert.match(skill, /Main owns delegation; OMP owns tools, permissions, TODO, Agents, and completion/i);
   assert.match(skill, new RegExp(`Catalog version: ${WORKFLOW_CATALOG_VERSION}\\b`, 'i'));
@@ -77,7 +81,7 @@ test('workflow artifact generator writes the optional workflow skill and one ref
   assert.match(skill, /SKILL DISCOVERY:[\s\S]*enumerated `C` URI goes directly in PLAN\/NOW[\s\S]*`skill:\/\/ecc-skill-catalog` remains only for unlisted niche discovery/iu);
   assert.match(skill, /`writing\.en`[^\n]*D=\[`skill:\/\/writing-review`\][^\n]*PLAN URI:/iu);
   assert.match(skill, /`network\.design`[^\n]*C=\[`skill:\/\/ecc-skill-catalog\/network-config-validation\/SKILL\.md`, `skill:\/\/ecc-skill-catalog\/safety-guard\/SKILL\.md`\][^\n]*PLAN URI:/iu);
-  assert.ok(Buffer.byteLength(skill) < 15_000, 'workflow Skill index should stay below 15k');
+  assert.ok(Buffer.byteLength(skill) < 16_000, 'workflow Skill index should stay below 16k');
   assert.match(skill, /Navigation only[\s\S]*never routes[\s\S]*gates[\s\S]*decides completion/i);
   assert.doesNotMatch(skill, /FIRST tool call|Invoke only roles|block:\s*true|continue:\s*true|hard router/i);
   assert.equal(
@@ -128,6 +132,41 @@ test('workflow artifact generator writes the optional workflow skill and one ref
   assert.match(codeReference, /`code\.dev`/);
   assert.match(codeReference, /Agent candidates/);
   assert.doesNotMatch(codeReference, /Optional Agent candidates|Optional delegation ideas/iu);
+
+  const generalIndexRow = skill
+    .split('\n')
+    .find((line) => line.startsWith('- `general.subagent` —'));
+  assert.ok(generalIndexRow);
+  assert.match(
+    generalIndexRow,
+    /PLAN URI: `skill:\/\/omp-enhancer-workflows\/references\/general\.subagent\.md`/u,
+  );
+  assert.doesNotMatch(generalIndexRow, /\b[DC]=\[|code-development/iu);
+
+  const generalCatalogStart = sharedCatalog.indexOf('### `general.subagent`');
+  const generalCatalogEnd = sharedCatalog.indexOf('\n### `', generalCatalogStart + 1);
+  assert.notEqual(generalCatalogStart, -1);
+  assert.notEqual(generalCatalogEnd, -1);
+  const generalCatalog = sharedCatalog.slice(generalCatalogStart, generalCatalogEnd);
+  for (const artifact of [generalReference, generalCatalog]) {
+    assert.match(artifact, /Agent candidates: `task`/u);
+    assert.match(
+      artifact,
+      /complete user-named inputs[\s\S]*task is the first project actor[\s\S]*reads the exact (?:user-)?named sources itself/iu,
+    );
+    assert.match(
+      artifact,
+      /task[\s\S]*owns one complete bounded[\s\S]*analysis[\s\S]*investigation[\s\S]*multi-step modification[\s\S]*creation[\s\S]*returns directly usable (?:evidence|artifact)/iu,
+    );
+    assert.match(
+      artifact,
+      /Main owns integration[\s\S]*final verification[\s\S]*permission[\s\S]*external-effect/iu,
+    );
+    assert.doesNotMatch(
+      artifact,
+      /code-development|code\.dev|code-specific|repository|local code|\bTDD\b|\bRED\b|\bGREEN\b|test coverage|plan review|reviewer|semantic diff|production changes|vertical slices/iu,
+    );
+  }
 
   for (const definition of workflowDefinitions) {
     const reference = await readFile(path.join(skillRoot, 'references', `${definition.id}.md`), 'utf8');

@@ -242,6 +242,8 @@ test('linked TikZ resources use one byte-zero extension handoff before the final
 
 test('Skill and references preserve host authority, copy safety, imagegen boundaries, and soft review', () => {
   const skill = read('skills/tikz-diagram/SKILL.md');
+  const renderReview = read('skills/tikz-diagram/references/render-review.md');
+  const imagegenAssets = read('skills/tikz-diagram/references/imagegen-assets.md');
   const references = readdirSync(join(skillRoot, 'references'))
     .filter((name) => name.endsWith('.md'))
     .map((name) => readFileSync(join(skillRoot, 'references', name), 'utf8'))
@@ -257,7 +259,8 @@ test('Skill and references preserve host authority, copy safety, imagegen bounda
   assert.match(contract, /prefer.+vector.+icon/is);
   assert.match(contract, /`generate_image`.+optional/is);
   assert.match(contract, /native imagegen.+`generate_image`/is);
-  assert.match(contract, /Main.+(?:choose|decide|own).+`generate_image`/is);
+  assert.match(imagegenAssets, /Main authorizes.+optional external effect.+initial setup.+`task` invokes `generate_image`/is);
+  assert.match(imagegenAssets, /`task`.+`tikz_prepare_asset`.+manifest.+`designer`.+next complete source revision.+`task`.+renders/is);
   assert.match(contract, /(?:never|do not).+`generate_image`.+(?:topology|edges|arrows).+(?:labels|text)/is);
   assert.match(contract, /raster.+never.+(?:call|claim|describe).+vector/is);
   assert.match(contract, /host.+authoritative/is);
@@ -265,7 +268,10 @@ test('Skill and references preserve host authority, copy safety, imagegen bounda
   assert.match(contract, /`visioner`.+read-only/is);
   assert.match(contract, /never probe or guess.+Agent URI.+inventory/is);
   assert.match(contract, /once per top-level Main task.+not.+(?:gate|block)/is);
-  assert.match(contract, /group.+findings.+bounded revision|split.+findings.+bounded revisions/is);
+  assert.match(renderReview, /`designer` owns.+complete.+source revision.+`task`.+`tikz_render`.+binds.+fresh.+exact revision.+`visioner`.+read-only/is);
+  assert.match(renderReview, /supported findings.+`designer`.+`task` rerenders.+`visioner` reviews only fresh rerendered evidence.+at most once/is);
+  assert.match(renderReview, /Main only authorizes external effects during initial setup and accepts final delivery.+does not render, modify, reconcile, or mediate the visual loop/is);
+  assert.doesNotMatch(`${renderReview}\n${imagegenAssets}`, /Main (?:compares|groups|changes|renders|integrates|invokes|prepares) (?:the|compatible|generated|project)/i);
   assert.match(contract, /no.+(?:gate|completion permission|automatic loop)/is);
   assert.doesNotMatch(contract, /block:\s*true|continue:\s*true|retry until|repeat until|must delegate|mandatory fork/i);
 });
@@ -291,11 +297,19 @@ test('selected TikZ work compiles designer, task render, and visioner in depende
   );
   assert.match(
     skill,
-    /`task`.+invokes.+`tikz_render`.+full-size.+60%/is,
+    /`task`.+invokes.+optional `generate_image`.+`tikz_prepare_asset`.+integrates.+invokes.+`tikz_render`.+binds.+fresh.+exact revision.+full-size.+60%/is,
   );
   assert.match(
     skill,
     /`visioner`.+independently.+read-only.+layout.+legibility.+fresh.+current-revision/is,
+  );
+  assert.match(
+    skill,
+    /`designer` applies.+supported findings.+`task` rerenders.+`visioner` reviews only fresh rerenders.+at most once/is,
+  );
+  assert.match(
+    skill,
+    /Main authorizes external-effect decisions during initial setup and accepts the final delivery.+does not render, modify, reconcile, or mediate the visual loop/is,
   );
   assert.match(
     skill,

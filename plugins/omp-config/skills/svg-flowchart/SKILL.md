@@ -23,7 +23,7 @@ Agent availability and capacity remain Main decisions. Use `designer` and `visio
 
 ## Author with designer
 
-When Main selects an exposed `designer`, give that Agent ownership of SVG creation and revision with all of the following task-local constraints:
+When Main selects an exposed `designer`, that `designer` owns one complete SVG source revision and every bounded repair revision, with all of the following task-local constraints:
 
 - Produce a valid standalone SVG with `xmlns`, a positive `viewBox`, `<title>`, and `<desc>`. Do not embed scripts, remote fonts, raster images, gradients, filters, masks, patterns, or external assets.
 - Use only black (`#000` or `#000000`), white (`#fff` or `#ffffff`), and `fill="none"`.
@@ -45,22 +45,24 @@ When Main selects an exposed `designer`, give that Agent ownership of SVG creati
 
 ## Validate source and renders
 
-Run the bundled checker before each visual review:
+`task` runs the bundled checker before each visual review:
 
 ```bash
 node <skill-directory>/scripts/check-svg-flowchart.mjs path/to/diagram.svg
 ```
 
-The checker validates the basic SVG contract, palette, allowed elements, orthogonal polylines, and minimum declared text size. Fix its findings before rendering.
+The checker validates the basic SVG contract, palette, allowed elements, orthogonal polylines, and minimum declared text size. `designer` fixes its source findings before rendering.
 
-Render the current SVG revision at its full declared size and at 60% scale using the intended delivery renderer when known, otherwise an available local browser. Record the renderer with the evidence. If renderers disagree, verify the actual target and report the portability difference; prefer explicit triangle geometry when arrow markers must survive multiple renderers. Give both fresh raster renders, the SVG path, the flow model, and the revision identifier to `visioner`. Do not claim visual approval from source inspection or the static checker alone.
+`task` renders the current SVG revision using the intended delivery renderer when known, otherwise an available local browser. Task binds the SVG path, flow model, and revision identifier to both the full declared size and 60% raster outputs as one fresh evidence set. If renderers disagree, verify the actual target and report the portability difference; prefer explicit triangle geometry when arrow markers must survive multiple renderers. Give that fresh evidence set to `visioner`. Do not claim visual approval from source inspection or the static checker alone.
 
 ## Iterate with visioner
 
 1. When exposed, have `designer` self-check the first render against the flow model and layout baseline.
-2. When exposed, have `visioner` independently inspect the latest full-size and 60% renders for missing or incorrect flow, wrong arrow direction, overlap, text clipping, connector-node or connector-label collision, avoidable crossings, small text, cramped spacing, and unclear hierarchy.
+2. When exposed, have `visioner` independently inspect only the fresh latest full-size and 60% renders for missing or incorrect flow, wrong arrow direction, overlap, text clipping, connector-node or connector-label collision, avoidable crossings, small text, cramped spacing, and unclear hierarchy.
 3. Require `visioner` to return `APPROVED`, `CHANGES_REQUIRED`, or `UNREVIEWABLE`. Each finding must include severity, element IDs, visible region, violated criterion, impact, and requested correction.
-4. Return `CHANGES_REQUIRED` to Main as advisory evidence. A supported finding selected for repair becomes a new bounded TODO checkpoint; Main may assign the affected geometry slice to an exposed `designer`, rerun the checker and renderer, and request at most one fresh affected review. Do not redispatch automatically. Do not review an unchanged artifact again.
+4. Treat `CHANGES_REQUIRED` as advisory evidence. For a supported finding, `designer` applies a bounded source revision, `task` reruns the checker and rerenders it, and `visioner` reviews only fresh rerendered evidence, at most once for that changed revision. Do not redispatch automatically. Do not review an unchanged artifact again.
 5. If a material geometry issue remains, report its exact element IDs, impact, and limitation instead of claiming visual approval.
 
 Report the static-check result and any visioner evidence tied to the final revision. No review verdict grants permission to publish or complete. Preserve review renders only when project convention or the user requires them.
+
+Main only authorizes external effects during initial setup and accepts final delivery; it does not check, render, modify, reconcile, or mediate the visual loop.

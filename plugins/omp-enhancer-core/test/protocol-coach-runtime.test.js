@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import registerCoreEnhancer from '../index.js';
+import {
+  DELEGATION_COMPILE_RULE,
+  DELEGATED_TODO_TEMPLATE,
+  NATIVE_TASK_PREFIX_TEMPLATE,
+} from '../src/workflows/staged-contract.js';
 
 const INDEX_URI = 'skill://omp-enhancer-workflows';
 const INDEX_BODY = '---\nname: omp-enhancer-workflows\ndescription: Workflow index.\n---\n';
@@ -36,7 +41,19 @@ test('exact DeepSeek Main receives an immutable retry-safe hidden context cue', 
     attribution: 'user',
     timestamp: first.messages[1].timestamp,
   });
-  assert.match(first.messages[1].content, /selects no workflow, Skill, Agent, or fork/u);
+  assert.match(first.messages[1].content, /CONTINUE PROJECT[^\n]*Main[^\n]*index (?:read|supply)[^\n]*initiated/iu);
+  assert.match(first.messages[1].content, /DIRECT only[^\n]*verbatim[^\n]*no-judgment[^\n]*field\/heading lookup/iu);
+  assert.match(first.messages[1].content, /read-only[^\n]*small[^\n]*comparison[^\n]*cannot downgrade[^\n]*PROJECT/iu);
+  assert.match(first.messages[1].content, /Main autonomously[^\n]*loaded index[^\n]*one matched exact Primary/iu);
+  assert.match(first.messages[1].content, /only (?:when|if) no row matches[^\n]*Primary none/iu);
+  assert.match(first.messages[1].content, /^1\. LOAD:/mu);
+  assert.match(first.messages[1].content, /^2\. COMMIT:/mu);
+  assert.match(first.messages[1].content, /^3\. SPLIT \+ EXECUTE:/mu);
+  assert.match(first.messages[1].content, /^4\. VERIFY:/mu);
+  assert.doesNotMatch(
+    first.messages[1].content,
+    /general\.subagent|agentic\.simple|writing\.|skill:\/\/|\bAgent\b|fan-?out|\bdelegate\b|gate|router|block|retry|controller/iu,
+  );
   assert.equal(typeof first.messages[1].timestamp, 'number');
   assert.equal(entries.length, entriesBeforeContext, 'read-only cue injection does not append persistence entries');
 
@@ -83,7 +100,7 @@ test('coach survives session serialization and restoration before provider retry
 });
 
 test('runtime wiring advances only through observed PLAN loads READY and TODO', async () => {
-  const { pi, ctx } = runtime({ model: deepseek() });
+  const { pi, entries, ctx } = runtime({ model: deepseek() });
   await handler(pi, 'before_agent_start')({ prompt: 'Review and revise article.md.' }, ctx);
   await handler(pi, 'tool_result')(indexResult(), ctx);
   assert.equal((await handler(pi, 'context')({ messages: [] }, ctx)).messages.at(-1).details.phase, 'PRE_PLAN');
@@ -94,7 +111,41 @@ test('runtime wiring advances only through observed PLAN loads READY and TODO', 
   await handler(pi, 'tool_result')(readResult('skill://writing-review'), ctx);
   assert.equal(await handler(pi, 'context')({ messages: [] }, ctx), undefined);
   await handler(pi, 'tool_result')(readResult('skill://omp-enhancer-workflows/references/writing-en.md'), ctx);
-  assert.equal((await handler(pi, 'context')({ messages: [] }, ctx)).messages.at(-1).details.phase, 'PRE_READY');
+  const preReady = (await handler(pi, 'context')({ messages: [] }, ctx)).messages.at(-1);
+  assert.equal(preReady.details.phase, 'PRE_READY');
+  assert.ok(preReady.content.includes('\n'));
+  assert.ok(preReady.content.length < 950, `PRE_READY must stay below 950 characters, got ${preReady.content.length}`);
+  assert.match(
+    preReady.content,
+    /same response[^\n]*native `?todo`?\([^\n)]*`?op=init`?[^\n)]*\)[^\n]*only[^\n]*end\/wait/iu,
+  );
+  assert.doesNotMatch(preReady.content, /op=done|mark done/iu);
+  assert.equal(preReady.content.split(DELEGATION_COMPILE_RULE).length - 1, 1);
+  assert.equal(preReady.content.split(DELEGATED_TODO_TEMPLATE).length - 1, 1);
+  assert.ok(preReady.content.includes('EACH MATCHED DELEGATE items[] STRING MUST USE THE FILLED FORM OF:'));
+  assert.match(preReady.content, /fill every placeholder/iu);
+  assert.match(
+    preReady.content,
+    /filled workflow[^\n]*excludes?[^\n]*sentinel `none`/iu,
+  );
+  assert.match(preReady.content, /`Add-ons=none`[^\n]*`workflow=Primary` only/iu);
+  assert.match(
+    preReady.content,
+    /empty (?:loaded )?Skills[\s\S]*`skills=none`[\s\S]*(?:never|not) blank\/omitted/iu,
+  );
+  assert.match(
+    preReady.content,
+    /checkpoint[\s\S]*complete[\s\S]*runnable[\s\S]*(?:one|single)[ -]line/iu,
+  );
+  assert.match(preReady.content, /(?:no|ban) role\/step shorthand[\s\S]*summary labels?[\s\S]*literal `Delegate step-task:`/iu);
+  assert.match(
+    preReady.content,
+    /TODO>=2[^\n]*(?:one|1) filled Delegate[^\n]*(?:one|1) separate parent-owned integration\/VERIFY/iu,
+  );
+  assert.match(preReady.content, /loaded `subagent-driven`[^\n]*otherwise `fallback=/iu);
+  assert.doesNotMatch(preReady.content, /integration[^\n]*VERIFY[^\n]*report[^\n]*(?:each|separate|three|3)/iu);
+  assert.match(preReady.content, /No choice\/authority\/gate/u);
+  assert.doesNotMatch(preReady.content, /block(?:ing|ed)?|controller/iu);
 
   await handler(pi, 'message_end')({
     message: {
@@ -109,12 +160,47 @@ test('runtime wiring advances only through observed PLAN loads READY and TODO', 
   }, ctx);
   const dispatch = await handler(pi, 'context')({ messages: [] }, ctx);
   assert.equal(dispatch.messages.at(-1).details.phase, 'PRE_DISPATCH');
-  assert.match(dispatch.messages.at(-1).content, /committed `tasks\[\]` batch form[\s\S]*nonempty top-level `context`/u);
+  const preDispatch = dispatch.messages.at(-1).content;
+  assert.ok(preDispatch.includes('\n'));
+  assert.ok(preDispatch.length < 1_100, `PRE_DISPATCH must stay below 1100 characters, got ${preDispatch.length}`);
   assert.match(
-    dispatch.messages.at(-1).content,
-    /\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]/u,
+    preDispatch,
+    /SELF-CHECK IF AND ONLY IF all hold[\s\S]*loaded `subagent-driven`[\s\S]*Main independently confirms[\s\S]*complete input[\s\S]*safe checkpoint[\s\S]*visible matching Agent[\s\S]*chose Delegate[\s\S]*no permitted fallback[\s\S]*committed TODO lacks[\s\S]*filled row/iu,
   );
-  assert.match(dispatch.messages.at(-1).content, /artifact-reference-only[\s\S]*resolved\/completed/u);
+  assert.equal(preDispatch.split(DELEGATED_TODO_TEMPLATE).length - 1, 1);
+  assert.match(
+    preDispatch,
+    /Then native `?todo`?\([^\n)]*`?op=init`?[^\n)]*\)[^\n]*rebase only[^\n]*never[^\n]*`?op=done`?[^\n]*end\/wait[^\n]*same response[^\n]*no `?task`?/iu,
+  );
+  assert.match(
+    preDispatch,
+    /otherwise[\s\S]*direct-simple[\s\S]*parent-only[\s\S]*permitted fallback[\s\S]*ignore (?:the )?self-check[\s\S]*(?:generate )?no `task`/iu,
+  );
+  assert.match(preDispatch, /LATER NATURAL RESPONSE[\s\S]*only if[\s\S]*filled committed row still exists/iu);
+  assert.equal(preDispatch.split(NATIVE_TASK_PREFIX_TEMPLATE).length - 1, 1);
+  assert.match(
+    preDispatch,
+    /explicitly[\s\S]*row Agent[\s\S]*item `agent`[\s\S]*default match[\s\S]*nonempty top-level `context`/iu,
+  );
+  assert.match(preDispatch, /literal `skills=none`[\s\S]*unchanged[\s\S]*(?:never|not) empty/iu);
+  assert.match(preDispatch, /No block\/router\/gate\/retry\/authority\/choice/u);
+
+  await handler(pi, 'message_end')({
+    message: {
+      role: 'assistant',
+      content: 'Native todo(op=init) rebase only; end/wait; same response has no task.',
+      timestamp: 4,
+    },
+  }, ctx);
+  assert.equal(await handler(pi, 'context')({ messages: [] }, ctx), undefined);
+  await handler(pi, 'tool_result')({
+    toolName: 'todo',
+    result: { content: [{ type: 'text', text: 'TODO rebased.' }] },
+  }, ctx);
+  assert.equal(await handler(pi, 'context')({ messages: [] }, ctx), undefined);
+  const protocolCoach = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.protocolCoach;
+  assert.equal(protocolCoach.pendingCue, null);
+  assert.equal(protocolCoach.declaration.dispatchCueQueued, true);
 });
 
 test('message observation inspects visible assistant text only', async () => {
@@ -145,7 +231,10 @@ test('coach is exact-model and current top-level user-turn gated', async () => {
   ]) {
     assert.equal(await cueFor({ model }), undefined, `${model.provider}/${model.id}`);
   }
-  assert.equal((await cueFor({ model: mimo() })).messages.at(-1).details.phase, 'PRE_PLAN');
+  const deepseekCue = (await cueFor({ model: deepseek() })).messages.at(-1);
+  const mimoCue = (await cueFor({ model: mimo() })).messages.at(-1);
+  assert.equal(mimoCue.details.phase, 'PRE_PLAN');
+  assert.equal(mimoCue.content, deepseekCue.content, 'exact DeepSeek and MiMo receive the same PRE_PLAN contract');
 
   const subagentEntries = [{ type: 'session_init', task: 'bounded child task' }];
   assert.equal(await cueFor({ model: deepseek(), entries: subagentEntries }), undefined);

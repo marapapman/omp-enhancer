@@ -82,6 +82,82 @@ test('current documentation links the self-development and E2E methods without e
   assert.ok(Buffer.byteLength(readme) <= 6500, 'root README keeps development detail under docs');
 });
 
+test('current repository documentation matches the v22 runtime and evidence contracts', async () => {
+  const [agents, architecture, development, workflows] = await Promise.all([
+    read('AGENTS.md'),
+    read('docs/ARCHITECTURE.md'),
+    read('docs/DEVELOPMENT.md'),
+    read('docs/WORKFLOW_DEVELOPMENT.md'),
+  ]);
+
+  assert.match(agents, /Workflow catalog \(v22\)/u);
+  assert.match(agents, /Workflow catalog v22/u);
+  assert.match(architecture, /Catalog version 22.+31.+29.+`subagent-driven`/isu);
+  assert.match(development, /Catalog version 22.+31.+29.+`subagent-driven`/isu);
+  assert.match(workflows, /当前 31 张卡片.+29 张.+`subagent-driven`/isu);
+  assert.match(workflows, /parity.+29 张.+`subagent-driven`/isu);
+  assert.doesNotMatch(
+    [agents, architecture, development, workflows].join('\n'),
+    /Catalog version 21|catalog \(v21\)|当前 30 张卡片|28 张非简单卡片/iu,
+  );
+
+  assert.match(
+    agents,
+    /`omp-enhancer-core` \| Task facts.+protocol coaching.+skill\/subagent validation.+`index\.js`/iu,
+  );
+  assert.doesNotMatch(agents, /`omp-enhancer-core` \|[^\n|]*Workflow routing/iu);
+  assert.doesNotMatch(agents, /`plugins\/omp-enhancer-core\/src\/` \|[^\n|]*routing/iu);
+  assert.match(
+    agents,
+    /`omp-test-enhancer`.+seven default-inactive advisory tools.+`dist\/extension\.js`.+`src\/extension\.ts`/isu,
+  );
+  assert.match(
+    agents,
+    /`plugins\/omp-test-enhancer\/src\/extension\.ts`.+source registration.+seven default-inactive advisory tools.+`dist\/extension\.js`/isu,
+  );
+  assert.doesNotMatch(agents, /advisory review gates|gate orchestration|6 tools/iu);
+
+  for (const [path, content] of [
+    ['AGENTS.md', agents],
+    ['docs/ARCHITECTURE.md', architecture],
+  ]) {
+    assert.match(
+      content,
+      /designer.+(?:design|source) revision.+task.+rendering.+compilation.+export.+visioner.+fresh.+read-only.+Main.+setup authorization.+final acceptance.+does not mediate/isu,
+      path,
+    );
+    assert.match(
+      content,
+      /backward-compatible `verdict`.+cannot upgrade.+proof.+`strictVerdict`.+`SUPPORTED`.+same-tuple `ENTAILS \+ PROVEN`.+`CONTRADICTED`.+same-tuple `NEGATES \+ DISPROVED`/isu,
+      path,
+    );
+  }
+
+  for (const [path, content] of [
+    ['docs/DEVELOPMENT.md', development],
+    ['docs/WORKFLOW_DEVELOPMENT.md', workflows],
+  ]) {
+    assert.match(
+      content,
+      /willingness.+`general\.subagent`.+non-mechanical.+subagent-driven/isu,
+      path,
+    );
+    assert.doesNotMatch(content, /willingness.+non-mechanical `agentic\.simple`/isu, path);
+  }
+
+  const probe = workflows.match(/真实 OMP 兼容验证[\s\S]*?Probe 使用/iu)?.[0] ?? '';
+  for (const entry of [
+    'plugins/omp-enhancer-core/index.js',
+    'plugins/omp-config/index.js',
+    'plugins/writing-helper/index.js',
+    'plugins/omp-test-enhancer/dist/extension.js',
+    'plugins/omp-fact-checker/index.js',
+    'plugins/tikz-helper/index.js',
+  ]) {
+    assert.match(probe, new RegExp(entry.replaceAll('.', '\\.'), 'u'), entry);
+  }
+});
+
 test('current documentation defines the bounded phase-local protocol coach without making it a gate', async () => {
   const [agents, architecture, development, optimization, e2e] = await Promise.all([
     read('AGENTS.md'),

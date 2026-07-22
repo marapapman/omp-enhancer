@@ -15,14 +15,16 @@ Use this when the requested deliverable is visual UI design or UI polish.
 ## Coordinate design and current-render review
 
 For every visual UI design or revision, use a currently exposed `designer` for
-the design checkpoint and a currently exposed `visioner` for the later
-independent review when each assignment is safe and complete.
+the design checkpoint, `task` for integration and rendering, and a currently
+exposed `visioner` for the later independent review when each assignment is
+safe and complete.
 
-1. `designer` owns the design and revision checkpoint. Supply the product intent, existing visual system, requested scope, responsive targets, reachable interaction states, and preservation constraints. The designer returns a bounded design revision, not completion permission.
-2. Main reconciles and integrates that revision within the authorized scope. Main binds one revision identifier to the integrated UI and its exact current revision, runs it in the intended renderer, and captures fresh evidence for the required responsive viewports and relevant interaction states. Carry that one revision identifier through the implementation, screenshots, state labels, and review request; never mix pre-designer, stale, or differently identified evidence.
+1. `designer` owns the complete design and source revision checkpoint. Supply the product intent, existing visual system, requested scope, responsive targets, reachable interaction states, and preservation constraints. The designer reconciles its revision against that scope and returns a bounded complete design revision, not completion permission.
+2. `task` owns integration and authorized execution. It integrates the exact designer revision without taking design ownership, runs it in the intended renderer, binds one revision identifier to the integrated UI and its exact current revision, and captures fresh evidence for the required responsive viewports and relevant interaction states. Carry that one revision identifier through the implementation, screenshots, state labels, and review request; never mix pre-designer, stale, or differently identified evidence.
 3. `visioner` independently reviews only that current-revision evidence, read-only, for hierarchy, alignment, spacing, typography, clipping, overflow, contrast, state clarity, and cross-viewport consistency. Main review, source checks, static checks, and designer self-review do not count as independent visioner evidence.
+4. For a supported visual finding, `designer` applies the bounded source revision, `task` rerenders and binds fresh evidence, and `visioner` reviews only the fresh rerender, at most once for that changed revision. Do not review an unchanged artifact.
 
-If `designer` is unavailable, record the specific unfulfilled design checkpoint and the Agent fallback reason. If `visioner` is unavailable, record the missing independent current-revision visual evidence. Findings remain advisory for Main to disposition. This evidence chain does not route, block, select a fanout, launch repairs, or decide completion.
+Main only authorizes external effects during initial setup and accepts final delivery; it does not render, modify, reconcile, or mediate the visual loop. If `designer` is unavailable, record the specific unfulfilled design checkpoint and the Agent fallback reason. If `visioner` is unavailable, record the missing independent current-revision visual evidence. Findings remain advisory. This evidence chain does not route, block, select a fanout, launch automatic repairs, or decide completion.
 
 ## Work from the product system
 

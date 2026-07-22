@@ -17,7 +17,7 @@ Actions:
 PLAN text alone is incomplete: same response calls NOW and waits, or calls THEN if NOW=none. THEN is one final resource-only batch. Give each evidence checkpoint an Action.
 AFTER NOW: empty revealed URI set => no text/marker; call the THEN batch. Otherwise RESOURCE EXTENSION MUST list >=1 exact revealed URI; `reads=none` is invalid.
 
-Catalog version: 21.
+Catalog version: 22.
 
 Navigation only: never routes, gates, grants permission, selects Agents, or decides completion.
 
@@ -42,7 +42,7 @@ SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select on
 
 ### general
 
-- `agentic.simple` — Only when no specialized card adds material method, evidence, preservation, risk, format, or delegation; target size alone never qualifies. S=[none]. PLAN URI: `skill://omp-enhancer-workflows/references/agentic.simple.md`.
+- `agentic.simple` — Only for trivial one-step operations: a simple command execution, a one-line code/text change, a direct factual answer, or a single read-only lookup needing no analysis, investigation, or subagent work. S=[none]. PLAN URI: `skill://omp-enhancer-workflows/references/agentic.simple.md`.
 
 ### writing
 
@@ -99,6 +99,7 @@ SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select on
 
 ### operations
 
+- `general.subagent` — Non-trivial analysis, investigation, multi-step modification, or creation when no specialized domain workflow adds a material method, evidence rule, risk control, or output constraint. S=[none]. PLAN URI: `skill://omp-enhancer-workflows/references/general.subagent.md`.
 - `omp.plugin` — The target is an OMP plugin, the omp-enhancer monorepo, or an isolated self-development fixture: workflows, Skills, Agents, prompts, reminders, hooks, config assets, packaging, or E2E. D=[`skill://code-development`]. PLAN URI: `skill://omp-enhancer-workflows/references/omp.plugin.md`.
 - `security.review` — The task explicitly reviews security trust boundaries, vulnerability impact, or remediation. C=[`skill://ecc-skill-catalog/security-review/SKILL.md`, `skill://ecc-skill-catalog/security-scan/SKILL.md`]. PLAN URI: `skill://omp-enhancer-workflows/references/security.review.md`.
 - `design.visual` — Independent UI/layout/interaction/static visual work/output. D=[`skill://frontend-design`, `skill://canvas-design`]. PLAN URI: `skill://omp-enhancer-workflows/references/design.visual.md`.

@@ -21,6 +21,10 @@ export const databaseWorkflows = [
       {
         "id": "step-4",
         "text": "Report prioritized findings with exact SQL or migration evidence, trigger, impact, engine assumptions, remediation, and verification."
+      },
+      {
+        "id": "step-review",
+        "text": "Reviewer independently audits the main-reviewed bounded diff and evidence without editing or mutating."
       }
     ],
     "scopeNotes": [
@@ -46,10 +50,12 @@ export const databaseWorkflows = [
       "Database diagnostics can expose sensitive data or acquire locks; prefer static plans and safe non-production evidence."
     ],
     "roles": [
-      "task"
+      "task",
+      "reviewer"
     ],
     "delegation": [
-      "steps-2-4: task owns a bounded read-only database audit slice and returns concrete artifact and evidence findings without editing, mutating, or applying changes; the parent reconciles scope and conclusions"
+      "steps-2-4: task owns a bounded read-only database audit slice and returns concrete artifact and evidence findings without editing, mutating, or applying changes; the parent reconciles scope and conclusions",
+      "step-review: reviewer independently audits only the Main-reviewed bounded diff and evidence without project reads, commands, edits, or live operations; parent reconciles scope and conclusions"
     ]
   },
   {

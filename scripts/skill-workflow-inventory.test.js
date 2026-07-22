@@ -115,7 +115,7 @@ test('every exact Skill URI in packaged Skill Markdown resolves to a real entry 
   const skillFiles = resourceFiles.filter((file) => path.basename(file) === 'SKILL.md');
   const roots = new Map();
 
-  assert.equal(resourceFiles.length, 453, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
+  assert.equal(resourceFiles.length, 454, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
 
   for (const file of skillFiles) {
     const name = frontmatterName(await readFile(file, 'utf8'));

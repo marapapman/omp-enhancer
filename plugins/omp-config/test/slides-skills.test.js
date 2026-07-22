@@ -16,10 +16,10 @@ test('Beamer generation checks the template before committing a story and author
   const discussTemplate = generation.indexOf('If the template is not configured');
   const discussStory = generation.indexOf('apply the PLAN-loaded `slides-storyline`');
   const generateFrames = generation.indexOf('Generate the deck from the committed template and outline');
-  const renderQa = generation.indexOf('Compile with the native engine');
+  const renderQa = generation.indexOf('Have `task` compile with the native engine');
   const designerLayout = generation.indexOf('Have `designer` perform the final layout pass');
-  const reconcileDesigner = generation.indexOf('Reconcile the designer revision');
-  const freshRerender = generation.indexOf('Recompile and render the designer revision');
+  const reconcileDesigner = generation.indexOf('Have `task` validate and integrate the complete designer revision');
+  const freshRerender = generation.indexOf('Have `task` recompile and render that exact designer revision');
   const visionReview = generation.indexOf('Have `visioner` independently inspect');
 
   assert.ok(inspectTemplate >= 0);
@@ -42,7 +42,8 @@ test('Beamer generation checks the template before committing a story and author
   assert.match(generation, /text and image overlap.+crowding.+clipping.+undersized text/is);
   assert.match(generation, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);
   assert.match(generation, /Do not accept `PASS` or `FAIL` as a substitute/i);
-  assert.match(generation, /supported finding.+new bounded TODO checkpoint.+at most one fresh affected review/is);
+  assert.match(generation, /supported finding.+`designer` applies.+`task` rerenders.+`visioner` reviews only fresh rerendered evidence.+at most once/is);
+  assert.match(generation, /Main only authorizes external effects during initial setup and accepts final delivery.+does not compile, render, modify, reconcile, or mediate the visual loop/is);
   assert.match(generation, /No review verdict grants permission to convert, publish, or complete/i);
 });
 
@@ -78,13 +79,14 @@ test('Beamer modification stays bounded to language and existing style', async (
   assert.match(modification, /Do not redesign the template or reopen story planning/i);
   assert.match(modification, /Do not require template discussion or a story-outline checkpoint/i);
   assert.match(modification, /Have `designer` perform a final layout pass on the changed frames and any pages whose layout they can influence/i);
-  assert.match(modification, /Reconcile the designer revision against the requested semantic diff, LaTeX anchors, and authorized scope/i);
-  assert.match(modification, /Recompile and render the designer revision.+revision identifier.+PDF.+render directory/is);
+  assert.match(modification, /Have `task` validate and integrate the complete designer revision against the requested semantic diff, LaTeX anchors, and authorized scope/i);
+  assert.match(modification, /Have `task` recompile and render that exact designer revision.+revision identifier.+PDF.+render directory/is);
   assert.match(modification, /Have `visioner` independently review the latest renders/i);
   assert.match(modification, /text and image overlap.+crowding.+clipping.+undersized text/is);
   assert.match(modification, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);
   assert.match(modification, /Do not accept `PASS` or `FAIL` as a substitute/i);
-  assert.match(modification, /supported finding.+new bounded TODO checkpoint.+at most one fresh affected review/is);
+  assert.match(modification, /supported finding.+`designer` applies.+`task` rerenders.+`visioner` reviews only fresh rerendered evidence.+at most once/is);
+  assert.match(modification, /Main only authorizes external effects during initial setup and accepts final delivery.+does not compile, render, modify, reconcile, or mediate the visual loop/is);
   assert.match(modification, /Do not widen the edit to unrelated pre-existing layout defects/i);
   assert.match(modification, /Do not split, add, remove, or reorder frames without explicit user authorization/i);
   assert.match(skill, /choose Chinese or English writing skills from the body being changed, not from the instruction language/i);
@@ -109,6 +111,7 @@ test('Beamer visual review is advisory and never an automatic repair controller'
 
   assert.match(skill, /Agent availability and capacity remain Main decisions/i);
   assert.match(skill, /No review verdict grants permission to convert, publish, or complete/i);
+  assert.doesNotMatch(skill, /Main may assign.+(?:reconcile|rerender)|Main (?:reconciles|rerenders|compiles|renders) the designer revision/is);
   assert.doesNotMatch(skill, /maximum of three|have `designer` address every|have `designer` make only the necessary bounded fix/i);
 });
 

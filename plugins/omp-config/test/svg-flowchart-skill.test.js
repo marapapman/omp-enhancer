@@ -19,12 +19,16 @@ test('SVG flowchart skill defines strict geometry, spacing, and bounded rendered
   assert.match(skill, /no Bézier.+arc.+spline.+curved connector/i);
   assert.match(skill, /32 px outer margin.+24 px between nodes.+16 px.+unrelated.+12 px internal text padding/i);
   assert.match(skill, /16 px minimum/i);
-  assert.match(skill, /designer.+visioner.+full-size.+60%/is);
+  assert.match(skill, /`designer` owns.+complete.+SVG source revision/is);
+  assert.match(skill, /`task` runs the bundled checker.+renders the current SVG revision.+binds.+revision identifier.+full declared size.+60%/is);
+  assert.match(skill, /`visioner` independently inspect.+fresh.+full-size.+60%/is);
   assert.match(skill, /Agent availability and capacity remain Main decisions/i);
-  assert.match(skill, /supported finding.+new bounded TODO checkpoint.+at most one fresh affected review/is);
+  assert.match(skill, /supported finding.+`designer` applies.+`task` reruns the checker and rerenders.+`visioner` reviews only fresh rerendered evidence.+at most once/is);
+  assert.match(skill, /Main only authorizes external effects during initial setup and accepts final delivery.+does not check, render, modify, reconcile, or mediate the visual loop/is);
   assert.match(skill, /Do not review an unchanged artifact again/i);
   assert.match(skill, /Do not claim visual approval from source inspection or the static checker alone/i);
   assert.match(skill, /No review verdict grants permission to publish or complete/i);
+  assert.doesNotMatch(skill, /Main may assign.+(?:rerun|renderer)|Main (?:runs|reruns|renders|modifies) the (?:checker|SVG|geometry)/is);
   assert.doesNotMatch(skill, /maximum of three|finish with zero|have `designer` address every|retry until|repeat until|block:\s*true|continue:\s*true/i);
 });
 
