@@ -324,6 +324,17 @@ Use `--plugin all` only when every plugin changed. The marketplace tracks GitHub
 
 Commit, push, marketplace refresh, and local plugin upgrade require explicit user authorization. Verify the remote commit before upgrading an installation that tracks the marketplace.
 
+Local OMP plugin upgrade must use `omp plugin upgrade <name>@omp-enhancer` against the marketplace. After `npm run release --apply`, sync the updated marketplace manifest to the OMP cache before upgrading:
+
+```bash
+cp .omp-plugin/marketplace.json ~/.omp/plugins/cache/marketplaces/omp-enhancer/marketplace.json
+cp .omp-plugin/marketplace.json ~/.omp/plugins/cache/marketplaces/omp-enhancer/.omp-plugin/marketplace.json
+omp plugin discover
+omp plugin upgrade <name>@omp-enhancer
+```
+
+Never use `omp plugin link` to point at a local repo checkout — that bypasses the marketplace and masks version drift between the repository source and the installed runtime. After a successful upgrade, verify the installed version with `omp plugin list`.
+
 ## Documentation boundaries
 
 Keep the root `README.md` concise and user-facing. Put architecture, migration, generation, testing, packaging, and release details under `docs/`. Update current docs and code together when a public command, tool, Skill, Agent, or runtime contract changes. Do not rewrite archived dated plans to make them look current; maintain the archive warning instead.
