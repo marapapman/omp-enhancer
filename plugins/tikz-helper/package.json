@@ -1,6 +1,6 @@
 {
   "name": "tikz-helper",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "OMP TikZ and OpenTikZ workflow resources with opt-in catalog, asset preparation, and isolated rendering tools.",
@@ -38,5 +38,8 @@
     "opentikz",
     "diagrams"
   ],
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "elkjs": "^0.12.0"
+  }
 }

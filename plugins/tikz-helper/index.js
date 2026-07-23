@@ -1,6 +1,7 @@
 import { prepareAsset } from './src/asset-prepare.js';
 import { searchCatalog } from './src/catalog-search.js';
-import { renderTikz } from './src/render-tikz.js';
+import { renderTikz, runBoundedCommand } from './src/render-tikz.js';
+import { generateTikz, computeLayout, elkToTikz } from './src/generate-tikz.js';
 import { asRuntimeError } from './src/runtime-error.js';
 
 function optional(z, schema) {
@@ -70,7 +71,16 @@ function renderParameters(z) {
     timeoutMs: optional(z, z.number()),
   });
 }
+function generateParameters(z) {
+  return z.object({
+    graph: z.string(),
+    layoutOptions: optional(z, z.string()),
+    styleOptions: optional(z, z.string()),
+  });
+}
 
+
+export { generateTikz, computeLayout, elkToTikz };
 export { prepareAsset } from './src/asset-prepare.js';
 export { searchCatalog } from './src/catalog-search.js';
 export { renderTikz, runBoundedCommand } from './src/render-tikz.js';
@@ -144,6 +154,35 @@ export default function registerTikzHelper(omp) {
           ...objectParams(params),
           projectRoot: projectRoot(ctx),
         }, { signal }));
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  });
+
+  omp.registerTool({
+    name: 'tikz_generate_diagram',
+    label: 'Generate TikZ Diagram from Layout IR',
+    description: 'Accept a diagram IR in ELK JSON format (graph with nodes, edges, ports, and layout options), compute automatic layout via Eclipse Layout Kernel, and generate compilable TikZ source code. The output .tex can be rendered with tikz_render.',
+    defaultInactive: true,
+    approval: 'read',
+    promptSnippet: 'Generate a TikZ figure by describing the graph structure and letting ELK compute the layout automatically.',
+    promptGuidelines: [
+      'Describe the diagram as nodes with id, width, height, and optional properties (shape, fill, textColor, dashed), edges with sources/targets and optional properties (arrow, label, color), and layout options (elk.algorithm, elk.direction, elk.spacing.nodeNode).',
+      'Set node sizes to fit their expected label text with padding before passing them to the layout engine.',
+      'Use properties.shape on nodes: rectangle (default), rounded, diamond, ellipse, circle, terminal, parallelogram, cylinder.',
+      'Use properties.arrow on edges: -> (default), <-, <->, -. Add labels with properties.label.',
+      'The tool returns the generated TikZ source and the positioned graph metadata. Use tikz_render to compile the saved .tex file.',
+      'Export the tool metadata: algorithm used, node count, edge count.',
+    ],
+    parameters: generateParameters(z),
+    async execute(_toolCallId, params) {
+      try {
+        const graph = JSON.parse(params.graph);
+        const parsed = { graph };
+        if (params.layoutOptions) parsed.layoutOptions = JSON.parse(params.layoutOptions);
+        if (params.styleOptions) parsed.tikzOptions = JSON.parse(params.styleOptions);
+        return successResponse(await generateTikz(parsed));
       } catch (error) {
         return errorResponse(error);
       }

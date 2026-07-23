@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, testing, fact checking, and editable TikZ diagrams.",
-    "version": "1.0.27",
+    "version": "1.0.28",
     "pluginRoot": "plugins"
   },
   "plugins": [
@@ -377,7 +377,7 @@
     {
       "name": "tikz-helper",
       "description": "Pinned OpenTikZ resources, semantic TikZ workflow guidance, generated icon asset preparation, and bounded render evidence.",
-      "version": "0.1.4",
+      "version": "0.2.0",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/tikz-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",

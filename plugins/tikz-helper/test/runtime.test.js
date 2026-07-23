@@ -49,7 +49,7 @@ async function temporaryDirectory(prefix) {
 }
 
 describe('tikz-helper runtime tools', () => {
-  it('registers only the three opt-in tools with least-effect approvals', () => {
+  it('registers only the four opt-in tools with least-effect approvals', () => {
     const api = makeExtensionApi();
     extension(api);
 
@@ -58,12 +58,15 @@ describe('tikz-helper runtime tools', () => {
       'tikz_catalog_search',
       'tikz_prepare_asset',
       'tikz_render',
+      'tikz_generate_diagram',
     ]);
-    assert.deepEqual(tools.map((tool) => tool.approval), ['read', 'exec', 'exec']);
+    assert.deepEqual(tools.map((tool) => tool.approval), ['read', 'exec', 'exec', 'read']);
     assert.equal(tools.every((tool) => tool.defaultInactive === true), true);
     assert.equal(tools.every((tool) => tool.parameters?.__ompZodSchema === true), true);
     assert.equal(Object.hasOwn(tools[2].parameters.shape, 'executable'), false);
     assert.equal(Object.hasOwn(tools[2].parameters.shape, 'command'), false);
+    // tikz_generate_diagram has graph (string), layoutOptions (optional string), styleOptions (optional string)
+    assert.equal(Object.hasOwn(tools[3].parameters.shape, 'graph'), true);
   });
 
   it('returns structured tool success and parameter failures', async () => {
