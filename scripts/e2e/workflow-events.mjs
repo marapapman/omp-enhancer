@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto';
 import nodePath from 'node:path';
+//
+// Timing contract: "before first project action" means after all WORKFLOW READY
+// resource loads settle and before the first project tool call (read/grep/glob/edit/write
+// on workspace files) or native task dispatch. Skill URI reads during DECLARE->LOAD
+// are not project actions. Offline tasks (networkAccess: forbidden) and workflows
+// where the card explicitly names task/writer as first project actor are exempt.
+//
 
 const SOURCE_SEARCH_TOOLS = new Set(['read', 'grep', 'glob', 'find']);
 const WEB_TOOLS = new Set(['web', 'web_search', 'search_query', 'fetch', 'browse', 'browser']);
@@ -599,6 +606,28 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     ));
     if (unsuccessful.length) failures.push(`${unsuccessful.length} tool call(s) did not complete successfully`);
   }
+  if (expectations.requireLocalSearchBeforeProjectTools === true) {
+    const firstProjectTool = summary.firstProjectToolCallEventIndex;
+    const searchesBeforeProject = (summary.toolCalls ?? []).filter((call) => (
+      SOURCE_SEARCH_TOOLS.has(call.name)
+      && Number.isFinite(call.completionEventIndex)
+      && (!Number.isFinite(firstProjectTool) || call.completionEventIndex < firstProjectTool)
+    ));
+    if (!Number.isFinite(firstProjectTool) || searchesBeforeProject.length === 0) {
+      failures.push('no local search tool was called before the first project tool');
+    }
+  }
+  if (expectations.requireWebSearchBeforeProjectTools === true) {
+    const firstProjectTool = summary.firstProjectToolCallEventIndex;
+    const webSearchesBeforeProject = (summary.toolCalls ?? []).filter((call) => (
+      WEB_TOOLS.has(call.name)
+      && Number.isFinite(call.completionEventIndex)
+      && (!Number.isFinite(firstProjectTool) || call.completionEventIndex < firstProjectTool)
+    ));
+    if (!Number.isFinite(firstProjectTool) || webSearchesBeforeProject.length === 0) {
+      failures.push('no web search tool was called before the first project tool');
+    }
+  }
   if (expectations.noWeb === true && summary.webCallCount > 0) {
     failures.push(`web tools were called ${summary.webCallCount} time(s)`);
   }
@@ -625,6 +654,10 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   if (Number.isFinite(expectations.maxSourceSearchCalls)
     && summary.sourceSearchCallCount > expectations.maxSourceSearchCalls) {
     failures.push(`source/search calls ${summary.sourceSearchCallCount} exceeded ${expectations.maxSourceSearchCalls}`);
+  }
+  if (Number.isFinite(expectations.minSourceSearchCalls)
+    && summary.sourceSearchCallCount < expectations.minSourceSearchCalls) {
+    failures.push(`source/search calls ${summary.sourceSearchCallCount} were below ${expectations.minSourceSearchCalls}`);
   }
   if (expectations.requireFinal !== false && summary.primaryFinalCount < 1) {
     failures.push('no non-empty primary final was observed');

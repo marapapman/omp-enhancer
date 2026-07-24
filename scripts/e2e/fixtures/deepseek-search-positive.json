@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "defaults": {
+    "model": "opencode-go/deepseek-v4-flash",
+    "thinking": "high",
+    "approvalMode": "yolo",
+    "advisor": false,
+    "executionMode": "rpc",
+    "tools": ["read"],
+    "repeat": 1,
+    "timeoutSeconds": 150,
+    "expectations": {
+      "noWeb": true,
+      "requireFinal": true,
+      "maxPrimaryFinals": 1,
+      "maxAdvisorMessages": 0,
+      "noUnobservedSkillClaims": true,
+      "requireSuccessfulToolCalls": true,
+      "maxDuplicateFailedCalls": 0,
+      "maxDuplicateSkillReadAttempts": 0,
+      "maxProvidedSkills": 0,
+      "expectedProvisionMode": "none",
+      "requireWorkflowIndexOnlyFirstToolBatch": true,
+      "requireWorkflowPlanBeforeResourceLoads": true,
+      "requireStructuredWorkflowLoadPhases": true,
+      "requiredWorkflowPlanFormat": "block",
+      "minWorkflowPlanNumberedActions": 4,
+      "forbidResourceProjectSameBatch": true,
+      "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+      "requireExactSelectedWorkflowReferences": true,
+      "requireWorkflowPlanSkillsUseDomainSkillUris": true,
+      "requireWorkflowReadyLoadedSkillsUseBareIds": true,
+      "requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills": true,
+      "maxToolCalls": 8,
+      "maxSourceSearchCalls": 8,
+      "maxAbortedAssistants": 0,
+      "pluginContinuationCount": 0
+    }
+  },
+  "scenarios": [
+    {
+      "id": "search-positive-implementation",
+      "category": "search-evidence",
+      "prompt": "Implement a new route handler for the /api/users endpoint that validates email format using a well-known validation library",
+      "tools": ["read", "grep", "glob", "web_search"],
+      "expectations": {
+        "noWeb": false,
+        "minSourceSearchCalls": 2,
+        "requireLocalSearchBeforeProjectTools": true,
+        "requireWebSearchBeforeProjectTools": true
+      }
+    },
+    {
+      "id": "search-negative-readonly",
+      "category": "search-evidence",
+      "prompt": "Review my project's current dependency versions",
+      "expectations": {
+        "noWeb": true,
+        "minSourceSearchCalls": 0,
+        "requireLocalSearchBeforeProjectTools": false,
+        "requireWebSearchBeforeProjectTools": false
+      }
+    }
+  ]
+}

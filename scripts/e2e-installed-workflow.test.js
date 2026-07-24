@@ -1194,6 +1194,62 @@ test('workflow evaluation can require a successful workflow reference read', () 
   assert.equal(observed.pass, true);
 });
 
+
+test('workflow evaluation requireLocalSearchBeforeProjectTools enforces ordering', () => {
+  const searchBeforeProject = evaluateWorkflowSummary({
+    toolCalls: [
+      { name: 'read', completed: true, isError: false, completionEventIndex: 2 },
+      { name: 'glob', completed: true, isError: false, completionEventIndex: 3 },
+    ],
+    firstProjectToolCallEventIndex: 5,
+  }, { requireLocalSearchBeforeProjectTools: true });
+  assert.equal(searchBeforeProject.pass, true);
+
+  const noSearchBeforeProject = evaluateWorkflowSummary({
+    toolCalls: [
+      { name: 'read', completed: true, isError: false, completionEventIndex: 10 },
+    ],
+    firstProjectToolCallEventIndex: 5,
+  }, { requireLocalSearchBeforeProjectTools: true });
+  assert.equal(noSearchBeforeProject.pass, false);
+  assert.match(noSearchBeforeProject.failures.join('\n'), /no local search tool was called before the first project tool/iu);
+
+  const noProjectToolAtAll = evaluateWorkflowSummary({
+    toolCalls: [{ name: 'read', completed: true, isError: false, completionEventIndex: 2 }],
+    firstProjectToolCallEventIndex: null,
+  }, { requireLocalSearchBeforeProjectTools: true });
+  assert.equal(noProjectToolAtAll.pass, false);
+
+  const falseExpectationSkips = evaluateWorkflowSummary({
+    toolCalls: [],
+  }, { requireLocalSearchBeforeProjectTools: false });
+  assert.equal(falseExpectationSkips.pass, true);
+});
+
+test('workflow evaluation requireWebSearchBeforeProjectTools enforces ordering', () => {
+  const webBeforeProject = evaluateWorkflowSummary({
+    toolCalls: [
+      { name: 'web_search', completed: true, isError: false, completionEventIndex: 2 },
+    ],
+    firstProjectToolCallEventIndex: 5,
+  }, { requireWebSearchBeforeProjectTools: true });
+  assert.equal(webBeforeProject.pass, true);
+
+  const noWebBeforeProject = evaluateWorkflowSummary({
+    toolCalls: [
+      { name: 'web_search', completed: true, isError: false, completionEventIndex: 10 },
+    ],
+    firstProjectToolCallEventIndex: 5,
+  }, { requireWebSearchBeforeProjectTools: true });
+  assert.equal(noWebBeforeProject.pass, false);
+  assert.match(noWebBeforeProject.failures.join('\n'), /no web search tool was called before the first project tool/iu);
+
+  const falseExpectationSkips = evaluateWorkflowSummary({
+    toolCalls: [],
+  }, { requireWebSearchBeforeProjectTools: false });
+  assert.equal(falseExpectationSkips.pass, true);
+});
+
 test('structured claim verdicts accept explicit Markdown labels and table rows within the active claim', () => {
   const expectations = {
     requiredClaimVerdicts: {

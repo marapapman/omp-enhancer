@@ -73,7 +73,7 @@ export const mlWorkflows = [
       },
       {
         "id": "step-search-external",
-        "text": "When current framework, device, serialization, or serving behavior could change the diagnosis, Main checks versioned official documentation and bounded community failure experience, records applicability, and keeps it separate from local artifact and runtime evidence."
+        "text": "When current framework, device, serialization, or serving behavior could change the diagnosis and network is not forbidden, Main uses web_search to check versioned official documentation (preferred) and bounded community failure experience, records applicability, and keeps it separate from local artifact and runtime evidence. Queries must not contain model weights, datasets, or proprietary architecture details."
       },
       {
         "id": "step-plan",

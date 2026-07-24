@@ -311,7 +311,7 @@ export default function registerCoreEnhancer(pi) {
     if (activeHostTurnKind !== 'user') return undefined;
     restoreStateFromContext(state, ctx);
     const name = toolEventName(event);
-    if (name === 'read' && !toolEventFailed(event)) recordSkillReads(state, event);
+    if (name === 'read' && !toolEventFailed(event) && !isDuplicateSkillRead(state, event)) recordSkillReads(state, event);
     if (name === 'task') recordTaskResult(state, event);
     if (protocolCoachEventEligible(protocolCoachTurnEligible, activeHostTurnKind, ctx)) {
       observeProtocolToolResult(state.protocolCoach, {
@@ -521,6 +521,10 @@ export function createState() {
     claimedSkills: new Set(),
     tasks: new Map(),
     completedAgents: new Set(),
+    skillEvidence: {
+      sessionLoaded: [],
+      readAttempts: [],
+    },
     taskSequence: 0,
     protocolCoach: createWorkflowProtocolCoachState(),
   };
@@ -596,8 +600,20 @@ function recordTaskResult(state, event) {
 
 function recordSkillReads(state, event) {
   const skill = verifiedSkillReadName(event);
-  if (skill) state.observedSkills.add(normalizeSkillName(skill));
+  if (skill) {
+    const normalized = normalizeSkillName(skill);
+    state.observedSkills.add(normalized);
+    state.skillEvidence.sessionLoaded.push(normalized);
+    state.skillEvidence.readAttempts.push({ skillId: normalized, uri: readToolTarget(event) ?? '', timestamp: Date.now(), success: true });
+  }
 }
+function isDuplicateSkillRead(state, event) {
+  const skill = verifiedSkillReadName(event);
+  if (!skill) return false;
+  const normalized = normalizeSkillName(skill);
+  return state.skillEvidence.sessionLoaded.some((id) => id === normalized);
+}
+
 
 function verifiedSkillReadName(event = {}) {
   const declaredName = skillFrontmatterName(readResultText(event));
@@ -781,6 +797,8 @@ function readStateSnapshot(value = {}) {
   for (const skill of arrayValue(value.claimedSkills)) {
     if (typeof skill === 'string') state.claimedSkills.add(normalizeSkillName(skill));
   }
+  state.skillEvidence = sanitizeSkillEvidence(value.skillEvidence);
+
   for (const raw of arrayValue(value.tasks)) {
     const task = sanitizeTaskRecord(raw);
     if (task) state.tasks.set(task.id, task);
@@ -794,6 +812,16 @@ function readStateSnapshot(value = {}) {
   state.protocolCoach = sanitizeWorkflowProtocolCoachState(value.protocolCoach);
   return state;
 }
+function sanitizeSkillEvidence(value) {
+  if (!isRecord(value)) {
+    return { sessionLoaded: [], readAttempts: [] };
+  }
+  return {
+    sessionLoaded: arrayValue(value.sessionLoaded).filter((s) => typeof s === 'string'),
+    readAttempts: arrayValue(value.readAttempts).filter((r) => isRecord(r)),
+  };
+}
+
 
 function sanitizeTaskContext(value, prompt = '') {
   if (!isRecord(value)) return null;
@@ -835,6 +863,7 @@ function serializeState(state) {
     schemaVersion: STATE_SCHEMA_VERSION,
     lastTaskContext: state.lastTaskContext,
     lastPrompt: state.lastPrompt,
+    skillEvidence: state.skillEvidence,
     taskStartedAt: state.taskStartedAt,
     compatibilityReminderTaskStartedAt: state.compatibilityReminderTaskStartedAt,
     lastSkillUsage: state.lastSkillUsage,
@@ -924,11 +953,11 @@ function isModelVisibleSkill(skill = {}) {
     && skill.hideFromModel !== true
     && skill.modelInvocationDisabled !== true;
 }
-
 function effectiveSkills(state) {
-  return new Set(state.observedSkills);
+  const loaded = new Set(state.observedSkills);
+  for (const id of state.skillEvidence.sessionLoaded) loaded.add(id);
+  return loaded;
 }
-
 function shouldInheritContinuation(state, prompt = '') {
   if (!state.lastTaskContext || !state.lastPrompt) return false;
   const text = String(prompt ?? '')

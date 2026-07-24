@@ -5,3 +5,5 @@
 .omp/e2e-fixtures/
 node_modules/
 /bun.lock
+*.tgz
+

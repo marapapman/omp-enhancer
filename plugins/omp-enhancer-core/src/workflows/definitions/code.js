@@ -17,7 +17,7 @@ export const codeWorkflows = [
       },
       {
         "id": "step-search-external",
-        "text": "When current library, toolchain, API, design, failure, or performance practice could change the decision and network use is available, search current official documentation and bounded community experience; keep external advice separate from local code evidence and record version and uncertainty."
+        "text": "When current library, toolchain, API, design, failure, or performance practice could change the decision and network is not forbidden, use web_search to search current official documentation (preferred) and bounded community experience; keep external advice separate from local code evidence and record version and applicability. Queries must not contain private code, secrets, or PII."
       },
       {
         "id": "step-plan",

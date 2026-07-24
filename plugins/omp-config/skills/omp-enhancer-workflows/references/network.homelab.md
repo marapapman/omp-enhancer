@@ -10,13 +10,18 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 - Primary when: A home or small-lab network plan covers gateways, switching, Wi-Fi, local services, segmentation, DNS, or remote access.
 - Reference steps:
   1. [step-1] Confirm operator experience, hardware inventory, current internet and management path, household constraints, goals, and acceptable downtime.
-  2. [step-2] Check hardware capability and identify the smallest topology that meets the required isolation, service, DNS, Wi-Fi, and remote-access goals.
-  3. [step-3] Plan addressing, DHCP, DNS, VLANs, firewall policy, wireless mapping, local services, and VPN only where the confirmed goals require them.
-  4. [step-4] Order changes so internet, DNS, and management access remain recoverable, with a validation check and rollback point after every disruptive phase.
-  5. [step-5] Deliver the minimal plan, capability gaps, quick wins, optional later phases, verification commands, and recovery instructions.
+  2. [step-search-local] Main checks the current home network topology, device hardware specifications, firmware versions, ISP configuration, and management access from project notes or authorized inventory.
+  3. [step-search-external] When hardware compatibility, firmware stability, protocol support, or ISP-specific behavior could affect the plan, Main uses web_search to search current vendor and community experience (preferred official sources); queries must not contain MAC addresses, public IPs, or credentials. Records version and applicability.
+  4. [step-inventory] Check hardware capability and identify the smallest topology that meets the required isolation, service, DNS, Wi-Fi, and remote-access goals.
+  5. [step-plan] Plan addressing, DHCP, DNS, VLANs, firewall policy, wireless mapping, local services, and VPN only where the confirmed goals require them.
+  6. [step-verify] Order changes so internet, DNS, and management access remain recoverable, with a validation check and rollback point after every disruptive phase.
+  7. [step-deliver] Deliver the minimal plan, capability gaps, quick wins, optional later phases, verification commands, and recovery instructions.
 - Agent candidates: `ecc-network-architect`.
 - Delegated checkpoints:
-  - steps-2-5: ecc-network-architect applies only the selected homelab skills and produces the bounded topology, staged validation, and rollback plan
+  - step-inventory: ecc-network-architect applies only the selected homelab skills and produces the bounded topology, staged validation, and rollback plan
+  - step-plan: ecc-network-architect applies only the selected homelab skills and produces the bounded topology, staged validation, and rollback plan
+  - step-verify: ecc-network-architect applies only the selected homelab skills and produces the bounded topology, staged validation, and rollback plan
+  - step-deliver: ecc-network-architect applies only the selected homelab skills and produces the bounded topology, staged validation, and rollback plan
 - Quality checks:
   - hardware capability correspondence, minimal topology, addressing and policy consistency, household service continuity, staged validation, management recovery, and rollback clarity
 - Scope notes:

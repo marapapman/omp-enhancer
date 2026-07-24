@@ -10,13 +10,17 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 - Primary when: The task is to diagnose a concrete connectivity, routing, DNS, interface, BGP, firewall, policy, or management symptom using read-only evidence.
 - Reference steps:
   1. [step-1] Characterize the symptom, affected endpoints, direction, timing, scope, last-known-good state, and recent changes.
-  2. [step-2] Collect the smallest host- or operator-authorized read-only evidence across the relevant link, interface, addressing, routing, DNS, policy, and application layers.
-  3. [step-3] Form ranked hypotheses and test whether each explains every observed symptom without changing live state.
-  4. [step-4] Identify the root cause or the narrowest remaining uncertainty with command output, counters, routes, policy, logs, or configuration evidence.
-  5. [step-5] Return safe next actions, verification criteria, maintenance and rollback needs, and any evidence still required before a change.
+  2. [step-search-local] Main searches local configuration, interface states, routing tables, recent changes, logs, and monitoring data to narrow the symptom scope before collecting operator-authorized evidence.
+  3. [step-inspect] Collect the smallest host- or operator-authorized read-only evidence across the relevant link, interface, addressing, routing, DNS, policy, and application layers.
+  4. [step-hypothesis] Form ranked hypotheses and test whether each explains every observed symptom without changing live state.
+  5. [step-diagnose] Identify the root cause or the narrowest remaining uncertainty with command output, counters, routes, policy, logs, or configuration evidence.
+  6. [step-report] Return safe next actions, verification criteria, maintenance and rollback needs, and any evidence still required before a change.
 - Agent candidates: `ecc-network-troubleshooter`.
 - Delegated checkpoints:
-  - steps-2-5: ecc-network-troubleshooter owns bounded read-only evidence collection, hypothesis testing, root-cause analysis, and the safe verification plan
+  - step-inspect: ecc-network-troubleshooter owns bounded read-only evidence collection, hypothesis testing, root-cause analysis, and the safe verification plan
+  - step-hypothesis: ecc-network-troubleshooter owns bounded read-only evidence collection, hypothesis testing, root-cause analysis, and the safe verification plan
+  - step-diagnose: ecc-network-troubleshooter owns bounded read-only evidence collection, hypothesis testing, root-cause analysis, and the safe verification plan
+  - step-report: ecc-network-troubleshooter owns bounded read-only evidence collection, hypothesis testing, root-cause analysis, and the safe verification plan
 - Quality checks:
   - symptom correspondence, bounded read-only evidence, OSI and policy path coverage, hypothesis discrimination, root-cause completeness, safe verification, and explicit uncertainty
 - Scope notes:

@@ -10,12 +10,15 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 - Primary when: The user asks for a read-only review of router, switch, firewall, VPN, DNS, DHCP, routing, ACL, or management-plane configuration.
 - Reference steps:
   1. [step-1] Freeze the reviewed configuration revision and identify the device role, platform, change intent, maintenance constraints, and adjacent context needed to prove findings.
-  2. [step-2] Inspect addressing, interfaces, routing, ACLs, firewall rules, AAA, management access, services, logging, monitoring, and proposed changes without editing them.
-  3. [step-3] Trace concrete references and traffic or management paths, separating demonstrated blockers from best-practice suggestions.
-  4. [step-4] Report prioritized findings with exact configuration evidence, affected path, trigger, impact, safe correction, validation, and rollback requirements.
+  2. [step-search-local] Main freezes and indexes the configuration file set, locating interface definitions, routing policy, ACLs, firewall rules, and management plane config relevant to the review scope before cross-referencing.
+  3. [step-inspect] Inspect addressing, interfaces, routing, ACLs, firewall rules, AAA, management access, services, logging, monitoring, and proposed changes without editing them.
+  4. [step-trace] Trace concrete references and traffic or management paths, separating demonstrated blockers from best-practice suggestions.
+  5. [step-report] Report prioritized findings with exact configuration evidence, affected path, trigger, impact, safe correction, validation, and rollback requirements.
 - Agent candidates: `ecc-network-config-reviewer`.
 - Delegated checkpoints:
-  - steps-2-4: ecc-network-config-reviewer independently audits the frozen configuration and returns evidence-backed findings without editing or applying changes
+  - step-inspect: ecc-network-config-reviewer independently audits the frozen configuration and returns evidence-backed findings without editing or applying changes
+  - step-trace: ecc-network-config-reviewer independently audits the frozen configuration and returns evidence-backed findings without editing or applying changes
+  - step-report: ecc-network-config-reviewer independently audits the frozen configuration and returns evidence-backed findings without editing or applying changes
 - Quality checks:
   - frozen revision, concrete configuration evidence, reference and path consistency, severity rationale, management-plane safety, actionable validation, rollback, and explicit runtime limitations
 - Scope notes:
