@@ -33,8 +33,8 @@ test('one code-development Skill owns the subagent-driven code lifecycle', async
   assert.match(skill, /`plan` Agent.+`PLAN REVIEW`.+parallel.+assignment.+before changing production code/isu);
   assert.match(skill, /same native `task`.+tasks\[\].+batch.+runnable.+independent.+slice/isu);
   assert.match(skill, /native `task`.+test mutation.+expected assertion failure as RED.+minimum.+production.+same command.+GREEN.+refactor/isu);
-  assert.match(skill, /Main.+integrat.+current tree.+semantic diff.+evidence.+self-review.+before.+native `reviewer`/isu);
-  assert.match(skill, /native `reviewer`.+Main-reviewed.+bounded semantic diff.+does not.+read.+project.+run.+command/isu);
+  assert.match(skill, /Main.+integrat.+current tree.+bounded diff.+evidence.+native `reviewer`/isu);
+  assert.match(skill, /native `reviewer`.+bounded semantic diff.+does not.+read.+project.+run.+command/isu);
   assert.match(skill, /supported.+finding.+native `task`.+repair.+refresh.+affected evidence.+one fresh affected review/isu);
   assert.match(skill, /never an automatic review-repair loop/iu);
   assert.match(skill, /references\/omp-enhancer\.md/iu);

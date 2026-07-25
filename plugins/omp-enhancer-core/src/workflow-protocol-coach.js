@@ -124,10 +124,17 @@ export function observeProtocolSuppliedWorkflowIndex(state) {
   markWorkflowIndexObserved(state);
 }
 
-export function observeProtocolToolCall(state, { name = '' } = {}) {
+export function observeProtocolToolCall(state, { name = '', taskRoles = [] } = {}) {
   if (!isCoachState(state)) return;
   if (String(name).trim().toLowerCase() === 'task') {
-    clearCue(state, 'PRE_DISPATCH');
+    // Only clear PRE_DISPATCH for work tasks, not plan review tasks.
+    // A plan-only task (agent=plan) consumes the plan-review checkpoint
+    // but not the dispatch cue — Main still needs the reminder when
+    // dispatching actual work tasks after plan disposition.
+    const isPlanOnly = taskRoles.length > 0 && taskRoles.every((r) => r === 'plan');
+    if (!isPlanOnly) {
+      clearCue(state, 'PRE_DISPATCH');
+    }
   }
 }
 

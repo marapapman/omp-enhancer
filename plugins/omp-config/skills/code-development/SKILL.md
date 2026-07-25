@@ -15,11 +15,12 @@ For substantive mutation, Main owns the parent TODO, integration, and conclusion
 2. Search local code and map entry points, callers, consumers, tests, configuration, generated assets, and runtime copies that can differ.
 3. When current behavior or experience affects the decision, make one bounded external pass: official documentation first, then community issues, discussions, or postmortems.
 4. Main writes a detailed implementation-and-evidence plan as parallel waves of vertical slices with non-overlapping write sets.
-5. The exposed `plan` Agent receives one `PLAN REVIEW` with the complete parallel plan and assignments before changing production code; disposition findings and rebase only affected rows.
-6. Use the same native `task` `tasks[]` batch for runnable independent slices; defer dependencies. Each task owns `RED -> GREEN -> REFACTOR`.
-7. Main integrates the current tree and dispatches the bounded diff and evidence to native `reviewer`.
-8. Give native `reviewer` only the bounded diff/evidence from task deliveries. Send supported findings to native `task` for bounded repair and refresh evidence, then allow at most one fresh affected reviewer pass; Main integrates the result.
-9. Report paths, commands, exits, dispositions, limitations, risks, and untouched changes.
+5. The exposed `plan` Agent receives one `PLAN REVIEW` with the complete parallel plan and assignments, challenging dependencies, write sets, test seams, and evidence before changing production code.
+6. Main records each accepted, rejected, and unresolved plan finding, rebases only affected TODO rows, and freezes complete assignments with exclusive write ownership, exact evidence return, and no versioning or publication authority.
+7. Use the same native `task` `tasks[]` batch for runnable independent slices; defer dependencies. Each task owns `RED -> GREEN -> REFACTOR`.
+8. Main integrates the current tree and dispatches the bounded diff and evidence to native `reviewer`.
+9. Give native `reviewer` only the bounded diff/evidence from task deliveries. Send supported findings to native `task` for bounded repair and refresh evidence, then allow at most one fresh affected reviewer pass; Main integrates the result.
+10. Report paths, commands, exits, dispositions, limitations, risks, and untouched changes.
 
 Merge matching workflow, Skill, and reference phases into one TODO row; do not execute a phase twice. Mechanical lookup needs no task. Substantive read-only work needs no mutation TDD but still follows the selected non-simple workflow's safe complete delegated checkpoint when a matching Agent is visible and safe. Read-only authorizes no mutation.
 

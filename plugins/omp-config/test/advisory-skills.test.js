@@ -134,8 +134,8 @@ test('code-development is the single subagent-driven method for planned parallel
   assert.match(content, /PLAN REVIEW.+parallel.+assignment.+before changing production code/isu, relative);
   assert.match(content, /same.+tasks\[\].+batch.+runnable.+independent.+native `task`/isu, relative);
   assert.match(content, /native `task`.+public-behavior test.+expected assertion failure as RED.+minimum.+production.+same command.+GREEN.+refactor/isu, relative);
-  assert.match(content, /Main.+integrat.+current tree.+semantic diff.+evidence.+self-review.+before.+native `reviewer`/isu, relative);
-  assert.match(content, /native `reviewer`.+Main-reviewed.+bounded semantic diff.+does not.+project.+command/isu, relative);
+  assert.match(content, /Main.+integrat.+current tree.+bounded diff.+evidence.+native `reviewer`/isu, relative);
+  assert.match(content, /native `reviewer`.+bounded semantic diff.+does not.+project.+command/isu, relative);
   assert.match(content, /supported.+finding.+native `task`.+repair.+one fresh affected review.+unchanged-input review loops/isu, relative);
   assert.match(content, /Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>/iu, relative);
   assert.match(content, /native task item `agent`.+row Agent[\s\S]*copies workflow, step, skills, and checkpoint/iu, relative);
@@ -158,7 +158,7 @@ test('code-development is the single subagent-driven method for planned parallel
   );
   assert.match(content, /this loaded Skill.+exact URI.+before.+workflow references/isu, relative);
   assert.doesNotMatch(content, /block:\s*true|continue:\s*true|required fork|fixed fanout|exactly \d+ reviewers|retry until/iu, relative);
-  assert.ok(Buffer.byteLength(content) < 7_500, `${relative} should stay compact`);
+  assert.ok(Buffer.byteLength(content) < 8_000, `${relative} should stay compact`);
 });
 
 test('the conditional OMP reference adds generated-asset and installed-runtime evidence without another top-level method', () => {

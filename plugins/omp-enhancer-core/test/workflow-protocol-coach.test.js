@@ -317,9 +317,17 @@ test('READY must be at byte zero and only its successful TODO queues PRE_DISPATC
   assert.match(first.content, /No block\/router\/gate\/retry\/authority\/choice/u);
   assert.doesNotMatch(first.content, /block:\s*true|continue:\s*true|agentic\.simple|writing\.pending/u);
 
-  const taskClear = structuredClone(state);
-  observeProtocolToolCall(taskClear, { name: 'task' });
-  assert.equal(taskClear.pendingCue, null, 'a valid task call still clears PRE_DISPATCH');
+  const workTaskClear = structuredClone(state);
+  observeProtocolToolCall(workTaskClear, { name: 'task', taskRoles: ['task'] });
+  assert.equal(workTaskClear.pendingCue, null, 'a work task call clears PRE_DISPATCH');
+
+  const planTaskNoClear = structuredClone(state);
+  observeProtocolToolCall(planTaskNoClear, { name: 'task', taskRoles: ['plan'] });
+  assert.notEqual(planTaskNoClear.pendingCue, null, 'a plan-only task call must NOT clear PRE_DISPATCH');
+
+  const mixedTaskClear = structuredClone(state);
+  observeProtocolToolCall(mixedTaskClear, { name: 'task', taskRoles: ['plan', 'task'] });
+  assert.equal(mixedTaskClear.pendingCue, null, 'a mixed task call including work must clear PRE_DISPATCH');
 
   observeProtocolAssistantMessage(state, 'Native todo(op=init) rebase only; end/wait; same response has no task.');
   assert.equal(state.pendingCue, null);

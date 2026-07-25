@@ -314,7 +314,12 @@ export default function registerCoreEnhancer(pi) {
     if (activeHostTurnKind !== 'user') return undefined;
     restoreStateFromContext(state, ctx);
     if (protocolCoachEventEligible(protocolCoachTurnEligible, activeHostTurnKind, ctx)) {
-      observeProtocolToolCall(state.protocolCoach, { name: toolEventName(event) });
+      const eventName = toolEventName(event);
+      let taskRoles = [];
+      if (eventName === 'task') {
+        taskRoles = taskInputItems(event).map(roleName).filter(Boolean);
+      }
+      observeProtocolToolCall(state.protocolCoach, { name: eventName, taskRoles });
     }
     if (toolEventName(event) === 'task') {
       recordTaskDispatch(state, event);

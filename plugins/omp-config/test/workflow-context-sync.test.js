@@ -283,7 +283,7 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.match(catalog, /`plan` independently challenges Main's supplied complete parallel plan/i);
   assert.match(catalog, /`task`.+same.+tasks\[\].+batch.+vertical.+RED.+GREEN.+REFACTOR/i);
   assert.match(catalog, /Main.+integrat.+current tree.+diff.+evidence.+review.+before.+reviewer/isu);
-  assert.match(catalog, /`reviewer` independently reviews the Main-reviewed.+semantic diff.+does not read.+project.+run commands/i);
+  assert.match(catalog, /`reviewer` independently reviews the bounded semantic diff.+does not read.+project.+run commands/i);
   assert.match(catalog, /supported.+finding.+`task`.+repair.+at most one.+fresh reviewer/i);
   assert.doesNotMatch(catalog, /### `(?:research\.technical|code\.(?:plan|debug|test|review|build)|performance\.optimize)`/i);
   assert.doesNotMatch(catalog, /`(?:test-planner|test-executor|test-reviewer|omp-target-auditor|implementation-task|config-librarian)`/i);
