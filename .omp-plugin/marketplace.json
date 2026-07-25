@@ -376,7 +376,7 @@
     {
       "name": "tikz-helper",
       "description": "Pinned OpenTikZ resources, semantic TikZ workflow guidance, generated icon asset preparation, and bounded render evidence.",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/tikz-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",
