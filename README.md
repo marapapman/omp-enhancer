@@ -13,7 +13,7 @@ OMP exposes available Skills and Agents; Main chooses under native permissions. 
 | `writing-helper` | English and Chinese writing, citation, style, and polish. |
 | `omp-testing-enhancer` | Testing evidence and advisory review. |
 | `omp-fact-checker` | Claim evidence, cross-checking, and advisory review. |
-| `tikz-helper` | Pinned OpenTikZ resources, semantic TikZ authoring, imagegen node assets, and rendered review evidence. |
+| `tikz-helper` | ELK auto-layout TikZ diagrams from a graph IR (no hand coordinates), pinned OpenTikZ icons, imagegen node assets, and rendered review evidence. |
 
 ## Workflows
 
@@ -39,7 +39,7 @@ Workflow names provide planning context only. They never grant permission to wri
 
 ## Install
 
-Add the GitHub marketplace and install the full stack:
+Add the marketplace and install:
 
 ```bash
 omp plugin marketplace add marapapman/omp-enhancer
@@ -53,7 +53,7 @@ omp plugin marketplace add /path/to/omp-enhancer
 omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer tikz-helper@omp-enhancer
 ```
 
-Start a new OMP session after installing or upgrading plugins that change config, Agents, or Skills.
+Then run `npm run install:deps` once to fetch plugin runtime dependencies (`elkjs` for TikZ ELK layout). Start a new OMP session after installing or upgrading plugins.
 
 ## Use
 
@@ -73,7 +73,7 @@ Common optional tools include:
 - testing analysis, browser, coverage, mutation, `omp_test_review`, and report tools;
 - fact analysis, evidence, report, and `fact_check_review` tools;
 - config diagnostics and managed-context synchronization.
-- TikZ catalog search, imagegen-asset preparation, and bounded rendering through `tikz_catalog_search`, `tikz_prepare_asset`, and `tikz_render`.
+- TikZ figures drawn from an ELK graph IR via `tikz_generate_diagram` (ELK computes the layout), with catalog search, imagegen-asset preparation, and bounded rendering through `tikz_catalog_search`, `tikz_prepare_asset`, and `tikz_render`.
 
 Review tools return advisory findings; they do not execute project commands, block work, or decide completion. Testing commands use the host-authorized shell; there is no plugin `/test` command. `/fact-check` remains available for explicit claim analysis.
 
@@ -93,7 +93,7 @@ omp plugin marketplace update omp-enhancer
 omp plugin upgrade
 ```
 
-The marketplace always tracks GitHub `main`; catalog `ref` pins are not part of the release contract.
+The marketplace tracks GitHub `main`; catalog `ref` pins are not part of the release contract. Re-run `npm run install:deps` after upgrading.
 
 ## Documentation
 
