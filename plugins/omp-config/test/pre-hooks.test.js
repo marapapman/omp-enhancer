@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import registerDestructiveCommandAdvisory from '../hooks/pre/guard-destructive.ts';
-import registerEditAnchorAdvisory from '../hooks/pre/opencode-deepseek-edit-anchor.ts';
+import registerEditAnchorAdvisory from '../hooks/pre/edit-anchor-guard.ts';
 
 function registeredToolCallHandler(factory) {
   let handler = null;

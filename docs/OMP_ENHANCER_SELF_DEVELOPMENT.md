@@ -9,7 +9,7 @@
 这套设计可以用确定性测试保证以下契约：
 
 - workflow definition、生成卡片、managed prompt 和 marketplace inventory 一致；
-- DeepSeek Flash 收到有界、one-shot、capability-gated 的 staged reminder；
+- 所有顶层 Main 模型收到有界、one-shot、capability-gated 的 staged reminder；
 - Main 能看到精确的 workflow、Skill 和 Agent 信息，而插件不替它选择；
 - evaluator 只根据事件流判断 PLAN、LOAD、READY、TODO、task delivery、Main verification、`MAIN REVIEW` 和 reviewer 时序；
 - lifecycle hook 不产生 `block: true`、`continue: true` 或自动 repair turn。
@@ -22,7 +22,7 @@ OMP Enhancer 自开发使用现有 `omp.plugin` 作为 Primary workflow，并加
 
 这种组织方式有三个目的：
 
-1. DeepSeek Flash 只需识别一个最具体的 Primary 和一个通用代码方法 Skill；
+1. Main 只需识别一个最具体的 Primary 和一个通用代码方法 Skill；
 2. workflow card 保存阶段，`code-development` 保存通用检索、计划、TDD 和 review 方法，条件 reference 只增加本仓库特有的生成、打包和 installed E2E 规则；
 3. 全局 reminder 仍保持通用，不知道 `omp.plugin`、Skill、Agent 或 reviewer 数量。
 

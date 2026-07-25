@@ -1,3 +1,11 @@
+> **Archived 2026-07-24.** This note records a historical, model-specific
+> prompt-optimization loop for `opencode-go/deepseek-v4-flash` and
+> `opencode-go/mimo-v2.5`. OMP Enhancer no longer binds reminders or coaching
+> to specific models; the current model-agnostic contract lives in
+> [Architecture and runtime contracts](../../ARCHITECTURE.md). The DeepSeek/MiMo
+> specific details below are preserved as history, not current runtime
+> instructions.
+
 # Flash Main prompt optimization
 
 This note records the offline prompt-optimization loop used for exact

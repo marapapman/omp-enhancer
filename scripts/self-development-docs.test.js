@@ -54,7 +54,7 @@ test('workflow E2E guide defines event evidence, failure classes, and reproducib
 
   assert.match(guide, /^# Workflow and Skill E2E Testing/imu);
   assert.match(guide, /deterministic contract.+static OMP probe.+isolated model E2E/isu);
-  assert.match(guide, /deepseek-self-iteration\.json/iu);
+  assert.match(guide, /self-iteration\.json/iu);
   assert.match(guide, /npm run e2e:main:self-iteration/iu);
   assert.match(guide, /test mutation.+RED.+production mutation.+GREEN/isu);
   assert.match(guide, /same command.+non-zero.+exit.+same command.+zero/isu);
@@ -82,7 +82,7 @@ test('current documentation links the self-development and E2E methods without e
   assert.ok(Buffer.byteLength(readme) <= 6500, 'root README keeps development detail under docs');
 });
 
-test('current repository documentation matches the v22 runtime and evidence contracts', async () => {
+test('current repository documentation matches the v23 runtime and evidence contracts', async () => {
   const [agents, architecture, development, workflows] = await Promise.all([
     read('AGENTS.md'),
     read('docs/ARCHITECTURE.md'),
@@ -90,10 +90,10 @@ test('current repository documentation matches the v22 runtime and evidence cont
     read('docs/WORKFLOW_DEVELOPMENT.md'),
   ]);
 
-  assert.match(agents, /Workflow catalog \(v22\)/u);
-  assert.match(agents, /Workflow catalog v22/u);
-  assert.match(architecture, /Catalog version 22.+31.+29.+`subagent-driven`/isu);
-  assert.match(development, /Catalog version 22.+31.+29.+`subagent-driven`/isu);
+  assert.match(agents, /Workflow catalog \(v23\)/u);
+  assert.match(agents, /Workflow catalog v23/u);
+  assert.match(architecture, /Catalog version 23.+31.+29.+`subagent-driven`/isu);
+  assert.match(development, /Catalog version 23.+31.+29.+`subagent-driven`/isu);
   assert.match(workflows, /当前 31 张卡片.+29 张.+`subagent-driven`/isu);
   assert.match(workflows, /parity.+29 张.+`subagent-driven`/isu);
   assert.doesNotMatch(
@@ -163,7 +163,7 @@ test('current documentation defines the bounded phase-local protocol coach witho
     read('AGENTS.md'),
     read('docs/ARCHITECTURE.md'),
     read('docs/DEVELOPMENT.md'),
-    read('docs/DEEPSEEK_PROMPT_OPTIMIZATION.md'),
+    read('docs/superpowers/DEEPSEEK_PROMPT_OPTIMIZATION.md'),
     read('docs/WORKFLOW_E2E_TESTING.md'),
   ]);
 
@@ -171,7 +171,7 @@ test('current documentation defines the bounded phase-local protocol coach witho
     ['AGENTS.md', agents],
     ['docs/ARCHITECTURE.md', architecture],
     ['docs/DEVELOPMENT.md', development],
-    ['docs/DEEPSEEK_PROMPT_OPTIMIZATION.md', optimization],
+    ['docs/superpowers/DEEPSEEK_PROMPT_OPTIMIZATION.md', optimization],
     ['docs/WORKFLOW_E2E_TESTING.md', e2e],
   ]) {
     assert.match(content, /PRE_PLAN[\s\S]*PRE_READY[\s\S]*PRE_DISPATCH/iu, path);

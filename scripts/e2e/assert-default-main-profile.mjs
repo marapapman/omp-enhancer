@@ -5,7 +5,7 @@ import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { prepareWorktreeIsolation } from './run-installed-deepseek-workflow.mjs';
+import { prepareWorktreeIsolation } from './run-installed-workflow.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const RPC_PROBE = path.join(SCRIPT_DIR, 'omp17-rpc-probe.mjs');
@@ -32,8 +32,8 @@ try {
   const isolatedConfig = await readFile(path.join(isolation.agentDir, 'config.yml'), 'utf8');
   assert.match(
     isolatedConfig,
-    /^\s{2}default:\s+opencode-go\/deepseek-v4-flash:max$/mu,
-    'Isolated OMP startup config did not contain the packaged Main default.',
+    /^\s{2}default:\s+\S+$/mu,
+    'Isolated OMP startup config did not contain a packaged Main default selector.',
   );
 
   const probe = spawnSync(process.execPath, [RPC_PROBE, '--', ...OMP_ARGS], {
@@ -68,9 +68,12 @@ try {
     );
   }
 
-  assert.equal(state.model?.provider, 'opencode-go');
-  assert.equal(state.model?.id, 'deepseek-v4-flash');
-  assert.equal(state.thinkingLevel, 'max');
+  assert.equal(typeof state.model?.provider, 'string', 'Startup probe must report a model provider.');
+  assert.ok((state.model?.provider ?? '').length > 0, 'Startup probe must report a non-empty model provider.');
+  assert.equal(typeof state.model?.id, 'string', 'Startup probe must report a model id.');
+  assert.ok((state.model?.id ?? '').length > 0, 'Startup probe must report a non-empty model id.');
+  assert.equal(typeof state.thinkingLevel, 'string', 'Startup probe must report a thinking level.');
+  assert.ok((state.thinkingLevel ?? '').length > 0, 'Startup probe must report a non-empty thinking level.');
   assert.equal(state.hostInstallation, false, 'Startup probe must use the isolated OMP state.');
   assert.equal(state.setupAgentInvoked, null, 'Startup probe must not send a model prompt.');
 

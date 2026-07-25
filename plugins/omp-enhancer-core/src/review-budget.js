@@ -21,7 +21,7 @@ export function buildTaskShapePrompt(taskDescriptor = {}, {
     : 'focused';
   const domains = uniqueLabels(taskDescriptor.domains).join(',') || 'general';
   return [
-    'COMPAT_TASK_SHAPE_FACTS (observed from the user instruction; non-binding):',
+    'TASK_SHAPE_FACTS (observed from the user instruction; non-binding):',
     `FACTS: operation=${operation}; complexity=${complexity}; domains=${domains}; exact-inspection-targets=${targets.length}; independent-target-analysis=${requestedOrNo(independentTargetAnalysisRequested)}; per-target-evidence=${requestedOrNo(perTargetEvidence)}; cross-target-comparison=${requestedOrNo(crossTargetComparison)}.`,
     `USE: these named targets and acceptance evidence seed candidate slices before project inspection.${workflowSkillVisible ? ' Complete DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY before project action.' : ' Complete the explicit plan before project action.'} After READY, inspect enough local context to make dependencies, exclusive write sets, test seams, and assignment input complete before dispatch. Target count is scope evidence, never a dispatch or fork-width decision.`,
   ].join('\n');
@@ -58,8 +58,15 @@ export function resolveDynamicReviewBudget(taskDescriptor = {}, {
 
   const nativeCapacity = normalizeNativeCapacity(nativeConcurrencyCapacity);
 
+  const posture = resolvePosture({
+    independentReview,
+    reviewApplicable,
+    complexity,
+    riskLevel,
+  });
+
   return {
-    version: 2,
+    version: 3,
     operation,
     domains,
     complexity,
@@ -70,6 +77,7 @@ export function resolveDynamicReviewBudget(taskDescriptor = {}, {
     independentReview,
     nativeConcurrencyCapacity: nativeCapacity,
     subagentsAllowed,
+    posture,
   };
 }
 
@@ -87,11 +95,13 @@ export function buildDynamicReviewBudgetPrompt({
 
   const domains = budget.domains.join(',') || 'general';
   const reviewDimensions = budget.reviewDimensions.join(',') || 'none-observed';
-  return [
-    'COMPAT_REVIEW_CONTEXT (soft, no quota):',
+  const lines = [
+    'REVIEW_CONTEXT (soft, no quota):',
     `FACTS: operation=${budget.operation};complexity=${budget.complexity};risk=${budget.riskLevel};domains=${domains};review=${reviewDimensions}.`,
+    `POSTURE: ${budget.posture}.`,
     'DECIDE: Main may use an existing checkpoint; selects no count/Agent/fork/batch/dispatch/permission/completion condition.',
-  ].join('\n');
+  ];
+  return lines.join('\n');
 }
 
 function materialReviewDimensions({ operation, domains, riskFlags }) {
@@ -110,6 +120,18 @@ function materialReviewDimensions({ operation, domains, riskFlags }) {
     dimensions.push('release-integrity');
   }
   return [...new Set(dimensions)];
+}
+function resolvePosture({ independentReview, reviewApplicable, complexity, riskLevel }) {
+  if (independentReview === 'forbidden' || !reviewApplicable && complexity !== 'broad') {
+    return 'minimal';
+  }
+  if (independentReview === 'required' || ['high', 'critical'].includes(riskLevel)) {
+    return 'high-assurance';
+  }
+  if (complexity === 'broad' || riskLevel === 'medium') {
+    return 'balanced';
+  }
+  return 'minimal';
 }
 
 function normalizeNativeCapacity(value) {

@@ -4,7 +4,7 @@
 
 This npm workspace is the OMP Enhancer marketplace monorepo. It packages six independently installable plugins:
 
-- `omp-enhancer-core`: safe task facts, session-scoped extension-tool activation, and exact-model DeepSeek Flash and MiMo v2.5 compatibility reminders plus bounded phase-local protocol coaching.
+- `omp-enhancer-core`: safe task facts, session-scoped extension-tool activation, and a model-agnostic workflow reminder plus bounded phase-local protocol coaching for all top-level Main models.
 - `omp-config`: shared config assets, optional workflow references, Agents, Skills, notify-only guards, hook templates, and diagnostics.
 - `writing-helper`: writing logic, style, citation, and polish tools plus English and Chinese writing resources.
 - `omp-testing-enhancer` (source directory `plugins/omp-test-enhancer`): testing analysis, host-observed evidence, browser/coverage/mutation context, Agents, advisory review, and reports.
@@ -54,7 +54,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 | Path | Purpose |
 |------|---------|
 | `plugins/omp-enhancer-core/src/` | Core plugin: task facts, workflow definitions, protocol coach, task descriptor, and skill/subagent validation |
-| `plugins/omp-enhancer-core/src/workflows/` | Workflow catalog (v22), schema, renderers, definitions (code, writing, research, network, database, ml, growth, operations) |
+| `plugins/omp-enhancer-core/src/workflows/` | Workflow catalog (v23), schema, renderers, definitions (code, writing, research, network, database, ml, growth, operations) |
 | `plugins/omp-test-enhancer/src/` | Testing enhancer TypeScript source: advisory tools, browser check, session state, and host observation |
 | `plugins/writing-helper/src/` | Quality analysis: logic, style, citations, preservation, language detection, report formatting |
 | `plugins/omp-fact-checker/src/` | Fact-check pipeline: claim extraction, evidence collection (A/B lanes), cross-checking, providers |
@@ -68,10 +68,10 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 | File | Significance |
 |------|-------------|
-| `plugins/omp-enhancer-core/index.js` | Largest plugin entry (~1121 lines): tool registration, lifecycle hooks, DeepSeek/MiMo compatibility reminders |
+| `plugins/omp-enhancer-core/index.js` | Largest plugin entry (~1121 lines): tool registration, lifecycle hooks, model-agnostic workflow reminders |
 | `plugins/omp-enhancer-core/src/task-descriptor.js` | 195KB task analysis — signal extraction, domain classification, risk assessment, language detection |
 | `plugins/omp-enhancer-core/src/workflow-protocol-coach.js` | Protocol state machine observing DISCOVER→DECLARE→LOAD→COMMIT→SPLIT→EXECUTE→VERIFY lifecycle |
-| `plugins/omp-enhancer-core/src/workflows/catalog.js` | Workflow catalog v22: assembles all domain workflow definitions |
+| `plugins/omp-enhancer-core/src/workflows/catalog.js` | Workflow catalog v23: assembles all domain workflow definitions |
 | `plugins/omp-enhancer-core/src/workflows/definitions/` | Canonical workflow definitions (code.js, writing.js, research.js, operations.js, etc.) |
 | `plugins/omp-enhancer-core/src/skill-usage.js` | `<skill-usage>` block parsing, denied/missing skills detection |
 | `plugins/omp-test-enhancer/src/extension.ts` | Testing Enhancer source registration for seven default-inactive advisory tools, lifecycle observation, and session state; the built runtime entry is `dist/extension.js` |
@@ -127,7 +127,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 **E2E tests:**
 
-- `scripts/e2e/run-installed-deepseek-workflow.mjs` — real model E2E with isolated OMP HOME, matrix scenarios
+- `scripts/e2e/run-installed-workflow.mjs` — real model E2E with isolated OMP HOME, matrix scenarios
 - `scripts/e2e/workflow-events.mjs` — NDJSON event log evaluator for PLAN/READY/TODO/task/reviewer sequences
 - `scripts/e2e/omp17-rpc-probe.mjs` — static OMP 17 probe for plugin lifecycle without model interaction
 
@@ -173,11 +173,11 @@ For every delegated assignment, Main copies the committed row's Agent exactly in
 
 The plugins have no active hard gate, hard router, classifier preflight, plugin-owned completion controller, or automatic repair loop. Never reintroduce one under a compatibility or review name.
 
-The exact `opencode-go/deepseek-v4-flash` and exact `opencode-go/mimo-v2.5` compatibility reminders are intentional and must remain. Each is capability-gated, scoped to a top-level Main task, and emitted at most once per active task. When the workflow Skill is visible, the reminder reinforces `DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY`, including the detailed PLAN, structured NOW/THEN loads, delegated/default TODO rebasing, and READY before project work. Imperative wording may restate a canonical native requirement and may tell Main to update native TODO when that tool is exposed, but it must not independently choose a plugin workflow, Skill candidate, Agent, or fork, create a runtime gate or authority, replace `systemPrompt`, change the native task schema, launch a task itself, or continue a session. `OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT=1` and `OMP_ENHANCER_DISABLE_MIMO_COMPAT=1` are controlled diagnostic switches for their corresponding exact models.
+The model-agnostic workflow reminder and phase-local protocol coaching are intentional and must remain. Each is capability-gated, scoped to a top-level Main task, and emitted at most once per active task. When the workflow Skill is visible, the reminder reinforces `DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY`, including the detailed PLAN, structured NOW/THEN loads, delegated/default TODO rebasing, and READY before project work. Imperative wording may restate a canonical native requirement and may tell Main to update native TODO when that tool is exposed, but it must not independently choose a plugin workflow, Skill candidate, Agent, or fork, create a runtime gate or authority, replace `systemPrompt`, change the next natural provider request, or mutate observed events. Two generic diagnostic switches are available: `OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER` disables the reminder and `OMP_ENHANCER_DISABLE_PROTOCOL_COACH` disables the coach.
 
-For those same exact models on a top-level Main task, Core may also observe the staged syntax already chosen by Main and append a short hidden ephemeral cue to the copied message list for the next natural provider request. A normal task has at most one `PRE_PLAN`, one `PRE_READY`, and one `PRE_DISPATCH` phase cue; the single `writing.pending` replacement may add one second-generation `PRE_READY`. The coach only restates the next byte-0 marker, declared-resource wait, native TODO/task schema, exact committed assignment prefix, nonempty top-level `context` for the committed `tasks[]` batch, and directly usable terminal delivery boundary. It may remind Main to resolve a no-op conditional repair checkpoint as completed instead of abandoned, but never decides whether a finding was accepted. It never triggers a turn, mutates prior messages or tool input/result, chooses a workflow, Skill, Agent, fork, TODO content, retry, or completion, or turns an observation into a block, router, gate, permission, or completion controller. `OMP_ENHANCER_DISABLE_PROTOCOL_COACH=1` disables only this phase-local coach.
+For any top-level Main task, Core may also observe the staged syntax already chosen by Main and append a short hidden ephemeral cue to the copied message list for the next natural provider request. A normal task has at most one `PRE_PLAN`, one `PRE_READY`, and one `PRE_DISPATCH` phase cue; the single `writing.pending` replacement may add one second-generation `PRE_READY`. The coach only restates the next byte-0 marker, declared-resource wait, native TODO/task schema, exact committed assignment prefix, nonempty top-level `context` for the committed `tasks[]` batch, and directly usable terminal delivery boundary. It may remind Main to resolve a no-op conditional repair checkpoint as completed instead of abandoned, but never decides whether the checkpoint is genuinely complete.
 
-The packaged config template keeps `opencode-go/deepseek-v4-flash:max` as Main's default and `openai-codex/gpt-5.6-luna:xhigh` as Advisor. MiMo v2.5 is an explicit alternative, not an automatic default change.
+The packaged config template leaves Main and Advisor model selection to the user; the plugin does not bind to any specific model.
 
 Advisory lifecycle rules:
 
@@ -297,8 +297,8 @@ Lifecycle and public-contract tests must prove:
 
 - no hook blocks or continues the host lifecycle;
 - no default runtime path hard-routes a task;
-- DeepSeek Flash and MiMo v2.5 reminder scope, exact-model capability gates, one-shot behavior, separate diagnostic switches, and native-authority language remain intact;
-- phase-local `PRE_PLAN`, `PRE_READY`, and `PRE_DISPATCH` coaching is exact-model/top-level only, survives provider retry and session restore, resets for a new task, honors `writing.pending`, has its own disable switch, and never mutates observed events;
+- model-agnostic reminder scope, top-level capability gates, one-shot behavior, two generic diagnostic switches (`OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER`, `OMP_ENHANCER_DISABLE_PROTOCOL_COACH`), and native-authority language remain intact;
+- phase-local `PRE_PLAN`, `PRE_READY`, and `PRE_DISPATCH` coaching is top-level only, survives provider retry and session restore, resets for a new task, honors `writing.pending`, has its own disable switch, and never mutates observed events;
 - workflow selection and staged TODO remain Agent-owned, and plan/assignment trace is never a dispatch or completion gate;
 - substantive code contracts preserve detailed dependency waves, exclusive vertical slices, native `task` TDD delivery, Main current-tree review before reviewer evidence, and bounded task repair without fixed fanout;
 - Advisor coaching stays bounded, pre-final, and unable to route, block, or restart work;

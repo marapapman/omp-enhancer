@@ -7,7 +7,7 @@
 当前工作流采用“OMP 原生运行 + 可选参考”的模型：
 
 - 默认 lifecycle 不注入或替换 `systemPrompt`，不激活工具，也不改写子 Agent assignment。Core 将任务记录为 `agent-selected`，不预选 workflow、Skill、tool 或 Agent。
-- 精确 `opencode-go/deepseek-v4-flash` 与精确 `opencode-go/mimo-v2.5` 的顶层 Main 任务各保留一次 capability-gated compatibility reminder。需要分析、判断、workflow composition、协调阶段或可能委派时，Main 使用 `DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY` 七阶段软协议：索引未由宿主提供时执行 index-only batch；只有 exact native `skill-prompt` body named `omp-enhancer-workflows` 才算 supplied index。下一 response 在 byte 0 从 `W` 开始填写公开、完整且不含占位符的 exact `WORKFLOW PLAN` block；`Skills` 只列 selected `D` 顶层 exact URI、`C` nested ECC exact URI 或未枚举长尾所需的 catalog URI，workflow references 只出现在 `Load order: NOW=[selected Skill/catalog URIs] THEN=[Add-on workflow references; Primary reference last]` 的 `THEN`，并至少详列 `LOAD`、`COMMIT`、`SPLIT + EXECUTE` 和 `VERIFY` 四个 Actions。枚举 `C` 直接进入 PLAN/NOW，不先读取 catalog。PLAN response 读取 `NOW` 一次并等待，`NOW=[none]` 时读取 `THEN` 一次并等待；最多三批 `RESOURCE EXTENSION` 只读取 loaded source 明确披露的 exact same-namespace URI，其中最多两次 long-tail catalog hop 加一次 linked-method batch；扩展后只读取 `THEN` 一次。随后下一 response 在 byte 0 从 `W` 开始输出 exact `WORKFLOW READY | ...`，只按实际步骤与 Skill 指令初始化详细 TODO，然后结束并等待；loaded-card soft compiler 仅在卡片是 `subagent-driven`、assignment input 完整、checkpoint 安全且 matching Agent 当前可见时，为该 checkpoint 生成 exact `Delegate` row，否则记录一个匹配的许可 fallback，parent-owned `VERIFY` rows 始终独立。Project tools 只能从后续 response 开始。纯机械字段 lookup 无 Skill、marker 或 TODO；Agent、fork 和证据整合仍由 Main 自主决定。完整行为契约见 [`ARCHITECTURE.md`](ARCHITECTURE.md#flash-model-compatibility-reminders)。
+- 所有顶层 Main 模型的任务各保留一次 capability-gated compatibility reminder。需要分析、判断、workflow composition、协调阶段或可能委派时，Main 使用 `DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY` 七阶段软协议：索引未由宿主提供时执行 index-only batch；只有 exact native `skill-prompt` body named `omp-enhancer-workflows` 才算 supplied index。下一 response 在 byte 0 从 `W` 开始填写公开、完整且不含占位符的 exact `WORKFLOW PLAN` block；`Skills` 只列 selected `D` 顶层 exact URI、`C` nested ECC exact URI 或未枚举长尾所需的 catalog URI，workflow references 只出现在 `Load order: NOW=[selected Skill/catalog URIs] THEN=[Add-on workflow references; Primary reference last]` 的 `THEN`，并至少详列 `LOAD`、`COMMIT`、`SPLIT + EXECUTE` 和 `VERIFY` 四个 Actions。枚举 `C` 直接进入 PLAN/NOW，不先读取 catalog。PLAN response …
 - `task-descriptor.js` 只提取 operation、domains、约束、目标、阶段、风险、正文语言、`inspectionTargets` 和 `inspectionShape` 等 JSON-safe 事实，供状态记录和短提示使用；这些字段不能选择 workflow、Agent 或 fork。
 - `omp-enhancer-workflows` Skill 提供精简选择索引和每个 workflow 一张的按需参考卡片，但不提供事实核查、写作、测试等领域方法。索引不复制完整 compose 图，却按 workflow 行暴露最小 Skill 发现信息：`D` 是顶层 exact URI，`C` 是索引显式暴露的 nested ECC exact URI；它们只是 optional candidates、绝不是 load sets，Main 只选择与 requested method、evidence rule、verdict 或 format 匹配的 URI；未枚举长尾才使用 `skill://ecc-skill-catalog`。Acting Agent 仍根据完整条件自主选择、组合、简化或忽略卡片与候选方法；项目不存在介入默认 Main 运行路径的 router 或 classifier。
 - 普通软件工作统一使用 `code.dev` 和 `code-development`。实质 mutation 的建议角色只有插件 `plan`、native `task` 与 native `reviewer`：Main 负责搜索、细粒度 parallel-wave 计划、集成和判断，task 负责完整 vertical TDD slice，reviewer 只审 Main-reviewed supplied diff/evidence。不要重新拆分 planning、debugging、testing、implementation、review、build、performance 或 technical-research 过程卡片；`code.plan`、`code.debug`、`code.test`、`code.review`、`code.build`、`performance.optimize` 与 `research.technical` 是退役 ID，其选择条件都映射到 `code.dev`。
@@ -237,7 +237,7 @@ npm run check:marketplace
 可以先做命令、隔离参数和 Matrix 结构预览；dry-run 不是 E2E 通过证据：
 
 ```bash
-node scripts/e2e/run-installed-deepseek-workflow.mjs \
+node scripts/e2e/run-installed-workflow.mjs \
   --matrix scripts/e2e/fixtures/workflow-consolidation-installed.json \
   --dry-run
 ```
@@ -259,32 +259,27 @@ node scripts/e2e/omp17-rpc-probe.mjs -- \
 
 Probe 使用隔离的临时 OMP home，只输出 hash、字符数和结构布尔值，不输出完整 prompt 或配置秘密。不要把 `--no-extensions` 与 `-e` 或 `--plugin-dir` 组合；OMP 会同时禁用显式工作树扩展，使对照产生假阳性。默认 probe 不提交 prompt，因此它只验证静态 startup `systemPrompt`、task schema、active tools、完整 catalog import、OMP 原生 Agents，以及 `omp-enhancer-workflows` 和单个顶层 `ecc-skill-catalog` 的原生发现状态。
 
-DeepSeek Flash 与 MiMo v2.5 的 runtime 断言由 Core hook 单测和行为矩阵负责：隐藏 custom hook 消息只进入对应 exact provider/model 的顶层 Main 任务一次；Skill discovery 仅在 OMP 暴露可见 Skills 时出现；workflow selection 仅在对应 Skill 可见时出现；原生 `task` active 且用户允许 Agent/委派时才可能出现 delegation 兼容消息。Staged evaluator 必须使用 assistant batch 与 tool result provenance，并区分两种 `DISCOVER` 入口：只有 exact native `skill-prompt` body named `omp-enhancer-workflows` 才算宿主已提供索引；否则首个工具 batch 只有成功的 workflow index。公开完整的 exact `WORKFLOW PLAN` response byte 0 必须是 `W`，其 `Skills` 只允许 selected `D` 顶层 exact URI、`C` nested ECC exact URI 或未枚举长尾 catalog URI，workflow references 只允许出现在 `THEN`，并至少包含 `LOAD`、`COMMIT`、`SPLIT + EXECUTE` 和 `VERIFY` 四个详细 Actions。Evaluator 解析 `Load order: NOW=[...] THEN=[...]`：`NOW` 只允许未由宿主提供的 selected Skill/catalog URI，枚举 `C` 必须直接出现且不得先读取 catalog；`THEN` 只允许 workflow reference URI，并按 Add-ons 后 Primary 排序。PLAN resource call 必须与 `NOW` 完全一致，`NOW=[none]` 时允许在该 batch 读取完整 `THEN`。0 到 3 个 extension batch 都要有 byte-0 marker、已成功加载的 source、source 完整结果中可见的 exact same-namespace URI、去重及批次数约束；未随 PLAN 加载的 `THEN` 必须在 extension 后恰好读取一次。所有 resource results 之后且 project call 之前，下一 response byte 0 必须是 `W` 并出现 exact `WORKFLOW READY | ...`；该 READY response 只初始化 TODO、结束并等待，任何 project call 都必须位于后续 response。Evaluator 对每个 `subagent-driven` checkpoint 验证 loaded-card 条件式结果：assignment input 完整、checkpoint 安全且 matching Agent 当前可见时才允许 exact `Delegate` TODO row，否则必须是一个与实际限制匹配的许可 fallback；parent-owned `VERIFY` rows 独立存在。旧单行 tuple 只保留解析兼容。`writing.pending` 还需验证 initial READY、单次语言 read、replacement PLAN/loads/READY。Mechanical lookup 反向禁止 marker、Skill 与 TODO。Subagent-driven code evaluator 应使用双独立 slice fixture，要求 plan review completion、一次 parallel implementation batch、每个 child 的 host-observed delivery、Main 的 current-tree broader command 与 visible `MAIN REVIEW`、之后的 reviewer supplied input，以及 supported repair 后的 re-review。行为矩阵还应覆盖 owning domain Skill、Primary+Add-ons、assignment schema、失败/partial result、事实 claim tuple 和 no-delegation 边界。Child 只消费 assignment 中冻结的 Skills；parent trace 无法观察的 child 内部 history 不能由 final claim 补造。真实矩阵中的 slice 或 reviewer 数量是场景输入与模型行为，不是插件全局保证；消息也不得返回或替换 `systemPrompt`、改变 native task schema/active tools、提供或 autoload Skill。另用 `OMP_RPC_SETUP_COMMAND='/enhancer-tools enable core'` 验证只有显式命令才改变 active extension tools。
+Workflow reminder 的 runtime 断言由 Core hook 单测和行为矩阵负责：隐藏 custom hook 消息只进入顶层 Main 任务一次；Skill discovery 仅在 OMP 暴露可见 Skills 时出现；workflow selection 仅在对应 Skill 可见时出现；原生 `task` active 且用户允许 Agent/委派时才可能出现 delegation 兼容消息。Staged evaluator 必须使用 assistant batch 与 tool result provenance，并区分两种 `DISCOVER` 入口：只有 exact native `skill-prompt` body named `omp-enhancer-workflows` 才算宿主已提供索引；否则首个工具 batch 只有成功的 workflow index。公开完整的 exact `WORKFLOW PLAN` response byte 0 必须是 `W`，其 `Skills` 只允许 selected `D` 顶层 exact URI、`C` nested ECC exact URI 或未枚举长尾 catalog URI，workflow references 只允许出现在 `THEN`，并至少包含 `LOAD`、`COMMIT`、`SPLIT + EXECUTE` 和 `VERIFY` 四个详细 Actions。Evaluator 解析 `Load order: NOW=[...] THEN=[...]`：`NOW` 只允许未由宿主提供的 selected Skill/catalog URI…
 
 Subagent willingness matrix 还使用不提 delegation 的自然 prompt 覆盖 `general.subagent` non-mechanical subagent-driven 对照和 trivial lookup direct 反例、以 `writing.en` 为 Primary 且 `writing.latex` 为 Add-on 的 writer→checker 依赖链，以及完整 `network.design` brief 的领域 Agent 选择和 exact nested `C` Skill direct read。写作场景同时验证 writer delivery 是 proposal、checker delivery 是 in-band report，任何获授权的 target mutation 都来自 finding disposition 之后可观察的 Main call。`requiredNativeTaskAgentSequence` 是 opt-in evaluator：前序 assignment 必须 completed、有非空 host-observed delivery，且其 delivery event 早于后序 Agent 的首次 assignment。它不作用于未声明该 expectation 的场景。共享 fixture 的文件变化若没有匹配的 parent mutation call，只能报告为 unattributed，不能由 assignment 时序推定为 child write。真实模型 pass rate、fork width、Skill/TODO 数量有随机性，只能作为行为观测；单个 pilot 不能证明稳定。
 
 本地 link 或 upgrade 后，可用 `OMP_RPC_USE_HOST_INSTALLATION=1 node scripts/e2e/omp17-rpc-probe.mjs --` 只读检查实际 OMP home；该模式仍使用 `--no-session`，且只输出 hash 与结构布尔值，不调用模型。
 
-如需继续运行 `scripts/e2e/run-installed-deepseek-workflow.mjs` 的行为矩阵，应把 TODO、task、Skill 和 Agent 事件解释为 OMP 自己的选择，而不是插件强制契约。脚本名称保留历史 DeepSeek 命名，但 `--model` 可覆盖整个矩阵。涉及外部写入的场景必须在临时目录中验证，或只做明确标为 preview 的 dry-run，不能为了 E2E 自动发布。
+如需继续运行 `scripts/e2e/run-installed-workflow.mjs` 的行为矩阵，应把 TODO、task、Skill 和 Agent 事件解释为 OMP 自己的选择，而不是插件强制契约。`--model` 可覆盖整个矩阵。涉及外部写入的场景必须在临时目录中验证，或只做明确标为 preview 的 dry-run，不能为了 E2E 自动发布。
 
 ### 可选真实 OMP E2E
 
-下面的行为矩阵在场景 prompt 中显式要求 TODO 和 task 元数据，用来验证 OMP 的原生执行接口；它不代表插件默认注入这些要求。工作树插件同时通过 entrypoint 和 plugin directory 加载，且不能与 `--no-extensions` 组合。DeepSeek/MiMo 比较是相同 matrix、thinking、repeat 和 evaluator 的两次独立运行，不是一次调用完成的 paired A/B wrapper，也不会自动产生模型差分结论：
+下面的行为矩阵在场景 prompt 中显式要求 TODO 和 task 元数据，用来验证 OMP 的原生执行接口；它不代表插件默认注入这些要求。工作树插件同时通过 entrypoint 和 plugin directory 加载，且不能与 `--no-extensions` 组合。不同模型的比较是相同 matrix、thinking、repeat 和 evaluator 的两次独立运行，不是一次调用完成的 paired A/B wrapper，也不会自动产生模型差分结论：
 
 ```bash
-node scripts/e2e/run-installed-deepseek-workflow.mjs \
+node scripts/e2e/run-installed-workflow.mjs \
   --matrix scripts/e2e/fixtures/workflow-consolidation-installed.json \
-  --model opencode-go/deepseek-v4-flash --thinking high \
+  --model <user-chosen> --thinking high \
   --worktree-plugins --repeat 1 \
-  --output .omp/e2e-results/workflow-deepseek
-node scripts/e2e/run-installed-deepseek-workflow.mjs \
-  --matrix scripts/e2e/fixtures/workflow-consolidation-installed.json \
-  --model opencode-go/mimo-v2.5 --thinking high \
-  --worktree-plugins --repeat 1 \
-  --output .omp/e2e-results/workflow-mimo
+  --output .omp/e2e-results/workflow-run
 ```
 
-模型 A/B 与 reminder-on/off A/B 不同；后者固定同一模型，并使用 `OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT=1` 或 `OMP_ENHANCER_DISABLE_MIMO_COMPAT=1` 抑制对应 reminder。
+模型 A/B 与 reminder-on/off A/B 不同；后者固定同一模型，并使用 `OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER=1` 抑制 reminder。
 
 `--worktree-plugins` 自动使用一次性 HOME、agent state 与 session state，并只加载当前工作树插件。它以 SQLite backup API 快照活动 `agent.db`，播种当前 Config assets 的白名单运行子集，清除宿主 profile/XDG/auth-broker/path overrides，并在项目本地 registry 或 opaque extension source 可能造成重复加载时 fail closed。所有隔离 state 在 `finally` 删除；report 只暴露 `isolated: true` 和脱敏后的 `--session-dir=<isolated>`。相关 OAuth credential 在预计矩阵时长加安全余量内可能到期时，runner 会在模型调用前拒绝运行，以降低隔离副本刷新并轮换宿主 token 的风险。省略该 flag 才表示验证当前已安装插件态。
 

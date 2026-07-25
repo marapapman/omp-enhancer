@@ -5,15 +5,14 @@
 ## Contents
 
 - `assets/CLAUDE.md` and root or agent config templates.
-- `assets/WORKFLOW_CATALOG.md` is the generated catalog version 22 for explicit synchronization and human inspection. Its semantic source lives in `omp-enhancer-core/src/workflows/definitions`; do not edit this asset by hand.
+- `assets/WORKFLOW_CATALOG.md` is the generated catalog version 23 for explicit synchronization and human inspection. Its semantic source lives in `omp-enhancer-core/src/workflows/definitions`; do not edit this asset by hand.
 - `skills/omp-enhancer-workflows/` publishes a compact selection table and one on-demand reference card per workflow. The table keeps exact IDs, full Primary conditions, literal card URIs, top-level `D` Skill URIs, and enumerated nested ECC `C` Skill URIs. It guides Main to declare its workflow/Skill plan, load selected resources, and rebase its own detailed TODO; it does not select a workflow, create a runtime gate, require delegation, activate tools, grant permission, or decide completion.
 - `skills/ecc/SKILL.md` publishes one top-level `ecc-skill-catalog` adapter, and `skills/ecc/catalog.md` indexes 255 nested ECC guides for exact, on-demand reads.
 - `assets/AGENTS.md` adds a compact Agent-owned staged plan/load/TODO contract and conditional handoff trace. `assets/WATCHDOG.yml` lets Advisor spend one early ordinary note coaching that contract while retaining its evidence and send limits. Neither imports `OMP_ENHANCER_WORKFLOW_CATALOG.md` nor appends the full catalog to a system prompt.
-- `assets/config.yml`, `assets/models.yml`, and `assets/mcp.json` remain templates only. `models.yml` contains DeepSeek provider-compatibility overrides, not a complete supported-model inventory.
-- `assets/config.yml` keeps `opencode-go/deepseek-v4-flash:max` as `modelRoles.default`, selects `openai-codex/gpt-5.6-luna:xhigh` for `modelRoles.advisor`, and includes `modelRoles.tiny` for optional lightweight tasks. MiMo v2.5 is an explicit alternative rather than an automatic default change; OMP and the acting Agent retain workflow selection.
+- `assets/config.yml` and `assets/mcp.json` remain templates only. The config template carries no concrete `modelRoles` defaults; model selection stays with OMP and the acting Agent.
 - `agents/`, `skills/`, and notify-only `hooks/` copied from the config source. For ordinary code work, Config contributes only the read-only `plan` role; OMP's native `task` owns implementation slices and native `reviewer` remains the semantic-diff reviewer, so neither native role is shadowed. Other packaged Agents are retained only for distinct network, security, visual, or open-source boundaries.
 - `skills/code-development/` is the single general code-process Skill. It covers local and decision-relevant external search, detailed parallel-wave planning, plan review, native task-owned vertical TDD, Main integration and `MAIN REVIEW`, and bounded semantic review/repair; `references/omp-enhancer.md` adds repository-specific generation, packaging, and installed-E2E guidance only when applicable.
-- `hook-templates/` contains behavior-changing DeepSeek compatibility templates that are packaged but not auto-discovered.
+- `hook-templates/` contains optional behavior-changing hook templates (for example, generic tool-result redaction and truncation helpers) that are packaged but not auto-discovered.
 - Slash command content for `/omp-config:config`, `/omp-config:config-doctor`, and `/omp-config:config-assets`.
 - Default-inactive runtime tools for extension loading: `omp_config_doctor`, `omp_config_assets`, `omp_config_plan`, and `omp_config_sync_workflow_context`.
 
@@ -25,13 +24,12 @@ This package does not automatically overwrite `~/.omp`. Treat the packaged files
 
 The auto-discovered destructive-command and malformed edit-anchor guard hooks
 are advisory-only: they produce UI warnings, do not rewrite input or output,
-and never return `block: true`. Behavior-changing DeepSeek compatibility hooks
-live under `hook-templates/`. They can repair model-specific context or tool
-input and run a consolidated result-format/redaction/truncation pipeline only
-after a user explicitly installs the chosen templates together with their
-referenced `lib/` helpers. The plugin does not activate them automatically, and
-they are not permission gates. The templates are scoped to provider
-`opencode-go` and model IDs `deepseek-v4-flash` and `deepseek-v4-pro`.
+and never return `block: true`. Optional behavior-changing hook templates
+live under `hook-templates/`. They are generic helpers (for example, tool-result
+redaction and truncation) and run only after a user explicitly installs the
+chosen templates together with their referenced `lib/` helpers. The plugin does
+not activate them automatically, and they are not permission gates. The templates
+are model-agnostic and carry no provider or model-id gating.
 Bundled agents do not declare `blocking: true`, and the config template disables
 `loopGuard` plus compaction `autoContinue` by default. Host sandboxing, approval,
 and system safety policy remain independent of this plugin.
@@ -89,37 +87,34 @@ will compare them later, they share a repository, or it prefers to retain
 context, Advisor may use that same one-note budget to ask Main to reapply OMP's
 native independence test. Advisor still does not choose the Agent or fork width.
 
-The companion Core plugin has two exact-model exceptions that do not alter this
-package's prompt assets. For a top-level Main task using exact
-`opencode-go/deepseek-v4-flash` or exact `opencode-go/mimo-v2.5`, it may append at
-most one hidden custom-hook compatibility message per active task. The labels are
-model-specific, but both messages reinforce
-`DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY`: index-only
-discovery unless the exact native `skill-prompt` body named
-`omp-enhancer-workflows` was supplied, a byte-0 `WORKFLOW PLAN` whose Skills
-contain only selected `D`/`C` exact Skill URIs or a long-tail catalog URI and
-whose workflow references appear only in structured THEN, four detailed
-Actions, bounded NOW/THEN loading, and a byte-0 `WORKFLOW READY | ...` with delegated TODO
-rows plus parent VERIFY before project work. Its stored attribution is `user`,
-while OMP presents ordinary custom-hook messages as supplemental developer
-context, so it explicitly yields to the user instruction and native OMP
-contracts.
+The companion Core plugin may emit scoped workflow-navigation reminders for a
+top-level Main task; those messages do not alter this package's prompt assets. They
+reinforce `DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY`:
+index-only discovery unless the exact native `skill-prompt` body named
+`omp-enhancer-workflows` was supplied, a byte-0 `WORKFLOW PLAN` whose Skills contain
+only selected `D`/`C` exact Skill URIs or a long-tail catalog URI and whose workflow
+references appear only in structured THEN, four detailed Actions, bounded NOW/THEN
+loading, and a byte-0 `WORKFLOW READY | ...` with delegated TODO rows plus parent
+VERIFY before project work. Its stored attribution is `user`, while OMP presents
+ordinary custom-hook messages as supplemental developer context, so it explicitly
+yields to the user instruction and native OMP contracts.
 
-The message includes workflow navigation only when that Skill is visible, other
-Skill discovery only when OMP exposes visible Skills, and task-shape or review
-facts only when the corresponding native capability is active and allowed. After
-READY, Main owns the detailed plan, native Agent choice, slice width, integration, and review decisions. The message
-does not return or replace `systemPrompt`, provide or autoload a Skill, change the
-native `task` schema or active tools, select a workflow, Agent, fork, reviewer
-count, dispatch, permission, or completion condition. Other provider/model
+The message includes workflow navigation only when that Skill is visible, other Skill
+discovery only when OMP exposes visible Skills, and task-shape or review facts only
+when the corresponding native capability is active and allowed. After READY, Main
+owns the detailed plan, native Agent choice, slice width, integration, and review
+decisions. The message does not return or replace `systemPrompt`, provide or autoload
+a Skill, change the native `task` schema or active tools, select a workflow, Agent,
+fork, reviewer count, dispatch, permission, or completion condition. Other provider/model
 tuples, subagents, and Advisor do not receive it.
 
-Set `OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT=1` or
-`OMP_ENHANCER_DISABLE_MIMO_COMPAT=1` only for controlled reminder diagnostics of
-the corresponding exact model while leaving Core and the rest of OMP loaded.
-The default behavior remains enabled under the capability checks above.
-
-`/model` changes the active session model. Selecting MiMo v2.5 this way is explicit and does not rewrite the packaged DeepSeek Main default. The primary request path does not run a plugin router or inject a catalog. OMP owns the request workflow. Analytical, judgment, composition, coordination, and possible-delegation work uses `omp-enhancer-workflows` only as the first navigation index, then loads the smallest selected exact `D`/`C` domain Skill set or an unlisted long-tail catalog chain when useful; mechanical field lookup uses no Skill. Main still chooses every workflow, Agent, Skill, and execution action.
+`/model` changes the active session model. The primary request path does not run a
+plugin router or inject a catalog. OMP owns the request workflow. Analytical,
+judgment, composition, coordination, and possible-delegation work uses
+`omp-enhancer-workflows` only as the first navigation index, then loads the smallest
+selected exact `D`/`C` domain Skill set or an unlisted long-tail catalog chain when
+useful; mechanical field lookup uses no Skill. Main still chooses every workflow,
+Agent, Skill, and execution action.
 
 ## Commands
 

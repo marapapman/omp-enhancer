@@ -2,17 +2,6 @@ secrets:
   enabled: true
 skills: 
   enabled: true
-modelRoles: 
-  advisor: openai-codex/gpt-5.6-luna:xhigh
-  commit: ollama-cloud/gemma3:4b
-  default: opencode-go/deepseek-v4-flash:max
-  designer: ollama-cloud/glm-5.2:xhigh
-  plan: ollama-cloud/deepseek-v4-pro:high
-  slow: ollama-cloud/glm-5.2:xhigh
-  smol: ollama-cloud/deepseek-v4-flash:medium
-  task: ollama-cloud/deepseek-v4-flash:high
-  tiny: opencode-go/deepseek-v4-flash:medium
-  vision: ollama-cloud/kimi-k2.6:medium
 loopGuard:
   enabled: false
 memory: 

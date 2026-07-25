@@ -32,7 +32,7 @@ import {
   snapshotTree,
   spawnCaptured,
   verifyFixture,
-} from './e2e/run-installed-deepseek-workflow.mjs';
+} from './e2e/run-installed-workflow.mjs';
 
 const SUBAGENT_DRIVEN_CODE_EXPECTATION = {
   planReviewAgent: 'plan',
@@ -101,8 +101,6 @@ test('worktree isolation config keeps only the E2E runtime allowlist', () => {
     '  enabled: true',
     'skills:',
     '  enabled: true',
-    'modelRoles:',
-    '  default: opencode-go/deepseek-v4-flash:max',
     'memory:',
     '  backend: mnemopi',
     'debug:',
@@ -117,7 +115,6 @@ test('worktree isolation config keeps only the E2E runtime allowlist', () => {
 
   const filtered = filterWorktreeConfig(source);
   assert.match(filtered, /^skills:/mu);
-  assert.match(filtered, /^modelRoles:/mu);
   assert.match(filtered, /^disabledProviders:/mu);
   assert.match(filtered, /^enabledModels:/mu);
   assert.match(filtered, /^task:/mu);
@@ -275,14 +272,11 @@ test('worktree isolation seeds current assets and deterministic Skills, then del
     writeFile(path.join(assetsDir, 'AGENTS.md'), 'current agents\n'),
     writeFile(path.join(assetsDir, 'WATCHDOG.yml'), 'instructions: current\n'),
     writeFile(path.join(assetsDir, 'WORKFLOW_CATALOG.md'), 'current catalog\n'),
-    writeFile(path.join(assetsDir, 'models.yml'), 'providers: {}\n'),
     writeFile(path.join(assetsDir, 'config.yml'), [
       'secrets:',
       '  enabled: true',
       'skills:',
       '  enabled: true',
-      'modelRoles:',
-      '  default: opencode-go/deepseek-v4-flash:max',
       'task:',
       '  batch: true',
       '',
@@ -305,7 +299,6 @@ test('worktree isolation seeds current assets and deterministic Skills, then del
       await readFile(path.join(isolation.agentDir, 'OMP_ENHANCER_WORKFLOW_CATALOG.md'), 'utf8'),
       'current catalog\n',
     );
-    assert.equal(await readFile(path.join(isolation.agentDir, 'models.yml'), 'utf8'), 'providers: {}\n');
     assert.match(
       await readFile(path.join(isolation.agentDir, 'skills', 'xlsx', 'SKILL.md'), 'utf8'),
       /^---\nname: xlsx\n/mu,
@@ -326,7 +319,7 @@ test('worktree isolation seeds current assets and deterministic Skills, then del
   }
 });
 
-test('worktree isolation preserves the packaged Main default selector', async () => {
+test('worktree isolation preserves the packaged model-agnostic config defaults', async () => {
   const stateParent = await mkdtemp(path.join(os.tmpdir(), 'omp-e2e-default-profile-'));
   let isolation;
   try {
@@ -335,10 +328,11 @@ test('worktree isolation preserves the packaged Main default selector', async ()
       baseEnv: { PATH: process.env.PATH },
       dryRun: true,
     });
-    assert.match(
-      await readFile(path.join(isolation.agentDir, 'config.yml'), 'utf8'),
-      /^\s{2}default:\s+opencode-go\/deepseek-v4-flash:max$/mu,
-    );
+    const config = await readFile(path.join(isolation.agentDir, 'config.yml'), 'utf8');
+    assert.doesNotMatch(config, /modelRoles:/mu);
+    assert.doesNotMatch(config, /deepseek|mimo|opencode-go/i);
+    assert.match(config, /^loopGuard:\s*\n\s+enabled:\s+false$/mu);
+    assert.match(config, /^task:\s*\n\s+agentModelOverrides:\s*\{\}/mu);
   } finally {
     await isolation?.cleanup();
     await rm(stateParent, { recursive: true, force: true });
@@ -626,7 +620,7 @@ for (const [receivedSignal, expectedExitCode] of [['SIGINT', 130], ['SIGTERM', 1
     };
     try {
       runner = spawnChild(process.execPath, [
-        path.join(process.cwd(), 'scripts/e2e/run-installed-deepseek-workflow.mjs'),
+        path.join(process.cwd(), 'scripts/e2e/run-installed-workflow.mjs'),
         '--matrix', matrixPath,
         '--output', outputRoot,
       ], {
@@ -3360,7 +3354,7 @@ test('semantic-edit-en fixture and sentinels require legal escaped LaTeX percent
     assert.match(text, /12\.5\\%/u);
 
     const matrix = JSON.parse(await readFile(
-      new URL('./e2e/fixtures/deepseek-installed-matrix.json', import.meta.url),
+      new URL('./e2e/fixtures/installed-matrix.json', import.meta.url),
       'utf8',
     ));
     const scenario = matrix.scenarios.find(({ id }) => id === 'semantic-edit-en');
@@ -3443,7 +3437,7 @@ test('temporary read-only fixtures ignore reads and attribute unauthorized mutat
 
 test('English Introduction fixture requires the unique conservative edit exactly', async () => {
   const matrix = JSON.parse(await readFile(
-    new URL('./e2e/fixtures/deepseek-installed-matrix.json', import.meta.url),
+    new URL('./e2e/fixtures/installed-matrix.json', import.meta.url),
     'utf8',
   ));
   const scenario = matrix.scenarios.find(({ id }) => id === 'semantic-edit-en-introduction-skill-first');
@@ -3488,7 +3482,7 @@ test('English Introduction fixture requires the unique conservative edit exactly
 
 test('semantic-edit-zh fixture contains a concrete removable style defect', async () => {
   const matrix = JSON.parse(await readFile(
-    new URL('./e2e/fixtures/deepseek-installed-matrix.json', import.meta.url),
+    new URL('./e2e/fixtures/installed-matrix.json', import.meta.url),
     'utf8',
   ));
   const scenario = matrix.scenarios.find(({ id }) => id === 'semantic-edit-zh');
@@ -3504,7 +3498,7 @@ test('semantic-edit-zh fixture contains a concrete removable style defect', asyn
 
 test('two-file workflow fixture exposes two independent bounded review slices', async () => {
   const matrix = JSON.parse(await readFile(
-    new URL('./e2e/fixtures/deepseek-advisor-stress.json', import.meta.url),
+    new URL('./e2e/fixtures/advisor-stress.json', import.meta.url),
     'utf8',
   ));
   const scenario = matrix.scenarios.find(({ id }) => id === 'advisor-two-file-workflow');
@@ -3524,7 +3518,7 @@ test('two-file workflow fixture exposes two independent bounded review slices', 
 
 test('self-iteration E2E fixture is a bounded real Node project with a green baseline', async () => {
   const matrix = JSON.parse(await readFile(
-    new URL('./e2e/fixtures/deepseek-self-iteration.json', import.meta.url),
+    new URL('./e2e/fixtures/self-iteration.json', import.meta.url),
     'utf8',
   ));
   const scenario = matrix.scenarios.find(({ id }) => id === 'omp-self-iteration-tdd');
@@ -3686,7 +3680,7 @@ test('fixture verification rejects replacement of the fixture root', async () =>
 
 test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-only evidence', async () => {
   const matrix = JSON.parse(await readFile(
-    new URL('./e2e/fixtures/deepseek-skill-discovery.json', import.meta.url),
+    new URL('./e2e/fixtures/skill-discovery.json', import.meta.url),
     'utf8',
   ));
 
@@ -3776,8 +3770,8 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
 
 test('DeepSeek writing-selection and Advisor paired matrices enable strict workflow resource declarations', async () => {
   const matrices = await Promise.all([
-    'deepseek-writing-selection.json',
-    'deepseek-advisor-paired.json',
+    'writing-selection.json',
+    'advisor-paired.json',
   ].map(async (name) => JSON.parse(await readFile(
     new URL(`./e2e/fixtures/${name}`, import.meta.url),
     'utf8',
@@ -3831,7 +3825,7 @@ test('DeepSeek writing-selection and Advisor paired matrices enable strict workf
 
 test('DeepSeek subagent default matrix keeps native task and hub semantics with natural controls', async () => {
   const matrix = JSON.parse(await readFile(
-    new URL('./e2e/fixtures/deepseek-subagent-willingness.json', import.meta.url),
+    new URL('./e2e/fixtures/subagent-willingness.json', import.meta.url),
     'utf8',
   ));
 
@@ -4218,7 +4212,7 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
   const outputRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-e2e-matrix-mode-'));
   try {
     const matrix = JSON.parse(await readFile(
-      new URL('./e2e/fixtures/deepseek-installed-matrix.json', import.meta.url),
+      new URL('./e2e/fixtures/installed-matrix.json', import.meta.url),
       'utf8',
     ));
     const { report } = await runInstalledMatrix({
@@ -4280,7 +4274,7 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
     assert.equal(modelOverrideReport.results[0].thinking, 'high');
 
     const stress = JSON.parse(await readFile(
-      new URL('./e2e/fixtures/deepseek-advisor-stress.json', import.meta.url),
+      new URL('./e2e/fixtures/advisor-stress.json', import.meta.url),
       'utf8',
     ));
     assert.equal(stress.defaults.advisor, true);
@@ -4380,6 +4374,97 @@ test('installed runner applies an isolated task eagerness overlay without changi
       runInstalledMatrix({ matrixPath, outputRoot: path.join(tempRoot, 'invalid'), dryRun: true }),
       /taskEager must be one of: default, preferred, always/,
     );
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+
+test('installed runner omits --model and --thinking when no override, scenario, or matrix default is present', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-e2e-no-implicit-model-'));
+  const matrixPath = path.join(tempRoot, 'matrix.json');
+  const outputRoot = path.join(tempRoot, 'results');
+  const matrix = {
+    version: 1,
+    defaults: {
+      advisor: false,
+    },
+    scenarios: [{
+      id: 'no-implicit-model',
+      cwd: path.resolve(import.meta.dirname, '..'),
+      prompt: 'Return a concise read-only result.',
+    }],
+  };
+  await writeFile(matrixPath, `${JSON.stringify(matrix, null, 2)}\n`);
+
+  try {
+    const { report } = await runInstalledMatrix({
+      matrixPath,
+      outputRoot,
+      dryRun: true,
+    });
+    const result = report.results[0];
+    assert.equal(result.model, null, 'runner must not inject an implicit model default.');
+    assert.equal(result.thinking, null, 'runner must not inject an implicit thinking default.');
+    assert.equal(
+      result.command.some((argument) => argument.startsWith('--model=')),
+      false,
+      'runner must not pass --model when no override/scenario/matrix default is present.',
+    );
+    assert.equal(
+      result.command.some((argument) => argument.startsWith('--thinking=')),
+      false,
+      'runner must not pass --thinking when no override/scenario/matrix default is present.',
+    );
+    assert.deepEqual(report.runtimeProfiles, [{ model: null, thinking: null }]);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('installed runner still honors a matrix default model and an explicit override together', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-e2e-matrix-default-model-'));
+  const matrixPath = path.join(tempRoot, 'matrix.json');
+  const outputRoot = path.join(tempRoot, 'results');
+  const matrix = {
+    version: 1,
+    defaults: {
+      advisor: false,
+      model: 'opencode-go/deepseek-v4-flash',
+      thinking: 'minimal',
+    },
+    scenarios: [{
+      id: 'matrix-default-model',
+      cwd: path.resolve(import.meta.dirname, '..'),
+      prompt: 'Return a concise read-only result.',
+    }],
+  };
+  await writeFile(matrixPath, `${JSON.stringify(matrix, null, 2)}\n`);
+
+  try {
+    const { report } = await runInstalledMatrix({
+      matrixPath,
+      outputRoot,
+      dryRun: true,
+    });
+    const result = report.results[0];
+    assert.equal(result.model, 'opencode-go/deepseek-v4-flash');
+    assert.equal(result.thinking, 'minimal');
+    assert.ok(result.command.includes('--model=opencode-go/deepseek-v4-flash'));
+    assert.ok(result.command.includes('--thinking=minimal'));
+
+    const { report: overrideReport } = await runInstalledMatrix({
+      matrixPath,
+      outputRoot: path.join(tempRoot, 'override'),
+      dryRun: true,
+      model: 'opencode-go/mimo-v2.5',
+      thinking: 'high',
+    });
+    const overrideResult = overrideReport.results[0];
+    assert.equal(overrideResult.model, 'opencode-go/mimo-v2.5');
+    assert.equal(overrideResult.thinking, 'high');
+    assert.ok(overrideResult.command.includes('--model=opencode-go/mimo-v2.5'));
+    assert.ok(overrideResult.command.includes('--thinking=high'));
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -6442,6 +6527,122 @@ function toolResultEvent(id, name, result) {
     result,
   };
 }
+
+test('requireLongFormWritingPilot asserts the long-form writing pilot trace contract', () => {
+  const writerMeta = '[workflow=writing.en step=step-2 todo=draft-section skills=writing-review]';
+  const checkerMeta = '[workflow=writing.en step=step-3 todo=check-integrated skills=writing-review]';
+  const integrationTarget = 'article.md';
+  const pilotOptions = { integrationTarget };
+  const baseExpectations = { requireFinal: false, requireLongFormWritingPilot: pilotOptions };
+
+  function greenEvents() {
+    return [
+      {
+        type: 'tool_execution_start',
+        toolCallId: 'task-writers',
+        toolName: 'task',
+        args: {
+          context: 'Draft each section independently and return the full proposal.',
+          tasks: [
+            { name: 'writer-section-a', agent: 'writer', task: `${writerMeta}\nDraft section A.` },
+            { name: 'writer-section-b', agent: 'writer', task: `${writerMeta}\nDraft section B.` },
+          ],
+        },
+      },
+      {
+        type: 'tool_execution_end',
+        toolCallId: 'task-writers',
+        toolName: 'task',
+        result: {
+          isError: false,
+          details: { results: [{ id: 'W1', status: 'completed' }, { id: 'W2', status: 'completed' }] },
+        },
+      },
+      { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="W1" status="completed">W1 delivery</task-result>' } },
+      { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="W2" status="completed">W2 delivery</task-result>' } },
+      { type: 'tool_execution_start', toolCallId: 'write-integration', toolName: 'write', args: { path: integrationTarget, content: 'integrated article' } },
+      { type: 'tool_execution_end', toolCallId: 'write-integration', toolName: 'write', result: { isError: false, content: [{ type: 'text', text: 'wrote' }] } },
+      {
+        type: 'tool_execution_start',
+        toolCallId: 'task-checker',
+        toolName: 'task',
+        args: { context: 'Check the integrated draft.', agent: 'checker', task: `${checkerMeta}\nCheck the integrated article.` },
+      },
+      { type: 'tool_execution_end', toolCallId: 'task-checker', toolName: 'task', result: { isError: false, details: { async: { jobId: 'C1', state: 'completed' } } } },
+      { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="C1" status="completed">C1 delivery</task-result>' } },
+      { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] } },
+    ];
+  }
+
+  const greenSummary = summarizeWorkflowEvents(greenEvents(), { exitCode: 0 });
+  assert.equal(greenSummary.nativeTask.multiForkBatchCallCount, 1);
+  assert.equal(greenSummary.nativeTask.assignments.filter(({ agent }) => agent === 'writer').length, 2);
+  const greenEvaluation = evaluateWorkflowSummary(greenSummary, baseExpectations);
+  assert.equal(greenEvaluation.pass, true, greenEvaluation.failures.join('\n'));
+
+  // RED: only one writer (no per-section batch) fails the >=2 writer requirement.
+  const oneWriterEvents = greenEvents();
+  oneWriterEvents[0].args.tasks = [oneWriterEvents[0].args.tasks[0]];
+  oneWriterEvents[1].result.details.results = [oneWriterEvents[1].result.details.results[0]];
+  oneWriterEvents.splice(3, 1);
+  const oneWriterEvaluation = evaluateWorkflowSummary(
+    summarizeWorkflowEvents(oneWriterEvents, { exitCode: 0 }),
+    baseExpectations,
+  );
+  assert.equal(oneWriterEvaluation.pass, false);
+  assert.match(oneWriterEvaluation.failures.join('\n'), />=2 writer assignments, observed 1/);
+
+  // RED: checker precedes integration fails the exactly-one-checker-after-integration rule.
+  const checkerBeforeEvents = greenEvents();
+  const checkerBlock = checkerBeforeEvents.splice(6, 3);
+  checkerBeforeEvents.splice(4, 0, ...checkerBlock);
+  const checkerBeforeEvaluation = evaluateWorkflowSummary(
+    summarizeWorkflowEvents(checkerBeforeEvents, { exitCode: 0 }),
+    baseExpectations,
+  );
+  assert.equal(checkerBeforeEvaluation.pass, false);
+  assert.match(checkerBeforeEvaluation.failures.join('\n'), /exactly one checker assignment after integration, observed 0/);
+
+  // RED: a native reviewer agent is forbidden in the writing pilot flow.
+  const reviewerEvents = greenEvents();
+  reviewerEvents[0].args.tasks.push({
+    name: 'reviewer-audit',
+    agent: 'reviewer',
+    task: '[workflow=writing.en step=step-review todo=review skills=writing-review]\nReview.',
+  });
+  reviewerEvents[1].result.details.results.push({ id: 'R1', status: 'completed' });
+  reviewerEvents.splice(4, 0, {
+    type: 'message_end',
+    message: { role: 'custom', customType: 'async-result', content: '<task-result id="R1" status="completed">R1 delivery</task-result>' },
+  });
+  const reviewerEvaluation = evaluateWorkflowSummary(
+    summarizeWorkflowEvents(reviewerEvents, { exitCode: 0 }),
+    baseExpectations,
+  );
+  assert.equal(reviewerEvaluation.pass, false);
+  assert.match(reviewerEvaluation.failures.join('\n'), /forbidden native reviewer: reviewer/);
+
+  // GREEN: sequential fallback (batch unavailable) is not-evaluable for the batch
+  // assertion and must not fail the pilot when 2 writers integrate before one checker.
+  const sequentialEvents = [
+    { type: 'tool_execution_start', toolCallId: 'task-w1', toolName: 'task', args: { context: 'Draft.', agent: 'writer', task: `${writerMeta}\nA.` } },
+    { type: 'tool_execution_end', toolCallId: 'task-w1', toolName: 'task', result: { isError: false, details: { async: { jobId: 'W1', state: 'completed' } } } },
+    { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="W1" status="completed">W1 delivery</task-result>' } },
+    { type: 'tool_execution_start', toolCallId: 'task-w2', toolName: 'task', args: { context: 'Draft.', agent: 'writer', task: `${writerMeta}\nB.` } },
+    { type: 'tool_execution_end', toolCallId: 'task-w2', toolName: 'task', result: { isError: false, details: { async: { jobId: 'W2', state: 'completed' } } } },
+    { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="W2" status="completed">W2 delivery</task-result>' } },
+    { type: 'tool_execution_start', toolCallId: 'write-integration', toolName: 'write', args: { path: integrationTarget, content: 'integrated article' } },
+    { type: 'tool_execution_end', toolCallId: 'write-integration', toolName: 'write', result: { isError: false, content: [{ type: 'text', text: 'wrote' }] } },
+    { type: 'tool_execution_start', toolCallId: 'task-checker', toolName: 'task', args: { context: 'Check.', agent: 'checker', task: `${checkerMeta}\nCheck.` } },
+    { type: 'tool_execution_end', toolCallId: 'task-checker', toolName: 'task', result: { isError: false, details: { async: { jobId: 'C1', state: 'completed' } } } },
+    { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="C1" status="completed">C1 delivery</task-result>' } },
+    { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] } },
+  ];
+  const sequentialSummary = summarizeWorkflowEvents(sequentialEvents, { exitCode: 0 });
+  assert.equal(sequentialSummary.nativeTask.multiForkBatchCallCount, 0);
+  const sequentialEvaluation = evaluateWorkflowSummary(sequentialSummary, baseExpectations);
+  assert.equal(sequentialEvaluation.pass, true, sequentialEvaluation.failures.join('\n'));
+});
 
 test('parseNdjson retains valid events and reports malformed lines', () => {
   const parsed = parseNdjson('{"type":"agent_start"}\nnot-json\n{"type":"agent_end"}\n');

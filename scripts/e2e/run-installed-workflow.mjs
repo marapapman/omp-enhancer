@@ -33,12 +33,11 @@ import { pluginWorkspacePaths } from '../plugin-workspaces.js';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..', '..');
 const SNAPSHOT_ROOT_IDENTITY = Symbol('snapshotRootIdentity');
-const DEFAULT_MATRIX = path.join(SCRIPT_DIR, 'fixtures', 'deepseek-installed-matrix.json');
+const DEFAULT_MATRIX = path.join(SCRIPT_DIR, 'fixtures', 'installed-matrix.json');
 const WORKTREE_FIXTURE_SKILLS_DIR = path.join(SCRIPT_DIR, 'fixtures', 'skills');
 const WORKTREE_ASSETS_DIR = path.join(REPO_ROOT, 'plugins', 'omp-config', 'assets');
 const WORKTREE_CONFIG_ALLOWLIST = new Set([
   'skills',
-  'modelRoles',
   'loopGuard',
   'compaction',
   'steeringMode',
@@ -253,8 +252,8 @@ export function filterWorktreeConfig(source) {
     if (include) output.push(line);
   }
   const value = output.join('\n').replace(/\n*$/u, '\n');
-  if (!/^modelRoles:/mu.test(value) || !/^task:/mu.test(value)) {
-    throw new Error('Worktree config must contain allowlisted modelRoles and task sections.');
+  if (!/^task:/mu.test(value)) {
+    throw new Error('Worktree config must contain an allowlisted task section.');
   }
   return value;
 }
@@ -529,7 +528,6 @@ export async function prepareWorktreeIsolation(options = {}) {
       ['AGENTS.md', 'AGENTS.md'],
       ['WATCHDOG.yml', 'WATCHDOG.yml'],
       ['WORKFLOW_CATALOG.md', 'OMP_ENHANCER_WORKFLOW_CATALOG.md'],
-      ['models.yml', 'models.yml'],
     ];
     await Promise.all(assetCopies.map(async ([source, destination]) => {
       const target = path.join(agentDir, destination);
@@ -977,8 +975,8 @@ async function runScenario({
     const model = modelOverride
       ?? scenario.model
       ?? matrix.defaults?.model
-      ?? 'opencode-go/deepseek-v4-flash';
-    const thinking = thinkingOverride ?? scenario.thinking ?? matrix.defaults?.thinking ?? 'minimal';
+      ?? null;
+    const thinking = thinkingOverride ?? scenario.thinking ?? matrix.defaults?.thinking ?? null;
     const args = buildOmpArgs({
       matrix,
       scenario,
@@ -1117,13 +1115,13 @@ function buildOmpArgs({
   const model = modelOverride
     ?? scenario.model
     ?? matrix.defaults?.model
-    ?? 'opencode-go/deepseek-v4-flash';
-  const thinking = thinkingOverride ?? scenario.thinking ?? matrix.defaults?.thinking ?? 'minimal';
+    ?? null;
+  const thinking = thinkingOverride ?? scenario.thinking ?? matrix.defaults?.thinking ?? null;
   const tools = scenario.tools ?? matrix.defaults?.tools ?? ['read', 'grep', 'glob'];
   const args = [
     `--mode=${executionMode === 'rpc' ? 'rpc' : 'json'}`,
-    `--model=${model}`,
-    `--thinking=${thinking}`,
+    ...(model == null ? [] : [`--model=${model}`]),
+    ...(thinking == null ? [] : [`--thinking=${thinking}`]),
     `--approval-mode=${scenario.approvalMode ?? matrix.defaults?.approvalMode ?? 'yolo'}`,
     `--config=${configOverlayPath}`,
     `--session-dir=${sessionDir}`,
@@ -1413,6 +1411,44 @@ export async function prepareScenario(scenario) {
         ].join('\n'),
       ),
     ]);
+  } else if (scenario.fixture === 'long-form-writing') {
+    // Temporary project for the long-form writing pilot E2E. Contains a frozen shared
+    // brief and an empty target article; the model chooses workflows/skills, but the
+    // prompt supplies complete disjoint per-section briefs so the pilot predicate can
+    // match. No model is hardcoded by the fixture.
+    await writeFile(
+      path.join(cwd, 'brief.md'),
+      [
+        '# Shared brief — frozen terminology and voice',
+        '',
+        'Audience: practising software engineers.',
+        'Voice: plain, technical, no marketing language.',
+        'Terminology (use exactly): orchestration, subagent, checkpoint, delivery, integration.',
+        'Citation style: inline parenthetical, e.g. (Orchestration Plan 2026).',
+        'Length per section: 3-5 paragraphs.',
+        'Do not invent metrics; mark unverified claims as [INFERENCE].',
+        '',
+      ].join('\n'),
+    );
+    await writeFile(path.join(cwd, 'article.md'), '# Article\n\n<to be drafted>\n');
+  } else if (scenario.fixture === 'long-form-writing-baseline') {
+    // Same temp project shape as long-form-writing; the scenario prompt instructs a
+    // single-writer draft so the baseline is the admission denominator, not the pilot.
+    await writeFile(
+      path.join(cwd, 'brief.md'),
+      [
+        '# Shared brief — frozen terminology and voice',
+        '',
+        'Audience: practising software engineers.',
+        'Voice: plain, technical, no marketing language.',
+        'Terminology (use exactly): orchestration, subagent, checkpoint, delivery, integration.',
+        'Citation style: inline parenthetical, e.g. (Orchestration Plan 2026).',
+        'Length per section: 3-5 paragraphs.',
+        'Do not invent metrics; mark unverified claims as [INFERENCE].',
+        '',
+      ].join('\n'),
+    );
+    await writeFile(path.join(cwd, 'article.md'), '# Article\n\n<to be drafted>\n');
   } else {
     throw new Error(`Unknown fixture: ${scenario.fixture}`);
   }
@@ -1860,7 +1896,7 @@ export function parseCliArgs(argv = process.argv.slice(2)) {
 async function main() {
   const options = parseCliArgs();
   if (options.help) {
-    process.stdout.write('Usage: run-installed-deepseek-workflow.mjs [--scenario ID] [--repeat N] [--model PROVIDER/MODEL] [--thinking LEVEL] [--worktree-plugins] [--dry-run] [--no-omp-deadline] [--output DIR]\n');
+    process.stdout.write('Usage: run-installed-workflow.mjs [--scenario ID] [--repeat N] [--model PROVIDER/MODEL] [--thinking LEVEL] [--worktree-plugins] [--dry-run] [--no-omp-deadline] [--output DIR]\n');
     return;
   }
   const { report, outputRoot } = await runInstalledMatrix(options);

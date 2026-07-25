@@ -21,7 +21,7 @@ export async function summarizeFile(file, { scenarioId = null, expectations = {}
 
 async function main(argv = process.argv.slice(2)) {
   const file = argv[0];
-  if (!file) throw new Error('Usage: summarize-installed-deepseek-workflow.mjs <events.ndjson>');
+  if (!file) throw new Error('Usage: summarize-installed-workflow.mjs <events.ndjson>');
   const result = await summarizeFile(resolve(file));
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }

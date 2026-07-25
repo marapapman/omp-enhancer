@@ -84,7 +84,7 @@ Call omp_config_sync_workflow_context with apply=false.
 Review the proposed changes, then call it with apply=true if desired.
 ```
 
-Sync preserves unrelated `AGENTS.md` and `WATCHDOG.yml` content. Defaults are `opencode-go/deepseek-v4-flash:max` for Main and `openai-codex/gpt-5.6-luna:xhigh` for Advisor; MiMo v2.5 is an explicit alternative. Reminders remain advisory.
+Sync preserves unrelated `AGENTS.md` and `WATCHDOG.yml` content. Main and Advisor model selection is user-configured; the plugin does not bind to any specific model. Reminders remain advisory.
 
 ## Upgrade
 

@@ -58,8 +58,8 @@ test('schema accepts only the three delegation defaults and requires roles only 
   );
 });
 
-test('catalog v22 projects explicit exception defaults and 29 substantive subagent-driven contracts', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 22);
+test('catalog v23 projects explicit exception defaults and 29 substantive subagent-driven contracts', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 23);
   assert.equal(workflowDefinitions.length, 31);
 
   const rawSimple = generalWorkflows.find(({ id }) => id === 'agentic.simple');
@@ -184,7 +184,7 @@ test('language writing workflows keep routine Skill hints narrow and make the wr
     assert.match(contract, /complete assignment input/iu, workflow.id);
     assert.match(contract, /writer[\s\S]*first project actor[\s\S]*reads? the (?:exact )?target/iu, workflow.id);
     assert.match(contract, /checker[\s\S]*after (?:the )?writer delivery/iu, workflow.id);
-    assert.match(contract, /writer is proposal-only[\s\S]*complete proposed revision or bounded patch[\s\S]*Main owns any authorized file change[\s\S]*assignment size leaves the actor sequence unchanged/iu, workflow.id);
+    assert.match(contract, /writer is proposal-only[\s\S]*complete proposed revision or bounded patch[\s\S]*Main owns any authorized file change[\s\S]*assignment size.*leaves? the actor sequence unchanged[\s\S]*EXCEPT when the long-form pilot predicate is fully met/iu, workflow.id);
     assert.match(contract, /direct(?:ly)? address(?:ed)? to Main[\s\S]*integrated final (?:response|delivery)[\s\S]*no explicit delegation request[\s\S]*writer[\s\S]*checker sequence unchanged/iu, workflow.id);
     assert.match(contract, /READY TODO contains dependency-ordered exact rows for step-2[\s\S]*writer[\s\S]*step-3[\s\S]*checker[\s\S]*parent-owned integration and verification[\s\S]*pending until complete writer delivery/iu, workflow.id);
     assert.match(contract, /later-wave checker checkpoint[\s\S]*stable[\s\S]*writer delivery[\s\S]*assignment body/iu, workflow.id);

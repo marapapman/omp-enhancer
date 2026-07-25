@@ -15,13 +15,12 @@
 
 ## Bootstrap 与生成 handoff 契约
 
-Deterministic tests 先验证精确 `opencode-go/deepseek-v4-flash` 和精确
-`opencode-go/mimo-v2.5` 的 compact、state-aware、top-level one-shot
-bootstrap。它根据当前 workflow Skill、其他 Skills、native `task`、
-delegation 许可与 exact native supplied-index provenance 选择最小提示；
+Deterministic tests 先验证所有顶层 Main 模型的 compact、state-aware、
+top-level one-shot bootstrap。它根据当前 workflow Skill、其他 Skills、native
+`task`、delegation 许可与 exact native supplied-index provenance 选择最小提示；
 workflow index 可见时，第一响应只允许 DIRECT、exact-native supplied 后
-直接 PLAN，或 not-supplied 后只读 index 并等待。其他 model、Advisor、
-subagent、重复 task reminder 或 diagnostic disable 分支都应保持无注入。
+直接 PLAN，或 not-supplied 后只读 index 并等待。Advisor、subagent、
+重复 task reminder 或 diagnostic disable 分支都应保持无注入。
 
 Generated-asset tests 再验证 front-loaded handoff：紧凑 index 的
 `DECLARE HANDOFF (soft)` 位于任何 domain row 前，先提示 next response byte 0 的
@@ -38,7 +37,7 @@ exact Delegate row，并要求 native `tasks[].task` 本体自身在 byte 0 以�
 label 或让 child 在输出中补 metadata 都不能替代 item body 或该 prefix。
 这些检查验证可观察协议，不会变成 runtime dispatch 或 completion gate。
 
-Protocol coach 先用 deterministic synthetic events 重放机械链路：`index result -> PRE_PLAN -> visible PLAN -> declared NOW/extensions/THEN results -> PRE_READY -> final non-pending READY + TODO result -> PRE_DISPATCH`。每个 phase-generation 只有一个逻辑 cue，并且只附加到下一次自然 provider request；provider retry 或无效的 corresponding marker 可再次看到同一个 pending cue，但不会生成新 key、请求或 turn，有效对应 response 后不再重发。Tests 还覆盖 exact-model/top-level Main gating、Advisor/subagent/其他模型/disable 分支无 cue、`writing.pending` 初始 TODO 不产生 dispatch cue、context 输入不被原地修改，以及 `tool_call`、`tool_result`、`session_stop` 的 advisory 返回契约不变。`OMP_ENHANCER_DISABLE_PROTOCOL_COACH=1` 只用于 coach 对照；这些 deterministic context tests 证明注入机制，绝不把它升级成 block、router、gate、retry 或 completion control。
+Protocol coach 先用 deterministic synthetic events 重放机械链路：`index result -> PRE_PLAN -> visible PLAN -> declared NOW/extensions/THEN results -> PRE_READY -> final non-pending READY + TODO result -> PRE_DISPATCH`。每个 phase-generation 只有一个逻辑 cue，并且只附加到下一次自然 provider request；provider retry 或无效的 corresponding marker 可再次看到同一个 pending cue，但不会生成新 key、请求或 turn，有效对应 response 后不再重发。Tests 还覆盖 top-level Main gating、Advisor/subagent/disable 分支无 cue、`writing.pending` 初始 TODO 不产生 dispatch cue、context 输入不被原地修改，以及 `tool_call`、`tool_result`、`session_stop` 的 advisory 返回契约不变。`OMP_ENHANCER_DISABLE_PROTOCOL_COACH=1` 只用于 coach 对照；这些 deterministic context tests 证明注入机制，绝不把它升级成 block、router、gate、retry 或 completion control。
 
 Writing Helper 的 deterministic content tests 与 static probe 另外验证
 `writer`/`zh-writer` 只暴露 `read`、`grep`、`glob` 并始终只返回完整
@@ -52,8 +51,7 @@ delivery。文件授权不改变 child capability；Main 独自做 finding dispo
 
 ## 自我迭代 fixture
 
-`scripts/e2e/fixtures/deepseek-self-iteration.json` 定义 positive `omp-self-iteration-tdd` 和 mechanical negative control `omp-self-iteration-mechanical-control`。Runner 在临时目录创建一个初始 GREEN 的真实 Node project，其中有两个互不重叠的 vertical slices：
-
+`scripts/e2e/fixtures/self-iteration.json` 定义 positive `omp-self-iteration-tdd` 和 mechanical negative control `omp-self-iteration-mechanical-control`。Runner 在临时目录创建一个初始 GREEN 的真实 Node project，其中有两个互不重叠的 vertical slices：
 ```text
 AGENTS.md
 package.json
@@ -76,7 +74,7 @@ npm run e2e:main:self-iteration -- \
   --output .omp/e2e-results/self-iteration-pilot
 ```
 
-脚本的兼容别名是 `npm run e2e:deepseek:self-iteration`。不传 `--scenario` 时同一入口运行 positive 与 mechanical control；单独 pilot 可传对应 scenario ID。默认 matrix 固定 `opencode-go/deepseek-v4-flash:max`；比较其他模型时显式覆盖 `--model` 与 `--thinking`，并使用新的 output 目录。
+不传 `--scenario` 时同一入口运行 positive 与 mechanical control；单独 pilot 可传对应 scenario ID。默认 matrix 不绑定具体模型；比较不同模型时显式覆盖 `--model` 与 `--thinking`，并使用新的 output 目录。
 
 ## 场景设计原则
 
@@ -224,9 +222,9 @@ Pilot 通过后 freeze candidate，再 repeat。至少同时报告：
 
 ## 维护边界
 
-- Runner 和 evaluator：`scripts/e2e/run-installed-deepseek-workflow.mjs`、`scripts/e2e/workflow-events.mjs`。
+- Runner 和 evaluator：`scripts/e2e/run-installed-workflow.mjs`、`scripts/e2e/workflow-events.mjs`。
 - Deterministic evaluator tests：`scripts/e2e-installed-workflow.test.js`。
-- Self-iteration matrix：`scripts/e2e/fixtures/deepseek-self-iteration.json`。
+- Self-iteration matrix：`scripts/e2e/fixtures/self-iteration.json`。
 - 自开发设计与 reviewer 方法：[OMP_ENHANCER_SELF_DEVELOPMENT.md](OMP_ENHANCER_SELF_DEVELOPMENT.md)。
 - 通用验证、打包和 release：[DEVELOPMENT.md](DEVELOPMENT.md)。
 

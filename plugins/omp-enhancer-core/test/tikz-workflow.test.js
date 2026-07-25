@@ -14,7 +14,7 @@ import {
 test('diagram.tikz is one bounded subagent-driven OpenTikZ workflow', () => {
   const workflow = workflowCatalog['diagram.tikz'];
 
-  assert.equal(WORKFLOW_CATALOG_VERSION, 22);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 23);
   assert.ok(workflowIds.includes('diagram.tikz'));
   assert.ok(workflow);
   assert.equal(workflow.delegationDefault, 'subagent-driven');

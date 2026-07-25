@@ -10,9 +10,11 @@ import {
 
 const INDEX_URI = 'skill://omp-enhancer-workflows';
 const INDEX_BODY = '---\nname: omp-enhancer-workflows\ndescription: Workflow index.\n---\n';
+const ARBITRARY_MODEL = { provider: 'foo', id: 'bar' };
+const NO_PROVIDER_MODEL = { id: 'bar' };
 
-test('exact DeepSeek Main receives an immutable retry-safe hidden context cue', async () => {
-  const { pi, entries, ctx } = runtime({ model: deepseek() });
+test('a top-level Main on an arbitrary model receives an immutable retry-safe hidden context cue', async () => {
+  const { pi, entries, ctx } = runtime({ model: ARBITRARY_MODEL });
   await handler(pi, 'before_agent_start')({ prompt: 'Review and revise article.md.' }, ctx);
   assert.equal(await handler(pi, 'context')({ messages: [] }, ctx), undefined, 'generic Skill inventory is not supplied-index evidence');
   await handler(pi, 'tool_result')(indexResult(), ctx);
@@ -64,8 +66,13 @@ test('exact DeepSeek Main receives an immutable retry-safe hidden context cue', 
   assert.ok(entries.some((entry) => entry.customType === 'omp-enhancer-core.state'));
 });
 
+test('a model without a provider field also receives the coach cue', async () => {
+  const cue = await cueFor({ model: NO_PROVIDER_MODEL });
+  assert.equal(cue.messages.at(-1).details.phase, 'PRE_PLAN');
+});
+
 test('an exact native supplied workflow skill queues PRE_PLAN without a read result', async () => {
-  const { pi, ctx } = runtime({ model: deepseek() });
+  const { pi, ctx } = runtime({ model: ARBITRARY_MODEL });
   const supplied = {
     role: 'custom',
     customType: 'skill-prompt',
@@ -84,7 +91,7 @@ test('an exact native supplied workflow skill queues PRE_PLAN without a read res
 });
 
 test('coach survives session serialization and restoration before provider retry', async () => {
-  const first = runtime({ model: deepseek() });
+  const first = runtime({ model: ARBITRARY_MODEL });
   await handler(first.pi, 'before_agent_start')({ prompt: 'Research and revise notes.md.' }, first.ctx);
   await handler(first.pi, 'tool_result')(indexResult(), first.ctx);
   const contextEvent = { messages: [{ role: 'user', content: 'Research and revise notes.md.', timestamp: 1 }] };
@@ -92,7 +99,7 @@ test('coach survives session serialization and restoration before provider retry
 
   const secondPi = new FakePi(first.entries);
   registerCoreEnhancer(secondPi);
-  const secondCtx = extensionContext(first.entries, { model: deepseek() });
+  const secondCtx = extensionContext(first.entries, { model: ARBITRARY_MODEL });
   await handler(secondPi, 'session_start')({}, secondCtx);
   await handler(secondPi, 'before_agent_start')({ prompt: '继续' }, secondCtx);
   const restored = await handler(secondPi, 'context')(contextEvent, secondCtx);
@@ -100,7 +107,7 @@ test('coach survives session serialization and restoration before provider retry
 });
 
 test('runtime wiring advances only through observed PLAN loads READY and TODO', async () => {
-  const { pi, entries, ctx } = runtime({ model: deepseek() });
+  const { pi, entries, ctx } = runtime({ model: ARBITRARY_MODEL });
   await handler(pi, 'before_agent_start')({ prompt: 'Review and revise article.md.' }, ctx);
   await handler(pi, 'tool_result')(indexResult(), ctx);
   assert.equal((await handler(pi, 'context')({ messages: [] }, ctx)).messages.at(-1).details.phase, 'PRE_PLAN');
@@ -204,7 +211,7 @@ test('runtime wiring advances only through observed PLAN loads READY and TODO', 
 });
 
 test('message observation inspects visible assistant text only', async () => {
-  const { pi, entries, ctx } = runtime({ model: deepseek() });
+  const { pi, entries, ctx } = runtime({ model: ARBITRARY_MODEL });
   await handler(pi, 'before_agent_start')({ prompt: 'Review and revise article.md.' }, ctx);
   await handler(pi, 'tool_result')(indexResult(), ctx);
   await handler(pi, 'message_end')({
@@ -223,21 +230,24 @@ test('message observation inspects visible assistant text only', async () => {
   assert.equal(snapshot.protocolCoach.pendingCue, null);
 });
 
-test('coach is exact-model and current top-level user-turn gated', async () => {
+test('coach is top-level user-turn gated and fires for any model', async () => {
   for (const model of [
     { provider: 'openai-codex', id: 'gpt-5.6-luna' },
-    { provider: 'opencode-go', id: 'deepseek-v4-flash-pro' },
-    { provider: 'xiaomi', id: 'mimo-v2.5' },
+    { provider: 'foo', id: 'bar' },
+    { id: 'bar' },
+    { provider: 'opencode-go', id: 'deepseek-v4-flash' },
+    { provider: 'opencode-go', id: 'mimo-v2.5' },
   ]) {
-    assert.equal(await cueFor({ model }), undefined, `${model.provider}/${model.id}`);
+    const cue = await cueFor({ model });
+    assert.equal(cue.messages.at(-1).details.phase, 'PRE_PLAN', `${model.provider ?? '<none>'}/${model.id}`);
   }
-  const deepseekCue = (await cueFor({ model: deepseek() })).messages.at(-1);
-  const mimoCue = (await cueFor({ model: mimo() })).messages.at(-1);
-  assert.equal(mimoCue.details.phase, 'PRE_PLAN');
-  assert.equal(mimoCue.content, deepseekCue.content, 'exact DeepSeek and MiMo receive the same PRE_PLAN contract');
+
+  const arbitraryCue = (await cueFor({ model: ARBITRARY_MODEL })).messages.at(-1);
+  const noProviderCue = (await cueFor({ model: NO_PROVIDER_MODEL })).messages.at(-1);
+  assert.equal(noProviderCue.content, arbitraryCue.content, 'all models receive the same PRE_PLAN contract');
 
   const subagentEntries = [{ type: 'session_init', task: 'bounded child task' }];
-  assert.equal(await cueFor({ model: deepseek(), entries: subagentEntries }), undefined);
+  assert.equal(await cueFor({ model: ARBITRARY_MODEL, entries: subagentEntries }), undefined);
 
   const advisorEntry = {
     type: 'custom_message',
@@ -246,15 +256,15 @@ test('coach is exact-model and current top-level user-turn gated', async () => {
     display: false,
     attribution: 'user',
   };
-  assert.equal(await cueFor({ model: deepseek(), entries: [advisorEntry], prompt: 'Review the plan.' }), undefined);
+  assert.equal(await cueFor({ model: ARBITRARY_MODEL, entries: [advisorEntry], prompt: 'Review the plan.' }), undefined);
 
-  const slash = runtime({ model: deepseek() });
+  const slash = runtime({ model: ARBITRARY_MODEL });
   await handler(slash.pi, 'before_agent_start')({ prompt: 'First task.' }, slash.ctx);
   await handler(slash.pi, 'tool_result')(indexResult(), slash.ctx);
   await handler(slash.pi, 'before_agent_start')({ prompt: '/help' }, slash.ctx);
   assert.equal(await handler(slash.pi, 'context')({ messages: [] }, slash.ctx), undefined);
 
-  const autolearn = runtime({ model: deepseek() });
+  const autolearn = runtime({ model: ARBITRARY_MODEL });
   await handler(autolearn.pi, 'before_agent_start')({ prompt: 'First task.' }, autolearn.ctx);
   await handler(autolearn.pi, 'tool_result')(indexResult(), autolearn.ctx);
   await handler(autolearn.pi, 'before_agent_start')({
@@ -266,17 +276,67 @@ test('coach is exact-model and current top-level user-turn gated', async () => {
   assert.equal(await handler(autolearn.pi, 'context')({ messages: [] }, autolearn.ctx), undefined);
 });
 
-test('model and coach disable switches suppress coaching independently per exact model', async () => {
+test('the workflow reminder and coach disable switches suppress independently', async () => {
   const cases = [
-    ['OMP_ENHANCER_DISABLE_PROTOCOL_COACH', deepseek()],
-    ['OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT', deepseek()],
-    ['OMP_ENHANCER_DISABLE_MIMO_COMPAT', mimo()],
+    ['OMP_ENHANCER_DISABLE_PROTOCOL_COACH', ARBITRARY_MODEL, 'coach'],
+    ['OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER', ARBITRARY_MODEL, 'reminder'],
   ];
-  for (const [name, model] of cases) {
+  for (const [name, model, target] of cases) {
     const previous = process.env[name];
     process.env[name] = '1';
     try {
-      assert.equal(await cueFor({ model }), undefined, name);
+      const rt = runtime({ model });
+      const reminder = await handler(rt.pi, 'before_agent_start')({ prompt: 'Review and revise article.md.' }, rt.ctx);
+      if (target === 'reminder') {
+        assert.equal(reminder, undefined, `${name} suppresses the reminder`);
+      } else {
+        assert.notEqual(reminder, undefined, `${name} does not suppress the reminder`);
+        await handler(rt.pi, 'tool_result')(indexResult(), rt.ctx);
+        assert.equal(await handler(rt.pi, 'context')({ messages: [] }, rt.ctx), undefined, `${name} suppresses the coach`);
+      }
+    } finally {
+      if (previous === undefined) delete process.env[name];
+      else process.env[name] = previous;
+    }
+  }
+
+  // OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER=1 keeps the coach alive.
+  const prevReminder = process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER;
+  process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER = '1';
+  try {
+    const rt = runtime({ model: ARBITRARY_MODEL });
+    assert.equal(await handler(rt.pi, 'before_agent_start')({ prompt: 'Review and revise article.md.' }, rt.ctx), undefined, 'reminder suppressed');
+    await handler(rt.pi, 'tool_result')(indexResult(), rt.ctx);
+    const cue = await handler(rt.pi, 'context')({ messages: [] }, rt.ctx);
+    assert.equal(cue.messages.at(-1).details.phase, 'PRE_PLAN', 'coach still fires when only the reminder is disabled');
+  } finally {
+    if (prevReminder === undefined) delete process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER;
+    else process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER = prevReminder;
+  }
+
+  // OMP_ENHANCER_DISABLE_PROTOCOL_COACH=1 keeps the reminder alive.
+  const prevCoach = process.env.OMP_ENHANCER_DISABLE_PROTOCOL_COACH;
+  process.env.OMP_ENHANCER_DISABLE_PROTOCOL_COACH = '1';
+  try {
+    const rt = runtime({ model: ARBITRARY_MODEL });
+    const reminder = await handler(rt.pi, 'before_agent_start')({ prompt: 'Review and revise article.md.' }, rt.ctx);
+    assert.notEqual(reminder, undefined, 'reminder still fires when only the coach is disabled');
+    await handler(rt.pi, 'tool_result')(indexResult(), rt.ctx);
+    assert.equal(await handler(rt.pi, 'context')({ messages: [] }, rt.ctx), undefined, 'coach suppressed');
+  } finally {
+    if (prevCoach === undefined) delete process.env.OMP_ENHANCER_DISABLE_PROTOCOL_COACH;
+    else process.env.OMP_ENHANCER_DISABLE_PROTOCOL_COACH = prevCoach;
+  }
+});
+
+test('the deleted per-model env switches are inert', async () => {
+  for (const name of ['OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT', 'OMP_ENHANCER_DISABLE_MIMO_COMPAT']) {
+    const previous = process.env[name];
+    process.env[name] = '1';
+    try {
+      const reminder = await cueFor({ model: { provider: 'opencode-go', id: 'deepseek-v4-flash' } });
+      assert.notEqual(reminder, undefined, `${name} no longer suppresses coaching`);
+      assert.equal(reminder.messages.at(-1).details.phase, 'PRE_PLAN');
     } finally {
       if (previous === undefined) delete process.env[name];
       else process.env[name] = previous;
@@ -284,8 +344,13 @@ test('model and coach disable switches suppress coaching independently per exact
   }
 });
 
+test('coach cue content contains no DeepSeek or MiMo labels and no model id', async () => {
+  const cue = (await cueFor({ model: ARBITRARY_MODEL })).messages.at(-1);
+  assert.doesNotMatch(cue.content, /DEEPSEEK|MIMO|deepseek|mimo|opencode-go/iu);
+});
+
 test('hooks remain advisory and never mutate task calls, tool results, or lifecycle control', async () => {
-  const { pi, ctx } = runtime({ model: deepseek() });
+  const { pi, ctx } = runtime({ model: ARBITRARY_MODEL });
   assert.equal(typeof pi.sendMessage, 'undefined');
   await handler(pi, 'before_agent_start')({ prompt: 'Implement a tested parser fix.' }, ctx);
 
@@ -354,14 +419,6 @@ function validPlan() {
     '3. SPLIT + EXECUTE: Execute.',
     '4. VERIFY: Verify.',
   ].join('\n');
-}
-
-function deepseek() {
-  return { provider: 'opencode-go', id: 'deepseek-v4-flash' };
-}
-
-function mimo() {
-  return { provider: 'opencode-go', id: 'mimo-v2.5' };
 }
 
 class FakePi {

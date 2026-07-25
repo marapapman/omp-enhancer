@@ -25,11 +25,10 @@ import {
 } from './src/workflow-protocol-coach.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
-const STATE_SCHEMA_VERSION = 7;
+const STATE_SCHEMA_VERSION = 8;
 const SKILL_DISCOVERY_MESSAGE_TYPE = 'omp-enhancer-skill-discovery';
 const PROTOCOL_COACH_MESSAGE_TYPE = 'omp-enhancer-protocol-coach';
-const DISABLE_DEEPSEEK_COMPAT_ENV = 'OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT';
-const DISABLE_MIMO_COMPAT_ENV = 'OMP_ENHANCER_DISABLE_MIMO_COMPAT';
+const DISABLE_WORKFLOW_REMINDER_ENV = 'OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER';
 const DISABLE_PROTOCOL_COACH_ENV = 'OMP_ENHANCER_DISABLE_PROTOCOL_COACH';
 const SKILL_URI_IDENTITY = 'SKILL URI: visible `x` -> `skill://x`; nested only from a loaded source revealing the exact URI. Use `read.path`. Bare `x` is a project path, not Skill absence; only exact-URI failure = unavailable. `.agents/skills` is not the inventory.';
 const STAGED_ENTRY = 'ENTRY (soft): DIRECT is a verbatim, no-judgment field/heading lookup with no Skill/TODO. Review, correction, comparison, verification, design, transformation, or planning is PROJECT at any size.';
@@ -205,9 +204,7 @@ export default function registerCoreEnhancer(pi) {
       state.lastPrompt = [state.lastPrompt, prompt].filter(Boolean).join('\n');
     }
     const visibleSkills = activeSkillInventory(pi);
-    const compatibilityModel = stagedCompatibilityModel(ctx.model);
-    protocolCoachTurnEligible = Boolean(compatibilityModel)
-      && process.env[DISABLE_PROTOCOL_COACH_ENV] !== '1';
+    protocolCoachTurnEligible = process.env[DISABLE_PROTOCOL_COACH_ENV] !== '1';
     const workflowIndexSupplied = hasSuppliedNativeSkillPrompt(
       event,
       ctx,
@@ -216,39 +213,36 @@ export default function registerCoreEnhancer(pi) {
     if (protocolCoachTurnEligible && workflowIndexSupplied) {
       observeProtocolSuppliedWorkflowIndex(state.protocolCoach);
     }
-    const compatibilityReminder = compatibilityModel
-      ? buildStagedCompatibilityReminder({
-        compatibilityModel,
-        hasVisibleSkills: visibleSkills.length > 0,
-        hasWorkflowSkill: visibleSkills.some(({ name }) => (
-          skillNamesEquivalent(name, 'omp-enhancer-workflows')
-        )),
-        workflowIndexSupplied,
-        hasNativeTask: hasActiveNativeTask(pi),
-        subagentsAllowed: taskContext.taskDescriptor?.constraints?.subagents !== 'forbidden',
-        implementationDelegationAllowed: taskContext.taskDescriptor?.constraints?.implementationDelegation !== 'forbidden',
-        taskDescriptor: taskContext.taskDescriptor,
-      })
-      : null;
-    const shouldRemindModel = (
-      compatibilityReminder
-      && state.compatibilityReminderTaskStartedAt !== state.taskStartedAt
+    const workflowReminder = buildStagedWorkflowReminder({
+      hasVisibleSkills: visibleSkills.length > 0,
+      hasWorkflowSkill: visibleSkills.some(({ name }) => (
+        skillNamesEquivalent(name, 'omp-enhancer-workflows')
+      )),
+      workflowIndexSupplied,
+      hasNativeTask: hasActiveNativeTask(pi),
+      subagentsAllowed: taskContext.taskDescriptor?.constraints?.subagents !== 'forbidden',
+      implementationDelegationAllowed: taskContext.taskDescriptor?.constraints?.implementationDelegation !== 'forbidden',
+      taskDescriptor: taskContext.taskDescriptor,
+    });
+    const shouldRemind = (
+      workflowReminder
+      && process.env[DISABLE_WORKFLOW_REMINDER_ENV] !== '1'
+      && state.workflowReminderTaskStartedAt !== state.taskStartedAt
     );
-    if (shouldRemindModel) {
-      state.compatibilityReminderTaskStartedAt = state.taskStartedAt;
+    if (shouldRemind) {
+      state.workflowReminderTaskStartedAt = state.taskStartedAt;
     }
     await persistState(pi, state);
-    if (shouldRemindModel) {
+    if (shouldRemind) {
       return {
         message: {
           customType: SKILL_DISCOVERY_MESSAGE_TYPE,
-          content: compatibilityReminder.content,
+          content: workflowReminder.content,
           display: false,
           attribution: 'user',
           details: {
             compatibility: 'skill-discovery',
-            model: compatibilityModel,
-            features: compatibilityReminder.features,
+            features: workflowReminder.features,
             source: 'omp-enhancer-core',
           },
         },
@@ -340,24 +334,11 @@ export default function registerCoreEnhancer(pi) {
   });
 }
 
-function stagedCompatibilityModel(model) {
-  const provider = String(model?.provider ?? '').trim().toLowerCase();
-  const id = String(model?.id ?? '').trim().toLowerCase();
-  if (provider !== 'opencode-go') return '';
-  if (id === 'deepseek-v4-flash' && process.env[DISABLE_DEEPSEEK_COMPAT_ENV] !== '1') {
-    return 'deepseek-v4-flash';
-  }
-  if (id === 'mimo-v2.5' && process.env[DISABLE_MIMO_COMPAT_ENV] !== '1') {
-    return 'mimo-v2.5';
-  }
-  return '';
-}
 
 function protocolCoachEventEligible(turnEligible, hostTurnKind, ctx = {}) {
   return turnEligible === true
     && hostTurnKind === 'user'
     && process.env[DISABLE_PROTOCOL_COACH_ENV] !== '1'
-    && Boolean(stagedCompatibilityModel(ctx.model))
     && !isSubagentSession(ctx);
 }
 
@@ -381,8 +362,7 @@ function buildWorkflowEntryReminder(protocolLabel, workflowIndexSupplied, {
   ].join('\n');
 }
 
-function buildStagedCompatibilityReminder({
-  compatibilityModel = '',
+function buildStagedWorkflowReminder({
   hasVisibleSkills = false,
   hasWorkflowSkill = false,
   workflowIndexSupplied = false,
@@ -393,12 +373,8 @@ function buildStagedCompatibilityReminder({
 } = {}) {
   const sections = [];
   const features = [];
-  const protocolLabel = compatibilityModel === 'mimo-v2.5'
-    ? 'MIMO_SOFT_PROTOCOL'
-    : 'DEEPSEEK_SOFT_PROTOCOL';
-  const workflowEntryLabel = compatibilityModel === 'mimo-v2.5'
-    ? 'MIMO_WORKFLOW_ENTRY'
-    : 'DEEPSEEK_WORKFLOW_ENTRY';
+  const protocolLabel = 'OMP_SOFT_PROTOCOL';
+  const workflowEntryLabel = 'OMP_WORKFLOW_ENTRY';
   if (hasWorkflowSkill) {
     sections.push(buildWorkflowEntryReminder(workflowEntryLabel, workflowIndexSupplied, {
       delegationAvailable: hasNativeTask && subagentsAllowed && implementationDelegationAllowed,
@@ -514,7 +490,7 @@ export function createState() {
     lastTaskContext: null,
     lastPrompt: '',
     taskStartedAt: 0,
-    compatibilityReminderTaskStartedAt: 0,
+    workflowReminderTaskStartedAt: 0,
     lastSkillUsage: null,
     lastSubagentUsage: null,
     observedSkills: new Set(),
@@ -784,8 +760,8 @@ function readStateSnapshot(value = {}) {
   if (value.schemaVersion !== STATE_SCHEMA_VERSION) return state;
   state.lastPrompt = typeof value.lastPrompt === 'string' ? value.lastPrompt : '';
   state.taskStartedAt = Number.isFinite(value.taskStartedAt) ? value.taskStartedAt : 0;
-  state.compatibilityReminderTaskStartedAt = Number.isFinite(value.compatibilityReminderTaskStartedAt)
-    ? value.compatibilityReminderTaskStartedAt
+  state.workflowReminderTaskStartedAt = Number.isFinite(value.workflowReminderTaskStartedAt)
+    ? value.workflowReminderTaskStartedAt
     : 0;
   state.lastTaskContext = sanitizeTaskContext(value.lastTaskContext, state.lastPrompt);
   state.lastSkillUsage = isRecord(value.lastSkillUsage) ? value.lastSkillUsage : null;
@@ -865,7 +841,7 @@ function serializeState(state) {
     lastPrompt: state.lastPrompt,
     skillEvidence: state.skillEvidence,
     taskStartedAt: state.taskStartedAt,
-    compatibilityReminderTaskStartedAt: state.compatibilityReminderTaskStartedAt,
+    workflowReminderTaskStartedAt: state.workflowReminderTaskStartedAt,
     lastSkillUsage: state.lastSkillUsage,
     lastSubagentUsage: state.lastSubagentUsage,
     observedSkills: [...state.observedSkills],

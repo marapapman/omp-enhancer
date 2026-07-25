@@ -859,6 +859,14 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     expectations.requiredNativeTaskAgentSequence,
     failures,
   );
+  if (expectations.requireLongFormWritingPilot != null) {
+    evaluateLongFormWritingPilot(
+      nativeTask,
+      summary.tddTrace ?? { mutationCalls: [], commandCalls: [] },
+      expectations.requireLongFormWritingPilot,
+      failures,
+    );
+  }
   for (const workflow of expectations.requiredNativeTaskWorkflows ?? []) {
     if (!nativeTaskWorkflows.has(workflow)) failures.push(`required native task workflow was not observed: ${workflow}`);
   }
@@ -991,6 +999,118 @@ function evaluateRequiredNativeTaskAgentSequence(nativeTask, specification, fail
     if (!Number.isFinite(current.eventIndex)
       || current.eventIndex <= prior.deliveryEventIndex) {
       failures.push(`required native task Agent ${current.agent} started before ${prior.agent} successful delivery`);
+    }
+  }
+}
+
+// Advisory offline expectation for the long-form writing pilot trace.
+// Asserts the observable pilot contract documented in ORCHESTRATION_AND_DEMODELING_PLAN
+// §6.3/§7.4: >=2 writer assignments in the same native task batch when batching is
+// available; all writer deliveries occur before the parent integration marker (a
+// successful parent write/edit of the target article); exactly one checker assignment
+// after integration; no native reviewer; at most one repair writer. The batch
+// assertion is skippable (marked not-evaluable) when batching is unavailable in the
+// run, mirroring the plan's treatment of batch-disabled parallel evidence. This is
+// an offline trace expectation, never a runtime gate.
+function evaluateLongFormWritingPilot(nativeTask, tddTrace, expectation, failures) {
+  const options = typeof expectation === 'object' && expectation ? expectation : {};
+  const writerAgent = options.writerAgent ?? 'writer';
+  const checkerAgent = options.checkerAgent ?? 'checker';
+  const reviewerAgent = options.reviewerAgent ?? 'reviewer';
+  const maxRepairWriters = Number.isFinite(options.maxRepairWriters)
+    ? options.maxRepairWriters
+    : 1;
+  const assignments = [...(nativeTask.assignments ?? [])]
+    .sort((left, right) => left.eventIndex - right.eventIndex || left.index - right.index);
+  const writerAssignments = assignments.filter(({ agent }) => agent === writerAgent);
+  const checkerAssignments = assignments.filter(({ agent }) => agent === checkerAgent);
+  const agents = new Set(nativeTask.agents ?? []);
+
+  if (agents.has(reviewerAgent)) {
+    failures.push(`long-form writing pilot observed a forbidden native reviewer: ${reviewerAgent}`);
+  }
+  if (writerAssignments.length < 2) {
+    failures.push(`long-form writing pilot required >=2 writer assignments, observed ${writerAssignments.length}`);
+  }
+
+  // Batch assertion: skippable when batching is unavailable in the run.
+  const batchAvailable = (nativeTask.multiForkBatchCallCount ?? 0) > 0;
+  if (batchAvailable) {
+    const batchCallIds = new Set();
+    for (const writer of writerAssignments) {
+      if (writer.batch) batchCallIds.add(writer.callId);
+    }
+    const sharedBatch = [...batchCallIds].some((callId) => (
+      writerAssignments.filter((writer) => writer.callId === callId).length >= 2
+    ));
+    if (!sharedBatch) {
+      failures.push('long-form writing pilot did not place >=2 writer assignments in the same native task batch');
+    }
+  }
+  // When batchAvailable is false, the plan mandates sequential fallback and the
+  // parallel-evidence assertion is not-evaluable rather than a failure.
+
+  // Integration marker: first successful parent write/edit of the target article.
+  // When integrationTarget is given, restrict to mutations of that path; otherwise
+  // fall back to the first successful parent mutation.
+  const integrationTarget = typeof options.integrationTarget === 'string'
+    ? options.integrationTarget.trim()
+    : '';
+  const mutationCalls = [...(tddTrace.mutationCalls ?? [])]
+    .sort((left, right) => left.eventIndex - right.eventIndex);
+  const integrationMutations = integrationTarget
+    ? mutationCalls.filter(({ target }) => target === integrationTarget)
+    : mutationCalls;
+  const integration = integrationMutations[0] ?? null;
+  if (!integration || !Number.isFinite(integration.eventIndex)) {
+    failures.push('long-form writing pilot did not observe a parent integration marker (successful write/edit of the target article)');
+    return;
+  }
+  const integrationEventIndex = integration.eventIndex;
+
+  // A conditional-repair writer is dispatched after the checker delivery, so it is
+  // legitimately delivered after the parent integration marker. Compute the checker
+  // delivery first and exclude repair writers from the section-writer ordering check.
+  const checkerDelivery = checkerAssignments
+    .map(({ deliveryEventIndex }) => deliveryEventIndex)
+    .filter(Number.isFinite)
+    .sort((left, right) => left - right)[0];
+  const isRepairWriter = (writer) => (
+    Number.isFinite(checkerDelivery)
+    && Number.isFinite(writer.eventIndex)
+    && writer.eventIndex > checkerDelivery
+  );
+
+  // All SECTION writer deliveries (excluding repair writers) must occur before the
+  // parent integration marker.
+  for (const writer of writerAssignments) {
+    if (isRepairWriter(writer)) continue;
+    if (writer.jobStatus !== 'completed' || !Number.isFinite(writer.jobCompletionEventIndex)) {
+      failures.push(`long-form writing pilot writer assignment did not complete successfully before integration: ${writer.name ?? writer.jobId ?? '<writer>'}`);
+      continue;
+    }
+    if (!writer.deliveryText || !Number.isFinite(writer.deliveryEventIndex)) {
+      failures.push(`long-form writing pilot writer assignment did not return a successful delivery before integration: ${writer.name ?? writer.jobId ?? '<writer>'}`);
+      continue;
+    }
+    if (writer.deliveryEventIndex >= integrationEventIndex) {
+      failures.push(`long-form writing pilot writer assignment was delivered after the parent integration marker: ${writer.name ?? writer.jobId ?? '<writer>'}`);
+    }
+  }
+
+  // Exactly one checker assignment after integration.
+  const checkersAfterIntegration = checkerAssignments.filter(({ eventIndex }) => (
+    Number.isFinite(eventIndex) && eventIndex > integrationEventIndex
+  ));
+  if (checkersAfterIntegration.length !== 1) {
+    failures.push(`long-form writing pilot required exactly one checker assignment after integration, observed ${checkersAfterIntegration.length}`);
+  }
+
+  // Conditional-repair bound: at most one repair writer after the checker delivery.
+  if (Number.isFinite(checkerDelivery)) {
+    const repairWriters = writerAssignments.filter((writer) => isRepairWriter(writer));
+    if (repairWriters.length > maxRepairWriters) {
+      failures.push(`long-form writing pilot repair writers ${repairWriters.length} exceeded ${maxRepairWriters}`);
     }
   }
 }

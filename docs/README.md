@@ -18,16 +18,17 @@ a router or gate.
 
 Optimization and dated evaluation records:
 
-- [Flash Main prompt optimization](DEEPSEEK_PROMPT_OPTIMIZATION.md)
+- [Flash Main prompt optimization (archived 2026-07-24)](superpowers/DEEPSEEK_PROMPT_OPTIMIZATION.md)
 - [Main model workflow evaluation, 2026-07-18](MAIN_MODEL_WORKFLOW_EVALUATION_2026-07-18.md)
 - [DeepSeek Flash expanded E2E, 2026-07-18 (stopped at 84/89 sessions)](DEEPSEEK_EXPANDED_E2E_2026-07-18.md)
 - [Skill resource path and compatibility-link repair record, 2026-07-19](SKILL_RESOURCE_PATH_FIX_2026-07-19.md)
 
-The prompt-optimization note labels its current contract separately from its
-historical prompt snapshots. Other dated records preserve the test harness,
-observations, and result counts from their stated snapshots. Old phase names,
-generated sizes, load order, and pass counts do not define current runtime
-behavior. The dated material under
-[`superpowers/`](superpowers/README.md) is also a historical archive.
+The prompt-optimization note has been archived under
+[`superpowers/`](superpowers/README.md); it is a historical record, not a
+current contract. Other dated records preserve the test harness, observations,
+and result counts from their stated snapshots. Old phase names, generated sizes,
+load order, and pass counts do not define current runtime behavior. The dated
+material under [`superpowers/`](superpowers/README.md) is also a historical
+archive.
 
 All non-simple workflows use a subagent-driven soft default when matching Agents are exposed: domain Agents precede generic `task`, independent checkpoints may share a batch, dependencies run in order, and Main retains integration, final verification, permissions, and external effects. Mechanical/direct-simple work and unresolved `writing.pending` input are explicit exceptions; unavailable capacity or unsafe splitting is recorded as a fallback limitation. Code guidance remains consolidated as `code.dev` plus `code-development`, or `omp.plugin` plus its conditional `references/omp-enhancer.md`; it adds reviewed vertical TDD slices, `MAIN REVIEW`, and bounded reviewer reconciliation. These are soft instructions rather than a router, gate, fixed fan-out, or automatic loop. Retired phase-specific names may appear only in the historical archive.

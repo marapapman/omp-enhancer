@@ -105,7 +105,7 @@ test('response-only writing omits review context while an explicit review reques
     prompt: 'Draft a concise email replying to Bob. Independent review is required.',
   });
   const context = buildDynamicReviewBudgetPrompt({ taskDescriptor: required });
-  assert.match(context, /COMPAT_REVIEW_CONTEXT/);
+  assert.match(context, /^REVIEW_CONTEXT/m);
   assert.match(context, /no count\/Agent\/fork/i);
 });
 
@@ -134,7 +134,7 @@ test('review prompt is compact and contains no reviewer or fork quota', () => {
     nativeConcurrencyCapacity: 4,
   });
 
-  assert.match(prompt, /COMPAT_REVIEW_CONTEXT \(soft, no quota\)/);
+  assert.match(prompt, /^REVIEW_CONTEXT \(soft, no quota\)/m);
   assert.match(prompt, /FACTS: operation=modify;complexity=broad;risk=medium;domains=code,tests;review=correctness,test-adequacy/i);
   assert.match(prompt, /existing checkpoint/i);
   assert.match(prompt, /selects no count\/Agent\/fork\/batch\/dispatch\/permission\/completion condition/i);
@@ -148,7 +148,7 @@ test('multi-target task-shape prompt exposes observed facts without choosing del
   });
   const prompt = buildTaskShapePrompt(descriptor);
 
-  assert.match(prompt, /COMPAT_TASK_SHAPE_FACTS/);
+  assert.match(prompt, /^TASK_SHAPE_FACTS/m);
   assert.match(prompt, /operation=inspect; complexity=broad/);
   assert.match(prompt, /exact-inspection-targets=2/);
   assert.match(prompt, /independent-target-analysis=requested; per-target-evidence=requested; cross-target-comparison=requested/);
@@ -205,4 +205,112 @@ test('review prompt is omitted only when review advice is inapplicable', () => {
   });
   assert.match(capacityUnknown, /no count\/Agent\/fork/i);
   assert.doesNotMatch(capacityUnknown, /native-cap=/i);
+});
+
+test('posture reflects task posture with model-free precedence', () => {
+  // minimal: independentReview forbidden -> minimal regardless
+  const forbidden = resolveDynamicReviewBudget({
+    operation: 'modify', domains: ['code', 'tests'], complexity: 'broad',
+    risk: { level: 'critical', flags: ['workspace-write'] },
+    constraints: { independentReview: 'forbidden' },
+  }, { nativeConcurrencyCapacity: 4 });
+  assert.equal(forbidden.posture, 'minimal');
+  assert.equal(forbidden.version, 3);
+
+  // minimal: not review-applicable and not broad
+  const notApplicableSimple = resolveDynamicReviewBudget({
+    operation: 'answer', domains: ['general'], complexity: 'simple',
+    risk: { level: 'low', flags: [] }, constraints: {},
+  });
+  assert.equal(notApplicableSimple.posture, 'minimal');
+
+  // minimal: not review-applicable, focused, low risk
+  const notApplicableFocused = resolveDynamicReviewBudget({
+    operation: 'execute', domains: ['tests'], complexity: 'focused',
+    risk: { level: 'low', flags: ['test-execution'] }, constraints: {},
+  });
+  assert.equal(notApplicableFocused.posture, 'minimal');
+
+  // high-assurance: independentReview required -> high-assurance regardless of other fields
+  const requiredLow = resolveDynamicReviewBudget({
+    operation: 'modify', domains: ['code'], complexity: 'focused',
+    risk: { level: 'low', flags: ['workspace-write'] },
+    constraints: { independentReview: 'required' },
+  }, { nativeConcurrencyCapacity: 2 });
+  assert.equal(requiredLow.posture, 'high-assurance');
+
+  // high-assurance: high risk, review-applicable
+  const highRisk = resolveDynamicReviewBudget({
+    operation: 'modify', domains: ['code', 'security'], complexity: 'broad',
+    risk: { level: 'high', flags: ['security-sensitive'] }, constraints: {},
+  }, { nativeConcurrencyCapacity: 4 });
+  assert.equal(highRisk.posture, 'high-assurance');
+
+  // high-assurance: critical risk, review-applicable
+  const criticalRisk = resolveDynamicReviewBudget({
+    operation: 'release', domains: ['code', 'tests', 'security', 'plugin'], complexity: 'broad',
+    risk: { level: 'critical', flags: ['external-write', 'security-sensitive'] },
+    constraints: {},
+  }, { nativeConcurrencyCapacity: 4 });
+  assert.equal(criticalRisk.posture, 'high-assurance');
+
+  // balanced: broad complexity, review-applicable
+  const broad = resolveDynamicReviewBudget({
+    operation: 'modify', domains: ['code', 'tests'], complexity: 'broad',
+    risk: { level: 'medium', flags: ['workspace-write', 'test-execution'] },
+    constraints: {},
+  }, { nativeConcurrencyCapacity: 4 });
+  assert.equal(broad.posture, 'balanced');
+
+  // balanced: medium risk, review-applicable
+  const mediumRisk = resolveDynamicReviewBudget({
+    operation: 'modify', domains: ['code'], complexity: 'focused',
+    risk: { level: 'medium', flags: ['workspace-write'] }, constraints: {},
+  }, { nativeConcurrencyCapacity: 4 });
+  assert.equal(mediumRisk.posture, 'balanced');
+
+  // minimal: review-applicable but not broad/medium/high/critical/required
+  const lowRiskFocused = resolveDynamicReviewBudget({
+    operation: 'modify', domains: ['code'], complexity: 'focused',
+    risk: { level: 'low', flags: ['workspace-write'] }, constraints: {},
+  }, { nativeConcurrencyCapacity: 4 });
+  assert.equal(lowRiskFocused.posture, 'minimal');
+});
+
+test('broad response-only writing resolves to balanced posture', () => {
+  const broadWriting = resolveDynamicReviewBudget({
+    operation: 'answer', domains: ['writing'], complexity: 'broad',
+    risk: { level: 'low', flags: [] },
+    constraints: { workspaceWrite: 'forbidden' },
+  }, { nativeConcurrencyCapacity: 4 });
+  assert.equal(broadWriting.posture, 'balanced');
+  assert.equal(broadWriting.version, 3);
+});
+
+test('posture never names a model, provider, Agent, count, or width', () => {
+  const descriptors = [
+    { operation: 'modify', domains: ['code', 'tests'], complexity: 'broad',
+      risk: { level: 'medium', flags: ['workspace-write'] }, constraints: {} },
+    { operation: 'release', domains: ['code', 'security'], complexity: 'broad',
+      risk: { level: 'critical', flags: ['external-write'] }, constraints: {} },
+    { operation: 'modify', domains: ['code'], complexity: 'focused',
+      risk: { level: 'low', flags: ['workspace-write'] },
+      constraints: { independentReview: 'required' } },
+    { operation: 'answer', domains: ['writing'], complexity: 'broad',
+      risk: { level: 'low', flags: [] },
+      constraints: { workspaceWrite: 'forbidden' } },
+  ];
+  for (const descriptor of descriptors) {
+    const context = resolveDynamicReviewBudget(descriptor, { nativeConcurrencyCapacity: 4 });
+    assert.ok(['minimal', 'balanced', 'high-assurance'].includes(context.posture));
+    assert.doesNotMatch(context.posture, /model|provider|agent|count|width|quota|fork|batch/i);
+  }
+});
+
+test('version is 3', () => {
+  const context = resolveDynamicReviewBudget({
+    operation: 'modify', domains: ['code'], complexity: 'focused',
+    risk: { level: 'low', flags: ['workspace-write'] }, constraints: {},
+  });
+  assert.equal(context.version, 3);
 });

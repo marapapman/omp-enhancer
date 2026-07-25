@@ -9,7 +9,6 @@
 
 # ── 顶层配置文件 ──
 !config.yml
-!models.yml
 !mcp.json
 !lsp.json
 !ssh.json

@@ -30,12 +30,11 @@ test('findPathRisks reports hardcoded Claude root home paths', () => {
   assert.match(findings[0].evidence, /\/root\/\.claude\/CLAUDE\.md/);
 });
 
-test('packaged model roles use DeepSeek Flash as main and GPT-5.6 Luna as advisor', async () => {
+test('packaged config template is model-agnostic and keeps loopGuard/compaction safe defaults', async () => {
   const config = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
 
-  assert.match(config, /default:\s+opencode-go\/deepseek-v4-flash:max/);
-  assert.match(config, /advisor:\s+openai-codex\/gpt-5\.6-luna:xhigh/);
-  assert.match(config, /tiny:\s+opencode-go\/deepseek-v4-flash:medium/);
+  assert.doesNotMatch(config, /modelRoles:/);
+  assert.doesNotMatch(config, /deepseek|mimo|opencode-go/i);
   assert.match(config, /loopGuard:\s*\n\s+enabled:\s+false/);
   assert.doesNotMatch(config, /modelPattern|maxRepeatedSentence|maxRepeatedPhrase|minRepeatedChars/);
   assert.match(config, /compaction:[\s\S]*autoContinue:\s+false/);
@@ -67,7 +66,6 @@ const expectedBundledSkills = [
   'caveman',
   'code-development',
   'conventional-commits',
-  'deepseek-tool-calling',
   'docx',
   'docker-compose',
   'ecc',
@@ -168,8 +166,8 @@ test('listAssets lists packaged agents, skills, hooks, and templates from plugin
   await writeFile(path.join(root, 'skills', 'tdd', 'SKILL.md'), '# TDD');
   await writeFile(path.join(root, 'hooks', 'pre', 'guard-destructive.ts'), 'export default {};\n');
   await writeFile(path.join(root, 'hooks', 'pre', '.hidden.ts'), 'export default {};\n');
-  await writeFile(path.join(root, 'hook-templates', 'pre', 'opencode-deepseek-cot.ts'), 'export default {};\n');
-  await writeFile(path.join(root, 'hook-templates', 'post', 'opencode-deepseek-tool-result-pipeline.ts'), 'export default {};\n');
+  await writeFile(path.join(root, 'hook-templates', 'pre', 'example-pre-template.ts'), 'export default {};\n');
+  await writeFile(path.join(root, 'hook-templates', 'post', 'example-post-template.ts'), 'export default {};\n');
 
   const assets = await listAssets(root);
 
@@ -181,8 +179,8 @@ test('listAssets lists packaged agents, skills, hooks, and templates from plugin
       post: [],
     },
     hookTemplates: {
-      pre: ['opencode-deepseek-cot.ts'],
-      post: ['opencode-deepseek-tool-result-pipeline.ts'],
+      pre: ['example-pre-template.ts'],
+      post: ['example-post-template.ts'],
     },
     templates: ['config.yml'],
   });
@@ -198,20 +196,18 @@ test('package manifest declares bundled skills as plugin content', async () => {
   assert.ok(packageJson.keywords.includes('omp-plugin'));
 });
 
-test('packaged config template keeps DeepSeek Flash as default and GPT-5.6 Luna as advisor', async () => {
+test('packaged config template is model-agnostic and keeps safe defaults', async () => {
   const template = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
 
-  assert.match(template, /advisor:\s*openai-codex\/gpt-5\.6-luna:xhigh/);
-  assert.match(template, /tiny:\s*opencode-go\/deepseek-v4-flash:medium/);
-  assert.doesNotMatch(template, /classifier:\s*opencode-go\/deepseek-v4-flash:medium/);
-  assert.doesNotMatch(template, /modelTags:\s*\n\s*classifier:/);
-  assert.match(template, /default:\s*opencode-go\/deepseek-v4-flash:max/);
-  assert.match(template, /plan:\s*ollama-cloud\/deepseek-v4-pro:high/);
-  assert.match(template, /task:\s*ollama-cloud\/deepseek-v4-flash:high/);
+  assert.doesNotMatch(template, /modelRoles:/);
+  assert.doesNotMatch(template, /deepseek|mimo|opencode-go/i);
+  assert.doesNotMatch(template, /classifier:|modelTags:/);
   assert.match(template, /webSearch:\s*codex/);
   assert.match(template, /backend:\s*mnemopi/);
-  assert.doesNotMatch(template, /disabledProviders:\s*\n\s*-\s*deepseek/);
-  assert.doesNotMatch(template, /task:\s*opencode-go\/deepseek/);
+  assert.match(template, /loopGuard:\s*\n\s+enabled:\s+false/);
+  assert.match(template, /compaction:[\s\S]*autoContinue:\s+false/);
+  assert.match(template, /task:\s*\n\s+agentModelOverrides:\s*\{\}/);
+  assert.match(template, /batch:\s+true/);
 });
 
 test('packaged advisor context assists Agent-owned workflow selection without replacing native Advisor behavior', async () => {
@@ -486,9 +482,9 @@ test('registered defaults resolve bundled package assets from a normal project c
   assert.equal(assetsResult.details.skills.includes('tdd'), false);
   assert.ok(assetsResult.details.hooks.pre.includes('guard-destructive.ts'));
   assert.deepEqual(assetsResult.details.hooks.post, []);
-  assert.ok(assetsResult.details.hookTemplates.pre.includes('opencode-deepseek-cot.ts'));
-  assert.ok(assetsResult.details.hookTemplates.pre.includes('opencode-deepseek-tool-repair.ts'));
-  assert.ok(assetsResult.details.hookTemplates.post.includes('opencode-deepseek-tool-result-pipeline.ts'));
+  assert.ok(assetsResult.details.hooks.pre.includes('edit-anchor-guard.ts'));
+  assert.deepEqual(assetsResult.details.hookTemplates.pre, []);
+  assert.deepEqual(assetsResult.details.hookTemplates.post, []);
   assert.ok(assetsResult.details.templates.includes('config.yml'));
   assert.ok(assetsResult.details.templates.includes('WATCHDOG.yml'));
 
@@ -510,8 +506,9 @@ test('registered defaults resolve bundled package assets from a normal project c
     assert.equal(commandAssets.skills.includes('tdd'), false);
     assert.ok(commandAssets.hooks.pre.includes('guard-destructive.ts'));
     assert.deepEqual(commandAssets.hooks.post, []);
-    assert.ok(commandAssets.hookTemplates.pre.includes('opencode-deepseek-cot.ts'));
-    assert.ok(commandAssets.hookTemplates.post.includes('opencode-deepseek-tool-result-pipeline.ts'));
+    assert.ok(commandAssets.hooks.pre.includes('edit-anchor-guard.ts'));
+    assert.deepEqual(commandAssets.hookTemplates.pre, []);
+    assert.deepEqual(commandAssets.hookTemplates.post, []);
     assert.ok(commandAssets.templates.includes('config.yml'));
     assert.ok(commandAssets.templates.includes('WATCHDOG.yml'));
 

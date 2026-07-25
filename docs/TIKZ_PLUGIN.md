@@ -115,7 +115,7 @@ The returned temporary file is immediately passed to `tikz_prepare_asset`. The p
 4. Reject a malicious or escaping TikZ fixture without launching the compiler.
 5. Verify `visioner` reviews the latest revision and a supported finding produces only a bounded fresh revision/review.
 6. Install the worktree marketplace, confirm `tikz-diagram` discovery, confirm `tikz_*` tools are inactive by default, activate only `tikz`, and verify cache-backed Skill symlinks.
-7. Run a live DeepSeek workflow canary for PLAN/READY, one Skill load, subagent dispatch when available, complete terminal delivery, and parent verification. Treat model behavior as a sample, not a deterministic release guarantee.
+7. Run a live workflow canary (any user-configured Main model) for PLAN/READY, one Skill load, subagent dispatch when available, complete terminal delivery, and parent verification. Treat model behavior as a sample, not a deterministic release guarantee.
 8. Run one explicitly authorized live imagegen canary only when provider configuration is available; exclude it from ordinary CI and release gates.
 
 ## Validation and release

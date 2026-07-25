@@ -91,19 +91,6 @@ test('visible authoring compatibility skills are self-contained and defer to the
   assert.doesNotMatch(writing, /Commit skill to git and push to your fork/iu, writingRelative);
   assert.match(writing, /commit.+push.+explicit user authorization/isu, writingRelative);
   assert.ok(Buffer.byteLength(writing) < 7_500, `${writingRelative} should stay compact`);
-
-  const deepseekRelative = 'skills/deepseek-tool-calling/SKILL.md';
-  const deepseek = readFileSync(join(pluginRoot, deepseekRelative), 'utf8');
-
-  assert.match(deepseek, /description: Use when.+DeepSeek.+tool/iu, deepseekRelative);
-  assert.doesNotMatch(deepseek, /^alwaysApply:/imu, deepseekRelative);
-  assert.match(deepseek, /当前会话实际暴露.+工具.+JSON Schema.+唯一参数契约/isu, deepseekRelative);
-  assert.match(deepseek, /示例.+冲突.+实际暴露.+schema.+优先/isu, deepseekRelative);
-  assert.match(deepseek, /Delegate Agent=<current-exposed-agent> workflow=<selected-ids> step=<step-id> skills=<loaded-ids-or-none> checkpoint=<complete-one-line-task>/iu, deepseekRelative);
-  assert.match(deepseek, /TODO 行的 Agent.+native task item.+agent/isu, deepseekRelative);
-  assert.match(deepseek, /\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]/iu, deepseekRelative);
-  assert.match(deepseek, /每个 task 正文逐字复制全部直接用户约束且不添加约束示例，再携带允许效果与验收证据[\s\S]*outer context.+name.+label.+不能替代/isu, deepseekRelative);
-  assert.doesNotMatch(deepseek, /"agent"\s*:\s*"scout"/iu, deepseekRelative);
 });
 
 test('workflow skills do not instruct the agent to self-block or repeat unchanged work', () => {

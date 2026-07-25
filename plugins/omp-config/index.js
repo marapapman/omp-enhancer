@@ -29,7 +29,7 @@ export async function runConfigPlan(input = {}) {
   const pluginRoot = await resolvePluginRoot(root);
   const plan = [
     `Review packaged templates under ${pluginRoot}/assets.`,
-    'Compare assets/config.yml, assets/models.yml, assets/mcp.json, assets/AGENTS.md, assets/WORKFLOW_CATALOG.md, and assets/WATCHDOG.yml with the target OMP home; the shared catalog installs under its OMP Enhancer namespaced filename.',
+    'Compare assets/config.yml, assets/mcp.json, assets/AGENTS.md, assets/WORKFLOW_CATALOG.md, and assets/WATCHDOG.yml with the target OMP home; the shared catalog installs under its OMP Enhancer namespaced filename.',
     'Compare bundled agents and skills with the target installation.',
     'Dry-run omp_config_sync_workflow_context against the intended OMP agent directory.',
     'Apply the managed workflow context only after explicit user review; preserve unrelated AGENTS.md and WATCHDOG.yml content.',

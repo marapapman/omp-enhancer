@@ -53,6 +53,59 @@ test('language writing workflows delegate prose edits and independent review to 
   assert.match(latexContract, /task may return only.+compile evidence.+language checker owns every semantic-check checkpoint/i);
 });
 
+test('long-form writing pilot branch activates only for a qualifying multi-section new-draft brief', () => {
+  for (const id of ['writing.zh', 'writing.en']) {
+    const workflow = workflowCatalog[id];
+    const contract = [
+      ...workflow.steps.map(({ text }) => text),
+      ...workflow.scopeNotes,
+    ].join(' ');
+
+    // Positive predicate: NEW long-form draft, >=2 independently specifiable sections, shared brief freezable
+    assert.match(contract, /long-form.*pilot.*new.*draft/iu, `${id} must describe the long-form pilot predicate`);
+    assert.match(contract, /two or more.*section|>= ?2.*section|\b2\+.*section/iu, `${id} must require two or more sections`);
+    assert.match(contract, /disjoint.*(?:proposal|scope)|independent.*specifiable/iu, `${id} must require disjoint proposal scope`);
+    assert.match(contract, /shared.*brief.*freez|evidence.*terminology.*voice.*freez/iu, `${id} must require a freezable shared brief`);
+
+    // Negative precedence: any of these triggers the ordinary branch
+    assert.match(contract, /revis|edit|polish|review|correct|proofread|translate/iu, `${id} must list negative precedence triggers`);
+    assert.match(contract, /whole.document rewrite|single section|incomplete brief|cross.section.*dependenc/iu, `${id} must list negative precedence controls`);
+
+    // Pilot branch structure: per-section step-2 rows, integration checkpoint, one step-3 checker, conditional step-4
+    assert.match(contract, /one.*step-2.*per.*section|per.section.*step-2|one.*proposal.*row.*per.*independent.*section/iu, `${id} must describe per-section step-2 rows`);
+    assert.match(contract, /integration.*checkpoint|parent.owned.*integration/iu, `${id} must describe the integration checkpoint`);
+    assert.match(contract, /exactly one.*step-3.*checker|one.*checker.*integrated/iu, `${id} must describe one step-3 checker on the integrated draft`);
+
+    // Writers remain proposal-only; Main owns integration
+    assert.match(contract, /proposal.only|proposal-only/iu, `${id} must keep writers proposal-only`);
+    assert.match(contract, /Main owns.*integration|Main.*authorized.*write/iu, `${id} must keep Main as integration owner`);
+
+    // No native reviewer, no generic MAIN REVIEW
+    assert.doesNotMatch(contract, /native reviewer|MAIN REVIEW.*overrid/iu, `${id} must not add native reviewer or generic MAIN REVIEW`);
+    // No model/provider/Agent/count/width/fork prescription
+    assert.doesNotMatch(contract, /fork count|reviewer count|parallel.benefit|required fork|fanout/iu, `${id} must not prescribe width/count/fork`);
+  }
+});
+
+test('long-form writing pilot negative controls keep the ordinary three frozen rows', () => {
+  for (const id of ['writing.zh', 'writing.en']) {
+    const workflow = workflowCatalog[id];
+    const contract = [
+      ...workflow.steps.map(({ text }) => text),
+      ...workflow.scopeNotes,
+    ].join(' ');
+
+    // The ordinary branch (default) must still be described with three frozen rows
+    assert.match(contract, /three exact Delegate rows.*step-2.*step-3.*conditional step-4|three.*frozen.*step-2.*step-3.*step-4/iu, `${id} must keep the ordinary three frozen rows`);
+
+    // The carve-out sentence must mention the pilot exception
+    assert.match(contract, /assignment size.*leaves the actor sequence unchanged.*EXCEPT.*pilot|size.*structure.*unchanged.*EXCEPT.*pilot/iu, `${id} must carve out the pilot exception`);
+
+    // Negative precedence must explicitly route to ordinary branch
+    assert.match(contract, /revis|edit|polish|proofread|translate.*ordinary|negative.*ordinary|any.*->.*ordinary/iu, `${id} must route negatives to ordinary branch`);
+  }
+});
+
 test('LaTeX and Markdown format workflows compose both ends of explicit conversion without selecting a prose language', () => {
   const latex = workflowCatalog['writing.latex'];
   const markdown = workflowCatalog['writing.markdown'];
