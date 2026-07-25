@@ -26,6 +26,7 @@
     "e2e:main:subagents": "node scripts/e2e/run-installed-workflow.mjs --matrix scripts/e2e/fixtures/subagent-willingness.json",
     "e2e:main:advisor": "node scripts/e2e/run-installed-workflow.mjs --matrix scripts/e2e/fixtures/advisor-stress.json",
     "e2e:main:self-iteration": "node scripts/e2e/run-installed-workflow.mjs --matrix scripts/e2e/fixtures/self-iteration.json",
-    "migrate:legacy-gate-skills": "node scripts/migrate-legacy-gate-skills.mjs"
+    "migrate:legacy-gate-skills": "node scripts/migrate-legacy-gate-skills.mjs",
+    "install:deps": "node scripts/install-plugin-deps.mjs"
   }
 }

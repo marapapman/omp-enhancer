@@ -6,7 +6,7 @@ Prefer a bundled OpenTikZ vector icon or a small code-native TikZ symbol. OMP's 
 
 - `generate_image` is optional. Main authorizes this optional external effect during initial setup after the semantic graph is fixed; `task` invokes `generate_image` only when the tool is exposed and the host permits the effect.
 - Never ask `generate_image` to choose topology, edges, arrows, labels, or text. Generate one isolated icon or pictogram at a time with no lettering, diagram background, connector, or surrounding node frame.
-- Keep generated art subordinate to the node's semantic ID. The TikZ source remains authoritative for node shape, label, position, size, and connections.
+- Keep generated art subordinate to the node's semantic ID. The ELK graph IR is the sole source of node positions and edge geometry. The author never authors, infers, or hand-edits TikZ coordinates. Artwork or content-only post-processing may change node contents (an icon or label text) but never the generated `at (...)` coordinates, edge sections, bend points, or positions.
 - Prefer vector icons. Image generation produces raster artwork unless its actual returned format proves otherwise; raster output stays raster, and never call, claim, or describe it as vector.
 
 ## Prepare and integrate

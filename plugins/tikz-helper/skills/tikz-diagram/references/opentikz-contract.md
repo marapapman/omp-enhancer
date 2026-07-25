@@ -1,6 +1,6 @@
 # OpenTikZ snapshot contract
 
-Use the pinned library as selection material, never as a writable working tree.
+The ELK graph IR is the sole source of node positions and edge geometry. The author never authors, infers, or hand-edits TikZ coordinates. Input nodes must omit x and y and input edges must omit sections and bendPoints; the layout engine computes them. OpenTikZ is an icon and semantic reference source only. Template and example figure geometry is discarded, never copied or used to infer coordinates. The figure's geometry always comes from the ELK IR via `tikz_generate_diagram`. Use the pinned vendor library as read-only selection material, never as a writable working tree.
 
 ## Provenance and boundary
 
@@ -12,7 +12,7 @@ Use the pinned library as selection material, never as a writable working tree.
 
 ## Select and copy
 
-1. Use `tikz_catalog_search` when exposed to match `id`, `name`, `type`, `domain`, `tags`, and description. Name the selected item and why it matches. If catalog search is unavailable, use a project-native code-native or plain TikZ fallback and report that no OpenTikZ item was selected; never guess a vendor item or path.
+1. Use `tikz_catalog_search` when exposed to match `id`, `name`, `type`, `domain`, `tags`, and description. Name the selected item and why it matches. OpenTikZ is an icon and semantic reference source only; prefer a matching vector icon and read its semantic metadata, but never copy or infer coordinates from a template or example. When catalog search is unavailable or returns no match, describe the figure entirely in an ELK graph IR with plain ELK shapes; coordinates are still never hand-authored. Report that no OpenTikZ item was selected; never guess a vendor item or path.
 2. Use only the tool-returned `sourcePath`, `metadataPath`, and `previewPath`; reject traversal, symlinks, remote resources, or a path outside the verified bundled root. Never infer a source filename from the catalog item's directory `path`.
 3. For a template, read its `edit_contract`: parameters are the intended edit surface, operations are recipes, node naming preserves identity, and invariants remain true. When fixed template node IDs differ from business terms, keep those IDs in source and record an explicit template-ID-to-semantic-ID mapping in the semantic spec. Icons and examples have no implied template contract.
 4. Copy the returned source and only required local assets into an authorized project-relative destination. Copy before edit and never edit any file inside the vendor tree.

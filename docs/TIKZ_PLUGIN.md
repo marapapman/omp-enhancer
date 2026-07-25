@@ -8,7 +8,7 @@ This document defines the implementation contract for the `tikz-helper` marketpl
 - Reuse the current `designer` and `visioner` Agent candidates instead of adding another role family.
 - Preserve OpenTikZ templates, icons, examples, metadata, previews, edit contracts, and licenses at an exact upstream commit.
 - Generate editable TikZ from a semantic node-and-edge contract, then validate and review fresh rendered evidence.
-- Use OMP's native `generate_image` only as an optional source of missing node icons. TikZ remains the authority for topology, labels, connectors, and layout.
+- Use OMP's native `generate_image` only as an optional source of missing node icons. The ELK graph IR is the sole source of node positions and edge geometry. TikZ and the figure text remain the authority for topology, labels, and connectors; the layout engine computes every coordinate.
 - Keep all plugin tools opt-in and advisory. Do not add a router, gate, completion controller, hook, slash command, or automatic repair loop.
 
 ## Non-goals
@@ -33,6 +33,7 @@ The initial tool group is `tikz`, exposed through `/enhancer-tools enable tikz`:
 - `tikz_catalog_search` (`read`): search the pinned catalog and return bounded structured candidates, including source, metadata, preview, and edit-contract data.
 - `tikz_prepare_asset` (`exec`): validate a local PNG/JPEG/WebP image, normalize it through fixed bounded ImageMagick arguments to a project-local PNG, name it by content hash, and update an asset manifest. It never invokes imagegen or a network provider.
 - `tikz_render` (`exec`): validate a project-local TikZ source, run fixed no-shell-escape pdfLaTeX compilation and conversion using argument arrays, and return current-revision PDF/SVG/full-size/60%-scale evidence.
+- `tikz_generate_diagram` (`read`): accept an ELK graph IR, compute node positions and edge geometry via elkjs, and emit a compilable standalone TikZ source. It is the sole tool that produces figure geometry; input nodes omit `x`/`y` and input edges omit `sections`/`bendPoints`.
 
 Every tool is `defaultInactive`. Activation does not grant filesystem, command, network, provider, or publication permission. Findings are structured evidence, not completion permission.
 
@@ -41,10 +42,10 @@ Every tool is `defaultInactive`. Activation does not grant filesystem, command, 
 `figure.spec.json` is an OMP-side contract and does not modify OpenTikZ metadata. It records:
 
 - figure identity, purpose, reading direction, target dimensions, fixed pdfLaTeX compatibility, and output formats;
-- stable nodes with type, label, icon, group, rank hints, and accessible description;
-- stable edges with source, target, label, branch/loop semantics, and preferred ports;
+- stable nodes with type, label, icon, group, rank hints, and accessible description; rank hints translate into ELK IR layoutOptions (e.g. layered constraints), not hand-authored coordinates;
+- stable edges with source, target, label, branch/loop semantics, and preferred ports; preferred ports translate into ELK IR port constraints, not manual edge routing;
 - groups or swimlanes, theme, legend, and color-independent encodings;
-- selected OpenTikZ item and upstream commit;
+- selected OpenTikZ item and upstream commit. OpenTikZ is an icon and semantic reference source only. The selected item may supply an icon graphic or a semantic example; its template geometry is never copied into the figure;
 - local generated-asset paths and provenance.
 
 The Skill's semantic review checks duplicate node IDs, dangling endpoints, unlabeled decision branches, unreachable nodes, missing assets, and inconsistent semantic references. `tikz_render` separately validates source and asset paths plus the fixed local toolchain. These checks are evidence for Main; neither decides whether Main may continue or finish.
@@ -56,9 +57,9 @@ The Skill's semantic review checks duplicate node IDs, dangling endpoints, unlab
 The subagent-driven card performs these stages:
 
 1. Freeze the semantic figure contract, target paths, fixed pdfLaTeX compatibility, dimensions, icon policy, and evidence requirements.
-2. Search the pinned catalog. Prefer an existing template and vector icon, then simple TikZ geometry, then the optional imagegen branch.
-3. Copy the selected source into the user project and edit only the copy under its `edit_contract`.
-4. Keep icon and label nodes separate. Keep topology, text, and connectors in TikZ.
+2. Search the pinned catalog for an icon or semantic reference only. Author the semantic graph as an ELK IR and call tikz_generate_diagram to compute the layout with ELK. The ELK graph IR is the sole source of node positions and edge geometry; the author never authors, infers, or hand-edits TikZ coordinates.
+3. Search OpenTikZ for an optional icon or semantic reference only; do not copy template geometry into the figure. The selected item may supply an icon graphic or a semantic example, never figure coordinates.
+4. Size each node to fit its exact label plus padding, set graph-level ELK layoutOptions (algorithm, direction, spacing, edge routing), and regenerate from the IR. Fix overlap, clipping, or crossings by changing ELK layout options or node sizes and regenerating, never by editing coordinates. Keep icon and label nodes separate; keep topology, text, and connectors in TikZ.
 5. Validate semantics and source safety; compile and render the current revision at full and 60% scale.
 6. Have `visioner` independently review only those current-revision renders.
 7. `task` renders the current revision. A supported visioner finding may produce one bounded designer repair and at most one fresh affected visual review, with `task` re-rendering for each revision.
@@ -98,8 +99,9 @@ The returned temporary file is immediately passed to `tikz_prepare_asset`. The p
 
 ## Deterministic tests
 
-- Catalog: stable ranking, bounded results, exact source/metadata/preview paths, edit-contract preservation, and pinned hash parity.
 - Semantic method: Skill tests cover stable IDs, dangling-edge and decision-label checks, reachability, fixed pdfLaTeX compatibility, and asset rules; runtime tests cover only the source and filesystem boundaries the tools actually enforce.
+- ELK content contract: docs-contract tests `readFileSync` this design doc and the plugin README and assert the frozen ELK-first phrases (P1, P4, P12), that the docs name `tikz_generate_diagram` as the tool that computes layout via ELK from an ELK graph IR, and that neither file gives affirmative coordinate-authoring or template-as-geometry instructions.
+- Prompt-guideline seam: runtime tests assert the `tikz_generate_diagram` promptGuidelines carry the coordinate-free rules (omit `x`/`y`/`sections`/`bendPoints`, graph-level `layoutOptions`, node sizing, regeneration-not-coordinates, arrow/line style, no `fixed`/`random`).
 - Paths and TeX: traversal, symlink escape, absolute includes, remote URLs, `\\write18`, pipe input, timeout, output cap, and no shell invocation.
 - Assets: PNG/JPEG/WebP fixtures, decoded-format mismatch, image limits, deterministic PNG/hash naming, metadata removal, manifest merge, acceptance of imagegen-style temporary inputs, and publication only to a project-local final path.
 - Tools: exact names, approval classes, `defaultInactive`, normalized parameters, structured details, and advisory findings.
@@ -109,7 +111,7 @@ The returned temporary file is immediately passed to `tikz_prepare_asset`. The p
 
 ## End-to-end tests
 
-1. Copy and modify the pinned OpenTikZ flowchart template; compile PDF and render SVG/full/60% PNG evidence.
+1. Generate a figure from an ELK graph IR via `tikz_generate_diagram` (sized nodes, graph-level `layoutOptions`); compile PDF and render SVG/full/60% PNG evidence without hand-authoring any `\node at`/`\draw` coordinate.
 2. Produce a pure-vector flowchart when imagegen is unavailable.
 3. Feed a mocked imagegen WebP/PNG result through asset preparation; verify project-local hash path, manifest, `graphicx` inclusion, compilation, and self-contained delivery.
 4. Reject a malicious or escaping TikZ fixture without launching the compiler.

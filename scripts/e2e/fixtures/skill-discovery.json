@@ -119,7 +119,7 @@
       "id": "natural-tikz-diagram",
       "category": "tikz-helper",
       "fixture": "skill-discovery-readonly",
-      "prompt": "Plan an editable TikZ approval flowchart with six labeled nodes, one decision branch, and one missing custom pictogram. Use the packaged OpenTikZ material, assume image generation is unavailable, preserve all labels and topology in TikZ, and require current-revision compile plus independent visual evidence. Do not inspect or modify project files and do not use the network.",
+      "prompt": "Plan an editable TikZ approval flowchart with six labeled nodes, one decision branch, and one missing custom pictogram. Draw the figure by authoring an ELK graph IR and calling tikz_generate_diagram to compute the layout with ELK, never hand-editing TikZ coordinates. Use the packaged OpenTikZ material as an icon source for the missing pictogram, assume image generation is unavailable, preserve all labels and topology in TikZ, and require current-revision compile plus independent visual evidence. Do not inspect or modify project files and do not use the network.",
       "expectations": {
         "minWorkflowReferenceReads": 1,
         "requiredSelectedWorkflowIds": ["diagram.tikz"],

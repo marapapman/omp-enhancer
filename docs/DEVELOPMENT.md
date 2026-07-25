@@ -266,6 +266,18 @@ npm run e2e:main:skills -- \
 
 真实矩阵中的 TODO、task、Skill、workflow 或 Agent 数量及重复通过率是随机模型行为观测，不是插件保证。涉及外部写入的场景必须使用临时目录或明确 preview，不得为 E2E 自动发布。
 
+## 安装插件依赖（一键）
+
+`omp plugin install` / `upgrade` 不会为插件拉取 npm 运行时依赖（已安装缓存里没有 `node_modules`）。安装或升级后运行一次 `npm run install:deps`，它会为每个已安装插件在其缓存目录执行 `npm install --omit=dev` 并验证依赖可解析：
+
+```bash
+npm run install:deps                              # 所有已安装插件
+npm run install:deps -- --plugin tikz-helper      # 仅单个插件
+npm run install:deps -- --dry-run                 # 预览不安装
+```
+
+也可在启用 Core tools 后调用 `omp_core_install_deps`（接受 `dryRun` 与 `plugin`）。`tikz-helper` 借此获得 `elkjs`（`tikz_generate_diagram` 的 ELK 自动布局引擎），`omp-testing-enhancer` 获得 `playwright`/`pixelmatch`/`pngjs`。渲染与图标归一化所需的 ImageMagick、`latexmk`、`dvisvgm`、`pdftocairo` 仍是独立宿主依赖；playwright 浏览器二进制仍需其自身的 `npx playwright install`。
+
 ## Release transaction
 
 根 `scripts/release.js` 是 plugin manifest、root lockfile 和 marketplace version 的唯一写入入口。先做 dry-run：

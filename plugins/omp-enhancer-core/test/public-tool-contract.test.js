@@ -32,6 +32,13 @@ const PUBLIC_TOOL_CONTRACT = [
     parameters: { dryRun: 'boolean?' },
     detailKeys: ['errors', 'installed', 'legacyFindings', 'recommendedIgnoredSkills', 'skipped', 'warnings'],
   },
+  {
+    name: 'omp_core_install_deps',
+    approval: 'exec',
+    defaultInactive: true,
+    parameters: { dryRun: 'boolean?', plugin: 'string?' },
+    detailKeys: ['errors', 'installed', 'upToDate', 'warnings'],
+  },
 ];
 
 const SAFE_TOOL_INPUTS = {
@@ -39,6 +46,7 @@ const SAFE_TOOL_INPUTS = {
   omp_core_validate_subagent_usage: { agents: [], output: '' },
   omp_core_observation_status: {},
   omp_core_install_skills: { dryRun: true },
+  omp_core_install_deps: { dryRun: true },
 };
 
 test('freezes the reduced public Core tool surface', () => {

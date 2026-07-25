@@ -58,8 +58,8 @@ test('schema accepts only the three delegation defaults and requires roles only 
   );
 });
 
-test('catalog v23 projects explicit exception defaults and 29 substantive subagent-driven contracts', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 23);
+test('catalog v24 projects explicit exception defaults and 29 substantive subagent-driven contracts', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 24);
   assert.equal(workflowDefinitions.length, 31);
 
   const rawSimple = generalWorkflows.find(({ id }) => id === 'agentic.simple');

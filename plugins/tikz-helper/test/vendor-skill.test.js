@@ -244,6 +244,7 @@ test('Skill and references preserve host authority, copy safety, imagegen bounda
   const skill = read('skills/tikz-diagram/SKILL.md');
   const renderReview = read('skills/tikz-diagram/references/render-review.md');
   const imagegenAssets = read('skills/tikz-diagram/references/imagegen-assets.md');
+  const opentikzContract = read('skills/tikz-diagram/references/opentikz-contract.md');
   const references = readdirSync(join(skillRoot, 'references'))
     .filter((name) => name.endsWith('.md'))
     .map((name) => readFileSync(join(skillRoot, 'references', name), 'utf8'))
@@ -253,7 +254,7 @@ test('Skill and references preserve host authority, copy safety, imagegen bounda
   assert.match(contract, /vendor.+read-only/is);
   assert.match(contract, /copy.+before.+edit/is);
   assert.match(contract, /never edit.+vendor/is);
-  assert.match(contract, /catalog search.+unavailable.+(?:code-native|project-native|plain TikZ).+fallback/is);
+  assert.match(opentikzContract, /When catalog search is unavailable or returns no match, describe the figure entirely in an ELK graph IR with plain ELK shapes; coordinates are still never hand-authored\./, 'opentikz-contract must embed the P6 fallback sentence directly');
   assert.match(contract, /returned `sourcePath`.+never infer.+filename/is);
   assert.match(contract, /template.+node IDs.+semantic (?:mapping|spec)/is);
   assert.match(contract, /prefer.+vector.+icon/is);
@@ -274,6 +275,19 @@ test('Skill and references preserve host authority, copy safety, imagegen bounda
   assert.doesNotMatch(`${renderReview}\n${imagegenAssets}`, /Main (?:compares|groups|changes|renders|integrates|invokes|prepares) (?:the|compatible|generated|project)/i);
   assert.match(contract, /no.+(?:gate|completion permission|automatic loop)/is);
   assert.doesNotMatch(contract, /block:\s*true|continue:\s*true|retry until|repeat until|must delegate|mandatory fork/i);
+  // DIRECT assertions against SKILL.md only (not the combined contract string)
+  assert.match(skill, /The ELK graph IR is the sole source of node positions and edge geometry\./, 'SKILL must embed P1 directly');
+  assert.match(skill, /The author never authors, infers, or hand-edits TikZ coordinates\./, 'SKILL must embed P2 directly');
+  assert.match(skill, /Author the semantic graph as an ELK IR and call tikz_generate_diagram to compute the layout with ELK\./, 'SKILL must embed P12 directly');
+  // ordered method flow: semantic graph -> tikz_generate_diagram -> write .tex -> tikz_render
+  const semanticIdx = skill.search(/semantic graph/i);
+  const generateIdx = skill.indexOf('tikz_generate_diagram');
+  const texIdx = skill.search(/\.tex/);
+  const renderIdx = skill.indexOf('tikz_render');
+  assert.ok(semanticIdx >= 0, 'SKILL must mention the semantic graph');
+  assert.ok(generateIdx > semanticIdx, 'SKILL must call tikz_generate_diagram after the semantic graph');
+  assert.ok(texIdx > generateIdx, 'SKILL must write the returned .tex after tikz_generate_diagram');
+  assert.ok(renderIdx > texIdx, 'SKILL must invoke tikz_render after writing the .tex');
 });
 
 test('selected TikZ work compiles designer, task render, and visioner in dependency order with explicit evidence gaps', () => {

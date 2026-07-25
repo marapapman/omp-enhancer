@@ -16,7 +16,7 @@ export function defaultOmpRoot() {
   return path.join(os.homedir(), '.omp');
 }
 
-function resolvePaths(ompRoot) {
+export function resolvePaths(ompRoot) {
   return {
     skillsDir: path.join(ompRoot, 'skills'),
     managedSkillsDir: path.join(ompRoot, 'agent', 'managed-skills'),
@@ -196,7 +196,7 @@ function installSingle(name, sourceDir, targetBase, dryRun, results) {
   }
 }
 
-async function discoverMarketplaces(marketplacesDir) {
+export async function discoverMarketplaces(marketplacesDir) {
   if (!existsSync(marketplacesDir)) return [];
 
   const entries = await readdir(marketplacesDir, { withFileTypes: true });
@@ -221,7 +221,7 @@ async function discoverMarketplaces(marketplacesDir) {
   return catalogs;
 }
 
-function resolvePluginCacheDir(pluginsDir, marketplaceName, plugin) {
+export function resolvePluginCacheDir(pluginsDir, marketplaceName, plugin) {
   if (!existsSync(pluginsDir)) return null;
 
   // Convention: <marketplace>___<name>___<version>

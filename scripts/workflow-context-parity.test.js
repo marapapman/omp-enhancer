@@ -21,8 +21,8 @@ import { exactNestedEccSkillUri } from '../plugins/omp-enhancer-core/src/workflo
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
 
-test('catalog v23 assigns exactly one direct, one deferred, and 29 subagent-driven defaults', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 23);
+test('catalog v24 assigns exactly one direct, one deferred, and 29 subagent-driven defaults', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 24);
   assert.equal(workflowDefinitions.length, 31);
   assert.deepEqual(
     [...new Set(workflowDefinitions.map(({ delegationDefault }) => delegationDefault))].sort(),
@@ -46,7 +46,7 @@ test('catalog v23 assigns exactly one direct, one deferred, and 29 subagent-driv
   );
 });
 
-test('packaged catalog, index, and all references expose catalog v23 execution defaults', async () => {
+test('packaged catalog, index, and all references expose catalog v24 execution defaults', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -54,8 +54,8 @@ test('packaged catalog, index, and all references expose catalog v23 execution d
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 23/);
-  assert.match(skillIndex, /Catalog version: 23/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 24/);
+  assert.match(skillIndex, /Catalog version: 24/);
   assert.equal(referenceNames.length, 31);
   assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 29);
   assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
@@ -79,7 +79,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   const skillReferences = Object.values(referencesByWorkflow).join('\n');
 
   assert.equal(catalog, buildSharedWorkflowCatalogMarkdown());
-  assert.equal(WORKFLOW_CATALOG_VERSION, 23);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 24);
   assert.equal(Number(catalog.match(/OMP_WORKFLOW_CATALOG_VERSION:\s*(\d+)/)?.[1]), WORKFLOW_CATALOG_VERSION);
   assert.deepEqual([...catalog.matchAll(/^### `([^`]+)`$/gm)].map((match) => match[1]), workflowIds);
   const indexedWorkflowIds = [...skillIndex.matchAll(/^- `([^`]+)` —/gm)].map((match) => match[1]);

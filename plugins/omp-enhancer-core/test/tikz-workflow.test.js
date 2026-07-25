@@ -14,7 +14,7 @@ import {
 test('diagram.tikz is one bounded subagent-driven OpenTikZ workflow', () => {
   const workflow = workflowCatalog['diagram.tikz'];
 
-  assert.equal(WORKFLOW_CATALOG_VERSION, 23);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 24);
   assert.ok(workflowIds.includes('diagram.tikz'));
   assert.ok(workflow);
   assert.equal(workflow.delegationDefault, 'subagent-driven');
@@ -29,7 +29,7 @@ test('diagram.tikz is one bounded subagent-driven OpenTikZ workflow', () => {
   const delegation = workflow.delegation.join(' ');
 
   assert.match(steps, /semantic figure spec.+node.+edge.+branch.+group.+flow direction.+asset manifest/iu);
-  assert.match(steps, /OpenTikZ.+catalog.+copy.+user.+project.+edit_contract.+parameter.+invariant.+node nam/iu);
+  assert.match(steps, /ELK graph IR.+sole source of node positions and edge geometry.+author never authors.+hand-edits TikZ coordinates.+tikz_generate_diagram.+compute the layout with ELK.+OpenTikZ.+icon and semantic reference source.+template.+geometry is discarded.+overlap.+changing layout options or node sizes and regenerating/iu);
   assert.match(steps, /Task.+optional.+OMP.+imagegen.+missing node icon.+visible.+useful/iu);
   assert.match(steps, /imagegen.+never.+OpenTikZ.+library.+asset manifest.+raster disclosure/iu);
   assert.match(steps, /tikz_prepare_asset.+normalized.+SHA-256|SHA-256.+tikz_prepare_asset/iu);

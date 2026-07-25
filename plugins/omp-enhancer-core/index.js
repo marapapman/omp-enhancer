@@ -1,4 +1,5 @@
 import { installPluginSkills } from './src/install-skills.js';
+import { installPluginDeps } from './src/install-deps.js';
 import { classifyHostTurn } from './src/host-turn-context.js';
 import { describeNaturalLanguageTask } from './src/task-descriptor.js';
 import {
@@ -151,6 +152,27 @@ export default function registerCoreEnhancer(pi) {
         'Errors: ' + result.errors.length,
         ...(result.warnings.length ? ['Warnings: ' + result.warnings.length] : []),
         ...(result.legacyFindings.length ? ['Legacy gate skill findings: ' + result.legacyFindings.length] : []),
+      ].join(', ');
+      return okResult(summary, result);
+    },
+  });
+  pi.registerTool({
+    name: 'omp_core_install_deps',
+    label: 'Install plugin dependencies',
+    description: 'Run npm install for installed marketplace plugins that declare runtime dependencies (for example elkjs for tikz-helper) so their tools work after install or upgrade. Reports installed, up-to-date, and failed plugins as structured evidence.',
+    defaultInactive: true,
+    approval: 'exec',
+    parameters: z?.object ? z.object({
+      dryRun: z.boolean().optional(),
+      plugin: z.string().optional(),
+    }) : undefined,
+    execute: async (_callId, params = {}) => {
+      const result = await installPluginDeps({ dryRun: params.dryRun ?? false, plugin: params.plugin });
+      const summary = [
+        'Installed: ' + result.installed.length,
+        'Up to date: ' + result.upToDate.length,
+        'Errors: ' + result.errors.length,
+        ...(result.warnings.length ? ['Warnings: ' + result.warnings.length] : []),
       ].join(', ');
       return okResult(summary, result);
     },

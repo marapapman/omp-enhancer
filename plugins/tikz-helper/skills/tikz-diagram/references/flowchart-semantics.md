@@ -8,13 +8,16 @@ Record one row per node with a stable semantic ID, role, exact label, incoming e
 
 Resolve graph-level ambiguity before layout. Every decision must have all meaningful outgoing branches and visible branch labels. Every loop must show its return target. Avoid decorative arrows that have no recorded edge, and avoid orphaned nodes. Keep the user's terminology verbatim where precision matters.
 
-## Map meaning to TikZ
+## Map meaning to ELK IR
 
-1. Choose the smallest matching catalog base. Start with `flowchart` for decisions and loops, `system-block-diagram` for component/data-flow architecture, or another catalog item only when its semantics fit better.
-2. Preserve the selected `edit_contract`, stable node naming, standalone document class, declared libraries, and parameter block. If the template fixes node IDs, keep them and record their semantic mapping; add new semantic names rather than coordinate-derived IDs.
-3. Map roles consistently: terminals to start/end forms, operations to process forms, decisions to diamond forms, stores to datastore forms, and groups to background boundaries.
-4. Lay out the main reading path first. Use aligned rows or columns, consistent spacing, and orthogonal routing where practical. Route exception and loop edges after the main spine; minimize crossings and keep arrowheads and labels clear of nodes.
-5. Size nodes for their exact labels with padding. Separate an icon from its label into distinct placements; do not overlay art on text. Prefer vector icons already in the OpenTikZ catalog.
-6. Compare the finished source back to the semantic graph. Check every node, edge, branch condition, label, direction, group, and requested emphasis before visual review.
+The ELK graph IR is the sole source of node positions and edge geometry. The author never authors, infers, or hand-edits TikZ coordinates. Input nodes must omit x and y and input edges must omit sections and bendPoints; the layout engine computes them. Place elk.algorithm and every authored layout option in the graph-level layoutOptions; the separate tool layoutOptions parameter is not the reliable algorithm channel.
+
+1. Encode nodes: stable id, `width`/`height` sized for the exact label plus padding, and `properties.shape` by role — terminals to `terminal`, operations to `rectangle` or `rounded`, decisions to `diamond`, stores to `cylinder` or `parallelogram`, groups to a parent node with `children`. Put every authored option, including `elk.algorithm`, in the graph-level `layoutOptions`.
+2. Encode edges: single `sources`/`targets` per edge, `properties.arrow` from `->`, `<-`, `<->`, or `-` for none, and `properties.label` for branch conditions. Use `dashed` or `dotted` for the line style.
+3. Choose `elk.algorithm`: `layered` for flows, pipelines, and architecture (default), `mrtree` for trees, `radial` for hub or mind-map layouts, `stress` or `force` for general association. Never recommend the fixed or random algorithms for a coordinate-free figure. Set `elk.direction: RIGHT|DOWN`.
+4. Set generous spacing and edge routing: `elk.spacing.nodeNode` and `elk.spacing.edgeNode` for every algorithm; layered adds `elk.layered.spacing.nodeNodeBetweenLayers` and `elk.layered.spacing.edgeNodeBetweenLayers`. `elk.edgeRouting: ORTHOGONAL` is a layered choice; stress/force use POLYLINE or SPLINES. Do not promise ORTHOGONAL universally.
+5. Groups: model a group as a parent node with `children`; for cross-parent edges require `layered` with `elk.hierarchyHandling: INCLUDE_CHILDREN`, since mixed algorithms do not support cross-parent edges.
+6. Size each node to fit its exact label plus padding before calling the layout engine. Declared dimensions are estimates — the backend ignores ELK-computed label coordinates and does not emit declared dimensions as TikZ minimum sizes, so size generously and require render review. Separate an icon from its label into distinct placements; do not overlay art on text. Prefer vector icons already in the OpenTikZ catalog.
+7. Fix overlap, clipping, or crossings by changing ELK layout options or node sizes and regenerating, never by editing coordinates. Compare the regenerated source back to the semantic graph: check every node, edge, branch condition, label, direction, group, and requested emphasis before visual review.
 
 Generated artwork cannot own or revise topology, edges, arrows, conditions, labels, or text. If an icon is unavailable, use a simple TikZ/vector symbol or a text-only node before considering raster generation.

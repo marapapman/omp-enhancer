@@ -69,6 +69,84 @@ describe('tikz-helper runtime tools', () => {
     assert.equal(Object.hasOwn(tools[3].parameters.shape, 'graph'), true);
   });
 
+  it('tikz_generate_diagram promptGuidelines teach ELK-first coordinate-free authoring', () => {
+    const api = makeExtensionApi();
+    extension(api);
+
+    const tools = api.registerTool.mock.calls.map((call) => call.arguments[0]);
+    const generate = tools.find((tool) => tool.name === 'tikz_generate_diagram');
+    assert.ok(generate, 'tikz_generate_diagram must be registered');
+    assert.ok(Array.isArray(generate.promptGuidelines), 'tikz_generate_diagram must expose promptGuidelines');
+    const guidelines = generate.promptGuidelines.join('\n');
+
+    // P3: input must omit x/y/sections/bendPoints
+    assert.match(
+      guidelines,
+      /Input nodes must omit x and y and input edges must omit sections and bendPoints; the layout engine computes them\./,
+      'promptGuidelines must embed P3 (coordinate-free input)',
+    );
+    // P7: size nodes for their exact label plus padding
+    assert.match(
+      guidelines,
+      /Size each node to fit its exact label plus padding before calling the layout engine\./,
+      'promptGuidelines must embed P7 (size for label plus padding)',
+    );
+    // P8: fix overlap by changing options/sizes and regenerating, never editing coordinates
+    assert.match(
+      guidelines,
+      /Fix overlap, clipping, or crossings by changing ELK layout options or node sizes and regenerating, never by editing coordinates\./,
+      'promptGuidelines must embed P8 (regenerate, never edit coordinates)',
+    );
+    // P9: graph-level layoutOptions is the algorithm channel
+    assert.match(
+      guidelines,
+      /Place elk\.algorithm and every authored layout option in the graph-level layoutOptions; the separate tool layoutOptions parameter is not the reliable algorithm channel\./,
+      'promptGuidelines must embed P9 (graph-level layoutOptions)',
+    );
+    // P10: arrows and line styles
+    assert.match(
+      guidelines,
+      /Use - for no arrow and dashed or dotted for line style\./,
+      'promptGuidelines must embed P10 (arrow/line-style vocabulary)',
+    );
+    // P11: never recommend fixed or random
+    assert.match(
+      guidelines,
+      /Never recommend the fixed or random algorithms for a coordinate-free figure\./,
+      'promptGuidelines must embed P11 (no fixed/random)',
+    );
+    // coordinate prohibition: never author/hand-edit TikZ coordinates
+    assert.match(
+      guidelines,
+      /never (?:author|infer|hand-edit) TikZ coordinates/i,
+      'promptGuidelines must prohibit authoring/hand-editing TikZ coordinates',
+    );
+    // supported algorithm set includes layered/mrtree/radial/stress/force but excludes fixed/random
+    assert.match(guidelines, /layered/i, 'promptGuidelines must name layered');
+    assert.match(guidelines, /mrtree/i, 'promptGuidelines must name mrtree');
+    assert.match(guidelines, /radial/i, 'promptGuidelines must name radial');
+    assert.match(guidelines, /stress/i, 'promptGuidelines must name stress');
+    assert.match(guidelines, /force/i, 'promptGuidelines must name force');
+    // P11 already asserts fixed/random are never recommended; confirm the exclusion is explicit
+    assert.match(
+      guidelines,
+      /Never recommend the fixed or random algorithms/,
+      'promptGuidelines must explicitly exclude fixed and random',
+    );
+    // regeneration rule (P8 restated as the repair loop)
+    assert.match(
+      guidelines,
+      /regenerating, never by editing coordinates/,
+      'promptGuidelines must state the regeneration repair rule',
+    );
+    // P3 honesty caveat: declared node dimensions are estimates
+    assert.match(
+      guidelines,
+      /Declared node width and height are estimates because the backend ignores ELK label positions and does not emit them as TikZ minimum sizes, so size generously and verify with a render\./,
+      'promptGuidelines must embed the sizing-caveat (declared dimensions are estimates)',
+    );
+  });
+
   it('returns structured tool success and parameter failures', async () => {
     const api = makeExtensionApi();
     extension(api);

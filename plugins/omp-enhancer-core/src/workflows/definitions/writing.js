@@ -476,7 +476,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-2",
-        "text": "Have designer search the pinned OpenTikZ catalog, select the smallest matching icon, template, or example, copy it into the user project without modifying the library, read the chosen template's edit_contract, and prepare the semantic figure spec plus asset manifest while preserving parameters, invariants, palette roles, and semantic node naming."
+        "text": "Have designer author the semantic graph as an ELK graph IR from the semantic figure spec: stable IDs, nodes each sized to fit its exact label plus padding, edges with arrow, label, and branch, and graph-level layoutOptions carrying elk.algorithm, elk.direction, and generous spacing. The ELK graph IR is the sole source of node positions and edge geometry; the author never authors, infers, or hand-edits TikZ coordinates. Designer calls tikz_generate_diagram to compute the layout with ELK and writes the returned standalone TikZ source. Designer may search the pinned OpenTikZ catalog for an icon and semantic reference source only and copy a selected icon into the user project without modifying the library; template and example figure geometry is discarded, never copied or used to infer coordinates."
       },
       {
         "id": "step-3",
@@ -484,7 +484,7 @@ export const writingWorkflows = [
       },
       {
         "id": "step-4",
-        "text": "Have designer create or revise the project-owned standalone TikZ source from the copied base and semantic figure spec, integrate only manifest-listed assets, keep generated icons separate from labels with explicit padding, preserve the edit_contract, and return the source, spec, manifest, and exact dependency set."
+        "text": "Have designer apply geometry findings by fixing overlap, clipping, or crossings, then changing layout options or node sizes and regenerating via tikz_generate_diagram, never by editing coordinates. Artwork or content-only edits may change node contents but never the generated coordinates. Designer integrates only manifest-listed assets, keeps generated icons separate from labels with explicit padding, preserves the edit_contract, and returns the source, spec, manifest, and exact dependency set."
       },
       {
         "id": "step-5",
@@ -505,7 +505,8 @@ export const writingWorkflows = [
     ],
     "scopeNotes": [
       ...VISUAL_AGENT_SCOPE_NOTES,
-      "The pinned OpenTikZ library is read-only; copy selected content into the declared user-project target before editing it.",
+      "The pinned OpenTikZ library is read-only; copy a selected icon into the declared user-project target, but OpenTikZ remains an icon and semantic reference source only and template geometry is never copied or used to infer coordinates.",
+      "The ELK graph IR is the sole source of node positions and edge geometry; the author never authors, infers, or hand-edits TikZ coordinates, and overlap or clipping is fixed by changing ELK layout options or node sizes and regenerating, never by editing coordinates.",
       "Main authorizes optional OMP imagegen calls and external-effect decisions during initial task setup; task executes imagegen and rendering under that authorization. Designer and visioner do not independently authorize external effects.",
       "Imagegen is optional and its visibility or activation is not permission, a workflow requirement, or a reason to invent an asset; a native TikZ or OpenTikZ fallback remains valid.",
       "The fixed renderer never runs a user-supplied or project-configured command and never treats compile success as visual approval.",
@@ -516,7 +517,7 @@ export const writingWorkflows = [
       "tikz-diagram"
     ],
     "qualityChecks": [
-      "semantic completeness and stable IDs, OpenTikZ edit-contract and dependency preservation, asset provenance and portability, safe standalone compile, revision-bound PDF and SVG, current-revision full-size and 60% raster evidence, independent visual review, icon legibility, explicit raster disclosure, and requested paper or slide fit"
+      "semantic completeness and stable IDs, ELK graph IR as the sole source of geometry with edit-contract and icon preservation, asset provenance and portability, safe standalone compile, revision-bound PDF and SVG, current-revision full-size and 60% raster evidence, independent visual review, icon legibility, explicit raster disclosure, and requested paper or slide fit"
     ],
     "riskNotes": [
       "Generated raster icons reduce all-vector scalability and remain separate project assets whose provenance and raster status must stay visible.",
@@ -528,9 +529,9 @@ export const writingWorkflows = [
       "visioner"
     ],
     "delegation": [
-      "step-2: designer owns bounded OpenTikZ discovery, copy selection, semantic figure spec, asset manifest, and missing-icon identification without modifying the library",
+      "step-2: designer owns ELK graph IR authoring, the tikz_generate_diagram layout call, bounded OpenTikZ icon discovery, the semantic figure spec, and the asset manifest without modifying the library",
       "step-3: task owns optional imagegen and prepared-asset execution when authorized by Main",
-      "step-4: designer owns the project TikZ source and manifest-listed asset integration while preserving the selected edit contract",
+      "step-4: designer owns the IR-driven TikZ source: applies geometry findings by changing ELK layout options or node sizes and regenerates via tikz_generate_diagram, integrating manifest-listed assets while preserving the selected edit contract",
       "step-5: task invokes the fixed tikz_render renderer for every revision",
       "step-6: visioner independently reviews the fresh full-size and 60% raster evidence for the current revision against the supplied spec and manifest",
       "step-7: designer applies visioner findings, task rerenders, and visioner performs at most one fresh affected review after rerendering"
