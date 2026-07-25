@@ -108,17 +108,52 @@ function normalizeAlgorithm(graph) {
   return algorithm;
 }
 
+const DEFAULT_IMPORT_ELK = () => import('elkjs/lib/main.js');
+
+export const ELK_INSTALL_GUIDANCE = Object.freeze({
+  code: 'ELK_NOT_INSTALLED',
+  install: Object.freeze({
+    command: 'npm run install:deps',
+    tool: 'omp_core_install_deps',
+    package: 'elkjs',
+  }),
+  directive: 'ELK (elkjs) is required to compute diagram layout. Install it, then call tikz_generate_diagram again. Never fall back to hand-authored TikZ coordinates: the ELK graph IR is the sole source of node positions and edge geometry.',
+});
+
+export async function checkElkEnvironment({ importElk = DEFAULT_IMPORT_ELK } = {}) {
+  try {
+    await importElk();
+    return { available: true, code: 'ELK_AVAILABLE' };
+  } catch (error) {
+    return {
+      available: false,
+      code: ELK_INSTALL_GUIDANCE.code,
+      error: error instanceof Error ? error.message : String(error),
+      install: ELK_INSTALL_GUIDANCE.install,
+      directive: ELK_INSTALL_GUIDANCE.directive,
+    };
+  }
+}
+
 let elkModule = null;
 
-async function loadElk() {
-  if (elkModule) return elkModule;
+async function loadElk(importElk) {
+  const useDefault = importElk === undefined;
+  const importer = useDefault ? DEFAULT_IMPORT_ELK : importElk;
+  if (useDefault && elkModule) return elkModule;
+  let mod;
   try {
-    const { default: ELK } = await import('elkjs/lib/main.js');
-    elkModule = ELK;
-    return ELK;
+    mod = await importer();
   } catch (error) {
-    throw new TikzRuntimeError('ELK_LAYOUT_ERROR', `Failed to load elkjs: ${error instanceof Error ? error.message : String(error)}`);
+    throw new TikzRuntimeError(
+      ELK_INSTALL_GUIDANCE.code,
+      `The ELK layout engine (elkjs) is not installed: ${error instanceof Error ? error.message : String(error)}. ${ELK_INSTALL_GUIDANCE.directive}`,
+      { install: ELK_INSTALL_GUIDANCE.install, directive: ELK_INSTALL_GUIDANCE.directive },
+    );
   }
+  const ELK = mod?.default ?? mod;
+  if (useDefault) elkModule = ELK;
+  return ELK;
 }
 
 export function createElk(options = {}) {
@@ -133,7 +168,7 @@ export async function computeLayout(graph, options = {}) {
   validateGraph(graph);
 
   const algorithm = normalizeAlgorithm(graph);
-  const ELK = await loadElk();
+  const ELK = await loadElk(options.importElk);
   const elk = new ELK();
 
   const graphClone = structuredClone(graph);

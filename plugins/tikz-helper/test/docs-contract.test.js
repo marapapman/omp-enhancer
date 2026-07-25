@@ -69,3 +69,10 @@ test('docs/TIKZ_PLUGIN.md preserves the designer/visioner-unavailable evidence-g
     /designer (?:is )?unavailable.+unfulfilled checkpoint.+Agent-availability fallback.+visioner (?:is )?unavailable.+missing independent current-revision visual evidence/is,
   );
 });
+
+const P_ELK_CHECK = 'If ELK is not installed, tikz_generate_diagram returns ELK_NOT_INSTALLED with install instructions; install elkjs and regenerate from the ELK graph IR rather than hand-authoring TikZ coordinates.';
+
+test('README.md and docs/TIKZ_PLUGIN.md embed the ELK environment check phrase', () => {
+  assert.ok(readme.includes(P_ELK_CHECK), 'README must contain P_ELK_CHECK verbatim');
+  assert.ok(designDoc.includes(P_ELK_CHECK), 'TIKZ_PLUGIN.md must contain P_ELK_CHECK verbatim');
+});

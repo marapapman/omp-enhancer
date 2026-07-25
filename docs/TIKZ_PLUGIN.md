@@ -33,7 +33,7 @@ The initial tool group is `tikz`, exposed through `/enhancer-tools enable tikz`:
 - `tikz_catalog_search` (`read`): search the pinned catalog and return bounded structured candidates, including source, metadata, preview, and edit-contract data.
 - `tikz_prepare_asset` (`exec`): validate a local PNG/JPEG/WebP image, normalize it through fixed bounded ImageMagick arguments to a project-local PNG, name it by content hash, and update an asset manifest. It never invokes imagegen or a network provider.
 - `tikz_render` (`exec`): validate a project-local TikZ source, run fixed no-shell-escape pdfLaTeX compilation and conversion using argument arrays, and return current-revision PDF/SVG/full-size/60%-scale evidence.
-- `tikz_generate_diagram` (`read`): accept an ELK graph IR, compute node positions and edge geometry via elkjs, and emit a compilable standalone TikZ source. It is the sole tool that produces figure geometry; input nodes omit `x`/`y` and input edges omit `sections`/`bendPoints`.
+- `tikz_generate_diagram` (`read`): accept an ELK graph IR, compute node positions and edge geometry via elkjs, and emit a compilable standalone TikZ source. It is the sole tool that produces figure geometry; input nodes omit `x`/`y` and input edges omit `sections`/`bendPoints`. If ELK is not installed, tikz_generate_diagram returns ELK_NOT_INSTALLED with install instructions; install elkjs and regenerate from the ELK graph IR rather than hand-authoring TikZ coordinates.
 
 Every tool is `defaultInactive`. Activation does not grant filesystem, command, network, provider, or publication permission. Findings are structured evidence, not completion permission.
 

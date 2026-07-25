@@ -84,6 +84,7 @@ export { generateTikz, computeLayout, elkToTikz };
 export { prepareAsset } from './src/asset-prepare.js';
 export { searchCatalog } from './src/catalog-search.js';
 export { renderTikz, runBoundedCommand } from './src/render-tikz.js';
+export { checkElkEnvironment, ELK_INSTALL_GUIDANCE } from './src/elk-layout.js';
 
 export default function registerTikzHelper(omp) {
   const z = omp.zod.z;
@@ -176,6 +177,7 @@ export default function registerTikzHelper(omp) {
       'Model groups as parent nodes with children. For edges that cross parent boundaries, use layered with elk.hierarchyHandling set to INCLUDE_CHILDREN; mixed algorithms do not support cross-parent edges.',
       'Place elk.algorithm and every authored layout option in the graph-level layoutOptions; the separate tool layoutOptions parameter is not the reliable algorithm channel. Declared node width and height are estimates because the backend ignores ELK label positions and does not emit them as TikZ minimum sizes, so size generously and verify with a render.',
       'Fix overlap, clipping, or crossings by changing ELK layout options or node sizes and regenerating, never by editing coordinates. The tool returns the generated TikZ source and the positioned graph metadata; write the returned .tex to the project path and compile it with tikz_render. Export the tool metadata: algorithm used, node count, edge count.',
+      'Before generating, confirm the ELK layout engine (elkjs) is installed; if the tool returns ELK_NOT_INSTALLED, install it with `npm run install:deps` (or the `omp_core_install_deps` tool) and call tikz_generate_diagram again. Never fall back to hand-authored TikZ coordinates when ELK is missing: install ELK first, then regenerate from the ELK graph IR.',
     ],
     parameters: generateParameters(z),
     async execute(_toolCallId, params) {

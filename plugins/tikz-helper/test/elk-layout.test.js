@@ -1,7 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { computeLayout, createElk } from '../src/elk-layout.js';
+import { computeLayout, createElk, checkElkEnvironment, ELK_INSTALL_GUIDANCE } from '../src/elk-layout.js';
+import { generateTikz } from '../src/generate-tikz.js';
 
 describe('elk-layout: input validation', () => {
   it('rejects null or non-object graph', async () => {
@@ -139,5 +140,59 @@ describe('elk-layout: factory', () => {
   it('creates a valid options object', () => {
     const instance = createElk({ defaultLayoutOptions: { 'elk.spacing.nodeNode': '50' } });
     assert.deepEqual(instance.options.defaultLayoutOptions, { 'elk.spacing.nodeNode': '50' });
+  });
+});
+
+describe('elk-layout: ELK environment check', () => {
+  const graph = {
+    id: 'g',
+    children: [
+      { id: 'a', width: 40, height: 20 },
+      { id: 'b', width: 40, height: 20 },
+    ],
+    edges: [{ id: 'e1', sources: ['a'], targets: ['b'] }],
+  };
+  const fail = async () => { throw new Error("Cannot find package 'elkjs'"); };
+
+  it('reports ELK_AVAILABLE when elkjs can be imported', async () => {
+    const r = await checkElkEnvironment();
+    assert.equal(r.available, true);
+    assert.equal(r.code, 'ELK_AVAILABLE');
+  });
+
+  it('reports ELK_NOT_INSTALLED with install guidance when the importer fails', async () => {
+    const r = await checkElkEnvironment({ importElk: fail });
+    assert.equal(r.available, false);
+    assert.equal(r.code, 'ELK_NOT_INSTALLED');
+    assert.equal(r.install.command, 'npm run install:deps');
+    assert.equal(r.install.tool, 'omp_core_install_deps');
+    assert.match(r.directive, /Never fall back to hand-authored TikZ coordinates/);
+    assert.ok(typeof r.error === 'string');
+  });
+
+  it('exposes a frozen ELK_INSTALL_GUIDANCE with the install seam', () => {
+    assert.equal(ELK_INSTALL_GUIDANCE.code, 'ELK_NOT_INSTALLED');
+    assert.equal(ELK_INSTALL_GUIDANCE.install.command, 'npm run install:deps');
+    assert.equal(ELK_INSTALL_GUIDANCE.install.tool, 'omp_core_install_deps');
+    assert.equal(ELK_INSTALL_GUIDANCE.install.package, 'elkjs');
+    assert.match(ELK_INSTALL_GUIDANCE.directive, /Never fall back to hand-authored TikZ coordinates/);
+    assert.ok(Object.isFrozen(ELK_INSTALL_GUIDANCE));
+    assert.ok(Object.isFrozen(ELK_INSTALL_GUIDANCE.install));
+  });
+
+  it('computeLayout rejects with ELK_NOT_INSTALLED guidance when elkjs is missing', async () => {
+    await assert.rejects(
+      () => computeLayout(graph, { importElk: fail }),
+      (e) => e.code === 'ELK_NOT_INSTALLED'
+        && e.details.install.command === 'npm run install:deps'
+        && /Never fall back to hand-authored TikZ coordinates/.test(e.message),
+    );
+  });
+
+  it('generateTikz rejects with ELK_NOT_INSTALLED when elkjs is missing', async () => {
+    await assert.rejects(
+      () => generateTikz({ graph }, { importElk: fail }),
+      (e) => e.code === 'ELK_NOT_INSTALLED',
+    );
   });
 });

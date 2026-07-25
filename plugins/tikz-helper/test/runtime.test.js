@@ -145,6 +145,10 @@ describe('tikz-helper runtime tools', () => {
       /Declared node width and height are estimates because the backend ignores ELK label positions and does not emit them as TikZ minimum sizes, so size generously and verify with a render\./,
       'promptGuidelines must embed the sizing-caveat (declared dimensions are estimates)',
     );
+    // ELK environment check + install-before-draw guidance (no hand-draw fallback)
+    assert.match(guidelines, /ELK_NOT_INSTALLED/);
+    assert.match(guidelines, /npm run install:deps/);
+    assert.match(guidelines, /Never fall back to hand-authored TikZ coordinates when ELK is missing/);
   });
 
   it('returns structured tool success and parameter failures', async () => {

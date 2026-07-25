@@ -22,7 +22,7 @@ export async function generateTikz(input = {}, options = {}) {
   validateProperties(graph);
 
   // Step 1: Compute layout via elkjs
-  const layoutResult = await computeLayout(graph, { layoutOptions });
+  const layoutResult = await computeLayout(graph, { layoutOptions, importElk: options.importElk });
 
   // Step 2: Generate TikZ from positioned graph
   const tikzSource = elkToTikz(layoutResult.graph, {
