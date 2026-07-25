@@ -33,6 +33,19 @@ describe('tikz-backend: validation', () => {
       (error) => error.code === 'TIKZ_GENERATION_ERROR' && error.message.includes('children'),
     );
   });
+  it('rejects nodes missing position coordinates after layout', () => {
+    const graph = {
+      id: 'no-pos',
+      children: [
+        { id: 'A', width: 80, height: 40 },  // missing x, y
+      ],
+    };
+    assert.throws(
+      () => elkToTikz(graph),
+      (error) => error.code === 'INVALID_GRAPH_IR',
+      'must reject nodes without x/y after layout',
+    );
+  });
 });
 
 describe('tikz-backend: basic node and edge output', () => {

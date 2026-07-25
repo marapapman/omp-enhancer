@@ -1,25 +1,10 @@
 import { computeLayout } from './elk-layout.js';
 import { elkToTikz } from './tikz-backend.js';
-import { TikzRuntimeError } from './runtime-error.js';
-
-function validateProperties(graph) {
-  if (!graph || typeof graph !== 'object') {
-    throw new TikzRuntimeError('INVALID_GRAPH_IR', 'Graph must be a non-null object.');
-  }
-  if (typeof graph.id !== 'string' || graph.id.trim() === '') {
-    throw new TikzRuntimeError('INVALID_GRAPH_IR', 'Graph must have a non-empty string id.');
-  }
-  if (!Array.isArray(graph.children) || graph.children.length === 0) {
-    throw new TikzRuntimeError('INVALID_GRAPH_IR', 'Graph must have at least one child node.');
-  }
-}
 
 export async function generateTikz(input = {}, options = {}) {
   const graph = input.graph;
   const tikzOptions = input.tikzOptions ?? {};
   const layoutOptions = input.layoutOptions ?? {};
-
-  validateProperties(graph);
 
   // Step 1: Compute layout via elkjs
   const layoutResult = await computeLayout(graph, { layoutOptions, importElk: options.importElk });
@@ -37,6 +22,7 @@ export async function generateTikz(input = {}, options = {}) {
   return {
     ok: true,
     tikz: tikzSource,
+    ir: JSON.stringify(layoutResult.graph, null, 2),
     graph: layoutResult.graph,
     metadata: {
       ...layoutResult.metadata,

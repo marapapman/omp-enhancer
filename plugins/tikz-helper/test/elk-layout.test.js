@@ -116,6 +116,37 @@ describe('elk-layout: computeLayout integration', () => {
     assert.equal(result.metadata.algorithm, 'stress');
   });
 
+  it('default layered algorithm propagates through merge when graph has no layoutOptions', async () => {
+    const graph = {
+      id: 'no-opts',
+      children: [
+        { id: 'A', width: 80, height: 40 },
+        { id: 'B', width: 80, height: 40 },
+      ],
+      edges: [{ id: 'e1', sources: ['A'], targets: ['B'] }],
+    };
+    // Must not have layoutOptions at all
+    assert.equal(graph.layoutOptions, undefined);
+    const result = await computeLayout(graph);
+    assert.equal(result.metadata.algorithm, 'layered', 'default layered algorithm must be applied');
+  });
+
+  it('rejects graphs exceeding maximum node count', async () => {
+    const nodes = [];
+    for (let i = 0; i < 501; i++) {
+      nodes.push({ id: `n${i}`, width: 80, height: 40 });
+    }
+    const graph = {
+      id: 'too-large',
+      children: nodes,
+    };
+    await assert.rejects(
+      computeLayout(graph),
+      (error) => error.code === 'GRAPH_TOO_LARGE',
+      'must reject GRAPH_TOO_LARGE for 501 nodes',
+    );
+  });
+
   it('reports execution time', async () => {
     const graph = {
       id: 'time-test',

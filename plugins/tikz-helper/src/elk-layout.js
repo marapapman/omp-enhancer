@@ -1,4 +1,32 @@
 import { TikzRuntimeError } from './runtime-error.js';
+const SERVER_DEFAULT_LAYOUT_OPTIONS = Object.freeze({
+  'elk.spacing.nodeNode': 50,
+  'elk.layered.spacing.nodeNodeBetweenLayers': 50,
+  'elk.spacing.edgeNode': 25,
+  'elk.layered.spacing.edgeNodeBetweenLayers': 25,
+  'elk.spacing.edgeEdge': 15,
+  'elk.spacing.portPort': 15,
+  'elk.spacing.labelNode': 10,
+  'elk.spacing.edgeLabel': 12,
+  'elk.spacing.componentComponent': 40,
+  'elk.padding': '[top=20,left=20,bottom=20,right=20]',
+  'elk.nodeSize.constraints': 'NODE_LABELS, PORTS, PORT_LABELS, MINIMUM_SIZE',
+  'elk.nodeSize.minimum': '(80, 40)',
+  'elk.layered.unnecessaryBendpoints': true,
+  'elk.layered.compaction.postCompaction.strategy': 'EDGE_LENGTH',
+  'elk.layered.compaction.connectedComponents': true,
+});
+
+
+function countNodes(node) {
+  let count = 1;
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) {
+      count += countNodes(child);
+    }
+  }
+  return count;
+}
 
 const VALID_LAYOUT_ALGORITHMS = new Set([
   'layered', 'stress', 'mrtree', 'radial', 'force', 'disco', 'box', 'fixed', 'random',
@@ -166,6 +194,11 @@ export async function computeLayout(graph, options = {}) {
   }
 
   validateGraph(graph);
+  const nodeCount = countNodes(graph);
+  const edgeCount = (graph.edges ?? []).length;
+  if (nodeCount > 500 || edgeCount > 1000) {
+    throw new TikzRuntimeError('GRAPH_TOO_LARGE', `Graph has ${nodeCount} nodes and ${edgeCount} edges; maximum is 500 nodes and 1000 edges.`);
+  }
 
   const algorithm = normalizeAlgorithm(graph);
   const ELK = await loadElk(options.importElk);
@@ -179,7 +212,9 @@ export async function computeLayout(graph, options = {}) {
     graphClone.layoutOptions['elk.algorithm'] = algorithm;
   }
 
-  const layoutOptions = { ...(options.layoutOptions ?? {}) };
+  const rootIrLayoutOptions = graphClone.layoutOptions ?? {};
+  const layoutOptions = {};
+  Object.assign(layoutOptions, SERVER_DEFAULT_LAYOUT_OPTIONS, options.layoutOptions ?? {}, rootIrLayoutOptions);
 
   // Backend assumes container-relative (PARENT) coordinates — force PARENT
   if (layoutOptions['json.edgeCoords'] && layoutOptions['json.edgeCoords'] !== 'PARENT') {

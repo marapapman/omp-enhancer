@@ -76,3 +76,10 @@ test('README.md and docs/TIKZ_PLUGIN.md embed the ELK environment check phrase',
   assert.ok(readme.includes(P_ELK_CHECK), 'README must contain P_ELK_CHECK verbatim');
   assert.ok(designDoc.includes(P_ELK_CHECK), 'TIKZ_PLUGIN.md must contain P_ELK_CHECK verbatim');
 });
+
+const P_IR_EXPORT = 'tikz_generate_diagram also returns the positioned ELK graph IR as standard ELK JSON; write it to a project-local .elk.json to edit in an ELK-compatible visual editor, then feed the edited IR back into tikz_generate_diagram to regenerate the TikZ.';
+
+test('README.md and docs/TIKZ_PLUGIN.md embed the IR export round-trip phrase', () => {
+  assert.ok(readme.includes(P_IR_EXPORT), 'README must contain P_IR_EXPORT verbatim');
+  assert.ok(designDoc.includes(P_IR_EXPORT), 'TIKZ_PLUGIN.md must contain P_IR_EXPORT verbatim');
+});

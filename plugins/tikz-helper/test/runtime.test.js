@@ -17,6 +17,7 @@ import extension from '../index.js';
 import { searchCatalog } from '../src/catalog-search.js';
 import { prepareAsset } from '../src/asset-prepare.js';
 import { renderTikz, runBoundedCommand } from '../src/render-tikz.js';
+import { computeLayout } from '../src/elk-layout.js';
 
 const fixtureCatalog = fileURLToPath(new URL('./fixtures/catalog.json', import.meta.url));
 
@@ -103,6 +104,17 @@ describe('tikz-helper runtime tools', () => {
       /Place elk\.algorithm and every authored layout option in the graph-level layoutOptions; the separate tool layoutOptions parameter is not the reliable algorithm channel\./,
       'promptGuidelines must embed P9 (graph-level layoutOptions)',
     );
+    // engine default spacing (replaces old "Set generous spacing with elk.spacing" guidance)
+    assert.match(
+      guidelines,
+      /engine applies generous default spacing/i,
+      'promptGuidelines must state engine applies generous default spacing',
+    );
+    assert.doesNotMatch(
+      guidelines,
+      /Set generous spacing with elk\.spacing/,
+      'promptGuidelines must not instruct manual spacing',
+    );
     // P10: arrows and line styles
     assert.match(
       guidelines,
@@ -149,6 +161,12 @@ describe('tikz-helper runtime tools', () => {
     assert.match(guidelines, /ELK_NOT_INSTALLED/);
     assert.match(guidelines, /npm run install:deps/);
     assert.match(guidelines, /Never fall back to hand-authored TikZ coordinates when ELK is missing/);
+    // IR export round-trip guidance (visual-editor editing)
+    assert.match(guidelines, /standard ELK JSON in the `ir` field/);
+    assert.match(guidelines, /<figure>\.elk\.json/);
+    assert.match(guidelines, /feed the edited IR back as the `graph` input to tikz_generate_diagram to regenerate/);
+    assert.match(guidelines, /re-importing recomputes layout via ELK/i);
+    assert.match(guidelines, /node positions are recomputed/);
   });
 
   it('returns structured tool success and parameter failures', async () => {
@@ -535,6 +553,234 @@ describe('TikZ rendering', () => {
         assert.equal(spawnOptions.detached, true, scenario.name);
         assert.deepEqual(groupKill.mock.calls[0].arguments, [-child.pid, 'SIGKILL'], scenario.name);
         assert.equal(child.kill.mock.callCount(), 0, scenario.name);
+      }
+    }
+  });
+});
+
+describe('layout defaults', () => {
+  function makeNode(id, width = 120, height = 50) {
+    return { id, width, height };
+  }
+
+  function makeEdge(id, source, target) {
+    return { id, sources: [source], targets: [target] };
+  }
+
+  function boundingBox(node) {
+    return { x: node.x, y: node.y, w: node.width, h: node.height };
+  }
+
+  function overlaps(a, b) {
+    return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+  }
+
+  it('5a: server defaults produce non-overlapping layout with minimum node sizes', async () => {
+    const graph = {
+      id: 'test-5a',
+      children: [
+        makeNode('A', 120, 50),
+        makeNode('B', 120, 50),
+        makeNode('C', 120, 50),
+      ],
+      edges: [
+        makeEdge('e1', 'A', 'B'),
+        makeEdge('e2', 'B', 'C'),
+      ],
+    };
+
+    const result = await computeLayout(graph);
+    const nodes = result.graph.children;
+
+    // All nodes have finite coordinates
+    for (const node of nodes) {
+      assert.equal(typeof node.x, 'number');
+      assert.equal(typeof node.y, 'number');
+      assert.ok(Number.isFinite(node.x));
+      assert.ok(Number.isFinite(node.y));
+    }
+
+    // No pair of bounding boxes overlaps
+    const boxes = nodes.map(boundingBox);
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        assert.equal(overlaps(boxes[i], boxes[j]), false, `nodes ${nodes[i].id} and ${nodes[j].id} overlap`);
+      }
+    }
+
+    // Each node width >= 80 and height >= 40 (minimum size enforced)
+    for (const node of nodes) {
+      assert.ok(node.width >= 80, `node ${node.id} width ${node.width} < 80`);
+      assert.ok(node.height >= 40, `node ${node.id} height ${node.height} < 40`);
+    }
+
+    // Default algorithm is layered
+    assert.equal(result.metadata.algorithm, 'layered');
+  });
+
+  it('5b: root-level IR layoutOptions override server defaults', async () => {
+    const graph = {
+      id: 'test-5b',
+      layoutOptions: {
+        'elk.algorithm': 'stress',
+        'elk.layered.spacing.nodeNodeBetweenLayers': 200,
+      },
+      children: [
+        makeNode('A', 120, 50),
+        makeNode('B', 120, 50),
+        makeNode('C', 120, 50),
+      ],
+      edges: [
+        makeEdge('e1', 'A', 'B'),
+        makeEdge('e2', 'B', 'C'),
+      ],
+    };
+
+    const result = await computeLayout(graph);
+    assert.equal(result.metadata.algorithm, 'stress', 'IR algorithm must override default');
+
+    // Under stress, the gap is governed by elk.spacing.nodeNode (not between-layer keys)
+    const nodes = result.graph.children;
+    const boxes = nodes.map(boundingBox);
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        assert.equal(overlaps(boxes[i], boxes[j]), false, `nodes ${nodes[i].id} and ${nodes[j].id} overlap`);
+      }
+    }
+  });
+  
+  it('5c: disconnected components are compacted without overlap', async () => {
+    const graph = {
+      id: 'test-5c',
+      children: [
+        makeNode('A', 120, 50),
+        makeNode('B', 120, 50),
+        makeNode('C', 120, 50),
+        makeNode('D', 120, 50),
+      ],
+      edges: [
+        makeEdge('e1', 'A', 'B'),
+        makeEdge('e2', 'C', 'D'),
+      ],
+    };
+
+    const result = await computeLayout(graph);
+    const nodes = result.graph.children;
+
+    // All nodes have finite coordinates
+    for (const node of nodes) {
+      assert.ok(Number.isFinite(node.x), `node ${node.id} x is not finite`);
+      assert.ok(Number.isFinite(node.y), `node ${node.id} y is not finite`);
+    }
+
+    // No pair of bounding boxes overlaps
+    const boxes = nodes.map(boundingBox);
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        assert.equal(overlaps(boxes[i], boxes[j]), false, `nodes ${nodes[i].id} and ${nodes[j].id} overlap`);
+      }
+    }
+
+    // Edges have sections (routed, not empty)
+    for (const edge of result.graph.edges) {
+      assert.ok(Array.isArray(edge.sections), `edge ${edge.id} has no sections`);
+      assert.ok(edge.sections.length > 0, `edge ${edge.id} has empty sections`);
+    }
+  });
+
+  it('5d: defaults survive across calls (no mutation leak)', async () => {
+    const graph1 = {
+      id: 'test-5d-1',
+      layoutOptions: { 'elk.spacing.nodeNode': 999 },
+      children: [makeNode('A', 120, 50), makeNode('B', 120, 50)],
+      edges: [makeEdge('e1', 'A', 'B')],
+    };
+
+    const graph2 = {
+      id: 'test-5d-2',
+      children: [makeNode('C', 120, 50), makeNode('D', 120, 50)],
+      edges: [makeEdge('e2', 'C', 'D')],
+    };
+
+    await computeLayout(graph1);
+    const result2 = await computeLayout(graph2);
+
+    const nodes2 = result2.graph.children;
+    // Measure actual gap: distance from right edge of first node to left edge of second
+    const firstRight = nodes2[0].x + nodes2[0].width;
+    const secondLeft = nodes2[1].x;
+    const gap = secondLeft - firstRight;
+    // Default nodeNode is 50; if leaked from call 1 (999), gap would be ~999
+    // Allow tolerance: gap should be far below 999 if no mutation leak
+    assert.ok(gap < 200, `gap ${gap} >= 200, may have leaked large spacing from call 1`);
+    assert.ok(gap > 0, `gap ${gap} <= 0, nodes overlap`);
+  });
+  
+  it('5e: compound nodes with ports get adequate sizing', async () => {
+    const graph = {
+      id: 'test-5e',
+      children: [
+        {
+          id: 'parent',
+          width: 100,
+          height: 100,
+          children: [
+            { id: 'child1', width: 60, height: 30 },
+            { id: 'child2', width: 60, height: 30 },
+          ],
+          ports: [
+            { id: 'port1', width: 10, height: 10 },
+          ],
+        },
+      ],
+    };
+
+    const result = await computeLayout(graph);
+    const parent = result.graph.children[0];
+
+    // Parent node dimensions are large enough to contain children + port
+    assert.ok(parent.width >= 60, `parent width ${parent.width} < 60`);
+    assert.ok(parent.height >= 30, `parent height ${parent.height} < 30`);
+    assert.ok(Number.isFinite(parent.x));
+    assert.ok(Number.isFinite(parent.y));
+  });
+
+  it('5f: node size respects MINIMUM_SIZE constraint when labels are present', async () => {
+    // ELK in elkjs does not measure label text dimensions, so NODE_LABELS
+    // alone does not expand nodes based on content. However, the server
+    // defaults include MINIMUM_SIZE (80,40) which floors all nodes.
+    // This test verifies that nodes with labels never collapse below the minimum.
+    const graph = {
+      id: 'test-5f',
+      children: [
+        { id: 'A', width: 5, height: 5, labels: [{ text: 'A label' }] },
+        { id: 'B', width: 5, height: 5, labels: [{ text: 'Another label' }] },
+      ],
+      edges: [
+        { id: 'e1', sources: ['A'], targets: ['B'] },
+      ],
+    };
+
+    const result = await computeLayout(graph);
+    const nodes = result.graph.children;
+
+    // All nodes have finite coordinates
+    for (const node of nodes) {
+      assert.ok(Number.isFinite(node.x), `node ${node.id} x is not finite`);
+      assert.ok(Number.isFinite(node.y), `node ${node.id} y is not finite`);
+    }
+
+    // NODE_LABELS alone doesn't expand in elkjs, but MINIMUM_SIZE floors to 80x40
+    for (const node of nodes) {
+      assert.ok(node.width >= 80, `node ${node.id} width ${node.width} < 80 (MINIMUM_SIZE not enforced)`);
+      assert.ok(node.height >= 40, `node ${node.id} height ${node.height} < 40 (MINIMUM_SIZE not enforced)`);
+    }
+
+    // No overlap
+    const boxes = nodes.map(boundingBox);
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        assert.equal(overlaps(boxes[i], boxes[j]), false, `nodes ${nodes[i].id} and ${nodes[j].id} overlap`);
       }
     }
   });

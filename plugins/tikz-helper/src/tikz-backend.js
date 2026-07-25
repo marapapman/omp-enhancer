@@ -109,6 +109,12 @@ function generateNodesRecursive(root, level, output, options, offsetX = 0, offse
   const children = root.children ?? [];
 
   for (const node of children) {
+    if (typeof node.x !== 'number' || !Number.isFinite(node.x) ||
+        typeof node.y !== 'number' || !Number.isFinite(node.y) ||
+        typeof node.width !== 'number' || !Number.isFinite(node.width) ||
+        typeof node.height !== 'number' || !Number.isFinite(node.height)) {
+      throw new TikzRuntimeError('INVALID_GRAPH_IR', `Node "${node.id}" is missing valid position or dimensions after layout computation.`);
+    }
     const padding = '  '.repeat(level + 1);
     const id = tikzId(node.id);
     const x = (node.x ?? 0) + offsetX;
