@@ -289,15 +289,15 @@ test('omp.plugin owns the complete self-iteration lifecycle without adding anoth
   assert.match(steps, /task.+public behavior.+RED.+minimal.+implementation.+GREEN.+refactor/iu);
   assert.match(steps, /targeted.+package.+current revision/iu);
   assert.match(steps, /runtime.+isolated.+installed OMP E2E.+event.+provider.+runner/iu);
-  assert.match(steps, /Main.+integrat.+current tree.+semantic diff.+test(?: and E2E)? evidence.+review/iu);
-  assert.match(steps, /reviewer.+Main-reviewed.+bounded.+semantic diff.+evidence.+without.+project.+read.+command/iu);
+  assert.match(steps, /Main.+integrat.+wave results.+targeted tests/iu);
+  assert.match(steps, /reviewer.+bounded.+semantic diff.+evidence.+without.+project.+read.+command/iu);
   assert.match(steps, /supported.+finding.+task.+repair.+fresh evidence.+at most one.+fresh reviewer.+never.+automatic/iu);
   assert.match(steps, /release.+only when.+explicit/iu);
   assert.match(delegation, /plan.+complete.+parallel.+plan/iu);
   assert.match(delegation, /task.+vertical.+RED.+GREEN.+REFACTOR/iu);
-  assert.match(delegation, /reviewer.+Main-reviewed.+semantic diff/iu);
+  assert.match(delegation, /reviewer.+bounded.+semantic diff/iu);
   assert.match(delegation, /task.+supported.+finding.+repair/iu);
-  assert.match(quality, /plan-review disposition.+task-owned.+RED-before-production.+GREEN.+Main self-review.+installed E2E.+review reconciliation/iu);
+  assert.match(quality, /plan-review disposition.+task-owned.+RED-before-production.+GREEN.+installed E2E.+review reconciliation/iu);
   assert.match(risks, /prompt.+installed-runtime.+drift.+isolated evidence.+stochastic.+one pass/iu);
 });
 
@@ -360,7 +360,7 @@ test('high-risk workflows define substantive composition, skills, and evidence c
     'code.dev': {
       compose: ['security.review', 'release.publish'],
       skills: ['code-development'],
-      evidence: ['local entry-to-caller-to-test trace', 'parallel vertical slices', 'task-owned RED-before-production', 'Main self-review', 'semantic diff'],
+      evidence: ['local entry-to-caller-to-test trace', 'parallel vertical slices', 'task-owned RED-before-production', 'lifecycle verification', 'semantic diff'],
     },
     'database.migration.repair': {
       compose: ['database.review', 'security.review'],

@@ -25,7 +25,7 @@ export const mlWorkflows = [
       },
       {
         "id": "step-review",
-        "text": "Reviewer independently audits the main-reviewed bounded diff and evidence without editing or mutating."
+        "text": "Reviewer independently audits the bounded diff and evidence without editing or mutating."
       }
     ],
     "scopeNotes": [
@@ -53,7 +53,7 @@ export const mlWorkflows = [
     ],
     "delegation": [
       "steps-2-4: task owns a bounded read-only ML audit slice and returns concrete system and evidence findings without editing or mutating code, data, or artifacts; the parent reconciles scope and conclusions",
-      "step-review: reviewer independently audits only the Main-reviewed bounded diff and evidence without project reads, commands, edits, or expensive jobs; parent reconciles scope and conclusions"
+      "step-review: reviewer independently audits only the bounded diff and evidence without project reads, commands, edits, or expensive jobs; parent reconciles scope and conclusions"
     ]
   },
   {
@@ -96,16 +96,12 @@ export const mlWorkflows = [
         "text": "Each task owns one complete vertical ML slice: change its focused deterministic public-behavior test first, prove the expected valid RED on a bounded fixture, make the minimum production code or configuration change without rewriting protected artifacts, rerun the same command for GREEN, refactor only while green, and return the bounded diff and exact resource-aware evidence."
       },
       {
-        "id": "step-main-review",
-        "text": "Main waits for task deliveries, integrates wave results, and verifies the smallest reproduction on the current tree; Main then examines the current tree, semantic diff, RED and GREEN evidence, root cause, shapes, device, determinism, evaluation or inference behavior, resource limits, serving correspondence, artifact provenance, and cross-slice interactions in an explicit MAIN REVIEW."
-      },
-      {
         "id": "step-review",
-        "text": "After MAIN REVIEW, the native reviewer independently reviews the Main-reviewed bounded diff and supplied evidence for root cause, model and data assumptions, reproducibility, serving parity, artifact safety, and operational risk without reading the project or running a command."
+        "text": "The native reviewer independently reviews the bounded diff and supplied evidence for root cause, model and data assumptions, reproducibility, serving parity, artifact safety, and operational risk without reading the project or running a command."
       },
       {
         "id": "step-repair",
-        "text": "Main validates each reviewer finding; for every material supported finding, task receives a bounded repair assignment, returns fresh affected evidence within the same artifact and compute limits, and Main refreshes verification and MAIN REVIEW before at most one fresh reviewer pass over the materially changed diff."
+        "text": "Main validates each reviewer finding; for every material supported finding, task receives a bounded repair assignment, returns fresh affected evidence within the same artifact and compute limits; Main integrates and runs focused verification, and allows at most one fresh reviewer pass over the materially changed diff."
       },
       {
         "id": "step-report",
@@ -128,7 +124,7 @@ export const mlWorkflows = [
       "pytorch-patterns"
     ],
     "qualityChecks": [
-      "exact environment and artifact identity, current failure evidence, data and tensor contract trace, deterministic reproduction, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, root-cause regression, focused repair, current-revision execution, Main self-review, reviewer reconciliation, serving correspondence, and artifact provenance"
+      "exact environment and artifact identity, current failure evidence, data and tensor contract trace, deterministic reproduction, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, root-cause regression, focused repair, current-revision execution, lifecycle verification, reviewer reconciliation, serving correspondence, and artifact provenance"
     ],
     "riskNotes": [
       "ML debugging can consume substantial compute or mutate datasets and artifacts; use bounded fixtures and preserve provenance."
@@ -142,9 +138,8 @@ export const mlWorkflows = [
       "step-plan-review: plan independently reviews Main's supplied complete parallel deterministic repair plan, write sets, assignments, evidence seams, compute budget, and artifact boundary without editing files or running expensive jobs",
       "step-task-batch: task receives all runnable independent ML slices for the wave in the same native tasks[] batch with exclusive write and resource budgets",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the deterministic test, minimum production repair, same-command evidence, and protected-artifact exclusions",
-      "step-main-review: Main waits, integrates, verifies the current tree, and completes MAIN REVIEW before reviewer is assigned",
-      "step-review: reviewer independently audits only the Main-reviewed bounded diff and supplied ML evidence without project reads, commands, edits, or expensive jobs",
-      "step-repair: task receives only a Main-validated supported finding as a bounded repair and returns fresh affected evidence for Main re-review"
+      "step-review: reviewer independently audits only the bounded diff and supplied ML evidence without project reads, commands, edits, or expensive jobs",
+      "step-repair: task receives only a Main-validated supported finding as a bounded repair and returns fresh evidence; Main integrates and dispatches at most one fresh affected reviewer pass"
     ]
   }
 ];

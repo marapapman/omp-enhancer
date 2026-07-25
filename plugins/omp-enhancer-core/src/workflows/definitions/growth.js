@@ -99,7 +99,7 @@ export const growthWorkflows = [
       },
       {
         "id": "step-review",
-        "text": "Reviewer independently audits the main-reviewed bounded diff and evidence without editing or mutating."
+        "text": "Reviewer independently audits the bounded diff and evidence without editing or mutating."
       }
     ],
     "scopeNotes": [
@@ -127,7 +127,7 @@ export const growthWorkflows = [
     "delegation": [
       "steps-1-4: task owns one complete bounded URL and evidence slice only when no composed domain Agent is a closer match; a composed domain Agent is preferred when its workflow owns the requested research, prose, or visual method",
       "step-5: the parent reconciles crawl, index, render, performance, language, and evidence limitations",
-      "step-review: reviewer independently audits only the Main-reviewed bounded diff and evidence without project reads, commands, edits, or site changes; parent reconciles scope and conclusions"
+      "step-review: reviewer independently audits only the bounded diff and evidence without project reads, commands, edits, or site changes; parent reconciles scope and conclusions"
     ]
   }
 ];

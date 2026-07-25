@@ -52,16 +52,12 @@ export const operationWorkflows = [
         "text": "When runtime, workflow, Skill, Agent, prompt, lifecycle, tool, packaging, or installed behavior changed, run an isolated installed OMP E2E pilot and relevant repeated and negative-control scenarios using event evidence; classify model behavior separately from provider, OMP-deadline, runner, and project-command failures."
       },
       {
-        "id": "step-main-review",
-        "text": "Main waits for every task, integrates the complete change, verifies the current tree, and then examines the current tree, semantic diff, test and E2E evidence, generated and installed parity, scope, architecture invariants, and cross-slice interactions in an explicit MAIN REVIEW before any reviewer assignment."
-      },
-      {
         "id": "step-review",
-        "text": "Only after MAIN REVIEW, the native reviewer independently reviews the Main-reviewed bounded semantic diff and supplied evidence without a project read or command, returning concrete unanswered findings without edit, repair, or completion authority."
+        "text": "The native reviewer independently reviews the bounded semantic diff and supplied evidence without a project read or command, returning concrete unanswered findings without edit, repair, or completion authority."
       },
       {
         "id": "step-repair",
-        "text": "Main validates every reviewer result; for each material supported finding, Main gives task a bounded repair assignment, task returns fresh evidence, Main refreshes affected checks and MAIN REVIEW, and at most one fresh reviewer reviews the materially changed Main-reviewed diff; this path is never automatic and never self-repeats."
+        "text": "Main validates every reviewer result; for each material supported finding, Main gives task a bounded repair assignment, task returns fresh evidence; Main integrates and runs focused verification, and allows at most one fresh reviewer pass over the materially changed diff; this path is never automatic and never self-repeats."
       },
       {
         "id": "step-report",
@@ -80,7 +76,7 @@ export const operationWorkflows = [
       "code-development"
     ],
     "qualityChecks": [
-      "acceptance-to-file coverage, explicit plan-review disposition, parallel vertical slices with exclusive write ownership, behavior/source task-owned RED-before-production and focused GREEN evidence, one-shot shared generation with check-only parity and no-diff inspection, current package and marketplace consistency, Main self-review, isolated installed E2E when runtime behavior changed, bounded review reconciliation, installed-runtime parity, dirty-tree containment, and advisory-only lifecycle behavior"
+      "acceptance-to-file coverage, explicit plan-review disposition, parallel vertical slices with exclusive write ownership, behavior/source task-owned RED-before-production and focused GREEN evidence, one-shot shared generation with check-only parity and no-diff inspection, current package and marketplace consistency, isolated installed E2E when runtime behavior changed, bounded review reconciliation, installed-runtime parity, dirty-tree containment, and advisory-only lifecycle behavior"
     ],
     "riskNotes": [
       "Prompt, lifecycle, model-behavior, packaging, and installed-runtime surfaces can drift across source, generated, packaged, and live states and require isolated evidence.",
@@ -95,9 +91,8 @@ export const operationWorkflows = [
       "step-plan-review: plan independently reviews Main's complete parallel plan, write sets, assignments, local and external anchors, generated and installed boundaries, TDD seams, and E2E method before production changes without editing files",
       "step-task-batch: task receives all runnable independent vertical slices for a wave in the same native tasks[] batch with exclusive source and test ownership; one dependency-ordered shared-generation task owns shared generated outputs",
       "step-task-tdd: each behavior/source task owns its complete vertical RED -> GREEN -> REFACTOR slice and returns the public-behavior test, canonical implementation, bounded diff, and exact command evidence; the downstream shared-generation task runs the shared generator exactly once and returns generation, check, and parity evidence without fabricating a RED",
-      "step-main-review: Main waits, integrates, performs check-only parity and no-diff inspection, and reviews the current tree, semantic diff, test and E2E evidence, and cross-slice interactions before reviewer is assigned; Main must not rerun the shared generator",
-      "step-review: reviewer independently audits only the Main-reviewed bounded semantic diff and supplied evidence without project reads, commands, edits, repair, or completion authority",
-      "step-repair: task receives only a Main-validated supported finding as a bounded repair and returns fresh evidence for Main re-review and at most one fresh affected reviewer pass",
+      "step-review: reviewer independently audits only the bounded semantic diff and supplied evidence without project reads, commands, edits, repair, or completion authority",
+      "step-repair: task receives only a Main-validated supported finding as a bounded repair and returns fresh evidence; Main integrates and dispatches at most one fresh affected reviewer pass",
       "step-report: Main retains exclusive versioning, publication, synchronization, release-boundary, and final verification ownership"
     ]
   },

@@ -24,7 +24,7 @@ export const databaseWorkflows = [
       },
       {
         "id": "step-review",
-        "text": "Reviewer independently audits the main-reviewed bounded diff and evidence without editing or mutating."
+        "text": "Reviewer independently audits the bounded diff and evidence without editing or mutating."
       }
     ],
     "scopeNotes": [
@@ -55,7 +55,7 @@ export const databaseWorkflows = [
     ],
     "delegation": [
       "steps-2-4: task owns a bounded read-only database audit slice and returns concrete artifact and evidence findings without editing, mutating, or applying changes; the parent reconciles scope and conclusions",
-      "step-review: reviewer independently audits only the Main-reviewed bounded diff and evidence without project reads, commands, edits, or live operations; parent reconciles scope and conclusions"
+      "step-review: reviewer independently audits only the bounded diff and evidence without project reads, commands, edits, or live operations; parent reconciles scope and conclusions"
     ]
   },
   {
@@ -100,16 +100,12 @@ export const databaseWorkflows = [
         "text": "Each task owns one complete vertical database slice: change its focused public migration, query, compatibility, or rollback test first, prove the expected valid RED in a disposable or explicitly authorized environment, make the minimum production and migration changes, rerun the same command for GREEN, refactor only while green, and return the bounded diff and exact evidence without applying live changes."
       },
       {
-        "id": "step-main-review",
-        "text": "Main waits for task deliveries, integrates wave results, and verifies clean and representative upgrade paths on the current tree; Main then examines the current tree, database and application diff, RED and GREEN evidence, migration state, data invariants, lock risk, rollback or forward-repair evidence, and cross-slice interactions in an explicit MAIN REVIEW."
-      },
-      {
         "id": "step-review",
-        "text": "After MAIN REVIEW, the native reviewer independently reviews the Main-reviewed bounded diff and supplied evidence for backup, rollback, lock, data, compatibility, and release risk without reading the project or running a command."
+        "text": "The native reviewer independently reviews the bounded diff and supplied evidence for backup, rollback, lock, data, compatibility, and release risk without reading the project or running a command."
       },
       {
         "id": "step-repair",
-        "text": "Main validates each reviewer finding; for every material supported finding, task receives a bounded repair assignment, returns fresh affected evidence without live application, and Main refreshes verification and MAIN REVIEW before at most one fresh reviewer pass over the materially changed diff."
+        "text": "Main validates each reviewer finding; for every material supported finding, task receives a bounded repair assignment, returns fresh affected evidence without live application, and Main integrates before at most one fresh reviewer pass over the materially changed diff."
       },
       {
         "id": "step-report",
@@ -137,7 +133,7 @@ export const databaseWorkflows = [
       "safety-guard"
     ],
     "qualityChecks": [
-      "current migration state, backup evidence, plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, compatibility order, bounded lock and downtime impact, data invariants, clean upgrade tests, rollback or forward-repair evidence, Main self-review, reviewer reconciliation, and exact execution boundary"
+      "current migration state, backup evidence, plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, compatibility order, bounded lock and downtime impact, data invariants, clean upgrade tests, rollback or forward-repair evidence, reviewer reconciliation, and exact execution boundary"
     ],
     "riskNotes": [
       "Schema and data changes can be destructive or irreversible; use the host approval path and never infer authority over a live database."
@@ -151,9 +147,8 @@ export const databaseWorkflows = [
       "step-plan-review: plan independently reviews Main's supplied complete parallel plan, write sets, compatibility sequence, migration validation, release order, rollback, and live-operation exclusions without editing or applying changes",
       "step-task-batch: task receives all runnable independent database slices for the wave in the same native tasks[] batch with exclusive write ownership",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the focused test, minimum production and migration changes, same-command evidence, and prohibition on unapproved live application",
-      "step-main-review: Main waits, integrates, verifies the current tree, and completes MAIN REVIEW before reviewer is assigned",
-      "step-review: reviewer independently audits only the Main-reviewed bounded diff and supplied database evidence without project reads, commands, edits, or live operations",
-      "step-repair: task receives only a Main-validated supported finding as a bounded repair and returns fresh affected evidence for Main re-review"
+      "step-review: reviewer independently audits only the bounded diff and supplied database evidence without project reads, commands, edits, or live operations",
+      "step-repair: task repairs and returns fresh evidence for Main integration"
     ]
   },
   {
@@ -197,16 +192,12 @@ export const databaseWorkflows = [
         "text": "Each task owns one complete vertical repair slice: change a focused test representing its failed migration state, prove the expected valid RED in a disposable environment, make the minimum production repair without touching an unapproved live database, rerun the same command for GREEN, refactor only while green, and return the bounded diff plus exact state-aware evidence."
       },
       {
-        "id": "step-main-review",
-        "text": "Main waits for task deliveries, integrates wave results, and verifies every relevant migration state on the current tree; Main then examines the current tree, repair diff, RED and GREEN evidence, backup status, data invariants, clean installation, idempotency, rollback or forward-repair path, cross-slice interactions, and live-operation boundary in an explicit MAIN REVIEW."
-      },
-      {
         "id": "step-review",
-        "text": "After MAIN REVIEW, the native reviewer independently reviews the Main-reviewed bounded diff and supplied evidence for diagnosis, migration state, backup, data, rollback, idempotency, and operational risk without reading the project or running a command."
+        "text": "The native reviewer independently reviews the bounded diff and supplied evidence for diagnosis, migration state, backup, data, rollback, idempotency, and operational risk without reading the project or running a command."
       },
       {
         "id": "step-repair",
-        "text": "Main validates each reviewer finding; for every material supported finding, task receives a bounded repository repair assignment, returns fresh affected evidence from disposable state, and Main refreshes verification and MAIN REVIEW before at most one fresh reviewer pass over the materially changed diff."
+        "text": "Main validates each reviewer finding; for every material supported finding, task receives a bounded repository repair assignment, returns fresh affected evidence from disposable state, and Main integrates before at most one fresh reviewer pass over the materially changed diff."
       },
       {
         "id": "step-report",
@@ -234,7 +225,7 @@ export const databaseWorkflows = [
       "safety-guard"
     ],
     "qualityChecks": [
-      "exact failure and migration state evidence, backup status, reproducible transition, root-cause classification, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, data invariants, state-aware regression coverage, clean and partial-state verification, Main self-review, reviewer reconciliation, rollback or forward-repair evidence, and live-operation boundary"
+      "exact failure and migration state evidence, backup status, reproducible transition, root-cause classification, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, data invariants, state-aware regression coverage, clean and partial-state verification, reviewer reconciliation, rollback or forward-repair evidence, and live-operation boundary"
     ],
     "riskNotes": [
       "A mistaken repair can destroy data or make migration history diverge further; require backup evidence, explicit environment identity, bounded commands, and a stop condition before live recovery."
@@ -248,9 +239,8 @@ export const databaseWorkflows = [
       "step-plan-review: plan independently reviews Main's supplied complete parallel state-aware repair plan, write sets, validation, stop condition, rollback, backup assumptions, and live boundary without editing or applying changes",
       "step-task-batch: task receives all runnable independent migration-repair slices for the wave in the same native tasks[] batch with exclusive write ownership",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the failed-state test, minimum production repair, same-command evidence, and prohibition on unapproved live recovery",
-      "step-main-review: Main waits, integrates, verifies the current tree, and completes MAIN REVIEW before reviewer is assigned",
-      "step-review: reviewer independently audits only the Main-reviewed bounded diff and supplied migration evidence without project reads, commands, edits, or live operations",
-      "step-repair: task receives only a Main-validated supported finding as a bounded repository repair and returns fresh affected evidence for Main re-review"
+      "step-review: reviewer independently audits only the bounded diff and supplied migration evidence without project reads, commands, edits, or live operations",
+      "step-repair: task repairs and returns fresh evidence for Main integration"
     ]
   }
 ];

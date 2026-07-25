@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, testing, fact checking, and editable TikZ diagrams.",
-    "version": "1.0.30",
+    "version": "1.0.32",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "omp-config",
       "description": "Optional OMP workflow references, configuration assets, uniquely named agents, notify-only hooks, opt-in hook templates, and diagnostics.",
-      "version": "0.1.42",
+      "version": "0.1.43",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -367,7 +367,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "OMP-native-first task-fact observer with opt-in evidence reviews, model-agnostic workflow guidance, and explicit extension-tool activation.",
-      "version": "0.1.135",
+      "version": "0.1.136",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",

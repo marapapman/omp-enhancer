@@ -13,11 +13,11 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
   2. [step-2] Inspect concrete queries, schema, indexes, constraints, transaction boundaries, locks, permissions, pooling, and migration order without editing or applying them.
   3. [step-3] Validate material findings against plans, tests, documentation, or current non-production evidence when those checks are authorized and safe.
   4. [step-4] Report prioritized findings with exact SQL or migration evidence, trigger, impact, engine assumptions, remediation, and verification.
-  5. [step-review] Reviewer independently audits the main-reviewed bounded diff and evidence without editing or mutating.
+  5. [step-review] Reviewer independently audits the bounded diff and evidence without editing or mutating.
 - Agent candidates: `task`, `reviewer`.
 - Delegated checkpoints:
   - steps-2-4: task owns a bounded read-only database audit slice and returns concrete artifact and evidence findings without editing, mutating, or applying changes; the parent reconciles scope and conclusions
-  - step-review: reviewer independently audits only the Main-reviewed bounded diff and evidence without project reads, commands, edits, or live operations; parent reconciles scope and conclusions
+  - step-review: reviewer independently audits only the bounded diff and evidence without project reads, commands, edits, or live operations; parent reconciles scope and conclusions
 - Quality checks:
   - engine and version correspondence, query and schema evidence, migration-order consistency, lock and transaction impact, security boundary review, severity rationale, and explicit runtime limitations
 - Scope notes:

@@ -9,7 +9,7 @@ The single general software-development method. Add domain Skills only for gaps.
 
 ## Commit the subagent-driven TODO
 
-For substantive mutation, Main owns the parent TODO, integration, reviews, and conclusion:
+For substantive mutation, Main owns the parent TODO, integration, and conclusion:
 
 1. Restate behavior, authority, acceptance, repository instructions, dirty-tree boundaries, and baseline.
 2. Search local code and map entry points, callers, consumers, tests, configuration, generated assets, and runtime copies that can differ.
@@ -17,8 +17,8 @@ For substantive mutation, Main owns the parent TODO, integration, reviews, and c
 4. Main writes a detailed implementation-and-evidence plan as parallel waves of vertical slices with non-overlapping write sets.
 5. The exposed `plan` Agent receives one `PLAN REVIEW` with the complete parallel plan and assignments before changing production code; disposition findings and rebase only affected rows.
 6. Use the same native `task` `tasks[]` batch for runnable independent slices; defer dependencies. Each task owns `RED -> GREEN -> REFACTOR`.
-7. Main integrates the current tree, then reviews its semantic diff and evidence in an explicit self-review before native `reviewer`.
-8. Give native `reviewer` only the Main-reviewed diff/evidence. Send supported findings to native `task` for bounded repair, refresh evidence, Main-review, and allow at most one fresh affected review.
+7. Main integrates the current tree and dispatches the bounded diff and evidence to native `reviewer`.
+8. Give native `reviewer` only the bounded diff/evidence from task deliveries. Send supported findings to native `task` for bounded repair and refresh evidence, then allow at most one fresh affected reviewer pass; Main integrates the result.
 9. Report paths, commands, exits, dispositions, limitations, risks, and untouched changes.
 
 Merge matching workflow, Skill, and reference phases into one TODO row; do not execute a phase twice. Mechanical lookup needs no task. Substantive read-only work needs no mutation TDD but still follows the selected non-simple workflow's safe complete delegated checkpoint when a matching Agent is visible and safe. Read-only authorizes no mutation.
@@ -57,13 +57,13 @@ An exported API is a valid public test seam. With no executable seam, record why
 
 If `task` is unavailable, capacity is constrained, assignment input is incomplete, or safe exclusive write sets are impossible, record that concrete fallback limitation and proceed only within native authority. This is not a gate or invented success. One indivisible mutation slice may use one task.
 
-## Integrate, Main-review, then independently review
+## Integrate, dispatch to reviewer, and task repair
 
 Main waits for complete deliveries, treats partial or failed jobs as limitations, resolves conflicts, and validates the current tree. Rerun focused commands, then proportionate typecheck, build, integration, browser, coverage, benchmark, packaging, or root checks; preserve the shared-generator no-rerun exception above.
 
-Before reviewer dispatch, Main writes `MAIN REVIEW` of acceptance, current-tree semantic diff, task RED/GREEN evidence, broader verification, interactions, scope, and risks. Native `reviewer` receives only that Main-reviewed bounded semantic diff/evidence; it does not edit, read project files, run commands, route, or decide completion.
+Native `reviewer` receives the bounded semantic diff/evidence from task deliveries; it does not edit, read project files, run commands, route, or decide completion.
 
-Main validates findings against current code. Send supported findings to native `task` for bounded repair, refresh affected evidence, and repeat `MAIN REVIEW`, then allow one fresh affected review. Unchanged-input review loops are churn; never an automatic review-repair loop.
+Main validates findings against current code. Send supported findings to native `task` for bounded repair, refresh affected evidence, and allow at most one fresh affected reviewer pass. Unchanged-input review loops are churn; never an automatic review-repair loop.
 
 ## Preserve authority
 

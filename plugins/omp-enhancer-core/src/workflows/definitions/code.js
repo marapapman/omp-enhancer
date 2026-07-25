@@ -40,16 +40,12 @@ export const codeWorkflows = [
         "text": "Each task owns one complete vertical slice: make its public-behavior test mutation first, run the exact focused command and return a valid RED assertion, make the minimum production change within its exclusive write set, rerun the same command for GREEN, refactor only while green, rerun affected evidence, and return the bounded diff and exact command results."
       },
       {
-        "id": "step-main-review",
-        "text": "Main waits for every task delivery, integrates the slices, resolves only evidenced conflicts, and runs focused and proportionate broader verification on the current tree; Main then examines the current tree, semantic diff, RED and GREEN evidence, acceptance coverage, scope, and cross-slice interactions in an explicit MAIN REVIEW before any reviewer assignment."
-      },
-      {
         "id": "step-review",
-        "text": "Only after MAIN REVIEW, the native reviewer independently reviews the Main-reviewed bounded semantic diff and supplied evidence without a project read or command, returning concrete findings or an explicit no-finding result without repair or completion authority."
+        "text": "The native reviewer independently reviews the bounded semantic diff and supplied evidence without a project read or command, returning concrete findings or an explicit no-finding result without repair or completion authority."
       },
       {
         "id": "step-repair",
-        "text": "Main validates every reviewer finding against current evidence; for each material supported finding, Main gives task a bounded repair assignment, task repairs within an exclusive write set and returns fresh affected evidence, Main refreshes affected evidence and performs a fresh MAIN REVIEW, and at most one fresh reviewer reviews the materially changed Main-reviewed diff."
+        "text": "Main validates every reviewer finding against current evidence; for each material supported finding, Main gives task a bounded repair assignment, task repairs within an exclusive write set and returns fresh affected evidence; Main integrates and runs focused verification, and allows at most one fresh reviewer pass over the materially changed diff."
       },
       {
         "id": "step-report",
@@ -67,7 +63,7 @@ export const codeWorkflows = [
       "code-development"
     ],
     "qualityChecks": [
-      "acceptance-to-file coverage, local entry-to-caller-to-test trace, current official and community evidence when decision-relevant, complete plan-review disposition, parallel vertical slices with non-overlapping write sets, task-owned RED-before-production and same-command GREEN evidence, Main self-review of the current semantic diff and cross-slice interactions, bounded reviewer evidence, finding reconciliation, and explicit authority and limitation reporting"
+      "acceptance-to-file coverage, local entry-to-caller-to-test trace, current official and community evidence when decision-relevant, complete plan-review disposition, parallel vertical slices with non-overlapping write sets, task-owned RED-before-production and same-command GREEN evidence, lifecycle verification of the current semantic diff and cross-slice interactions, bounded reviewer evidence, finding reconciliation, and explicit authority and limitation reporting"
     ],
     "riskNotes": [
       "External examples can be stale or inapplicable, and broad code searches can create noise; record versions, prefer primary documentation for behavior, and use community reports as leads rather than local truth.",
@@ -83,9 +79,8 @@ export const codeWorkflows = [
       "step-plan-review: plan independently challenges Main's supplied complete parallel plan, write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary without editing files",
       "step-task-batch: task receives every runnable independent vertical slice for the wave in the same native tasks[] batch, with one task per exclusive write set and no child ownership of the parent TODO",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the public-behavior test mutation, valid RED, minimum production change, same-command GREEN, bounded refactor, and exact returned evidence",
-      "step-main-review: Main waits, integrates, verifies, and reviews the current tree, semantic diff, evidence, scope, and cross-slice interactions before reviewer is assigned",
-      "step-review: reviewer independently reviews the Main-reviewed bounded semantic diff and supplied evidence, does not read the project or run commands, and returns findings without repair or completion authority",
-      "step-repair: task receives only a Main-validated supported finding as a bounded repair assignment; Main refreshes affected evidence and re-reviews before at most one fresh affected reviewer pass"
+      "step-review: reviewer independently reviews the bounded semantic diff and supplied evidence, does not read the project or run commands, and returns findings without repair or completion authority",
+      "step-repair: task receives only a Main-validated supported finding as a bounded repair and returns fresh evidence; Main integrates and dispatches at most one fresh affected reviewer pass"
     ]
   }
 ];

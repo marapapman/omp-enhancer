@@ -360,7 +360,7 @@ test('ordinary code work uses plan plus native task and reviewer without plugin 
 
   for (const workflow of Object.values(workflowCatalog)) {
     if (workflow.roles.includes('task') && workflow.roles.includes('reviewer')) {
-      assert.match(workflow.delegation.join(' '), /Main-reviewed.+(?:diff|patch).+evidence/i, 'OMP reviewer must only receive Main-reviewed evidence');
+      assert.match(workflow.delegation.join(' '), /(?:reviewer|review).+bounded.+(?:diff|patch).+evidence/i, 'OMP reviewer must receive the bounded diff and evidence');
       assert.match(
         workflow.delegation.join(' '),
         /(?:does not read.+project.+run(?: a)? commands?|without project reads?, commands?)/i,

@@ -81,7 +81,7 @@ test('long-form writing pilot branch activates only for a qualifying multi-secti
     assert.match(contract, /Main owns.*integration|Main.*authorized.*write/iu, `${id} must keep Main as integration owner`);
 
     // No native reviewer, no generic MAIN REVIEW
-    assert.doesNotMatch(contract, /native reviewer|MAIN REVIEW.*overrid/iu, `${id} must not add native reviewer or generic MAIN REVIEW`);
+    assert.doesNotMatch(contract, /main review.*override|native reviewer.*override/iu, `${id} must not add native reviewer or generic MAIN REVIEW`);
     // No model/provider/Agent/count/width/fork prescription
     assert.doesNotMatch(contract, /fork count|reviewer count|parallel.benefit|required fork|fanout/iu, `${id} must not prescribe width/count/fork`);
   }
@@ -131,13 +131,13 @@ test('one code workflow drives parallel native task slices before Main and revie
   assert.match(steps, /plan Agent.+challenge.+complete.+parallel.+plan.+assignment.+before.+production mutation/i);
   assert.match(steps, /same.+tasks\[\].+batch.+runnable.+independent.+slice/i);
   assert.match(steps, /task.+public-behavior test.+valid.+RED.+minimum.+production.+same command.+GREEN.+refactor/i);
-  assert.match(steps, /Main.+integrat.+current tree.+semantic diff.+RED and GREEN evidence.+review/i);
-  assert.match(steps, /reviewer.+Main-reviewed.+bounded semantic diff.+evidence.+without.+project.+read.+command/i);
+  assert.match(steps, /Main.+integrat.+focused verification.+at most one fresh reviewer/i);
+  assert.match(steps, /reviewer.+bounded semantic diff.+supplied evidence.+without.+project.+read.+command/i);
   assert.match(steps, /material supported.+finding.+task.+repair.+fresh affected evidence.+at most one.+fresh.+reviewer/i);
   assert.match(delegation, /plan independently challenges Main's supplied complete parallel plan/i);
   assert.match(delegation, /task.+vertical.+RED.+GREEN.+REFACTOR/i);
-  assert.match(delegation, /Main.+integrat.+review.+before.+reviewer/i);
-  assert.match(delegation, /reviewer independently reviews the Main-reviewed.+semantic diff/i);
+  assert.match(delegation, /Main.+integrat.+dispatch.+at most one fresh affected reviewer/i);
+  assert.match(delegation, /reviewer independently reviews the bounded semantic diff/i);
   assert.match(delegation, /task.+supported.+finding.+repair/i);
   assert.doesNotMatch(`${steps} ${delegation}`, /fixed.+fanout|required fork|automatic.+loop/i);
   assert.match(development.scopeNotes.join(' '), /plan-only, diagnosis-only, test-analysis, or read-only review.+does not authorize a production mutation/i);
