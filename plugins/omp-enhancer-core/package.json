@@ -1,6 +1,6 @@
 {
   "name": "omp-enhancer-core",
-  "version": "0.1.139",
+  "version": "0.1.140",
   "private": true,
   "type": "module",
   "description": "OMP-native-first task-fact observer with opt-in evidence reviews, model-agnostic workflow guidance, and explicit extension-tool activation.",
