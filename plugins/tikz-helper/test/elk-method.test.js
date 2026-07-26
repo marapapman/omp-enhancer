@@ -113,3 +113,9 @@ test('rewritten tikz-helper surfaces contain no affirmative hand-layout guidance
     assert.doesNotMatch(text, AFFIRMATIVE_HAND_LAYOUT, `${name} must not contain affirmative hand-layout/coordinate-authoring guidance`);
   }
 });
+
+test('SKILL.md references media presets', () => {
+  assert.match(skill, /paper-column/);
+  assert.match(skill, /slide-16-9/);
+  assert.match(skill, /Media presets/);
+});

@@ -21,3 +21,7 @@ The ELK graph IR is the sole source of node positions and edge geometry. The aut
 7. Fix overlap, clipping, or crossings by changing ELK layout options or node sizes and regenerating, never by editing coordinates. Compare the regenerated source back to the semantic graph: check every node, edge, branch condition, label, direction, group, and requested emphasis before visual review.
 
 Generated artwork cannot own or revise topology, edges, arrows, conditions, labels, or text. If an icon is unavailable, use a simple TikZ/vector symbol or a text-only node before considering raster generation.
+
+### Preset selection
+
+Choose the `tikz_generate_diagram` preset parameter by target medium: `paper-column` (DOWN flow, compact spacing) for double-column paper figures; `paper-full` (RIGHT, medium spacing) for single-column or full-width figures; `slide-16-9` or `slide-4-3` (RIGHT, airy spacing) for slide decks. `elk.aspectRatio` in the slide presets is advisory under layered layout — for strict slide aspect ratio, select the stress algorithm in the graph-level layoutOptions.

@@ -83,3 +83,7 @@ test('README.md and docs/TIKZ_PLUGIN.md embed the IR export round-trip phrase', 
   assert.ok(readme.includes(P_IR_EXPORT), 'README must contain P_IR_EXPORT verbatim');
   assert.ok(designDoc.includes(P_IR_EXPORT), 'TIKZ_PLUGIN.md must contain P_IR_EXPORT verbatim');
 });
+
+test('docs/TIKZ_PLUGIN.md documents media presets and density control', () => {
+  assert.match(designDoc, /Media presets and density control/);
+});

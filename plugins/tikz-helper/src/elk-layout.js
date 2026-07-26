@@ -1,5 +1,5 @@
 import { TikzRuntimeError } from './runtime-error.js';
-const SERVER_DEFAULT_LAYOUT_OPTIONS = Object.freeze({
+export const SERVER_DEFAULT_LAYOUT_OPTIONS = Object.freeze({
   'elk.spacing.nodeNode': 50,
   'elk.layered.spacing.nodeNodeBetweenLayers': 50,
   'elk.spacing.edgeNode': 25,
@@ -15,10 +15,11 @@ const SERVER_DEFAULT_LAYOUT_OPTIONS = Object.freeze({
   'elk.layered.unnecessaryBendpoints': true,
   'elk.layered.compaction.postCompaction.strategy': 'EDGE_LENGTH',
   'elk.layered.compaction.connectedComponents': true,
+  'elk.randomSeed': 1,
 });
 
 
-function countNodes(node) {
+export function countNodes(node) {
   let count = 1;
   if (Array.isArray(node.children)) {
     for (const child of node.children) {
@@ -253,6 +254,8 @@ export async function computeLayout(graph, options = {}) {
       nodeCount: (positioned.children ?? []).length,
       edgeCount: (positioned.edges ?? []).length,
       executionTime: typeof executionTime === 'number' ? executionTime : null,
+      width: typeof positioned.width === 'number' ? positioned.width : null,
+      height: typeof positioned.height === 'number' ? positioned.height : null,
     },
   };
 }

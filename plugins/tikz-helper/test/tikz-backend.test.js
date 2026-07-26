@@ -216,3 +216,98 @@ describe('tikz-backend: defaultArrow option', () => {
     assert.match(tikz, /\[<-\]/);
   });
 });
+
+describe('tikz-backend: scale and baseFontSize options', () => {
+  const SCALE_LAYOUT = {
+    id: 'root',
+    children: [
+      { id: 'client', x: 20, y: 40, width: 60, height: 30, labels: [{ text: 'Client' }] },
+      { id: 'server', x: 20, y: 120, width: 60, height: 30, labels: [{ text: 'Server' }] },
+    ],
+    edges: [
+      {
+        id: 'e1',
+        sources: ['client'],
+        targets: ['server'],
+        sections: [{ startPoint: { x: 50, y: 70 }, endPoint: { x: 50, y: 120 } }],
+      },
+    ],
+  };
+
+  it('default output is unchanged when scale and baseFontSize are absent', () => {
+    const tikz = elkToTikz(SCALE_LAYOUT);
+    assert.match(tikz, /\\begin\{tikzpicture\}\[node distance=0pt, anchor=north west, every node\/\.style=\{inner sep=0pt, outer sep=0pt\}\]/);
+    assert.doesNotMatch(tikz, /scale=/);
+    assert.doesNotMatch(tikz, /font=\\fontsize/);
+  });
+
+  it('scale=1 emits no scale= in output', () => {
+    const tikz = elkToTikz(SCALE_LAYOUT, { scale: 1 });
+    assert.doesNotMatch(tikz, /scale=/);
+    assert.doesNotMatch(tikz, /transform shape/);
+  });
+
+  it('scale=0.5, baseFontSize=20 emits scale, transform shape, and every-node font directive', () => {
+    const tikz = elkToTikz(SCALE_LAYOUT, { scale: 0.5, baseFontSize: 20 });
+    assert.match(tikz, /scale=0\.5, transform shape/);
+    assert.match(tikz, /every node\/\.style=\{inner sep=0pt, outer sep=0pt, font=\\fontsize\{20\}\{24\}\\selectfont\}/);
+  });
+
+  it('scale=0.5 with baseFontSize=null emits scale= but no every-node font directive', () => {
+    const tikz = elkToTikz(SCALE_LAYOUT, { scale: 0.5, baseFontSize: null });
+    assert.match(tikz, /scale=0\.5, transform shape/);
+    assert.doesNotMatch(tikz, /font=\\fontsize/);
+  });
+
+  it('non-finite scale (NaN) is ignored and treated as default', () => {
+    const tikz = elkToTikz(SCALE_LAYOUT, { scale: NaN, baseFontSize: 20 });
+    assert.doesNotMatch(tikz, /scale=/);
+    assert.doesNotMatch(tikz, /transform shape/);
+    // baseFontSize is still finite and positive, so font directive still emits
+    assert.match(tikz, /font=\\fontsize\{20\}\{24\}\\selectfont/);
+  });
+
+  it('non-finite scale (Infinity) is ignored and treated as default', () => {
+    const tikz = elkToTikz(SCALE_LAYOUT, { scale: Infinity });
+    assert.doesNotMatch(tikz, /scale=/);
+    assert.doesNotMatch(tikz, /transform shape/);
+  });
+
+  it('non-finite baseFontSize (NaN) is ignored', () => {
+    const tikz = elkToTikz(SCALE_LAYOUT, { baseFontSize: NaN });
+    assert.doesNotMatch(tikz, /font=\\fontsize/);
+  });
+
+  it('non-finite baseFontSize (Infinity) is ignored', () => {
+    const tikz = elkToTikz(SCALE_LAYOUT, { baseFontSize: Infinity });
+    assert.doesNotMatch(tikz, /font=\\fontsize/);
+  });
+
+  it('non-positive baseFontSize (0) is ignored', () => {
+    const tikz = elkToTikz(SCALE_LAYOUT, { baseFontSize: 0 });
+    assert.doesNotMatch(tikz, /font=\\fontsize/);
+  });
+
+  it('per-node fontSize keeps precedence over every-node baseFontSize', () => {
+    const layout = {
+      id: 'root',
+      children: [
+        { id: 'n1', x: 10, y: 10, width: 60, height: 30, properties: { fontSize: 12 }, labels: [{ text: 'A' }] },
+      ],
+    };
+    const tikz = elkToTikz(layout, { scale: 0.5, baseFontSize: 20 });
+    // every-node style carries the base font
+    assert.match(tikz, /every node\/\.style=\{inner sep=0pt, outer sep=0pt, font=\\fontsize\{20\}\{24\}\\selectfont\}/);
+    // per-node font directive is also present (keeps precedence in TikZ)
+    assert.match(tikz, /font=\\fontsize\{12\}\{14\}\\selectfont/);
+  });
+
+  it('coordinates and Y-flip are untouched when scale is applied', () => {
+    const tikz = elkToTikz(SCALE_LAYOUT, { scale: 0.5 });
+    // client at (20,40), Y flipped = (20pt, -40pt) — coordinates not scaled by backend
+    assert.match(tikz, /\(client\)\s+at\s+\(20pt,\s*-40pt\)/);
+    assert.match(tikz, /\(server\)\s+at\s+\(20pt,\s*-120pt\)/);
+    // edge geometry untouched
+    assert.match(tikz, /\\draw\[->\]\s+\(client\)\s+--\s+\(50pt,\s*-70pt\)\s+--\s+\(50pt,\s*-120pt\)\s+--\s+\(server\)/);
+  });
+});

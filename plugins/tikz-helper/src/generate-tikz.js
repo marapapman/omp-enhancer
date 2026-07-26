@@ -1,22 +1,59 @@
-import { computeLayout } from './elk-layout.js';
+import { computeLayout, countNodes } from './elk-layout.js';
 import { elkToTikz } from './tikz-backend.js';
+import {
+  LAYOUT_PRESETS, resolvePresetLayoutOptions, resolveTargetWidth, computeFillRatio,
+  densityAdjustment, DENSITY_RELAYOUT_FACTOR, scaleSpacingKeys, sizingReport,
+} from './layout-presets.js';
 
 export async function generateTikz(input = {}, options = {}) {
   const graph = input.graph;
   const tikzOptions = input.tikzOptions ?? {};
-  const layoutOptions = input.layoutOptions ?? {};
+  const preset = input.preset ?? null;
+  const density = input.density ?? 'balanced';
 
-  // Step 1: Compute layout via elkjs
-  const layoutResult = await computeLayout(graph, { layoutOptions, importElk: options.importElk });
+  // Merge layer order: SERVER_DEFAULTS <- preset <- tool layoutOptions <- graph IR
+  // (graph IR wins inside computeLayout; preset sits below tool options here).
+  const presetOptions = preset ? resolvePresetLayoutOptions(preset, density) : {};
+  const merged = { ...presetOptions, ...(input.layoutOptions ?? {}) };
 
-  // Step 2: Generate TikZ from positioned graph
+  let layoutResult = await computeLayout(graph, { layoutOptions: merged, importElk: options.importElk });
+
+  // Density guard: bounded, deterministic relayouts that only change spacing.
+  const densityReport = { fillRatio: computeFillRatio(layoutResult.graph), adjustments: [], relayouts: 0 };
+  let budget = 2;
+  let adjustment = densityAdjustment(densityReport.fillRatio, countNodes(layoutResult.graph));
+  while (adjustment && budget > 0) {
+    Object.assign(merged, scaleSpacingKeys(merged, DENSITY_RELAYOUT_FACTOR[adjustment]));
+    densityReport.adjustments.push(adjustment);
+    densityReport.relayouts += 1;
+    budget -= 1;
+    layoutResult = await computeLayout(graph, { layoutOptions: merged, importElk: options.importElk });
+    densityReport.fillRatio = computeFillRatio(layoutResult.graph);
+    adjustment = densityAdjustment(densityReport.fillRatio, countNodes(layoutResult.graph));
+  }
+
+  // Sizing: uniform scale so paper presets land at the target physical width.
+  const presetDef = preset ? LAYOUT_PRESETS[preset] : null;
+  const targetWidthPt = resolveTargetWidth(preset, input.targetWidthPt);
+  const rootWidth = typeof layoutResult.graph.width === 'number' ? layoutResult.graph.width : 0;
+  const rootHeight = typeof layoutResult.graph.height === 'number' ? layoutResult.graph.height : 0;
+  let scale = 1;
+  if (targetWidthPt && rootWidth > 0) {
+    scale = Number((targetWidthPt / rootWidth).toFixed(4));
+    if (Math.abs(scale - 1) <= 0.02) scale = 1; // snap: avoid pointless transform
+  }
+  const fontPt = presetDef ? presetDef.fontPt : null;
+  const sizing = sizingReport({ preset, targetWidthPt, rootWidth, rootHeight, scale, fontPt });
+
   const tikzSource = elkToTikz(layoutResult.graph, {
     standalone: tikzOptions.standalone,
     yAxisFlip: tikzOptions.yAxisFlip,
     defaultShape: tikzOptions.defaultShape,
     defaultArrow: tikzOptions.defaultArrow,
-    tikzLibraries: tikzOptions.tikzLibraries,
+    tikzLibraries: tikzLibrariesSafe(tikzOptions.tikzLibraries),
     preamble: tikzOptions.preamble,
+    scale,
+    baseFontSize: fontPt,
   });
 
   return {
@@ -24,10 +61,10 @@ export async function generateTikz(input = {}, options = {}) {
     tikz: tikzSource,
     ir: JSON.stringify(layoutResult.graph, null, 2),
     graph: layoutResult.graph,
-    metadata: {
-      ...layoutResult.metadata,
-    },
+    metadata: { ...layoutResult.metadata, density: densityReport, sizing },
   };
 }
+
+function tikzLibrariesSafe(value) { return Array.isArray(value) ? value : []; }
 
 export { computeLayout, elkToTikz };

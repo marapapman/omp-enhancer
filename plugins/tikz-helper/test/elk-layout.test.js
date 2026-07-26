@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { computeLayout, createElk, checkElkEnvironment, ELK_INSTALL_GUIDANCE } from '../src/elk-layout.js';
+import { computeLayout, createElk, checkElkEnvironment, ELK_INSTALL_GUIDANCE, SERVER_DEFAULT_LAYOUT_OPTIONS, countNodes } from '../src/elk-layout.js';
 import { generateTikz } from '../src/generate-tikz.js';
 
 describe('elk-layout: input validation', () => {
@@ -171,6 +171,89 @@ describe('elk-layout: factory', () => {
   it('creates a valid options object', () => {
     const instance = createElk({ defaultLayoutOptions: { 'elk.spacing.nodeNode': '50' } });
     assert.deepEqual(instance.options.defaultLayoutOptions, { 'elk.spacing.nodeNode': '50' });
+  });
+});
+
+describe('elk-layout: exports and determinism', () => {
+  it('SERVER_DEFAULT_LAYOUT_OPTIONS is frozen with elk.randomSeed: 1', () => {
+    assert.ok(Object.isFrozen(SERVER_DEFAULT_LAYOUT_OPTIONS));
+    assert.equal(SERVER_DEFAULT_LAYOUT_OPTIONS['elk.randomSeed'], 1);
+    assert.equal(SERVER_DEFAULT_LAYOUT_OPTIONS['elk.spacing.nodeNode'], 50);
+  });
+
+  it('countNodes is exported and counts recursively', () => {
+    const flat = {
+      id: 'root',
+      children: [
+        { id: 'n1', width: 30, height: 20 },
+        { id: 'n2', width: 30, height: 20 },
+        { id: 'n3', width: 30, height: 20 },
+      ],
+    };
+    assert.equal(countNodes(flat), 4); // root + 3 children
+
+    const nested = {
+      id: 'root',
+      children: [
+        { id: 'g1', children: [
+          { id: 'a', width: 10, height: 10 },
+          { id: 'b', width: 10, height: 10 },
+        ]},
+        { id: 'n1', width: 30, height: 20 },
+      ],
+    };
+    assert.equal(countNodes(nested), 5); // root + g1(2 children) + n1
+  });
+
+  it('computeLayout returns deterministic coordinates with elk.randomSeed: 1', async () => {
+    const graph = {
+      id: 'det',
+      children: [
+        { id: 'n1', width: 80, height: 40 },
+        { id: 'n2', width: 80, height: 40 },
+        { id: 'n3', width: 80, height: 40 },
+        { id: 'n4', width: 80, height: 40 },
+        { id: 'n5', width: 80, height: 40 },
+        { id: 'n6', width: 80, height: 40 },
+      ],
+      edges: [
+        { id: 'e1', sources: ['n1'], targets: ['n2'] },
+        { id: 'e2', sources: ['n2'], targets: ['n3'] },
+        { id: 'e3', sources: ['n3'], targets: ['n4'] },
+        { id: 'e4', sources: ['n4'], targets: ['n5'] },
+        { id: 'e5', sources: ['n5'], targets: ['n6'] },
+      ],
+    };
+
+    const r1 = await computeLayout(graph);
+    const r2 = await computeLayout(graph);
+
+    const coords1 = JSON.stringify(r1.graph.children.map(n => ({ id: n.id, x: n.x, y: n.y })));
+    const coords2 = JSON.stringify(r2.graph.children.map(n => ({ id: n.id, x: n.x, y: n.y })));
+    assert.equal(coords1, coords2, 'coordinates must be identical across runs');
+  });
+
+  it('metadata.width and height are finite positive numbers for laid-out graph', async () => {
+    const graph = {
+      id: 'size-test',
+      children: [
+        { id: 'n1', width: 80, height: 40 },
+        { id: 'n2', width: 80, height: 40 },
+        { id: 'n3', width: 80, height: 40 },
+      ],
+      edges: [
+        { id: 'e1', sources: ['n1'], targets: ['n2'] },
+        { id: 'e2', sources: ['n2'], targets: ['n3'] },
+      ],
+    };
+
+    const result = await computeLayout(graph);
+    assert.equal(typeof result.metadata.width, 'number');
+    assert.equal(typeof result.metadata.height, 'number');
+    assert.ok(Number.isFinite(result.metadata.width), 'width must be finite');
+    assert.ok(Number.isFinite(result.metadata.height), 'height must be finite');
+    assert.ok(result.metadata.width > 0, 'width must be > 0');
+    assert.ok(result.metadata.height > 0, 'height must be > 0');
   });
 });
 

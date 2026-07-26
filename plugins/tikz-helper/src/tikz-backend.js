@@ -294,6 +294,8 @@ export function elkToTikz(layoutResult, options = {}) {
     defaultArrow: options.defaultArrow ?? '->',
     preamble: options.preamble ?? null,
     tikzLibraries: options.tikzLibraries ?? [],
+    scale: options.scale ?? 1,
+    baseFontSize: options.baseFontSize ?? null,
   };
   const lines = [];
   const fitCommands = [];
@@ -313,7 +315,16 @@ export function elkToTikz(layoutResult, options = {}) {
     lines.push('\\begin{document}');
   }
 
-  lines.push('\\begin{tikzpicture}[node distance=0pt, anchor=north west, every node/.style={inner sep=0pt, outer sep=0pt}]');
+  const pictureOptions = ['node distance=0pt', 'anchor=north west'];
+  if (Number.isFinite(opts.scale) && opts.scale !== 1) {
+    pictureOptions.push(`scale=${opts.scale}, transform shape`);
+  }
+  const everyNodeStyle = ['inner sep=0pt', 'outer sep=0pt'];
+  if (Number.isFinite(opts.baseFontSize) && opts.baseFontSize > 0) {
+    everyNodeStyle.push(`font=\\fontsize{${opts.baseFontSize}}{${Math.round(opts.baseFontSize * 1.2)}}\\selectfont`);
+  }
+  pictureOptions.push(`every node/.style={${everyNodeStyle.join(', ')}}`);
+  lines.push(`\\begin{tikzpicture}[${pictureOptions.join(', ')}]`);
   generateNodesRecursive(layoutResult, 0, lines, opts, 0, 0, fitCommands);
   generateEdges(layoutResult, lines, opts);
 

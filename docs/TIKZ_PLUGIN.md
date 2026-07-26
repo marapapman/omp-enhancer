@@ -50,6 +50,27 @@ Every tool is `defaultInactive`. Activation does not grant filesystem, command, 
 
 The Skill's semantic review checks duplicate node IDs, dangling endpoints, unlabeled decision branches, unreachable nodes, missing assets, and inconsistent semantic references. `tikz_render` separately validates source and asset paths plus the fixed local toolchain. These checks are evidence for Main; neither decides whether Main may continue or finish.
 
+## Media presets and density control
+
+`tikz_generate_diagram` accepts optional `preset`, `density`, and `targetWidthPt` parameters to adapt layout to the target medium.
+
+| Preset | Direction | Spacing scale | Min node | Padding | Font | Target width | Aspect ratio |
+|--------|-----------|--------------|----------|---------|------|-------------|-------------|
+| paper-column | DOWN | 0.85× | (60,30) | 16pt | 9pt | 240pt | — |
+| paper-full | RIGHT | 1.0× | (80,40) | 20pt | 10pt | 504pt | — |
+| slide-16-9 | RIGHT | 1.3× | (120,56) | 28pt | 14pt | — | ≈1.78 |
+| slide-4-3 | RIGHT | 1.3× | (110,52) | 26pt | 14pt | — | ≈1.33 |
+
+**Merge order (later wins):** SERVER defaults ← preset ← tool `layoutOptions` ← graph-level `layoutOptions`.
+
+**Density guard:** Automatic relayout (at most 2 iterations) that scales spacing when the fill ratio (occupied / total area) exceeds 0.60 (expand by ×1.25) or falls below 0.15 (compact by ×0.8, only when nodeCount ≥ 4). Only spacing keys change; topology, direction, and algorithm are untouched.
+
+**Sizing formula:** `scale = targetWidthPt / root.width` (snapped to 1 when within ±2%). Effective font = fontPt × scale. A warning is emitted when effective font < 6pt.
+
+**Determinism:** `elk.randomSeed: 1` is set in server defaults so all layouts are reproducible.
+
+All warnings and density adjustments are advisory only. The tool returns `metadata.density` (fillRatio, adjustments, relayout count) and `metadata.sizing` (target width, intrinsic dimensions, scale, effective font, embedding hint).
+
 ## Workflow contract
 
 `diagram.tikz` is Primary for standalone editable TikZ, LaTeX diagrams, architecture diagrams, pipelines, and flowcharts. It is an Add-on to `slides.generate` or `slides.modify` when a deck is the central deliverable. Exported SVG or PNG remains rendered evidence of `diagram.tikz` and never selects `diagram.svg`. `writing.latex` is composed only for an independently requested prose, template, conversion, or format operation.

@@ -76,6 +76,9 @@ function generateParameters(z) {
     graph: z.string(),
     layoutOptions: optional(z, z.string()),
     styleOptions: optional(z, z.string()),
+    preset: optional(z, z.enum(['paper-column', 'paper-full', 'slide-16-9', 'slide-4-3'])),
+    density: optional(z, z.enum(['compact', 'balanced', 'airy'])),
+    targetWidthPt: optional(z, z.number()),
   });
 }
 
@@ -164,7 +167,7 @@ export default function registerTikzHelper(omp) {
   omp.registerTool({
     name: 'tikz_generate_diagram',
     label: 'Generate TikZ Diagram from Layout IR',
-    description: 'Accept a diagram IR in ELK JSON format (graph with nodes, edges, ports, and layout options), compute automatic layout via Eclipse Layout Kernel, and generate compilable TikZ source code. The output .tex can be rendered with tikz_render.',
+    description: 'Accept a diagram IR in ELK JSON format (graph with nodes, edges, ports, and layout options), compute automatic layout via Eclipse Layout Kernel, and generate compilable TikZ source code. The output .tex can be rendered with tikz_render. Supports paper-column, paper-full, and slide presets with density tuning and sizing metadata.',
     defaultInactive: true,
     approval: 'read',
     promptSnippet: 'Generate a TikZ figure by describing the graph structure and letting ELK compute the layout automatically.',
@@ -179,6 +182,8 @@ export default function registerTikzHelper(omp) {
       'Fix overlap, clipping, or crossings by changing ELK layout options or node sizes and regenerating, never by editing coordinates. The tool returns the generated TikZ source and the positioned graph metadata; write the returned .tex to the project path and compile it with tikz_render. Export the tool metadata: algorithm used, node count, edge count.',
       'Before generating, confirm the ELK layout engine (elkjs) is installed; if the tool returns ELK_NOT_INSTALLED, install it with `npm run install:deps` (or the `omp_core_install_deps` tool) and call tikz_generate_diagram again. Never fall back to hand-authored TikZ coordinates when ELK is missing: install ELK first, then regenerate from the ELK graph IR.',
       'The tool also returns the positioned ELK graph IR as standard ELK JSON in the `ir` field (and the structured `graph`). Write it to a project-local `<figure>.elk.json` to edit in an ELK-compatible visual editor, then feed the edited IR back as the `graph` input to tikz_generate_diagram to regenerate the TikZ; re-importing recomputes layout via ELK (structural, label, and size edits survive, but node positions are recomputed), so the IR is a round-trip artifact, not a hand-coordinate surface.',
+      'Choose the preset parameter for the target medium: paper-column (double-column paper, about 240pt wide, vertical flow), paper-full (full text width, about 504pt), slide-16-9, or slide-4-3 (airy spacing and larger font for projected figures). Presets tune ELK direction, spacing, minimum node size, padding, and font automatically; density=compact|balanced|airy scales spacing further. Do not hand-tune spacing to fix density — choose a preset or density instead.',
+      'Export the tool sizing metadata: target width, intrinsic width and height, applied scale, effective font size, density relayouts, and the embedding hint. Warnings (for example effective font below 6pt) are advisory evidence: split the graph, shorten labels, or choose a wider preset — never edit coordinates.',
     ],
     parameters: generateParameters(z),
     async execute(_toolCallId, params) {
@@ -187,6 +192,9 @@ export default function registerTikzHelper(omp) {
         const parsed = { graph };
         if (params.layoutOptions) parsed.layoutOptions = JSON.parse(params.layoutOptions);
         if (params.styleOptions) parsed.tikzOptions = JSON.parse(params.styleOptions);
+        if (params.preset) parsed.preset = params.preset;
+        if (params.density) parsed.density = params.density;
+        if (typeof params.targetWidthPt === 'number') parsed.targetWidthPt = params.targetWidthPt;
         return successResponse(await generateTikz(parsed));
       } catch (error) {
         return errorResponse(error);

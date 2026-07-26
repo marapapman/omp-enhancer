@@ -68,6 +68,10 @@ describe('tikz-helper runtime tools', () => {
     assert.equal(Object.hasOwn(tools[2].parameters.shape, 'command'), false);
     // tikz_generate_diagram has graph (string), layoutOptions (optional string), styleOptions (optional string)
     assert.equal(Object.hasOwn(tools[3].parameters.shape, 'graph'), true);
+    // S5: preset, density, targetWidthPt optional params
+    assert.equal(Object.hasOwn(tools[3].parameters.shape, 'preset'), true, 'must have preset param');
+    assert.equal(Object.hasOwn(tools[3].parameters.shape, 'density'), true, 'must have density param');
+    assert.equal(Object.hasOwn(tools[3].parameters.shape, 'targetWidthPt'), true, 'must have targetWidthPt param');
   });
 
   it('tikz_generate_diagram promptGuidelines teach ELK-first coordinate-free authoring', () => {
@@ -167,6 +171,9 @@ describe('tikz-helper runtime tools', () => {
     assert.match(guidelines, /feed the edited IR back as the `graph` input to tikz_generate_diagram to regenerate/);
     assert.match(guidelines, /re-importing recomputes layout via ELK/i);
     assert.match(guidelines, /node positions are recomputed/);
+    // S5: preset and density guidance
+    assert.match(guidelines, /paper-column \(double-column paper/);
+    assert.match(guidelines, /Export the tool sizing metadata/);
   });
 
   it('returns structured tool success and parameter failures', async () => {
