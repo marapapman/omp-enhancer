@@ -236,6 +236,9 @@ function mergeAsset(existingAssets, incoming) {
 }
 
 export async function prepareAsset(input = {}, options = {}) {
+  if (input.sourceType === 'svg' || input.sourceType === 'tex') {
+    return registerAssetSource(input, options);
+  }
   const projectRoot = await resolveProjectRoot(input.projectRoot);
   const inputPath = await resolveInputImage(projectRoot, input.inputPath);
   const outputDirectory = normalizeRelativePath(
@@ -312,6 +315,74 @@ export async function prepareAsset(input = {}, options = {}) {
       imageGeneration: false,
       normalizedWith: 'imagemagick',
       command: normalized.evidence ?? null,
+    },
+  };
+}
+
+export async function registerAssetSource(input = {}, options = {}) {
+  const projectRoot = await resolveProjectRoot(input.projectRoot);
+  if (input.sourceType !== 'svg' && input.sourceType !== 'tex') {
+    throw new TikzRuntimeError('INVALID_PARAMETER', 'sourceType must be "svg" or "tex".');
+  }
+  if (typeof input.relativePath !== 'string' || input.relativePath.trim() === '') {
+    throw new TikzRuntimeError('INVALID_PARAMETER', 'relativePath must be a project-relative path.');
+  }
+  const resolved = await resolveExistingProjectFile(projectRoot, input.relativePath, 'relativePath');
+  const sourceBuffer = await readBoundedSource(resolved.path, {
+    ...options.sourceRead,
+    signal: options.signal,
+  });
+  const sha256 = createHash('sha256').update(sourceBuffer).digest('hex');
+  const outputDirectory = normalizeRelativePath(
+    input.outputDirectory ?? DEFAULT_OUTPUT_DIRECTORY,
+    'outputDirectory',
+  );
+  const directory = await ensureProjectDirectory(projectRoot, outputDirectory, 'outputDirectory');
+  const manifestRelativePath = `${directory.normalized}/${MANIFEST_NAME}`;
+  const manifestTarget = await assertWritableProjectFile(projectRoot, manifestRelativePath, 'manifest path');
+  const existingManifest = await readManifest(manifestTarget.path);
+  const importedAt = (options.now ?? (() => new Date().toISOString()))();
+  const nodeIds = Array.isArray(input.nodeIds)
+    ? input.nodeIds.filter((n) => typeof n === 'string' && n.trim() !== '')
+    : (typeof input.nodeId === 'string' && input.nodeId.trim() !== '' ? [input.nodeId] : []);
+  const provenanceKind = typeof input.provenanceKind === 'string' && input.provenanceKind.trim() !== ''
+    ? input.provenanceKind
+    : (input.sourceType === 'svg' ? 'imported-svg' : 'copied-opentikz-tex');
+  const provenanceEntry = { kind: provenanceKind, importedAt };
+  const asset = {
+    sha256,
+    relativePath: input.relativePath,
+    bytes: sourceBuffer.length,
+    inputFormat: input.sourceType,
+    inputWidth: null,
+    inputHeight: null,
+    outputFormat: input.sourceType,
+    outputWidth: null,
+    outputHeight: null,
+    sourceType: input.sourceType === 'svg' ? 'svg-source' : 'opentikz-tex',
+    nodeIds,
+    prompt: undefined,
+    provenance: [provenanceEntry],
+  };
+  const manifest = {
+    ...existingManifest,
+    version: 1,
+    assets: mergeAsset(existingManifest.assets ?? [], asset),
+  };
+  await writeManifestAtomically(manifestTarget.path, manifest);
+
+  return {
+    ok: true,
+    asset: manifest.assets.find((item) => item.sha256 === sha256),
+    manifest: {
+      relativePath: manifestRelativePath,
+      assetCount: manifest.assets.length,
+    },
+    operations: {
+      networkAccess: false,
+      imageGeneration: false,
+      normalizedWith: null,
+      command: null,
     },
   };
 }

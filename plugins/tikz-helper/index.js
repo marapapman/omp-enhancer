@@ -1,8 +1,12 @@
-import { prepareAsset } from './src/asset-prepare.js';
+import { prepareAsset, registerAssetSource } from './src/asset-prepare.js';
 import { searchCatalog } from './src/catalog-search.js';
 import { renderTikz, runBoundedCommand } from './src/render-tikz.js';
 import { generateTikz, computeLayout, elkToTikz } from './src/generate-tikz.js';
 import { asRuntimeError } from './src/runtime-error.js';
+import { TikzRuntimeError } from './src/runtime-error.js';
+import { readFile, writeFile, mkdir, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, dirname, isAbsolute, resolve, sep } from 'node:path';
 
 function optional(z, schema) {
   return typeof z.optional === 'function' ? z.optional(schema) : schema.optional();
@@ -82,9 +86,16 @@ function generateParameters(z) {
   });
 }
 
+function previewAssetsParameters(z) {
+  return z.object({
+    manifestPath: optional(z, z.string()),
+    nodeIds: optional(z, z.array(z.string())),
+  });
+}
+
 
 export { generateTikz, computeLayout, elkToTikz };
-export { prepareAsset } from './src/asset-prepare.js';
+export { prepareAsset, registerAssetSource } from './src/asset-prepare.js';
 export { searchCatalog } from './src/catalog-search.js';
 export { renderTikz, runBoundedCommand } from './src/render-tikz.js';
 export { checkElkEnvironment, ELK_INSTALL_GUIDANCE } from './src/elk-layout.js';
@@ -201,4 +212,107 @@ export default function registerTikzHelper(omp) {
       }
     },
   });
+
+  omp.registerTool({
+    name: 'tikz_preview_assets',
+    label: 'Preview TikZ Icon Assets',
+    description: 'Preview icon assets from an asset manifest for visioner review. Writes previews to temporary directory only, never to project files.',
+    defaultInactive: true,
+    approval: 'exec',
+    promptSnippet: 'Render icon asset previews to a temporary directory for visioner visual review.',
+    promptGuidelines: [
+      'Previews are written to a temporary directory only; project files are never modified.',
+      'Pass manifestPath to choose the manifest; omit it to use the default figures/tikz/assets/assets.manifest.json.',
+      'Pass nodeIds to preview only assets attached to those nodes.',
+    ],
+    parameters: previewAssetsParameters(z),
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      try {
+        return successResponse(await previewAssetPreviews({
+          ...objectParams(params),
+          projectRoot: projectRoot(ctx),
+        }, { signal }));
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  });
+}
+
+async function previewAssetPreviews(input = {}, options = {}) {
+  const root = typeof input.projectRoot === 'string' && input.projectRoot.trim() !== ''
+    ? input.projectRoot : process.cwd();
+  const manifestRel = input.manifestPath && input.manifestPath.trim() !== ''
+    ? input.manifestPath
+    : 'figures/tikz/assets/assets.manifest.json';
+  const manifestPath = isAbsolute(manifestRel) ? manifestRel : resolve(root, manifestRel.split('/').join(sep));
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ENOENT') {
+      throw new TikzRuntimeError('FILE_NOT_FOUND', `Asset manifest not found: ${manifestRel}`, { path: manifestRel });
+    }
+    throw asRuntimeError(error);
+  }
+  const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
+  const wantedNodeIds = Array.isArray(input.nodeIds)
+    ? input.nodeIds.filter((n) => typeof n === 'string' && n.trim() !== '')
+    : null;
+  const matching = assets.filter((a) => a && typeof a === 'object' && (
+    !wantedNodeIds || (Array.isArray(a.nodeIds) && a.nodeIds.some((n) => wantedNodeIds.includes(n)))
+  ));
+  const tempDir = await mkdtemp(join(tmpdir(), 'omp-tikz-preview-'));
+  const previews = [];
+  for (const asset of matching) {
+    const sourcePath = isAbsolute(asset.relativePath) ? asset.relativePath : resolve(root, String(asset.relativePath).split('/').join(sep));
+    const st = asset.sourceType ?? (asset.outputFormat === 'png' ? 'raster' : null);
+    let previewPath = null;
+    let limitations = [];
+    if (st === 'raster' || asset.outputFormat === 'png') {
+      previewPath = sourcePath;
+      limitations.push('raster asset previewed in place; no temporary copy generated');
+    } else if (st === 'svg-source' || asset.inputFormat === 'svg') {
+      try {
+        const content = await readFile(sourcePath, 'utf8');
+        const previewRel = join(tempDir, `preview-${asset.sha256 ?? 'svg'}.svg`);
+        const wrapped = content.trim().startsWith('<svg') || content.trim().startsWith('<?xml')
+          ? content
+          : `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${asset.outputWidth ?? 200}" height="${asset.outputHeight ?? 200}"><g>${content}</g></svg>`;
+        await writeFile(previewRel, wrapped);
+        previewPath = previewRel;
+        limitations.push('svg preview written to temp directory; converter not invoked');
+      } catch (error) {
+        limitations.push(`svg preview unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } else if (st === 'opentikz-tex' || asset.inputFormat === 'tex') {
+      try {
+        const content = await readFile(sourcePath, 'utf8');
+        const wrapperDir = join(tempDir, `tex-${asset.sha256 ?? 'tex'}`);
+        await mkdir(wrapperDir, { recursive: true });
+        const texPath = join(wrapperDir, 'preview.tex');
+        const wrapper = `\\documentclass[convert={density=150,outext=.png}]{standalone}\n\\usepackage{tikz}\n\\usepackage{graphicx}\n\\begin{document}\n\\begin{tikzpicture}\n${content}\n\\end{tikzpicture}\n\\end{document}\n`;
+        await writeFile(texPath, wrapper);
+        previewPath = texPath;
+        limitations.push('tex preview wrapper written to temp directory; compilation requires tikz_render');
+      } catch (error) {
+        limitations.push(`tex preview unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } else {
+      limitations.push(`unknown source type "${String(st)}"; no preview generated`);
+    }
+    previews.push({
+      previewPath,
+      sourcePath,
+      nodeIds: Array.isArray(asset.nodeIds) ? asset.nodeIds : [],
+      limitations,
+    });
+  }
+  return {
+    ok: true,
+    previews,
+    tempDirectory: tempDir,
+    manifestPath: manifestRel,
+    matchedCount: matching.length,
+  };
 }

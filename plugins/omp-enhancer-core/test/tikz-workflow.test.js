@@ -11,51 +11,62 @@ import {
   buildWorkflowSkillReferenceMarkdown,
 } from '../src/workflows/render-skill.js';
 
-test('diagram.tikz is one bounded subagent-driven OpenTikZ workflow', () => {
+test('diagram.tikz is the single bounded subagent-driven TikZ Primary with a 9-step asset+figure chain', () => {
   const workflow = workflowCatalog['diagram.tikz'];
 
-  assert.equal(WORKFLOW_CATALOG_VERSION, 24);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 26);
   assert.ok(workflowIds.includes('diagram.tikz'));
+  assert.equal(workflowIds.includes('diagram.svg'), false);
   assert.ok(workflow);
   assert.equal(workflow.delegationDefault, 'subagent-driven');
-  assert.deepEqual(workflow.skills, ['tikz-diagram']);
+  assert.deepEqual(workflow.skills, ['tikz-diagram', 'svg-flowchart']);
   assert.deepEqual(workflow.catalogSkills, []);
   assert.deepEqual(workflow.roles, ['designer', 'task', 'visioner']);
-  assert.match(workflow.chooseWhen, /TikZ.+paper|paper.+TikZ/iu);
+  assert.match(workflow.chooseWhen, /TikZ.+academic|academic.+TikZ|flowchart.+architecture|decision flow.+deploy pipeline/iu);
+  assert.match(workflow.chooseWhen, /SVG.+only icon assets.+preview evidence.+compatibility supplements/iu);
+
+  assert.equal(workflow.steps.length, 9);
 
   const steps = workflow.steps.join(' ');
   const scope = workflow.scopeNotes.join(' ');
   const quality = workflow.qualityChecks.join(' ');
   const delegation = workflow.delegation.join(' ');
 
-  assert.match(steps, /semantic figure spec.+node.+edge.+branch.+group.+flow direction.+asset manifest/iu);
-  assert.match(steps, /ELK graph IR.+sole source of node positions and edge geometry.+author never authors.+hand-edits TikZ coordinates.+tikz_generate_diagram.+compute the layout with ELK.+OpenTikZ.+icon and semantic reference source.+template.+geometry is discarded.+overlap.+changing layout options or node sizes and regenerating/iu);
-  assert.match(steps, /Task.+optional.+OMP.+imagegen.+missing node icon.+visible.+useful/iu);
-  assert.match(steps, /imagegen.+never.+OpenTikZ.+library.+asset manifest.+raster disclosure/iu);
-  assert.match(steps, /tikz_prepare_asset.+normalized.+SHA-256|SHA-256.+tikz_prepare_asset/iu);
-  assert.match(steps, /tikz_render.+fixed.+argument.+shell false.+no shell escape/iu);
-  assert.match(steps, /temporary workspace.+PDF.+SVG.+full-size.+60%/iu);
-  assert.match(steps, /current revision.+semantic figure spec.+asset manifest.+icon legibility.+raster disclosure/iu);
-  assert.match(steps, /visual review finding.+produce one bounded new revision.+rerun.+renderer.+reviewed at most once/iu);
-  assert.match(steps, /report.+source.+spec.+asset manifest.+render.+review.+limitations.+no verdict.+completion/iu);
+  // Phased chain: blueprint -> asset prep -> asset review -> ELK -> render -> whole-figure review -> bounded revision -> deliver
+  assert.match(steps, /Main fixes audience.+output path.+target format.+icon requirements.+asset source boundaries/iu);
+  assert.match(steps, /graphical blueprint.+semantic graph.+per-node icon plan.+manifest draft.+no final coordinates/iu);
+  assert.match(steps, /Prepare and validate icon assets.+OpenTikZ.+imagegen.+SVG assets.+previews and manifest/iu);
+  assert.match(steps, /Review asset previews per icon.+reject or approve.+only new previews/iu);
+  assert.match(steps, /Generate ELK IR.+tikz_generate_diagram.+TikZ source.+round-trip check/iu);
+  assert.match(steps, /tikz_render.+revision-bound PDF\/SVG\/PNG/iu);
+  assert.match(steps, /Independently review fresh whole-figure renders.+semantic completeness.+icon clarity.+layering.+overlap.+clipping.+labels.+branch semantics.+manifest disclosure/iu);
+  assert.match(steps, /At most one bounded revision.+unchanged artifacts are not re-reviewed/iu);
+  assert.match(steps, /Deliver source files.+semantic graph.+manifest.+preview\/render evidence.+limitations.+asset provenance/iu);
 
-  assert.match(delegation, /step-2: designer.+OpenTikZ.+semantic figure spec.+asset manifest/iu);
-  assert.match(delegation, /step-4: designer.+TikZ source.+asset/iu);
-  assert.match(delegation, /step-6: visioner.+full-size.+60%.+current revision/iu);
-  assert.match(delegation, /step-7: designer applies visioner findings, task rerenders, and visioner performs at most one fresh affected review after rerendering/iu);
+  assert.equal(workflow.delegation.length, 7);
+  assert.deepEqual(workflow.delegation, [
+    'step-2: designer owns the semantic blueprint and per-icon plan while preserving scope',
+    'step-3: task prepares and validates icon assets and writes the asset manifest',
+    'step-4: visioner independently and read-only reviews fresh asset previews and flags unsupported icons',
+    'step-5: designer owns the ELK graph IR, layout generation, and final TikZ source revision',
+    'step-6: task invokes the fixed tikz_render renderer for the approved current revision',
+    'step-7: visioner independently and read-only reviews the fresh current-revision renders',
+    'step-8: designer applies supported findings, task rerenders, and visioner reviews only fresh rerenders',
+  ]);
 
-  assert.match(scope, /Main.+authorizes.+imagegen.+task.+executes/iu);
-  assert.match(scope, /imagegen.+optional.+not.+permission|optional.+imagegen.+not.+permission/iu);
-  assert.match(scope, /OpenTikZ.+read-only.+copy/iu);
-  assert.match(scope, /fixed renderer.+never.+user-supplied.+project-configured.+command/iu);
-  assert.match(scope, /no.+gate.+router.+automatic.+loop/iu);
-  assert.match(quality, /semantic completeness.+edit-contract.+compile.+current-revision.+full-size.+60%.+icon legibility.+raster disclosure/iu);
-  assert.doesNotMatch(`${steps} ${scope} ${delegation}`, /retry until|repeat until|automatic repair|block:\s*true|continue:\s*true/iu);
+  assert.match(scope, /SVG and other formats are only icon assets.+geometry always comes from ELK IR/iu);
+  assert.match(scope, /OpenTikZ.+read-only source/iu);
+  assert.match(scope, /imagegen.+only when explicitly authorized/iu);
+  assert.match(scope, /deterministic fixed-command pipeline.+shell escape disabled/iu);
+  assert.match(scope, /No gate.+router.+fork.+loop.+bounded and advisory/iu);
+  assert.match(scope, /visioner review is independent and read-only.+does not render.+edit.+decide completion/iu);
+
+  assert.match(quality, /semantic completeness.+ELK graph IR.+edit-contract.+compile.+icon legibility.+raster disclosure/iu);
+  assert.doesNotMatch(`${steps} ${scope} ${delegation}`, /retry until|repeat until|automatic repair|automatic retry|block:\s*true|continue:\s*true/iu);
 });
 
 test('TikZ composes only with independently requested language, slide, and design work', () => {
   const tikz = workflowCatalog['diagram.tikz'];
-  const svg = workflowCatalog['diagram.svg'];
   const latex = workflowCatalog['writing.latex'];
 
   assert.deepEqual(tikz.composeWith, [
@@ -65,28 +76,29 @@ test('TikZ composes only with independently requested language, slide, and desig
     'writing.zh',
     'writing.en',
   ]);
-  assert.equal(svg.composeWith.includes('diagram.tikz'), false);
   assert.equal(tikz.composeWith.includes('diagram.svg'), false);
   assert.equal(latex.composeWith.includes('diagram.tikz'), false);
   assert.match(`${latex.chooseWhen} ${latex.scopeNotes.join(' ')}`, /TikZ.+alone.+diagram\.tikz/iu);
 
   for (const id of ['writing.zh', 'writing.en', 'slides.generate', 'slides.modify', 'design.visual']) {
     assert.equal(workflowCatalog[id].composeWith.includes('diagram.tikz'), true, id);
+    assert.equal(workflowCatalog[id].composeWith.includes('diagram.svg'), false, `${id} must not compose removed diagram.svg`);
   }
 });
 
-test('workflow Skill classifies TikZ as a specialized output distinct from SVG and LaTeX prose', () => {
+test('workflow Skill classifies TikZ as the single specialized visual output distinct from LaTeX prose', () => {
   const index = buildWorkflowSkillIndexMarkdown();
   const reference = buildWorkflowSkillReferenceMarkdown('diagram.tikz');
 
   assert.match(
     index,
-    /#### specialized outputs[\s\S]*`slides\.generate`[\s\S]*`slides\.modify`[\s\S]*`diagram\.svg`[\s\S]*`diagram\.tikz`/iu,
+    /#### specialized outputs[\s\S]*`slides\.generate`[\s\S]*`slides\.modify`[\s\S]*`diagram\.tikz`/iu,
   );
-  assert.match(index, /direct standalone SVG.+`diagram\.svg`.+TikZ.+`diagram\.tikz`/iu);
-  assert.match(index, /TikZ source alone.+not.+`writing\.latex`/iu);
-  assert.match(index, /`diagram\.tikz`[^\n]*D=\[`skill:\/\/tikz-diagram`\][^\n]*PLAN URI/iu);
+  assert.match(index, /TikZ.+`diagram\.tikz`/iu);
+  assert.match(index, /SVG or other formats are only icon assets.+compatibility supplements/iu);
+  assert.match(index, /`diagram\.tikz`[^\n]*D=\[`skill:\/\/tikz-diagram`, `skill:\/\/svg-flowchart`\][^\n]*PLAN URI/iu);
   assert.match(reference, /# `diagram\.tikz` workflow reference/iu);
   assert.match(reference, /Agent candidates: `designer`, `task`, `visioner`/iu);
-  assert.doesNotMatch(reference, /hard gate|hard router|automatic retry|retry until|repeat until/iu);
+  assert.doesNotMatch(reference, /automatic retry|retry until|repeat until|automatic repair/iu);
+  assert.doesNotMatch(index, /standalone SVG.*Primary|Direct standalone SVG/iu);
 });

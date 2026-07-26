@@ -183,3 +183,153 @@ describe('generate-tikz: preset, density, and sizing orchestration', () => {
     );
   });
 });
+
+describe('generate-tikz: node icon assets', () => {
+  it('properties.icon.kind=includegraphics emits \\includegraphics in the TikZ output', async () => {
+    const iconGraph = {
+      id: 'icon-root',
+      children: [
+        {
+          id: 'icon-node',
+          width: 60,
+          height: 60,
+          properties: {
+            icon: {
+              kind: 'includegraphics',
+              relativePath: 'figures/tikz/assets/abc.png',
+              width: '1.2cm',
+            },
+          },
+        },
+      ],
+      edges: [],
+      layoutOptions: { 'elk.algorithm': 'layered', 'elk.direction': 'RIGHT' },
+    };
+    const r = await generateTikz({ graph: iconGraph });
+    assert.equal(r.ok, true);
+    assert.match(
+      r.tikz,
+      /\\includegraphics\[width=1\.2cm,keepaspectratio\]\{figures\/tikz\/assets\/abc\.png\}/,
+      'TikZ output must contain the \\includegraphics icon command',
+    );
+    // The node is emitted with the icon as its content rather than the id label.
+    assert.doesNotMatch(r.tikz, /\(icon-node\)\s+at\s+\([^)]+\)\s+\{icon-node\}/,
+      'icon node must not fall back to the id-as-label body');
+  });
+
+  it('properties.icon with a forbidden geometry field throws TikzRuntimeError', async () => {
+    const badGraph = {
+      id: 'icon-bad-root',
+      children: [
+        {
+          id: 'bad-icon-node',
+          width: 60,
+          height: 60,
+          properties: {
+            icon: {
+              kind: 'includegraphics',
+              relativePath: 'figures/tikz/assets/abc.png',
+              width: '1.2cm',
+              x: 10,
+            },
+          },
+        },
+      ],
+      edges: [],
+      layoutOptions: { 'elk.algorithm': 'layered', 'elk.direction': 'RIGHT' },
+    };
+    await assert.rejects(
+      () => generateTikz({ graph: badGraph }),
+      (error) => error.code === 'INVALID_ICON_SPEC' && /x/.test(error.message),
+      'geometry field in properties.icon must raise INVALID_ICON_SPEC',
+    );
+  });
+
+  it('metadata.assets collects icon assets from the positioned IR', async () => {
+    const iconGraph = {
+      id: 'icon-assets-root',
+      children: [
+        {
+          id: 'icon-a',
+          width: 60,
+          height: 60,
+          properties: {
+            icon: { kind: 'includegraphics', relativePath: 'figures/tikz/assets/a.png', width: '1cm' },
+          },
+        },
+        {
+          id: 'icon-b',
+          width: 60,
+          height: 60,
+          properties: {
+            icon: { kind: 'includegraphics', relativePath: 'figures/tikz/assets/a.png', width: '1cm' },
+          },
+        },
+      ],
+      edges: [],
+      layoutOptions: { 'elk.algorithm': 'layered', 'elk.direction': 'RIGHT' },
+    };
+    const r = await generateTikz({ graph: iconGraph });
+    assert.ok(Array.isArray(r.metadata.assets), 'metadata.assets must be an array');
+    assert.equal(r.metadata.assets.length, 1, 'two nodes sharing one relativePath collapse to a single asset entry');
+    assert.equal(r.metadata.assets[0].relativePath, 'figures/tikz/assets/a.png');
+    assert.equal(r.metadata.assets[0].kind, 'includegraphics');
+    assert.deepEqual(r.metadata.assets[0].nodeIds.sort(), ['icon-a', 'icon-b']);
+  });
+
+  it('properties.icon.kind=tex emits \\input{...} in the TikZ output', async () => {
+    const texGraph = {
+      id: 'tex-icon-root',
+      children: [
+        {
+          id: 'tex-node',
+          width: 60,
+          height: 60,
+          properties: {
+            icon: {
+              kind: 'tex',
+              relativePath: 'figures/tikz/assets/some-icon.tex',
+            },
+          },
+        },
+      ],
+      edges: [],
+      layoutOptions: { 'elk.algorithm': 'layered', 'elk.direction': 'RIGHT' },
+    };
+    const r = await generateTikz({ graph: texGraph });
+    assert.equal(r.ok, true);
+    assert.match(
+      r.tikz,
+      /\\input\{figures\/tikz\/assets\/some-icon\.tex\}/,
+      'TikZ output must contain the \\input icon command for kind=tex',
+    );
+    assert.doesNotMatch(r.tikz, /\(tex-node\)\s+at\s+\([^)]+\)\s+\{tex-node\}/,
+      'tex icon node must not fall back to the id-as-label body');
+  });
+
+  it('properties.icon.kind=unknown (unrecognized) throws TikzRuntimeError', async () => {
+    const unknownGraph = {
+      id: 'unknown-icon-root',
+      children: [
+        {
+          id: 'unknown-node',
+          width: 60,
+          height: 60,
+          properties: {
+            icon: {
+              kind: 'unknown',
+              relativePath: 'figures/tikz/assets/x.png',
+            },
+          },
+        },
+      ],
+      edges: [],
+      layoutOptions: { 'elk.algorithm': 'layered', 'elk.direction': 'RIGHT' },
+    };
+    await assert.rejects(
+      () => generateTikz({ graph: unknownGraph }),
+      (error) => error.code === 'INVALID_ICON_SPEC' && /unknown/.test(error.message),
+      'an unrecognized properties.icon.kind must raise INVALID_ICON_SPEC',
+    );
+  });
+});

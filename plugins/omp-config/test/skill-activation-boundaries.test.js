@@ -18,7 +18,7 @@ test('svg-flowchart metadata uses a positive task-local trigger instead of a har
   const skill = readSkill('svg-flowchart');
   const description = descriptionOf(skill);
 
-  assert.match(description, /Use when the task is to create or revise/iu);
+  assert.match(description, /Use when a diagram\.tikz figure needs/iu);
   assert.doesNotMatch(description, /\b(?:whenever|always|must)\b/iu);
   assert.doesNotMatch(skill, /## When to Activate/iu);
 });

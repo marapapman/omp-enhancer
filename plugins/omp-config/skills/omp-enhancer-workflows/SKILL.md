@@ -17,7 +17,7 @@ Actions:
 PLAN text alone is incomplete: same response calls NOW and waits, or calls THEN if NOW=none. THEN is one final resource-only batch. Give each evidence checkpoint an Action.
 AFTER NOW: empty revealed URI set => no text/marker; call the THEN batch. Otherwise RESOURCE EXTENSION MUST list >=1 exact revealed URI; `reads=none` is invalid.
 
-Catalog version: 24.
+Catalog version: 26.
 
 Navigation only: never routes, gates, grants permission, selects Agents, or decides completion.
 
@@ -33,8 +33,8 @@ STATE: DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY.
 
 Main owns delegation; OMP owns tools, permissions, TODO, Agents, and completion.
 
-PROSE: English draft/revision -> `writing.en`; Chinese -> `writing.zh`; unknown body -> `writing.pending`. Other central operation => language Add-on. Language Primary + `.tex` target/LaTeX prose/preserved LaTeX commands => `writing.latex` Add-on. Direct standalone SVG -> `diagram.svg`; editable TikZ `.tex`/PDF/SVG/PNG -> `diagram.tikz`; TikZ source alone does not add `writing.latex`. Format-only => format Primary. Converters/templates only when requested. Loaded language card + target/constraints/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read. Long-form pilot: NEW multi-section draft with complete disjoint briefs and a freezable shared brief may shard step-2 per section; revise/edit/polish/translate/whole-doc/single-section stays ordinary.
-VISUAL: Non-visual Primary + independently requested UI/layout/static-visual deliverable => `design.visual` Add-on. Standalone slide/SVG/TikZ stays specialized Primary; add `design.visual` only for separate visual-design work/output.
+PROSE: English draft/revision -> `writing.en`; Chinese -> `writing.zh`; unknown body -> `writing.pending`. Other central operation => language Add-on. Language Primary + `.tex` target/LaTeX prose/preserved LaTeX commands => `writing.latex` Add-on. Academic figure, flowchart, architecture, decision flow, deploy pipeline, or editable TikZ `.tex`/PDF/SVG/PNG -> `diagram.tikz`; SVG or other formats are only icon assets, preview evidence, or compatibility supplements inside that card; TikZ source alone does not add `writing.latex`. Format-only => format Primary. Converters/templates only when requested. Loaded language card + target/constraints/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read. Long-form pilot: NEW multi-section draft with complete disjoint briefs and a freezable shared brief may shard step-2 per section; revise/edit/polish/translate/whole-doc/single-section stays ordinary.
+Standalone slide or TikZ stays specialized Primary; SVG is only an icon/asset or compatibility supplement inside diagram.tikz. Non-visual Primary + independently requested UI/layout/static-visual deliverable => design.visual Add-on.
 
 ## Domain index
 
@@ -62,8 +62,7 @@ SKILL DISCOVERY: `D` and `C` are optional candidates, never load sets. Select on
 
 - `slides.generate` — New LaTeX Beamer deck requiring template/story decisions before frame authoring. D=[`skill://latex-beamer-slides`, `skill://slides-storyline`, `skill://beamer-to-powerpoint`]. PLAN URI: `skill://omp-enhancer-workflows/references/slides.generate.md`.
 - `slides.modify` — Bounded wording, language, or existing-style changes to a current LaTeX Beamer deck. D=[`skill://latex-beamer-slides`]. PLAN URI: `skill://omp-enhancer-workflows/references/slides.modify.md`.
-- `diagram.svg` — Standalone monochrome SVG workflow/process/block/box diagram with rendered visual QA. D=[`skill://svg-flowchart`]. PLAN URI: `skill://omp-enhancer-workflows/references/diagram.svg.md`.
-- `diagram.tikz` — Editable TikZ paper diagram with PDF/SVG/PNG evidence. D=[`skill://tikz-diagram`]. PLAN URI: `skill://omp-enhancer-workflows/references/diagram.tikz.md`.
+- `diagram.tikz` — Editable TikZ diagram for academic figures, flowcharts, architecture, decision flows, and deploy pipelines; SVG and other formats are only icon assets, preview evidence, or compatibility supplements. D=[`skill://tikz-diagram`, `skill://svg-flowchart`]. PLAN URI: `skill://omp-enhancer-workflows/references/diagram.tikz.md`.
 
 ### research
 

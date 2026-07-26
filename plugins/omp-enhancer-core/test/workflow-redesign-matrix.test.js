@@ -14,7 +14,7 @@ test('workflow catalog exposes composable workflows including language-pending w
   assert.ok(workflowIds.includes('writing.en'));
   assert.ok(workflowIds.includes('slides.generate'));
   assert.ok(workflowIds.includes('slides.modify'));
-  assert.ok(workflowIds.includes('diagram.svg'));
+  assert.equal(workflowIds.includes('diagram.svg'), false);
   assert.ok(workflowIds.includes('research.web'));
 });
 
@@ -249,32 +249,49 @@ test('slides workflows separate template-and-story generation from bounded modif
   );
 });
 
-test('SVG diagram workflow keeps creation neutral and exposes optional independent visual review', () => {
-  const diagram = workflowCatalog['diagram.svg'];
+test('design.visual workflow delegates the bounded visual chain with a revision loop', () => {
+  const visual = workflowCatalog['design.visual'];
 
-  assert.deepEqual(diagram.skills, ['svg-flowchart']);
-  assert.deepEqual(diagram.roles, ['designer', 'task', 'visioner']);
-  assert.deepEqual(diagram.delegation, [
-    'step-2: designer creates the SVG and owns every source revision',
-    'step-3: task runs the static checker and renders full-size and 60% rasters',
-    'step-4: visioner independently reviews the fresh full-size and 60% raster renders',
-    'step-5: designer applies visioner findings, task rerenders, and visioner reviews only the resulting new revision',
+  assert.deepEqual(visual.skills, ['frontend-design', 'canvas-design']);
+  assert.deepEqual(visual.roles, ['designer', 'task', 'visioner']);
+
+  assert.match(visual.steps[0], /requested scope.+existing visual context.+implementation boundary/i);
+  assert.match(visual.steps[1], /bounded visual direction/i);
+  assert.match(visual.steps[2], /design or source revision.+non-visual stages/i);
+  assert.match(visual.steps[3], /render.+identified current revision.+reconcile.+scope/i);
+  assert.match(visual.steps[4], /independently.+read-only.+review.+hierarchy.+spacing.+typography.+responsiveness.+accessibility/i);
+  assert.match(visual.steps[5], /visual review finding.+bounded new.+revision.+rerender.+reviewed at most once.+do not review an unchanged artifact/i);
+
+  assert.deepEqual(visual.delegation, [
+    'step-2: designer owns the bounded visual direction',
+    'step-3: designer owns the design or source revision while preserving the requested scope',
+    'step-4: task renders one identified current revision; designer reconciles scope',
+    'step-5: visioner independently and read-only reviews that current render or layout',
+    'step-6: designer applies visioner findings, task rerenders, and visioner reviews only fresh rerenders',
   ]);
-  assert.match(diagram.steps[0], /node and edge model.+flow direction/i);
-  assert.match(diagram.steps[1], /standalone SVG.+black and white.+straight or dashed lines.+orthogonal polylines.+no curved connectors/i);
-  assert.match(diagram.steps[2], /render.+full size.+60%/i);
-  assert.match(diagram.steps[3], /independently inspect.+latest rasters/i);
-  assert.match(diagram.steps[4], /visual review finding.+new revision.+rerun.+rendering.+reviewed at most once/i);
-  assert.match(diagram.steps[5], /Report.+source validation.+rendered evidence.+remaining.+limitations.+no verdict.+completion/i);
-  assert.doesNotMatch(diagram.steps.join(' '), /Deliver only after|maximum of three/i);
-  assert.match(diagram.scopeNotes.join(' '), /Designer creates or revises the SVG, task renders, visioner reviews the renders/i);
-  assert.match(diagram.scopeNotes.join(' '), /Do not substitute source inspection or author self-review for independent rendered evidence/i);
-  assert.match(
-    diagram.qualityChecks.join(' '),
-    /node and edge completeness.+arrow direction.+overlap.+text clipping.+connector collision.+crossing.+font size.+spacing.+rendered evidence/i,
-  );
 });
 
+test('all visual workflow steps keep role names out of step text', () => {
+  for (const id of ['design.visual', 'slides.generate', 'slides.modify', 'diagram.tikz']) {
+    const workflow = workflowCatalog[id];
+    const stepText = workflow.steps.join(' ');
+    assert.doesNotMatch(stepText, /\b(?:designer|visioner)\b/i, `${id} steps must not mention designer or visioner roles`);
+  }
+});
+
+test('diagram.tikz exposes the bounded subagent-driven delegation chain', () => {
+  const tikz = workflowCatalog['diagram.tikz'];
+
+  assert.deepEqual(tikz.delegation, [
+    'step-2: designer owns the semantic blueprint and per-icon plan while preserving scope',
+    'step-3: task prepares and validates icon assets and writes the asset manifest',
+    'step-4: visioner independently and read-only reviews fresh asset previews and flags unsupported icons',
+    'step-5: designer owns the ELK graph IR, layout generation, and final TikZ source revision',
+    'step-6: task invokes the fixed tikz_render renderer for the approved current revision',
+    'step-7: visioner independently and read-only reviews the fresh current-revision renders',
+    'step-8: designer applies supported findings, task rerenders, and visioner reviews only fresh rerenders',
+  ]);
+});
 test('every catalog role is OMP-native or marketplace-packaged and every selected skill remains packaged', async () => {
   const [registeredSkills, registeredAgents] = await Promise.all([
     registeredMarketplaceSkills(repoRoot),

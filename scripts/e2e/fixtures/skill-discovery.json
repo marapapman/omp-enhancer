@@ -123,8 +123,8 @@
       "expectations": {
         "minWorkflowReferenceReads": 1,
         "requiredSelectedWorkflowIds": ["diagram.tikz"],
-        "requiredObservedSkills": ["tikz-diagram"],
-        "maxObservedSkills": 6,
+        "requiredObservedSkills": ["tikz-diagram", "svg-flowchart"],
+        "maxObservedSkills": 7,
         "forbiddenSkills": ["svg-writing", "writing-review", "writing-markdown-helper"]
       }
     },

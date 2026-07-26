@@ -61,10 +61,44 @@ export async function generateTikz(input = {}, options = {}) {
     tikz: tikzSource,
     ir: JSON.stringify(layoutResult.graph, null, 2),
     graph: layoutResult.graph,
-    metadata: { ...layoutResult.metadata, density: densityReport, sizing },
+    metadata: {
+      ...layoutResult.metadata,
+      density: densityReport,
+      sizing,
+      assets: collectIconAssets(layoutResult.graph),
+    },
   };
 }
 
 function tikzLibrariesSafe(value) { return Array.isArray(value) ? value : []; }
+
+function collectIconAssets(root) {
+  const assets = [];
+  const seen = new Set();
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return;
+    const icon = node.properties?.icon;
+    if (icon && typeof icon === 'object' && !Array.isArray(icon)) {
+      const rel = typeof icon.relativePath === 'string' ? icon.relativePath : null;
+      const key = `${icon.kind ?? ''}:${rel ?? ''}`;
+      if (rel && !seen.has(key)) {
+        seen.add(key);
+        assets.push({
+          relativePath: rel,
+          nodeIds: [String(node.id ?? '')].filter(Boolean),
+          kind: icon.kind ?? null,
+          width: icon.width ?? null,
+          height: icon.height ?? null,
+        });
+      } else if (rel && seen.has(key)) {
+        const existing = assets.find((a) => `${a.kind}:${a.relativePath}` === key);
+        if (existing && node.id !== undefined) existing.nodeIds.push(String(node.id));
+      }
+    }
+    for (const child of node.children ?? []) visit(child);
+  };
+  visit(root);
+  return assets;
+}
 
 export { computeLayout, elkToTikz };

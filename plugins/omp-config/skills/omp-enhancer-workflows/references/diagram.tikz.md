@@ -7,36 +7,37 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 
 ## `diagram.tikz`
 
-- Primary when: Editable TikZ paper diagram with PDF/SVG/PNG evidence.
+- Primary when: Editable TikZ diagram for academic figures, flowcharts, architecture, decision flows, and deploy pipelines; SVG and other formats are only icon assets, preview evidence, or compatibility supplements.
 - Reference steps:
-  1. [step-1] Main confirms the user-project output path, intended paper or slide context, fixed pdfLaTeX compatibility, and target width, then requires a semantic figure spec with stable node and edge IDs, labels, branch semantics, groups, primary flow direction, accessibility text, and an asset manifest.
-  2. [step-2] Have designer author the semantic graph as an ELK graph IR from the semantic figure spec: stable IDs, nodes each sized to fit its exact label plus padding, edges with arrow, label, and branch, and graph-level layoutOptions carrying elk.algorithm, elk.direction, and generous spacing. The ELK graph IR is the sole source of node positions and edge geometry; the author never authors, infers, or hand-edits TikZ coordinates. Designer calls tikz_generate_diagram to compute the layout with ELK and writes the returned standalone TikZ source. Designer may search the pinned OpenTikZ catalog for an icon and semantic reference source only and copy a selected icon into the user project without modifying the library; template and example figure geometry is discarded, never copied or used to infer coordinates.
-  3. [step-3] Task may use optional OMP imagegen for a missing node icon only when imagegen is visible, useful, authorized by Main, and consistent with the request; never write into the OpenTikZ library. Task passes a returned local image through tikz_prepare_asset to create a normalized SHA-256-named project asset and records prompt, provider, model, hash, relative path, and raster disclosure in the asset manifest; otherwise retain a TikZ or OpenTikZ fallback.
-  4. [step-4] Have designer apply geometry findings by fixing overlap, clipping, or crossings, then changing layout options or node sizes and regenerating via tikz_generate_diagram, never by editing coordinates. Artwork or content-only edits may change node contents but never the generated coordinates. Designer integrates only manifest-listed assets, keeps generated icons separate from labels with explicit padding, preserves the edit_contract, and returns the source, spec, manifest, and exact dependency set.
-  5. [step-5] Task invokes tikz_render with its fixed pdfLaTeX argument-vector renderer: validate project-relative paths, copy the dependency graph to a temporary workspace, use shell false and no shell escape with no network or user-supplied command, then publish revision-bound PDF, SVG, full-size PNG, and 60% PNG plus structured command evidence for the same current revision.
-  6. [step-6] Have visioner independently compare the same current revision's latest full-size and 60% raster renders with the semantic figure spec and asset manifest, checking semantic completeness, direction and branch labels, overlap, clipping, crossings, hierarchy, icon legibility, and every raster disclosure.
-  7. [step-7] For each visual review finding, produce one bounded new revision, rerun the fixed renderer, then the changed current revision is reviewed at most once; never review an unchanged artifact or continue automatically.
-  8. [step-8] Report the final project-owned TikZ source, semantic figure spec, asset manifest, revision-bound compile and render evidence, independent review verdict, raster disclosures, and unresolved limitations; no verdict decides completion or publication.
+  1. [step-1] Main fixes audience, output path, target format, node/edge/groups, labels, icon requirements, asset source boundaries, and acceptance evidence.
+  2. [step-2] Produce a complete graphical blueprint: semantic graph, per-node icon plan, manifest draft, alternatives; no final coordinates.
+  3. [step-3] Prepare and validate icon assets (OpenTikZ/imagegen/SVG assets), generate previews and manifest.
+  4. [step-4] Review asset previews per icon, reject or approve; only new previews are reviewed.
+  5. [step-5] Generate ELK IR under approved manifest constraints, call tikz_generate_diagram, produce project-local TikZ source with semantic-graph round-trip check.
+  6. [step-6] Call tikz_render to produce revision-bound PDF/SVG/PNG evidence.
+  7. [step-7] Independently review fresh whole-figure renders for semantic completeness, icon clarity, layering, overlap, clipping, labels, branch semantics, and manifest disclosure.
+  8. [step-8] At most one bounded revision for supported findings; rerun asset/ layout/ render; unchanged artifacts are not re-reviewed; defects remain visible.
+  9. [step-9] Deliver source files, semantic graph, manifest, preview/render evidence, unresolved limitations, and asset provenance.
 - Agent candidates: `designer`, `task`, `visioner`.
 - Delegated checkpoints:
-  - step-2: designer owns ELK graph IR authoring, the tikz_generate_diagram layout call, bounded OpenTikZ icon discovery, the semantic figure spec, and the asset manifest without modifying the library
-  - step-3: task owns optional imagegen and prepared-asset execution when authorized by Main
-  - step-4: designer owns the IR-driven TikZ source: applies geometry findings by changing ELK layout options or node sizes and regenerates via tikz_generate_diagram, integrating manifest-listed assets while preserving the selected edit contract
-  - step-5: task invokes the fixed tikz_render renderer for every revision
-  - step-6: visioner independently reviews the fresh full-size and 60% raster evidence for the current revision against the supplied spec and manifest
-  - step-7: designer applies visioner findings, task rerenders, and visioner performs at most one fresh affected review after rerendering
+  - step-2: designer owns the semantic blueprint and per-icon plan while preserving scope
+  - step-3: task prepares and validates icon assets and writes the asset manifest
+  - step-4: visioner independently and read-only reviews fresh asset previews and flags unsupported icons
+  - step-5: designer owns the ELK graph IR, layout generation, and final TikZ source revision
+  - step-6: task invokes the fixed tikz_render renderer for the approved current revision
+  - step-7: visioner independently and read-only reviews the fresh current-revision renders
+  - step-8: designer applies supported findings, task rerenders, and visioner reviews only fresh rerenders
 - Quality checks:
   - semantic completeness and stable IDs, ELK graph IR as the sole source of geometry with edit-contract and icon preservation, asset provenance and portability, safe standalone compile, revision-bound PDF and SVG, current-revision full-size and 60% raster evidence, independent visual review, icon legibility, explicit raster disclosure, and requested paper or slide fit
 - Scope notes:
   - Visual-stage chain: designer owns the design or source revision; task owns rendering, compilation, and optional imagegen execution; visioner independently and read-only reviews the current render or layout. Main authorizes external-effect decisions during initial setup and accepts the final delivery. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
   - When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop.
-  - The pinned OpenTikZ library is read-only; copy a selected icon into the declared user-project target, but OpenTikZ remains an icon and semantic reference source only and template geometry is never copied or used to infer coordinates.
-  - The ELK graph IR is the sole source of node positions and edge geometry; the author never authors, infers, or hand-edits TikZ coordinates, and overlap or clipping is fixed by changing ELK layout options or node sizes and regenerating, never by editing coordinates.
-  - Main authorizes optional OMP imagegen calls and external-effect decisions during initial task setup; task executes imagegen and rendering under that authorization. Designer and visioner do not independently authorize external effects.
-  - Imagegen is optional and its visibility or activation is not permission, a workflow requirement, or a reason to invent an asset; a native TikZ or OpenTikZ fallback remains valid.
-  - The fixed renderer never runs a user-supplied or project-configured command and never treats compile success as visual approval.
-  - Direct standalone SVG authoring remains diagram.svg; an SVG preview rendered from editable TikZ remains evidence for diagram.tikz.
-  - This card creates no gate, router, permission, completion controller, retry, or automatic correction loop. The designer-visioner-task loop resolves findings without Main disposition; supported limitations remain visible.
+  - SVG and other formats are only icon assets, preview evidence, or compatibility supplements; geometry always comes from ELK IR.
+  - OpenTikZ is a read-only source for safe vector icon copy.
+  - imagegen (PNG) may be used only when explicitly authorized for node icon assets.
+  - Rendering is a deterministic fixed-command pipeline with shell escape disabled.
+  - No gate, router, fork, or loop decides completion; each revision cycle is bounded and advisory.
+  - visioner review is independent and read-only; it does not render, edit, or decide completion.
 - Risk notes:
   - Generated raster icons reduce all-vector scalability and remain separate project assets whose provenance and raster status must stay visible.
   - Brand marks and other third-party assets may carry trademark or usage restrictions even when source graphics are reusable.

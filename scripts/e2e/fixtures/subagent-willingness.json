@@ -332,6 +332,63 @@
         "requiredNativeTaskWorkflowsPerAssignment": ["omp.plugin"],
         "requiredNativeTaskSkillsPerAssignment": ["code-development"]
       }
+    },
+    {
+      "id": "natural-diagram-tikz-subagent-default",
+      "category": "subagent-default/visual",
+      "fixture": "visual-tikz-canvas",
+      "timeoutSeconds": 480,
+      "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
+      "prompt": "Create docs/deploy-flow.tex as an editable TikZ flowchart of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build. Author an ELK graph IR and call tikz_generate_diagram to compute the layout with ELK, never hand-editing TikZ coordinates. Use the svg-flowchart skill to produce a monochrome SVG icon asset for the release node, run it through the bundled SVG static checker, then integrate the approved icon into the TikZ figure. Render full-size and 60% rasters to docs/deploy-flow-full.png and docs/deploy-flow-60.png, and get independent visual review of the fresh renders before final delivery.",
+      "expectations": {
+        "minNativeTaskCalls": 1,
+        "maxNativeTaskCalls": 6,
+        "minNativeTaskAssignmentAttempts": 1,
+        "maxNativeTaskAssignmentAttempts": 6,
+        "requireNativeTaskCompletion": true,
+        "requireNativeTaskSubmissionForEveryAssignment": true,
+        "requireNonemptyNativeTaskContext": true,
+        "requireNativeTaskMetadataPrefix": true,
+        "requireExactNativeTaskMetadataPrefix": true,
+        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
+        "requiredNativeTaskAgents": ["designer", "visioner"],
+        "requiredNativeTaskWorkflows": ["diagram.tikz"],
+        "requiredNativeTaskWorkflowsPerAssignment": ["diagram.tikz"],
+        "requiredObservedSkills": ["omp-enhancer-workflows", "tikz-diagram", "svg-flowchart"],
+        "maxObservedSkills": 3,
+        "forbiddenSkills": ["writing-markdown-helper"],
+        "requiredWorkflowPrimary": "diagram.tikz",
+        "requiredSelectedWorkflowIds": ["diagram.tikz"],
+        "requiredWorkflowLoadOrder": [
+          "skill://tikz-diagram",
+          "skill://svg-flowchart",
+          "skill://omp-enhancer-workflows/references/diagram.tikz.md"
+        ],
+        "requireWorkflowResourceCallsMatchLoadOrder": true,
+        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requireWorkflowPlanBeforeResourceLoads": true,
+        "requireWorkflowPlanFirstVisibleContent": true,
+        "requireWorkflowPlanLoadCallsSameBatch": true,
+        "forbidResourceProjectSameBatch": true,
+        "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+        "requireWorkflowReadyFirstVisibleContent": true,
+        "requireWorkflowReadyTodoOnlyBatch": true,
+        "requireExactSelectedWorkflowReferences": true,
+        "requireNativeTodoInit": true,
+        "minNativeTodoItems": 3,
+        "requireNativeTodoCompletion": true,
+        "requireNativeTodoInitBeforeSubstantiveTool": true,
+        "requiredNativeTodoItemPatterns": [
+          "^Delegate Agent=designer workflow=diagram\\.tikz step=step-2 skills=tikz-diagram,svg-flowchart checkpoint=.+$",
+          "^Delegate Agent=visioner workflow=diagram\\.tikz step=step-4 skills=tikz-diagram,svg-flowchart checkpoint=.+$"
+        ],
+        "maxToolCalls": 60
+      },
+      "fixtureExpectations": {
+        "allowedChangedFiles": ["docs/deploy-flow.tex", "docs/deploy-flow-full.png", "docs/deploy-flow-60.png"],
+        "requiredChangedFiles": ["docs/deploy-flow.tex"],
+        "requiredPatterns": { "docs/deploy-flow.tex": ["\\documentclass", "\\begin{tikzpicture}"] }
+      }
     }
   ]
 }

@@ -50,7 +50,7 @@ async function temporaryDirectory(prefix) {
 }
 
 describe('tikz-helper runtime tools', () => {
-  it('registers only the four opt-in tools with least-effect approvals', () => {
+  it('registers the five opt-in tools with least-effect approvals', () => {
     const api = makeExtensionApi();
     extension(api);
 
@@ -60,8 +60,9 @@ describe('tikz-helper runtime tools', () => {
       'tikz_prepare_asset',
       'tikz_render',
       'tikz_generate_diagram',
+      'tikz_preview_assets',
     ]);
-    assert.deepEqual(tools.map((tool) => tool.approval), ['read', 'exec', 'exec', 'read']);
+    assert.deepEqual(tools.map((tool) => tool.approval), ['read', 'exec', 'exec', 'read', 'exec']);
     assert.equal(tools.every((tool) => tool.defaultInactive === true), true);
     assert.equal(tools.every((tool) => tool.parameters?.__ompZodSchema === true), true);
     assert.equal(Object.hasOwn(tools[2].parameters.shape, 'executable'), false);
@@ -72,6 +73,13 @@ describe('tikz-helper runtime tools', () => {
     assert.equal(Object.hasOwn(tools[3].parameters.shape, 'preset'), true, 'must have preset param');
     assert.equal(Object.hasOwn(tools[3].parameters.shape, 'density'), true, 'must have density param');
     assert.equal(Object.hasOwn(tools[3].parameters.shape, 'targetWidthPt'), true, 'must have targetWidthPt param');
+    // tikz_preview_assets registered with approval 'exec' and optional manifestPath/nodeIds
+    const preview = tools.find((tool) => tool.name === 'tikz_preview_assets');
+    assert.ok(preview, 'tikz_preview_assets must be registered');
+    assert.equal(preview.approval, 'exec', 'tikz_preview_assets must have approval exec');
+    assert.equal(preview.defaultInactive, true, 'tikz_preview_assets must default to inactive');
+    assert.equal(Object.hasOwn(preview.parameters.shape, 'manifestPath'), true);
+    assert.equal(Object.hasOwn(preview.parameters.shape, 'nodeIds'), true);
   });
 
   it('tikz_generate_diagram promptGuidelines teach ELK-first coordinate-free authoring', () => {
@@ -791,4 +799,97 @@ describe('layout defaults', () => {
       }
     }
   });
+describe('tikz_preview_assets output contract', () => {
+  it('returns previewPath, sourcePath, nodeIds, and limitations for each manifest asset', async () => {
+    const projectRoot = await temporaryDirectory('tikz-preview-project-');
+    const assetsDir = join(projectRoot, 'figures', 'tikz', 'assets');
+    await mkdir(assetsDir, { recursive: true });
+
+    // Write a raster PNG asset matching the asset-prepare.js manifest schema.
+    const pngBytes = Buffer.from('preview png fixture');
+    const sha256 = createHash('sha256').update(pngBytes).digest('hex');
+    const assetRel = `figures/tikz/assets/${sha256}.png`;
+    await writeFile(join(projectRoot, assetRel), pngBytes);
+
+    const manifest = {
+      version: 1,
+      assets: [
+        {
+          sha256,
+          relativePath: assetRel,
+          bytes: pngBytes.length,
+          inputFormat: 'webp',
+          inputWidth: 1024,
+          inputHeight: 1024,
+          outputFormat: 'png',
+          outputWidth: 512,
+          outputHeight: 512,
+          nodeIds: ['database', 'cache'],
+          prompt: 'A database pictogram with no text',
+          provenance: [{ kind: 'generated-image', importedAt: '2026-07-21T00:00:00.000Z' }],
+        },
+      ],
+    };
+    const manifestRel = 'figures/tikz/assets/assets.manifest.json';
+    await writeFile(join(projectRoot, manifestRel), JSON.stringify(manifest, null, 2));
+
+    const api = makeExtensionApi();
+    extension(api);
+    const previewTool = api.registerTool.mock.calls[4].arguments[0];
+    assert.equal(previewTool.name, 'tikz_preview_assets');
+
+    const response = await previewTool.execute(
+      'preview-1',
+      { manifestPath: manifestRel, nodeIds: ['database'] },
+      undefined,
+      undefined,
+      { cwd: projectRoot },
+    );
+
+    assert.equal(response.isError, false);
+    assert.equal(response.details.ok, true);
+    assert.equal(response.details.matchedCount, 1);
+    assert.equal(response.details.previews.length, 1);
+    assert.equal(response.details.manifestPath, manifestRel);
+
+    const preview = response.details.previews[0];
+    assert.equal(Object.hasOwn(preview, 'previewPath'), true, 'must expose previewPath');
+    assert.equal(Object.hasOwn(preview, 'sourcePath'), true, 'must expose sourcePath');
+    assert.equal(Object.hasOwn(preview, 'nodeIds'), true, 'must expose nodeIds');
+    assert.equal(Object.hasOwn(preview, 'limitations'), true, 'must expose limitations');
+
+    // Raster assets preview in place; previewPath points at the source file.
+    assert.equal(preview.sourcePath, join(projectRoot, assetRel));
+    assert.equal(preview.previewPath, preview.sourcePath);
+    assert.deepEqual(preview.nodeIds, ['database', 'cache']);
+    assert.ok(Array.isArray(preview.limitations), 'limitations must be an array');
+    assert.ok(preview.limitations.length > 0, 'limitations must list preview constraints');
+    assert.match(preview.limitations.join(' '), /raster asset previewed in place/i);
+
+    // Previews are written to a temp directory, never to project files.
+    assert.ok(
+      response.details.tempDirectory.startsWith(tmpdir()),
+      'temp directory must live under the OS temp root, not the project',
+    );
+  });
+
+  it('returns an error response when the manifest is missing', async () => {
+    const projectRoot = await temporaryDirectory('tikz-preview-missing-');
+    const api = makeExtensionApi();
+    extension(api);
+    const previewTool = api.registerTool.mock.calls[4].arguments[0];
+
+    const response = await previewTool.execute(
+      'preview-2',
+      { manifestPath: 'figures/tikz/assets/assets.manifest.json' },
+      undefined,
+      undefined,
+      { cwd: projectRoot },
+    );
+
+    assert.equal(response.isError, true);
+    assert.equal(response.details.ok, false);
+    assert.equal(response.details.code, 'FILE_NOT_FOUND');
+  });
+});
 });

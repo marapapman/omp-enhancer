@@ -10,16 +10,18 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 - Primary when: Independent UI/layout/interaction/static visual work/output.
 - Reference steps:
   1. [step-1] Main inspects the requested scope, existing visual context, implementation boundary, and constraints.
-  2. [step-2] Have designer choose a bounded visual direction from the supplied context and constraints.
-  3. [step-3] Have designer create or refine one design or source revision without taking ownership of non-visual stages.
-  4. [step-4] Task renders one identified current revision. Designer reconciles that revision against scope and implementation constraints.
-  5. [step-5] Have visioner independently and read-only review the current render or layout for hierarchy, spacing, typography, responsiveness, accessibility, and states.
+  2. [step-2] Choose one bounded visual direction from the supplied context and constraints.
+  3. [step-3] Create or refine one design or source revision without taking ownership of non-visual stages.
+  4. [step-4] Render one identified current revision, then reconcile that revision against scope and implementation constraints.
+  5. [step-5] Independently and read-only review the current render or layout for hierarchy, spacing, typography, responsiveness, accessibility, and states.
+  6. [step-6] For each visual review finding, produce one bounded new design or source revision, rerender the changed current revision, then the fresh rerenders are reviewed at most once; do not review an unchanged artifact and report remaining visual defects.
 - Agent candidates: `designer`, `task`, `visioner`.
 - Delegated checkpoints:
   - step-2: designer owns the bounded visual direction
   - step-3: designer owns the design or source revision while preserving the requested scope
   - step-4: task renders one identified current revision; designer reconciles scope
   - step-5: visioner independently and read-only reviews that current render or layout
+  - step-6: designer applies visioner findings, task rerenders, and visioner reviews only fresh rerenders
 - Quality checks:
   - visual coherence, responsive behavior, accessibility, and rendered evidence
 - Scope notes:

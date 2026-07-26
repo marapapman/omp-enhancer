@@ -290,36 +290,57 @@ test('Skill and references preserve host authority, copy safety, imagegen bounda
   assert.ok(renderIdx > texIdx, 'SKILL must invoke tikz_render after writing the .tex');
 });
 
-test('selected TikZ work compiles designer, task render, and visioner in dependency order with explicit evidence gaps', () => {
+test('selected TikZ work compiles asset chain before figure chain in dependency order with explicit evidence gaps', () => {
   const skill = read('skills/tikz-diagram/SKILL.md');
   const designDoc = readFileSync(resolve(pluginRoot, '../../docs/TIKZ_PLUGIN.md'), 'utf8');
 
-  const designerCheckpoint = skill.indexOf('1. **Designer checkpoint**');
-  const taskRender = skill.indexOf('2. **Task render checkpoint**');
-  const visionerCheckpoint = skill.indexOf('3. **Visioner checkpoint**');
-  assert.ok(designerCheckpoint >= 0, 'the normal compiled chain must name the designer checkpoint');
-  assert.ok(taskRender > designerCheckpoint, 'task render must follow designer delivery');
-  assert.ok(visionerCheckpoint > taskRender, 'visioner review must follow fresh task rendering');
+  // Asset-chain markers in order
+  const designerBlueprint = skill.indexOf('1. **Designer blueprint checkpoint**');
+  const taskAsset = skill.indexOf('2. **Task asset checkpoint**');
+  const visionerAssetReview = skill.indexOf('3. **Visioner asset-review checkpoint**');
+  assert.ok(designerBlueprint >= 0, 'the asset chain must name the designer blueprint checkpoint');
+  assert.ok(taskAsset > designerBlueprint, 'task asset preparation must follow the designer blueprint');
+  assert.ok(visionerAssetReview > taskAsset, 'visioner asset review must follow fresh task asset previews');
+
+  // Figure-chain markers in order
+  const designerLayout = skill.indexOf('4. **Designer layout checkpoint**');
+  const taskRender = skill.indexOf('5. **Task render checkpoint**');
+  const visionerFigureReview = skill.indexOf('6. **Visioner figure-review checkpoint**');
+  assert.ok(designerLayout > visionerAssetReview, 'designer layout must follow asset review');
+  assert.ok(taskRender > designerLayout, 'task render must follow designer layout delivery');
+  assert.ok(visionerFigureReview > taskRender, 'visioner figure review must follow fresh task rendering');
 
   assert.match(
     skill,
-    /selected non-simple `diagram\.tikz`.+normal compiled dependency chain.+`designer`.+`task`.+`visioner`/is,
+    /selected non-simple `diagram\.tikz`.+compiled dependency chain has two stages.+asset chain.+figure chain/is,
   );
   assert.match(
     skill,
-    /`designer` owns.+complete.+design.+source revision checkpoint/is,
+    /`designer` owns one icon plan per node.+source.+size.+padding.+owning node ID.+alternative/is,
   );
   assert.match(
     skill,
-    /`task`.+invokes.+optional `generate_image`.+`tikz_prepare_asset`.+integrates.+invokes.+`tikz_render`.+binds.+fresh.+exact revision.+full-size.+60%/is,
+    /`task` prepares each planned asset.+`tikz_prepare_asset`.+preview set.+`tikz_preview_assets`.+`nodeId`.+full-size.+60%/is,
   );
   assert.match(
     skill,
-    /`visioner`.+independently.+read-only.+layout.+legibility.+fresh.+current-revision/is,
+    /`visioner` independently and read-only reviews the preview set per asset.+APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/is,
   );
   assert.match(
     skill,
-    /`designer` applies.+supported findings.+`task` rerenders.+`visioner` reviews only fresh rerenders.+at most once/is,
+    /`designer` feeds the semantic graph as an ELK graph IR.+`visioner`-approved asset manifest.+`tikz_generate_diagram`.+computes the layout with ELK/is,
+  );
+  assert.match(
+    skill,
+    /`task` invokes `tikz_render`.+validates project-relative paths.+binds fresh exact revision PDF.+SVG.+full-size PNG.+60%/is,
+  );
+  assert.match(
+    skill,
+    /`visioner` independently.+read-only checks layout and legibility.+fresh current-revision full-size and 60% renders.+semantic spec and asset manifest/is,
+  );
+  assert.match(
+    skill,
+    /`designer` applies supported findings.+`task` rerenders.+`visioner` reviews only fresh rerenders.+at most once/is,
   );
   assert.match(
     skill,

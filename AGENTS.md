@@ -54,7 +54,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 | Path | Purpose |
 |------|---------|
 | `plugins/omp-enhancer-core/src/` | Core plugin: task facts, workflow definitions, protocol coach, task descriptor, and skill/subagent validation |
-| `plugins/omp-enhancer-core/src/workflows/` | Workflow catalog (v23), schema, renderers, definitions (code, writing, research, network, database, ml, growth, operations) |
+| `plugins/omp-enhancer-core/src/workflows/` | Workflow catalog (v26), schema, renderers, definitions (code, writing, research, network, database, ml, growth, operations) |
 | `plugins/omp-test-enhancer/src/` | Testing enhancer TypeScript source: advisory tools, browser check, session state, and host observation |
 | `plugins/writing-helper/src/` | Quality analysis: logic, style, citations, preservation, language detection, report formatting |
 | `plugins/omp-fact-checker/src/` | Fact-check pipeline: claim extraction, evidence collection (A/B lanes), cross-checking, providers |
@@ -71,7 +71,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 | `plugins/omp-enhancer-core/index.js` | Largest plugin entry (~1121 lines): tool registration, lifecycle hooks, model-agnostic workflow reminders |
 | `plugins/omp-enhancer-core/src/task-descriptor.js` | 195KB task analysis — signal extraction, domain classification, risk assessment, language detection |
 | `plugins/omp-enhancer-core/src/workflow-protocol-coach.js` | Protocol state machine observing DISCOVER→DECLARE→LOAD→COMMIT→SPLIT→EXECUTE→VERIFY lifecycle |
-| `plugins/omp-enhancer-core/src/workflows/catalog.js` | Workflow catalog v23: assembles all domain workflow definitions |
+| `plugins/omp-enhancer-core/src/workflows/catalog.js` | Workflow catalog v26: assembles all domain workflow definitions |
 | `plugins/omp-enhancer-core/src/workflows/definitions/` | Canonical workflow definitions (code.js, writing.js, research.js, operations.js, etc.) |
 | `plugins/omp-enhancer-core/src/skill-usage.js` | `<skill-usage>` block parsing, denied/missing skills detection |
 | `plugins/omp-test-enhancer/src/extension.ts` | Testing Enhancer source registration for seven default-inactive advisory tools, lifecycle observation, and session state; the built runtime entry is `dist/extension.js` |

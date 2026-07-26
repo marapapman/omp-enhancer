@@ -8,7 +8,7 @@ import { checkSvgFlowchart } from '../skills/svg-flowchart/scripts/check-svg-flo
 const skillUrl = new URL('../skills/svg-flowchart/SKILL.md', import.meta.url);
 const visionerUrl = new URL('../agents/visioner.md', import.meta.url);
 
-test('SVG flowchart skill defines strict geometry, spacing, and bounded rendered review', async () => {
+test('SVG flowchart skill defines strict geometry, spacing, and bounded rendered review as an icon asset method', async () => {
   const skill = await readFile(skillUrl, 'utf8');
 
   assert.match(skill, /standalone SVG/i);
@@ -17,10 +17,10 @@ test('SVG flowchart skill defines strict geometry, spacing, and bounded rendered
   assert.match(skill, /`<line>`.+`<polyline>`/i);
   assert.match(skill, /horizontal or vertical/i);
   assert.match(skill, /no Bézier.+arc.+spline.+curved connector/i);
-  assert.match(skill, /32 px outer margin.+24 px between nodes.+16 px.+unrelated.+12 px internal text padding/i);
+  assert.match(skill, /32 px outer margin.+24 px between internal elements.+16 px.+unrelated.+12 px internal text padding/i);
   assert.match(skill, /16 px minimum/i);
-  assert.match(skill, /`designer` owns.+complete.+SVG source revision/is);
-  assert.match(skill, /`task` runs the bundled checker.+renders the current SVG revision.+binds.+revision identifier.+full declared size.+60%/is);
+  assert.match(skill, /`designer` owns one complete SVG icon asset revision/is);
+  assert.match(skill, /`task` runs the bundled checker.+renders the current SVG icon revision.+binds.+revision identifier.+full declared size.+60%/is);
   assert.match(skill, /`visioner` independently inspect.+fresh.+full-size.+60%/is);
   assert.match(skill, /Agent availability and capacity remain Main decisions/i);
   assert.match(skill, /supported finding.+`designer` applies.+`task` reruns the checker and rerenders.+`visioner` reviews only fresh rerendered evidence.+at most once/is);
@@ -28,6 +28,10 @@ test('SVG flowchart skill defines strict geometry, spacing, and bounded rendered
   assert.match(skill, /Do not review an unchanged artifact again/i);
   assert.match(skill, /Do not claim visual approval from source inspection or the static checker alone/i);
   assert.match(skill, /No review verdict grants permission to publish or complete/i);
+  assert.match(skill, /icon asset method|asset method under `diagram\.tikz`/is);
+  assert.match(skill, /Final layout and whole-figure output belong to diagram\.tikz/is);
+  assert.match(skill, /SVG icon asset static validation only/is);
+  assert.doesNotMatch(skill, /standalone diagram workflow|standalone diagram authoring/i);
   assert.doesNotMatch(skill, /Main may assign.+(?:rerun|renderer)|Main (?:runs|reruns|renders|modifies) the (?:checker|SVG|geometry)/is);
   assert.doesNotMatch(skill, /maximum of three|finish with zero|have `designer` address every|retry until|repeat until|block:\s*true|continue:\s*true/i);
 });

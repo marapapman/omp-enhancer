@@ -84,9 +84,9 @@ test('existing slides and SVG Skills retain designer, current-render, and vision
     /Have `visioner` independently review/i,
   ]);
   assertInOrder(svg, [
-    /`designer` owns one complete SVG source revision/is,
+    /`designer` owns one complete SVG icon asset revision/is,
     /`task` runs the bundled checker/i,
-    /`task` renders the current SVG revision/i,
+    /`task` renders the current SVG icon revision/i,
     /visioner` independently inspect only the fresh latest full-size and 60% renders/i,
   ]);
 });

@@ -952,6 +952,25 @@ test('automation wording does not turn explanations into execution or build subs
   assert.ok(visual.domains.includes('visual'));
 });
 
+test('visual domain detection includes drawing-script generation and Chinese equivalents', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+
+  // Positive: drawing-script generation recognized as visual
+  const tikz = describeNaturalLanguageTask({ prompt: '画一个 TikZ 架构图，展示部署流水线' });
+  assert.ok(tikz.domains.includes('visual'), 'zh TikZ diagram must be visual domain');
+
+  const svg = describeNaturalLanguageTask({ prompt: 'Create an SVG flowchart of the deploy process' });
+  assert.equal(svg.operation, 'create', 'SVG creation must be create operation');
+  assert.ok(svg.domains.includes('visual'), 'SVG flowchart must be visual domain');
+
+  const beautify = describeNaturalLanguageTask({ prompt: '美化这张 SVG 流程图' });
+  assert.ok(beautify.domains.includes('visual'), 'zh SVG beautification must be visual domain');
+
+  // Negative: non-visual must not be flagged
+  const memory = describeNaturalLanguageTask({ prompt: 'Help me figure out the memory leak in the cache layer' });
+  assert.ok(!memory.domains.includes('visual'), 'memory leak debugging must not be visual domain');
+});
+
 test('explicit destructive workspace imperatives surface high-risk advisory metadata', async () => {
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
   for (const prompt of [

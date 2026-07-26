@@ -47,6 +47,8 @@ test('catalog exposes the consolidated workflows and deliberately omits healthca
   }
   assert.equal(workflowIds.includes('healthcare.review'), false);
   assert.equal(workflowIds.includes('communications.triage'), false);
+  assert.equal(workflowIds.includes('diagram.svg'), false);
+  assert.equal(workflowDefinitions.length, 30);
   for (const id of RETIRED_CODE_WORKFLOWS) {
     assert.equal(workflowIds.includes(id), false, `retired workflow remains: ${id}`);
   }
@@ -79,7 +81,7 @@ test('compact workflow Skill teaches primary-plus-add-on composition with exact 
   assert.match(index, /`\.tex` target[\s\S]*LaTeX prose[\s\S]*preserve(?:d)? LaTeX commands[\s\S]*`writing\.latex` Add-on/iu);
   assert.match(
     index,
-    /### writing[\s\S]*#### language[\s\S]*`writing\.pending`[\s\S]*`writing\.zh`[\s\S]*`writing\.en`[\s\S]*#### format overlays[\s\S]*`writing\.latex`[\s\S]*`writing\.markdown`[\s\S]*`doc\.convert\.word`[\s\S]*#### specialized outputs[\s\S]*`slides\.generate`[\s\S]*`slides\.modify`[\s\S]*`diagram\.svg`/iu,
+    /### writing[\s\S]*#### language[\s\S]*`writing\.pending`[\s\S]*`writing\.zh`[\s\S]*`writing\.en`[\s\S]*#### format overlays[\s\S]*`writing\.latex`[\s\S]*`writing\.markdown`[\s\S]*`doc\.convert\.word`[\s\S]*#### specialized outputs[\s\S]*`slides\.generate`[\s\S]*`slides\.modify`[\s\S]*`diagram\.tikz`/iu,
   );
   assert.match(index, /`writing\.latex`[^\n]*Add-on to matching prose[^\n]*Primary only for format\/structure work/iu);
   assert.match(index, /`writing\.en` — The prose/u);
@@ -97,7 +99,8 @@ test('compact workflow Skill teaches primary-plus-add-on composition with exact 
   assert.match(index, /COMMIT HANDOFF \(soft\):[\s\S]*after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable[\s\S]*next response begins `W`[\s\S]*bare IDs[\s\S]*initializes native TODO only[\s\S]*Project tools start only after the READY \+ TODO response ends and its results return/i);
   assert.doesNotMatch(index, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
   assert.match(index, /`code\.dev` — [^\n]*no OMP plugin, database, ML, network, writing, research, design, or release card better owns the central deliverable/iu);
-  assert.match(index, /VISUAL:[^\n]*non-visual Primary[^\n]*`design\.visual` Add-on[^\n]*standalone slide\/SVG\/TikZ[^\n]*specialized Primary[^\n]*separate visual-design work\/output/iu);
+  assert.match(index, /non-visual Primary[^\n]*independently requested UI\/layout\/static-visual deliverable[^\n]*`?design\.visual`? Add-on/iu);
+  assert.doesNotMatch(index, /standalone SVG.*Primary|Direct standalone SVG/iu);
   assert.match(index, /Format-only => format Primary/iu);
   assert.match(index, /Converters\/templates only when requested/iu);
   assert.match(

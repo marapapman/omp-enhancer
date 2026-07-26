@@ -3731,7 +3731,7 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   assert.equal(docker.expectations.maxObservedSkills, 2);
   const tikz = matrix.scenarios.find(({ id }) => id === 'natural-tikz-diagram');
   assert.deepEqual(tikz.expectations.requiredSelectedWorkflowIds, ['diagram.tikz']);
-  assert.deepEqual(tikz.expectations.requiredObservedSkills, ['tikz-diagram']);
+  assert.deepEqual(tikz.expectations.requiredObservedSkills, ['tikz-diagram', 'svg-flowchart']);
   assert.ok(tikz.expectations.forbiddenSkills.includes('svg-writing'));
   const subagent = matrix.scenarios.find(({ id }) => id === 'natural-subagent-isolation');
   assert.equal(subagent.expectations.requireNativeTaskCompletion, true);
@@ -4047,6 +4047,34 @@ test('DeepSeek subagent default matrix keeps native task and hub semantics with 
   assert.match(network.prompt, /pre-deployment configuration-validation checklist/iu);
   assert.match(network.prompt, /advisory migration-risk review/iu);
   assert.doesNotMatch(network.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
+  const diagram = matrix.scenarios.find(({ id }) => id === 'natural-diagram-tikz-subagent-default');
+  assert.ok(diagram, 'natural-diagram-tikz-subagent-default scenario must exist');
+  assert.equal(diagram.fixture, 'visual-tikz-canvas');
+  assert.equal(diagram.category, 'subagent-default/visual');
+  assert.equal(diagram.expectations.requiredWorkflowPrimary, 'diagram.tikz');
+  assert.deepEqual(diagram.expectations.requiredSelectedWorkflowIds, ['diagram.tikz']);
+  assert.deepEqual(diagram.expectations.requiredNativeTaskWorkflows, ['diagram.tikz']);
+  assert.deepEqual(diagram.expectations.requiredObservedSkills, [
+    'omp-enhancer-workflows',
+    'tikz-diagram',
+    'svg-flowchart',
+  ]);
+  assert.deepEqual(diagram.expectations.requiredWorkflowLoadOrder, [
+    'skill://tikz-diagram',
+    'skill://svg-flowchart',
+    'skill://omp-enhancer-workflows/references/diagram.tikz.md',
+  ]);
+  assert.equal(diagram.expectations.requireWorkflowResourceCallsMatchLoadOrder, true);
+  assert.deepEqual(diagram.expectations.requiredNativeTaskAgents, ['designer', 'visioner']);
+  assert.equal(diagram.expectations.minNativeTaskCalls, 1);
+  assert.equal(diagram.expectations.requireNativeTaskCompletion, true);
+  assert.equal(diagram.expectations.requireNativeTodoInit, true);
+  assert.equal(diagram.expectations.requireNativeTodoCompletion, true);
+  assert.match(diagram.prompt, /tikz_generate_diagram/iu);
+  assert.match(diagram.prompt, /ELK graph IR/iu);
+  assert.match(diagram.prompt, /svg-flowchart skill/iu);
+  assert.doesNotMatch(diagram.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
+  assert.equal(diagram.fixtureExpectations.requiredChangedFiles[0], 'docs/deploy-flow.tex');
   assert.equal(positives.length, 2);
   for (const scenario of positives) {
     const expectedWidth = 2;

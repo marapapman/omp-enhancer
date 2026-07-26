@@ -153,7 +153,6 @@ export const operationWorkflows = [
     "id": "design.visual",
     "chooseWhen": "Independent UI/layout/interaction/static visual work/output.",
     "composeWith": [
-      "diagram.svg",
       "diagram.tikz",
       "slides.generate",
       "slides.modify"
@@ -165,19 +164,23 @@ export const operationWorkflows = [
       },
       {
         "id": "step-2",
-        "text": "Have designer choose a bounded visual direction from the supplied context and constraints."
+        "text": "Choose one bounded visual direction from the supplied context and constraints."
       },
       {
         "id": "step-3",
-        "text": "Have designer create or refine one design or source revision without taking ownership of non-visual stages."
+        "text": "Create or refine one design or source revision without taking ownership of non-visual stages."
       },
       {
         "id": "step-4",
-        "text": "Task renders one identified current revision. Designer reconciles that revision against scope and implementation constraints."
+        "text": "Render one identified current revision, then reconcile that revision against scope and implementation constraints."
       },
       {
         "id": "step-5",
-        "text": "Have visioner independently and read-only review the current render or layout for hierarchy, spacing, typography, responsiveness, accessibility, and states."
+        "text": "Independently and read-only review the current render or layout for hierarchy, spacing, typography, responsiveness, accessibility, and states."
+      },
+      {
+        "id": "step-6",
+        "text": "For each visual review finding, produce one bounded new design or source revision, rerender the changed current revision, then the fresh rerenders are reviewed at most once; do not review an unchanged artifact and report remaining visual defects."
       }
     ],
     "scopeNotes": [
@@ -201,7 +204,8 @@ export const operationWorkflows = [
       "step-2: designer owns the bounded visual direction",
       "step-3: designer owns the design or source revision while preserving the requested scope",
       "step-4: task renders one identified current revision; designer reconciles scope",
-      "step-5: visioner independently and read-only reviews that current render or layout"
+      "step-5: visioner independently and read-only reviews that current render or layout",
+      "step-6: designer applies visioner findings, task rerenders, and visioner reviews only fresh rerenders"
     ]
   },
   {

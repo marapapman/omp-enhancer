@@ -105,6 +105,41 @@ function nodeLabel(node) {
   return tikzId(node.id);
 }
 
+const ICON_GEOMETRY_FIELDS = Object.freeze(['x', 'y', 'transform', 'coordinates', 'bendPoints', 'sections']);
+
+function nodeIconContent(node) {
+  const icon = node?.properties?.icon;
+  if (!icon || typeof icon !== 'object' || Array.isArray(icon)) return null;
+  for (const field of ICON_GEOMETRY_FIELDS) {
+    if (icon[field] !== undefined) {
+      throw new TikzRuntimeError(
+        'INVALID_ICON_SPEC',
+        `Node "${node.id}" has properties.icon with a forbidden geometry field "${field}".`,
+      );
+    }
+  }
+  if (icon.kind === 'includegraphics') {
+    const width = typeof icon.width === 'string' ? icon.width : null;
+    if (width === null) {
+      throw new TikzRuntimeError('INVALID_ICON_SPEC', `Node "${node.id}" properties.icon.width must be a string.`);
+    }
+    if (typeof icon.relativePath !== 'string' || icon.relativePath.trim() === '') {
+      throw new TikzRuntimeError('INVALID_ICON_SPEC', `Node "${node.id}" properties.icon.relativePath is required.`);
+    }
+    return `\\includegraphics[width=${width},keepaspectratio]{${icon.relativePath}}`;
+  }
+  if (icon.kind === 'tex') {
+    if (typeof icon.relativePath !== 'string' || icon.relativePath.trim() === '') {
+      throw new TikzRuntimeError('INVALID_ICON_SPEC', `Node "${node.id}" properties.icon.relativePath is required.`);
+    }
+    return `\\input{${icon.relativePath}}`;
+  }
+  throw new TikzRuntimeError(
+    'INVALID_ICON_SPEC',
+    `Node "${node.id}" has properties.icon with an unsupported kind "${icon.kind ?? ''}". Supported kinds: includegraphics, tex.`,
+  );
+}
+
 function generateNodesRecursive(root, level, output, options, offsetX = 0, offsetY = 0, fitCommands = null) {
   const children = root.children ?? [];
 
@@ -141,7 +176,12 @@ function generateNodesRecursive(root, level, output, options, offsetX = 0, offse
         fitCommands.push(`${padding}  \\node[draw, dashed, fill=gray!10, fit={(${id}) ${childIds.map(id => `(${id})`).join(' ')}}] (${id}-bg) {};`);
       }
     } else {
-      output.push(`${padding}\\node[${style}] (${id}) at (${pt(x)}, ${pt(finalY)}) {${label}};`);
+      const nodeContent = nodeIconContent(node);
+      if (nodeContent !== null) {
+        output.push(`${padding}\\node[${style}] (${id}) at (${pt(x)}, ${pt(finalY)}) {${nodeContent}};`);
+      } else {
+        output.push(`${padding}\\node[${style}] (${id}) at (${pt(x)}, ${pt(finalY)}) {${label}};`);
+      }
     }
   }
 }

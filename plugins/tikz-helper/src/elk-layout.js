@@ -206,6 +206,31 @@ export async function computeLayout(graph, options = {}) {
   const elk = new ELK();
 
   const graphClone = structuredClone(graph);
+
+  // ELK's JSON importer rejects non-string values in node.properties (e.g. a
+  // nested `icon` object). Strip non-string properties before layout and
+  // re-attach them to the positioned graph afterwards so the tikz backend can
+  // emit icon commands.
+  const strippedProperties = new Map();
+  function stripNonStringProperties(node) {
+    if (!node || typeof node !== 'object') return;
+    if (node.properties && typeof node.properties === 'object' && !Array.isArray(node.properties)) {
+      const stripped = {};
+      for (const [key, value] of Object.entries(node.properties)) {
+        if (typeof value !== 'string') stripped[key] = value;
+      }
+      if (Object.keys(stripped).length > 0) {
+        strippedProperties.set(node.id, stripped);
+        const keep = {};
+        for (const [key, value] of Object.entries(node.properties)) {
+          if (typeof value === 'string') keep[key] = value;
+        }
+        node.properties = keep;
+      }
+    }
+    for (const child of node.children ?? []) stripNonStringProperties(child);
+  }
+  stripNonStringProperties(graphClone);
   if (!graphClone.layoutOptions) {
     graphClone.layoutOptions = {};
   }
@@ -246,6 +271,16 @@ export async function computeLayout(graph, options = {}) {
 
   const executionTime = result?.logging?.executionTime;
   const positioned = { ...result };
+  if (strippedProperties.size > 0) {
+    function reattach(node) {
+      if (!node || typeof node !== 'object') return;
+      if (strippedProperties.has(node.id)) {
+        node.properties = { ...(node.properties ?? {}), ...strippedProperties.get(node.id) };
+      }
+      for (const child of node.children ?? []) reattach(child);
+    }
+    reattach(positioned);
+  }
 
   return {
     graph: positioned,

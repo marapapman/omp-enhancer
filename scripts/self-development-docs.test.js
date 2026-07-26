@@ -82,7 +82,7 @@ test('current documentation links the self-development and E2E methods without e
   assert.ok(Buffer.byteLength(readme) <= 6500, 'root README keeps development detail under docs');
 });
 
-test('current repository documentation matches the v23 runtime and evidence contracts', async () => {
+test('current repository documentation matches the v26 runtime and evidence contracts', async () => {
   const [agents, architecture, development, workflows] = await Promise.all([
     read('AGENTS.md'),
     read('docs/ARCHITECTURE.md'),
@@ -90,17 +90,16 @@ test('current repository documentation matches the v23 runtime and evidence cont
     read('docs/WORKFLOW_DEVELOPMENT.md'),
   ]);
 
-  assert.match(agents, /Workflow catalog \(v23\)/u);
-  assert.match(agents, /Workflow catalog v23/u);
-  assert.match(architecture, /Catalog version 23.+31.+29.+`subagent-driven`/isu);
-  assert.match(development, /Catalog version 23.+31.+29.+`subagent-driven`/isu);
-  assert.match(workflows, /当前 31 张卡片.+29 张.+`subagent-driven`/isu);
-  assert.match(workflows, /parity.+29 张.+`subagent-driven`/isu);
+  assert.match(agents, /Workflow catalog \(v26\)/u);
+  assert.match(agents, /Workflow catalog v26/u);
+  assert.match(architecture, /Catalog version 26.+30.+28.+`subagent-driven`/isu);
+  assert.match(development, /Catalog version 26.+30.+28.+`subagent-driven`/isu);
+  assert.match(workflows, /当前 30 张卡片.+28 张.+`subagent-driven`/isu);
+  assert.match(workflows, /parity.+28 张.+`subagent-driven`/isu);
   assert.doesNotMatch(
     [agents, architecture, development, workflows].join('\n'),
-    /Catalog version 21|catalog \(v21\)|当前 30 张卡片|28 张非简单卡片/iu,
+    /Catalog version 23|catalog \(v23\)|当前 31 张卡片|29 张非简单卡片/iu,
   );
-
   assert.match(
     agents,
     /`omp-enhancer-core` \| Task facts.+protocol coaching.+skill\/subagent validation.+`index\.js`/iu,
