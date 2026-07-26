@@ -255,6 +255,7 @@ export default function registerCoreEnhancer(pi) {
     }
     const workflowReminder = buildStagedWorkflowReminder({
       planMode,
+      planToExecuteTransition,
       hasVisibleSkills: visibleSkills.length > 0,
       hasWorkflowSkill: visibleSkills.some(({ name }) => (
         skillNamesEquivalent(name, 'omp-enhancer-workflows')
@@ -407,9 +408,9 @@ function buildWorkflowEntryReminder(protocolLabel, workflowIndexSupplied, {
     'AUTHORITY: this reminder selects no workflow, Skill, Agent, or fork width and creates no runtime gate, router, retry, permission, or completion control. Main selects from the loaded index and current native state; OMP owns tools, permissions, delegation, and completion.',
   ].join('\n');
 }
-
 function buildStagedWorkflowReminder({
   planMode = false,
+  planToExecuteTransition = false,
   hasVisibleSkills = false,
   hasWorkflowSkill = false,
   workflowIndexSupplied = false,
@@ -428,7 +429,8 @@ function buildStagedWorkflowReminder({
   }
   const protocolLabel = 'OMP_SOFT_PROTOCOL';
   const workflowEntryLabel = 'OMP_WORKFLOW_ENTRY';
-  if (hasWorkflowSkill) {
+  const effectiveWorkflowSkill = hasWorkflowSkill || planToExecuteTransition;
+  if (effectiveWorkflowSkill) {
     sections.push(buildWorkflowEntryReminder(workflowEntryLabel, workflowIndexSupplied, {
       delegationAvailable: hasNativeTask && subagentsAllowed && implementationDelegationAllowed,
     }));
@@ -451,7 +453,7 @@ function buildStagedWorkflowReminder({
     }
   }
   const taskShapePrompt = hasNativeTask && subagentsAllowed
-    ? buildTaskShapePrompt(taskDescriptor, { workflowSkillVisible: hasWorkflowSkill })
+    ? buildTaskShapePrompt(taskDescriptor, { workflowSkillVisible: effectiveWorkflowSkill })
     : '';
   if (taskShapePrompt) {
     sections.push(taskShapePrompt);
@@ -463,7 +465,7 @@ function buildStagedWorkflowReminder({
     });
     const delegationSections = [
       ...(reviewBudgetPrompt ? [reviewBudgetPrompt] : []),
-      ...(implementationDelegationAllowed && !hasWorkflowSkill ? [
+      ...(implementationDelegationAllowed && !effectiveWorkflowSkill ? [
         DELEGATION_DECISION,
       ] : []),
     ];

@@ -743,6 +743,41 @@ test('state schema bump drops stale model-era reminder state on restore', async 
   assert.notEqual(reminder, undefined);
 });
 
+
+test('plan-to-execute transition injects OMP_WORKFLOW_ENTRY without visible workflow skill', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task', 'todo'];
+  // No workflow skill visible — only a non-workflow skill
+  pi.pi = {
+    getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }],
+  };
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries, process.cwd(), { model: ARBITRARY_MODEL });
+
+  // First turn: plan mode with both required markers
+  const planTurn = await event(pi, 'before_agent_start')({
+    prompt: 'Implement the user auth module.',
+    systemPrompt: ['base prompt'],
+    messages: [
+      { role: 'custom', content: 'Plan mode is active. xd://propose' },
+    ],
+  }, ctx);
+  assert.ok(planTurn, 'plan mode turn must produce a reminder');
+  assert.match(planTurn.message.content, /OMP_PLAN_MODE/u, 'plan mode reminder must contain OMP_PLAN_MODE');
+  assert.doesNotMatch(planTurn.message.content, /^OMP_WORKFLOW_ENTRY/u, 'plan mode must not contain OMP_WORKFLOW_ENTRY');
+
+  // Second turn: execution after plan mode (same entries carry state)
+  // planToExecuteTransition = lastTaskPlanMode(true from first call) && planMode(false for this turn)
+  const executeTurn = await event(pi, 'before_agent_start')({
+    prompt: 'proceed',
+    systemPrompt: ['base prompt'],
+  }, ctx);
+  assert.ok(executeTurn, 'execute turn must produce a reminder');
+  assert.match(executeTurn.message.content, /^OMP_WORKFLOW_ENTRY/u, 'execute turn must inject OMP_WORKFLOW_ENTRY without visible workflow skill');
+  assert.match(executeTurn.message.content, /DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY/u, 'entry must embed the staged protocol');
+  assert.match(executeTurn.message.content, /INDEX STATUS=NOT SUPPLIED/u, 'entry must instruct index read since skill is not visible');
+});
 function registeredCore() {
   const entries = [];
   const pi = new FakePi(entries);
