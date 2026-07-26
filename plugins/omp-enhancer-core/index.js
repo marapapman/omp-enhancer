@@ -7,6 +7,12 @@ import {
   buildTaskShapePrompt,
 } from './src/review-budget.js';
 import {
+  detectPlanMode,
+  isPlanSlashCommand,
+  stripPlanCommand,
+  buildPlanModeReminderSection,
+} from './src/plan-mode.js';
+import {
   normalizeSkillName,
   parseLoadedSkillEvidence,
   skillReadNameCandidates,
@@ -23,10 +29,11 @@ import {
   presentWorkflowProtocolCoachCue,
   sanitizeWorkflowProtocolCoachState,
   serializeWorkflowProtocolCoachState,
+  observeProtocolPlanMode,
 } from './src/workflow-protocol-coach.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
-const STATE_SCHEMA_VERSION = 8;
+const STATE_SCHEMA_VERSION = 9;
 const SKILL_DISCOVERY_MESSAGE_TYPE = 'omp-enhancer-skill-discovery';
 const PROTOCOL_COACH_MESSAGE_TYPE = 'omp-enhancer-protocol-coach';
 const DISABLE_WORKFLOW_REMINDER_ENV = 'OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER';
@@ -196,17 +203,28 @@ export default function registerCoreEnhancer(pi) {
     if (hostTurn.kind === 'autolearn-capture') return undefined;
     if (hostTurn.kind === 'advisor') return undefined;
     const prompt = extractPrompt(event);
-    if (isSlashCommandPrompt(prompt)) return undefined;
+    const planMode = detectPlanMode({ prompt, messages: event.messages });
+    const planSlash = isPlanSlashCommand(prompt);
+    // A /plan command (or any host plan-mode turn) is a real planning task and
+    // keeps coaching; every other slash command stays host-handled and bails.
+    if (isSlashCommandPrompt(prompt) && !planSlash) return undefined;
+    const effectivePrompt = planSlash ? stripPlanCommand(prompt) : prompt;
 
     if (isSubagentSession(ctx) || isSubagentLaunchPrompt(prompt)) return undefined;
 
-    const implementationTransition = isPlanningImplementationTransition(state, prompt);
-    const inherited = !implementationTransition && shouldInheritContinuation(state, prompt);
+    const implementationTransition = isPlanningImplementationTransition(state, effectivePrompt);
+    // Plan mode lifted after a plan-mode task => execute phase: force a fresh task
+    // so the full multi-task + post-test + reviewer coaching re-fires (true for
+    // exactly one turn, because lastTaskPlanMode is then reset to planMode=false).
+    const planToExecuteTransition = state.lastTaskPlanMode === true && !planMode;
+    const inherited = !implementationTransition
+      && !planToExecuteTransition
+      && shouldInheritContinuation(state, effectivePrompt);
     const previousPrompt = state.lastPrompt;
     const taskContext = inherited
       ? state.lastTaskContext
       : resolveMainTaskContext({
-        prompt,
+        prompt: effectivePrompt,
       });
 
     if (!inherited) {
@@ -219,12 +237,12 @@ export default function registerCoreEnhancer(pi) {
       state.lastSubagentUsage = null;
       state.observedSkills.clear();
       state.claimedSkills.clear();
-      state.tasks.clear();
-      state.completedAgents.clear();
       state.protocolCoach = createWorkflowProtocolCoachState();
     } else {
       state.lastPrompt = [state.lastPrompt, prompt].filter(Boolean).join('\n');
     }
+    state.lastTaskPlanMode = planMode;
+    observeProtocolPlanMode(state.protocolCoach, planMode);
     const visibleSkills = activeSkillInventory(pi);
     protocolCoachTurnEligible = process.env[DISABLE_PROTOCOL_COACH_ENV] !== '1';
     const workflowIndexSupplied = hasSuppliedNativeSkillPrompt(
@@ -236,6 +254,7 @@ export default function registerCoreEnhancer(pi) {
       observeProtocolSuppliedWorkflowIndex(state.protocolCoach);
     }
     const workflowReminder = buildStagedWorkflowReminder({
+      planMode,
       hasVisibleSkills: visibleSkills.length > 0,
       hasWorkflowSkill: visibleSkills.some(({ name }) => (
         skillNamesEquivalent(name, 'omp-enhancer-workflows')
@@ -390,6 +409,7 @@ function buildWorkflowEntryReminder(protocolLabel, workflowIndexSupplied, {
 }
 
 function buildStagedWorkflowReminder({
+  planMode = false,
   hasVisibleSkills = false,
   hasWorkflowSkill = false,
   workflowIndexSupplied = false,
@@ -400,6 +420,12 @@ function buildStagedWorkflowReminder({
 } = {}) {
   const sections = [];
   const features = [];
+  if (planMode) {
+    sections.push(buildPlanModeReminderSection({
+      delegationAvailable: hasNativeTask && subagentsAllowed && implementationDelegationAllowed,
+    }));
+    features.push('plan-mode');
+  }
   const protocolLabel = 'OMP_SOFT_PROTOCOL';
   const workflowEntryLabel = 'OMP_WORKFLOW_ENTRY';
   if (hasWorkflowSkill) {
@@ -414,7 +440,15 @@ function buildStagedWorkflowReminder({
     sections.push(`${protocolLabel} (soft one-shot for top-level Main; this reminder selects no workflow or Agent):\n${SKILL_STAGED_REMINDER}`);
     features.push('skill-discovery');
   } else if (hasNativeTask && subagentsAllowed && implementationDelegationAllowed) {
-    sections.push(`${protocolLabel} (soft one-shot for top-level Main; this reminder selects no workflow or Agent):\n${TASK_STAGED_REMINDER}`);
+    const isSubstantive = ['modify', 'create', 'release'].includes(taskDescriptor.operation);
+    if (isSubstantive) {
+      sections.push(buildWorkflowEntryReminder(workflowEntryLabel, workflowIndexSupplied, {
+        delegationAvailable: true,
+      }));
+      features.push('skill-discovery', 'workflow-selection');
+    } else {
+      sections.push(`${protocolLabel} (soft one-shot for top-level Main; this reminder selects no workflow or Agent):\n${TASK_STAGED_REMINDER}`);
+    }
   }
   const taskShapePrompt = hasNativeTask && subagentsAllowed
     ? buildTaskShapePrompt(taskDescriptor, { workflowSkillVisible: hasWorkflowSkill })
@@ -790,6 +824,7 @@ function readStateSnapshot(value = {}) {
   state.workflowReminderTaskStartedAt = Number.isFinite(value.workflowReminderTaskStartedAt)
     ? value.workflowReminderTaskStartedAt
     : 0;
+  state.lastTaskPlanMode = value.lastTaskPlanMode === true;
   state.lastTaskContext = sanitizeTaskContext(value.lastTaskContext, state.lastPrompt);
   state.lastSkillUsage = isRecord(value.lastSkillUsage) ? value.lastSkillUsage : null;
   state.lastSubagentUsage = isRecord(value.lastSubagentUsage) ? value.lastSubagentUsage : null;
@@ -869,6 +904,7 @@ function serializeState(state) {
     skillEvidence: state.skillEvidence,
     taskStartedAt: state.taskStartedAt,
     workflowReminderTaskStartedAt: state.workflowReminderTaskStartedAt,
+    lastTaskPlanMode: state.lastTaskPlanMode === true,
     lastSkillUsage: state.lastSkillUsage,
     lastSubagentUsage: state.lastSubagentUsage,
     observedSkills: [...state.observedSkills],

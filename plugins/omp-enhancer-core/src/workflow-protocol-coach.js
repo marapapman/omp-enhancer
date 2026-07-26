@@ -56,6 +56,7 @@ export function createWorkflowProtocolCoachState() {
     indexCueQueued: false,
     generation: 0,
     replacementUsed: false,
+    planMode: false,
     declaration: null,
     pendingCue: null,
     diagnostics: [],
@@ -114,7 +115,7 @@ export function observeProtocolToolResult(state, {
     return;
   }
   declaration.todoObserved = true;
-  if (declaration.primary === 'writing.pending' || declaration.dispatchCueQueued) return;
+  if (declaration.primary === 'writing.pending' || declaration.dispatchCueQueued || state.planMode) return;
   declaration.dispatchCueQueued = true;
   queueCue(state, 'PRE_DISPATCH', declaration.generation);
 }
@@ -157,6 +158,7 @@ export function serializeWorkflowProtocolCoachState(state) {
     indexCueQueued: safe.indexCueQueued,
     generation: safe.generation,
     replacementUsed: safe.replacementUsed,
+    planMode: safe.planMode === true,
     declaration: safe.declaration ? serializeDeclaration(safe.declaration) : null,
     pendingCue: safe.pendingCue ? { ...safe.pendingCue } : null,
     diagnostics: safe.diagnostics.map((item) => ({ ...item })),
@@ -170,6 +172,7 @@ export function sanitizeWorkflowProtocolCoachState(value = {}) {
   state.indexCueQueued = value.indexCueQueued === true;
   state.generation = nonnegativeInteger(value.generation);
   state.replacementUsed = value.replacementUsed === true;
+  state.planMode = value.planMode === true;
   state.declaration = sanitizeDeclaration(value.declaration);
   if (state.declaration) state.generation = Math.max(state.generation, state.declaration.generation);
   state.pendingCue = sanitizePendingCue(value.pendingCue);
@@ -177,6 +180,11 @@ export function sanitizeWorkflowProtocolCoachState(value = {}) {
     ? value.diagnostics.map(sanitizeDiagnostic).filter(Boolean).slice(-MAX_DIAGNOSTICS)
     : [];
   return state;
+}
+
+export function observeProtocolPlanMode(state, planMode = false) {
+  if (!isCoachState(state)) return;
+  state.planMode = planMode === true;
 }
 
 function markWorkflowIndexObserved(state) {

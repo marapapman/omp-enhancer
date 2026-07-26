@@ -720,7 +720,7 @@ test('state schema bump drops stale model-era reminder state on restore', async 
   pi.pi = { getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }] };
   await event(pi, 'before_agent_start')({ prompt: 'First project task.' }, ctx);
   const staleSnapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.equal(staleSnapshot.schemaVersion, 8);
+  assert.equal(staleSnapshot.schemaVersion, 9);
   // Simulate a pre-v8 persisted state using the old field name.
   const preV8 = {
     ...structuredClone(staleSnapshot),
@@ -736,7 +736,7 @@ test('state schema bump drops stale model-era reminder state on restore', async 
   const restoredCtx = extensionContext(restoredEntries, process.cwd(), { model: ARBITRARY_MODEL });
   await event(restoredPi, 'session_start')({}, restoredCtx);
   const after = restoredEntries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.equal(after.schemaVersion, 8);
+  assert.equal(after.schemaVersion, 9);
   assert.equal(after.workflowReminderTaskStartedAt, 0);
   // A fresh reminder fires for the new task (stale one-shot state was dropped).
   const reminder = await event(restoredPi, 'before_agent_start')({ prompt: 'A new project task.' }, restoredCtx);
