@@ -367,7 +367,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "OMP-native-first task-fact observer with opt-in evidence reviews, model-agnostic workflow guidance, and explicit extension-tool activation.",
-      "version": "0.1.137",
+      "version": "0.1.138",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",
