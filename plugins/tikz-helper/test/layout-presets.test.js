@@ -53,8 +53,8 @@ describe('layout-presets: frozen constants', () => {
   });
 
   it('threshold constants have expected values', () => {
-    assert.equal(FILL_RATIO_EXPAND_ABOVE, 0.60);
-    assert.equal(FILL_RATIO_COMPACT_BELOW, 0.15);
+    assert.equal(FILL_RATIO_EXPAND_ABOVE, 0.70);
+    assert.equal(FILL_RATIO_COMPACT_BELOW, 0.12);
     assert.equal(MIN_COMPACT_NODE_COUNT, 4);
     assert.equal(EFFECTIVE_FONT_WARNING_PT, 6);
   });
@@ -75,9 +75,9 @@ describe('layout-presets: frozen constants', () => {
 });
 
 describe('layout-presets: resolvePresetLayoutOptions', () => {
-  it('paper-column balanced scales nodeNode to 50*0.85=42.5 and sets preset fields', () => {
+  it('paper-column balanced scales nodeNode to 42*0.85=35.7 and sets preset fields', () => {
     const opts = resolvePresetLayoutOptions('paper-column', 'balanced');
-    assert.equal(opts['elk.spacing.nodeNode'], 42.5);
+    assert.ok(Math.abs(opts['elk.spacing.nodeNode'] - 35.7) < 1e-6);
     assert.equal(opts['elk.padding'], '[top=16,left=16,bottom=16,right=16]');
     assert.equal(opts['elk.direction'], 'DOWN');
     assert.equal(opts['elk.edgeRouting'], 'ORTHOGONAL');
@@ -87,23 +87,24 @@ describe('layout-presets: resolvePresetLayoutOptions', () => {
     assert.equal(opts['elk.aspectRatio'], undefined);
   });
 
-  it('paper-column airy scales nodeNode to 50*0.85*1.35=57.375', () => {
+  it('paper-column airy scales nodeNode to 42*0.85*1.35=48.195', () => {
     const opts = resolvePresetLayoutOptions('paper-column', 'airy');
-    assert.equal(opts['elk.spacing.nodeNode'], 57.375);
+    assert.equal(opts['elk.spacing.nodeNode'], 48.195);
   });
 
-  it('scales all nine spacing keys by spacingScale * density factor', () => {
+  it('scales all ten spacing keys by spacingScale * density factor', () => {
     const opts = resolvePresetLayoutOptions('paper-full', 'balanced');
     // paper-full spacingScale 1.0, balanced factor 1 -> 1:1 with server defaults
-    assert.equal(opts['elk.spacing.nodeNode'], 50);
-    assert.equal(opts['elk.layered.spacing.nodeNodeBetweenLayers'], 50);
-    assert.equal(opts['elk.spacing.edgeNode'], 25);
-    assert.equal(opts['elk.layered.spacing.edgeNodeBetweenLayers'], 25);
-    assert.equal(opts['elk.spacing.edgeEdge'], 15);
-    assert.equal(opts['elk.spacing.portPort'], 15);
-    assert.equal(opts['elk.spacing.labelNode'], 10);
-    assert.equal(opts['elk.spacing.edgeLabel'], 12);
-    assert.equal(opts['elk.spacing.componentComponent'], 40);
+    assert.equal(opts['elk.spacing.nodeNode'], 42);
+    assert.equal(opts['elk.layered.spacing.nodeNodeBetweenLayers'], 42);
+    assert.equal(opts['elk.spacing.edgeNode'], 20);
+    assert.equal(opts['elk.layered.spacing.edgeNodeBetweenLayers'], 20);
+    assert.equal(opts['elk.spacing.edgeEdge'], 12);
+    assert.equal(opts['elk.spacing.portPort'], 12);
+    assert.equal(opts['elk.spacing.labelNode'], 8);
+    assert.equal(opts['elk.spacing.edgeLabel'], 10);
+    assert.equal(opts['elk.spacing.componentComponent'], 34);
+    assert.equal(opts['elk.spacing.labelLabel'], 5);
   });
 
   it('slide-16-9 sets aspectRatio and larger spacing via scale 1.3', () => {
@@ -113,27 +114,27 @@ describe('layout-presets: resolvePresetLayoutOptions', () => {
     assert.equal(opts['elk.font.size'], 14);
     assert.equal(opts['elk.nodeSize.minimum'], '(120, 56)');
     assert.equal(opts['elk.padding'], '[top=28,left=28,bottom=28,right=28]');
-    // 50 * 1.3 * 1 = 65
-    assert.equal(opts['elk.spacing.nodeNode'], 65);
+    // 42 * 1.3 * 1 = 54.6
+    assert.equal(opts['elk.spacing.nodeNode'], 54.6);
   });
-
-  it('compact density reduces spacing (paper-column compact: 50*0.85*0.8=34)', () => {
+  it('compact density reduces spacing (paper-column compact: 42*0.85*0.8=28.56)', () => {
     const opts = resolvePresetLayoutOptions('paper-column', 'compact');
-    assert.equal(opts['elk.spacing.nodeNode'], 34);
+    assert.ok(Math.abs(opts['elk.spacing.nodeNode'] - 28.56) < 1e-6);
   });
-
   it('defaults density to balanced when omitted', () => {
     const opts = resolvePresetLayoutOptions('paper-column');
-    assert.equal(opts['elk.spacing.nodeNode'], 42.5);
+    assert.ok(Math.abs(opts['elk.spacing.nodeNode'] - 35.7) < 1e-6);
   });
 
-  it('preserves non-spacing server defaults (nodeSize.constraints, compaction, randomSeed)', () => {
+  it('preserves non-spacing server defaults (nodeSize.constraints, compaction, randomSeed, font, nodeLabels, feedbackEdges)', () => {
     const opts = resolvePresetLayoutOptions('paper-full', 'balanced');
     assert.equal(opts['elk.nodeSize.constraints'], SERVER_DEFAULT_LAYOUT_OPTIONS['elk.nodeSize.constraints']);
     assert.equal(opts['elk.layered.unnecessaryBendpoints'], true);
     assert.equal(opts['elk.layered.compaction.postCompaction.strategy'], 'EDGE_LENGTH');
     assert.equal(opts['elk.layered.compaction.connectedComponents'], true);
     assert.equal(opts['elk.randomSeed'], 1);
+    assert.equal(opts['elk.nodeLabels.placement'], 'INSIDE H_CENTER V_CENTER');
+    assert.equal(opts['elk.layered.feedbackEdges'], true);
   });
 
   it('returns a plain (non-frozen) object so callers may merge further', () => {
@@ -171,7 +172,7 @@ describe('layout-presets: resolvePresetLayoutOptions', () => {
 });
 
 describe('layout-presets: scaleSpacingKeys', () => {
-  it('multiplies all nine spacing keys and leaves others untouched', () => {
+  it('multiplies all ten spacing keys and leaves others untouched', () => {
     const input = {
       'elk.spacing.nodeNode': 50,
       'elk.layered.spacing.nodeNodeBetweenLayers': 50,
@@ -182,6 +183,7 @@ describe('layout-presets: scaleSpacingKeys', () => {
       'elk.spacing.labelNode': 10,
       'elk.spacing.edgeLabel': 12,
       'elk.spacing.componentComponent': 40,
+      'elk.spacing.labelLabel': 5,
       'elk.padding': '[top=20,left=20,bottom=20,right=20]',
       'elk.direction': 'DOWN',
     };
@@ -195,6 +197,7 @@ describe('layout-presets: scaleSpacingKeys', () => {
     assert.equal(out['elk.spacing.labelNode'], 20);
     assert.equal(out['elk.spacing.edgeLabel'], 24);
     assert.equal(out['elk.spacing.componentComponent'], 80);
+    assert.equal(out['elk.spacing.labelLabel'], 10);
     // non-spacing keys preserved verbatim
     assert.equal(out['elk.padding'], '[top=20,left=20,bottom=20,right=20]');
     assert.equal(out['elk.direction'], 'DOWN');
@@ -226,6 +229,12 @@ describe('layout-presets: scaleSpacingKeys', () => {
     const input = { 'elk.spacing.nodeNode': 50 };
     const out = scaleSpacingKeys(input, 1);
     assert.notEqual(out, input);
+  });
+
+  it('clamps scaled spacing to a minimum of 3 (floor guard)', () => {
+    const out = scaleSpacingKeys({ 'elk.spacing.nodeNode': 2, 'elk.spacing.edgeNode': 1 }, 0.5);
+    assert.equal(out['elk.spacing.nodeNode'], 3);
+    assert.equal(out['elk.spacing.edgeNode'], 3);
   });
 });
 
@@ -302,32 +311,35 @@ describe('layout-presets: computeFillRatio', () => {
 });
 
 describe('layout-presets: densityAdjustment', () => {
-  it('returns expand when fillRatio > 0.60', () => {
-    assert.equal(densityAdjustment(0.61, 4), 'expand');
+  it('returns expand when fillRatio > 0.70', () => {
+    assert.equal(densityAdjustment(0.71, 4), 'expand');
     assert.equal(densityAdjustment(0.9, 10), 'expand');
   });
 
   it('returns null at exactly the expand threshold (not strictly greater)', () => {
+    assert.equal(densityAdjustment(0.70, 4), null);
     assert.equal(densityAdjustment(0.60, 4), null);
   });
 
-  it('returns compact when fillRatio < 0.15 and nodeCount >= 4', () => {
-    assert.equal(densityAdjustment(0.14, 4), 'compact');
+  it('returns compact when fillRatio < 0.12 and nodeCount >= 4', () => {
+    assert.equal(densityAdjustment(0.11, 4), 'compact');
     assert.equal(densityAdjustment(0.10, 8), 'compact');
   });
 
-  it('returns null when fillRatio < 0.15 but nodeCount < 4', () => {
-    assert.equal(densityAdjustment(0.14, 3), null);
+  it('returns null when fillRatio < 0.12 but nodeCount < 4', () => {
+    assert.equal(densityAdjustment(0.11, 3), null);
     assert.equal(densityAdjustment(0.10, 1), null);
   });
 
   it('returns null at exactly the compact threshold (not strictly less)', () => {
+    assert.equal(densityAdjustment(0.12, 4), null);
     assert.equal(densityAdjustment(0.15, 4), null);
   });
 
   it('returns null for mid-range fillRatio', () => {
     assert.equal(densityAdjustment(0.30, 4), null);
     assert.equal(densityAdjustment(0.50, 6), null);
+    assert.equal(densityAdjustment(0.65, 6), null);
   });
 });
 

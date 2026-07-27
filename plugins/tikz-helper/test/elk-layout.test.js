@@ -178,7 +178,7 @@ describe('elk-layout: exports and determinism', () => {
   it('SERVER_DEFAULT_LAYOUT_OPTIONS is frozen with elk.randomSeed: 1', () => {
     assert.ok(Object.isFrozen(SERVER_DEFAULT_LAYOUT_OPTIONS));
     assert.equal(SERVER_DEFAULT_LAYOUT_OPTIONS['elk.randomSeed'], 1);
-    assert.equal(SERVER_DEFAULT_LAYOUT_OPTIONS['elk.spacing.nodeNode'], 50);
+    assert.equal(SERVER_DEFAULT_LAYOUT_OPTIONS['elk.spacing.nodeNode'], 42);
   });
 
   it('countNodes is exported and counts recursively', () => {

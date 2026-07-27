@@ -79,6 +79,12 @@ function compileNodeStyle(node, options) {
   if (props.fontSize) {
     parts.push(`font=\\fontsize{${props.fontSize}}{${Math.round(props.fontSize * 1.2)}}\\selectfont`);
   }
+  if (Number.isFinite(node.width) && node.width > 0) {
+    parts.push(`minimum width=${pt(node.width)}`);
+  }
+  if (Number.isFinite(node.height) && node.height > 0) {
+    parts.push(`minimum height=${pt(node.height)}`);
+  }
 
   return parts.join(', ');
 }
@@ -221,6 +227,13 @@ function edgeLabelPosition(edge) {
   const props = edge.properties ?? {};
   return props.labelPosition ?? 'above';
 }
+function edgeLabelFont(options) {
+  if (Number.isFinite(options.baseFontSize) && options.baseFontSize > 0) {
+    const fs = Math.max(options.baseFontSize - 1, 5);
+    return `font=\\fontsize{${fs}}{${Math.round(fs * 1.2)}}\\selectfont`;
+  }
+  return 'font=\\small';
+}
 
 function generateEdges(root, output, options, offsetX = 0, offsetY = 0) {
   const edges = root.edges ?? [];
@@ -262,13 +275,13 @@ function generateEdges(root, output, options, offsetX = 0, offsetY = 0) {
       }
 
       if (points.length === 0) {
-        output.push(`${padding}\\draw[${style}] (${sourceId}) -- (${targetId})${label ? ` node[${edgeLabelPosition(edge)}, font=\\small] {${label}}` : ''};`);
+        output.push(`${padding}\\draw[${style}] (${sourceId}) -- (${targetId})${label ? ` node[${edgeLabelPosition(edge)}, ${edgeLabelFont(options)}] {${label}}` : ''};`);
       } else {
         const coords = points.map((p) => `(${p})`).join(' -- ');
-        output.push(`${padding}\\draw[${style}] (${sourceId}) -- ${coords} -- (${targetId})${label ? ` node[${edgeLabelPosition(edge)}, font=\\small] {${label}}` : ''};`);
+        output.push(`${padding}\\draw[${style}] (${sourceId}) -- ${coords} -- (${targetId})${label ? ` node[${edgeLabelPosition(edge)}, ${edgeLabelFont(options)}] {${label}}` : ''};`);
       }
     } else {
-      output.push(`${padding}\\draw[${style}] (${sourceId}) -- (${targetId})${label ? ` node[${edgeLabelPosition(edge)}, font=\\small] {${label}}` : ''};`);
+      output.push(`${padding}\\draw[${style}] (${sourceId}) -- (${targetId})${label ? ` node[${edgeLabelPosition(edge)}, ${edgeLabelFont(options)}] {${label}}` : ''};`);
     }
   }
 
@@ -359,7 +372,7 @@ export function elkToTikz(layoutResult, options = {}) {
   if (Number.isFinite(opts.scale) && opts.scale !== 1) {
     pictureOptions.push(`scale=${opts.scale}, transform shape`);
   }
-  const everyNodeStyle = ['inner sep=0pt', 'outer sep=0pt'];
+  const everyNodeStyle = ['inner sep=2pt', 'outer sep=0pt'];
   if (Number.isFinite(opts.baseFontSize) && opts.baseFontSize > 0) {
     everyNodeStyle.push(`font=\\fontsize{${opts.baseFontSize}}{${Math.round(opts.baseFontSize * 1.2)}}\\selectfont`);
   }

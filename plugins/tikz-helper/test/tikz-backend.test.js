@@ -236,7 +236,7 @@ describe('tikz-backend: scale and baseFontSize options', () => {
 
   it('default output is unchanged when scale and baseFontSize are absent', () => {
     const tikz = elkToTikz(SCALE_LAYOUT);
-    assert.match(tikz, /\\begin\{tikzpicture\}\[node distance=0pt, anchor=north west, every node\/\.style=\{inner sep=0pt, outer sep=0pt\}\]/);
+    assert.match(tikz, /\\begin\{tikzpicture\}\[node distance=0pt, anchor=north west, every node\/\.style=\{inner sep=2pt, outer sep=0pt\}\]/);
     assert.doesNotMatch(tikz, /scale=/);
     assert.doesNotMatch(tikz, /font=\\fontsize/);
   });
@@ -250,7 +250,7 @@ describe('tikz-backend: scale and baseFontSize options', () => {
   it('scale=0.5, baseFontSize=20 emits scale, transform shape, and every-node font directive', () => {
     const tikz = elkToTikz(SCALE_LAYOUT, { scale: 0.5, baseFontSize: 20 });
     assert.match(tikz, /scale=0\.5, transform shape/);
-    assert.match(tikz, /every node\/\.style=\{inner sep=0pt, outer sep=0pt, font=\\fontsize\{20\}\{24\}\\selectfont\}/);
+    assert.match(tikz, /every node\/\.style=\{inner sep=2pt, outer sep=0pt, font=\\fontsize\{20\}\{24\}\\selectfont\}/);
   });
 
   it('scale=0.5 with baseFontSize=null emits scale= but no every-node font directive', () => {
@@ -297,7 +297,7 @@ describe('tikz-backend: scale and baseFontSize options', () => {
     };
     const tikz = elkToTikz(layout, { scale: 0.5, baseFontSize: 20 });
     // every-node style carries the base font
-    assert.match(tikz, /every node\/\.style=\{inner sep=0pt, outer sep=0pt, font=\\fontsize\{20\}\{24\}\\selectfont\}/);
+    assert.match(tikz, /every node\/\.style=\{inner sep=2pt, outer sep=0pt, font=\\fontsize\{20\}\{24\}\\selectfont\}/);
     // per-node font directive is also present (keeps precedence in TikZ)
     assert.match(tikz, /font=\\fontsize\{12\}\{14\}\\selectfont/);
   });
@@ -309,5 +309,131 @@ describe('tikz-backend: scale and baseFontSize options', () => {
     assert.match(tikz, /\(server\)\s+at\s+\(20pt,\s*-120pt\)/);
     // edge geometry untouched
     assert.match(tikz, /\\draw\[->\]\s+\(client\)\s+--\s+\(50pt,\s*-70pt\)\s+--\s+\(50pt,\s*-120pt\)\s+--\s+\(server\)/);
+  });
+});
+
+describe('tikz-backend: edge label font helper', () => {
+  const LABEL_LAYOUT = {
+    id: 'root',
+    children: [
+      { id: 'a', x: 0, y: 0, width: 20, height: 20 },
+      { id: 'b', x: 100, y: 0, width: 20, height: 20 },
+    ],
+    edges: [{
+      id: 'e1', sources: ['a'], targets: ['b'],
+      properties: { label: 'HTTP' },
+    }],
+  };
+
+  it('edge labels use font=\\small when baseFontSize is absent', () => {
+    const tikz = elkToTikz(LABEL_LAYOUT);
+    assert.match(tikz, /font=\\small\] \{HTTP\}/);
+  });
+
+  it('edge labels use font=\\small when baseFontSize is null', () => {
+    const tikz = elkToTikz(LABEL_LAYOUT, { baseFontSize: null });
+    assert.match(tikz, /font=\\small\] \{HTTP\}/);
+  });
+
+  it('edge labels use fontsize directive 1pt smaller than baseFontSize', () => {
+    const tikz = elkToTikz(LABEL_LAYOUT, { baseFontSize: 10 });
+    // 10 - 1 = 9, 9*1.2 = 10.8 -> round = 11
+    assert.match(tikz, /font=\\fontsize\{9\}\{11\}\\selectfont\] \{HTTP\}/);
+  });
+
+  it('edge labels floor at 5pt when baseFontSize is small', () => {
+    const tikz = elkToTikz(LABEL_LAYOUT, { baseFontSize: 4 });
+    // max(4-1, 5) = 5, 5*1.2 = 6
+    assert.match(tikz, /font=\\fontsize\{5\}\{6\}\\selectfont\] \{HTTP\}/);
+  });
+
+  it('edge labels use \\small when baseFontSize is non-finite', () => {
+    const tikz = elkToTikz(LABEL_LAYOUT, { baseFontSize: NaN });
+    assert.match(tikz, /font=\\small\] \{HTTP\}/);
+    const tikz2 = elkToTikz(LABEL_LAYOUT, { baseFontSize: Infinity });
+    assert.match(tikz2, /font=\\small\] \{HTTP\}/);
+  });
+
+  it('edge labels use \\small when baseFontSize is non-positive', () => {
+    const tikz = elkToTikz(LABEL_LAYOUT, { baseFontSize: 0 });
+    assert.match(tikz, /font=\\small\] \{HTTP\}/);
+  });
+
+  it('edge labels use fontsize directive in edges with bend points', () => {
+    const layout = {
+      id: 'root',
+      children: [
+        { id: 'a', x: 0, y: 0, width: 20, height: 20 },
+        { id: 'b', x: 100, y: 0, width: 20, height: 20 },
+      ],
+      edges: [{
+        id: 'e1', sources: ['a'], targets: ['b'],
+        sections: [{ startPoint: { x: 20, y: 10 }, bendPoints: [{ x: 50, y: 30 }], endPoint: { x: 100, y: 10 } }],
+        properties: { label: 'X' },
+      }],
+    };
+    const tikz = elkToTikz(layout, { baseFontSize: 12 });
+    // 12 - 1 = 11, 11*1.2 = 13.2 -> round = 13
+    assert.match(tikz, /font=\\fontsize\{11\}\{13\}\\selectfont\] \{X\}/);
+  });
+});
+
+describe('tikz-backend: minimum sizes from ELK dimensions', () => {
+  it('emits minimum width and height from node dimensions', () => {
+    const layout = {
+      id: 'root',
+      children: [
+        { id: 'n1', x: 0, y: 0, width: 100, height: 50, labels: [{ text: 'A' }] },
+      ],
+    };
+    const tikz = elkToTikz(layout);
+    assert.match(tikz, /minimum width=100pt/);
+    assert.match(tikz, /minimum height=50pt/);
+  });
+
+  it('does not emit minimum width when width is 0', () => {
+    const layout = {
+      id: 'root',
+      children: [
+        { id: 'n1', x: 0, y: 0, width: 0, height: 50, labels: [{ text: 'A' }] },
+      ],
+    };
+    const tikz = elkToTikz(layout);
+    assert.doesNotMatch(tikz, /minimum width/);
+    assert.match(tikz, /minimum height=50pt/);
+  });
+
+  it('does not emit minimum height when height is 0', () => {
+    const layout = {
+      id: 'root',
+      children: [
+        { id: 'n1', x: 0, y: 0, width: 100, height: 0, labels: [{ text: 'A' }] },
+      ],
+    };
+    const tikz = elkToTikz(layout);
+    assert.match(tikz, /minimum width=100pt/);
+    assert.doesNotMatch(tikz, /minimum height/);
+  });
+
+  it('emits minimum sizes alongside shape and fill', () => {
+    const layout = {
+      id: 'root',
+      children: [
+        { id: 'n1', x: 0, y: 0, width: 80, height: 40, properties: { shape: 'diamond', fill: '#ff0000' }, labels: [{ text: 'D' }] },
+      ],
+    };
+    const tikz = elkToTikz(layout);
+    assert.match(tikz, /diamond.*minimum width=80pt.*minimum height=40pt/);
+  });
+
+  it('emits inner sep=2pt in every-node style', () => {
+    const layout = {
+      id: 'root',
+      children: [
+        { id: 'n1', x: 0, y: 0, width: 100, height: 50, labels: [{ text: 'A' }] },
+      ],
+    };
+    const tikz = elkToTikz(layout);
+    assert.match(tikz, /every node\/\.style=\{inner sep=2pt, outer sep=0pt\}/);
   });
 });

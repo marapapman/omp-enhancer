@@ -83,7 +83,7 @@ test('no reference uses forbidden enforcement phrasing', () => {
 test('flowchart-semantics pins the node-sizing estimate caveat (SIZING-CAVEAT-FLOWCHART)', () => {
   assert.match(
     flowchart,
-    /Declared dimensions are estimates — the backend ignores ELK-computed label coordinates and does not emit declared dimensions as TikZ minimum sizes, so size generously and require render review\./,
+    /The backend emits ELK-computed node dimensions as TikZ minimum width and height, with 2pt inner padding\. Declare width and height sized for the exact label plus padding; ELK may enlarge nodes when its label measurement exceeds declared dimensions\. Verify with a render\./,
     'flowchart-semantics.md must pin the SIZING-CAVEAT-FLOWCHART sentence verbatim',
   );
 });

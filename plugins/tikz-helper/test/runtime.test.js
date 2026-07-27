@@ -163,11 +163,11 @@ describe('tikz-helper runtime tools', () => {
       /regenerating, never by editing coordinates/,
       'promptGuidelines must state the regeneration repair rule',
     );
-    // P3 honesty caveat: declared node dimensions are estimates
+    // Sizing caveat: backend emits ELK dimensions as TikZ minimum sizes
     assert.match(
       guidelines,
-      /Declared node width and height are estimates because the backend ignores ELK label positions and does not emit them as TikZ minimum sizes, so size generously and verify with a render\./,
-      'promptGuidelines must embed the sizing-caveat (declared dimensions are estimates)',
+      /The backend emits ELK-computed dimensions as TikZ minimum width and height with 2pt inner padding\. Declare node width and height sized for the exact label plus padding; ELK may enlarge nodes when its label measurement exceeds declared dimensions\. Verify with a render\./,
+      'promptGuidelines must embed the sizing-caveat (backend emits ELK dimensions as minimum sizes)',
     );
     // ELK environment check + install-before-draw guidance (no hand-draw fallback)
     assert.match(guidelines, /ELK_NOT_INSTALLED/);

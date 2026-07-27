@@ -366,7 +366,7 @@ describe('ImageMagick asset processor', () => {
     await assert.rejects(observedHandle.stat(), (error) => error.code === 'EBADF');
   });
 
-  it('uses exec approval and has only elkjs as npm runtime dependency', async () => {
+  it('uses exec approval and has the expected npm runtime dependencies', async () => {
     const api = makeExtensionApi();
     extension(api);
     const assetTool = api.registerTool.mock.calls.map((call) => call.arguments[0])
@@ -379,6 +379,7 @@ describe('ImageMagick asset processor', () => {
     const depNames = Object.keys(deps);
     assert.equal(depNames.length >= 1, true);
     assert.ok(depNames.includes('elkjs'), 'elkjs should be a dependency');
-    assert.equal(depNames.length, 1, 'only elkjs should be a dependency');
+    assert.ok(depNames.includes('@thi.ng/geom-isec'), '@thi.ng/geom-isec should be a dependency for geometry checks');
+    assert.ok(depNames.includes('isect'), 'isect should be a dependency for edge crossing detection');
   });
 });

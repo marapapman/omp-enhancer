@@ -1,21 +1,25 @@
 import { TikzRuntimeError } from './runtime-error.js';
 export const SERVER_DEFAULT_LAYOUT_OPTIONS = Object.freeze({
-  'elk.spacing.nodeNode': 50,
-  'elk.layered.spacing.nodeNodeBetweenLayers': 50,
-  'elk.spacing.edgeNode': 25,
-  'elk.layered.spacing.edgeNodeBetweenLayers': 25,
-  'elk.spacing.edgeEdge': 15,
-  'elk.spacing.portPort': 15,
-  'elk.spacing.labelNode': 10,
-  'elk.spacing.edgeLabel': 12,
-  'elk.spacing.componentComponent': 40,
-  'elk.padding': '[top=20,left=20,bottom=20,right=20]',
+  'elk.spacing.nodeNode': 42,
+  'elk.layered.spacing.nodeNodeBetweenLayers': 42,
+  'elk.spacing.edgeNode': 20,
+  'elk.layered.spacing.edgeNodeBetweenLayers': 20,
+  'elk.spacing.edgeEdge': 12,
+  'elk.spacing.portPort': 12,
+  'elk.spacing.labelNode': 8,
+  'elk.spacing.edgeLabel': 10,
+  'elk.spacing.componentComponent': 34,
+  'elk.spacing.labelLabel': 5,
+  'elk.padding': '[top=12,left=12,bottom=12,right=12]',
   'elk.nodeSize.constraints': 'NODE_LABELS, PORTS, PORT_LABELS, MINIMUM_SIZE',
   'elk.nodeSize.minimum': '(80, 40)',
   'elk.layered.unnecessaryBendpoints': true,
   'elk.layered.compaction.postCompaction.strategy': 'EDGE_LENGTH',
   'elk.layered.compaction.connectedComponents': true,
   'elk.randomSeed': 1,
+  'elk.font.size': 10,
+  'elk.nodeLabels.placement': 'INSIDE H_CENTER V_CENTER',
+  'elk.layered.feedbackEdges': true,
 });
 
 
@@ -286,6 +290,7 @@ export async function computeLayout(graph, options = {}) {
     graph: positioned,
     metadata: {
       algorithm,
+      fontSize: layoutOptions['elk.font.size'] ?? null,
       nodeCount: (positioned.children ?? []).length,
       edgeCount: (positioned.edges ?? []).length,
       executionTime: typeof executionTime === 'number' ? executionTime : null,

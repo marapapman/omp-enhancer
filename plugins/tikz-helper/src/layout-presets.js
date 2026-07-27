@@ -5,8 +5,8 @@ export const PRESET_NAMES = Object.freeze(['paper-column', 'paper-full', 'slide-
 export const DENSITY_NAMES = Object.freeze(['compact', 'balanced', 'airy']);
 export const DENSITY_FACTORS = Object.freeze({ compact: 0.8, balanced: 1, airy: 1.35 });
 export const DENSITY_RELAYOUT_FACTOR = Object.freeze({ expand: 1.25, compact: 0.8 });
-export const FILL_RATIO_EXPAND_ABOVE = 0.60;
-export const FILL_RATIO_COMPACT_BELOW = 0.15;
+export const FILL_RATIO_EXPAND_ABOVE = 0.70;
+export const FILL_RATIO_COMPACT_BELOW = 0.12;
 export const MIN_COMPACT_NODE_COUNT = 4;
 export const EFFECTIVE_FONT_WARNING_PT = 6;
 
@@ -17,7 +17,7 @@ export const LAYOUT_PRESETS = Object.freeze({
   'slide-4-3':    Object.freeze({ direction: 'RIGHT', spacingScale: 1.3,  nodeSizeMinimum: '(110, 52)', padding: 26, fontPt: 14, targetWidthPt: null, aspectRatio: 1.3333, embedding: '\\includegraphics[width=0.8\\linewidth]{<file>}' }),
 });
 
-// The nine ELK spacing keys that density and preset spacingScale act upon.
+// The ten ELK spacing keys that density and preset spacingScale act upon.
 const SPACING_KEYS = Object.freeze([
   'elk.spacing.nodeNode',
   'elk.layered.spacing.nodeNodeBetweenLayers',
@@ -28,19 +28,21 @@ const SPACING_KEYS = Object.freeze([
   'elk.spacing.labelNode',
   'elk.spacing.edgeLabel',
   'elk.spacing.componentComponent',
+  'elk.spacing.labelLabel',
 ]);
-
 /**
- * Returns a NEW object with the nine ELK spacing keys multiplied by `factor`
+ * Returns a NEW object with the ten ELK spacing keys multiplied by `factor`
  * when they are present and numeric. Non-spacing keys are copied verbatim.
- * The input object is never mutated.
+ * The input object is never mutated. Each scaled value is clamped to a
+ * minimum of 3pt so density compaction cannot drive spacing below the
+ * threshold where orthogonal edge routing and node borders visually overlap.
  */
 export function scaleSpacingKeys(layoutOptions, factor) {
   const out = { ...layoutOptions };
   for (const key of SPACING_KEYS) {
     const value = out[key];
     if (typeof value === 'number' && Number.isFinite(value)) {
-      out[key] = value * factor;
+      out[key] = Math.max(value * factor, 3);
     }
   }
   return out;

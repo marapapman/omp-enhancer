@@ -1,3 +1,4 @@
+import { detectGeometryIssues } from './geometry-check.js';
 import { computeLayout, countNodes } from './elk-layout.js';
 import { elkToTikz } from './tikz-backend.js';
 import {
@@ -31,6 +32,7 @@ export async function generateTikz(input = {}, options = {}) {
     densityReport.fillRatio = computeFillRatio(layoutResult.graph);
     adjustment = densityAdjustment(densityReport.fillRatio, countNodes(layoutResult.graph));
   }
+  const geo = detectGeometryIssues(layoutResult.graph);
 
   // Sizing: uniform scale so paper presets land at the target physical width.
   const presetDef = preset ? LAYOUT_PRESETS[preset] : null;
@@ -42,7 +44,7 @@ export async function generateTikz(input = {}, options = {}) {
     scale = Number((targetWidthPt / rootWidth).toFixed(4));
     if (Math.abs(scale - 1) <= 0.02) scale = 1; // snap: avoid pointless transform
   }
-  const fontPt = presetDef ? presetDef.fontPt : null;
+  const fontPt = presetDef ? presetDef.fontPt : (layoutResult.metadata.fontSize ?? null);
   const sizing = sizingReport({ preset, targetWidthPt, rootWidth, rootHeight, scale, fontPt });
 
   const tikzSource = elkToTikz(layoutResult.graph, {
@@ -66,6 +68,8 @@ export async function generateTikz(input = {}, options = {}) {
       density: densityReport,
       sizing,
       assets: collectIconAssets(layoutResult.graph),
+      geometryIssues: geo.issues,
+      geometrySummary: geo.summary,
     },
   };
 }
