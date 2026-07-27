@@ -6,6 +6,7 @@ import {
   collectLeafNodes,
   collectEdges,
   overlapArea,
+  GEOMETRY_DEPS_GUIDANCE,
 } from '../src/geometry-check.js';
 
 // ---------------------------------------------------------------------------
@@ -36,9 +37,9 @@ function seg(x1, y1, x2, y2, bends) {
 }
 
 describe('geometry-check: return shape and freezing', () => {
-  it('returns a frozen { issues, summary } object', () => {
+  it('returns a frozen { issues, summary } object', async () => {
     const root = { id: 'r', width: 200, height: 200, children: [], edges: [] };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     assert.ok(Object.isFrozen(result), 'result must be frozen');
     assert.ok(Array.isArray(result.issues));
     assert.ok(Object.isFrozen(result.issues), 'issues array must be frozen');
@@ -46,9 +47,9 @@ describe('geometry-check: return shape and freezing', () => {
     assert.ok(Object.isFrozen(result.summary), 'summary must be frozen');
   });
 
-  it('handles an empty graph (no children, no edges)', () => {
+  it('handles an empty graph (no children, no edges)', async () => {
     const root = { id: 'r', width: 100, height: 100, children: [], edges: [] };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     assert.deepEqual(result.issues, []);
     assert.equal(result.summary.totalEdgeCrossings, 0);
     assert.equal(result.summary.totalBends, 0);
@@ -214,7 +215,7 @@ describe('geometry-check: collectEdges', () => {
 });
 
 describe('geometry-check: node-node overlap detection', () => {
-  it('detects overlapping nodes with overlap area and severity', () => {
+  it('detects overlapping nodes with overlap area and severity', async () => {
     // Two nodes overlapping: a=[0,0,100,50], b=[80,0,100,50]
     // overlap region: x [80,100]=20, y [0,50]=50 → area 1000
     const root = {
@@ -225,7 +226,7 @@ describe('geometry-check: node-node overlap detection', () => {
       ],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const overlaps = result.issues.filter((i) => i.type === 'node-node-overlap');
     assert.equal(overlaps.length, 1);
     assert.equal(overlaps[0].nodeA, 'a');
@@ -234,7 +235,7 @@ describe('geometry-check: node-node overlap detection', () => {
     assert.equal(overlaps[0].severity, 'error', 'area > 50 → error');
   });
 
-  it('reports warning severity for small overlaps (<=50)', () => {
+  it('reports warning severity for small overlaps (<=50)', async () => {
     // Overlap area = 10pt² → warning
     const root = {
       id: 'r', width: 300, height: 100,
@@ -253,14 +254,14 @@ describe('geometry-check: node-node overlap detection', () => {
       ],
       edges: [],
     };
-    const result = detectGeometryIssues(root2);
+    const result = await detectGeometryIssues(root2);
     const overlaps = result.issues.filter((i) => i.type === 'node-node-overlap');
     assert.equal(overlaps.length, 1);
     assert.equal(overlaps[0].overlapAreaPt2, 10);
     assert.equal(overlaps[0].severity, 'warning');
   });
 
-  it('does not report non-overlapping nodes', () => {
+  it('does not report non-overlapping nodes', async () => {
     const root = {
       id: 'r', width: 300, height: 100,
       children: [
@@ -269,12 +270,12 @@ describe('geometry-check: node-node overlap detection', () => {
       ],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const overlaps = result.issues.filter((i) => i.type === 'node-node-overlap');
     assert.equal(overlaps.length, 0);
   });
 
-  it('ignores sub-pixel overlaps below noise threshold (<=0.5)', () => {
+  it('ignores sub-pixel overlaps below noise threshold (<=0.5)', async () => {
     // overlap area = 0.4 → below 0.5 threshold → no report
     const root = {
       id: 'r', width: 300, height: 100,
@@ -284,7 +285,7 @@ describe('geometry-check: node-node overlap detection', () => {
       ],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const overlaps = result.issues.filter((i) => i.type === 'node-node-overlap');
     assert.equal(overlaps.length, 0);
   });
@@ -305,7 +306,7 @@ describe('geometry-check: overlapArea helper', () => {
 });
 
 describe('geometry-check: edge-node collision detection', () => {
-  it('detects an edge passing through an unrelated node', () => {
+  it('detects an edge passing through an unrelated node', async () => {
     // Edge from (0,25) to (200,25) passes through node c at (80,0,40,50)
     const root = {
       id: 'r', width: 300, height: 100,
@@ -316,7 +317,7 @@ describe('geometry-check: edge-node collision detection', () => {
       ],
       edges: [edge('e1', 'src', 'dst', [seg(20, 25, 240, 25)])],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const collisions = result.issues.filter((i) => i.type === 'edge-node-collision');
     assert.ok(collisions.length >= 1, 'must detect edge passing through node c');
     const hit = collisions.find((c) => c.nodeId === 'c');
@@ -325,7 +326,7 @@ describe('geometry-check: edge-node collision detection', () => {
     assert.equal(hit.severity, 'warning');
   });
 
-  it('does not report collision with source or target node', () => {
+  it('does not report collision with source or target node', async () => {
     // Edge from src to dst; segment starts inside src, ends inside dst
     const root = {
       id: 'r', width: 300, height: 100,
@@ -335,12 +336,12 @@ describe('geometry-check: edge-node collision detection', () => {
       ],
       edges: [edge('e1', 'src', 'dst', [seg(30, 20, 230, 20)])],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const collisions = result.issues.filter((i) => i.type === 'edge-node-collision');
     assert.equal(collisions.length, 0, 'no collision with source/target');
   });
 
-  it('does not report when edge does not cross any node', () => {
+  it('does not report when edge does not cross any node', async () => {
     const root = {
       id: 'r', width: 400, height: 200,
       children: [
@@ -350,14 +351,14 @@ describe('geometry-check: edge-node collision detection', () => {
       ],
       edges: [edge('e1', 'a', 'b', [seg(20, 20, 320, 20)])],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const collisions = result.issues.filter((i) => i.type === 'edge-node-collision' && i.nodeId === 'c');
     assert.equal(collisions.length, 0);
   });
 });
 
 describe('geometry-check: node out-of-bounds detection', () => {
-  it('detects a node extending beyond root bounds', () => {
+  it('detects a node extending beyond root bounds', async () => {
     const root = {
       id: 'r', width: 200, height: 100,
       children: [
@@ -366,39 +367,39 @@ describe('geometry-check: node out-of-bounds detection', () => {
       ],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const oob = result.issues.filter((i) => i.type === 'node-out-of-bounds');
     assert.ok(oob.length >= 1);
     assert.equal(oob[0].nodeId, 'oob');
     assert.equal(oob[0].severity, 'warning');
   });
 
-  it('detects a node with negative coordinates', () => {
+  it('detects a node with negative coordinates', async () => {
     const root = {
       id: 'r', width: 200, height: 100,
       children: [leaf('neg', -10, 10, 50, 50)],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const oob = result.issues.filter((i) => i.type === 'node-out-of-bounds');
     assert.ok(oob.length >= 1);
     assert.equal(oob[0].nodeId, 'neg');
   });
 
-  it('does not report in-bounds nodes', () => {
+  it('does not report in-bounds nodes', async () => {
     const root = {
       id: 'r', width: 200, height: 100,
       children: [leaf('ok', 10, 10, 50, 50)],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const oob = result.issues.filter((i) => i.type === 'node-out-of-bounds');
     assert.equal(oob.length, 0);
   });
 });
 
 describe('geometry-check: group containment', () => {
-  it('detects a child extending beyond parent group bounds', () => {
+  it('detects a child extending beyond parent group bounds', async () => {
     const root = {
       id: 'r', width: 500, height: 500,
       children: [
@@ -412,7 +413,7 @@ describe('geometry-check: group containment', () => {
       ],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const violations = result.issues.filter((i) => i.type === 'child-out-of-group');
     assert.ok(violations.length >= 1, 'must detect child outside group');
     const bad = violations.find((v) => v.childId === 'child-bad');
@@ -421,7 +422,7 @@ describe('geometry-check: group containment', () => {
     assert.equal(bad.severity, 'warning');
   });
 
-  it('does not report children fully inside group', () => {
+  it('does not report children fully inside group', async () => {
     const root = {
       id: 'r', width: 500, height: 500,
       children: [
@@ -432,14 +433,14 @@ describe('geometry-check: group containment', () => {
       ],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const violations = result.issues.filter((i) => i.type === 'child-out-of-group');
     assert.equal(violations.length, 0);
   });
 });
 
 describe('geometry-check: edge-edge crossings', () => {
-  it('detects two crossing edges', () => {
+  it('detects two crossing edges', async () => {
     // e1: (0,0)->(100,100), e2: (0,100)->(100,0) → cross at (50,50)
     const root = {
       id: 'r', width: 200, height: 200,
@@ -454,14 +455,14 @@ describe('geometry-check: edge-edge crossings', () => {
         edge('e2', 'n3', 'n4', [seg(5, 105, 105, 5)]),
       ],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     assert.ok(result.summary.totalEdgeCrossings >= 1, 'summary counts the crossing');
     const crossings = result.issues.filter((i) => i.type === 'edge-crossings');
     assert.ok(crossings.length >= 1, 'edge-crossings issue reported');
     assert.ok(crossings[0].count >= 1);
   });
 
-  it('does not report crossings for parallel edges', () => {
+  it('does not report crossings for parallel edges', async () => {
     const root = {
       id: 'r', width: 200, height: 200,
       children: [
@@ -475,7 +476,7 @@ describe('geometry-check: edge-edge crossings', () => {
         edge('e2', 'n3', 'n4', [seg(5, 55, 105, 55)]),
       ],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     assert.equal(result.summary.totalEdgeCrossings, 0);
     const crossings = result.issues.filter((i) => i.type === 'edge-crossings');
     assert.equal(crossings.length, 0);
@@ -483,7 +484,7 @@ describe('geometry-check: edge-edge crossings', () => {
 });
 
 describe('geometry-check: summary metrics', () => {
-  it('computes aspectRatio, areaUtilization, and bends for a simple graph', () => {
+  it('computes aspectRatio, areaUtilization, and bends for a simple graph', async () => {
     const root = {
       id: 'r', width: 200, height: 100,
       children: [
@@ -494,7 +495,7 @@ describe('geometry-check: summary metrics', () => {
         edge('e1', 'a', 'b', [seg(50, 25, 100, 25, [{ x: 100, y: 60 }])]),
       ],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const s = result.summary;
     assert.equal(typeof s.aspectRatio, 'number');
     assert.ok(s.aspectRatio >= 1, 'aspectRatio clamped to >= 1');
@@ -507,23 +508,23 @@ describe('geometry-check: summary metrics', () => {
     assert.equal(typeof s.edgeLengthUniformity, 'number');
   });
 
-  it('clamps aspectRatio to >= 1 for tall graphs', () => {
+  it('clamps aspectRatio to >= 1 for tall graphs', async () => {
     const root = {
       id: 'r', width: 100, height: 200,
       children: [leaf('a', 10, 10, 40, 40)],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     assert.ok(result.summary.aspectRatio >= 1, 'tall graph ratio clamped');
   });
 
-  it('handles zero edges gracefully in avgBendsPerEdge', () => {
+  it('handles zero edges gracefully in avgBendsPerEdge', async () => {
     const root = {
       id: 'r', width: 100, height: 100,
       children: [leaf('a', 10, 10, 20, 20)],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     assert.equal(result.summary.avgBendsPerEdge, 0);
     assert.equal(result.summary.edgeLengthUniformity, 1, 'no edges → perfect uniformity');
   });
@@ -578,7 +579,7 @@ describe('geometry-check: collectLeafNodes applies group coordinate offset', () 
     assert.equal(leaves[0].y, 35, '10+20+5 = 35');
   });
 
-  it('detects overlap between a grouped leaf and a root-level leaf', () => {
+  it('detects overlap between a grouped leaf and a root-level leaf', async () => {
     // Group at (100,100) with inner leaf at (50,50,40,40) → global (150,150).
     // Root leaf at (150,150,40,40) → exact overlap, area 1600.
     const root = {
@@ -592,7 +593,7 @@ describe('geometry-check: collectLeafNodes applies group coordinate offset', () 
       ],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const overlaps = result.issues.filter((i) => i.type === 'node-node-overlap');
     assert.equal(overlaps.length, 1, 'cross-group overlap detected');
     const ids = [overlaps[0].nodeA, overlaps[0].nodeB].sort();
@@ -601,7 +602,7 @@ describe('geometry-check: collectLeafNodes applies group coordinate offset', () 
     assert.equal(overlaps[0].severity, 'error');
   });
 
-  it('does not falsely report overlap when grouped leaf is globally separate', () => {
+  it('does not falsely report overlap when grouped leaf is globally separate', async () => {
     // Group at (100,100) with inner at (0,0,40,40) → global (100,100).
     // Root leaf at (300,300,40,40) → no overlap.
     const root = {
@@ -615,14 +616,14 @@ describe('geometry-check: collectLeafNodes applies group coordinate offset', () 
       ],
       edges: [],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const overlaps = result.issues.filter((i) => i.type === 'node-node-overlap');
     assert.equal(overlaps.length, 0, 'no false overlap across groups');
   });
 });
 
 describe('geometry-check: edge-edge crossings skip shared endpoints', () => {
-  it('does not count two edges sharing a source port as crossing', () => {
+  it('does not count two edges sharing a source port as crossing', async () => {
     // Both edges start at the same port coordinate (10,10) — common in ELK
     // layered layouts where multiple edges leave the same source node.
     const root = {
@@ -637,13 +638,13 @@ describe('geometry-check: edge-edge crossings skip shared endpoints', () => {
         edge('e2', 'src', 'dst2', [seg(10, 10, 10, 110)]),
       ],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     assert.equal(result.summary.totalEdgeCrossings, 0, 'shared source port is not a crossing');
     const crossings = result.issues.filter((i) => i.type === 'edge-crossings');
     assert.equal(crossings.length, 0);
   });
 
-  it('does not count two edges sharing a target port as crossing', () => {
+  it('does not count two edges sharing a target port as crossing', async () => {
     // Both edges converge on the same target port (190,10).
     const root = {
       id: 'r', width: 200, height: 200,
@@ -657,11 +658,11 @@ describe('geometry-check: edge-edge crossings skip shared endpoints', () => {
         edge('e2', 's2', 'dst', [seg(10, 110, 190, 10)]),
       ],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     assert.equal(result.summary.totalEdgeCrossings, 0, 'shared target port is not a crossing');
   });
 
-  it('still counts a genuine crossing when endpoints differ', () => {
+  it('still counts a genuine crossing when endpoints differ', async () => {
     // Two edges that actually cross mid-segment, no shared endpoints.
     const root = {
       id: 'r', width: 200, height: 200,
@@ -676,7 +677,7 @@ describe('geometry-check: edge-edge crossings skip shared endpoints', () => {
         edge('e2', 'n3', 'n4', [seg(5, 195, 195, 5)]),
       ],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     assert.ok(result.summary.totalEdgeCrossings >= 1, 'real crossing still detected');
     const crossings = result.issues.filter((i) => i.type === 'edge-crossings');
     assert.ok(crossings.length >= 1);
@@ -684,7 +685,7 @@ describe('geometry-check: edge-edge crossings skip shared endpoints', () => {
 });
 
 describe('geometry-check: segment-rect intersection bounds', () => {
-  it('does not report collision when segment endpoint does not reach the rect', () => {
+  it('does not report collision when segment endpoint does not reach the rect', async () => {
     // A short segment whose infinite line would touch a far rect's edge, but
     // the segment itself never reaches the rect. No collision expected.
     // Segment (0,0)->(10,10); its line y=x meets the top edge of a far rect
@@ -697,14 +698,14 @@ describe('geometry-check: segment-rect intersection bounds', () => {
       ],
       edges: [edge('e1', 'src', 'src', [seg(0, 0, 10, 10)])],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const collisions = result.issues.filter(
       (i) => i.type === 'edge-node-collision' && i.nodeId === 'far',
     );
     assert.equal(collisions.length, 0, 'no false positive from infinite-line touch');
   });
 
-  it('reports collision for a collinear segment overlapping a rect edge', () => {
+  it('reports collision for a collinear segment overlapping a rect edge', async () => {
     // Segment runs along the top edge of node c (y=0) from x=5 to x=205,
     // overlapping c's top edge [80,120]. Collinear overlap must be detected.
     const root = {
@@ -716,7 +717,7 @@ describe('geometry-check: segment-rect intersection bounds', () => {
       ],
       edges: [edge('e1', 'src', 'dst', [seg(5, 0, 205, 0)])],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const collisions = result.issues.filter(
       (i) => i.type === 'edge-node-collision' && i.nodeId === 'c',
     );
@@ -724,7 +725,7 @@ describe('geometry-check: segment-rect intersection bounds', () => {
     assert.equal(collisions[0].edgeId, 'e1');
   });
 
-  it('does not report collision for a collinear segment that does not overlap the rect', () => {
+  it('does not report collision for a collinear segment that does not overlap the rect', async () => {
     // Segment along y=0 from x=0 to x=70; node c top edge spans x=80..120.
     // Collinear but the segment ends before reaching the rect → no overlap.
     const root = {
@@ -736,14 +737,14 @@ describe('geometry-check: segment-rect intersection bounds', () => {
       ],
       edges: [edge('e1', 'src', 'src', [seg(0, 0, 70, 0)])],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const collisions = result.issues.filter(
       (i) => i.type === 'edge-node-collision' && i.nodeId === 'c',
     );
     assert.equal(collisions.length, 0, 'collinear-but-disjoint is not a collision');
   });
 
-  it('reports collision when a segment endpoint touches the rect boundary', () => {
+  it('reports collision when a segment endpoint touches the rect boundary', async () => {
     // Segment from (0,25) ending exactly on the left edge of c at (80,25).
     // thi.ng labels endpoint-touching intersections INTERSECT_OUTSIDE; the
     // bounds check must still accept it as a valid collision.
@@ -755,10 +756,46 @@ describe('geometry-check: segment-rect intersection bounds', () => {
       ],
       edges: [edge('e1', 'src', 'src', [seg(0, 25, 80, 25)])],
     };
-    const result = detectGeometryIssues(root);
+    const result = await detectGeometryIssues(root);
     const collisions = result.issues.filter(
       (i) => i.type === 'edge-node-collision' && i.nodeId === 'c',
     );
     assert.ok(collisions.length >= 1, 'endpoint touching rect boundary is a collision');
+  });
+});
+
+describe('geometry-check: lazy dependency loading', () => {
+  it('exposes a frozen GEOMETRY_DEPS_GUIDANCE with the install seam', () => {
+    assert.equal(GEOMETRY_DEPS_GUIDANCE.code, 'GEOMETRY_DEPS_NOT_INSTALLED');
+    assert.equal(GEOMETRY_DEPS_GUIDANCE.install.command, 'npm run install:deps');
+    assert.equal(GEOMETRY_DEPS_GUIDANCE.install.tool, 'omp_core_install_deps');
+    assert.deepEqual(GEOMETRY_DEPS_GUIDANCE.install.packages, ['@thi.ng/geom-isec', 'isect']);
+    assert.match(GEOMETRY_DEPS_GUIDANCE.directive, /@thi\.ng\/geom-isec and isect/);
+    assert.ok(Object.isFrozen(GEOMETRY_DEPS_GUIDANCE));
+    assert.ok(Object.isFrozen(GEOMETRY_DEPS_GUIDANCE.install));
+    assert.ok(Object.isFrozen(GEOMETRY_DEPS_GUIDANCE.install.packages));
+  });
+
+  it('returns the GEOMETRY_DEPS_NOT_INSTALLED fallback when loader throws', async () => {
+    const failingLoader = async () => { throw new Error('simulated missing dep'); };
+    const root = { id: 'r', width: 200, height: 200, children: [], edges: [] };
+    const result = await detectGeometryIssues(root, { loadGeomDeps: failingLoader });
+    assert.ok(Object.isFrozen(result), 'fallback result must be frozen');
+    assert.deepEqual(result.issues, []);
+    assert.ok(Object.isFrozen(result.issues), 'fallback issues array must be frozen');
+    assert.equal(result.code, GEOMETRY_DEPS_GUIDANCE.code);
+    assert.equal(result.summary.totalEdgeCrossings, 0);
+    assert.equal(result.summary.totalBends, 0);
+    assert.equal(result.summary.avgBendsPerEdge, 0);
+    assert.equal(result.summary.aspectRatio, 1);
+    assert.equal(result.summary.areaUtilization, 0);
+    assert.equal(result.summary.edgeLengthUniformity, 1);
+    assert.ok(Object.isFrozen(result.summary), 'fallback summary must be frozen');
+  });
+
+  it('returns code: null on the normal success path (deps installed)', async () => {
+    const root = { id: 'r', width: 200, height: 200, children: [], edges: [] };
+    const result = await detectGeometryIssues(root);
+    assert.equal(result.code, null, 'success path reports code null');
   });
 });

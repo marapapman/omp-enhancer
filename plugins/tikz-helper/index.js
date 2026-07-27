@@ -99,6 +99,7 @@ export { prepareAsset, registerAssetSource } from './src/asset-prepare.js';
 export { searchCatalog } from './src/catalog-search.js';
 export { renderTikz, runBoundedCommand } from './src/render-tikz.js';
 export { checkElkEnvironment, ELK_INSTALL_GUIDANCE } from './src/elk-layout.js';
+export { GEOMETRY_DEPS_GUIDANCE } from './src/geometry-check.js';
 
 export default function registerTikzHelper(omp) {
   const z = omp.zod.z;

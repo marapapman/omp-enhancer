@@ -11,13 +11,49 @@
 //     pointInRect (edge-node segment/rect intersection)
 //   isect — Bentley-Ottmann sweep for edge-edge crossings
 
-import { testRectRect, pointInRect, intersectLineLine, IntersectionType } from '@thi.ng/geom-isec';
-import isect from 'isect';
 
 const NOISE_THRESHOLD = 0.5; // pt² — ignore sub-pixel overlaps below this
 const ERROR_THRESHOLD = 50; // pt² — overlap larger than this is an error
 const BOUNDS_TOLERANCE = 1; // pt — tolerance for out-of-bounds check
 const GROUP_PADDING = 2; // pt — minimum padding inside group containers
+// ---------------------------------------------------------------------------
+// Lazy-loaded geometry dependencies. Static top-level imports would crash the
+// plugin on load when @thi.ng/geom-isec / isect are not installed in the
+// consuming environment. We resolve them on first use and cache the modules;
+// if they are missing the detector returns a well-known fallback so the rest
+// of the plugin keeps working.
+// ---------------------------------------------------------------------------
+
+let _geomIsec = null;
+let _isectLib = null;
+
+async function loadGeomDeps() {
+  if (!_geomIsec) {
+    _geomIsec = await import('@thi.ng/geom-isec');
+    _isectLib = (await import('isect')).default;
+  }
+  return { geomIsec: _geomIsec, isectLib: _isectLib };
+}
+
+export const GEOMETRY_DEPS_GUIDANCE = Object.freeze({
+  code: 'GEOMETRY_DEPS_NOT_INSTALLED',
+  install: Object.freeze({
+    command: 'npm run install:deps',
+    tool: 'omp_core_install_deps',
+    packages: Object.freeze(['@thi.ng/geom-isec', 'isect']),
+  }),
+  directive: 'Geometry overlap detection requires @thi.ng/geom-isec and isect. Install them, then call tikz_generate_diagram again.',
+});
+
+const EMPTY_SUMMARY = Object.freeze({
+  totalEdgeCrossings: 0,
+  totalBends: 0,
+  avgBendsPerEdge: 0,
+  aspectRatio: 1,
+  areaUtilization: 0,
+  edgeLengthUniformity: 1,
+});
+
 
 /**
  * Detect geometric issues in a positioned ELK root graph.
@@ -26,7 +62,20 @@ const GROUP_PADDING = 2; // pt — minimum padding inside group containers
  * @returns {{ issues: object[], summary: object }} Frozen result. An empty
  *   issues array means no problems detected.
  */
-export function detectGeometryIssues(root) {
+export async function detectGeometryIssues(root, { loadGeomDeps: loader = loadGeomDeps } = {}) {
+  let testRectRect, pointInRect, intersectLineLine, IntersectionType, isectLib;
+  try {
+    const deps = await loader();
+    ({ testRectRect, pointInRect, intersectLineLine, IntersectionType } = deps.geomIsec);
+    isectLib = deps.isectLib;
+  } catch {
+    return Object.freeze({
+      issues: Object.freeze([]),
+      summary: EMPTY_SUMMARY,
+      code: GEOMETRY_DEPS_GUIDANCE.code,
+    });
+  }
+
   const issues = [];
   const leaves = collectLeafNodes(root);
   const edges = collectEdges(root);
@@ -55,7 +104,7 @@ export function detectGeometryIssues(root) {
   for (const edge of edges) {
     for (const node of leaves) {
       if (node.id === edge.sourceId || node.id === edge.targetId) continue;
-      if (edgeIntersectsNode(edge, node)) {
+      if (edgeIntersectsNode(edge, node, { pointInRect, intersectLineLine, IntersectionType })) {
         issues.push({
           type: 'edge-node-collision',
           severity: 'warning',
@@ -82,7 +131,7 @@ export function detectGeometryIssues(root) {
   }
 
   // Check 5: Edge-edge crossings (Bentley-Ottmann via isect)
-  const crossingCount = countEdgeCrossings(edges);
+  const crossingCount = countEdgeCrossings(edges, isectLib);
   if (crossingCount > 0) {
     issues.push({
       type: 'edge-crossings',
@@ -92,7 +141,7 @@ export function detectGeometryIssues(root) {
   }
 
   const summary = computeSummary(leaves, edges, crossingCount, root);
-  return Object.freeze({ issues: Object.freeze(issues), summary: Object.freeze(summary) });
+  return Object.freeze({ issues: Object.freeze(issues), summary: Object.freeze(summary), code: null });
 }
 
 /**
@@ -201,7 +250,8 @@ export function overlapArea(a, b) {
  * @param {object} node - { x, y, width, height }
  * @returns {boolean}
  */
-export function edgeIntersectsNode(edge, node) {
+export function edgeIntersectsNode(edge, node, deps) {
+  const { pointInRect, intersectLineLine, IntersectionType } = deps;
   const rect = [node.x, node.y, node.width, node.height];
   for (const section of edge.sections ?? []) {
     const pts = sectionPoints(section);
@@ -215,7 +265,7 @@ export function edgeIntersectsNode(edge, node) {
       // An endpoint inside the rect means the segment enters the box.
       if (p1Inside || p2Inside) return true;
       // Test the segment against the four rect boundary edges.
-      if (segmentCrossesRect(p1, p2, rect)) return true;
+      if (segmentCrossesRect(p1, p2, rect, { intersectLineLine, IntersectionType, pointInRect })) return true;
     }
   }
   return false;
@@ -266,7 +316,7 @@ function checkGroupContainment(root, issues) {
  * @param {object[]} edges - flattened edges from collectEdges
  * @returns {number}
  */
-export function countEdgeCrossings(edges) {
+export function countEdgeCrossings(edges, isectLib) {
   // Build a flat segment list tagged with edge id, skipping zero-length segs.
   const segments = [];
   for (const edge of edges) {
@@ -286,7 +336,7 @@ export function countEdgeCrossings(edges) {
   }
   if (segments.length < 2) return 0;
 
-  const detector = isect.bush(segments);
+  const detector = isectLib.bush(segments);
   let intersections;
   try {
     intersections = detector.run();
@@ -429,7 +479,8 @@ function sectionPoints(section) {
  *    endpoint lies inside the rect — if so, the segment overlaps the rect edge
  *    and crosses the rect.
  */
-function segmentCrossesRect(p1, p2, rect) {
+function segmentCrossesRect(p1, p2, rect, deps) {
+  const { intersectLineLine, IntersectionType, pointInRect } = deps;
   const [rx, ry, rw, rh] = rect;
   const x0 = rx;
   const y0 = ry;

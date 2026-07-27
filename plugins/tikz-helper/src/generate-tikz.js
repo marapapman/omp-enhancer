@@ -32,7 +32,7 @@ export async function generateTikz(input = {}, options = {}) {
     densityReport.fillRatio = computeFillRatio(layoutResult.graph);
     adjustment = densityAdjustment(densityReport.fillRatio, countNodes(layoutResult.graph));
   }
-  const geo = detectGeometryIssues(layoutResult.graph);
+  const geo = await detectGeometryIssues(layoutResult.graph);
 
   // Sizing: uniform scale so paper presets land at the target physical width.
   const presetDef = preset ? LAYOUT_PRESETS[preset] : null;
@@ -70,6 +70,7 @@ export async function generateTikz(input = {}, options = {}) {
       assets: collectIconAssets(layoutResult.graph),
       geometryIssues: geo.issues,
       geometrySummary: geo.summary,
+      geometryCode: geo.code ?? null,
     },
   };
 }
