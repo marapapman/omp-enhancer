@@ -50,7 +50,7 @@ async function temporaryDirectory(prefix) {
 }
 
 describe('tikz-helper runtime tools', () => {
-  it('registers the five opt-in tools with least-effect approvals', () => {
+  it('registers the five active-by-default tools with least-effect approvals', () => {
     const api = makeExtensionApi();
     extension(api);
 
@@ -63,7 +63,7 @@ describe('tikz-helper runtime tools', () => {
       'tikz_preview_assets',
     ]);
     assert.deepEqual(tools.map((tool) => tool.approval), ['read', 'exec', 'exec', 'read', 'exec']);
-    assert.equal(tools.every((tool) => tool.defaultInactive === true), true);
+    assert.equal(tools.every((tool) => tool.defaultInactive !== true), true, 'no tikz tool should start inactive');
     assert.equal(tools.every((tool) => tool.parameters?.__ompZodSchema === true), true);
     assert.equal(Object.hasOwn(tools[2].parameters.shape, 'executable'), false);
     assert.equal(Object.hasOwn(tools[2].parameters.shape, 'command'), false);
@@ -77,7 +77,7 @@ describe('tikz-helper runtime tools', () => {
     const preview = tools.find((tool) => tool.name === 'tikz_preview_assets');
     assert.ok(preview, 'tikz_preview_assets must be registered');
     assert.equal(preview.approval, 'exec', 'tikz_preview_assets must have approval exec');
-    assert.equal(preview.defaultInactive, true, 'tikz_preview_assets must default to inactive');
+    assert.equal(preview.defaultInactive !== true, true, 'tikz_preview_assets should not default to inactive');
     assert.equal(Object.hasOwn(preview.parameters.shape, 'manifestPath'), true);
     assert.equal(Object.hasOwn(preview.parameters.shape, 'nodeIds'), true);
   });

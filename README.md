@@ -57,7 +57,7 @@ Then run `npm run install:deps` once to fetch plugin runtime dependencies (`elkj
 
 ## Use
 
-All extension tools are inactive by default so they do not enlarge the normal prompt. Enable only the group needed in the current session:
+Extension tools except tikz-helper are inactive by default so they do not enlarge the normal prompt; tikz-helper tools are active when the plugin loads. Enable or disable groups as needed:
 
 ```text
 /enhancer-tools status
@@ -65,7 +65,7 @@ All extension tools are inactive by default so they do not enlarge the normal pr
 /enhancer-tools disable <core|config|writing|fact|test|tikz|all>
 ```
 
-Activation only exposes tool schemas. It does not grant filesystem, command, network, or publication permission.
+Activation exposes tool schemas; it grants no filesystem, command, network, or publication permission.
 
 Common optional tools include:
 

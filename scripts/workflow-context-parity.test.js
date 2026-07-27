@@ -381,7 +381,7 @@ test('README stays user-focused and links the detailed current documentation', a
   assert.match(readme, /mechanical field lookups? without analysis.*no Skill or TODO/is);
   assert.match(readme, /PLAN response starts at byte 0 with `WORKFLOW PLAN`[\s\S]*READY response starts at byte 0 with `WORKFLOW READY \| \.\.\.`[\s\S]*rebases the detailed TODO/i);
   assert.match(readme, /Non-simple workflows softly default to subagent-driven execution[\s\S]*Main owns integration, verification, permissions, and effects/i);
-  assert.match(readme, /all extension tools are inactive by default/i);
+  assert.match(readme, /extension tools except tikz-helper are inactive by default/i);
   assert.match(readme, /\/enhancer-tools enable/i);
   assert.match(readme, /there is no plugin `\/test` command/i);
   assert.match(readme, /docs\/ARCHITECTURE\.md/);

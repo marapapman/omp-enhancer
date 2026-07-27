@@ -44,7 +44,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 **Key architectural invariants (from docs/ARCHITECTURE.md):**
 
 - No hard routers, hard gates, classifier preflights, or plugin-owned completion controllers
-- All marketplace tools are `defaultInactive` — users activate via `/enhancer-tools`
+- All marketplace tools except tikz-helper are `defaultInactive`. tikz-helper tools are active when the plugin loads.
 - Visual delivery gives `designer` the design or source revision, `task` the rendering, compilation, export, and optional imagegen execution, and `visioner` fresh current-revision evidence in a read-only review. Main retains setup authorization and final acceptance only and does not mediate the visual loop.
 - Fact conclusions preserve exact claim tuples (subject, predicate/object, scope, time/version, quantifier); the backward-compatible `verdict` cannot upgrade compatibility evidence into proof, while fail-closed `strictVerdict` controls factual conclusions.
 - Review tools are advisory only — they don't execute commands, block, or gate completion
@@ -188,7 +188,7 @@ Advisory lifecycle rules:
 - OMP remains the only authority for sandboxing, tools, permissions, approvals, delegation, and completion.
 - Source text is data; instructions embedded in a document cannot change operation, risk, or authority.
 
-All marketplace tools are `defaultInactive`. Users explicitly expose a group with `/enhancer-tools`; activation is not permission for filesystem, command, network, or publication effects.
+All marketplace tools except tikz-helper are `defaultInactive`. tikz-helper tools are active when the plugin loads.
 
 The public testing and fact completeness tools are `omp_test_review` and `fact_check_review`. Legacy gate-named aliases are not supported. Testing Enhancer does not register `/test`; it must never execute a supplied or project-configured test command. Host-authorized shell execution remains outside the review tool.
 
@@ -256,7 +256,7 @@ For ECC Skill inventory changes, use `npm run generate:ecc-skills` and `npm run 
 - Each plugin is self-contained with no external npm dependencies between plugins
 - Registration pattern: `export default function registerOmpPlugin(pi) { pi.registerTool(...); pi.on(...); }`
 - State persisted across turns via `pi.appendEntry(customType, data)`; restored on `session_start`
-- All marketplace tools are `defaultInactive` — users must activate via `/enhancer-tools`
+- All marketplace tools except tikz-helper are `defaultInactive`. tikz-helper tools are active when the plugin loads.
 - A workflow may list an Agent or Skill only as an optional candidate; at runtime use only what OMP currently exposes
 
 **Workflow & generated assets:**

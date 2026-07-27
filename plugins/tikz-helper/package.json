@@ -3,7 +3,7 @@
   "version": "0.3.1",
   "private": true,
   "type": "module",
-  "description": "OMP TikZ and OpenTikZ workflow resources with opt-in catalog, asset preparation, and isolated rendering tools.",
+  "description": "OMP TikZ and OpenTikZ workflow resources with active-by-default catalog, asset preparation, and isolated rendering tools.",
   "main": "index.js",
   "exports": {
     ".": "./index.js"

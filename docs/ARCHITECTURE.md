@@ -83,7 +83,7 @@ Reminder 会根据 OMP 当前暴露的能力组合以下信息：
 | Fact Checker | claim plan、双 lane evidence、cross-check、report 和独立 review | 把缺失证据变成生命周期 gate |
 | TikZ Helper | 固定 OpenTikZ catalog/模板/图标、语义图契约、imagegen 资产整理和受限渲染 | 运行时拉取上游、替 imagegen 选权、把审查 verdict 变成完成门 |
 
-各插件导出的工具都设置为 `defaultInactive`。只有用户显式执行 `/enhancer-tools enable <group>` 后，相应 schema 才加入当前 session 的 active tools。激活工具不是操作授权。
+除 tikz-helper 外，各插件导出的工具都设置为 `defaultInactive`。tikz-helper 的工具在插件加载时默认激活。只有用户显式执行 `/enhancer-tools enable <group>` 后，相应 schema 才加入当前 session 的 active tools。激活工具不是操作授权。
 
 ## Review 工具
 

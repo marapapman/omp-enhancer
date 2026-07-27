@@ -13,7 +13,7 @@ plugins/
 ├── writing-helper/      # writing QA tools、Agents、Skills
 ├── omp-test-enhancer/   # TypeScript testing evidence/review tools
 ├── omp-fact-checker/    # fact plan、evidence、cross-check、review
-└── tikz-helper/         # pinned OpenTikZ assets、TikZ Skill and opt-in tools
+└── tikz-helper/         # pinned OpenTikZ assets、TikZ Skill and active-by-default tools
 
 scripts/                 # generation、validation、E2E、release、packaging
 docs/                    # current architecture/development documentation
@@ -49,7 +49,7 @@ docs/superpowers/        # historical plans/specs/reports only
 - 多目标 task facts 只用于记录，不得从中编译 route 或静态角色映射。实质 mutation 的 Main 应先检索足够的代码、caller、test 与 configuration anchors，再建立 dependency waves、exclusive write sets 和 complete per-slice assignment input；同 wave batching 是基于真实独立性的软方法，不是固定 fork 或 completion contract。每个 delegated native TODO `items[]` string 必须是完整 exact `Delegate Agent=... workflow=... step=... skills=... checkpoint=...` row；native `tasks[].task` 本体 byte 0 必须是机械复制该 row 后得到的 `[workflow=... step=... todo=... skills=...]` 四键 prefix，且每次 native `task` call 都必须有非空顶层 `context`；batch `context`、name、label 或让 child 自述 metadata 都不能替代 item body 或该 prefix。Assignment、host-observed delivery、Main integration/review 和 fallback limitation 都要有 prompt parity 或 event-stream 回归。Child 只消费 committed row 中冻结的 Skills，不再发现、选择或加载另一套 Skill；缺口作为 limitation 返回 Main。
 - Plugin `tool_call` hook 不返回 `block: true`；`session_stop` hook 不返回 `continue: true`。
 - Plugin 不安排自动 repair turn，不拥有 host session completion。
-- 所有 extension tools 都是 `defaultInactive`，只能由用户通过 `/enhancer-tools` 显式激活。
+- 除 tikz-helper 外，所有 extension tools 都是 `defaultInactive`，只能由用户通过 `/enhancer-tools` 显式激活。tikz-helper 工具在插件加载时默认激活，可通过 `/enhancer-tools disable tikz` 停用。
 - Testing 和 fact review 的公开名称是 `omp_test_review` 与 `fact_check_review`；不得恢复旧的 `*_gate` alias。
 - Testing Enhancer 不注册 `/test` command，也不执行调用参数或项目配置中的测试命令。
 - Review finding、缺失阶段或缺失证据是 advisory data，不是 tool error；真实参数或 I/O 错误仍返回 error。

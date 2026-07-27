@@ -9,7 +9,7 @@ This document defines the implementation contract for the `tikz-helper` marketpl
 - Preserve OpenTikZ templates, icons, examples, metadata, previews, edit contracts, and licenses at an exact upstream commit.
 - Generate editable TikZ from a semantic node-and-edge contract, then validate and review fresh rendered evidence.
 - Use OMP's native `generate_image` only as an optional source of missing node icons. The ELK graph IR is the sole source of node positions and edge geometry. TikZ and the figure text remain the authority for topology, labels, and connectors; the layout engine computes every coordinate.
-- Keep all plugin tools opt-in and advisory. Do not add a router, gate, completion controller, hook, slash command, or automatic repair loop.
+- Keep all plugin tools advisory. Do not add a router, gate, completion controller, hook, slash command, or automatic repair loop.
 
 ## Non-goals
 
@@ -28,14 +28,14 @@ OpenTikZ code and tools remain under MIT. Graphic `.tex` sources, metadata, and 
 
 The plugin has one top-level Skill, `tikz-diagram`, with directly linked references for the OpenTikZ edit contract, semantic flowchart method, image assets, and render review. The Skill stays compact; detailed methods are read only when selected.
 
-The initial tool group is `tikz`, exposed through `/enhancer-tools enable tikz`:
+The initial tool group is `tikz`, active by default when the plugin loads (disable via `/enhancer-tools disable tikz` if needed):
 
 - `tikz_catalog_search` (`read`): search the pinned catalog and return bounded structured candidates, including source, metadata, preview, and edit-contract data.
 - `tikz_prepare_asset` (`exec`): validate a local PNG/JPEG/WebP image, normalize it through fixed bounded ImageMagick arguments to a project-local PNG, name it by content hash, and update an asset manifest. It never invokes imagegen or a network provider.
 - `tikz_render` (`exec`): validate a project-local TikZ source, run fixed no-shell-escape pdfLaTeX compilation and conversion using argument arrays, and return current-revision PDF/SVG/full-size/60%-scale evidence.
 - `tikz_generate_diagram` (`read`): accept an ELK graph IR, compute node positions and edge geometry via elkjs, and emit a compilable standalone TikZ source. It is the sole tool that produces figure geometry; input nodes omit `x`/`y` and input edges omit `sections`/`bendPoints`. If ELK is not installed, tikz_generate_diagram returns ELK_NOT_INSTALLED with install instructions; install elkjs and regenerate from the ELK graph IR rather than hand-authoring TikZ coordinates. tikz_generate_diagram also returns the positioned ELK graph IR as standard ELK JSON; write it to a project-local .elk.json to edit in an ELK-compatible visual editor, then feed the edited IR back into tikz_generate_diagram to regenerate the TikZ.
 
-Every tool is `defaultInactive`. Activation does not grant filesystem, command, network, provider, or publication permission. Findings are structured evidence, not completion permission.
+Tools are active by default. Deactivation via /enhancer-tools does not grant or revoke filesystem, command, network, provider, or publication permission. Findings are structured evidence, not completion permission.
 
 ## Semantic figure contract
 
@@ -128,7 +128,7 @@ The returned temporary file is immediately passed to `tikz_prepare_asset`. The p
 - Prompt-guideline seam: runtime tests assert the `tikz_generate_diagram` promptGuidelines carry the coordinate-free rules (omit `x`/`y`/`sections`/`bendPoints`, graph-level `layoutOptions`, node sizing, regeneration-not-coordinates, arrow/line style, no `fixed`/`random`).
 - Paths and TeX: traversal, symlink escape, absolute includes, remote URLs, `\\write18`, pipe input, timeout, output cap, and no shell invocation.
 - Assets: PNG/JPEG/WebP fixtures, decoded-format mismatch, image limits, deterministic PNG/hash naming, metadata removal, manifest merge, acceptance of imagegen-style temporary inputs, and publication only to a project-local final path.
-- Tools: exact names, approval classes, `defaultInactive`, normalized parameters, structured details, and advisory findings.
+- Tools: exact names, approval classes, active-by-default registration, normalized parameters, structured details, and advisory findings.
 - Workflow: `diagram.tikz` trigger and composition boundaries, one Skill, designer/visioner delegation, optional imagegen, current-revision render evidence, and no gate/router language.
 - Inventory: workspace, lockfile, marketplace order, global Skill uniqueness, pack contents, and scoped version changes.
 - E2E evidence parsing: linked `skill://.../references/...` reads remain method-resource evidence and are not misclassified as separate Skill identities.
@@ -140,7 +140,7 @@ The returned temporary file is immediately passed to `tikz_prepare_asset`. The p
 3. Feed a mocked imagegen WebP/PNG result through asset preparation; verify project-local hash path, manifest, `graphicx` inclusion, compilation, and self-contained delivery.
 4. Reject a malicious or escaping TikZ fixture without launching the compiler.
 5. Verify `visioner` reviews the latest revision and a supported finding produces only a bounded fresh revision/review.
-6. Install the worktree marketplace, confirm `tikz-diagram` discovery, confirm `tikz_*` tools are inactive by default, activate only `tikz`, and verify cache-backed Skill symlinks.
+6. Install the worktree marketplace, confirm `tikz-diagram` discovery, confirm `tikz_*` tools are active by default and can be disabled via `/enhancer-tools disable tikz`, and verify cache-backed Skill symlinks.
 7. Run a live workflow canary (any user-configured Main model) for PLAN/READY, one Skill load, subagent dispatch when available, complete terminal delivery, and parent verification. Treat model behavior as a sample, not a deterministic release guarantee.
 8. Run one explicitly authorized live imagegen canary only when provider configuration is available; exclude it from ordinary CI and release gates.
 

@@ -108,7 +108,6 @@ export default function registerTikzHelper(omp) {
     name: 'tikz_catalog_search',
     label: 'OpenTikZ Catalog Search',
     description: 'Search the packaged, version-pinned OpenTikZ catalog and return safe copy sources without modifying the vendor snapshot.',
-    defaultInactive: true,
     approval: 'read',
     promptSnippet: 'Search packaged OpenTikZ icons, templates, and examples by semantic terms.',
     promptGuidelines: [
@@ -129,7 +128,6 @@ export default function registerTikzHelper(omp) {
     name: 'tikz_prepare_asset',
     label: 'Prepare TikZ Node Asset',
     description: 'Normalize an existing PNG, JPEG, or WebP as a metadata-free, content-addressed PNG inside the project and merge its provenance manifest. This tool never generates an image or uses the network.',
-    defaultInactive: true,
     approval: 'exec',
     promptSnippet: 'Import and normalize an already-produced node icon for a TikZ figure.',
     promptGuidelines: [
@@ -154,7 +152,6 @@ export default function registerTikzHelper(omp) {
     name: 'tikz_render',
     label: 'Render TikZ Figure',
     description: 'Validate and compile a project-local standalone TikZ source with fixed commands in an isolated temporary workspace, then publish revision-bound PDF, SVG, full PNG, and 60%-scale PNG evidence.',
-    defaultInactive: true,
     approval: 'exec',
     promptSnippet: 'Compile and render a safe project-local TikZ source for current-revision review.',
     promptGuidelines: [
@@ -179,7 +176,6 @@ export default function registerTikzHelper(omp) {
     name: 'tikz_generate_diagram',
     label: 'Generate TikZ Diagram from Layout IR',
     description: 'Accept a diagram IR in ELK JSON format (graph with nodes, edges, ports, and layout options), compute automatic layout via Eclipse Layout Kernel, and generate compilable TikZ source code. The output .tex can be rendered with tikz_render. Supports paper-column, paper-full, and slide presets with density tuning and sizing metadata.',
-    defaultInactive: true,
     approval: 'read',
     promptSnippet: 'Generate a TikZ figure by describing the graph structure and letting ELK compute the layout automatically.',
     promptGuidelines: [
@@ -218,7 +214,6 @@ export default function registerTikzHelper(omp) {
     name: 'tikz_preview_assets',
     label: 'Preview TikZ Icon Assets',
     description: 'Preview icon assets from an asset manifest for visioner review. Writes previews to temporary directory only, never to project files.',
-    defaultInactive: true,
     approval: 'exec',
     promptSnippet: 'Render icon asset previews to a temporary directory for visioner visual review.',
     promptGuidelines: [
