@@ -25,6 +25,7 @@ In that same response, read exactly the applicable exact URIs once in their list
 ## Create or revise a figure
 
 The ELK graph IR is the sole source of node positions and edge geometry. The author never authors, infers, or hand-edits TikZ coordinates. Author the semantic graph as an ELK IR and call tikz_generate_diagram to compute the layout with ELK.
+`tikz_generate_diagram` is a regular OMP tool — invoke it as a standard tool call (like `read`/`bash`/`edit`). In contrast, `generate_image` is an xd:// device invoked via `write` to `xd://generate_image`.
 
 1. Capture the requested audience, output path, format, size, labels, topology, preservation constraints, acceptance evidence, target-medium preset (paper-column, paper-full, slide-16-9, slide-4-3) and density preference. Ask only when an ambiguity changes the graph or meaning; state reversible visual defaults.
 2. Write the semantic graph before geometry: stable node IDs, roles, exact labels, directed edges, branch conditions, start/end nodes, groups, direction, and icon needs. The graph owns meaning; decoration never changes it.
