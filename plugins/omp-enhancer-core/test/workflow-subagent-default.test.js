@@ -15,13 +15,18 @@ const NON_SUBSTANTIVE_DEFAULTS = new Map([
   ['writing.pending', 'defer-until-composed'],
 ]);
 
-const NEW_TASK_WORKFLOWS = [
-  'writing.latex',
-  'writing.markdown',
-  'doc.convert.word',
-  'marketing.campaign',
-  'release.publish',
-];
+const NEW_TASK_WORKFLOWS = new Map([
+  ['writing.latex', ['task', 'reviewer']],
+  ['writing.markdown', ['task', 'reviewer']],
+  ['doc.convert.word', ['task', 'reviewer']],
+  ['marketing.campaign', ['task', 'scout', 'reviewer']],
+  ['release.publish', ['task', 'reviewer']],
+]);
+
+const NETWORK_AUDIT_WORKFLOWS = new Map([
+  ['network.design', ['ecc-network-architect', 'ecc-network-config-reviewer']],
+  ['network.homelab', ['ecc-network-architect', 'ecc-network-config-reviewer']],
+]);
 
 test('schema defaults arbitrary omitted delegation policy to subagent-driven without workflow-id inference', () => {
   const [definition] = defineWorkflowCatalog([
@@ -58,8 +63,8 @@ test('schema accepts only the three delegation defaults and requires roles only 
   );
 });
 
-test('catalog v26 projects explicit exception defaults and 28 substantive subagent-driven contracts', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 26);
+test('catalog v27 projects explicit exception defaults and 28 substantive subagent-driven contracts', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 27);
   assert.equal(workflowDefinitions.length, 30);
 
   const rawSimple = generalWorkflows.find(({ id }) => id === 'agentic.simple');
@@ -85,7 +90,7 @@ test('general.subagent is a generic task-owned checkpoint with no code lifecycle
   assert.ok(general);
   assert.equal(general.delegationDefault, 'subagent-driven');
   assert.deepEqual(general.skills, []);
-  assert.deepEqual(general.roles, ['task']);
+  assert.deepEqual(general.roles, ['task', 'reviewer']);
 
   const contract = [
     general.chooseWhen,
@@ -113,7 +118,7 @@ test('general.subagent is a generic task-owned checkpoint with no code lifecycle
   );
   assert.doesNotMatch(
     contract,
-    /code-development|code\.dev|code-specific|repository|local code|\bTDD\b|\bRED\b|\bGREEN\b|test coverage|plan review|reviewer|semantic diff|production changes|vertical slices/iu,
+    /code-development|code\.dev|code-specific|repository|local code|\bTDD\b|\bRED\b|\bGREEN\b|test coverage|plan review|semantic diff|production changes|vertical slices/iu,
   );
 });
 
@@ -137,8 +142,12 @@ test('writing.pending owns one bounded language-resolution transition before the
 });
 
 test('previously roleless substantive workflows use native task with bounded domain duties', () => {
-  for (const id of NEW_TASK_WORKFLOWS) {
-    assert.deepEqual(workflowCatalog[id].roles, ['task'], id);
+  for (const [id, expectedRoles] of NEW_TASK_WORKFLOWS) {
+    assert.deepEqual(workflowCatalog[id].roles, expectedRoles, id);
+  }
+
+  for (const [id, expectedRoles] of NETWORK_AUDIT_WORKFLOWS) {
+    assert.deepEqual(workflowCatalog[id].roles, expectedRoles, id);
   }
 
   for (const id of ['writing.latex', 'writing.markdown', 'doc.convert.word']) {

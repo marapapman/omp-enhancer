@@ -161,6 +161,10 @@ test('runtime wiring advances only through observed PLAN loads READY and TODO', 
       timestamp: 3,
     },
   }, ctx);
+  await handler(pi, 'tool_call')({
+    toolName: 'todo',
+    input: { op: 'init', list: [{ items: [{ task: 'Delegate Agent=task revise the article' }, { task: 'VERIFY integrate the result' }] }] },
+  }, ctx);
   await handler(pi, 'tool_result')({
     toolName: 'todo',
     result: { content: [{ type: 'text', text: 'TODO initialized.' }] },
@@ -208,6 +212,33 @@ test('runtime wiring advances only through observed PLAN loads READY and TODO', 
   const protocolCoach = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.protocolCoach;
   assert.equal(protocolCoach.pendingCue, null);
   assert.equal(protocolCoach.declaration.dispatchCueQueued, true);
+
+  // PRE_VERIFY: a settled work task after dispatch queues the verify cue.
+  await handler(pi, 'tool_call')({
+    toolName: 'task',
+    callId: 'task-1',
+    input: { context: 'bounded revision', tasks: [{ agent: 'task', task: 'revise the article' }] },
+  }, ctx);
+  assert.equal(await handler(pi, 'context')({ messages: [] }, ctx), undefined, 'no cue between task call and result');
+  await handler(pi, 'tool_result')({
+    toolName: 'task',
+    callId: 'task-1',
+    result: { content: [{ type: 'text', text: 'revised delivery' }] },
+  }, ctx);
+  const verify = await handler(pi, 'context')({ messages: [] }, ctx);
+  const verifyMessage = verify.messages.at(-1);
+  assert.equal(verifyMessage.details.phase, 'PRE_VERIFY');
+  assert.match(verifyMessage.content, /OMP PROTOCOL COACH \(soft, VERIFY\)/u);
+  assert.match(verifyMessage.content, /No block\/router\/gate\/retry\/authority\/choice/u);
+  assert.match(verifyMessage.content, /Deliveries settled[\s\S]*Main integrates[\s\S]*audit checkpoint/u);
+
+  // Serialization round-trip preserves the five new declaration fields.
+  const settled = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.protocolCoach;
+  assert.equal(settled.declaration.verifyCueQueued, true);
+  assert.equal(settled.declaration.tasksDispatched, 1);
+  assert.equal(settled.declaration.tasksSettled, 1);
+  assert.equal(settled.declaration.todoHasDelegateRows, true);
+  assert.equal(settled.declaration.todoHasFallbackRows, false);
 });
 
 test('message observation inspects visible assistant text only', async () => {
@@ -371,6 +402,50 @@ test('hooks remain advisory and never mutate task calls, tool results, or lifecy
   assert.deepEqual(taskCall, originalCall);
   assert.deepEqual(taskResult, originalResult);
   assert.equal(await handler(pi, 'session_stop')({ output: 'done' }, ctx), undefined);
+});
+
+test('NO_DELEGATION_ROWS surfaces on state and omp_core_observation_status when a subagent-driven TODO lacks Delegate and fallback rows', async () => {
+  const { pi, entries, ctx } = runtime({ model: ARBITRARY_MODEL });
+  await handler(pi, 'before_agent_start')({ prompt: 'Review and revise article.md.' }, ctx);
+  await handler(pi, 'tool_result')(indexResult(), ctx);
+  await handler(pi, 'message_end')({ message: { role: 'assistant', content: validPlan(), timestamp: 2 } }, ctx);
+  await handler(pi, 'tool_result')(readResult('skill://writing-review'), ctx);
+  await handler(pi, 'tool_result')(readResult('skill://omp-enhancer-workflows/references/writing-en.md'), ctx);
+  await handler(pi, 'message_end')({
+    message: {
+      role: 'assistant',
+      content: 'WORKFLOW READY | primary=writing.en | add-ons=none | skills-loaded=writing-review | skills-unavailable=none',
+      timestamp: 3,
+    },
+  }, ctx);
+  // TODO init with NO Delegate and NO fallback rows.
+  await handler(pi, 'tool_call')({
+    toolName: 'todo',
+    input: { op: 'init', list: [{ items: [{ task: 'VERIFY integrate the result' }, { task: 'REPORT write summary' }] }] },
+  }, ctx);
+  await handler(pi, 'tool_result')({
+    toolName: 'todo',
+    result: { content: [{ type: 'text', text: 'TODO initialized.' }] },
+  }, ctx);
+
+  const coach = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.protocolCoach;
+  assert.ok(
+    coach.diagnostics.some((item) => item.code === 'NO_DELEGATION_ROWS'),
+    'NO_DELEGATION_ROWS surfaces on state.diagnostics',
+  );
+
+  // The diagnostic is also exposed via the omp_core_observation_status tool.
+  const statusTool = pi.tools.get('omp_core_observation_status');
+  assert.ok(statusTool, 'omp_core_observation_status tool is registered');
+  const statusResult = await statusTool.execute({});
+  assert.ok(
+    Array.isArray(statusResult.details.status.coachDiagnostics),
+    'omp_core_observation_status details.status.coachDiagnostics is an array',
+  );
+  assert.ok(
+    statusResult.details.status.coachDiagnostics.some((item) => item.code === 'NO_DELEGATION_ROWS'),
+    'NO_DELEGATION_ROWS surfaces in omp_core_observation_status details.status.coachDiagnostics',
+  );
 });
 
 async function cueFor({ model, entries = [], prompt = 'Review and revise article.md.' }) {

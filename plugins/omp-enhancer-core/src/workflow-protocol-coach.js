@@ -3,12 +3,13 @@ import {
   DELEGATED_TODO_TEMPLATE,
   NATIVE_TASK_PREFIX_TEMPLATE,
 } from './workflows/staged-contract.js';
+import { workflowCatalog } from './workflows/catalog.js';
 
 const COACH_STATE_VERSION = 1;
 const MAX_OBSERVED_TEXT_BYTES = 64 * 1024;
 const MAX_DIAGNOSTICS = 16;
 const INDEX_URI = 'skill://omp-enhancer-workflows';
-const CUE_KINDS = new Set(['PRE_PLAN', 'PRE_READY', 'PRE_DISPATCH']);
+const CUE_KINDS = new Set(['PRE_PLAN', 'PRE_READY', 'PRE_DISPATCH', 'PRE_VERIFY']);
 const URI_PATTERN = /^skill:\/\/[A-Za-z0-9._~!$&'()*+:=@%/-]+$/u;
 
 const CUE_CONTENT = Object.freeze({
@@ -47,6 +48,12 @@ const CUE_CONTENT = Object.freeze({
     'Copy literal `skills=none` unchanged, never empty. Complete terminal delivery; status/reference-only incomplete. No accepted repair finding=>resolve TODO, no `task`.',
     'No block/router/gate/retry/authority/choice.',
   ].join('\n'),
+  PRE_VERIFY: [
+    'OMP PROTOCOL COACH (soft, VERIFY)',
+    'Deliveries settled. Main integrates the current tree, runs the focused verification named by the loaded card, and dispatches the card audit checkpoint (reviewer or domain auditor) with the bounded diff and evidence, or records fallback=<one matched permitted limitation> per skipped checkpoint.',
+    'Then MAIN REVIEW of the integrated result; final response reports evidence, dispositions, and limitations.',
+    'No block/router/gate/retry/authority/choice.',
+  ].join('\n'),
 });
 
 export function createWorkflowProtocolCoachState() {
@@ -83,6 +90,18 @@ export function observeProtocolAssistantMessage(state, rawText = '') {
   return JSON.stringify(state) !== before;
 }
 
+function maybeQueueVerifyCue(state) {
+  const declaration = state.declaration;
+  if (!declaration) return;
+  if (!declaration.readyObserved || !declaration.todoObserved) return;
+  if (declaration.verifyCueQueued) return;
+  if (state.planMode) return;
+  if (declaration.tasksDispatched <= 0) return;
+  if (declaration.tasksSettled < declaration.tasksDispatched) return;
+  declaration.verifyCueQueued = true;
+  queueCue(state, 'PRE_VERIFY', state.generation);
+}
+
 export function observeProtocolToolResult(state, {
   name = '',
   target = '',
@@ -111,10 +130,21 @@ export function observeProtocolToolResult(state, {
     maybeQueueReadyCue(state);
   }
 
+  if (toolName === 'task' && declaration && isSettled) {
+    declaration.tasksSettled += 1;
+    maybeQueueVerifyCue(state);
+  }
+
   if (toolName !== 'todo' || !declaration || !isSettled || failed || !declaration.readyObserved) {
     return;
   }
   declaration.todoObserved = true;
+  const primaryId = declaration.primary;
+  const primaryDef = primaryId ? workflowCatalog[primaryId] : null;
+  const delegationDefault = primaryDef?.delegationDefault ?? 'subagent-driven';
+  if (delegationDefault === 'subagent-driven' && !declaration.todoHasDelegateRows && !declaration.todoHasFallbackRows) {
+    addDiagnostic(state, 'NO_DELEGATION_ROWS');
+  }
   if (declaration.primary === 'writing.pending' || declaration.dispatchCueQueued || state.planMode) return;
   declaration.dispatchCueQueued = true;
   queueCue(state, 'PRE_DISPATCH', declaration.generation);
@@ -135,8 +165,19 @@ export function observeProtocolToolCall(state, { name = '', taskRoles = [] } = {
     const isPlanOnly = taskRoles.length > 0 && taskRoles.every((r) => r === 'plan');
     if (!isPlanOnly) {
       clearCue(state, 'PRE_DISPATCH');
+      if (state.declaration) {
+        state.declaration.tasksDispatched += 1;
+      }
     }
   }
+}
+
+export function observeProtocolTodoInput(state, { itemsText = '' } = {}) {
+  if (!isCoachState(state)) return;
+  const declaration = state.declaration;
+  if (!declaration) return;
+  declaration.todoHasDelegateRows = /Delegate Agent=/u.test(itemsText);
+  declaration.todoHasFallbackRows = /fallback=/u.test(itemsText);
 }
 
 export function presentWorkflowProtocolCoachCue(state) {
@@ -340,6 +381,11 @@ function acceptDeclaration(state, parsed) {
     todoObserved: false,
     readyCueQueued: false,
     dispatchCueQueued: false,
+    tasksDispatched: 0,
+    tasksSettled: 0,
+    verifyCueQueued: false,
+    todoHasDelegateRows: false,
+    todoHasFallbackRows: false,
   };
   maybeQueueReadyCue(state);
 }
@@ -489,6 +535,11 @@ function serializeDeclaration(value) {
     todoObserved: value.todoObserved,
     readyCueQueued: value.readyCueQueued,
     dispatchCueQueued: value.dispatchCueQueued,
+    tasksDispatched: nonnegativeInteger(value.tasksDispatched),
+    tasksSettled: nonnegativeInteger(value.tasksSettled),
+    verifyCueQueued: value.verifyCueQueued === true,
+    todoHasDelegateRows: value.todoHasDelegateRows === true,
+    todoHasFallbackRows: value.todoHasFallbackRows === true,
   };
 }
 
@@ -518,6 +569,11 @@ function sanitizeDeclaration(value) {
     todoObserved: value.todoObserved === true,
     readyCueQueued: value.readyCueQueued === true,
     dispatchCueQueued: value.dispatchCueQueued === true,
+    tasksDispatched: nonnegativeInteger(value.tasksDispatched),
+    tasksSettled: nonnegativeInteger(value.tasksSettled),
+    verifyCueQueued: value.verifyCueQueued === true,
+    todoHasDelegateRows: value.todoHasDelegateRows === true,
+    todoHasFallbackRows: value.todoHasFallbackRows === true,
   };
 }
 

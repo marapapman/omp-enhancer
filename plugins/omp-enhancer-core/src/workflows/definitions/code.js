@@ -13,19 +13,19 @@ export const codeWorkflows = [
       },
       {
         "id": "step-search-local",
-        "text": "Search local code actively before proposing changes: locate entry points with fast repository search, trace callers and consumers, inspect adjacent tests and configuration, and distinguish repository source from generated, packaged, installed, or runtime truth."
+        "text": "Main writes a bounded evidence brief and delegates search local code to scout — entry points from fast repository search, callers, consumers, adjacent tests, configuration, and source-vs-generated-vs-packaged-vs-installed anchors; Main integrates the returned evidence and performs no broad repository search itself"
       },
       {
         "id": "step-search-external",
-        "text": "When current library, toolchain, API, design, failure, or performance practice could change the decision and network is not forbidden, use web_search to search current official documentation (preferred) and bounded community experience; keep external advice separate from local code evidence and record version and applicability. Queries must not contain private code, secrets, or PII."
+        "text": "When current library, toolchain, API, design, failure, or performance practice could change the decision and network is not forbidden, Main delegates one bounded external pass to librarian (official documentation first, bounded community experience second), keeps external advice separate from local evidence, and records version and applicability; queries must not contain private code, secrets, or PII"
       },
       {
         "id": "step-plan",
-        "text": "Main writes a detailed implementation and evidence plan for parallel execution in dependency-ordered waves of vertical slices, naming for every slice its ID, acceptance target, dependencies, exact files and non-overlapping write sets, local anchors, public test seam, exact focused command, expected valid RED, minimum production boundary, required Skills, integration point, and evidence to return; mark every slice runnable or blocked and independent or dependent."
+        "text": "Main writes a frozen planning brief — requested outcome, mutation authority, acceptance criteria, integrated evidence anchors, slice boundaries, and evidence bar — and delegates to the plan Agent the full detailed implementation and evidence plan: dependency-ordered parallel waves of vertical slices with IDs, acceptance targets, dependencies, exact files and non-overlapping write sets, public test seams, exact focused commands, expected valid RED, minimum production boundaries, required Skills, integration points, returned evidence, and the draft's own challenge findings; Main authors no plan detail beyond the brief"
       },
       {
         "id": "step-plan-review",
-        "text": "Use the currently exposed plan Agent to review and challenge Main's complete plan for parallel execution, including the plan assignment map, slice dependencies, write-set conflicts, inputs, and verification coverage, before any authorized production mutation."
+        "text": "The plan Agent's draft carries its challenge findings; Main reviews the complete plan, parallel waves, plan assignment map, and exclusive write sets, and requests at most one fresh plan Agent pass only when disposition materially changes the plan before any authorized production mutation, never on unchanged text"
       },
       {
         "id": "step-plan-disposition",
@@ -57,7 +57,8 @@ export const codeWorkflows = [
       "When no meaningful test seam exists, state why and use the strongest available contract, build, static, replay, or runtime evidence without fabricating a RED.",
       "The number of slices follows real independent work, dependencies, exclusive write ownership, and native capacity; do not manufacture parallelism or split tests from their production slice.",
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; missing delegation is not invented success.",
-      "This card is Agent-owned guidance, not a gate, router, fork mandate, completion controller, or self-repeating repair mechanism."
+      "This card is Agent-owned guidance, not a gate, router, fork mandate, completion controller, or self-repeating repair mechanism.",
+      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation"
     ],
     "skills": [
       "code-development"
@@ -73,10 +74,15 @@ export const codeWorkflows = [
     "roles": [
       "plan",
       "task",
-      "reviewer"
+      "reviewer",
+      "scout",
+      "librarian"
     ],
     "delegation": [
-      "step-plan-review: plan independently challenges Main's supplied complete parallel plan, write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary without editing files",
+      "step-search-local: scout owns the bounded local evidence pass and returns exact anchors distinguishing repository source from generated, packaged, installed, or runtime truth",
+      "step-search-external: librarian owns one bounded external pass over official documentation and community experience and returns versioned, applicability-tagged leads",
+      "step-plan: plan drafts the complete implementation and evidence plan from Main's frozen brief, including its own challenge findings, without editing files",
+      "step-plan-review: plan independently challenges Main's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and drafted it from Main's frozen brief, with at most one fresh pass on materially rebased plans, without editing files",
       "step-task-batch: task receives every runnable independent vertical slice for the wave in the same native tasks[] batch, with one task per exclusive write set and no child ownership of the parent TODO",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the public-behavior test mutation, valid RED, minimum production change, same-command GREEN, bounded refactor, and exact returned evidence",
       "step-review: reviewer independently reviews the bounded semantic diff and supplied evidence, does not read the project or run commands, and returns findings without repair or completion authority",

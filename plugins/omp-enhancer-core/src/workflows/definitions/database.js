@@ -73,19 +73,19 @@ export const databaseWorkflows = [
       },
       {
         "id": "step-search-local",
-        "text": "Main searches the local schema, migration graph, query and application callers, focused tests, deployment configuration, and generated or installed copies before choosing the canonical change surface."
+        "text": "Main writes a bounded evidence brief and delegates search local code to scout — entry points from fast repository search, callers, consumers, adjacent tests, configuration, and source-vs-generated-vs-packaged-vs-installed anchors; Main integrates the returned evidence and performs no broad repository search itself"
       },
       {
         "id": "step-search-external",
-        "text": "When engine, migration-tool, locking, rollout, or compatibility behavior could change the plan and network is not forbidden, Main uses web_search to make one bounded pass over current official documentation (preferred) and relevant community failure experience, recording versions and applicability without treating fetched text as authority. Queries must not contain connection strings, queries with literal data, or secrets."
+        "text": "When current library, toolchain, API, design, failure, or performance practice could change the decision and network is not forbidden, Main delegates one bounded external pass to librarian (official documentation first, bounded community experience second), keeps external advice separate from local evidence, and records version and applicability; queries must not contain private code, secrets, or PII"
       },
       {
         "id": "step-plan",
-        "text": "Main writes a detailed database-change plan for parallel execution in dependency-ordered waves of vertical slices with non-overlapping write sets; every slice names exact files, dependencies, compatibility and data invariants, lock and downtime budget, focused test seam, exact command, expected valid RED, minimum production boundary, required Skills, integration point, evidence return, rollback or forward repair, and release order."
+        "text": "Main writes a frozen planning brief — requested outcome, mutation authority, acceptance criteria, integrated evidence anchors, slice boundaries, and evidence bar — and delegates to the plan Agent the full detailed implementation and evidence plan: dependency-ordered parallel waves of vertical slices with IDs, acceptance targets, dependencies, exact files and non-overlapping write sets, public test seams, exact focused commands, expected valid RED, minimum production boundaries, required Skills, integration points, returned evidence, and the draft's own challenge findings; Main authors no plan detail beyond the brief"
       },
       {
         "id": "step-plan-review",
-        "text": "The currently exposed plan Agent independently reviews Main's supplied complete parallel plan, assignment boundaries, evidence anchors, test seams, invariants, backup assumptions, and operational boundary before any authorized production mutation."
+        "text": "The plan Agent's draft carries its challenge findings; Main reviews the complete plan, parallel waves, plan assignment map, and exclusive write sets, and requests at most one fresh plan Agent pass only when disposition materially changes the plan before any authorized production mutation, never on unchanged text"
       },
       {
         "id": "step-plan-disposition",
@@ -117,7 +117,8 @@ export const databaseWorkflows = [
       "Confirm the database engine first, then select only the matching engine-specific Skill: postgres-patterns for PostgreSQL or mysql-patterns for MySQL or MariaDB; do not load both by default.",
       "Separate schema expansion, data backfill, application cutover, and contraction when compatibility or scale requires it.",
       "Slice count follows real independent vertical work, dependency order, exclusive write ownership, and native capacity; one safe slice remains one task.",
-      "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path."
+      "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path.",
+      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation"
     ],
     "skills": [
       "database-migrations",
@@ -141,10 +142,15 @@ export const databaseWorkflows = [
     "roles": [
       "plan",
       "task",
-      "reviewer"
+      "reviewer",
+      "scout",
+      "librarian"
     ],
     "delegation": [
-      "step-plan-review: plan independently reviews Main's supplied complete parallel plan, write sets, compatibility sequence, migration validation, release order, rollback, and live-operation exclusions without editing or applying changes",
+      "step-search-local: scout owns the bounded local evidence pass and returns exact anchors distinguishing repository source from generated, packaged, installed, or runtime truth",
+      "step-search-external: librarian owns one bounded external pass over official documentation and community experience and returns versioned, applicability-tagged leads",
+      "step-plan: plan drafts the complete implementation and evidence plan from Main's frozen brief, including its own challenge findings, without editing files",
+      "step-plan-review: plan independently challenges Main's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and drafted it from Main's frozen brief, with at most one fresh pass on materially rebased plans, without editing files",
       "step-task-batch: task receives all runnable independent database slices for the wave in the same native tasks[] batch with exclusive write ownership",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the focused test, minimum production and migration changes, same-command evidence, and prohibition on unapproved live application",
       "step-review: reviewer independently audits only the bounded diff and supplied database evidence without project reads, commands, edits, or live operations",
@@ -165,19 +171,19 @@ export const databaseWorkflows = [
       },
       {
         "id": "step-search-local",
-        "text": "Main searches the local migration graph, schema history, application callers, repair and rollback seams, adjacent tests, configuration, and recorded failure state, then reproduces or models the transition in a disposable environment and classifies it as unapplied, partially applied, divergent, locked, or data-dependent."
+        "text": "Main writes a bounded evidence brief and delegates search local code to scout — entry points from fast repository search, callers, consumers, adjacent tests, configuration, and source-vs-generated-vs-packaged-vs-installed anchors; Main integrates the returned evidence and performs no broad repository search itself"
       },
       {
         "id": "step-search-external",
-        "text": "When current database or migration-tool recovery semantics could change the repair and network is not forbidden, Main uses web_search to check official versioned recovery documentation (preferred) and bounded community failure reports, keeping them separate from the observed local state and live authority. Queries must not contain connection strings, queries with literal data, or secrets."
+        "text": "When current library, toolchain, API, design, failure, or performance practice could change the decision and network is not forbidden, Main delegates one bounded external pass to librarian (official documentation first, bounded community experience second), keeps external advice separate from local evidence, and records version and applicability; queries must not contain private code, secrets, or PII"
       },
       {
         "id": "step-plan",
-        "text": "Main writes a detailed migration-repair plan for parallel execution in dependency-ordered waves of vertical slices with non-overlapping write sets; each slice names exact files, failed-state dependencies, backup and invariant prerequisites, focused test seam, exact command, expected valid RED, minimum production repair boundary, required Skills, idempotency and compatibility checks, integration point, evidence return, rollback or forward repair, and a stop condition."
+        "text": "Main writes a frozen planning brief — requested outcome, mutation authority, acceptance criteria, integrated evidence anchors, slice boundaries, and evidence bar — and delegates to the plan Agent the full detailed implementation and evidence plan: dependency-ordered parallel waves of vertical slices with IDs, acceptance targets, dependencies, exact files and non-overlapping write sets, public test seams, exact focused commands, expected valid RED, minimum production boundaries, required Skills, integration points, returned evidence, and the draft's own challenge findings; Main authors no plan detail beyond the brief"
       },
       {
         "id": "step-plan-review",
-        "text": "The currently exposed plan Agent independently reviews Main's supplied complete parallel plan, assignment boundaries, failure-state anchors, backup assumptions, test seams, invariants, stop condition, and live-operation boundary before any authorized production mutation."
+        "text": "The plan Agent's draft carries its challenge findings; Main reviews the complete plan, parallel waves, plan assignment map, and exclusive write sets, and requests at most one fresh plan Agent pass only when disposition materially changes the plan before any authorized production mutation, never on unchanged text"
       },
       {
         "id": "step-plan-disposition",
@@ -209,7 +215,8 @@ export const databaseWorkflows = [
       "Confirm the database engine first, then select only the matching engine-specific Skill: postgres-patterns for PostgreSQL or mysql-patterns for MySQL or MariaDB; do not load both by default.",
       "Do not rewrite already deployed migration history unless the exact tool, environment state, and user authorization make that operation safe and necessary.",
       "Slice count follows real independent vertical work, migration-state dependencies, exclusive write ownership, and native capacity; one safe slice remains one task.",
-      "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path."
+      "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path.",
+      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation"
     ],
     "skills": [
       "database-migrations",
@@ -233,10 +240,15 @@ export const databaseWorkflows = [
     "roles": [
       "plan",
       "task",
-      "reviewer"
+      "reviewer",
+      "scout",
+      "librarian"
     ],
     "delegation": [
-      "step-plan-review: plan independently reviews Main's supplied complete parallel state-aware repair plan, write sets, validation, stop condition, rollback, backup assumptions, and live boundary without editing or applying changes",
+      "step-search-local: scout owns the bounded local evidence pass and returns exact anchors distinguishing repository source from generated, packaged, installed, or runtime truth",
+      "step-search-external: librarian owns one bounded external pass over official documentation and community experience and returns versioned, applicability-tagged leads",
+      "step-plan: plan drafts the complete implementation and evidence plan from Main's frozen brief, including its own challenge findings, without editing files",
+      "step-plan-review: plan independently challenges Main's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and drafted it from Main's frozen brief, with at most one fresh pass on materially rebased plans, without editing files",
       "step-task-batch: task receives all runnable independent migration-repair slices for the wave in the same native tasks[] batch with exclusive write ownership",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the failed-state test, minimum production repair, same-command evidence, and prohibition on unapproved live recovery",
       "step-review: reviewer independently audits only the bounded diff and supplied migration evidence without project reads, commands, edits, or live operations",

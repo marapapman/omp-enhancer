@@ -253,7 +253,7 @@ test('compact workflow Skill teaches primary-plus-add-on composition with exact 
 });
 
 test('the consolidated code lifecycle uses plan plus native task and reviewer', () => {
-  assert.deepEqual(workflowCatalog['code.dev'].roles, ['plan', 'task', 'reviewer']);
+  assert.deepEqual(workflowCatalog['code.dev'].roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
   assert.deepEqual(workflowCatalog['code.dev'].skills, ['code-development']);
   assert.equal(workflowCatalog['design.visual'].roles.includes('designer'), true);
   assert.equal(workflowCatalog['design.visual'].roles.includes('visioner'), true);
@@ -281,13 +281,14 @@ test('omp.plugin owns the complete self-iteration lifecycle without adding anoth
   assert.ok(workflow);
   assert.equal(workflowIds.some((id) => /self|iterat/iu.test(id)), false);
   assert.match(workflow.chooseWhen, /OMP plugin.+omp-enhancer.+self-development fixture.+workflow.+Skill.+prompt.+E2E/iu);
-  assert.deepEqual(workflow.roles, ['plan', 'task', 'reviewer']);
+  assert.deepEqual(workflow.roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
   assert.deepEqual(workflow.skills, ['code-development']);
   assert.equal(workflow.composeWith.includes('code.dev'), false);
   assert.equal(workflowCatalog['code.dev'].composeWith.includes('omp.plugin'), false);
   assert.match(steps, /acceptance.+invariants.+dirty worktree.+installed state/iu);
   assert.match(steps, /detailed implementation and evidence plan.+parallel.+waves.+vertical slices.+non-overlapping.+write sets.+tests.+E2E/iu);
-  assert.match(steps, /independently review.+parallel.+plan.+assignment.+before production changes/iu);
+  assert.match(steps, /parallel.+plan.+assignment.+before.+production/iu);
+  assert.match(steps, /independently review.+bounded.+semantic diff/iu);
   assert.match(steps, /same.+tasks\[\].+batch.+independent.+vertical.+slice/iu);
   assert.match(steps, /task.+public behavior.+RED.+minimal.+implementation.+GREEN.+refactor/iu);
   assert.match(steps, /targeted.+package.+current revision/iu);
@@ -306,25 +307,30 @@ test('omp.plugin owns the complete self-iteration lifecycle without adding anoth
 
 test('new workflows use bounded exact roles', () => {
   const expected = {
-    'code.dev': ['plan', 'task', 'reviewer'],
-    'network.design': ['ecc-network-architect'],
-    'network.homelab': ['ecc-network-architect'],
+    'code.dev': ['plan', 'task', 'reviewer', 'scout', 'librarian'],
+    'network.design': ['ecc-network-architect', 'ecc-network-config-reviewer'],
+    'network.homelab': ['ecc-network-architect', 'ecc-network-config-reviewer'],
     'network.review': ['ecc-network-config-reviewer'],
     'network.debug': ['ecc-network-troubleshooter'],
     'database.review': ['task', 'reviewer'],
-    'database.change': ['plan', 'task', 'reviewer'],
-    'database.migration.repair': ['plan', 'task', 'reviewer'],
+    'database.change': ['plan', 'task', 'reviewer', 'scout', 'librarian'],
+    'database.migration.repair': ['plan', 'task', 'reviewer', 'scout', 'librarian'],
     'ml.review': ['task', 'reviewer'],
-    'ml.debug': ['plan', 'task', 'reviewer'],
+    'ml.debug': ['plan', 'task', 'reviewer', 'scout', 'librarian'],
     'release.opensource': [
       'ecc-opensource-forker',
       'ecc-opensource-sanitizer',
       'ecc-opensource-packager',
       'reviewer',
     ],
-    'marketing.campaign': ['task'],
+    'marketing.campaign': ['task', 'scout', 'reviewer'],
     'seo.audit': ['task', 'reviewer'],
-    'omp.plugin': ['plan', 'task', 'reviewer'],
+    'omp.plugin': ['plan', 'task', 'reviewer', 'scout', 'librarian'],
+    'general.subagent': ['task', 'reviewer'],
+    'release.publish': ['task', 'reviewer'],
+    'writing.latex': ['task', 'reviewer'],
+    'writing.markdown': ['task', 'reviewer'],
+    'doc.convert.word': ['task', 'reviewer'],
   };
 
   for (const [id, roles] of Object.entries(expected)) {

@@ -35,7 +35,11 @@ export const growthWorkflows = [
       {
         "id": "step-6",
         "text": "Deliver the bounded campaign artifacts, evidence and assumption notes, unresolved claim limitations, and explicit next actions without publishing them unless separately authorized."
-      }
+      },
+      {
+        "id": "step-audit",
+        "text": "reviewer independently audits the campaign content and evidence chain without editing deliverables"
+      },
     ],
     "scopeNotes": [
       "The workflow owns campaign structure; task may own a complete bounded channel slice, but prefer exact domain roles inherited from the selected research, fact-check, writing, slide, or visual workflow.",
@@ -58,12 +62,15 @@ export const growthWorkflows = [
       "Unsupported claims, fabricated urgency, privacy-sensitive targeting, and unapproved publication can create legal and reputational harm."
     ],
     "roles": [
-      "task"
+      "task",
+      "scout",
+      "reviewer"
     ],
     "delegation": [
-      "steps-1-3: keep campaign scope, positioning, claim boundaries, and workflow composition with the parent",
+      "steps-1-3: scout owns product, audience, positioning, and claim evidence gathering under a bounded brief and returns sourced evidence; Main keeps campaign scope, composition, and permission decisions",
       "steps-2-5: task owns one complete bounded channel deliverable and evidence slice only when no composed domain Agent is a closer match; a composed domain Agent is preferred when its workflow owns the requested research, fact-check, prose, slide, or visual method",
-      "step-6: the parent reconciles facts, language, channel scope, artifacts, and publication boundaries"
+      "step-6: the parent reconciles facts, language, channel scope, artifacts, and publication boundaries",
+      "step-audit: reviewer independently audits the campaign content and evidence chain without editing deliverables"
     ]
   },
   {
@@ -104,7 +111,8 @@ export const growthWorkflows = [
     ],
     "scopeNotes": [
       "Main owns audit scope and final synthesis; task may own a complete bounded URL slice, but prefer exact domain roles from composed research, writing, or visual workflows when they match.",
-      "SEO recommendations do not authorize site edits, deployment, analytics changes, outreach, or publication."
+      "SEO recommendations do not authorize site edits, deployment, analytics changes, outreach, or publication.",
+      "The delegated deliverable is the independent audit; parent VERIFY integrates it and adds no second auditor unless the user requests one"
     ],
     "skills": [
       "seo",

@@ -23,12 +23,12 @@ test('ordinary code work has one lifecycle workflow with one owning Skill', () =
   );
   for (const id of RETIRED_CODE_WORKFLOWS) assert.equal(workflowIds.includes(id), false, id);
   assert.deepEqual(workflow.skills, ['code-development']);
-  assert.deepEqual(workflow.roles, ['plan', 'task', 'reviewer']);
+  assert.deepEqual(workflow.roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
   assert.equal(workflow.composeWith.includes('omp.plugin'), false);
 
   const omp = workflowCatalog['omp.plugin'];
   assert.deepEqual(omp.skills, ['code-development']);
-  assert.deepEqual(omp.roles, ['plan', 'task', 'reviewer']);
+  assert.deepEqual(omp.roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
   assert.equal(omp.composeWith.includes('code.dev'), false);
 });
 
@@ -82,14 +82,14 @@ test('domain code changes reuse task-owned parallel vertical TDD and Main-before
     const steps = workflow.steps.join(' ');
     const delegation = workflow.delegation.join(' ');
 
-    assert.deepEqual(workflow.roles, ['plan', 'task', 'reviewer'], id);
+    assert.deepEqual(workflow.roles, ['plan', 'task', 'reviewer', 'scout', 'librarian'], id);
     assert.ok(workflow.skills.includes('code-development'), id);
     assert.match(steps, /Main writes.+parallel.+wave.+vertical.+slice.+non-overlapping.+write/iu, `${id}: parallel Main plan`);
     assert.match(steps, /plan Agent.+review.+parallel.+before.+production/iu, `${id}: plan review`);
     assert.match(steps, /task.+test.+RED.+production.+same.+command.+GREEN.+refactor/iu, `${id}: task-owned TDD`);
     assert.match(steps, /reviewer.+independently reviews.+bounded.+diff.+evidence/iu, `${id}: reviewer input`);
     assert.match(steps, /supported.+finding.+task.+repair/iu, `${id}: task repair`);
-    assert.match(delegation, /plan.+reviews.+supplied.+plan/iu, `${id}: plan delegation`);
+    assert.match(delegation, /plan.+challenges.+supplied.+plan/iu, `${id}: plan delegation`);
     assert.match(delegation, /task.+vertical.+RED.+GREEN/iu, `${id}: task delegation`);
     assert.match(delegation, /reviewer.+independently.+bounded.+diff/iu, `${id}: diff review`);
     assertLifecycleOrder(workflow, id);

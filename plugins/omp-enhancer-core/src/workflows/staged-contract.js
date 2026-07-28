@@ -53,3 +53,6 @@ export const TODO_REBASE_REASONS = `${TODO_REBASE_REASON_LIST.slice(0, -1).join(
 export const TODO_REBASE_REASONS_COMPACT = TODO_REBASE_REASON_LIST.join('/');
 
 export const DIRECT_FALLBACK_REASONS = 'one concrete user or native constraint, Agent availability or capacity, incomplete assignment input, unresolved dependency or write-set overlap, safety risk, or native parent-owned action';
+export const ORCHESTRATOR_IDENTITY = 'ORCHESTRATOR: Main is the orchestrator. Evidence gathering, planning, implementation, and audit checkpoints are delegated to the Agents named by the loaded card; Main keeps selection, TODO, assignment copy, delivery integration, permission and external-effect decisions, and the final response. Direct work exists only on DIRECT, on `agentic.simple`, or behind a concrete recorded fallback.';
+
+export const SELF_INDUCED_FALLBACK_GUARD = 'Main never self-induces a fallback by skipping brief, input, or checkpoint preparation; a fallback= row names exactly one enumerated reason and the affected checkpoint.';

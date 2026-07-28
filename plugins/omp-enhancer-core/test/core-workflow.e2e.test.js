@@ -120,7 +120,7 @@ test('an arbitrary top-level model receives the compact seven-stage soft reminde
   assert.match(result.message.content, /AFTER THE INDEX RETURNS:[\s\S]*DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY/iu);
   assert.match(result.message.content, /byte-0 `WORKFLOW PLAN`[\s\S]*structured NOW\/THEN[\s\S]*at least four detailed Actions/iu);
   assert.match(result.message.content, /resource-only load batches[\s\S]*byte-0 `WORKFLOW READY` \+ rebased detailed TODO only[\s\S]*project tools/iu);
-  assert.match(result.message.content, /loaded non-simple card[\s\S]*current matching Agent[\s\S]*parent VERIFY/iu);
+  assert.match(result.message.content, /Main is the orchestrator[\s\S]*loaded non-simple card[\s\S]*evidence gathering, planning, implementation, and audit[\s\S]*parent VERIFY/iu);
   assert.doesNotMatch(result.message.content, /character 1/iu);
   assert.doesNotMatch(result.message.content, /TASK COPY:|Delegate Writer:|generic Draft\/Check|checkpoint=<verbatim-task-content>/iu);
   assert.match(result.message.content, /Main selects[\s\S]*OMP owns tools, permissions, delegation, and completion/iu);
@@ -130,7 +130,7 @@ test('an arbitrary top-level model receives the compact seven-stage soft reminde
   assert.doesNotMatch(result.message.content, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
   assert.doesNotMatch(result.message.content, /suggested=|within-native-cap|native-cap=|NATIVE_BATCH_SHAPE|action=delegate|block:\s*true|continue:\s*true|hard router|automatic retry/u);
   assert.doesNotMatch(result.message.content, /DEEPSEEK|MIMO|deepseek-v4-flash|mimo-v2\.5|opencode-go/iu);
-  assert.ok(result.message.content.length < 1800, `compatibility context length=${result.message.content.length}`);
+  assert.ok(result.message.content.length < 2000, `compatibility context length=${result.message.content.length}`);
   assert.deepEqual(result.message.details.features, [
     'skill-discovery',
     'workflow-selection',
@@ -324,6 +324,7 @@ test('the staged reminder fires once for any top-level model', async () => {
   assert.match(result.message.content, /INDEX STATUS=NOT SUPPLIED[\s\S]*path=skill:\/\/omp-enhancer-workflows/iu);
   assert.match(result.message.content, /DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY/iu);
   assert.match(result.message.content, /byte-0 `WORKFLOW PLAN`[\s\S]*byte-0 `WORKFLOW READY`/iu);
+  assert.match(result.message.content, /Main is the orchestrator[\s\S]*evidence gathering, planning, implementation, and audit/iu);
   assert.doesNotMatch(result.message.content, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
   assert.doesNotMatch(result.message.content, /suggested=|reviewer count=\d|fork width=\d|required fork|block:\s*true/iu);
   assert.doesNotMatch(result.message.content, /DEEPSEEK|MIMO|deepseek|mimo|opencode-go/iu);
@@ -371,7 +372,7 @@ test('staged reminder exposes only capabilities active in the native runtime', a
   assert.match(taskOnly.message.content, /PROJECT ONLY . PHASE 1 . PLAN:[\s\S]*PROJECT ONLY . PHASE 2 . COMMIT:[\s\S]*PROJECT ONLY . PHASE 3 . EXECUTE/iu);
   assert.match(taskOnly.message.content, /PHASE 1 . PLAN:[\s\S]*PHASE 2 . COMMIT:[\s\S]*PHASE 3 . EXECUTE/iu);
   assert.match(taskOnly.message.content, /no fork or width is selected by this reminder/i);
-  assert.match(taskOnly.message.content, /DELEGATION AFTER READY \(soft\):[\s\S]*non-simple work defaults to delegation if native state permits/iu);
+  assert.match(taskOnly.message.content, /DELEGATION AFTER READY \(soft\):[\s\S]*Main is the orchestrator[\s\S]*non-simple work is delegated to currently visible Agents when native state permits/iu);
   assert.deepEqual(taskOnly.message.details.features, ['delegation-decision']);
 });
 

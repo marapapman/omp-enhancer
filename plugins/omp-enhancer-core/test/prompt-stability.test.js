@@ -6,6 +6,8 @@ import {
   buildWorkflowSkillReferenceMarkdown,
 } from '../src/workflows/render-skill.js';
 import {
+  ORCHESTRATOR_IDENTITY,
+  SELF_INDUCED_FALLBACK_GUARD,
   WORKFLOW_PLAN_TEMPLATE,
   WORKFLOW_STATE_LINE,
 } from '../src/workflows/staged-contract.js';
@@ -75,4 +77,13 @@ test('workflow prompts use one positive staged handoff with explicit load phases
     `${index}\n${reference}`,
     /after optional hidden thinking|Thinking "(?:Let me emit WORKFLOW PLAN|emit READY)"|All resources loaded|WRONG:|CORRECT:/iu,
   );
+});
+
+test('orchestrator identity and fallback guard constants are non-empty single-line strings', () => {
+  assert.equal(typeof ORCHESTRATOR_IDENTITY, 'string');
+  assert.ok(ORCHESTRATOR_IDENTITY.length > 0);
+  assert.equal(typeof SELF_INDUCED_FALLBACK_GUARD, 'string');
+  assert.ok(SELF_INDUCED_FALLBACK_GUARD.length > 0);
+  assert.match(SELF_INDUCED_FALLBACK_GUARD, /fallback=/u);
+  assert.match(SELF_INDUCED_FALLBACK_GUARD, /exactly one enumerated reason/u);
 });

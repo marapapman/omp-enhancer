@@ -5,6 +5,7 @@ import {
   createWorkflowProtocolCoachState,
   observeProtocolAssistantMessage,
   observeProtocolSuppliedWorkflowIndex,
+  observeProtocolTodoInput,
   observeProtocolToolCall,
   observeProtocolToolResult,
   presentWorkflowProtocolCoachCue,
@@ -404,6 +405,183 @@ test('state serialization and sanitization preserve a retryable cue without shar
   const invalid = sanitizeWorkflowProtocolCoachState({ pendingCue: { kind: 'ROUTE_TASK' } });
   assert.equal(invalid.pendingCue, null);
   assert.equal(invalid.declaration, null);
+});
+
+const CODE_DEV_URI = 'skill://omp-enhancer-workflows/references/code-dev.md';
+
+function codeDevPlan() {
+  return [
+    'WORKFLOW PLAN',
+    'Primary: code.dev',
+    'Add-ons: none',
+    `Skills: ${CODE_DEV_URI}`,
+    `Load order: NOW=[${CODE_DEV_URI}] THEN=[none]`,
+    'Actions:',
+    '1. LOAD: Read declared resources and wait.',
+    '2. COMMIT: Emit WORKFLOW READY and TODO only, then wait.',
+    '3. SPLIT + EXECUTE: Follow the committed checkpoints.',
+    '4. VERIFY: Integrate requested evidence.',
+  ].join('\n');
+}
+
+function codeDevReadyState() {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  observeProtocolAssistantMessage(state, codeDevPlan());
+  for (const uri of [...state.declaration.now, ...state.declaration.then]) {
+    observeProtocolToolResult(state, { name: 'read', target: uri });
+  }
+  observeProtocolAssistantMessage(
+    state,
+    'WORKFLOW READY | primary=code.dev | add-ons=none | skills-loaded=omp-enhancer-workflows/references/code-dev.md | skills-unavailable=none',
+  );
+  return state;
+}
+
+function dispatchStateWithDelegateTodo() {
+  const state = codeDevReadyState();
+  observeProtocolTodoInput(state, { itemsText: 'Delegate Agent=task do the work\nVERIFY integrate' });
+  observeProtocolToolResult(state, { name: 'todo' });
+  return state;
+}
+
+test('PRE_VERIFY fires once when all dispatched work tasks settle on a subagent-driven primary', () => {
+  const state = dispatchStateWithDelegateTodo();
+  assert.equal(state.pendingCue?.kind, 'PRE_DISPATCH');
+  assert.equal(state.declaration.tasksDispatched, 0);
+
+  observeProtocolToolCall(state, { name: 'task', taskRoles: ['task'] });
+  assert.equal(state.declaration.tasksDispatched, 1);
+  assert.equal(state.pendingCue, null, 'work task call clears PRE_DISPATCH');
+
+  observeProtocolToolResult(state, { name: 'task' });
+  assert.equal(state.declaration.tasksSettled, 1);
+  assert.equal(state.pendingCue?.kind, 'PRE_VERIFY');
+
+  const cue = presentWorkflowProtocolCoachCue(state);
+  assert.equal(cue.kind, 'PRE_VERIFY');
+  assert.match(cue.content, /OMP PROTOCOL COACH \(soft, VERIFY\)/u);
+  assert.match(cue.content, /Deliveries settled[\s\S]*Main integrates[\s\S]*audit checkpoint/u);
+  assert.match(cue.content, /MAIN REVIEW[\s\S]*final response reports evidence/u);
+  assert.match(cue.content, /No block\/router\/gate\/retry\/authority\/choice/u);
+  assert.equal(state.declaration.verifyCueQueued, true);
+
+  // A second settled task must NOT re-queue PRE_VERIFY (one-shot per generation).
+  observeProtocolToolCall(state, { name: 'task', taskRoles: ['task'] });
+  observeProtocolToolResult(state, { name: 'task' });
+  const second = presentWorkflowProtocolCoachCue(state);
+  assert.equal(second.kind, 'PRE_VERIFY');
+  assert.equal(state.declaration.verifyCueQueued, true);
+});
+
+test('a plan-only task neither counts toward tasksDispatched nor triggers PRE_VERIFY', () => {
+  const state = dispatchStateWithDelegateTodo();
+  observeProtocolToolCall(state, { name: 'task', taskRoles: ['plan'] });
+  assert.equal(state.declaration.tasksDispatched, 0, 'plan-only task does not increment tasksDispatched');
+  assert.notEqual(state.pendingCue, null, 'plan-only task does not clear PRE_DISPATCH');
+  assert.equal(state.pendingCue.kind, 'PRE_DISPATCH');
+
+  observeProtocolToolResult(state, { name: 'task' });
+  assert.equal(state.declaration.tasksDispatched, 0, 'plan-only task does not increment tasksDispatched');
+  assert.equal(state.pendingCue?.kind, 'PRE_DISPATCH', 'no PRE_VERIFY without dispatched work tasks');
+});
+
+test('a FAILED settled work task still fires PRE_VERIFY', () => {
+  const state = dispatchStateWithDelegateTodo();
+  observeProtocolToolCall(state, { name: 'task', taskRoles: ['task'] });
+  assert.equal(state.declaration.tasksDispatched, 1);
+
+  observeProtocolToolResult(state, { name: 'task', failed: true });
+  assert.equal(state.declaration.tasksSettled, 1, 'failed results count as settled');
+  assert.equal(state.pendingCue?.kind, 'PRE_VERIFY', 'PRE_VERIFY fires even on failed settlement');
+  assert.equal(state.declaration.verifyCueQueued, true);
+});
+
+test('NO_DELEGATION_ROWS diagnostic fires when a subagent-driven TODO has no Delegate or fallback rows', () => {
+  const state = codeDevReadyState();
+  observeProtocolTodoInput(state, { itemsText: 'VERIFY integrate the result\nREPORT write summary' });
+  assert.equal(state.declaration.todoHasDelegateRows, false);
+  assert.equal(state.declaration.todoHasFallbackRows, false);
+
+  observeProtocolToolResult(state, { name: 'todo' });
+  assert.ok(
+    state.diagnostics.some((item) => item.code === 'NO_DELEGATION_ROWS'),
+    'NO_DELEGATION_ROWS fired on subagent-driven primary with no Delegate/fallback rows',
+  );
+});
+
+test('NO_DELEGATION_ROWS is absent when the TODO contains a Delegate row', () => {
+  const state = codeDevReadyState();
+  observeProtocolTodoInput(state, { itemsText: 'Delegate Agent=task implement the fix\nVERIFY integrate' });
+  assert.equal(state.declaration.todoHasDelegateRows, true);
+
+  observeProtocolToolResult(state, { name: 'todo' });
+  assert.ok(
+    !state.diagnostics.some((item) => item.code === 'NO_DELEGATION_ROWS'),
+    'NO_DELEGATION_ROWS absent when a Delegate row exists',
+  );
+});
+
+test('NO_DELEGATION_ROWS is absent when the TODO contains a fallback row', () => {
+  const state = codeDevReadyState();
+  observeProtocolTodoInput(state, { itemsText: 'fallback=parent-owned action because no Agent available\nVERIFY integrate' });
+  assert.equal(state.declaration.todoHasFallbackRows, true);
+
+  observeProtocolToolResult(state, { name: 'todo' });
+  assert.ok(
+    !state.diagnostics.some((item) => item.code === 'NO_DELEGATION_ROWS'),
+    'NO_DELEGATION_ROWS absent when a fallback row exists',
+  );
+});
+
+test('NO_DELEGATION_ROWS is absent on a direct-simple primary', () => {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  observeProtocolAssistantMessage(state, [
+    'WORKFLOW PLAN',
+    'Primary: agentic.simple',
+    'Add-ons: none',
+    `Skills: ${CODE_DEV_URI}`,
+    `Load order: NOW=[${CODE_DEV_URI}] THEN=[none]`,
+    'Actions:',
+    '1. LOAD: Read declared resources and wait.',
+    '2. COMMIT: Emit WORKFLOW READY and TODO only, then wait.',
+    '3. SPLIT + EXECUTE: Follow the committed checkpoints.',
+    '4. VERIFY: Integrate requested evidence.',
+  ].join('\n'));
+  for (const uri of [...state.declaration.now, ...state.declaration.then]) {
+    observeProtocolToolResult(state, { name: 'read', target: uri });
+  }
+  observeProtocolAssistantMessage(
+    state,
+    'WORKFLOW READY | primary=agentic.simple | add-ons=none | skills-loaded=omp-enhancer-workflows/references/code-dev.md | skills-unavailable=none',
+  );
+  observeProtocolTodoInput(state, { itemsText: 'VERIFY integrate the result\nREPORT write summary' });
+  observeProtocolToolResult(state, { name: 'todo' });
+  assert.ok(
+    !state.diagnostics.some((item) => item.code === 'NO_DELEGATION_ROWS'),
+    'NO_DELEGATION_ROWS absent on direct-simple primary',
+  );
+});
+
+test('serialization round-trip preserves the five new declaration fields', () => {
+  const state = dispatchStateWithDelegateTodo();
+  observeProtocolToolCall(state, { name: 'task', taskRoles: ['task'] });
+  observeProtocolToolResult(state, { name: 'task' });
+  assert.equal(state.declaration.verifyCueQueued, true);
+  assert.equal(state.declaration.tasksDispatched, 1);
+  assert.equal(state.declaration.tasksSettled, 1);
+  assert.equal(state.declaration.todoHasDelegateRows, true);
+  assert.equal(state.declaration.todoHasFallbackRows, false);
+
+  const snapshot = serializeWorkflowProtocolCoachState(state);
+  const restored = sanitizeWorkflowProtocolCoachState(snapshot);
+  assert.equal(restored.declaration.verifyCueQueued, true);
+  assert.equal(restored.declaration.tasksDispatched, 1);
+  assert.equal(restored.declaration.tasksSettled, 1);
+  assert.equal(restored.declaration.todoHasDelegateRows, true);
+  assert.equal(restored.declaration.todoHasFallbackRows, false);
+  assert.deepEqual(serializeWorkflowProtocolCoachState(restored), snapshot);
 });
 
 function indexedState() {

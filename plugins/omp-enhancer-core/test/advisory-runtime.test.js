@@ -237,6 +237,122 @@ test('public usage reviews honor explicit Main selections without becoming gates
   assert.doesNotMatch(agents.content[0].text, /blocked/i);
 });
 
+test('a subagent-driven TODO with no Delegate or fallback rows surfaces NO_DELEGATION_ROWS', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task', 'todo'];
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt: 'Implement the parser fix and review the result.' }, ctx);
+
+  // Index read settles → PRE_PLAN cue
+  await event(pi, 'tool_result')({
+    toolName: 'read',
+    input: { path: 'skill://omp-enhancer-workflows' },
+    result: { content: [{ type: 'text', text: '---\nname: omp-enhancer-workflows\ndescription: Workflow index.\n---\n' }] },
+  }, ctx);
+
+  // PLAN message creates a subagent-driven declaration (code.dev, no loads needed)
+  await event(pi, 'message_end')({
+    message: { role: 'assistant', content: validPlan(), timestamp: 2 },
+  }, ctx);
+
+  // READY message marks readyObserved (loads are settled since now/then are none)
+  await event(pi, 'message_end')({
+    message: {
+      role: 'assistant',
+      content: 'WORKFLOW READY | primary=code.dev | add-ons=none | skills-loaded=none | skills-unavailable=none',
+      timestamp: 3,
+    },
+  }, ctx);
+
+  // todo(op=init) tool_call with items lacking Delegate Agent= and fallback= rows
+  await event(pi, 'tool_call')({
+    toolName: 'todo',
+    input: {
+      op: 'init',
+      list: [{ items: [{ task: 'Investigate the parser bug.' }, { task: 'Write the fix directly.' }] }],
+    },
+  }, ctx);
+
+  // Settled todo tool_result flips todoObserved and fires the diagnostic
+  await event(pi, 'tool_result')({
+    toolName: 'todo',
+    result: { content: [{ type: 'text', text: 'TODO initialized.' }] },
+  }, ctx);
+
+  const snapshot = latestState(entries);
+  const diagnosticCodes = snapshot.protocolCoach.diagnostics.map((d) => d.code);
+  assert.ok(diagnosticCodes.includes('NO_DELEGATION_ROWS'), `expected NO_DELEGATION_ROWS in ${JSON.stringify(diagnosticCodes)}`);
+
+  // The observation status tool surfaces the same diagnostic advisorially
+  const status = await pi.tools.get('omp_core_observation_status').execute(
+    'status-after-todo',
+    {},
+    undefined,
+    undefined,
+    ctx,
+  );
+  assert.equal(status.isError, false);
+  const coachDiagCodes = status.details.status.coachDiagnostics.map((d) => d.code);
+  assert.ok(coachDiagCodes.includes('NO_DELEGATION_ROWS'), `expected NO_DELEGATION_ROWS in coachDiagnostics ${JSON.stringify(coachDiagCodes)}`);
+});
+
+test('a TODO with a Delegate row does not surface NO_DELEGATION_ROWS', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task', 'todo'];
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries);
+  await event(pi, 'session_start')({}, ctx);
+  await event(pi, 'before_agent_start')({ prompt: 'Implement the parser fix and review the result.' }, ctx);
+  await event(pi, 'tool_result')({
+    toolName: 'read',
+    input: { path: 'skill://omp-enhancer-workflows' },
+    result: { content: [{ type: 'text', text: '---\nname: omp-enhancer-workflows\ndescription: Workflow index.\n---\n' }] },
+  }, ctx);
+  await event(pi, 'message_end')({
+    message: { role: 'assistant', content: validPlan(), timestamp: 2 },
+  }, ctx);
+  await event(pi, 'message_end')({
+    message: {
+      role: 'assistant',
+      content: 'WORKFLOW READY | primary=code.dev | add-ons=none | skills-loaded=none | skills-unavailable=none',
+      timestamp: 3,
+    },
+  }, ctx);
+  await event(pi, 'tool_call')({
+    toolName: 'todo',
+    input: {
+      op: 'init',
+      list: [{ items: [{ task: 'Delegate Agent=scout step-search-local: bounded local evidence pass' }] }],
+    },
+  }, ctx);
+  await event(pi, 'tool_result')({
+    toolName: 'todo',
+    result: { content: [{ type: 'text', text: 'TODO initialized.' }] },
+  }, ctx);
+  const snapshot = latestState(entries);
+  const diagnosticCodes = snapshot.protocolCoach.diagnostics.map((d) => d.code);
+  assert.equal(diagnosticCodes.includes('NO_DELEGATION_ROWS'), false, `Delegate row should suppress NO_DELEGATION_ROWS, got ${JSON.stringify(diagnosticCodes)}`);
+});
+
+function validPlan() {
+  return [
+    'WORKFLOW PLAN',
+    'Primary: code.dev',
+    'Add-ons: none',
+    'Skills: none',
+    'Load order: NOW=[none] THEN=[none]',
+    'Actions:',
+    '1. SEARCH: Gather evidence.',
+    '2. PLAN: Draft the implementation plan.',
+    '3. EXECUTE: Implement the fix.',
+    '4. VERIFY: Review the result.',
+  ].join('\n');
+}
+
 async function coreRuntime(prompt, cwd = process.cwd()) {
   const pi = new FakePi();
   registerCoreEnhancer(pi);

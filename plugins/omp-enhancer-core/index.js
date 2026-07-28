@@ -7,6 +7,10 @@ import {
   buildTaskShapePrompt,
 } from './src/review-budget.js';
 import {
+  buildToolCallPrimingSection,
+  shouldPrimeToolCalls,
+} from './src/model-toolcall-priming.js';
+import {
   detectPlanMode,
   isPlanSlashCommand,
   stripPlanCommand,
@@ -25,6 +29,7 @@ import {
   observeProtocolAssistantMessage,
   observeProtocolSuppliedWorkflowIndex,
   observeProtocolToolCall,
+  observeProtocolTodoInput,
   observeProtocolToolResult,
   presentWorkflowProtocolCoachCue,
   sanitizeWorkflowProtocolCoachState,
@@ -50,10 +55,10 @@ const SKILL_STAGED_REMINDER = [
 const TASK_STAGED_REMINDER = [
   STAGED_ENTRY,
   'PROJECT ONLY — PHASE 1 — PLAN: before project tools, write a concise numbered plan and decide whether the request has genuinely independent runnable slices.',
-  'PROJECT ONLY — PHASE 2 — COMMIT: map that plan to native `todo` when exposed and allowed. Decide direct work or delegation from the current Available Agents, native schema and capacity, dependencies, and user constraints; no fork or width is selected by this reminder.',
-  'PROJECT ONLY — PHASE 3 — EXECUTE: follow the committed plan with bounded assignments and evidence, then integrate delivered results. Native tools, permissions, delivery, and completion remain authoritative.',
+  'PROJECT ONLY — PHASE 2 — COMMIT: map that plan to native `todo` when exposed and allowed. Non-trivial work defaults to delegation to currently visible Agents; choose direct work only under one concrete recorded constraint (user or native constraint, Agent availability or capacity, incomplete assignment input that cannot be prepared, dependency or write-set overlap, safety); no fork or width is selected by this reminder.',
+  'PROJECT ONLY — PHASE 3 — EXECUTE: dispatch the committed bounded assignments, integrate delivered results, and verify before the final response. Native tools, permissions, delivery, and completion remain authoritative.',
 ].join('\n');
-const DELEGATION_DECISION = 'DELEGATION AFTER READY (soft): non-simple work defaults to delegation if native state permits. When parent-owned pre-dispatch prerequisites complete, the committed task is next. Main owns TODO/Agent/width; no runtime gate/router/retry/completion control.';
+const DELEGATION_DECISION = 'DELEGATION AFTER READY (soft): Main is the orchestrator — non-simple work is delegated to currently visible Agents when native state permits; direct work needs one concrete recorded fallback per checkpoint. When parent-owned pre-dispatch prerequisites complete, the committed task is next. Main owns TODO/Agent/width; no runtime gate/router/retry/completion control.';
 const ENHANCER_TOOL_GROUPS = Object.freeze({
   core: ['omp_core_'],
   config: ['omp_config_'],
@@ -130,7 +135,7 @@ export default function registerCoreEnhancer(pi) {
   pi.registerTool({
     name: 'omp_core_observation_status',
     label: 'Show Core observations',
-    description: 'Show observed skill reads and native task progress without selecting a workflow or Agent.',
+    description: 'Show observed skill reads and native task progress without selecting a workflow or Agent. Includes advisory protocol diagnostics (for example NO_DELEGATION_ROWS) without selecting a workflow or Agent.',
     defaultInactive: true,
     approval: 'read',
     parameters: z?.object ? z.object({}) : undefined,
@@ -265,6 +270,7 @@ export default function registerCoreEnhancer(pi) {
       subagentsAllowed: taskContext.taskDescriptor?.constraints?.subagents !== 'forbidden',
       implementationDelegationAllowed: taskContext.taskDescriptor?.constraints?.implementationDelegation !== 'forbidden',
       taskDescriptor: taskContext.taskDescriptor,
+      model: ctx?.model,
     });
     const shouldRemind = (
       workflowReminder
@@ -333,16 +339,24 @@ export default function registerCoreEnhancer(pi) {
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
     if (activeHostTurnKind !== 'user') return undefined;
     restoreStateFromContext(state, ctx);
+    const eventName = toolEventName(event);
     if (protocolCoachEventEligible(protocolCoachTurnEligible, activeHostTurnKind, ctx)) {
-      const eventName = toolEventName(event);
       let taskRoles = [];
       if (eventName === 'task') {
         taskRoles = taskInputItems(event).map(roleName).filter(Boolean);
       }
       observeProtocolToolCall(state.protocolCoach, { name: eventName, taskRoles });
+      if (eventName === 'todo') {
+        const input = event.input ?? event.params ?? event.arguments ?? {};
+        if (input.op === 'init') {
+          observeProtocolTodoInput(state.protocolCoach, { itemsText: todoInitItemsText(event) });
+        }
+      }
     }
-    if (toolEventName(event) === 'task') {
+    if (eventName === 'task') {
       recordTaskDispatch(state, event);
+    }
+    if (eventName === 'task' || eventName === 'todo') {
       await persistState(pi, state);
     }
     return undefined;
@@ -396,7 +410,7 @@ function buildWorkflowEntryReminder(protocolLabel, workflowIndexSupplied, {
     ? '- OTHERWISE (PROJECT): INDEX STATUS=SUPPLIED BY EXACT NATIVE `skill-prompt`. Do not reread it; the next response starts at byte 0 with a filled `WORKFLOW PLAN` from that body.'
     : '- OTHERWISE (PROJECT): INDEX STATUS=NOT SUPPLIED. Call only `read` with `path=skill://omp-enhancer-workflows`, end the response and wait. Do not read a project path or call any other tool first.';
   const executionHandoff = delegationAvailable
-    ? 'For a loaded non-simple card, assign at least one safe complete checkpoint to a current matching Agent when native state permits; keep parent VERIFY separate.'
+    ? 'Main is the orchestrator: for the loaded non-simple card, delegate evidence gathering, planning, implementation, and audit to visible Agents; copy Delegate rows into native task; direct work needs one recorded fallback. Keep parent VERIFY separate.'
     : 'For a loaded non-simple card, record the concrete permitted fallback on each affected checkpoint when native delegation is unavailable or forbidden; keep parent VERIFY separate.';
   return [
     `${protocolLabel} (soft one-shot for top-level Main).`,
@@ -408,7 +422,7 @@ function buildWorkflowEntryReminder(protocolLabel, workflowIndexSupplied, {
     'AUTHORITY: this reminder selects no workflow, Skill, Agent, or fork width and creates no runtime gate, router, retry, permission, or completion control. Main selects from the loaded index and current native state; OMP owns tools, permissions, delegation, and completion.',
   ].join('\n');
 }
-function buildStagedWorkflowReminder({
+export function buildStagedWorkflowReminder({
   planMode = false,
   planToExecuteTransition = false,
   hasVisibleSkills = false,
@@ -418,6 +432,7 @@ function buildStagedWorkflowReminder({
   subagentsAllowed = true,
   implementationDelegationAllowed = true,
   taskDescriptor = {},
+  model = null,
 } = {}) {
   const sections = [];
   const features = [];
@@ -474,6 +489,10 @@ function buildStagedWorkflowReminder({
       features.push('delegation-decision');
     }
     if (reviewBudgetPrompt) features.push('dynamic-review-budget');
+  }
+  if (shouldPrimeToolCalls(model)) {
+    sections.push(buildToolCallPrimingSection());
+    features.push('tool-call-priming');
   }
   if (!sections.length) return null;
   return {
@@ -773,6 +792,7 @@ function buildObservationStatus(state) {
     tasks: [...state.tasks.values()],
     skill_review: state.lastSkillUsage,
     agent_review: state.lastSubagentUsage,
+    coachDiagnostics: sanitizeWorkflowProtocolCoachState(state.protocolCoach).diagnostics,
   };
 }
 
@@ -1041,6 +1061,19 @@ function taskInputItems(event = {}) {
   const input = event.input ?? event.params ?? event.arguments ?? {};
   if (Array.isArray(input.tasks)) return input.tasks.filter(isRecord);
   return isRecord(input) && ['assignment', 'prompt', 'task', 'message'].some((key) => typeof input[key] === 'string') ? [input] : [];
+}
+
+function todoInitItemsText(event = {}) {
+  const input = event.input ?? event.params ?? event.arguments ?? {};
+  if (input.op !== 'init') return '';
+  const items = Array.isArray(input.list)
+    ? input.list.flatMap((phase) => (Array.isArray(phase?.items) ? phase.items : []))
+    : Array.isArray(input.items) ? input.items : [];
+  return items.map((item) => (
+    typeof item === 'string'
+      ? item.trim()
+      : String(item?.text ?? item?.content ?? item?.task ?? item?.name ?? '').trim()
+  )).filter(Boolean).join('\n');
 }
 
 function assignmentKey(item) {

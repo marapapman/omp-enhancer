@@ -45,7 +45,7 @@ test('language writing workflows delegate prose edits and independent review to 
   }
 
   for (const workflow of ['writing.latex', 'writing.markdown', 'doc.convert.word']) {
-    assert.deepEqual(workflowCatalog[workflow].roles, ['task'], `${workflow} uses a language-neutral format task`);
+    assert.deepEqual(workflowCatalog[workflow].roles, ['task', 'reviewer'], `${workflow} uses a language-neutral format task with independent review`);
   }
 
   const latexContract = workflowCatalog['writing.latex'].delegation.join(' ');
@@ -114,8 +114,8 @@ test('LaTeX and Markdown format workflows compose both ends of explicit conversi
   assert.ok(markdown.composeWith.includes('writing.latex'));
   assert.match(latex.chooseWhen, /LaTeX source\/output[\s\S]*LaTeX prose[\s\S]*preserved commands[\s\S]*Add-on[\s\S]*Primary only/iu);
   assert.match(markdown.chooseWhen, /Markdown source\/output[\s\S]*Add-on[\s\S]*Primary only/iu);
-  assert.deepEqual(latex.roles, ['task']);
-  assert.deepEqual(markdown.roles, ['task']);
+  assert.deepEqual(latex.roles, ['task', 'reviewer']);
+  assert.deepEqual(markdown.roles, ['task', 'reviewer']);
 });
 
 test('one code workflow drives parallel native task slices before Main and reviewer review', () => {
@@ -123,7 +123,7 @@ test('one code workflow drives parallel native task slices before Main and revie
   const steps = development.steps.join(' ');
   const delegation = development.delegation.join(' ');
 
-  assert.deepEqual(development.roles, ['plan', 'task', 'reviewer']);
+  assert.deepEqual(development.roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
   assert.deepEqual(development.skills, ['code-development']);
   assert.match(steps, /search local code.+entry points.+callers.+tests.+configuration/i);
   assert.match(steps, /official documentation.+community experience/i);
@@ -297,7 +297,7 @@ test('every catalog role is OMP-native or marketplace-packaged and every selecte
     registeredMarketplaceSkills(repoRoot),
     registeredMarketplaceAgents(repoRoot),
   ]);
-  const nativeAgents = new Set(['task', 'designer', 'librarian', 'reviewer']);
+  const nativeAgents = new Set(['task', 'designer', 'librarian', 'reviewer', 'scout']);
   for (const [workflow, meta] of Object.entries(workflowCatalog)) {
     for (const skill of meta.skills) {
       assert.equal(registeredSkills.has(skill), true, `${workflow}: ${skill}`);

@@ -35,7 +35,11 @@ export const networkWorkflows = [
       {
         "id": "step-deliver",
         "text": "Deliver a phased architecture and implementation plan with assumptions, evidence gaps, risks, validation gates, and rollback points."
-      }
+      },
+      {
+        "id": "step-audit",
+        "text": "ecc-network-config-reviewer independently reviews the produced design or plan against validation and safety evidence without applying configuration; Main integrates findings"
+      },
     ],
     "scopeNotes": [
       "This workflow produces architecture and staged guidance; it does not authorize live network changes.",
@@ -56,13 +60,15 @@ export const networkWorkflows = [
       "Network changes can remove management access or affect multiple sites; require an out-of-band recovery path and explicit maintenance ownership before execution."
     ],
     "roles": [
-      "ecc-network-architect"
+      "ecc-network-architect",
+      "ecc-network-config-reviewer"
     ],
     "delegation": [
       "step-inventory: ecc-network-architect owns the read-only architecture analysis, phased design, validation gates, and rollback plan",
       "step-design: ecc-network-architect owns the read-only architecture analysis, phased design, validation gates, and rollback plan",
       "step-verify: ecc-network-architect owns the read-only architecture analysis, phased design, validation gates, and rollback plan",
-      "step-deliver: ecc-network-architect owns the read-only architecture analysis, phased design, validation gates, and rollback plan"
+      "step-deliver: ecc-network-architect owns the read-only architecture analysis, phased design, validation gates, and rollback plan",
+      "step-audit: ecc-network-config-reviewer independently reviews the produced design or plan without applying configuration"
     ]
   },
   {
@@ -102,7 +108,11 @@ export const networkWorkflows = [
       {
         "id": "step-deliver",
         "text": "Deliver the minimal plan, capability gaps, quick wins, optional later phases, verification commands, and recovery instructions."
-      }
+      },
+      {
+        "id": "step-audit",
+        "text": "ecc-network-config-reviewer independently reviews the produced design or plan against validation and safety evidence without applying configuration; Main integrates findings"
+      },
     ],
     "scopeNotes": [
       "Use the shared network architect role with homelab skills rather than a second prompt-only architect wrapper.",
@@ -131,13 +141,15 @@ export const networkWorkflows = [
       "DNS, DHCP, firewall, VLAN, and remote-access mistakes can disconnect the household or expose services; prefer staged reversible changes."
     ],
     "roles": [
-      "ecc-network-architect"
+      "ecc-network-architect",
+      "ecc-network-config-reviewer"
     ],
     "delegation": [
       "step-inventory: ecc-network-architect applies only the selected homelab skills and produces the bounded topology, staged validation, and rollback plan",
       "step-plan: ecc-network-architect applies only the selected homelab skills and produces the bounded topology, staged validation, and rollback plan",
       "step-verify: ecc-network-architect applies only the selected homelab skills and produces the bounded topology, staged validation, and rollback plan",
-      "step-deliver: ecc-network-architect applies only the selected homelab skills and produces the bounded topology, staged validation, and rollback plan"
+      "step-deliver: ecc-network-architect applies only the selected homelab skills and produces the bounded topology, staged validation, and rollback plan",
+      "step-audit: ecc-network-config-reviewer independently reviews the produced design or plan without applying configuration"
     ]
   },
   {
@@ -172,7 +184,8 @@ export const networkWorkflows = [
     ],
     "scopeNotes": [
       "The reviewer is read-only and must not push, apply, or stage device configuration.",
-      "A static configuration review cannot prove live forwarding state; compose network.debug when runtime evidence is required."
+      "A static configuration review cannot prove live forwarding state; compose network.debug when runtime evidence is required.",
+      "The delegated deliverable is the independent audit; parent VERIFY integrates it and adds no second auditor unless the user requests one"
     ],
     "skills": [
       "network-config-validation",
@@ -233,7 +246,8 @@ export const networkWorkflows = [
     ],
     "scopeNotes": [
       "Diagnosis remains read-only; a recommended live change needs separate user authorization and host approval.",
-      "Do not collect broad device state when a smaller command set can distinguish the hypotheses."
+      "Do not collect broad device state when a smaller command set can distinguish the hypotheses.",
+      "The delegated deliverable is the independent audit; parent VERIFY integrates it and adds no second auditor unless the user requests one"
     ],
     "skills": [
       "network-interface-health",

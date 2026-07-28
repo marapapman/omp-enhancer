@@ -204,7 +204,11 @@ export const writingWorkflows = [
       {
         "id": "step-4",
         "text": "Use a language-neutral task only for bounded compile evidence; the composed language checker owns semantic review."
-      }
+      },
+      {
+        "id": "step-audit",
+        "text": "When no composed language checker owns the independent audit, reviewer audits the format output against preservation, structure, and compile or render evidence; a composed writer/checker Primary keeps its sequence unchanged"
+      },
     ],
     "scopeNotes": [
       "Compilation and publication are separate workflow steps when requested.",
@@ -222,11 +226,13 @@ export const writingWorkflows = [
     ],
     "riskNotes": [],
     "roles": [
-      "task"
+      "task",
+      "reviewer"
     ],
     "delegation": [
       "step-3: task owns only an explicitly requested format-only conversion or LaTeX-structure change; the writer selected from composed writing.zh or writing.en owns every prose revision checkpoint",
-      "step-4: task may return only explicitly requested compile evidence; the selected composed language checker owns every semantic-check checkpoint, while the parent reconciles structure and scope"
+      "step-4: task may return only explicitly requested compile evidence; the selected composed language checker owns every semantic-check checkpoint, while the parent reconciles structure and scope",
+      "step-audit: reviewer audits the format output when no composed language checker owns the independent audit; composed writer/checker sequences stay unchanged"
     ]
   },
   {
@@ -506,7 +512,11 @@ export const writingWorkflows = [
       {
         "id": "step-4",
         "text": "Render or verify when in scope."
-      }
+      },
+      {
+        "id": "step-audit",
+        "text": "When no composed language checker owns the independent audit, reviewer audits the format output against preservation, structure, and compile or render evidence; a composed writer/checker Primary keeps its sequence unchanged"
+      },
     ],
     "scopeNotes": [
       "Code mentioned inside prose does not by itself make this a code implementation task.",
@@ -521,11 +531,13 @@ export const writingWorkflows = [
     ],
     "riskNotes": [],
     "roles": [
-      "task"
+      "task",
+      "reviewer"
     ],
     "delegation": [
       "step-2: task owns only a bounded format-only conversion and Markdown-structure preservation slice; for prose changes, prefer the writer from the composed writing.zh or writing.en workflow",
-      "step-3: prefer the composed language checker for prose review; task may return bounded structure evidence, while the parent reconciles Markdown scope"
+      "step-3: prefer the composed language checker for prose review; task may return bounded structure evidence, while the parent reconciles Markdown scope",
+      "step-audit: reviewer audits the format output when no composed language checker owns the independent audit; composed writer/checker sequences stay unchanged"
     ]
   },
   {
@@ -553,7 +565,11 @@ export const writingWorkflows = [
       {
         "id": "step-4",
         "text": "Review headings, tables, figures, and document structure."
-      }
+      },
+      {
+        "id": "step-audit",
+        "text": "When no composed language checker owns the independent audit, reviewer audits the format output against preservation, structure, and compile or render evidence; a composed writer/checker Primary keeps its sequence unchanged"
+      },
     ],
     "scopeNotes": [
       "Source preservation and overwrite risk deserve explicit attention."
@@ -568,11 +584,13 @@ export const writingWorkflows = [
       "Confirm the intended output path before replacing an existing document."
     ],
     "roles": [
-      "task"
+      "task",
+      "reviewer"
     ],
     "delegation": [
       "step-3: task owns only a bounded format conversion and document-structure preservation slice; for prose changes, prefer the writer from the composed writing.zh or writing.en workflow",
-      "step-4: prefer the composed language checker for revised prose; task may return bounded structure evidence, while the parent reconciles document scope and visual review"
+      "step-4: prefer the composed language checker for revised prose; task may return bounded structure evidence, while the parent reconciles document scope and visual review",
+      "step-audit: reviewer audits the format output when no composed language checker owns the independent audit; composed writer/checker sequences stay unchanged"
     ]
   }
 ];
