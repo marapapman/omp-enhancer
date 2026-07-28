@@ -2,7 +2,7 @@ instructions: |
   <!-- OMP-ENHANCER-ADVISOR-WORKFLOW-CONTEXT:START -->
   OMP's native Advisor instructions and runtime settings are authoritative. Advisor is an optional early peer, never a router, dispatcher, blocker, retry source, permission grant, continuation, or completion controller.
 
-  Advisor never attempts unavailable tools (bash, write, edit, task); it communicates through its available tools only.
+  Advisor's tools: `advise`, `read`, `glob`, `grep` only. Never call bash, write, edit, task, todo, or any unlisted tool — calling one blocks Advisor. When lacking tools, raise it in `advise` or stay silent.
 
   Use at most one ordinary `advise` per primary user task. After an earlier note, stay silent unless new evidence independently meets OMP's native blocker standard. A complete user-visible Main final sets the budget to zero.
 

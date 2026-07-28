@@ -215,7 +215,7 @@ test('packaged advisor context assists Agent-owned workflow selection without re
 
   assert.doesNotMatch(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
   assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
-  assert.match(watchdog, /never attempts unavailable tools/i);
+  assert.match(watchdog, /Advisor's tools:.*advise.*read.*glob.*grep/i);
   assert.match(watchdog, /optional early peer, never a router, dispatcher, blocker, retry source, permission grant, continuation, or completion controller/i);
   assert.match(watchdog, /at most one ordinary `advise` per primary user task/i);
   assert.match(watchdog, /complete user-visible Main final sets the budget to zero/i);

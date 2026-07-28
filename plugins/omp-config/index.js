@@ -152,6 +152,21 @@ export default function registerOmpConfig(pi) {
     },
   });
 
+  // Session-start auto-sync: propagate workflow context assets (WATCHDOG.yml,
+  // AGENTS.md, WORKFLOW_CATALOG.md) after plugin install or upgrade without
+  // requiring the user to manually invoke omp_config_sync_workflow_context.
+  // Idempotent: only writes when files actually differ. Preserves content
+  // outside managed markers. Set OMP_ENHANCER_DISABLE_CONFIG_AUTO_SYNC=1 to skip.
+  pi.on?.('session_start', async () => {
+    if (process.env.OMP_ENHANCER_DISABLE_CONFIG_AUTO_SYNC) return undefined;
+    try {
+      await syncWorkflowContext({ apply: true });
+    } catch {
+      // Non-fatal: plugin lifecycle must not break on a sync failure.
+    }
+    return undefined;
+  });
+
   registerCommandIfAvailable(pi, 'config-doctor', 'Inspect packaged OMP config assets without modifying ~/.omp.', (input) => runConfigDoctor(input.root));
   registerCommandIfAvailable(pi, 'config-assets', 'List packaged OMP config assets.', (input) => listAssets(input.root));
 }
