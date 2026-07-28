@@ -51,7 +51,7 @@ export const generalWorkflows = [
       },
       {
         "id": "step-audit",
-        "text": "For a mutation or creation delivery, reviewer independently audits the bounded diff and evidence without project reads or commands; for pure read-only analysis, Main records fallback=parent-owned action with the reason instead of a second auditor"
+        "text": "For a mutation or creation delivery, reviewer independently audits the bounded diff and evidence of the complete change, including Main-authored edits, without project reads or commands; for pure read-only analysis, Main records fallback=parent-owned action with the reason instead of a second auditor"
       },
       {
         "id": "step-verify",

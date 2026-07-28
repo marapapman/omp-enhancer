@@ -311,7 +311,7 @@ test('new workflows use bounded exact roles', () => {
     'network.design': ['ecc-network-architect', 'ecc-network-config-reviewer'],
     'network.homelab': ['ecc-network-architect', 'ecc-network-config-reviewer'],
     'network.review': ['ecc-network-config-reviewer'],
-    'network.debug': ['ecc-network-troubleshooter'],
+    'network.debug': ['ecc-network-troubleshooter', 'reviewer'],
     'database.review': ['task', 'reviewer'],
     'database.change': ['plan', 'task', 'reviewer', 'scout', 'librarian'],
     'database.migration.repair': ['plan', 'task', 'reviewer', 'scout', 'librarian'],

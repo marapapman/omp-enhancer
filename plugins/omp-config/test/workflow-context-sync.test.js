@@ -260,11 +260,11 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.match(catalog, /substantive code.+subagent-driven.+plugin `plan`.+native `task`.+native `reviewer`/isu);
   assert.match(catalog, /same native `task` `tasks\[\]` batch.+runnable independent.+vertical slices.+dependent.+later wave/isu);
   assert.match(catalog, /body of the text being modified, never from the prompt language/);
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 27/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 28/);
   assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 28);
   assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
   assert.equal((catalog.match(/^- Execution default \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
-  assert.match(skillIndex, /Catalog version: 27/);
+  assert.match(skillIndex, /Catalog version: 28/);
   assert.match(skillIndex, /`writing\.pending`[\s\S]*one narrow language read[\s\S]*replace once with writing\.zh or writing\.en before substantive work/iu);
   const referenceText = references.join('\n');
   assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 28);
@@ -323,6 +323,7 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.match(agents, /detailed dependency-wave plan of non-overlapping vertical slices/i);
   assert.match(agents, /Main integrates deliveries, verifies the current tree, and writes `MAIN REVIEW` before native `reviewer` receives only the Main-reviewed bounded diff and evidence/i);
   assert.match(agents, /supported finding returns to `task` as a bounded repair[\s\S]*at most one fresh affected reviewer/i);
+  assert.match(agents, /including code Main wrote itself/u);
   assert.match(agents, /child follows its assignment and does not own the parent TODO/i);
   assert.match(agents, /\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]/i);
   assert.doesNotMatch(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);

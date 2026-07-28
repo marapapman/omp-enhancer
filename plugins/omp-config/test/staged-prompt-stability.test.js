@@ -40,6 +40,10 @@ test('managed prompts expose one unambiguous positive workflow state machine', a
     /After all parent-owned pre-dispatch prerequisites named by the loaded reference complete, the committed `task` is the next project action/u,
   );
   assert.match(
+    agents,
+    /including code Main wrote itself/u,
+  );
+  assert.match(
     watchdog,
     /With that exact body, DISCOVER is complete: no read; PLAN is next/u,
   );

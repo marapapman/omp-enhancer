@@ -97,7 +97,7 @@ export const mlWorkflows = [
       },
       {
         "id": "step-review",
-        "text": "The native reviewer independently reviews the bounded diff and supplied evidence for root cause, model and data assumptions, reproducibility, serving parity, artifact safety, and operational risk without reading the project or running a command."
+        "text": "The native reviewer independently reviews the bounded diff and supplied evidence for root cause, model and data assumptions, reproducibility, serving parity, artifact safety, and operational risk, covering the complete change including Main-authored edits, without reading the project or running a command."
       },
       {
         "id": "step-repair",
@@ -113,7 +113,8 @@ export const mlWorkflows = [
       "Data, checkpoints, caches, and generated models remain outside the write scope unless explicitly included.",
       "Slice count follows real independent vertical work, artifact dependencies, exclusive write ownership, bounded compute, and native capacity; one safe slice remains one task.",
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path.",
-      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation"
+      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation",
+      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-review checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
     ],
     "skills": [
       "mle-workflow",
@@ -125,7 +126,7 @@ export const mlWorkflows = [
       "pytorch-patterns"
     ],
     "qualityChecks": [
-      "exact environment and artifact identity, current failure evidence, data and tensor contract trace, deterministic reproduction, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, root-cause regression, focused repair, current-revision execution, lifecycle verification, reviewer reconciliation, serving correspondence, and artifact provenance"
+      "exact environment and artifact identity, current failure evidence, data and tensor contract trace, deterministic reproduction, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, root-cause regression, focused repair, current-revision execution, lifecycle verification, reviewer reconciliation, serving correspondence, and artifact provenance, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely"
     ],
     "riskNotes": [
       "ML debugging can consume substantial compute or mutate datasets and artifacts; use bounded fixtures and preserve provenance."

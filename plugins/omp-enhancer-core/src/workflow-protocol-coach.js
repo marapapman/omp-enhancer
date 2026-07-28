@@ -1,15 +1,19 @@
 import {
   DELEGATION_COMPILE_RULE,
   DELEGATED_TODO_TEMPLATE,
+  DIRECT_FALLBACK_REASONS,
   NATIVE_TASK_PREFIX_TEMPLATE,
+  TODO_REBASE_REASONS_COMPACT,
 } from './workflows/staged-contract.js';
 import { workflowCatalog } from './workflows/catalog.js';
 
-const COACH_STATE_VERSION = 1;
+const COACH_STATE_VERSION = 2;
 const MAX_OBSERVED_TEXT_BYTES = 64 * 1024;
 const MAX_DIAGNOSTICS = 16;
 const INDEX_URI = 'skill://omp-enhancer-workflows';
-const CUE_KINDS = new Set(['PRE_PLAN', 'PRE_READY', 'PRE_DISPATCH', 'PRE_VERIFY']);
+const CUE_KINDS = new Set(['PRE_PLAN', 'PRE_READY', 'PRE_DISPATCH', 'PRE_VERIFY', 'EXECUTE_STABILITY']);
+export const STABILITY_CUE_TOOL_RESULT_CADENCE = 8;
+export const STABILITY_CUE_MAX_PER_TASK = 20;
 const URI_PATTERN = /^skill:\/\/[A-Za-z0-9._~!$&'()*+:=@%/-]+$/u;
 
 const CUE_CONTENT = Object.freeze({
@@ -50,8 +54,8 @@ const CUE_CONTENT = Object.freeze({
   ].join('\n'),
   PRE_VERIFY: [
     'OMP PROTOCOL COACH (soft, VERIFY)',
-    'Deliveries settled. Main integrates the current tree, runs the focused verification named by the loaded card, and dispatches the card audit checkpoint (reviewer or domain auditor) with the bounded diff and evidence, or records fallback=<one matched permitted limitation> per skipped checkpoint.',
-    'Then MAIN REVIEW of the integrated result; final response reports evidence, dispositions, and limitations.',
+    'Deliveries settled. Main integrates the current tree, runs the focused verification named by the loaded card, and dispatches the card audit checkpoint (reviewer or domain auditor) with the bounded diff and evidence covering the complete change, including Main-authored edits, or records fallback=<one matched permitted limitation> per skipped checkpoint.',
+    'Then MAIN REVIEW of the integrated result; a substantive code change ends without the named audit only behind a recorded Agent-unavailability fallback; final response reports evidence, dispositions, and limitations.',
     'No block/router/gate/retry/authority/choice.',
   ].join('\n'),
 });
@@ -135,6 +139,25 @@ export function observeProtocolToolResult(state, {
     maybeQueueVerifyCue(state);
   }
 
+  if (
+    declaration
+    && isSettled
+    && !state.planMode
+    && declaration.todoObserved
+    && declaration.tasksDispatched > 0
+    && !declaration.verifyCueQueued
+    && declaration.stabilityCuesEmitted < STABILITY_CUE_MAX_PER_TASK
+  ) {
+    declaration.toolResultsSinceStabilityCue += 1;
+    if (declaration.toolResultsSinceStabilityCue >= STABILITY_CUE_TOOL_RESULT_CADENCE) {
+      declaration.toolResultsSinceStabilityCue = 0;
+      if (!state.pendingCue) {
+        declaration.stabilityCuesEmitted += 1;
+        queueCue(state, 'EXECUTE_STABILITY', declaration.generation);
+      }
+    }
+  }
+
   if (toolName !== 'todo' || !declaration || !isSettled || failed || !declaration.readyObserved) {
     return;
   }
@@ -182,6 +205,29 @@ export function observeProtocolTodoInput(state, { itemsText = '' } = {}) {
 
 export function presentWorkflowProtocolCoachCue(state) {
   if (!isCoachState(state) || !state.pendingCue) return null;
+  if (state.pendingCue.kind === 'EXECUTE_STABILITY') {
+    const declaration = state.declaration;
+    if (!declaration) return null;
+    const pendingTimestamp = state.pendingCue.timestamp;
+    const workflow = [declaration.primary, ...declaration.addOns].filter(Boolean).join(',') || 'none';
+    const delegation = declaration.todoHasDelegateRows
+      ? 'delegated'
+      : declaration.todoHasFallbackRows
+        ? 'fallback recorded'
+        : 'not recorded';
+    const content = [
+      'OMP PROTOCOL COACH (soft, EXECUTE)',
+      `LONG-CONTEXT RE-PRIME for the active task: workflow=${workflow}; delegation=${delegation}; tasks settled ${declaration.tasksSettled}/${declaration.tasksDispatched}.`,
+      'PHASE: you are in EXECUTE of DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY; project tools started only after the READY + TODO response ended and its results returned; do not re-emit PLAN/READY or re-load declared resources.',
+      `TODO: keep committed Delegate rows stable; copy row Agent to item \`agent\`; task byte 0 \`[workflow=... step=... todo=... skills=...]\`; verbatim checkpoint; nonempty top-level \`context\`; rebasing a row needs one of ${TODO_REBASE_REASONS_COMPACT}; never self-induce a fallback by skipping brief, input, or checkpoint preparation.`,
+      `DELEGATION: direct work exists only on DIRECT, \`agentic.simple\`, or behind one recorded fallback limited to ${DIRECT_FALLBACK_REASONS}; size, latency, read-only output, overhead, or no explicit delegation request are not fallbacks.`,
+      'AUDIT: the card audit checkpoint (reviewer or domain auditor) reviews the complete change, including Main-authored edits, before the final response; it falls back only on recorded Agent unavailability.',
+      'After all tasks settle: integrate the current tree, run the card\'s focused verification, write MAIN REVIEW, then final response.',
+      'No block/router/gate/retry/authority/choice.',
+    ].join('\n');
+    state.pendingCue = null;
+    return { kind: 'EXECUTE_STABILITY', content, timestamp: pendingTimestamp };
+  }
   const content = CUE_CONTENT[state.pendingCue.kind];
   if (!content) return null;
   return {
@@ -386,6 +432,8 @@ function acceptDeclaration(state, parsed) {
     verifyCueQueued: false,
     todoHasDelegateRows: false,
     todoHasFallbackRows: false,
+    toolResultsSinceStabilityCue: 0,
+    stabilityCuesEmitted: 0,
   };
   maybeQueueReadyCue(state);
 }
@@ -540,6 +588,8 @@ function serializeDeclaration(value) {
     verifyCueQueued: value.verifyCueQueued === true,
     todoHasDelegateRows: value.todoHasDelegateRows === true,
     todoHasFallbackRows: value.todoHasFallbackRows === true,
+    toolResultsSinceStabilityCue: nonnegativeInteger(value.toolResultsSinceStabilityCue),
+    stabilityCuesEmitted: nonnegativeInteger(value.stabilityCuesEmitted),
   };
 }
 
@@ -574,6 +624,8 @@ function sanitizeDeclaration(value) {
     verifyCueQueued: value.verifyCueQueued === true,
     todoHasDelegateRows: value.todoHasDelegateRows === true,
     todoHasFallbackRows: value.todoHasFallbackRows === true,
+    toolResultsSinceStabilityCue: nonnegativeInteger(value.toolResultsSinceStabilityCue),
+    stabilityCuesEmitted: nonnegativeInteger(value.stabilityCuesEmitted),
   };
 }
 

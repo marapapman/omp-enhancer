@@ -14,7 +14,7 @@ import {
 test('diagram.tikz is the single bounded subagent-driven TikZ Primary with a 9-step asset+figure chain', () => {
   const workflow = workflowCatalog['diagram.tikz'];
 
-  assert.equal(WORKFLOW_CATALOG_VERSION, 27);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 28);
   assert.ok(workflowIds.includes('diagram.tikz'));
   assert.equal(workflowIds.includes('diagram.svg'), false);
   assert.ok(workflow);

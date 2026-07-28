@@ -7,6 +7,10 @@ import {
   DELEGATED_TODO_TEMPLATE,
   NATIVE_TASK_PREFIX_TEMPLATE,
 } from '../src/workflows/staged-contract.js';
+import {
+  STABILITY_CUE_TOOL_RESULT_CADENCE,
+  STABILITY_CUE_MAX_PER_TASK,
+} from '../src/workflow-protocol-coach.js';
 
 const INDEX_URI = 'skill://omp-enhancer-workflows';
 const INDEX_BODY = '---\nname: omp-enhancer-workflows\ndescription: Workflow index.\n---\n';
@@ -231,6 +235,8 @@ test('runtime wiring advances only through observed PLAN loads READY and TODO', 
   assert.match(verifyMessage.content, /OMP PROTOCOL COACH \(soft, VERIFY\)/u);
   assert.match(verifyMessage.content, /No block\/router\/gate\/retry\/authority\/choice/u);
   assert.match(verifyMessage.content, /Deliveries settled[\s\S]*Main integrates[\s\S]*audit checkpoint/u);
+  assert.match(verifyMessage.content, /Main-authored edits/u);
+  assert.match(verifyMessage.content, /Agent-unavailability fallback/u);
 
   // Serialization round-trip preserves the five new declaration fields.
   const settled = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.protocolCoach;
@@ -378,6 +384,92 @@ test('the deleted per-model env switches are inert', async () => {
 test('coach cue content contains no DeepSeek or MiMo labels and no model id', async () => {
   const cue = (await cueFor({ model: ARBITRARY_MODEL })).messages.at(-1);
   assert.doesNotMatch(cue.content, /DEEPSEEK|MIMO|deepseek|mimo|opencode-go/iu);
+});
+
+test('EXECUTE_STABILITY re-primes every 8 settled tool results, capped at 20, never clobbering phase cues', async () => {
+  const { pi, entries, ctx } = runtime({ model: ARBITRARY_MODEL });
+  await handler(pi, 'before_agent_start')({ prompt: 'Review and revise article.md.' }, ctx);
+  await handler(pi, 'tool_result')(indexResult(), ctx);
+  // simulate PLAN -> READY -> TODO with 1 Delegate row -> dispatch task
+  await handler(pi, 'message_end')({
+    message: { role: 'assistant', content: validPlan(), timestamp: 2 },
+  }, ctx);
+  await handler(pi, 'tool_result')(readResult('skill://writing-review'), ctx);
+  await handler(pi, 'tool_result')(readResult('skill://omp-enhancer-workflows/references/writing-en.md'), ctx);
+  const preReady = await handler(pi, 'context')({ messages: [] }, ctx);
+  assert.ok(preReady, 'PRE_READY must be present');
+  await handler(pi, 'message_end')({
+    message: {
+      role: 'assistant',
+      content: 'WORKFLOW READY | primary=writing.en | add-ons=none | skills-loaded=writing-review | skills-unavailable=none',
+      timestamp: 3,
+    },
+  }, ctx);
+  await handler(pi, 'tool_result')({
+    toolName: 'todo',
+    result: { content: [{ type: 'text', text: 'TODO init.' }] },
+  }, ctx);
+  // After todo init, simulate dispatch and task call
+  const preDispatch = await handler(pi, 'context')({ messages: [] }, ctx);
+  assert.equal(preDispatch.messages.at(-1).details.phase, 'PRE_DISPATCH');
+  await handler(pi, 'message_end')({
+    message: {
+      role: 'assistant',
+      content: 'Native task dispatch now.',
+      timestamp: 4,
+    },
+  }, ctx);
+  await handler(pi, 'tool_call')({
+    toolName: 'task',
+    callId: 'task-1',
+    input: { context: 'bounded revision', tasks: [{ agent: 'task', task: 'revise the article' }] },
+  }, ctx);
+
+  // 7 settled non-task tool results => no stability cue yet
+  for (let i = 0; i < 7; i++) {
+    await handler(pi, 'tool_result')({
+      toolName: 'read',
+      callId: `read-${i}`,
+      result: { content: [{ type: 'text', text: `data ${i}` }] },
+    }, ctx);
+    assert.equal(await handler(pi, 'context')({ messages: [] }, ctx), undefined, `no cue after ${i + 1} results`);
+  }
+
+  // 8th settled non-task tool result => EXECUTE_STABILITY cue
+  await handler(pi, 'tool_result')({
+    toolName: 'read',
+    callId: 'read-7',
+    result: { content: [{ type: 'text', text: 'data 7' }] },
+  }, ctx);
+  let cue = await handler(pi, 'context')({ messages: [] }, ctx);
+  assert.ok(cue, 'EXECUTE_STABILITY cue must be present after 8th result');
+  assert.equal(cue.messages.at(-1).details.phase, 'EXECUTE_STABILITY');
+  assert.match(cue.messages.at(-1).content, /LONG-CONTEXT RE-PRIME/u);
+  assert.match(cue.messages.at(-1).content, /Main-authored edits/u);
+  assert.match(cue.messages.at(-1).content, /PHASE:/u);
+  assert.match(cue.messages.at(-1).content, /TODO:/u);
+  assert.match(cue.messages.at(-1).content, /DELEGATION:/u);
+  assert.match(cue.messages.at(-1).content, /AUDIT:/u);
+  assert.match(cue.messages.at(-1).content, /No block\/router\/gate\/retry\/authority\/choice/u);
+
+  // Simulate one assistant message (clears pending cue), repeat window => 2nd cue
+  await handler(pi, 'message_end')({
+    message: { role: 'assistant', content: 'Working on revision.', timestamp: 5 },
+  }, ctx);
+  for (let i = 0; i < STABILITY_CUE_TOOL_RESULT_CADENCE; i++) {
+    await handler(pi, 'tool_result')({
+      toolName: 'read',
+      callId: `read-next-${i}`,
+      result: { content: [{ type: 'text', text: `data ${i}` }] },
+    }, ctx);
+  }
+  cue = await handler(pi, 'context')({ messages: [] }, ctx);
+  assert.ok(cue, '2nd EXECUTE_STABILITY cue must be present');
+
+  // Serialization round-trip preserves stability cue counters
+  const settled = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.protocolCoach;
+  assert.ok(settled.declaration.toolResultsSinceStabilityCue >= 0);
+  assert.ok(settled.declaration.stabilityCuesEmitted >= 0);
 });
 
 test('hooks remain advisory and never mutate task calls, tool results, or lifecycle control', async () => {

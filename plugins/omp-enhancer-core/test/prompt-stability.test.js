@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import {
   buildWorkflowSkillIndexMarkdown,
@@ -86,4 +87,16 @@ test('orchestrator identity and fallback guard constants are non-empty single-li
   assert.ok(SELF_INDUCED_FALLBACK_GUARD.length > 0);
   assert.match(SELF_INDUCED_FALLBACK_GUARD, /fallback=/u);
   assert.match(SELF_INDUCED_FALLBACK_GUARD, /exactly one enumerated reason/u);
+});
+
+test('mutation cards carry author-neutral review coverage and unavailability-only audit fallback', async () => {
+  const codeRef = await readFile(new URL('../../omp-config/skills/omp-enhancer-workflows/references/code.dev.md', import.meta.url), 'utf8');
+  const pluginRef = await readFile(new URL('../../omp-config/skills/omp-enhancer-workflows/references/omp.plugin.md', import.meta.url), 'utf8');
+  const netDebugRef = await readFile(new URL('../../omp-config/skills/omp-enhancer-workflows/references/network.debug.md', import.meta.url), 'utf8');
+  for (const ref of [codeRef, pluginRef]) {
+    assert.match(ref, /Main-authored/u);
+    assert.match(ref, /fall[s]? back only when the named Agent is unavailable/u);
+  }
+  assert.match(netDebugRef, /step-audit/u);
+  assert.match(netDebugRef, /falls back only when native reviewer is unavailable/u);
 });

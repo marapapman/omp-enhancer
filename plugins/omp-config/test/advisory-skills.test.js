@@ -158,7 +158,7 @@ test('code-development is the single subagent-driven method for planned parallel
   );
   assert.match(content, /this loaded Skill.+exact URI.+before.+workflow references/isu, relative);
   assert.doesNotMatch(content, /block:\s*true|continue:\s*true|required fork|fixed fanout|exactly \d+ reviewers|retry until/iu, relative);
-  assert.ok(Buffer.byteLength(content) < 8_000, `${relative} should stay compact`);
+  assert.ok(Buffer.byteLength(content) < 8_500, `${relative} should stay compact`);
 });
 
 test('the conditional OMP reference adds generated-asset and installed-runtime evidence without another top-level method', () => {

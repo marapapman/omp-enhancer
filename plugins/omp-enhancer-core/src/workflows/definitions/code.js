@@ -41,7 +41,7 @@ export const codeWorkflows = [
       },
       {
         "id": "step-review",
-        "text": "The native reviewer independently reviews the bounded semantic diff and supplied evidence without a project read or command, returning concrete findings or an explicit no-finding result without repair or completion authority."
+        "text": "The native reviewer independently reviews the bounded semantic diff and supplied evidence for the complete integrated change, including Main-authored edits, without a project read or command, returning concrete findings or an explicit no-finding result without repair or completion authority."
       },
       {
         "id": "step-repair",
@@ -58,13 +58,14 @@ export const codeWorkflows = [
       "The number of slices follows real independent work, dependencies, exclusive write ownership, and native capacity; do not manufacture parallelism or split tests from their production slice.",
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; missing delegation is not invented success.",
       "This card is Agent-owned guidance, not a gate, router, fork mandate, completion controller, or self-repeating repair mechanism.",
-      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation"
+      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation",
+      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-review checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
     ],
     "skills": [
       "code-development"
     ],
     "qualityChecks": [
-      "acceptance-to-file coverage, local entry-to-caller-to-test trace, current official and community evidence when decision-relevant, complete plan-review disposition, parallel vertical slices with non-overlapping write sets, task-owned RED-before-production and same-command GREEN evidence, lifecycle verification of the current semantic diff and cross-slice interactions, bounded reviewer evidence, finding reconciliation, and explicit authority and limitation reporting"
+      "acceptance-to-file coverage, local entry-to-caller-to-test trace, current official and community evidence when decision-relevant, complete plan-review disposition, parallel vertical slices with non-overlapping write sets, task-owned RED-before-production and same-command GREEN evidence, lifecycle verification of the current semantic diff and cross-slice interactions, bounded reviewer evidence, finding reconciliation, and explicit authority and limitation reporting, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely"
     ],
     "riskNotes": [
       "External examples can be stale or inapplicable, and broad code searches can create noise; record versions, prefer primary documentation for behavior, and use community reports as leads rather than local truth.",
@@ -85,7 +86,7 @@ export const codeWorkflows = [
       "step-plan-review: plan independently challenges Main's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and drafted it from Main's frozen brief, with at most one fresh pass on materially rebased plans, without editing files",
       "step-task-batch: task receives every runnable independent vertical slice for the wave in the same native tasks[] batch, with one task per exclusive write set and no child ownership of the parent TODO",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the public-behavior test mutation, valid RED, minimum production change, same-command GREEN, bounded refactor, and exact returned evidence",
-      "step-review: reviewer independently reviews the bounded semantic diff and supplied evidence, does not read the project or run commands, and returns findings without repair or completion authority",
+      "step-review: reviewer independently reviews the bounded semantic diff and supplied evidence covering task deliveries and Main-authored edits alike, does not read the project or run commands, and returns findings without repair or completion authority",
       "step-repair: task receives only a Main-validated supported finding as a bounded repair and returns fresh evidence; Main integrates and dispatches at most one fresh affected reviewer pass"
     ]
   }

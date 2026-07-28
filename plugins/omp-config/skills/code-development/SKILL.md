@@ -15,10 +15,10 @@ For substantive mutation, Main owns the parent TODO, integration, and conclusion
 2. Delegate the local evidence pass to scout and one bounded external pass to librarian with bounded briefs; integrate their returned anchors, entry points, callers, consumers, tests, configuration, and source-vs-generated-vs-runtime distinctions. Main performs no broad search itself beyond writing the briefs.
 3. Freeze a concise planning brief (outcome, authority, acceptance, integrated anchors, slice boundaries, evidence bar) and delegate to the plan Agent the full detailed implementation-and-evidence plan, including its own challenge findings.
 4. The plan Agent's draft carries its challenge findings; request at most one fresh plan pass only when disposition materially changes the plan, never on unchanged text, before any authorized production mutation.
-5. Main records each accepted, rejected, and unresolved plan finding, rebases only affected TODO rows, and freezes complete assignments with exclusive write ownership, exact evidence return, and no versioning or publication authority.
+5. Main records each accepted, rejected, and unresolved plan finding, rebases only affected TODO rows, and freezes complete assignments with exclusive write ownership, exact evidence return, and no versioning or publication authority. Main skips this review only when the `plan` Agent is not visible, recording fallback=Agent availability on that row.
 6. Use the same native `task` `tasks[]` batch for runnable independent slices; defer dependencies. Each task owns `RED -> GREEN -> REFACTOR`.
-7. Main integrates the current tree and dispatches the bounded diff and evidence to native `reviewer`.
-8. Give native `reviewer` only the bounded diff/evidence from task deliveries. Send supported findings to native `task` for bounded repair and refresh evidence, then allow at most one fresh affected reviewer pass; Main integrates the result.
+7. Main integrates the current tree and dispatches the bounded diff and evidence of the complete change — task slices and Main-authored edits alike — to native `reviewer`; skipping is permitted only when `reviewer` is unavailable, recorded with the concrete reason.
+8. Give native `reviewer` only the bounded diff/evidence of the complete change, including Main-authored edits. Send supported findings to native `task` for bounded repair and refresh evidence, then allow at most one fresh affected reviewer pass; Main integrates the result.
 9. Report paths, commands, exits, dispositions, limitations, risks, and untouched changes.
 
 Merge matching workflow, Skill, and reference phases into one TODO row; do not execute a phase twice. Mechanical lookup needs no task. Substantive read-only work needs no mutation TDD but still follows the selected non-simple workflow's safe complete delegated checkpoint when a matching Agent is visible and safe. Read-only authorizes no mutation.
@@ -61,7 +61,7 @@ If `task` is unavailable, capacity is constrained, assignment input is incomplet
 
 Main waits for complete deliveries, treats partial or failed jobs as limitations, resolves conflicts, and validates the current tree. Rerun focused commands, then proportionate typecheck, build, integration, browser, coverage, benchmark, packaging, or root checks; preserve the shared-generator no-rerun exception above.
 
-Native `reviewer` receives the bounded semantic diff/evidence from task deliveries; it does not edit, read project files, run commands, route, or decide completion.
+Native `reviewer` receives the bounded semantic diff/evidence of the complete integrated change — including code Main wrote itself — regardless of which checkpoint produced it; it does not edit, read project files, run commands, route, or decide completion.
 
 Main validates findings against current code. Send supported findings to native `task` for bounded repair, refresh affected evidence, and allow at most one fresh affected reviewer pass. Unchanged-input review loops are churn; never an automatic review-repair loop.
 

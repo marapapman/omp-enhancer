@@ -21,8 +21,8 @@ import { exactNestedEccSkillUri } from '../plugins/omp-enhancer-core/src/workflo
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
 
-test('catalog v27 assigns exactly one direct, one deferred, and 28 subagent-driven defaults', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 27);
+test('catalog v28 assigns exactly one direct, one deferred, and 28 subagent-driven defaults', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 28);
   assert.equal(workflowDefinitions.length, 30);
   assert.deepEqual(
     [...new Set(workflowDefinitions.map(({ delegationDefault }) => delegationDefault))].sort(),
@@ -46,7 +46,7 @@ test('catalog v27 assigns exactly one direct, one deferred, and 28 subagent-driv
   );
 });
 
-test('packaged catalog, index, and all references expose catalog v27 execution defaults', async () => {
+test('packaged catalog, index, and all references expose catalog v28 execution defaults', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -54,8 +54,8 @@ test('packaged catalog, index, and all references expose catalog v27 execution d
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 27/);
-  assert.match(skillIndex, /Catalog version: 27/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 28/);
+  assert.match(skillIndex, /Catalog version: 28/);
   assert.equal(referenceNames.length, 30);
   assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 28);
   assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
@@ -79,7 +79,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   const skillReferences = Object.values(referencesByWorkflow).join('\n');
 
   assert.equal(catalog, buildSharedWorkflowCatalogMarkdown());
-  assert.equal(WORKFLOW_CATALOG_VERSION, 27);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 28);
   assert.equal(Number(catalog.match(/OMP_WORKFLOW_CATALOG_VERSION:\s*(\d+)/)?.[1]), WORKFLOW_CATALOG_VERSION);
   assert.deepEqual([...catalog.matchAll(/^### `([^`]+)`$/gm)].map((match) => match[1]), workflowIds);
   const indexedWorkflowIds = [...skillIndex.matchAll(/^- `([^`]+)` —/gm)].map((match) => match[1]);
@@ -481,3 +481,19 @@ function frontmatterName(markdown, source) {
   assert.ok(name, `${source} is missing a frontmatter name`);
   return name;
 }
+
+test('all subagent-driven cards render the audit-willingness default and mutation cards name Main-authored coverage', async () => {
+  const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
+  assert.equal(
+    (catalog.match(/An audit checkpoint named by this card is delegated by default/g) ?? []).length,
+    28,
+  );
+  for (const id of ['code.dev', 'database.change', 'database.migration.repair', 'ml.debug', 'omp.plugin']) {
+    const ref = await readFile(new URL(`../plugins/omp-config/skills/omp-enhancer-workflows/references/${id}.md`, import.meta.url), 'utf8');
+    assert.match(ref, /Main-authored/u, id);
+  }
+  const netDebugRef = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/network.debug.md', import.meta.url), 'utf8');
+  assert.match(netDebugRef, /\[step-audit\]/u);
+  assert.match(netDebugRef, /fall[s]? back only when native reviewer is unavailable/u);
+  assert.deepEqual(workflowCatalog['network.debug'].roles, ['ecc-network-troubleshooter', 'reviewer']);
+});

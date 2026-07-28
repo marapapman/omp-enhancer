@@ -240,6 +240,10 @@ export const networkWorkflows = [
         "text": "Identify the root cause or the narrowest remaining uncertainty with command output, counters, routes, policy, logs, or configuration evidence."
       },
       {
+        "id": "step-audit",
+        "text": "Before the report, the native reviewer independently audits the diagnosis deliverable and its read-only evidence — root-cause completeness, hypothesis discrimination, evidence-to-symptom correspondence, safe verification plan, and explicit remaining uncertainty — without project reads or live commands, returning concrete findings or an explicit no-finding result without repair or completion authority."
+      },
+      {
         "id": "step-report",
         "text": "Return safe next actions, verification criteria, maintenance and rollback needs, and any evidence still required before a change."
       }
@@ -247,7 +251,8 @@ export const networkWorkflows = [
     "scopeNotes": [
       "Diagnosis remains read-only; a recommended live change needs separate user authorization and host approval.",
       "Do not collect broad device state when a smaller command set can distinguish the hypotheses.",
-      "The delegated deliverable is the independent audit; parent VERIFY integrates it and adds no second auditor unless the user requests one"
+      "The delegated deliverable is the independent audit; parent VERIFY integrates it and adds no second auditor unless the user requests one",
+      "The diagnosis audit checkpoint falls back only when native reviewer is unavailable; Main records that concrete unavailability on the affected row instead of shipping the diagnosis unreviewed. The audit is read-only and does not collect new device state."
     ],
     "skills": [
       "network-interface-health",
@@ -260,19 +265,21 @@ export const networkWorkflows = [
       "netmiko-ssh-automation"
     ],
     "qualityChecks": [
-      "symptom correspondence, bounded read-only evidence, OSI and policy path coverage, hypothesis discrimination, root-cause completeness, safe verification, and explicit uncertainty"
+      "symptom correspondence, bounded read-only evidence, OSI and policy path coverage, hypothesis discrimination, root-cause completeness, safe verification, and explicit uncertainty, independent reviewer audit of the diagnosis deliverable with unavailability-only fallback recorded concretely"
     ],
     "riskNotes": [
       "Even diagnostic collection can expose secrets or burden devices; redact credentials and use bounded read-only commands."
     ],
     "roles": [
-      "ecc-network-troubleshooter"
+      "ecc-network-troubleshooter",
+      "reviewer"
     ],
     "delegation": [
       "step-inspect: ecc-network-troubleshooter owns bounded read-only evidence collection, hypothesis testing, root-cause analysis, and the safe verification plan",
       "step-hypothesis: ecc-network-troubleshooter owns bounded read-only evidence collection, hypothesis testing, root-cause analysis, and the safe verification plan",
       "step-diagnose: ecc-network-troubleshooter owns bounded read-only evidence collection, hypothesis testing, root-cause analysis, and the safe verification plan",
-      "step-report: ecc-network-troubleshooter owns bounded read-only evidence collection, hypothesis testing, root-cause analysis, and the safe verification plan"
+      "step-report: ecc-network-troubleshooter owns bounded read-only evidence collection, hypothesis testing, root-cause analysis, and the safe verification plan",
+      "step-audit: reviewer independently audits the diagnosis deliverable and evidence without project reads or live commands and returns findings without repair or completion authority"
     ]
   }
 ];

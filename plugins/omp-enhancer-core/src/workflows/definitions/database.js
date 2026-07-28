@@ -101,7 +101,7 @@ export const databaseWorkflows = [
       },
       {
         "id": "step-review",
-        "text": "The native reviewer independently reviews the bounded diff and supplied evidence for backup, rollback, lock, data, compatibility, and release risk without reading the project or running a command."
+        "text": "The native reviewer independently reviews the bounded diff and supplied evidence for backup, rollback, lock, data, compatibility, and release risk, covering the complete change including Main-authored edits, without reading the project or running a command."
       },
       {
         "id": "step-repair",
@@ -118,7 +118,8 @@ export const databaseWorkflows = [
       "Separate schema expansion, data backfill, application cutover, and contraction when compatibility or scale requires it.",
       "Slice count follows real independent vertical work, dependency order, exclusive write ownership, and native capacity; one safe slice remains one task.",
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path.",
-      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation"
+      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation",
+      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-review checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
     ],
     "skills": [
       "database-migrations",
@@ -134,7 +135,7 @@ export const databaseWorkflows = [
       "safety-guard"
     ],
     "qualityChecks": [
-      "current migration state, backup evidence, plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, compatibility order, bounded lock and downtime impact, data invariants, clean upgrade tests, rollback or forward-repair evidence, reviewer reconciliation, and exact execution boundary"
+      "current migration state, backup evidence, plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, compatibility order, bounded lock and downtime impact, data invariants, clean upgrade tests, rollback or forward-repair evidence, reviewer reconciliation, and exact execution boundary, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely"
     ],
     "riskNotes": [
       "Schema and data changes can be destructive or irreversible; use the host approval path and never infer authority over a live database."
@@ -153,7 +154,7 @@ export const databaseWorkflows = [
       "step-plan-review: plan independently challenges Main's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and drafted it from Main's frozen brief, with at most one fresh pass on materially rebased plans, without editing files",
       "step-task-batch: task receives all runnable independent database slices for the wave in the same native tasks[] batch with exclusive write ownership",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the focused test, minimum production and migration changes, same-command evidence, and prohibition on unapproved live application",
-      "step-review: reviewer independently audits only the bounded diff and supplied database evidence without project reads, commands, edits, or live operations",
+      "step-review: reviewer independently reviews the bounded diff and supplied evidence covering task deliveries and Main-authored edits alike, does not read the project or run commands, and returns findings without repair or completion authority",
       "step-repair: task repairs and returns fresh evidence for Main integration"
     ]
   },
@@ -199,7 +200,7 @@ export const databaseWorkflows = [
       },
       {
         "id": "step-review",
-        "text": "The native reviewer independently reviews the bounded diff and supplied evidence for diagnosis, migration state, backup, data, rollback, idempotency, and operational risk without reading the project or running a command."
+        "text": "The native reviewer independently reviews the bounded diff and supplied evidence for diagnosis, migration state, backup, data, rollback, idempotency, and operational risk, covering the complete change including Main-authored edits, without reading the project or running a command."
       },
       {
         "id": "step-repair",
@@ -216,7 +217,8 @@ export const databaseWorkflows = [
       "Do not rewrite already deployed migration history unless the exact tool, environment state, and user authorization make that operation safe and necessary.",
       "Slice count follows real independent vertical work, migration-state dependencies, exclusive write ownership, and native capacity; one safe slice remains one task.",
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path.",
-      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation"
+      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation",
+      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-review checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
     ],
     "skills": [
       "database-migrations",
@@ -232,7 +234,7 @@ export const databaseWorkflows = [
       "safety-guard"
     ],
     "qualityChecks": [
-      "exact failure and migration state evidence, backup status, reproducible transition, root-cause classification, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, data invariants, state-aware regression coverage, clean and partial-state verification, reviewer reconciliation, rollback or forward-repair evidence, and live-operation boundary"
+      "exact failure and migration state evidence, backup status, reproducible transition, root-cause classification, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, data invariants, state-aware regression coverage, clean and partial-state verification, reviewer reconciliation, rollback or forward-repair evidence, and live-operation boundary, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely"
     ],
     "riskNotes": [
       "A mistaken repair can destroy data or make migration history diverge further; require backup evidence, explicit environment identity, bounded commands, and a stop condition before live recovery."
@@ -251,7 +253,7 @@ export const databaseWorkflows = [
       "step-plan-review: plan independently challenges Main's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and drafted it from Main's frozen brief, with at most one fresh pass on materially rebased plans, without editing files",
       "step-task-batch: task receives all runnable independent migration-repair slices for the wave in the same native tasks[] batch with exclusive write ownership",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the failed-state test, minimum production repair, same-command evidence, and prohibition on unapproved live recovery",
-      "step-review: reviewer independently audits only the bounded diff and supplied migration evidence without project reads, commands, edits, or live operations",
+      "step-review: reviewer independently reviews the bounded diff and supplied evidence covering task deliveries and Main-authored edits alike, does not read the project or run commands, and returns findings without repair or completion authority",
       "step-repair: task repairs and returns fresh evidence for Main integration"
     ]
   }

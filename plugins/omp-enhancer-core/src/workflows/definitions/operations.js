@@ -53,7 +53,7 @@ export const operationWorkflows = [
       },
       {
         "id": "step-review",
-        "text": "The native reviewer independently reviews the bounded semantic diff and supplied evidence without a project read or command, returning concrete unanswered findings without edit, repair, or completion authority."
+        "text": "The native reviewer independently reviews the bounded semantic diff and supplied evidence covering the complete integrated change, including Main-authored edits, without a project read or command, returning concrete unanswered findings without edit, repair, or completion authority."
       },
       {
         "id": "step-repair",
@@ -71,13 +71,14 @@ export const operationWorkflows = [
       "Slice count follows actual independent vertical work, exclusive write ownership, dependency waves, and native capacity; do not manufacture parallelism or separate a test from its production behavior.",
       "A generator that rewrites a shared output tree is an exclusive downstream integration slice, not a command for multiple parallel source slices.",
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow is not a gate, router, fork mandate, or completion controller.",
-      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation"
+      "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation",
+      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-review checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
     ],
     "skills": [
       "code-development"
     ],
     "qualityChecks": [
-      "acceptance-to-file coverage, explicit plan-review disposition, parallel vertical slices with exclusive write ownership, behavior/source task-owned RED-before-production and focused GREEN evidence, one-shot shared generation with check-only parity and no-diff inspection, current package and marketplace consistency, isolated installed E2E when runtime behavior changed, bounded review reconciliation, installed-runtime parity, dirty-tree containment, and advisory-only lifecycle behavior"
+      "acceptance-to-file coverage, explicit plan-review disposition, parallel vertical slices with exclusive write ownership, behavior/source task-owned RED-before-production and focused GREEN evidence, one-shot shared generation with check-only parity and no-diff inspection, current package and marketplace consistency, isolated installed E2E when runtime behavior changed, bounded review reconciliation, installed-runtime parity, dirty-tree containment, and advisory-only lifecycle behavior, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely"
     ],
     "riskNotes": [
       "Prompt, lifecycle, model-behavior, packaging, and installed-runtime surfaces can drift across source, generated, packaged, and live states and require isolated evidence.",
