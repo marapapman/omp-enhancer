@@ -1108,3 +1108,90 @@ test('a trailing concise status report does not turn a focused code edit into wr
   const unscoped = describeNaturalLanguageTask({ prompt: 'Fix a bug in the project.' });
   assert.deepEqual(unscoped.workspaceWriteTargets, []);
 });
+
+test('projectSnapshot signals are backward-compatible when absent', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const descriptor = describeNaturalLanguageTask({ prompt: 'fix the login bug' });
+  assert.equal(descriptor.projectScale, 'unknown');
+  // Existing complexity is unchanged; for a short code prompt without
+  // snapshot, the complexity should be the default 'focused'.
+  assert.ok(['focused', 'simple', 'broad'].includes(descriptor.complexity));
+});
+
+test('large monorepo projectSnapshot upgrades complexity to broad', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const descriptor = describeNaturalLanguageTask({
+    prompt: 'fix the login bug',
+    projectSnapshot: {
+      projectType: 'monorepo',
+      languages: ['js', 'ts'],
+      isMonorepo: true,
+      sourceFileCount: 600,
+      hasTests: true,
+      testFramework: 'vitest',
+      buildSystem: 'npm',
+      packageManager: 'npm',
+      workspaceCount: 4,
+    },
+  });
+  assert.equal(descriptor.projectScale, 'large');
+  assert.equal(descriptor.complexity, 'broad');
+});
+
+test('small projectSnapshot yields simple complexity for general prompt', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const descriptor = describeNaturalLanguageTask({
+    prompt: 'what is 2+2',
+    projectSnapshot: {
+      projectType: 'single-package',
+      languages: ['js'],
+      isMonorepo: false,
+      sourceFileCount: 3,
+      hasTests: false,
+      testFramework: null,
+      buildSystem: null,
+      packageManager: null,
+      workspaceCount: 0,
+    },
+  });
+  assert.equal(descriptor.projectScale, 'small');
+  assert.equal(descriptor.complexity, 'simple');
+});
+
+test('null projectSnapshot is backward compatible', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const withNull = describeNaturalLanguageTask({
+    prompt: 'fix the login bug',
+    projectSnapshot: null,
+  });
+  const without = describeNaturalLanguageTask({ prompt: 'fix the login bug' });
+  assert.equal(withNull.projectScale, 'unknown');
+  assert.equal(without.projectScale, 'unknown');
+  assert.equal(withNull.complexity, without.complexity);
+});
+
+test('medium projectSnapshot stays focused', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const descriptor = describeNaturalLanguageTask({
+    prompt: 'fix the login bug',
+    projectSnapshot: {
+      projectType: 'single-package',
+      languages: ['js'],
+      isMonorepo: false,
+      sourceFileCount: 60,
+      hasTests: true,
+      testFramework: 'node-test',
+      buildSystem: 'npm',
+      packageManager: 'npm',
+      workspaceCount: 0,
+    },
+  });
+  assert.equal(descriptor.projectScale, 'medium');
+  assert.equal(descriptor.complexity, 'focused');
+});
+
+test('undefined projectSnapshot has projectScale unknown', async () => {
+  const { describeNaturalLanguageTask } = await loadDescriptorModule();
+  const descriptor = describeNaturalLanguageTask({ prompt: 'fix the login bug' });
+  assert.equal(descriptor.projectScale, 'unknown');
+});

@@ -77,6 +77,7 @@ export function describeNaturalLanguageTask(input = {}) {
   const signals = collectSignals(text, operationalPrompt, {
     scopePrompt: directivePrompt,
     rawPrompt: directivePrompt,
+    projectSnapshot: input.projectSnapshot ?? null,
   });
   const writingLanguage = signals.writingWork
     ? resolveWritingLanguage({
@@ -121,6 +122,7 @@ export function describeNaturalLanguageTask(input = {}) {
     writingSourcePending: signals.writingWork && !['zh', 'en'].includes(language),
     writingTaskKind: signals.writingTaskKind,
     writingConversion: signals.writingConversion,
+    projectScale: signals.projectScale ?? 'unknown',
     provenance: {
       ruleConfidence: signals.ambiguous ? 0.72 : 0.94,
       reasons: signals.reasons,
@@ -239,6 +241,9 @@ export function normalizeTaskDescriptor(value = {}) {
     writingConversion: WRITING_CONVERSION_VALUES.has(value.writingConversion)
       ? value.writingConversion
       : 'unknown',
+    projectScale: ['small', 'medium', 'large', 'unknown'].includes(value.projectScale)
+      ? value.projectScale
+      : 'unknown',
     provenance: {
       ruleConfidence: clamp(value.provenance?.ruleConfidence ?? 1),
       reasons: uniqueStrings(value.provenance?.reasons ?? []),
@@ -246,7 +251,7 @@ export function normalizeTaskDescriptor(value = {}) {
   };
 }
 
-function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = prompt } = {}) {
+function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = prompt, projectSnapshot = null } = {}) {
   const rawText = String(sourceText);
   const rawExclusiveCompanionMutation = hasExclusiveCompanionMutation(rawPrompt);
   const externalActionContract = analyzeExternalActionPrompt(prompt);
@@ -261,6 +266,17 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
     : testExecutionBinding.targets.length
       ? testExecutionBinding.targets
       : testExecutionTargetsFor(prompt);
+  // Project snapshot signals
+  const snapshot = projectSnapshot;
+  const projectType = snapshot?.projectType ?? 'unknown';
+  const projectScale = !snapshot ? 'unknown'
+    : (snapshot.sourceFileCount > 500 || snapshot.isMonorepo) ? 'large'
+    : snapshot.sourceFileCount > 50 ? 'medium'
+    : 'small';
+  const isMonorepo = snapshot?.isMonorepo ?? false;
+  const projectHasTests = snapshot?.hasTests ?? false;
+  const projectSourceFileCount = snapshot?.sourceFileCount ?? 0;
+
   // Workspace paths are scope data, not action or domain words. Extract them
   // first, then remove both ordinary quoted data and every recognized scope
   // target from the shared semantic signal text. This prevents directories
@@ -826,6 +842,11 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
     configWork,
     ambiguous,
     reasons,
+    projectType,
+    projectScale,
+    isMonorepo,
+    projectHasTests,
+    projectSourceFileCount,
   };
 }
 
@@ -2046,6 +2067,11 @@ function complexityFor(signals, operation, domains) {
     && domains.includes('code')
     && (signals.workspaceWriteTargets ?? []).filter((target) => target.endsWith('/')).length >= 2) return 'broad';
   if (domains.length === 1 && domains[0] === 'general') return 'simple';
+
+  // Project scale refinement: upgrade focused to broad for large code projects
+  if (['modify', 'create'].includes(operation) && domains.includes('code')
+    && signals.projectScale === 'large') return 'broad';
+
   return 'focused';
 }
 

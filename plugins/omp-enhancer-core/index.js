@@ -1,6 +1,7 @@
 import { installPluginSkills } from './src/install-skills.js';
 import { installPluginDeps } from './src/install-deps.js';
 import { classifyHostTurn } from './src/host-turn-context.js';
+import { collectProjectSnapshot } from './src/project-snapshot.js';
 import { describeNaturalLanguageTask } from './src/task-descriptor.js';
 import {
   buildDynamicReviewBudgetPrompt,
@@ -226,14 +227,22 @@ export default function registerCoreEnhancer(pi) {
       && !planToExecuteTransition
       && shouldInheritContinuation(state, effectivePrompt);
     const previousPrompt = state.lastPrompt;
+    let projectSnapshot = null;
+    if (!inherited) {
+      try {
+        const cwd = ctx.cwd || process.cwd();
+        projectSnapshot = collectProjectSnapshot(cwd);
+      } catch { /* advisory — never break the hook */ }
+    }
     const taskContext = inherited
       ? state.lastTaskContext
       : resolveMainTaskContext({
         prompt: effectivePrompt,
+        projectSnapshot,
       });
 
     if (!inherited) {
-      state.lastTaskContext = taskContext;
+      state.lastTaskContext = { ...taskContext, projectSnapshot };
       state.lastPrompt = implementationTransition
         ? [previousPrompt, prompt].filter(Boolean).join('\n')
         : prompt;
@@ -490,6 +499,12 @@ export function buildStagedWorkflowReminder({
     }
     if (reviewBudgetPrompt) features.push('dynamic-review-budget');
   }
+  // Project exploration advisory: nudge scout dispatch for borderline complexity
+  if (taskDescriptor.complexity === 'focused'
+    && ['medium', 'large'].includes(taskDescriptor.projectScale)
+    && hasNativeTask && subagentsAllowed) {
+    sections.push('PROJECT EXPLORATION (soft): Before committing to a workflow width, dispatch one `scout` subagent to explore the target project (entry points, module boundaries, test layout, config vs generated). Use the scout\'s evidence together with the project snapshot to decide whether `focused` work is sufficient or the task is `broad`. This is advisory; if a `scout` Agent is not visible or native capacity is constrained, proceed with the snapshot-seeded complexity.');
+  }
   if (shouldPrimeToolCalls(model)) {
     sections.push(buildToolCallPrimingSection());
     features.push('tool-call-priming');
@@ -588,9 +603,10 @@ export function createState() {
   };
 }
 
-function resolveMainTaskContext({ prompt = '' } = {}) {
+function resolveMainTaskContext({ prompt = '', projectSnapshot = null } = {}) {
   const taskDescriptor = describeNaturalLanguageTask({
     prompt: String(prompt ?? ''),
+    projectSnapshot,
   });
   return buildAgentSelectedTaskContext(taskDescriptor);
 }

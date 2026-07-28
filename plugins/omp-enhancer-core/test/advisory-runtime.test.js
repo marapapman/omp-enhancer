@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 import registerCoreEnhancer from '../index.js';
 
@@ -417,3 +420,76 @@ function fakeZod() {
     array: (schema) => withOptional({ type: 'array', schema }),
   };
 }
+
+test('large monorepo snapshot upgrades complexity and suppresses PROJECT EXPLORATION reminder', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'monorepo-test-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'monorepo', workspaces: ['packages/*'] }));
+    for (let i = 0; i < 600; i++) {
+      fs.writeFileSync(path.join(tmpDir, 'file' + i + '.js'), '// file ' + i);
+    }
+
+    const entries = [];
+    const pi = new FakePi(entries);
+    pi.getActiveTools = () => ['read', 'task', 'todo'];
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext(entries, tmpDir);
+    await event(pi, 'session_start')({}, ctx);
+    const result = await event(pi, 'before_agent_start')({ prompt: 'fix the login bug' }, ctx);
+
+    const snapshot = latestState(entries);
+    assert.equal(snapshot.lastTaskContext.projectSnapshot.projectType, 'monorepo');
+    assert.equal(snapshot.lastTaskContext.taskDescriptor.complexity, 'broad');
+    assert.equal(snapshot.lastTaskContext.taskDescriptor.projectScale, 'large');
+
+    if (result?.message?.content) {
+      assert.ok(!result.message.content.includes('PROJECT EXPLORATION'), 'broad complexity must not include PROJECT EXPLORATION reminder');
+    }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('medium project snapshot yields focused complexity with PROJECT EXPLORATION reminder', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'medium-test-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'medium-project' }));
+    for (let i = 0; i < 60; i++) {
+      fs.writeFileSync(path.join(tmpDir, 'file' + i + '.js'), '// file ' + i);
+    }
+
+    const entries = [];
+    const pi = new FakePi(entries);
+    pi.getActiveTools = () => ['read', 'task', 'todo'];
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext(entries, tmpDir);
+    await event(pi, 'session_start')({}, ctx);
+    const result = await event(pi, 'before_agent_start')({ prompt: 'fix the login bug' }, ctx);
+
+    const snapshot = latestState(entries);
+    assert.equal(snapshot.lastTaskContext.taskDescriptor.complexity, 'focused');
+    assert.equal(snapshot.lastTaskContext.taskDescriptor.projectScale, 'medium');
+
+    assert.ok(result?.message?.content, 'reminder must be emitted for focused tasks');
+    assert.ok(result.message.content.includes('PROJECT EXPLORATION'), 'medium project must include PROJECT EXPLORATION reminder');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('invalid cwd produces unknown projectScale with no PROJECT EXPLORATION reminder', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task', 'todo'];
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(entries, '/nonexistent/path/that/does/not/exist');
+  await event(pi, 'session_start')({}, ctx);
+  const result = await event(pi, 'before_agent_start')({ prompt: 'fix the login bug' }, ctx);
+
+  const snapshot = latestState(entries);
+  assert.equal(snapshot.lastTaskContext.taskDescriptor.projectScale, 'unknown');
+
+  if (result?.message?.content) {
+    assert.ok(!result.message.content.includes('PROJECT EXPLORATION'), 'invalid cwd must not include PROJECT EXPLORATION reminder');
+  }
+});

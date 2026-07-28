@@ -74,6 +74,7 @@ test('primary startup records task facts without changing the native prompt or a
   const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
   assert.deepEqual(Object.keys(snapshot.lastTaskContext).sort(), [
     'intent',
+    'projectSnapshot',
     'taskDescriptor',
   ]);
   assert.equal(snapshot.lastTaskContext.intent, 'agent-selected');
