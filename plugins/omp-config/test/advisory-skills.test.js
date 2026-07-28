@@ -23,7 +23,7 @@ test('global guidance gives Main an explicit staged workflow, Skill, TODO, and d
   assert.match(content, /RESOURCE EXTENSION \| source=<loaded-exact-skill-uri> \| reads=<revealed-exact-skill-uris>[\s\S]*at most three extension batches[\s\S]*two catalog hops plus one linked-method batch/i, relative);
   assert.match(content, /next response is the filled READY plus native TODO init[\s\S]*byte 0 is `W`[\s\S]*Apply the loaded-card soft compiler:[\s\S]*one exact Delegate row for that checkpoint[\s\S]*Parent VERIFY rows remain separate/i, relative);
   assert.match(content, /Every non-simple loaded card is soft `subagent-driven`[\s\S]*currently visible matching Agent[\s\S]*assignment input is complete/i, relative);
-  assert.match(content, /substantive code mutation[\s\S]*plugin `plan` review[\s\S]*native `task` slice[\s\S]*writes `MAIN REVIEW` before native `reviewer`/i, relative);
+  assert.match(content, /substantive code mutation[\s\S]*plugin `plan`.+drafts the parallel plan[\s\S]*native `task` slice[\s\S]*writes `MAIN REVIEW` before native `reviewer`/i, relative);
   assert.match(content, /\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]/i, relative);
   assert.match(content, /child[\s\S]*does not own the parent TODO/i, relative);
   assert.match(content, /native `skill-prompt`/i, relative);
@@ -59,7 +59,7 @@ test('root and managed Main guidance default every loaded non-simple workflow to
       /Only (?:a )?new dependency[\s\S]*scope[\s\S]*permission[\s\S]*tool[\s\S]*Agent[\s\S]*schema[\s\S]*capacity[\s\S]*Skill-load failure[\s\S]*contradictory[\s\S]*project evidence[\s\S]*may rebase/iu,
       relative,
     );
-    assert.match(content, /substantive code mutation[\s\S]*plugin `plan` review[\s\S]*native `task` slice[\s\S]*`MAIN REVIEW`[\s\S]*native `reviewer`[\s\S]*does not apply to another domain/iu, relative);
+    assert.match(content, /substantive code mutation[\s\S]*plugin `plan`.+drafts the parallel plan[\s\S]*native `task` slice[\s\S]*`MAIN REVIEW`[\s\S]*native `reviewer`[\s\S]*does not apply to another domain/iu, relative);
     assert.doesNotMatch(content, /Mechanical and read-only work need not use task/i, relative);
   }
 });
@@ -128,10 +128,10 @@ test('code-development is the single subagent-driven method for planned parallel
 
   assert.match(content, /^---\nname: code-development\ndescription: .+\n---\n/iu, relative);
   assert.match(content, /single general software-development method/iu, relative);
-  assert.match(content, /Search local code.+entry points.+callers.+consumers.+tests.+configuration/isu, relative);
-  assert.match(content, /official documentation first.+community issues, discussions, or postmortems/isu, relative);
-  assert.match(content, /Main.+detailed.+parallel waves.+vertical slices.+non-overlapping write sets/isu, relative);
-  assert.match(content, /PLAN REVIEW.+parallel.+assignment.+before changing production code/isu, relative);
+  assert.match(content, /Delegate the local evidence pass to scout.+entry points.+callers.+consumers.+tests.+configuration/isu, relative);
+  assert.match(content, /one bounded external pass to librarian.+official documentation.+community issues/isu, relative);
+  assert.match(content, /delegate to the plan Agent.+detailed implementation-and-evidence plan.+parallel vertical slices/isu, relative);
+  assert.match(content, /The plan Agent.+draft carries its challenge findings.+fresh plan pass.+before any authorized production mutation/isu, relative);
   assert.match(content, /same.+tasks\[\].+batch.+runnable.+independent.+native `task`/isu, relative);
   assert.match(content, /native `task`.+public-behavior test.+expected assertion failure as RED.+minimum.+production.+same command.+GREEN.+refactor/isu, relative);
   assert.match(content, /Main.+integrat.+current tree.+bounded diff.+evidence.+native `reviewer`/isu, relative);

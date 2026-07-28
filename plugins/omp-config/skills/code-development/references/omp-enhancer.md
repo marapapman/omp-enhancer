@@ -20,7 +20,7 @@ Shared generation is a mechanical generation slice: its evidence is the generato
 
 ## Run installed-runtime E2E when behavior crosses the host boundary
 
-Use deterministic tests first. When Main, Advisor, workflow selection, Skill loading, Agent use, reminders, lifecycle, tool exposure, packaging, or installed behavior changes, run an isolated installed OMP scenario with a frozen fixture, model, thinking level, tool set, evaluator, and timeout.
+Use deterministic tests first. When Main, Advisor, workflow selection, Skill loading, Agent use, reminders, lifecycle, tool exposure, packaging, or installed behavior changes, delegate the isolated installed OMP scenario to task with a frozen fixture, model, thinking level, tool set, evaluator, and timeout, and evaluate the returned event evidence.
 
 A generator-integrity-only change that does not change generated prompt content, package contents, or installed behavior does not require a live E2E run; its deterministic generator and parity contracts are the evidence boundary.
 

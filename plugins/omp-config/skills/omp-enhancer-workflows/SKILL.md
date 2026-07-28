@@ -17,7 +17,7 @@ Actions:
 PLAN text alone is incomplete: same response calls NOW and waits, or calls THEN if NOW=none. THEN is one final resource-only batch. Give each evidence checkpoint an Action.
 AFTER NOW: empty revealed URI set => no text/marker; call the THEN batch. Otherwise RESOURCE EXTENSION MUST list >=1 exact revealed URI; `reads=none` is invalid.
 
-Catalog version: 26.
+Catalog version: 27.
 
 Navigation only: never routes, gates, grants permission, selects Agents, or decides completion.
 
@@ -111,7 +111,7 @@ SELECTION: Primary = central deliverable; independent requested operations/outpu
 
 EXECUTION: DIRECT skips; `agentic.simple` has no `task`; `writing.pending` composes once; other cards use the compiler.
 
-FALLBACK: concrete user/native, Agent/capacity, input/dependency/write-set, safety, or parent ownership only; never size, latency, read-only, overhead, or no delegation request.
+FALLBACK: concrete user/native, Agent/capacity, input/dependency/write-set, safety, or parent ownership only; never size, latency, read-only, overhead, or no delegation request. Main never self-induces a fallback by skipping brief, input, or checkpoint preparation; a fallback= row names exactly one enumerated reason and the affected checkpoint.
 
 SKILL URI: D=direct; C=exact nested; others need a loaded source. Supplied bodies stay in PLAN/READY, not NOW; only exact failure marks unavailable.
 

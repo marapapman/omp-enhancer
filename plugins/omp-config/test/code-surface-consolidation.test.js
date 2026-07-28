@@ -27,10 +27,10 @@ test('one code-development Skill owns the subagent-driven code lifecycle', async
   const skill = await readFile(path.join(pluginRoot, 'skills', 'code-development', 'SKILL.md'), 'utf8');
 
   assert.match(skill, /^---\nname: code-development\ndescription: .+\n---/u);
-  assert.match(skill, /Search local code.+callers.+tests.+`rg`/isu);
+  assert.match(skill, /Delegate the local evidence pass to scout.+callers.+tests.+configuration/isu);
   assert.match(skill, /official documentation.+community issues/isu);
-  assert.match(skill, /Main.+detailed.+parallel.+waves.+vertical slices.+non-overlapping.+write sets/isu);
-  assert.match(skill, /`plan` Agent.+`PLAN REVIEW`.+parallel.+assignment.+before changing production code/isu);
+  assert.match(skill, /delegate to the plan Agent.+detailed implementation-and-evidence plan.+parallel vertical slices/isu);
+  assert.match(skill, /The plan Agent.+draft carries its challenge findings.+fresh plan pass.+before any authorized production mutation/isu);
   assert.match(skill, /same native `task`.+tasks\[\].+batch.+runnable.+independent.+slice/isu);
   assert.match(skill, /native `task`.+test mutation.+expected assertion failure as RED.+minimum.+production.+same command.+GREEN.+refactor/isu);
   assert.match(skill, /Main.+integrat.+current tree.+bounded diff.+evidence.+native `reviewer`/isu);

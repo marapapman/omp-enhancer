@@ -12,21 +12,20 @@ The single general software-development method. Add domain Skills only for gaps.
 For substantive mutation, Main owns the parent TODO, integration, and conclusion:
 
 1. Restate behavior, authority, acceptance, repository instructions, dirty-tree boundaries, and baseline.
-2. Search local code and map entry points, callers, consumers, tests, configuration, generated assets, and runtime copies that can differ.
-3. When current behavior or experience affects the decision, make one bounded external pass: official documentation first, then community issues, discussions, or postmortems.
-4. Main writes a detailed implementation-and-evidence plan as parallel waves of vertical slices with non-overlapping write sets.
-5. The exposed `plan` Agent receives one `PLAN REVIEW` with the complete parallel plan and assignments, challenging dependencies, write sets, test seams, and evidence before changing production code.
-6. Main records each accepted, rejected, and unresolved plan finding, rebases only affected TODO rows, and freezes complete assignments with exclusive write ownership, exact evidence return, and no versioning or publication authority.
-7. Use the same native `task` `tasks[]` batch for runnable independent slices; defer dependencies. Each task owns `RED -> GREEN -> REFACTOR`.
-8. Main integrates the current tree and dispatches the bounded diff and evidence to native `reviewer`.
-9. Give native `reviewer` only the bounded diff/evidence from task deliveries. Send supported findings to native `task` for bounded repair and refresh evidence, then allow at most one fresh affected reviewer pass; Main integrates the result.
-10. Report paths, commands, exits, dispositions, limitations, risks, and untouched changes.
+2. Delegate the local evidence pass to scout and one bounded external pass to librarian with bounded briefs; integrate their returned anchors, entry points, callers, consumers, tests, configuration, and source-vs-generated-vs-runtime distinctions. Main performs no broad search itself beyond writing the briefs.
+3. Freeze a concise planning brief (outcome, authority, acceptance, integrated anchors, slice boundaries, evidence bar) and delegate to the plan Agent the full detailed implementation-and-evidence plan, including its own challenge findings.
+4. The plan Agent's draft carries its challenge findings; request at most one fresh plan pass only when disposition materially changes the plan, never on unchanged text, before any authorized production mutation.
+5. Main records each accepted, rejected, and unresolved plan finding, rebases only affected TODO rows, and freezes complete assignments with exclusive write ownership, exact evidence return, and no versioning or publication authority.
+6. Use the same native `task` `tasks[]` batch for runnable independent slices; defer dependencies. Each task owns `RED -> GREEN -> REFACTOR`.
+7. Main integrates the current tree and dispatches the bounded diff and evidence to native `reviewer`.
+8. Give native `reviewer` only the bounded diff/evidence from task deliveries. Send supported findings to native `task` for bounded repair and refresh evidence, then allow at most one fresh affected reviewer pass; Main integrates the result.
+9. Report paths, commands, exits, dispositions, limitations, risks, and untouched changes.
 
 Merge matching workflow, Skill, and reference phases into one TODO row; do not execute a phase twice. Mechanical lookup needs no task. Substantive read-only work needs no mutation TDD but still follows the selected non-simple workflow's safe complete delegated checkpoint when a matching Agent is visible and safe. Read-only authorizes no mutation.
 
 ## Search local code and current evidence
 
-Search local code for identifiers, entry points, callers, consumers, tests, configuration, and packaged copies with `rg` or host search. If empty, try one bounded alternative. Supply anchors and separate facts from hypotheses.
+Write bounded evidence briefs for scout (local) and librarian (external) instead of searching broadly; supply anchors and separate facts from hypotheses. State skips; a repository-owned invariant with no version-sensitive dependency is a valid reason to skip the external brief.
 
 For substantive work, use one bounded network pass unless the decision is local/mechanical, forbidden, or offline:
 
@@ -42,7 +41,7 @@ Each slice names ID, wave/dependencies, target/acceptance, exclusive write set, 
 
 Source slices never run a shared generator. One downstream exclusive integration task runs it exactly once after source dependencies as a mechanical generation slice. It returns generator check, parity, and no-unexpected-diff and must not fabricate RED. Main inspects the generated diff, runs check-only, and does not rerun the generator.
 
-The read-only `PLAN REVIEW` challenges dependencies, write sets, TDD seams, exact RED/GREEN commands, integration, broader verification, and evidence handoff. Main dispositions advisory findings. Review a materially changed affected plan at most once more, never unchanged text.
+The plan Agent drafts the parallel plan and carries its own challenge findings; the read-only fresh pass, at most one per material rebase, challenges dependencies, write sets, TDD seams, exact RED/GREEN commands, integration, broader verification, and evidence handoff. Main dispositions advisory findings.
 
 Each delegated TODO row is `Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>`. Keep checkpoint complete, one-line, and free of reserved markers. The native task item `agent` is the row Agent; it copies workflow, step, skills, and checkpoint into byte-0 prefix `[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>]`. The task body copies all direct user constraints verbatim and adds no examples, then carries allowed effects and acceptance evidence; outer context, name, or label is not a substitute. Headings follow the prefix.
 

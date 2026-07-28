@@ -260,11 +260,11 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.match(catalog, /substantive code.+subagent-driven.+plugin `plan`.+native `task`.+native `reviewer`/isu);
   assert.match(catalog, /same native `task` `tasks\[\]` batch.+runnable independent.+vertical slices.+dependent.+later wave/isu);
   assert.match(catalog, /body of the text being modified, never from the prompt language/);
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 26/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 27/);
   assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 28);
   assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
   assert.equal((catalog.match(/^- Execution default \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
-  assert.match(skillIndex, /Catalog version: 26/);
+  assert.match(skillIndex, /Catalog version: 27/);
   assert.match(skillIndex, /`writing\.pending`[\s\S]*one narrow language read[\s\S]*replace once with writing\.zh or writing\.en before substantive work/iu);
   const referenceText = references.join('\n');
   assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 28);
@@ -319,10 +319,10 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.match(agents, /Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>/i);
   assert.match(agents, /## SPLIT, EXECUTE, VERIFY[\s\S]*Main chooses direct work, Agent, and fork width from the committed TODO/i);
   assert.match(agents, /Every non-simple loaded card is soft `subagent-driven`[\s\S]*`agentic\.simple` uses zero `task` calls[\s\S]*`writing\.pending` first completes its one-time composition transition/i);
-  assert.match(agents, /substantive code mutation[\s\S]*plugin `plan` review[\s\S]*native `task` slice[\s\S]*native `reviewer` receives only the Main-reviewed bounded diff and evidence/i);
+  assert.match(agents, /substantive code mutation[\s\S]*plugin `plan`.+drafts the parallel plan[\s\S]*native `task` slice[\s\S]*native `reviewer` receives only the Main-reviewed bounded diff and evidence/i);
   assert.match(agents, /detailed dependency-wave plan of non-overlapping vertical slices/i);
   assert.match(agents, /Main integrates deliveries, verifies the current tree, and writes `MAIN REVIEW` before native `reviewer` receives only the Main-reviewed bounded diff and evidence/i);
-  assert.match(agents, /supported finding returns to `task` as a bounded repair[\s\S]*at most one fresh reviewer/i);
+  assert.match(agents, /supported finding returns to `task` as a bounded repair[\s\S]*at most one fresh affected reviewer/i);
   assert.match(agents, /child follows its assignment and does not own the parent TODO/i);
   assert.match(agents, /\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]/i);
   assert.doesNotMatch(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
