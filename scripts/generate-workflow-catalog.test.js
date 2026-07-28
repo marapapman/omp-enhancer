@@ -164,7 +164,7 @@ test('workflow artifact generator writes the optional workflow skill and one ref
     );
     assert.doesNotMatch(
       artifact,
-      /code-development|code\.dev|code-specific|repository|local code|\bTDD\b|\bRED\b|\bGREEN\b|test coverage|plan review|reviewer|semantic diff|production changes|vertical slices/iu,
+      /code-development|code\.dev|code-specific|repository|local code|\bTDD\b|\bRED\b|\bGREEN\b|test coverage|plan review|semantic diff|production changes|vertical slices/iu,
     );
   }
 

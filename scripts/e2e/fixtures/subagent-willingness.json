@@ -389,6 +389,37 @@
         "requiredChangedFiles": ["docs/deploy-flow.tex"],
         "requiredPatterns": { "docs/deploy-flow.tex": ["\\documentclass", "\\begin{tikzpicture}"] }
       }
+    },
+    {
+      "id": "orchestrator-code-delegation-conformance",
+      "category": "subagent-default/orchestrator",
+      "cwd": ".",
+      "timeoutSeconds": 480,
+      "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit", "bash"],
+      "prompt": "In plugins/writing-helper/src/quality.js, add a bounded helper that normalizes report section ordering, with tests. Follow the code workflow.",
+      "expectations": {
+        "minNativeTaskCalls": 3,
+        "requiredNativeTaskAgents": ["scout", "plan", "task", "reviewer"],
+        "requiredNativeTaskAgentSequence": ["scout", "plan", "task", "reviewer"],
+        "requiredWorkflowPrimary": "code.dev",
+        "requiredSelectedWorkflowIds": ["code.dev"],
+        "requiredNativeTaskWorkflows": ["code.dev"],
+        "requireNativeTaskMetadataPrefix": true,
+        "maxProjectInspectionCallsBeforeNativeTask": 6
+      }
+    },
+    {
+      "id": "orchestrator-audit-not-skipped",
+      "category": "subagent-default/orchestrator",
+      "cwd": ".",
+      "timeoutSeconds": 480,
+      "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit", "bash"],
+      "prompt": "In plugins/writing-helper/src/quality.js, add a bounded helper that normalizes report section ordering, with tests, and dispatch the card audit checkpoint after the implementation work settles. Follow the code workflow and do not skip the reviewer.",
+      "expectations": {
+        "requiredNativeTaskAgents": ["task", "reviewer"],
+        "requiredNativeTaskAgentSequence": ["task", "reviewer"],
+        "requireNativeTodoItemPatterns": ["Delegate Agent=reviewer "]
+      }
     }
   ]
 }

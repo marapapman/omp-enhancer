@@ -21,8 +21,8 @@ import { exactNestedEccSkillUri } from '../plugins/omp-enhancer-core/src/workflo
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
 
-test('catalog v26 assigns exactly one direct, one deferred, and 28 subagent-driven defaults', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 26);
+test('catalog v27 assigns exactly one direct, one deferred, and 28 subagent-driven defaults', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 27);
   assert.equal(workflowDefinitions.length, 30);
   assert.deepEqual(
     [...new Set(workflowDefinitions.map(({ delegationDefault }) => delegationDefault))].sort(),
@@ -46,7 +46,7 @@ test('catalog v26 assigns exactly one direct, one deferred, and 28 subagent-driv
   );
 });
 
-test('packaged catalog, index, and all references expose catalog v26 execution defaults', async () => {
+test('packaged catalog, index, and all references expose catalog v27 execution defaults', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -54,8 +54,8 @@ test('packaged catalog, index, and all references expose catalog v26 execution d
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 26/);
-  assert.match(skillIndex, /Catalog version: 26/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 27/);
+  assert.match(skillIndex, /Catalog version: 27/);
   assert.equal(referenceNames.length, 30);
   assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 28);
   assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
@@ -79,7 +79,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   const skillReferences = Object.values(referencesByWorkflow).join('\n');
 
   assert.equal(catalog, buildSharedWorkflowCatalogMarkdown());
-  assert.equal(WORKFLOW_CATALOG_VERSION, 26);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 27);
   assert.equal(Number(catalog.match(/OMP_WORKFLOW_CATALOG_VERSION:\s*(\d+)/)?.[1]), WORKFLOW_CATALOG_VERSION);
   assert.deepEqual([...catalog.matchAll(/^### `([^`]+)`$/gm)].map((match) => match[1]), workflowIds);
   const indexedWorkflowIds = [...skillIndex.matchAll(/^- `([^`]+)` —/gm)].map((match) => match[1]);
@@ -187,11 +187,12 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.match(agents, /Copy every direct user constraint verbatim into the job body[\s\S]*Fill every required native field[\s\S]*child follows its assignment and does not own the parent TODO/iu);
   assert.match(claude, /copy the TODO Agent exactly to native `agent`[\s\S]*assignment byte 0[\s\S]*Copy every direct user constraint verbatim/iu);
   assert.match(claude, /RESOURCE EXTENSION \| source=<loaded-exact-skill-uri> \| reads=<revealed-exact-skill-uris>/u);
-  assert.match(agents, /substantive code mutation[\s\S]*plugin `plan` review[\s\S]*native `task` slice owns test mutation, valid RED, minimum production, the same-command GREEN[\s\S]*writes `MAIN REVIEW` before native `reviewer`/iu);
-  assert.match(claude, /substantive code mutation[\s\S]*plugin `plan` review[\s\S]*valid RED[\s\S]*same-command GREEN[\s\S]*`MAIN REVIEW` before native `reviewer`/iu);
+  assert.match(agents, /substantive code mutation[\s\S]*plugin `plan`.+drafts the parallel plan[\s\S]*native `task` slice owns test mutation, valid RED, minimum production, the same-command GREEN[\s\S]*writes `MAIN REVIEW` before native `reviewer`/iu);
+  assert.match(claude, /substantive code mutation[\s\S]*plugin `plan`.+drafts the parallel plan[\s\S]*valid RED[\s\S]*same-command GREEN[\s\S]*`MAIN REVIEW` before native `reviewer`/iu);
   assert.doesNotMatch(`${agents}\n${claude}`, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
   assert.doesNotMatch(`${agents}\n${claude}`, /block:\s*true|continue:\s*true|systemPrompt\s*=|triggerTurn\s*\(/iu);
   assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
+  assert.match(watchdog, /never attempts unavailable tools/i);
   assert.match(watchdog, /Use at most one ordinary `advise` per primary user task[\s\S]*complete user-visible Main final sets the budget to zero/i);
   assert.match(watchdog, /workflow window is Main's `DISCOVER -> DECLARE -> LOAD -> COMMIT`[\s\S]*before its first native `task` or substantive project action[\s\S]*resource reads keep the window open/i);
   assert.match(watchdog, /native `skill-prompt` body named `omp-enhancer-workflows`[\s\S]*AGENTS\.md[\s\S]*do not count[\s\S]*DISCOVER is complete: no read; PLAN is next/iu);
@@ -227,6 +228,10 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.match(catalog, /Main.+integrat.+current tree.+diff.+evidence.+review.+before.+reviewer/isu);
   assert.match(catalog, /body of the text being modified/i);
   assert.match(catalog, /`writing\.pending`[\s\S]*initial READY[\s\S]*one narrow source read[\s\S]*language only[\s\S]*one replacement `WORKFLOW PLAN`[\s\S]*same format Add-ons[\s\S]*new language Skills[\s\S]*language workflow reference last[\s\S]*do not reread loaded companions[\s\S]*replacement `WORKFLOW READY`/iu);
+  assert.match(catalog, /ORCHESTRATOR: Main is the orchestrator/iu);
+  assert.match(catalog, /Main never self-induces a fallback/iu);
+  assert.match(skillReferences, /ORCHESTRATOR: Main is the orchestrator/iu);
+  assert.match(skillReferences, /Main never self-induces a fallback/iu);
   assert.match(catalog, /language remains ambiguous[\s\S]*ask the user[\s\S]*never loop or guess/iu);
   assert.doesNotMatch(catalog, /block:\s*true|continue:\s*true|hard gate/i);
 });
@@ -335,15 +340,15 @@ test('extension workflow roles have one owner while OMP native roles have no plu
 });
 
 test('ordinary code work uses plan plus native task and reviewer without plugin wrappers', () => {
-  assert.deepEqual(workflowCatalog['code.dev'].roles, ['plan', 'task', 'reviewer']);
-  assert.deepEqual(workflowCatalog['database.change'].roles, ['plan', 'task', 'reviewer']);
-  assert.deepEqual(workflowCatalog['database.migration.repair'].roles, ['plan', 'task', 'reviewer']);
-  assert.deepEqual(workflowCatalog['ml.debug'].roles, ['plan', 'task', 'reviewer']);
-  assert.deepEqual(workflowCatalog['omp.plugin'].roles, ['plan', 'task', 'reviewer']);
+  assert.deepEqual(workflowCatalog['code.dev'].roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
+  assert.deepEqual(workflowCatalog['database.change'].roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
+  assert.deepEqual(workflowCatalog['database.migration.repair'].roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
+  assert.deepEqual(workflowCatalog['ml.debug'].roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
+  assert.deepEqual(workflowCatalog['omp.plugin'].roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
   assert.deepEqual(workflowCatalog['database.review'].roles, ['task', 'reviewer']);
   assert.deepEqual(workflowCatalog['ml.review'].roles, ['task', 'reviewer']);
   assert.deepEqual(workflowCatalog['security.review'].roles, ['ecc-security-reviewer']);
-  assert.deepEqual(workflowCatalog['release.publish'].roles, ['task']);
+  assert.deepEqual(workflowCatalog['release.publish'].roles, ['task', 'reviewer']);
 
   const allRoles = new Set(Object.values(workflowCatalog).flatMap(({ roles }) => roles));
   for (const retired of [
@@ -357,14 +362,23 @@ test('ordinary code work uses plan plus native task and reviewer without plugin 
   ]) {
     assert.equal(allRoles.has(retired), false, retired);
   }
-
-  for (const workflow of Object.values(workflowCatalog)) {
-    if (workflow.roles.includes('task') && workflow.roles.includes('reviewer')) {
-      assert.match(workflow.delegation.join(' '), /(?:reviewer|review).+bounded.+(?:diff|patch).+evidence/i, 'OMP reviewer must receive the bounded diff and evidence');
+  const BOUNDED_DIFF_AUDIT_IDS = new Set([
+    'code.dev',
+    'database.review',
+    'database.change',
+    'database.migration.repair',
+    'ml.review',
+    'ml.debug',
+    'omp.plugin',
+    'seo.audit',
+  ]);
+  for (const [id, workflow] of Object.entries(workflowCatalog)) {
+    if (BOUNDED_DIFF_AUDIT_IDS.has(id)) {
+      assert.match(workflow.delegation.join(' '), /(?:reviewer|review).+bounded.+(?:diff|patch).+evidence/i, `${id}: OMP reviewer must receive the bounded diff and evidence`);
       assert.match(
         workflow.delegation.join(' '),
         /(?:does not read.+project.+run(?: a)? commands?|without project reads?, commands?)/i,
-        'OMP reviewer must not inspect the project or run commands',
+        `${id}: OMP reviewer must not inspect the project or run commands`,
       );
     }
   }
