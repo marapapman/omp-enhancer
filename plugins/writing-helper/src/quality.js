@@ -8,6 +8,9 @@ const DEFAULT_CHECKS = ['logic', 'style', 'citation'];
 const VALID_CHECKS = new Set([...DEFAULT_CHECKS, 'preservation']);
 const DEFAULT_MAX_ISSUES = 30;
 
+const CATEGORY_ORDER = ['logic', 'style', 'citation', 'preservation'];
+const SEVERITY_ORDER = ['FATAL', 'CRITICAL', 'WARNING', 'IMPORTANT'];
+
 function normalizeChecks(checks) {
   if (!Array.isArray(checks) || checks.length === 0) return DEFAULT_CHECKS;
   const invalidChecks = checks.filter((check) => !VALID_CHECKS.has(check));
@@ -133,4 +136,70 @@ export function analyzeWritingQuality(input = {}) {
     citations: citationDetails,
     preservation,
   };
+}
+
+function issueSectionKey(issue) {
+  if (!issue || typeof issue !== 'object') return 0;
+  const catIdx = typeof issue.category === 'string' ? CATEGORY_ORDER.indexOf(issue.category) : -1;
+  const sevIdx = typeof issue.severity === 'string' ? SEVERITY_ORDER.indexOf(issue.severity) : -1;
+  return ((catIdx >= 0 ? catIdx : CATEGORY_ORDER.length) << 8) | (sevIdx >= 0 ? sevIdx : SEVERITY_ORDER.length);
+}
+
+/**
+ * Return a new result with issues sorted by canonical section order:
+ * category (logic → style → citation → preservation), then severity
+ * (FATAL → CRITICAL → WARNING → IMPORTANT → other). Unknown values
+ * sort after known ones. The original result is not mutated.
+ *
+ * @param {object|null|undefined} result  analyzeWritingQuality result
+ * @returns {object}  shallow-copied result with sorted issues (or input unchanged)
+ */
+export function normalizeSectionOrdering(result) {
+  if (!result || typeof result !== 'object' || !Array.isArray(result.issues)) {
+    return result;
+  }
+  const sorted = [...result.issues].sort((a, b) => issueSectionKey(a) - issueSectionKey(b));
+  return { ...result, issues: sorted };
+}
+
+/**
+ * Group a flat issue array into category-ordered report sections.
+ * Each section contains issues belonging to one category, sorted by
+ * severity (FATAL → CRITICAL → WARNING → IMPORTANT → other).
+ * Sections appear in canonical category order, with unknown categories
+ * after known ones. The input array is not mutated.
+ *
+ * @param {Array} issues  Flat array of issue objects
+ * @returns {Array<{category: string, issues: Array}>}
+ */
+export function groupIssuesBySection(issues) {
+  if (!Array.isArray(issues)) return [];
+
+  // Group by category, using __unknown__ for missing/non-string values
+  const groups = new Map();
+  for (const issue of issues) {
+    const cat = issue && typeof issue === 'object' && typeof issue.category === 'string'
+      ? issue.category
+      : '__unknown__';
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat).push(issue);
+  }
+
+  // Build sections with issues sorted by severity within each group
+  const sections = [];
+  for (const [category, catIssues] of groups) {
+    sections.push({
+      category,
+      issues: [...catIssues].sort((a, b) => issueSectionKey(a) - issueSectionKey(b)),
+    });
+  }
+
+  // Sort sections by canonical category order (unknowns last)
+  sections.sort((a, b) => {
+    const aIdx = CATEGORY_ORDER.indexOf(a.category);
+    const bIdx = CATEGORY_ORDER.indexOf(b.category);
+    return (aIdx >= 0 ? aIdx : CATEGORY_ORDER.length) - (bIdx >= 0 ? bIdx : CATEGORY_ORDER.length);
+  });
+
+  return sections;
 }
