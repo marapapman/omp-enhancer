@@ -1,0 +1,7 @@
+{
+  "tikz-helper": {
+    "command": "node",
+    "args": ["./mcp-server.js"],
+    "timeout": 120000
+  }
+}
