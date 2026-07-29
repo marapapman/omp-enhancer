@@ -159,6 +159,9 @@ const HANDLERS = {
   },
 
   async tikz_generate_diagram(params) {
+    if (typeof params.graph !== 'string') {
+      throw new Error('graph parameter must be a JSON string, not an object or other type. Use JSON.stringify() to convert your graph object to a string before passing it.');
+    }
     const graph = JSON.parse(params.graph);
     const parsed = { graph };
     if (params.layoutOptions) parsed.layoutOptions = JSON.parse(params.layoutOptions);
@@ -227,7 +230,8 @@ async function handleRequest(msg) {
       writeResponse(id, { content: [toContent(result)] });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      writeResponse(id, mcpError(message));
+      const code = error.code ? `[${error.code}] ` : '';
+      writeResponse(id, mcpError(`${code}${message}`));
     }
     return;
   }

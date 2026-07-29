@@ -48,7 +48,7 @@ function compileNodeStyle(node, options) {
   const props = node.properties ?? {};
   const parts = ['draw'];
 
-  const shapeName = props.shape ?? options.defaultShape ?? 'rectangle';
+  const shapeName = props.shape ?? node.shape ?? options.defaultShape ?? 'rectangle';
   const tikzShape = SHAPE_MAP[shapeName];
   if (tikzShape) {
     parts.push(tikzShape);
@@ -107,6 +107,7 @@ function nodeLabel(node) {
   const labels = node.labels ?? [];
   const props = node.properties ?? {};
   if (props.label) return escapeLatex(props.label);
+  if (typeof node.label === 'string' && node.label.trim() !== '') return escapeLatex(node.label);
   if (labels.length > 0 && labels[0].text) return escapeLatex(labels[0].text);
   return tikzId(node.id);
 }
@@ -199,17 +200,20 @@ function compileEdgeStyle(edge, options) {
   const arrow = ARROW_MAP[props.arrow] ?? options.defaultArrow ?? '->';
   parts.push(arrow);
 
-  if (props.line && LINE_STYLES[props.line]) {
-    parts.push(LINE_STYLES[props.line]);
+  const line = props.line ?? edge.style?.line;
+  if (line && LINE_STYLES[line]) {
+    parts.push(LINE_STYLES[line]);
   }
-  if (props.color) {
-    const color = tikzColor(props.color);
-    if (color) parts.push(color);
+  const color = props.color ?? edge.style?.stroke;
+  if (color) {
+    const tikzC = tikzColor(color);
+    if (tikzC) parts.push(tikzC);
   }
-  if (props.dashed) parts.push('dashed');
-  if (props.dotted) parts.push('dotted');
-  if (props.lineWidth && LINE_STYLES[props.lineWidth]) {
-    parts.push(LINE_STYLES[props.lineWidth]);
+  if (props.dashed ?? edge.style?.dashed) parts.push('dashed');
+  if (props.dotted ?? edge.style?.dotted) parts.push('dotted');
+  const lineWidth = props.lineWidth ?? edge.style?.lineWidth;
+  if (lineWidth && LINE_STYLES[lineWidth]) {
+    parts.push(LINE_STYLES[lineWidth]);
   }
 
   return parts.join(', ');
@@ -219,6 +223,7 @@ function edgeLabel(edge) {
   const labels = edge.labels ?? [];
   const props = edge.properties ?? {};
   if (props.label) return escapeLatex(props.label);
+  if (typeof edge.label === 'string' && edge.label.trim() !== '') return escapeLatex(edge.label);
   if (labels.length > 0 && labels[0].text) return escapeLatex(labels[0].text);
   return null;
 }
