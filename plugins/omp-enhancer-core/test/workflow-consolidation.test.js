@@ -287,7 +287,7 @@ test('omp.plugin owns the complete self-iteration lifecycle without adding anoth
   assert.equal(workflowCatalog['code.dev'].composeWith.includes('omp.plugin'), false);
   assert.match(steps, /acceptance.+invariants.+dirty worktree.+installed state/iu);
   assert.match(steps, /detailed implementation and evidence plan.+parallel.+waves.+vertical slices.+non-overlapping.+write sets.+tests.+E2E/iu);
-  assert.match(steps, /parallel.+plan.+assignment.+before.+production/iu);
+  assert.match(steps, /reviewer.+audit.+plan.+parallel.+plan.+assignment.+before.+production/iu);
   assert.match(steps, /independently review.+bounded.+semantic diff/iu);
   assert.match(steps, /same.+tasks\[\].+batch.+independent.+vertical.+slice/iu);
   assert.match(steps, /task.+public behavior.+RED.+minimal.+implementation.+GREEN.+refactor/iu);
@@ -301,7 +301,7 @@ test('omp.plugin owns the complete self-iteration lifecycle without adding anoth
   assert.match(delegation, /task.+vertical.+RED.+GREEN.+REFACTOR/iu);
   assert.match(delegation, /reviewer.+bounded.+semantic diff/iu);
   assert.match(delegation, /task.+supported.+finding.+repair/iu);
-  assert.match(quality, /plan-review disposition.+task-owned.+RED-before-production.+GREEN.+installed E2E.+review reconciliation/iu);
+  assert.match(quality, /plan-audit disposition.+task-owned.+RED-before-production.+GREEN.+installed E2E.+review reconciliation/iu);
   assert.match(risks, /prompt.+installed-runtime.+drift.+isolated evidence.+stochastic.+one pass/iu);
 });
 

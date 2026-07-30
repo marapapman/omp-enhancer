@@ -17,7 +17,7 @@ test('self-development guide defines the agent-owned reviewed TDD lifecycle', as
   assert.match(guide, /local code.+official.+community/isu);
   assert.match(guide, /DISCOVER.+WORKFLOW PLAN.+LOAD.+WORKFLOW READY.+TODO/isu);
   assert.match(guide, /PLAN REVIEW.+RED.+GREEN.+REFACTOR.+E2E.+review.+reconcile/isu);
-  assert.match(guide, /`plan`.+complete plan.+native `reviewer`.+existing.+diff/isu);
+  assert.match(guide, /native `plan`.+起草.+native `reviewer`.+审计/isu);
   assert.match(
     guide,
     /PLAN REVIEW[\s\S]*native `task`[\s\S]*(?:one `tasks\[\]` batch|parallel batch)[\s\S]*`MAIN REVIEW`[\s\S]*native `reviewer`[\s\S]*native `task`[\s\S]*repair/iu,

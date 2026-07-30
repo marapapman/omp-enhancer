@@ -25,15 +25,15 @@ export const operationWorkflows = [
       },
       {
         "id": "step-plan",
-        "text": "Main writes a frozen planning brief — requested outcome, mutation authority, acceptance criteria, integrated evidence anchors, slice boundaries, and evidence bar — and delegates to the plan Agent the full detailed implementation and evidence plan: dependency-ordered parallel waves of vertical slices with IDs, acceptance targets, dependencies, exact files and non-overlapping write sets, public test seams, exact focused commands, expected valid RED, minimum production boundaries, required Skills, focused tests, shared-generator boundaries, isolated installed E2E scenarios, E2E event evidence, and the release boundary, integration points, returned evidence, and the draft's own challenge findings; Main authors no plan detail beyond the brief"
+        "text": "Main writes a frozen planning brief — requested outcome, mutation authority, acceptance criteria, integrated evidence anchors, slice boundaries, and evidence bar — and delegates to the plan Agent the full detailed implementation and evidence plan: dependency-ordered parallel waves of vertical slices with IDs, acceptance targets, dependencies, exact files and non-overlapping write sets, public test seams, exact focused commands, expected valid RED, minimum production boundaries, required Skills, focused tests, shared-generator boundaries, isolated installed E2E scenarios, E2E event evidence, and the release boundary, integration points, returned evidence, and the draft's own challenge findings; Main authors no plan detail beyond the brief. Main may dispatch plan again for a finer-grained sub-plan when a slice needs deeper decomposition before production mutation; each plan pass receives Main's updated frozen brief."
       },
       {
         "id": "step-plan-review",
-        "text": "The plan Agent's draft carries its challenge findings; Main reviews the complete plan, parallel waves, plan assignment map, and exclusive write sets, and requests at most one fresh plan Agent pass only when disposition materially changes the plan before any authorized production mutation, never on unchanged text; a generator that rewrites a shared output set belongs to one downstream integration slice after its source dependencies, never to parallel sibling slices"
+        "text": "The plan Agent's draft carries its challenge findings; Main dispatches reviewer to independently audit the plan's parallel waves, exclusive write sets, dependency accuracy, test seams, and evidence boundary. Main may call plan again with reviewer findings integrated into an updated brief; repeated plan-reviewer cycles are allowed while plan content materially changes, never on unchanged text; a generator that rewrites a shared output set belongs to one downstream integration slice after its source dependencies, never to parallel sibling slices"
       },
       {
         "id": "step-plan-disposition",
-        "text": "Main records each accepted, rejected, and unresolved plan finding, rebases only affected TODO rows, and freezes complete assignments with exclusive write ownership, exact evidence return, and no versioning or publication authority."
+        "text": "Main records each accepted, rejected, and unresolved reviewer plan finding, rebases only affected TODO rows, and freezes complete assignments with exclusive write ownership, exact evidence return, and no versioning or publication authority."
       },
       {
         "id": "step-task-batch",
@@ -72,13 +72,13 @@ export const operationWorkflows = [
       "A generator that rewrites a shared output tree is an exclusive downstream integration slice, not a command for multiple parallel source slices.",
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow is not a gate, router, fork mandate, or completion controller.",
       "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation",
-      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-review checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
+      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-audit checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
     ],
     "skills": [
       "code-development"
     ],
     "qualityChecks": [
-      "acceptance-to-file coverage, explicit plan-review disposition, parallel vertical slices with exclusive write ownership, behavior/source task-owned RED-before-production and focused GREEN evidence, one-shot shared generation with check-only parity and no-diff inspection, current package and marketplace consistency, isolated installed E2E when runtime behavior changed, bounded review reconciliation, installed-runtime parity, dirty-tree containment, and advisory-only lifecycle behavior, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely"
+      "acceptance-to-file coverage, explicit plan-review disposition, parallel vertical slices with exclusive write ownership, behavior/source task-owned RED-before-production and focused GREEN evidence, one-shot shared generation with check-only parity and no-diff inspection, current package and marketplace consistency, isolated installed E2E when runtime behavior changed, bounded review reconciliation, installed-runtime parity, dirty-tree containment, and advisory-only lifecycle behavior, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely, reviewer-audited plan output before production mutation, Main-authored edit coverage in reviewer audit"
     ],
     "riskNotes": [
       "Prompt, lifecycle, model-behavior, packaging, and installed-runtime surfaces can drift across source, generated, packaged, and live states and require isolated evidence.",
@@ -95,7 +95,7 @@ export const operationWorkflows = [
       "step-search-local: scout owns the bounded local evidence pass and returns exact anchors distinguishing repository source from generated, packaged, installed, or runtime truth",
       "step-search-external: librarian owns one bounded external pass over official documentation and community experience and returns versioned, applicability-tagged leads",
       "step-plan: plan drafts the complete implementation and evidence plan from Main's frozen brief, including its own challenge findings, without editing files",
-      "step-plan-review: plan independently challenges Main's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and drafted it from Main's frozen brief, with at most one fresh pass on materially rebased plans, without editing files",
+      "step-plan-review: reviewer independently audits plan's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and returns findings; Main may dispatch plan again with reviewer findings integrated, while plan content materially changes",
       "step-task-batch: task receives all runnable independent vertical slices for a wave in the same native tasks[] batch with exclusive source and test ownership; one dependency-ordered shared-generation task owns shared generated outputs",
       "step-task-tdd: each behavior/source task owns its complete vertical RED -> GREEN -> REFACTOR slice and returns the public-behavior test, canonical implementation, bounded diff, and exact command evidence; the downstream shared-generation task runs the shared generator exactly once and returns generation, check, and parity evidence without fabricating a RED",
       "step-e2e: task runs the isolated installed E2E pilot without publish, upgrade, or external contact and returns event-log evidence; Main evaluates",

@@ -9,7 +9,7 @@ import { exactNestedEccSkillUri } from '../plugins/omp-enhancer-core/src/workflo
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const pluginsRoot = path.join(repoRoot, 'plugins');
-const nativeAgents = new Set(['scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
+const nativeAgents = new Set(['plan', 'scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
 const packageArtifactDirectories = new Set([
   '.git',
   '.hg',

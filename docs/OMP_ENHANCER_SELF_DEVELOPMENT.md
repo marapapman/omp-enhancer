@@ -34,7 +34,7 @@ OMP Enhancer 自开发使用现有 `omp.plugin` 作为 Primary workflow，并加
 2. `DECLARE`：Main 的下一 response 在 byte 0 从 `W` 开始公开写出 exact `WORKFLOW PLAN`：Primary、Add-ons、仅含 exact domain Skill/catalog URI 的 Skills，以及至少四个详细编号 Actions：`LOAD`、`COMMIT`、`SPLIT + EXECUTE`、`VERIFY`。`Load order: NOW=[skill://code-development] THEN=[skill://omp-enhancer-workflows/references/omp.plugin.md]` 把 workflow reference 仅放在 `THEN`；若宿主已通过 native `skill-prompt` 提供 `code-development` 正文，则仍在 `Skills` 中声明它，但从 `NOW` 省略。
 3. `LOAD`：PLAN response 读取 `NOW` 一次并等待。`skill://code-development` 的完整结果明确披露 exact `skill://code-development/references/omp-enhancer.md` 后，Main 用一次可见 `RESOURCE EXTENSION` 读取它并等待；最后读取 `THEN` 一次。全局上限是最多两次 catalog hop 加一次 linked-method resource batch，任何已由宿主提供或已成功读取的 URI 都不得重读。
 4. `COMMIT`：资源全部返回或标记 unavailable 后，Main 的下一 response 在 byte 0 从 `W` 开始公开输出 exact `WORKFLOW READY | ...`，根据真实 workflow card 与 Skill 指令初始化详细 TODO，冻结后续 assignment 使用的 workflow/Skill 元数据，然后结束等待且不调用项目工具。Loaded-card soft compiler 在 `omp.plugin` 为 `subagent-driven`、input 完整、checkpoint 安全且 matching Agent 可见时产生 exact `Delegate` TODO row；否则记录一个匹配的许可 fallback，parent-owned `VERIFY` rows 保持独立。
-5. `SPLIT`：Main 完成本地与决策相关的外部检索、细粒度 dependency-wave 计划和插件 `plan` 审阅，再把安全、完整、写集不重叠的 vertical TDD slices 组成并行 wave。
+5. `SPLIT`：Main 完成本地与决策相关的外部检索、细粒度 dependency-wave 计划和 native `plan` 审阅，再把安全、完整、写集不重叠的 vertical TDD slices 组成并行 wave。
 6. `EXECUTE`：native `task` 分片依次完成 test mutation、valid RED、最小 production change、同命令 GREEN 和 refactor；Main 集成 delivery、运行 broader verification，并在 reviewer 前公开 `MAIN REVIEW`。
 7. `VERIFY`：native `reviewer` 只接收 Main-reviewed bounded diff/evidence；Main disposition finding，并仅对 supported finding 进行有界修复和至多一次 fresh affected review，最后交付验证证据。
 
@@ -49,7 +49,7 @@ READY 后的 TODO 应保留以下语义，而不是把它们压缩为笼统的�
 1. `BASELINE`：验收条件、架构不变量、仓库指令、dirty-tree 边界、canonical source、生成物、插件边界与安装态。
 2. `SEARCH`：用本地代码检索定位入口、调用者、测试、配置和 source/generated/package/installed 差异；只有当前 API、工具链或社区故障经验可能影响决策时，才补充有界的官方资料与社区检索，并记录版本与适用性。
 3. `PLAN`：Main 根据实际证据写出 dependency-ordered waves 和完整 vertical slices；逐 slice 记录 ID、验收、依赖、exact exclusive write set、本地锚点、test seam、focused command、expected valid RED、production boundary、所需 Skills、integration point 和 returned evidence，并列出生成命令、broader checks、E2E、文档与 release boundary。
-4. `PLAN REVIEW`：只读插件 `plan` Agent 收到完整 plan 与 assignment map；Main 为每项 finding 记录 accepted、rejected 或 unresolved disposition。
+4. `PLAN REVIEW`：native `reviewer` 审计 plan 的 parallel waves、write sets、test seams 和 evidence boundary；Main 为每项 finding 记录 accepted、rejected 或 unresolved disposition。Main may call `plan` again with reviewer findings integrated while plan content materially changes。
 5. `TASK WAVES`：同 wave 的 runnable independent slices 通过 native `task` 的 one `tasks[]` batch 提交；dependent slice 等待后续 wave。每个 child 独占自己的 test、production 和非共享输出 write set，并返回 host-observable delivery；全量 shared generation 留给后续 exclusive integration slice。
 6. `RED / GREEN / REFACTOR`：每个 task 在同一个 vertical slice 中依次完成 test mutation、真实命令上的 valid RED、最小 canonical implementation、同一命令 GREEN 和 green-only refactor，并返回 bounded diff 与 exact evidence。
 7. `INTEGRATE / VERIFY`：Main 等待所有 delivery，集成 current tree，检查 generated diff，并运行 focused、check-only parity 与 proportionate broader checks；shared generator 已由 exclusive integration task 执行，Main 不重复运行。
@@ -113,7 +113,7 @@ Shared generator 是一个明确依赖边界：当命令会重写整组 workflow
 
 ## Subagent-driven 实现与分层审阅
 
-使用 smallest useful set of distinct unanswered review questions：插件 `plan` 审计划是否可执行，native `task` 实现 complete vertical slices，Main 审 current integrated tree，native `reviewer` 再挑战 supplied evidence。`plan` receives the complete plan；native `reviewer` receives the existing Main-reviewed bounded semantic diff。只读 reviewers 不承担 Main 的判断，task 不接管 parent TODO。
+使用 smallest useful set of distinct unanswered review questions：native `plan` 起草可执行的实现计划，native `reviewer` 审计计划是否可执行，native `task` 实现 complete vertical slices，Main 审 current integrated tree，native `reviewer` 再挑战 supplied evidence。`plan` receives the complete plan；native `reviewer` receives the existing Main-reviewed bounded semantic diff。只读 reviewers 不承担 Main 的判断，task 不接管 parent TODO。
 
 执行顺序固定表达依赖，但不是 runtime gate：
 
@@ -123,7 +123,7 @@ Shared generator 是一个明确依赖边界：当命令会重写整组 workflow
 4. `REVIEWER`：只有在 `MAIN REVIEW` 后，native `reviewer` 才接收 Main-reviewed bounded diff、验收条件和 fresh evidence；它不读项目或运行命令。
 5. `REPAIR`：Main 验证 finding；supported、in-scope material issue 才交给 native `task` 做 bounded repair，随后刷新 evidence、再次 `MAIN REVIEW`，并在 input materially changed 时最多再请一次 reviewer。
 
-`explore`、`implementation-task`、`config-librarian`、`omp-target-auditor`、`test-planner`、`test-executor` 和 `test-reviewer` 已退出普通代码阶段。当前通用角色只有插件 `plan`、native `task` 和 native `reviewer`；Main 保留本地检索、计划、集成、finding validation、TODO 和 final conclusion。
+`explore`、`implementation-task`、`config-librarian`、`omp-target-auditor`、`test-planner`、`test-executor` 和 `test-reviewer` 已退出普通代码阶段。当前通用角色只有 native `plan`、native `task` 和 native `reviewer`；Main 保留本地检索、计划、集成、finding validation、TODO 和 final conclusion。
 
 每个委派 TODO 行先使用 `Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>`；checkpoint 是完整、单行且 metadata-safe 的任务标签。Dispatch 时机械复制 workflow、step、skills，并把 checkpoint 原样复制到 `todo`，因此 assignment byte 0 使用 `[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>]`，不能先写 `# Target` 或 `# Goal`；正文携带 write set、non-goals、anchors、command、验收和 evidence return 等完整 bounded input。Child 只消费冻结的 assignment Skills，不重新执行 workflow/Skill discovery，不自行选择或加载另一套 Skill；缺少方法或输入时返回具体 limitation，由 Main 决定是否 rebase。Batch outer context 不能替代 per-job input。失败、取消或 partial child work 不算 delivery。Agent 缺失、capacity 不足、input 不完整或无法形成安全 exclusive write sets 时，Main 记录具体 limitation，并只采用 OMP 权限允许的最安全 fallback；它不是 hard fork requirement、fixed fan-out 或 completion gate。
 

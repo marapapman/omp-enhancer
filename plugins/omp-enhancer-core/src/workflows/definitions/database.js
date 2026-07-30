@@ -81,15 +81,15 @@ export const databaseWorkflows = [
       },
       {
         "id": "step-plan",
-        "text": "Main writes a frozen planning brief — requested outcome, mutation authority, acceptance criteria, integrated evidence anchors, slice boundaries, and evidence bar — and delegates to the plan Agent the full detailed implementation and evidence plan: dependency-ordered parallel waves of vertical slices with IDs, acceptance targets, dependencies, exact files and non-overlapping write sets, public test seams, exact focused commands, expected valid RED, minimum production boundaries, required Skills, integration points, returned evidence, and the draft's own challenge findings; Main authors no plan detail beyond the brief"
+        "text": "Main writes a frozen planning brief — requested outcome, mutation authority, acceptance criteria, integrated evidence anchors, slice boundaries, and evidence bar — and delegates to the plan Agent the full detailed implementation and evidence plan: dependency-ordered parallel waves of vertical slices with IDs, acceptance targets, dependencies, exact files and non-overlapping write sets, public test seams, exact focused commands, expected valid RED, minimum production boundaries, required Skills, integration points, returned evidence, and the draft's own challenge findings; Main authors no plan detail beyond the brief. Main may dispatch plan again for a finer-grained sub-plan when a slice needs deeper decomposition before production mutation; each plan pass receives Main's updated frozen brief."
       },
       {
         "id": "step-plan-review",
-        "text": "The plan Agent's draft carries its challenge findings; Main reviews the complete plan, parallel waves, plan assignment map, and exclusive write sets, and requests at most one fresh plan Agent pass only when disposition materially changes the plan before any authorized production mutation, never on unchanged text"
+        "text": "The plan Agent's draft carries its challenge findings; Main dispatches reviewer to independently audit the plan's parallel waves, exclusive write sets, dependency accuracy, test seams, and evidence boundary. Main may call plan again with reviewer findings integrated into an updated brief; repeated plan-reviewer cycles are allowed while plan content materially changes, never on unchanged text"
       },
       {
         "id": "step-plan-disposition",
-        "text": "Main disposes every plan finding as accepted, rejected, or unresolved, rebases only affected slices, and freezes complete assignments with exclusive write ownership and explicit live-operation exclusions."
+        "text": "Main disposes every reviewer plan finding as accepted, rejected, or unresolved, rebases only affected slices, and freezes complete assignments with exclusive write ownership and explicit live-operation exclusions."
       },
       {
         "id": "step-task-batch",
@@ -119,7 +119,7 @@ export const databaseWorkflows = [
       "Slice count follows real independent vertical work, dependency order, exclusive write ownership, and native capacity; one safe slice remains one task.",
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path.",
       "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation",
-      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-review checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
+      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-audit checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
     ],
     "skills": [
       "database-migrations",
@@ -135,7 +135,7 @@ export const databaseWorkflows = [
       "safety-guard"
     ],
     "qualityChecks": [
-      "current migration state, backup evidence, plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, compatibility order, bounded lock and downtime impact, data invariants, clean upgrade tests, rollback or forward-repair evidence, reviewer reconciliation, and exact execution boundary, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely"
+      "current migration state, backup evidence, plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, compatibility order, bounded lock and downtime impact, data invariants, clean upgrade tests, rollback or forward-repair evidence, reviewer reconciliation, and exact execution boundary, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely, reviewer-audited plan output before production mutation, Main-authored edit coverage in reviewer audit"
     ],
     "riskNotes": [
       "Schema and data changes can be destructive or irreversible; use the host approval path and never infer authority over a live database."
@@ -151,7 +151,7 @@ export const databaseWorkflows = [
       "step-search-local: scout owns the bounded local evidence pass and returns exact anchors distinguishing repository source from generated, packaged, installed, or runtime truth",
       "step-search-external: librarian owns one bounded external pass over official documentation and community experience and returns versioned, applicability-tagged leads",
       "step-plan: plan drafts the complete implementation and evidence plan from Main's frozen brief, including its own challenge findings, without editing files",
-      "step-plan-review: plan independently challenges Main's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and drafted it from Main's frozen brief, with at most one fresh pass on materially rebased plans, without editing files",
+      "step-plan-review: reviewer independently audits plan's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and returns findings; Main may dispatch plan again with reviewer findings integrated, while plan content materially changes",
       "step-task-batch: task receives all runnable independent database slices for the wave in the same native tasks[] batch with exclusive write ownership",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the focused test, minimum production and migration changes, same-command evidence, and prohibition on unapproved live application",
       "step-review: reviewer independently reviews the bounded diff and supplied evidence covering task deliveries and Main-authored edits alike, does not read the project or run commands, and returns findings without repair or completion authority",
@@ -180,15 +180,15 @@ export const databaseWorkflows = [
       },
       {
         "id": "step-plan",
-        "text": "Main writes a frozen planning brief — requested outcome, mutation authority, acceptance criteria, integrated evidence anchors, slice boundaries, and evidence bar — and delegates to the plan Agent the full detailed implementation and evidence plan: dependency-ordered parallel waves of vertical slices with IDs, acceptance targets, dependencies, exact files and non-overlapping write sets, public test seams, exact focused commands, expected valid RED, minimum production boundaries, required Skills, integration points, returned evidence, and the draft's own challenge findings; Main authors no plan detail beyond the brief"
+        "text": "Main writes a frozen planning brief — requested outcome, mutation authority, acceptance criteria, integrated evidence anchors, slice boundaries, and evidence bar — and delegates to the plan Agent the full detailed implementation and evidence plan: dependency-ordered parallel waves of vertical slices with IDs, acceptance targets, dependencies, exact files and non-overlapping write sets, public test seams, exact focused commands, expected valid RED, minimum production boundaries, required Skills, integration points, returned evidence, and the draft's own challenge findings; Main authors no plan detail beyond the brief. Main may dispatch plan again for a finer-grained sub-plan when a slice needs deeper decomposition before production mutation; each plan pass receives Main's updated frozen brief."
       },
       {
         "id": "step-plan-review",
-        "text": "The plan Agent's draft carries its challenge findings; Main reviews the complete plan, parallel waves, plan assignment map, and exclusive write sets, and requests at most one fresh plan Agent pass only when disposition materially changes the plan before any authorized production mutation, never on unchanged text"
+        "text": "The plan Agent's draft carries its challenge findings; Main dispatches reviewer to independently audit the plan's parallel waves, exclusive write sets, dependency accuracy, test seams, and evidence boundary. Main may call plan again with reviewer findings integrated into an updated brief; repeated plan-reviewer cycles are allowed while plan content materially changes, never on unchanged text"
       },
       {
         "id": "step-plan-disposition",
-        "text": "Main records every accepted, rejected, and unresolved plan finding, rebases only affected slices, and freezes complete assignments with exclusive write ownership and no implied authority over a live recovery command."
+        "text": "Main records every accepted, rejected, and unresolved reviewer plan finding, rebases only affected slices, and freezes complete assignments with exclusive write ownership and no implied authority over a live recovery command."
       },
       {
         "id": "step-task-batch",
@@ -218,7 +218,7 @@ export const databaseWorkflows = [
       "Slice count follows real independent vertical work, migration-state dependencies, exclusive write ownership, and native capacity; one safe slice remains one task.",
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; this workflow creates no gate, router, fork mandate, completion controller, or self-repeating repair path.",
       "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation",
-      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-review checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
+      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-audit checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
     ],
     "skills": [
       "database-migrations",
@@ -234,7 +234,7 @@ export const databaseWorkflows = [
       "safety-guard"
     ],
     "qualityChecks": [
-      "exact failure and migration state evidence, backup status, reproducible transition, root-cause classification, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, data invariants, state-aware regression coverage, clean and partial-state verification, reviewer reconciliation, rollback or forward-repair evidence, and live-operation boundary, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely"
+      "exact failure and migration state evidence, backup status, reproducible transition, root-cause classification, complete plan-review disposition, parallel vertical slices with exclusive write ownership, task-owned RED-before-production and same-command GREEN, data invariants, state-aware regression coverage, clean and partial-state verification, reviewer reconciliation, rollback or forward-repair evidence, and live-operation boundary, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely, reviewer-audited plan output before production mutation, Main-authored edit coverage in reviewer audit"
     ],
     "riskNotes": [
       "A mistaken repair can destroy data or make migration history diverge further; require backup evidence, explicit environment identity, bounded commands, and a stop condition before live recovery."
@@ -250,7 +250,7 @@ export const databaseWorkflows = [
       "step-search-local: scout owns the bounded local evidence pass and returns exact anchors distinguishing repository source from generated, packaged, installed, or runtime truth",
       "step-search-external: librarian owns one bounded external pass over official documentation and community experience and returns versioned, applicability-tagged leads",
       "step-plan: plan drafts the complete implementation and evidence plan from Main's frozen brief, including its own challenge findings, without editing files",
-      "step-plan-review: plan independently challenges Main's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and drafted it from Main's frozen brief, with at most one fresh pass on materially rebased plans, without editing files",
+      "step-plan-review: reviewer independently audits plan's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and returns findings; Main may dispatch plan again with reviewer findings integrated, while plan content materially changes",
       "step-task-batch: task receives all runnable independent migration-repair slices for the wave in the same native tasks[] batch with exclusive write ownership",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the failed-state test, minimum production repair, same-command evidence, and prohibition on unapproved live recovery",
       "step-review: reviewer independently reviews the bounded diff and supplied evidence covering task deliveries and Main-authored edits alike, does not read the project or run commands, and returns findings without repair or completion authority",

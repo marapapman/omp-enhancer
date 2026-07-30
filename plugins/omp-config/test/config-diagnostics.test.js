@@ -477,7 +477,7 @@ test('registered defaults resolve bundled package assets from a normal project c
 
   const assets = tools.find((tool) => tool.name === 'omp_config_assets');
   const assetsResult = await assets.execute('call-2', {}, undefined, undefined, { cwd: projectRoot });
-  assert.ok(assetsResult.details.agents.includes('plan.md'));
+  assert.equal(assetsResult.details.agents.includes('plan.md'), false);
   assert.ok(assetsResult.details.skills.includes('code-development'));
   assert.equal(assetsResult.details.agents.includes('implementation-task.md'), false);
   assert.equal(assetsResult.details.skills.includes('tdd'), false);
@@ -501,7 +501,7 @@ test('registered defaults resolve bundled package assets from a normal project c
     assert.equal(commandDoctor.summary, 'No config risks found.');
 
     const commandAssets = await commands.get('config-assets').handler('');
-    assert.ok(commandAssets.agents.includes('plan.md'));
+    assert.equal(commandAssets.agents.includes('plan.md'), false);
     assert.ok(commandAssets.skills.includes('code-development'));
     assert.equal(commandAssets.agents.includes('implementation-task.md'), false);
     assert.equal(commandAssets.skills.includes('tdd'), false);

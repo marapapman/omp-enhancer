@@ -42,12 +42,12 @@ test('the consolidated lifecycle is subagent-driven from parallel vertical TDD t
   assert.match(steps, /local.+search.+caller.+test/iu);
   assert.match(steps, /network.+official.+community/iu);
   assert.match(steps, /detailed.+plan.+parallel.+waves.+vertical slices.+exact files.+non-overlapping.+write/iu);
-  assert.match(steps, /plan Agent.+challenge.+plan.+parallel.+assignment.+before.+production/iu);
+  assert.match(steps, /reviewer.+audit.+plan.+parallel.+write sets.+dependencies/iu);
   assert.match(steps, /same.+tasks\[\].+batch.+runnable.+independent.+slice/iu);
   assert.match(steps, /task.+test.+mutation.+valid.+RED.+minimum.+production.+same.+command.+GREEN.+refactor/iu);
   assert.match(steps, /reviewer.+independently reviews.+bounded.+semantic diff.+evidence.+without.+project.+read.+command/iu);
   assert.match(steps, /supported.+finding.+task.+repair.+fresh.+evidence.+Main.+integrat.+fresh.+reviewer/iu);
-  assert.match(delegation, /plan.+challenge.+complete.+parallel.+plan.+write sets.+dependencies/iu);
+  assert.match(delegation, /reviewer.+audit.+plan.+write sets.+dependencies/iu);
   assert.match(delegation, /task.+same.+tasks\[\].+batch.+vertical.+RED.+GREEN.+REFACTOR/iu);
   assert.match(delegation, /reviewer.+bounded.+semantic diff.+evidence.+does not read.+project.+run.+command/iu);
   assert.match(delegation, /task.+supported.+finding.+repair/iu);
@@ -89,7 +89,7 @@ test('domain code changes reuse task-owned parallel vertical TDD and Main-before
     assert.match(steps, /task.+test.+RED.+production.+same.+command.+GREEN.+refactor/iu, `${id}: task-owned TDD`);
     assert.match(steps, /reviewer.+independently reviews.+bounded.+diff.+evidence/iu, `${id}: reviewer input`);
     assert.match(steps, /supported.+finding.+task.+repair/iu, `${id}: task repair`);
-    assert.match(delegation, /plan.+challenges.+supplied.+plan/iu, `${id}: plan delegation`);
+    assert.match(delegation, /reviewer.+audit.+plan.+supplied.+plan/iu, `${id}: plan delegation`);
     assert.match(delegation, /task.+vertical.+RED.+GREEN/iu, `${id}: task delegation`);
     assert.match(delegation, /reviewer.+independently.+bounded.+diff/iu, `${id}: diff review`);
     assertLifecycleOrder(workflow, id);
@@ -123,13 +123,13 @@ function assertLifecycleOrder(workflow, label = workflow.id) {
   };
 
   const plan = stepIndex(/Main.+plan.+parallel.+wave.+vertical.+slice/iu, 'parallel plan');
-  const planReview = stepIndex(/plan Agent.+review/iu, 'plan review');
+  const planReview = stepIndex(/reviewer.+audit.+plan/iu, 'plan audit');
   const taskTdd = stepIndex(/task.+RED.+GREEN.+refactor/iu, 'task TDD');
   const reviewer = stepIndex(/reviewer.+independently reviews.+bounded.+diff.+evidence/iu, 'reviewer review');
   const repair = stepIndex(/supported.+finding.+task.+repair/iu, 'task repair');
 
-  assert.ok(plan < planReview, `${label}: plan must precede plan review`);
-  assert.ok(planReview < taskTdd, `${label}: plan review must precede task TDD`);
+  assert.ok(plan < planReview, `${label}: plan must precede plan audit`);
+  assert.ok(planReview < taskTdd, `${label}: plan audit must precede task TDD`);
   assert.ok(taskTdd < reviewer, `${label}: task TDD must precede reviewer`);
   assert.ok(reviewer < repair, `${label}: reviewer findings must precede repair`);
 }

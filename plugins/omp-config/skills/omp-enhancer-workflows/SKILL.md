@@ -17,7 +17,7 @@ Actions:
 PLAN text alone is incomplete: same response calls NOW and waits, or calls THEN if NOW=none. THEN is one final resource-only batch. Give each evidence checkpoint an Action.
 AFTER NOW: empty revealed URI set => no text/marker; call the THEN batch. Otherwise RESOURCE EXTENSION MUST list >=1 exact revealed URI; `reads=none` is invalid.
 
-Catalog version: 28.
+Catalog version: 29.
 
 Navigation only: never routes, gates, grants permission, selects Agents, or decides completion.
 

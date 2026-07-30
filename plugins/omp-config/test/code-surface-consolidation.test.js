@@ -29,8 +29,8 @@ test('one code-development Skill owns the subagent-driven code lifecycle', async
   assert.match(skill, /^---\nname: code-development\ndescription: .+\n---/u);
   assert.match(skill, /Delegate the local evidence pass to scout.+callers.+tests.+configuration/isu);
   assert.match(skill, /official documentation.+community issues/isu);
-  assert.match(skill, /delegate to the plan Agent.+detailed implementation-and-evidence plan.+parallel vertical slices/isu);
-  assert.match(skill, /The plan Agent.+draft carries its challenge findings.+fresh plan pass.+before any authorized production mutation/isu);
+  assert.match(skill, /delegate to native `plan` agent.+detailed implementation-and-evidence plan.+parallel vertical slices/isu);
+  assert.match(skill, /Dispatch native `reviewer` to independently audit plan.+parallel waves.+write sets.+dependencies/isu);
   assert.match(skill, /same native `task`.+tasks\[\].+batch.+runnable.+independent.+slice/isu);
   assert.match(skill, /native `task`.+test mutation.+expected assertion failure as RED.+minimum.+production.+same command.+GREEN.+refactor/isu);
   assert.match(skill, /Main.+integrat.+current tree.+bounded diff.+evidence.+native `reviewer`/isu);
@@ -50,23 +50,4 @@ test('retired overlapping code-method Skills are no longer top-level choices', a
   }
 });
 
-test('ordinary code delegation exposes plugin plan plus native task and reviewer without wrappers', async () => {
-  const plan = await readFile(path.join(pluginRoot, 'agents', 'plan.md'), 'utf8');
-  assert.match(plan, /local code.+search|search.+local code/isu);
-  assert.match(plan, /official.+community/isu);
-  assert.match(plan, /parallel.+waves.+vertical slices.+non-overlapping.+write sets/isu);
-  assert.match(plan, /assignment.+native `task`.+test.+RED.+GREEN.+refactor/isu);
 
-  for (const relative of [
-    'agents/explore.md',
-    'agents/task.md',
-    'agents/implementation-task.md',
-    '../omp-test-enhancer/agents/test-planner.md',
-    '../omp-test-enhancer/agents/test-executor.md',
-    '../omp-test-enhancer/agents/test-reviewer.md',
-    'agents/config-librarian.md',
-    'agents/omp-target-auditor.md',
-  ]) {
-    await assert.rejects(access(path.join(pluginRoot, relative)), (error) => error?.code === 'ENOENT', relative);
-  }
-});

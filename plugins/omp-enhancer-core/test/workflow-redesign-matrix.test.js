@@ -128,13 +128,13 @@ test('one code workflow drives parallel native task slices before Main and revie
   assert.match(steps, /search local code.+entry points.+callers.+tests.+configuration/i);
   assert.match(steps, /official documentation.+community experience/i);
   assert.match(steps, /detailed implementation and evidence plan.+parallel.+waves.+vertical slices.+exact files.+non-overlapping.+write sets/i);
-  assert.match(steps, /plan Agent.+challenge.+complete.+parallel.+plan.+assignment.+before.+production mutation/i);
+  assert.match(steps, /reviewer.+audit.+plan.+parallel.+plan.+write sets.+dependencies/i);
   assert.match(steps, /same.+tasks\[\].+batch.+runnable.+independent.+slice/i);
   assert.match(steps, /task.+public-behavior test.+valid.+RED.+minimum.+production.+same command.+GREEN.+refactor/i);
   assert.match(steps, /Main.+integrat.+focused verification.+at most one fresh reviewer/i);
   assert.match(steps, /reviewer.+bounded semantic diff.+supplied evidence.+without.+project.+read.+command/i);
   assert.match(steps, /material supported.+finding.+task.+repair.+fresh affected evidence.+at most one.+fresh.+reviewer/i);
-  assert.match(delegation, /plan independently challenges Main's supplied complete parallel plan/i);
+  assert.match(delegation, /reviewer independently audits plan's supplied complete parallel plan/i);
   assert.match(delegation, /task.+vertical.+RED.+GREEN.+REFACTOR/i);
   assert.match(delegation, /Main.+integrat.+dispatch.+at most one fresh affected reviewer/i);
   assert.match(delegation, /reviewer independently reviews the bounded semantic diff/i);

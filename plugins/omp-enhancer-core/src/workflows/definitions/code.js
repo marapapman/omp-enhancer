@@ -21,15 +21,15 @@ export const codeWorkflows = [
       },
       {
         "id": "step-plan",
-        "text": "Main writes a frozen planning brief — requested outcome, mutation authority, acceptance criteria, integrated evidence anchors, slice boundaries, and evidence bar — and delegates to the plan Agent the full detailed implementation and evidence plan: dependency-ordered parallel waves of vertical slices with IDs, acceptance targets, dependencies, exact files and non-overlapping write sets, public test seams, exact focused commands, expected valid RED, minimum production boundaries, required Skills, integration points, returned evidence, and the draft's own challenge findings; Main authors no plan detail beyond the brief"
+        "text": "Main writes a frozen planning brief — requested outcome, mutation authority, acceptance criteria, integrated evidence anchors, slice boundaries, and evidence bar — and delegates to the plan Agent the full detailed implementation and evidence plan: dependency-ordered parallel waves of vertical slices with IDs, acceptance targets, dependencies, exact files and non-overlapping write sets, public test seams, exact focused commands, expected valid RED, minimum production boundaries, required Skills, integration points, returned evidence, and the draft's own challenge findings; Main authors no plan detail beyond the brief. Main may dispatch plan again for a finer-grained sub-plan when a slice needs deeper decomposition before production mutation; each plan pass receives Main's updated frozen brief."
       },
       {
         "id": "step-plan-review",
-        "text": "The plan Agent's draft carries its challenge findings; Main reviews the complete plan, parallel waves, plan assignment map, and exclusive write sets, and requests at most one fresh plan Agent pass only when disposition materially changes the plan before any authorized production mutation, never on unchanged text"
+        "text": "The plan Agent's draft carries its challenge findings; Main dispatches reviewer to independently audit the plan's parallel waves, exclusive write sets, dependency accuracy, test seams, and evidence boundary. Main may call plan again with reviewer findings integrated into an updated brief; repeated plan-reviewer cycles are allowed while plan content materially changes, never on unchanged text"
       },
       {
         "id": "step-plan-disposition",
-        "text": "Main records every accepted, rejected, and unresolved plan finding, rebases only affected TODO rows, and freezes complete bounded assignments with exclusive write ownership before dispatch."
+        "text": "Main records every accepted, rejected, and unresolved reviewer plan finding, rebases only affected TODO rows, and freezes complete bounded assignments with exclusive write ownership before dispatch."
       },
       {
         "id": "step-task-batch",
@@ -59,13 +59,13 @@ export const codeWorkflows = [
       "If task is unavailable, capacity constrained, or an assignment cannot be made safe, Main records the limitation and uses only a host-authorized direct fallback, if any; missing delegation is not invented success.",
       "This card is Agent-owned guidance, not a gate, router, fork mandate, completion controller, or self-repeating repair mechanism.",
       "Main never self-induces a fallback by skipping brief, input, or checkpoint preparation",
-      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-review checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
+      "The named audit Agent reviews the complete change regardless of who wrote the code — task slices, integration edits, and Main-authored code alike; the audit and plan-audit checkpoints fall back only when the named Agent is unavailable, and Main records that concrete unavailability on the affected row instead of proceeding unreviewed."
     ],
     "skills": [
       "code-development"
     ],
     "qualityChecks": [
-      "acceptance-to-file coverage, local entry-to-caller-to-test trace, current official and community evidence when decision-relevant, complete plan-review disposition, parallel vertical slices with non-overlapping write sets, task-owned RED-before-production and same-command GREEN evidence, lifecycle verification of the current semantic diff and cross-slice interactions, bounded reviewer evidence, finding reconciliation, and explicit authority and limitation reporting, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely"
+      "acceptance-to-file coverage, local entry-to-caller-to-test trace, current official and community evidence when decision-relevant, complete plan-review disposition, parallel vertical slices with non-overlapping write sets, task-owned RED-before-production and same-command GREEN evidence, lifecycle verification of the current semantic diff and cross-slice interactions, bounded reviewer evidence, finding reconciliation, and explicit authority and limitation reporting, author-neutral reviewer audit of the complete change including Main-authored edits, unavailability-only plan-review and code-review fallbacks recorded concretely, reviewer-audited plan output before production mutation, Main-authored edit coverage in reviewer audit"
     ],
     "riskNotes": [
       "External examples can be stale or inapplicable, and broad code searches can create noise; record versions, prefer primary documentation for behavior, and use community reports as leads rather than local truth.",
@@ -83,7 +83,7 @@ export const codeWorkflows = [
       "step-search-local: scout owns the bounded local evidence pass and returns exact anchors distinguishing repository source from generated, packaged, installed, or runtime truth",
       "step-search-external: librarian owns one bounded external pass over official documentation and community experience and returns versioned, applicability-tagged leads",
       "step-plan: plan drafts the complete implementation and evidence plan from Main's frozen brief, including its own challenge findings, without editing files",
-      "step-plan-review: plan independently challenges Main's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and drafted it from Main's frozen brief, with at most one fresh pass on materially rebased plans, without editing files",
+      "step-plan-review: reviewer independently audits plan's supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and returns findings; Main may dispatch plan again with reviewer findings integrated, while plan content materially changes",
       "step-task-batch: task receives every runnable independent vertical slice for the wave in the same native tasks[] batch, with one task per exclusive write set and no child ownership of the parent TODO",
       "step-task-tdd: task owns its complete vertical RED -> GREEN -> REFACTOR slice, including the public-behavior test mutation, valid RED, minimum production change, same-command GREEN, bounded refactor, and exact returned evidence",
       "step-review: reviewer independently reviews the bounded semantic diff and supplied evidence covering task deliveries and Main-authored edits alike, does not read the project or run commands, and returns findings without repair or completion authority",

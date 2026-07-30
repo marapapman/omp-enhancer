@@ -19,10 +19,10 @@ import { defineWorkflowCatalog } from '../plugins/omp-enhancer-core/src/workflow
 import { exactNestedEccSkillUri } from '../plugins/omp-enhancer-core/src/workflows/skill-discovery.js';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const OMP_NATIVE_ROLE_IDS = new Set(['scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
+const OMP_NATIVE_ROLE_IDS = new Set(['plan', 'scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
 
 test('catalog v28 assigns exactly one direct, one deferred, and 28 subagent-driven defaults', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 28);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 29);
   assert.equal(workflowDefinitions.length, 30);
   assert.deepEqual(
     [...new Set(workflowDefinitions.map(({ delegationDefault }) => delegationDefault))].sort(),
@@ -54,8 +54,8 @@ test('packaged catalog, index, and all references expose catalog v28 execution d
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 28/);
-  assert.match(skillIndex, /Catalog version: 28/);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 29/);
+  assert.match(skillIndex, /Catalog version: 29/);
   assert.equal(referenceNames.length, 30);
   assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 28);
   assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
@@ -79,7 +79,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   const skillReferences = Object.values(referencesByWorkflow).join('\n');
 
   assert.equal(catalog, buildSharedWorkflowCatalogMarkdown());
-  assert.equal(WORKFLOW_CATALOG_VERSION, 28);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 29);
   assert.equal(Number(catalog.match(/OMP_WORKFLOW_CATALOG_VERSION:\s*(\d+)/)?.[1]), WORKFLOW_CATALOG_VERSION);
   assert.deepEqual([...catalog.matchAll(/^### `([^`]+)`$/gm)].map((match) => match[1]), workflowIds);
   const indexedWorkflowIds = [...skillIndex.matchAll(/^- `([^`]+)` —/gm)].map((match) => match[1]);
@@ -177,7 +177,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.match(agents, /Project tools start only after the READY \+ TODO response ends and its results return[\s\S]*user's explicit source-language description is sufficient[\s\S]*select only the visible `writing\.pending` option/iu);
   assert.match(agents, /After its initial READY\/TODO wait[\s\S]*replacement PLAN[\s\S]*only new language Skills in NOW[\s\S]*language Primary reference last in THEN[\s\S]*replacement READY\/TODO/iu);
   assert.match(agents, /After all declared resources return or are marked unavailable, the next response is the filled READY plus native TODO init[\s\S]*byte 0 is `W`[\s\S]*WORKFLOW READY \| primary=<id-or-none>[\s\S]*Rebase a detailed TODO/iu);
-  assert.match(agents, /Preserve every named plan review, RED, GREEN, E2E, independent review, and parent verification checkpoint/iu);
+  assert.match(agents, /Preserve every named plan audit, RED, GREEN, E2E, independent review, and parent verification checkpoint/iu);
   assert.match(agents, /next response is the filled READY plus native TODO init[\s\S]*byte 0 is `W`[\s\S]*Apply the loaded-card soft compiler:[\s\S]*one exact Delegate row for that checkpoint[\s\S]*Parent VERIFY rows remain separate[\s\S]*Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>/iu);
   assert.match(agents, /COMPILE \(soft\): loaded `subagent-driven` \+ complete input \+ safe checkpoint \+ visible matching Agent => Delegate row[\s\S]*fallback=<one matched permitted limitation>/iu);
   assert.match(agents, /Main chooses direct work, Agent, and fork width from the committed TODO[\s\S]*Every non-simple loaded card is soft `subagent-driven`[\s\S]*`agentic\.simple` uses zero `task` calls/iu);
@@ -187,8 +187,8 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.match(agents, /Copy every direct user constraint verbatim into the job body[\s\S]*Fill every required native field[\s\S]*child follows its assignment and does not own the parent TODO/iu);
   assert.match(claude, /copy the TODO Agent exactly to native `agent`[\s\S]*assignment byte 0[\s\S]*Copy every direct user constraint verbatim/iu);
   assert.match(claude, /RESOURCE EXTENSION \| source=<loaded-exact-skill-uri> \| reads=<revealed-exact-skill-uris>/u);
-  assert.match(agents, /substantive code mutation[\s\S]*plugin `plan`.+drafts the parallel plan[\s\S]*native `task` slice owns test mutation, valid RED, minimum production, the same-command GREEN[\s\S]*writes `MAIN REVIEW` before native `reviewer`/iu);
-  assert.match(claude, /substantive code mutation[\s\S]*plugin `plan`.+drafts the parallel plan[\s\S]*valid RED[\s\S]*same-command GREEN[\s\S]*`MAIN REVIEW` before native `reviewer`/iu);
+  assert.match(agents, /substantive code mutation[\s\S]*native `plan`.+drafts the parallel plan[\s\S]*native `task` slice owns test mutation, valid RED, minimum production, the same-command GREEN[\s\S]*writes `MAIN REVIEW` before native `reviewer`/iu);
+  assert.match(claude, /substantive code mutation[\s\S]*native `plan`.+drafts the parallel plan[\s\S]*valid RED[\s\S]*same-command GREEN[\s\S]*`MAIN REVIEW` before native `reviewer`/iu);
   assert.doesNotMatch(`${agents}\n${claude}`, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
   assert.doesNotMatch(`${agents}\n${claude}`, /block:\s*true|continue:\s*true|systemPrompt\s*=|triggerTurn\s*\(/iu);
   assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
@@ -223,7 +223,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.match(catalog, /assignment text byte 0 begins `\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]`/i);
   assert.match(catalog, /EXECUTION DEFAULTS \(soft\):[\s\S]*All other selected workflows use the `subagent-driven` default/iu);
   assert.match(catalog, /defaults guide Main but never select an Agent or fork width/iu);
-  assert.match(catalog, /substantive code.+subagent-driven.+plugin `plan`.+native `task`.+native `reviewer`/isu);
+  assert.match(catalog, /substantive code.+subagent-driven.+native `plan`.+native `task`.+native `reviewer`/isu);
   assert.match(catalog, /same native `task` `tasks\[\]` batch.+runnable independent.+vertical slices.+dependent.+later wave/isu);
   assert.match(catalog, /Main.+integrat.+current tree.+diff.+evidence.+review.+before.+reviewer/isu);
   assert.match(catalog, /body of the text being modified/i);

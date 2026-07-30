@@ -11,6 +11,7 @@ const REMOVED_AGENT_FILES = [
   'config-librarian.md',
   'explore.md',
   'implementation-task.md',
+  'plan.md',
   'omp-target-auditor.md',
   'task.md',
   'quick_task.md',
@@ -82,37 +83,9 @@ test('legacy agent wrappers are removed after their knowledge moves to workflows
   }
 });
 
-test('ordinary code planning stays with plugin plan while implementation and review use native agents', async () => {
-  const plan = await readFile(path.join(AGENT_ROOT, 'plan.md'), 'utf8');
-  assert.doesNotMatch(plan, /^spawns:\s*["']?\*["']?\s*$/m);
-  assert.match(plan, /^spawns:\s*\[\]\s*$/m);
-  assert.match(plan, /^name:\s*plan$/m);
-  assert.match(plan, /Search local truth[\s\S]*entry points, callers, consumers, tests, configuration/i);
-  assert.match(plan, /official documentation[\s\S]*community issues, discussions, postmortems/i);
-  assert.match(plan, /PLAN REVIEW[\s\S]*exact RED\/GREEN commands/i);
-  assert.match(plan, /parallel waves[\s\S]*vertical slices[\s\S]*non-overlapping write sets/i);
-  assert.match(plan, /native `task` assignments?[\s\S]*test mutation[\s\S]*RED[\s\S]*GREEN[\s\S]*refactor/i);
-  assert.match(plan, /dependencies[\s\S]*later wave/i);
-  assert.match(plan, /operate as read-only/i);
-  const planTools = frontmatterList(plan, 'tools');
-  assert.equal(planTools.includes('edit'), false);
-  assert.equal(planTools.includes('write'), false);
-
-  for (const file of [
-    'ecc-security-reviewer.md',
-    'ecc-network-config-reviewer.md',
-    'ecc-opensource-sanitizer.md',
-  ]) {
-    const source = await readFile(path.join(AGENT_ROOT, file), 'utf8');
-    const tools = frontmatterList(source, 'tools');
-    assert.equal(tools.includes('edit'), false, `${file} must not edit`);
-    assert.equal(tools.includes('write'), false, `${file} must not write`);
-  }
-});
-
 test('OMP native agent identities are not packaged by omp-config', async () => {
   const present = new Set(await readdir(AGENT_ROOT));
-  for (const file of ['scout.md', 'task.md', 'sonic.md', 'designer.md', 'librarian.md', 'reviewer.md']) {
+  for (const file of ['scout.md', 'task.md', 'sonic.md', 'plan.md', 'designer.md', 'librarian.md', 'reviewer.md']) {
     assert.equal(present.has(file), false, `OMP native agent is shadowed by plugin asset: ${file}`);
   }
 });
