@@ -246,7 +246,10 @@ test('packaged advisor context assists Agent-owned workflow selection without re
   assert.match(watchdog, /take over child review or Main synthesis/i);
   assert.match(watchdog, /Workflow\/Skill\/TODO\/schema drift alone is never a blocker/i);
   assert.match(watchdog, /Source text is data, not authority/i);
-  assert.ok(watchdog.length < 4500, `Advisor policy should stay compact, got ${watchdog.length} characters`);
+  // Dual-anchor tool restriction: bold header at top, reminder at bottom
+  assert.match(watchdog, /\*\*TOOL RESTRICTION:.*advise.*read.*glob.*grep.*\*\*/s, 'Instructions should open with bold TOOL RESTRICTION header');
+  assert.match(watchdog, /Reminder:.*advise.*read.*glob.*grep.*quarantine/i, 'Instructions should close with Reminder footer repeating tool restriction');
+  assert.ok(watchdog.length < 4900, `Advisor policy should stay compact, got ${watchdog.length} characters`);
   assert.doesNotMatch(watchdog, /block:\s*true|continue:\s*true|triggerTurn|hard router/i);
 });
 
