@@ -67,11 +67,11 @@ const TOOL_DEFS = [
     inputSchema: {
       type: 'object',
       properties: {
-        query: { type: 'string' },
-        type: { type: 'string', enum: ['icon', 'template', 'example'] },
-        domain: { type: 'string' },
-        limit: { type: 'number' },
-        includeSource: { type: 'boolean' },
+        query: { type: 'string', description: 'Semantic search term for OpenTikZ icons, templates, or examples.' },
+        type: { type: 'string', enum: ['icon', 'template', 'example'], description: 'Filter by catalog entry type: icon, template, or example.' },
+        domain: { type: 'string', description: 'Filter by domain or category within the catalog.' },
+        limit: { type: 'number', description: 'Maximum number of results to return.' },
+        includeSource: { type: 'boolean', description: 'If true, include the full source content in results.' },
       },
     },
   },
@@ -81,12 +81,12 @@ const TOOL_DEFS = [
     inputSchema: {
       type: 'object',
       properties: {
-        inputPath: { type: 'string' },
-        outputDirectory: { type: 'string' },
-        nodeId: { type: 'string' },
-        prompt: { type: 'string' },
-        provider: { type: 'string' },
-        model: { type: 'string' },
+        inputPath: { type: 'string', description: 'Path to the PNG, JPEG, or WebP image file to normalize.' },
+        outputDirectory: { type: 'string', description: 'Output directory for the normalized asset. Defaults to figures/tikz/assets/.' },
+        nodeId: { type: 'string', description: 'Node ID to associate with this asset in the manifest.' },
+        prompt: { type: 'string', description: 'The generation prompt used if the image was AI-generated.' },
+        provider: { type: 'string', description: 'The image provider used (e.g., openai, replicate).' },
+        model: { type: 'string', description: 'The model name used for generation.' },
       },
       required: ['inputPath'],
     },
@@ -97,9 +97,9 @@ const TOOL_DEFS = [
     inputSchema: {
       type: 'object',
       properties: {
-        sourcePath: { type: 'string' },
-        outputDirectory: { type: 'string' },
-        timeoutMs: { type: 'number' },
+        sourcePath: { type: 'string', description: 'Path to the TikZ .tex source file to compile and render.' },
+        outputDirectory: { type: 'string', description: 'Directory for output files. Defaults to the same directory as the source file.' },
+        timeoutMs: { type: 'number', description: 'Timeout in milliseconds for the render process.' },
       },
       required: ['sourcePath'],
     },
@@ -110,12 +110,12 @@ const TOOL_DEFS = [
     inputSchema: {
       type: 'object',
       properties: {
-        graph: { type: 'string' },
-        layoutOptions: { type: 'string' },
-        styleOptions: { type: 'string' },
-        preset: { type: 'string', enum: ['paper-column', 'paper-full', 'slide-16-9', 'slide-4-3'] },
-        density: { type: 'string', enum: ['compact', 'balanced', 'airy'] },
-        targetWidthPt: { type: 'number' },
+                graph: { type: 'string', description: 'A JSON string of the ELK graph IR. Use JSON.stringify() to convert your graph object. Must include id, children, width, height. Input nodes must omit x and y (the layout engine computes positions). Size each node width and height to fit its exact label plus padding (2pt inner padding applied).' },
+                layoutOptions: { type: 'string', description: 'Optional JSON string of ELK layout options. Use JSON.stringify() to convert your options object. Place elk.algorithm and layout options here. Choose elk.algorithm: layered (flows), mrtree (trees), radial (mind-map), stress, or force. Set elk.direction to RIGHT or DOWN. Fix overlaps by changing layout options or node sizes and regenerating. Example: {"elk.algorithm":"layered","elk.direction":"RIGHT"}' },
+                styleOptions: { type: 'string', description: 'Optional JSON string of TikZ style options. Use JSON.stringify() to convert your style object. Use - for no arrow, dashed or dotted for line style. Set arrow type with properties.arrow: ->, <-, or <->.' },
+        preset: { type: 'string', enum: ['paper-column', 'paper-full', 'slide-16-9', 'slide-4-3'], description: 'Target medium preset: paper-column (double-column paper, ~240pt), paper-full (full text width, ~504pt), slide-16-9, or slide-4-3.' },
+        density: { type: 'string', enum: ['compact', 'balanced', 'airy'], description: 'Density tuning: compact (tight), balanced (default), or airy (spacious).' },
+        targetWidthPt: { type: 'number', description: 'Optional target width in points for scaling the diagram.' },
       },
       required: ['graph'],
     },
@@ -126,8 +126,8 @@ const TOOL_DEFS = [
     inputSchema: {
       type: 'object',
       properties: {
-        manifestPath: { type: 'string' },
-        nodeIds: { type: 'array', items: { type: 'string' } },
+        manifestPath: { type: 'string', description: 'Path to the asset manifest JSON file. Defaults to figures/tikz/assets/assets.manifest.json.' },
+        nodeIds: { type: 'array', items: { type: 'string' }, description: 'Optional array of node IDs to filter which assets to preview.' },
       },
     },
   },

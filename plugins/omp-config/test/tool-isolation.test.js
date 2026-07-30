@@ -5,12 +5,12 @@ import registerOmpConfig from '../index.js';
 
 test('config tools are opt-in and declare their real approval tier', () => {
   const tools = [];
-  const optional = (schema) => ({ type: 'optional', schema });
+  const optional = (schema) => ({ type: 'optional', schema, describe() { return this; } });
   const pi = {
     zod: {
       z: {
-        string: () => ({ type: 'string', optional() { return optional(this); } }),
-        boolean: () => ({ type: 'boolean', optional() { return optional(this); } }),
+        string: () => ({ type: 'string', optional() { return optional(this); }, describe() { return this; } }),
+        boolean: () => ({ type: 'boolean', optional() { return optional(this); }, describe() { return this; } }),
         optional,
         object: (shape) => ({ type: 'object', shape }),
       },

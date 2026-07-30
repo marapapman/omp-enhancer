@@ -1348,6 +1348,9 @@ function fakeZod() {
     optional() {
       return { ...this, isOptional: true };
     },
+    describe(description) {
+      return { ...this, description };
+    },
   });
   return {
     string: () => schema('string'),

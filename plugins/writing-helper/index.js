@@ -6,14 +6,15 @@ import { fetchExternalCitationEvidence, parseLocalLiteratureRecords, verifyCitat
 import { loadWritingLogicDocument } from './src/document-loader.js';
 import { analyzeWritingQuality } from './src/quality.js';
 import { formatWritingLogicReport, formatWritingQualityReport } from './src/report.js';
+import { withToolErrorHandling } from './src/tool-error-utils.js';
 
 function buildBaseShape(z) {
   return {
-    path: z.string().optional(),
-    text: z.string().optional(),
-    language: z.enum(['zh', 'en', 'auto']).optional(),
-    mode: z.enum(['redline', 'standard']).optional(),
-    maxIssues: z.number().optional(),
+    path: z.string().optional().describe('File path to the document to check. Example: \'/path/to/paper.md\'. Omit when passing text directly.'),
+    text: z.string().optional().describe('Document text to check in-line, used when no path is provided. Example: \'The document content...\'.'),
+    language: z.enum(['zh', 'en', 'auto']).optional().describe('Language of the document: zh (Chinese), en (English), or auto (detect).'),
+    mode: z.enum(['redline', 'standard']).optional().describe('Check mode: standard (balanced) or redline (strict, minimal noise).'),
+    maxIssues: z.number().optional().describe('Maximum number of issues to report. Example: 10. Omit for no limit.'),
   };
 }
 
@@ -24,14 +25,14 @@ function buildLogicParameters(z) {
 function buildQualityParameters(z) {
   return z.object({
     ...buildBaseShape(z),
-    checks: z.array(z.enum(['logic', 'style', 'citation', 'preservation'])).optional(),
-    originalText: z.string().optional(),
-    preservation: z.boolean().optional(),
-    bibliography: z.string().optional(),
-    bibliographyPath: z.string().optional(),
-    literaturePath: z.string().optional(),
-    allowNetwork: z.boolean().optional(),
-    citationProviders: z.array(z.enum(['local', 'doi', 'arxiv', 'crossref'])).optional(),
+    checks: z.array(z.enum(['logic', 'style', 'citation', 'preservation'])).optional().describe('Check types to run: logic, style, citation, preservation. Example: [\'logic\', \'style\']. Omit to run all relevant checks.'),
+    originalText: z.string().optional().describe('Original text for preservation comparison. Required when checks includes preservation.'),
+    preservation: z.boolean().optional().describe('Enable semantic preservation analysis between originalText and the input document.'),
+    bibliography: z.string().optional().describe('Bibliography content as a string, alternative to bibliographyPath.'),
+    bibliographyPath: z.string().optional().describe('File path to a bibliography file. Example: \'/path/to/references.bib\'.'),
+    literaturePath: z.string().optional().describe('File path to local literature records for citation verification.'),
+    allowNetwork: z.boolean().optional().describe('Allow network access for citation verification via DOI or Crossref. Default: false.'),
+    citationProviders: z.array(z.enum(['local', 'doi', 'arxiv', 'crossref'])).optional().describe('Citation verification providers to use. Example: [\'doi\', \'crossref\'].'),
   });
 }
 
@@ -316,14 +317,14 @@ export default function writingLogicExtension(omp) {
       'Do not use this tool to rewrite documents; it reports issues only.',
     ],
     parameters: logicParameters,
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    execute: withToolErrorHandling('writing_logic_check', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const output = runWritingLogicCheck(paramsOrEmpty(params), cwdFromContext(ctx));
       return {
         content: [textContent(output.report)],
         details: output.details,
         isError: !output.ok,
       };
-    },
+    }),
   });
 
   omp.registerTool({
@@ -337,19 +338,19 @@ export default function writingLogicExtension(omp) {
     promptGuidelines: [
       'Use writing_quality_check for final writing QA across logic, style, and citations.',
       'Treat UNVERIFIED citations as needing evidence, not as fabricated or true.',
-      'Set allowNetwork to true only when network access is authorized for the current request; tool activation alone is not network permission.',
-      'For preservation review, pass originalText and select the preservation check; drift findings are advisory and never block editing or completion.',
+      'Set allowNetwork to true only when network access is authorized; tool activation alone is not network permission.',
+      'Pass originalText and enable preservation check; drift findings are advisory and never block editing.',
       'Do not use this tool to rewrite documents; it reports issues only.',
     ],
     parameters: qualityParameters,
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    execute: withToolErrorHandling('writing_quality_check', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const output = await runWritingQualityCheck(paramsOrEmpty(params), cwdFromContext(ctx));
       return {
         content: [textContent(output.report)],
         details: output.details,
         isError: !output.ok,
       };
-    },
+    }),
   });
 
   omp.registerCommand('writing-logic', {

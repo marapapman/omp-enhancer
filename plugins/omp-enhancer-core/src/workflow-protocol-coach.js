@@ -6,12 +6,17 @@ import {
   TODO_REBASE_REASONS_COMPACT,
 } from './workflows/staged-contract.js';
 import { workflowCatalog } from './workflows/catalog.js';
+import {
+  buildToolCallReprimeSection,
+  buildToolErrorEscalationSection,
+  shouldPrimeToolCalls,
+} from './model-toolcall-priming.js';
 
 const COACH_STATE_VERSION = 2;
 const MAX_OBSERVED_TEXT_BYTES = 64 * 1024;
 const MAX_DIAGNOSTICS = 16;
 const INDEX_URI = 'skill://omp-enhancer-workflows';
-const CUE_KINDS = new Set(['PRE_PLAN', 'PRE_READY', 'PRE_DISPATCH', 'PRE_VERIFY', 'EXECUTE_STABILITY']);
+const CUE_KINDS = new Set(['PRE_PLAN', 'PRE_READY', 'PRE_DISPATCH', 'PRE_VERIFY', 'EXECUTE_STABILITY', 'TOOL_ERROR_RECOVERY', 'TOOL_ERROR_ESCALATION']);
 export const STABILITY_CUE_TOOL_RESULT_CADENCE = 8;
 export const STABILITY_CUE_MAX_PER_TASK = 20;
 const URI_PATTERN = /^skill:\/\/[A-Za-z0-9._~!$&'()*+:=@%/-]+$/u;
@@ -60,6 +65,13 @@ const CUE_CONTENT = Object.freeze({
   ].join('\n'),
 });
 
+const SMALL_MODEL_CUE_VARIANTS = Object.freeze({
+  PRE_PLAN: '1. Read skill://omp-enhancer-workflows. 2. Pick one workflow. 3. Write WORKFLOW PLAN with Primary, Add-ons, Skills, NOW/THEN, and 4+ Actions. Advisory only; authority remains Main/native.',
+  PRE_READY: '1. After all resources load, write WORKFLOW READY at byte 0. 2. Fill primary, add-ons, skills-loaded, skills-unavailable. 3. Init TODO and wait. No choice/authority/gate.',
+  PRE_DISPATCH: '1. Copy each TODO row into native task. 2. Start byte 0 [workflow=... step=... todo=... skills=...]. 3. Run independent tasks in parallel. No block/router/gate/retry/authority/choice.',
+  PRE_VERIFY: '1. Check acceptance criteria against current tree. 2. Run focused tests. 3. Report paths, commands, evidence, and limitations. No block/router/gate/retry/authority/choice.',
+});
+
 export function createWorkflowProtocolCoachState() {
   return {
     schemaVersion: COACH_STATE_VERSION,
@@ -71,6 +83,8 @@ export function createWorkflowProtocolCoachState() {
     declaration: null,
     pendingCue: null,
     diagnostics: [],
+    toolErrorCounters: {},
+    model: null,
   };
 }
 
@@ -112,6 +126,7 @@ export function observeProtocolToolResult(state, {
   body = '',
   failed = false,
   pending = false,
+  model = null,
 } = {}) {
   if (!isCoachState(state)) return;
   const toolName = String(name).trim().toLowerCase();
@@ -154,6 +169,24 @@ export function observeProtocolToolResult(state, {
       if (!state.pendingCue) {
         declaration.stabilityCuesEmitted += 1;
         queueCue(state, 'EXECUTE_STABILITY', declaration.generation);
+      }
+    }
+  }
+
+  // ── Error recovery tracking for small models ──
+  if (isSettled) {
+    if (failed) {
+      state.toolErrorCounters[name] = (state.toolErrorCounters[name] || 0) + 1;
+    } else if (toolName) {
+      state.toolErrorCounters[name] = 0;
+    }
+
+    if (failed && shouldPrimeToolCalls(model) && toolName) {
+      const counter = state.toolErrorCounters[name];
+      if (counter === 1 && !state.pendingCue) {
+        queueCue(state, 'TOOL_ERROR_RECOVERY', state.generation);
+      } else if (counter === 3 && !state.pendingCue) {
+        queueCue(state, 'TOOL_ERROR_ESCALATION', state.generation);
       }
     }
   }
@@ -203,12 +236,21 @@ export function observeProtocolTodoInput(state, { itemsText = '' } = {}) {
   declaration.todoHasFallbackRows = /fallback=/u.test(itemsText);
 }
 
-export function presentWorkflowProtocolCoachCue(state) {
+export function presentWorkflowProtocolCoachCue(state, model = null) {
   if (!isCoachState(state) || !state.pendingCue) return null;
   if (state.pendingCue.kind === 'EXECUTE_STABILITY') {
     const declaration = state.declaration;
     if (!declaration) return null;
     const pendingTimestamp = state.pendingCue.timestamp;
+    if (shouldPrimeToolCalls(model)) {
+      const workflow = [declaration.primary, ...declaration.addOns].filter(Boolean).join(',') || 'none';
+      const content = [
+        'OMP PROTOCOL COACH (soft, EXECUTE)',
+        `EXECUTE: workflow=${workflow}. 1. Keep TODO Delegate rows stable; copy row Agent to item agent. 2. Task byte 0 [workflow=... step=... todo=... skills=...]; verbatim checkpoint. 3. Rebase a row only when a permitted reason applies; never skip brief/input/checkpoint prep. No block/router/gate/retry/authority/choice.`,
+      ].join('\n');
+      state.pendingCue = null;
+      return { kind: 'EXECUTE_STABILITY', content, timestamp: pendingTimestamp };
+    }
     const workflow = [declaration.primary, ...declaration.addOns].filter(Boolean).join(',') || 'none';
     const delegation = declaration.todoHasDelegateRows
       ? 'delegated'
@@ -228,8 +270,22 @@ export function presentWorkflowProtocolCoachCue(state) {
     state.pendingCue = null;
     return { kind: 'EXECUTE_STABILITY', content, timestamp: pendingTimestamp };
   }
-  const content = CUE_CONTENT[state.pendingCue.kind];
-  if (!content) return null;
+  // Error recovery cues — event-driven, clear after presenting
+  if (state.pendingCue.kind === 'TOOL_ERROR_RECOVERY' || state.pendingCue.kind === 'TOOL_ERROR_ESCALATION') {
+    const kind = state.pendingCue.kind;
+    const pendingTimestamp = state.pendingCue.timestamp;
+    const content = kind === 'TOOL_ERROR_RECOVERY'
+      ? buildToolCallReprimeSection()
+      : buildToolErrorEscalationSection();
+    state.pendingCue = null;
+    return { kind, content, timestamp: pendingTimestamp };
+  }
+  // Phase cues with small-model variant support for capable models
+  const rawContent = CUE_CONTENT[state.pendingCue.kind];
+  if (!rawContent) return null;
+  const content = shouldPrimeToolCalls(model)
+    ? (SMALL_MODEL_CUE_VARIANTS[state.pendingCue.kind] ?? rawContent)
+    : rawContent;
   return {
     kind: state.pendingCue.kind,
     content,

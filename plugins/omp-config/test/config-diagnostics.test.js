@@ -92,9 +92,9 @@ function createRegistrationHarness() {
   const pi = {
     zod: {
       z: {
-        string: () => ({ optional: () => ({ type: 'optional-string' }) }),
-        boolean: () => ({ optional: () => ({ type: 'optional-boolean' }) }),
-        optional: (schema) => ({ type: 'optional', schema }),
+        string: () => ({ optional: () => ({ type: 'optional-string', describe() { return this; } }), describe() { return this; } }),
+        boolean: () => ({ optional: () => ({ type: 'optional-boolean', describe() { return this; } }), describe() { return this; } }),
+        optional: (schema) => ({ type: 'optional', schema, describe() { return this; } }),
         object: (shape) => ({ type: 'object', shape }),
       },
     },
@@ -525,9 +525,9 @@ test('index registers doctor assets and plan tools safely', async () => {
   const pi = {
     zod: {
       z: {
-        string: () => ({ optional: () => ({ type: 'optional-string' }) }),
-        boolean: () => ({ optional: () => ({ type: 'optional-boolean' }) }),
-        optional: (schema) => ({ type: 'optional', schema }),
+        string: () => ({ optional: () => ({ type: 'optional-string', describe() { return this; } }), describe() { return this; } }),
+        boolean: () => ({ optional: () => ({ type: 'optional-boolean', describe() { return this; } }), describe() { return this; } }),
+        optional: (schema) => ({ type: 'optional', schema, describe() { return this; } }),
         object: (shape) => ({ type: 'object', shape }),
       },
     },

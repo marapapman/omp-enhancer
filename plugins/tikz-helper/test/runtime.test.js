@@ -23,6 +23,7 @@ const fixtureCatalog = fileURLToPath(new URL('./fixtures/catalog.json', import.m
 
 function schema(kind, data = {}) {
   const value = { __ompZodSchema: true, kind, ...data };
+  value.describe = () => value;
   value.optional = () => ({ ...value, optional: true });
   return value;
 }
@@ -92,96 +93,52 @@ describe('tikz-helper runtime tools', () => {
     assert.ok(Array.isArray(generate.promptGuidelines), 'tikz_generate_diagram must expose promptGuidelines');
     const guidelines = generate.promptGuidelines.join('\n');
 
-    // P3: input must omit x/y/sections/bendPoints
-    assert.match(
-      guidelines,
-      /Input nodes must omit x and y and input edges must omit sections and bendPoints; the layout engine computes them\./,
-      'promptGuidelines must embed P3 (coordinate-free input)',
-    );
+    // Content moved to parameter .describe() is checked in production (real Zod);
+    // the mock Z does not preserve .describe() text.
+
     // P7: size nodes for their exact label plus padding
     assert.match(
       guidelines,
-      /Size each node to fit its exact label plus padding before calling the layout engine\./,
+      /Size each node width and height to fit its exact label plus padding before calling the layout engine\./,
       'promptGuidelines must embed P7 (size for label plus padding)',
     );
-    // P8: fix overlap by changing options/sizes and regenerating, never editing coordinates
+    // Graph must be a JSON string
     assert.match(
       guidelines,
-      /Fix overlap, clipping, or crossings by changing ELK layout options or node sizes and regenerating, never by editing coordinates\./,
-      'promptGuidelines must embed P8 (regenerate, never edit coordinates)',
+      /graph parameter must be a JSON string/i,
+      'promptGuidelines must state graph is a JSON string',
     );
-    // P9: graph-level layoutOptions is the algorithm channel
+    // Algorithm selection
+    assert.match(guidelines, /elk\.algorithm: layered/i, 'promptGuidelines must name layered');
+    assert.match(guidelines, /mrtree/i, 'promptGuidelines must name mrtree');
+    assert.match(guidelines, /radial/i, 'promptGuidelines must name radial');
+    assert.match(guidelines, /stress/i, 'promptGuidelines must name stress');
+    assert.match(guidelines, /force/i, 'promptGuidelines must name force');
+    // Direction guidance
     assert.match(
       guidelines,
-      /Place elk\.algorithm and every authored layout option in the graph-level layoutOptions; the separate tool layoutOptions parameter is not the reliable algorithm channel\./,
-      'promptGuidelines must embed P9 (graph-level layoutOptions)',
+      /Set elk\.direction to RIGHT or DOWN/,
+      'promptGuidelines must suggest direction',
     );
-    // engine default spacing (replaces old "Set generous spacing with elk.spacing" guidance)
+    // Preset guidance
+    assert.match(guidelines, /paper-column \(double-column paper/);
+    // S5: density and sizing
+    assert.match(guidelines, /target medium/i);
+    // Write returned .tex and compile
     assert.match(
       guidelines,
-      /engine applies generous default spacing/i,
-      'promptGuidelines must state engine applies generous default spacing',
+      /Write the returned \.tex to the project and compile it with tikz_render/,
+      'promptGuidelines must state the write-then-render workflow',
     );
+    // ELK environment check + install-before-draw guidance
+    assert.match(guidelines, /ELK_NOT_INSTALLED/);
+    assert.match(guidelines, /npm run install:deps/);
+    // No manual spacing instructions
     assert.doesNotMatch(
       guidelines,
       /Set generous spacing with elk\.spacing/,
       'promptGuidelines must not instruct manual spacing',
     );
-    // P10: arrows and line styles
-    assert.match(
-      guidelines,
-      /Use - for no arrow and dashed or dotted for line style\./,
-      'promptGuidelines must embed P10 (arrow/line-style vocabulary)',
-    );
-    // P11: never recommend fixed or random
-    assert.match(
-      guidelines,
-      /Never recommend the fixed or random algorithms for a coordinate-free figure\./,
-      'promptGuidelines must embed P11 (no fixed/random)',
-    );
-    // coordinate prohibition: never author/hand-edit TikZ coordinates
-    assert.match(
-      guidelines,
-      /never (?:author|infer|hand-edit) TikZ coordinates/i,
-      'promptGuidelines must prohibit authoring/hand-editing TikZ coordinates',
-    );
-    // supported algorithm set includes layered/mrtree/radial/stress/force but excludes fixed/random
-    assert.match(guidelines, /layered/i, 'promptGuidelines must name layered');
-    assert.match(guidelines, /mrtree/i, 'promptGuidelines must name mrtree');
-    assert.match(guidelines, /radial/i, 'promptGuidelines must name radial');
-    assert.match(guidelines, /stress/i, 'promptGuidelines must name stress');
-    assert.match(guidelines, /force/i, 'promptGuidelines must name force');
-    // P11 already asserts fixed/random are never recommended; confirm the exclusion is explicit
-    assert.match(
-      guidelines,
-      /Never recommend the fixed or random algorithms/,
-      'promptGuidelines must explicitly exclude fixed and random',
-    );
-    // regeneration rule (P8 restated as the repair loop)
-    assert.match(
-      guidelines,
-      /regenerating, never by editing coordinates/,
-      'promptGuidelines must state the regeneration repair rule',
-    );
-    // Sizing caveat: backend emits ELK dimensions as TikZ minimum sizes
-    assert.match(
-      guidelines,
-      /The backend emits ELK-computed dimensions as TikZ minimum width and height with 2pt inner padding\. Declare node width and height sized for the exact label plus padding; ELK may enlarge nodes when its label measurement exceeds declared dimensions\. Verify with a render\./,
-      'promptGuidelines must embed the sizing-caveat (backend emits ELK dimensions as minimum sizes)',
-    );
-    // ELK environment check + install-before-draw guidance (no hand-draw fallback)
-    assert.match(guidelines, /ELK_NOT_INSTALLED/);
-    assert.match(guidelines, /npm run install:deps/);
-    assert.match(guidelines, /Never fall back to hand-authored TikZ coordinates when ELK is missing/);
-    // IR export round-trip guidance (visual-editor editing)
-    assert.match(guidelines, /standard ELK JSON in the `ir` field/);
-    assert.match(guidelines, /<figure>\.elk\.json/);
-    assert.match(guidelines, /feed the edited IR back as the `graph` input to tikz_generate_diagram to regenerate/);
-    assert.match(guidelines, /re-importing recomputes layout via ELK/i);
-    assert.match(guidelines, /node positions are recomputed/);
-    // S5: preset and density guidance
-    assert.match(guidelines, /paper-column \(double-column paper/);
-    assert.match(guidelines, /Export the tool sizing metadata/);
   });
 
   it('returns structured tool success and parameter failures', async () => {

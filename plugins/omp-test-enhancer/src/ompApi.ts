@@ -9,6 +9,10 @@ export interface AgentToolResult {
   isError?: boolean
 }
 
+export interface ZodSchema {
+  describe(description: string): ZodSchema
+}
+
 export type ToolUpdate = Partial<AgentToolResult>
 
 export interface ExtensionToolContext {
@@ -38,6 +42,8 @@ export interface ToolDefinition<TParams = unknown> {
   defaultInactive?: boolean
   deferrable?: boolean
   approval?: 'read' | 'write' | 'exec'
+  promptSnippet?: string
+  promptGuidelines?: string[]
   execute(
     toolCallId: string,
     params: TParams,
@@ -52,13 +58,13 @@ export interface ExtensionAPI {
   events?: object
   zod: {
     z: {
-      object(shape: Record<string, unknown>): unknown
-      string(): unknown
-      boolean(): unknown
-      unknown(): unknown
-      array(schema: unknown): unknown
-      enum(values: readonly [string, ...string[]]): unknown
-      optional(schema: unknown): unknown
+      object(shape: Record<string, unknown>): ZodSchema
+      string(): ZodSchema
+      boolean(): ZodSchema
+      unknown(): ZodSchema
+      array(schema: unknown): ZodSchema
+      enum(values: readonly [string, ...string[]]): ZodSchema
+      optional(schema: unknown): ZodSchema
     }
   }
   setLabel(label: string): void

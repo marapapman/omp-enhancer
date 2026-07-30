@@ -14,7 +14,7 @@ import { findPublicEntryHints, findRelatedTests, readRepoFiles } from '../repo/r
 import { isRecord } from '../utils.js'
 import type { BrowserCheckParams } from './browserCheck.js'
 import type { ObservedTestCommandEvidence } from '../session/testingState.js'
-import type { AgentToolResult, ExtensionToolContext, ToolDefinition } from '../ompApi.js'
+import type { AgentToolResult, ExtensionToolContext, ToolDefinition, ZodSchema } from '../ompApi.js'
 import type { ApiPlan, BrowserEvidence, BrowserPlan, CandidateFileChange, CandidateTest, ChangedTarget, CoverageAnalysis, CoverageGap, GateResult, MutationAnalysis, MutationSurvivor, PropertyPlan, RiskLevel, TargetKind } from '../types.js'
 
 interface ChangedFileInput {
@@ -66,13 +66,13 @@ export interface TestingToolCallbacks {
 }
 
 interface ZodLike {
-  object(shape: Record<string, unknown>): unknown
-  string(): unknown
-  boolean(): unknown
-  unknown(): unknown
-  array(schema: unknown): unknown
-  enum(values: readonly [string, ...string[]]): unknown
-  optional(schema: unknown): unknown
+  object(shape: Record<string, unknown>): ZodSchema
+  string(): ZodSchema
+  boolean(): ZodSchema
+  unknown(): ZodSchema
+  array(schema: unknown): ZodSchema
+  enum(values: readonly [string, ...string[]]): ZodSchema
+  optional(schema: unknown): ZodSchema
 }
 
 interface AnalyzeParams {
@@ -141,146 +141,226 @@ const PROPERTY_EXPERIENCE_PATHS = [
 const PROPERTY_GREP_PATTERN = 'fast-check|fc\\.property|fc\\.assert|property\\(|round[ -]?trip|idempotent|invariant|Object\\.freeze|toThrow|malformed|invalid|boundary|edge case'
 
 export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCallbacks = {}): ToolDefinition[] {
-  const changedFileSchema = z.object({ path: z.string(), content: z.string() })
-  const targetSchema = z.unknown()
-  const candidateSchema = z.unknown()
-  const gateResultSchema = z.unknown()
+  const changedFileSchema = z.object({ path: z.string().describe('Workspace-relative file path. Example: "src/utils.ts".'), content: z.string().describe('Full text content of the file.') })
+  const targetSchema = z.unknown().describe('A changed target object with sourceFile (path), symbolName, risk, kind, relatedTests array, and publicEntryHints array.')
+  const candidateSchema = z.unknown().describe('A candidate test object describing test files modified, actions performed, and current test content.')
+  const gateResultSchema = z.unknown().describe('A gate result object with gate name, passed boolean, severity (critical/warning), summary string, evidence, and repairHint.')
 
   return [
     {
       name: 'omp_test_analyze',
       label: 'Analyze test targets',
       description: '从显式文件路径或文件内容分析改动并找出需要补测的目标；不会执行命令',
+      promptSnippet: 'Analyze source file changes and identify targets needing test coverage.',
+      promptGuidelines: [
+        'Provide file paths or content to analyze for missing test coverage.',
+        'Pass either "files" (workspace-relative paths) or "changedFiles" (path+content objects), not both.',
+        'The tool does NOT execute any commands; it only analyzes existing evidence.',
+        'Use the returned targets to guide further test context and browser check tools.',
+        'Check warnings to see if any requested files were unreadable.'
+      ],
       defaultInactive: true,
       approval: 'read',
       parameters: z.object({
-        files: z.optional(z.array(z.string())),
-        changedFiles: z.optional(z.array(changedFileSchema))
-      }),
+        files: z.optional(z.array(z.string())).describe('Array of workspace-relative file paths to analyze. Example: ["src/utils.ts", "src/api.ts"].'),
+        changedFiles: z.optional(z.array(changedFileSchema)).describe('Array of {path, content} objects with actual file content. Use when files are not on disk.')
+      }).describe('Parameters for omp_test_analyze. Provide either files or changedFiles, not both.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-        const output = await executeAnalyze(params as AnalyzeParams, ctx)
-        await callbacks.onAnalyze?.(output, ctx)
-        return textResult(output.targets.length === 1 ? 'Found 1 test target.' : `Found ${output.targets.length} test targets.`, output)
+        try {
+          const output = await executeAnalyze(params as AnalyzeParams, ctx)
+          await callbacks.onAnalyze?.(output, ctx)
+          return textResult(output.targets.length === 1 ? 'Found 1 test target.' : `Found ${output.targets.length} test targets.`, output)
+        } catch (error) {
+          return textResult(`omp_test_analyze failed: ${error instanceof Error ? error.message : String(error)}`, { error: String(error) }, true)
+        }
       }
     },
     {
       name: 'omp_test_context',
       label: 'Build test context',
       description: '读取目标相关的公开入口和现有测试上下文',
+      promptSnippet: 'Build test context for a changed target, including entry points and existing tests.',
+      promptGuidelines: [
+        'Provide a target object from omp_test_analyze output.',
+        'The tool reads public entry hints and existing test files for the target.',
+        'It does NOT execute commands or modify any files.',
+        'Use the output to understand the testing style and available test infrastructure.'
+      ],
       defaultInactive: true,
       approval: 'read',
-      parameters: z.object({ target: targetSchema }),
+      parameters: z.object({ target: targetSchema }).describe('Parameters for omp_test_context. Provide a target object with sourceFile, symbolName, and relatedTests.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-        const output = await executeContext(params as ContextParams, ctx)
-        return textResult(`Testing style: ${output.testingStyle}.`, output)
+        try {
+          const output = await executeContext(params as ContextParams, ctx)
+          return textResult(`Testing style: ${output.testingStyle}.`, output)
+        } catch (error) {
+          return textResult(`omp_test_context failed: ${error instanceof Error ? error.message : String(error)}`, { error: String(error) }, true)
+        }
       }
     },
     {
       name: 'omp_test_browser_check',
       label: 'Run browser check',
       description: '打开浏览器执行前端用户事件、视觉检查和操作错误采集',
+      promptSnippet: 'Run Playwright browser checks for UI interaction evidence.',
+      promptGuidelines: [
+        'Requires a "baseUrl" pointing to the running dev server or app.',
+        'Define "scenarios" as user interaction sequences for browser automation.',
+        'Start the server first before calling this tool.',
+        'Set artifactDir to a writable path for browser artifacts like screenshots.',
+        'The tool returns pass/fail/skip status for each defined scenario.'
+      ],
       defaultInactive: true,
       approval: 'exec',
       parameters: z.object({
-        baseUrl: z.string(),
-        serverCommand: z.optional(z.string()),
-        artifactDir: z.optional(z.string()),
-        targetIds: z.optional(z.array(z.string())),
-        setup: z.optional(z.unknown()),
-        scenarios: z.array(z.unknown())
-      }),
+        baseUrl: z.string().describe('The base URL of the running dev server or app. Example: "http://localhost:5173".'),
+        serverCommand: z.optional(z.string()).describe('Optional command to start the server. Not executed, used for evidence only.'),
+        artifactDir: z.optional(z.string()).describe('Directory path for browser artifacts (screenshots, traces, videos). Must be writable.'),
+        targetIds: z.optional(z.array(z.string())).describe('Specific target IDs from omp_test_analyze to scope browser checks.'),
+        setup: z.optional(z.unknown()).describe('Optional setup configuration object for the browser environment.'),
+        scenarios: z.array(z.unknown()).describe('Array of user interaction scenario objects defining browser automation steps.')
+      }).describe('Parameters for omp_test_browser_check. Requires baseUrl and at least one scenario.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-        const parsed = parseBrowserCheckParams(params)
-        let output: BrowserEvidence
-        if (!parsed.ok) {
-          output = invalidBrowserCheckEvidence(params, parsed.error)
-        } else {
-          try {
-            const rawOutput = await (callbacks.runBrowserCheck ?? runDefaultBrowserCheck)(parsed.value, ctx)
-            output = readBrowserEvidenceValue(rawOutput)
-              ?? invalidBrowserCheckEvidence(params, { path: '$.result', message: 'Browser runner returned malformed evidence.' })
-          } catch (error: unknown) {
-            output = browserCheckExecutionFailureEvidence(parsed.value, error)
+        try {
+          const parsed = parseBrowserCheckParams(params)
+          let output: BrowserEvidence
+          if (!parsed.ok) {
+            output = invalidBrowserCheckEvidence(params, parsed.error)
+          } else {
+            try {
+              const rawOutput = await (callbacks.runBrowserCheck ?? runDefaultBrowserCheck)(parsed.value, ctx)
+              output = readBrowserEvidenceValue(rawOutput)
+                ?? invalidBrowserCheckEvidence(params, { path: '$.result', message: 'Browser runner returned malformed evidence.' })
+            } catch (error: unknown) {
+              output = browserCheckExecutionFailureEvidence(parsed.value, error)
+            }
           }
+          await callbacks.onBrowserCheck?.(output, ctx)
+          return textResult(output.status === 'passed' ? 'Browser check passed.' : output.status === 'skipped' ? 'Browser check skipped.' : 'Browser check failed.', output)
+        } catch (error) {
+          return textResult(`omp_test_browser_check failed: ${error instanceof Error ? error.message : String(error)}`, { error: String(error) }, true)
         }
-        await callbacks.onBrowserCheck?.(output, ctx)
-        return textResult(output.status === 'passed' ? 'Browser check passed.' : output.status === 'skipped' ? 'Browser check skipped.' : 'Browser check failed.', output)
       }
     },
     {
       name: 'omp_test_coverage_analyze',
       label: 'Analyze coverage gaps',
       description: '读取覆盖率报告并找出未覆盖的行、分支和函数',
+      promptSnippet: 'Analyze coverage reports for uncovered lines, branches, and functions.',
+      promptGuidelines: [
+        'Provide a coverage report as "coverageReport" object or "reportPath" to a JSON file.',
+        'The tool does NOT run coverage; it only analyzes existing reports.',
+        'Returns gap details including line ranges and thresholds.',
+        'Use gaps to guide additional test assertions.'
+      ],
       defaultInactive: true,
       approval: 'read',
       parameters: z.object({
-        coverageReport: z.optional(z.unknown()),
-        reportPath: z.optional(z.string())
-      }),
+        coverageReport: z.optional(z.unknown()).describe('Coverage report object in JSON format. Use instead of reportPath when the report is already loaded.'),
+        reportPath: z.optional(z.string()).describe('Workspace-relative path to a coverage report JSON file. Example: "coverage/coverage-final.json".')
+      }).describe('Parameters for omp_test_coverage_analyze. Provide either coverageReport or reportPath.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-        const output = await executeCoverageAnalyze(params as CoverageParams, ctx)
-        return textResult(output.status === 'available' ? `Found ${output.gaps.length} coverage gaps.` : 'No coverage report found.', output)
+        try {
+          const output = await executeCoverageAnalyze(params as CoverageParams, ctx)
+          return textResult(output.status === 'available' ? `Found ${output.gaps.length} coverage gaps.` : 'No coverage report found.', output)
+        } catch (error) {
+          return textResult(`omp_test_coverage_analyze failed: ${error instanceof Error ? error.message : String(error)}`, { error: String(error) }, true)
+        }
       }
     },
     {
       name: 'omp_test_mutation_context',
       label: 'Analyze mutation survivors',
       description: '读取 mutation 报告并把 surviving mutants 转成补测建议',
+      promptSnippet: 'Analyze mutation testing reports and convert surviving mutants into test improvement suggestions.',
+      promptGuidelines: [
+        'Provide a mutation report as "mutationReport" object or "reportPath" to a JSON file.',
+        'The tool does NOT run mutation testing; it only analyzes existing reports.',
+        'Returns surviving mutants with repair hints.',
+        'Use output to strengthen assertion coverage for weak spots.'
+      ],
       defaultInactive: true,
       approval: 'read',
       parameters: z.object({
-        mutationReport: z.optional(z.unknown()),
-        reportPath: z.optional(z.string())
-      }),
+        mutationReport: z.optional(z.unknown()).describe('Mutation report object in JSON format. Use instead of reportPath when the report is already loaded.'),
+        reportPath: z.optional(z.string()).describe('Workspace-relative path to a mutation report JSON file. Example: "mutation/mutation-report.json".')
+      }).describe('Parameters for omp_test_mutation_context. Provide either mutationReport or reportPath.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-        const output = await executeMutationAnalyze(params as MutationParams, ctx)
-        return textResult(output.status === 'available' ? `Found ${output.survivedMutants.length} mutation survivors.` : 'No mutation report found.', output)
+        try {
+          const output = await executeMutationAnalyze(params as MutationParams, ctx)
+          return textResult(output.status === 'available' ? `Found ${output.survivedMutants.length} mutation survivors.` : 'No mutation report found.', output)
+        } catch (error) {
+          return textResult(`omp_test_mutation_context failed: ${error instanceof Error ? error.message : String(error)}`, { error: String(error) }, true)
+        }
       }
     },
     {
       name: 'omp_test_review',
       label: 'Review test evidence',
       description: '只读汇总当前 task context 中宿主已观察到的测试和浏览器证据；不会执行命令、阻止会话或触发修复',
+      promptSnippet: 'Advisory review of testing evidence collected by the host across test gates.',
+      promptGuidelines: [
+        'Pass the targets array from omp_test_analyze output.',
+        'Provide the candidate test object describing what was changed.',
+        'Optionally supply testCommand to verify against configured commands.',
+        'Results are advisory-only: no blocking, no command execution.',
+        'Critical findings indicate missing test gate evidence to address.'
+      ],
       defaultInactive: true,
       approval: 'read',
       parameters: z.object({
-        targets: z.array(targetSchema),
-        candidate: candidateSchema,
-        testCommand: z.optional(z.string())
-      }),
+        targets: z.array(targetSchema).describe('Array of changed target objects from omp_test_analyze output. Each target describes a file and its test context.'),
+        candidate: candidateSchema.describe('Candidate test object describing the test files, actions, and current content.'),
+        testCommand: z.optional(z.string()).describe('Optional test command string to verify against the configured command.')
+      }).describe('Parameters for omp_test_review. Provide targets and candidate from analysis results.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-        const observedBrowserEvidence = callbacks.getObservedBrowserEvidence?.(ctx)
-        const observedTestCommandEvidence = callbacks.getObservedTestCommandEvidence?.()
-        const output = await executeReview(
-          params as ReviewParams,
-          ctx,
-          observedTestCommandEvidence,
-          observedBrowserEvidence
-        )
-        await callbacks.onReview?.(output, ctx)
-        return textResult(output.passed ? 'Test review is ready.' : 'Test review found critical findings.', output)
+        try {
+          const observedBrowserEvidence = callbacks.getObservedBrowserEvidence?.(ctx)
+          const observedTestCommandEvidence = callbacks.getObservedTestCommandEvidence?.()
+          const output = await executeReview(
+            params as ReviewParams,
+            ctx,
+            observedTestCommandEvidence,
+            observedBrowserEvidence
+          )
+          await callbacks.onReview?.(output, ctx)
+          return textResult(output.passed ? 'Test review is ready.' : 'Test review found critical findings.', output)
+        } catch (error) {
+          return textResult(`omp_test_review failed: ${error instanceof Error ? error.message : String(error)}`, { error: String(error) }, true)
+        }
       }
     },
     {
       name: 'omp_test_report',
       label: 'Build test report',
       description: '生成测试增强报告',
+      promptSnippet: 'Build a formatted test enhancement report from review results.',
+      promptGuidelines: [
+        'Pass reviewResults from omp_test_review output, or omit to use stored results.',
+        'The tool generates a markdown summary of all gate results.',
+        'Critical findings are highlighted in the report for action.',
+        'Returns plain markdown text for inclusion in session context.'
+      ],
       defaultInactive: true,
       approval: 'read',
       parameters: z.object({
-        reviewResults: z.optional(z.array(gateResultSchema))
-      }),
+        reviewResults: z.optional(z.array(gateResultSchema)).describe('Optional array of gate result objects from omp_test_review. Omit to use the most recently stored review results.')
+      }).describe('Parameters for omp_test_report. Provide reviewResults or omit to use stored results.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, _ctx) => {
-        const reportParams = params as ReportParams
-        const explicitResults = Array.isArray(reportParams.reviewResults) ? reportParams.reviewResults : undefined
-        const stateResults = explicitResults ?? callbacks.getRecentReviewResults?.()
+        try {
+          const reportParams = params as ReportParams
+          const explicitResults = Array.isArray(reportParams.reviewResults) ? reportParams.reviewResults : undefined
+          const stateResults = explicitResults ?? callbacks.getRecentReviewResults?.()
 
-        if (!stateResults || stateResults.length === 0) {
-          return textResult('No test review result found.', { found: false })
+          if (!stateResults || stateResults.length === 0) {
+            return textResult('No test review result found.', { found: false })
+          }
+
+          const output = buildTestReport({ reviewResults: stateResults })
+          return textResult(output.markdown, output)
+        } catch (error) {
+          return textResult(`omp_test_report failed: ${error instanceof Error ? error.message : String(error)}`, { error: String(error) }, true)
         }
-
-        const output = buildTestReport({ reviewResults: stateResults })
-        return textResult(output.markdown, output)
       }
     }
   ]
@@ -1104,8 +1184,8 @@ function classifyChangedFiles(changedFiles: ChangedFileInput[]): ChangedTarget[]
     })
 }
 
-function textResult(text: string, details: unknown): AgentToolResult {
-  return { content: [{ type: 'text', text }], details }
+function textResult(text: string, details: unknown, isError = false): AgentToolResult {
+  return { content: [{ type: 'text', text }], details, isError }
 }
 
 function isChangedFileInput(value: unknown): value is ChangedFileInput {

@@ -7,11 +7,11 @@ import { join } from 'node:path';
 import extension, { runWritingLogicCheck, runWritingQualityCheck } from '../index.js';
 
 function schema(kind, data = {}) {
-  return { __ompZodSchema: true, kind, ...data };
+  return { __ompZodSchema: true, kind, ...data, describe: () => schema(kind, data) };
 }
 
 function optional(schemaValue) {
-  return { ...schemaValue, optional: true };
+  return { ...schemaValue, optional: true, describe: () => optional(schemaValue) };
 }
 
 function makeZodApi() {

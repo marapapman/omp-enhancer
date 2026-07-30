@@ -192,7 +192,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.doesNotMatch(`${agents}\n${claude}`, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
   assert.doesNotMatch(`${agents}\n${claude}`, /block:\s*true|continue:\s*true|systemPrompt\s*=|triggerTurn\s*\(/iu);
   assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
-  assert.match(watchdog, /never attempts unavailable tools/i);
+  assert.match(watchdog, /Never call bash, write, edit, task, todo, or any unlisted tool/i);
   assert.match(watchdog, /Use at most one ordinary `advise` per primary user task[\s\S]*complete user-visible Main final sets the budget to zero/i);
   assert.match(watchdog, /workflow window is Main's `DISCOVER -> DECLARE -> LOAD -> COMMIT`[\s\S]*before its first native `task` or substantive project action[\s\S]*resource reads keep the window open/i);
   assert.match(watchdog, /native `skill-prompt` body named `omp-enhancer-workflows`[\s\S]*AGENTS\.md[\s\S]*do not count[\s\S]*DISCOVER is complete: no read; PLAN is next/iu);

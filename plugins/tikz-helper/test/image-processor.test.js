@@ -62,6 +62,7 @@ function successfulSpawn(calls, output = pngHeader()) {
 
 function schema(kind, data = {}) {
   const value = { __ompZodSchema: true, kind, ...data };
+  value.describe = () => value;
   value.optional = () => ({ ...value, optional: true });
   return value;
 }

@@ -6,6 +6,20 @@ const TOOL_CALL_PRIMING_SECTION = [
   'Advisory only; this never blocks, routes, retries, or completes work, and it selects no workflow, Skill, Agent, or fork width. OMP owns tools, permissions, delegation, and completion.',
 ].join('\n');
 
+const TOOL_CALL_REPRIME_SECTION = [
+  'TOOL_ERROR_RECOVERY (soft, model-adaptive):',
+  'Your last tool call failed. Read the error message carefully — it names the parameter field, the value you sent, the expected format, and a corrected example. Fix that one field and re-issue the call. Do not repeat the exact same call unchanged.',
+  'If the same tool has failed 3 times, stop retrying it. Summarize the error to the user and ask for guidance, or choose a different approach.',
+  'Advisory only; this never blocks, routes, retries, or completes work, and it selects no workflow, Skill, Agent, or fork width. OMP owns tools, permissions, delegation, and completion.',
+].join('\n');
+
+const TOOL_ERROR_ESCALATION_SECTION = [
+  'TOOL_ERROR_ESCALATION (soft, model-adaptive):',
+  'This tool has failed 3 times with parameter errors. Stop retrying this tool.',
+  'Summarize the error and what you tried to the user. Ask for guidance or choose a different approach.',
+  'Advisory only; this never blocks, routes, retries, or completes work.',
+].join('\n');
+
 const TOOL_CALL_PRIMING_FAMILIES = Object.freeze([
   'mimo',
   'deepseek-v4-flash',
@@ -22,6 +36,14 @@ export function shouldPrimeToolCalls(model = {}) {
 
 export function buildToolCallPrimingSection() {
   return TOOL_CALL_PRIMING_SECTION;
+}
+
+export function buildToolCallReprimeSection() {
+  return TOOL_CALL_REPRIME_SECTION;
+}
+
+export function buildToolErrorEscalationSection() {
+  return TOOL_ERROR_ESCALATION_SECTION;
 }
 
 function isRecord(value) {

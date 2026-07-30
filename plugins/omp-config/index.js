@@ -3,6 +3,7 @@ import { listAssets } from './src/asset-index.js';
 import { formatDoctorReport, formatPlanReport, formatWorkflowContextSyncReport } from './src/report.js';
 import { resolvePluginRoot } from './src/plugin-root.js';
 import { syncWorkflowContext } from './src/workflow-context-sync.js';
+import { withToolErrorHandling } from './src/tool-error-utils.js';
 
 function textContent(text) {
   return { type: 'text', text };
@@ -39,17 +40,17 @@ export async function runConfigPlan(input = {}) {
 
 function optionalStringParameters(z) {
   if (typeof z.optional === 'function') {
-    return z.object({ root: z.optional(z.string()) });
+    return z.object({ root: z.optional(z.string()).describe('Target OMP agent directory path. Defaults to the current working directory or ctx.cwd.') });
   }
-  return z.object({ root: z.string().optional() });
+  return z.object({ root: z.string().optional().describe('Target OMP agent directory path. Defaults to the current working directory or ctx.cwd.') });
 }
 
 function workflowContextSyncParameters(z) {
   const optional = (schema) => typeof z.optional === 'function' ? z.optional(schema) : schema.optional();
   return z.object({
-    root: optional(z.string()),
-    target: optional(z.string()),
-    apply: optional(z.boolean()),
+    root: optional(z.string()).describe('Target OMP agent directory path. Defaults to the current working directory or ctx.cwd.'),
+    target: optional(z.string()).describe('Specific workflow context file(s) to sync, e.g. AGENTS.md or WATCHDOG.yml. Omitting syncs all managed assets.'),
+    apply: optional(z.boolean()).describe('Set to true to apply changes. Defaults to false (dry-run mode).'),
   });
 }
 
@@ -76,15 +77,21 @@ export default function registerOmpConfig(pi) {
     description: 'Inspect packaged OMP config assets and report portability risks.',
     defaultInactive: true,
     approval: 'read',
+    promptSnippet: 'Inspect packaged OMP config assets and report portability risks.',
+    promptGuidelines: [
+      'Reports advisory findings only; does not modify files.',
+      'Pass root to inspect a specific agent directory.',
+      'Use this before applying config changes to verify safety.',
+    ],
     parameters,
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    execute: withToolErrorHandling('omp_config_doctor', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const result = await runConfigDoctor(pluginRootFromParams(params, ctx));
       return {
         content: [textContent(formatDoctorReport(result))],
         details: result,
         isError: false,
       };
-    },
+    }),
   });
 
   pi.registerTool({
@@ -93,29 +100,26 @@ export default function registerOmpConfig(pi) {
     description: 'Preview or explicitly apply the shared main-agent and Advisor workflow catalog to an OMP agent directory. Defaults to dry-run and preserves unrelated AGENTS.md content.',
     defaultInactive: true,
     approval: 'write',
+    promptSnippet: 'Preview or apply shared workflow catalog assets to an OMP agent directory.',
+    promptGuidelines: [
+      'Defaults to dry-run; pass apply: true to write changes.',
+      'Preserves content outside managed markers in AGENTS.md.',
+      'Use root to target a specific agent directory.',
+    ],
     parameters: syncParameters,
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    execute: withToolErrorHandling('omp_config_sync_workflow_context', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const input = paramsOrEmpty(params);
-      try {
-        const result = await syncWorkflowContext({
-          root: pluginRootFromParams(input, ctx),
-          target: input.target,
-          apply: input.apply === true,
-        });
-        return {
-          content: [textContent(formatWorkflowContextSyncReport(result))],
-          details: result,
-          isError: false,
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return {
-          content: [textContent(`OMP workflow context sync failed: ${message}`)],
-          details: { ok: false, error: message },
-          isError: true,
-        };
-      }
-    },
+      const result = await syncWorkflowContext({
+        root: pluginRootFromParams(input, ctx),
+        target: input.target,
+        apply: input.apply === true,
+      });
+      return {
+        content: [textContent(formatWorkflowContextSyncReport(result))],
+        details: result,
+        isError: false,
+      };
+    }),
   });
 
   pi.registerTool({
@@ -124,15 +128,21 @@ export default function registerOmpConfig(pi) {
     description: 'List packaged OMP config agents, skills, hooks, and templates.',
     defaultInactive: true,
     approval: 'read',
+    promptSnippet: 'List packaged OMP config agents, skills, hooks, and templates.',
+    promptGuidelines: [
+      'Returns a JSON inventory of all packaged config assets.',
+      'Pass root to inspect a specific agent directory.',
+      'This tool is read-only; it does not modify files.',
+    ],
     parameters,
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    execute: withToolErrorHandling('omp_config_assets', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const result = await listAssets(pluginRootFromParams(params, ctx));
       return {
         content: [textContent(JSON.stringify(result, null, 2))],
         details: result,
         isError: false,
       };
-    },
+    }),
   });
 
   pi.registerTool({
@@ -141,15 +151,21 @@ export default function registerOmpConfig(pi) {
     description: 'Create a safe manual review plan before applying packaged OMP config templates to a target config directory.',
     defaultInactive: true,
     approval: 'read',
+    promptSnippet: 'Create a safe manual review plan before applying config templates.',
+    promptGuidelines: [
+      'Use this tool before omp_config_sync_workflow_context with apply: true.',
+      'Reports what would change without modifying any files.',
+      'Pass root to target a specific directory.',
+    ],
     parameters,
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    execute: withToolErrorHandling('omp_config_plan', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const result = await runConfigPlan({ root: pluginRootFromParams(params, ctx) });
       return {
         content: [textContent(formatPlanReport(result))],
         details: result,
         isError: false,
       };
-    },
+    }),
   });
 
   // Session-start auto-sync: propagate workflow context assets (WATCHDOG.yml,

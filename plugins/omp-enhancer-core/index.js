@@ -17,6 +17,7 @@ import {
   stripPlanCommand,
   buildPlanModeReminderSection,
 } from './src/plan-mode.js';
+import { withToolErrorHandling } from './src/small-model-hardening.js';
 import {
   normalizeSkillName,
   parseLoadedSkillEvidence,
@@ -83,11 +84,17 @@ export default function registerCoreEnhancer(pi) {
     description: 'Compare observed skill reads with explicitly supplied skill candidates and return advisory evidence.',
     defaultInactive: true,
     approval: 'read',
+    promptSnippet: 'Review skill usage in assistant output against supplied skill candidates.',
+    promptGuidelines: [
+      'Pass the full assistant output text as output.',
+      'Supply the skills array with every skill name the model claims to have used.',
+      'This tool reports advisory evidence only; it does not block or gate completion.',
+    ],
     parameters: z?.object ? z.object({
-      output: z.string(),
-      skills: z.array(z.string()).optional(),
+      output: z.string().describe('The assistant output text to check for skill usage evidence.'),
+      skills: z.array(z.string()).optional().describe('Skill names the model claims to have used.'),
     }) : undefined,
-    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+    execute: withToolErrorHandling('omp_core_validate_skill_usage', async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const suggestedSkills = unique(params.skills ?? []);
       const validation = validateSkillUsage({
@@ -105,7 +112,7 @@ export default function registerCoreEnhancer(pi) {
       return okResult(state.lastSkillUsage.summary, {
         validation: state.lastSkillUsage,
       });
-    },
+    }),
   });
 
   pi.registerTool({
@@ -114,11 +121,17 @@ export default function registerCoreEnhancer(pi) {
     description: 'Compare reported collaboration with explicitly supplied Agent candidates and return advisory evidence.',
     defaultInactive: true,
     approval: 'read',
+    promptSnippet: 'Review agent/subagent usage in assistant output against supplied agent candidates.',
+    promptGuidelines: [
+      'Pass the full assistant output text as output.',
+      'Supply the agents array with every agent name the model claims to have used.',
+      'This tool reports advisory evidence only; it does not block or gate completion.',
+    ],
     parameters: z?.object ? z.object({
-      output: z.string(),
-      agents: z.array(z.string()).optional(),
+      output: z.string().describe('The assistant output text to check for agent usage evidence.'),
+      agents: z.array(z.string()).optional().describe('Agent names the model claims to have collaborated with.'),
     }) : undefined,
-    execute: async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
+    execute: withToolErrorHandling('omp_core_validate_subagent_usage', async (_callId, params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const suggestedRoles = unique(params.agents ?? []);
       const validation = validateSubagentUsage({
@@ -130,7 +143,7 @@ export default function registerCoreEnhancer(pi) {
       return okResult(state.lastSubagentUsage.summary, {
         validation: state.lastSubagentUsage,
       });
-    },
+    }),
   });
 
   pi.registerTool({
@@ -139,13 +152,19 @@ export default function registerCoreEnhancer(pi) {
     description: 'Show observed skill reads and native task progress without selecting a workflow or Agent. Includes advisory protocol diagnostics (for example NO_DELEGATION_ROWS) without selecting a workflow or Agent.',
     defaultInactive: true,
     approval: 'read',
+    promptSnippet: 'Show observed skill reads, task progress, and protocol diagnostics.',
+    promptGuidelines: [
+      'Call this tool to check current session state without selecting a workflow.',
+      'Output includes advisory protocol diagnostics that do not block completion.',
+      'Use this to verify skill reads and task delegation status.',
+    ],
     parameters: z?.object ? z.object({}) : undefined,
-    execute: async (_callId, _params = {}, _signal, _onUpdate, ctx = {}) => {
+    execute: withToolErrorHandling('omp_core_observation_status', async (_callId, _params = {}, _signal, _onUpdate, ctx = {}) => {
       restoreStateFromContext(state, ctx);
       const status = buildObservationStatus(state);
       await persistState(pi, state);
       return okResult(formatObservationStatus(status), { status });
-    },
+    }),
   });
 
   pi.registerTool({
@@ -154,10 +173,16 @@ export default function registerCoreEnhancer(pi) {
     description: 'Install marketplace plugin skills without overwriting real directories, and report exact legacy gate skills that can be ignored without disabling autolearn.',
     defaultInactive: true,
     approval: 'write',
+    promptSnippet: 'Install marketplace plugin skills into the agent directory.',
+    promptGuidelines: [
+      'Use dryRun: true to preview before applying.',
+      'Reports installed, skipped, and error counts as structured evidence.',
+      'This tool writes files; use only when skill installation is needed.',
+    ],
     parameters: z?.object ? z.object({
-      dryRun: z.boolean().optional(),
+      dryRun: z.boolean().optional().describe('If true, preview what would be installed without writing files.'),
     }) : undefined,
-    execute: async (_callId, params = {}) => {
+    execute: withToolErrorHandling('omp_core_install_skills', async (_callId, params = {}) => {
       const result = await installPluginSkills({ dryRun: params.dryRun ?? false });
       const summary = [
         'Installed: ' + result.installed.length,
@@ -167,7 +192,7 @@ export default function registerCoreEnhancer(pi) {
         ...(result.legacyFindings.length ? ['Legacy gate skill findings: ' + result.legacyFindings.length] : []),
       ].join(', ');
       return okResult(summary, result);
-    },
+    }),
   });
   pi.registerTool({
     name: 'omp_core_install_deps',
@@ -175,11 +200,17 @@ export default function registerCoreEnhancer(pi) {
     description: 'Run npm install for installed marketplace plugins that declare runtime dependencies (for example elkjs for tikz-helper) so their tools work after install or upgrade. Reports installed, up-to-date, and failed plugins as structured evidence.',
     defaultInactive: true,
     approval: 'exec',
+    promptSnippet: 'Install npm runtime dependencies for marketplace plugins (e.g. elkjs for tikz-helper).',
+    promptGuidelines: [
+      'Use dryRun: true to preview before applying.',
+      'Use the plugin parameter to target a specific plugin instead of all.',
+      'Reports installed, up-to-date, and error counts as structured evidence.',
+    ],
     parameters: z?.object ? z.object({
-      dryRun: z.boolean().optional(),
-      plugin: z.string().optional(),
+      dryRun: z.boolean().optional().describe('If true, preview what would be installed without running npm install.'),
+      plugin: z.string().optional().describe('Specific plugin name to install dependencies for. Omit to install all.'),
     }) : undefined,
-    execute: async (_callId, params = {}) => {
+    execute: withToolErrorHandling('omp_core_install_deps', async (_callId, params = {}) => {
       const result = await installPluginDeps({ dryRun: params.dryRun ?? false, plugin: params.plugin });
       const summary = [
         'Installed: ' + result.installed.length,
@@ -188,7 +219,7 @@ export default function registerCoreEnhancer(pi) {
         ...(result.warnings.length ? ['Warnings: ' + result.warnings.length] : []),
       ].join(', ');
       return okResult(summary, result);
-    },
+    }),
   });
 
   registerEnhancerToolsCommand(pi);
@@ -323,7 +354,7 @@ export default function registerCoreEnhancer(pi) {
     if (!protocolCoachEventEligible(protocolCoachTurnEligible, activeHostTurnKind, ctx)) return undefined;
     if (!Array.isArray(event.messages)) return undefined;
     restoreStateFromContext(state, ctx);
-    const cue = presentWorkflowProtocolCoachCue(state.protocolCoach);
+    const cue = presentWorkflowProtocolCoachCue(state.protocolCoach, ctx?.model);
     if (!cue) return undefined;
     return {
       messages: [
@@ -384,6 +415,7 @@ export default function registerCoreEnhancer(pi) {
         body: name === 'read' ? readResultText(event) : '',
         failed: toolEventFailed(event),
         pending: toolEventPending(event),
+        model: ctx?.model,
       });
     }
     await persistState(pi, state);

@@ -51,12 +51,12 @@ describe('omp_test_analyze warnings', () => {
 
 function fakeZod() {
   return {
-    object: (shape: Record<string, unknown>) => ({ type: 'object', shape }),
-    string: () => ({ type: 'string' }),
-    boolean: () => ({ type: 'boolean' }),
-    unknown: () => ({ type: 'unknown' }),
-    array: (schema: unknown) => ({ type: 'array', schema }),
-    enum: (values: readonly [string, ...string[]]) => ({ type: 'enum', values }),
-    optional: (schema: unknown) => ({ type: 'optional', schema })
+    object: (shape: Record<string, unknown>) => ({  type: 'object', shape , describe() { return this } }),
+    string: () => ({  type: 'string' , describe() { return this } }),
+    boolean: () => ({  type: 'boolean' , describe() { return this } }),
+    unknown: () => ({  type: 'unknown' , describe() { return this } }),
+    array: (schema: unknown) => ({  type: 'array', schema , describe() { return this } }),
+    enum: (values: readonly [string, ...string[]]) => ({  type: 'enum', values , describe() { return this } }),
+    optional: (schema: unknown) => ({  type: 'optional', schema , describe() { return this } }),
   }
 }

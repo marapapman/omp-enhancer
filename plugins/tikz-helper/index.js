@@ -4,6 +4,7 @@ import { renderTikz, runBoundedCommand } from './src/render-tikz.js';
 import { generateTikz, computeLayout, elkToTikz } from './src/generate-tikz.js';
 import { asRuntimeError } from './src/runtime-error.js';
 import { TikzRuntimeError } from './src/runtime-error.js';
+import { requireString, parseJsonParam } from './src/tool-error-utils.js';
 import { readFile, writeFile, mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, isAbsolute, resolve, sep } from 'node:path';
@@ -49,47 +50,47 @@ function errorResponse(error) {
 
 function catalogParameters(z) {
   return z.object({
-    query: optional(z, z.string()),
-    type: optional(z, z.enum(['icon', 'template', 'example'])),
-    domain: optional(z, z.string()),
-    limit: optional(z, z.number()),
-    includeSource: optional(z, z.boolean()),
+    query: optional(z, z.string()).describe('Semantic search term for OpenTikZ icons, templates, or examples.'),
+    type: optional(z, z.enum(['icon', 'template', 'example'])).describe('Filter by catalog entry type: icon, template, or example.'),
+    domain: optional(z, z.string()).describe('Filter by domain or category within the catalog.'),
+    limit: optional(z, z.number()).describe('Maximum number of results to return.'),
+    includeSource: optional(z, z.boolean()).describe('If true, include the full source content in results.'),
   });
 }
 
 function assetParameters(z) {
   return z.object({
-    inputPath: z.string(),
-    outputDirectory: optional(z, z.string()),
-    nodeId: optional(z, z.string()),
-    prompt: optional(z, z.string()),
-    provider: optional(z, z.string()),
-    model: optional(z, z.string()),
+    inputPath: z.string().describe('Path to the PNG, JPEG, or WebP image file to normalize.'),
+    outputDirectory: optional(z, z.string()).describe('Output directory for the normalized asset. Defaults to figures/tikz/assets/.'),
+    nodeId: optional(z, z.string()).describe('Node ID to associate with this asset in the manifest.'),
+    prompt: optional(z, z.string()).describe('The generation prompt used if the image was AI-generated.'),
+    provider: optional(z, z.string()).describe('The image provider used (e.g., openai, replicate).'),
+    model: optional(z, z.string()).describe('The model name used for generation.'),
   });
 }
 
 function renderParameters(z) {
   return z.object({
-    sourcePath: z.string(),
-    outputDirectory: optional(z, z.string()),
-    timeoutMs: optional(z, z.number()),
+    sourcePath: z.string().describe('Path to the TikZ .tex source file to compile and render.'),
+    outputDirectory: optional(z, z.string()).describe('Directory for output files. Defaults to the same directory as the source file.'),
+    timeoutMs: optional(z, z.number()).describe('Timeout in milliseconds for the render process.'),
   });
 }
 function generateParameters(z) {
   return z.object({
-    graph: z.string(),
-    layoutOptions: optional(z, z.string()),
-    styleOptions: optional(z, z.string()),
-    preset: optional(z, z.enum(['paper-column', 'paper-full', 'slide-16-9', 'slide-4-3'])),
-    density: optional(z, z.enum(['compact', 'balanced', 'airy'])),
-    targetWidthPt: optional(z, z.number()),
+        graph: z.string().describe('A JSON string of the ELK graph IR. Use JSON.stringify() to convert your graph object. Must include id, children, width, height. Input nodes must omit x and y (the layout engine computes positions). Size each node width and height to fit its exact label plus padding (2pt inner padding applied). Example: \'{"id":"root","children":[{"id":"n1","width":40,"height":20}]}\''),
+        layoutOptions: optional(z, z.string()).describe('Optional JSON string of ELK layout options. Use JSON.stringify() to convert your options object. Place elk.algorithm and layout options here. Choose elk.algorithm: layered (flows), mrtree (trees), radial (mind-map), stress, or force. Set elk.direction to RIGHT or DOWN. Fix overlaps by changing layout options or node sizes and regenerating. Example: {"elk.algorithm":"layered","elk.direction":"RIGHT"}'),
+        styleOptions: optional(z, z.string()).describe('Optional JSON string of TikZ style options. Use JSON.stringify() to convert your style object. Use - for no arrow, dashed or dotted for line style. Set arrow type with properties.arrow: ->, <-, or <->.'),
+    preset: optional(z, z.enum(['paper-column', 'paper-full', 'slide-16-9', 'slide-4-3'])).describe('Target medium preset: paper-column (double-column paper, ~240pt), paper-full (full text width, ~504pt), slide-16-9, or slide-4-3.'),
+    density: optional(z, z.enum(['compact', 'balanced', 'airy'])).describe('Density tuning: compact (tight), balanced (default), or airy (spacious).'),
+    targetWidthPt: optional(z, z.number()).describe('Optional target width in points for scaling the diagram.'),
   });
 }
 
 function previewAssetsParameters(z) {
   return z.object({
-    manifestPath: optional(z, z.string()),
-    nodeIds: optional(z, z.array(z.string())),
+    manifestPath: optional(z, z.string()).describe('Path to the asset manifest JSON file. Defaults to figures/tikz/assets/assets.manifest.json.'),
+    nodeIds: optional(z, z.array(z.string())).describe('Optional array of node IDs to filter which assets to preview.'),
   });
 }
 
@@ -181,27 +182,26 @@ export default function registerTikzHelper(omp) {
     approval: 'read',
     promptSnippet: 'Generate a TikZ figure by describing the graph structure and letting ELK compute the layout automatically.',
     promptGuidelines: [
-      'Author the diagram as an ELK graph IR: a root with graph-level layoutOptions, a children array of nodes, and an edges array. Each node has id, width, height sized for its exact label plus padding, and optional properties (shape, fill, textColor). Each edge has id, a single sources entry, a single targets entry, and optional properties (arrow, label, color). Size each node to fit its exact label plus padding before calling the layout engine.',
-      'Use properties.shape on nodes: rectangle (default), rounded, diamond, ellipse, circle, terminal, parallelogram, cylinder. Use properties.arrow on edges: -> (default), <-, <->, and - for no arrow. Add labels with properties.label; use dashed or dotted for line style. Use - for no arrow and dashed or dotted for line style.',
-      'Input nodes must omit x and y and input edges must omit sections and bendPoints; the layout engine computes them. The author never authors, infers, or hand-edits TikZ coordinates; never hand-edit TikZ coordinates and never author TikZ coordinates manually — the ELK graph IR is the sole source of node positions and edge geometry.',
-      'Choose elk.algorithm from layered (flows, pipelines, architecture), mrtree (trees), radial (hub or mind-map), stress, or force (general association). Never recommend the fixed or random algorithms for a coordinate-free figure.',
-      'Set elk.direction to RIGHT or DOWN. The engine applies generous default spacing (nodeNode, edgeNode, padding, etc.) automatically; do not set spacing options yourself unless you have a specific reason. Set elk.edgeRouting to ORTHOGONAL for layered graphs; stress and force use POLYLINE or SPLINES.',
-      'Model groups as parent nodes with children. For edges that cross parent boundaries, use layered with elk.hierarchyHandling set to INCLUDE_CHILDREN; mixed algorithms do not support cross-parent edges.',
-      'Place elk.algorithm and every authored layout option in the graph-level layoutOptions; the separate tool layoutOptions parameter is not the reliable algorithm channel. Node sizing, spacing, and compaction are handled by engine defaults; do not author spacing or padding options. The backend emits ELK-computed dimensions as TikZ minimum width and height with 2pt inner padding. Declare node width and height sized for the exact label plus padding; ELK may enlarge nodes when its label measurement exceeds declared dimensions. Verify with a render. Declare width and height for each node based on label text length and font size. ELK may enlarge nodes when its internal label measurement exceeds declared dimensions. The backend emits ELK dimensions as TikZ minimum sizes with 2pt inner padding.',
-      'Fix overlap, clipping, or crossings by changing ELK layout options or node sizes and regenerating, never by editing coordinates. The tool returns the generated TikZ source and the positioned graph metadata; write the returned .tex to the project path and compile it with tikz_render. Export the tool metadata: algorithm used, node count, edge count.',
-      'Before generating, confirm the ELK layout engine (elkjs) is installed; if the tool returns ELK_NOT_INSTALLED, install it with `npm run install:deps` (or the `omp_core_install_deps` tool) and call tikz_generate_diagram again. Never fall back to hand-authored TikZ coordinates when ELK is missing: install ELK first, then regenerate from the ELK graph IR.',
-      'The tool also returns the positioned ELK graph IR as standard ELK JSON in the `ir` field (and the structured `graph`). Write it to a project-local `<figure>.elk.json` to edit in an ELK-compatible visual editor, then feed the edited IR back as the `graph` input to tikz_generate_diagram to regenerate the TikZ; re-importing recomputes layout via ELK (structural, label, and size edits survive, but node positions are recomputed), so the IR is a round-trip artifact, not a hand-coordinate surface.',
-      'Choose the preset parameter for the target medium: paper-column (double-column paper, about 240pt wide, vertical flow), paper-full (full text width, about 504pt), slide-16-9, or slide-4-3 (airy spacing and larger font for projected figures). Presets tune ELK direction, spacing, minimum node size, padding, and font automatically; density=compact|balanced|airy scales spacing further. Do not hand-tune spacing to fix density — choose a preset or density instead.',
-      'Export the tool sizing metadata: target width, intrinsic width and height, applied scale, effective font size, density relayouts, and the embedding hint. Warnings (for example effective font below 6pt) are advisory evidence: split the graph, shorten labels, or choose a wider preset — never edit coordinates.',
-      'This is a regular OMP tool — invoke it as a standard tool call, not via write to xd://. The native `generate_image` tool is an xd:// device (`write xd://generate_image`) with a different purpose (image generation for node icons).',
+      'The graph parameter must be a JSON string. Use JSON.stringify() to convert your graph object before passing it.',
+      'Size each node width and height to fit its exact label plus padding before calling the layout engine.',
+      'Set elk.algorithm: layered (flows), mrtree (trees), radial (mind-map), stress, or force.',
+      'Set elk.direction to RIGHT or DOWN.',
+      'Choose preset for target medium: paper-column (double-column paper), paper-full (full text width), slide-16-9, or slide-4-3.',
+      'Write the returned .tex to the project and compile it with tikz_render.',
+      'If ELK_NOT_INSTALLED, run npm run install:deps and call tikz_generate_diagram again.',
     ],
     parameters: generateParameters(z),
     async execute(_toolCallId, params) {
       try {
-        const graph = JSON.parse(params.graph);
-        const parsed = { graph };
-        if (params.layoutOptions) parsed.layoutOptions = JSON.parse(params.layoutOptions);
-        if (params.styleOptions) parsed.tikzOptions = JSON.parse(params.styleOptions);
+        const graphResult = parseJsonParam('tikz_generate_diagram', 'graph', params.graph);
+        if (!graphResult.ok) return errorResponse(new Error(graphResult.error));
+        const layoutResult = parseJsonParam('tikz_generate_diagram', 'layoutOptions', params.layoutOptions);
+        if (!layoutResult.ok) return errorResponse(new Error(layoutResult.error));
+        const styleResult = parseJsonParam('tikz_generate_diagram', 'styleOptions', params.styleOptions);
+        if (!styleResult.ok) return errorResponse(new Error(styleResult.error));
+        const parsed = { graph: graphResult.value };
+        if (layoutResult.value !== undefined) parsed.layoutOptions = layoutResult.value;
+        if (styleResult.value !== undefined) parsed.tikzOptions = styleResult.value;
         if (params.preset) parsed.preset = params.preset;
         if (params.density) parsed.density = params.density;
         if (typeof params.targetWidthPt === 'number') parsed.targetWidthPt = params.targetWidthPt;

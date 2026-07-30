@@ -823,7 +823,7 @@ function nativeDelegationPrompt({ batch, cap, injectedContext = '' }) {
 }
 
 function fakeZod() {
-  const schema = () => ({ optional: schema });
+  const schema = () => ({ optional: schema, describe: () => schema() });
   return {
     string: schema,
     boolean: schema,

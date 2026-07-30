@@ -20,6 +20,7 @@ import {
   validateFactCheckReview,
 } from './src/fact-check.js';
 import { fetchProviderEvidence } from './src/providers.js';
+import { withToolErrorHandling } from './src/tool-error-utils.js';
 
 const EVIDENCE_STATUSES = ['SUPPORTED', 'CONTRADICTED', 'INSUFFICIENT', 'UNVERIFIABLE'];
 const FINAL_VERDICTS = [...EVIDENCE_STATUSES, 'CONFLICTED'];
@@ -59,9 +60,9 @@ function loadInputText(input = {}, cwd = process.cwd()) {
 
 function buildAnalyzeParameters(z) {
   return z.object({
-    path: z.string().optional(),
-    text: z.string().optional(),
-    maxClaims: z.number().optional(),
+    path: z.string().optional().describe('File path to the text to analyze. Provide exactly one of text or path. Example: "/path/to/document.txt".'),
+    text: z.string().optional().describe('Inline text to analyze for fact-check claims. Provide exactly one of text or path. Example: "The sky is blue because of Rayleigh scattering."'),
+    maxClaims: z.number().optional().describe('Maximum number of claims to extract. Limits the plan scope. Example: 10.'),
   });
 }
 
@@ -69,13 +70,13 @@ function buildEvidenceParameters(z) {
   const claim = buildClaimSchema(z);
   const evidence = buildEvidenceRecordSchema(z);
   return z.object({
-    path: z.string().optional(),
-    text: z.string().optional(),
-    claims: z.array(claim).optional(),
-    evidenceRecords: z.array(evidence).optional(),
-    lane: z.enum(['A', 'B']).optional(),
-    allowNetwork: z.boolean().optional(),
-    providers: z.array(z.enum(['crossref', 'arxiv', 'openalex', 'datacite', 'google-fact-check'])).optional(),
+    path: z.string().optional().describe('File path to derive claims when claims are not supplied explicitly. Example: "/path/to/document.txt".'),
+    text: z.string().optional().describe('Inline text to derive claims when claims are not supplied explicitly. Example: "The Eiffel Tower is 330 meters tall."'),
+    claims: z.array(claim).optional().describe('Fact-check claims with id/text fields. Use results from fact_check_analyze. When supplied, evidenceRecords should also be provided.'),
+    evidenceRecords: z.array(evidence).optional().describe('Pre-collected evidence records keyed by claimId. Each record requires claimId, lane, and a canonical status.'),
+    lane: z.enum(['A', 'B']).optional().describe('Evidence lane identifier for structured multi-observer fact-checking. Example: "A".'),
+    allowNetwork: z.boolean().optional().describe('Allow network access to fetch provider evidence. Set to true only when network access is authorized. Example: false.'),
+    providers: z.array(z.enum(['crossref', 'arxiv', 'openalex', 'datacite', 'google-fact-check'])).optional().describe('External evidence providers to query. Only used when allowNetwork is true. Example: ["crossref", "arxiv"].'),
   });
 }
 
@@ -83,62 +84,62 @@ function buildReportParameters(z) {
   const claim = buildClaimSchema(z);
   const evidence = buildEvidenceRecordSchema(z);
   const crossCheck = z.object({
-    claimId: z.string(),
-    status: z.string(),
-    laneA: z.string().optional(),
-    laneB: z.string().optional(),
-    conflicts: z.array(z.string()).optional(),
-    findings: z.array(z.string()).optional(),
+    claimId: z.string().describe('The ID of the claim being cross-checked.'),
+    status: z.string().describe('Cross-check status: AGREED, CONFLICTED, PARTIAL, INSUFFICIENT, or UNVERIFIABLE.'),
+    laneA: z.string().optional().describe('First evidence lane for comparison. Example: "A".'),
+    laneB: z.string().optional().describe('Second evidence lane for comparison. Example: "B".'),
+    conflicts: z.array(z.string()).optional().describe('List of specific points of conflict between lanes. Example: ["source_disagrees_on_date"].'),
+    findings: z.array(z.string()).optional().describe('Additional findings from the cross-check analysis. Example: ["both_lanes_agree_on_outcome"].'),
   });
   return z.object({
-    claims: z.array(claim).optional(),
-    evidenceRecords: z.array(evidence).optional(),
-    crossChecks: z.array(crossCheck).optional(),
+    claims: z.array(claim).optional().describe('Fact-check claims with id/text fields. Use results from fact_check_analyze.'),
+    evidenceRecords: z.array(evidence).optional().describe('Evidence records keyed by claimId, from fact_check_evidence output.'),
+    crossChecks: z.array(crossCheck).optional().describe('Pre-built cross-check results. If omitted, cross-checks are computed deterministically from claims and evidenceRecords.'),
   });
 }
 
 function buildClaimSchema(z) {
   return z.object({
-    id: z.string(),
-    text: z.string(),
-    category: z.string().optional(),
-    priority: z.string().optional(),
-    location: z.string().optional(),
-    evidencePlan: z.array(z.string()).optional(),
-    freshnessRequirement: z.enum(['CURRENT', 'NOT_APPLICABLE']).optional(),
-    claimTuple: buildCanonicalTupleSchema(z).optional(),
+    id: z.string().describe('Unique identifier for the claim. Example: "claim-1".'),
+    text: z.string().describe('The factual assertion text to be checked. Example: "The sky is blue because of Rayleigh scattering.".'),
+    category: z.string().optional().describe('Optional category label for the claim. Example: "science".'),
+    priority: z.string().optional().describe('Optional priority level. Example: "high".'),
+    location: z.string().optional().describe('Optional location context for the claim. Example: "Paris".'),
+    evidencePlan: z.array(z.string()).optional().describe('Optional list of evidence sources to consult. Example: ["crossref", "arxiv"].'),
+    freshnessRequirement: z.enum(['CURRENT', 'NOT_APPLICABLE']).optional().describe('Freshness requirement for evidence. Use CURRENT when the claim requires up-to-date sources. Example: "CURRENT".'),
+    claimTuple: buildCanonicalTupleSchema(z).optional().describe('Canonical structured tuple representing the claim in subject-predicate-object form.'),
   });
 }
 
 function buildEvidenceRecordSchema(z) {
   return z.object({
-    claimId: z.string(),
-    lane: z.enum(['A', 'B']).optional(),
-    provider: z.string().optional(),
-    status: z.enum(EVIDENCE_STATUSES),
-    quote: z.string().optional(),
-    source: z.string().optional(),
-    reason: z.string().optional(),
-    evidenceType: z.enum(['passage', 'table', 'dataset', 'metadata']).optional(),
-    freshness: z.enum(['CURRENT', 'STALE', 'UNKNOWN', 'NOT_APPLICABLE']).optional(),
-    requirementsMet: z.boolean().optional(),
-    sourceLineage: z.string().optional(),
-    observed: z.any().optional(),
+    claimId: z.string().describe('The claim ID this evidence supports or contradicts. Must match a claim id from fact_check_analyze. Example: "claim-1".'),
+    lane: z.enum(['A', 'B']).optional().describe('Evidence lane identifier for multi-observer fact-checking. Example: "A".'),
+    provider: z.string().optional().describe('Provider name for the evidence source. Example: "crossref".'),
+    status: z.enum(EVIDENCE_STATUSES).describe('Evidence status: SUPPORTED, CONTRADICTED, INSUFFICIENT, or UNVERIFIABLE. Example: "SUPPORTED".'),
+    quote: z.string().optional().describe('Direct quote from the source supporting the evidence. Example: "The Eiffel Tower is 330 meters tall.".'),
+    source: z.string().optional().describe('Source URL or citation for the evidence. Example: "https://example.com/source".'),
+    reason: z.string().optional().describe('Explanation of why this status was assigned. Example: "Source confirms the measurement.".'),
+    evidenceType: z.enum(['passage', 'table', 'dataset', 'metadata']).optional().describe('Type of evidence source. Example: "passage".'),
+    freshness: z.enum(['CURRENT', 'STALE', 'UNKNOWN', 'NOT_APPLICABLE']).optional().describe('Freshness assessment of the evidence source. Example: "CURRENT".'),
+    requirementsMet: z.boolean().optional().describe('Whether the evidence satisfies the evidence plan requirements. Example: true.'),
+    sourceLineage: z.string().optional().describe('Provenance chain for the evidence source. Example: "primary -> secondary".'),
+    observed: z.any().optional().describe('Raw observed data or metadata from the evidence collection process.'),
     evidenceTuple: z.object({
       ...buildCanonicalTupleShape(z),
-      relation: z.enum(FACT_ASSESSMENT_CONTRACT.tupleRelations),
-      negatedField: z.enum(FACT_ASSESSMENT_CONTRACT.negatedFields).optional(),
-    }).optional(),
-    strength: z.enum(FACT_ASSESSMENT_CONTRACT.strengths).optional(),
+      relation: z.enum(FACT_ASSESSMENT_CONTRACT.tupleRelations).describe('Relation between the canonical tuple fields: ENTAILS, CONTRADICTS, NEUTRAL, or AMBIGUOUS. Example: "ENTAILS".'),
+      negatedField: z.enum(FACT_ASSESSMENT_CONTRACT.negatedFields).optional().describe('Field that is negated in this evidence, if applicable. Example: "objectValue".'),
+    }).optional().describe('Canonical structured evidence tuple with relation assessment.'),
+    strength: z.enum(FACT_ASSESSMENT_CONTRACT.strengths).optional().describe('Strength of the evidence: STRONG, MODERATE, WEAK, or INCONCLUSIVE. Example: "STRONG".'),
     limitation: z.object({
-      level: z.enum(FACT_ASSESSMENT_CONTRACT.limitationLevels),
-      reason: z.string().optional(),
-    }).optional(),
+      level: z.enum(FACT_ASSESSMENT_CONTRACT.limitationLevels).describe('Limitation severity: MINOR, MODERATE, or SIGNIFICANT. Example: "MINOR".'),
+      reason: z.string().optional().describe('Explanation of the limitation. Example: "Single source only.".'),
+    }).optional().describe('Optional limitation assessment for this evidence record.'),
     countercheck: z.object({
-      status: z.enum(FACT_ASSESSMENT_CONTRACT.countercheckStatuses),
-      outcome: z.enum(FACT_ASSESSMENT_CONTRACT.countercheckOutcomes),
-      note: z.string().optional(),
-    }).optional(),
+      status: z.enum(FACT_ASSESSMENT_CONTRACT.countercheckStatuses).describe('Countercheck status: PENDING, PERFORMED, or NOT_APPLICABLE. Example: "PERFORMED".'),
+      outcome: z.enum(FACT_ASSESSMENT_CONTRACT.countercheckOutcomes).describe('Countercheck outcome: CONSISTENT, INCONSISTENT, or INCONCLUSIVE. Example: "CONSISTENT".'),
+      note: z.string().optional().describe('Optional note about the countercheck result. Example: "Verified against original source.".'),
+    }).optional().describe('Optional countercheck verification for this evidence record.'),
   });
 }
 
@@ -148,8 +149,8 @@ function buildCanonicalTupleSchema(z) {
 
 function buildCanonicalTupleShape(z) {
   const tupleField = () => z.object({
-    value: z.string(),
-    materiality: z.enum(FACT_ASSESSMENT_CONTRACT.tupleMaterialities),
+    value: z.string().describe('The canonical string value for this tuple field. Example: "sky".'),
+    materiality: z.enum(FACT_ASSESSMENT_CONTRACT.tupleMaterialities).describe('Materiality level for this field: CORE, CONTEXTUAL, or DERIVED. Example: "CORE".'),
   });
   return {
     subject: tupleField(),
@@ -163,8 +164,8 @@ function buildCanonicalTupleShape(z) {
 
 function buildReviewParameters(z) {
   return z.object({
-    finalOutput: z.string(),
-    riskLevel: z.enum(['low', 'standard', 'high']).optional(),
+    finalOutput: z.string().describe('The final fact-check report text to review for consistency and completeness. Example: "FACT_EVIDENCE_A\n- claim-1: SUPPORTED\n  source: example.com".'),
+    riskLevel: z.enum(['low', 'standard', 'high']).optional().describe('Risk level context for the review evaluation. Example: "standard".'),
   });
 }
 
@@ -218,8 +219,10 @@ export default function factCheckerExtension(omp) {
     description: 'Extract checkable factual claims and suggest a FACT_CHECK_PLAN. Workflow telemetry is optional and never blocks later tools.',
     defaultInactive: true,
     approval: 'read',
+    promptSnippet: 'Extract checkable claims from text and build a fact-check plan.',
+    promptGuidelines: ['Pass either text or path (not both).', 'Set maxClaims to limit the number of claims extracted.', 'Returns advisory plan data; does not verify claims itself.'],
     parameters: buildAnalyzeParameters(z),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    execute: withToolErrorHandling('fact_check_analyze', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const input = paramsOrEmpty(params);
       const workflow = workflowStateFor(ctx);
       const loaded = loadInputText(input, cwdFromContext(ctx));
@@ -240,7 +243,7 @@ export default function factCheckerExtension(omp) {
         },
         isError: false,
       };
-    },
+    }),
   });
 
   omp.registerTool({
@@ -249,8 +252,10 @@ export default function factCheckerExtension(omp) {
     description: 'Collect local and optional provider evidence for fact-check claims. path/text derive claims only when claims are omitted; when claims are supplied, pass structured evidenceRecords. Network/API failures degrade to insufficient evidence.',
     defaultInactive: true,
     approval: 'read',
+    promptSnippet: 'Collect evidence for planned fact-check claims.',
+    promptGuidelines: ['Requires a plan from fact_check_analyze first.', 'Set allowNetwork: true only when network access is authorized.', 'Returns evidence records; does not issue verdicts.'],
     parameters: buildEvidenceParameters(z),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    execute: withToolErrorHandling('fact_check_evidence', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const input = paramsOrEmpty(params);
       const workflow = workflowStateFor(ctx);
       const warnings = [];
@@ -300,7 +305,7 @@ export default function factCheckerExtension(omp) {
         },
         isError: false,
       };
-    },
+    }),
   });
 
   omp.registerTool({
@@ -309,8 +314,10 @@ export default function factCheckerExtension(omp) {
     description: 'Build an advisory source-aware FACT_CHECK_REPORT from supplied claims and evidence. Earlier workflow telemetry is helpful but optional.',
     defaultInactive: true,
     approval: 'read',
+    promptSnippet: 'Generate a verdict report from evidence records.',
+    promptGuidelines: ['Requires evidence from fact_check_evidence first.', 'strictVerdict uses fail-closed logic: SUPPORTED requires ENTAILS + PROVEN.', 'Output is advisory evidence; it does not decide completion.'],
     parameters: buildReportParameters(z),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    execute: withToolErrorHandling('fact_check_report', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const input = paramsOrEmpty(params);
       const workflow = workflowStateFor(ctx);
       const warnings = [];
@@ -350,7 +357,7 @@ export default function factCheckerExtension(omp) {
         },
         isError: false,
       };
-    },
+    }),
   });
 
   omp.registerTool({
@@ -359,8 +366,10 @@ export default function factCheckerExtension(omp) {
     description: 'Review fact-check workflow evidence and report missing or inconsistent support. This advisory tool never blocks tools or session completion.',
     defaultInactive: true,
     approval: 'read',
+    promptSnippet: 'Review a fact-check plan, evidence, and verdicts for completeness.',
+    promptGuidelines: ['Pass plan, evidence, and/or report data to review.', 'Reports advisory findings; does not execute commands or block completion.', 'Use this for independent quality assurance on fact-check results.'],
     parameters: buildReviewParameters(z),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    execute: withToolErrorHandling('fact_check_review', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const input = paramsOrEmpty(params);
       const workflow = workflowStateFor(ctx);
       const riskLevel = workflow?.plan?.riskLevel ?? input.riskLevel ?? 'standard';
@@ -392,7 +401,7 @@ export default function factCheckerExtension(omp) {
         details: result,
         isError: false,
       };
-    },
+    }),
   });
 
   omp.registerCommand('fact-check', {

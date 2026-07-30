@@ -199,11 +199,11 @@ function extensionContext(entries) {
 }
 
 function fakeZod() {
-  const withOptional = (schema) => ({ ...schema, optional: () => ({ type: 'optional', schema }) });
+  const chainable = (base) => ({ ...base, optional: () => chainable({ type: 'optional', schema: base }), describe: () => chainable(base) });
   return {
-    object: (shape) => withOptional({ type: 'object', shape }),
-    string: () => withOptional({ type: 'string' }),
-    boolean: () => withOptional({ type: 'boolean' }),
-    array: (schema) => withOptional({ type: 'array', schema }),
+    object: (shape) => chainable({ type: 'object', shape }),
+    string: () => chainable({ type: 'string' }),
+    boolean: () => chainable({ type: 'boolean' }),
+    array: (schema) => chainable({ type: 'array', schema }),
   };
 }
