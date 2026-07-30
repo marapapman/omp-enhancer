@@ -11,10 +11,10 @@ import {
   buildWorkflowSkillReferenceMarkdown,
 } from '../src/workflows/render-skill.js';
 
-test('diagram.tikz is the single bounded subagent-driven TikZ Primary with a 9-step asset+figure chain', () => {
+test('diagram.tikz is the single bounded subagent-driven TikZ Primary with a 10-step asset+figure chain', () => {
   const workflow = workflowCatalog['diagram.tikz'];
 
-  assert.equal(WORKFLOW_CATALOG_VERSION, 28);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 29);
   assert.ok(workflowIds.includes('diagram.tikz'));
   assert.equal(workflowIds.includes('diagram.svg'), false);
   assert.ok(workflow);
@@ -25,30 +25,32 @@ test('diagram.tikz is the single bounded subagent-driven TikZ Primary with a 9-s
   assert.match(workflow.chooseWhen, /TikZ.+academic|academic.+TikZ|flowchart.+architecture|decision flow.+deploy pipeline/iu);
   assert.match(workflow.chooseWhen, /SVG.+only icon assets.+preview evidence.+compatibility supplements/iu);
 
-  assert.equal(workflow.steps.length, 9);
+  assert.equal(workflow.steps.length, 10);
 
   const steps = workflow.steps.join(' ');
   const scope = workflow.scopeNotes.join(' ');
   const quality = workflow.qualityChecks.join(' ');
   const delegation = workflow.delegation.join(' ');
 
-  // Phased chain: blueprint -> asset prep -> asset review -> ELK -> render -> whole-figure review -> bounded revision -> deliver
+  // Phased chain: blueprint -> asset prep -> asset review -> ELK IR -> generation -> render -> whole-figure review -> bounded revision -> deliver
   assert.match(steps, /Main fixes audience.+output path.+target format.+icon requirements.+asset source boundaries/iu);
   assert.match(steps, /graphical blueprint.+semantic graph.+per-node icon plan.+manifest draft.+no final coordinates/iu);
   assert.match(steps, /Prepare and validate icon assets.+OpenTikZ.+imagegen.+SVG assets.+previews and manifest/iu);
   assert.match(steps, /Review asset previews per icon.+reject or approve.+only new previews/iu);
-  assert.match(steps, /Generate ELK IR.+tikz_generate_diagram.+TikZ source.+round-trip check/iu);
+  assert.match(steps, /Author the semantic graph as an ELK graph IR.+layout options.+node sizing/iu);
+  assert.match(steps, /Call tikz_generate_diagram.+approved ELK graph IR.+TikZ source.+semantic-graph round-trip/iu);
   assert.match(steps, /tikz_render.+revision-bound PDF\/SVG\/PNG/iu);
   assert.match(steps, /Independently review fresh whole-figure renders.+semantic completeness.+icon clarity.+layering.+overlap.+clipping.+labels.+branch semantics.+manifest disclosure/iu);
   assert.match(steps, /At most one bounded revision.+unchanged artifacts are not re-reviewed/iu);
   assert.match(steps, /Deliver source files.+semantic graph.+manifest.+preview\/render evidence.+limitations.+asset provenance/iu);
 
-  assert.equal(workflow.delegation.length, 7);
+  assert.equal(workflow.delegation.length, 8);
   assert.deepEqual(workflow.delegation, [
     'step-2: designer owns the semantic blueprint and per-icon plan while preserving scope',
     'step-3: task prepares and validates icon assets and writes the asset manifest',
     'step-4: visioner independently and read-only reviews fresh asset previews and flags unsupported icons',
-    'step-5: designer owns the ELK graph IR, layout generation, and final TikZ source revision',
+    'step-5: designer authors the ELK graph IR under approved manifest constraints with layout options and node sizing',
+    'step-5b: task calls tikz_generate_diagram with the designer ELK graph IR, writes the project-local TikZ source, and verifies the semantic-graph round-trip',
     'step-6: task invokes the fixed tikz_render renderer for the approved current revision',
     'step-7: visioner independently and read-only reviews the fresh current-revision renders',
     'step-8: designer applies supported findings, task rerenders, and visioner reviews only fresh rerenders',

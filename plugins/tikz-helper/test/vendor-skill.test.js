@@ -303,11 +303,13 @@ test('selected TikZ work compiles asset chain before figure chain in dependency 
   assert.ok(visionerAssetReview > taskAsset, 'visioner asset review must follow fresh task asset previews');
 
   // Figure-chain markers in order
-  const designerLayout = skill.indexOf('4. **Designer layout checkpoint**');
-  const taskRender = skill.indexOf('5. **Task render checkpoint**');
-  const visionerFigureReview = skill.indexOf('6. **Visioner figure-review checkpoint**');
-  assert.ok(designerLayout > visionerAssetReview, 'designer layout must follow asset review');
-  assert.ok(taskRender > designerLayout, 'task render must follow designer layout delivery');
+  const designerElkIr = skill.indexOf('4. **Designer ELK IR checkpoint**');
+  const taskGeneration = skill.indexOf('5. **Task generation checkpoint**');
+  const taskRender = skill.indexOf('6. **Task render checkpoint**');
+  const visionerFigureReview = skill.indexOf('7. **Visioner figure-review checkpoint**');
+  assert.ok(designerElkIr > visionerAssetReview, 'designer ELK IR must follow asset review');
+  assert.ok(taskGeneration > designerElkIr, 'task generation must follow designer ELK IR');
+  assert.ok(taskRender > taskGeneration, 'task render must follow task generation');
   assert.ok(visionerFigureReview > taskRender, 'visioner figure review must follow fresh task rendering');
 
   assert.match(
@@ -328,7 +330,11 @@ test('selected TikZ work compiles asset chain before figure chain in dependency 
   );
   assert.match(
     skill,
-    /`designer` feeds the semantic graph as an ELK graph IR.+`visioner`-approved asset manifest.+`tikz_generate_diagram`.+computes the layout with ELK/is,
+    /`designer` authors the semantic graph as an ELK graph IR.+`visioner`-approved asset manifest integrated/is,
+  );
+  assert.match(
+    skill,
+    /`task` receives the approved ELK graph IR.+calls `tikz_generate_diagram`.+to compute layout and emit TikZ source/is,
   );
   assert.match(
     skill,
@@ -340,7 +346,7 @@ test('selected TikZ work compiles asset chain before figure chain in dependency 
   );
   assert.match(
     skill,
-    /`designer` applies supported findings.+`task` rerenders.+`visioner` reviews only fresh rerenders.+at most once/is,
+    /`designer` applies supported findings.+`task` (?:regenerates via.+and )?rerenders.+`visioner` reviews only fresh rerenders.+at most once/is,
   );
   assert.match(
     skill,

@@ -431,7 +431,11 @@ export const writingWorkflows = [
       },
       {
         "id": "step-5",
-        "text": "Generate ELK IR under approved manifest constraints, call tikz_generate_diagram, produce project-local TikZ source with semantic-graph round-trip check."
+        "text": "Author the semantic graph as an ELK graph IR under approved manifest constraints with layout options and node sizing; no tool invocation or coordinate hand-editing."
+      },
+      {
+        "id": "step-5b",
+        "text": "Call tikz_generate_diagram with the approved ELK graph IR, write the returned TikZ source to the project-local path, and verify the semantic-graph round-trip."
       },
       {
         "id": "step-6",
@@ -479,7 +483,8 @@ export const writingWorkflows = [
       "step-2: designer owns the semantic blueprint and per-icon plan while preserving scope",
       "step-3: task prepares and validates icon assets and writes the asset manifest",
       "step-4: visioner independently and read-only reviews fresh asset previews and flags unsupported icons",
-      "step-5: designer owns the ELK graph IR, layout generation, and final TikZ source revision",
+      "step-5: designer authors the ELK graph IR under approved manifest constraints with layout options and node sizing",
+      "step-5b: task calls tikz_generate_diagram with the designer ELK graph IR, writes the project-local TikZ source, and verifies the semantic-graph round-trip",
       "step-6: task invokes the fixed tikz_render renderer for the approved current revision",
       "step-7: visioner independently and read-only reviews the fresh current-revision renders",
       "step-8: designer applies supported findings, task rerenders, and visioner reviews only fresh rerenders"

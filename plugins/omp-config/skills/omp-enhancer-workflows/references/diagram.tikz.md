@@ -13,17 +13,19 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
   2. [step-2] Produce a complete graphical blueprint: semantic graph, per-node icon plan, manifest draft, alternatives; no final coordinates.
   3. [step-3] Prepare and validate icon assets (OpenTikZ/imagegen/SVG assets), generate previews and manifest.
   4. [step-4] Review asset previews per icon, reject or approve; only new previews are reviewed.
-  5. [step-5] Generate ELK IR under approved manifest constraints, call tikz_generate_diagram, produce project-local TikZ source with semantic-graph round-trip check.
-  6. [step-6] Call tikz_render to produce revision-bound PDF/SVG/PNG evidence.
-  7. [step-7] Independently review fresh whole-figure renders for semantic completeness, icon clarity, layering, overlap, clipping, labels, branch semantics, and manifest disclosure.
-  8. [step-8] At most one bounded revision for supported findings; rerun asset/ layout/ render; unchanged artifacts are not re-reviewed; defects remain visible.
-  9. [step-9] Deliver source files, semantic graph, manifest, preview/render evidence, unresolved limitations, and asset provenance.
+  5. [step-5] Author the semantic graph as an ELK graph IR under approved manifest constraints with layout options and node sizing; no tool invocation or coordinate hand-editing.
+  6. [step-5b] Call tikz_generate_diagram with the approved ELK graph IR, write the returned TikZ source to the project-local path, and verify the semantic-graph round-trip.
+  7. [step-6] Call tikz_render to produce revision-bound PDF/SVG/PNG evidence.
+  8. [step-7] Independently review fresh whole-figure renders for semantic completeness, icon clarity, layering, overlap, clipping, labels, branch semantics, and manifest disclosure.
+  9. [step-8] At most one bounded revision for supported findings; rerun asset/ layout/ render; unchanged artifacts are not re-reviewed; defects remain visible.
+  10. [step-9] Deliver source files, semantic graph, manifest, preview/render evidence, unresolved limitations, and asset provenance.
 - Agent candidates: `designer`, `task`, `visioner`.
 - Delegated checkpoints:
   - step-2: designer owns the semantic blueprint and per-icon plan while preserving scope
   - step-3: task prepares and validates icon assets and writes the asset manifest
   - step-4: visioner independently and read-only reviews fresh asset previews and flags unsupported icons
-  - step-5: designer owns the ELK graph IR, layout generation, and final TikZ source revision
+  - step-5: designer authors the ELK graph IR under approved manifest constraints with layout options and node sizing
+  - step-5b: task calls tikz_generate_diagram with the designer ELK graph IR, writes the project-local TikZ source, and verifies the semantic-graph round-trip
   - step-6: task invokes the fixed tikz_render renderer for the approved current revision
   - step-7: visioner independently and read-only reviews the fresh current-revision renders
   - step-8: designer applies supported findings, task rerenders, and visioner reviews only fresh rerenders
