@@ -2,7 +2,7 @@ export const WORKFLOW_STATE_LINE = 'DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPL
 
 export const WORKFLOW_PROJECT_START_RULE = 'Project tools start only after the READY + TODO response ends and its results return.';
 
-export const DELEGATION_COMPILE_RULE = 'COMPILE (soft): loaded `subagent-driven` + complete input + safe checkpoint + visible matching Agent => Delegate row; otherwise `fallback=<one matched permitted limitation>`. PLAN defers this final disposition until the card loads; no plugin enforces it.';
+export const DELEGATION_COMPILE_RULE = 'COMPILE (soft): loaded `subagent-driven` + complete input (the checkpoint text carries target, constraints, and acceptance evidence) + safe checkpoint (no unresolved dependency and no write-set overlap with other rows) + visible matching Agent => Delegate row; otherwise `fallback=<one matched permitted limitation>`. PLAN defers this final disposition until the card loads; no plugin enforces it.';
 
 export const WORKFLOW_PLAN_TEMPLATE = [
   'WORKFLOW PLAN',

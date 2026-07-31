@@ -52,7 +52,7 @@ test('workflow prompts use one positive staged handoff with explicit load phases
   );
   assert.match(
     index,
-    /COMPILE \(soft\): loaded `subagent-driven` \+ complete input \+ safe checkpoint \+ visible matching Agent => Delegate row; otherwise `fallback=<one matched permitted limitation>`/iu,
+    /COMPILE \(soft\): loaded `subagent-driven` \+ complete input.*safe checkpoint.*visible matching Agent => Delegate row; otherwise `fallback=<one matched permitted limitation>`/iu,
   );
   assert.match(
     index,
@@ -64,7 +64,7 @@ test('workflow prompts use one positive staged handoff with explicit load phases
   );
   assert.match(
     reference,
-    /complete input \+ safe checkpoint \+ visible matching Agent => one exact Delegate row/iu,
+    /complete input.*safe checkpoint.*visible matching Agent => one exact Delegate row/iu,
   );
   assert.match(
     index,

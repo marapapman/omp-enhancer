@@ -16,9 +16,10 @@ const COACH_STATE_VERSION = 2;
 const MAX_OBSERVED_TEXT_BYTES = 64 * 1024;
 const MAX_DIAGNOSTICS = 16;
 const INDEX_URI = 'skill://omp-enhancer-workflows';
-const CUE_KINDS = new Set(['PRE_PLAN', 'PRE_READY', 'PRE_DISPATCH', 'PRE_VERIFY', 'EXECUTE_STABILITY', 'TOOL_ERROR_RECOVERY', 'TOOL_ERROR_ESCALATION']);
+const CUE_KINDS = new Set(['PRE_PLAN', 'PRE_READY', 'PRE_DISPATCH', 'PRE_VERIFY', 'EXECUTE_STABILITY', 'TOOL_ERROR_RECOVERY', 'TOOL_ERROR_ESCALATION', 'WRITING_PENDING_ESCALATION', 'LOAD_STALL_ESCALATION', 'INDEX_BOOTSTRAP']);
 export const STABILITY_CUE_TOOL_RESULT_CADENCE = 8;
 export const STABILITY_CUE_MAX_PER_TASK = 20;
+const PENDING_TIMEOUT_MS = 180_000;
 const URI_PATTERN = /^skill:\/\/[A-Za-z0-9._~!$&'()*+:=@%/-]+$/u;
 
 const CUE_CONTENT = Object.freeze({
@@ -31,7 +32,7 @@ const CUE_CONTENT = Object.freeze({
     'Next visible response byte 0 WORKFLOW PLAN:',
     '1. LOAD: declare exact resource URIs, load in order, wait.',
     '2. COMMIT: READY + detailed TODO only; end/wait.',
-    '3. SPLIT + EXECUTE: apply loaded steps and current native state.',
+    '3. SPLIT + EXECUTE: apply loaded checkpoints to current Agents and dependency order; Delegate or record one permitted fallback.',
     '4. VERIFY: parent integration and acceptance evidence.',
     'Advisory only; selection and authority remain Main/native.',
   ].join('\n'),
@@ -63,14 +64,45 @@ const CUE_CONTENT = Object.freeze({
     'Then MAIN REVIEW of the integrated result; a substantive code change ends without the named audit only behind a recorded Agent-unavailability fallback; final response reports evidence, dispositions, and limitations.',
     'No block/router/gate/retry/authority/choice.',
   ].join('\n'),
+  WRITING_PENDING_ESCALATION: [
+    'OMP PROTOCOL COACH (soft, writing.pending escalation):',
+    'The writing.pending state has not transitioned to writing.zh or writing.en after the language read.',
+    'If the target body language is now known, emit a replacement WORKFLOW PLAN with Primary=writing.zh or writing.en.',
+    'If still unknown, ask the user directly. Do not remain in pending indefinitely.',
+    'Advisory only; no block/router/gate/retry/authority/choice.',
+  ].join('\n'),
+  INDEX_BOOTSTRAP: [
+    'OMP PROTOCOL COACH (soft, DISCOVER)',
+    'The workflow index has not been read this task: PROJECT work starts by calling read with path=skill://omp-enhancer-workflows (only that read; end the response and wait).',
+    'If this task is a DIRECT verbatim no-judgment lookup, ignore this cue.',
+    'Advisory only; no block/router/gate/retry/authority/choice.',
+  ].join('\n'),
 });
 
+const SILENT_RETRY_PREFIX = 'MISSING_STEP (soft): your previous response did not include the pending workflow marker below. It is still required — emit it at byte 0 of your next response, then continue.';
+const SMALL_MODEL_SILENT_RETRY_PREFIX = 'MISSING STEP: your last reply skipped the marker below. Put it at byte 0 of your next reply.';
+
 const SMALL_MODEL_CUE_VARIANTS = Object.freeze({
-  PRE_PLAN: '1. Read skill://omp-enhancer-workflows. 2. Pick one workflow. 3. Write WORKFLOW PLAN with Primary, Add-ons, Skills, NOW/THEN, and 4+ Actions. Advisory only; authority remains Main/native.',
+  PRE_PLAN: '1. Read skill://omp-enhancer-workflows. 2. Pick one Primary workflow. 3. Next reply byte 0: WORKFLOW PLAN with Primary, Add-ons, Skills, Load order NOW=[...] THEN=[...], Actions 1-4. 4. Same reply: read only the NOW URIs, then wait. If a loaded skill reveals more exact skill:// URIs, start a reply with RESOURCE EXTENSION | source=... | reads=... and read them once. Advisory only; authority remains Main/native.',
   PRE_READY: '1. After all resources load, write WORKFLOW READY at byte 0. 2. Fill primary, add-ons, skills-loaded, skills-unavailable. 3. Init TODO and wait. No choice/authority/gate.',
-  PRE_DISPATCH: '1. Copy each TODO row into native task. 2. Start byte 0 [workflow=... step=... todo=... skills=...]. 3. Run independent tasks in parallel. No block/router/gate/retry/authority/choice.',
+  PRE_DISPATCH: '1. Copy each TODO Delegate row into a native task item: agent = the row Agent. 2. Task byte 0 [workflow=... step=... todo=<the row checkpoint, verbatim> skills=...]. 3. Run independent tasks in one batch. No block/router/gate/retry/authority/choice.',
   PRE_VERIFY: '1. Check acceptance criteria against current tree. 2. Run focused tests. 3. Report paths, commands, evidence, and limitations. No block/router/gate/retry/authority/choice.',
+  WRITING_PENDING_ESCALATION: '1. Read the target file (language only). 2. Chinese => new WORKFLOW PLAN with Primary=writing.zh; English => Primary=writing.en. 3. If unclear, ask the user. Advisory only.',
+  INDEX_BOOTSTRAP: 'READ NOW: call read with path=skill://omp-enhancer-workflows. Only that read. Then wait. (Skip only for a DIRECT verbatim lookup.)',
 });
+
+const FORMAT_CORRECTION_PREFIX = [
+  'FORMAT_CORRECTION (soft): your last PLAN/READY was not at byte 0 or had a field error.',
+  'FIX: start your next response with the marker at the very first character (no preamble, no greeting).',
+  'Use the exact template fields: Primary, Add-ons, Skills, Load order: NOW=[...] THEN=[...], Actions: 1-4.',
+  'Advisory only; this corrects format, not content.',
+].join('\n');
+
+const SMALL_MODEL_FORMAT_CORRECTION = 'FORMAT: Start next response at byte 0 with WORKFLOW PLAN or WORKFLOW READY. No preamble. Use exact fields: Primary, Add-ons, Skills, NOW/THEN, Actions 1-4.';
+
+function normalizeUriTarget(value) {
+  return String(value ?? '').trim().replace(/\/+$/u, '').toLowerCase();
+}
 
 export function createWorkflowProtocolCoachState() {
   return {
@@ -85,6 +117,11 @@ export function createWorkflowProtocolCoachState() {
     diagnostics: [],
     toolErrorCounters: {},
     model: null,
+    formatErrorDetected: false,
+    formatErrorRetryCount: 0,
+    rejectionHint: null,
+    toolResultsBeforeIndex: 0,
+    bootstrapCueQueued: false,
   };
 }
 
@@ -92,6 +129,7 @@ export function observeProtocolAssistantMessage(state, rawText = '') {
   if (!isCoachState(state)) return false;
   const before = JSON.stringify(state);
   const text = boundedText(rawText);
+  if (!text) return false;
   const pendingAtStart = state.pendingCue;
 
   let preservePending = false;
@@ -102,8 +140,26 @@ export function observeProtocolAssistantMessage(state, rawText = '') {
     preservePending = extensionObservation === 'late' || readyObservation === 'invalid';
   }
 
-  if (pendingAtStart && state.pendingCue === pendingAtStart && !preservePending) {
-    state.pendingCue = null;
+  const preserveOnFormatError = state.formatErrorDetected;
+  state.formatErrorDetected = false;
+  const isPhaseCue = pendingAtStart && ['PRE_PLAN', 'PRE_READY', 'PRE_DISPATCH', 'PRE_VERIFY'].includes(pendingAtStart.kind);
+  if (pendingAtStart && state.pendingCue === pendingAtStart && !preservePending && !preserveOnFormatError) {
+    if (isPhaseCue && (pendingAtStart.silentRetries ?? 0) < 2) {
+      pendingAtStart.silentRetries = (pendingAtStart.silentRetries ?? 0) + 1;
+      addDiagnostic(state, `${pendingAtStart.kind}_IGNORED`);
+    } else {
+      if (isPhaseCue) {
+        addDiagnostic(state, `${pendingAtStart.kind}_IGNORED_EXHAUSTED`);
+      }
+      state.pendingCue = null;
+    }
+  } else if (preserveOnFormatError && state.pendingCue === pendingAtStart) {
+    state.formatErrorRetryCount += 1;
+    if (state.formatErrorRetryCount > 2) {
+      addDiagnostic(state, 'FORMAT_ERROR_RETRY_EXHAUSTED');
+      state.pendingCue = null;
+      state.formatErrorRetryCount = 0;
+    }
   }
   return JSON.stringify(state) !== before;
 }
@@ -135,7 +191,7 @@ export function observeProtocolToolResult(state, {
 
   if (
     toolName === 'read'
-    && exactTarget === INDEX_URI
+    && normalizeUriTarget(exactTarget) === INDEX_URI
     && !failed
     && isSettled
     && hasExactIndexIdentity(body)
@@ -144,9 +200,12 @@ export function observeProtocolToolResult(state, {
   }
 
   const declaration = state.declaration;
-  if (toolName === 'read' && declaration && isSettled && requiredUris(declaration).includes(exactTarget)) {
-    declaration.returned = unique([...declaration.returned, exactTarget]);
-    maybeQueueReadyCue(state);
+  if (toolName === 'read' && declaration && isSettled) {
+    const matched = requiredUris(declaration).find((uri) => normalizeUriTarget(uri) === normalizeUriTarget(exactTarget));
+    if (matched) {
+      declaration.returned = unique([...declaration.returned, matched]);
+      maybeQueueReadyCue(state);
+    }
   }
 
   if (toolName === 'task' && declaration && isSettled) {
@@ -165,11 +224,12 @@ export function observeProtocolToolResult(state, {
   ) {
     declaration.toolResultsSinceStabilityCue += 1;
     if (declaration.toolResultsSinceStabilityCue >= STABILITY_CUE_TOOL_RESULT_CADENCE) {
-      declaration.toolResultsSinceStabilityCue = 0;
       if (!state.pendingCue) {
+        declaration.toolResultsSinceStabilityCue = 0;
         declaration.stabilityCuesEmitted += 1;
         queueCue(state, 'EXECUTE_STABILITY', declaration.generation);
       }
+      // When pendingCue exists: counter NOT reset, next settled result retries
     }
   }
 
@@ -188,6 +248,49 @@ export function observeProtocolToolResult(state, {
       } else if (counter === 3 && !state.pendingCue) {
         queueCue(state, 'TOOL_ERROR_ESCALATION', state.generation);
       }
+    }
+  }
+
+  // ── writing.pending timeout escalation ──
+  if (
+    declaration
+    && declaration.primary === 'writing.pending'
+    && declaration.pendingStartedAt
+    && isSettled
+    && !declaration.verifyCueQueued
+    && !declaration.pendingEscalationQueued
+  ) {
+    const elapsed = Date.now() - declaration.pendingStartedAt;
+    if (elapsed > PENDING_TIMEOUT_MS) {
+      addDiagnostic(state, 'WRITING_PENDING_TIMEOUT');
+      queueCue(state, 'WRITING_PENDING_ESCALATION', declaration.generation);
+      declaration.pendingEscalationQueued = true;
+    }
+  }
+
+  // ── Bootstrap: index never read ──
+  if (isSettled && !state.indexObserved && !state.declaration && !state.bootstrapCueQueued) {
+    state.toolResultsBeforeIndex += 1;
+    if (state.toolResultsBeforeIndex >= 4) {
+      state.bootstrapCueQueued = true;
+      addDiagnostic(state, 'INDEX_NOT_READ');
+      queueCue(state, 'INDEX_BOOTSTRAP', state.generation);
+    }
+  }
+
+  // ── Declaration-stall escalation ──
+  if (isSettled && declaration && !declaration.readyObserved && !declarationLoadsSettled(declaration) && !declaration.stallEscalationQueued && Date.now() - (declaration.startedAt ?? 0) > PENDING_TIMEOUT_MS) {
+    declaration.stallEscalationQueued = true;
+    addDiagnostic(state, 'DECLARATION_LOADS_STALLED');
+    queueCue(state, 'LOAD_STALL_ESCALATION', declaration.generation);
+  }
+
+  // ── Zero-task PRE_VERIFY ──
+  if (isSettled && declaration && declaration.readyObserved && declaration.todoObserved && declaration.tasksDispatched === 0 && !declaration.verifyCueQueued && !state.planMode) {
+    declaration.zeroTaskToolResults = (declaration.zeroTaskToolResults ?? 0) + 1;
+    if (declaration.zeroTaskToolResults >= STABILITY_CUE_TOOL_RESULT_CADENCE) {
+      declaration.verifyCueQueued = true;
+      queueCue(state, 'PRE_VERIFY', declaration.generation);
     }
   }
 
@@ -270,6 +373,22 @@ export function presentWorkflowProtocolCoachCue(state, model = null) {
     state.pendingCue = null;
     return { kind: 'EXECUTE_STABILITY', content, timestamp: pendingTimestamp };
   }
+  if (state.pendingCue.kind === 'LOAD_STALL_ESCALATION') {
+    const declaration = state.declaration;
+    const pendingTimestamp = state.pendingCue.timestamp;
+    if (!declaration) { state.pendingCue = null; return null; }
+    const missing = requiredUris(declaration).filter((uri) => !declaration.returned.includes(uri));
+    const content = shouldPrimeToolCalls(model)
+      ? `STALLED LOADS: missing ${missing.join(', ') || 'none'}. Read each now, or mark unavailable and write WORKFLOW READY at byte 0.`
+      : [
+          'OMP PROTOCOL COACH (soft, load-stall escalation):',
+          `Declared workflow resources have not returned for over ${Math.round(PENDING_TIMEOUT_MS / 1000)}s. Missing: ${missing.join(', ') || 'none'}.`,
+          'Either read each missing exact URI now, or treat it as unavailable, list it under skills-unavailable, and emit WORKFLOW READY at byte 0.',
+          'Advisory only; no block/router/gate/retry/authority/choice.',
+        ].join('\n');
+    state.pendingCue = null;
+    return { kind: 'LOAD_STALL_ESCALATION', content, timestamp: pendingTimestamp };
+  }
   // Error recovery cues — event-driven, clear after presenting
   if (state.pendingCue.kind === 'TOOL_ERROR_RECOVERY' || state.pendingCue.kind === 'TOOL_ERROR_ESCALATION') {
     const kind = state.pendingCue.kind;
@@ -283,9 +402,22 @@ export function presentWorkflowProtocolCoachCue(state, model = null) {
   // Phase cues with small-model variant support for capable models
   const rawContent = CUE_CONTENT[state.pendingCue.kind];
   if (!rawContent) return null;
-  const content = shouldPrimeToolCalls(model)
+  let content = shouldPrimeToolCalls(model)
     ? (SMALL_MODEL_CUE_VARIANTS[state.pendingCue.kind] ?? rawContent)
     : rawContent;
+  if (state.formatErrorRetryCount > 0) {
+    content = (shouldPrimeToolCalls(model) ? SMALL_MODEL_FORMAT_CORRECTION : FORMAT_CORRECTION_PREFIX) + '\n' + content;
+  }
+  if (state.pendingCue.silentRetries > 0) {
+    const prefix = shouldPrimeToolCalls(model) ? SMALL_MODEL_SILENT_RETRY_PREFIX : SILENT_RETRY_PREFIX;
+    content = prefix + '\n' + content;
+  }
+  if (state.rejectionHint) {
+    const hintSuffix = shouldPrimeToolCalls(model)
+      ? `PROBLEM: ${state.rejectionHint}. Fix it. Marker at byte 0.`
+      : `LAST REJECTION: ${state.rejectionHint}. Correct that field and re-emit the marker at byte 0.`;
+    content = content + '\n' + hintSuffix;
+  }
   return {
     kind: state.pendingCue.kind,
     content,
@@ -305,6 +437,12 @@ export function serializeWorkflowProtocolCoachState(state) {
     declaration: safe.declaration ? serializeDeclaration(safe.declaration) : null,
     pendingCue: safe.pendingCue ? { ...safe.pendingCue } : null,
     diagnostics: safe.diagnostics.map((item) => ({ ...item })),
+    toolErrorCounters: { ...safe.toolErrorCounters },
+    formatErrorDetected: safe.formatErrorDetected,
+    formatErrorRetryCount: safe.formatErrorRetryCount,
+    toolResultsBeforeIndex: safe.toolResultsBeforeIndex,
+    bootstrapCueQueued: safe.bootstrapCueQueued,
+    rejectionHint: safe.rejectionHint,
   };
 }
 
@@ -316,6 +454,17 @@ export function sanitizeWorkflowProtocolCoachState(value = {}) {
   state.generation = nonnegativeInteger(value.generation);
   state.replacementUsed = value.replacementUsed === true;
   state.planMode = value.planMode === true;
+  state.formatErrorDetected = typeof value.formatErrorDetected === 'boolean' ? value.formatErrorDetected : false;
+  state.formatErrorRetryCount = Number.isInteger(value.formatErrorRetryCount) ? Math.max(0, value.formatErrorRetryCount) : 0;
+  state.toolErrorCounters = {};
+  if (isRecord(value.toolErrorCounters)) {
+    for (const [key, count] of Object.entries(value.toolErrorCounters)) {
+      if (Number.isInteger(count) && count >= 0) state.toolErrorCounters[key] = count;
+    }
+  }
+  state.toolResultsBeforeIndex = nonnegativeInteger(value.toolResultsBeforeIndex);
+  state.bootstrapCueQueued = value.bootstrapCueQueued === true;
+  state.rejectionHint = typeof value.rejectionHint === 'string' && value.rejectionHint !== '' ? value.rejectionHint : null;
   state.declaration = sanitizeDeclaration(value.declaration);
   if (state.declaration) state.generation = Math.max(state.generation, state.declaration.generation);
   state.pendingCue = sanitizePendingCue(value.pendingCue);
@@ -343,19 +492,25 @@ function observePlan(state, text) {
   if (offset < 0) return;
   if (offset !== 0) {
     addDiagnostic(state, 'PLAN_NOT_BYTE_0');
+    state.rejectionHint = 'PLAN_NOT_BYTE_0';
+    state.formatErrorDetected = true;
     return;
   }
   const parsed = parsePlan(text);
   if (!parsed) {
     addDiagnostic(state, 'PLAN_MALFORMED');
+    state.rejectionHint = 'PLAN_MALFORMED';
+    state.formatErrorDetected = true;
     return;
   }
   if (!state.indexObserved) {
     addDiagnostic(state, 'PLAN_BEFORE_INDEX');
+    state.rejectionHint = 'PLAN_BEFORE_INDEX';
     return;
   }
 
   if (!state.declaration) {
+    state.formatErrorRetryCount = 0;
     acceptDeclaration(state, parsed);
     clearCue(state, 'PRE_PLAN');
     return;
@@ -370,6 +525,7 @@ function observePlan(state, text) {
   );
   if (!replacementAllowed) {
     addDiagnostic(state, 'PLAN_REPLACEMENT_REJECTED');
+    state.rejectionHint = 'PLAN_REPLACEMENT_REJECTED';
     return;
   }
   state.replacementUsed = true;
@@ -421,30 +577,40 @@ function observeReady(state, text) {
   if (offset < 0) return 'none';
   if (offset !== 0) {
     addDiagnostic(state, 'READY_NOT_BYTE_0');
+    state.rejectionHint = 'READY_NOT_BYTE_0';
+    state.formatErrorDetected = true;
     return 'invalid';
   }
   const ready = parseReady(text);
   if (!ready) {
     addDiagnostic(state, 'READY_MALFORMED');
+    state.rejectionHint = 'READY_MALFORMED';
+    state.formatErrorDetected = true;
     return 'invalid';
   }
   if (!state.declaration) {
     addDiagnostic(state, 'READY_BEFORE_PLAN');
+    state.rejectionHint = 'READY_BEFORE_PLAN';
     return 'invalid';
   }
   if (!declarationLoadsSettled(state.declaration)) {
     addDiagnostic(state, 'READY_BEFORE_LOADS_SETTLED');
+    state.rejectionHint = 'READY_BEFORE_LOADS_SETTLED';
     return 'invalid';
   }
   if (ready.primary !== state.declaration.primary) {
     addDiagnostic(state, 'READY_PRIMARY_MISMATCH');
+    state.rejectionHint = 'READY_PRIMARY_MISMATCH';
     return 'invalid';
   }
   if (!sameStrings(ready.addOns, state.declaration.addOns)) {
     addDiagnostic(state, 'READY_ADD_ONS_MISMATCH');
+    state.rejectionHint = 'READY_ADD_ONS_MISMATCH';
     return 'invalid';
   }
   state.declaration.readyObserved = true;
+  state.formatErrorRetryCount = 0;
+  state.rejectionHint = null;
   clearCue(state, 'PRE_READY');
   return 'accepted';
 }
@@ -470,6 +636,7 @@ function parseReady(text) {
 
 function acceptDeclaration(state, parsed) {
   state.generation += 1;
+  state.rejectionHint = null;
   state.declaration = {
     generation: state.generation,
     primary: parsed.primary,
@@ -490,8 +657,15 @@ function acceptDeclaration(state, parsed) {
     todoHasFallbackRows: false,
     toolResultsSinceStabilityCue: 0,
     stabilityCuesEmitted: 0,
+    startedAt: Date.now(),
+    stallEscalationQueued: false,
+    pendingEscalationQueued: false,
+    zeroTaskToolResults: 0,
   };
   maybeQueueReadyCue(state);
+  if (parsed.primary === 'writing.pending') {
+    state.declaration.pendingStartedAt = Date.now();
+  }
 }
 
 function parsePlan(text) {
@@ -590,6 +764,7 @@ function queueCue(state, kind, generation) {
     generation,
     key,
     timestamp: Date.now(),
+    silentRetries: 0,
   };
 }
 
@@ -646,6 +821,11 @@ function serializeDeclaration(value) {
     todoHasFallbackRows: value.todoHasFallbackRows === true,
     toolResultsSinceStabilityCue: nonnegativeInteger(value.toolResultsSinceStabilityCue),
     stabilityCuesEmitted: nonnegativeInteger(value.stabilityCuesEmitted),
+    startedAt: value.startedAt,
+    stallEscalationQueued: value.stallEscalationQueued === true,
+    pendingEscalationQueued: value.pendingEscalationQueued === true,
+    zeroTaskToolResults: nonnegativeInteger(value.zeroTaskToolResults),
+    pendingStartedAt: value.pendingStartedAt,
   };
 }
 
@@ -682,6 +862,11 @@ function sanitizeDeclaration(value) {
     todoHasFallbackRows: value.todoHasFallbackRows === true,
     toolResultsSinceStabilityCue: nonnegativeInteger(value.toolResultsSinceStabilityCue),
     stabilityCuesEmitted: nonnegativeInteger(value.stabilityCuesEmitted),
+    startedAt: Number.isFinite(value.startedAt) ? value.startedAt : undefined,
+    stallEscalationQueued: value.stallEscalationQueued === true,
+    pendingEscalationQueued: value.pendingEscalationQueued === true,
+    zeroTaskToolResults: nonnegativeInteger(value.zeroTaskToolResults),
+    pendingStartedAt: Number.isFinite(value.pendingStartedAt) ? value.pendingStartedAt : undefined,
   };
 }
 
@@ -695,6 +880,7 @@ function sanitizePendingCue(value) {
     generation,
     key,
     timestamp: Number.isFinite(value.timestamp) && value.timestamp >= 0 ? value.timestamp : 0,
+    silentRetries: nonnegativeInteger(value.silentRetries),
   };
 }
 

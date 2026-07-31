@@ -7,6 +7,10 @@ import { jsonEvidenceCandidates } from './json-candidates.js';
 
 const placeholderValues = new Set(['todo', 'tbd', '<required skill>', '<skill>', '[skill]', 'required skill']);
 const SKILL_NAMESPACE_PREFIXES = new Set(['ecc', 'omp', 'superpowers', 'vendor']);
+const DENIAL_PREFIXES = Object.freeze(['did not load', 'without loading', 'failed to load', 'could not load', "won't load", 'will not load', 'skip', 'skipping', '未加载', '没有加载', '无法加载', '不需要加载', '加载失败', '跳过']);
+function denialPattern(fragment) {
+  return new RegExp(`(?:${DENIAL_PREFIXES.map(escapeRegExp).join('|')})\\s*${fragment}`, 'iu');
+}
 let runtimeSkillAliases;
 
 export function validateSkillUsage({ suggestedSkills = [], output = '', loadedSkills = [] } = {}) {
@@ -131,8 +135,7 @@ function findDeniedSkills(output, suggestedSkills) {
   const lower = output.toLowerCase();
   return suggestedSkills.filter((skill) => {
     return skillNameVariants(skill).some((variant) => {
-      const escaped = escapeRegExp(variant);
-      return new RegExp(`did not load\\s+${escaped}|without loading\\s+${escaped}|未加载\\s*${escaped}|没有加载\\s*${escaped}`).test(lower);
+      return denialPattern(escapeRegExp(variant)).test(lower);
     }) || hasNamespacedDenial(lower, skill);
   });
 }
@@ -515,7 +518,7 @@ function hasNamespacedDenial(output, skill) {
   const canonical = normalizeSkillName(skill);
   if (!canonical.includes('-')) return false;
   const namespaced = `(?:[a-z0-9_]+[-/])*${escapeRegExp(canonical)}`;
-  return new RegExp(`did not load\\s+${namespaced}|without loading\\s+${namespaced}|未加载\\s*${namespaced}|没有加载\\s*${namespaced}`).test(output);
+  return denialPattern(namespaced).test(output);
 }
 
 function runtimeAliasMap() {

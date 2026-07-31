@@ -29,7 +29,7 @@ test('shouldPrimeToolCalls does not match capable or unknown model families', ()
     { provider: 'anthropic', id: 'claude-opus-4' },
     { provider: 'openai', id: 'gpt-5' },
     { provider: 'google', id: 'gemini-2.5-pro' },
-    { provider: 'opencode-go', id: 'deepseek-v3.2' },
+    { provider: 'foo', id: 'claude-3.7-sonnet' },
     { id: 'bar' },
     null,
     undefined,
@@ -99,7 +99,7 @@ test('priming is NOT injected when model does not match any family', () => {
     { provider: 'anthropic', id: 'claude-opus-4' },
     { provider: 'openai', id: 'gpt-5' },
     { provider: 'google', id: 'gemini-2.5-pro' },
-    { provider: 'opencode-go', id: 'deepseek-v3.2' },
+    { provider: 'foo', id: 'claude-3.7-sonnet' },
   ]) {
     const features = reminderFeatures(model);
     assert.ok(
@@ -142,4 +142,16 @@ test('priming feature coexists with other reminder features', () => {
   assert.ok(result.features.includes('skill-discovery'), 'should have skill-discovery');
   assert.ok(result.features.includes('workflow-selection'), 'should have workflow-selection');
   assert.ok(result.features.includes('delegation-decision'), 'should have delegation-decision');
+});
+
+test('extended model families match for priming', () => {
+  for (const model of [
+    { provider: 'volcengine-agent-plan', id: 'glm-5.2' },
+    { provider: 'deepseek', id: 'deepseek-v4-flash' },
+    { provider: 'moonshotai', id: 'qwen-72b-chat' },
+    { provider: 'minimax', id: 'minimax-text-01' },
+    { provider: 'step', id: 'step-3.7-flash' },
+  ]) {
+    assert.equal(shouldPrimeToolCalls(model), true, `${model.provider}/${model.id} should prime`);
+  }
 });

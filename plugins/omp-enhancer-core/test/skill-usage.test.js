@@ -555,3 +555,33 @@ test('does not accept SKILL_USAGE examples nested only in assignment JSON fields
   assert.deepEqual(result.loaded, []);
   assert.deepEqual(result.missing, ['verification-before-completion']);
 });
+
+test('extended denial phrases are detected', () => {
+  for (const phrase of [
+    'skipping writing-review',
+    'could not load writing-review',
+    'failed to load writing-review',
+    "won't load writing-review",
+    'will not load writing-review',
+    '不需要加载 writing-review',
+    '跳过 writing-review',
+    '无法加载 writing-review',
+    '加载失败 writing-review',
+  ]) {
+    const result = validateSkillUsage({
+      suggestedSkills: ['writing-review'],
+      output: phrase,
+      loadedSkills: [],
+    });
+    assert.ok(result.denied.length > 0, `should detect denial: ${phrase}`);
+  }
+});
+
+test('reversed word order is not falsely detected as denial', () => {
+  const result = validateSkillUsage({
+    suggestedSkills: ['writing-review'],
+    output: 'writing-review not needed for this task',
+    loadedSkills: [],
+  });
+  assert.equal(result.denied.length, 0, 'reversed word order should not be denial');
+});

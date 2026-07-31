@@ -66,7 +66,7 @@ test('workflow artifact generator writes the optional workflow skill and one ref
   assert.match(skill, /SKILL DISCOVERY:[\s\S]*`D` and `C` are optional candidates, never load sets[\s\S]*select only a URI that matches the requested method, evidence rule, verdict, or format[\s\S]*refs stay in THEN/iu);
   assert.doesNotMatch(skill, /Exclude every `Not for`|Honor `Not for`/iu);
   assert.match(skill, /Format-only => format Primary/i);
-  assert.match(skill, /LOAD:[\s\S]*Skills=exact domain Skill\/catalog URIs[\s\S]*NOW=non-supplied Skills\/catalogs[\s\S]*THEN=Add-on refs then Primary[\s\S]*max 2 catalog \+ 1 method extensions[\s\S]*Never guess\/reread\/re-PLAN/iu);
+  assert.match(skill, /LOAD:[\s\S]*Skills=exact domain Skill\/catalog URIs[\s\S]*NOW=non-supplied Skills\/catalogs[\s\S]*THEN=Add-on refs then Primary[\s\S]*max 3 extension batches \(<=2 catalog hops \+ 1 linked-method batch\)[\s\S]*Never guess\/reread\/re-PLAN/iu);
   assert.match(skill, /SKILL URI:[\s\S]*D(?:=| is )direct[\s\S]*C(?:=| is )exact nested[\s\S]*(?:others|Other nested URIs) need a loaded source[\s\S]*Supplied bodies stay in PLAN\/READY, not NOW[\s\S]*only exact failure (?:marks|means) unavailable/iu);
   assert.match(skill, /DECLARE HANDOFF \(soft\):[\s\S]*Next visible response MUST start byte 0 with `WORKFLOW PLAN`[\s\S]*contain only this form[^\n]*\nWORKFLOW PLAN\nPrimary: <id-or-none>\nAdd-ons: <ids-or-none>\nSkills: <exact domain Skill\/catalog URIs-or-none>\nLoad order: NOW=\[<chosen non-supplied Skill\/catalog URIs-or-none>\] THEN=\[<Add-on PLAN URIs; Primary PLAN URI last-or-none>\]\nActions:\n1\. LOAD:[\s\S]*2\. COMMIT:[\s\S]*3\. SPLIT \+ EXECUTE:[\s\S]*4\. VERIFY:/i);
   assert.doesNotMatch(skill, /assistant content\[0\]/iu);
@@ -81,7 +81,7 @@ test('workflow artifact generator writes the optional workflow skill and one ref
   assert.match(skill, /SKILL DISCOVERY:[\s\S]*enumerated `C` URI goes directly in PLAN\/NOW[\s\S]*`skill:\/\/ecc-skill-catalog` remains only for unlisted niche discovery/iu);
   assert.match(skill, /`writing\.en`[^\n]*D=\[`skill:\/\/writing-review`\][^\n]*PLAN URI:/iu);
   assert.match(skill, /`network\.design`[^\n]*C=\[`skill:\/\/ecc-skill-catalog\/network-config-validation\/SKILL\.md`, `skill:\/\/ecc-skill-catalog\/safety-guard\/SKILL\.md`\][^\n]*PLAN URI:/iu);
-  assert.ok(Buffer.byteLength(skill) < 16_000, 'workflow Skill index should stay below 16k');
+  assert.ok(Buffer.byteLength(skill) < 17_000, 'workflow Skill index should stay below 17k');
   assert.match(skill, /Navigation only[\s\S]*never routes[\s\S]*gates[\s\S]*decides completion/i);
   assert.doesNotMatch(skill, /FIRST tool call|Invoke only roles|block:\s*true|continue:\s*true|hard router/i);
   assert.equal(

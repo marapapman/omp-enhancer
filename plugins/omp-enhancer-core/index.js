@@ -7,6 +7,7 @@ import {
   buildDynamicReviewBudgetPrompt,
   buildTaskShapePrompt,
 } from './src/review-budget.js';
+import { suggestWorkflowCandidates } from './src/workflow-suggester.js';
 import {
   buildToolCallPrimingSection,
   shouldPrimeToolCalls,
@@ -54,12 +55,24 @@ const SKILL_STAGED_REMINDER = [
   'PROJECT ONLY — LOAD: read only NOW exact Skill URIs, end, and wait. Omit a supplied native `skill-prompt` body; do not bulk-load or retry unchanged failures.',
   'PROJECT ONLY — COMMIT: first visible bytes are `WORKFLOW READY | workflows=unavailable | skills-loaded=<bare-ids-or-none> | skills-unavailable=<bare-ids-or-none>`; rebase TODO, call TODO init only, wait, then execute.',
 ].join('\n');
+function buildSkillStagedReminder(workflowIndexSupplied) {
+  const indexDirective = workflowIndexSupplied
+    ? 'INDEX STATUS=SUPPLIED BY EXACT NATIVE `skill-prompt`. Do not reread it.'
+    : 'INDEX STATUS=NOT SUPPLIED. First PROJECT tool batch reads only `skill://omp-enhancer-workflows`, ends, and waits. Do not combine with another Skill, workflow reference, or project tool.';
+  return [indexDirective, SKILL_STAGED_REMINDER].join('\n');
+}
 const TASK_STAGED_REMINDER = [
   STAGED_ENTRY,
   'PROJECT ONLY — PHASE 1 — PLAN: before project tools, write a concise numbered plan and decide whether the request has genuinely independent runnable slices.',
   'PROJECT ONLY — PHASE 2 — COMMIT: map that plan to native `todo` when exposed and allowed. Non-trivial work defaults to delegation to currently visible Agents; choose direct work only under one concrete recorded constraint (user or native constraint, Agent availability or capacity, incomplete assignment input that cannot be prepared, dependency or write-set overlap, safety); no fork or width is selected by this reminder.',
   'PROJECT ONLY — PHASE 3 — EXECUTE: dispatch the committed bounded assignments, integrate delivered results, and verify before the final response. Native tools, permissions, delivery, and completion remain authoritative.',
 ].join('\n');
+function buildTaskStagedReminder(workflowIndexSupplied) {
+  const indexDirective = workflowIndexSupplied
+    ? 'INDEX STATUS=SUPPLIED BY EXACT NATIVE `skill-prompt`. Do not reread it.'
+    : 'INDEX STATUS=NOT SUPPLIED. First PROJECT tool batch reads only `skill://omp-enhancer-workflows`, ends, and waits. Do not combine with another Skill, workflow reference, or project tool.';
+  return [indexDirective, TASK_STAGED_REMINDER].join('\n');
+}
 const DELEGATION_DECISION = 'DELEGATION AFTER READY (soft): Main is the orchestrator — non-simple work is delegated to currently visible Agents when native state permits; direct work needs one concrete recorded fallback per checkpoint. When parent-owned pre-dispatch prerequisites complete, the committed task is next. Main owns TODO/Agent/width; no runtime gate/router/retry/completion control.';
 const ENHANCER_TOOL_GROUPS = Object.freeze({
   core: ['omp_core_'],
@@ -99,7 +112,7 @@ export default function registerCoreEnhancer(pi) {
       const suggestedSkills = unique(params.skills ?? []);
       const validation = validateSkillUsage({
         suggestedSkills,
-        output: '',
+        output: params.output ?? '',
         loadedSkills: effectiveSkills(state),
       });
       for (const skill of parseLoadedSkillEvidence(params.output ?? '')) {
@@ -444,8 +457,21 @@ function protocolCoachEventEligible(turnEligible, hostTurnKind, ctx = {}) {
     && !isSubagentSession(ctx);
 }
 
+function buildWorkflowCandidatePrompt(taskDescriptor = {}) {
+  const suggestion = suggestWorkflowCandidates(taskDescriptor);
+  if (!suggestion.candidates.length) return '';
+  return [
+    'WORKFLOW_CANDIDATES (observed from task signals; non-binding advisory):',
+    `CANDIDATES: ${suggestion.candidates.join(', ')}.`,
+    suggestion.languageHint ? `LANGUAGE_HINT: ${suggestion.languageHint}` : '',
+    `RATIONALE: ${suggestion.rationale}`,
+    'Main selects the final Primary from the loaded index; these candidates narrow the search and may be ignored when the index reveals a better match. No router or gate.',
+  ].filter(Boolean).join('\n');
+}
+
 function buildWorkflowEntryReminder(protocolLabel, workflowIndexSupplied, {
   delegationAvailable = false,
+  taskDescriptor = {},
 } = {}) {
   const firstProjectAction = workflowIndexSupplied
     ? '- OTHERWISE (PROJECT): INDEX STATUS=SUPPLIED BY EXACT NATIVE `skill-prompt`. Do not reread it; the next response starts at byte 0 with a filled `WORKFLOW PLAN` from that body.'
@@ -461,6 +487,9 @@ function buildWorkflowEntryReminder(protocolLabel, workflowIndexSupplied, {
     'Review, correction, comparison, verification, design, transformation, planning, research, and writing are PROJECT at any size. Available Skills metadata and this reminder are not the body; only the exact native `skill-prompt` body named `omp-enhancer-workflows` is supplied.',
     `AFTER THE INDEX RETURNS: follow its DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY protocol exactly. Emit a byte-0 \`WORKFLOW PLAN\` with one Primary, only independently matched Add-ons, exact Skill URIs, structured NOW/THEN, and at least four detailed Actions. Use resource-only load batches and waits; then emit byte-0 \`WORKFLOW READY\` + rebased detailed TODO only and wait before project tools. ${executionHandoff}`,
     'AUTHORITY: this reminder selects no workflow, Skill, Agent, or fork width and creates no runtime gate, router, retry, permission, or completion control. Main selects from the loaded index and current native state; OMP owns tools, permissions, delegation, and completion.',
+    ...(taskDescriptor.language && ['zh', 'en'].includes(String(taskDescriptor.language).toLowerCase())
+      ? [`If the task descriptor already resolved language=${taskDescriptor.language}, select writing.${taskDescriptor.language} directly and skip writing.pending.`]
+      : []),
   ].join('\n');
 }
 export function buildStagedWorkflowReminder({
@@ -489,23 +518,25 @@ export function buildStagedWorkflowReminder({
   if (effectiveWorkflowSkill) {
     sections.push(buildWorkflowEntryReminder(workflowEntryLabel, workflowIndexSupplied, {
       delegationAvailable: hasNativeTask && subagentsAllowed && implementationDelegationAllowed,
+      taskDescriptor,
     }));
     features.push('skill-discovery', 'workflow-selection');
     if (hasNativeTask && subagentsAllowed && implementationDelegationAllowed) {
       features.push('delegation-decision');
     }
   } else if (hasVisibleSkills) {
-    sections.push(`${protocolLabel} (soft one-shot for top-level Main; this reminder selects no workflow or Agent):\n${SKILL_STAGED_REMINDER}`);
+    sections.push(`${protocolLabel} (soft one-shot for top-level Main; this reminder selects no workflow or Agent):\n${buildSkillStagedReminder(workflowIndexSupplied)}`);
     features.push('skill-discovery');
   } else if (hasNativeTask && subagentsAllowed && implementationDelegationAllowed) {
     const isSubstantive = ['modify', 'create', 'release'].includes(taskDescriptor.operation);
     if (isSubstantive) {
       sections.push(buildWorkflowEntryReminder(workflowEntryLabel, workflowIndexSupplied, {
         delegationAvailable: true,
+        taskDescriptor,
       }));
       features.push('skill-discovery', 'workflow-selection');
     } else {
-      sections.push(`${protocolLabel} (soft one-shot for top-level Main; this reminder selects no workflow or Agent):\n${TASK_STAGED_REMINDER}`);
+      sections.push(`${protocolLabel} (soft one-shot for top-level Main; this reminder selects no workflow or Agent):\n${buildTaskStagedReminder(workflowIndexSupplied)}`);
     }
   }
   const taskShapePrompt = hasNativeTask && subagentsAllowed
@@ -514,6 +545,13 @@ export function buildStagedWorkflowReminder({
   if (taskShapePrompt) {
     sections.push(taskShapePrompt);
     features.push('task-shape-facts');
+  }
+  const candidatePrompt = hasNativeTask && subagentsAllowed
+    ? buildWorkflowCandidatePrompt(taskDescriptor)
+    : '';
+  if (candidatePrompt) {
+    sections.push(candidatePrompt);
+    features.push('workflow-candidates');
   }
   if (hasNativeTask && subagentsAllowed) {
     const reviewBudgetPrompt = buildDynamicReviewBudgetPrompt({

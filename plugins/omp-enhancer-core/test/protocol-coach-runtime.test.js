@@ -58,7 +58,7 @@ test('a top-level Main on an arbitrary model receives an immutable retry-safe hi
   assert.match(first.messages[1].content, /^4\. VERIFY:/mu);
   assert.doesNotMatch(
     first.messages[1].content,
-    /general\.subagent|agentic\.simple|writing\.|skill:\/\/|\bAgent\b|fan-?out|\bdelegate\b|gate|router|block|retry|controller/iu,
+    /general\.subagent|agentic\.simple|writing\.|skill:\/\/|fan-?out|\bgate\b|\brouter\b|\bblock\b|\bretry\b|\bcontroller\b/iu,
   );
   assert.equal(typeof first.messages[1].timestamp, 'number');
   assert.equal(entries.length, entriesBeforeContext, 'read-only cue injection does not append persistence entries');
@@ -66,7 +66,9 @@ test('a top-level Main on an arbitrary model receives an immutable retry-safe hi
   await handler(pi, 'message_end')({
     message: { role: 'assistant', content: 'Provider response completed.', timestamp: 2 },
   }, ctx);
-  assert.equal(await handler(pi, 'context')(event, ctx), undefined);
+  // Non-marker response retries PRE_PLAN instead of dropping it
+  const afterMsg = await handler(pi, 'context')(event, ctx);
+  assert.equal(afterMsg.messages.at(-1).details.phase, 'PRE_PLAN');
   assert.ok(entries.some((entry) => entry.customType === 'omp-enhancer-core.state'));
 });
 
@@ -125,7 +127,7 @@ test('runtime wiring advances only through observed PLAN loads READY and TODO', 
   const preReady = (await handler(pi, 'context')({ messages: [] }, ctx)).messages.at(-1);
   assert.equal(preReady.details.phase, 'PRE_READY');
   assert.ok(preReady.content.includes('\n'));
-  assert.ok(preReady.content.length < 950, `PRE_READY must stay below 950 characters, got ${preReady.content.length}`);
+  assert.ok(preReady.content.length < 1_100, `PRE_READY must stay below 1100 characters, got ${preReady.content.length}`);
   assert.match(
     preReady.content,
     /same response[^\n]*native `?todo`?\([^\n)]*`?op=init`?[^\n)]*\)[^\n]*only[^\n]*end\/wait/iu,
@@ -207,14 +209,18 @@ test('runtime wiring advances only through observed PLAN loads READY and TODO', 
       timestamp: 4,
     },
   }, ctx);
-  assert.equal(await handler(pi, 'context')({ messages: [] }, ctx), undefined);
+  // Non-marker response retries PRE_DISPATCH instead of dropping it
+  const retryCtx = await handler(pi, 'context')({ messages: [] }, ctx);
+  assert.equal(retryCtx.messages.at(-1).details.phase, 'PRE_DISPATCH');
   await handler(pi, 'tool_result')({
     toolName: 'todo',
     result: { content: [{ type: 'text', text: 'TODO rebased.' }] },
   }, ctx);
-  assert.equal(await handler(pi, 'context')({ messages: [] }, ctx), undefined);
+  // Todo result does not queue a second cue
+  const afterTodoCtx = await handler(pi, 'context')({ messages: [] }, ctx);
+  assert.equal(afterTodoCtx.messages.at(-1).details.phase, 'PRE_DISPATCH');
   const protocolCoach = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.protocolCoach;
-  assert.equal(protocolCoach.pendingCue, null);
+  assert.equal(protocolCoach.pendingCue.kind, 'PRE_DISPATCH');
   assert.equal(protocolCoach.declaration.dispatchCueQueued, true);
 
   // PRE_VERIFY: a settled work task after dispatch queues the verify cue.
@@ -264,7 +270,8 @@ test('message observation inspects visible assistant text only', async () => {
 
   const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
   assert.equal(snapshot.protocolCoach.declaration, null);
-  assert.equal(snapshot.protocolCoach.pendingCue, null);
+  // Empty visible text (thinking/toolCall only) preserves the pending cue instead of clearing it
+  assert.equal(snapshot.protocolCoach.pendingCue?.kind, 'PRE_PLAN');
 });
 
 test('coach is top-level user-turn gated and fires for any model', async () => {
@@ -538,6 +545,29 @@ test('NO_DELEGATION_ROWS surfaces on state and omp_core_observation_status when 
     statusResult.details.status.coachDiagnostics.some((item) => item.code === 'NO_DELEGATION_ROWS'),
     'NO_DELEGATION_ROWS surfaces in omp_core_observation_status details.status.coachDiagnostics',
   );
+});
+
+test('bootstrap INDEX_BOOTSTRAP fires after 4 non-index tool results when index not read', async () => {
+  const { pi, entries, ctx } = runtime({ model: ARBITRARY_MODEL });
+  await handler(pi, 'before_agent_start')({ prompt: 'Review and revise article.md.' }, ctx);
+  // Do NOT send indexResult — simulate the model skipping the index read
+  // Send 4 non-index tool results
+  for (let i = 0; i < 4; i++) {
+    await handler(pi, 'tool_result')({
+      toolName: 'read',
+      result: { content: [{ type: 'text', text: `File ${i} content.` }] },
+      target: `skill://other-${i}`,
+    }, ctx);
+  }
+  const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.protocolCoach;
+  assert.equal(snapshot.bootstrapCueQueued, true);
+  assert.ok(snapshot.diagnostics.some((d) => d.code === 'INDEX_NOT_READ'));
+  // Context hook should inject the INDEX_BOOTSTRAP cue
+  const event = { messages: [{ role: 'user', content: 'Review and revise article.md.', timestamp: 1 }] };
+  const result = await handler(pi, 'context')(event, ctx);
+  assert.ok(result, 'context should return messages with INDEX_BOOTSTRAP cue');
+  assert.equal(result.messages.at(-1).details.phase, 'INDEX_BOOTSTRAP');
+  assert.match(result.messages.at(-1).content, /skill:\/\/omp-enhancer-workflows/);
 });
 
 async function cueFor({ model, entries = [], prompt = 'Review and revise article.md.' }) {

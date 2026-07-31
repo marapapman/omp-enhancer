@@ -50,11 +50,13 @@ test('a verified exact workflow index read presents PRE_PLAN until assistant pro
   assert.match(first.content, /^4\. VERIFY:/mu);
   assert.doesNotMatch(
     first.content,
-    /general\.subagent|agentic\.simple|writing\.|skill:\/\/|\bAgent\b|fan-?out|\bdelegate\b|gate|router|block|retry|controller/iu,
+    /general\.subagent|agentic\.simple|writing\.|skill:\/\/|fan-?out|\bgate\b|\brouter\b|\bblock\b|\bretry\b|\bcontroller\b/iu,
   );
 
   observeProtocolAssistantMessage(state, 'I will prepare the declaration.');
-  assert.equal(state.pendingCue, null);
+  assert.notEqual(state.pendingCue, null);
+  assert.equal(state.pendingCue?.kind, 'PRE_PLAN');
+  assert.equal(state.pendingCue.silentRetries, 1);
 });
 
 test('an exactly validated native supplied index uses the same PRE_PLAN observation', () => {
@@ -112,7 +114,7 @@ test('CRLF PLAN freezes declared reads and waits for all resources and final THE
   assert.equal(state.pendingCue?.kind, 'PRE_READY');
   const cue = presentWorkflowProtocolCoachCue(state);
   assert.ok(cue.content.includes('\n'), 'PRE_READY is a compact multiline schema');
-  assert.ok(cue.content.length < 950, `PRE_READY must stay below 950 characters, got ${cue.content.length}`);
+  assert.ok(cue.content.length < 1_100, `PRE_READY must stay below 1100 characters, got ${cue.content.length}`);
   assert.match(cue.content, /byte 0[^\n]*WORKFLOW READY/iu);
   assert.match(
     cue.content,
@@ -236,10 +238,74 @@ test('malformed or prefaced PLAN is diagnostic-only and never guesses a declarat
     const state = indexedState();
     presentWorkflowProtocolCoachCue(state);
     observeProtocolAssistantMessage(state, text);
-    assert.equal(state.declaration, null);
-    assert.ok(state.diagnostics.length > 0);
-    assert.equal(state.pendingCue, null);
+    assert.equal(state.declaration, null, 'malformed PLAN never guesses a declaration');
+    assert.ok(state.diagnostics.length > 0, 'malformed PLAN records a diagnostic');
+    assert.notEqual(state.pendingCue, null, 'cue is preserved for format error recovery');
+    assert.equal(state.formatErrorRetryCount, 1, 'retry count incremented');
   }
+});
+
+test('format error retry count caps at 2 and exhausts the cue', () => {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  // First malformed attempt
+  observeProtocolAssistantMessage(state, `Preface\n${workflowPlan()}`);
+  assert.notEqual(state.pendingCue, null, 'cue preserved after first format error');
+  assert.equal(state.formatErrorRetryCount, 1);
+  // Second malformed attempt
+  observeProtocolAssistantMessage(state, `Preface\n${workflowPlan()}`);
+  assert.notEqual(state.pendingCue, null, 'cue preserved after second format error');
+  assert.equal(state.formatErrorRetryCount, 2);
+  // Third malformed attempt exhausts
+  observeProtocolAssistantMessage(state, `Preface\n${workflowPlan()}`);
+  assert.equal(state.pendingCue, null, 'cue discarded after retry exhaustion');
+  assert.ok(state.diagnostics.some((item) => item.code === 'FORMAT_ERROR_RETRY_EXHAUSTED'));
+});
+
+test('correction prefix is injected when formatErrorRetryCount > 0', () => {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  observeProtocolAssistantMessage(state, `Preface\n${workflowPlan()}`);
+  assert.equal(state.formatErrorRetryCount, 1);
+  const cue = presentWorkflowProtocolCoachCue(state);
+  assert.match(cue.content, /FORMAT_CORRECTION/u);
+});
+
+test('small-model format correction variant is used for weak models', () => {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  observeProtocolAssistantMessage(state, `Preface\n${workflowPlan()}`);
+  const cue = presentWorkflowProtocolCoachCue(state, { provider: 'openai', id: 'mimo-v2.5' });
+  assert.match(cue.content, /FORMAT:/u);
+});
+
+test('writing.pending timeout escalation queues WRITING_PENDING_ESCALATION cue', () => {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  observeProtocolAssistantMessage(state, workflowPlan({
+    primary: 'writing.pending',
+    skills: [],
+    now: [],
+    then: [],
+  }));
+  assert.equal(state.declaration.primary, 'writing.pending');
+  // Simulate timeout by backdating pendingStartedAt
+  state.declaration.pendingStartedAt = Date.now() - 200_000;
+  observeProtocolToolResult(state, { name: 'read', target: INDEX_URI });
+  assert.ok(state.diagnostics.some((item) => item.code === 'WRITING_PENDING_TIMEOUT'));
+  assert.equal(state.pendingCue?.kind, 'WRITING_PENDING_ESCALATION');
+  const cue = presentWorkflowProtocolCoachCue(state);
+  assert.match(cue.content, /writing\.pending escalation/iu);
+});
+
+test('normal assistant message without PLAN marker retries before discarding cue', () => {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  observeProtocolAssistantMessage(state, 'I will prepare the declaration.');
+  assert.notEqual(state.pendingCue, null);
+  assert.equal(state.pendingCue?.kind, 'PRE_PLAN');
+  assert.equal(state.pendingCue.silentRetries, 1);
+  assert.equal(state.formatErrorDetected, false);
 });
 
 test('READY is rejected before every current-generation load has settled', () => {
@@ -331,9 +397,11 @@ test('READY must be at byte zero and only its successful TODO queues PRE_DISPATC
   assert.equal(mixedTaskClear.pendingCue, null, 'a mixed task call including work must clear PRE_DISPATCH');
 
   observeProtocolAssistantMessage(state, 'Native todo(op=init) rebase only; end/wait; same response has no task.');
-  assert.equal(state.pendingCue, null);
+  assert.notEqual(state.pendingCue, null, 'non-marker response retries instead of dropping cue');
+  assert.equal(state.pendingCue?.kind, 'PRE_DISPATCH');
+  assert.equal(state.pendingCue.silentRetries, 1);
   observeProtocolToolResult(state, { name: 'todo' });
-  assert.equal(state.pendingCue, null, 'the successful rebase result cannot queue a second cue');
+  assert.equal(state.pendingCue?.kind, 'PRE_DISPATCH', 'todo result does not queue a second cue');
   assert.equal(state.declaration.dispatchCueQueued, true);
 });
 
@@ -657,3 +725,160 @@ function workflowPlan({
     '4. VERIFY: Integrate requested evidence.',
   ].join(newline);
 }
+
+// ── New behavior tests: gap-fix verification ──
+
+test('empty-text assistant message preserves pending cue', () => {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  assert.equal(state.pendingCue?.kind, 'PRE_PLAN');
+  // Empty text (tool-only turn) should NOT clear the cue
+  observeProtocolAssistantMessage(state, '');
+  assert.equal(state.pendingCue?.kind, 'PRE_PLAN');
+  assert.equal(state.pendingCue.silentRetries, 0);
+});
+
+test('silent retry twice then exhaust drops cue with diagnostic', () => {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  assert.equal(state.pendingCue?.kind, 'PRE_PLAN');
+
+  // First non-marker response: retry
+  observeProtocolAssistantMessage(state, 'Thinking about the plan...');
+  assert.equal(state.pendingCue?.kind, 'PRE_PLAN');
+  assert.equal(state.pendingCue.silentRetries, 1);
+  assert.ok(state.diagnostics.some((d) => d.code === 'PRE_PLAN_IGNORED'));
+
+  // Second: retry again
+  observeProtocolAssistantMessage(state, 'Still thinking...');
+  assert.equal(state.pendingCue?.kind, 'PRE_PLAN');
+  assert.equal(state.pendingCue.silentRetries, 2);
+
+  // Third: exhausted
+  observeProtocolAssistantMessage(state, 'One more thought...');
+  assert.equal(state.pendingCue, null);
+  assert.ok(state.diagnostics.some((d) => d.code === 'PRE_PLAN_IGNORED_EXHAUSTED'));
+});
+
+test('LOAD_STALL_ESCALATION fires after timeout with missing URI list', () => {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  observeProtocolAssistantMessage(state, workflowPlan());
+  assert.ok(state.declaration);
+  // Backdate startedAt to exceed timeout
+  state.declaration.startedAt = Date.now() - 200_000;
+  // Settle some but not all URIs — leave DOMAIN_URI unsettled
+  observeProtocolToolResult(state, { name: 'read', target: PRIMARY_URI });
+  assert.equal(state.declaration.stallEscalationQueued, true);
+  assert.ok(state.diagnostics.some((d) => d.code === 'DECLARATION_LOADS_STALLED'));
+  const cue = presentWorkflowProtocolCoachCue(state);
+  assert.equal(cue.kind, 'LOAD_STALL_ESCALATION');
+  assert.match(cue.content, /Missing:/);
+  assert.match(cue.content, new RegExp(DOMAIN_URI));
+  // Fires only once
+  state.pendingCue = { kind: 'LOAD_STALL_ESCALATION', generation: 0, key: 'x', timestamp: 0, silentRetries: 0 };
+  observeProtocolToolResult(state, { name: 'read', target: PRIMARY_URI });
+  assert.equal(state.declaration.stallEscalationQueued, true);
+});
+
+test('rejection hint is appended to cue and cleared on acceptance', () => {
+  const state = readyCueState();
+  observeProtocolAssistantMessage(state, readyLine({ primary: 'writing.zh' }));
+  assert.equal(state.rejectionHint, 'READY_PRIMARY_MISMATCH');
+  const cue = presentWorkflowProtocolCoachCue(state);
+  assert.match(cue.content, /LAST REJECTION: READY_PRIMARY_MISMATCH/);
+  // Good READY clears hint
+  observeProtocolAssistantMessage(state, readyLine());
+  assert.equal(state.rejectionHint, null);
+});
+
+test('zero-task PRE_VERIFY fires after cadence settled results', () => {
+  const state = readyCueState();
+  state.declaration.tasksDispatched = 0;
+  state.declaration.todoObserved = true;
+  state.declaration.readyObserved = true;
+  state.declaration.todoHasFallbackRows = true;
+  state.declaration.todoHasFallbackRows = true;
+  // Send 8 settled non-task results
+  for (let i = 0; i < 8; i++) {
+    observeProtocolToolResult(state, { name: 'read', target: `skill://test-${i}` });
+  }
+  assert.equal(state.declaration.verifyCueQueued, true);
+  assert.equal(state.pendingCue?.kind, 'PRE_VERIFY');
+});
+
+test('stability cue defers when pendingCue exists instead of dropping', () => {
+  const state = readyCueState();
+  state.declaration.todoObserved = true;
+  state.declaration.tasksDispatched = 1;
+  // Queue a different cue first
+  state.pendingCue = { kind: 'PRE_DISPATCH', generation: 1, key: 'x', timestamp: 0, silentRetries: 0 };
+  // Send 8 settled results — cadence reached but pendingCue blocks emission
+  for (let i = 0; i < 8; i++) {
+    observeProtocolToolResult(state, { name: 'read', target: `skill://test-${i}` });
+  }
+  assert.equal(state.declaration.stabilityCuesEmitted, 0, 'stability cue not emitted while pending');
+  assert.equal(state.declaration.toolResultsSinceStabilityCue, 8, 'counter not reset');
+  // Clear the pending cue
+  state.pendingCue = null;
+  // Next settled result triggers emission
+  observeProtocolToolResult(state, { name: 'read', target: 'skill://test-next' });
+  assert.equal(state.declaration.stabilityCuesEmitted, 1);
+  assert.equal(state.pendingCue?.kind, 'EXECUTE_STABILITY');
+});
+
+test('writing.pending escalation fires only once', () => {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  observeProtocolAssistantMessage(state, workflowPlan({ primary: 'writing.pending' }));
+  state.declaration.pendingStartedAt = Date.now() - 200_000;
+  // First settled result triggers escalation
+  observeProtocolToolResult(state, { name: 'read', target: PRIMARY_URI });
+  assert.equal(state.declaration.pendingEscalationQueued, true);
+  assert.equal(state.pendingCue?.kind, 'WRITING_PENDING_ESCALATION');
+  // Second settled result does NOT re-escalate
+  state.pendingCue = null;
+  observeProtocolToolResult(state, { name: 'read', target: ADD_ON_URI });
+  assert.equal(state.pendingCue, null);
+});
+
+test('serialization round-trip preserves all new fields', () => {
+  const state = indexedState();
+  presentWorkflowProtocolCoachCue(state);
+  state.rejectionHint = 'READY_PRIMARY_MISMATCH';
+  state.toolResultsBeforeIndex = 3;
+  state.bootstrapCueQueued = true;
+  state.toolErrorCounters = { read: 2, bash: 0 };
+  state.formatErrorDetected = true;
+  state.formatErrorRetryCount = 1;
+  const serialized = serializeWorkflowProtocolCoachState(state);
+  const restored = sanitizeWorkflowProtocolCoachState(serialized);
+  assert.equal(restored.rejectionHint, 'READY_PRIMARY_MISMATCH');
+  assert.equal(restored.toolResultsBeforeIndex, 3);
+  assert.equal(restored.bootstrapCueQueued, true);
+  assert.deepEqual(restored.toolErrorCounters, { read: 2, bash: 0 });
+  assert.equal(restored.formatErrorDetected, true);
+  assert.equal(restored.formatErrorRetryCount, 1);
+});
+
+test('normalized URI matching accepts trailing slash and case variants', () => {
+  const state = createWorkflowProtocolCoachState();
+  // Read with trailing slash
+  observeProtocolToolResult(state, { name: 'read', target: 'skill://omp-enhancer-workflows/', body: INDEX_BODY });
+  assert.equal(state.indexObserved, true);
+  assert.equal(state.pendingCue?.kind, 'PRE_PLAN');
+});
+
+test('INDEX_BOOTSTRAP fires after 4 non-index settled results when index not observed', () => {
+  const state = createWorkflowProtocolCoachState();
+  assert.equal(state.indexObserved, false);
+  assert.equal(state.declaration, null);
+  for (let i = 0; i < 4; i++) {
+    observeProtocolToolResult(state, { name: 'read', target: `skill://other-${i}` });
+  }
+  assert.equal(state.bootstrapCueQueued, true);
+  assert.ok(state.diagnostics.some((d) => d.code === 'INDEX_NOT_READ'));
+  const cue = presentWorkflowProtocolCoachCue(state);
+  assert.equal(cue.kind, 'INDEX_BOOTSTRAP');
+  assert.match(cue.content, /skill:\/\/omp-enhancer-workflows/);
+});

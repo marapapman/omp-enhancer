@@ -20,12 +20,7 @@ const TOOL_ERROR_ESCALATION_SECTION = [
   'Advisory only; this never blocks, routes, retries, or completes work.',
 ].join('\n');
 
-const TOOL_CALL_PRIMING_FAMILIES = Object.freeze([
-  'mimo',
-  'deepseek-v4-flash',
-  'kimi',
-  'step-3.7-flash',
-]);
+const TOOL_CALL_PRIMING_FAMILIES = Object.freeze(['mimo', 'deepseek', 'kimi', 'glm', 'minimax', 'qwen', 'step']);
 
 export function shouldPrimeToolCalls(model = {}) {
   const { provider = '', id = '' } = isRecord(model) ? model : {};

@@ -7,6 +7,7 @@ import {
 } from './skill-discovery.js';
 import {
   DELEGATED_TODO_TEMPLATE,
+  DELEGATION_COMPILE_RULE,
   DIRECT_FALLBACK_REASONS,
   NATIVE_TASK_PREFIX_TEMPLATE,
   ORCHESTRATOR_IDENTITY,
@@ -95,9 +96,9 @@ export function buildWorkflowSkillIndexMarkdown() {
     '',
     'SKILL URI: D=direct; C=exact nested; others need a loaded source. Supplied bodies stay in PLAN/READY, not NOW; only exact failure marks unavailable.',
     '',
-    'LOAD: Skills=exact domain Skill/catalog URIs; NOW=non-supplied Skills/catalogs; THEN=Add-on refs then Primary. Load/wait each; max 2 catalog + 1 method extensions. NOW none loads THEN with PLAN. Never guess/reread/re-PLAN except `writing.pending`.',
+    'LOAD: Skills=exact domain Skill/catalog URIs; NOW=non-supplied Skills/catalogs; THEN=Add-on refs then Primary. Load/wait each; max 3 extension batches (<=2 catalog hops + 1 linked-method batch). NOW none loads THEN with PLAN. Never guess/reread/re-PLAN except `writing.pending`.',
     '',
-    `COMMIT HANDOFF (soft): after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable, next response begins \`W\`, fills \`${WORKFLOW_READY_TEMPLATE}\` with bare IDs, initializes native TODO only, and ends/waits. Freeze W/S. COMPILE (soft): loaded \`subagent-driven\` + complete input + safe checkpoint + visible matching Agent => Delegate row; otherwise \`fallback=<one matched permitted limitation>\`. ${WORKFLOW_PROJECT_START_RULE}`,
+    `COMMIT HANDOFF (soft): after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable, next response begins \`W\`, fills \`${WORKFLOW_READY_TEMPLATE}\` with bare IDs, initializes native TODO only, and ends/waits. Freeze W/S. ${DELEGATION_COMPILE_RULE} ${WORKFLOW_PROJECT_START_RULE}`,
     '',
     'NEXT VISIBLE BYTES MUST BE `WORKFLOW PLAN`; no preface; no plugin enforces this format.',
     '',

@@ -91,7 +91,7 @@ test('compact workflow Skill teaches primary-plus-add-on composition with exact 
   assert.match(index, /SKILL DISCOVERY:[\s\S]*`D` and `C` are optional candidates, never load sets[\s\S]*select only a URI that matches the requested method, evidence rule, verdict, or format[\s\S]*refs stay in THEN/iu);
   assert.doesNotMatch(index, /Exclude every `Not for`|Honor `Not for`/iu);
   assert.match(index, /Format-only => format Primary/iu);
-  assert.match(index, /LOAD:[\s\S]*Skills=exact domain Skill\/catalog URIs[\s\S]*NOW=non-supplied Skills\/catalogs[\s\S]*THEN=Add-on refs then Primary[\s\S]*max 2 catalog \+ 1 method extensions[\s\S]*Never guess\/reread\/re-PLAN except `writing\.pending`/i);
+  assert.match(index, /LOAD:[\s\S]*Skills=exact domain Skill\/catalog URIs[\s\S]*NOW=non-supplied Skills\/catalogs[\s\S]*THEN=Add-on refs then Primary[\s\S]*max 3 extension batches \(<=2 catalog hops \+ 1 linked-method batch\)[\s\S]*Never guess\/reread\/re-PLAN except `writing\.pending`/i);
   assert.match(index, /DECLARE HANDOFF \(soft\):[\s\S]*Next visible response MUST start byte 0 with `WORKFLOW PLAN`[\s\S]*contain only this form[^\n]*\nWORKFLOW PLAN\nPrimary: <id-or-none>\nAdd-ons: <ids-or-none>\nSkills: <exact domain Skill\/catalog URIs-or-none>\nLoad order: NOW=\[<chosen non-supplied Skill\/catalog URIs-or-none>\] THEN=\[<Add-on PLAN URIs; Primary PLAN URI last-or-none>\]\nActions:\n1\. LOAD:[\s\S]*2\. COMMIT:[\s\S]*3\. SPLIT \+ EXECUTE:[\s\S]*4\. VERIFY:/i);
   assert.doesNotMatch(index, /assistant content\[0\]/iu);
   assert.match(index, /PLAN text alone is incomplete[\s\S]*same response calls NOW and waits[\s\S]*calls THEN if NOW=none[\s\S]*THEN is one final resource-only batch[\s\S]*Give each evidence checkpoint an Action/iu);
@@ -124,7 +124,7 @@ test('compact workflow Skill teaches primary-plus-add-on composition with exact 
   assert.doesNotMatch(networkIndexRow, /C=\[`network-config-validation`/u);
   assert.doesNotMatch(networkIndexRow, /via `skill:\/\/ecc-skill-catalog`/u);
   assert.doesNotMatch(index, /\bHints:/u);
-  assert.ok(Buffer.byteLength(index) < 16_000, 'workflow Skill index should stay below 16k');
+  assert.ok(Buffer.byteLength(index) < 17_000, 'workflow Skill index should stay below 17k');
   assert.doesNotMatch(index, /slices=<|assignment-input=|Composition example:|\[workflow=<ids>/i);
   assert.match(index, /PLAN URI: `skill:\/\/omp-enhancer-workflows\/references\/code\.dev\.md`/i);
   assert.doesNotMatch(index, /PLAN URI: `references\//u);
@@ -156,7 +156,7 @@ test('compact workflow Skill teaches primary-plus-add-on composition with exact 
     codeReference.trimEnd().split('\n').at(-1),
     'READY NEXT (soft): SENTINEL 2/2 — no plugin enforcement. Next assistant response byte 0 = `W` of filled `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<ids-or-none> | skills-unavailable=<ids-or-none>`; no other visible text; native TODO init only; end/wait.',
   );
-  assert.match(codeReference, /complete input \+ safe checkpoint \+ visible matching Agent => one exact Delegate row[\s\S]*otherwise `fallback=<one matched permitted limitation>`[\s\S]*Parent VERIFY rows remain separate[\s\S]*Every delegated row is exactly `Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>`/iu);
+  assert.match(codeReference, /complete input.*safe checkpoint.*visible matching Agent => one exact Delegate row[\s\S]*otherwise `fallback=<one matched permitted limitation>`[\s\S]*Parent VERIFY rows remain separate[\s\S]*Every delegated row is exactly `Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>`/iu);
   assert.match(codeReference, /Primary when:/i);
   assert.doesNotMatch(codeReference, /Add-on candidates/iu);
   assert.doesNotMatch(codeReference, /Optional Skill topics|Optional Skill candidates/iu);

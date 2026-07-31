@@ -95,7 +95,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.match(skillIndex, /SKILL DISCOVERY:[\s\S]*`D` and `C` are optional candidates, never load sets[\s\S]*matches the requested method, evidence rule, verdict, or format[\s\S]*refs stay in THEN/iu);
   assert.doesNotMatch(skillIndex, /Exclude every `Not for`|Honor `Not for`/iu);
   assert.match(skillIndex, /Format-only => format Primary/i);
-  assert.match(skillIndex, /LOAD:[\s\S]*Skills=exact domain Skill\/catalog URIs[\s\S]*NOW=non-supplied Skills\/catalogs[\s\S]*THEN=Add-on refs then Primary[\s\S]*max 2 catalog \+ 1 method extensions[\s\S]*Never guess\/reread\/re-PLAN/i);
+  assert.match(skillIndex, /LOAD:[\s\S]*Skills=exact domain Skill\/catalog URIs[\s\S]*NOW=non-supplied Skills\/catalogs[\s\S]*THEN=Add-on refs then Primary[\s\S]*max 3 extension batches \(<=2 catalog hops \+ 1 linked-method batch\)[\s\S]*Never guess\/reread\/re-PLAN/i);
   assert.match(skillIndex, /DECLARE HANDOFF \(soft\):[\s\S]*Next visible response MUST start byte 0 with `WORKFLOW PLAN`[\s\S]*contain only this form[^\n]*\nWORKFLOW PLAN\nPrimary: <id-or-none>\nAdd-ons: <ids-or-none>\nSkills: <exact domain Skill\/catalog URIs-or-none>\nLoad order: NOW=\[<chosen non-supplied Skill\/catalog URIs-or-none>\] THEN=\[<Add-on PLAN URIs; Primary PLAN URI last-or-none>\]\nActions:\n1\. LOAD:[\s\S]*2\. COMMIT:[\s\S]*3\. SPLIT \+ EXECUTE:[\s\S]*4\. VERIFY:/i);
   assert.doesNotMatch(skillIndex, /assistant content\[0\]/iu);
   assert.match(skillIndex, /PLAN text alone is incomplete[\s\S]*same response calls NOW and waits[\s\S]*calls THEN if NOW=none[\s\S]*THEN is one final resource-only batch[\s\S]*Give each evidence checkpoint an Action/iu);
@@ -108,7 +108,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.doesNotMatch(skillIndex, /^- `[^`]+`[^\n]+\b(?:Add-ons|Skills):/gmu);
   assert.match(skillIndex, /SKILL DISCOVERY:[\s\S]*enumerated `C` URI goes directly in PLAN\/NOW[\s\S]*`skill:\/\/ecc-skill-catalog` remains only for unlisted niche discovery/iu);
   assert.match(skillIndex, /`network\.design`[^\n]*C=\[`skill:\/\/ecc-skill-catalog\/network-config-validation\/SKILL\.md`, `skill:\/\/ecc-skill-catalog\/safety-guard\/SKILL\.md`\][^\n]*PLAN URI:/iu);
-  assert.ok(Buffer.byteLength(skillIndex) < 16_000, 'Main workflow index should stay below 16k');
+  assert.ok(Buffer.byteLength(skillIndex) < 17_000, 'Main workflow index should stay below 17k');
   assert.match(skillIndex, /Navigation only[\s\S]*never routes[\s\S]*gates[\s\S]*decides completion/i);
   assert.doesNotMatch(skillIndex, /block:\s*true|continue:\s*true|hard router|automatic retry/iu);
   assert.doesNotMatch(skillIndex, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
@@ -179,7 +179,7 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   assert.match(agents, /After all declared resources return or are marked unavailable, the next response is the filled READY plus native TODO init[\s\S]*byte 0 is `W`[\s\S]*WORKFLOW READY \| primary=<id-or-none>[\s\S]*Rebase a detailed TODO/iu);
   assert.match(agents, /Preserve every named plan audit, RED, GREEN, E2E, independent review, and parent verification checkpoint/iu);
   assert.match(agents, /next response is the filled READY plus native TODO init[\s\S]*byte 0 is `W`[\s\S]*Apply the loaded-card soft compiler:[\s\S]*one exact Delegate row for that checkpoint[\s\S]*Parent VERIFY rows remain separate[\s\S]*Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>/iu);
-  assert.match(agents, /COMPILE \(soft\): loaded `subagent-driven` \+ complete input \+ safe checkpoint \+ visible matching Agent => Delegate row[\s\S]*fallback=<one matched permitted limitation>/iu);
+  assert.match(agents, /COMPILE \(soft\): loaded `subagent-driven` \+ complete input.*safe checkpoint.*visible matching Agent => Delegate row[\s\S]*fallback=<one matched permitted limitation>/iu);
   assert.match(agents, /Main chooses direct work, Agent, and fork width from the committed TODO[\s\S]*Every non-simple loaded card is soft `subagent-driven`[\s\S]*`agentic\.simple` uses zero `task` calls/iu);
   assert.match(agents, /After all parent-owned pre-dispatch prerequisites[\s\S]*committed `task` is the next project action/iu);
   assert.match(agents, /\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]/i);
