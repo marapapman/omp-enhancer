@@ -15,50 +15,41 @@ const AUDITOR_ROLES = new Set([
   'checker',
 ]);
 
-const AUDIT_SCOPE_NOTE = 'The delegated deliverable is the independent audit';
+test('every workflow definition has a non-empty suggestedFlow and an auditor role candidate', () => {
+  assert.equal(workflowDefinitions.length, 5);
+  assert.ok(workflowDefinitions.length > 0, 'expected the five consolidated workflows');
 
-test('every subagent-driven workflow has an auditor role with a delegation line or an audit-deliverable scope note', () => {
-  const subagentDriven = workflowDefinitions.filter(
-    ({ delegationDefault }) => delegationDefault === 'subagent-driven',
-  );
-
-  assert.ok(subagentDriven.length > 0, 'expected at least one subagent-driven workflow');
-
-  for (const definition of subagentDriven) {
-    const auditorRoles = definition.roles.filter((role) => AUDITOR_ROLES.has(role));
-    const scopeNotes = definition.scopeNotes.join(' ');
-    const delegation = definition.delegation.join(' ');
-
-    const hasAuditorRole = auditorRoles.length > 0;
-    const hasAuditorDelegation = auditorRoles.some((role) =>
-      definition.delegation.some((line) => line.includes(role)),
-    );
-    const hasAuditScopeNote = scopeNotes.includes(AUDIT_SCOPE_NOTE);
-
+  for (const definition of workflowDefinitions) {
     assert.ok(
-      (hasAuditorRole && hasAuditorDelegation) || hasAuditScopeNote,
-      `${definition.id}: subagent-driven workflow must assign an auditor role in delegation or carry the audit-deliverable scope note`,
+      Array.isArray(definition.suggestedFlow) && definition.suggestedFlow.length > 0,
+      `${definition.id}: expected a non-empty suggestedFlow`,
+    );
+    const auditorRoles = definition.roles.filter((role) => AUDITOR_ROLES.has(role));
+    assert.ok(
+      auditorRoles.length > 0,
+      `${definition.id}: expected at least one auditor role candidate (got ${definition.roles.join(', ')})`,
+    );
+    assert.ok(
+      definition.suggestedFlow.some((line) => /review|check|audit|verify/i.test(line)),
+      `${definition.id}: suggestedFlow must describe a review/audit phase`,
     );
   }
 });
 
-test('audit-deliverable scope note satisfies the coverage requirement without a second auditor', () => {
-  const auditDeliverableWorkflows = workflowDefinitions.filter(
-    ({ delegationDefault, scopeNotes }) =>
-      delegationDefault === 'subagent-driven' &&
-      scopeNotes.some((note) => note.includes(AUDIT_SCOPE_NOTE)),
-  );
+test('each consolidated workflow names its audit owner in suggestedFlow or roles', () => {
+  const expected = {
+    code: ['reviewer'],
+    writing: ['checker', 'zh-checker'],
+    research: ['fact-reviewer', 'fact-cross-checker'],
+    visual: ['visioner'],
+    operations: ['reviewer', 'ecc-security-reviewer'],
+  };
 
-  assert.ok(
-    auditDeliverableWorkflows.length > 0,
-    'expected at least one audit-deliverable workflow',
-  );
-
-  for (const definition of auditDeliverableWorkflows) {
-    const scopeNotes = definition.scopeNotes.join(' ');
-    assert.ok(
-      scopeNotes.includes(AUDIT_SCOPE_NOTE),
-      `${definition.id}: must contain the audit-deliverable scope note`,
-    );
+  for (const [id, auditors] of Object.entries(expected)) {
+    const definition = workflowDefinitions.find((candidate) => candidate.id === id);
+    assert.ok(definition, `missing workflow ${id}`);
+    for (const auditor of auditors) {
+      assert.ok(definition.roles.includes(auditor), `${id} must keep ${auditor} among role candidates`);
+    }
   }
 });

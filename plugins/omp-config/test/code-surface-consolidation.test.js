@@ -29,15 +29,15 @@ test('one code-development Skill owns the subagent-driven code lifecycle', async
   assert.match(skill, /^---\nname: code-development\ndescription: .+\n---/u);
   assert.match(skill, /Delegate the local evidence pass to scout.+callers.+tests.+configuration/isu);
   assert.match(skill, /official documentation.+community issues/isu);
-  assert.match(skill, /delegate to native `plan` agent.+detailed implementation-and-evidence plan.+parallel vertical slices/isu);
-  assert.match(skill, /Dispatch native `reviewer` to independently audit plan.+parallel waves.+write sets.+dependencies/isu);
-  assert.match(skill, /same native `task`.+tasks\[\].+batch.+runnable.+independent.+slice/isu);
+  assert.match(skill, /delegate to the `analyzer` agent the full detailed implementation-and-evidence plan/isu);
+  assert.match(skill, /Main may dispatch `reviewer` to audit them before production mutation/isu);
+  assert.match(skill, /same native `task` `tasks\[\]` batch for runnable independent slices/isu);
   assert.match(skill, /native `task`.+test mutation.+expected assertion failure as RED.+minimum.+production.+same command.+GREEN.+refactor/isu);
   assert.match(skill, /Main.+integrat.+current tree.+bounded diff.+evidence.+native `reviewer`/isu);
   assert.match(skill, /native `reviewer`.+bounded semantic diff.+does not.+read.+project.+run.+command/isu);
   assert.match(skill, /supported.+finding.+native `task`.+repair.+refresh.+affected evidence.+one fresh affected review/isu);
   assert.match(skill, /never an automatic review-repair loop/iu);
-  assert.match(skill, /references\/omp-enhancer\.md/iu);
+  assert.match(skill, /never plugin gates and never invented success/iu);
 });
 
 test('retired overlapping code-method Skills are no longer top-level choices', async () => {

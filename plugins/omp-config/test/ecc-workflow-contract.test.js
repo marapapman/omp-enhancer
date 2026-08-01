@@ -225,15 +225,10 @@ test('security review examples preserve read-only and external-effect authority'
 });
 
 test('delegation guides copy direct constraints verbatim without adding examples', async () => {
-  const [code, opensource] = await Promise.all([
-    readFile(path.join(packageRoot, 'skills', 'code-development', 'SKILL.md'), 'utf8'),
-    readSkill('opensource-pipeline'),
-  ]);
+  const opensource = await readSkill('opensource-pipeline');
 
-  for (const [name, skill] of [['code-development', code], ['opensource-pipeline', opensource]]) {
-    assert.match(skill, /task body cop(?:y|ies) all direct user constraints verbatim and add(?:s)? no examples/isu, name);
-    assert.match(skill, /outer context, name, or label.+not a substitute/isu, name);
-  }
+  assert.match(opensource, /task body copies all direct user constraints verbatim and adds no examples/isu);
+  assert.match(opensource, /outer context, name, or label.+not a substitute/isu);
 });
 
 test('marketplace Skill Markdown filesystem links resolve recursively', async () => {

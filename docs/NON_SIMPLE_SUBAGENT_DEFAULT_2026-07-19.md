@@ -1,3 +1,5 @@
+> SUPERSEDED: The orchestration layer was simplified in catalog v31. The protocol coach was removed, the 7-stage protocol was replaced with ANALYZE -> EXECUTE -> REVIEW, and the 31 workflow cards were merged into 5 domains (code, writing, research, visual, operations). This dated plan describes the retired design and is kept for history only.
+
 # Non-simple workflow subagent-default plan
 
 Date: 2026-07-19

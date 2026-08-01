@@ -16,37 +16,39 @@ import {
   workflowReferenceUri,
 } from '../plugins/omp-enhancer-core/src/workflows/render-skill.js';
 import { defineWorkflowCatalog } from '../plugins/omp-enhancer-core/src/workflows/schema.js';
-import { exactNestedEccSkillUri } from '../plugins/omp-enhancer-core/src/workflows/skill-discovery.js';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['plan', 'scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
+const EXPECTED_WORKFLOW_IDS = ['code', 'writing', 'research', 'visual', 'operations'];
 
-test('catalog v30 assigns exactly one direct, one deferred, and 29 subagent-driven defaults', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 30);
-  assert.equal(workflowDefinitions.length, 31);
-  assert.deepEqual(
-    [...new Set(workflowDefinitions.map(({ delegationDefault }) => delegationDefault))].sort(),
-    ['defer-until-composed', 'direct-simple', 'subagent-driven'],
-  );
-  assert.deepEqual(
-    workflowDefinitions.filter(({ delegationDefault }) => delegationDefault === 'direct-simple').map(({ id }) => id),
-    ['agentic.simple'],
-  );
-  assert.deepEqual(
-    workflowDefinitions.filter(({ delegationDefault }) => delegationDefault === 'defer-until-composed').map(({ id }) => id),
-    ['writing.pending'],
-  );
-  assert.equal(
-    workflowDefinitions.filter(({ delegationDefault }) => delegationDefault === 'subagent-driven').length,
-    29,
-  );
-  assert.deepEqual(
-    Object.entries(workflowCatalog).map(([id, { delegationDefault }]) => [id, delegationDefault]),
-    workflowDefinitions.map(({ id, delegationDefault }) => [id, delegationDefault]),
-  );
+test('catalog v31 defines exactly the five consolidated advisory workflows', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 31);
+  assert.equal(workflowDefinitions.length, 5);
+  assert.deepEqual(workflowIds, EXPECTED_WORKFLOW_IDS);
+  for (const definition of workflowDefinitions) {
+    assert.equal(typeof definition.chooseWhen, 'string');
+    assert.ok(definition.chooseWhen.length > 0, `${definition.id} chooseWhen`);
+    assert.ok(Array.isArray(definition.skills) && definition.skills.length > 0, `${definition.id} skills`);
+    assert.ok(Array.isArray(definition.catalogSkills), `${definition.id} catalogSkills`);
+    for (const skill of definition.catalogSkills) {
+      assert.ok(definition.skills.includes(skill), `${definition.id} catalogSkills must be a subset of skills`);
+    }
+    assert.ok(Array.isArray(definition.roles) && definition.roles.length > 0, `${definition.id} roles`);
+    assert.ok(Array.isArray(definition.suggestedFlow) && definition.suggestedFlow.length > 0, `${definition.id} suggestedFlow`);
+    for (const line of definition.suggestedFlow) assert.equal(typeof line, 'string', `${definition.id} suggestedFlow line`);
+    assert.ok(Array.isArray(definition.scopeNotes), `${definition.id} scopeNotes`);
+    for (const retired of ['steps', 'delegation', 'delegationDefault', 'composeWith', 'qualityChecks', 'riskNotes']) {
+      assert.equal(Object.hasOwn(definition, retired), false, `${definition.id} must not carry ${retired}`);
+    }
+  }
+  assert.deepEqual(Object.keys(workflowCatalog), workflowIds);
+  const catalogSkillCount = new Set(workflowDefinitions.flatMap(({ catalogSkills }) => catalogSkills)).size;
+  assert.equal(catalogSkillCount, 7, 'research (2) + operations (5) catalog candidates');
+  const code = workflowCatalog.code;
+  assert.deepEqual(code.roles, ['analyzer', 'task', 'reviewer', 'scout', 'librarian']);
 });
 
-test('packaged catalog, index, and all references expose catalog v30 execution defaults', async () => {
+test('packaged catalog, index, and all references expose catalog v31 advisory content', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -54,22 +56,18 @@ test('packaged catalog, index, and all references expose catalog v30 execution d
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 30/);
-  assert.match(skillIndex, /Catalog version: 30/);
-  assert.equal(referenceNames.length, 31);
-  assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 29);
-  assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
-  assert.equal((catalog.match(/^- Execution default \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
-  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 29);
-  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `direct-simple`/gm) ?? []).length, 1);
-  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
-  assert.match(skillIndex, /EXECUTION:[\s\S]*DIRECT skips[\s\S]*`agentic\.simple` has no `task`[\s\S]*`writing\.pending` composes once[\s\S]*(?:every )?other (?:loaded )?cards? uses? the compiler(?: below)?/iu);
-  assert.match(skillIndex, /PLAN text alone is incomplete[\s\S]*same response calls NOW[\s\S]*calls THEN if NOW=none/iu);
-  assert.match(skillIndex, /Navigation only[\s\S]*never routes[\s\S]*gates[\s\S]*selects Agents[\s\S]*decides completion/iu);
-  assert.doesNotMatch(`${catalog}\n${skillIndex}\n${referenceText}`, /block:\s*true|continue:\s*true|triggerTurn|systemPrompt\s*=/i);
+  assert.match(catalog, /# OMP Enhancer Workflow Catalog v31/);
+  assert.match(skillIndex, /Phases: ANALYZE -> EXECUTE -> REVIEW/iu);
+  assert.match(skillIndex, /Advisory reference only/i);
+  assert.equal(referenceNames.length, 5);
+  assert.deepEqual(referenceNames, workflowIds.map((id) => `${id}.md`).sort());
+  assert.doesNotMatch(
+    `${catalog}\n${skillIndex}\n${referenceText}`,
+    /EXECUTION DEFAULT|WORKFLOW PLAN|WORKFLOW READY|SENTINEL|byte 0|block:\s*true|continue:\s*true|triggerTurn|systemPrompt\s*=/i,
+  );
 });
 
-test('shared catalog exposes exact Skill URIs while references omit late Skill candidates', async () => {
+test('shared catalog and Skill index expose the five domains while references carry advisory cards', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const agents = await readFile(new URL('../plugins/omp-config/assets/AGENTS.md', import.meta.url), 'utf8');
@@ -79,213 +77,81 @@ test('shared catalog exposes exact Skill URIs while references omit late Skill c
   const skillReferences = Object.values(referencesByWorkflow).join('\n');
 
   assert.equal(catalog, buildSharedWorkflowCatalogMarkdown());
-  assert.equal(WORKFLOW_CATALOG_VERSION, 30);
-  assert.equal(Number(catalog.match(/OMP_WORKFLOW_CATALOG_VERSION:\s*(\d+)/)?.[1]), WORKFLOW_CATALOG_VERSION);
-  assert.deepEqual([...catalog.matchAll(/^### `([^`]+)`$/gm)].map((match) => match[1]), workflowIds);
+  assert.equal(Number(catalog.match(/# OMP Enhancer Workflow Catalog v(\d+)/)?.[1]), WORKFLOW_CATALOG_VERSION);
+  assert.deepEqual([...catalog.matchAll(/^## `([^`]+)`$/gm)].map((match) => match[1]), workflowIds);
   const indexedWorkflowIds = [...skillIndex.matchAll(/^- `([^`]+)` —/gm)].map((match) => match[1]);
-  assert.equal(new Set(indexedWorkflowIds).size, workflowIds.length);
-  assert.deepEqual([...indexedWorkflowIds].sort(), [...workflowIds].sort());
-  assert.match(skillIndex, /staged project work/i);
-  assert.match(skillIndex, /verbatim field lookup needs no Skill or TODO/is);
-  assert.match(skillIndex, /STATE: DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY/iu);
-  assert.match(skillIndex, /1\. \*\*DISCOVER\*\*[\s\S]*completed DISCOVER result[\s\S]*do not read `skill:\/\/omp-enhancer-workflows` again/i);
-  assert.match(skillIndex, /2\. \*\*DECLARE \+ LOAD\*\*[\s\S]*operation, source, and output[\s\S]*Emit PLAN first[\s\S]*load NOW[\s\S]*load THEN[\s\S]*Project tools start only after the READY \+ TODO response ends and its results return/i);
-  assert.match(skillIndex, /## State handoff[\s\S]*SELECTION:[\s\S]*Primary = central deliverable/iu);
-  assert.match(skillIndex, /SELECTION:[\s\S]*Primary = central deliverable[\s\S]*independent requested operations\/outputs = Add-ons/iu);
-  assert.match(skillIndex, /SKILL DISCOVERY:[\s\S]*`D` and `C` are optional candidates, never load sets[\s\S]*matches the requested method, evidence rule, verdict, or format[\s\S]*refs stay in THEN/iu);
-  assert.doesNotMatch(skillIndex, /Exclude every `Not for`|Honor `Not for`/iu);
-  assert.match(skillIndex, /Format-only => format Primary/i);
-  assert.match(skillIndex, /LOAD:[\s\S]*Skills=exact domain Skill\/catalog URIs[\s\S]*NOW=non-supplied Skills\/catalogs[\s\S]*THEN=Add-on refs then Primary[\s\S]*max 3 extension batches \(<=2 catalog hops \+ 1 linked-method batch\)[\s\S]*Never guess\/reread\/re-PLAN/i);
-  assert.match(skillIndex, /DECLARE HANDOFF \(soft\):[\s\S]*Next visible response MUST start byte 0 with `WORKFLOW PLAN`[\s\S]*contain only this form[^\n]*\nWORKFLOW PLAN\nPrimary: <id-or-none>\nAdd-ons: <ids-or-none>\nSkills: <exact domain Skill\/catalog URIs-or-none>\nLoad order: NOW=\[<chosen non-supplied Skill\/catalog URIs-or-none>\] THEN=\[<Add-on PLAN URIs; Primary PLAN URI last-or-none>\]\nActions:\n1\. LOAD:[\s\S]*2\. COMMIT:[\s\S]*3\. SPLIT \+ EXECUTE:[\s\S]*4\. VERIFY:/i);
-  assert.doesNotMatch(skillIndex, /assistant content\[0\]/iu);
-  assert.match(skillIndex, /PLAN text alone is incomplete[\s\S]*same response calls NOW and waits[\s\S]*calls THEN if NOW=none[\s\S]*THEN is one final resource-only batch[\s\S]*Give each evidence checkpoint an Action/iu);
-  assert.match(skillIndex, /AFTER NOW:[^\n]*empty revealed URI set[^\n]*no text\/marker[^\n]*call the THEN batch[^\n]*RESOURCE EXTENSION MUST list >=1 exact revealed URI[^\n]*`reads=none` is invalid/iu);
-  assert.match(skillIndex, /COMMIT HANDOFF \(soft\):[\s\S]*after every declared NOW resource, revealed extension, and THEN reference has returned or been marked unavailable[\s\S]*next response begins `W`[\s\S]*initializes native TODO only[\s\S]*Project tools start only after the READY \+ TODO response ends and its results return/iu);
-  assert.match(skillIndex, /SELECTION:[\s\S]*Primary = central deliverable[\s\S]*independent requested operations\/outputs = Add-ons/iu);
-  assert.match(skillIndex, /PROSE:[\s\S]*English draft\/revision -> `writing\.en`[\s\S]*Other central operation => language Add-on[\s\S]*`\.tex` target[\s\S]*`writing\.latex` Add-on/iu);
-  assert.match(skillIndex, /3\. \*\*COMMIT \+ EXECUTE\*\*[\s\S]*Emit READY first[\s\S]*commit loaded methods to detailed native TODO[\s\S]*split, execute, and verify/i);
-  assert.doesNotMatch(skillIndex, /slices=<|assignment-input=|Composition example:|\[workflow=<ids>/i);
-  assert.doesNotMatch(skillIndex, /^- `[^`]+`[^\n]+\b(?:Add-ons|Skills):/gmu);
-  assert.match(skillIndex, /SKILL DISCOVERY:[\s\S]*enumerated `C` URI goes directly in PLAN\/NOW[\s\S]*`skill:\/\/ecc-skill-catalog` remains only for unlisted niche discovery/iu);
-  assert.match(skillIndex, /`network\.design`[^\n]*C=\[`skill:\/\/ecc-skill-catalog\/network-config-validation\/SKILL\.md`, `skill:\/\/ecc-skill-catalog\/safety-guard\/SKILL\.md`\][^\n]*PLAN URI:/iu);
+  assert.deepEqual(indexedWorkflowIds, workflowIds);
+  assert.match(skillIndex, /^## Domain index$/mu);
+  assert.match(skillIndex, /^## Usage$/mu);
+  assert.match(skillIndex, /1\. Match the task to a domain above\./u);
   assert.ok(Buffer.byteLength(skillIndex) < 17_000, 'Main workflow index should stay below 17k');
-  assert.match(skillIndex, /Navigation only[\s\S]*never routes[\s\S]*gates[\s\S]*decides completion/i);
+  assert.doesNotMatch(skillIndex, /DECLARE HANDOFF|WORKFLOW PLAN|WORKFLOW READY|SENTINEL|byte 0|NOW=|THEN=|RESOURCE EXTENSION|Delegate Agent=|EXECUTION DEFAULT/i);
   assert.doesNotMatch(skillIndex, /block:\s*true|continue:\s*true|hard router|automatic retry/iu);
-  assert.doesNotMatch(skillIndex, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
 
   assert.deepEqual(Object.keys(referencesByWorkflow), workflowIds);
 
   for (const definition of workflowDefinitions) {
+    const section = referenceSection(skillReferences, definition.id);
+    const catalogSection = catalogSectionOf(catalog, definition.id);
     assert.ok(
-      skillIndex.includes(`PLAN URI: \`${workflowReferenceUri(definition.id)}\`.`),
+      skillIndex.includes(`Reference: \`${workflowReferenceUri(definition.id)}\`.`),
       `${definition.id} is missing its literal reference URI`,
     );
-    assert.equal((referencesByWorkflow[definition.id].match(/^## `/gm) ?? []).length, 1, `${definition.id} reference must contain one card`);
-    const section = workflowSkillSection(skillReferences, definition.id);
-    const catalogSection = workflowCatalogSection(catalog, definition.id);
-    assert.ok(section.includes(`- Primary when: ${definition.chooseWhen}`), `${definition.id} chooseWhen is hidden from Main`);
-    assert.doesNotMatch(section, /Add-on candidates/iu, `${definition.id} reference should not reopen composition after PLAN`);
-    for (const [index, step] of definition.steps.entries()) {
-      assert.ok(section.includes(`${index + 1}. [${step.id}] ${step.text}`), `${definition.id} is missing ${step.id}`);
-    }
+    assert.ok(section.includes(`- When: ${definition.chooseWhen}`), `${definition.id} chooseWhen is hidden from Main`);
+    assert.ok(section.includes('- Suggested flow:'), `${definition.id} reference must render suggested flow`);
+    assert.ok(section.includes('- Scope notes:'), `${definition.id} reference must render scope notes`);
     for (const skill of definition.skills) {
-      const uri = definition.catalogSkills.includes(skill)
-        ? exactNestedEccSkillUri(skill)
-        : `skill://${skill}`;
-      assert.ok(catalogSection.includes(`\`${uri}\``), `${definition.id} catalog is missing exact Skill URI ${uri}`);
+      assert.ok(section.includes(`\`${skill}\``), `${definition.id} reference is missing skill ${skill}`);
+      assert.ok(catalogSection.includes(`\`${skill}\``), `${definition.id} catalog card is missing skill ${skill}`);
     }
-    assert.doesNotMatch(section, /Optional Skill topics|Skill candidates/iu, `${definition.id} reference should not reopen Skill selection after PLAN`);
     for (const role of definition.roles) {
-      assert.ok(section.includes(`\`${role}\``), `${definition.id} is missing optional role ${role}`);
+      assert.ok(section.includes(`\`${role}\``), `${definition.id} is missing role ${role}`);
+      assert.ok(catalogSection.includes(`\`${role}\``), `${definition.id} catalog card is missing role ${role}`);
     }
-    for (const line of definition.delegation) assert.ok(section.includes(withoutTerminalPunctuation(line)));
-    for (const line of definition.qualityChecks) assert.ok(section.includes(withoutTerminalPunctuation(line)));
-    for (const line of definition.scopeNotes) assert.ok(section.includes(withoutTerminalPunctuation(line)));
-    for (const line of definition.riskNotes) assert.ok(section.includes(withoutTerminalPunctuation(line)));
-    assert.ok(
-      section.includes(`EXECUTION DEFAULT (soft): ${executionDefaultLabel(definition.delegationDefault)}`),
-      `${definition.id} reference is missing ${definition.delegationDefault}`,
-    );
-    assert.ok(
-      catalogSection.includes(`- Execution default (soft): ${executionDefaultLabel(definition.delegationDefault)}`),
-      `${definition.id} catalog card is missing ${definition.delegationDefault}`,
-    );
+    for (const line of definition.suggestedFlow) {
+      assert.ok(section.includes(line), `${definition.id} reference is missing suggested flow line`);
+    }
+    assert.doesNotMatch(section, /EXECUTION DEFAULT|READY NEXT|TASK COPY|AFTER TODO RESULT|Delegate Agent=|SENTINEL|byte 0|WORKFLOW READY/i, definition.id);
   }
-
-  assert.match(catalog, /filled PLAN[^\n]*byte 0 is `W`[\s\S]*filled `WORKFLOW READY \|`[^\n]*byte 0 is `W`/iu);
-  assert.match(catalog, /exact nested ECC URI listed on a card[^\n]*directly in PLAN\/NOW[^\n]*`skill:\/\/ecc-skill-catalog`[^\n]*unlisted niche discovery/iu);
 
   assert.equal(countSharedCatalogImports(agents), 0, 'Main should use the compact prompt and on-demand workflow Skill');
   assert.equal(countSharedCatalogImports(watchdog), 0, 'Advisor should coach Main through the on-demand workflow Skill without a full catalog import');
   assert.match(agents, /OMP's native system prompt, settings, active tools, dynamic Available Agents, approval flow, and completion behavior are authoritative/);
-  assert.match(agents, /DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY/u);
-  assert.match(agents, /verbatim field or heading lookup without analysis[\s\S]*use no workflow Skill or TODO/is);
-  assert.match(agents, /Only a native `skill-prompt` body named `omp-enhancer-workflows` counts as the supplied index[\s\S]*AGENTS\.md[\s\S]*Available Skills list[\s\S]*do not count[\s\S]*Otherwise the first PROJECT tool batch reads only `skill:\/\/omp-enhancer-workflows`[\s\S]*wait/iu);
-  assert.match(agents, /next response puts the filled PLAN in visible assistant text before any resource call[\s\S]*byte 0 is `W`:\n\nWORKFLOW PLAN\nPrimary: <id-or-none>\nAdd-ons: <ids-or-none>\nSkills: <exact domain Skill\/catalog URIs-or-none>\nLoad order: NOW=\[<chosen non-supplied Skill\/catalog URIs-or-none>\] THEN=\[<Add-on PLAN URIs; Primary PLAN URI last-or-none>\]\nActions:\n1\. LOAD:[\s\S]*2\. COMMIT:[\s\S]*3\. SPLIT \+ EXECUTE:[\s\S]*4\. VERIFY:/i);
-  assert.match(agents, /Primary and Add-ons are workflow IDs copied verbatim from the loaded index[\s\S]*Skill names are never workflow IDs/iu);
-  assert.match(agents, /visible assistant text before any resource call[\s\S]*resource call without that visible PLAN/iu);
-  assert.doesNotMatch(agents, /assistant content\[0\]/iu);
-  assert.match(agents, /`Skills` lists exact domain Skill\/catalog URIs only[\s\S]*workflow references appear only in `THEN`[\s\S]*`NOW` copies the chosen Skill\/catalog URIs[\s\S]*`THEN` copies selected Add-on `PLAN URI` values in order and the Primary `PLAN URI` once and last/iu);
-  assert.match(agents, /Index `D` entries are top-level exact URIs[\s\S]*`C` entries are enumerated nested ECC exact URIs[\s\S]*selected D\/C entries copy directly into `Skills` and `NOW`[\s\S]*unlisted niche discovery/iu);
-  assert.match(agents, /PLAN response reads exactly `NOW` once and waits[\s\S]*When `NOW=\[none\]`, it reads exactly `THEN` once and waits[\s\S]*no project tool, `todo`, or `task`/iu);
-  assert.match(agents, /RESOURCE EXTENSION \| source=<loaded-exact-skill-uri> \| reads=<revealed-exact-skill-uris>/u);
-  assert.match(agents, /at most three extension batches[\s\S]*two catalog hops plus one linked-method batch[\s\S]*source must already be loaded[\s\S]*never guess[\s\S]*reread/iu);
-  assert.match(agents, /After extensions, read `THEN` once in a final reference-only batch and wait/iu);
-  assert.match(agents, /Copy a visible Skill name `x` to literal `skill:\/\/x`[\s\S]*Bare `x` is a project path[\s\S]*not the complete runtime inventory[\s\S]*exact declared `skill:\/\/\.\.\.` resolver call fails/iu);
-  assert.match(agents, /native `skill-prompt` body is already loaded[\s\S]*keep its exact URI in PLAN `Skills`[\s\S]*omit it from `NOW`[\s\S]*never reread it/iu);
-  assert.match(claude, /native `skill-prompt` body is already loaded[\s\S]*keep its exact URI in PLAN `Skills`[\s\S]*omit it from `NOW`[\s\S]*never reread it/iu);
-  assert.match(agents, /Project tools start only after the READY \+ TODO response ends and its results return[\s\S]*user's explicit source-language description is sufficient[\s\S]*select only the visible `writing\.pending` option/iu);
-  assert.match(agents, /After its initial READY\/TODO wait[\s\S]*replacement PLAN[\s\S]*only new language Skills in NOW[\s\S]*language Primary reference last in THEN[\s\S]*replacement READY\/TODO/iu);
-  assert.match(agents, /After all declared resources return or are marked unavailable, the next response is the filled READY plus native TODO init[\s\S]*byte 0 is `W`[\s\S]*WORKFLOW READY \| primary=<id-or-none>[\s\S]*Rebase a detailed TODO/iu);
-  assert.match(agents, /Preserve every named plan audit, RED, GREEN, E2E, independent review, and parent verification checkpoint/iu);
-  assert.match(agents, /next response is the filled READY plus native TODO init[\s\S]*byte 0 is `W`[\s\S]*Apply the loaded-card soft compiler:[\s\S]*one exact Delegate row for that checkpoint[\s\S]*Parent VERIFY rows remain separate[\s\S]*Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>/iu);
-  assert.match(agents, /COMPILE \(soft\): loaded `subagent-driven` \+ complete input.*safe checkpoint.*visible matching Agent => Delegate row[\s\S]*fallback=<one matched permitted limitation>/iu);
-  assert.match(agents, /Main chooses direct work, Agent, and fork width from the committed TODO[\s\S]*Every non-simple loaded card is soft `subagent-driven`[\s\S]*`agentic\.simple` uses zero `task` calls/iu);
-  assert.match(agents, /After all parent-owned pre-dispatch prerequisites[\s\S]*committed `task` is the next project action/iu);
-  assert.match(agents, /\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]/i);
-  assert.match(agents, /copy the TODO Agent exactly to native `agent`[\s\S]*Copy workflow, step, skills, and the checkpoint verbatim[\s\S]*assignment byte 0/iu);
-  assert.match(agents, /Copy every direct user constraint verbatim into the job body[\s\S]*Fill every required native field[\s\S]*child follows its assignment and does not own the parent TODO/iu);
-  assert.match(claude, /copy the TODO Agent exactly to native `agent`[\s\S]*assignment byte 0[\s\S]*Copy every direct user constraint verbatim/iu);
-  assert.match(claude, /RESOURCE EXTENSION \| source=<loaded-exact-skill-uri> \| reads=<revealed-exact-skill-uris>/u);
-  assert.match(agents, /substantive code mutation[\s\S]*native `plan`.+drafts the parallel plan[\s\S]*native `task` slice owns test mutation, valid RED, minimum production, the same-command GREEN[\s\S]*writes `MAIN REVIEW` before native `reviewer`/iu);
-  assert.match(claude, /substantive code mutation[\s\S]*native `plan`.+drafts the parallel plan[\s\S]*valid RED[\s\S]*same-command GREEN[\s\S]*`MAIN REVIEW` before native `reviewer`/iu);
-  assert.doesNotMatch(`${agents}\n${claude}`, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
-  assert.doesNotMatch(`${agents}\n${claude}`, /block:\s*true|continue:\s*true|systemPrompt\s*=|triggerTurn\s*\(/iu);
-  assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
-  assert.match(watchdog, /Never call bash, write, edit, task, todo, or any unlisted tool/i);
-  assert.match(watchdog, /Use at most one ordinary `advise` per primary user task[\s\S]*complete user-visible Main final sets the budget to zero/i);
-  assert.match(watchdog, /workflow window is Main's `DISCOVER -> DECLARE -> LOAD -> COMMIT`[\s\S]*before its first native `task` or substantive project action[\s\S]*resource reads keep the window open/i);
-  assert.match(watchdog, /native `skill-prompt` body named `omp-enhancer-workflows`[\s\S]*AGENTS\.md[\s\S]*do not count[\s\S]*DISCOVER is complete: no read; PLAN is next/iu);
-  assert.match(watchdog, /next response puts filled PLAN in visible assistant text before declared resource calls[\s\S]*byte 0 is `W`[\s\S]*`NOW`[\s\S]*`THEN`[\s\S]*PLAN reads NOW only and waits[\s\S]*with NOW none it reads THEN and waits/iu);
-  assert.match(watchdog, /Index D is top-level exact and C is enumerated nested ECC exact[\s\S]*selected D\/C goes directly to Skills\/NOW[\s\S]*unlisted niche discovery/iu);
-  assert.match(watchdog, /RESOURCE EXTENSION \| source=<loaded-exact-skill-uri> \| reads=<revealed-exact-skill-uris>[\s\S]*Limit three batches[\s\S]*Final references use THEN once and wait/iu);
-  assert.match(watchdog, /next response after resource loading is filled READY plus native TODO init[\s\S]*byte 0 is `W`[\s\S]*Apply this soft compiler:[\s\S]*one `Delegate Agent=\.\.\. workflow=\.\.\. step=\.\.\. skills=\.\.\. checkpoint=\.\.\.` row[\s\S]*fallback=<one matched permitted limitation>/iu);
-  assert.match(watchdog, /writing\.pending[\s\S]*language-only read keeps it open through replacement PLAN\/LOAD\/READY/iu);
-  assert.doesNotMatch(watchdog, /assistant content\[0\]/iu);
-  assert.match(watchdog, /DECISION CHECK \(optional\) \| drift=<one-material-drift> \| evidence=<one-visible-fact> \| next=<one-smallest-safe-action>/i);
-  assert.match(watchdog, /Eligible drift includes an absent visible marker, undeclared resource, NOW\/THEN mismatch[\s\S]*task metadata mismatch/iu);
-  assert.match(watchdog, /Only exact declared `skill:\/\/\.\.\.` resolver failure supports Skill unavailability[\s\S]*supplied native `skill-prompt` body is loaded and omitted from NOW/iu);
-  assert.match(watchdog, /Never guess unseen workflow, Skill, or Agent IDs[\s\S]*choose resources[\s\S]*demand duplicate reads[\s\S]*choose a fork or reviewer count[\s\S]*Workflow\/Skill\/TODO\/schema drift alone is never a blocker/iu);
-  assert.doesNotMatch(watchdog, /block:\s*true|continue:\s*true|hard router|automatic retry|triggerTurn\s*\(/iu);
-  assert.match(catalog, /optional reference material/i);
-  assert.match(catalog, /staged sequence below is model guidance, not a runtime-enforced precondition or completion gate/i);
-  assert.match(catalog, /analysis, judgment, workflow composition, coordinated stages, or possible delegation/i);
-  assert.match(catalog, /mechanical field lookup without analysis[\s\S]*uses no Skill/is);
-  assert.match(catalog, /Main explicitly writes the exact `WORKFLOW PLAN` block[\s\S]*exact domain Skill or catalog URIs[\s\S]*NOW\/THEN resource load order[\s\S]*at least four detailed Actions/i);
-  assert.match(catalog, /PLAN uses `Load order: NOW=\[\.\.\.\] THEN=\[\.\.\.\]`[\s\S]*`Skills` lists exact domain Skill or catalog URIs only[\s\S]*THEN alone copies selected Add-on reference URIs plus the Primary once and last[\s\S]*Main reads NOW and waits[\s\S]*at most three visible `RESOURCE EXTENSION` batches[\s\S]*reads THEN once and waits/i);
-  assert.match(catalog, /Once resources are loaded or marked unavailable[\s\S]*next response is the filled `WORKFLOW READY \|` plus native TODO initialization[\s\S]*rebases the detailed TODO[\s\S]*calls only native TODO initialization[\s\S]*waits/iu);
-  assert.match(catalog, /Add-on enriches and never replaces the Primary/i);
-  assert.match(catalog, /selected combination remains Agent-owned/i);
-  assert.match(catalog, /small target is not by itself a reason for `agentic\.simple`/i);
-  assert.match(catalog, /literal TODO row `Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>`/i);
-  assert.match(catalog, /sets the native task item `agent` to the row Agent[\s\S]*mechanically copies workflow, step, and skills unchanged and the checkpoint value verbatim into `todo`/i);
-  assert.match(catalog, /task body copies every direct user constraint verbatim and adds no examples[\s\S]*carries allowed effects and acceptance items[\s\S]*outer context, name, or label cannot substitute/iu);
-  assert.match(catalog, /assignment text byte 0 begins `\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]`/i);
-  assert.match(catalog, /EXECUTION DEFAULTS \(soft\):[\s\S]*All other selected workflows use the `subagent-driven` default/iu);
-  assert.match(catalog, /defaults guide Main but never select an Agent or fork width/iu);
-  assert.match(catalog, /substantive code.+subagent-driven.+native `plan`.+native `task`.+native `reviewer`/isu);
-  assert.match(catalog, /same native `task` `tasks\[\]` batch.+runnable independent.+vertical slices.+dependent.+later wave/isu);
-  assert.match(catalog, /Main.+integrat.+current tree.+diff.+evidence.+review.+before.+reviewer/isu);
-  assert.match(catalog, /body of the text being modified/i);
-  assert.match(catalog, /`writing\.pending`[\s\S]*initial READY[\s\S]*one narrow source read[\s\S]*language only[\s\S]*one replacement `WORKFLOW PLAN`[\s\S]*same format Add-ons[\s\S]*new language Skills[\s\S]*language workflow reference last[\s\S]*do not reread loaded companions[\s\S]*replacement `WORKFLOW READY`/iu);
-  assert.match(catalog, /ORCHESTRATOR: Main is the orchestrator/iu);
-  assert.match(catalog, /Main never self-induces a fallback/iu);
-  assert.match(skillReferences, /ORCHESTRATOR: Main is the orchestrator/iu);
-  assert.match(skillReferences, /Main never self-induces a fallback/iu);
-  assert.match(catalog, /language remains ambiguous[\s\S]*ask the user[\s\S]*never loop or guess/iu);
-  assert.doesNotMatch(catalog, /block:\s*true|continue:\s*true|hard gate/i);
+  assert.match(agents, /ANALYZE -> EXECUTE -> REVIEW/u);
+  assert.match(agents, /never routes, blocks, grants permission, starts a task, or decides completion/iu);
+  assert.match(agents, /A verbatim field or heading lookup needs no workflow or TODO/iu);
+  assert.match(agents, /No plugin creates a gate, router, retry, permission, or completion controller/iu);
+  assert.doesNotMatch(agents, /WORKFLOW PLAN|WORKFLOW READY|SENTINEL|byte 0|RESOURCE EXTENSION|Delegate Agent=|writing\.pending/i);
+  assert.match(claude, /ANALYZE -> EXECUTE -> REVIEW/u);
+  assert.match(claude, /never routes, blocks, grants permission, starts a task, or decides completion/iu);
+  assert.match(watchdog, /Main is the orchestrator\. Phases: ANALYZE -> EXECUTE -> REVIEW/u);
+  assert.match(watchdog, /No plugin creates a gate, router, retry, permission, or completion controller/iu);
+  assert.doesNotMatch(`${catalog}\n${skillIndex}\n${skillReferences}\n${agents}\n${watchdog}`, /block:\s*true|continue:\s*true|triggerTurn|systemPrompt\s*=/i);
 });
 
 test('workflow schema rejects drift-prone definitions', () => {
   const valid = (overrides = {}) => ({
     id: 'example.base',
     chooseWhen: 'An example is needed.',
-    composeWith: [],
-    steps: [{ id: 'step-1', text: 'Perform the example.' }],
+    skills: ['example-skill'],
+    catalogSkills: [],
+    roles: ['task'],
+    suggestedFlow: ['Perform the example.'],
     scopeNotes: [],
-    skills: [],
-    qualityChecks: ['example is correct'],
-    riskNotes: [],
-    roles: [],
-    delegation: ['step-1: keep this workflow with the main agent'],
-    delegationDefault: 'direct-simple',
     ...overrides,
   });
 
   assert.throws(() => defineWorkflowCatalog([[valid(), valid()]]), /Duplicate workflow id/);
-  assert.throws(() => defineWorkflowCatalog([[valid({ composeWith: ['missing.workflow'] })]]), /unknown workflow/);
-  assert.throws(() => defineWorkflowCatalog([[valid({ delegation: ['step-2: keep this workflow with the main agent'] })]]), /unknown delegation step/);
-  assert.throws(() => defineWorkflowCatalog([[valid({ roles: ['reviewer'] })]]), /does not assign role reviewer/);
-  assert.throws(() => defineWorkflowCatalog([[valid({ delegation: ['step-1: fork independent evidence lane'] })]]), /does not retain work with the parent/);
-  assert.throws(
-    () => defineWorkflowCatalog([[valid({
-      roles: ['reviewer'],
-      delegation: ['step-1: main agent must not use reviewer'],
-    })]]),
-    /does not assign role reviewer/,
-  );
-  assert.throws(
-    () => defineWorkflowCatalog([[valid({ delegation: ['step-1: parent should delegate to a worker'] })]]),
-    /unlisted generic role/,
-  );
-  assert.throws(
-    () => defineWorkflowCatalog([[valid({
-      steps: [{ id: 'step-alpha', text: 'Perform the example.' }],
-      roles: ['reviewer'],
-      delegation: ['step-missing: reviewer reviews the example'],
-    })]]),
-    /unknown delegation step step-missing/,
-  );
-  assert.throws(() => defineWorkflowCatalog([[{ ...valid(), skill: ['misspelled'] }]]), /unknown field skill/);
-  assert.throws(
-    () => defineWorkflowCatalog([[valid({ steps: [{ id: 'step-1', text: 'Perform the example.', label: 'typo' }] })]]),
-    /unknown field label/,
-  );
+  assert.throws(() => defineWorkflowCatalog([[valid({ id: 'Example Base' })]]), /invalid identifier/);
+  assert.throws(() => defineWorkflowCatalog([[valid({ steps: [] })]]), /unknown field steps/);
+  assert.throws(() => defineWorkflowCatalog([[valid({ delegation: [] })]]), /unknown field delegation/);
+  assert.throws(() => defineWorkflowCatalog([[valid({ delegationDefault: 'subagent-driven' })]]), /unknown field delegationDefault/);
+  assert.throws(() => defineWorkflowCatalog([[valid({ composeWith: [] })]]), /unknown field composeWith/);
+  assert.throws(() => defineWorkflowCatalog([[valid({ qualityChecks: [] })]]), /unknown field qualityChecks/);
+  assert.throws(() => defineWorkflowCatalog([[valid({ riskNotes: [] })]]), /unknown field riskNotes/);
   assert.throws(() => defineWorkflowCatalog([[valid({ chooseWhen: 42 })]]), /chooseWhen must be a string/);
-  assert.throws(
-    () => defineWorkflowCatalog([[valid({ qualityChecks: [{}] })]]),
-    /qualityChecks\[0\] must be a string/,
-  );
+  assert.throws(() => defineWorkflowCatalog([[valid({ suggestedFlow: [{}] })]]), /suggestedFlow\[0\] must be a string/);
+  assert.throws(() => defineWorkflowCatalog([[valid({ suggestedFlow: [] })]]), /must contain at least one entry/);
   assert.throws(
     () => defineWorkflowCatalog([[valid({ chooseWhen: 'Unsafe\nsecond line.' })]]),
     /single-line string/,
@@ -297,13 +163,18 @@ test('workflow schema rejects drift-prone definitions', () => {
     /reserved managed marker/,
   );
   assert.throws(
-    () => defineWorkflowCatalog([[valid({ steps: ['Implicit step ID'] })]]),
-    /explicit stable id/,
+    () => defineWorkflowCatalog([[valid({ catalogSkills: ['unlisted-candidate'] })]]),
+    /non-candidate/,
   );
-  assert.doesNotThrow(() => defineWorkflowCatalog([[valid({
-    steps: [{ id: 'step-alpha', text: 'Perform the example.' }],
-    delegation: ['step-alpha: keep this workflow with the main agent'],
-  })]]));
+  assert.throws(
+    () => defineWorkflowCatalog([[valid({ skills: ['example-skill', 'example-skill'] })]]),
+    /duplicate/,
+  );
+  assert.throws(
+    () => defineWorkflowCatalog([[valid({ roles: ['Bad Role'] })]]),
+    /invalid identifier/,
+  );
+  assert.doesNotThrow(() => defineWorkflowCatalog([[valid()]]));
 });
 
 test('extension workflow roles have one owner while OMP native roles have no plugin owner', async () => {
@@ -339,16 +210,8 @@ test('extension workflow roles have one owner while OMP native roles have no plu
   }
 });
 
-test('ordinary code work uses plan plus native task and reviewer without plugin wrappers', () => {
-  assert.deepEqual(workflowCatalog['code.dev'].roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
-  assert.deepEqual(workflowCatalog['database.change'].roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
-  assert.deepEqual(workflowCatalog['database.migration.repair'].roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
-  assert.deepEqual(workflowCatalog['ml.debug'].roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
-  assert.deepEqual(workflowCatalog['omp.plugin'].roles, ['plan', 'task', 'reviewer', 'scout', 'librarian']);
-  assert.deepEqual(workflowCatalog['database.review'].roles, ['task', 'reviewer']);
-  assert.deepEqual(workflowCatalog['ml.review'].roles, ['task', 'reviewer']);
-  assert.deepEqual(workflowCatalog['security.review'].roles, ['ecc-security-reviewer']);
-  assert.deepEqual(workflowCatalog['release.publish'].roles, ['task', 'reviewer']);
+test('code workflow names the packaged analyzer plus native task, reviewer, scout, and librarian', () => {
+  assert.deepEqual(workflowCatalog.code.roles, ['analyzer', 'task', 'reviewer', 'scout', 'librarian']);
 
   const allRoles = new Set(Object.values(workflowCatalog).flatMap(({ roles }) => roles));
   for (const retired of [
@@ -362,26 +225,13 @@ test('ordinary code work uses plan plus native task and reviewer without plugin 
   ]) {
     assert.equal(allRoles.has(retired), false, retired);
   }
-  const BOUNDED_DIFF_AUDIT_IDS = new Set([
-    'code.dev',
-    'database.review',
-    'database.change',
-    'database.migration.repair',
-    'ml.review',
-    'ml.debug',
-    'omp.plugin',
-    'seo.audit',
-  ]);
-  for (const [id, workflow] of Object.entries(workflowCatalog)) {
-    if (BOUNDED_DIFF_AUDIT_IDS.has(id)) {
-      assert.match(workflow.delegation.join(' '), /(?:reviewer|review).+bounded.+(?:diff|patch).+evidence/i, `${id}: OMP reviewer must receive the bounded diff and evidence`);
-      assert.match(
-        workflow.delegation.join(' '),
-        /(?:does not read.+project.+run(?: a)? commands?|without project reads?, commands?)/i,
-        `${id}: OMP reviewer must not inspect the project or run commands`,
-      );
-    }
-  }
+  assert.equal(allRoles.has('ecc-network-architect'), true);
+  assert.equal(allRoles.has('ecc-network-config-reviewer'), true);
+  assert.equal(allRoles.has('ecc-network-troubleshooter'), true);
+  assert.equal(allRoles.has('ecc-security-reviewer'), true);
+  assert.equal(allRoles.has('ecc-opensource-sanitizer'), true);
+  assert.equal(allRoles.has('ecc-opensource-forker'), true);
+  assert.equal(allRoles.has('ecc-opensource-packager'), true);
 });
 
 test('README stays user-focused and links the detailed current documentation', async () => {
@@ -389,12 +239,10 @@ test('README stays user-focused and links the detailed current documentation', a
   assert.ok(readme.split('\n').length <= 110, 'root README should remain a concise user guide');
   assert.ok(Buffer.byteLength(readme) <= 6500, 'development detail belongs under docs');
   assert.match(readme, /OMP exposes available Skills and Agents; Main chooses under native permissions/i);
-  assert.match(readme, /Only the exact native `skill-prompt` body named `omp-enhancer-workflows` counts as supplied/i);
-  assert.match(readme, /`D` is a top-level Skill exact URI[\s\S]*`C` is an enumerated nested ECC exact URI[\s\S]*selected `D` or `C` URI goes directly into `WORKFLOW PLAN` and `NOW`[\s\S]*unenumerated long-tail ECC method requires `skill:\/\/ecc-skill-catalog`/i);
-  assert.match(readme, /Writing choices are grouped as language, format overlays, and specialized outputs[\s\S]*`writing\.en` or `writing\.zh` is Primary[\s\S]*LaTeX is an Add-on[\s\S]*format workflow is Primary only for format- or structure-only work/i);
-  assert.match(readme, /mechanical field lookups? without analysis.*no Skill or TODO/is);
-  assert.match(readme, /PLAN response starts at byte 0 with `WORKFLOW PLAN`[\s\S]*READY response starts at byte 0 with `WORKFLOW READY \| \.\.\.`[\s\S]*rebases the detailed TODO/i);
-  assert.match(readme, /Non-simple workflows softly default to subagent-driven execution[\s\S]*Main owns integration, verification, permissions, and effects/i);
+  assert.match(readme, /covers 5 domains: code, writing, research, visual, and operations/i);
+  assert.match(readme, /Main orchestrates through ANALYZE -> EXECUTE -> REVIEW/i);
+  assert.match(readme, /`D` is a top-level Skill exact URI; `C` is an enumerated nested ECC exact URI/i);
+  assert.match(readme, /there is no separate pending workflow/i);
   assert.match(readme, /extension tools except tikz-helper are inactive by default/i);
   assert.match(readme, /\/enhancer-tools enable/i);
   assert.match(readme, /there is no plugin `\/test` command/i);
@@ -404,26 +252,18 @@ test('README stays user-focused and links the detailed current documentation', a
   assert.doesNotMatch(readme, /TODO-first|full workflow-catalog injection|omp_core_route_task|omp_test_gate|fact_check_gate/i);
 });
 
-function workflowSkillSection(catalog, id) {
-  const start = catalog.indexOf(`## \`${id}\`\n`);
-  const next = catalog.indexOf('\n## `', start + 1);
-  assert.ok(start >= 0, `missing workflow Skill section ${id}`);
-  return catalog.slice(start, next < 0 ? catalog.length : next);
+function referenceSection(references, id) {
+  const start = references.indexOf(`# \`${id}\` workflow reference`);
+  const next = references.indexOf('\n# `', start + 1);
+  assert.ok(start >= 0, `missing workflow reference section ${id}`);
+  return references.slice(start, next < 0 ? references.length : next);
 }
 
-function workflowCatalogSection(catalog, id) {
-  const start = catalog.indexOf(`### \`${id}\`\n`);
-  const next = catalog.indexOf('\n### `', start + 1);
+function catalogSectionOf(catalog, id) {
+  const start = catalog.indexOf(`## \`${id}\``);
+  const next = catalog.indexOf('\n## `', start + 1);
   assert.ok(start >= 0, `missing shared catalog section ${id}`);
   return catalog.slice(start, next < 0 ? catalog.length : next);
-}
-
-function withoutTerminalPunctuation(value) {
-  return value.replace(/[.!?]+$/u, '');
-}
-
-function executionDefaultLabel(delegationDefault) {
-  return `\`${delegationDefault}\``;
 }
 
 function countSharedCatalogImports(value) {
@@ -481,19 +321,3 @@ function frontmatterName(markdown, source) {
   assert.ok(name, `${source} is missing a frontmatter name`);
   return name;
 }
-
-test('all subagent-driven cards render the audit-willingness default and mutation cards name Main-authored coverage', async () => {
-  const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
-  assert.equal(
-    (catalog.match(/An audit checkpoint named by this card is delegated by default/g) ?? []).length,
-    29,
-  );
-  for (const id of ['code.dev', 'database.change', 'database.migration.repair', 'ml.debug', 'omp.plugin']) {
-    const ref = await readFile(new URL(`../plugins/omp-config/skills/omp-enhancer-workflows/references/${id}.md`, import.meta.url), 'utf8');
-    assert.match(ref, /Main-authored/u, id);
-  }
-  const netDebugRef = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/network.debug.md', import.meta.url), 'utf8');
-  assert.match(netDebugRef, /\[step-audit\]/u);
-  assert.match(netDebugRef, /fall[s]? back only when native reviewer is unavailable/u);
-  assert.deepEqual(workflowCatalog['network.debug'].roles, ['ecc-network-troubleshooter', 'reviewer']);
-});

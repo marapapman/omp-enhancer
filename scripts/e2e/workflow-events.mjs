@@ -290,28 +290,13 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
     workflowPreparation,
     visibleAdvisorMessages,
   );
-  const pendingPreparationCallIds = new Set();
-  if (workflowPreparation.pendingLanguageTransition?.valid === true) {
-    pendingPreparationCallIds.add(workflowPreparation.pendingLanguageTransition.languageReadCallId);
-    for (const batchIndex of [
-      workflowPreparation.pendingLanguageTransition.initialReadyBatchIndex,
-      workflowPreparation.pendingLanguageTransition.replacementReadyBatchIndex,
-    ]) {
-      for (const call of calls.filter(({ assistantBatchIndex }) => assistantBatchIndex === batchIndex)) {
-        pendingPreparationCallIds.add(call.id);
-      }
-    }
-  }
-  const projectToolCalls = calls.filter((call) => (
-    !nonProjectResourceReadFromCall(call) && !pendingPreparationCallIds.has(call.id)
-  ));
+  const projectToolCalls = calls.filter((call) => !nonProjectResourceReadFromCall(call));
   const firstProjectToolCallEventIndex = projectToolCalls.length
     ? Math.min(...projectToolCalls.map(({ eventIndex }) => eventIndex))
     : null;
   const substantiveToolCalls = calls.filter((call) => (
     !nonProjectResourceReadFromCall(call)
     && !ORCHESTRATION_TOOLS.has(call.name)
-    && !pendingPreparationCallIds.has(call.id)
   ));
   const firstSubstantiveToolCallEventIndex = substantiveToolCalls.length
     ? Math.min(...substantiveToolCalls.map(({ eventIndex }) => eventIndex))
@@ -436,13 +421,6 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     );
   }
   const workflowPreparation = summary.workflowPreparation ?? {};
-  if (workflowPreparation.pendingLanguageTransition?.valid === false) {
-    failures.push(...workflowPreparation.pendingLanguageTransition.failures);
-  }
-  if (expectations.requireWorkflowIndexOnlyFirstToolBatch === true
-    && workflowPreparation.indexOnlyFirstToolBatch !== true) {
-    failures.push('workflow index was not the only successful call in the first assistant tool batch');
-  }
   if (expectations.requireWorkflowPlanBeforeResourceLoads === true
     && workflowPreparation.planAfterIndexBeforeLoadsOrProjectTools !== true) {
     failures.push('WORKFLOW PLAN was not observed after the workflow index completed and before resource or project tools');
@@ -891,9 +869,7 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   }
   const requiredTaskMetadata = Array.isArray(expectations.requiredNativeTaskMetadata)
     ? expectations.requiredNativeTaskMetadata
-    : expectations.requireNativeTaskMetadataPrefix === true
-      ? TASK_ASSIGNMENT_METADATA_FIELDS
-      : [];
+    : [];
   if (requiredTaskMetadata.length) {
     const assignments = nativeTask.assignments ?? [];
     if (!assignments.length) {
@@ -912,14 +888,6 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     const inexact = assignments.filter(({ hasExactMetadataPrefix }) => hasExactMetadataPrefix !== true);
     if (!assignments.length || inexact.length) {
       failures.push(`${inexact.length || 'all'} native task assignment(s) omitted the exact compact metadata prefix`);
-    }
-  }
-  if (expectations.requireNativeTaskMetadataMatchesDelegatedTodoRows === true) {
-    const assignments = nativeTask.assignments ?? [];
-    const initializedItems = summary.nativeTodo?.initializedItems ?? [];
-    const mismatched = unmatchedAssignmentsForDelegatedTodoRows(initializedItems, assignments);
-    if (!assignments.length || mismatched.length) {
-      failures.push(`${mismatched.length || 'all'} native task assignment(s) did not mechanically match an initialized delegated TODO row`);
     }
   }
   if (expectations.requireNativeTaskSubmissionForEveryAssignment === true
@@ -1608,19 +1576,6 @@ function assignmentMatchesDelegatedTodoRow(initializedItems, assignment) {
   return initializedItems.some((item) => {
     const delegated = delegatedTodoMetadata(item);
     return delegatedTodoMatchesAssignment(delegated, assignment);
-  });
-}
-
-function unmatchedAssignmentsForDelegatedTodoRows(initializedItems, assignments) {
-  const delegatedRows = initializedItems.map(delegatedTodoMetadata);
-  const consumedRowIndexes = new Set();
-  return assignments.filter((assignment) => {
-    const matchingRowIndex = delegatedRows.findIndex((delegated, index) => (
-      !consumedRowIndexes.has(index) && delegatedTodoMatchesAssignment(delegated, assignment)
-    ));
-    if (matchingRowIndex === -1) return true;
-    consumedRowIndexes.add(matchingRowIndex);
-    return false;
   });
 }
 
@@ -2537,11 +2492,6 @@ function summarizeWorkflowPreparation(calls, assistantBatches) {
     ))
     .sort(compareCallPositions);
   const discoveryIndexCall = successfulIndexCalls.at(0) ?? null;
-  const indexOnlyFirstToolBatch = provenanceComplete
-    && firstToolBatchCalls.length === 1
-    && firstToolBatchCalls[0].workflowStageKind === 'workflow-index'
-    && firstToolBatchCalls[0].completed === true
-    && firstToolBatchCalls[0].isError === false;
   const callsAfterDiscoveryGate = discoveryIndexCall
     ? primaryCalls.filter(({ id }) => id !== discoveryIndexCall.id)
     : primaryCalls;
@@ -2552,20 +2502,8 @@ function summarizeWorkflowPreparation(calls, assistantBatches) {
       && callsAfterDiscoveryGate.every((call) => markerBeforeCall(marker, call))
     )) ?? null
     : null;
-  const pendingLanguageTransition = summarizePendingLanguageTransition({
-    planMarkers,
-    readyMarkers,
-    initialPlanMarker: initialValidPlanMarker,
-    primaryCalls,
-    preparationCalls,
-    callsByBatch,
-  });
-  const validPlanMarker = pendingLanguageTransition?.valid
-    ? pendingLanguageTransition.replacementPlanMarker
-    : initialValidPlanMarker;
-  const validReadyMarker = pendingLanguageTransition?.valid
-    ? pendingLanguageTransition.replacementReadyMarker
-    : readyMarkers.find((marker) => (
+  const validPlanMarker = initialValidPlanMarker;
+  const validReadyMarker = readyMarkers.find((marker) => (
     preparationCalls.every((call) => (
       call.completed === true
       && Number.isFinite(call.completionEventIndex)
@@ -2606,7 +2544,6 @@ function summarizeWorkflowPreparation(calls, assistantBatches) {
     preparationResourceCallIds: preparationCalls.map(({ id }) => id),
     projectCallIds: projectCalls.map(({ id }) => id),
     mixedResourceProjectBatchIndexes,
-    indexOnlyFirstToolBatch,
     planAfterIndexBeforeLoadsOrProjectTools: provenanceComplete && Boolean(validPlanMarker),
     readyAfterLoadsBeforeProjectTools: provenanceComplete
       && Boolean(validPlanMarker)
@@ -2619,180 +2556,15 @@ function summarizeWorkflowPreparation(calls, assistantBatches) {
     workflowPlanDeclaration: workflowDeclarationSummary(validPlanMarker?.declaration),
     workflowReadyDeclaration: workflowDeclarationSummary(validReadyMarker?.declaration),
     initialWorkflowPlanDeclaration: workflowDeclarationSummary(initialValidPlanMarker?.declaration),
-    pendingLanguageTransition: pendingLanguageTransition ? {
-      valid: pendingLanguageTransition.valid,
-      failures: [...pendingLanguageTransition.failures],
-      languageReadCallId: pendingLanguageTransition.languageReadCall?.id ?? null,
-      initialPlanBatchIndex: pendingLanguageTransition.initialPlanMarker?.batchIndex ?? null,
-      initialReadyBatchIndex: pendingLanguageTransition.initialReadyMarker?.batchIndex ?? null,
-      replacementPlanBatchIndex: pendingLanguageTransition.replacementPlanMarker?.batchIndex ?? null,
-      replacementReadyBatchIndex: pendingLanguageTransition.replacementReadyMarker?.batchIndex ?? null,
-    } : null,
     workflowPlanPhases: workflowPlanPhases({
-      pendingLanguageTransition,
       validPlanMarker,
       validReadyMarker,
     }),
   };
 }
 
-function summarizePendingLanguageTransition({
-  planMarkers,
-  readyMarkers,
-  initialPlanMarker,
-  primaryCalls,
-  preparationCalls,
-  callsByBatch,
-}) {
-  const initialPrimary = initialPlanMarker?.declaration?.primary ?? null;
-  if (initialPrimary !== 'writing.pending') {
-    if (planMarkers.length <= 1) return null;
-    return {
-      valid: false,
-      failures: ['repeated WORKFLOW PLAN is allowed only for writing.pending language resolution'],
-      initialPlanMarker,
-      initialReadyMarker: null,
-      replacementPlanMarker: planMarkers.at(1) ?? null,
-      replacementReadyMarker: null,
-      languageReadCall: null,
-    };
-  }
-
-  const failures = [];
-  if (planMarkers.length !== 2) {
-    failures.push(`writing.pending requires exactly one replacement WORKFLOW PLAN; observed ${Math.max(0, planMarkers.length - 1)}`);
-  }
-  if (readyMarkers.length !== 2) {
-    failures.push(`writing.pending requires initial and replacement WORKFLOW READY; observed ${readyMarkers.length}`);
-  }
-  const replacementPlanMarker = planMarkers.at(1) ?? null;
-  const initialReadyMarker = readyMarkers.find((marker) => (
-    initialPlanMarker
-    && markerBeforeMarker(initialPlanMarker, marker)
-    && (!replacementPlanMarker || markerBeforeMarker(marker, replacementPlanMarker))
-  )) ?? null;
-  const replacementReadyMarker = readyMarkers.find((marker) => (
-    replacementPlanMarker && markerBeforeMarker(replacementPlanMarker, marker)
-  )) ?? null;
-  if (!initialReadyMarker) failures.push('writing.pending initial WORKFLOW READY was missing before language resolution');
-  if (!replacementPlanMarker) failures.push('writing.pending replacement WORKFLOW PLAN was missing');
-  if (!replacementReadyMarker) failures.push('writing.pending replacement WORKFLOW READY was missing');
-
-  for (const [label, marker] of [
-    ['initial WORKFLOW PLAN', initialPlanMarker],
-    ['initial WORKFLOW READY', initialReadyMarker],
-    ['replacement WORKFLOW PLAN', replacementPlanMarker],
-    ['replacement WORKFLOW READY', replacementReadyMarker],
-  ]) {
-    if (marker && marker.firstVisibleContent !== true) {
-      failures.push(`writing.pending ${label} was not visible at byte 0`);
-    }
-  }
-
-  const initialPlan = initialPlanMarker?.declaration ?? null;
-  const initialReady = initialReadyMarker?.declaration ?? null;
-  const replacementPlan = replacementPlanMarker?.declaration ?? null;
-  const replacementReady = replacementReadyMarker?.declaration ?? null;
-  if (initialReady && !declarationsShareSelection(initialPlan, initialReady)) {
-    failures.push('writing.pending initial READY did not preserve the pending selection');
-  }
-  if (replacementPlan && !['writing.en', 'writing.zh'].includes(replacementPlan.primary)) {
-    failures.push(`writing.pending replacement primary was ${replacementPlan.primary ?? '<none>'}, expected writing.en or writing.zh`);
-  }
-  if (replacementPlan && !sameStringList(initialPlan?.addOns, replacementPlan.addOns)) {
-    failures.push('writing.pending format companions changed in the replacement PLAN');
-  }
-  if (replacementReady && !declarationsShareSelection(replacementPlan, replacementReady)) {
-    failures.push('writing.pending replacement READY did not preserve the replacement selection');
-  }
-
-  const callsBetween = (startMarker, endMarker) => (
-    !startMarker || !endMarker ? [] : primaryCalls.filter((call) => (
-      Number.isFinite(call.eventIndex)
-      && call.eventIndex > startMarker.eventIndex
-      && call.eventIndex < endMarker.eventIndex
-    ))
-  );
-  const transitionCalls = callsBetween(initialReadyMarker, replacementPlanMarker);
-  const languageReads = transitionCalls.filter((call) => (
-    call.name === 'read' && call.workflowStageKind === 'project'
-  ));
-  const languageReadCall = languageReads.length === 1 ? languageReads[0] : null;
-  if (transitionCalls.length !== 1 || !languageReadCall) {
-    failures.push('writing.pending transition must contain exactly one narrow project read and no substantive companion action');
-  } else if (languageReadCall.completed !== true
-    || languageReadCall.isError !== false
-    || !Number.isFinite(languageReadCall.completionEventIndex)
-    || languageReadCall.completionEventIndex >= replacementPlanMarker.eventIndex) {
-    failures.push('writing.pending language-only read did not complete successfully before replacement PLAN');
-  }
-
-  const beforeInitialReady = preparationCalls.filter((call) => (
-    initialPlanMarker
-    && initialReadyMarker
-    && markerBeforeCall(initialPlanMarker, call)
-    && Number.isFinite(call.completionEventIndex)
-    && call.completionEventIndex < initialReadyMarker.eventIndex
-  ));
-  const loadedBeforeTransition = new Set(beforeInitialReady
-    .filter((call) => call.completed === true && call.isError === false)
-    .map(readTargetFromCall));
-  const repeated = (replacementPlan?.loadOrder ?? [])
-    .map(stripOuterMarkdown)
-    .filter((uri) => loadedBeforeTransition.has(uri));
-  if (repeated.length > 0) {
-    failures.push(`writing.pending replacement PLAN reread loaded companion resource(s): ${repeated.join(', ')}`);
-  }
-  const languageReference = replacementPlan?.primary
-    ? `skill://omp-enhancer-workflows/references/${replacementPlan.primary}.md`
-    : '';
-  if (replacementPlan && replacementPlan.loadOrder.at(-1) !== languageReference) {
-    failures.push(`writing.pending replacement PLAN did not put its language reference last: ${languageReference || '<none>'}`);
-  }
-
-  const replacementWindowCalls = callsBetween(replacementPlanMarker, replacementReadyMarker);
-  const invalidReplacementCalls = replacementWindowCalls.filter((call) => (
-    !isWorkflowPreparationResourceKind(call.workflowStageKind)
-  ));
-  if (invalidReplacementCalls.length > 0) {
-    failures.push('writing.pending performed substantive work between replacement PLAN and replacement READY');
-  }
-  for (const [label, marker] of [
-    ['initial', initialReadyMarker],
-    ['replacement', replacementReadyMarker],
-  ]) {
-    if (!marker) continue;
-    const batchCalls = callsByBatch.get(marker.batchIndex) ?? [];
-    const todoOnly = batchCalls.length === 1
-      && batchCalls[0].name === 'todo'
-      && batchCalls[0].arguments?.op === 'init'
-      && batchCalls[0].completed === true
-      && batchCalls[0].isError === false;
-    if (!todoOnly) failures.push(`writing.pending ${label} READY batch was not TODO-init-only`);
-  }
-
-  return {
-    valid: failures.length === 0,
-    failures,
-    initialPlanMarker,
-    initialReadyMarker,
-    replacementPlanMarker,
-    replacementReadyMarker,
-    languageReadCall,
-  };
-}
-
-function workflowPlanPhases({ pendingLanguageTransition, validPlanMarker, validReadyMarker }) {
-  const phases = pendingLanguageTransition?.valid ? [
-    {
-      planMarker: pendingLanguageTransition.initialPlanMarker,
-      readyMarker: pendingLanguageTransition.initialReadyMarker,
-    },
-    {
-      planMarker: pendingLanguageTransition.replacementPlanMarker,
-      readyMarker: pendingLanguageTransition.replacementReadyMarker,
-    },
-  ] : [{ planMarker: validPlanMarker, readyMarker: validReadyMarker }];
+function workflowPlanPhases({ validPlanMarker, validReadyMarker }) {
+  const phases = [{ planMarker: validPlanMarker, readyMarker: validReadyMarker }];
   return phases.filter(({ planMarker }) => planMarker).map(({ planMarker, readyMarker }) => ({
     planBatchIndex: planMarker.batchIndex,
     planEventIndex: planMarker.eventIndex,
@@ -2800,14 +2572,6 @@ function workflowPlanPhases({ pendingLanguageTransition, validPlanMarker, validR
     readyEventIndex: readyMarker?.eventIndex ?? null,
     declaration: workflowDeclarationSummary(planMarker.declaration),
   }));
-}
-
-function declarationsShareSelection(left, right) {
-  return left?.primary === right?.primary && sameStringList(left?.addOns, right?.addOns);
-}
-
-function sameStringList(left = [], right = []) {
-  return JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());
 }
 
 function isWorkflowPreparationResourceKind(kind) {
@@ -3344,18 +3108,6 @@ function workflowLoadOrderFailures(summary, workflowPreparation, expectations) {
   const failures = [];
   const declared = (workflowPreparation.workflowPlanDeclaration?.loadOrder ?? [])
     .map(stripOuterMarkdown);
-  const executionDeclared = workflowPreparation.pendingLanguageTransition?.valid === true
-    ? (workflowPreparation.workflowPlanPhases ?? []).flatMap(({ declaration }) => (
-      (declaration?.loadOrder ?? []).map(stripOuterMarkdown)
-    ))
-    : declared;
-  const required = Array.isArray(expectations.requiredWorkflowLoadOrder)
-    ? expectations.requiredWorkflowLoadOrder.map(stripOuterMarkdown)
-    : null;
-
-  if (required && JSON.stringify(declared) !== JSON.stringify(required)) {
-    failures.push(`WORKFLOW PLAN load order was ${declared.join(' -> ') || '<none>'}, expected ${required.join(' -> ') || '<none>'}`);
-  }
 
   if (expectations.requireWorkflowResourceCallsMatchLoadOrder === true) {
     const extensionUris = new Set(workflowPreparation.resourceExtensionReadUris ?? []);
@@ -3372,8 +3124,8 @@ function workflowLoadOrderFailures(summary, workflowPreparation, expectations) {
         || numericSortValue(left.eventIndex) - numericSortValue(right.eventIndex)
       ))
       .map(readTargetFromCall);
-    if (JSON.stringify(actual) !== JSON.stringify(executionDeclared)) {
-      failures.push(`workflow resource call order was ${actual.join(' -> ') || '<none>'}, expected declared Load order ${executionDeclared.join(' -> ') || '<none>'}`);
+    if (JSON.stringify(actual) !== JSON.stringify(declared)) {
+      failures.push(`workflow resource call order was ${actual.join(' -> ') || '<none>'}, expected declared Load order ${declared.join(' -> ') || '<none>'}`);
     }
   }
   return failures;

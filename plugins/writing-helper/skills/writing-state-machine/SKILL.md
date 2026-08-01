@@ -1,6 +1,6 @@
 ---
 name: writing-state-machine
-description: Use after Main selects writing.en and assigns a writer child for hallucination-sensitive English drafting or revision where citations, numbers, and factual claims require an explicit source-to-text evidence matrix. Not for ordinary prose editing; isolate paragraph context only when explicitly requested.
+description: Use after Main selects writing and assigns a writer child for hallucination-sensitive English drafting or revision where citations, numbers, and factual claims require an explicit source-to-text evidence matrix. Not for ordinary prose editing; isolate paragraph context only when explicitly requested.
 ---
 
 # Writing State Machine Skill
@@ -11,7 +11,7 @@ explicitly requests paragraph context isolation.
 
 ## Workflow boundary
 
-Use this Skill only after Main selects workflow `writing.en`, loads its exact workflow reference and this Skill, and dispatches a `writer` child. This is the assigned writer child's bounded local method. It does not select or dispatch Agents. Do not recursively fork, spawn, or delegate. Main retains the parent TODO, integration, final verification, and user-visible delivery.
+Use this Skill only after Main selects workflow `writing`, loads its exact workflow reference and this Skill, and dispatches a `writer` child. This is the assigned writer child's bounded local method. It does not select or dispatch Agents. Do not recursively fork, spawn, or delegate. Main retains the parent TODO, integration, final verification, and user-visible delivery.
 
 The evidence matrix is a writer-local self-check. It does not satisfy or replace an independent `checker` delivery selected by Main. Run one bounded local pass; it never starts an automatic repair loop or creates a completion gate. Return the paragraph, matrix, provenance, and unresolved gaps to Main.
 

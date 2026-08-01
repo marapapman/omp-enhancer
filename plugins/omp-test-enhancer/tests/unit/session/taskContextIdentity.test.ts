@@ -21,7 +21,7 @@ describe('taskContextIdentity', () => {
       { type: 'custom', customType: CORE_STATE_ENTRY, data: { schemaVersion: 2, taskStartedAt: 0, lastTaskContext: { intent: 'agent-selected' } } },
       { type: 'custom', customType: CORE_STATE_ENTRY, data: { schemaVersion: 2, taskStartedAt: 300, lastTaskContext: null } },
       { type: 'custom', customType: CORE_STATE_ENTRY, data: { schemaVersion: 2, taskStartedAt: 400, lastTaskContext: { intent: 'diagnostic-probe' } } },
-      { type: 'custom', customType: CORE_STATE_ENTRY, data: { schemaVersion: 2, routeStartedAt: 500, lastRoute: { intent: 'code.dev' } } }
+      { type: 'custom', customType: CORE_STATE_ENTRY, data: { schemaVersion: 2, routeStartedAt: 500, lastRoute: { intent: 'code' } } }
     ])).toBeUndefined()
   })
 

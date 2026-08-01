@@ -1,27 +1,26 @@
 ---
 name: code-development
-description: Use for substantive code work with local and current evidence, reviewed parallel slices, task-owned TDD, Main integration, and bounded independent review.
+description: Use for substantive code work with local and current evidence, optional analyzer planning, task-owned TDD, Main integration, and bounded independent review.
 ---
 
 # Develop Code
 
 The single general software-development method. Add domain Skills only for gaps.
 
-## Commit the subagent-driven TODO
+## Orchestrate ANALYZE -> EXECUTE -> REVIEW
 
-For substantive mutation, Main owns the parent TODO, integration, and conclusion:
+Main owns the parent TODO, integration, and conclusion. Main chooses direct work or delegation by task complexity:
 
 1. Restate behavior, authority, acceptance, repository instructions, dirty-tree boundaries, and baseline.
 2. Delegate the local evidence pass to scout and one bounded external pass to librarian with bounded briefs; integrate their returned anchors, entry points, callers, consumers, tests, configuration, and source-vs-generated-vs-runtime distinctions. Main performs no broad search itself beyond writing the briefs.
-3. Freeze a concise planning brief (outcome, authority, acceptance, integrated anchors, slice boundaries, evidence bar) and delegate to native `plan` agent the full detailed implementation-and-evidence plan, including its own challenge findings. Main may dispatch `plan` again for a finer-grained sub-plan when a slice needs deeper decomposition.
-4. Dispatch native `reviewer` to independently audit plan's parallel waves, write sets, dependencies, test seams, and evidence boundary. Main may call `plan` again with reviewer findings integrated into an updated brief; repeated plan-reviewer cycles are allowed while plan content materially changes, never on unchanged text, before any authorized production mutation.
-5. Main records each accepted, rejected, and unresolved reviewer plan finding, rebases only affected TODO rows, and freezes complete assignments with exclusive write ownership, exact evidence return, and no versioning or publication authority. Main skips this audit only when native `reviewer` is not visible, recording fallback=Agent availability on that row.
-6. Use the same native `task` `tasks[]` batch for runnable independent slices; defer dependencies. Each task owns `RED -> GREEN -> REFACTOR`.
-7. Main integrates the current tree and dispatches the bounded diff and evidence of the complete change — task slices and Main-authored edits alike — to native `reviewer`; skipping is permitted only when `reviewer` is unavailable, recorded with the concrete reason.
-8. Give native `reviewer` only the bounded diff/evidence of the complete change, including Main-authored edits. Send supported findings to native `task` for bounded repair and refresh evidence, then allow at most one fresh affected reviewer pass; Main integrates the result.
-9. Report paths, commands, exits, dispositions, limitations, risks, and untouched changes.
+3. For complex multi-slice work, freeze a concise planning brief (outcome, authority, acceptance, integrated anchors, slice boundaries, evidence bar) and delegate to the `analyzer` agent the full detailed implementation-and-evidence plan, including its own challenge findings. For focused work, Main plans directly from the integrated evidence.
+4. Main records each accepted, rejected, and unresolved challenge finding, rebases only affected TODO rows, and freezes complete assignments with exclusive write ownership, exact evidence return, and no versioning or publication authority.
+5. Use the same native `task` `tasks[]` batch for runnable independent slices; defer dependencies. Each task owns `RED -> GREEN -> REFACTOR`.
+6. Main reviews simple changes directly. For complex or risky changes, Main integrates the current tree and dispatches the bounded diff and evidence of the complete change — task slices and Main-authored edits alike — to native `reviewer`.
+7. Send supported reviewer findings to native `task` for bounded repair and refresh evidence, then allow at most one fresh affected reviewer pass; Main integrates the result.
+8. Report paths, commands, exits, dispositions, limitations, risks, and untouched changes.
 
-Merge matching workflow, Skill, and reference phases into one TODO row; do not execute a phase twice. Mechanical lookup needs no task. Substantive read-only work needs no mutation TDD but still follows the selected non-simple workflow's safe complete delegated checkpoint when a matching Agent is visible and safe. Read-only authorizes no mutation.
+Merge matching workflow, Skill, and reference phases into one TODO row; do not execute a phase twice. Mechanical lookup needs no task. Substantive read-only work needs no mutation TDD but still follows the selected workflow's safe complete delegated checkpoint when a matching Agent is visible and safe. Read-only authorizes no mutation.
 
 ## Search local code and current evidence
 
@@ -41,11 +40,9 @@ Each slice names ID, wave/dependencies, target/acceptance, exclusive write set, 
 
 Source slices never run a shared generator. One downstream exclusive integration task runs it exactly once after source dependencies as a mechanical generation slice. It returns generator check, parity, and no-unexpected-diff and must not fabricate RED. Main inspects the generated diff, runs check-only, and does not rerun the generator.
 
-Use native `plan` to draft the parallel plan and native `reviewer` to audit it.
+Use the `analyzer` agent to draft complex parallel plans; Main may dispatch `reviewer` to audit them before production mutation when the change is large or risky.
 
-Each delegated TODO row is `Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>`. Keep checkpoint complete, one-line, and free of reserved markers. The native task item `agent` is the row Agent; it copies workflow, step, skills, and checkpoint into byte-0 prefix `[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>]`. The task body copies all direct user constraints verbatim and adds no examples, then carries allowed effects and acceptance evidence; outer context, name, or label is not a substitute. Headings follow the prefix.
-
-The child owns only that bounded assignment. Include write set, non-goals, anchors, command, evidence, and Skill instructions.
+The child owns only its bounded assignment. Include write set, non-goals, anchors, command, evidence, and Skill instructions.
 
 ## Delegate complete TDD slices
 
@@ -68,5 +65,3 @@ Main validates findings against current code. Send supported findings to native 
 ## Preserve authority
 
 Do not infer permission for destructive or external commands, commit, push, publish, deploy, upgrade, or third-party contact. Missing Agents, Skills, network access, tests, reviews, or evidence are visible limitations, never plugin gates and never invented success.
-
-For OMP Enhancer work, this loaded Skill reveals exact URI `skill://code-development/references/omp-enhancer.md`. Before workflow references, emit `RESOURCE EXTENSION | source=skill://code-development | reads=skill://code-development/references/omp-enhancer.md` at byte 0, read it, wait, then load references. This pre-READY extension is no re-PLAN, router, gate, retry, permission, or completion control. Exact-read failure: unavailable; never guess.

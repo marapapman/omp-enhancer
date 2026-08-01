@@ -1,16 +1,16 @@
 ---
 name: plain-chinese-writing
-description: 中文 prose deliverable 的局部清晰写作方法，要求平直、自然，避免翻译腔、AI 味、套话和过度结构化表达。仅当用户请求中文 prose deliverable，且 Main 已选择工作流 `writing.zh`，并加载其精确 workflow reference 和本 Skill 时使用；不能替代 writer、checker 或父级编排。
+description: 中文 prose deliverable 的局部清晰写作方法，要求平直、自然，避免翻译腔、AI 味、套话和过度结构化表达。仅当用户请求中文 prose deliverable，且 Main 已选择工作流 `writing`，并加载其精确 workflow reference 和本 Skill 时使用；不能替代 writer、checker 或父级编排。
 ---
 
 # 通用中文平直写作 Skill
 
 ## 0. 适用范围
 
-本 Skill 是 `writing.zh` 中处理中文 prose deliverable 的局部方法。只有同时满足以下条件时才使用。
+本 Skill 是 `writing` 中处理中文 prose deliverable 的局部方法。只有同时满足以下条件时才使用。
 
 1. 用户请求新写、改写或润色一份中文 prose deliverable。
-2. Main 已选择工作流 `writing.zh`，并在计划中声明和加载其精确 workflow reference 与本 Skill。
+2. Main 已选择工作流 `writing`，并在计划中声明和加载其精确 workflow reference 与本 Skill。
 
 本 Skill 只规定平直、自然的中文写法和语义锚点保护方法，不选择或调度 Agent，也不能替代 writer、checker 或父级编排。Main 保留父级 TODO、委派、集成、finding disposition、最终验证和面向用户的交付权。
 
@@ -917,7 +917,7 @@ Smith 等人（2023）在模型中引入注意力机制来处理长序列。他�
 
 ## 16. 简短提示词
 
-在工作流 `writing.zh` 已选择、其精确 workflow reference 与本 Skill 均已加载后，需要给受派 writer 简短方法提示时，可使用。
+在工作流 `writing` 已选择、其精确 workflow reference 与本 Skill 均已加载后，需要给受派 writer 简短方法提示时，可使用。
 
 ```text
 请按 plain-chinese-writing Skill 要求输出中文。

@@ -593,14 +593,14 @@ describe('bundled frugal-pi writing content', () => {
     );
   });
 
-  it('keeps plain Chinese writing scoped to a selected writing.zh prose method', () => {
+  it('keeps plain Chinese writing scoped to a selected writing prose method', () => {
     const source = readFileSync(join(rootDir, 'skills/plain-chinese-writing/SKILL.md'), 'utf8');
     const frontmatter = source.match(/^---\n([\s\S]*?)\n---/u)?.[1] ?? '';
     const scope = source.match(/^## 0\. 适用范围\n([\s\S]*?)^---$/mu)?.[1] ?? '';
 
     assert.match(frontmatter, /用户请求中文 prose deliverable/u);
-    assert.match(frontmatter, /Main 已选择工作流 `writing\.zh`，并加载其精确 workflow reference 和本 Skill/u);
-    assert.doesNotMatch(source, /选择并加载 `writing\.zh`/u);
+    assert.match(frontmatter, /Main 已选择工作流 `writing`，并加载其精确 workflow reference 和本 Skill/u);
+    assert.doesNotMatch(source, /选择并加载 `writing`/u);
     assert.match(scope, /局部方法/u);
     assert.match(scope, /不选择或调度 Agent/u);
     assert.match(scope, /不能替代 writer、checker 或父级编排/u);

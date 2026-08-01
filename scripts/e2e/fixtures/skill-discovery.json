@@ -20,7 +20,6 @@
       "maxDuplicateSkillReadAttempts": 0,
       "maxProvidedSkills": 0,
       "expectedProvisionMode": "none",
-      "requireWorkflowIndexOnlyFirstToolBatch": true,
       "requireWorkflowPlanBeforeResourceLoads": true,
       "requireStructuredWorkflowLoadPhases": true,
       "requiredWorkflowPlanFormat": "block",
@@ -44,7 +43,6 @@
       "fixture": "skill-discovery-readonly",
       "prompt": "Read skill://xlsx and return only its first Markdown heading. Do not read project files.",
       "expectations": {
-        "requireWorkflowIndexOnlyFirstToolBatch": false,
         "requireWorkflowPlanBeforeResourceLoads": false,
         "requireStructuredWorkflowLoadPhases": false,
         "forbidResourceProjectSameBatch": false,
@@ -67,7 +65,7 @@
       "prompt": "Read abstract.tex and propose a conservative correction of its single English sentence. Preserve all qualifiers, modality, negation, percentages, citations, and LaTeX commands. Do not modify files or use the network.",
       "expectations": {
         "minWorkflowReferenceReads": 1,
-        "requiredSelectedWorkflowIds": ["writing.en", "writing.latex"],
+        "requiredSelectedWorkflowIds": ["writing"],
         "requiredAnySkills": ["writing-review", "polish-acm-latex-prose"],
         "maxObservedSkills": 2,
         "forbiddenSkills": ["plain-chinese-writing", "zh-writing-polish", "writing-markdown-helper"]
@@ -122,7 +120,7 @@
       "prompt": "Plan an editable TikZ approval flowchart with six labeled nodes, one decision branch, and one missing custom pictogram. Draw the figure by authoring an ELK graph IR and calling tikz_generate_diagram to compute the layout with ELK, never hand-editing TikZ coordinates. Use the packaged OpenTikZ material as an icon source for the missing pictogram, assume image generation is unavailable, preserve all labels and topology in TikZ, and require current-revision compile plus independent visual evidence. Do not inspect or modify project files and do not use the network.",
       "expectations": {
         "minWorkflowReferenceReads": 1,
-        "requiredSelectedWorkflowIds": ["diagram.tikz"],
+        "requiredSelectedWorkflowIds": ["visual"],
         "requiredObservedSkills": ["tikz-diagram", "svg-flowchart"],
         "maxObservedSkills": 7,
         "forbiddenSkills": ["svg-writing", "writing-review", "writing-markdown-helper"]
@@ -135,7 +133,7 @@
       "prompt": "Plan an editable Mermaid architecture flowchart for a five-module LLM serving stack with one decision branch. Author the figure as Mermaid code and call mermaid_render to convert it to revision-bound SVG, never hand-editing SVG coordinates and never using TikZ. Use the svg-flowchart method for a monochrome node icon; assume image generation is unavailable; preserve all labels and topology in Mermaid; require current-revision render plus independent visual evidence. Do not inspect or modify project files and do not use the network.",
       "expectations": {
         "minWorkflowReferenceReads": 1,
-        "requiredSelectedWorkflowIds": ["diagram.mermaid"],
+        "requiredSelectedWorkflowIds": ["visual"],
         "requiredObservedSkills": ["mermaid-diagram", "svg-flowchart"],
         "maxObservedSkills": 7,
         "forbiddenSkills": ["svg-writing", "writing-review", "writing-markdown-helper"]
@@ -173,7 +171,6 @@
       "tools": ["task", "hub", "read"],
       "expectations": {
         "requireSuccessfulToolCalls": false,
-        "requireWorkflowIndexOnlyFirstToolBatch": false,
         "requireWorkflowPlanBeforeResourceLoads": false,
         "requireStructuredWorkflowLoadPhases": false,
         "forbidResourceProjectSameBatch": false,
@@ -199,7 +196,6 @@
       "prompt": "Read README.md and return only its first Markdown heading. Do not modify files.",
       "tools": ["todo", "task", "hub", "read"],
       "expectations": {
-        "requireWorkflowIndexOnlyFirstToolBatch": false,
         "requireWorkflowPlanBeforeResourceLoads": false,
         "requireStructuredWorkflowLoadPhases": false,
         "forbidResourceProjectSameBatch": false,

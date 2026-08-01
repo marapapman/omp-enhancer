@@ -53,6 +53,16 @@ test('session_stop never schedules a repair or continuation', async (t) => {
   }
 });
 
+test('the context and message_end hooks no longer exist after coach removal', async () => {
+  const { pi } = await coreRuntime('Review the parser implementation.');
+  const eventNames = pi.eventHandlers.map((entry) => entry.eventName);
+  assert.equal(eventNames.includes('context'), false, 'context hook must be removed');
+  assert.equal(eventNames.includes('message_end'), false, 'message_end hook must be removed');
+  assert.equal(eventNames.includes('assistant_delta'), false);
+  assert.equal(eventNames.includes('assistant_output'), false);
+  assert.equal(eventNames.includes('response_delta'), false);
+});
+
 test('tool results are observed without changing native events', async () => {
   const { pi, ctx } = await coreRuntime('Review the parser implementation.');
   const calls = [
@@ -185,14 +195,11 @@ test('an implementation follow-up refreshes task facts while selection stays age
 
 test('Core has no generated-output loop controller or hard-gate state', async () => {
   const { pi, ctx } = await coreRuntime('Inspect the current implementation and report findings.');
-  const eventNames = pi.eventHandlers.map((entry) => entry.eventName);
-  assert.equal(eventNames.includes('assistant_delta'), false);
-  assert.equal(eventNames.includes('assistant_output'), false);
-  assert.equal(eventNames.includes('response_delta'), false);
   assert.equal(await event(pi, 'session_stop')({ output: 'Best-effort result.' }, ctx), undefined);
 
   const snapshot = latestState(pi.entries);
   for (const field of [
+    'protocolCoach',
     'lastRoute',
     'lastRouteProbe',
     'classifierAttempted',
@@ -240,56 +247,17 @@ test('public usage reviews honor explicit Main selections without becoming gates
   assert.doesNotMatch(agents.content[0].text, /blocked/i);
 });
 
-test('a subagent-driven TODO with no Delegate or fallback rows surfaces NO_DELEGATION_ROWS', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task', 'todo'];
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext(entries);
-  await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')({ prompt: 'Implement the parser fix and review the result.' }, ctx);
-
-  // Index read settles → PRE_PLAN cue
-  await event(pi, 'tool_result')({
-    toolName: 'read',
-    input: { path: 'skill://omp-enhancer-workflows' },
-    result: { content: [{ type: 'text', text: '---\nname: omp-enhancer-workflows\ndescription: Workflow index.\n---\n' }] },
-  }, ctx);
-
-  // PLAN message creates a subagent-driven declaration (code.dev, no loads needed)
-  await event(pi, 'message_end')({
-    message: { role: 'assistant', content: validPlan(), timestamp: 2 },
-  }, ctx);
-
-  // READY message marks readyObserved (loads are settled since now/then are none)
-  await event(pi, 'message_end')({
-    message: {
-      role: 'assistant',
-      content: 'WORKFLOW READY | primary=code.dev | add-ons=none | skills-loaded=none | skills-unavailable=none',
-      timestamp: 3,
-    },
-  }, ctx);
-
-  // todo(op=init) tool_call with items lacking Delegate Agent= and fallback= rows
+test('the observation status tool exposes no coach diagnostics after coach removal', async () => {
+  const { pi, ctx } = await coreRuntime('Implement the parser fix and review the result.');
   await event(pi, 'tool_call')({
     toolName: 'todo',
-    input: {
-      op: 'init',
-      list: [{ items: [{ task: 'Investigate the parser bug.' }, { task: 'Write the fix directly.' }] }],
-    },
+    input: { op: 'init', list: [{ items: [{ task: 'Investigate the parser bug.' }] }] },
   }, ctx);
-
-  // Settled todo tool_result flips todoObserved and fires the diagnostic
   await event(pi, 'tool_result')({
     toolName: 'todo',
     result: { content: [{ type: 'text', text: 'TODO initialized.' }] },
   }, ctx);
 
-  const snapshot = latestState(entries);
-  const diagnosticCodes = snapshot.protocolCoach.diagnostics.map((d) => d.code);
-  assert.ok(diagnosticCodes.includes('NO_DELEGATION_ROWS'), `expected NO_DELEGATION_ROWS in ${JSON.stringify(diagnosticCodes)}`);
-
-  // The observation status tool surfaces the same diagnostic advisorially
   const status = await pi.tools.get('omp_core_observation_status').execute(
     'status-after-todo',
     {},
@@ -298,63 +266,80 @@ test('a subagent-driven TODO with no Delegate or fallback rows surfaces NO_DELEG
     ctx,
   );
   assert.equal(status.isError, false);
-  const coachDiagCodes = status.details.status.coachDiagnostics.map((d) => d.code);
-  assert.ok(coachDiagCodes.includes('NO_DELEGATION_ROWS'), `expected NO_DELEGATION_ROWS in coachDiagnostics ${JSON.stringify(coachDiagCodes)}`);
+  assert.equal(Object.hasOwn(status.details.status, 'coachDiagnostics'), false);
+  assert.equal(Object.hasOwn(status.details.status, 'protocolCoach'), false);
 });
 
-test('a TODO with a Delegate row does not surface NO_DELEGATION_ROWS', async () => {
+test('large monorepo snapshot upgrades complexity and the reminder stays PROJECT-EXPLORATION-free', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'monorepo-test-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'monorepo', workspaces: ['packages/*'] }));
+    for (let i = 0; i < 600; i++) {
+      fs.writeFileSync(path.join(tmpDir, 'file' + i + '.js'), '// file ' + i);
+    }
+
+    const entries = [];
+    const pi = new FakePi(entries);
+    pi.getActiveTools = () => ['read', 'task', 'todo'];
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext(entries, tmpDir);
+    await event(pi, 'session_start')({}, ctx);
+    const result = await event(pi, 'before_agent_start')({ prompt: 'fix the login bug' }, ctx);
+
+    const snapshot = latestState(entries);
+    assert.equal(snapshot.lastTaskContext.projectSnapshot.projectType, 'monorepo');
+    assert.equal(snapshot.lastTaskContext.taskDescriptor.complexity, 'broad');
+    assert.equal(snapshot.lastTaskContext.taskDescriptor.projectScale, 'large');
+
+    assert.ok(result?.message?.content, 'reminder must be emitted for broad tasks with native task');
+    assert.match(result.message.content, /OMP_ORCHESTRATION/u);
+    assert.ok(!result.message.content.includes('PROJECT EXPLORATION'), 'the simplified reminder must not include PROJECT EXPLORATION');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('medium project snapshot yields focused complexity with the advisory reminder', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'medium-test-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'medium-project' }));
+    for (let i = 0; i < 60; i++) {
+      fs.writeFileSync(path.join(tmpDir, 'file' + i + '.js'), '// file ' + i);
+    }
+
+    const entries = [];
+    const pi = new FakePi(entries);
+    pi.getActiveTools = () => ['read', 'task', 'todo'];
+    registerCoreEnhancer(pi);
+    const ctx = extensionContext(entries, tmpDir);
+    await event(pi, 'session_start')({}, ctx);
+    const result = await event(pi, 'before_agent_start')({ prompt: 'fix the login bug' }, ctx);
+
+    const snapshot = latestState(entries);
+    assert.equal(snapshot.lastTaskContext.taskDescriptor.complexity, 'focused');
+    assert.equal(snapshot.lastTaskContext.taskDescriptor.projectScale, 'medium');
+
+    assert.ok(result?.message?.content, 'reminder must be emitted for focused tasks with native task');
+    assert.ok(!result.message.content.includes('PROJECT EXPLORATION'), 'the simplified reminder must not include PROJECT EXPLORATION');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('invalid cwd produces unknown projectScale and still emits the advisory', async () => {
   const entries = [];
   const pi = new FakePi(entries);
   pi.getActiveTools = () => ['read', 'task', 'todo'];
   registerCoreEnhancer(pi);
-  const ctx = extensionContext(entries);
+  const ctx = extensionContext(entries, '/nonexistent/path/that/does/not/exist');
   await event(pi, 'session_start')({}, ctx);
-  await event(pi, 'before_agent_start')({ prompt: 'Implement the parser fix and review the result.' }, ctx);
-  await event(pi, 'tool_result')({
-    toolName: 'read',
-    input: { path: 'skill://omp-enhancer-workflows' },
-    result: { content: [{ type: 'text', text: '---\nname: omp-enhancer-workflows\ndescription: Workflow index.\n---\n' }] },
-  }, ctx);
-  await event(pi, 'message_end')({
-    message: { role: 'assistant', content: validPlan(), timestamp: 2 },
-  }, ctx);
-  await event(pi, 'message_end')({
-    message: {
-      role: 'assistant',
-      content: 'WORKFLOW READY | primary=code.dev | add-ons=none | skills-loaded=none | skills-unavailable=none',
-      timestamp: 3,
-    },
-  }, ctx);
-  await event(pi, 'tool_call')({
-    toolName: 'todo',
-    input: {
-      op: 'init',
-      list: [{ items: [{ task: 'Delegate Agent=scout step-search-local: bounded local evidence pass' }] }],
-    },
-  }, ctx);
-  await event(pi, 'tool_result')({
-    toolName: 'todo',
-    result: { content: [{ type: 'text', text: 'TODO initialized.' }] },
-  }, ctx);
-  const snapshot = latestState(entries);
-  const diagnosticCodes = snapshot.protocolCoach.diagnostics.map((d) => d.code);
-  assert.equal(diagnosticCodes.includes('NO_DELEGATION_ROWS'), false, `Delegate row should suppress NO_DELEGATION_ROWS, got ${JSON.stringify(diagnosticCodes)}`);
-});
+  const result = await event(pi, 'before_agent_start')({ prompt: 'fix the login bug' }, ctx);
 
-function validPlan() {
-  return [
-    'WORKFLOW PLAN',
-    'Primary: code.dev',
-    'Add-ons: none',
-    'Skills: none',
-    'Load order: NOW=[none] THEN=[none]',
-    'Actions:',
-    '1. SEARCH: Gather evidence.',
-    '2. PLAN: Draft the implementation plan.',
-    '3. EXECUTE: Implement the fix.',
-    '4. VERIFY: Review the result.',
-  ].join('\n');
-}
+  const snapshot = latestState(entries);
+  assert.equal(snapshot.lastTaskContext.taskDescriptor.projectScale, 'unknown');
+  assert.ok(result?.message?.content, 'reminder must be emitted with native task');
+  assert.ok(!result.message.content.includes('PROJECT EXPLORATION'));
+});
 
 async function coreRuntime(prompt, cwd = process.cwd()) {
   const pi = new FakePi();
@@ -412,7 +397,11 @@ function extensionContext(entries, cwd = process.cwd()) {
 }
 
 function fakeZod() {
-  const chainable = (base) => ({ ...base, optional: () => chainable({ type: 'optional', schema: base }), describe: () => chainable(base) });
+  const chainable = (base) => ({
+    ...base,
+    optional: () => chainable({ type: 'optional', schema: base }),
+    describe: () => chainable(base),
+  });
   return {
     object: (shape) => chainable({ type: 'object', shape }),
     string: () => chainable({ type: 'string' }),
@@ -420,76 +409,3 @@ function fakeZod() {
     array: (schema) => chainable({ type: 'array', schema }),
   };
 }
-
-test('large monorepo snapshot upgrades complexity and suppresses PROJECT EXPLORATION reminder', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'monorepo-test-'));
-  try {
-    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'monorepo', workspaces: ['packages/*'] }));
-    for (let i = 0; i < 600; i++) {
-      fs.writeFileSync(path.join(tmpDir, 'file' + i + '.js'), '// file ' + i);
-    }
-
-    const entries = [];
-    const pi = new FakePi(entries);
-    pi.getActiveTools = () => ['read', 'task', 'todo'];
-    registerCoreEnhancer(pi);
-    const ctx = extensionContext(entries, tmpDir);
-    await event(pi, 'session_start')({}, ctx);
-    const result = await event(pi, 'before_agent_start')({ prompt: 'fix the login bug' }, ctx);
-
-    const snapshot = latestState(entries);
-    assert.equal(snapshot.lastTaskContext.projectSnapshot.projectType, 'monorepo');
-    assert.equal(snapshot.lastTaskContext.taskDescriptor.complexity, 'broad');
-    assert.equal(snapshot.lastTaskContext.taskDescriptor.projectScale, 'large');
-
-    if (result?.message?.content) {
-      assert.ok(!result.message.content.includes('PROJECT EXPLORATION'), 'broad complexity must not include PROJECT EXPLORATION reminder');
-    }
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-test('medium project snapshot yields focused complexity with PROJECT EXPLORATION reminder', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'medium-test-'));
-  try {
-    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'medium-project' }));
-    for (let i = 0; i < 60; i++) {
-      fs.writeFileSync(path.join(tmpDir, 'file' + i + '.js'), '// file ' + i);
-    }
-
-    const entries = [];
-    const pi = new FakePi(entries);
-    pi.getActiveTools = () => ['read', 'task', 'todo'];
-    registerCoreEnhancer(pi);
-    const ctx = extensionContext(entries, tmpDir);
-    await event(pi, 'session_start')({}, ctx);
-    const result = await event(pi, 'before_agent_start')({ prompt: 'fix the login bug' }, ctx);
-
-    const snapshot = latestState(entries);
-    assert.equal(snapshot.lastTaskContext.taskDescriptor.complexity, 'focused');
-    assert.equal(snapshot.lastTaskContext.taskDescriptor.projectScale, 'medium');
-
-    assert.ok(result?.message?.content, 'reminder must be emitted for focused tasks');
-    assert.ok(result.message.content.includes('PROJECT EXPLORATION'), 'medium project must include PROJECT EXPLORATION reminder');
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-test('invalid cwd produces unknown projectScale with no PROJECT EXPLORATION reminder', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task', 'todo'];
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext(entries, '/nonexistent/path/that/does/not/exist');
-  await event(pi, 'session_start')({}, ctx);
-  const result = await event(pi, 'before_agent_start')({ prompt: 'fix the login bug' }, ctx);
-
-  const snapshot = latestState(entries);
-  assert.equal(snapshot.lastTaskContext.taskDescriptor.projectScale, 'unknown');
-
-  if (result?.message?.content) {
-    assert.ok(!result.message.content.includes('PROJECT EXPLORATION'), 'invalid cwd must not include PROJECT EXPLORATION reminder');
-  }
-});

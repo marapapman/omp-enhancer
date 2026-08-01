@@ -1,6 +1,6 @@
 ---
 name: writing-mad-writer
-description: Use after Main selects writing.en and assigns a writer child to draft multiple English sections quickly with one focused multidimensional self-check. Not for conservative polishing, bounded review-only work, or strict evidence-matrix writing.
+description: Use after Main selects writing and assigns a writer child to draft multiple English sections quickly with one focused multidimensional self-check. Not for conservative polishing, bounded review-only work, or strict evidence-matrix writing.
 ---
 # Writing Mad-Writer
 
@@ -10,7 +10,7 @@ Write document sections, run one focused inline check, fix clear local issues, a
 
 ## Workflow boundary
 
-Use this Skill only after Main selects workflow `writing.en`, loads its exact workflow reference and this Skill, and dispatches a `writer` child. This is the assigned writer child's bounded local method. It does not select or dispatch Agents. Do not recursively fork, spawn, or delegate. Main retains the parent TODO, integration, final verification, and user-visible delivery.
+Use this Skill only after Main selects workflow `writing`, loads its exact workflow reference and this Skill, and dispatches a `writer` child. This is the assigned writer child's bounded local method. It does not select or dispatch Agents. Do not recursively fork, spawn, or delegate. Main retains the parent TODO, integration, final verification, and user-visible delivery.
 
 The seven dimensions below are a writer-local self-check. This self-check does not satisfy or replace an independent `checker` delivery selected by Main. Run one bounded local pass; it never starts an automatic repair loop or creates a completion gate. Return the revised text, evidence, limitations, and any author decisions to Main.
 

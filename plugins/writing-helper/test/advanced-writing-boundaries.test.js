@@ -22,8 +22,8 @@ describe('advanced writing Skills preserve workflow and effect boundaries', () =
     for (const name of englishSkills) {
       const source = prose(readSkill(name));
 
-      assert.match(source, /after Main selects workflow `writing\.en`, loads its exact workflow reference and this Skill, and dispatches a `writer` child/iu, `${name} should distinguish workflow selection from Skill loading`);
-      assert.doesNotMatch(source, /selects and loads `writing\.en`/iu, `${name} must not describe a workflow ID as a Skill load`);
+      assert.match(source, /after Main selects workflow `writing`, loads its exact workflow reference and this Skill, and dispatches a `writer` child/iu, `${name} should distinguish workflow selection from Skill loading`);
+      assert.doesNotMatch(source, /selects and loads `writing`/iu, `${name} must not describe a workflow ID as a Skill load`);
       assert.match(source, /assigned writer child's bounded local method/iu, `${name} should identify its child-local scope`);
       assert.match(source, /does not select or dispatch Agents/iu, `${name} should not take over routing`);
       assert.match(source, /do not recursively (?:fork|spawn|delegate)/iu, `${name} children must not recurse`);
@@ -33,8 +33,8 @@ describe('advanced writing Skills preserve workflow and effect boundaries', () =
     for (const name of chineseSkills) {
       const source = prose(readSkill(name));
 
-      assert.match(source, /Main 选择工作流 `writing\.zh`、加载其精确 workflow reference 和本 Skill，再把任务派给 `zh-writer` 子 Agent 后/u, `${name} 应区分工作流选择与 Skill 加载`);
-      assert.doesNotMatch(source, /选择并加载 `writing\.zh`/u, `${name} 不应把 workflow ID 写成 Skill load`);
+      assert.match(source, /Main 选择工作流 `writing`、加载其精确 workflow reference 和本 Skill，再把任务派给 `zh-writer` 子 Agent 后/u, `${name} 应区分工作流选择与 Skill 加载`);
+      assert.doesNotMatch(source, /选择并加载 `writing`/u, `${name} 不应把 workflow ID 写成 Skill load`);
       assert.match(source, /受派 writer 子 Agent 的有界局部方法/u, `${name} 应标明 child-local 范围`);
       assert.match(source, /不选择或调度 Agent/u, `${name} 不应接管路由`);
       assert.match(source, /不要递归 (?:fork|spawn|delegate)/u, `${name} 子 Agent 不应递归委派`);

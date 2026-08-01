@@ -75,14 +75,8 @@
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requiredObservedSkills": ["code-development", "omp-enhancer-workflows"],
-        "requiredWorkflowPrimary": "code.dev",
-        "requiredSelectedWorkflowIds": ["code.dev"],
-        "requiredWorkflowLoadOrder": [
-          "skill://code-development",
-          "skill://omp-enhancer-workflows/references/code.dev.md"
-        ],
-        "requireWorkflowResourceCallsMatchLoadOrder": true,
-        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requiredWorkflowPrimary": "code",
+        "requiredSelectedWorkflowIds": ["code"],
         "requireWorkflowPlanBeforeResourceLoads": true,
         "requireWorkflowPlanFirstVisibleContent": true,
         "requireWorkflowPlanLoadCallsSameBatch": true,
@@ -96,13 +90,7 @@
           "^(?!Delegate\\s)(?=[^\\r\\n]*(?:Main|parent)(?:[- ]owned)?)(?=[^\\r\\n]*(?:compar(?:e|ison)|integrat(?:e|ion)|verif(?:y|ication)))[^\\r\\n]+"
         ],
         "requireNativeTodoCompletion": true,
-        "requireNativeTodoInitBeforeSubstantiveTool": true,
-        "requireNativeTaskMetadataPrefix": true,
-        "requireExactNativeTaskMetadataPrefix": true,
-        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
-        "requiredNativeTaskWorkflows": ["code.dev"],
-        "requiredNativeTaskWorkflowsPerAssignment": ["code.dev"],
-        "requiredNativeTaskSkillsPerAssignment": ["code-development"]
+        "requireNativeTodoInitBeforeSubstantiveTool": true
       }
     }
   ]

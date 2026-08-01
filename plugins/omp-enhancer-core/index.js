@@ -4,14 +4,9 @@ import { classifyHostTurn } from './src/host-turn-context.js';
 import { collectProjectSnapshot } from './src/project-snapshot.js';
 import { describeNaturalLanguageTask } from './src/task-descriptor.js';
 import {
-  buildDynamicReviewBudgetPrompt,
   buildTaskShapePrompt,
 } from './src/review-budget.js';
 import { suggestWorkflowCandidates } from './src/workflow-suggester.js';
-import {
-  buildToolCallPrimingSection,
-  shouldPrimeToolCalls,
-} from './src/model-toolcall-priming.js';
 import {
   detectPlanMode,
   isPlanSlashCommand,
@@ -27,53 +22,11 @@ import {
   validateSkillUsage,
 } from './src/skill-usage.js';
 import { validateSubagentUsage } from './src/subagent-usage.js';
-import {
-  createWorkflowProtocolCoachState,
-  observeProtocolAssistantMessage,
-  observeProtocolSuppliedWorkflowIndex,
-  observeProtocolToolCall,
-  observeProtocolTodoInput,
-  observeProtocolToolResult,
-  presentWorkflowProtocolCoachCue,
-  sanitizeWorkflowProtocolCoachState,
-  serializeWorkflowProtocolCoachState,
-  observeProtocolPlanMode,
-} from './src/workflow-protocol-coach.js';
 
 const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
-const STATE_SCHEMA_VERSION = 9;
+const STATE_SCHEMA_VERSION = 10;
 const SKILL_DISCOVERY_MESSAGE_TYPE = 'omp-enhancer-skill-discovery';
-const PROTOCOL_COACH_MESSAGE_TYPE = 'omp-enhancer-protocol-coach';
 const DISABLE_WORKFLOW_REMINDER_ENV = 'OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER';
-const DISABLE_PROTOCOL_COACH_ENV = 'OMP_ENHANCER_DISABLE_PROTOCOL_COACH';
-const SKILL_URI_IDENTITY = 'SKILL URI: visible `x` -> `skill://x`; nested only from a loaded source revealing the exact URI. Use `read.path`. Bare `x` is a project path, not Skill absence; only exact-URI failure = unavailable. `.agents/skills` is not the inventory.';
-const STAGED_ENTRY = 'ENTRY (soft): DIRECT is a verbatim, no-judgment field/heading lookup with no Skill/TODO. Review, correction, comparison, verification, design, transformation, or planning is PROJECT at any size.';
-const SKILL_STAGED_REMINDER = [
-  STAGED_ENTRY,
-  'PROJECT ONLY — DECLARE: next response starts at byte 0 with the visible WORKFLOW PLAN block using Primary/Add-ons none, chosen exact domain Skill URIs, `Load order: NOW=[<non-supplied Skill URIs-or-none>] THEN=[none]`, and four detailed Actions. Do not invent an ID.',
-  SKILL_URI_IDENTITY,
-  'PROJECT ONLY — LOAD: read only NOW exact Skill URIs, end, and wait. Omit a supplied native `skill-prompt` body; do not bulk-load or retry unchanged failures.',
-  'PROJECT ONLY — COMMIT: first visible bytes are `WORKFLOW READY | workflows=unavailable | skills-loaded=<bare-ids-or-none> | skills-unavailable=<bare-ids-or-none>`; rebase TODO, call TODO init only, wait, then execute.',
-].join('\n');
-function buildSkillStagedReminder(workflowIndexSupplied) {
-  const indexDirective = workflowIndexSupplied
-    ? 'INDEX STATUS=SUPPLIED BY EXACT NATIVE `skill-prompt`. Do not reread it.'
-    : 'INDEX STATUS=NOT SUPPLIED. First PROJECT tool batch reads only `skill://omp-enhancer-workflows`, ends, and waits. Do not combine with another Skill, workflow reference, or project tool.';
-  return [indexDirective, SKILL_STAGED_REMINDER].join('\n');
-}
-const TASK_STAGED_REMINDER = [
-  STAGED_ENTRY,
-  'PROJECT ONLY — PHASE 1 — PLAN: before project tools, write a concise numbered plan and decide whether the request has genuinely independent runnable slices.',
-  'PROJECT ONLY — PHASE 2 — COMMIT: map that plan to native `todo` when exposed and allowed. Non-trivial work defaults to delegation to currently visible Agents; choose direct work only under one concrete recorded constraint (user or native constraint, Agent availability or capacity, incomplete assignment input that cannot be prepared, dependency or write-set overlap, safety); no fork or width is selected by this reminder.',
-  'PROJECT ONLY — PHASE 3 — EXECUTE: dispatch the committed bounded assignments, integrate delivered results, and verify before the final response. Native tools, permissions, delivery, and completion remain authoritative.',
-].join('\n');
-function buildTaskStagedReminder(workflowIndexSupplied) {
-  const indexDirective = workflowIndexSupplied
-    ? 'INDEX STATUS=SUPPLIED BY EXACT NATIVE `skill-prompt`. Do not reread it.'
-    : 'INDEX STATUS=NOT SUPPLIED. First PROJECT tool batch reads only `skill://omp-enhancer-workflows`, ends, and waits. Do not combine with another Skill, workflow reference, or project tool.';
-  return [indexDirective, TASK_STAGED_REMINDER].join('\n');
-}
-const DELEGATION_DECISION = 'DELEGATION AFTER READY (soft): Main is the orchestrator — non-simple work is delegated to currently visible Agents when native state permits; direct work needs one concrete recorded fallback per checkpoint. When parent-owned pre-dispatch prerequisites complete, the committed task is next. Main owns TODO/Agent/width; no runtime gate/router/retry/completion control.';
 const ENHANCER_TOOL_GROUPS = Object.freeze({
   core: ['omp_core_'],
   config: ['omp_config_'],
@@ -86,7 +39,6 @@ const ENHANCER_TOOL_GROUPS = Object.freeze({
 export default function registerCoreEnhancer(pi) {
   const state = createState();
   let activeHostTurnKind = 'user';
-  let protocolCoachTurnEligible = false;
   const z = pi.zod?.z ?? pi.z;
 
   pi.setLabel?.('OMP Enhancer Core');
@@ -162,13 +114,12 @@ export default function registerCoreEnhancer(pi) {
   pi.registerTool({
     name: 'omp_core_observation_status',
     label: 'Show Core observations',
-    description: 'Show observed skill reads and native task progress without selecting a workflow or Agent. Includes advisory protocol diagnostics (for example NO_DELEGATION_ROWS) without selecting a workflow or Agent.',
+    description: 'Show observed skill reads and native task progress without selecting a workflow or Agent.',
     defaultInactive: true,
     approval: 'read',
-    promptSnippet: 'Show observed skill reads, task progress, and protocol diagnostics.',
+    promptSnippet: 'Show observed skill reads and task progress.',
     promptGuidelines: [
       'Call this tool to check current session state without selecting a workflow.',
-      'Output includes advisory protocol diagnostics that do not block completion.',
       'Use this to verify skill reads and task delegation status.',
     ],
     parameters: z?.object ? z.object({}) : undefined,
@@ -239,14 +190,12 @@ export default function registerCoreEnhancer(pi) {
 
   pi.on?.('session_start', async (_event = {}, ctx = {}) => {
     activeHostTurnKind = 'user';
-    protocolCoachTurnEligible = false;
     if (!restoreStateFromContext(state, ctx)) resetState(state);
     await persistState(pi, state);
     return undefined;
   });
 
   pi.on?.('before_agent_start', async (event = {}, ctx = {}) => {
-    protocolCoachTurnEligible = false;
     restoreStateFromContext(state, ctx);
     const hostTurn = classifyHostTurn(event, ctx);
     activeHostTurnKind = hostTurn.kind;
@@ -295,36 +244,31 @@ export default function registerCoreEnhancer(pi) {
       state.lastSubagentUsage = null;
       state.observedSkills.clear();
       state.claimedSkills.clear();
-      state.protocolCoach = createWorkflowProtocolCoachState();
     } else {
       state.lastPrompt = [state.lastPrompt, prompt].filter(Boolean).join('\n');
     }
     state.lastTaskPlanMode = planMode;
-    observeProtocolPlanMode(state.protocolCoach, planMode);
     const visibleSkills = activeSkillInventory(pi);
-    protocolCoachTurnEligible = process.env[DISABLE_PROTOCOL_COACH_ENV] !== '1';
     const workflowIndexSupplied = hasSuppliedNativeSkillPrompt(
       event,
       ctx,
       'omp-enhancer-workflows',
     );
-    if (protocolCoachTurnEligible && workflowIndexSupplied) {
-      observeProtocolSuppliedWorkflowIndex(state.protocolCoach);
-    }
-    const workflowReminder = buildStagedWorkflowReminder({
-      planMode,
-      planToExecuteTransition,
-      hasVisibleSkills: visibleSkills.length > 0,
+    let workflowReminder = buildStagedWorkflowReminder({
       hasWorkflowSkill: visibleSkills.some(({ name }) => (
         skillNamesEquivalent(name, 'omp-enhancer-workflows')
       )),
       workflowIndexSupplied,
       hasNativeTask: hasActiveNativeTask(pi),
       subagentsAllowed: taskContext.taskDescriptor?.constraints?.subagents !== 'forbidden',
-      implementationDelegationAllowed: taskContext.taskDescriptor?.constraints?.implementationDelegation !== 'forbidden',
       taskDescriptor: taskContext.taskDescriptor,
-      model: ctx?.model,
     });
+    if (planMode) {
+      const planSection = buildPlanModeReminderSection();
+      workflowReminder = workflowReminder
+        ? { content: `${planSection}\n\n${workflowReminder.content}`, features: ['plan-mode', ...workflowReminder.features] }
+        : { content: planSection, features: ['plan-mode'] };
+    }
     const shouldRemind = (
       workflowReminder
       && process.env[DISABLE_WORKFLOW_REMINDER_ENV] !== '1'
@@ -352,60 +296,10 @@ export default function registerCoreEnhancer(pi) {
     return undefined;
   });
 
-  pi.on?.('message_end', async (event = {}, ctx = {}) => {
-    if (!protocolCoachEventEligible(protocolCoachTurnEligible, activeHostTurnKind, ctx)) return undefined;
-    if (event.message?.role !== 'assistant' || !assistantMessageSucceeded(event.message)) return undefined;
-    const text = visibleAssistantText(event.message);
-    restoreStateFromContext(state, ctx);
-    const changed = observeProtocolAssistantMessage(state.protocolCoach, text);
-    if (!changed) return undefined;
-    await persistState(pi, state);
-    return undefined;
-  });
-
-  pi.on?.('context', async (event = {}, ctx = {}) => {
-    if (!protocolCoachEventEligible(protocolCoachTurnEligible, activeHostTurnKind, ctx)) return undefined;
-    if (!Array.isArray(event.messages)) return undefined;
-    restoreStateFromContext(state, ctx);
-    const cue = presentWorkflowProtocolCoachCue(state.protocolCoach, ctx?.model);
-    if (!cue) return undefined;
-    return {
-      messages: [
-        ...event.messages,
-        {
-          role: 'custom',
-          customType: PROTOCOL_COACH_MESSAGE_TYPE,
-          content: cue.content,
-          display: false,
-          details: {
-            advisory: true,
-            phase: cue.kind,
-            source: 'omp-enhancer-core',
-          },
-          attribution: 'user',
-          timestamp: cue.timestamp,
-        },
-      ],
-    };
-  });
-
   pi.on?.('tool_call', async (event = {}, ctx = {}) => {
     if (activeHostTurnKind !== 'user') return undefined;
     restoreStateFromContext(state, ctx);
     const eventName = toolEventName(event);
-    if (protocolCoachEventEligible(protocolCoachTurnEligible, activeHostTurnKind, ctx)) {
-      let taskRoles = [];
-      if (eventName === 'task') {
-        taskRoles = taskInputItems(event).map(roleName).filter(Boolean);
-      }
-      observeProtocolToolCall(state.protocolCoach, { name: eventName, taskRoles });
-      if (eventName === 'todo') {
-        const input = event.input ?? event.params ?? event.arguments ?? {};
-        if (input.op === 'init') {
-          observeProtocolTodoInput(state.protocolCoach, { itemsText: todoInitItemsText(event) });
-        }
-      }
-    }
     if (eventName === 'task') {
       recordTaskDispatch(state, event);
     }
@@ -421,16 +315,6 @@ export default function registerCoreEnhancer(pi) {
     const name = toolEventName(event);
     if (name === 'read' && !toolEventFailed(event) && !isDuplicateSkillRead(state, event)) recordSkillReads(state, event);
     if (name === 'task') recordTaskResult(state, event);
-    if (protocolCoachEventEligible(protocolCoachTurnEligible, activeHostTurnKind, ctx)) {
-      observeProtocolToolResult(state.protocolCoach, {
-        name,
-        target: readToolTarget(event),
-        body: name === 'read' ? readResultText(event) : '',
-        failed: toolEventFailed(event),
-        pending: toolEventPending(event),
-        model: ctx?.model,
-      });
-    }
     await persistState(pi, state);
     return undefined;
   });
@@ -450,135 +334,63 @@ export default function registerCoreEnhancer(pi) {
 }
 
 
-function protocolCoachEventEligible(turnEligible, hostTurnKind, ctx = {}) {
-  return turnEligible === true
-    && hostTurnKind === 'user'
-    && process.env[DISABLE_PROTOCOL_COACH_ENV] !== '1'
-    && !isSubagentSession(ctx);
-}
-
 function buildWorkflowCandidatePrompt(taskDescriptor = {}) {
   const suggestion = suggestWorkflowCandidates(taskDescriptor);
   if (!suggestion.candidates.length) return '';
   return [
     'WORKFLOW_CANDIDATES (observed from task signals; non-binding advisory):',
     `CANDIDATES: ${suggestion.candidates.join(', ')}.`,
-    suggestion.languageHint ? `LANGUAGE_HINT: ${suggestion.languageHint}` : '',
     `RATIONALE: ${suggestion.rationale}`,
-    'Main selects the final Primary from the loaded index; these candidates narrow the search and may be ignored when the index reveals a better match. No router or gate.',
+    'Main selects the final domain from the reference catalog; these candidates narrow the search and may be ignored when the catalog reveals a better match. No router or gate.',
   ].filter(Boolean).join('\n');
 }
 
-function buildWorkflowEntryReminder(protocolLabel, workflowIndexSupplied, {
-  delegationAvailable = false,
-  taskDescriptor = {},
-} = {}) {
-  const firstProjectAction = workflowIndexSupplied
-    ? '- OTHERWISE (PROJECT): INDEX STATUS=SUPPLIED BY EXACT NATIVE `skill-prompt`. Do not reread it; the next response starts at byte 0 with a filled `WORKFLOW PLAN` from that body.'
-    : '- OTHERWISE (PROJECT): INDEX STATUS=NOT SUPPLIED. Call only `read` with `path=skill://omp-enhancer-workflows`, end the response and wait. Do not read a project path or call any other tool first.';
-  const executionHandoff = delegationAvailable
-    ? 'Main is the orchestrator: for the loaded non-simple card, delegate evidence gathering, planning, implementation, and audit to visible Agents; copy Delegate rows into native task; direct work needs one recorded fallback. Keep parent VERIFY separate.'
-    : 'For a loaded non-simple card, record the concrete permitted fallback on each affected checkpoint when native delegation is unavailable or forbidden; keep parent VERIFY separate.';
-  return [
-    `${protocolLabel} (soft one-shot for top-level Main).`,
-    'FIRST RESPONSE: choose exactly one line below.',
-    '- DIRECT ONLY: a verbatim, no-judgment field/heading lookup uses no Skill or TODO.',
-    firstProjectAction,
-    'Review, correction, comparison, verification, design, transformation, planning, research, and writing are PROJECT at any size. Available Skills metadata and this reminder are not the body; only the exact native `skill-prompt` body named `omp-enhancer-workflows` is supplied.',
-    `AFTER THE INDEX RETURNS: follow its DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY protocol exactly. Emit a byte-0 \`WORKFLOW PLAN\` with one Primary, only independently matched Add-ons, exact Skill URIs, structured NOW/THEN, and at least four detailed Actions. Use resource-only load batches and waits; then emit byte-0 \`WORKFLOW READY\` + rebased detailed TODO only and wait before project tools. ${executionHandoff}`,
-    'AUTHORITY: this reminder selects no workflow, Skill, Agent, or fork width and creates no runtime gate, router, retry, permission, or completion control. Main selects from the loaded index and current native state; OMP owns tools, permissions, delegation, and completion.',
-    ...(taskDescriptor.language && ['zh', 'en'].includes(String(taskDescriptor.language).toLowerCase())
-      ? [`If the task descriptor already resolved language=${taskDescriptor.language}, select writing.${taskDescriptor.language} directly and skip writing.pending.`]
-      : []),
-  ].join('\n');
-}
 export function buildStagedWorkflowReminder({
-  planMode = false,
-  planToExecuteTransition = false,
-  hasVisibleSkills = false,
   hasWorkflowSkill = false,
   workflowIndexSupplied = false,
   hasNativeTask = false,
   subagentsAllowed = true,
-  implementationDelegationAllowed = true,
   taskDescriptor = {},
-  model = null,
 } = {}) {
+  if (!hasWorkflowSkill && !hasNativeTask) return null;
+
   const sections = [];
   const features = [];
-  if (planMode) {
-    sections.push(buildPlanModeReminderSection({
-      delegationAvailable: hasNativeTask && subagentsAllowed && implementationDelegationAllowed,
-    }));
-    features.push('plan-mode');
-  }
-  const protocolLabel = 'OMP_SOFT_PROTOCOL';
-  const workflowEntryLabel = 'OMP_WORKFLOW_ENTRY';
-  const effectiveWorkflowSkill = hasWorkflowSkill || planToExecuteTransition;
-  if (effectiveWorkflowSkill) {
-    sections.push(buildWorkflowEntryReminder(workflowEntryLabel, workflowIndexSupplied, {
-      delegationAvailable: hasNativeTask && subagentsAllowed && implementationDelegationAllowed,
-      taskDescriptor,
-    }));
-    features.push('skill-discovery', 'workflow-selection');
-    if (hasNativeTask && subagentsAllowed && implementationDelegationAllowed) {
-      features.push('delegation-decision');
-    }
-  } else if (hasVisibleSkills) {
-    sections.push(`${protocolLabel} (soft one-shot for top-level Main; this reminder selects no workflow or Agent):\n${buildSkillStagedReminder(workflowIndexSupplied)}`);
-    features.push('skill-discovery');
-  } else if (hasNativeTask && subagentsAllowed && implementationDelegationAllowed) {
-    const isSubstantive = ['modify', 'create', 'release'].includes(taskDescriptor.operation);
-    if (isSubstantive) {
-      sections.push(buildWorkflowEntryReminder(workflowEntryLabel, workflowIndexSupplied, {
-        delegationAvailable: true,
-        taskDescriptor,
-      }));
-      features.push('skill-discovery', 'workflow-selection');
-    } else {
-      sections.push(`${protocolLabel} (soft one-shot for top-level Main; this reminder selects no workflow or Agent):\n${buildTaskStagedReminder(workflowIndexSupplied)}`);
-    }
-  }
-  const taskShapePrompt = hasNativeTask && subagentsAllowed
-    ? buildTaskShapePrompt(taskDescriptor, { workflowSkillVisible: effectiveWorkflowSkill })
-    : '';
-  if (taskShapePrompt) {
-    sections.push(taskShapePrompt);
-    features.push('task-shape-facts');
-  }
-  const candidatePrompt = hasNativeTask && subagentsAllowed
-    ? buildWorkflowCandidatePrompt(taskDescriptor)
-    : '';
-  if (candidatePrompt) {
-    sections.push(candidatePrompt);
-    features.push('workflow-candidates');
-  }
+
+  const indexDirective = workflowIndexSupplied
+    ? 'The workflow index was supplied natively. Do not reread it.'
+    : 'For non-trivial PROJECT work, read `skill://omp-enhancer-workflows` for the domain reference catalog.';
+
+  sections.push([
+    'OMP_ORCHESTRATION (soft advisory; selects no workflow, Agent, or gate):',
+    'Main is the orchestrator. Phases: ANALYZE -> EXECUTE -> REVIEW.',
+    'ANALYZE: Main analyzes directly for focused work; delegates to analyzer for complex multi-slice work.',
+    'EXECUTE: Main executes directly for simple changes; delegates to task/domain agents for substantial work.',
+    'REVIEW: Main reviews simple changes directly; delegates to reviewer for complex or risky changes.',
+    indexDirective,
+    'A verbatim field/heading lookup needs no workflow or TODO.',
+    'OMP owns tools, permissions, delegation, and completion.',
+  ].join('\n'));
+  features.push('orchestration-advisory');
+
   if (hasNativeTask && subagentsAllowed) {
-    const reviewBudgetPrompt = buildDynamicReviewBudgetPrompt({
-      taskDescriptor,
-    });
-    const delegationSections = [
-      ...(reviewBudgetPrompt ? [reviewBudgetPrompt] : []),
-      ...(implementationDelegationAllowed && !effectiveWorkflowSkill ? [
-        DELEGATION_DECISION,
-      ] : []),
-    ];
-    if (delegationSections.length) sections.push(delegationSections.join('\n'));
-    if (implementationDelegationAllowed && !features.includes('delegation-decision')) {
-      features.push('delegation-decision');
+    const taskShapePrompt = buildTaskShapePrompt(taskDescriptor, { workflowSkillVisible: hasWorkflowSkill });
+    if (taskShapePrompt) {
+      sections.push(taskShapePrompt);
+      features.push('task-shape-facts');
     }
-    if (reviewBudgetPrompt) features.push('dynamic-review-budget');
+    const candidatePrompt = buildWorkflowCandidatePrompt(taskDescriptor);
+    if (candidatePrompt) {
+      sections.push(candidatePrompt);
+      features.push('workflow-candidates');
+    }
   }
-  // Project exploration advisory: nudge scout dispatch for borderline complexity
-  if (taskDescriptor.complexity === 'focused'
-    && ['medium', 'large'].includes(taskDescriptor.projectScale)
-    && hasNativeTask && subagentsAllowed) {
-    sections.push('PROJECT EXPLORATION (soft): Before committing to a workflow width, dispatch one `scout` subagent to explore the target project (entry points, module boundaries, test layout, config vs generated). Use the scout\'s evidence together with the project snapshot to decide whether `focused` work is sufficient or the task is `broad`. This is advisory; if a `scout` Agent is not visible or native capacity is constrained, proceed with the snapshot-seeded complexity.');
+
+  if (taskDescriptor.language && ['zh', 'en'].includes(String(taskDescriptor.language).toLowerCase())) {
+    sections.push(`Task descriptor resolved language=${taskDescriptor.language}; select matching writing skills directly.`);
+    features.push('language-hint');
   }
-  if (shouldPrimeToolCalls(model)) {
-    sections.push(buildToolCallPrimingSection());
-    features.push('tool-call-priming');
-  }
+
   if (!sections.length) return null;
   return {
     content: sections.join('\n\n'),
@@ -669,7 +481,6 @@ export function createState() {
       readAttempts: [],
     },
     taskSequence: 0,
-    protocolCoach: createWorkflowProtocolCoachState(),
   };
 }
 
@@ -878,7 +689,6 @@ function buildObservationStatus(state) {
     tasks: [...state.tasks.values()],
     skill_review: state.lastSkillUsage,
     agent_review: state.lastSubagentUsage,
-    coachDiagnostics: sanitizeWorkflowProtocolCoachState(state.protocolCoach).diagnostics,
   };
 }
 
@@ -955,7 +765,6 @@ function readStateSnapshot(value = {}) {
   state.taskSequence = Number.isInteger(value.taskSequence) && value.taskSequence >= 0
     ? value.taskSequence
     : state.tasks.size;
-  state.protocolCoach = sanitizeWorkflowProtocolCoachState(value.protocolCoach);
   return state;
 }
 function sanitizeSkillEvidence(value) {
@@ -1020,7 +829,6 @@ function serializeState(state) {
     tasks: [...state.tasks.values()],
     completedAgents: [...state.completedAgents],
     taskSequence: state.taskSequence,
-    protocolCoach: serializeWorkflowProtocolCoachState(state.protocolCoach),
   };
 }
 
@@ -1147,19 +955,6 @@ function taskInputItems(event = {}) {
   const input = event.input ?? event.params ?? event.arguments ?? {};
   if (Array.isArray(input.tasks)) return input.tasks.filter(isRecord);
   return isRecord(input) && ['assignment', 'prompt', 'task', 'message'].some((key) => typeof input[key] === 'string') ? [input] : [];
-}
-
-function todoInitItemsText(event = {}) {
-  const input = event.input ?? event.params ?? event.arguments ?? {};
-  if (input.op !== 'init') return '';
-  const items = Array.isArray(input.list)
-    ? input.list.flatMap((phase) => (Array.isArray(phase?.items) ? phase.items : []))
-    : Array.isArray(input.items) ? input.items : [];
-  return items.map((item) => (
-    typeof item === 'string'
-      ? item.trim()
-      : String(item?.text ?? item?.content ?? item?.task ?? item?.name ?? '').trim()
-  )).filter(Boolean).join('\n');
 }
 
 function assignmentKey(item) {

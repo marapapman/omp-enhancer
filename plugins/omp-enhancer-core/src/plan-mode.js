@@ -44,17 +44,12 @@ export function stripPlanCommand(prompt = '') {
   return text.slice(match[0].length).trim();
 }
 
-// Advisory plan-mode reminder section. delegationAvailable gates the review
-// wording the same way buildWorkflowEntryReminder does.
-export function buildPlanModeReminderSection({ delegationAvailable = false } = {}) {
-  const reviewLine = delegationAvailable
-    ? 'proactively dispatch the read-only `plan` Agent in PLAN REVIEW mode on the completed plan file when it is visible, disposition its advisory findings, revise the plan, then write the plan slug to xd://propose. If `plan` is not visible, record that limitation; never fabricate a review.'
-    : 'record the concrete permitted fallback for the plan review when native delegation is unavailable or forbidden, then write the plan slug to xd://propose. Never fabricate a review.';
+// Advisory plan-mode reminder section.
+export function buildPlanModeReminderSection() {
   return [
-    'OMP_PLAN_MODE (soft one-shot; host read-only state; selects no workflow/Agent/gate):',
-    'HOST CONTRACT: OMP plan mode is active. The working tree is read-only: never create, edit, delete, or rename working-tree files and never run state-changing commands. The deliverable is the canonical plan written to local://<slug>-plan.md (local:// planning artifacts only).',
-    'AUTHOR THE PLAN WITH THE STAGED WORKFLOW: plan mode does not skip workflow, Skill, or TODO preparation. Follow DISCOVER -> DECLARE -> LOAD -> COMMIT to choose one Primary and load its method, then write the decision-complete plan file from the loaded steps.',
-    `REVIEW THE PLAN BEFORE PROPOSING: ${reviewLine}`,
-    'EXIT: leaving plan mode and any implementation happens ONLY through the user\'s approval via xd://propose. This reminder grants no write permission, starts no execution, and creates no gate, router, or completion control.',
+    'OMP_PLAN_MODE (soft advisory):',
+    'Plan mode is active. The working tree is read-only. The deliverable is the plan written to local://<slug>-plan.md.',
+    'Use ANALYZE -> EXECUTE -> REVIEW: analyze the task, write the plan, review it before proposing.',
+    'Exit happens only through user approval via xd://propose.',
   ].join('\n');
 }

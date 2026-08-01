@@ -1,38 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-
-// ScopeNotes from VISUAL_AGENT_SCOPE_NOTES — same constant in both files
-// We verify they produce identical scopeNotes entries across the 5 visual workflows
 
 import { workflowCatalog } from '../src/workflows/catalog.js';
 
-const VISUAL_IDS = ['design.visual', 'slides.generate', 'slides.modify', 'diagram.tikz', 'diagram.mermaid'];
-
-test('every visual workflow shares the same VISUAL_AGENT_SCOPE_NOTES prefix in scopeNotes', () => {
-  const reference = workflowCatalog['design.visual'].scopeNotes.slice(0, 2);
-
-  for (const id of VISUAL_IDS) {
-    const notes = workflowCatalog[id].scopeNotes.slice(0, 2);
-    assert.deepEqual(notes, reference, `${id} scopeNotes first 2 entries must match design.visual`);
-  }
+test('the single visual workflow carries the shared visual scope notes', () => {
+  const visual = workflowCatalog.visual;
+  assert.ok(visual, 'visual workflow must exist');
+  assert.ok(visual.scopeNotes.length >= 2, 'visual workflow must carry scope notes');
+  assert.match(visual.scopeNotes.join(' '), /Default to Mermaid for academic diagrams unless explicit TikZ\/LaTeX request/iu);
+  assert.match(visual.scopeNotes.join(' '), /TikZ rendering uses the tikz-helper plugin pipeline/iu);
 });
 
-test('VISUAL_AGENT_SCOPE_NOTES sources are byte-identical in operations.js and writing.js', () => {
-  const opsSource = readFileSync(
-    new URL('../src/workflows/definitions/operations.js', import.meta.url),
-    'utf-8',
-  );
-  const writingSource = readFileSync(
-    new URL('../src/workflows/definitions/writing.js', import.meta.url),
-    'utf-8',
-  );
-
-  // Extract the VISUAL_AGENT_SCOPE_NOTES array from each file
-  const opsMatch = opsSource.match(/const VISUAL_AGENT_SCOPE_NOTES = \[(\s*[\s\S]*?)\n\];/m);
-  const writingMatch = writingSource.match(/const VISUAL_AGENT_SCOPE_NOTES = \[(\s*[\s\S]*?)\n\];/m);
-
-  assert.ok(opsMatch, 'VISUAL_AGENT_SCOPE_NOTES found in operations.js');
-  assert.ok(writingMatch, 'VISUAL_AGENT_SCOPE_NOTES found in writing.js');
-  assert.equal(opsMatch[1], writingMatch[1], 'VISUAL_AGENT_SCOPE_NOTES must be byte-identical in both files');
+test('no separate visual workflow files remain with duplicated scope-note constants', () => {
+  // The five legacy visual workflows are consolidated into one `visual` definition.
+  for (const id of ['design.visual', 'slides.generate', 'slides.modify', 'diagram.tikz', 'diagram.mermaid']) {
+    assert.equal(workflowCatalog[id], undefined, `${id} must be consolidated away`);
+  }
 });

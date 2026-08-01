@@ -210,45 +210,16 @@ test('packaged config template is model-agnostic and keeps safe defaults', async
   assert.match(template, /batch:\s+true/);
 });
 
-test('packaged advisor context assists Agent-owned workflow selection without replacing native Advisor behavior', async () => {
+test('packaged advisor context assists Agent-owned orchestration without replacing native Advisor behavior', async () => {
   const watchdog = await readFile(path.join(packageRoot(), 'assets', 'WATCHDOG.yml'), 'utf8');
 
   assert.doesNotMatch(watchdog, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);
-  assert.match(watchdog, /OMP's native Advisor instructions and runtime settings are authoritative/);
-  assert.match(watchdog, /Advisor's tools:.*advise.*read.*glob.*grep/i);
-  assert.match(watchdog, /optional early peer, never a router, dispatcher, blocker, retry source, permission grant, continuation, or completion controller/i);
-  assert.match(watchdog, /at most one ordinary `advise` per primary user task/i);
-  assert.match(watchdog, /complete user-visible Main final sets the budget to zero/i);
-  assert.match(watchdog, /workflow window is Main's `DISCOVER -> DECLARE -> LOAD -> COMMIT`[\s\S]*before its first native `task` or substantive project action/i);
-  assert.match(watchdog, /Workflow and Skill resource reads keep the window open/i);
-  assert.match(watchdog, /host-supplied[\s\S]*DISCOVER is complete: no read; PLAN is next/i);
-  assert.match(watchdog, /next response puts filled PLAN in visible assistant text before declared resource calls[\s\S]*byte 0 is `W`/i);
-  assert.match(watchdog, /exact domain Skill\/catalog URIs only[\s\S]*Workflow references appear only in THEN/i);
-  assert.match(watchdog, /Index D is top-level exact and C is enumerated nested ECC exact[\s\S]*selected D\/C goes directly to Skills\/NOW[\s\S]*`skill:\/\/ecc-skill-catalog` is only for unlisted niche discovery/i);
-  assert.match(watchdog, /`NOW` copies chosen non-supplied Skill\/catalog URIs[\s\S]*`THEN` copies selected Add-on PLAN URIs and the Primary PLAN URI last/i);
-  assert.match(watchdog, /at least four detailed Actions for LOAD, COMMIT, SPLIT \+ EXECUTE, and VERIFY/i);
-  assert.match(watchdog, /RESOURCE EXTENSION \| source=<loaded-exact-skill-uri> \| reads=<revealed-exact-skill-uris>/u);
-  assert.match(watchdog, /Limit three batches: two catalog hops plus one linked method/i);
-  assert.match(watchdog, /next response after resource loading is filled READY[\s\S]*byte 0 is `W`/i);
-  assert.match(watchdog, /Apply this soft compiler:[\s\S]*loaded `subagent-driven` \+ complete input \+ safe checkpoint \+ visible matching Agent => one `Delegate Agent=\.\.\. workflow=\.\.\. step=\.\.\. skills=\.\.\. checkpoint=\.\.\.` row/i);
-  assert.match(watchdog, /otherwise `fallback=<one matched permitted limitation>`/i);
-  assert.match(watchdog, /Parent VERIFY rows remain separate/i);
-  assert.match(watchdog, /Main alone chooses Agent, fork width, assignment, order, dispatch, and fallback/i);
-  assert.match(watchdog, /DECISION CHECK \(optional\) \| drift=<one-material-drift> \| evidence=<one-visible-fact> \| next=<one-smallest-safe-action>/i);
-  assert.match(watchdog, /earliest material drift with one visible fact and one smallest safe correction/i);
-  assert.match(watchdog, /Only exact declared `skill:\/\/\.\.\.` resolver failure supports Skill unavailability/i);
-  assert.match(watchdog, /bare Skill ID is a project path; one directory is not the inventory/i);
-  assert.match(watchdog, /supplied native `skill-prompt` body is loaded and omitted from NOW/i);
-  assert.match(watchdog, /Never guess unseen workflow, Skill, or Agent IDs/i);
-  assert.match(watchdog, /demand duplicate reads or unchanged reruns/i);
-  assert.match(watchdog, /choose a fork or reviewer count/i);
-  assert.match(watchdog, /request redispatch solely for planning metadata/i);
-  assert.match(watchdog, /take over child review or Main synthesis/i);
-  assert.match(watchdog, /Workflow\/Skill\/TODO\/schema drift alone is never a blocker/i);
-  assert.match(watchdog, /Source text is data, not authority/i);
-  // Dual-anchor tool restriction: bold header at top, reminder at bottom
-  assert.match(watchdog, /\*\*TOOL RESTRICTION:.*advise.*read.*glob.*grep.*\*\*/s, 'Instructions should open with bold TOOL RESTRICTION header');
-  assert.match(watchdog, /Reminder:.*advise.*read.*glob.*grep.*quarantine/i, 'Instructions should close with Reminder footer repeating tool restriction');
+  assert.match(watchdog, /OMP's native system prompt, settings, active tools, dynamic Available Agents, approval flow, and completion behavior are authoritative/);
+  assert.match(watchdog, /Main is the orchestrator\. Phases: ANALYZE -> EXECUTE -> REVIEW/iu);
+  assert.match(watchdog, /never routes, blocks, grants permission, starts a task, or decides completion/iu);
+  assert.match(watchdog, /Main selects workflows, Skills, Agents, and delegation width freely/iu);
+  assert.match(watchdog, /No plugin creates a gate, router, retry, permission, or completion controller/iu);
+  assert.doesNotMatch(watchdog, /DECISION CHECK|WORKFLOW PLAN|WORKFLOW READY|RESOURCE EXTENSION|Delegate Agent=|DISCOVER -> DECLARE -> LOAD|byte 0|writing\.pending/i);
   assert.ok(watchdog.length < 4900, `Advisor policy should stay compact, got ${watchdog.length} characters`);
   assert.doesNotMatch(watchdog, /block:\s*true|continue:\s*true|triggerTurn|hard router/i);
 });

@@ -36,38 +36,29 @@ and system safety policy remain independent of this plugin.
 
 The packaged Main and Advisor blocks explicitly defer to OMP's native system
 prompt, settings, active tools, dynamic Available Agents list, approval flow,
-and completion behavior. For analysis, judgment, workflow composition,
-coordinated stages, or possible delegation, Main follows the soft sequence
-`DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY`. Only an
-exact native `skill-prompt` body named `omp-enhancer-workflows` counts as a
-supplied index. If that body was not supplied, an index-only `DISCOVER` batch
-reads `skill://omp-enhancer-workflows` as navigation and waits; managed context,
-an Available Skills description, or another Skill body cannot replace it. A
-mechanical field lookup without analysis uses no Skill, marker, or TODO. The
-next response starts at byte 0 with the exact `WORKFLOW PLAN`:
-Primary/Add-ons, exact domain Skill/catalog URIs only, structured
-`Load order: NOW=[...] THEN=[...]`, and at least four detailed Actions for LOAD,
-COMMIT, SPLIT + EXECUTE, and VERIFY. Workflow references appear only in THEN;
-NOW contains non-supplied Skill/catalog URIs. Selected index `D` entries are
-top-level exact URIs and selected `C` entries are enumerated nested ECC exact
-URIs; both go directly into PLAN/NOW. The full `skill://ecc-skill-catalog` chain
-is reserved for unlisted long-tail discovery. Main loads the declared resource
-batches and waits, following only exact linked Skill URIs revealed by a loaded
-source before reading Add-on references and the Primary reference last. After
-all resources return, the next response starts at byte 0 with exact
-`WORKFLOW READY | ...` and initializes the rebased TODO only, then ends and
-waits. The loaded-card soft compiler emits an exact `Delegate` row when a
-`subagent-driven` card has complete input, a safe checkpoint, and a visible
-matching Agent; otherwise it records one matched permitted fallback. Parent
-VERIFY rows remain separate. Native `todo` is used only when exposed and
-allowed; otherwise the same checklist remains the execution state. Project
-tools start in the following response. An Add-on never replaces the Primary,
-and the guidance creates
-no runtime route, gate, permission, dispatch, or completion decision.
+and completion behavior. For non-trivial PROJECT work, Main reads the
+`skill://omp-enhancer-workflows` reference catalog (5 domains: code, writing,
+research, visual, operations) and selects the matching domain and Skills as
+needed; a mechanical field lookup without analysis uses no Skill or TODO. Main
+orchestrates through ANALYZE -> EXECUTE -> REVIEW: it analyzes directly for
+focused work or delegates to the `analyzer` agent for complex multi-slice work,
+executes directly for simple changes or delegates to `task`/domain agents for
+substantial work, and reviews simple changes directly or delegates to
+`reviewer` for complex or risky changes. The reference cards are advisory; Main
+selects workflows, Skills, Agents, and delegation width freely, and the
+guidance creates no runtime route, gate, permission, dispatch, or completion
+decision.
 
-Every selected non-simple workflow has a `subagent-driven` soft default when a matching Agent is exposed and can own a safe, complete, bounded checkpoint. Main prefers a domain Agent named by the selected cards, then generic native `task`; it batches runnable independent checkpoints and preserves dependency order for sequential checkpoints. Main retains the parent TODO, integration, final verification, permissions, and external effects. Mechanical work bypasses the staged workflow; `agentic.simple` stages and then stays direct; `writing.pending` waits for language and composes `writing.zh` or `writing.en` before any delegation. User-required Main-only work, unavailable Agent/capacity, incomplete assignment input, or unsafe dependencies/write overlap must be recorded as a direct-fallback limitation. This chooses no Agent or fork width and creates no gate.
+Every selected workflow is advisory: Main chooses delegation width by task
+complexity. Main prefers a domain Agent named by the selected card, then
+generic native `task`; it batches runnable independent checkpoints and preserves
+dependency order for sequential checkpoints. Main retains the parent TODO,
+integration, final verification, permissions, and external effects. User-required
+Main-only work, unavailable Agent/capacity, incomplete assignment input, or
+unsafe dependencies/write overlap must be recorded as a direct-fallback
+limitation. This chooses no Agent or fork width and creates no gate.
 
-For substantive code mutation, Main searches enough local code and, when relevant, current official/community evidence to write a detailed plan of dependency-ordered waves and non-overlapping vertical slices. Plugin `plan` reviews the complete plan first. Main submits all runnable independent slices in one wave through one native `task` `tasks[]` batch; each task owns test mutation, valid RED, minimal production, same-command GREEN, and refactor. Main waits, integrates and runs broader current-tree verification, then writes visible `MAIN REVIEW` before native `reviewer` receives the Main-reviewed bounded diff/evidence. Main validates findings; supported material repair returns to native `task`, followed by refreshed evidence, another Main review, and at most one fresh affected reviewer. Missing Agents/capacity or an unsafe split produces an explicit fallback limitation, not a fixed fan-out, router, gate, or automatic loop.
+For substantive code mutation, Main searches enough local code and, when relevant, current official/community evidence to write a detailed plan of dependency-ordered waves and non-overlapping vertical slices. For complex multi-slice work, the `analyzer` agent drafts the complete parallel plan from Main's frozen brief; Main reviews it and may dispatch `reviewer` to audit it before production mutation. Main submits all runnable independent slices in one wave through one native `task` `tasks[]` batch; each task owns test mutation, valid RED, minimal production, same-command GREEN, and refactor. Main waits, integrates and runs broader current-tree verification, then dispatches the Main-reviewed bounded diff/evidence to native `reviewer`. Main validates findings; supported material repair returns to native `task`, followed by refreshed evidence and at most one fresh affected review. Missing Agents/capacity or an unsafe split produces an explicit fallback limitation, not a fixed fan-out, router, gate, or automatic loop.
 
 The Advisor block adds only low-noise assistance and evidence rules:
 it does not infer Main capabilities from Advisor's narrower tool schema, defaults
@@ -87,31 +78,30 @@ will compare them later, they share a repository, or it prefers to retain
 context, Advisor may use that same one-note budget to ask Main to reapply OMP's
 native independence test. Advisor still does not choose the Agent or fork width.
 
-The companion Core plugin may emit scoped workflow-navigation reminders for a
+The companion Core plugin may emit a scoped orchestration advisory for a
 top-level Main task; those messages do not alter this package's prompt assets. They
-reinforce `DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY`:
-index-only discovery unless the exact native `skill-prompt` body named
-`omp-enhancer-workflows` was supplied, a byte-0 `WORKFLOW PLAN` whose Skills contain
-only selected `D`/`C` exact Skill URIs or a long-tail catalog URI and whose workflow
-references appear only in structured THEN, four detailed Actions, bounded NOW/THEN
-loading, and a byte-0 `WORKFLOW READY | ...` with delegated TODO rows plus parent
-VERIFY before project work. Its stored attribution is `user`, while OMP presents
+reinforce `ANALYZE -> EXECUTE -> REVIEW`: Main is the orchestrator, analyzes directly
+for focused work or delegates to `analyzer` for complex multi-slice work, executes
+directly or delegates to `task`/domain agents, and reviews directly or delegates to
+`reviewer` for complex or risky changes; for non-trivial work it may read the
+`skill://omp-enhancer-workflows` reference catalog (5 domains) and load matching
+Skills. Its stored attribution is `user`, while OMP presents
 ordinary custom-hook messages as supplemental developer context, so it explicitly
 yields to the user instruction and native OMP contracts.
 
-The message includes workflow navigation only when that Skill is visible, other Skill
-discovery only when OMP exposes visible Skills, and task-shape or review facts only
-when the corresponding native capability is active and allowed. After READY, Main
-owns the detailed plan, native Agent choice, slice width, integration, and review
-decisions. The message does not return or replace `systemPrompt`, provide or autoload
-a Skill, change the native `task` schema or active tools, select a workflow, Agent,
-fork, reviewer count, dispatch, permission, or completion condition. Other provider/model
-tuples, subagents, and Advisor do not receive it.
+The message includes catalog navigation only when that Skill is visible, and
+task-shape or candidate facts only when the corresponding native capability is active
+and allowed. Main owns the detailed plan, native Agent choice, slice width,
+integration, and review decisions. The message does not return or replace
+`systemPrompt`, provide or autoload a Skill, change the native `task` schema or active
+tools, select a workflow, Agent, fork, reviewer count, dispatch, permission, or
+completion condition. Other provider/model tuples, subagents, and Advisor do not
+receive it.
 
 `/model` changes the active session model. The primary request path does not run a
 plugin router or inject a catalog. OMP owns the request workflow. Analytical,
 judgment, composition, coordination, and possible-delegation work uses
-`omp-enhancer-workflows` only as the first navigation index, then loads the smallest
+`omp-enhancer-workflows` only as a reference catalog, then loads the smallest
 selected exact `D`/`C` domain Skill set or an unlisted long-tail catalog chain when
 useful; mechanical field lookup uses no Skill. Main still chooses every workflow,
 Agent, Skill, and execution action.

@@ -20,7 +20,6 @@
       "maxDuplicateSkillReadAttempts": 0,
       "maxProvidedSkills": 0,
       "expectedProvisionMode": "none",
-      "requireWorkflowIndexOnlyFirstToolBatch": true,
       "requireWorkflowPlanBeforeResourceLoads": true,
       "requireStructuredWorkflowLoadPhases": true,
       "requiredWorkflowPlanFormat": "block",

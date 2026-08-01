@@ -131,7 +131,7 @@
       "cwd": "/home/dingli/frugal-pi",
       "timeoutSeconds": 150,
       "repeat": 1,
-      "prompt": "只读对比审阅两个已提供的代码变更计划：计划 A 涉及 extensions/agent-fleet/main-orchestration.ts 的阶段收敛，计划 B 涉及 extensions/agent-fleet/stop-rules.ts 的停止规则。选择 code.dev 并加载唯一通用 skill://code-development，用原生 todo 写明两个独立可运行的 PLAN REVIEW slice。不要在 Main 预读目标；把两个完整计划放进同一次 task tasks[] 批量调用，两个 assignment 都使用 plan。每个 assignment 必须直接给出精确目标和符号、验收条件、本地锚点、预期 RED/GREEN、扩大验证和风险，开头使用完整 [workflow=code.dev step=step-plan-review todo=... skills=code-development] 前缀，并要求只审阅所提供的计划，不读取项目文件、不运行命令，直接返回最多三条具体缺口或明确无发现。task 会返回后台 job；等待结果自动送达，若必须检查状态只用一次 job poll/list，绝不能再调用 task 轮询。主 agent 不扩展到其他文件；逐项完成 todo 后给出简短对比结论。不修改文件、不运行测试、不联网。",
+      "prompt": "只读对比审阅两个已提供的代码变更计划：计划 A 涉及 extensions/agent-fleet/main-orchestration.ts 的阶段收敛，计划 B 涉及 extensions/agent-fleet/stop-rules.ts 的停止规则。选择 code 工作流并加载唯一通用 skill://code-development，用原生 todo 写明两个独立可运行的 PLAN REVIEW slice。不要在 Main 预读目标；把两个完整计划放进同一次 task tasks[] 批量调用，两个 assignment 都使用 plan。每个 assignment 必须直接给出精确目标和符号、验收条件、本地锚点、预期 RED/GREEN、扩大验证和风险，并要求只审阅所提供的计划，不读取项目文件、不运行命令，直接返回最多三条具体缺口或明确无发现。task 会返回后台 job；等待结果自动送达，若必须检查状态只用一次 job poll/list，绝不能再调用 task 轮询。主 agent 不扩展到其他文件；逐项完成 todo 后给出简短对比结论。不修改文件、不运行测试、不联网。",
       "tools": ["todo", "task", "job", "read", "grep", "glob"],
       "expectations": {
         "requiredSkills": ["code-development"],
@@ -146,13 +146,7 @@
         "minNativeTaskForks": 2,
         "minNativeTaskBatchCalls": 1,
         "requireNativeTaskBatch": true,
-        "requireNativeTaskMetadataPrefix": true,
-        "requireExactNativeTaskMetadataPrefix": true,
-        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
-        "requiredNativeTaskAgents": ["plan"],
-        "requiredNativeTaskWorkflows": ["code.dev"],
-        "requiredNativeTaskWorkflowsPerAssignment": ["code.dev"],
-        "requiredNativeTaskSkillsPerAssignment": ["code-development"]
+        "requiredNativeTaskAgents": ["plan"]
       }
     },
     {
@@ -201,7 +195,7 @@
       "category": "writing-edit",
       "fixture": "semantic-edit-en-introduction",
       "repeat": 3,
-      "prompt": "先从共享工作流目录选择 writing.en + writing.latex，并在任何项目读取前用原生 todo 建立计划；从当前技能目录加载最小适用英文写作 skill。然后保守润色 tex/introduction.tex，只删除第一段中重复的第二个 lower；除此之外逐字保留文件内容，包括所有 LaTeX 命令、标签、限定词、模态、否定、百分比和引用。修改后复读一次，逐项完成 todo，不联网，最后简要报告。",
+      "prompt": "先从共享工作流目录选择 writing 工作流，并在任何项目读取前用原生 todo 建立计划；从当前技能目录加载最小适用英文写作 skill。然后保守润色 tex/introduction.tex，只删除第一段中重复的第二个 lower；除此之外逐字保留文件内容，包括所有 LaTeX 命令、标签、限定词、模态、否定、百分比和引用。修改后复读一次，逐项完成 todo，不联网，最后简要报告。",
       "tools": ["todo", "read", "edit"],
       "expectations": {
         "requiredSkills": [],

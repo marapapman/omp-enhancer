@@ -19,20 +19,18 @@ OMP exposes available Skills and Agents; Main chooses under native permissions. 
 
 Describe the task naturally. Main remains responsible for selecting Skills, Agents, tools, and execution steps under the user instruction and OMP's native permissions.
 
-`omp-config` exposes the optional `omp-enhancer-workflows` index. Only the exact native `skill-prompt` body named `omp-enhancer-workflows` counts as supplied; managed context, a Skill list, or another body does not. Otherwise Main reads `skill://omp-enhancer-workflows` alone first. It covers writing, research, fact checking, code, infrastructure, SVG/TikZ diagrams, design, security, and release work.
+`omp-config` exposes the optional `omp-enhancer-workflows` reference catalog. It covers 5 domains: code, writing, research, visual, and operations. Main reads `skill://omp-enhancer-workflows` for non-trivial work and selects the matching domain and Skills; a mechanical field lookup without analysis uses no Skill or TODO.
 
-Its discovery columns are explicit: `D` is a top-level Skill exact URI; `C` is an enumerated nested ECC exact URI. A selected `D` or `C` URI goes directly into `WORKFLOW PLAN` and `NOW`; only an unenumerated long-tail ECC method requires `skill://ecc-skill-catalog`. Workflow references stay in `THEN`.
+Its discovery columns are explicit: `D` is a top-level Skill exact URI; `C` is an enumerated nested ECC exact URI. Skills provide methods and evidence rules; the domain cards are advisory.
 
-Writing choices are grouped as language, format overlays, and specialized outputs. For prose, `writing.en` or `writing.zh` is Primary and a requested format such as LaTeX is an Add-on; a format workflow is Primary only for format- or structure-only work.
+Writing covers prose in any language and format (English, Chinese, LaTeX, Markdown, Beamer, Word). Main selects the matching language and format Skills directly; there is no separate pending workflow.
 
-The PLAN response starts at byte 0 with `WORKFLOW PLAN`, loads declared resources, and waits. After loading, the READY response starts at byte 0 with `WORKFLOW READY | ...`, rebases the detailed TODO, initializes native TODO only when available, and waits before project work. Mechanical field lookups without analysis use no Skill or TODO.
+Main orchestrates through ANALYZE -> EXECUTE -> REVIEW: it analyzes directly for focused work or delegates to the `analyzer` agent for complex multi-slice work, executes directly for simple changes or delegates to `task`/domain agents for substantial work, and reviews simple changes directly or delegates to `reviewer` for complex or risky changes. A concrete safety, capacity, input, or dependency limit records direct fallback. This is not a gate, router, fixed fan-out, or automatic loop.
 
-Non-simple workflows softly default to subagent-driven execution when matching Agents are available. Main owns integration, verification, permissions, and effects; independent work may run in parallel. A concrete safety, capacity, input, or dependency limit records direct fallback. Code adds RED/GREEN slices, `MAIN REVIEW`, and reviewer reconciliation. This is not a gate, router, fixed fan-out, or automatic loop.
-
-You may name workflow IDs to constrain a request, for example:
+You may name a workflow domain to constrain a request, for example:
 
 ```text
-Use code.dev + security.review. Review only; do not modify files.
+Use code + security. Review only; do not modify files.
 ```
 
 Workflow names provide planning context only. They never grant permission to write, execute, publish, or access the network.

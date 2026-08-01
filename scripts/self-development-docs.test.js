@@ -82,7 +82,7 @@ test('current documentation links the self-development and E2E methods without e
   assert.ok(Buffer.byteLength(readme) <= 6500, 'root README keeps development detail under docs');
 });
 
-test('current repository documentation matches the v30 runtime and evidence contracts', async () => {
+test('current repository documentation matches the v31 runtime and evidence contracts', async () => {
   const [agents, architecture, development, workflows] = await Promise.all([
     read('AGENTS.md'),
     read('docs/ARCHITECTURE.md'),
@@ -90,19 +90,19 @@ test('current repository documentation matches the v30 runtime and evidence cont
     read('docs/WORKFLOW_DEVELOPMENT.md'),
   ]);
 
-  assert.match(agents, /Workflow catalog \(v30\)/u);
-  assert.match(agents, /Workflow catalog v30/u);
-  assert.match(architecture, /Catalog version 30.+31.+29.+`subagent-driven`/isu);
-  assert.match(development, /Catalog version 30.+31.+29.+`subagent-driven`/isu);
-  assert.match(workflows, /当前 31 张卡片.+29 张.+`subagent-driven`/isu);
-  assert.match(workflows, /parity.+29 张.+`subagent-driven`/isu);
+  assert.match(agents, /Workflow catalog \(v31\)/u);
+  assert.match(agents, /Workflow catalog v31/u);
+  assert.match(architecture, /Catalog version 31.+合并为 5 个域：`code`、`writing`、`research`、`visual`、`operations`/isu);
+  assert.match(development, /Catalog version 31.+5 张域卡/isu);
+  assert.match(workflows, /Catalog version 31 只有 5 张域卡/isu);
+  assert.match(workflows, /catalog v31 只有 5 个 ID/isu);
   assert.doesNotMatch(
     [agents, architecture, development, workflows].join('\n'),
-    /Catalog version 23|catalog \(v23\)/iu,
+    /Catalog version 23|catalog \(v23\)|catalog v30/iu,
   );
   assert.match(
     agents,
-    /`omp-enhancer-core` \| Task facts.+protocol coaching.+skill\/subagent validation.+`index\.js`/iu,
+    /`omp-enhancer-core` \| Task facts.+orchestration advisory.+skill\/subagent validation.+`index\.js`/iu,
   );
   assert.doesNotMatch(agents, /`omp-enhancer-core` \|[^\n|]*Workflow routing/iu);
   assert.doesNotMatch(agents, /`plugins\/omp-enhancer-core\/src\/` \|[^\n|]*routing/iu);
@@ -138,7 +138,7 @@ test('current repository documentation matches the v30 runtime and evidence cont
   ]) {
     assert.match(
       content,
-      /willingness.+`general\.subagent`.+non-mechanical.+subagent-driven/isu,
+      /willingness[^\n]*`code` 域与 `operations` 域/isu,
       path,
     );
     assert.doesNotMatch(content, /willingness.+non-mechanical `agentic\.simple`/isu, path);
@@ -157,12 +157,11 @@ test('current repository documentation matches the v30 runtime and evidence cont
   }
 });
 
-test('current documentation defines the bounded phase-local protocol coach without making it a gate', async () => {
-  const [agents, architecture, development, optimization, e2e] = await Promise.all([
+test('current documentation describes the simplified ANALYZE to EXECUTE to REVIEW advisory without making it a gate', async () => {
+  const [agents, architecture, development, e2e] = await Promise.all([
     read('AGENTS.md'),
     read('docs/ARCHITECTURE.md'),
     read('docs/DEVELOPMENT.md'),
-    read('docs/superpowers/DEEPSEEK_PROMPT_OPTIMIZATION.md'),
     read('docs/WORKFLOW_E2E_TESTING.md'),
   ]);
 
@@ -170,16 +169,15 @@ test('current documentation defines the bounded phase-local protocol coach witho
     ['AGENTS.md', agents],
     ['docs/ARCHITECTURE.md', architecture],
     ['docs/DEVELOPMENT.md', development],
-    ['docs/superpowers/DEEPSEEK_PROMPT_OPTIMIZATION.md', optimization],
     ['docs/WORKFLOW_E2E_TESTING.md', e2e],
   ]) {
-    assert.match(content, /PRE_PLAN[\s\S]*PRE_READY[\s\S]*PRE_DISPATCH/iu, path);
-    assert.match(content, /OMP_ENHANCER_DISABLE_PROTOCOL_COACH/iu, path);
-    assert.match(content, /(?:next natural|下一次自然).*?(?:request|请求)/isu, path);
+    assert.match(content, /ANALYZE -> EXECUTE -> REVIEW/u, path);
     assert.match(content, /(?:no|不|不得|不会).+(?:block|gate|router|路由|门禁|completion|完成控制)/isu, path);
   }
 
-  assert.match(development, /writing\.pending[\s\S]*(?:不|不得|不会|does not).+PRE_DISPATCH/iu);
-  assert.match(e2e, /deterministic[\s\S]*context[\s\S]*(?:single|单次).+(?:sample|样本)/isu);
-  assert.doesNotMatch(optimization, /No plugin observes or enforces either sentinel|No hook observes or enforces these markers/iu);
+  assert.match(agents, /OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER/u);
+  assert.doesNotMatch(
+    [agents, architecture, development, e2e].join('\n'),
+    /OMP_ENHANCER_DISABLE_PROTOCOL_COACH|PRE_PLAN[\s\S]*PRE_READY[\s\S]*PRE_DISPATCH/iu,
+  );
 });

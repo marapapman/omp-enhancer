@@ -7,96 +7,80 @@ import {
   buildWorkflowSkillReferenceMarkdown,
 } from '../src/workflows/render-skill.js';
 import {
+  DIRECT_FALLBACK_REASONS,
   ORCHESTRATOR_IDENTITY,
-  SELF_INDUCED_FALLBACK_GUARD,
-  WORKFLOW_PLAN_TEMPLATE,
-  WORKFLOW_STATE_LINE,
+  WORKFLOW_PHASE_LINE,
 } from '../src/workflows/staged-contract.js';
 
-test('workflow prompts use one positive staged handoff with explicit load phases', () => {
-  const index = buildWorkflowSkillIndexMarkdown();
-  const reference = buildWorkflowSkillReferenceMarkdown('writing.en');
+const LEGACY_MARKERS = [
+  'DECLARE HANDOFF',
+  'WORKFLOW PLAN',
+  'WORKFLOW READY',
+  'SENTINEL',
+  'byte 0',
+  'NOW=',
+  'THEN=',
+  'RESOURCE EXTENSION',
+  'Delegate Agent=',
+  'TASK COPY',
+  'DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY',
+];
 
-  assert.equal(
-    WORKFLOW_STATE_LINE,
-    'DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY',
-  );
-  assert.match(index, new RegExp(WORKFLOW_STATE_LINE.replaceAll(' -> ', String.raw`\s*->\s*`), 'u'));
-  assert.match(
-    WORKFLOW_PLAN_TEMPLATE,
-    /Load order: NOW=\[<chosen non-supplied Skill\/catalog URIs-or-none>\] THEN=\[<Add-on PLAN URIs; Primary PLAN URI last-or-none>\]/u,
-  );
-  assert.match(
-    WORKFLOW_PLAN_TEMPLATE,
-    /Skills: <exact domain Skill\/catalog URIs-or-none>[\s\S]*1\. LOAD:[\s\S]*2\. COMMIT:[\s\S]*3\. SPLIT \+ EXECUTE:[\s\S]*4\. VERIFY:/u,
-  );
-  assert.match(
-    WORKFLOW_PLAN_TEMPLATE,
-    /2\. COMMIT: After all resources, emit READY \+ detailed TODO from loaded steps only; end and wait; zero project tools\./u,
-  );
-  assert.match(
-    WORKFLOW_PLAN_TEMPLATE,
-    /3\. SPLIT \+ EXECUTE: After READY wait, apply loaded defaults\/checkpoints to current Agents and dependency order; Delegate or record one permitted fallback\./u,
-  );
-  assert.match(
-    index,
-    /This body is the completed DISCOVER result; do not read `skill:\/\/omp-enhancer-workflows` again/u,
-  );
-  assert.match(
-    index,
-    /LOAD:[\s\S]*Skills=exact domain Skill\/catalog URIs[\s\S]*NOW=non-supplied Skills\/catalogs[\s\S]*THEN=Add-on refs then Primary/iu,
-  );
-  assert.match(
-    index,
-    /Language Primary \+ `\.tex` target[\s\S]*LaTeX prose[\s\S]*`writing\.latex` Add-on[\s\S]*Converters\/templates only when requested/iu,
-  );
-  assert.match(
-    index,
-    /COMPILE \(soft\): loaded `subagent-driven` \+ complete input.*safe checkpoint.*visible matching Agent => Delegate row; otherwise `fallback=<one matched permitted limitation>`/iu,
-  );
-  assert.match(
-    index,
-    /Loaded language card \+ target\/constraints\/roles => writer -> checker -> parent VERIFY after READY; Main does not pre-read/iu,
-  );
-  assert.match(
-    reference,
-    /READY NEXT \(soft\):[\s\S]*response byte 0 = `W`[\s\S]*native TODO init only[\s\S]*Rebase TODO[\s\S]*End\/wait/iu,
-  );
-  assert.match(
-    reference,
-    /complete input.*safe checkpoint.*visible matching Agent => one exact Delegate row/iu,
-  );
-  assert.match(
-    index,
-    /DECLARE HANDOFF \(soft\):[\s\S]*Next visible response MUST start byte 0 with `WORKFLOW PLAN`[\s\S]*contain only this form[\s\S]*state stays silent/iu,
-  );
-  assert.match(
-    reference,
-    /Next assistant response byte 0 = `W` of filled `WORKFLOW READY \|[\s\S]*same response calls native TODO init only/iu,
-  );
-  assert.doesNotMatch(
-    `${index}\n${reference}`,
-    /after optional hidden thinking|Thinking "(?:Let me emit WORKFLOW PLAN|emit READY)"|All resources loaded|WRONG:|CORRECT:/iu,
-  );
+test('workflow prompts use the compact three-phase advisory with all five domain rows', () => {
+  const index = buildWorkflowSkillIndexMarkdown();
+  const reference = buildWorkflowSkillReferenceMarkdown('code');
+
+  assert.equal(WORKFLOW_PHASE_LINE, 'ANALYZE -> EXECUTE -> REVIEW');
+  assert.match(index, new RegExp(WORKFLOW_PHASE_LINE.replaceAll(' -> ', String.raw`\s*->\s*`), 'u'));
+  assert.match(index, /# Workflow reference catalog/u);
+  assert.match(index, /Advisory reference only\. Main selects workflows, Skills, Agents, and delegation width freely\./u);
+  assert.match(index, /## Domain index/u);
+
+  for (const id of ['code', 'writing', 'research', 'visual', 'operations']) {
+    const row = index.split('\n').find((line) => line.includes(`\`${id}\``));
+    assert.ok(row, `index must contain a row for ${id}`);
+    assert.match(row, /— [^`\n]+/u, `${id} row must carry chooseWhen text`);
+    assert.match(row, /D=\[`skill:\/\/[^`\n]+`(?:, `skill:\/\/[^`\n]+`)*\]/u, `${id} row must expose direct skill candidates`);
+  }
+
+  assert.match(index, /1\. Match the task to a domain above\./u);
+  assert.match(index, /2\. Load matching skills as needed for methods and evidence rules\./u);
+  assert.match(index, /3\. ANALYZE: Main analyzes directly or delegates to analyzer for complex multi-slice work\./u);
+  assert.match(index, /4\. EXECUTE: Main executes directly or delegates to task\/domain agents\./u);
+  assert.match(index, /5\. REVIEW: Main reviews directly or delegates to reviewer for complex\/risky changes\./u);
+
+  for (const marker of LEGACY_MARKERS) {
+    assert.doesNotMatch(index, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'iu'), `index must not contain ${marker}`);
+  }
+
+  assert.match(reference, /^# `code` workflow reference$/um);
+  assert.match(reference, /Optional advisory reference\. Main orchestrates freely\./u);
+  assert.match(reference, /- When: Substantive code inspection/u);
+  assert.match(reference, /- Skills: `code-development`/u);
+  assert.match(reference, /- Agent candidates: `analyzer`, `task`, `reviewer`, `scout`, `librarian`\./u);
+  assert.match(reference, /- Suggested flow:\n  1\. Establish outcome/u);
+  assert.match(reference, /- Scope notes:\n  - Read-only or plan-only requests do not authorize production mutation\./u);
+  for (const marker of LEGACY_MARKERS) {
+    assert.doesNotMatch(reference, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'iu'), `reference must not contain ${marker}`);
+  }
 });
 
-test('orchestrator identity and fallback guard constants are non-empty single-line strings', () => {
+test('orchestrator identity and fallback-reason constants are non-empty single-line strings', () => {
   assert.equal(typeof ORCHESTRATOR_IDENTITY, 'string');
   assert.ok(ORCHESTRATOR_IDENTITY.length > 0);
-  assert.equal(typeof SELF_INDUCED_FALLBACK_GUARD, 'string');
-  assert.ok(SELF_INDUCED_FALLBACK_GUARD.length > 0);
-  assert.match(SELF_INDUCED_FALLBACK_GUARD, /fallback=/u);
-  assert.match(SELF_INDUCED_FALLBACK_GUARD, /exactly one enumerated reason/u);
+  assert.match(ORCHESTRATOR_IDENTITY, /Main is the orchestrator/u);
+  assert.doesNotMatch(ORCHESTRATOR_IDENTITY, /[\r\n]/u);
+
+  assert.equal(typeof DIRECT_FALLBACK_REASONS, 'string');
+  assert.ok(DIRECT_FALLBACK_REASONS.length > 0);
+  assert.doesNotMatch(DIRECT_FALLBACK_REASONS, /[\r\n]/u);
 });
 
-test('mutation cards carry author-neutral review coverage and unavailability-only audit fallback', async () => {
-  const codeRef = await readFile(new URL('../../omp-config/skills/omp-enhancer-workflows/references/code.dev.md', import.meta.url), 'utf8');
-  const pluginRef = await readFile(new URL('../../omp-config/skills/omp-enhancer-workflows/references/omp.plugin.md', import.meta.url), 'utf8');
-  const netDebugRef = await readFile(new URL('../../omp-config/skills/omp-enhancer-workflows/references/network.debug.md', import.meta.url), 'utf8');
-  for (const ref of [codeRef, pluginRef]) {
-    assert.match(ref, /Main-authored/u);
-    assert.match(ref, /fall[s]? back only when the named Agent is unavailable/u);
-  }
-  assert.match(netDebugRef, /step-audit/u);
-  assert.match(netDebugRef, /falls back only when native reviewer is unavailable/u);
+test('the generated code reference file matches the advisory card contract', async () => {
+  const codeRef = await readFile(new URL('../../omp-config/skills/omp-enhancer-workflows/references/code.md', import.meta.url), 'utf8');
+  assert.match(codeRef, /# `code` workflow reference/u);
+  assert.match(codeRef, /- When: Substantive code inspection/u);
+  assert.match(codeRef, /- Agent candidates: `analyzer`, `task`, `reviewer`, `scout`, `librarian`\./u);
+  assert.match(codeRef, /- Suggested flow:/u);
+  assert.doesNotMatch(codeRef, /DECLARE HANDOFF|SENTINEL|byte 0|WORKFLOW PLAN|WORKFLOW READY/u);
 });

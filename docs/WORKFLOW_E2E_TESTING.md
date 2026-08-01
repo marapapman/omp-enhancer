@@ -13,31 +13,34 @@
 
 下层失败时先修复下层，不用昂贵模型 run 猜测 deterministic defect。Dry-run 只验证参数、fixture 与 matrix 结构，不是 E2E PASS。
 
-## Bootstrap 与生成 handoff 契约
+## Bootstrap 与生成目录契约
 
-Deterministic tests 先验证所有顶层 Main 模型的 compact、state-aware、
-top-level one-shot bootstrap。它根据当前 workflow Skill、其他 Skills、native
-`task`、delegation 许可与 exact native supplied-index provenance 选择最小提示；
-workflow index 可见时，第一响应只允许 DIRECT、exact-native supplied 后
-直接 PLAN，或 not-supplied 后只读 index 并等待。Advisor、subagent、
-重复 task reminder 或 diagnostic disable 分支都应保持无注入。
+Deterministic tests 先验证所有顶层 Main 模型的 capability-gated、top-level、
+one-shot orchestration advisory（`OMP_ORCHESTRATION`）。它根据当前可见 workflow
+Skill、其他 Skills 与原生 `task` 能力选择最小提示；advisor、subagent、
+重复 task reminder 或 diagnostic disable 分支都应保持无注入。Advisory 只复述
+`ANALYZE -> EXECUTE -> REVIEW`、Main 的编排者身份与可选的域目录指引，
+不包含 marker 协议，也不随 provider retry 重复。
 
-Generated-asset tests 再验证 front-loaded handoff：紧凑 index 的
-`DECLARE HANDOFF (soft)` 位于任何 domain row 前，先提示 next response byte 0 的
-`WORKFLOW PLAN`；每张 workflow reference 在详细 card body 前后各有一个
-`READY NEXT (soft)` sentinel。两者都提示 next response byte 0 的
-`WORKFLOW READY`、no other visible text、native TODO init only 与 end/wait，
-且没有 plugin enforcement。Index 大小由生成与预算 contract tests 针对
+Generated-asset tests 再验证紧凑目录：索引包含全部 5 个域（`code`、`writing`、
+`research`、`visual`、`operations`），每行给出 exact ID、chooseWhen 条件、
+候选 Skill URI（`D` 顶层 exact URI、`C` nested ECC exact URI）与单卡 reference
+URI；索引顶部声明 `ANALYZE -> EXECUTE -> REVIEW` 与 usage 规则。单卡只包含
+When、Skills、Agent candidates、Suggested flow 与 Scope notes，没有步骤 ID、
+delegation 行或任何 sentinel。Index 大小由生成与预算 contract tests 针对
 当前 artifact 动态校验；文档不固化易过期的 byte snapshot。
 
-Reference tests 还要求每个 delegated native TODO `items[]` string 完整等于
-exact Delegate row，并要求 native `tasks[].task` 本体自身在 byte 0 以机械
-复制所得的 `[workflow=... step=... todo=... skills=...]` 四键 prefix 开始；
-每次 native `task` call 都必须带非空顶层 `context`。Batch `context`、name、
-label 或让 child 在输出中补 metadata 都不能替代 item body 或该 prefix。
+Reference tests 还要求每次 native `task` call 都带非空顶层 `context`，
+每个 assignment 携带完整 bounded input 与冻结的 assignment Skills。Batch
+`context`、name、label 或让 child 在输出中补 metadata 都不能替代 item body。
 这些检查验证可观察协议，不会变成 runtime dispatch 或 completion gate。
 
-Protocol coach 先用 deterministic synthetic events 重放机械链路：`index result -> PRE_PLAN -> visible PLAN -> declared NOW/extensions/THEN results -> PRE_READY -> final non-pending READY + TODO result -> PRE_DISPATCH`。每个 phase-generation 只有一个逻辑 cue，并且只附加到下一次自然 provider request；provider retry 或无效的 corresponding marker 可再次看到同一个 pending cue，但不会生成新 key、请求或 turn，有效对应 response 后不再重发；EXECUTE_STABILITY 节奏、上限、不抢占 phase cue 与 phase cue 覆盖稳定性 cue 均由 deterministic context test 证明，live E2E 不依赖其出现在 parent event stream。Tests 还覆盖 top-level Main gating、Advisor/subagent/disable 分支无 cue、`writing.pending` 初始 TODO 不产生 dispatch cue、context 输入不被原地修改，以及 `tool_call`、`tool_result`、`session_stop` 的 advisory 返回契约不变。`OMP_ENHANCER_DISABLE_PROTOCOL_COACH=1` 只用于 coach 对照；这些 deterministic context tests 证明注入机制，绝不把它升级成 block、router、gate、retry 或 completion control。
+Reminder 先用 deterministic synthetic events 验证 one-shot 行为：只进入顶层
+Main 任务一次、Advisor/subagent/disable 分支无注入、context 输入不被原地修改，
+以及 `tool_call`、`tool_result`、`session_stop` 的 advisory 返回契约不变。
+`OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER=1` 只用于 reminder 对照；这些
+deterministic context tests 证明注入机制，绝不把它升级成 block、router、gate、
+retry 或 completion control。
 
 Writing Helper 的 deterministic content tests 与 static probe 另外验证
 `writer`/`zh-writer` 只暴露 `read`、`grep`、`glob` 并始终只返回完整
@@ -61,9 +64,9 @@ src/enabled.js
 test/enabled.test.js
 ```
 
-任务只允许修改这两组 source/test 文件。Main 必须先检索本地锚点并写完整 wave/slice 计划，插件 `plan` 完成 PLAN REVIEW 后，用一次 native `task` call 的同一个 `tasks[]` batch 提交两个 independent slices。每个 task child 自己完成 test mutation、valid RED、minimal production mutation、same-command GREEN 和 refactor，并通过 host-observed completed delivery 返回 command exit、changed paths 与 bounded diff。Parent 不使用 `edit` 或 `write` 实现 slice，也不冒充 child 的 RED/GREEN；两项 delivery 完成后，Main 在 parent event stream 中运行一次 exact `npm test` 作为 broader current-tree verification，随后公开 `MAIN REVIEW`，再把 Main-reviewed bounded diff/evidence 交给 native `reviewer`。
+任务只允许修改这两组 source/test 文件。Main 必须先检索本地锚点并写完整 wave/slice 计划；复杂计划由只读 `analyzer` 审阅后，用一次 native `task` call 的同一个 `tasks[]` batch 提交两个 independent slices。每个 task child 自己完成 test mutation、valid RED、minimal production mutation、same-command GREEN 和 refactor，并通过 host-observed completed delivery 返回 command exit、changed paths 与 bounded diff。Parent 不使用 `edit` 或 `write` 实现 slice，也不冒充 child 的 RED/GREEN；两项 delivery 完成后，Main 在 parent event stream 中运行一次 exact `npm test` 作为 broader current-tree verification，随后公开 `MAIN REVIEW`，再把 Main-reviewed bounded diff/evidence 交给 native `reviewer`。
 
-Synthetic evaluator traces 和 live conditional branch 还覆盖 supported-finding repair path：Main 验证 finding 后把 bounded repair 交回 native `task`，接收 host-observed repair delivery，刷新受影响 evidence 并写第二次 `MAIN REVIEW`，之后最多一次 fresh reviewer。它观察 `omp.plugin`、`code-development` 及其 OMP Enhancer 条件 reference，而不是已退役的普通代码卡片或过程 Skills。这个固定 fixture 的决策完全由本地证据决定，因此禁止 network，也禁止 publish、release、upgrade 和 package/AGENTS 修改。网络禁用是该场景的负向边界，不否定 `code-development` 在实际决策相关任务中先查官方资料再查社区经验。
+Synthetic evaluator traces 和 live conditional branch 还覆盖 supported-finding repair path：Main 验证 finding 后把 bounded repair 交回 native `task`，接收 host-observed repair delivery，刷新受影响 evidence 并写第二次 `MAIN REVIEW`，之后最多一次 fresh reviewer。它观察 `code` workflow、`code-development` 及其 OMP Enhancer 条件 reference，而不是已退役的普通代码卡片或过程 Skills。这个固定 fixture 的决策完全由本地证据决定，因此禁止 network，也禁止 publish、release、upgrade 和 package/AGENTS 修改。网络禁用是该场景的负向边界，不否定 `code-development` 在实际决策相关任务中先查官方资料再查社区经验。
 
 常用入口：
 
@@ -88,25 +91,18 @@ npm run e2e:main:self-iteration -- \
 - positive scenario 旁有 mechanical lookup、user-forbidden delegation 或 unchanged-read 等 negative control；
 - reviewer 数量只表达该场景的具体未回答问题，不成为全局配额。
 
-Self-iteration matrix 的 assignments 分别覆盖 PLAN REVIEW、两个 parallel native-task slices、reviewer 和条件式 repair；它们来自 fixture 的真实独立性与 supported-finding branch，不表示每个 OMP 任务需要固定 fork 数或 reviewer 数。
+Self-iteration matrix 的 assignments 分别覆盖计划审阅（复杂时委派 `analyzer`）、两个 parallel native-task slices、reviewer 和条件式 repair；它们来自 fixture 的真实独立性与 supported-finding branch，不表示每个 OMP 任务需要固定 fork 数或 reviewer 数。
 
 ## Event stream 是真值
 
 Evaluator 从 parent event stream 恢复：
 
-- `DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY` 的可观察边界；
-- workflow index resolver read，或 scenario 明确记录的 exact native `skill-prompt` body named `omp-enhancer-workflows`；只有后者算 exact-native supplied index，managed context、Available Skills 描述或其他 Skill body 都不算，且不得再出现 index resolver read；
-- byte 0 为 `W` 的 visible `WORKFLOW PLAN` response；`D`/`C` 只是 optional candidates、绝不是 load sets，其 Skills 只含与 requested method、evidence rule、verdict 或 format 匹配的 selected `D` 顶层 exact URI、`C` nested ECC exact URI 或未枚举长尾 catalog URI，workflow references 只在 `THEN`，且至少有 `LOAD`、`COMMIT`、`SPLIT + EXECUTE` 和 `VERIFY` 四个详细 Actions；
-- 与 `NOW` 完全一致的 successful Skill/catalog reads；`NOW` 不包含已由宿主提供的 Skill，枚举 `C` URI 直接出现且不先读取 catalog；
-- 0 到 3 个带 `RESOURCE EXTENSION` marker 的 exact linked-resource batches，其中最多两次未枚举长尾 catalog hop 加一次方法资源；source 必须已成功加载，目标 URI 必须出现在 source 完整结果中、保持同 Skill namespace 且未读过；
-- 与 `THEN` 完全一致的 workflow reference reads，Add-ons 在前、Primary 一次且最后；`NOW=[none]` 时该批可以跟随 PLAN 立即发生，其他情况在 resource extension 之后发生且只发生一次；
-- byte 0 为 `W` 的 visible `WORKFLOW READY |` response；该 response 只初始化 TODO、结束并等待。Loaded-card soft compiler 在 `subagent-driven`、input 完整、checkpoint 安全且 matching Agent 可见时，把完整 exact `Delegate Agent=... workflow=... step=... skills=... checkpoint=...` string 写入一个 native TODO `items[]` entry；否则记录一个匹配的许可 fallback；parent-owned `VERIFY` rows 保持独立；
-- `writing.pending` 的 initial READY、一次 narrow language read、replacement PLAN/loads/READY，且不重复 transition；
-- writing index 的 `language`、`format overlays`、`specialized outputs` 三组，以及正文任务中 language Primary + requested format Add-on、纯格式任务中 format Primary 的正反场景；其中 preservation-only `writing.latex` Add-on 读取零个 format Skills，显式 conversion/template 只读取一个方向匹配候选；
+- workflow/Skill 读取（含域索引 `skill://omp-enhancer-workflows`），或场景明确记录的 exact native `skill-prompt` body named `omp-enhancer-workflows`；managed context、Available Skills 描述或其他 Skill body 都不算 supplied body；
+- `D`/`C` 只是 optional candidates、绝不是 load sets；Main 只读取与 requested method、evidence rule、verdict 或 format 匹配的最小 URI 集；
 - native TODO init、transition 与 completion；
 - parent `write`/`edit` mutation target、call ID 和事件位置；
 - parent `bash` command、exit code、timeout 与完成位置；
-- native task assignment、Agent、每次 task call 的非空顶层 `context`、`tasks[].task` 本体 byte-0 四键 metadata、job ID、completion 与 host-observed terminal child delivery text；
+- native task assignment、Agent、每次 task call 的非空顶层 `context`、job ID、completion 与 host-observed terminal child delivery text；
 - visible `MAIN REVIEW` text 与 event order；
 - hub/async result 与 final response。
 
@@ -119,17 +115,20 @@ checker in-band report delivery、Main finding disposition，以及之后匹配 
 writer 越权；writer 无 mutation capability 的结论来自 deterministic/static
 contract。只读写作 fixture 则反向要求没有 target mutation。
 
-`writing.en`/`writing.zh` 的 initial TODO 还必须一次冻结三个 exact Delegate
-rows：step-2 writer、step-3 checker 与 conditional step-4 corrected-proposal。
-Step-3 等待完整 writer terminal delivery；step-4 只有在 Main 接受至少一个
-checker finding 后才 dispatch，否则 Main 把该 no-op conditional checkpoint
-标为 resolved/completed，而不是 drop/abandon。完整且可直接使用的 proposal/report
-必须位于 terminal child delivery，不能只留在更早消息后以 status-only 或
-artifact-reference-only 句子结束；这个断言不绑定特定 host handoff schema。
+`writing` 域的写作场景要求 writer/zh-writer 的 proposal 与 checker/zh-checker 的
+in-band report 都完整进入 terminal child delivery，不能只留在更早消息后以
+status-only 或 artifact-reference-only 句子结束；这个断言不绑定特定 host
+handoff schema。Main 独自做 finding disposition，任何获授权的文件修改都来自
+disposition 之后可观察的 Main call。
 
 `edit` 可能以 basename snapshot anchor 发起，但成功结果会返回 canonical `[absolute/path#tag]`。Evaluator 必须用隔离 project root 把结果路径还原为 `test/...` 或 `src/...` 后再匹配 mutation pattern；只保留 basename 会把真实 TDD 误判为“没有修改”。Fixture snapshot 还要保存 baseline root 的 realpath 与 filesystem identity，在验证前后拒绝 root replacement 和任何 symlink，并在读取 semantic sentinel 前确认文件 realpath 仍在原真实 project root 内；lexical `src/...` 或 `test/...` 名称本身不是 containment evidence。
 
-需要验证公开 checkpoint 时，启用 `requireWorkflowPlanFirstVisibleContent`，正向断言 PLAN response byte 0 为 `W`；启用 `requireStructuredWorkflowLoadPhases`，要求 PLAN `Skills` 只含 selected D/C exact Skill URI 或未枚举长尾 catalog URI、至少包含四个命名 Actions、使用 `NOW/THEN` 语法、PLAN resource call 精确匹配 `NOW`、枚举 `C` 不先读取 catalog、workflow references 仅在 `THEN` 且按 Add-ons 后 Primary 排序，所有非 extension reference reads 也精确匹配 `THEN`。启用 `requireWorkflowReadyTodoOnlyBatch` 时，READY response byte 0 同样为 `W` 并只完成一次成功的 native TODO init，随后结束等待；subagent-driven scenario 按 loaded-card compiler 断言 matching checkpoint 的 native TODO `items[]` string 是 exact `Delegate` row，或存在一个许可 fallback，并保留 parent-owned `VERIFY` rows，再到下一 response 开始项目工具。若 fixture 通过 exact native `skill-prompt` 提供 index 或 domain Skill 正文，应把该 provenance 写进 scenario expectation，并断言 Main 不重读已提供 URI；其他 prompt text 不算 supplied body。这些都是离线 trace expectations，不是插件 runtime gate、router、dispatch authority 或 completion condition。
+需要验证公开 checkpoint 时，fixture 通过 `fixtureExpectations` 声明 required/
+forbidden patterns。若 fixture 通过 exact native `skill-prompt` 提供域索引或
+domain Skill 正文，应把该 provenance 写进 scenario expectation，并断言 Main
+不重读已提供 URI；其他 prompt text 不算 supplied body。这些都是离线 trace
+expectations，不是插件 runtime gate、router、dispatch authority 或 completion
+condition。
 
 ## Task-owned TDD 与 parent verification 断言
 
@@ -149,7 +148,7 @@ Parent trace 禁止 Main 使用 `edit`/`write` 代替 child 实现。所有 task
 
 ## Main review、reviewer 与 repair 时序
 
-`requireSubagentDrivenCode` 要求 parent TODO 先初始化，插件 `plan` job 在任何 implementation task 前完成并收到 Main 提供的完整 plan。每次 native `task` call 都必须有非空顶层 `context`。Patterns 只匹配每个 job 自己的 native `tasks[].task` text；batch outer `context`、name 或 label 不能替单个 assignment 冒充完整约束。Exact metadata 从 native TODO `items[]` 中的完整 delegated row 机械复制：把该 row 的 `Agent` 原样复制到 native `tasks[].agent`，把 `workflow`、`step`、`skills` 和 `checkpoint` 分别原样复制到 `tasks[].task` 本体 byte 0 的 `[workflow=... step=... todo=<checkpoint> skills=...]` 前缀。前缀必须已存在于 job body 自身，不能靠 outer metadata 或让 child 输出 metadata 补造。Child 只消费这个 frozen `skills` 集合，不重新发现、选择或加载 Skill；若集合不足，delivery 返回 limitation，由 Main disposition。`requireExactNativeTaskMetadataPrefix` 检查 byte-0 前缀，`requireNativeTaskMetadataMatchesDelegatedTodoRows` 检查上述 row-to-job 字段对应；二者都是离线 trace expectations，不是插件 runtime gate、dispatch authority 或 completion condition。
+`requireSubagentDrivenCode` 要求 parent TODO 先初始化；复杂计划的审阅（如委派 `analyzer`）在任何 implementation task 前完成并收到 Main 提供的完整计划。每次 native `task` call 都必须有非空顶层 `context`。Patterns 只匹配每个 job 自己的 native `tasks[].task` text；batch outer `context`、name 或 label 不能替单个 assignment 冒充完整约束。Child 只消费 assignment 冻结的 `skills` 集合，不重新发现、选择或加载 Skill；若集合不足，delivery 返回 limitation，由 Main disposition。这些都是离线 trace expectations，不是插件 runtime gate、dispatch authority 或 completion condition。
 
 Main broader verification GREEN 后必须出现 visible `MAIN REVIEW`。它至少覆盖 current tree containment、bounded semantic diff、task-returned RED/GREEN evidence、broader verification 与 cross-slice interaction。Native `reviewer` 的 assignment 必须晚于该 marker，并携带 Main review、bounded diff 和 evidence；reviewer 不读取项目或运行命令。其 completed delivery 是 host-observed evidence，不是 completion permission。
 
@@ -182,7 +181,7 @@ Main broader verification GREEN 后必须出现 visible `MAIN REVIEW`。它至�
 7. 需要 A/B 时只改变一个变量，再独立运行相同 repeat。
 8. 综合严格 PASS、behavior compliance、infrastructure health 与 limitation。
 
-模型 A/B、reminder on/off A/B 与 protocol coach on/off A/B 是三种实验。前者只换 model；reminder 对照固定 model 并使用对应 `OMP_ENHANCER_DISABLE_*_COMPAT=1`；coach 对照只切换 `OMP_ENHANCER_DISABLE_PROTOCOL_COACH=1`。不要在同一 run 同时换 prompt、model、thinking 和 evaluator 后宣称因果。Phase cue 不一定出现在 parent event stream，所以 live E2E 不能用 Main 自述补造“已注入”；deterministic context test 负责证明该机制。单次 live canary 只是行为样本，不能证明稳定性提升。
+模型 A/B 与 reminder on/off A/B 是两种实验。前者只换 model；reminder 对照固定 model 并使用 `OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER=1`（reminder off）。Protocol coach 已删除，不存在 coach 对照。不要在同一 run 同时换 prompt、model、thinking 和 evaluator 后宣称因果。One-shot advisory 不一定出现在 parent event stream，所以 live E2E 不能用 Main 自述补造“已注入”；deterministic context test 负责证明该机制。单次 live canary 只是行为样本，不能证明稳定性提升。
 
 ## 故障分类
 
@@ -203,7 +202,7 @@ Main broader verification GREEN 后必须出现 visible `MAIN REVIEW`。它至�
 | runner hard timeout | harness 主进程硬上限到达 |
 | project command timeout | `bash.details.timedOut=true`；是项目命令问题，不是 runner hard timeout |
 | evaluator defect | event 存在但 parser、provenance 或 expectation 逻辑误判 |
-| workflow compliance | 可评估 trace 漏掉或错序执行 PLAN、LOAD、READY、TODO、TDD 或 review |
+| workflow compliance | 可评估 trace 漏掉或错序执行 ANALYZE、EXECUTE、REVIEW 阶段、TODO、TDD 或 review |
 
 零 token、无成功 assistant batch、无工具调用且全是 provider error 的 run 保持严格失败，但不应被解释成模型主动拒绝 workflow。Recovered transport error 也不能从报告中删除。
 

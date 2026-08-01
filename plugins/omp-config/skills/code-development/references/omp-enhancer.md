@@ -10,7 +10,7 @@ Use this conditional reference only while changing the OMP Enhancer marketplace 
 - Preserve unrelated dirty-tree changes and review only intended paths.
 - Compare repository source, generated assets, package contents, marketplace metadata, and installed runtime when behavior can drift across them.
 
-When the complete `omp.plugin` condition matches, use it as the Primary workflow. Its internal plan, TDD, generation, installed E2E, and review phases do not require duplicate workflow cards.
+When the target is the omp-enhancer monorepo, its internal plan, TDD, generation, installed E2E, and review phases follow the `code` workflow's ANALYZE -> EXECUTE -> REVIEW flow; no duplicate workflow cards are needed.
 
 ## Test from the public contract inward
 
@@ -24,12 +24,12 @@ Use deterministic tests first. When Main, Advisor, workflow selection, Skill loa
 
 A generator-integrity-only change that does not change generated prompt content, package contents, or installed behavior does not require a live E2E run; its deterministic generator and parity contracts are the evidence boundary.
 
-Judge event evidence rather than model self-report. Preserve the sequence that matters: workflow index, visible WORKFLOW PLAN, exact resource loads, WORKFLOW READY, detailed TODO, local and external search when applicable, plan review, native `task` wave assignments and completion, task-owned RED/GREEN evidence, Main current-tree review, bounded diff review, task repair, refreshed evidence, and one final response. Keep provider errors, runner timeouts, evaluator defects, and compliance failures separate. Run one pilot before any repeated candidate matrix.
+Judge event evidence rather than model self-report. Preserve the sequence that matters: workflow index, skill and reference loads when selected, detailed TODO, local and external search when applicable, analyzer planning when delegated, native `task` wave assignments and completion, task-owned RED/GREEN evidence, Main current-tree review, bounded diff review, task repair, refreshed evidence, and one final response. Keep provider errors, runner timeouts, evaluator defects, and compliance failures separate. Run one pilot before any repeated candidate matrix.
 
 Never let an E2E fixture publish, upgrade, or contact external systems. A live model result is probabilistic evidence; deterministic contracts remain the regression boundary.
 
 ## Review the smallest useful changed surface
 
-Use native `plan` to draft the parallel plan, native `reviewer` to audit plan output and the complete change, and native `task` to own complete code-and-test slices and supported repairs. Main may dispatch `plan` multiple times for fine-grained sub-plans and dispatches `reviewer` proactively for both plan audits and code-diff audits. Main reviews the current tree, diff, and evidence before reviewer dispatch. The reviewer receives a Main-reviewed bounded diff and supplied evidence; it does not read the project or run commands. Main owns integration, finding validation, broader current-tree checks, and the final conclusion. After a supported material repair, refresh affected evidence, Main-review again, and request at most one fresh affected review; never start an automatic review-repair loop.
+For complex or risky changes, delegate to the `analyzer` agent a detailed parallel implementation plan from Main's frozen brief; Main may dispatch `reviewer` to audit the analyzer's plan before production mutation and dispatches `reviewer` for the complete code diff. Main may dispatch `analyzer` again for a finer-grained sub-plan when a slice needs deeper decomposition. Main reviews the current tree, diff, and evidence before reviewer dispatch. The reviewer receives a Main-reviewed bounded diff and supplied evidence; it does not read the project or run commands. Main owns integration, finding validation, broader current-tree checks, and the final conclusion. After a supported material repair, refresh affected evidence, Main-review again, and request at most one fresh affected review; never start an automatic review-repair loop.
 
 Report exact deterministic commands, E2E run IDs when used, review dispositions, generated assets, limitations, and release boundaries. Commit, push, publish, marketplace refresh, and local upgrade require explicit user authorization.

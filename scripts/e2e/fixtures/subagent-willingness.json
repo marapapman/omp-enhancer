@@ -64,14 +64,8 @@
           "(?:^|\\s)fallback=(?=[^\\r\\n]*(?:user(?:\\s+or\\s+native)?\\s+constraint|native(?:\\s+user)?\\s+constraint|user\\s+request|explicit\\s+user\\s+instruction|user\\s+explicitly\\s+(?:required|requested|instructed)))(?=[^\\r\\n]*(?:do\\s+not\\s+delegate|no[- ]delegation|main(?:\\s+agent)?[- ]only|keep\\s+all\\s+work\\s+in\\s+(?:the\\s+)?main\\s+agent))[^\\r\\n]+"
         ],
         "requiredObservedSkills": ["code-development", "omp-enhancer-workflows"],
-        "requiredWorkflowPrimary": "omp.plugin",
-        "requiredSelectedWorkflowIds": ["omp.plugin"],
-        "requiredWorkflowLoadOrder": [
-          "skill://code-development",
-          "skill://omp-enhancer-workflows/references/omp.plugin.md"
-        ],
-        "requireWorkflowResourceCallsMatchLoadOrder": true,
-        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requiredWorkflowPrimary": "code",
+        "requiredSelectedWorkflowIds": ["code"],
         "requireWorkflowPlanBeforeResourceLoads": true,
         "requireWorkflowPlanFirstVisibleContent": true,
         "forbidResourceProjectSameBatch": true,
@@ -112,22 +106,12 @@
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requireNonemptyNativeTaskContext": true,
-        "requireNativeTaskMetadataPrefix": true,
-        "requireExactNativeTaskMetadataPrefix": true,
-        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
         "requiredNativeTaskAgents": ["task"],
-        "requiredNativeTaskWorkflows": ["general.subagent"],
-        "requiredNativeTaskWorkflowsPerAssignment": ["general.subagent"],
         "requiredObservedSkills": ["omp-enhancer-workflows"],
         "forbiddenSkills": ["code-development"],
         "maxObservedSkills": 1,
-        "requiredWorkflowPrimary": "general.subagent",
-        "requiredSelectedWorkflowIds": ["general.subagent"],
-        "requiredWorkflowLoadOrder": [
-          "skill://omp-enhancer-workflows/references/general.subagent.md"
-        ],
-        "requireWorkflowResourceCallsMatchLoadOrder": true,
-        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requiredWorkflowPrimary": "operations",
+        "requiredSelectedWorkflowIds": ["operations"],
         "requireWorkflowPlanBeforeResourceLoads": true,
         "requireWorkflowPlanFirstVisibleContent": true,
         "requireWorkflowPlanLoadCallsSameBatch": true,
@@ -140,9 +124,6 @@
         "minNativeTodoItems": 2,
         "requireNativeTodoCompletion": true,
         "requireNativeTodoInitBeforeSubstantiveTool": true,
-        "requiredNativeTodoItemPatterns": [
-          "^Delegate Agent=task workflow=general\\.subagent step=step-task skills=none checkpoint=.+$"
-        ],
         "maxProjectInspectionCallsBeforeNativeTask": 0,
         "maxProjectInspectionCallsAfterNativeTask": 3
       }
@@ -161,14 +142,8 @@
         "requireNativeTaskCompletion": true,
       "requireNativeTaskSubmissionForEveryAssignment": true,
       "requireNonemptyNativeTaskContext": true,
-      "requireNativeTaskMetadataPrefix": true,
-        "requireExactNativeTaskMetadataPrefix": true,
-        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
         "requiredNativeTaskAgents": ["writer", "checker"],
         "requiredNativeTaskAgentSequence": ["writer", "checker"],
-        "requiredNativeTaskWorkflows": ["writing.en", "writing.latex"],
-        "requiredNativeTaskWorkflowsPerAssignment": ["writing.en", "writing.latex"],
-        "requiredNativeTaskSkillsPerAssignment": ["writing-review"],
         "requiredObservedSkills": ["omp-enhancer-workflows", "writing-review"],
         "forbiddenSkills": [
           "format-markdown2latex",
@@ -186,15 +161,8 @@
           "zh-writing-review",
           "zh-writing-state-machine"
         ],
-        "requiredWorkflowPrimary": "writing.en",
-        "requiredSelectedWorkflowIds": ["writing.en", "writing.latex"],
-        "requiredWorkflowLoadOrder": [
-          "skill://writing-review",
-          "skill://omp-enhancer-workflows/references/writing.latex.md",
-          "skill://omp-enhancer-workflows/references/writing.en.md"
-        ],
-        "requireWorkflowResourceCallsMatchLoadOrder": true,
-        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requiredWorkflowPrimary": "writing",
+        "requiredSelectedWorkflowIds": ["writing"],
         "requireWorkflowPlanBeforeResourceLoads": true,
       "requireWorkflowPlanFirstVisibleContent": true,
       "requireWorkflowPlanLoadCallsSameBatch": true,
@@ -225,24 +193,11 @@
         "maxNativeTaskAssignmentAttempts": 1,
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
-        "requireNativeTaskMetadataPrefix": true,
-        "requireExactNativeTaskMetadataPrefix": true,
-        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
         "requiredNativeTaskAgents": ["ecc-network-architect"],
-        "requiredNativeTaskWorkflows": ["network.design"],
-        "requiredNativeTaskWorkflowsPerAssignment": ["network.design"],
-        "requiredNativeTaskSkillsPerAssignment": ["network-config-validation", "safety-guard"],
-        "requiredObservedSkills": ["omp-enhancer-workflows", "network-config-validation", "safety-guard"],
+        "requiredObservedSkills": ["omp-enhancer-workflows", "network-config-validation"],
         "forbiddenSkills": ["ecc-skill-catalog"],
-        "requiredWorkflowPrimary": "network.design",
-        "requiredSelectedWorkflowIds": ["network.design"],
-        "requiredWorkflowLoadOrder": [
-          "skill://ecc-skill-catalog/network-config-validation/SKILL.md",
-          "skill://ecc-skill-catalog/safety-guard/SKILL.md",
-          "skill://omp-enhancer-workflows/references/network.design.md"
-        ],
-        "requireWorkflowResourceCallsMatchLoadOrder": true,
-        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requiredWorkflowPrimary": "operations",
+        "requiredSelectedWorkflowIds": ["operations"],
         "requireWorkflowPlanBeforeResourceLoads": true,
         "requireWorkflowPlanFirstVisibleContent": true,
         "forbidResourceProjectSameBatch": true,
@@ -276,14 +231,8 @@
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requiredObservedSkills": ["code-development", "omp-enhancer-workflows"],
-        "requiredWorkflowPrimary": "omp.plugin",
-        "requiredSelectedWorkflowIds": ["omp.plugin"],
-        "requiredWorkflowLoadOrder": [
-          "skill://code-development",
-          "skill://omp-enhancer-workflows/references/omp.plugin.md"
-        ],
-        "requireWorkflowResourceCallsMatchLoadOrder": true,
-        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requiredWorkflowPrimary": "code",
+        "requiredSelectedWorkflowIds": ["code"],
         "requireWorkflowPlanBeforeResourceLoads": true,
         "requireWorkflowPlanFirstVisibleContent": true,
         "requireWorkflowPlanLoadCallsSameBatch": true,
@@ -299,13 +248,7 @@
         ],
         "requireNativeTodoCompletion": true,
         "requireNativeTodoInitBeforeSubstantiveTool": true,
-        "requireNativeTaskMetadataPrefix": true,
-        "requireExactNativeTaskMetadataPrefix": true,
-        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
-        "requiredNativeTaskAgents": ["plan"],
-        "requiredNativeTaskWorkflows": ["omp.plugin"],
-        "requiredNativeTaskWorkflowsPerAssignment": ["omp.plugin"],
-        "requiredNativeTaskSkillsPerAssignment": ["code-development"]
+        "requiredNativeTaskAgents": ["plan"]
       }
     },
     {
@@ -321,16 +264,12 @@
         "maxNativeTaskAssignmentAttempts": 2,
         "requireNativeTaskCompletion": true,
         "requiredObservedSkills": ["code-development", "omp-enhancer-workflows"],
-        "requireWorkflowIndexOnlyFirstToolBatch": true,
         "requireWorkflowPlanBeforeResourceLoads": true,
         "requireWorkflowPlanFirstVisibleContent": true,
         "forbidResourceProjectSameBatch": true,
         "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
         "requireExactSelectedWorkflowReferences": true,
-        "requiredNativeTaskAgents": ["plan"],
-        "requiredNativeTaskWorkflows": ["omp.plugin"],
-        "requiredNativeTaskWorkflowsPerAssignment": ["omp.plugin"],
-        "requiredNativeTaskSkillsPerAssignment": ["code-development"]
+        "requiredNativeTaskAgents": ["plan"]
       }
     },
     {
@@ -348,24 +287,12 @@
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requireNonemptyNativeTaskContext": true,
-        "requireNativeTaskMetadataPrefix": true,
-        "requireExactNativeTaskMetadataPrefix": true,
-        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
         "requiredNativeTaskAgents": ["designer", "visioner"],
-        "requiredNativeTaskWorkflows": ["diagram.tikz"],
-        "requiredNativeTaskWorkflowsPerAssignment": ["diagram.tikz"],
         "requiredObservedSkills": ["omp-enhancer-workflows", "tikz-diagram", "svg-flowchart"],
         "maxObservedSkills": 3,
         "forbiddenSkills": ["writing-markdown-helper"],
-        "requiredWorkflowPrimary": "diagram.tikz",
-        "requiredSelectedWorkflowIds": ["diagram.tikz"],
-        "requiredWorkflowLoadOrder": [
-          "skill://tikz-diagram",
-          "skill://svg-flowchart",
-          "skill://omp-enhancer-workflows/references/diagram.tikz.md"
-        ],
-        "requireWorkflowResourceCallsMatchLoadOrder": true,
-        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requiredWorkflowPrimary": "visual",
+        "requiredSelectedWorkflowIds": ["visual"],
         "requireWorkflowPlanBeforeResourceLoads": true,
         "requireWorkflowPlanFirstVisibleContent": true,
         "requireWorkflowPlanLoadCallsSameBatch": true,
@@ -378,10 +305,6 @@
         "minNativeTodoItems": 3,
         "requireNativeTodoCompletion": true,
         "requireNativeTodoInitBeforeSubstantiveTool": true,
-        "requiredNativeTodoItemPatterns": [
-          "^Delegate Agent=designer workflow=diagram\\.tikz step=step-2 skills=tikz-diagram,svg-flowchart checkpoint=.+$",
-          "^Delegate Agent=visioner workflow=diagram\\.tikz step=step-4 skills=tikz-diagram,svg-flowchart checkpoint=.+$"
-        ],
         "maxToolCalls": 60
       },
       "fixtureExpectations": {
@@ -405,24 +328,12 @@
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requireNonemptyNativeTaskContext": true,
-        "requireNativeTaskMetadataPrefix": true,
-        "requireExactNativeTaskMetadataPrefix": true,
-        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
         "requiredNativeTaskAgents": ["designer", "visioner"],
-        "requiredNativeTaskWorkflows": ["diagram.mermaid"],
-        "requiredNativeTaskWorkflowsPerAssignment": ["diagram.mermaid"],
         "requiredObservedSkills": ["omp-enhancer-workflows", "mermaid-diagram", "svg-flowchart"],
         "maxObservedSkills": 3,
         "forbiddenSkills": ["writing-markdown-helper"],
-        "requiredWorkflowPrimary": "diagram.mermaid",
-        "requiredSelectedWorkflowIds": ["diagram.mermaid"],
-        "requiredWorkflowLoadOrder": [
-          "skill://mermaid-diagram",
-          "skill://svg-flowchart",
-          "skill://omp-enhancer-workflows/references/diagram.mermaid.md"
-        ],
-        "requireWorkflowResourceCallsMatchLoadOrder": true,
-        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requiredWorkflowPrimary": "visual",
+        "requiredSelectedWorkflowIds": ["visual"],
         "requireWorkflowPlanBeforeResourceLoads": true,
         "requireWorkflowPlanFirstVisibleContent": true,
         "requireWorkflowPlanLoadCallsSameBatch": true,
@@ -435,10 +346,6 @@
         "minNativeTodoItems": 3,
         "requireNativeTodoCompletion": true,
         "requireNativeTodoInitBeforeSubstantiveTool": true,
-        "requiredNativeTodoItemPatterns": [
-          "^Delegate Agent=designer workflow=diagram\\.mermaid step=step-2 skills=mermaid-diagram,svg-flowchart checkpoint=.+$",
-          "^Delegate Agent=visioner workflow=diagram\\.mermaid step=step-4 skills=mermaid-diagram,svg-flowchart checkpoint=.+$"
-        ],
         "maxToolCalls": 60
       },
       "fixtureExpectations": {
@@ -462,10 +369,8 @@
         "minNativeTaskCalls": 3,
         "requiredNativeTaskAgents": ["scout", "plan", "task", "reviewer"],
         "requiredNativeTaskAgentSequence": ["scout", "plan", "task", "reviewer"],
-        "requiredWorkflowPrimary": "code.dev",
-        "requiredSelectedWorkflowIds": ["code.dev"],
-        "requiredNativeTaskWorkflows": ["code.dev"],
-        "requireNativeTaskMetadataPrefix": true,
+        "requiredWorkflowPrimary": "code",
+        "requiredSelectedWorkflowIds": ["code"],
         "maxProjectInspectionCallsBeforeNativeTask": 6
       }
     },
@@ -478,8 +383,7 @@
       "prompt": "In plugins/writing-helper/src/quality.js, add a bounded helper that normalizes report section ordering, with tests, and dispatch the card audit checkpoint after the implementation work settles. Follow the code workflow and do not skip the reviewer.",
       "expectations": {
         "requiredNativeTaskAgents": ["task", "reviewer"],
-        "requiredNativeTaskAgentSequence": ["task", "reviewer"],
-        "requireNativeTodoItemPatterns": ["Delegate Agent=reviewer "]
+        "requiredNativeTaskAgentSequence": ["task", "reviewer"]
       }
     }
   ]

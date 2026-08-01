@@ -28,7 +28,7 @@ omp_test_report
 
 ## 工作流
 
-Testing Enhancer 不再打包 `test-planner`、`test-executor` 或 `test-reviewer`。普通 testing/code 工作统一由 `code.dev` 和 `code-development` 组织，并在相关 Agents 可用时采用插件 `plan`、native `task` 与 native `reviewer`，避免把一个 vertical TDD slice 的 test 和 production 拆给不同 workers：
+Testing Enhancer 不再打包 `test-planner`、`test-executor` 或 `test-reviewer`。普通 testing/code 工作统一由 `code` 和 `code-development` 组织，并在相关 Agents 可用时采用插件 `plan`、native `task` 与 native `reviewer`，避免把一个 vertical TDD slice 的 test 和 production 拆给不同 workers：
 
 1. Main 先检索本地入口、公开行为和相关测试；决策相关时再查当前官方资料与社区经验。
 2. Main 可用 `omp_test_analyze` 和 `omp_test_context` 补充 target-to-behavior evidence，并把计划写成 dependency-ordered waves。每个 vertical slice 明确 acceptance、依赖、exclusive write set、test seam、exact focused command、expected RED、production boundary、integration point 和 return evidence。

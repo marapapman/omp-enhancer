@@ -1,6 +1,6 @@
 ---
 name: zh-writing-state-machine
-description: "Main 选择 writing.zh 并把任务派给 zh-writer 子 Agent 后，用于引用、数字和事实主张需要逐项来源证据矩阵的高敏感中文写作或修订。不用于普通润色；只有用户明确要求时才隔离每段上下文。"
+description: "Main 选择 writing 并把任务派给 zh-writer 子 Agent 后，用于引用、数字和事实主张需要逐项来源证据矩阵的高敏感中文写作或修订。不用于普通润色；只有用户明确要求时才隔离每段上下文。"
 ---
 
 # 中文严格写作状态机
@@ -9,7 +9,7 @@ description: "Main 选择 writing.zh 并把任务派给 zh-writer 子 Agent 后�
 
 ## 工作流边界
 
-只在 Main 选择工作流 `writing.zh`、加载其精确 workflow reference 和本 Skill，再把任务派给 `zh-writer` 子 Agent 后使用本 Skill。这是受派 writer 子 Agent 的有界局部方法，不选择或调度 Agent。不要递归 fork、spawn 或 delegate。Main 保留父级 TODO、集成、最终验证和面向用户的交付权。
+只在 Main 选择工作流 `writing`、加载其精确 workflow reference 和本 Skill，再把任务派给 `zh-writer` 子 Agent 后使用本 Skill。这是受派 writer 子 Agent 的有界局部方法，不选择或调度 Agent。不要递归 fork、spawn 或 delegate。Main 保留父级 TODO、集成、最终验证和面向用户的交付权。
 
 证据矩阵只是 writer 局部自检，不能满足或替代独立 `zh-checker` delivery。只做一次有界局部处理；不启动自动修复循环，也不创建完成门禁。把段落、矩阵、来源和未解决缺口返回给 Main。
 

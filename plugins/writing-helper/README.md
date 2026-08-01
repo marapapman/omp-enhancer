@@ -139,20 +139,17 @@ method needed by its byte-0 `step` and `todo`. It never executes another
 checkpoint's command, delegation, revision, publication, or file effect;
 checker `web_search` remains limited to its own parent-selected review mode.
 
-`writing.en` and `writing.zh` follow the marketplace-wide subagent-driven soft
-default when their matching roles are exposed. Main gives the language-matched
-writer a complete bounded drafting or revision assignment and receives a
-proposal, then gives the language-matched checker the source, proposal, and
-exact acceptance anchors for an independent in-band review. Main validates each
-finding; accepted findings may return once to the writer for one corrected
-proposal. Main alone applies any authorized file change and then verifies
+`writing` is the single marketplace writing workflow. Main gives the language-matched
+writer (writer or zh-writer) a complete bounded drafting or revision assignment and
+receives a proposal, then gives the language-matched checker (checker or zh-checker)
+the source, proposal, and exact acceptance anchors for an independent in-band review.
+Main validates each finding; accepted findings may return once to the writer for one
+corrected proposal. Main alone applies any authorized file change and then verifies
 content anchors, format, and the resulting artifact. Writer and checker are
-dependency-ordered rather than parallel. `writing.pending` delegates nothing
-until the source language is known and Main composes `writing.en` or
-`writing.zh`. If the user requires Main-only work, a role/capacity is
-unavailable, or the artifact/assignment is incomplete or unsafe to split, Main
-records the direct fallback. This remains Agent-selected soft guidance, not a
-fork requirement, router, gate, or automatic repair loop.
+dependency-ordered rather than parallel. If the user requires Main-only work, a
+role/capacity is unavailable, or the artifact/assignment is incomplete or unsafe to
+split, Main records the direct fallback. This remains Agent-selected soft guidance,
+not a fork requirement, router, gate, or automatic repair loop.
 
 ### Skills
 

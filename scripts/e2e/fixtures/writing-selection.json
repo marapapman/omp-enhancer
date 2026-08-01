@@ -21,7 +21,6 @@
       "maxDuplicateSkillReadAttempts": 0,
       "maxProvidedSkills": 0,
       "expectedProvisionMode": "none",
-      "requireWorkflowIndexOnlyFirstToolBatch": true,
       "requireWorkflowPlanBeforeResourceLoads": true,
       "requireStructuredWorkflowLoadPhases": true,
       "requiredWorkflowPlanFormat": "block",
@@ -47,7 +46,7 @@
       "fixture": "skill-discovery-readonly",
       "prompt": "Read abstract.tex and propose a conservative correction of its single English sentence. Preserve all qualifiers, modality, negation, percentages, citations, and LaTeX commands. Do not modify files or use the network.",
       "expectations": {
-        "requiredSelectedWorkflowIds": ["writing.en", "writing.latex"],
+        "requiredSelectedWorkflowIds": ["writing"],
         "requiredObservedSkills": ["writing-review"],
         "requiredObservedSkillsBeforeProjectTools": ["writing-review"],
         "forbiddenSkills": ["format-markdown2latex", "format-latex2markdown", "format-template-latex"]
@@ -59,8 +58,7 @@
       "fixture": "skill-discovery-readonly",
       "prompt": "Read abstract.tex and plan an explicit conversion of its LaTeX content to Markdown for abstract.md. Describe the exact preservation, transformation, and verification steps, but do not perform the conversion, modify files, or use the network.",
       "expectations": {
-        "requiredSelectedWorkflowIds": ["writing.latex", "writing.markdown"],
-        "forbiddenSelectedWorkflowIds": ["writing.pending", "writing.en", "writing.zh"],
+        "requiredSelectedWorkflowIds": ["writing"],
         "requiredObservedSkills": ["format-latex2markdown"],
         "requiredObservedSkillsBeforeProjectTools": ["format-latex2markdown"],
         "forbiddenSkills": ["format-markdown2latex", "format-template-latex", "writing-review", "writing-markdown-helper", "zh-writing-markdown-helper"]

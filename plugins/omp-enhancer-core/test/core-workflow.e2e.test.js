@@ -9,6 +9,19 @@ import registerCoreEnhancer from '../index.js';
 const ARBITRARY_MODEL = { provider: 'foo', id: 'bar' };
 const NO_PROVIDER_MODEL = { id: 'bar' };
 
+const FORBIDDEN_REMINDER_MARKERS = [
+  'WORKFLOW PLAN',
+  'WORKFLOW READY',
+  'NOW=',
+  'THEN=',
+  'RESOURCE EXTENSION',
+  'Delegate Agent=',
+  'byte 0',
+  'SENTINEL',
+  'DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY',
+  'DECLARE HANDOFF',
+];
+
 class FakePi {
   constructor(entries = []) {
     this.labels = [];
@@ -28,8 +41,10 @@ class FakePi {
     this.tools.set(tool.name, tool);
   }
 
+  registerCommand() {}
+
   on(eventName, handler) {
-    this.eventHandlers.push({ event: eventName, handler });
+    this.eventHandlers.push({ eventName, handler });
   }
 
   appendEntry(customType, data) {
@@ -37,9 +52,67 @@ class FakePi {
   }
 }
 
-test('primary startup records task facts without changing the native prompt or adding a message', async () => {
+function fakeZod() {
+  const chainable = (base) => ({
+    ...base,
+    optional: () => chainable({ type: 'optional', schema: base }),
+    describe: () => chainable(base),
+  });
+  return {
+    object: (shape) => chainable({ type: 'object', shape }),
+    string: () => chainable({ type: 'string' }),
+    boolean: () => chainable({ type: 'boolean' }),
+    array: (schema) => chainable({ type: 'array', schema }),
+  };
+}
+
+function extensionContext(entries, cwd = process.cwd(), extra = {}) {
+  return {
+    cwd,
+    sessionManager: {
+      getBranch: () => entries,
+      getEntries: () => entries,
+    },
+    ui: { notify: () => undefined },
+    hasUI: false,
+    ...extra,
+  };
+}
+
+function event(pi, eventName) {
+  const registered = pi.eventHandlers.find((entry) => entry.eventName === eventName);
+  if (!registered) throw new Error(`Missing event handler: ${eventName}`);
+  return registered.handler;
+}
+
+function registeredCore() {
   const entries = [];
   const pi = new FakePi(entries);
+  registerCoreEnhancer(pi);
+  return { pi, entries, ctx: extensionContext(entries) };
+}
+
+function latestState(entries) {
+  return entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
+}
+
+async function reminderFor(prompt, { tools = ['read', 'task', 'todo'], skills = ['omp-enhancer-workflows'], model = ARBITRARY_MODEL, messages, entries } = {}) {
+  const stateEntries = entries ?? [];
+  const pi = new FakePi(stateEntries);
+  if (tools) pi.getActiveTools = () => tools;
+  pi.pi = { getActiveSkills: () => skills.map((name) => ({ name, description: 'Select workflows.' })) };
+  registerCoreEnhancer(pi);
+  const ctx = extensionContext(stateEntries, process.cwd(), { model });
+  await event(pi, 'session_start')({}, ctx);
+  const result = await event(pi, 'before_agent_start')(
+    { prompt, systemPrompt: ['native OMP prompt'], ...(messages ? { messages } : {}) },
+    ctx,
+  );
+  return { result, pi, ctx, stateEntries };
+}
+
+test('primary startup records task facts without changing the native prompt or adding a message', async () => {
+  const { pi, ctx, entries } = registeredCore();
   let nativeBuilds = 0;
   pi.pi = {
     SKILL_PROMPT_MESSAGE_TYPE: 'skill-prompt',
@@ -54,505 +127,177 @@ test('primary startup records task facts without changing the native prompt or a
       return { message: 'must not autoload', details: { name: 'wrong' } };
     },
   };
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext(entries);
   const previousReminder = process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER;
   process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER = '1';
   try {
-  await event(pi, 'session_start')({}, ctx);
-  const startEvent = {
-    prompt: 'Diagnose the parser, implement the fix, add tests, and review the result.',
-    systemPrompt: ['base prompt'],
-  };
-  const originalEvent = structuredClone(startEvent);
-  const routed = await event(pi, 'before_agent_start')(startEvent, ctx);
+    await event(pi, 'session_start')({}, ctx);
+    const startEvent = {
+      prompt: 'Diagnose the parser, implement the fix, add tests, and review the result.',
+      systemPrompt: ['base prompt'],
+    };
+    const originalEvent = structuredClone(startEvent);
+    const routed = await event(pi, 'before_agent_start')(startEvent, ctx);
 
-  assert.equal(nativeBuilds, 0);
-  assert.equal(routed, undefined);
-  assert.deepEqual(startEvent, originalEvent);
+    assert.equal(nativeBuilds, 0);
+    assert.equal(routed, undefined);
+    assert.deepEqual(startEvent, originalEvent);
 
-  const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.deepEqual(Object.keys(snapshot.lastTaskContext).sort(), [
-    'intent',
-    'projectSnapshot',
-    'taskDescriptor',
-  ]);
-  assert.equal(snapshot.lastTaskContext.intent, 'agent-selected');
+    const snapshot = latestState(entries);
+    assert.deepEqual(Object.keys(snapshot.lastTaskContext).sort(), [
+      'intent',
+      'projectSnapshot',
+      'taskDescriptor',
+    ]);
+    assert.equal(snapshot.lastTaskContext.intent, 'agent-selected');
+    assert.equal(snapshot.schemaVersion, 10);
   } finally {
     if (previousReminder === undefined) delete process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER;
     else process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER = previousReminder;
   }
 });
 
-test('an arbitrary top-level model receives the compact seven-stage soft reminder without replacing the native prompt', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task', 'todo'];
-  pi.pi = {
-    getActiveSkills: () => [
-      { name: 'omp-enhancer-workflows', description: 'Select composable workflows.' },
-      { name: 'writing-review', description: 'Review academic prose.' },
-    ],
-  };
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext(entries, process.cwd(), {
-    model: ARBITRARY_MODEL,
-  });
-  const startEvent = {
-    prompt: 'Fix the parser across multiple files, add regression tests, and verify behavior.',
-    systemPrompt: [nativeDelegationPrompt({ batch: true, cap: 4 }), 'native Skill inventory'],
-  };
-  const originalEvent = structuredClone(startEvent);
-
-  const result = await event(pi, 'before_agent_start')(startEvent, ctx);
-
-  assert.deepEqual(startEvent, originalEvent);
-  assert.equal(Object.hasOwn(result, 'systemPrompt'), false);
+test('an arbitrary top-level model receives the compact orchestration advisory without replacing the native prompt', async () => {
+  const { result, pi, ctx } = await reminderFor('Fix the parser across multiple files, add tests, and review the result.');
+  assert.ok(result, 'a code project task must produce a reminder');
   assert.equal(result.message.customType, 'omp-enhancer-skill-discovery');
   assert.equal(result.message.display, false);
   assert.equal(result.message.attribution, 'user');
   assert.equal(Object.hasOwn(result.message.details, 'model'), false);
-  assert.match(result.message.content, /^OMP_WORKFLOW_ENTRY/u);
-  assert.match(result.message.content, /^OMP_WORKFLOW_ENTRY[^\n]*\nFIRST RESPONSE:[^\n]*\n- DIRECT ONLY[^\n]*\n- OTHERWISE \(PROJECT\): INDEX STATUS=NOT SUPPLIED/iu);
-  assert.match(result.message.content, /DIRECT ONLY[\s\S]*verbatim, no-judgment field\/heading lookup[\s\S]*Review, correction, comparison, verification, design, transformation, planning[\s\S]*are PROJECT/iu);
-  assert.match(result.message.content, /PROJECT at any size/iu);
-  assert.match(result.message.content, /call only `read` with `path=skill:\/\/omp-enhancer-workflows`[\s\S]*end the response and wait[\s\S]*Do not read a project path/iu);
-  assert.match(result.message.content, /Available Skills metadata and this reminder are not the body/iu);
-  assert.match(result.message.content, /AFTER THE INDEX RETURNS:[\s\S]*DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY/iu);
-  assert.match(result.message.content, /byte-0 `WORKFLOW PLAN`[\s\S]*structured NOW\/THEN[\s\S]*at least four detailed Actions/iu);
-  assert.match(result.message.content, /resource-only load batches[\s\S]*byte-0 `WORKFLOW READY` \+ rebased detailed TODO only[\s\S]*project tools/iu);
-  assert.match(result.message.content, /Main is the orchestrator[\s\S]*loaded non-simple card[\s\S]*evidence gathering, planning, implementation, and audit[\s\S]*parent VERIFY/iu);
-  assert.doesNotMatch(result.message.content, /character 1/iu);
-  assert.doesNotMatch(result.message.content, /TASK COPY:|Delegate Writer:|generic Draft\/Check|checkpoint=<verbatim-task-content>/iu);
-  assert.match(result.message.content, /Main selects[\s\S]*OMP owns tools, permissions, delegation, and completion/iu);
-  assert.match(result.message.content, /^REVIEW_CONTEXT \(soft, no quota\)/mu);
-  assert.match(result.message.content, /soft one-shot for top-level Main[\s\S]*selects no workflow, Skill, Agent, or fork width/iu);
-  assert.match(result.message.content, /no runtime gate, router, retry, permission, or completion control/iu);
-  assert.doesNotMatch(result.message.content, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
-  assert.doesNotMatch(result.message.content, /suggested=|within-native-cap|native-cap=|NATIVE_BATCH_SHAPE|action=delegate|block:\s*true|continue:\s*true|hard router|automatic retry/u);
-  assert.doesNotMatch(result.message.content, /DEEPSEEK|MIMO|deepseek-v4-flash|mimo-v2\.5|opencode-go/iu);
-  assert.ok(result.message.content.length < 2500, `compatibility context length=${result.message.content.length}`);
-  assert.deepEqual(result.message.details.features, [
-    'skill-discovery',
-    'workflow-selection',
-    'delegation-decision',
-    'workflow-candidates',
-    'dynamic-review-budget',
-  ]);
+  assert.equal(result.message.details.compatibility, 'skill-discovery');
 
-  assert.equal(await event(pi, 'before_agent_start')({
-    prompt: '继续',
-    systemPrompt: ['native OMP prompt'],
-  }, ctx), undefined, 'the reminder is one-shot for the active task');
+  assert.match(result.message.content, /^OMP_ORCHESTRATION \(soft advisory; selects no workflow, Agent, or gate\):/u);
+  assert.match(result.message.content, /Main is the orchestrator\. Phases: ANALYZE -> EXECUTE -> REVIEW\./u);
+  assert.match(result.message.content, /ANALYZE: Main analyzes directly for focused work; delegates to analyzer for complex multi-slice work\./u);
+  assert.match(result.message.content, /EXECUTE: Main executes directly for simple changes; delegates to task\/domain agents for substantial work\./u);
+  assert.match(result.message.content, /REVIEW: Main reviews simple changes directly; delegates to reviewer for complex or risky changes\./u);
+  assert.match(result.message.content, /For non-trivial PROJECT work, read `skill:\/\/omp-enhancer-workflows` for the domain reference catalog\./u);
+  assert.match(result.message.content, /A verbatim field\/heading lookup needs no workflow or TODO\./u);
+  assert.match(result.message.content, /OMP owns tools, permissions, delegation, and completion\./u);
+  assert.match(result.message.content, /WORKFLOW_CANDIDATES/u);
+  assert.match(result.message.content, /CANDIDATES: code/u);
+  assert.match(result.message.content, /Task descriptor resolved language=en; select matching writing skills directly\./u);
+
+  for (const marker of FORBIDDEN_REMINDER_MARKERS) {
+    assert.doesNotMatch(result.message.content, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'iu'), `reminder must not contain ${marker}`);
+  }
+
+  assert.deepEqual(result.message.details.features, [
+    'orchestration-advisory',
+    'workflow-candidates',
+    'language-hint',
+  ]);
+  assert.ok(result.message.content.length < 2500, `reminder length=${result.message.content.length}`);
+
+  assert.equal(
+    await event(pi, 'before_agent_start')({ prompt: '继续', systemPrompt: ['native OMP prompt'] }, ctx),
+    undefined,
+    'the reminder is one-shot for the active task',
+  );
 });
 
-test('a model with no provider field also receives the workflow-entry reminder', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task', 'todo'];
-  pi.pi = {
-    getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }],
-  };
-  registerCoreEnhancer(pi);
-  const result = await event(pi, 'before_agent_start')({
-    prompt: 'Audit two modules and compare their evidence.',
-    systemPrompt: ['native OMP prompt'],
-  }, extensionContext(entries, process.cwd(), { model: NO_PROVIDER_MODEL }));
-  assert.match(result.message.content, /^OMP_WORKFLOW_ENTRY/u);
+test('a model with no provider field also receives the orchestration reminder', async () => {
+  const { result } = await reminderFor('Audit two modules and compare their evidence.', { model: NO_PROVIDER_MODEL });
+  assert.ok(result);
+  assert.match(result.message.content, /^OMP_ORCHESTRATION/u);
   assert.equal(Object.hasOwn(result.message.details, 'model'), false);
 });
 
-test('workflow entry observes an already supplied native workflow index and never asks for a duplicate read', async () => {
+test('the reminder acknowledges an already supplied native workflow index without asking for a duplicate read', async () => {
   const entries = [{
     type: 'custom',
     customType: 'skill-prompt',
     content: '---\nname: omp-enhancer-workflows\n---\n# OMP Enhancer workflows',
-    details: {
-      name: 'omp-enhancer-workflows',
-      path: '/skills/omp-enhancer-workflows/SKILL.md',
-    },
+    details: { name: 'omp-enhancer-workflows' },
     attribution: 'user',
   }];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task', 'todo'];
-  pi.pi = {
-    getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }],
-  };
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext(entries, process.cwd(), {
-    model: ARBITRARY_MODEL,
-  });
+  const { result } = await reminderFor('Review the report and propose a revision.', { entries });
 
-  const result = await event(pi, 'before_agent_start')({
-    prompt: 'Review the report and propose a revision.',
-    systemPrompt: ['native OMP prompt'],
-  }, ctx);
-
-  assert.match(result.message.content, /INDEX STATUS=SUPPLIED BY EXACT NATIVE `skill-prompt`/iu);
-  assert.match(result.message.content, /do not reread it[\s\S]*next response starts at byte 0 with a filled `WORKFLOW PLAN`/iu);
-  assert.doesNotMatch(result.message.content, /call only `read` with `path=skill:\/\/omp-enhancer-workflows`/iu);
+  assert.match(result.message.content, /The workflow index was supplied natively\. Do not reread it\./u);
+  assert.doesNotMatch(result.message.content, /For non-trivial PROJECT work, read `skill:\/\/omp-enhancer-workflows`/u);
 });
 
-test('workflow entry treats unsafe, empty, stale, or legacy prompt evidence as not supplied', async () => {
-  const cases = [
-    {
-      label: 'throwing branch getter',
-      entries: [],
-      mutateContext: (ctx) => {
-        ctx.sessionManager.getBranch = () => {
-          throw new Error('branch unavailable');
-        };
-      },
-    },
-    {
-      label: 'empty body metadata',
-      entries: [{
-        type: 'custom',
-        customType: 'skill-prompt',
-        content: '   ',
-        details: { name: 'omp-enhancer-workflows' },
-        attribution: 'user',
-      }],
-    },
-    {
-      label: 'stale prior-turn body',
-      entries: [
-        {
-          type: 'custom',
-          customType: 'skill-prompt',
-          content: '---\nname: omp-enhancer-workflows\n---\nold body',
-          details: { name: 'omp-enhancer-workflows' },
-          attribution: 'user',
-        },
-        { type: 'message', message: { role: 'assistant', content: [{ type: 'text', text: 'old answer' }] } },
-        { type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'new request' }] } },
-      ],
-    },
-    {
-      label: 'legacy Core autoload',
-      entries: [{
-        type: 'custom',
-        customType: 'skill-prompt',
-        content: '---\nname: omp-enhancer-workflows\n---\nlegacy body',
-        details: {
-          name: 'omp-enhancer-workflows',
-          provisionProvider: 'omp-enhancer-core',
-          provisionSchemaVersion: 1,
-        },
-      }],
-    },
-    {
-      label: 'stale prior-turn body in event messages',
-      entries: [],
-      messages: [
-        {
-          type: 'custom',
-          customType: 'skill-prompt',
-          content: '---\nname: omp-enhancer-workflows\n---\nold event body',
-          details: { name: 'omp-enhancer-workflows' },
-          attribution: 'user',
-        },
-        { role: 'assistant', content: [{ type: 'text', text: 'old answer' }] },
-        { role: 'user', content: [{ type: 'text', text: 'new request' }] },
-      ],
-    },
-  ];
-
-  for (const { label, entries, messages, mutateContext } of cases) {
-    const pi = new FakePi(entries);
-    pi.getActiveTools = () => ['read', 'task', 'todo'];
-    pi.pi = {
-      getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }],
-    };
-    registerCoreEnhancer(pi);
-    const ctx = extensionContext(entries, process.cwd(), {
-      model: ARBITRARY_MODEL,
-    });
-    mutateContext?.(ctx);
-
-    const result = await event(pi, 'before_agent_start')({
-      prompt: 'Review the report.',
-      systemPrompt: ['native OMP prompt'],
-      ...(messages ? { messages } : {}),
-    }, ctx);
-
-    assert.match(result.message.content, /INDEX STATUS=NOT SUPPLIED/iu, label);
-  }
-});
-
-test('workflow entry records fallback guidance when native delegation is unavailable or forbidden', async () => {
-  for (const { label, tools, prompt } of [
-    { label: 'task unavailable', tools: ['read', 'todo'], prompt: 'Review the report.' },
-    { label: 'delegation forbidden', tools: ['read', 'task', 'todo'], prompt: 'Review the report, but keep all work in the main agent and do not delegate.' },
-  ]) {
-    const entries = [];
-    const pi = new FakePi(entries);
-    pi.getActiveTools = () => tools;
-    pi.pi = {
-      getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }],
-    };
-    registerCoreEnhancer(pi);
-    const result = await event(pi, 'before_agent_start')({
-      prompt,
-      systemPrompt: ['native OMP prompt'],
-    }, extensionContext(entries, process.cwd(), {
-      model: ARBITRARY_MODEL,
-    }));
-
-    assert.match(result.message.content, /record the concrete permitted fallback[\s\S]*parent VERIFY/iu, label);
-    assert.doesNotMatch(result.message.content, /assign at least one safe complete checkpoint/iu, label);
-  }
-});
-
-test('the staged reminder fires once for any top-level model', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task', 'todo'];
-  pi.pi = {
-    getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }],
-  };
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext(entries, process.cwd(), {
-    model: { provider: 'opencode-go', id: 'mimo-v2.5' },
-  });
-
-  const result = await event(pi, 'before_agent_start')({
-    prompt: 'Audit two modules and compare their evidence.',
-    systemPrompt: ['native OMP prompt'],
-  }, ctx);
-
-  assert.match(result.message.content, /^OMP_WORKFLOW_ENTRY/u);
-  assert.equal(Object.hasOwn(result.message.details, 'model'), false);
-  assert.match(result.message.content, /INDEX STATUS=NOT SUPPLIED[\s\S]*path=skill:\/\/omp-enhancer-workflows/iu);
-  assert.match(result.message.content, /DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY/iu);
-  assert.match(result.message.content, /byte-0 `WORKFLOW PLAN`[\s\S]*byte-0 `WORKFLOW READY`/iu);
-  assert.match(result.message.content, /Main is the orchestrator[\s\S]*evidence gathering, planning, implementation, and audit/iu);
-  assert.doesNotMatch(result.message.content, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
-  assert.doesNotMatch(result.message.content, /suggested=|reviewer count=\d|fork width=\d|required fork|block:\s*true/iu);
-  assert.doesNotMatch(result.message.content, /DEEPSEEK|MIMO|deepseek|mimo|opencode-go/iu);
-  assert.equal(await event(pi, 'before_agent_start')({
-    prompt: '继续',
-    systemPrompt: ['native OMP prompt'],
-  }, ctx), undefined);
-});
-
-test('staged reminder exposes only capabilities active in the native runtime', async () => {
-  const nativeEvent = { prompt: 'Audit two independent modules.', systemPrompt: ['native OMP prompt'] };
-
-  const skillEntries = [];
-  const skillPi = new FakePi(skillEntries);
-  skillPi.getActiveTools = () => ['read'];
-  skillPi.pi = { getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }] };
-  registerCoreEnhancer(skillPi);
-  const skillOnly = await event(skillPi, 'before_agent_start')(
-    structuredClone(nativeEvent),
-    extensionContext(skillEntries, process.cwd(), {
-      model: ARBITRARY_MODEL,
-    }),
-  );
-  assert.match(skillOnly.message.content, /^OMP_SOFT_PROTOCOL[^\n]*\n(?:INDEX STATUS=[^\n]*\n)?ENTRY \(soft\):[\s\S]*DIRECT is a verbatim, no-judgment field\/heading lookup[\s\S]*no Skill\/TODO/iu);
-  assert.match(skillOnly.message.content, /PROJECT ONLY . DECLARE:[\s\S]*PROJECT ONLY . LOAD:[\s\S]*PROJECT ONLY . COMMIT:/iu);
-  assert.match(skillOnly.message.content, /DECLARE:[\s\S]*visible WORKFLOW PLAN block[\s\S]*Load order: NOW=\[<non-supplied Skill URIs-or-none>\] THEN=\[none\]/iu);
-  assert.match(skillOnly.message.content, /LOAD:[\s\S]*read only NOW exact Skill URIs[\s\S]*wait/iu);
-  assertSkillUriIdentity(skillOnly.message.content);
-  assert.match(skillOnly.message.content, /COMMIT:[\s\S]*first visible bytes are `WORKFLOW READY \| workflows=unavailable[\s\S]*TODO init only/iu);
-  assert.doesNotMatch(skillOnly.message.content, /DELEGATION AFTER READY|REVIEW_CONTEXT/u);
-  assert.deepEqual(skillOnly.message.details.features, ['skill-discovery']);
-
-  const taskEntries = [];
-  const taskPi = new FakePi(taskEntries);
-  taskPi.getActiveTools = () => ['read', 'task'];
-  taskPi.pi = { getActiveSkills: () => [] };
-  registerCoreEnhancer(taskPi);
-  const taskOnly = await event(taskPi, 'before_agent_start')(
-    structuredClone(nativeEvent),
-    extensionContext(taskEntries, process.cwd(), {
-      model: ARBITRARY_MODEL,
-    }),
-  );
-  assert.match(taskOnly.message.content, /^OMP_SOFT_PROTOCOL[^\n]*\n(?:INDEX STATUS=[^\n]*\n)?ENTRY \(soft\):[\s\S]*DIRECT is a verbatim, no-judgment field\/heading lookup[\s\S]*no Skill\/TODO/iu);
-  assert.match(taskOnly.message.content, /PROJECT ONLY . PHASE 1 . PLAN:[\s\S]*PROJECT ONLY . PHASE 2 . COMMIT:[\s\S]*PROJECT ONLY . PHASE 3 . EXECUTE/iu);
-  assert.match(taskOnly.message.content, /PHASE 1 . PLAN:[\s\S]*PHASE 2 . COMMIT:[\s\S]*PHASE 3 . EXECUTE/iu);
-  assert.match(taskOnly.message.content, /no fork or width is selected by this reminder/i);
-  assert.match(taskOnly.message.content, /DELEGATION AFTER READY \(soft\):[\s\S]*Main is the orchestrator[\s\S]*non-simple work is delegated to currently visible Agents when native state permits/iu);
-  assert.deepEqual(taskOnly.message.details.features, ['workflow-candidates', 'delegation-decision']);
-});
-
-test('review and multi-target facts remain compact and never choose dispatch or width', async () => {
-  const reviewEntries = [];
-  const reviewPi = new FakePi(reviewEntries);
-  reviewPi.getActiveTools = () => ['read', 'task'];
-  reviewPi.pi = { getActiveSkills: () => [] };
-  registerCoreEnhancer(reviewPi);
-  const review = await event(reviewPi, 'before_agent_start')({
-    prompt: 'Fix the parser across multiple files, add tests, and require an independent review.',
-    systemPrompt: ['native OMP prompt'],
-  }, extensionContext(reviewEntries, process.cwd(), {
-    model: ARBITRARY_MODEL,
-  }));
-  assert.match(review.message.content, /^REVIEW_CONTEXT \(soft, no quota\)/mu);
-  assert.match(review.message.content, /review=correctness,test-adequacy/i);
-  assert.doesNotMatch(review.message.content, /suggested=|within-native-cap|native-cap=|reviewerLaneSuggestion/u);
-
-  const shapeEntries = [];
-  const shapePi = new FakePi(shapeEntries);
-  shapePi.getActiveTools = () => ['read', 'task'];
-  shapePi.pi = {
-    getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }],
-  };
-  registerCoreEnhancer(shapePi);
-  const shape = await event(shapePi, 'before_agent_start')({
-    prompt: 'Independently audit src/a.js and src/b.js. Give evidence for each and compare them. Do not modify files.',
-    systemPrompt: ['native OMP prompt'],
-  }, extensionContext(shapeEntries, process.cwd(), {
-    model: ARBITRARY_MODEL,
-  }));
-  assert.match(shape.message.content, /^TASK_SHAPE_FACTS/mu);
-  assert.match(shape.message.content, /exact-inspection-targets=2/u);
-  assert.match(shape.message.content, /never a dispatch or fork-width decision/i);
-  assert.doesNotMatch(shape.message.content, /action=delegate|required fork|must delegate/iu);
-});
-
-test('explicit no-delegation wording keeps Skill guidance but removes delegation advice', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task'];
-  pi.pi = { getActiveSkills: () => [{ name: 'code-development', description: 'Plan, test, and review code changes.' }] };
-  registerCoreEnhancer(pi);
-  const result = await event(pi, 'before_agent_start')({
-    prompt: 'Audit src/router.js, but keep all work in the main agent and do not delegate any part.',
-    systemPrompt: ['native OMP prompt'],
-  }, extensionContext(entries, process.cwd(), {
-    model: ARBITRARY_MODEL,
-  }));
-
-  assert.match(result.message.content, /PROJECT ONLY . DECLARE:[\s\S]*visible WORKFLOW PLAN block[\s\S]*Load order: NOW=\[<non-supplied Skill URIs-or-none>\] THEN=\[none\]/iu);
-  assert.doesNotMatch(result.message.content, /DELEGATION AFTER READY|REVIEW_CONTEXT/u);
-  assert.deepEqual(result.message.details.features, ['skill-discovery']);
-  const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.equal(snapshot.lastTaskContext.taskDescriptor.constraints.subagents, 'forbidden');
-});
-
-test('the reminder is top-level, primary-agent, and visible-capability gated but model-agnostic', async () => {
-  const nativeEvent = { prompt: 'Review abstract.tex conservatively.', systemPrompt: ['native OMP prompt'] };
-  // Every top-level model receives the reminder (no exact-model gating).
+test('the reminder fires once for any top-level model without model-specific behavior', async () => {
   for (const model of [
     { provider: 'opencode-go', id: 'deepseek-v3.2' },
     { provider: 'opencode-go', id: 'deepseek-v4-flash-pro' },
     { provider: 'another-provider', id: 'deepseek-v4-flash' },
     { provider: 'opencode-go', id: 'mimo-v2.5-pro' },
-    { provider: 'xiaomi', id: 'mimo-v2.5' },
     { provider: 'foo', id: 'bar' },
     { id: 'bar' },
   ]) {
-    const entries = [];
-    const pi = new FakePi(entries);
-    pi.getActiveTools = () => ['read'];
-    pi.pi = { getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }] };
-    registerCoreEnhancer(pi);
-    const result = await event(pi, 'before_agent_start')(
-      structuredClone(nativeEvent),
-      extensionContext(entries, process.cwd(), { model }),
-    );
-    assert.notEqual(result, undefined, `${model.provider ?? '<none>'}/${model.id} should receive a reminder`);
-    assert.match(result.message.content, /^OMP_SOFT_PROTOCOL/u, `${model.provider ?? '<none>'}/${model.id}`);
+    const { result } = await reminderFor('Audit two modules and compare their evidence.', { model });
+    assert.ok(result, `${model.provider ?? '<none>'}/${model.id} should receive a reminder`);
+    assert.match(result.message.content, /^OMP_ORCHESTRATION/u, `${model.provider ?? '<none>'}/${model.id}`);
     assert.equal(Object.hasOwn(result.message.details, 'model'), false);
   }
+});
 
-  // The deleted per-model env switches are inert.
-  for (const name of ['OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT', 'OMP_ENHANCER_DISABLE_MIMO_COMPAT']) {
-    const previous = process.env[name];
-    process.env[name] = '1';
-    try {
-      const entries = [];
-      const pi = new FakePi(entries);
-      pi.getActiveTools = () => ['read'];
-      pi.pi = { getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }] };
-      registerCoreEnhancer(pi);
-      const result = await event(pi, 'before_agent_start')(
-        structuredClone(nativeEvent),
-        extensionContext(entries, process.cwd(), {
-          model: { provider: 'opencode-go', id: name === 'OMP_ENHANCER_DISABLE_DEEPSEEK_COMPAT' ? 'deepseek-v4-flash' : 'mimo-v2.5' },
-        }),
-      );
-      assert.notEqual(result, undefined, `${name} is inert`);
-      assert.match(result.message.content, /^OMP_SOFT_PROTOCOL/u);
-    } finally {
-      if (previous === undefined) delete process.env[name];
-      else process.env[name] = previous;
-    }
-  }
-
-  // OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER suppresses only the reminder.
-  const previousReminder = process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER;
+test('OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER suppresses only the reminder', async () => {
+  const previous = process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER;
   process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER = '1';
   try {
-    const entries = [];
-    const pi = new FakePi(entries);
-    pi.getActiveTools = () => ['read'];
-    pi.pi = { getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }] };
-    registerCoreEnhancer(pi);
-    assert.equal(await event(pi, 'before_agent_start')(
-      structuredClone(nativeEvent),
-      extensionContext(entries, process.cwd(), { model: ARBITRARY_MODEL }),
-    ), undefined, 'OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER suppresses the reminder');
+    const { result } = await reminderFor('Review the report and propose a revision.');
+    assert.equal(result, undefined, 'OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER suppresses the reminder');
   } finally {
-    if (previousReminder === undefined) delete process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER;
-    else process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER = previousReminder;
+    if (previous === undefined) delete process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER;
+    else process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER = previous;
   }
+});
 
-  // Subagent sessions never receive the reminder.
-  const subagentEntries = [{
+test('subagent sessions never receive the reminder', async () => {
+  const entries = [{
     type: 'session_init',
     task: 'Complete the assignment below, thoroughly:\n\nReview abstract.tex conservatively.',
     tools: ['read'],
     spawns: '',
   }];
-  const subagentPi = new FakePi(subagentEntries);
-  subagentPi.getActiveTools = () => ['read'];
-  subagentPi.pi = { getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }] };
-  registerCoreEnhancer(subagentPi);
-  const subagentEvent = {
-    prompt: 'Complete the assignment below, thoroughly:\n\nReview abstract.tex conservatively.',
-    systemPrompt: ['native subagent prompt'],
-  };
-  assert.equal(await event(subagentPi, 'before_agent_start')(
-    structuredClone(subagentEvent),
-    extensionContext(subagentEntries, process.cwd(), {
-      model: ARBITRARY_MODEL,
-    }),
-  ), undefined);
-
-  // No visible skills -> no reminder.
-  const hiddenEntries = [];
-  const hiddenPi = new FakePi(hiddenEntries);
-  hiddenPi.pi = { getActiveSkills: () => [{ name: 'hidden-skill', hide: true }] };
-  registerCoreEnhancer(hiddenPi);
-  assert.equal(await event(hiddenPi, 'before_agent_start')(
-    structuredClone(nativeEvent),
-    extensionContext(hiddenEntries, process.cwd(), {
-      model: ARBITRARY_MODEL,
-    }),
-  ), undefined);
+  const { result } = await reminderFor('Complete the assignment below, thoroughly:\n\nReview abstract.tex conservatively.', { entries });
+  assert.equal(result, undefined);
 });
 
-test('automatic startup never reads a writing target', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'omp-workflow-language-'));
-  mkdirSync(join(root, 'tex'), { recursive: true });
-  writeFileSync(join(root, 'tex', 'introduction.tex'), '\\section{Introduction}\nThis paper presents the system and its evaluation.');
-  try {
-    const { pi, entries } = registeredCore();
-    const result = await event(pi, 'before_agent_start')({
-      prompt: '请润色 tex/introduction.tex。',
-    }, extensionContext(entries, root));
+test('no visible skills and no native task produce no reminder', async () => {
+  const { result } = await reminderFor('Look up the version in package.json.', {
+    tools: null,
+    skills: [{ name: 'hidden-skill', hide: true }],
+  });
+  assert.equal(result, undefined);
+});
 
-    assert.equal(result, undefined);
-    const automatic = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data.lastTaskContext;
-    assert.equal(automatic.taskDescriptor.language, 'unknown');
-    assert.equal(automatic.taskDescriptor.writingLanguageSource, 'pending-source');
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+test('plan mode prepends the plan-mode advisory and marks the feature', async () => {
+  const { result } = await reminderFor('Implement the user auth module.', {
+    messages: [{ role: 'custom', content: 'Plan mode is active. xd://propose' }],
+  });
+  assert.ok(result, 'plan mode turn must produce a reminder');
+  assert.match(result.message.content, /^OMP_PLAN_MODE \(soft advisory\):/u);
+  assert.match(result.message.content, /Plan mode is active\. The working tree is read-only\./u);
+  assert.match(result.message.content, /Use ANALYZE -> EXECUTE -> REVIEW: analyze the task, write the plan, review it before proposing\./u);
+  assert.match(result.message.content, /OMP_ORCHESTRATION/u);
+  assert.equal(result.message.details.features[0], 'plan-mode');
+  assert.ok(result.message.details.features.includes('orchestration-advisory'));
+});
+
+test('multi-target inspection adds task-shape facts without choosing dispatch width', async () => {
+  const { result } = await reminderFor(
+    'Independently audit src/a.js and src/b.js. Give evidence for each and compare them. Do not modify files.',
+  );
+  assert.ok(result);
+  assert.match(result.message.content, /^TASK_SHAPE_FACTS/mu);
+  assert.match(result.message.content, /exact-inspection-targets=2/u);
+  assert.match(result.message.content, /never a dispatch or fork-width decision/i);
+  assert.doesNotMatch(result.message.content, /action=delegate|required fork|must delegate/iu);
+  assert.ok(result.message.details.features.includes('task-shape-facts'));
+});
+
+test('explicit no-delegation wording keeps the advisory but drops workflow candidates', async () => {
+  const { result, stateEntries } = await reminderFor(
+    'Audit src/router.js, but keep all work in the main agent and do not delegate any part.',
+  );
+  assert.ok(result);
+  assert.match(result.message.content, /^OMP_ORCHESTRATION/u);
+  assert.doesNotMatch(result.message.content, /WORKFLOW_CANDIDATES|TASK_SHAPE_FACTS/u);
+  assert.deepEqual(result.message.details.features, ['orchestration-advisory', 'language-hint']);
+  const snapshot = latestState(stateEntries);
+  assert.equal(snapshot.lastTaskContext.taskDescriptor.constraints.subagents, 'forbidden');
 });
 
 test('real batch task assignments are observed without changing native task input', async () => {
@@ -568,26 +313,18 @@ test('real batch task assignments are observed without changing native task inpu
       tasks: [
         {
           name: 'RoutePlanner',
-          agent: 'plan',
-          task: 'WR:code.dev ST:step-plan-review TODO:Inspect-router SK:code-development\n# Target\nsrc/router.js\n# Acceptance\nFile-backed findings.',
+          agent: 'analyzer',
+          task: '# Target\nsrc/router.js\n# Acceptance\nFile-backed findings.',
         },
         {
           name: 'RouteImplementer',
           agent: 'task',
-          task: '[workflow=code.dev step=step-tdd todo=Implement-router skills=code-development]\n# Target\nsrc/router.js and test/router.test.js\n# Acceptance\nValid RED, minimal production change, same-command GREEN, and refactor evidence.',
+          task: '# Target\nsrc/router.js and test/router.test.js\n# Acceptance\nValid RED, minimal production change, same-command GREEN, and refactor evidence.',
         },
         {
           name: 'TestReviewer',
           agent: 'reviewer',
-          task: [
-            'OMP_WORKFLOW: code.dev',
-            'OMP_WORKFLOW_STEP: step-review',
-            'OMP_TODO_ITEM: Inspect the complete regression test matrix and return exact evidence',
-            'OMP_SELECTED_SKILLS:',
-            '- code-development',
-            '# Target',
-            'test/',
-          ].join('\n'),
+          task: '# Target\ntest/\n# Acceptance\nInspect the complete regression test matrix and return exact evidence.',
         },
       ],
     },
@@ -597,10 +334,10 @@ test('real batch task assignments are observed without changing native task inpu
   assert.equal(await event(pi, 'tool_call')(taskEvent, ctx), undefined);
   assert.deepEqual(taskEvent, originalEvent);
 
-  const afterDispatch = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
+  const afterDispatch = latestState(entries);
   assert.equal(afterDispatch.tasks.length, 1);
   assert.equal(afterDispatch.tasks[0].id, 'audit-batch');
-  assert.deepEqual(afterDispatch.tasks[0].roles, ['plan', 'task', 'reviewer']);
+  assert.deepEqual(afterDispatch.tasks[0].roles, ['analyzer', 'task', 'reviewer']);
 
   await event(pi, 'tool_result')({
     name: 'task',
@@ -608,7 +345,7 @@ test('real batch task assignments are observed without changing native task inpu
     result: {
       details: {
         results: [
-          { name: 'RoutePlanner', agent: 'plan', status: 'completed' },
+          { name: 'RoutePlanner', agent: 'analyzer', status: 'completed' },
           { name: 'RouteImplementer', agent: 'task', status: 'completed' },
           { name: 'TestReviewer', agent: 'reviewer', status: 'completed' },
         ],
@@ -642,7 +379,7 @@ test('task results without call IDs receive distinct fallback IDs', async () => 
     },
   }, ctx);
 
-  const snapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
+  const snapshot = latestState(entries);
   assert.deepEqual(snapshot.tasks.map(({ id }) => id), ['task-result-1', 'task-result-2']);
   assert.deepEqual(snapshot.tasks.map(({ summary }) => summary), ['First orphan result.', 'Second orphan result.']);
   assert.equal(snapshot.taskSequence, 2);
@@ -657,7 +394,7 @@ test('flat task assignments and spawned subagents keep native task and prompt ev
     input: {
       name: 'ParserReviewer',
       agent: 'reviewer',
-      task: '[workflow=code.dev step=step-review todo=Review parser diff skills=code-development]\n# Target\nsrc/parser.js',
+      task: '# Target\nsrc/parser.js\n# Acceptance\nReview the parser diff with evidence.',
     },
   };
   const originalTask = structuredClone(taskEvent);
@@ -681,7 +418,7 @@ test('advisor and autolearn host turns never reset the active user workflow stat
   const { pi, ctx, entries } = registeredCore();
   pi.getActiveTools = () => ['read', 'task'];
   await event(pi, 'before_agent_start')({ prompt: 'Review src/router.js and report findings.' }, ctx);
-  const before = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
+  const before = latestState(entries);
   const entryCount = entries.length;
 
   const advisorPrompt = 'Check the workflow and TODO selection.';
@@ -712,180 +449,53 @@ test('advisor and autolearn host turns never reset the active user workflow stat
     output: 'SKILL_USAGE\nLoaded:\n- writing-review',
   }, advisorCtx), undefined);
 
-  const after = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
+  const after = latestState(entries);
   assert.equal(entries.length, entryCount);
   assert.deepEqual(after, before);
 });
 
-test('state schema bump drops stale model-era reminder state on restore', async () => {
+test('state schema bump drops stale reminder-era state on restore', async () => {
   const { pi, entries, ctx } = registeredCore();
   pi.getActiveTools = () => ['read', 'task', 'todo'];
   pi.pi = { getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }] };
   await event(pi, 'before_agent_start')({ prompt: 'First project task.' }, ctx);
-  const staleSnapshot = entries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.equal(staleSnapshot.schemaVersion, 9);
-  // Simulate a pre-v8 persisted state using the old field name.
-  const preV8 = {
+  const staleSnapshot = latestState(entries);
+  assert.equal(staleSnapshot.schemaVersion, 10);
+  // Simulate a pre-v10 persisted state (the schema version just bumped).
+  const preV10 = {
     ...structuredClone(staleSnapshot),
-    schemaVersion: 7,
-    compatibilityReminderTaskStartedAt: staleSnapshot.taskStartedAt,
+    schemaVersion: 9,
   };
-  delete preV8.workflowReminderTaskStartedAt;
-  const restoredEntries = [{ type: 'custom', customType: 'omp-enhancer-core.state', data: preV8 }];
+  const restoredEntries = [{ type: 'custom', customType: 'omp-enhancer-core.state', data: preV10 }];
   const restoredPi = new FakePi(restoredEntries);
   restoredPi.getActiveTools = () => ['read', 'task', 'todo'];
   restoredPi.pi = { getActiveSkills: () => [{ name: 'omp-enhancer-workflows', description: 'Select workflows.' }] };
   registerCoreEnhancer(restoredPi);
   const restoredCtx = extensionContext(restoredEntries, process.cwd(), { model: ARBITRARY_MODEL });
   await event(restoredPi, 'session_start')({}, restoredCtx);
-  const after = restoredEntries.findLast((entry) => entry.customType === 'omp-enhancer-core.state').data;
-  assert.equal(after.schemaVersion, 9);
+  const after = latestState(restoredEntries);
+  assert.equal(after.schemaVersion, 10);
   assert.equal(after.workflowReminderTaskStartedAt, 0);
   // A fresh reminder fires for the new task (stale one-shot state was dropped).
   const reminder = await event(restoredPi, 'before_agent_start')({ prompt: 'A new project task.' }, restoredCtx);
   assert.notEqual(reminder, undefined);
 });
 
+test('automatic startup never reads a writing target', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'omp-workflow-language-'));
+  mkdirSync(join(root, 'tex'), { recursive: true });
+  writeFileSync(join(root, 'tex', 'introduction.tex'), '\\section{Introduction}\nThis paper presents the system and its evaluation.');
+  try {
+    const { pi, entries } = registeredCore();
+    const result = await event(pi, 'before_agent_start')({
+      prompt: '请润色 tex/introduction.tex。',
+    }, extensionContext(entries, root));
 
-test('plan-to-execute transition injects OMP_WORKFLOW_ENTRY without visible workflow skill', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task', 'todo'];
-  // No workflow skill visible — only a non-workflow skill
-  pi.pi = {
-    getActiveSkills: () => [{ name: 'writing-review', description: 'Review prose.' }],
-  };
-  registerCoreEnhancer(pi);
-  const ctx = extensionContext(entries, process.cwd(), { model: ARBITRARY_MODEL });
-
-  // First turn: plan mode with both required markers
-  const planTurn = await event(pi, 'before_agent_start')({
-    prompt: 'Implement the user auth module.',
-    systemPrompt: ['base prompt'],
-    messages: [
-      { role: 'custom', content: 'Plan mode is active. xd://propose' },
-    ],
-  }, ctx);
-  assert.ok(planTurn, 'plan mode turn must produce a reminder');
-  assert.match(planTurn.message.content, /OMP_PLAN_MODE/u, 'plan mode reminder must contain OMP_PLAN_MODE');
-  assert.doesNotMatch(planTurn.message.content, /^OMP_WORKFLOW_ENTRY/u, 'plan mode must not contain OMP_WORKFLOW_ENTRY');
-
-  // Second turn: execution after plan mode (same entries carry state)
-  // planToExecuteTransition = lastTaskPlanMode(true from first call) && planMode(false for this turn)
-  const executeTurn = await event(pi, 'before_agent_start')({
-    prompt: 'proceed',
-    systemPrompt: ['base prompt'],
-  }, ctx);
-  assert.ok(executeTurn, 'execute turn must produce a reminder');
-  assert.match(executeTurn.message.content, /^OMP_WORKFLOW_ENTRY/u, 'execute turn must inject OMP_WORKFLOW_ENTRY without visible workflow skill');
-  assert.match(executeTurn.message.content, /DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY/u, 'entry must embed the staged protocol');
-  assert.match(executeTurn.message.content, /INDEX STATUS=NOT SUPPLIED/u, 'entry must instruct index read since skill is not visible');
+    assert.equal(result, undefined);
+    const automatic = latestState(entries).lastTaskContext;
+    assert.equal(automatic.taskDescriptor.language, 'unknown');
+    assert.equal(automatic.taskDescriptor.writingLanguageSource, 'pending-source');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
-
-test('hasVisibleSkills but no workflow skill injects INDEX STATUS=NOT SUPPLIED read directive', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task', 'todo'];
-  pi.pi = { getActiveSkills: () => [{ name: 'tikz-diagram', description: 'Draw TikZ diagrams.' }] };
-  registerCoreEnhancer(pi);
-  const result = await event(pi, 'before_agent_start')({
-    prompt: '画一个系统架构图',
-    systemPrompt: ['native OMP prompt'],
-  }, extensionContext(entries, process.cwd(), { model: ARBITRARY_MODEL }));
-  assert.ok(result, 'tikz scenario must produce a reminder');
-  assert.match(result.message.content, /^OMP_SOFT_PROTOCOL/u, 'weak branch must use OMP_SOFT_PROTOCOL prefix');
-  assert.match(result.message.content, /INDEX STATUS=NOT SUPPLIED/iu, 'must instruct reading workflow index');
-  assert.match(result.message.content, /skill:\/\/omp-enhancer-workflows/iu, 'must name the workflow index URI');
-  assert.match(result.message.content, /PROJECT ONLY.*DECLARE.*byte 0.*WORKFLOW PLAN/iu, 'must retain the weak-branch PLAN directive');
-  assert.equal(Object.hasOwn(result.message.details, 'model'), false, 'no per-model metadata');
-  assert.ok(result.message.details.features?.includes('skill-discovery'), 'features must include skill-discovery');
-});
-
-test('hasVisibleSkills but no workflow skill with supplied index uses INDEX STATUS=SUPPLIED', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task', 'todo'];
-  pi.pi = { getActiveSkills: () => [{ name: 'tikz-diagram', description: 'Draw TikZ diagrams.' }] };
-  registerCoreEnhancer(pi);
-  const result = await event(pi, 'before_agent_start')({
-    prompt: '画一个系统架构图',
-    systemPrompt: ['native OMP prompt'],
-    messages: [{ role: 'user', customType: 'skill-prompt', content: 'body', details: { name: 'omp-enhancer-workflows' } }],
-  }, extensionContext(entries, process.cwd(), { model: ARBITRARY_MODEL }));
-  assert.ok(result, 'supplied index scenario must produce a reminder');
-  assert.match(result.message.content, /^OMP_SOFT_PROTOCOL/u, 'weak branch must use OMP_SOFT_PROTOCOL prefix');
-  assert.match(result.message.content, /INDEX STATUS=SUPPLIED/iu, 'must acknowledge supplied index');
-  assert.match(result.message.content, /INDEX STATUS=SUPPLIED BY EXACT NATIVE/iu, 'supplied status must reference native skill-prompt');
-  assert.ok(result.message.details.features?.includes('skill-discovery'), 'features must include skill-discovery');
-});
-
-test('no visible skills + non-substantive operation injects INDEX STATUS=NOT SUPPLIED in TASK_STAGED_REMINDER', async () => {
-  const entries = [];
-  const pi = new FakePi(entries);
-  pi.getActiveTools = () => ['read', 'task', 'todo'];
-  // No pi.getActiveSkills → visibleSkills is empty
-  registerCoreEnhancer(pi);
-  const result = await event(pi, 'before_agent_start')({
-    prompt: 'Review the codebase structure.',
-    systemPrompt: ['native OMP prompt'],
-  }, extensionContext(entries, process.cwd(), { model: ARBITRARY_MODEL }));
-  assert.ok(result, 'non-substantive scenario must produce a reminder');
-  assert.match(result.message.content, /^OMP_SOFT_PROTOCOL/u, 'must use OMP_SOFT_PROTOCOL prefix');
-  assert.match(result.message.content, /INDEX STATUS=NOT SUPPLIED/iu, 'must instruct reading workflow index');
-  assert.match(result.message.content, /skill:\/\/omp-enhancer-workflows/iu, 'must name the workflow index URI');
-  assert.match(result.message.content, /PROJECT ONLY.*PHASE 1.*PLAN/iu, 'must retain TASK_STAGED_REMINDER PLAN directive');
-  assert.match(result.message.content, /PROJECT ONLY.*PHASE 2.*COMMIT/iu, 'must retain TASK_STAGED_REMINDER COMMIT directive');
-  assert.match(result.message.content, /PROJECT ONLY.*PHASE 3.*EXECUTE/iu, 'must retain TASK_STAGED_REMINDER EXECUTE directive');
-});
-
-function registeredCore() {
-  const entries = [];
-  const pi = new FakePi(entries);
-  registerCoreEnhancer(pi);
-  return { pi, entries, ctx: extensionContext(entries) };
-}
-
-function assertSkillUriIdentity(content) {
-  assert.match(content, /SKILL URI:[\s\S]*visible `x` -> `skill:\/\/x`[\s\S]*nested only from a loaded source revealing the exact URI/iu);
-  assert.match(content, /Use `read\.path`[\s\S]*Bare `x` is a project path, not Skill absence[\s\S]*only exact-URI failure = unavailable/iu);
-  assert.match(content, /`\.agents\/skills` is not the inventory/iu);
-}
-
-function event(pi, name) {
-  const found = pi.eventHandlers.find((handler) => handler.event === name);
-  if (!found) throw new Error('Missing event ' + name);
-  return found.handler;
-}
-
-function extensionContext(entries = [], cwd = process.cwd(), extra = {}) {
-  return {
-    cwd,
-    sessionManager: {
-      getBranch: () => entries,
-      getEntries: () => entries,
-    },
-    ui: { notify: () => undefined },
-    hasUI: false,
-    ...extra,
-  };
-}
-
-function nativeDelegationPrompt({ batch, cap, injectedContext = '' }) {
-  const width = batch
-    ? '- **Width = real independence.** Fan out exactly as wide as the work genuinely decomposes, batched into one `tasks[]` array.'
-    : '- **Width = real independence.** Fan out exactly as wide as the work genuinely decomposes, as parallel calls in one message.';
-  const capLine = cap == null
-    ? ''
-    : `\n- **Concurrency cap:** At most ${cap} subagent${cap === 1 ? '' : 's'} run at once in this session.`;
-  return `<system-conventions>\nNative OMP conventions.\n</system-conventions>\n${injectedContext}\n## Delegation gates:\n${width}${capLine}\nEXECUTION WORKFLOW\n==============`;
-}
-
-function fakeZod() {
-  const schema = () => ({ optional: schema, describe: () => schema() });
-  return {
-    string: schema,
-    boolean: schema,
-    array: () => schema(),
-    object: () => schema(),
-  };
-}

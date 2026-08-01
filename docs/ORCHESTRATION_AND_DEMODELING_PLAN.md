@@ -1,5 +1,7 @@
 # OMP-Enhancer 多智能体动态协作编排 + 去模型绑定 — 实施计划
 
+> **SUPERSEDED**: The orchestration layer was simplified in catalog v31. The protocol coach was removed and the 7-stage protocol was replaced with `ANALYZE -> EXECUTE -> REVIEW`. 本文件是历史规划文档，仅作存档；当前架构与行为以 [ARCHITECTURE.md](ARCHITECTURE.md) 为准。
+
 状态：v2.1（实施进度更新）——工作流 B（去模型绑定）已实现并全树验证（根 npm test 765 绿、check:workflows/marketplace、omp-config pack:dry、writing-helper 100% 覆盖）；工作流 A 确定性部分（W1-A 姿态、W1-B 长篇试点、Wave 2 生成 v23）已实现并验证；Wave 0/Wave 3 的 live E2E 基线待用户授权后补。
 日期：2026-07-24
 范围：omp-enhancer marketplace monorepo（cwd /home/dingli/omp-enhancer）

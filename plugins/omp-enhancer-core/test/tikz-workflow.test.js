@@ -11,99 +11,54 @@ import {
   buildWorkflowSkillReferenceMarkdown,
 } from '../src/workflows/render-skill.js';
 
-test('diagram.tikz is the single bounded subagent-driven TikZ Primary with a 10-step asset+figure chain', () => {
-  const workflow = workflowCatalog['diagram.tikz'];
+test('the visual workflow is the single TikZ-capable domain with the advisory render chain', () => {
+  const workflow = workflowCatalog.visual;
 
-  assert.equal(WORKFLOW_CATALOG_VERSION, 30);
-  assert.ok(workflowIds.includes('diagram.tikz'));
-  assert.ok(workflowIds.includes('diagram.mermaid'));
-  assert.equal(workflowIds.includes('diagram.svg'), false);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 31);
+  assert.ok(workflowIds.includes('visual'));
   assert.ok(workflow);
-  assert.equal(workflow.delegationDefault, 'subagent-driven');
-  assert.deepEqual(workflow.skills, ['tikz-diagram', 'svg-flowchart']);
+  assert.deepEqual(workflow.skills, ['mermaid-diagram', 'tikz-diagram', 'svg-flowchart', 'frontend-design', 'canvas-design']);
   assert.deepEqual(workflow.catalogSkills, []);
   assert.deepEqual(workflow.roles, ['designer', 'task', 'visioner']);
-  assert.match(workflow.chooseWhen, /explicitly requested via TikZ or LaTeX source/iu);
-  assert.match(workflow.chooseWhen, /unqualified academic figures.+default to diagram\.mermaid/iu);
+  assert.match(workflow.chooseWhen, /Diagrams \(Mermaid, TikZ\), UI\/UX design, visual artifacts, slides with visual layout, or rendered figure review/iu);
 
-  assert.equal(workflow.steps.length, 10);
-
-  const steps = workflow.steps.join(' ');
+  const flow = workflow.suggestedFlow.join(' ');
   const scope = workflow.scopeNotes.join(' ');
-  const quality = workflow.qualityChecks.join(' ');
-  const delegation = workflow.delegation.join(' ');
 
-  // Phased chain: blueprint -> asset prep -> asset review -> ELK IR -> generation -> render -> whole-figure review -> bounded revision -> deliver
-  assert.match(steps, /Main fixes audience.+output path.+target format.+icon requirements.+asset source boundaries/iu);
-  assert.match(steps, /graphical blueprint.+semantic graph.+per-node icon plan.+manifest draft.+no final coordinates/iu);
-  assert.match(steps, /Prepare and validate icon assets.+OpenTikZ.+imagegen.+SVG assets.+previews and manifest/iu);
-  assert.match(steps, /Review asset previews per icon.+reject or approve.+only new previews/iu);
-  assert.match(steps, /Author the semantic graph as an ELK graph IR.+layout options.+node sizing/iu);
-  assert.match(steps, /Call tikz_generate_diagram.+approved ELK graph IR.+TikZ source.+semantic-graph round-trip/iu);
-  assert.match(steps, /tikz_render.+revision-bound PDF\/SVG\/PNG/iu);
-  assert.match(steps, /Independently review fresh whole-figure renders.+semantic completeness.+icon clarity.+layering.+overlap.+clipping.+labels.+branch semantics.+manifest disclosure/iu);
-  assert.match(steps, /At most one bounded revision.+unchanged artifacts are not re-reviewed/iu);
-  assert.match(steps, /Deliver source files.+semantic graph.+manifest.+preview\/render evidence.+limitations.+asset provenance/iu);
+  assert.match(flow, /Clarify diagram type, format, and rendering requirements/iu);
+  assert.match(flow, /Render and verify output via task; review via visioner for quality/iu);
+  assert.match(flow, /Deliver with source files and rendered evidence/iu);
 
-  assert.equal(workflow.delegation.length, 8);
-  assert.deepEqual(workflow.delegation, [
-    'step-2: designer owns the semantic blueprint and per-icon plan while preserving scope',
-    'step-3: task prepares and validates icon assets and writes the asset manifest',
-    'step-4: visioner independently and read-only reviews fresh asset previews and flags unsupported icons',
-    'step-5: designer authors the ELK graph IR under approved manifest constraints with layout options and node sizing',
-    'step-5b: task calls tikz_generate_diagram with the designer ELK graph IR, writes the project-local TikZ source, and verifies the semantic-graph round-trip',
-    'step-6: task invokes the fixed tikz_render renderer for the approved current revision',
-    'step-7: visioner independently and read-only reviews the fresh current-revision renders',
-    'step-8: designer applies supported findings, task rerenders, and visioner reviews only fresh rerenders',
-  ]);
+  assert.match(scope, /Default to Mermaid for academic diagrams unless explicit TikZ\/LaTeX request/iu);
+  assert.match(scope, /TikZ rendering uses the tikz-helper plugin pipeline/iu);
 
-  assert.match(scope, /SVG and other formats are only icon assets.+geometry always comes from ELK IR/iu);
-  assert.match(scope, /OpenTikZ.+read-only source/iu);
-  assert.match(scope, /imagegen.+only when explicitly authorized/iu);
-  assert.match(scope, /deterministic fixed-command pipeline.+shell escape disabled/iu);
-  assert.match(scope, /No gate.+router.+fork.+loop.+bounded and advisory/iu);
-  assert.match(scope, /visioner review is independent and read-only.+does not render.+edit.+decide completion/iu);
-
-  assert.match(quality, /semantic completeness.+ELK graph IR.+edit-contract.+compile.+icon legibility.+raster disclosure/iu);
-  assert.doesNotMatch(`${steps} ${scope} ${delegation}`, /retry until|repeat until|automatic repair|automatic retry|block:\s*true|continue:\s*true/iu);
+  assert.equal(Object.hasOwn(workflow, 'delegation'), false);
+  assert.equal(Object.hasOwn(workflow, 'steps'), false);
+  assert.equal(Object.hasOwn(workflow, 'delegationDefault'), false);
+  assert.equal(Object.hasOwn(workflow, 'qualityChecks'), false);
+  assert.doesNotMatch(`${flow} ${scope}`, /retry until|repeat until|automatic repair|automatic retry|block:\s*true|continue:\s*true/iu);
 });
 
-test('TikZ composes only with independently requested language, slide, and design work', () => {
-  const tikz = workflowCatalog['diagram.tikz'];
-  const latex = workflowCatalog['writing.latex'];
-
-  assert.deepEqual(tikz.composeWith, [
-    'design.visual',
-    'slides.generate',
-    'slides.modify',
-    'writing.zh',
-    'writing.en',
-  ]);
-  assert.equal(tikz.composeWith.includes('diagram.svg'), false);
-  assert.equal(latex.composeWith.includes('diagram.tikz'), false);
-  assert.match(`${latex.chooseWhen} ${latex.scopeNotes.join(' ')}`, /TikZ.+alone.+diagram\.tikz/iu);
-
-  for (const id of ['writing.zh', 'writing.en', 'slides.generate', 'slides.modify', 'design.visual']) {
-    assert.equal(workflowCatalog[id].composeWith.includes('diagram.tikz'), true, id);
-    assert.equal(workflowCatalog[id].composeWith.includes('diagram.svg'), false, `${id} must not compose removed diagram.svg`);
+test('legacy TikZ workflow ids are consolidated away and composeWith is gone', () => {
+  assert.equal(workflowIds.includes('diagram.tikz'), false);
+  assert.equal(workflowIds.includes('diagram.mermaid'), false);
+  assert.equal(workflowIds.includes('diagram.svg'), false);
+  for (const id of workflowIds) {
+    assert.equal(Object.hasOwn(workflowCatalog[id], 'composeWith'), false, `${id} must not carry composeWith`);
   }
 });
 
-test('workflow Skill classifies TikZ as the single specialized visual output distinct from LaTeX prose', () => {
+test('workflow Skill classifies TikZ as part of the single visual domain distinct from LaTeX prose', () => {
   const index = buildWorkflowSkillIndexMarkdown();
-  const reference = buildWorkflowSkillReferenceMarkdown('diagram.tikz');
+  const reference = buildWorkflowSkillReferenceMarkdown('visual');
 
   assert.match(
     index,
-    /#### specialized outputs[\s\S]*`slides\.generate`[\s\S]*`slides\.modify`[\s\S]*`diagram\.mermaid`[\s\S]*`diagram\.tikz`/iu,
+    /`visual`[^\n]*Diagrams \(Mermaid, TikZ\)[^\n]*D=\[`skill:\/\/mermaid-diagram`, `skill:\/\/tikz-diagram`, `skill:\/\/svg-flowchart`, `skill:\/\/frontend-design`, `skill:\/\/canvas-design`\]/u,
   );
-  assert.match(index, /explicit editable TikZ.+`diagram\.tikz`/iu);
-  assert.match(index, /Academic figure.+flowchart.+architecture.+decision flow.+deploy pipeline.+`diagram\.mermaid`/iu);
-  assert.match(index, /`diagram\.mermaid`[^\n]*D=\[`skill:\/\/mermaid-diagram`, `skill:\/\/svg-flowchart`\][^\n]*PLAN URI/iu);
-  assert.match(index, /SVG or other formats are only icon assets.+compatibility supplements/iu);
-  assert.match(index, /`diagram\.tikz`[^\n]*D=\[`skill:\/\/tikz-diagram`, `skill:\/\/svg-flowchart`\][^\n]*PLAN URI/iu);
-  assert.match(reference, /# `diagram\.tikz` workflow reference/iu);
-  assert.match(reference, /Agent candidates: `designer`, `task`, `visioner`/iu);
+  assert.match(reference, /# `visual` workflow reference/u);
+  assert.match(reference, /Agent candidates: `designer`, `task`, `visioner`\./u);
+  assert.match(reference, /Default to Mermaid for academic diagrams unless explicit TikZ\/LaTeX request/iu);
   assert.doesNotMatch(reference, /automatic retry|retry until|repeat until|automatic repair/iu);
   assert.doesNotMatch(index, /standalone SVG.*Primary|Direct standalone SVG/iu);
 });

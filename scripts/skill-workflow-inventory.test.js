@@ -9,7 +9,7 @@ import { exactNestedEccSkillUri } from '../plugins/omp-enhancer-core/src/workflo
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const pluginsRoot = path.join(repoRoot, 'plugins');
-const nativeAgents = new Set(['plan', 'scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
+const nativeAgents = new Set(['analyzer', 'plan', 'scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
 const packageArtifactDirectories = new Set([
   '.git',
   '.hg',
@@ -86,7 +86,7 @@ test('workflow discovery metadata matches direct and ECC-catalog packaging', asy
   }
 
   const catalogCandidates = new Set(workflowDefinitions.flatMap(({ catalogSkills }) => catalogSkills));
-  assert.equal(catalogCandidates.size, 25, 'update the reviewed enumerated ECC candidate baseline');
+  assert.equal(catalogCandidates.size, 7, 'update the reviewed enumerated ECC candidate baseline');
 
   for (const definition of workflowDefinitions) {
     const expectedCatalogSkills = definition.skills.filter((skill) => !directlyVisible.has(skill));
@@ -115,7 +115,7 @@ test('every exact Skill URI in packaged Skill Markdown resolves to a real entry 
   const skillFiles = resourceFiles.filter((file) => path.basename(file) === 'SKILL.md');
   const roots = new Map();
 
-  assert.equal(resourceFiles.length, 456, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
+  assert.equal(resourceFiles.length, 430, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
 
   for (const file of skillFiles) {
     const name = frontmatterName(await readFile(file, 'utf8'));
