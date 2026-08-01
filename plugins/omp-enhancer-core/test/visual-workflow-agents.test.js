@@ -12,6 +12,7 @@ const VISUAL_WORKFLOW_IDS = [
   'slides.generate',
   'slides.modify',
   'diagram.tikz',
+  'diagram.mermaid',
 ];
 
 const VISUAL_CHECKPOINTS = {
@@ -19,6 +20,7 @@ const VISUAL_CHECKPOINTS = {
   'slides.generate': { designer: 'step-7', task: 'step-9', visioner: 'step-10' },
   'slides.modify': { designer: 'step-5', task: 'step-7', visioner: 'step-8' },
   'diagram.tikz': { designer: 'step-2', task: 'step-3', visioner: 'step-4' },
+  'diagram.mermaid': { designer: 'step-2', task: 'step-3', visioner: 'step-4' },
 };
 
 test('every visual workflow exposes designer then parent-bound render then visioner', () => {
@@ -88,7 +90,7 @@ test('compact index composes visual design only for an independently requested v
   );
   assert.match(
     index,
-    /Standalone slide or TikZ stays specialized Primary[^\n]*SVG is only an icon\/asset or compatibility supplement inside diagram\.tikz/iu,
+    /Standalone slide or explicit-TikZ request stays specialized Primary[^\n]*academic diagrams default to diagram\.mermaid/iu,
   );
   assert.doesNotMatch(index, /standalone SVG.*Primary|Direct standalone SVG/iu);
 });

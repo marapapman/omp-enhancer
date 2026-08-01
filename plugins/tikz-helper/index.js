@@ -1,6 +1,7 @@
 import { prepareAsset, registerAssetSource } from './src/asset-prepare.js';
 import { searchCatalog } from './src/catalog-search.js';
 import { renderTikz, runBoundedCommand } from './src/render-tikz.js';
+import { renderMermaid, resolveMermaidCliPath } from './src/mermaid-render.js';
 import { generateTikz, computeLayout, elkToTikz } from './src/generate-tikz.js';
 import { asRuntimeError } from './src/runtime-error.js';
 import { TikzRuntimeError } from './src/runtime-error.js';
@@ -94,11 +95,23 @@ function previewAssetsParameters(z) {
   });
 }
 
+function mermaidParameters(z) {
+  return z.object({
+    sourcePath: optional(z, z.string()).describe('Path to the Mermaid .mmd or .md source file to render. Provide exactly one of source or sourcePath.'),
+    source: optional(z, z.string()).describe('Inline Mermaid source text. Provide exactly one of source or sourcePath.'),
+    outputDirectory: optional(z, z.string()).describe('Directory for output files. Defaults to figures/mermaid/rendered/.'),
+    theme: optional(z, z.enum(['default', 'forest', 'dark', 'neutral'])).describe('Mermaid theme. Defaults to default.'),
+    width: optional(z, z.number()).describe('Optional output width in pixels for the rendered SVG.'),
+    timeoutMs: optional(z, z.number()).describe('Timeout in milliseconds for the render process.'),
+  });
+}
+
 
 export { generateTikz, computeLayout, elkToTikz };
 export { prepareAsset, registerAssetSource } from './src/asset-prepare.js';
 export { searchCatalog } from './src/catalog-search.js';
 export { renderTikz, runBoundedCommand } from './src/render-tikz.js';
+export { renderMermaid, resolveMermaidCliPath } from './src/mermaid-render.js';
 export { checkElkEnvironment, ELK_INSTALL_GUIDANCE } from './src/elk-layout.js';
 export { GEOMETRY_DEPS_GUIDANCE } from './src/geometry-check.js';
 export { previewAssetPreviews };
@@ -227,6 +240,30 @@ export default function registerTikzHelper(omp) {
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       try {
         return successResponse(await previewAssetPreviews({
+          ...objectParams(params),
+          projectRoot: projectRoot(ctx),
+        }, { signal }));
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  });
+
+  omp.registerTool({
+    name: 'mermaid_render',
+    label: 'Render Mermaid Diagram',
+    description: 'Validate Mermaid source (inline or project .mmd/.md) and run the pinned mermaid-cli in an isolated temporary workspace with offline, sandboxed headless Chrome, then publish revision-bound SVG evidence. Never hand-edit SVG coordinates.',
+    approval: 'exec',
+    promptSnippet: 'Convert authored Mermaid code to revision-bound SVG evidence.',
+    promptGuidelines: [
+      'Author the diagram in Mermaid code first; never hand-edit SVG coordinates.',
+      'This tool accepts no command or executable parameter; rendering is fully offline with sandbox launch flags.',
+      'The structured evidence reports execution facts only and does not decide completion.',
+    ],
+    parameters: mermaidParameters(z),
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      try {
+        return successResponse(await renderMermaid({
           ...objectParams(params),
           projectRoot: projectRoot(ctx),
         }, { signal }));

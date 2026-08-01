@@ -80,7 +80,7 @@ const ENHANCER_TOOL_GROUPS = Object.freeze({
   writing: ['writing_'],
   fact: ['fact_check_'],
   test: ['omp_test_'],
-  tikz: ['tikz_'],
+  tikz: ['tikz_', 'mermaid_'],
 });
 
 export default function registerCoreEnhancer(pi) {

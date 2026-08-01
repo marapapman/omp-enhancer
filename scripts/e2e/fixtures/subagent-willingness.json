@@ -391,6 +391,67 @@
       }
     },
     {
+      "id": "diagram-mermaid-subagent-default",
+      "category": "subagent-default/visual",
+      "fixture": "visual-tikz-canvas",
+      "timeoutSeconds": 480,
+      "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
+      "prompt": "Create docs/deploy-flow.mmd as an editable Mermaid flowchart of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build. Author the diagram in Mermaid code and call mermaid_render with outputDirectory docs to convert it to a revision-bound SVG (never hand-editing SVG coordinates and never using TikZ). Confirm the published SVG in docs/ contains real text elements (viewBox and text, no foreignObject). Get independent visual review of the fresh render before final delivery.",
+      "expectations": {
+        "minNativeTaskCalls": 1,
+        "maxNativeTaskCalls": 6,
+        "minNativeTaskAssignmentAttempts": 1,
+        "maxNativeTaskAssignmentAttempts": 6,
+        "requireNativeTaskCompletion": true,
+        "requireNativeTaskSubmissionForEveryAssignment": true,
+        "requireNonemptyNativeTaskContext": true,
+        "requireNativeTaskMetadataPrefix": true,
+        "requireExactNativeTaskMetadataPrefix": true,
+        "requireNativeTaskMetadataMatchesDelegatedTodoRows": true,
+        "requiredNativeTaskAgents": ["designer", "visioner"],
+        "requiredNativeTaskWorkflows": ["diagram.mermaid"],
+        "requiredNativeTaskWorkflowsPerAssignment": ["diagram.mermaid"],
+        "requiredObservedSkills": ["omp-enhancer-workflows", "mermaid-diagram", "svg-flowchart"],
+        "maxObservedSkills": 3,
+        "forbiddenSkills": ["writing-markdown-helper"],
+        "requiredWorkflowPrimary": "diagram.mermaid",
+        "requiredSelectedWorkflowIds": ["diagram.mermaid"],
+        "requiredWorkflowLoadOrder": [
+          "skill://mermaid-diagram",
+          "skill://svg-flowchart",
+          "skill://omp-enhancer-workflows/references/diagram.mermaid.md"
+        ],
+        "requireWorkflowResourceCallsMatchLoadOrder": true,
+        "requireWorkflowIndexOnlyFirstToolBatch": true,
+        "requireWorkflowPlanBeforeResourceLoads": true,
+        "requireWorkflowPlanFirstVisibleContent": true,
+        "requireWorkflowPlanLoadCallsSameBatch": true,
+        "forbidResourceProjectSameBatch": true,
+        "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+        "requireWorkflowReadyFirstVisibleContent": true,
+        "requireWorkflowReadyTodoOnlyBatch": true,
+        "requireExactSelectedWorkflowReferences": true,
+        "requireNativeTodoInit": true,
+        "minNativeTodoItems": 3,
+        "requireNativeTodoCompletion": true,
+        "requireNativeTodoInitBeforeSubstantiveTool": true,
+        "requiredNativeTodoItemPatterns": [
+          "^Delegate Agent=designer workflow=diagram\\.mermaid step=step-2 skills=mermaid-diagram,svg-flowchart checkpoint=.+$",
+          "^Delegate Agent=visioner workflow=diagram\\.mermaid step=step-4 skills=mermaid-diagram,svg-flowchart checkpoint=.+$"
+        ],
+        "maxToolCalls": 60
+      },
+      "fixtureExpectations": {
+        "allowedChangedFiles": ["docs/deploy-flow.mmd", "docs/deploy-flow-*.svg"],
+        "requiredChangedFiles": ["docs/deploy-flow.mmd"],
+        "requiredPatterns": {
+          "docs/deploy-flow.mmd": ["graph (TD|LR)", "-->", "rollback"],
+          "docs/deploy-flow-*.svg": ["viewBox", "<text"]
+        },
+        "forbiddenPatterns": { "docs/deploy-flow-*.svg": ["foreignObject"] }
+      }
+    },
+    {
       "id": "orchestrator-code-delegation-conformance",
       "category": "subagent-default/orchestrator",
       "cwd": ".",

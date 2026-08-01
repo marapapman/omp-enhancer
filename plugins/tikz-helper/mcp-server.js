@@ -3,8 +3,9 @@
 /**
  * Standalone MCP server for tikz-helper tools.
  *
- * Exposes the 5 tikz_* tools (tikz_catalog_search, tikz_prepare_asset,
- * tikz_render, tikz_generate_diagram, tikz_preview_assets) over the
+ * Exposes the 6 tools (tikz_catalog_search, tikz_prepare_asset,
+ * tikz_render, tikz_generate_diagram, tikz_preview_assets,
+ * mermaid_render) over the
  * Model Context Protocol (MCP) using stdio transport.
  *
  * No OMP runtime required. The server imports the same core functions
@@ -29,6 +30,7 @@
 import { generateTikz } from './index.js';
 import { searchCatalog } from './src/catalog-search.js';
 import { renderTikz } from './src/render-tikz.js';
+import { renderMermaid } from './src/mermaid-render.js';
 import { prepareAsset } from './src/asset-prepare.js';
 import { previewAssetPreviews } from './index.js';
 import { createInterface } from 'node:readline';
@@ -131,6 +133,21 @@ const TOOL_DEFS = [
       },
     },
   },
+  {
+    name: 'mermaid_render',
+    description: 'Validate Mermaid source (inline or project .mmd/.md) and run the pinned mermaid-cli in an isolated temporary workspace with offline, sandboxed headless Chrome, then publish revision-bound SVG evidence. Never hand-edit SVG coordinates.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sourcePath: { type: 'string', description: 'Path to the Mermaid .mmd or .md source file to render. Provide exactly one of source or sourcePath.' },
+        source: { type: 'string', description: 'Inline Mermaid source text. Provide exactly one of source or sourcePath.' },
+        outputDirectory: { type: 'string', description: 'Directory for output files. Defaults to figures/mermaid/rendered/.' },
+        theme: { type: 'string', enum: ['default', 'forest', 'dark', 'neutral'], description: 'Mermaid theme. Defaults to default.' },
+        width: { type: 'number', description: 'Optional output width in pixels for the rendered SVG.' },
+        timeoutMs: { type: 'number', description: 'Timeout in milliseconds for the render process.' },
+      },
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -175,6 +192,14 @@ const HANDLERS = {
   async tikz_preview_assets(params) {
     const projectRoot = resolveProjectRoot();
     return await previewAssetPreviews(
+      { ...objectParams(params), projectRoot },
+      {},
+    );
+  },
+
+  async mermaid_render(params) {
+    const projectRoot = resolveProjectRoot();
+    return await renderMermaid(
       { ...objectParams(params), projectRoot },
       {},
     );

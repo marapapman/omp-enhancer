@@ -51,7 +51,7 @@ async function temporaryDirectory(prefix) {
 }
 
 describe('tikz-helper runtime tools', () => {
-  it('registers the five active-by-default tools with least-effect approvals', () => {
+  it('registers the six active-by-default tools with least-effect approvals', () => {
     const api = makeExtensionApi();
     extension(api);
 
@@ -62,8 +62,9 @@ describe('tikz-helper runtime tools', () => {
       'tikz_render',
       'tikz_generate_diagram',
       'tikz_preview_assets',
+      'mermaid_render',
     ]);
-    assert.deepEqual(tools.map((tool) => tool.approval), ['read', 'exec', 'exec', 'read', 'exec']);
+    assert.deepEqual(tools.map((tool) => tool.approval), ['read', 'exec', 'exec', 'read', 'exec', 'exec']);
     assert.equal(tools.every((tool) => tool.defaultInactive !== true), true, 'no tikz tool should start inactive');
     assert.equal(tools.every((tool) => tool.parameters?.__ompZodSchema === true), true);
     assert.equal(Object.hasOwn(tools[2].parameters.shape, 'executable'), false);

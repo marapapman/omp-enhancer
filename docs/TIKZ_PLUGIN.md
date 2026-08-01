@@ -2,6 +2,8 @@
 
 This document defines the implementation contract for the `tikz-helper` marketplace plugin. OpenTikZ is integrated as a pinned, read-only content snapshot; OMP remains responsible for workflow selection, tools, approvals, delegation, and completion.
 
+New academic architecture, block-diagram, flowchart, decision-flow, and deploy-pipeline figures default to the Mermaid code-first pipeline (`diagram.mermaid` + `mermaid_render`); see [MERMAID_PIPELINE.md](./MERMAID_PIPELINE.md) for that pipeline's contract. This document keeps the ELK-first TikZ contract verbatim for the explicit editable-TikZ path.
+
 ## Goals
 
 - Add one specialized `diagram.tikz` workflow and one top-level `tikz-diagram` Skill.
@@ -73,7 +75,7 @@ All warnings and density adjustments are advisory only. The tool returns `metada
 
 ## Workflow contract
 
-`diagram.tikz` is the single Primary path for standalone editable TikZ, LaTeX diagrams, architecture diagrams, pipelines, and flowcharts. It is an Add-on to `slides.generate` or `slides.modify` when a deck is the central deliverable. SVG is an icon asset and compatibility supplement, not a parallel primary: an SVG icon asset is a node pictogram embedded in the TikZ figure, and an SVG preview or export is rendered evidence or compatibility output for `diagram.tikz`. Exported SVG or PNG never selects a standalone SVG workflow and never replaces the TikZ main figure. `writing.latex` is composed only for an independently requested prose, template, conversion, or format operation.
+`diagram.tikz` is the single Primary path for standalone editable TikZ and LaTeX diagrams explicitly requested via TikZ or LaTeX source; academic architecture, block-diagram, flowchart, decision-flow, and deploy-pipeline figures default to `diagram.mermaid`, the Mermaid-first pipeline described below. It is an Add-on to `slides.generate` or `slides.modify` when a deck is the central deliverable. SVG is an icon asset and compatibility supplement, not a parallel primary: an SVG icon asset is a node pictogram embedded in the TikZ figure, and an SVG preview or export is rendered evidence or compatibility output for `diagram.tikz`. Exported SVG or PNG never selects a standalone SVG workflow and never replaces the TikZ main figure. `writing.latex` is composed only for an independently requested prose, template, conversion, or format operation.
 
 The subagent-driven card performs a phased icon-before-layout workflow. The asset chain runs before the figure chain:
 
@@ -94,6 +96,14 @@ For `diagram.tikz`, the normal compiled dependency chain has two stages. The **a
 The same ownership pattern applies across the current non-simple visual workflows: `design.visual`, `diagram.tikz`, `slides.generate`, and `slides.modify` use `designer` for a complete design or revision checkpoint, `task` for rendering and optional imagegen, and `visioner` for a fresh current-revision render check. `diagram.tikz` additionally runs the asset chain before the figure chain. Main authorizes external-effect decisions during setup and accepts final delivery, but does not mediate the visual loop. Each selected workflow still supplies its own medium-specific spec, renderer, evidence, and acceptance criteria; this pattern does not collapse those workflows into TikZ.
 
 If designer is unavailable, the affected TODO and final evidence preserve the precise unfulfilled checkpoint and permitted Agent-availability fallback; Main does not silently relabel its own work as designer evidence. If visioner is unavailable, record missing independent current-revision visual evidence. Compile, source, and static checks, designer self-review, and Main self-review do not replace that evidence. These are explicit evidence gaps rather than host enforcement: no dispatch, fixed fanout, routing, retry, permission, or completion decision is created by the Skill or workflow card.
+
+## Mermaid-first diagram pipeline
+
+Academic architecture, block-diagram, flowchart, decision-flow, and deploy-pipeline figures default to the Mermaid code-first pipeline: the `diagram.mermaid` workflow card selects the `mermaid-diagram` method, the author writes Mermaid source as code, `task` calls `mermaid_render` to convert that source to a revision-bound SVG, and `visioner` independently reviews the fresh current-revision render. Within `diagram.mermaid` the revision-bound SVG is the primary figure deliverable; the SVG-as-icon-asset-and-supplement statements above are scoped to the explicit-TikZ `diagram.tikz` path and do not apply to the Mermaid pipeline.
+
+`diagram.tikz` remains for editable TikZ explicitly requested via TikZ or LaTeX source, with the ELK graph IR staying the sole geometry authority on that path. The Mermaid pipeline does not modify the `tikz_*` tools, the pinned OpenTikZ snapshot, or any frozen ELK-first phrase in this document; the TikZ contract above stays verbatim and honest.
+
+The full `mermaid_render` contract — parameter surface, source validation, invocation, revision-bound artifact naming, the offline security model, determinism guarantees, error codes, install guidance, and the validation matrix — is documented in [MERMAID_PIPELINE.md](./MERMAID_PIPELINE.md).
 
 ## Imagegen asset branch
 

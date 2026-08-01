@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, testing, fact checking, and editable TikZ diagrams.",
-    "version": "1.0.38",
+    "version": "1.0.39",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "omp-config",
       "description": "Optional OMP workflow references, configuration assets, uniquely named agents, notify-only hooks, opt-in hook templates, and diagnostics.",
-      "version": "0.1.54",
+      "version": "0.1.55",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -367,7 +367,7 @@
     {
       "name": "omp-enhancer-core",
       "description": "OMP-native-first task-fact observer with opt-in evidence reviews, model-agnostic workflow guidance, and explicit extension-tool activation.",
-      "version": "0.1.147",
+      "version": "0.2.0",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -376,12 +376,13 @@
     {
       "name": "tikz-helper",
       "description": "Pinned OpenTikZ resources, semantic TikZ workflow guidance, generated icon asset preparation, and bounded render evidence.",
-      "version": "0.3.7",
+      "version": "0.4.0",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/tikz-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",
       "source": "./tikz-helper",
       "skills": [
+        "./skills/mermaid-diagram",
         "./skills/tikz-diagram"
       ]
     }

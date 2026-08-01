@@ -161,6 +161,7 @@ export const operationWorkflows = [
     "id": "design.visual",
     "chooseWhen": "Independent UI/layout/interaction/static visual work/output.",
     "composeWith": [
+      "diagram.mermaid",
       "diagram.tikz",
       "slides.generate",
       "slides.modify"

@@ -3678,6 +3678,138 @@ test('fixture verification rejects replacement of the fixture root', async () =>
   }
 });
 
+test('verifyFixture glob entries match revision-bound artifact names within one path segment', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'omp-fixture-glob-'));
+  try {
+    await mkdir(path.join(root, 'docs'), { recursive: true });
+    await mkdir(path.join(root, 'docs', 'sub'), { recursive: true });
+    await writeFile(path.join(root, 'docs', 'deploy-flow.mmd'), 'baseline\n');
+    const beforeFiles = await snapshotTree(root);
+
+    // Allowed glob accepts the revision-bound artifact; one-segment `*` never crosses `/`.
+    await writeFile(path.join(root, 'docs', 'deploy-flow.mmd'), 'graph TD\n');
+    await writeFile(path.join(root, 'docs', 'deploy-flow-abc123def456.svg'), '<svg viewBox="0 0 100 100"><text>x</text></svg>\n');
+    await writeFile(path.join(root, 'docs', 'sub', 'deploy.svg'), '<svg></svg>\n');
+
+    const result = await verifyFixture(root, beforeFiles, {
+      allowedChangedFiles: ['docs/deploy-flow.mmd', 'docs/deploy-flow-*.svg', 'docs/*.md'],
+      requiredChangedFiles: ['docs/deploy-flow.mmd', 'docs/deploy-flow-*.svg'],
+      requiredPatterns: {
+        'docs/deploy-flow.mmd': ['graph TD'],
+        'docs/deploy-flow-*.svg': ['viewBox', '<text'],
+      },
+      forbiddenPatterns: { 'docs/deploy-flow-*.svg': ['foreignObject'] },
+    });
+    assert.equal(result.pass, false);
+    assert.match(result.failures.join('\n'), /unexpected fixture file change: docs\/sub\/deploy\.svg/iu);
+
+    await rm(path.join(root, 'docs', 'sub', 'deploy.svg'));
+    const passing = await verifyFixture(root, beforeFiles, {
+      allowedChangedFiles: ['docs/deploy-flow.mmd', 'docs/deploy-flow-*.svg'],
+      requiredChangedFiles: ['docs/deploy-flow.mmd', 'docs/deploy-flow-*.svg'],
+      requiredPatterns: {
+        'docs/deploy-flow.mmd': ['graph TD'],
+        'docs/deploy-flow-*.svg': ['viewBox', '<text'],
+      },
+      forbiddenPatterns: { 'docs/deploy-flow-*.svg': ['foreignObject'] },
+    });
+    assert.equal(passing.pass, true);
+    assert.deepEqual(passing.changedFiles, [
+      'docs/deploy-flow-abc123def456.svg',
+      'docs/deploy-flow.mmd',
+    ]);
+
+    // Required glob with no matching changed file fails explicitly.
+    const missing = await verifyFixture(root, beforeFiles, {
+      allowedChangedFiles: ['docs/deploy-flow.mmd', 'docs/deploy-flow-*.svg'],
+      requiredChangedFiles: ['docs/deploy-flow-*.png'],
+    });
+    assert.equal(missing.pass, false);
+    assert.match(missing.failures.join('\n'), /expected fixture file was not changed: docs\/deploy-flow-\*\.png/iu);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('verifyFixture pattern-map glob keys read every matching file and report no-match keys', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'omp-fixture-globmap-'));
+  try {
+    await mkdir(path.join(root, 'docs'), { recursive: true });
+    await writeFile(path.join(root, 'docs', 'deploy-flow.mmd'), 'graph TD\nrollback\n');
+    await writeFile(path.join(root, 'docs', 'deploy-flow-abc123def456.svg'), '<svg viewBox="0 0 100 100"><text>x</text></svg>\n');
+    const beforeFiles = await snapshotTree(root);
+
+    await writeFile(path.join(root, 'docs', 'deploy-flow.mmd'), 'graph TD\nrollback\n');
+    await writeFile(path.join(root, 'docs', 'deploy-flow-abc123def456.svg'), '<svg viewBox="0 0 100 100"><text>ok</text></svg>\n');
+
+    const exact = await verifyFixture(root, beforeFiles, {
+      allowedChangedFiles: ['docs/deploy-flow.mmd', 'docs/deploy-flow-*.svg'],
+      exactContents: { 'docs/deploy-flow.mmd': 'graph TD\nrollback\n' },
+      requiredPatterns: { 'docs/deploy-flow-*.svg': ['viewBox', '<text'] },
+      forbiddenPatterns: { 'docs/deploy-flow-*.svg': ['foreignObject'] },
+    });
+    assert.equal(exact.pass, true);
+
+    const globContentMismatch = await verifyFixture(root, beforeFiles, {
+      allowedChangedFiles: ['docs/deploy-flow.mmd', 'docs/deploy-flow-*.svg'],
+      exactContents: { 'docs/deploy-flow-*.svg': 'different content\n' },
+    });
+    assert.equal(globContentMismatch.pass, false);
+    assert.match(globContentMismatch.failures.join('\n'), /did not exactly match the expected content: docs\/deploy-flow-abc123def456\.svg/iu);
+
+    const noMatch = await verifyFixture(root, beforeFiles, {
+      allowedChangedFiles: ['docs/deploy-flow.mmd', 'docs/deploy-flow-*.svg'],
+      requiredPatterns: { 'docs/missing-*.svg': ['viewBox'] },
+    });
+    assert.equal(noMatch.pass, false);
+    assert.match(noMatch.failures.join('\n'), /required fixture output matched no file: docs\/missing-\*\.svg/iu);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('verifyFixture exact-path entries stay byte-identical and are never treated as regex', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'omp-fixture-exact-'));
+  try {
+    await mkdir(path.join(root, 'docs'), { recursive: true });
+    await writeFile(path.join(root, 'docs', 'deploy-flow.mmd'), 'baseline\n');
+    await writeFile(path.join(root, 'docs', 'deploy-flow[1].svg'), '<svg></svg>\n');
+    const beforeFiles = await snapshotTree(root);
+
+    // An exact entry containing regex metacharacters must match literally only.
+    await writeFile(path.join(root, 'docs', 'deploy-flow[1].svg'), '<svg viewBox="0 0 10 10"><text>v1</text></svg>\n');
+    await writeFile(path.join(root, 'docs', 'deploy-flow1.svg'), '<svg viewBox="0 0 10 10"><text>v2</text></svg>\n');
+
+    const literal = await verifyFixture(root, beforeFiles, {
+      allowedChangedFiles: ['docs/deploy-flow[1].svg'],
+      requiredChangedFiles: ['docs/deploy-flow[1].svg'],
+      requiredPatterns: { 'docs/deploy-flow[1].svg': ['<text>v1</text>'] },
+    });
+    assert.equal(literal.pass, false);
+    assert.match(literal.failures.join('\n'), /unexpected fixture file change: docs\/deploy-flow1\.svg/iu);
+
+    await rm(path.join(root, 'docs', 'deploy-flow1.svg'));
+    const literalOnly = await verifyFixture(root, beforeFiles, {
+      allowedChangedFiles: ['docs/deploy-flow[1].svg'],
+      requiredChangedFiles: ['docs/deploy-flow[1].svg'],
+      requiredPatterns: { 'docs/deploy-flow[1].svg': ['<text>v1</text>'] },
+    });
+    assert.equal(literalOnly.pass, true);
+    assert.deepEqual(literalOnly.changedFiles, ['docs/deploy-flow[1].svg']);
+
+    // Exact contents on an exact key keeps byte-equality semantics.
+    await writeFile(path.join(root, 'docs', 'deploy-flow[1].svg'), 'tampered\n');
+    const mismatch = await verifyFixture(root, beforeFiles, {
+      allowedChangedFiles: ['docs/deploy-flow[1].svg'],
+      exactContents: { 'docs/deploy-flow[1].svg': '<svg viewBox="0 0 10 10"><text>v1</text></svg>\n' },
+    });
+    assert.equal(mismatch.pass, false);
+    assert.match(mismatch.failures.join('\n'), /did not exactly match the expected content: docs\/deploy-flow\[1\]\.svg/iu);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-only evidence', async () => {
   const matrix = JSON.parse(await readFile(
     new URL('./e2e/fixtures/skill-discovery.json', import.meta.url),
@@ -3701,7 +3833,7 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   ]) {
     assert.equal(matrix.defaults.expectations[expectation], true, expectation);
   }
-  assert.equal(matrix.scenarios.length, 10);
+  assert.equal(matrix.scenarios.length, 11);
   const controls = matrix.scenarios.filter(({ category }) => category === 'harness-control');
   assert.deepEqual(controls.map(({ id }) => id), ['fixture-xlsx-control']);
   for (const scenario of matrix.scenarios.filter(({ category }) => category !== 'harness-control')) {
@@ -3733,6 +3865,20 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   assert.deepEqual(tikz.expectations.requiredSelectedWorkflowIds, ['diagram.tikz']);
   assert.deepEqual(tikz.expectations.requiredObservedSkills, ['tikz-diagram', 'svg-flowchart']);
   assert.ok(tikz.expectations.forbiddenSkills.includes('svg-writing'));
+  const mermaid = matrix.scenarios.find(({ id }) => id === 'natural-mermaid-diagram');
+  assert.equal(mermaid.category, 'tikz-helper');
+  assert.equal(mermaid.fixture, 'skill-discovery-readonly');
+  assert.equal(mermaid.expectations.minWorkflowReferenceReads, 1);
+  assert.deepEqual(mermaid.expectations.requiredSelectedWorkflowIds, ['diagram.mermaid']);
+  assert.deepEqual(mermaid.expectations.requiredObservedSkills, ['mermaid-diagram', 'svg-flowchart']);
+  assert.equal(mermaid.expectations.maxObservedSkills, 7);
+  assert.ok(mermaid.expectations.forbiddenSkills.includes('svg-writing'));
+  assert.ok(mermaid.expectations.forbiddenSkills.includes('writing-review'));
+  assert.ok(mermaid.expectations.forbiddenSkills.includes('writing-markdown-helper'));
+  assert.match(mermaid.prompt, /mermaid_render/iu);
+  assert.match(mermaid.prompt, /revision-bound SVG/iu);
+  assert.match(mermaid.prompt, /never using TikZ/iu);
+  assert.doesNotMatch(mermaid.prompt, /ELK graph IR|tikz_generate_diagram/iu);
   const subagent = matrix.scenarios.find(({ id }) => id === 'natural-subagent-isolation');
   assert.equal(subagent.expectations.requireNativeTaskCompletion, true);
   assert.equal(subagent.expectations.requireSuccessfulToolCalls, false);
@@ -4075,6 +4221,46 @@ test('DeepSeek subagent default matrix keeps native task and hub semantics with 
   assert.match(diagram.prompt, /svg-flowchart skill/iu);
   assert.doesNotMatch(diagram.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
   assert.equal(diagram.fixtureExpectations.requiredChangedFiles[0], 'docs/deploy-flow.tex');
+  const mermaid = matrix.scenarios.find(({ id }) => id === 'diagram-mermaid-subagent-default');
+  assert.ok(mermaid, 'diagram-mermaid-subagent-default scenario must exist');
+  assert.equal(mermaid.fixture, 'visual-tikz-canvas');
+  assert.equal(mermaid.category, 'subagent-default/visual');
+  assert.equal(mermaid.timeoutSeconds, 480);
+  assert.deepEqual(mermaid.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob', 'write', 'edit']);
+  assert.equal(mermaid.expectations.requiredWorkflowPrimary, 'diagram.mermaid');
+  assert.deepEqual(mermaid.expectations.requiredSelectedWorkflowIds, ['diagram.mermaid']);
+  assert.deepEqual(mermaid.expectations.requiredNativeTaskWorkflows, ['diagram.mermaid']);
+  assert.deepEqual(mermaid.expectations.requiredObservedSkills, [
+    'omp-enhancer-workflows',
+    'mermaid-diagram',
+    'svg-flowchart',
+  ]);
+  assert.equal(mermaid.expectations.maxObservedSkills, 3);
+  assert.deepEqual(mermaid.expectations.requiredWorkflowLoadOrder, [
+    'skill://mermaid-diagram',
+    'skill://svg-flowchart',
+    'skill://omp-enhancer-workflows/references/diagram.mermaid.md',
+  ]);
+  assert.equal(mermaid.expectations.requireWorkflowResourceCallsMatchLoadOrder, true);
+  assert.deepEqual(mermaid.expectations.requiredNativeTaskAgents, ['designer', 'visioner']);
+  assert.equal(mermaid.expectations.requiredNativeTodoItemPatterns.length, 2);
+  assert.equal(mermaid.expectations.maxToolCalls, 60);
+  assert.match(mermaid.prompt, /mermaid_render with outputDirectory docs/iu);
+  assert.match(mermaid.prompt, /rollback edge from release to build/iu);
+  assert.match(mermaid.prompt, /never using TikZ/iu);
+  assert.doesNotMatch(mermaid.prompt, /ELK graph IR|tikz_generate_diagram/iu);
+  assert.deepEqual(mermaid.fixtureExpectations.allowedChangedFiles, [
+    'docs/deploy-flow.mmd',
+    'docs/deploy-flow-*.svg',
+  ]);
+  assert.equal(mermaid.fixtureExpectations.requiredChangedFiles[0], 'docs/deploy-flow.mmd');
+  assert.deepEqual(Object.keys(mermaid.fixtureExpectations.requiredPatterns), [
+    'docs/deploy-flow.mmd',
+    'docs/deploy-flow-*.svg',
+  ]);
+  assert.deepEqual(mermaid.fixtureExpectations.forbiddenPatterns, {
+    'docs/deploy-flow-*.svg': ['foreignObject'],
+  });
   assert.equal(positives.length, 2);
   for (const scenario of positives) {
     const expectedWidth = 2;

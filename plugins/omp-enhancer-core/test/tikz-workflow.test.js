@@ -14,16 +14,17 @@ import {
 test('diagram.tikz is the single bounded subagent-driven TikZ Primary with a 10-step asset+figure chain', () => {
   const workflow = workflowCatalog['diagram.tikz'];
 
-  assert.equal(WORKFLOW_CATALOG_VERSION, 29);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 30);
   assert.ok(workflowIds.includes('diagram.tikz'));
+  assert.ok(workflowIds.includes('diagram.mermaid'));
   assert.equal(workflowIds.includes('diagram.svg'), false);
   assert.ok(workflow);
   assert.equal(workflow.delegationDefault, 'subagent-driven');
   assert.deepEqual(workflow.skills, ['tikz-diagram', 'svg-flowchart']);
   assert.deepEqual(workflow.catalogSkills, []);
   assert.deepEqual(workflow.roles, ['designer', 'task', 'visioner']);
-  assert.match(workflow.chooseWhen, /TikZ.+academic|academic.+TikZ|flowchart.+architecture|decision flow.+deploy pipeline/iu);
-  assert.match(workflow.chooseWhen, /SVG.+only icon assets.+preview evidence.+compatibility supplements/iu);
+  assert.match(workflow.chooseWhen, /explicitly requested via TikZ or LaTeX source/iu);
+  assert.match(workflow.chooseWhen, /unqualified academic figures.+default to diagram\.mermaid/iu);
 
   assert.equal(workflow.steps.length, 10);
 
@@ -94,9 +95,11 @@ test('workflow Skill classifies TikZ as the single specialized visual output dis
 
   assert.match(
     index,
-    /#### specialized outputs[\s\S]*`slides\.generate`[\s\S]*`slides\.modify`[\s\S]*`diagram\.tikz`/iu,
+    /#### specialized outputs[\s\S]*`slides\.generate`[\s\S]*`slides\.modify`[\s\S]*`diagram\.mermaid`[\s\S]*`diagram\.tikz`/iu,
   );
-  assert.match(index, /TikZ.+`diagram\.tikz`/iu);
+  assert.match(index, /explicit editable TikZ.+`diagram\.tikz`/iu);
+  assert.match(index, /Academic figure.+flowchart.+architecture.+decision flow.+deploy pipeline.+`diagram\.mermaid`/iu);
+  assert.match(index, /`diagram\.mermaid`[^\n]*D=\[`skill:\/\/mermaid-diagram`, `skill:\/\/svg-flowchart`\][^\n]*PLAN URI/iu);
   assert.match(index, /SVG or other formats are only icon assets.+compatibility supplements/iu);
   assert.match(index, /`diagram\.tikz`[^\n]*D=\[`skill:\/\/tikz-diagram`, `skill:\/\/svg-flowchart`\][^\n]*PLAN URI/iu);
   assert.match(reference, /# `diagram\.tikz` workflow reference/iu);

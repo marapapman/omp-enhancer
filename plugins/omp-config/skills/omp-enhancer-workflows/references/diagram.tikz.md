@@ -7,7 +7,7 @@ Derive TODO internally. Each delegated native TODO `items[]` string is the exact
 
 ## `diagram.tikz`
 
-- Primary when: Editable TikZ diagram for academic figures, flowcharts, architecture, decision flows, and deploy pipelines; SVG and other formats are only icon assets, preview evidence, or compatibility supplements.
+- Primary when: Editable TikZ diagram explicitly requested via TikZ or LaTeX source; unqualified academic figures, block diagrams, flowcharts, decision flows, and deploy pipelines default to diagram.mermaid.
 - Reference steps:
   1. [step-1] Main fixes audience, output path, target format, node/edge/groups, labels, icon requirements, asset source boundaries, and acceptance evidence.
   2. [step-2] Produce a complete graphical blueprint: semantic graph, per-node icon plan, manifest draft, alternatives; no final coordinates.

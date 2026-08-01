@@ -57,6 +57,7 @@ export const writingWorkflows = [
       "writing.latex",
       "slides.generate",
       "slides.modify",
+      "diagram.mermaid",
       "diagram.tikz",
       "writing.markdown",
       "doc.convert.word",
@@ -120,6 +121,7 @@ export const writingWorkflows = [
       "writing.latex",
       "slides.generate",
       "slides.modify",
+      "diagram.mermaid",
       "diagram.tikz",
       "writing.markdown",
       "doc.convert.word",
@@ -212,7 +214,7 @@ export const writingWorkflows = [
     ],
     "scopeNotes": [
       "Compilation and publication are separate workflow steps when requested.",
-      "A TikZ figure source alone selects diagram.tikz, not writing.latex; compose this card only for an independently requested LaTeX prose, document-format, template, or structure operation.",
+      "A TikZ or Mermaid figure source alone selects diagram.tikz or diagram.mermaid, not writing.latex; compose this card only for an independently requested LaTeX prose, document-format, template, or structure operation.",
       "When composed with writing.en or writing.zh as a preservation-only Add-on, it contributes LaTeX preservation constraints only: select zero format Skills and create no generic `task` Delegate row.",
       "Its generic `task` candidate is only for an explicitly requested format conversion, LaTeX-structure change, or compile-evidence checkpoint; it is not a candidate for prose revision or semantic check when a language workflow is composed."
     ],
@@ -242,6 +244,7 @@ export const writingWorkflows = [
       "writing.zh",
       "writing.en",
       "writing.latex",
+      "diagram.mermaid",
       "diagram.tikz",
       "design.visual",
       "research.web",
@@ -334,6 +337,7 @@ export const writingWorkflows = [
       "writing.zh",
       "writing.en",
       "writing.latex",
+      "diagram.mermaid",
       "diagram.tikz"
     ],
     "steps": [
@@ -404,7 +408,7 @@ export const writingWorkflows = [
   },
   {
     "id": "diagram.tikz",
-    "chooseWhen": "Editable TikZ diagram for academic figures, flowcharts, architecture, decision flows, and deploy pipelines; SVG and other formats are only icon assets, preview evidence, or compatibility supplements.",
+    "chooseWhen": "Editable TikZ diagram explicitly requested via TikZ or LaTeX source; unqualified academic figures, block diagrams, flowcharts, decision flows, and deploy pipelines default to diagram.mermaid.",
     "composeWith": [
       "design.visual",
       "slides.generate",
@@ -488,6 +492,90 @@ export const writingWorkflows = [
       "step-6: task invokes the fixed tikz_render renderer for the approved current revision",
       "step-7: visioner independently and read-only reviews the fresh current-revision renders",
       "step-8: designer applies supported findings, task rerenders, and visioner reviews only fresh rerenders"
+    ]
+  },
+  {
+    "id": "diagram.mermaid",
+    "chooseWhen": "Editable Mermaid diagram for academic architecture, block diagrams, flowcharts, decision flows, and deploy pipelines; explicit editable TikZ or LaTeX source requests use diagram.tikz.",
+    "composeWith": [
+      "design.visual",
+      "slides.generate",
+      "slides.modify",
+      "writing.zh",
+      "writing.en"
+    ],
+    "steps": [
+      {
+        "id": "step-1",
+        "text": "Main fixes audience, output path, target format, node/edge/groups, labels, icon requirements, asset source boundaries, and acceptance evidence."
+      },
+      {
+        "id": "step-2",
+        "text": "Produce a complete graphical blueprint: semantic graph, per-node icon plan, manifest draft, alternatives; no final coordinates."
+      },
+      {
+        "id": "step-3",
+        "text": "Prepare and validate icon assets (OpenTikZ/svg-flowchart/SVG assets), generate previews and manifest."
+      },
+      {
+        "id": "step-4",
+        "text": "Review asset previews per icon, reject or approve; only new previews are reviewed."
+      },
+      {
+        "id": "step-5",
+        "text": "Author the semantic graph as Mermaid source under approved manifest constraints with stable IDs, labels, edges, branch conditions, subgraphs, and direction; no SVG coordinate hand-editing and no tool invocation."
+      },
+      {
+        "id": "step-6",
+        "text": "Call mermaid_render to produce revision-bound SVG evidence."
+      },
+      {
+        "id": "step-7",
+        "text": "Independently review the fresh whole-figure SVG for semantic completeness, icon clarity, layout, overlap, clipping, labels, branch semantics, and manifest disclosure."
+      },
+      {
+        "id": "step-8",
+        "text": "At most one bounded revision for supported findings; rerun source/render; unchanged artifacts are not re-reviewed; defects remain visible."
+      },
+      {
+        "id": "step-9",
+        "text": "Deliver Mermaid source, revision-bound SVG, manifest, render evidence, unresolved limitations, and asset provenance."
+      }
+    ],
+    "scopeNotes": [
+      ...VISUAL_AGENT_SCOPE_NOTES,
+      "Mermaid source is the editable source; SVG is render evidence, not an authoring surface.",
+      "OpenTikZ is a read-only source for safe vector icon copy.",
+      "imagegen (PNG) may be used only when explicitly authorized for node icon assets.",
+      "Rendering is a deterministic offline fixed-command pipeline with shell escape disabled.",
+      "No gate, router, fork, or loop decides completion; each revision cycle is bounded and advisory.",
+      "visioner review is independent and read-only; it does not render, edit, or decide completion."
+    ],
+    "skills": [
+      "mermaid-diagram",
+      "svg-flowchart"
+    ],
+    "qualityChecks": [
+      "semantic completeness and stable IDs, Mermaid source as the sole editable source with edit-contract and icon preservation, asset provenance and portability, deterministic offline render, revision-bound SVG, current-revision raster evidence, independent visual review, icon legibility, explicit raster disclosure, and requested paper or slide fit"
+    ],
+    "riskNotes": [
+      "Generated raster icons reduce all-vector scalability and remain separate project assets whose provenance and raster status must stay visible.",
+      "Brand marks and other third-party assets may carry trademark or usage restrictions even when source graphics are reusable."
+    ],
+    "roles": [
+      "designer",
+      "task",
+      "visioner"
+    ],
+    "delegation": [
+      "step-2: designer owns the semantic blueprint and per-icon plan while preserving scope",
+      "step-3: task prepares and validates icon assets and writes the asset manifest",
+      "step-4: visioner independently and read-only reviews fresh asset previews and flags unsupported icons",
+      "step-5: designer authors the Mermaid source under approved manifest constraints with stable IDs, labels, edges, and subgraphs",
+      "step-6: task calls mermaid_render with the designer Mermaid source and binds the revision-bound SVG evidence",
+      "step-7: visioner independently and read-only reviews the fresh current-revision SVG",
+      "step-8: designer applies supported findings, task rerenders, and visioner reviews only fresh rerenders",
+      "step-9: task delivers the Mermaid source, revision-bound SVG, manifest, render evidence, limitations, and provenance"
     ]
   },
   {

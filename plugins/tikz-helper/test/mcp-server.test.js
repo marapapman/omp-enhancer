@@ -15,6 +15,7 @@ describe('tikz-helper MCP server', () => {
   /** Lines received from child stdout, indexed by id */
   const responses = new Map();
   let lineBuffer = [];
+  let stdoutBuffer = '';
 
   before(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'omp-tikz-mcp-test-'));
@@ -44,10 +45,16 @@ describe('tikz-helper MCP server', () => {
 
         lineBuffer = [];
         responses.clear();
+        stdoutBuffer = '';
 
         child.stdout.on('data', (chunk) => {
-          const lines = chunk.toString().split('\n').filter(Boolean);
-          for (const line of lines) {
+          // Buffer partial lines: a single response can arrive split across
+          // chunks, and a mid-line split must not drop the message.
+          stdoutBuffer += chunk.toString();
+          const lines = stdoutBuffer.split('\n');
+          stdoutBuffer = lines.pop() ?? '';
+          const complete = lines.filter((line) => line.trim() !== '');
+          for (const line of complete) {
             try {
               const msg = JSON.parse(line);
               if (msg.id != null) {
@@ -57,7 +64,7 @@ describe('tikz-helper MCP server', () => {
               // ignore parse errors from other output
             }
           }
-          lineBuffer.push(...lines);
+          lineBuffer.push(...complete);
         });
 
         child.stderr.on('data', () => {
@@ -72,8 +79,11 @@ describe('tikz-helper MCP server', () => {
       child.stdin.write(JSON.stringify(msg) + '\n');
 
       // Poll for the response — the server responds synchronously per request
+      let settled = false;
       const poll = () => {
+        if (settled) return;
         if (responses.has(id)) {
+          settled = true;
           resolve(responses.get(id));
         } else {
           setTimeout(poll, 10);
@@ -81,8 +91,12 @@ describe('tikz-helper MCP server', () => {
       };
       setTimeout(poll, 10);
 
-      // Safety timeout
-      setTimeout(() => reject(new Error(`Timeout waiting for response to id=${id}`)), 5000);
+      // Safety timeout — stop polling so a lost response cannot hang the process
+      setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(`Timeout waiting for response to id=${id}`));
+      }, 5000);
     });
   }
 
@@ -100,7 +114,7 @@ describe('tikz-helper MCP server', () => {
     assert.equal(resp.result.serverInfo.name, 'tikz-helper');
   });
 
-  it('responds to tools/list with 5 tools', async () => {
+  it('responds to tools/list with 6 tools', async () => {
     // Send initialized notification (no response expected)
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
 
@@ -109,7 +123,7 @@ describe('tikz-helper MCP server', () => {
     assert.ok(resp.result, 'tools/list must return a result');
     const tools = resp.result.tools;
     assert.ok(Array.isArray(tools), 'tools must be an array');
-    assert.equal(tools.length, 5, 'must have exactly 5 tools');
+    assert.equal(tools.length, 6, 'must have exactly 6 tools');
 
     const names = tools.map((t) => t.name);
     assert.deepEqual(names, [
@@ -118,6 +132,7 @@ describe('tikz-helper MCP server', () => {
       'tikz_render',
       'tikz_generate_diagram',
       'tikz_preview_assets',
+      'mermaid_render',
     ], 'tool names must match expected order');
 
     // All tools must have name, description, inputSchema
@@ -126,6 +141,19 @@ describe('tikz-helper MCP server', () => {
       assert.ok(typeof tool.description === 'string' && tool.description.length > 0, `tool ${tool.name}: description required`);
       assert.ok(tool.inputSchema && typeof tool.inputSchema === 'object', `tool ${tool.name}: inputSchema required`);
     }
+
+    // mermaid_render: frozen param surface, source XOR sourcePath, no targetBase
+    const mermaidTool = tools.find((t) => t.name === 'mermaid_render');
+    assert.ok(mermaidTool, 'mermaid_render must be listed');
+    assert.equal(mermaidTool.inputSchema.type, 'object');
+    assert.deepEqual(mermaidTool.inputSchema.properties.theme.enum, ['default', 'forest', 'dark', 'neutral']);
+    assert.equal(Object.hasOwn(mermaidTool.inputSchema.properties, 'source'), true);
+    assert.equal(Object.hasOwn(mermaidTool.inputSchema.properties, 'sourcePath'), true);
+    assert.equal(Object.hasOwn(mermaidTool.inputSchema.properties, 'outputDirectory'), true);
+    assert.equal(Object.hasOwn(mermaidTool.inputSchema.properties, 'width'), true);
+    assert.equal(Object.hasOwn(mermaidTool.inputSchema.properties, 'timeoutMs'), true);
+    assert.equal(Object.hasOwn(mermaidTool.inputSchema.properties, 'targetBase'), false, 'targetBase must not exist');
+    assert.equal(mermaidTool.inputSchema.required, undefined, 'source XOR sourcePath is validated in code, not in required');
   });
 
   it('tikz_catalog_search with query returns results', async () => {

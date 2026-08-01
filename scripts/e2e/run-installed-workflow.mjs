@@ -1466,6 +1466,36 @@ export async function prepareScenario(scenario) {
   };
 }
 
+/**
+ * Match a fixture expectation entry against a relative fixture file path.
+ * Entries without `*` are exact path matches (byte-identical to legacy behavior);
+ * `*` matches any characters within one path segment (`[^/]*`, no `**` support).
+ * All other regex metacharacters in the entry are escaped.
+ */
+export function matchesFixturePath(entry, file) {
+  if (!entry.includes('*')) return entry === file;
+  const pattern = entry
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '[^/]*');
+  return new RegExp(`^${pattern}$`).test(file);
+}
+
+/**
+ * Resolve the files a fixture expectation entry refers to: the entry itself for
+ * exact paths, or every post-run file matching the minimal `*` glob. Pushes a
+ * distinct failure when a glob matches no file.
+ */
+async function fixtureOutputsFor(root, rootRealPath, afterFiles, entry, failures, label) {
+  const files = entry.includes('*')
+    ? [...afterFiles.keys()].filter((file) => matchesFixturePath(entry, file)).sort()
+    : [entry];
+  if (files.length === 0) {
+    failures.push(`${label} matched no file: ${entry}`);
+    return [];
+  }
+  return files;
+}
+
 export async function verifyFixture(root, beforeFiles, expectations) {
   const baselineRootIdentity = beforeFiles?.[SNAPSHOT_ROOT_IDENTITY] ?? null;
   let currentRootIdentity;
@@ -1511,45 +1541,58 @@ export async function verifyFixture(root, beforeFiles, expectations) {
   for (const [file, value] of afterFiles) {
     if (String(value).startsWith('symlink:')) failures.push(`fixture contains symbolic link: ${file}`);
   }
-  const allowed = new Set(expectations.allowedChangedFiles ?? []);
+  const allowed = expectations.allowedChangedFiles ?? [];
   for (const file of changedFiles) {
-    if (!allowed.has(file)) failures.push(`unexpected fixture file change: ${file}`);
-  }
-  for (const file of expectations.requiredChangedFiles ?? []) {
-    if (!changedFiles.includes(file)) failures.push(`expected fixture file was not changed: ${file}`);
-  }
-  for (const [file, expected] of Object.entries(expectations.exactContents ?? {})) {
-    let actual = '';
-    try {
-      actual = await readContainedFixtureFile(root, rootRealPath, file);
-    } catch (error) {
-      failures.push(`exact fixture output is unreadable or outside the fixture root: ${file} (${error.message})`);
-      continue;
-    }
-    if (actual !== expected) failures.push(`fixture output did not exactly match the expected content: ${file}`);
-  }
-  for (const [file, patterns] of Object.entries(expectations.requiredPatterns ?? {})) {
-    let text = '';
-    try {
-      text = await readContainedFixtureFile(root, rootRealPath, file);
-    } catch (error) {
-      failures.push(`required fixture output is unreadable or outside the fixture root: ${file} (${error.message})`);
-      continue;
-    }
-    for (const pattern of patterns) {
-      if (!new RegExp(pattern, 'iu').test(text)) failures.push(`semantic sentinel was lost in ${file}: ${pattern}`);
+    if (!allowed.some((entry) => matchesFixturePath(entry, file))) {
+      failures.push(`unexpected fixture file change: ${file}`);
     }
   }
-  for (const [file, patterns] of Object.entries(expectations.forbiddenPatterns ?? {})) {
-    let text = '';
-    try {
-      text = await readContainedFixtureFile(root, rootRealPath, file);
-    } catch (error) {
-      failures.push(`forbidden-pattern fixture output is unreadable or outside the fixture root: ${file} (${error.message})`);
-      continue;
+  for (const entry of expectations.requiredChangedFiles ?? []) {
+    if (!changedFiles.some((file) => matchesFixturePath(entry, file))) {
+      failures.push(`expected fixture file was not changed: ${entry}`);
     }
-    for (const pattern of patterns) {
-      if (new RegExp(pattern, 'iu').test(text)) failures.push(`forbidden fixture pattern remained in ${file}: ${pattern}`);
+  }
+  for (const [entry, expected] of Object.entries(expectations.exactContents ?? {})) {
+    const files = await fixtureOutputsFor(root, rootRealPath, afterFiles, entry, failures, 'exact fixture output');
+    for (const file of files) {
+      let actual = '';
+      try {
+        actual = await readContainedFixtureFile(root, rootRealPath, file);
+      } catch (error) {
+        failures.push(`exact fixture output is unreadable or outside the fixture root: ${file} (${error.message})`);
+        continue;
+      }
+      if (actual !== expected) failures.push(`fixture output did not exactly match the expected content: ${file}`);
+    }
+  }
+  for (const [entry, patterns] of Object.entries(expectations.requiredPatterns ?? {})) {
+    const files = await fixtureOutputsFor(root, rootRealPath, afterFiles, entry, failures, 'required fixture output');
+    for (const file of files) {
+      let text = '';
+      try {
+        text = await readContainedFixtureFile(root, rootRealPath, file);
+      } catch (error) {
+        failures.push(`required fixture output is unreadable or outside the fixture root: ${file} (${error.message})`);
+        continue;
+      }
+      for (const pattern of patterns) {
+        if (!new RegExp(pattern, 'iu').test(text)) failures.push(`semantic sentinel was lost in ${file}: ${pattern}`);
+      }
+    }
+  }
+  for (const [entry, patterns] of Object.entries(expectations.forbiddenPatterns ?? {})) {
+    const files = await fixtureOutputsFor(root, rootRealPath, afterFiles, entry, failures, 'forbidden-pattern fixture output');
+    for (const file of files) {
+      let text = '';
+      try {
+        text = await readContainedFixtureFile(root, rootRealPath, file);
+      } catch (error) {
+        failures.push(`forbidden-pattern fixture output is unreadable or outside the fixture root: ${file} (${error.message})`);
+        continue;
+      }
+      for (const pattern of patterns) {
+        if (new RegExp(pattern, 'iu').test(text)) failures.push(`forbidden fixture pattern remained in ${file}: ${pattern}`);
+      }
     }
   }
   return { pass: failures.length === 0, failures, changedFiles };

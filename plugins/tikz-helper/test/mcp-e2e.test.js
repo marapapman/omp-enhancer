@@ -25,9 +25,15 @@ function createMcpClient(projectRoot) {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     responses.clear();
+    let stdoutBuffer = '';
     child.stdout.on('data', (chunk) => {
-      const lines = chunk.toString().split('\n').filter(Boolean);
+      // Buffer partial lines: a single response can arrive split across
+      // chunks, and a mid-line split must not drop the message.
+      stdoutBuffer += chunk.toString();
+      const lines = stdoutBuffer.split('\n');
+      stdoutBuffer = lines.pop() ?? '';
       for (const line of lines) {
+        if (line.trim() === '') continue;
         try {
           const msg = JSON.parse(line);
           if (msg.id != null) responses.set(msg.id, msg);
@@ -45,12 +51,23 @@ function createMcpClient(projectRoot) {
       const msg = { jsonrpc: '2.0', id, method };
       if (params !== undefined) msg.params = params;
       child.stdin.write(JSON.stringify(msg) + '\n');
+      let settled = false;
       const poll = () => {
-        if (responses.has(id)) resolve(responses.get(id));
-        else setTimeout(poll, 10);
+        if (settled) return;
+        if (responses.has(id)) {
+          settled = true;
+          resolve(responses.get(id));
+        } else {
+          setTimeout(poll, 10);
+        }
       };
       setTimeout(poll, 10);
-      setTimeout(() => reject(new Error(`Timeout waiting for id=${id}`)), 10000);
+      // Safety timeout — stop polling so a lost response cannot hang the process
+      setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(`Timeout waiting for id=${id}`));
+      }, 10000);
     });
   }
 
@@ -726,10 +743,10 @@ describe('E2E: MCP protocol compliance', () => {
     assert.equal(resp.result.serverInfo.name, 'tikz-helper');
   });
 
-  it('tools/list returns exactly 5 tools with correct names', async () => {
+  it('tools/list returns exactly 6 tools with correct names', async () => {
     const resp = await client.request('tools/list');
     const tools = resp.result.tools;
-    assert.equal(tools.length, 5);
+    assert.equal(tools.length, 6);
     const names = tools.map(t => t.name);
     assert.deepEqual(names, [
       'tikz_catalog_search',
@@ -737,6 +754,7 @@ describe('E2E: MCP protocol compliance', () => {
       'tikz_render',
       'tikz_generate_diagram',
       'tikz_preview_assets',
+      'mermaid_render',
     ]);
   });
 
@@ -770,6 +788,35 @@ describe('E2E: MCP protocol compliance', () => {
     const prepTool = resp.result.tools.find(t => t.name === 'tikz_prepare_asset');
     assert.ok(prepTool);
     assert.ok(prepTool.inputSchema.required?.includes('inputPath'));
+  });
+
+  it('mermaid_render without source or sourcePath returns a structured INVALID_PARAMETER error', async () => {
+    const resp = await client.request('tools/call', {
+      name: 'mermaid_render',
+      arguments: {},
+    });
+    assert.equal(resp.result.isError, true, 'neither source nor sourcePath must error');
+    const text = getErrorText(resp);
+    assert.ok(text.includes('INVALID_PARAMETER'), `error must carry the code: ${text}`);
+    assert.ok(/source/i.test(text), 'error must mention source');
+  });
+
+  it('mermaid_render with both source and sourcePath returns a structured error', async () => {
+    const resp = await client.request('tools/call', {
+      name: 'mermaid_render',
+      arguments: { source: 'graph TD; A-->B;', sourcePath: 'flow.mmd' },
+    });
+    assert.equal(resp.result.isError, true, 'both source and sourcePath must error');
+    assert.ok(getErrorText(resp).includes('INVALID_PARAMETER'));
+  });
+
+  it('mermaid_render with traversing sourcePath returns PATH_OUTSIDE_PROJECT', async () => {
+    const resp = await client.request('tools/call', {
+      name: 'mermaid_render',
+      arguments: { sourcePath: '../escape.mmd' },
+    });
+    assert.equal(resp.result.isError, true);
+    assert.ok(getErrorText(resp).includes('PATH_OUTSIDE_PROJECT'));
   });
 
   it('call with missing method returns JSON-RPC error', async () => {

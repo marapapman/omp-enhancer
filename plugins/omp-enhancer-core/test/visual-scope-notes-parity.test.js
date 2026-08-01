@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 
 import { workflowCatalog } from '../src/workflows/catalog.js';
 
-const VISUAL_IDS = ['design.visual', 'slides.generate', 'slides.modify', 'diagram.tikz'];
+const VISUAL_IDS = ['design.visual', 'slides.generate', 'slides.modify', 'diagram.tikz', 'diagram.mermaid'];
 
 test('every visual workflow shares the same VISUAL_AGENT_SCOPE_NOTES prefix in scopeNotes', () => {
   const reference = workflowCatalog['design.visual'].scopeNotes.slice(0, 2);

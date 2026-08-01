@@ -7,7 +7,7 @@ Use the `diagram.tikz` workflow for editable TikZ or LaTeX diagrams. Its normal 
 
 OMP's native `generate_image` can supply a missing node pictogram when it is currently enabled and the user and host authorize the provider and write effects. The plugin does not invoke imagegen itself. Generated files are copied out of temporary storage, normalized, hashed, and recorded in a separate project-local manifest; they are raster assets and are not OpenTikZ CC0 content or editable vectors.
 
-The plugin registers five tools that are active by default when the extension is loaded.
+The plugin registers six tools that are active by default when the extension is loaded.
 No slash-command activation is required.
 
 
@@ -16,12 +16,15 @@ No slash-command activation is required.
 - `tikz_prepare_asset` runs fixed ImageMagick arguments under `exec` approval to normalize an authorized local PNG, JPEG, or WebP file into a project-local hash-named PNG and update its manifest.
 - `tikz_render` validates a project-local TikZ source and runs fixed no-shell-escape compilation and conversion under OMP's normal `exec` approval.
 - `tikz_generate_diagram` accepts an ELK graph IR, computes node positions and edge geometry via elkjs, and emits a compilable standalone TikZ source. The engine applies generous default spacing, padding, node sizing, and compaction; only override spacing options for specific needs. Input nodes omit `x`/`y` and input edges omit `sections`/`bendPoints`; the layout engine computes them. It is the sole tool that produces figure geometry. tikz_generate_diagram also returns the positioned ELK graph IR as standard ELK JSON; write it to a project-local .elk.json to edit in an ELK-compatible visual editor, then feed the edited IR back into tikz_generate_diagram to regenerate the TikZ.
+- `mermaid_render` validates Mermaid source (inline string or project `.mmd`/`.md` file) and runs the pinned mermaid-cli in an isolated temporary workspace with offline, sandboxed headless Chrome, then publishes revision-bound SVG evidence under OMP's normal `exec` approval. Mermaid diagrams are authored as code first; the tool never accepts or edits SVG coordinates.
 
 ### Presets
 
 The `tikz_generate_diagram` tool supports preset-based layout tuning for target media. Pass `preset: "paper-column"` for double-column paper figures (DOWN flow, 9pt font, compact spacing, target width 240pt), `preset: "paper-full"` for full-page figures (RIGHT flow, 10pt font, ~504pt target), or `preset: "slide-16-9"` / `"slide-4-3"` for slide decks (RIGHT flow, 14pt font, airy spacing, advisory aspect ratio). Density can be fine-tuned with `density: "compact" | "balanced" | "airy"` (default balanced). Override the target physical width with `targetWidthPt`. The tool's returned `metadata.sizing` reports scale, effective font, and any density relayouts.
 
 The plugin declares one npm runtime dependency, `elkjs` (the ELK layout engine behind `tikz_generate_diagram`). Because `omp plugin install` does not fetch dependencies, run `npm run install:deps` (or call `omp_core_install_deps`) once after install or upgrade to place `elkjs` in the plugin cache. Asset normalization requires ImageMagick on `PATH`: Windows requires `magick`, while other platforms try `magick` and then `convert`. Rendering currently uses fixed `latexmk -pdf` (pdfLaTeX) mode and requires `latexmk`, `dvisvgm`, and `pdftocairo` on `PATH`. A missing executable, incompatible input/source, TeX package, or uninstalled `elkjs` is returned as a structured limitation; the plugin never substitutes a project-supplied command. If ELK is not installed, tikz_generate_diagram returns ELK_NOT_INSTALLED with install instructions; install elkjs and regenerate from the ELK graph IR rather than hand-authoring TikZ coordinates.
+
+Mermaid rendering requires the npm dependencies `@mermaid-js/mermaid-cli` and `puppeteer`; run `npm install` at the repository root once to place them and download headless Chrome. Rendering is fully offline (`--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost`) with `--no-sandbox` and `--disable-setuid-sandbox` launch flags for WSL2/root environments, and the HTML label/text metrics are pinned (`htmlLabels: false`, fixed font family) so revisions are deterministic. If mermaid-cli is missing, mermaid_render returns MERMAID_NOT_INSTALLED with install instructions; if Chrome is missing, it returns CHROME_NOT_FOUND and points at `node node_modules/puppeteer/install.mjs` or `PUPPETEER_EXECUTABLE_PATH`.
 
 Tool visibility is active by default. Each tool's approval level (read or exec) is enforced by the OMP host runtime. Tool findings and visual review remain advisory.
 

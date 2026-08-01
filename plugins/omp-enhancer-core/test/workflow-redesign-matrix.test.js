@@ -128,7 +128,7 @@ test('one code workflow drives parallel native task slices before Main and revie
   assert.match(steps, /search local code.+entry points.+callers.+tests.+configuration/i);
   assert.match(steps, /official documentation.+community experience/i);
   assert.match(steps, /detailed implementation and evidence plan.+parallel.+waves.+vertical slices.+exact files.+non-overlapping.+write sets/i);
-  assert.match(steps, /reviewer.+audit.+plan.+parallel.+plan.+write sets.+dependencies/i);
+  assert.match(steps, /reviewer.+independently audit the plan's parallel waves.+exclusive write sets.+dependency accuracy.+test seams.+evidence boundary/i);
   assert.match(steps, /same.+tasks\[\].+batch.+runnable.+independent.+slice/i);
   assert.match(steps, /task.+public-behavior test.+valid.+RED.+minimum.+production.+same command.+GREEN.+refactor/i);
   assert.match(steps, /Main.+integrat.+focused verification.+at most one fresh reviewer/i);
@@ -272,7 +272,7 @@ test('design.visual workflow delegates the bounded visual chain with a revision 
 });
 
 test('all visual workflow steps keep role names out of step text', () => {
-  for (const id of ['design.visual', 'slides.generate', 'slides.modify', 'diagram.tikz']) {
+  for (const id of ['design.visual', 'slides.generate', 'slides.modify', 'diagram.tikz', 'diagram.mermaid']) {
     const workflow = workflowCatalog[id];
     const stepText = workflow.steps.join(' ');
     assert.doesNotMatch(stepText, /\b(?:designer|visioner)\b/i, `${id} steps must not mention designer or visioner roles`);
@@ -298,10 +298,14 @@ test('every catalog role is OMP-native or marketplace-packaged and every selecte
     registeredMarketplaceSkills(repoRoot),
     registeredMarketplaceAgents(repoRoot),
   ]);
-  const nativeAgents = new Set(['task', 'designer', 'librarian', 'reviewer', 'scout']);
+  const nativeAgents = new Set(['plan', 'task', 'designer', 'librarian', 'reviewer', 'scout']);
   for (const [workflow, meta] of Object.entries(workflowCatalog)) {
     for (const skill of meta.skills) {
-      assert.equal(registeredSkills.has(skill), true, `${workflow}: ${skill}`);
+      assert.equal(
+        registeredSkills.has(skill),
+        true,
+        `${workflow}: ${skill}`,
+      );
     }
     for (const role of meta.roles) {
       assert.equal(

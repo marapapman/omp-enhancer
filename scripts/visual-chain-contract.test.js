@@ -16,7 +16,7 @@ test('diagram.tikz SKILL.md chain order is asset chain before figure chain, then
   const visionerAssetReviewIdx = skillMd.indexOf('Visioner asset-review checkpoint');
 
   // Figure-chain markers in order
-  const designerLayoutIdx = skillMd.indexOf('Designer layout checkpoint');
+  const designerLayoutIdx = skillMd.indexOf('Designer ELK IR checkpoint');
   const taskRenderIdx = skillMd.indexOf('Task render checkpoint');
   const visionerFigureReviewIdx = skillMd.indexOf('Visioner figure-review checkpoint');
 
@@ -26,7 +26,7 @@ test('diagram.tikz SKILL.md chain order is asset chain before figure chain, then
   assert.ok(designerBlueprintIdx >= 0, 'SKILL.md must contain "Designer blueprint checkpoint"');
   assert.ok(taskAssetIdx >= 0, 'SKILL.md must contain "Task asset checkpoint"');
   assert.ok(visionerAssetReviewIdx >= 0, 'SKILL.md must contain "Visioner asset-review checkpoint"');
-  assert.ok(designerLayoutIdx >= 0, 'SKILL.md must contain "Designer layout checkpoint"');
+  assert.ok(designerLayoutIdx >= 0, 'SKILL.md must contain "Designer ELK IR checkpoint"');
   assert.ok(taskRenderIdx >= 0, 'SKILL.md must contain "Task render checkpoint"');
   assert.ok(visionerFigureReviewIdx >= 0, 'SKILL.md must contain "Visioner figure-review checkpoint"');
   assert.ok(loopIdx >= 0, 'SKILL.md must contain "Designer-visioner loop"');

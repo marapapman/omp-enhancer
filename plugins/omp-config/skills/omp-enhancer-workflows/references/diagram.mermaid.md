@@ -1,33 +1,47 @@
 READY NEXT (soft): SENTINEL 1/2 — no plugin enforcement. Next assistant response byte 0 = `W` of filled `WORKFLOW READY | primary=<id-or-none> | add-ons=<ids-or-none> | skills-loaded=<ids-or-none> | skills-unavailable=<ids-or-none>`; no other visible text; the same response calls native TODO init only. Rebase TODO from loaded resources; end/wait.
-# `writing.latex` workflow reference
+# `diagram.mermaid` workflow reference
 
 Optional reference only. OMP native runtime instructions and settings remain authoritative.
 RESOURCE HANDOFF (soft): load only remaining declared resources and wait. Do not start project work in a resource-result response.
 Derive TODO internally. Each delegated native TODO `items[]` string is the exact Delegate row; use no role-colon shorthand. Its checkpoint is one metadata-safe line without `]`, `workflow=`, `step=`, `todo=`, `skills=`, or `checkpoint=`.
 
-## `writing.latex`
+## `diagram.mermaid`
 
-- Primary when: LaTeX source/output, LaTeX prose, or preserved commands: Add-on to matching prose; Primary only for format/structure work. A preservation-only Add-on selects zero format Skills; explicit conversion or template selects one matching candidate.
+- Primary when: Editable Mermaid diagram for academic architecture, block diagrams, flowcharts, decision flows, and deploy pipelines; explicit editable TikZ or LaTeX source requests use diagram.tikz.
 - Reference steps:
-  1. [step-1] The owning workflow checkpoint actor reads the relevant source and local macros; when composed with a language workflow, the language writer owns the prose target read.
-  2. [step-2] Preserve commands, comments, citations, math, labels, and revision markers.
-  3. [step-3] Make only the requested format conversion or LaTeX-structure change; a composed language writer owns prose revision.
-  4. [step-4] Use a language-neutral task only for bounded compile evidence; the composed language checker owns semantic review.
-  5. [step-audit] When no composed language checker owns the independent audit, reviewer audits the format output against preservation, structure, and compile or render evidence; a composed writer/checker Primary keeps its sequence unchanged
-- Agent candidates: `task`, `reviewer`.
+  1. [step-1] Main fixes audience, output path, target format, node/edge/groups, labels, icon requirements, asset source boundaries, and acceptance evidence.
+  2. [step-2] Produce a complete graphical blueprint: semantic graph, per-node icon plan, manifest draft, alternatives; no final coordinates.
+  3. [step-3] Prepare and validate icon assets (OpenTikZ/svg-flowchart/SVG assets), generate previews and manifest.
+  4. [step-4] Review asset previews per icon, reject or approve; only new previews are reviewed.
+  5. [step-5] Author the semantic graph as Mermaid source under approved manifest constraints with stable IDs, labels, edges, branch conditions, subgraphs, and direction; no SVG coordinate hand-editing and no tool invocation.
+  6. [step-6] Call mermaid_render to produce revision-bound SVG evidence.
+  7. [step-7] Independently review the fresh whole-figure SVG for semantic completeness, icon clarity, layout, overlap, clipping, labels, branch semantics, and manifest disclosure.
+  8. [step-8] At most one bounded revision for supported findings; rerun source/render; unchanged artifacts are not re-reviewed; defects remain visible.
+  9. [step-9] Deliver Mermaid source, revision-bound SVG, manifest, render evidence, unresolved limitations, and asset provenance.
+- Agent candidates: `designer`, `task`, `visioner`.
 - Delegated checkpoints:
-  - step-3: task owns only an explicitly requested format-only conversion or LaTeX-structure change; the writer selected from composed writing.zh or writing.en owns every prose revision checkpoint
-  - step-4: task may return only explicitly requested compile evidence; the selected composed language checker owns every semantic-check checkpoint, while the parent reconciles structure and scope
-  - step-audit: reviewer audits the format output when no composed language checker owns the independent audit; composed writer/checker sequences stay unchanged
+  - step-2: designer owns the semantic blueprint and per-icon plan while preserving scope
+  - step-3: task prepares and validates icon assets and writes the asset manifest
+  - step-4: visioner independently and read-only reviews fresh asset previews and flags unsupported icons
+  - step-5: designer authors the Mermaid source under approved manifest constraints with stable IDs, labels, edges, and subgraphs
+  - step-6: task calls mermaid_render with the designer Mermaid source and binds the revision-bound SVG evidence
+  - step-7: visioner independently and read-only reviews the fresh current-revision SVG
+  - step-8: designer applies supported findings, task rerenders, and visioner reviews only fresh rerenders
+  - step-9: task delivers the Mermaid source, revision-bound SVG, manifest, render evidence, limitations, and provenance
 - Quality checks:
-  - LaTeX structure, active-text boundaries, reference integrity, and compile evidence when requested
+  - semantic completeness and stable IDs, Mermaid source as the sole editable source with edit-contract and icon preservation, asset provenance and portability, deterministic offline render, revision-bound SVG, current-revision raster evidence, independent visual review, icon legibility, explicit raster disclosure, and requested paper or slide fit
 - Scope notes:
-  - Compilation and publication are separate workflow steps when requested.
-  - A TikZ or Mermaid figure source alone selects diagram.tikz or diagram.mermaid, not writing.latex; compose this card only for an independently requested LaTeX prose, document-format, template, or structure operation.
-  - When composed with writing.en or writing.zh as a preservation-only Add-on, it contributes LaTeX preservation constraints only: select zero format Skills and create no generic `task` Delegate row.
-  - Its generic `task` candidate is only for an explicitly requested format conversion, LaTeX-structure change, or compile-evidence checkpoint; it is not a candidate for prose revision or semantic check when a language workflow is composed.
+  - Visual-stage chain: designer owns the design or source revision; task owns rendering, compilation, and optional imagegen execution; visioner independently and read-only reviews the current render or layout. Main authorizes external-effect decisions during initial setup and accepts the final delivery. Non-visual stages keep their existing owners and are not assigned to designer or visioner merely because the workflow is visual.
+  - When designer is unavailable, record the precise unfulfilled design checkpoint with the permitted `fallback=Agent availability`; Main must not silently self-substitute or claim designer evidence. When visioner is unavailable, record the missing independent current-revision visual evidence; source inspection, compile success, designer self-review, or Main self-review is not visioner evidence. These are visible limitations, never a plugin gate, router, fixed dispatch, completion condition, or automatic loop.
+  - Mermaid source is the editable source; SVG is render evidence, not an authoring surface.
+  - OpenTikZ is a read-only source for safe vector icon copy.
+  - imagegen (PNG) may be used only when explicitly authorized for node icon assets.
+  - Rendering is a deterministic offline fixed-command pipeline with shell escape disabled.
+  - No gate, router, fork, or loop decides completion; each revision cycle is bounded and advisory.
+  - visioner review is independent and read-only; it does not render, edit, or decide completion.
 - Risk notes:
-  - none
+  - Generated raster icons reduce all-vector scalability and remain separate project assets whose provenance and raster status must stay visible.
+  - Brand marks and other third-party assets may carry trademark or usage restrictions even when source graphics are reusable.
 
 EXECUTION DEFAULT (soft): `subagent-driven` — Main chooses a currently visible matching Agent and width for each safe complete checkpoint. After every parent-owned pre-dispatch prerequisite named by this card completes, the committed `task` is the next project action; runnable independent checkpoints share a batch and dependent ones wait. Main integrates and verifies deliveries. Only a new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase a row; direct fallback is limited to one concrete user or native constraint, Agent availability or capacity, incomplete assignment input, unresolved dependency or write-set overlap, safety risk, or native parent-owned action. Size, latency, read-only output, integrated delivery, overhead, or no explicit delegation request alone are not fallbacks. An audit checkpoint named by this card is delegated by default and falls back only when the named audit Agent is unavailable; the recorded fallback names that unavailability. This selects no Agent or fork width and creates no fork requirement, gate, retry, or completion condition. ORCHESTRATOR: Main is the orchestrator. Evidence gathering, planning, implementation, and audit checkpoints are delegated to the Agents named by the loaded card; Main keeps selection, TODO, assignment copy, delivery integration, permission and external-effect decisions, and the final response. Direct work exists only on DIRECT, on `agentic.simple`, or behind a concrete recorded fallback. Main never self-induces a fallback by skipping brief, input, or checkpoint preparation; a fallback= row names exactly one enumerated reason and the affected checkpoint.
 

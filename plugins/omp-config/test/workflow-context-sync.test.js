@@ -205,6 +205,7 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
     'writing.latex',
     'slides.generate',
     'slides.modify',
+    'diagram.mermaid',
     'diagram.tikz',
     'writing.markdown',
     'doc.convert.word',
@@ -255,19 +256,19 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.match(catalog, /Main explicitly writes the exact `WORKFLOW PLAN` block[\s\S]*exact domain Skill or catalog URIs[\s\S]*NOW\/THEN resource load order[\s\S]*at least four detailed Actions for LOAD, COMMIT, SPLIT \+ EXECUTE, and VERIFY/i);
   assert.match(catalog, /next response is the filled PLAN plus its declared resource calls[\s\S]*byte 0 is `W`[\s\S]*`Skills` lists exact domain Skill or catalog URIs only[\s\S]*THEN alone copies selected Add-on reference URIs plus the Primary once and last/i);
   assert.match(catalog, /at most three visible `RESOURCE EXTENSION` batches[\s\S]*next response is the filled `WORKFLOW READY \|` plus native TODO initialization[\s\S]*byte 0 is `W`/i);
-  assert.match(catalog, /COMPILE \(soft\): loaded `subagent-driven` \+ complete input \+ safe checkpoint \+ visible matching Agent => Delegate row[\s\S]*otherwise `fallback=<one matched permitted limitation>`/i);
+  assert.match(catalog, /COMPILE \(soft\): loaded `subagent-driven` \+ complete input \(the checkpoint text carries target, constraints, and acceptance evidence\) \+ safe checkpoint \(no unresolved dependency and no write-set overlap with other rows\) \+ visible matching Agent => Delegate row[\s\S]*otherwise `fallback=<one matched permitted limitation>`/i);
   assert.match(catalog, /Project tools start only after the READY \+ TODO response ends and its results return/i);
   assert.match(catalog, /substantive code.+subagent-driven.+native `plan`.+native `task`.+native `reviewer`/isu);
   assert.match(catalog, /same native `task` `tasks\[\]` batch.+runnable independent.+vertical slices.+dependent.+later wave/isu);
   assert.match(catalog, /body of the text being modified, never from the prompt language/);
-  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 29/);
-  assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 28);
+  assert.match(catalog, /OMP_WORKFLOW_CATALOG_VERSION: 30/);
+  assert.equal((catalog.match(/^- Execution default \(soft\): `subagent-driven`/gm) ?? []).length, 29);
   assert.equal((catalog.match(/^- Execution default \(soft\): `direct-simple`/gm) ?? []).length, 1);
   assert.equal((catalog.match(/^- Execution default \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
-  assert.match(skillIndex, /Catalog version: 29/);
+  assert.match(skillIndex, /Catalog version: 30/);
   assert.match(skillIndex, /`writing\.pending`[\s\S]*one narrow language read[\s\S]*replace once with writing\.zh or writing\.en before substantive work/iu);
   const referenceText = references.join('\n');
-  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 28);
+  assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `subagent-driven`/gm) ?? []).length, 29);
   assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `direct-simple`/gm) ?? []).length, 1);
   assert.equal((referenceText.match(/^EXECUTION DEFAULT \(soft\): `defer-until-composed`/gm) ?? []).length, 1);
   assert.match(referenceText, /# `agentic\.simple` workflow reference[\s\S]*`direct-simple`[\s\S]*after staged READY[\s\S]*no `task`/iu);
@@ -278,7 +279,7 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.match(catalog, /### `writing\.pending`[\s\S]*exactly one narrow source read[\s\S]*no substantive review or revision[\s\S]*selected language workflow[\s\S]*subagent-driven writer and checker sequence/i);
   assert.match(catalog, /### `code\.dev`[\s\S]*Direct Skill candidates: `skill:\/\/code-development`/i);
   assert.match(catalog, /Agent candidates:[^\n]*`plan`[^\n]*`task`[^\n]*`reviewer`/i);
-  assert.match(catalog, /`reviewer` independently audits plan's supplied complete parallel plan/i);
+  assert.match(catalog, /`reviewer` independently audits `plan`'s supplied complete parallel plan — write sets, dependencies, assignment inputs, test seams, local and external anchors, and evidence boundary — and returns findings/i);
   assert.match(catalog, /`task`.+same.+tasks\[\].+batch.+vertical.+RED.+GREEN.+REFACTOR/i);
   assert.match(catalog, /Main.+integrat.+current tree.+diff.+evidence.+review.+before.+reviewer/isu);
   assert.match(catalog, /`reviewer` independently reviews the bounded semantic diff.+does not read.+project.+run commands/i);

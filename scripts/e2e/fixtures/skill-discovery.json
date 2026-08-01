@@ -129,6 +129,19 @@
       }
     },
     {
+      "id": "natural-mermaid-diagram",
+      "category": "tikz-helper",
+      "fixture": "skill-discovery-readonly",
+      "prompt": "Plan an editable Mermaid architecture flowchart for a five-module LLM serving stack with one decision branch. Author the figure as Mermaid code and call mermaid_render to convert it to revision-bound SVG, never hand-editing SVG coordinates and never using TikZ. Use the svg-flowchart method for a monochrome node icon; assume image generation is unavailable; preserve all labels and topology in Mermaid; require current-revision render plus independent visual evidence. Do not inspect or modify project files and do not use the network.",
+      "expectations": {
+        "minWorkflowReferenceReads": 1,
+        "requiredSelectedWorkflowIds": ["diagram.mermaid"],
+        "requiredObservedSkills": ["mermaid-diagram", "svg-flowchart"],
+        "maxObservedSkills": 7,
+        "forbiddenSkills": ["svg-writing", "writing-review", "writing-markdown-helper"]
+      }
+    },
+    {
       "id": "natural-xlsx",
       "category": "omp-user-skill",
       "fixture": "skill-discovery-readonly",

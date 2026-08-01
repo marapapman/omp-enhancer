@@ -487,4 +487,8 @@ export {
   DEFAULT_EXECUTABLES,
   DEFAULT_OUTPUT_DIRECTORY,
   MAX_COMMAND_OUTPUT_BYTES,
+  publishArtifact,
+  assertArtifact,
+  normalizeTimeout,
+  revisionFor,
 };

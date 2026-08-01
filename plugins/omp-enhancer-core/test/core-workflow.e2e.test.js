@@ -131,11 +131,12 @@ test('an arbitrary top-level model receives the compact seven-stage soft reminde
   assert.doesNotMatch(result.message.content, /All resources loaded|WRONG:|CORRECT:|after optional hidden thinking|Thinking "/iu);
   assert.doesNotMatch(result.message.content, /suggested=|within-native-cap|native-cap=|NATIVE_BATCH_SHAPE|action=delegate|block:\s*true|continue:\s*true|hard router|automatic retry/u);
   assert.doesNotMatch(result.message.content, /DEEPSEEK|MIMO|deepseek-v4-flash|mimo-v2\.5|opencode-go/iu);
-  assert.ok(result.message.content.length < 2000, `compatibility context length=${result.message.content.length}`);
+  assert.ok(result.message.content.length < 2500, `compatibility context length=${result.message.content.length}`);
   assert.deepEqual(result.message.details.features, [
     'skill-discovery',
     'workflow-selection',
     'delegation-decision',
+    'workflow-candidates',
     'dynamic-review-budget',
   ]);
 
@@ -349,7 +350,7 @@ test('staged reminder exposes only capabilities active in the native runtime', a
       model: ARBITRARY_MODEL,
     }),
   );
-  assert.match(skillOnly.message.content, /^OMP_SOFT_PROTOCOL[^\n]*\nENTRY \(soft\):[\s\S]*DIRECT is a verbatim, no-judgment field\/heading lookup[\s\S]*no Skill\/TODO/iu);
+  assert.match(skillOnly.message.content, /^OMP_SOFT_PROTOCOL[^\n]*\n(?:INDEX STATUS=[^\n]*\n)?ENTRY \(soft\):[\s\S]*DIRECT is a verbatim, no-judgment field\/heading lookup[\s\S]*no Skill\/TODO/iu);
   assert.match(skillOnly.message.content, /PROJECT ONLY . DECLARE:[\s\S]*PROJECT ONLY . LOAD:[\s\S]*PROJECT ONLY . COMMIT:/iu);
   assert.match(skillOnly.message.content, /DECLARE:[\s\S]*visible WORKFLOW PLAN block[\s\S]*Load order: NOW=\[<non-supplied Skill URIs-or-none>\] THEN=\[none\]/iu);
   assert.match(skillOnly.message.content, /LOAD:[\s\S]*read only NOW exact Skill URIs[\s\S]*wait/iu);
@@ -369,12 +370,12 @@ test('staged reminder exposes only capabilities active in the native runtime', a
       model: ARBITRARY_MODEL,
     }),
   );
-  assert.match(taskOnly.message.content, /^OMP_SOFT_PROTOCOL[^\n]*\nENTRY \(soft\):[\s\S]*DIRECT is a verbatim, no-judgment field\/heading lookup[\s\S]*no Skill\/TODO/iu);
+  assert.match(taskOnly.message.content, /^OMP_SOFT_PROTOCOL[^\n]*\n(?:INDEX STATUS=[^\n]*\n)?ENTRY \(soft\):[\s\S]*DIRECT is a verbatim, no-judgment field\/heading lookup[\s\S]*no Skill\/TODO/iu);
   assert.match(taskOnly.message.content, /PROJECT ONLY . PHASE 1 . PLAN:[\s\S]*PROJECT ONLY . PHASE 2 . COMMIT:[\s\S]*PROJECT ONLY . PHASE 3 . EXECUTE/iu);
   assert.match(taskOnly.message.content, /PHASE 1 . PLAN:[\s\S]*PHASE 2 . COMMIT:[\s\S]*PHASE 3 . EXECUTE/iu);
   assert.match(taskOnly.message.content, /no fork or width is selected by this reminder/i);
   assert.match(taskOnly.message.content, /DELEGATION AFTER READY \(soft\):[\s\S]*Main is the orchestrator[\s\S]*non-simple work is delegated to currently visible Agents when native state permits/iu);
-  assert.deepEqual(taskOnly.message.details.features, ['delegation-decision']);
+  assert.deepEqual(taskOnly.message.details.features, ['workflow-candidates', 'delegation-decision']);
 });
 
 test('review and multi-target facts remain compact and never choose dispatch or width', async () => {
@@ -780,6 +781,63 @@ test('plan-to-execute transition injects OMP_WORKFLOW_ENTRY without visible work
   assert.match(executeTurn.message.content, /DISCOVER -> DECLARE -> LOAD -> COMMIT -> SPLIT -> EXECUTE -> VERIFY/u, 'entry must embed the staged protocol');
   assert.match(executeTurn.message.content, /INDEX STATUS=NOT SUPPLIED/u, 'entry must instruct index read since skill is not visible');
 });
+
+test('hasVisibleSkills but no workflow skill injects INDEX STATUS=NOT SUPPLIED read directive', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task', 'todo'];
+  pi.pi = { getActiveSkills: () => [{ name: 'tikz-diagram', description: 'Draw TikZ diagrams.' }] };
+  registerCoreEnhancer(pi);
+  const result = await event(pi, 'before_agent_start')({
+    prompt: '画一个系统架构图',
+    systemPrompt: ['native OMP prompt'],
+  }, extensionContext(entries, process.cwd(), { model: ARBITRARY_MODEL }));
+  assert.ok(result, 'tikz scenario must produce a reminder');
+  assert.match(result.message.content, /^OMP_SOFT_PROTOCOL/u, 'weak branch must use OMP_SOFT_PROTOCOL prefix');
+  assert.match(result.message.content, /INDEX STATUS=NOT SUPPLIED/iu, 'must instruct reading workflow index');
+  assert.match(result.message.content, /skill:\/\/omp-enhancer-workflows/iu, 'must name the workflow index URI');
+  assert.match(result.message.content, /PROJECT ONLY.*DECLARE.*byte 0.*WORKFLOW PLAN/iu, 'must retain the weak-branch PLAN directive');
+  assert.equal(Object.hasOwn(result.message.details, 'model'), false, 'no per-model metadata');
+  assert.ok(result.message.details.features?.includes('skill-discovery'), 'features must include skill-discovery');
+});
+
+test('hasVisibleSkills but no workflow skill with supplied index uses INDEX STATUS=SUPPLIED', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task', 'todo'];
+  pi.pi = { getActiveSkills: () => [{ name: 'tikz-diagram', description: 'Draw TikZ diagrams.' }] };
+  registerCoreEnhancer(pi);
+  const result = await event(pi, 'before_agent_start')({
+    prompt: '画一个系统架构图',
+    systemPrompt: ['native OMP prompt'],
+    messages: [{ role: 'user', customType: 'skill-prompt', content: 'body', details: { name: 'omp-enhancer-workflows' } }],
+  }, extensionContext(entries, process.cwd(), { model: ARBITRARY_MODEL }));
+  assert.ok(result, 'supplied index scenario must produce a reminder');
+  assert.match(result.message.content, /^OMP_SOFT_PROTOCOL/u, 'weak branch must use OMP_SOFT_PROTOCOL prefix');
+  assert.match(result.message.content, /INDEX STATUS=SUPPLIED/iu, 'must acknowledge supplied index');
+  assert.match(result.message.content, /INDEX STATUS=SUPPLIED BY EXACT NATIVE/iu, 'supplied status must reference native skill-prompt');
+  assert.ok(result.message.details.features?.includes('skill-discovery'), 'features must include skill-discovery');
+});
+
+test('no visible skills + non-substantive operation injects INDEX STATUS=NOT SUPPLIED in TASK_STAGED_REMINDER', async () => {
+  const entries = [];
+  const pi = new FakePi(entries);
+  pi.getActiveTools = () => ['read', 'task', 'todo'];
+  // No pi.getActiveSkills → visibleSkills is empty
+  registerCoreEnhancer(pi);
+  const result = await event(pi, 'before_agent_start')({
+    prompt: 'Review the codebase structure.',
+    systemPrompt: ['native OMP prompt'],
+  }, extensionContext(entries, process.cwd(), { model: ARBITRARY_MODEL }));
+  assert.ok(result, 'non-substantive scenario must produce a reminder');
+  assert.match(result.message.content, /^OMP_SOFT_PROTOCOL/u, 'must use OMP_SOFT_PROTOCOL prefix');
+  assert.match(result.message.content, /INDEX STATUS=NOT SUPPLIED/iu, 'must instruct reading workflow index');
+  assert.match(result.message.content, /skill:\/\/omp-enhancer-workflows/iu, 'must name the workflow index URI');
+  assert.match(result.message.content, /PROJECT ONLY.*PHASE 1.*PLAN/iu, 'must retain TASK_STAGED_REMINDER PLAN directive');
+  assert.match(result.message.content, /PROJECT ONLY.*PHASE 2.*COMMIT/iu, 'must retain TASK_STAGED_REMINDER COMMIT directive');
+  assert.match(result.message.content, /PROJECT ONLY.*PHASE 3.*EXECUTE/iu, 'must retain TASK_STAGED_REMINDER EXECUTE directive');
+});
+
 function registeredCore() {
   const entries = [];
   const pi = new FakePi(entries);

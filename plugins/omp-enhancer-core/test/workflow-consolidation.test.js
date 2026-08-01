@@ -48,7 +48,7 @@ test('catalog exposes the consolidated workflows and deliberately omits healthca
   assert.equal(workflowIds.includes('healthcare.review'), false);
   assert.equal(workflowIds.includes('communications.triage'), false);
   assert.equal(workflowIds.includes('diagram.svg'), false);
-  assert.equal(workflowDefinitions.length, 30);
+  assert.equal(workflowDefinitions.length, 31);
   for (const id of RETIRED_CODE_WORKFLOWS) {
     assert.equal(workflowIds.includes(id), false, `retired workflow remains: ${id}`);
   }
@@ -81,7 +81,7 @@ test('compact workflow Skill teaches primary-plus-add-on composition with exact 
   assert.match(index, /`\.tex` target[\s\S]*LaTeX prose[\s\S]*preserve(?:d)? LaTeX commands[\s\S]*`writing\.latex` Add-on/iu);
   assert.match(
     index,
-    /### writing[\s\S]*#### language[\s\S]*`writing\.pending`[\s\S]*`writing\.zh`[\s\S]*`writing\.en`[\s\S]*#### format overlays[\s\S]*`writing\.latex`[\s\S]*`writing\.markdown`[\s\S]*`doc\.convert\.word`[\s\S]*#### specialized outputs[\s\S]*`slides\.generate`[\s\S]*`slides\.modify`[\s\S]*`diagram\.tikz`/iu,
+    /### writing[\s\S]*#### language[\s\S]*`writing\.pending`[\s\S]*`writing\.zh`[\s\S]*`writing\.en`[\s\S]*#### format overlays[\s\S]*`writing\.latex`[\s\S]*`writing\.markdown`[\s\S]*`doc\.convert\.word`[\s\S]*#### specialized outputs[\s\S]*`slides\.generate`[\s\S]*`slides\.modify`[\s\S]*`diagram\.mermaid`[\s\S]*`diagram\.tikz`/iu,
   );
   assert.match(index, /`writing\.latex`[^\n]*Add-on to matching prose[^\n]*Primary only for format\/structure work/iu);
   assert.match(index, /`writing\.en` — The prose/u);
@@ -287,7 +287,7 @@ test('omp.plugin owns the complete self-iteration lifecycle without adding anoth
   assert.equal(workflowCatalog['code.dev'].composeWith.includes('omp.plugin'), false);
   assert.match(steps, /acceptance.+invariants.+dirty worktree.+installed state/iu);
   assert.match(steps, /detailed implementation and evidence plan.+parallel.+waves.+vertical slices.+non-overlapping.+write sets.+tests.+E2E/iu);
-  assert.match(steps, /reviewer.+audit.+plan.+parallel.+plan.+assignment.+before.+production/iu);
+  assert.match(steps, /reviewer.+independently audit the plan's parallel waves.+exclusive write sets.+dependency accuracy.+test seams.+evidence boundary/iu);
   assert.match(steps, /independently review.+bounded.+semantic diff/iu);
   assert.match(steps, /same.+tasks\[\].+batch.+independent.+vertical.+slice/iu);
   assert.match(steps, /task.+public behavior.+RED.+minimal.+implementation.+GREEN.+refactor/iu);
@@ -301,7 +301,7 @@ test('omp.plugin owns the complete self-iteration lifecycle without adding anoth
   assert.match(delegation, /task.+vertical.+RED.+GREEN.+REFACTOR/iu);
   assert.match(delegation, /reviewer.+bounded.+semantic diff/iu);
   assert.match(delegation, /task.+supported.+finding.+repair/iu);
-  assert.match(quality, /plan-audit disposition.+task-owned.+RED-before-production.+GREEN.+installed E2E.+review reconciliation/iu);
+  assert.match(quality, /explicit plan-review disposition.+task-owned.+RED-before-production.+GREEN.+installed E2E.+review reconciliation/iu);
   assert.match(risks, /prompt.+installed-runtime.+drift.+isolated evidence.+stochastic.+one pass/iu);
 });
 
