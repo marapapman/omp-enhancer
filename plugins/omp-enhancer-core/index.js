@@ -27,6 +27,9 @@ const CORE_STATE_ENTRY = 'omp-enhancer-core.state';
 const STATE_SCHEMA_VERSION = 10;
 const SKILL_DISCOVERY_MESSAGE_TYPE = 'omp-enhancer-skill-discovery';
 const DISABLE_WORKFLOW_REMINDER_ENV = 'OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER';
+const SKIPPED_TOOL_REMINDER_TYPE = 'omp-enhancer-skipped-tool-replay';
+const SKIPPED_TOOL_REMINDER_WINDOW_MS = 5_000;
+const PENDING_ADVISORY_SKIP_PATTERN = /Skipped due to pending system advisory/;
 const ENHANCER_TOOL_GROUPS = Object.freeze({
   core: ['omp_core_'],
   config: ['omp_config_'],
@@ -319,6 +322,41 @@ export default function registerCoreEnhancer(pi) {
     return undefined;
   });
 
+  // The host interrupts a running tool batch when a system advisory (e.g. an
+  // advisor card) is queued, and emits synthetic skipped results for the calls
+  // that never executed. Those skips are delivered as `tool_execution_end`
+  // events even though no tool ran. Queue one bounded follow-up reminder so
+  // Main re-issues the skipped call (typically the todo update) after the
+  // advisory is delivered. `followUp` is deliberate: follow-up messages never
+  // interrupt a tool batch (unlike `steer` with one-at-a-time steering mode,
+  // which would re-trigger the same skip on the next batch).
+  // Persist only when replay state changes — every tool execution emits this
+  // event, so persisting on the common path would double session state appends.
+  pi.on?.('tool_execution_end', async (event = {}, ctx = {}) => {
+    if (activeHostTurnKind !== 'user') return undefined;
+    restoreStateFromContext(state, ctx);
+    const name = toolEventName(event);
+    if (name && toolEventFailed(event) && isPendingAdvisorySkip(event)) {
+      const now = Date.now();
+      if (now - state.skippedToolReplaySentAt >= SKIPPED_TOOL_REMINDER_WINDOW_MS) {
+        state.skippedToolReplaySentAt = now;
+        await persistState(pi, state);
+        if (typeof pi.sendMessage === 'function') {
+          try {
+            pi.sendMessage({
+              customType: SKIPPED_TOOL_REMINDER_TYPE,
+              content: buildSkippedToolReplayReminder(name),
+              display: false,
+              attribution: 'user',
+              details: { source: 'omp-enhancer-core', toolName: name },
+            }, { deliverAs: 'followUp' });
+          } catch { /* advisory only — never break the hook */ }
+        }
+      }
+    }
+    return undefined;
+  });
+
   pi.on?.('session_stop', async (event = {}, ctx = {}) => {
     if (activeHostTurnKind !== 'user') {
       activeHostTurnKind = 'user';
@@ -370,6 +408,7 @@ export function buildStagedWorkflowReminder({
     indexDirective,
     'A verbatim field/heading lookup needs no workflow or TODO.',
     'OMP owns tools, permissions, delegation, and completion.',
+    'If a tool call is skipped with "Skipped due to pending system advisory", retry it after the advisory is delivered — keep todo and plan updates in sync.',
   ].join('\n'));
   features.push('orchestration-advisory');
 
@@ -470,6 +509,7 @@ export function createState() {
     lastPrompt: '',
     taskStartedAt: 0,
     workflowReminderTaskStartedAt: 0,
+    skippedToolReplaySentAt: 0,
     lastSkillUsage: null,
     lastSubagentUsage: null,
     observedSkills: new Set(),
@@ -742,6 +782,9 @@ function readStateSnapshot(value = {}) {
   state.workflowReminderTaskStartedAt = Number.isFinite(value.workflowReminderTaskStartedAt)
     ? value.workflowReminderTaskStartedAt
     : 0;
+  state.skippedToolReplaySentAt = Number.isFinite(value.skippedToolReplaySentAt)
+    ? value.skippedToolReplaySentAt
+    : 0;
   state.lastTaskPlanMode = value.lastTaskPlanMode === true;
   state.lastTaskContext = sanitizeTaskContext(value.lastTaskContext, state.lastPrompt);
   state.lastSkillUsage = isRecord(value.lastSkillUsage) ? value.lastSkillUsage : null;
@@ -821,6 +864,7 @@ function serializeState(state) {
     skillEvidence: state.skillEvidence,
     taskStartedAt: state.taskStartedAt,
     workflowReminderTaskStartedAt: state.workflowReminderTaskStartedAt,
+    skippedToolReplaySentAt: state.skippedToolReplaySentAt,
     lastTaskPlanMode: state.lastTaskPlanMode === true,
     lastSkillUsage: state.lastSkillUsage,
     lastSubagentUsage: state.lastSubagentUsage,
@@ -1001,6 +1045,20 @@ function toolEventPending(event = {}) {
       ?? '',
   ).toLowerCase();
   return ['pending', 'running', 'started', 'in_progress', 'in-progress'].includes(status);
+}
+
+function isPendingAdvisorySkip(event = {}) {
+  const text = extractText(event.result ?? event).slice(0, 400);
+  return PENDING_ADVISORY_SKIP_PATTERN.test(text);
+}
+
+function buildSkippedToolReplayReminder(toolName) {
+  return [
+    '<system-reminder>',
+    `The host skipped the tool call \`${toolName}\` because a system advisory was pending; the advisory is delivered above.`,
+    'Re-issue the skipped tool call(s) before continuing — the todo update must not be silently dropped.',
+    '</system-reminder>',
+  ].join('\n');
 }
 
 function extractPrompt(event = {}) {

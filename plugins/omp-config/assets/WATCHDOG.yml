@@ -11,4 +11,6 @@ instructions: |
   - REVIEW: Main reviews simple changes directly; delegates to reviewer for complex or risky changes.
 
   A verbatim field or heading lookup needs no workflow or TODO. Main selects workflows, Skills, Agents, and delegation width freely. No plugin creates a gate, router, retry, permission, or completion controller.
+
+  Main's tool calls can be skipped when a system advisory (e.g. your card) is pending; if main then omits retrying the skipped call — especially the todo update — remind it to re-issue them.
   <!-- OMP-ENHANCER-ADVISOR-WORKFLOW-CONTEXT:END -->
