@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
 import {
+  access,
   mkdir,
   mkdtemp,
   readFile,
@@ -7,7 +9,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
-import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { basename, delimiter, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
@@ -40,7 +42,7 @@ export const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
 export const MERMAID_FONT_FAMILY = 'Arial, Helvetica, sans-serif';
 
 export const MERMAID_INSTALL_GUIDANCE = 'mermaid-cli is not installed. Run `npm install` at the repository root (the npm workspace installs @mermaid-js/mermaid-cli and puppeteer), then retry rendering.';
-export const CHROME_NOT_FOUND_GUIDANCE = 'Headless Chrome was not found. Run `node node_modules/puppeteer/install.mjs` at the repository root (or set PUPPETEER_EXECUTABLE_PATH), then retry rendering.';
+export const CHROME_NOT_FOUND_GUIDANCE = 'Headless Chrome was not found. A system chromium (e.g. apt/snap chromium or google-chrome) is detected automatically via PATH; install one, run `node node_modules/puppeteer/install.mjs` at the repository root (or set PUPPETEER_EXECUTABLE_PATH), then retry rendering.';
 
 const PUPPETEER_LAUNCH_ARGS = Object.freeze([
   '--no-sandbox',
@@ -107,33 +109,81 @@ async function readCliVersions(cliPath) {
   return { mermaidCli: 'unknown', mermaid: 'unknown' };
 }
 
-/** Probe the puppeteer-managed Chrome executable; null when unavailable. */
-async function defaultProbeChrome() {
-  if (process.env.PUPPETEER_EXECUTABLE_PATH?.trim()) {
-    const configured = process.env.PUPPETEER_EXECUTABLE_PATH.trim();
-    try {
-      const metadata = await stat(configured);
-      if (metadata.isFile()) return configured;
-    } catch {
-      // fall through to the puppeteer cache probe
+const PATH_CHROME_CANDIDATES = Object.freeze([
+  'chromium',
+  'chromium-browser',
+  'google-chrome',
+  'google-chrome-stable',
+]);
+
+/** Dynamic import of the puppeteer module; null when it is not installed. */
+async function resolvePuppeteerModule() {
+  try {
+    return await import('puppeteer');
+  } catch {
+    return null;
+  }
+}
+
+/** True when `candidate` is a regular file the current user may execute. */
+async function isExecutableFile(candidate) {
+  try {
+    await access(candidate, fsConstants.X_OK);
+    const metadata = await stat(candidate);
+    return metadata.isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Probe for a usable Chrome executable; null when unavailable.
+ *
+ * Order (each step falls through when it finds nothing usable):
+ * 1. `PUPPETEER_EXECUTABLE_PATH` (explicit user override).
+ * 2. PATH scan for system chromium binaries, independent of puppeteer so
+ *    detection works in the installed runtime where `import('puppeteer')`
+ *    throws. PATH candidates are preferred over the puppeteer cache, so a
+ *    cached binary that cannot run on this platform is never selected when a
+ *    system chromium is available.
+ * 3. The puppeteer-managed browser cache, permission-checked: each candidate
+ *    must be a regular file with the execute bit (X_OK). This rejects
+ *    non-executable cache entries; it does NOT verify the binary can run on
+ *    this platform (an x86-64 download inside a linux_arm cache dir still has
+ *    the execute bit and is only selected when no PATH chromium and no env
+ *    override exist — a wrong-arch launch then fails and surfaces as a
+ *    structured COMMAND_FAILED whose details carry the captured stderr).
+ *
+ * `env` and `resolvePuppeteer` are injectable for tests; the no-argument
+ * call used by renderMermaid reads the real process.env and dynamic import.
+ */
+export async function defaultProbeChrome({ env = process.env, resolvePuppeteer = resolvePuppeteerModule } = {}) {
+  const configured = env.PUPPETEER_EXECUTABLE_PATH?.trim();
+  if (configured && await isExecutableFile(configured)) {
+    return configured;
+  }
+  const pathValue = typeof env.PATH === 'string' ? env.PATH : '';
+  for (const dir of pathValue.split(delimiter)) {
+    if (dir === '') continue;
+    for (const name of PATH_CHROME_CANDIDATES) {
+      const candidate = join(dir, name);
+      if (await isExecutableFile(candidate)) return candidate;
     }
   }
-  let mod;
-  try {
-    mod = await import('puppeteer');
-  } catch {
-    return null;
+  const mod = await resolvePuppeteer();
+  if (mod) {
+    try {
+      const executable = typeof mod.executablePath === 'function'
+        ? mod.executablePath()
+        : (typeof mod.default?.executablePath === 'function' ? mod.default.executablePath() : null);
+      if (typeof executable === 'string' && executable !== '' && await isExecutableFile(executable)) {
+        return executable;
+      }
+    } catch {
+      // Unusable cache entry; nothing left to try.
+    }
   }
-  try {
-    const executable = typeof mod.executablePath === 'function'
-      ? mod.executablePath()
-      : (typeof mod.default?.executablePath === 'function' ? mod.default.executablePath() : null);
-    if (typeof executable !== 'string' || executable === '') return null;
-    const metadata = await stat(executable);
-    return metadata.isFile() ? executable : null;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function validateMermaidParams(input) {
@@ -183,9 +233,16 @@ function mermaidRevisionFor(source, mermaidConfig, versions) {
 async function runCheckedCommand(commandRunner, args, options) {
   const evidence = await commandRunner(process.execPath, args, options);
   if (!evidence || evidence.exitCode !== 0) {
+    // The default runner already rejects with the full evidence (incl. stderr)
+    // in details; this branch covers injected commandRunner seams that return
+    // a bare { exitCode } result, keeping the failure diagnostic visible.
+    const stderr = typeof evidence?.stderr === 'string'
+      ? evidence.stderr.slice(0, MAX_COMMAND_OUTPUT_BYTES)
+      : '';
     throw new TikzRuntimeError('COMMAND_FAILED', 'mermaid-cli did not report a successful exit.', {
       executable: process.execPath,
       exitCode: evidence?.exitCode ?? null,
+      ...(stderr ? { stderr } : {}),
     });
   }
   return evidence;
@@ -272,7 +329,7 @@ export async function renderMermaid(input = {}, options = {}) {
     const outSvg = join(workspace, `${sourceBase}.svg`);
     await writeFile(sourceFile, source, 'utf8');
     await writeFile(mermaidConfigFile, `${JSON.stringify(mermaidConfig, null, 2)}\n`, 'utf8');
-    await writeFile(puppeteerConfigFile, `${JSON.stringify({ args: PUPPETEER_LAUNCH_ARGS }, null, 2)}\n`, 'utf8');
+    await writeFile(puppeteerConfigFile, `${JSON.stringify({ args: PUPPETEER_LAUNCH_ARGS, ...(chromePath ? { executablePath: chromePath } : {}) }, null, 2)}\n`, 'utf8');
 
     const args = [
       cliPath,

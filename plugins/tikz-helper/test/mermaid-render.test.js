@@ -1,6 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { existsSync } from 'node:fs';
 import {
+  chmod,
+  mkdir,
   mkdtemp,
   readFile,
   rm,
@@ -8,12 +10,12 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, mock } from 'node:test';
 
 import extension from '../index.js';
-import { renderMermaid, resolveMermaidCliPath } from '../src/mermaid-render.js';
+import { defaultProbeChrome, renderMermaid, resolveMermaidCliPath } from '../src/mermaid-render.js';
 import { TikzRuntimeError } from '../src/runtime-error.js';
 
 const SIMPLE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text>ok</text></svg>';
@@ -45,6 +47,23 @@ function makeExtensionApi() {
 
 async function tempProject() {
   return mkdtemp(join(tmpdir(), 'omp-mermaid-test-'));
+}
+
+/** Write a fake executable at dir/name (mode 0755) and return its path. */
+async function writeExecutable(dir, name) {
+  await mkdir(dir, { recursive: true });
+  const file = join(dir, name);
+  await writeFile(file, '#!/bin/sh\nexit 0\n', 'utf8');
+  await chmod(file, 0o755);
+  return file;
+}
+
+/** Write a plain file at dir/name (mode 0644, no exec bit) and return its path. */
+async function writePlainFile(dir, name) {
+  await mkdir(dir, { recursive: true });
+  const file = join(dir, name);
+  await writeFile(file, 'not an executable\n', 'utf8');
+  return file;
 }
 
 /** Mock command runner that writes an SVG at the -o path and reports success. */
@@ -208,12 +227,15 @@ describe('mermaid_render bounded command', () => {
     assert.ok(captured.mermaidConfig.fontFamily.length > 0);
     assert.deepEqual(captured.mermaidConfig.flowchart, {});
 
-    // puppeteer config with sandbox + offline flags
-    assert.deepEqual(captured.puppeteerConfig.args, [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost',
-    ]);
+    // puppeteer config pins the probed browser plus sandbox + offline flags
+    assert.deepEqual(captured.puppeteerConfig, {
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost',
+      ],
+      executablePath: '/fake/chrome',
+    });
 
     assert.equal(result.ok, true);
     assert.equal(result.sourcePath, 'diagram.mmd');
@@ -259,6 +281,23 @@ describe('mermaid_render bounded command', () => {
     await assert.rejects(
       renderMermaid({ projectRoot: root, source: 'graph TD; A-->B;' }, { ...mockOptions, commandRunner: timeoutRunner }),
       (error) => error instanceof TikzRuntimeError && error.code === 'COMMAND_TIMEOUT',
+    );
+  });
+
+  it('surfaces the captured stderr when an injected runner reports a nonzero exit', async () => {
+    const root = await tempProject();
+    const failingRunner = async () => ({
+      exitCode: 1,
+      signal: null,
+      stdout: '',
+      stderr: 'Failed to launch the browser process: /fake/chrome: ELF: not found\n',
+      shell: false,
+    });
+    await assert.rejects(
+      renderMermaid({ projectRoot: root, source: 'graph TD; A-->B;' }, { ...mockOptions, commandRunner: failingRunner }),
+      (error) => error instanceof TikzRuntimeError
+        && error.code === 'COMMAND_FAILED'
+        && /ELF: not found/u.test(error.details?.stderr ?? ''),
     );
   });
 });
@@ -307,6 +346,111 @@ describe('mermaid_render artifact naming', () => {
   });
 });
 
+describe('defaultProbeChrome browser detection', () => {
+  it('finds a system chromium on PATH', async () => {
+    const root = await tempProject();
+    const chrome = await writeExecutable(join(root, 'bin'), 'chromium');
+    const found = await defaultProbeChrome({
+      env: { PATH: join(root, 'bin') },
+      resolvePuppeteer: async () => null,
+    });
+    assert.equal(found, chrome);
+  });
+
+  it('also recognizes chromium-browser on PATH', async () => {
+    const root = await tempProject();
+    const chrome = await writeExecutable(join(root, 'bin'), 'chromium-browser');
+    const found = await defaultProbeChrome({
+      env: { PATH: join(root, 'bin') },
+      resolvePuppeteer: async () => null,
+    });
+    assert.equal(found, chrome);
+  });
+
+  it('skips PATH binaries without the exec bit and picks the next candidate', async () => {
+    const root = await tempProject();
+    const dir1 = join(root, 'bin1');
+    const dir2 = join(root, 'bin2');
+    await writePlainFile(dir1, 'chromium');
+    const chrome = await writeExecutable(dir2, 'chromium');
+    const found = await defaultProbeChrome({
+      env: { PATH: `${dir1}${delimiter}${dir2}` },
+      resolvePuppeteer: async () => null,
+    });
+    assert.equal(found, chrome);
+  });
+
+  it('prefers a PATH chromium over an executable puppeteer-cache binary', async () => {
+    const root = await tempProject();
+    const cacheChrome = await writeExecutable(join(root, 'cache'), 'chrome');
+    const pathChrome = await writeExecutable(join(root, 'bin'), 'chromium');
+    const found = await defaultProbeChrome({
+      env: { PATH: join(root, 'bin') },
+      resolvePuppeteer: async () => ({ executablePath: () => cacheChrome }),
+    });
+    assert.equal(found, pathChrome);
+  });
+
+  it('rejects a non-executable puppeteer-cache binary in favor of a PATH chromium', async () => {
+    const root = await tempProject();
+    const cacheChrome = await writePlainFile(join(root, 'cache'), 'chrome');
+    const pathChrome = await writeExecutable(join(root, 'bin'), 'chromium');
+    const found = await defaultProbeChrome({
+      env: { PATH: join(root, 'bin') },
+      resolvePuppeteer: async () => ({ executablePath: () => cacheChrome }),
+    });
+    assert.equal(found, pathChrome);
+  });
+
+  it('returns null when the only cache binary is not executable', async () => {
+    const root = await tempProject();
+    const cacheChrome = await writePlainFile(join(root, 'cache'), 'chrome');
+    const found = await defaultProbeChrome({
+      env: { PATH: '' },
+      resolvePuppeteer: async () => ({ executablePath: () => cacheChrome }),
+    });
+    assert.equal(found, null);
+  });
+
+  it('falls back to an executable puppeteer-cache binary when PATH has no chromium', async () => {
+    const root = await tempProject();
+    const cacheChrome = await writeExecutable(join(root, 'cache'), 'chrome');
+    const found = await defaultProbeChrome({
+      env: { PATH: '' },
+      resolvePuppeteer: async () => ({ executablePath: () => cacheChrome }),
+    });
+    assert.equal(found, cacheChrome);
+  });
+
+  it('lets PUPPETEER_EXECUTABLE_PATH override the PATH scan', async () => {
+    const root = await tempProject();
+    const envChrome = await writeExecutable(join(root, 'env'), 'chrome');
+    await writeExecutable(join(root, 'bin'), 'chromium');
+    const found = await defaultProbeChrome({
+      env: { PUPPETEER_EXECUTABLE_PATH: envChrome, PATH: join(root, 'bin') },
+      resolvePuppeteer: async () => null,
+    });
+    assert.equal(found, envChrome);
+  });
+
+  it('reads the real PUPPETEER_EXECUTABLE_PATH and PATH when called with no arguments', async () => {
+    const root = await tempProject();
+    const envChrome = await writeExecutable(join(root, 'env'), 'chrome');
+    const previous = process.env.PUPPETEER_EXECUTABLE_PATH;
+    process.env.PUPPETEER_EXECUTABLE_PATH = envChrome;
+    try {
+      const found = await defaultProbeChrome();
+      assert.equal(found, envChrome);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.PUPPETEER_EXECUTABLE_PATH;
+      } else {
+        process.env.PUPPETEER_EXECUTABLE_PATH = previous;
+      }
+    }
+  });
+});
+
 describe('mermaid_render environment preflight', () => {
   it('returns MERMAID_NOT_INSTALLED with actionable guidance when mermaid-cli is missing', async () => {
     const root = await tempProject();
@@ -330,7 +474,8 @@ describe('mermaid_render environment preflight', () => {
       ),
       (error) => error instanceof TikzRuntimeError
         && error.code === 'CHROME_NOT_FOUND'
-        && /chrome|puppeteer/i.test(error.message),
+        && /chrome|puppeteer/i.test(error.message)
+        && /system chromium/i.test(error.message),
     );
   });
 });

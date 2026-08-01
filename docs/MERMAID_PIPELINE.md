@@ -43,7 +43,7 @@ Contract for the Mermaid code-first diagram pipeline: author Mermaid source as c
 ## Error codes and install guidance
 
 - `MERMAID_NOT_INSTALLED` — `@mermaid-js/mermaid-cli` is missing. Run `npm install` at the repo root (npm workspace) so `@mermaid-js/mermaid-cli@^11.16.0` and `puppeteer@^24.15.0` resolve for `plugins/tikz-helper`, then retry from the Mermaid source. Never hand-author SVG coordinates as a fallback.
-- `CHROME_NOT_FOUND` — puppeteer's Chrome for Testing binary is missing. Run `node node_modules/puppeteer/install.mjs` (or re-run the npm postinstall). Headless Chrome on minimal hosts also needs its shared libraries (libnss3, libatk, libgbm, libasound2, etc.); missing libraries are an environment prerequisite and are reported distinctly from code failures. `PUPPETEER_CACHE_DIR` relocates the cache for CI; `PUPPETEER_SKIP_DOWNLOAD=1` plus an explicit `executablePath` serves locked-down environments.
+- `CHROME_NOT_FOUND` — no usable Chrome executable was found. Detection order is: `PUPPETEER_EXECUTABLE_PATH` (explicit override) → a system chromium (`chromium`, `chromium-browser`, `google-chrome`, `google-chrome-stable`) found on `PATH` (independent of puppeteer, so it works in the installed runtime) → puppeteer's Chrome for Testing cache, permission-checked (regular file with the execute bit). The check does not verify a cached binary can run on this platform (an x86-64 download inside a linux_arm cache dir still has the execute bit); with no PATH chromium and no env override such a binary is selected and a wrong-arch launch then fails as a structured `COMMAND_FAILED` whose details carry the captured stderr. Install a system chromium (apt/snap) or run `node node_modules/puppeteer/install.mjs` (or re-run the npm postinstall) to download Chrome for Testing. Headless Chrome on minimal hosts also needs its shared libraries (libnss3, libatk, libgbm, libasound2, etc.); missing libraries are an environment prerequisite and are reported distinctly from code failures. `PUPPETEER_CACHE_DIR` relocates the cache for CI; `PUPPETEER_SKIP_DOWNLOAD=1` plus an explicit `executablePath` serves locked-down environments.
 - `INVALID_PARAMETER` — both or neither of `source`/`sourcePath`, wrong `sourcePath` extension (must be `.mmd`/`.md`), a non-dash basename, or `timeoutMs` out of bounds.
 - `PATH_OUTSIDE_PROJECT` / `SYMLINK_ESCAPE` — path-policy rejections.
 - `OUTPUT_LIMIT` / `COMMAND_TIMEOUT` — bounded-command outcomes (stderr cap exceeded; deadline exceeded).
@@ -67,6 +67,7 @@ Contract for the Mermaid code-first diagram pipeline: author Mermaid source as c
 | Artifact escape | symlink target | `SYMLINK_ESCAPE` |
 | Missing deps | mermaid-cli absent | `MERMAID_NOT_INSTALLED` with install guidance |
 | Missing deps | Chrome absent | `CHROME_NOT_FOUND` with install guidance |
+| Chrome detection | env override → PATH scan → puppeteer cache | probed executable pinned via `executablePath`; system chromium on PATH preferred over an unusable cache binary |
 | Determinism | same source + config + versions | same revision |
 
 ## Relationship to TikZ
