@@ -363,6 +363,24 @@ describe('TikZ rendering', () => {
     assert.equal(commandRunner.mock.callCount(), 0);
   });
 
+  it('rejects a non-TeX dependency that exceeds the bounded-read cap before spawn', async () => {
+    const projectRoot = await temporaryDirectory('tikz-dep-size-');
+    await mkdir(join(projectRoot, 'figures'), { recursive: true });
+    await writeFile(
+      join(projectRoot, 'diagram.tex'),
+      String.raw`\documentclass{standalone}\usepackage{graphicx}\begin{document}\includegraphics{figures/big.png}\end{document}`,
+    );
+    await writeFile(join(projectRoot, 'figures', 'big.png'), Buffer.alloc(25 * 1024 * 1024 + 1));
+    const commandRunner = mock.fn();
+
+    await assert.rejects(
+      renderTikz({ projectRoot, sourcePath: 'diagram.tex' }, { commandRunner }),
+      (error) => error.code === 'DEPENDENCY_TOO_LARGE'
+        && /25 MiB safety limit/u.test(error.message),
+    );
+    assert.equal(commandRunner.mock.callCount(), 0);
+  });
+
   it('compiles from an isolated temporary workspace and publishes revision-bound artifacts', async () => {
     const projectRoot = await temporaryDirectory('tikz-project-');
     await mkdir(join(projectRoot, 'figures', 'assets'), { recursive: true });
@@ -829,6 +847,69 @@ describe('tikz_preview_assets output contract', () => {
       response.details.tempDirectory.startsWith(tmpdir()),
       'temp directory must live under the OS temp root, not the project',
     );
+  });
+
+  it('rejects a manifestPath that escapes the project root', async () => {
+    const projectRoot = await temporaryDirectory('tikz-preview-manifest-traversal-');
+    const api = makeExtensionApi();
+    extension(api);
+    const previewTool = api.registerTool.mock.calls[4].arguments[0];
+
+    const response = await previewTool.execute(
+      'preview-3',
+      { manifestPath: '../../../../etc/passwd' },
+      undefined,
+      undefined,
+      { cwd: projectRoot },
+    );
+
+    assert.equal(response.isError, true);
+    assert.equal(response.details.ok, false);
+    assert.equal(response.details.code, 'PATH_OUTSIDE_PROJECT');
+  });
+
+  it('rejects a manifest asset whose relativePath escapes the project root', async () => {
+    const projectRoot = await temporaryDirectory('tikz-preview-asset-traversal-');
+    const assetsDir = join(projectRoot, 'figures', 'tikz', 'assets');
+    await mkdir(assetsDir, { recursive: true });
+
+    const manifest = {
+      version: 1,
+      assets: [
+        {
+          sha256: 'deadbeef',
+          relativePath: '../../../../etc/passwd',
+          bytes: 1,
+          inputFormat: 'svg',
+          inputWidth: null,
+          inputHeight: null,
+          outputFormat: 'svg',
+          outputWidth: null,
+          outputHeight: null,
+          sourceType: 'svg-source',
+          nodeIds: ['n1'],
+          provenance: [{ kind: 'imported-svg', importedAt: '2026-07-26T00:00:00.000Z' }],
+        },
+      ],
+    };
+    const manifestRel = 'figures/tikz/assets/assets.manifest.json';
+    await writeFile(join(projectRoot, manifestRel), JSON.stringify(manifest, null, 2));
+
+    const api = makeExtensionApi();
+    extension(api);
+    const previewTool = api.registerTool.mock.calls[4].arguments[0];
+
+    const response = await previewTool.execute(
+      'preview-4',
+      { manifestPath: manifestRel },
+      undefined,
+      undefined,
+      { cwd: projectRoot },
+    );
+
+    assert.equal(response.isError, true);
+    assert.equal(response.details.ok, false);
+    assert.equal(response.details.code, 'PATH_OUTSIDE_PROJECT');
   });
 
   it('returns an error response when the manifest is missing', async () => {

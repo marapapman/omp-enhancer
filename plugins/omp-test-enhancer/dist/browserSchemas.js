@@ -144,6 +144,8 @@ function parseSetup(value) {
         return failure('$.setup.headless', 'Expected a boolean.');
     if (value.trace !== undefined && value.trace !== 'off' && value.trace !== 'retain-on-failure')
         return failure('$.setup.trace', 'Expected off or retain-on-failure.');
+    // screenshot: 'off' disables ONLY the automatic failure screenshot. Explicit 'screenshot' steps, visualCheck
+    // captures, and trace-level screenshots (trace: 'retain-on-failure') are unaffected.
     if (value.screenshot !== undefined && value.screenshot !== 'off' && value.screenshot !== 'only-on-failure')
         return failure('$.setup.screenshot', 'Expected off or only-on-failure.');
     if (value.serviceWorkers !== undefined && value.serviceWorkers !== 'allow' && value.serviceWorkers !== 'block')

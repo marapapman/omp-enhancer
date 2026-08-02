@@ -247,7 +247,7 @@ B→A 强制（因 `review-budget.js` 共享 + 通用交付语义依赖；A 不�
 - B1-core：删 `stagedCompatibilityModel` 根门控与 `DEEPSEEK_/MIMO_` 标签；提醒+教练对所有顶层 Main 模型触发；新增 `OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER`（与 `OMP_ENHANCER_DISABLE_PROTOCOL_COACH` 分立）；`compatibilityReminderTaskStartedAt`→`workflowReminderTaskStartedAt`；`STATE_SCHEMA_VERSION` 7→8（陈旧状态丢弃）；CUE_CONTENT 未动。
 - B1-labels：`COMPAT_TASK_SHAPE_FACTS`→`TASK_SHAPE_FACTS`、`COMPAT_REVIEW_CONTEXT`→`REVIEW_CONTEXT`。
 - B-runner：runner 去硬编码模型默认（`--model/--thinking` 改 opt-in，未设则用当前配置）；runner/summarizer/8 fixtures 去 deepseek 命名；删 `e2e:deepseek:*` 别名；`assert-default-main-profile.mjs` 泛化。
-- B-config：删打包 `assets/models.yml`、`deepseek-tool-calling` Skill、deepseek hook-templates（cot/tool-repair/tool-result-pipeline/model-gate/tool-result-format）；剥离 `config.yml` 的 `modelRoles` 块；`opencode-deepseek-edit-anchor.ts`→`edit-anchor-guard.ts`；PKU Skill 泛化；`generate:marketplace`（marketplace 移除 deepseek-tool-calling）；redact/truncate 通用 helper 保留（仍被 post-hooks 使用）。
+- B-config：删打包 `assets/models.yml`、`deepseek-tool-calling` Skill、deepseek hook-templates（cot/tool-repair/tool-result-pipeline/model-gate/tool-result-format）；剥离 `config.yml` 的 `modelRoles` 块；`opencode-deepseek-edit-anchor.ts`→`edit-anchor-guard.ts`；PKU Skill 泛化；`generate:marketplace`（marketplace 移除 deepseek-tool-calling）；redact/truncate 通用 helper 保留（post-hooks 已删，helper 作为可选库资产打包，仅 post-hooks.test.js 契约测试保留）。
 - B4：AGENTS/ARCHITECTURE/DEVELOPMENT/WORKFLOW_DEVELOPMENT/WORKFLOW_E2E_TESTING/OMP_ENHANCER_SELF_DEVELOPMENT/README 改模型无关；`DEEPSEEK_PROMPT_OPTIMIZATION.md` 归档至 `docs/superpowers/`。
 - 验证：根 `npm test` 绿；grep 验收活动代码无模型绑定；`check:workflows`/`check:marketplace`/`check:ecc-skills`、omp-config `pack:dry` 通过。
 

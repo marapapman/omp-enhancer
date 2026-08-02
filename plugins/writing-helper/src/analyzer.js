@@ -1,8 +1,8 @@
-import { resolveLanguage } from './language.js';
+import { paragraphLocation, resolveLanguage } from './language.js';
+import { MAX_ISSUES_CONFIG, UNLIMITED, clampMaxIssues } from './max-issues.js';
 
-const DEFAULT_MAX_ISSUES = 20;
-const MIN_MAX_ISSUES = 1;
-const MAX_MAX_ISSUES = 100;
+/** Severities kept in redline mode (MINOR/INFO findings are dropped). */
+export const REDLINE_SEVERITIES = new Set(['FATAL', 'CRITICAL', 'WARNING', 'IMPORTANT']);
 
 const ZH_STRONG_WORDS = ['所有', '完全', '最优', '显著', '全部', '任何', '必然'];
 const EN_STRONG_WORDS = ['all', 'always', 'best', 'significant', 'every', 'never', 'guarantee'];
@@ -22,11 +22,6 @@ const SCOPE_WORDS = [
 ];
 const METRIC_LABELS = ['准确率', '召回率', 'F1', '精度', 'accuracy', 'recall', 'precision'];
 
-function clampMaxIssues(value) {
-  if (!Number.isFinite(value ?? DEFAULT_MAX_ISSUES)) return DEFAULT_MAX_ISSUES;
-  return Math.max(MIN_MAX_ISSUES, Math.min(MAX_MAX_ISSUES, Math.trunc(value ?? DEFAULT_MAX_ISSUES)));
-}
-
 function splitSentences(text) {
   const matches = [];
   const pattern = /[^。！？.!?\n]+[。！？.!?]?/gu;
@@ -36,12 +31,6 @@ function splitSentences(text) {
     if (sentence.length > 0) matches.push({ sentence, index: match.index ?? 0 });
   }
   return matches;
-}
-
-function locationFor(text, index, language) {
-  const before = text.slice(0, index);
-  const paragraph = before.split(/\n\s*\n/u).length;
-  return language === 'zh' ? `第 ${paragraph} 段` : `paragraph ${paragraph}`;
 }
 
 function hasAny(value, words) {
@@ -70,7 +59,7 @@ function strongConclusionIssues(text, language) {
       id: `evidence-${issues.length + 1}`,
       severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
       dimension: 'evidence',
-      location: locationFor(text, sentence.index, language),
+      location: paragraphLocation(text, sentence.index, language),
       quote: sentence.sentence,
       problem:
         language === 'zh'
@@ -102,7 +91,7 @@ function dataConsistencyIssues(text, language) {
       severity: language === 'zh' ? 'FATAL' : 'CRITICAL',
       dimension: 'data',
       /* node:coverage ignore next */
-      location: locationFor(text, first?.index ?? 0, language),
+      location: paragraphLocation(text, first?.index ?? 0, language),
       quote: values.map((match) => match[0]).join('；'),
       problem:
         language === 'zh'
@@ -136,7 +125,7 @@ function terminologyIssues(text, language) {
       id: `terminology-${issues.length + 1}`,
       severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
       dimension: 'terminology',
-      location: locationFor(text, index, language),
+      location: paragraphLocation(text, index, language),
       quote: text.slice(index, Math.min(text.length, index + 80)),
       problem:
         language === 'zh'
@@ -192,7 +181,7 @@ function causalLeapIssues(text, language) {
       /* node:coverage ignore next */
       severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
       dimension: 'logic',
-      location: locationFor(text, sentence.index, language),
+      location: paragraphLocation(text, sentence.index, language),
       quote: sentence.sentence,
       problem:
         language === 'zh'
@@ -218,19 +207,14 @@ function summarize(issues) {
 
 function filterMode(issues, mode) {
   if (mode === 'standard') return issues;
-  return issues.filter((issue) =>
-    issue.severity === 'FATAL' ||
-    issue.severity === 'WARNING' ||
-    issue.severity === 'CRITICAL' ||
-    issue.severity === 'IMPORTANT',
-  );
+  return issues.filter((issue) => REDLINE_SEVERITIES.has(issue.severity));
 }
 
 export function analyzeWritingLogic(input) {
   const text = input.text ?? '';
   const language = resolveLanguage(input.language, text);
   const mode = input.mode ?? 'redline';
-  const maxIssues = clampMaxIssues(input.maxIssues);
+  const maxIssues = input.maxIssues === UNLIMITED ? UNLIMITED : clampMaxIssues(input.maxIssues, MAX_ISSUES_CONFIG.logic);
 
   const allIssues = filterMode(
     [
@@ -248,6 +232,6 @@ export function analyzeWritingLogic(input) {
     language,
     mode,
     summary: summarize(allIssues),
-    issues: allIssues.slice(0, maxIssues),
+    issues: maxIssues === UNLIMITED ? allIssues : allIssues.slice(0, maxIssues),
   };
 }

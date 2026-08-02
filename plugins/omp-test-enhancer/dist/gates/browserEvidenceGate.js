@@ -54,8 +54,10 @@ export function evaluateBrowserEvidenceGate(evidence, options = {}) {
             repairHint: 'Run at least one browser scenario with at least one interaction step in the current task context.'
         });
     }
+    // Computed over findingResults (after the zero-scenario guard above) so the two guards dedup:
+    // if the zero-scenario guard already added a failing result, this guard must not fire again.
     const lacksFailingStructuredFinding = evidence.status === 'failed'
-        && !evidence.findings.some(finding => !finding.passed);
+        && !findingResults.some(result => !result.passed);
     if (lacksFailingStructuredFinding) {
         findingResults.unshift({
             gate: 'browser-interaction',
@@ -79,14 +81,11 @@ export function evaluateBrowserEvidenceGate(evidence, options = {}) {
         }
         return results;
     }
-    return [{
-            gate: 'browser-interaction',
-            passed: false,
-            severity: 'critical',
-            summary: 'Browser check failed without structured findings.',
-            evidence,
-            repairHint: 'Report the browser-evidence gap; collect one additional observation only when it would materially improve the review.'
-        }];
+    // status is 'passed' | 'failed' | 'skipped': 'skipped' is handled above, 'passed' returned above,
+    // and every 'failed' evidence either carries a failing structured finding (returned via observedResults)
+    // or has one synthesized by the zero-scenario or lacksFailingStructuredFinding guard. The guards above
+    // guarantee observedResults is non-empty for 'failed', so this explicit return is exhaustive.
+    return observedResults;
 }
 function nonNegativeInteger(value) {
     return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : 0;

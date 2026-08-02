@@ -35,6 +35,10 @@ const MAX_TIMEOUT_MS = 120_000;
 const MAX_COMMAND_OUTPUT_BYTES = 256 * 1024;
 const MAX_TEX_FILES = 100;
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
+// Non-TeX dependencies (graphics pulled via \includegraphics) are binary and
+// may legitimately be larger than TeX sources; cap them at the same 25 MiB
+// safety limit the asset pipeline uses for raster inputs.
+const MAX_NON_TEX_DEPENDENCY_BYTES = 25 * 1024 * 1024;
 const GRAPHIC_EXTENSIONS = ['', '.png', '.jpg', '.jpeg', '.webp', '.pdf', '.svg'];
 const SUPPORTS_PROCESS_GROUP_TERMINATION = process.platform !== 'win32';
 
@@ -262,6 +266,19 @@ async function readBoundedSource(path) {
   return readFile(path, 'utf8');
 }
 
+async function readBoundedNonTexDependency(path) {
+  const metadata = await stat(path);
+  if (metadata.size > MAX_NON_TEX_DEPENDENCY_BYTES) {
+    throw new TikzRuntimeError(
+      'DEPENDENCY_TOO_LARGE',
+      'A non-TeX dependency exceeds the 25 MiB safety limit.',
+      { path, bytes: metadata.size, maximumBytes: MAX_NON_TEX_DEPENDENCY_BYTES },
+    );
+  }
+  // Keep the raw Buffer: revisionFor() hashes dependency bytes verbatim.
+  return readFile(path);
+}
+
 async function collectDependencyGraph(root, entryPath) {
   const pending = [entryPath];
   const dependencies = new Map();
@@ -271,7 +288,7 @@ async function collectDependencyGraph(root, entryPath) {
     const path = pending.shift();
     if (dependencies.has(path)) continue;
     if (extname(path).toLocaleLowerCase('en-US') !== '.tex') {
-      dependencies.set(path, await readFile(path));
+      dependencies.set(path, await readBoundedNonTexDependency(path));
       continue;
     }
     texFiles += 1;

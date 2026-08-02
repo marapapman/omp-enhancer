@@ -207,8 +207,9 @@ export default function registerCoreEnhancer(pi) {
     const prompt = extractPrompt(event);
     const planMode = detectPlanMode({ prompt, messages: event.messages });
     const planSlash = isPlanSlashCommand(prompt);
-    // A /plan command (or any host plan-mode turn) is a real planning task and
-    // keeps coaching; every other slash command stays host-handled and bails.
+    // A /plan slash command is allowed through (and stripped below); actual
+    // plan-mode behavior is driven only by official host markers via
+    // detectPlanMode. Every other slash command stays host-handled and bails.
     if (isSlashCommandPrompt(prompt) && !planSlash) return undefined;
     const effectivePrompt = planSlash ? stripPlanCommand(prompt) : prompt;
 
@@ -216,8 +217,9 @@ export default function registerCoreEnhancer(pi) {
 
     const implementationTransition = isPlanningImplementationTransition(state, effectivePrompt);
     // Plan mode lifted after a plan-mode task => execute phase: force a fresh task
-    // so the full multi-task + post-test + reviewer coaching re-fires (true for
-    // exactly one turn, because lastTaskPlanMode is then reset to planMode=false).
+    // so the full multi-task + post-test + reviewer coaching re-fires. The
+    // transition fires for exactly one turn because lastTaskPlanMode is re-set to
+    // the current turn's planMode (false on the transition turn).
     const planToExecuteTransition = state.lastTaskPlanMode === true && !planMode;
     const inherited = !implementationTransition
       && !planToExecuteTransition
@@ -510,6 +512,7 @@ export function createState() {
     taskStartedAt: 0,
     workflowReminderTaskStartedAt: 0,
     skippedToolReplaySentAt: 0,
+    lastTaskPlanMode: false,
     lastSkillUsage: null,
     lastSubagentUsage: null,
     observedSkills: new Set(),
@@ -1063,21 +1066,6 @@ function buildSkippedToolReplayReminder(toolName) {
 
 function extractPrompt(event = {}) {
   return String(event.prompt ?? event.userPrompt ?? event.message ?? event.task ?? '');
-}
-
-function visibleAssistantText(message = {}) {
-  if (typeof message.content === 'string') return message.content;
-  if (!Array.isArray(message.content)) return '';
-  return message.content
-    .filter((block) => block?.type === 'text' && typeof block.text === 'string')
-    .map((block) => block.text)
-    .join('\n');
-}
-
-function assistantMessageSucceeded(message = {}) {
-  if (message.errorMessage || message.error) return false;
-  const stopReason = String(message.stopReason ?? message.stop_reason ?? '').trim().toLowerCase();
-  return !['error', 'aborted', 'cancelled', 'canceled'].includes(stopReason);
 }
 
 function extractText(value, seen = new Set()) {

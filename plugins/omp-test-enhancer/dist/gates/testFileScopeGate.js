@@ -1,3 +1,4 @@
+import { isTestFilePath } from '../repo/testPathUtils.js';
 export function evaluateTestFileScopeGate(input) {
     const findings = [];
     const severity = input.severity ?? 'critical';
@@ -43,7 +44,4 @@ export function evaluateTestFileScopeGate(input) {
             summary: 'Candidate changes are limited to test files.',
             evidence: {}
         }];
-}
-function isTestFilePath(path) {
-    return /\.(test|spec|cy)\.[cm]?[tj]sx?$/.test(path) || /(^|\/)__tests__\//.test(path) || /(^|\/)tests\//.test(path);
 }

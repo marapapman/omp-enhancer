@@ -1,3 +1,5 @@
+import { paragraphLocation } from './language.js';
+
 function normalizeWhitespace(value) {
   /* node:coverage ignore next */
   return String(value ?? '').replace(/\s+/gu, ' ').trim();
@@ -180,11 +182,6 @@ function compareBibToEvidence(bibEntry, evidence) {
   return mismatches;
 }
 
-function locationFor(text, index, language = 'en') {
-  const paragraph = text.slice(0, Math.max(0, index)).split(/\n\s*\n/u).length;
-  return language === 'zh' ? `第 ${paragraph} 段` : `paragraph ${paragraph}`;
-}
-
 function issueFromCitation(citation, text, language) {
   const severity = citation.status === 'MISMATCH' ? 'CRITICAL' : 'WARNING';
   const problem = citation.status === 'MISMATCH'
@@ -195,7 +192,7 @@ function issueFromCitation(citation, text, language) {
     category: 'citation',
     dimension: 'citation',
     severity,
-    location: locationFor(text, citation.index, language),
+    location: paragraphLocation(text, citation.index, language),
     quote: citation.quote,
     problem: language === 'zh'
       /* node:coverage ignore next */
@@ -373,6 +370,9 @@ export async function fetchExternalCitationEvidence({ text = '', bibliography = 
         const record = await lookupDoi(target, fetchImpl);
         if (record) records.push(record);
       }
+      // A DOI that encodes an arXiv identifier (e.g. 10.48550/arXiv.*) is also
+      // looked up in arXiv when the 'doi' provider is active: the two
+      // identifiers describe the same artifact, and the overlap is intentional.
       if (target.kind === 'arxiv' && (providers.has('arxiv') || providers.has('doi'))) {
         const record = await lookupArxiv(target, fetchImpl);
         if (record) records.push(record);

@@ -39,6 +39,34 @@ test('facts domain with answer operation suggests research', () => {
   assert.deepEqual(result.candidates, ['research']);
 });
 
+test('facts domain with inspect operation suggests research', () => {
+  const result = suggestWorkflowCandidates({
+    domains: ['facts'],
+    operation: 'inspect',
+  });
+  assert.deepEqual(result.candidates, ['research']);
+});
+
+test('facts and security together suggest operations (security wins)', () => {
+  for (const operation of ['answer', 'inspect']) {
+    const result = suggestWorkflowCandidates({
+      domains: ['facts', 'security'],
+      operation,
+    });
+    assert.deepEqual(result.candidates, ['operations'], operation);
+  }
+});
+
+test('writing and security together suggest operations (security wins)', () => {
+  for (const operation of ['modify', 'inspect', 'create']) {
+    const result = suggestWorkflowCandidates({
+      domains: ['writing', 'security'],
+      operation,
+    });
+    assert.deepEqual(result.candidates, ['operations'], operation);
+  }
+});
+
 test('security domain suggests operations', () => {
   const result = suggestWorkflowCandidates({
     domains: ['security'],

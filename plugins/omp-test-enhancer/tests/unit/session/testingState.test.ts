@@ -7,7 +7,9 @@ import {
   completeTestingReview,
   createInitialTestingReviewState,
   invalidateObservedBrowserEvidence,
+  invalidateObservedTestCommand,
   recordObservedBrowserEvidence,
+  recordObservedTestCommand,
   restoreTestingReviewStateFromEntries,
   scopeTestingReviewToTaskContext,
   startTestingReview
@@ -188,6 +190,78 @@ describe('testing review state', () => {
       lastReviewResults: [readyResult]
     })
     expect(invalidateObservedBrowserEvidence(reviewed)).not.toHaveProperty('lastObservedBrowserEvidence')
+  })
+
+  it('records, restores, and invalidates task-context-scoped observed test command evidence', () => {
+    const collecting = startTestingReview(createInitialTestingReviewState(), [target], {
+      taskContextIdentity: 'task:1',
+      runId: 'test-run-1'
+    })
+    const observed = recordObservedTestCommand(collecting, {
+      schemaVersion: 2,
+      taskContextIdentity: 'task:1',
+      commandDigest: 'a'.repeat(64),
+      exitCode: 0,
+      observedAt: 1234
+    })
+
+    expect(restoreTestingReviewStateFromEntries([{
+      type: 'custom',
+      customType: TESTING_STATE_ENTRY,
+      data: observed
+    }], { taskContextIdentity: 'task:1', requireCurrentTaskContext: true })).toMatchObject({
+      lastObservedTestCommand: {
+        taskContextIdentity: 'task:1',
+        commandDigest: 'a'.repeat(64),
+        exitCode: 0,
+        observedAt: 1234
+      }
+    })
+
+    const reviewed = completeTestingReview(observed, [{
+      gate: 'test-command',
+      passed: true,
+      severity: 'critical',
+      summary: 'Matching host-observed test command passed.',
+      evidence: { command: 'host-observed:sha256:aaaaaaaaaaaaaaaa', exitCode: 0 }
+    }, readyResult])
+    expect(invalidateObservedTestCommand(reviewed)).toMatchObject({
+      reviewStatus: 'collecting',
+      lastReviewResults: [readyResult]
+    })
+    expect(invalidateObservedTestCommand(reviewed)).not.toHaveProperty('lastObservedTestCommand')
+  })
+
+  it('drops stale browser gate results on browser evidence invalidation but keeps other gate results', () => {
+    const collecting = startTestingReview(createInitialTestingReviewState(), [target], {
+      taskContextIdentity: 'task:1',
+      runId: 'test-run-1'
+    })
+    const observed = recordObservedBrowserEvidence(collecting, {
+      schemaVersion: 2,
+      taskContextIdentity: 'task:1',
+      evidence: passedBrowserEvidence,
+      observedAt: 1234
+    })
+    const reviewed = completeTestingReview(observed, [{
+      gate: 'browser-interaction',
+      passed: false,
+      severity: 'critical',
+      summary: 'Click could not reach the submit button.',
+      evidence: { framework: 'playwright', status: 'failed', findings: [] },
+      repairHint: 'Check the overlay covering the submit button.'
+    }, {
+      gate: 'test-command',
+      passed: true,
+      severity: 'warning',
+      summary: 'Matching host-observed test command passed.',
+      evidence: { command: 'host-observed:sha256:aaaaaaaaaaaaaaaa', exitCode: 0 }
+    }])
+
+    expect(invalidateObservedBrowserEvidence(reviewed)).toMatchObject({
+      reviewStatus: 'collecting',
+      lastReviewResults: [expect.objectContaining({ gate: 'test-command' })]
+    })
   })
 
   it('rejects malformed persisted browser evidence and a different task context identity', () => {

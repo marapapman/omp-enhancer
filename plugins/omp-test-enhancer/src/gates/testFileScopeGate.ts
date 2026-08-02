@@ -1,3 +1,4 @@
+import { isTestFilePath } from '../repo/testPathUtils.js'
 import type { CandidateTest, GateResult } from '../types.js'
 
 export interface EvaluateTestFileScopeGateInput {
@@ -54,8 +55,4 @@ export function evaluateTestFileScopeGate(input: EvaluateTestFileScopeGateInput)
     summary: 'Candidate changes are limited to test files.',
     evidence: {}
   }]
-}
-
-function isTestFilePath(path: string): boolean {
-  return /\.(test|spec|cy)\.[cm]?[tj]sx?$/.test(path) || /(^|\/)__tests__\//.test(path) || /(^|\/)tests\//.test(path)
 }

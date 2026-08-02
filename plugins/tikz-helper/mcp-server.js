@@ -33,6 +33,8 @@ import { renderTikz } from './src/render-tikz.js';
 import { renderMermaid } from './src/mermaid-render.js';
 import { prepareAsset } from './src/asset-prepare.js';
 import { previewAssetPreviews } from './index.js';
+import { parseJsonParam } from './src/tool-error-utils.js';
+import { PRESET_NAMES, DENSITY_NAMES } from './src/layout-presets.js';
 import { createInterface } from 'node:readline';
 import { stdin, stdout, stderr, exit } from 'node:process';
 
@@ -79,18 +81,23 @@ const TOOL_DEFS = [
   },
   {
     name: 'tikz_prepare_asset',
-    description: 'Normalize an existing PNG, JPEG, or WebP as a metadata-free, content-addressed PNG inside the project and merge its provenance manifest. This tool never generates an image or uses the network.',
+    description: 'Normalize an existing PNG, JPEG, or WebP image as a metadata-free, content-addressed PNG inside the project, or register an existing project-local SVG or TeX source as a content-addressed manifest entry, and merge its provenance manifest. This tool never generates an image or uses the network.',
     inputSchema: {
       type: 'object',
       properties: {
         inputPath: { type: 'string', description: 'Path to the PNG, JPEG, or WebP image file to normalize.' },
-        outputDirectory: { type: 'string', description: 'Output directory for the normalized asset. Defaults to figures/tikz/assets/.' },
+        outputDirectory: { type: 'string', description: 'Output directory for the normalized asset. Defaults to figures/tikz/assets.' },
         nodeId: { type: 'string', description: 'Node ID to associate with this asset in the manifest.' },
         prompt: { type: 'string', description: 'The generation prompt used if the image was AI-generated.' },
         provider: { type: 'string', description: 'The image provider used (e.g., openai, replicate).' },
         model: { type: 'string', description: 'The model name used for generation.' },
+        sourceType: { type: 'string', enum: ['svg', 'tex'], description: 'Register an existing project-local SVG or TeX source as a content-addressed manifest entry instead of normalizing a raster image.' },
+        relativePath: { type: 'string', description: 'Project-relative path to the SVG or TeX source file when sourceType is set.' },
       },
-      required: ['inputPath'],
+      anyOf: [
+        { required: ['inputPath'], description: 'Raster normalization mode: normalize a PNG, JPEG, or WebP image.' },
+        { required: ['sourceType', 'relativePath'], description: 'Source registration mode: register a project-local SVG or TeX source.' },
+      ],
     },
   },
   {
@@ -100,7 +107,7 @@ const TOOL_DEFS = [
       type: 'object',
       properties: {
         sourcePath: { type: 'string', description: 'Path to the TikZ .tex source file to compile and render.' },
-        outputDirectory: { type: 'string', description: 'Directory for output files. Defaults to the same directory as the source file.' },
+        outputDirectory: { type: 'string', description: 'Directory for output files. Defaults to figures/tikz/rendered.' },
         timeoutMs: { type: 'number', description: 'Timeout in milliseconds for the render process.' },
       },
       required: ['sourcePath'],
@@ -115,8 +122,8 @@ const TOOL_DEFS = [
                 graph: { type: 'string', description: 'A JSON string of the ELK graph IR. Use JSON.stringify() to convert your graph object. Must include id, children, width, height. Input nodes must omit x and y (the layout engine computes positions). Size each node width and height to fit its exact label plus padding (2pt inner padding applied).' },
                 layoutOptions: { type: 'string', description: 'Optional JSON string of ELK layout options. Use JSON.stringify() to convert your options object. Place elk.algorithm and layout options here. Choose elk.algorithm: layered (flows), mrtree (trees), radial (mind-map), stress, or force. Set elk.direction to RIGHT or DOWN. Fix overlaps by changing layout options or node sizes and regenerating. Example: {"elk.algorithm":"layered","elk.direction":"RIGHT"}' },
                 styleOptions: { type: 'string', description: 'Optional JSON string of TikZ style options. Use JSON.stringify() to convert your style object. Use - for no arrow, dashed or dotted for line style. Set arrow type with properties.arrow: ->, <-, or <->.' },
-        preset: { type: 'string', enum: ['paper-column', 'paper-full', 'slide-16-9', 'slide-4-3'], description: 'Target medium preset: paper-column (double-column paper, ~240pt), paper-full (full text width, ~504pt), slide-16-9, or slide-4-3.' },
-        density: { type: 'string', enum: ['compact', 'balanced', 'airy'], description: 'Density tuning: compact (tight), balanced (default), or airy (spacious).' },
+        preset: { type: 'string', enum: [...PRESET_NAMES], description: 'Target medium preset: paper-column (double-column paper, ~240pt), paper-full (full text width, ~504pt), slide-16-9, or slide-4-3.' },
+        density: { type: 'string', enum: [...DENSITY_NAMES], description: 'Density tuning: compact (tight), balanced (default), or airy (spacious).' },
         targetWidthPt: { type: 'number', description: 'Optional target width in points for scaling the diagram.' },
       },
       required: ['graph'],
@@ -141,7 +148,7 @@ const TOOL_DEFS = [
       properties: {
         sourcePath: { type: 'string', description: 'Path to the Mermaid .mmd or .md source file to render. Provide exactly one of source or sourcePath.' },
         source: { type: 'string', description: 'Inline Mermaid source text. Provide exactly one of source or sourcePath.' },
-        outputDirectory: { type: 'string', description: 'Directory for output files. Defaults to figures/mermaid/rendered/.' },
+        outputDirectory: { type: 'string', description: 'Directory for output files. Defaults to figures/mermaid/rendered.' },
         theme: { type: 'string', enum: ['default', 'forest', 'dark', 'neutral'], description: 'Mermaid theme. Defaults to default.' },
         width: { type: 'number', description: 'Optional output width in pixels for the rendered SVG.' },
         timeoutMs: { type: 'number', description: 'Timeout in milliseconds for the render process.' },
@@ -176,13 +183,17 @@ const HANDLERS = {
   },
 
   async tikz_generate_diagram(params) {
-    if (typeof params.graph !== 'string') {
-      throw new Error('graph parameter must be a JSON string, not an object or other type. Use JSON.stringify() to convert your graph object to a string before passing it.');
-    }
-    const graph = JSON.parse(params.graph);
-    const parsed = { graph };
-    if (params.layoutOptions) parsed.layoutOptions = JSON.parse(params.layoutOptions);
-    if (params.styleOptions) parsed.tikzOptions = JSON.parse(params.styleOptions);
+    // Shared parseJsonParam (same helper the OMP registration surface uses) so
+    // malformed JSON errors stay actionable on both entry points.
+    const graphResult = parseJsonParam('tikz_generate_diagram', 'graph', params.graph);
+    if (!graphResult.ok) throw new Error(graphResult.error);
+    const layoutResult = parseJsonParam('tikz_generate_diagram', 'layoutOptions', params.layoutOptions);
+    if (!layoutResult.ok) throw new Error(layoutResult.error);
+    const styleResult = parseJsonParam('tikz_generate_diagram', 'styleOptions', params.styleOptions);
+    if (!styleResult.ok) throw new Error(styleResult.error);
+    const parsed = { graph: graphResult.value };
+    if (layoutResult.value !== undefined) parsed.layoutOptions = layoutResult.value;
+    if (styleResult.value !== undefined) parsed.tikzOptions = styleResult.value;
     if (params.preset) parsed.preset = params.preset;
     if (params.density) parsed.density = params.density;
     if (typeof params.targetWidthPt === 'number') parsed.targetWidthPt = params.targetWidthPt;

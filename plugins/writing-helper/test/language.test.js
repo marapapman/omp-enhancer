@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { resolveLanguage } from '../src/language.js';
+import { paragraphLocation, resolveLanguage } from '../src/language.js';
 
 describe('resolveLanguage', () => {
   it('uses explicit Chinese without inspecting text', () => {
@@ -26,5 +26,20 @@ describe('resolveLanguage', () => {
 
   it('defaults ambiguous empty text to English', () => {
     assert.equal(resolveLanguage('auto', '   \n\t'), 'en');
+  });
+});
+
+describe('paragraphLocation', () => {
+  it('numbers paragraphs 1-based and counts blank-line separators', () => {
+    assert.equal(paragraphLocation('first paragraph\n\nsecond paragraph', 17, 'en'), 'paragraph 2');
+    assert.equal(paragraphLocation('第一段\n\n第二段', 6, 'zh'), '第 2 段');
+  });
+
+  it('defaults to English labels for non-Chinese languages', () => {
+    assert.equal(paragraphLocation('plain text', 4, 'auto'), 'paragraph 1');
+  });
+
+  it('treats a negative index as the document start', () => {
+    assert.equal(paragraphLocation('some text', -3, 'en'), 'paragraph 1');
   });
 });

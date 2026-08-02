@@ -70,11 +70,15 @@ export function invalidateObservedTestCommand(state) {
     if (!state.lastObservedTestCommand)
         return state;
     const { lastObservedTestCommand: _discarded, ...rest } = state;
+    // Drop stale test-command gate results alongside the observation so a later review
+    // does not replay findings derived from the invalidated command evidence.
+    const lastReviewResults = state.lastReviewResults.filter(result => result.gate !== 'test-command');
     const hasActiveReview = state.reviewRunId !== undefined
         || state.lastTargets.length > 0
-        || state.lastReviewResults.length > 0;
+        || lastReviewResults.length > 0;
     return {
         ...rest,
+        lastReviewResults,
         reviewStatus: hasActiveReview ? 'collecting' : state.reviewStatus,
         evidenceRevision: state.evidenceRevision + 1
     };

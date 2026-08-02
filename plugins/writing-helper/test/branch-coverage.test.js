@@ -10,6 +10,7 @@ import { fetchExternalCitationEvidence, parseLocalLiteratureRecords, verifyCitat
 import { loadWritingLogicDocument } from '../src/document-loader.js';
 import { analyzeWritingQuality } from '../src/quality.js';
 import { formatWritingLogicReport, formatWritingQualityReport } from '../src/report.js';
+import { withToolErrorHandling } from '../src/tool-error-utils.js';
 
 function schema(kind, data = {}) {
   return { __ompZodSchema: true, kind, ...data, describe: () => schema(kind, data) };
@@ -58,6 +59,41 @@ function makeExtensionApi() {
 }
 
 describe('coverage branch cases', () => {
+  it('exercises tool error handling success and catch branches', async () => {
+    const okHandler = async () => ({ content: [], isError: false });
+    const wrappedOk = withToolErrorHandling('my_tool', okHandler);
+    const okResult = await wrappedOk('call-1', {}, undefined, undefined, {});
+    assert.equal(okResult.isError, false);
+
+    const detailedError = Object.assign(new Error('bad input'), {
+      code: 'E_BAD_INPUT',
+      details: { field: 'graph' },
+    });
+    const wrappedDetail = withToolErrorHandling('my_tool', async () => { throw detailedError; });
+    const detailResult = await wrappedDetail('call-2', {}, undefined, undefined, {});
+    assert.equal(detailResult.isError, true);
+    assert.match(detailResult.content[0].text, /my_tool.*E_BAD_INPUT.*bad input/);
+    assert.deepEqual(detailResult.details, {
+      ok: false,
+      code: 'E_BAD_INPUT',
+      error: 'bad input',
+      context: { field: 'graph' },
+    });
+
+    const wrappedPlain = withToolErrorHandling('my_tool', async () => { throw 'plain failure'; });
+    const plainResult = await wrappedPlain('call-3', {}, undefined, undefined, {});
+    assert.equal(plainResult.isError, true);
+    assert.match(plainResult.content[0].text, /RUNTIME_ERROR\): plain failure/);
+    assert.equal(plainResult.details.code, 'RUNTIME_ERROR');
+    assert.equal('context' in plainResult.details, false);
+
+    const wrappedNull = withToolErrorHandling('my_tool', async () => { throw null; });
+    const nullResult = await wrappedNull('call-4', {}, undefined, undefined, {});
+    assert.equal(nullResult.isError, true);
+    assert.equal(nullResult.details.code, 'RUNTIME_ERROR');
+    assert.equal(nullResult.details.error, 'null');
+  });
+
   it('exercises command parser defaults and optional execution fallbacks', async () => {
     const api = makeExtensionApi();
     extension(api);

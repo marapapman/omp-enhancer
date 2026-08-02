@@ -36,7 +36,14 @@ function tikzId(raw) {
 
 function tikzColor(value) {
   if (!value) return null;
-  return /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(value) ? `{rgb,255:red,${parseInt(value.slice(1, 3), 16)};green,${parseInt(value.slice(3, 5), 16)};blue,${parseInt(value.slice(5, 7), 16)}}` : value;
+  const match = /^#([0-9a-fA-F]{3})([0-9a-fA-F]{3})?$/.exec(value);
+  if (!match) return value;
+  // Expand shorthand #RGB to #RRGGBB (do not narrow the accepted color forms)
+  // before parsing the three two-digit channels.
+  const hex = match[2]
+    ? value
+    : `#${match[1].split('').map((channel) => channel + channel).join('')}`;
+  return `{rgb,255:red,${parseInt(hex.slice(1, 3), 16)};green,${parseInt(hex.slice(3, 5), 16)};blue,${parseInt(hex.slice(5, 7), 16)}}`;
 }
 
 function pt(value) {

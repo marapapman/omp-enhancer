@@ -407,14 +407,37 @@ test('cross-check records a partial result and explicit gap when optional lane B
   assert.deepEqual(result[0].gaps, ['FACT_EVIDENCE_B not supplied']);
 });
 
-test('buildFactCheckPlan computes risk from the untruncated text', () => {
+test('buildFactCheckPlan computes risk and stages from the truncated claim set', () => {
   const text = 'The stable value is 42. The medical dose is 5 mg.';
   const plan = buildFactCheckPlan({ text, maxClaims: 1 });
 
   assert.equal(plan.claims.length, 1);
-  assert.equal(plan.riskLevel, 'high');
+  assert.equal(plan.riskLevel, 'low');
   assert.ok(plan.requiredStages.includes('fact-researcher-a'));
-  assert.ok(plan.requiredStages.includes('fact-researcher-b'));
+  assert.equal(plan.requiredStages.includes('fact-researcher-b'), false);
+
+  const highRiskRetained = buildFactCheckPlan({ text: 'The medical dose is 5 mg.', maxClaims: 1 });
+  assert.equal(highRiskRetained.riskLevel, 'high');
+  assert.ok(highRiskRetained.requiredStages.includes('fact-researcher-b'));
+});
+
+test('legacy status aliases normalize to canonical evidence statuses', () => {
+  const claim = { id: 'FC-001', text: 'The company was founded in 2020.' };
+  const aliases = [
+    ['SUPPORTS', 'SUPPORTED'],
+    ['VERIFIED', 'SUPPORTED'],
+    ['CONTRADICTS', 'CONTRADICTED'],
+    ['NOT_APPLICABLE', 'UNVERIFIABLE'],
+    ['SUPPORTED', 'SUPPORTED'],
+    ['INSUFFICIENT', 'INSUFFICIENT'],
+  ];
+  for (const [input, canonical] of aliases) {
+    const records = collectLocalEvidence({
+      claims: [claim],
+      evidenceRecords: [{ claimId: claim.id, lane: 'A', status: input }],
+    });
+    assert.equal(records[0].status, canonical, `alias ${input}`);
+  }
 });
 
 test('buildFactCheckPlan records claim-specific freshness requirements', () => {
@@ -569,7 +592,7 @@ test('cross-check uses claim fields for real conflicts and ignores distinct sour
   assert.deepEqual(citationConflict[0].conflicts, ['year']);
 });
 
-test('fact advisory review reports missing plan, evidence, cross-check, review, report, and usage', () => {
+test('fact advisory review reports missing plan, evidence, cross-check, review, and report', () => {
   const failed = validateFactCheckReview({ finalOutput: 'FACT_CHECK_PLAN\nFACT_CHECK_REPORT' });
   assert.equal(failed.ok, false);
   assert.deepEqual(failed.missing.includes('FACT_REVIEW'), true);
@@ -582,10 +605,10 @@ test('fact advisory review reports missing plan, evidence, cross-check, review, 
       'FACT_CROSS_CHECK',
       'FACT_REVIEW',
       'FACT_CHECK_REPORT',
-      'FACT_CHECK_USAGE',
     ].join('\n'),
   });
   assert.equal(passed.ok, true);
+  assert.equal(passed.missing.includes('FACT_CHECK_USAGE'), false);
 });
 
 test('the registered review reports workflow inconsistencies without failing tool execution', async () => {
@@ -603,7 +626,6 @@ test('the registered review reports workflow inconsistencies without failing too
     'FACT_REVIEW',
     'FACT_CHECK_REPORT',
     `- FC-001: ${verdict}`,
-    'FACT_CHECK_USAGE',
   ].join('\n');
 
   const premature = await omp.tools.get('fact_check_review').execute(
@@ -708,6 +730,54 @@ test('the registered review reports workflow inconsistencies without failing too
   assert.ok(duplicated.details.missingObserved.includes('final verdicts matching host FACT_CHECK_REPORT'));
 });
 
+test('final verdict alias LOCAL_UNVERIFIED matches a canonical UNVERIFIABLE report verdict', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+  const analyzed = await omp.tools.get('fact_check_analyze').execute(
+    'alias-plan', { text: 'The stable fact is 42.' }, undefined, undefined, ctx,
+  );
+  const claims = analyzed.details.claims;
+  const evidence = await omp.tools.get('fact_check_evidence').execute(
+    'alias-evidence', {
+      claims,
+      lane: 'A',
+      allowNetwork: false,
+      evidenceRecords: [{
+        claimId: 'FC-001',
+        lane: 'A',
+        status: 'UNVERIFIABLE',
+        quote: '42',
+        source: 'a.md',
+      }],
+    }, undefined, undefined, ctx,
+  );
+  const report = await omp.tools.get('fact_check_report').execute(
+    'alias-report', { claims, evidenceRecords: evidence.details.records }, undefined, undefined, ctx,
+  );
+  assert.equal(report.isError, false);
+  assert.equal(report.details.results[0].verdict, 'UNVERIFIABLE');
+
+  const reviewed = await omp.tools.get('fact_check_review').execute(
+    'alias-review', {
+      finalOutput: [
+        'FACT_CHECK_PLAN',
+        'FACT_EVIDENCE_A',
+        'FACT_CROSS_CHECK',
+        'FACT_REVIEW',
+        'FACT_CHECK_REPORT',
+        '- FC-001: LOCAL_UNVERIFIED',
+      ].join('\n'),
+      riskLevel: 'low',
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(reviewed.isError, false);
+  assert.equal(reviewed.details.ok, true);
+  assert.equal(reviewed.details.ready, true);
+  assert.equal(reviewed.details.strictSupportReady, false);
+  assert.deepEqual(reviewed.details.missingObserved, []);
+});
+
 test('registered workflow supports stateless advisory use and isolates optional session telemetry', async () => {
   const omp = new FakeOmp();
   factCheckerExtension(omp);
@@ -733,7 +803,6 @@ test('registered workflow supports stateless advisory use and isolates optional 
         'FACT_REVIEW',
         'FACT_CHECK_REPORT',
         'FC-001: SUPPORTED',
-        'FACT_CHECK_USAGE',
       ].join('\n'),
       riskLevel: 'low',
     }, undefined, undefined, ctxB,
@@ -743,7 +812,7 @@ test('registered workflow supports stateless advisory use and isolates optional 
   assert.ok(isolated.details.missingObserved.includes('host FACT_CHECK_PLAN'));
 });
 
-test('analyze rejects ambiguous path plus text and review ignores a lower model risk', async () => {
+test('analyze rejects ambiguous path plus text and plans risk from the truncated claim set', async () => {
   const omp = new FakeOmp();
   factCheckerExtension(omp);
   const ctx = { cwd: process.cwd(), sessionManager: {} };
@@ -763,7 +832,7 @@ test('analyze rejects ambiguous path plus text and review ignores a lower model 
       maxClaims: 1,
     }, undefined, undefined, ctx,
   );
-  assert.equal(analyzed.details.riskLevel, 'high');
+  assert.equal(analyzed.details.riskLevel, 'low');
   const claims = analyzed.details.claims;
   const evidenceA = await omp.tools.get('fact_check_evidence').execute(
     'high-risk-evidence-a', {
@@ -792,14 +861,14 @@ test('analyze rejects ambiguous path plus text and review ignores a lower model 
         'FACT_REVIEW',
         'FACT_CHECK_REPORT',
         'FC-001: SUPPORTED',
-        'FACT_CHECK_USAGE',
       ].join('\n'),
       riskLevel: 'low',
     }, undefined, undefined, ctx,
   );
   assert.equal(reviewed.isError, false);
-  assert.equal(reviewed.details.ready, false);
-  assert.ok(reviewed.details.missingObserved.includes('host FACT_EVIDENCE_B'));
+  assert.equal(reviewed.details.ready, true);
+  assert.deepEqual(reviewed.details.missingObserved, []);
+  assert.equal(reviewed.details.strictSupportReady, false);
 });
 
 test('evidence rejects non-canonical statuses and unsupported deterministic citations', async () => {

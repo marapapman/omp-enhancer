@@ -268,14 +268,10 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
       : testExecutionTargetsFor(prompt);
   // Project snapshot signals
   const snapshot = projectSnapshot;
-  const projectType = snapshot?.projectType ?? 'unknown';
   const projectScale = !snapshot ? 'unknown'
     : (snapshot.sourceFileCount > 500 || snapshot.isMonorepo) ? 'large'
     : snapshot.sourceFileCount > 50 ? 'medium'
     : 'small';
-  const isMonorepo = snapshot?.isMonorepo ?? false;
-  const projectHasTests = snapshot?.hasTests ?? false;
-  const projectSourceFileCount = snapshot?.sourceFileCount ?? 0;
 
   // Workspace paths are scope data, not action or domain words. Extract them
   // first, then remove both ordinary quoted data and every recognized scope
@@ -763,9 +759,7 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
 
   return {
     text,
-    prompt,
     noWorkspaceWrite,
-    noActionExecution,
     advisory,
     inspectionTargets: inspectionFacts.targets,
     inspectionShape: inspectionFacts.shape,
@@ -777,7 +771,6 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
     testExecutionTargets,
     testExecutionCommand,
     exclusiveToolContract,
-    noExternalWrite,
     externalWriteTargets: externalScopes.targets,
     externalWriteExclusions: externalScopes.exclusions,
     noNetworkAccess,
@@ -785,8 +778,6 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
     noSubagents,
     implementationDelegationConstraint,
     independentReviewConstraint,
-    releaseArtifact,
-    dependencyUpgrade,
     irreversibleFileOperation,
     irreversibleExternalOperation,
     externalActionDestructive,
@@ -806,15 +797,13 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
     documentArtifactCreateRequested,
     documentTransformationRequested,
     bugReportWriting,
-    bugReportCompanionCodeAction,
     observedTestSummaryWriting,
     securityProseWriting,
     securityWork,
     testWork,
-    noTestAuthoring,
     broadBugAudit,
     directTestExecution,
-    pureExactTestExecution: exactTestOnlyExecution,
+    exactTestOnlyExecution,
     directTestAuthoring,
     primaryDirectTestAuthoring,
     localDevExecution,
@@ -823,10 +812,6 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
     dependencyInstallExecution,
     setupScriptExecution,
     localAutomationExecution,
-    directDestructiveModify,
-    localGitMetadata,
-    implicitModify,
-    ambiguousCodeAction,
     directModify,
     visualModificationRequested,
     codeModificationRequested,
@@ -842,11 +827,7 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
     configWork,
     ambiguous,
     reasons,
-    projectType,
     projectScale,
-    isMonorepo,
-    projectHasTests,
-    projectSourceFileCount,
   };
 }
 
@@ -1906,7 +1887,7 @@ function operationFor(signals) {
   if (signals.localDevExecution || signals.localMigrationExecution || signals.localAutomationExecution || signals.irreversibleExternalOperation) return 'execute';
   if (signals.releaseRequested && signals.directTestExecution && !signals.directModify
     && !signals.writingWork && !signals.directCreate) return 'release';
-  if (signals.pureExactTestExecution) return 'execute';
+  if (signals.exactTestOnlyExecution) return 'execute';
   if (signals.writingWork
     && !(signals.observedTestSummaryWriting && signals.directTestExecution)
     && (!signals.directTestExecution
@@ -2884,10 +2865,6 @@ export function resolveWritingLanguage({
   ));
   if (chineseTarget) return { language: 'zh', source: 'explicit-output' };
   return { language: fallback, source: fallback === 'unknown' ? 'pending-source' : 'fallback' };
-}
-
-export function resolveWritingTargetLanguage(prompt, fallback = 'unknown', options = {}) {
-  return resolveWritingLanguage({ prompt, fallback, ...options }).language;
 }
 
 function positiveWritingLanguageClauses(prompt = '') {

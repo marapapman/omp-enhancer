@@ -63,7 +63,7 @@ export function validateSkillUsage({ suggestedSkills = [], output = '', loadedSk
   };
 }
 
-export function parseSkillUsage(output = '') {
+function parseSkillUsage(output = '') {
   const block = findAuthoritativeSkillUsage(String(output));
   return block ? parseSkillUsageBlock(block) : { required: [], loaded: [] };
 }

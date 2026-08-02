@@ -4,7 +4,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import registerCoreEnhancer from '../index.js';
+import registerCoreEnhancer, { createState } from '../index.js';
+
+test('createState returns the full canonical state shape with lastTaskPlanMode defaulting to false', () => {
+  const state = createState();
+  assert.equal(state.lastTaskPlanMode, false);
+  assert.equal(state.schemaVersion, 10);
+  assert.equal(state.taskStartedAt, 0);
+  assert.equal(state.workflowReminderTaskStartedAt, 0);
+  assert.equal(state.skippedToolReplaySentAt, 0);
+  assert.equal(state.lastTaskContext, null);
+  assert.equal(state.lastPrompt, '');
+  assert.equal(state.lastSkillUsage, null);
+  assert.equal(state.lastSubagentUsage, null);
+  assert.ok(state.observedSkills instanceof Set);
+  assert.ok(state.claimedSkills instanceof Set);
+  assert.ok(state.tasks instanceof Map);
+  assert.ok(state.completedAgents instanceof Set);
+  assert.deepEqual(state.skillEvidence, { sessionLoaded: [], readAttempts: [] });
+  assert.equal(state.taskSequence, 0);
+});
 
 test('Core never blocks host tool calls', async (t) => {
   const cases = [

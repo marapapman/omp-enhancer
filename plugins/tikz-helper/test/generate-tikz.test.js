@@ -182,6 +182,66 @@ describe('generate-tikz: preset, density, and sizing orchestration', () => {
       (error) => error.code === 'INVALID_PRESET',
     );
   });
+
+  it('no-preset density scales server-default spacing: compact < balanced < airy', async () => {
+    const makeChain = () => ({
+      id: 'density-chain',
+      children: [makeNode('a', 120, 50), makeNode('b', 120, 50)],
+      edges: [makeEdge('e1', 'a', 'b')],
+      layoutOptions: { 'elk.algorithm': 'layered', 'elk.direction': 'RIGHT' },
+    });
+    const compact = await generateTikz({ graph: makeChain(), density: 'compact' });
+    const balanced = await generateTikz({ graph: makeChain(), density: 'balanced' });
+    const airy = await generateTikz({ graph: makeChain(), density: 'airy' });
+    assert.ok(
+      compact.graph.width < balanced.graph.width,
+      `compact root width ${compact.graph.width} must be narrower than balanced ${balanced.graph.width}`,
+    );
+    assert.ok(
+      balanced.graph.width < airy.graph.width,
+      `balanced root width ${balanced.graph.width} must be narrower than airy ${airy.graph.width}`,
+    );
+  });
+
+  it('explicit layoutOptions override density spacing in the no-preset path', async () => {
+    const baseChain = () => ({
+      id: 'override-chain',
+      children: [makeNode('a', 120, 50), makeNode('b', 120, 50)],
+      edges: [makeEdge('e1', 'a', 'b')],
+      layoutOptions: { 'elk.algorithm': 'layered', 'elk.direction': 'RIGHT' },
+    });
+    const explicitSpacing = {
+      'elk.spacing.nodeNode': 100,
+      'elk.layered.spacing.nodeNodeBetweenLayers': 100,
+    };
+    const compact = await generateTikz({
+      graph: baseChain(),
+      density: 'compact',
+      layoutOptions: explicitSpacing,
+    });
+    const airy = await generateTikz({
+      graph: baseChain(),
+      density: 'airy',
+      layoutOptions: explicitSpacing,
+    });
+    assert.equal(
+      compact.graph.width,
+      airy.graph.width,
+      'explicit input.layoutOptions must win over density on both calls',
+    );
+    const plainAiry = await generateTikz({ graph: baseChain(), density: 'airy' });
+    assert.ok(
+      compact.graph.width > plainAiry.graph.width,
+      `explicit spacing ${compact.graph.width} must exceed airy-density spacing ${plainAiry.graph.width}`,
+    );
+  });
+
+  it('unknown density rejects with INVALID_PRESET even without a preset', async () => {
+    await assert.rejects(
+      () => generateTikz({ graph: sixNodePipelineGraph(), density: 'super-dense' }),
+      (error) => error.code === 'INVALID_PRESET' && /Unknown density "super-dense"/u.test(error.message),
+    );
+  });
 });
 
 describe('generate-tikz: node icon assets', () => {

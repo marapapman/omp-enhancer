@@ -43,8 +43,7 @@ describe('testing tools', () => {
         { sourceFile: 'src/auth/parseToken.ts', symbolName: 'parseToken', kind: 'parser', risk: 'low' },
         { sourceFile: 'src/user/UserService.ts', symbolName: 'UserService', kind: 'service', risk: 'high' }
       ],
-      warnings: [],
-      nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_review', 'omp_test_report']
+      warnings: []
     })
   })
 
@@ -77,8 +76,7 @@ describe('testing tools', () => {
 
     expect(result.details).toMatchObject({
       runId: expect.stringMatching(/^test-/),
-      targets: [{ sourceFile: 'src/ui/LoginForm.tsx', symbolName: 'LoginForm', kind: 'react-component', risk: 'medium' }],
-      nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_review', 'omp_test_report']
+      targets: [{ sourceFile: 'src/ui/LoginForm.tsx', symbolName: 'LoginForm', kind: 'react-component', risk: 'medium' }]
     })
   })
 
@@ -907,6 +905,72 @@ describe('createTestingEnhancerTools execute layer', () => {
           gate: 'test-command',
           passed: true,
           evidence: { command: expect.stringMatching(/^host-observed:sha256:/), exitCode: 0 }
+        })
+      ])
+    })
+  })
+
+  it('reports a distinct finding when host-observed evidence matches no expected command', async () => {
+    const cwd = await tempRepo()
+    await mkdir(join(cwd, '.omp'), { recursive: true })
+    await writeFile(join(cwd, '.omp', 'testing-enhancer.yml'), [
+      'version: 2',
+      'test:',
+      '  command:',
+      'review:',
+      '  indirectTest: critical',
+      '  productionEdits: critical',
+      '  testCommand: critical',
+      '  browserEvidence: critical',
+      ''
+    ].join('\n'))
+    const target: ChangedTarget = {
+      id: 'src/user/UserService.ts#UserService',
+      sourceFile: 'src/user/UserService.ts',
+      symbolName: 'UserService',
+      kind: 'service',
+      risk: 'high'
+    }
+    const observedCommand = `${process.execPath} -e "process.stdout.write('observed')"`
+    const expectedCommand = `${process.execPath} -e "process.stdout.write('expected')"`
+
+    const tools = createTestingEnhancerTools(fakeZod(), {
+      getObservedTestCommandEvidence: () => ({
+        schemaVersion: 2,
+        taskContextIdentity: 'task-1',
+        commandDigest: createHash('sha256').update(observedCommand).digest('hex'),
+        exitCode: 0,
+        observedAt: Date.now()
+      })
+    })
+    const result = await tool(tools, 'omp_test_review').execute(
+      'call',
+      {
+        targets: [target],
+        candidate: {
+          id: 'candidate',
+          targetId: target.id,
+          files: [{ path: 'src/user/UserService.test.ts', action: 'create', content: 'expect(result).toBe(true)' }]
+        },
+        testCommand: expectedCommand
+      },
+      undefined,
+      undefined,
+      context(cwd)
+    )
+
+    expect(result.details).toMatchObject({
+      passed: false,
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          gate: 'test-command',
+          passed: false,
+          severity: 'critical',
+          summary: 'Observed test command did not match the configured command.',
+          evidence: {
+            expectedCommandDigest: createHash('sha256').update(expectedCommand).digest('hex'),
+            observedCommandDigest: createHash('sha256').update(observedCommand).digest('hex')
+          }
         })
       ])
     })

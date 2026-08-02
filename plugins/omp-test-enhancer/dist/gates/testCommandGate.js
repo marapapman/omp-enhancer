@@ -9,6 +9,19 @@ export function evaluateTestCommandGate(result, options = {}) {
                 evidence: {}
             }];
     }
+    if (result.status === 'mismatched') {
+        return [{
+                gate: 'test-command',
+                passed: false,
+                severity,
+                summary: 'Observed test command did not match the configured command.',
+                evidence: {
+                    expectedCommandDigest: result.expectedCommandDigest,
+                    observedCommandDigest: result.observedCommandDigest
+                },
+                repairHint: 'Run the configured test command so the host-observed evidence matches the expected command.'
+            }];
+    }
     if (result.exitCode === 0) {
         return [{
                 gate: 'test-command',

@@ -45,7 +45,7 @@ Supported command flags:
 | `--allow-network` | quality | Request external citation lookup for this invocation when host and user permissions already allow it. |
 | `--no-network` | quality | Explicitly keep external citation lookup disabled. |
 | `--disable-network` | quality | Alias for `--no-network`. |
-| `--citation-providers doi,arxiv,crossref` | quality | Select external lookup providers. |
+| `--citation-providers local,doi,arxiv,crossref` | quality | Select lookup providers; `local` suppresses all external lookups. |
 
 Slash commands are path-oriented. Use the tools directly when you need inline `text` input.
 
@@ -77,6 +77,10 @@ or replace OMP host and user permissions. Exposing the tool through
 `/enhancer-tools` is likewise not network permission. The compatibility flags
 `--no-network` and `--disable-network`, or tool input `allowNetwork: false`, keep
 lookup disabled explicitly.
+
+Passing `citationProviders: ['local']` (or `--citation-providers local`) pins the
+checker to local-only mode: all external DOI/arXiv/Crossref lookups are
+suppressed even when `allowNetwork: true` is set.
 
 ## Supported citation forms
 

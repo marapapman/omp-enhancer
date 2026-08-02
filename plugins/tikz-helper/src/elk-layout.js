@@ -189,10 +189,6 @@ async function loadElk(importElk) {
   return ELK;
 }
 
-export function createElk(options = {}) {
-  return { options };
-}
-
 export async function computeLayout(graph, options = {}) {
   if (!graph || typeof graph !== 'object') {
     throw new TikzRuntimeError('INVALID_GRAPH_IR', 'Graph must be a non-null object.');

@@ -1,11 +1,11 @@
 ---
 name: svg-flowchart
-description: Produce black-and-white, readable, reviewable SVG assets as node icons for diagram figures. Use when a diagram.tikz figure needs a simple monochrome SVG icon asset, an orthogonal flowchart pictogram, or a static SVG preview for compatibility. This is an asset method under the mermaid-first diagram pipeline — final layout and whole-figure output belong to `diagram.mermaid` / `mermaid_render` (and `diagram.tikz` only for explicit-TikZ requests).
+description: Produce black-and-white, readable, reviewable SVG assets as node icons for diagram figures. Use when a visual workflow figure needs a simple monochrome SVG icon asset, an orthogonal flowchart pictogram, or a static SVG preview for compatibility. This is an asset method under the visual diagram pipeline — final layout and whole-figure output belong to the owning visual workflow (Mermaid via mermaid_render, or TikZ for explicit-TikZ requests).
 ---
 
 # SVG flowchart (icon asset method)
 
-This Skill is an **asset method** under the mermaid-first diagram pipeline. It produces black-and-white, readable, reviewable SVG assets that become node icons in a diagram figure. It does not author standalone diagrams, own figure layout, or replace the diagram main figure. Final layout, whole-figure geometry, and the compiled/printed output belong to `diagram.mermaid` and its `mermaid_render` tool; only for explicit-TikZ requests does final layout and whole-figure output belong to diagram.tikz.
+This Skill is an **asset method** under the `visual` workflow. It produces black-and-white, readable, reviewable SVG assets that become node icons in a diagram figure. It does not author standalone diagrams, own figure layout, or replace the diagram main figure. Final layout and whole-figure output belong to the owning visual workflow (Mermaid via `mermaid_render`, or TikZ for explicit-TikZ requests).
 
 When this Skill is part of a `writer` or `zh-writer` assignment, that child remains proposal-only: it runs no command and writes no file, and returns the complete proposed artifact or diff. Main or a separate explicitly capable Main-selected Agent owns authorized effects.
 
@@ -17,7 +17,7 @@ SVG is one of three acceptable roles here, never a replacement for the diagram p
 
 SVG (or any other format) is never used to replace the diagram main figure, own node positions, or carry the figure topology. Topology, labels, connectors, and geometry remain in the Mermaid source (or in the TikZ source for explicit-TikZ requests).
 
-Within a selected `diagram.mermaid` or `diagram.tikz` workflow, prefer a currently exposed `designer` as the SVG icon editor and a currently exposed `visioner` for independent review of fresh raster renders of the icon asset.
+Within a selected `visual` workflow, prefer a currently exposed `designer` as the SVG icon editor and a currently exposed `visioner` for independent review of fresh raster renders of the icon asset.
 
 Agent availability and capacity remain Main decisions. Use `designer` and `visioner` only when currently exposed and a safe complete assignment can be formed; otherwise Main records the limitation and uses the workflow's direct fallback. Static and visual findings are evidence, not a plugin-owned repair or completion controller.
 
@@ -26,7 +26,7 @@ Agent availability and capacity remain Main decisions. Use `designer` and `visio
 1. Read project instructions, the diagram brief, the owning diagram figure's node list, the intended display size of the icon, the renderer, and the output path inside the user project.
 2. Record the target node ID, the icon's role in the figure, the pictogram meaning, the required square aspect ratio, and the intended embedding size before drawing.
 3. Give the icon's shape or enclosing group a stable SVG `id` derived from the owning node ID so review findings can identify the exact element.
-4. Resolve only ambiguities that materially change the icon semantics. Do not invent missing nodes, edges, or figure topology — those belong to the owning diagram workflow (`diagram.mermaid`, or `diagram.tikz` only for explicit-TikZ requests).
+4. Resolve only ambiguities that materially change the icon semantics. Do not invent missing nodes, edges, or figure topology — those belong to the owning visual workflow (Mermaid, or TikZ only for explicit-TikZ requests).
 
 ## Author with designer
 
@@ -52,7 +52,7 @@ When Main selects an exposed `designer`, that `designer` owns one complete SVG i
 
 ## Validate source and renders
 
-`task` runs the bundled checker before each visual review. The checker is for **SVG icon asset static validation only** — it does not validate figure layout, topology, or whole-figure semantics, which belong to the owning diagram workflow (`diagram.mermaid`, or `diagram.tikz` for explicit-TikZ requests).
+`task` runs the bundled checker before each visual review. The checker is for **SVG icon asset static validation only** — it does not validate figure layout, topology, or whole-figure semantics, which belong to the owning visual workflow (Mermaid, or TikZ for explicit-TikZ requests).
 
 ```bash
 node <skill-directory>/scripts/check-svg-flowchart.mjs path/to/icon.svg
@@ -72,4 +72,4 @@ The checker validates the basic SVG contract, palette, allowed elements, orthogo
 
 Report the static-check result and any visioner evidence tied to the final icon revision. No review verdict grants permission to publish or complete. Preserve review renders only when project convention or the user requires them.
 
-Main only authorizes external effects during initial setup and accepts final delivery; it does not check, render, modify, reconcile, or mediate the visual loop. Final figure layout, node positions, edge geometry, and whole-figure output remain the responsibility of `diagram.mermaid` and `mermaid_render` (and `diagram.tikz` only for explicit-TikZ requests).
+Main only authorizes external effects during initial setup and accepts final delivery; it does not check, render, modify, reconcile, or mediate the visual loop. Final figure layout, node positions, edge geometry, and whole-figure output remain the responsibility of the owning visual workflow (Mermaid via `mermaid_render`, or TikZ only for explicit-TikZ requests).

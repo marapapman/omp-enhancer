@@ -121,4 +121,27 @@ describe('analyzeWritingLogic', () => {
     assert.equal(result.summary.verdict, 'pass');
   });
 
+  it('defaults maxIssues to 20 and clamps to the logic cap of 100', () => {
+    const text = Array.from({ length: 120 }, (_, i) => `该方法必然优于基线方法 ${i}。`).join('\n');
+
+    const defaults = analyzeWritingLogic({ text, language: 'zh', mode: 'redline' });
+    assert.equal(defaults.summary.total, 120);
+    assert.equal(defaults.summary.verdict, 'needs_revision');
+    assert.equal(defaults.issues.length, 20);
+
+    const capped = analyzeWritingLogic({ text, language: 'zh', mode: 'redline', maxIssues: 500 });
+    assert.equal(capped.summary.total, 120);
+    assert.equal(capped.issues.length, 100);
+
+    const clampedLow = analyzeWritingLogic({ text, language: 'zh', mode: 'redline', maxIssues: 0 });
+    assert.equal(clampedLow.issues.length, 1);
+  });
+
+  it("supports 'unlimited' maxIssues without truncating issues", () => {
+    const text = Array.from({ length: 120 }, (_, i) => `该方法必然优于基线方法 ${i}。`).join('\n');
+
+    const result = analyzeWritingLogic({ text, language: 'zh', mode: 'redline', maxIssues: 'unlimited' });
+    assert.equal(result.summary.total, 120);
+    assert.equal(result.issues.length, 120);
+  });
 });

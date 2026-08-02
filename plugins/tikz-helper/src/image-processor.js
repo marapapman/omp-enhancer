@@ -415,4 +415,3 @@ export async function normalizeImageWithImageMagick(buffer, options = {}) {
 }
 
 export const imageMagickImageProcessor = Object.freeze({ normalize: normalizeImageWithImageMagick });
-export const supportedInputFormats = Object.freeze(['png', 'jpeg', 'webp']);

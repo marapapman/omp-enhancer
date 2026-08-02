@@ -157,6 +157,94 @@ describe('browserCheck helpers', () => {
     }
   })
 
+  it('skips the automatic failure screenshot when setup.screenshot is off', async () => {
+    const artifactDir = await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-screenshot-off-'))
+    const page = {
+      goto: async () => undefined,
+      getByText: () => ({
+        click: async () => { throw new Error('element is not actionable') }
+      }),
+      screenshot: async () => { throw new Error('screenshot must not be called') }
+    }
+
+    try {
+      const result = await executeBrowserScenarios(page as never, {
+        baseUrl: 'http://127.0.0.1:3000',
+        setup: { screenshot: 'off' },
+        scenarios: [{
+          name: 'failing',
+          steps: [
+            { action: 'goto', url: '/', description: 'Open page' },
+            { action: 'click', locator: { kind: 'text', value: 'broken' }, description: 'Click broken' }
+          ]
+        }]
+      }, artifactDir)
+
+      expect(result.findings).toEqual([
+        expect.objectContaining({ passed: false, summary: 'Browser step failed: Click broken' })
+      ])
+      expect(result.findings[0]).not.toHaveProperty('artifacts')
+      expect(result.artifacts).not.toHaveProperty('actualImagePath')
+      await expect(access(join(artifactDir, 'failure-0-1.png'))).rejects.toThrow()
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true })
+    }
+  })
+
+  it('still captures explicit screenshot steps when setup.screenshot is off', async () => {
+    const artifactDir = await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-screenshot-step-'))
+    const page = {
+      goto: async () => undefined,
+      screenshot: async ({ path }: { path: string }) => writeSolidPng(path)
+    }
+
+    try {
+      const result = await executeBrowserScenarios(page as never, {
+        baseUrl: 'http://127.0.0.1:3000',
+        setup: { screenshot: 'off' },
+        scenarios: [{
+          name: 'capture',
+          steps: [
+            { action: 'goto', url: '/', description: 'Open page' },
+            { action: 'screenshot', description: 'Save state' }
+          ]
+        }]
+      }, artifactDir)
+
+      expect(result.executionCounts.captureCount).toBe(1)
+      expect(result.artifacts.actualImagePath).toBe(join(artifactDir, 'capture-Save-state.png'))
+      await expect(access(join(artifactDir, 'capture-Save-state.png'))).resolves.toBeUndefined()
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true })
+    }
+  })
+
+  it('still captures visualCheck screenshots when setup.screenshot is off', async () => {
+    const artifactDir = await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-visual-off-'))
+    const page = {
+      goto: async () => undefined,
+      screenshot: async ({ path }: { path: string }) => writeSolidPng(path)
+    }
+
+    try {
+      const result = await executeBrowserScenarios(page as never, {
+        baseUrl: 'http://127.0.0.1:3000',
+        setup: { screenshot: 'off' },
+        scenarios: [{
+          name: 'visual',
+          steps: [{ action: 'goto', url: '/', description: 'Open page' }],
+          visualChecks: [{ kind: 'page', name: 'current page' }]
+        }]
+      }, artifactDir)
+
+      expect(result.executionCounts.captureCount).toBe(1)
+      expect(result.artifacts.actualImagePath).toBe(join(artifactDir, 'current-page.actual.png'))
+      await expect(access(join(artifactDir, 'current-page.actual.png'))).resolves.toBeUndefined()
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true })
+    }
+  })
+
   it('keeps capture-only evidence separate from completed visual assertions', async () => {
     const artifactDir = await mkdtemp(join(tmpdir(), 'omp-testing-enhancer-captures-'))
     const page = {

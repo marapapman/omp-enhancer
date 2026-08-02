@@ -183,4 +183,19 @@ describe('evaluateIndirectTestGate', () => {
       passed: false
     }))
   })
+
+  it('does not double-report .instance() access on react components', () => {
+    const result = evaluateIndirectTestGate({
+      targets: [target('react-component')],
+      candidate: candidate('expect(component.instance()).toBeDefined()')
+    })
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toEqual(expect.objectContaining({
+      gate: 'indirect-test',
+      passed: false,
+      summary: 'Test accesses implementation details.',
+      evidence: { file: 'src/user/UserService.test.ts', pattern: '.instance()' }
+    }))
+  })
 })

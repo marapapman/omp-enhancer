@@ -22,8 +22,26 @@ describe('evaluateTestCommandGate', () => {
     }])
   })
 
+  it('reports a distinct finding when the observed command digest does not match the expected command', () => {
+    expect(evaluateTestCommandGate({
+      status: 'mismatched',
+      expectedCommandDigest: 'a'.repeat(64),
+      observedCommandDigest: 'b'.repeat(64)
+    })).toEqual([{
+      gate: 'test-command',
+      passed: false,
+      severity: 'critical',
+      summary: 'Observed test command did not match the configured command.',
+      evidence: {
+        expectedCommandDigest: 'a'.repeat(64),
+        observedCommandDigest: 'b'.repeat(64)
+      },
+      repairHint: 'Run the configured test command so the host-observed evidence matches the expected command.'
+    }])
+  })
+
   it('passes successful command results', () => {
-    expect(evaluateTestCommandGate({ command: 'bunx vitest run', exitCode: 0, stdout: 'ok', stderr: '' })).toEqual([{
+    expect(evaluateTestCommandGate({ status: 'observed', command: 'bunx vitest run', exitCode: 0, stdout: 'ok', stderr: '' })).toEqual([{
       gate: 'test-command',
       passed: true,
       severity: 'critical',
@@ -33,7 +51,7 @@ describe('evaluateTestCommandGate', () => {
   })
 
   it('reports failed command results as critical findings', () => {
-    expect(evaluateTestCommandGate({ command: 'bunx vitest run', exitCode: 1, stdout: '', stderr: 'fail' })).toEqual([{
+    expect(evaluateTestCommandGate({ status: 'observed', command: 'bunx vitest run', exitCode: 1, stdout: '', stderr: 'fail' })).toEqual([{
       gate: 'test-command',
       passed: false,
       severity: 'critical',
@@ -43,7 +61,7 @@ describe('evaluateTestCommandGate', () => {
   })
 
   it('downgrades failed command results when configured as warning', () => {
-    expect(evaluateTestCommandGate({ command: 'bunx vitest run', exitCode: 1, stdout: '', stderr: 'fail' }, { severity: 'warning' })).toEqual([{
+    expect(evaluateTestCommandGate({ status: 'observed', command: 'bunx vitest run', exitCode: 1, stdout: '', stderr: 'fail' }, { severity: 'warning' })).toEqual([{
       gate: 'test-command',
       passed: false,
       severity: 'warning',
@@ -53,7 +71,7 @@ describe('evaluateTestCommandGate', () => {
   })
 
   it('reports timeout-style negative exit codes as critical findings', () => {
-    expect(evaluateTestCommandGate({ command: 'npm test', exitCode: -1, stdout: '', stderr: 'timed out' })).toEqual([{
+    expect(evaluateTestCommandGate({ status: 'observed', command: 'npm test', exitCode: -1, stdout: '', stderr: 'timed out' })).toEqual([{
       gate: 'test-command',
       passed: false,
       severity: 'critical',

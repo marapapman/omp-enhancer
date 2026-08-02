@@ -314,7 +314,7 @@ test('selected TikZ work compiles asset chain before figure chain in dependency 
 
   assert.match(
     skill,
-    /selected non-simple `diagram\.tikz`.+compiled dependency chain has two stages.+asset chain.+figure chain/is,
+    /selected non-simple `visual`.+compiled dependency chain has two stages.+asset chain.+figure chain/is,
   );
   assert.match(
     skill,

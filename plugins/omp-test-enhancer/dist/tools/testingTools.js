@@ -6,6 +6,7 @@ import { evaluateTestCommandGate } from '../gates/testCommandGate.js';
 import { evaluateTestFileScopeGate } from '../gates/testFileScopeGate.js';
 import { readTestingEnhancerConfig } from '../config/testingConfig.js';
 import { findPublicEntryHints, findRelatedTests, readRepoFiles } from '../repo/repoScanner.js';
+import { isFrontendEntryFile, isTestFilePath } from '../repo/testPathUtils.js';
 import { isRecord } from '../utils.js';
 const PROPERTY_TARGET_KINDS = ['pure-function', 'validator', 'parser', 'formatter'];
 const PROPERTY_EXPERIENCE_PATHS = [
@@ -92,7 +93,7 @@ export function createTestingEnhancerTools(z, callbacks = {}) {
                 serverCommand: z.optional(z.string()).describe('Optional command to start the server. Not executed, used for evidence only.'),
                 artifactDir: z.optional(z.string()).describe('Directory path for browser artifacts (screenshots, traces, videos). Must be writable.'),
                 targetIds: z.optional(z.array(z.string())).describe('Specific target IDs from omp_test_analyze to scope browser checks.'),
-                setup: z.optional(z.unknown()).describe('Optional setup configuration object for the browser environment.'),
+                setup: z.optional(z.unknown()).describe('Optional setup configuration object: headless, viewport, trace (off or retain-on-failure), screenshot (off or only-on-failure), serviceWorkers. screenshot: off disables only the automatic failure screenshot; explicit screenshot steps and visualChecks still capture, and trace-level screenshots are unaffected.'),
                 scenarios: z.array(z.unknown()).describe('Array of user interaction scenario objects defining browser automation steps.')
             }).describe('Parameters for omp_test_browser_check. Requires baseUrl and at least one scenario.'),
             execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
@@ -358,8 +359,7 @@ async function executeAnalyze(params, ctx) {
     return {
         runId: `test-${randomUUID()}`,
         targets,
-        warnings,
-        nextTools: ['omp_test_context', 'omp_test_browser_check', 'omp_test_coverage_analyze', 'omp_test_mutation_context', 'omp_test_review', 'omp_test_report']
+        warnings
     };
 }
 async function executeContext(params, ctx) {
@@ -413,7 +413,7 @@ async function executeReview(params, ctx, observedTestCommand, observedBrowserEv
     const commandResult = !hasCommandConflict
         ? observedTestCommandResult(observedTestCommand, expectedCommand)
         : undefined;
-    const commandSeverity = expectedCommand || observedTestCommand || config ? severities.testCommand : 'warning';
+    const commandSeverity = expectedCommand || observedTestCommand ? severities.testCommand : 'warning';
     const commandResults = hasCommandConflict && configuredCommand && suppliedCommand
         ? [configuredCommandConflictResult(configuredCommand, suppliedCommand, commandSeverity)]
         : evaluateTestCommandGate(commandResult, {
@@ -516,9 +516,15 @@ async function readGitPathList(ctx, args) {
 function observedTestCommandResult(evidence, expectedCommand) {
     if (!evidence)
         return undefined;
-    if (expectedCommand && digestCommand(expectedCommand) !== evidence.commandDigest)
-        return undefined;
+    if (expectedCommand && digestCommand(expectedCommand) !== evidence.commandDigest) {
+        return {
+            status: 'mismatched',
+            expectedCommandDigest: digestCommand(expectedCommand),
+            observedCommandDigest: evidence.commandDigest
+        };
+    }
     return {
+        status: 'observed',
         command: `host-observed:sha256:${evidence.commandDigest.slice(0, 16)}`,
         exitCode: evidence.exitCode,
         stdout: '',
@@ -978,9 +984,6 @@ function buildBrowserPlanForTarget(target, existingTests) {
         evidenceToCollect: ['actionability', 'console-error', 'page-error', 'network-failure', 'accessibility', 'visual-diff']
     };
 }
-function isFrontendEntryFile(path) {
-    return /(^|\/)(app|pages|routes)\//i.test(path) || /(^|\/)(page|layout|template|loading|error|not-found|App|Root|main)\.[cm]?[tj]sx?$/.test(path);
-}
 function isBrowserTestPath(path) {
     return /\.(browser|e2e)\.(test|spec)\.[cm]?[tj]sx?$/.test(path) || /(^|\/)(playwright|e2e|browser)(\/|$)/i.test(path);
 }
@@ -988,9 +991,6 @@ function requiresBrowserEvidence(target) {
     return target.kind === 'react-component' ||
         isFrontendEntryFile(target.sourceFile) ||
         (target.relatedTests ?? []).some(isBrowserTestPath);
-}
-function isTestFilePath(path) {
-    return /\.(test|spec|cy)\.[cm]?[tj]sx?$/.test(path) || /(^|\/)__tests__\//.test(path) || /(^|\/)tests\//.test(path);
 }
 function uniqueStrings(values) {
     return [...new Set(values)];

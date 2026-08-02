@@ -328,6 +328,8 @@ export async function executeBrowserScenarios(
   const findings: BrowserFinding[] = []
   const artifacts: BrowserArtifactRefs = {}
   const executionCounts: BrowserExecutionCounts = { scenarioCount: 0, stepCount: 0, captureCount: 0, visualAssertionCount: 0 }
+  // 'off' skips ONLY the automatic failure screenshot; explicit 'screenshot' steps and visualCheck captures stay unconditional.
+  const screenshotMode = params.setup?.screenshot ?? 'only-on-failure'
 
   for (const [scenarioIndex, scenario] of params.scenarios.entries()) {
     let scenarioFailed = false
@@ -355,8 +357,10 @@ export async function executeBrowserScenarios(
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error)
         const failurePath = join(artifactDir, `failure-${scenarioIndex}-${stepIndex}.png`)
-        await page.screenshot({ path: failurePath, fullPage: true }).catch(() => undefined)
-        if (!artifacts.actualImagePath) artifacts.actualImagePath = failurePath
+        if (screenshotMode !== 'off') {
+          await page.screenshot({ path: failurePath, fullPage: true }).catch(() => undefined)
+          if (!artifacts.actualImagePath) artifacts.actualImagePath = failurePath
+        }
         findings.push({
           gate: 'browser-interaction',
           passed: false,
@@ -365,7 +369,7 @@ export async function executeBrowserScenarios(
           summary: `Browser step failed: ${step.description}`,
           evidence: { action: step.action, message },
           repairHint: 'Check locator actionability, route setup, and visible UI state.',
-          artifacts: { actualImagePath: failurePath }
+          ...(screenshotMode !== 'off' ? { artifacts: { actualImagePath: failurePath } } : {})
         })
         scenarioFailed = true
         break

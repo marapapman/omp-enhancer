@@ -42,13 +42,15 @@ export function suggestWorkflowCandidates(taskDescriptor = {}) {
   }
 
   // ── Writing ──
-  if (domains.has(DOMAIN_WRITING)) {
+  if (candidates.length === 0 && domains.has(DOMAIN_WRITING) && !domains.has(DOMAIN_SECURITY)) {
     candidates.push('writing');
     rationale = 'writing task';
   }
 
   // ── Fact-checking ──
-  if (candidates.length === 0 && domains.has(DOMAIN_FACTS) && operation === 'answer') {
+  if (candidates.length === 0 && domains.has(DOMAIN_FACTS)
+    && (operation === 'answer' || operation === 'inspect')
+    && !domains.has(DOMAIN_SECURITY)) {
     candidates.push('research');
     rationale = 'fact-checking request';
   }

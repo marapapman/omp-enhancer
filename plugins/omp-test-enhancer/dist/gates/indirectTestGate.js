@@ -115,6 +115,6 @@ function hasOnlyMockCallAssertions(content) {
         method === 'toHaveBeenTimes');
 }
 function findComponentStateAccess(content) {
-    const patterns = ['.state', '.setState', '.instance()', 'wrapper.find(', 'component.find('];
+    const patterns = ['.state', '.setState', 'wrapper.find(', 'component.find('];
     return patterns.find(pattern => content.includes(pattern));
 }

@@ -142,6 +142,6 @@ function hasOnlyMockCallAssertions(content: string): boolean {
 }
 
 function findComponentStateAccess(content: string): string | undefined {
-  const patterns = ['.state', '.setState', '.instance()', 'wrapper.find(', 'component.find(']
+  const patterns = ['.state', '.setState', 'wrapper.find(', 'component.find(']
   return patterns.find(pattern => content.includes(pattern))
 }

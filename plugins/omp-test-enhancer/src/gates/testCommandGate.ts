@@ -1,11 +1,8 @@
 import type { GateResult } from '../types.js'
 
-export interface TestCommandResult {
-  command: string
-  exitCode: number
-  stdout: string
-  stderr: string
-}
+export type TestCommandResult =
+  | { status: 'observed'; command: string; exitCode: number; stdout: string; stderr: string }
+  | { status: 'mismatched'; expectedCommandDigest: string; observedCommandDigest: string }
 
 export interface EvaluateTestCommandGateOptions {
   severity?: GateResult['severity']
@@ -21,6 +18,20 @@ export function evaluateTestCommandGate(result: TestCommandResult | undefined, o
       severity,
       summary: 'No matching host-observed test command evidence.',
       evidence: {}
+    }]
+  }
+
+  if (result.status === 'mismatched') {
+    return [{
+      gate: 'test-command',
+      passed: false,
+      severity,
+      summary: 'Observed test command did not match the configured command.',
+      evidence: {
+        expectedCommandDigest: result.expectedCommandDigest,
+        observedCommandDigest: result.observedCommandDigest
+      },
+      repairHint: 'Run the configured test command so the host-observed evidence matches the expected command.'
     }]
   }
 

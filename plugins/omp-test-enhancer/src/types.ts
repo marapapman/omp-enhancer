@@ -85,6 +85,8 @@ export interface BrowserPlan {
   setup: {
     viewport: { width: number; height: number }
     trace: 'off' | 'retain-on-failure'
+    // 'off' skips ONLY the automatic failure screenshot; explicit 'screenshot' steps and visualCheck captures
+    // stay unconditional, and trace: 'retain-on-failure' still records trace-level screenshots.
     screenshot: 'off' | 'only-on-failure'
     serviceWorkers: 'allow' | 'block'
   }

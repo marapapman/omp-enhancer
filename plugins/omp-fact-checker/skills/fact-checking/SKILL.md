@@ -43,6 +43,12 @@ Compare the exact claim tuple before assigning a verdict:
   needed for alignment is unavailable. Use `INSUFFICIENT` for adjacent, weaker,
   incomplete, or incomparable evidence.
 
+`LOCAL_UNVERIFIED` is the claim-verdict alias for final report text; the
+canonical structured vocabulary for the same state is `UNVERIFIABLE`
+(evidence records and the `FACT_CHECK_REPORT` verdict). Keep the two layers
+consistent: a final verdict line such as `FC-001: LOCAL_UNVERIFIED` maps to
+the structured verdict `UNVERIFIABLE`.
+
 When passing structured claims to the Fact Checker tools, use `claimTuple` with
 exactly these canonical fields: `subject`, `basePredicate`, `objectValue`,
 `scope`, `timeVersion`, and `quantifier`. Every field is an object containing a

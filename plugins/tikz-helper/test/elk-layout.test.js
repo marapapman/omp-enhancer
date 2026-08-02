@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { computeLayout, createElk, checkElkEnvironment, ELK_INSTALL_GUIDANCE, SERVER_DEFAULT_LAYOUT_OPTIONS, countNodes } from '../src/elk-layout.js';
+import { computeLayout, checkElkEnvironment, ELK_INSTALL_GUIDANCE, SERVER_DEFAULT_LAYOUT_OPTIONS, countNodes } from '../src/elk-layout.js';
 import { generateTikz } from '../src/generate-tikz.js';
 
 describe('elk-layout: input validation', () => {
@@ -164,13 +164,6 @@ describe('elk-layout: computeLayout integration', () => {
     const result = await computeLayout(graph);
     assert.equal(typeof result.metadata.executionTime, 'number');
     assert.ok(result.metadata.executionTime >= 0);
-  });
-});
-
-describe('elk-layout: factory', () => {
-  it('creates a valid options object', () => {
-    const instance = createElk({ defaultLayoutOptions: { 'elk.spacing.nodeNode': '50' } });
-    assert.deepEqual(instance.options.defaultLayoutOptions, { 'elk.spacing.nodeNode': '50' });
   });
 });
 

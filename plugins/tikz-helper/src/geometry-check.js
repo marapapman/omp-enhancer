@@ -390,7 +390,6 @@ function segmentsShareEndpoint(a, b) {
     (at.x === bf.x && at.y === bf.y) ||
     (at.x === bt.x && at.y === bt.y)
   );
-  return count;
 }
 
 /**

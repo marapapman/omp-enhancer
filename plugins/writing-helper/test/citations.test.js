@@ -199,6 +199,30 @@ describe('verifyCitations', () => {
     assert.equal(evidence[0].provider, 'arxiv');
     assert.equal(evidence[0].year, 2021);
   });
+
+  it('suppresses all external lookups when providers restrict to local only', async () => {
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      return {
+        ok: true,
+        async json() {
+          return { message: {} };
+        },
+      };
+    };
+
+    const evidence = await fetchExternalCitationEvidence({
+      text: 'CLIP is a common baseline [@radford2021clip]. See arXiv:2103.00020.',
+      bibliography: '@inproceedings{radford2021clip, title={Learning Transferable Visual Models From Natural Language Supervision}, author={Radford, Alec}, year={2021}, doi={10.48550/arXiv.2103.00020}}',
+      allowNetwork: true,
+      citationProviders: ['local'],
+      fetchImpl,
+    });
+
+    assert.deepEqual(evidence, []);
+    assert.equal(calls, 0);
+  });
   it('parses multiple LaTeX citation keys from one cite command', () => {
     const result = verifyCitations({
       text: 'Prior work includes \\cite{radford2021clip, vaswani2017attention}.',

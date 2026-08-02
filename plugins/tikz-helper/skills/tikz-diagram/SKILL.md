@@ -57,11 +57,11 @@ Only `visioner`-approved icons enter the asset manifest. `task` prepares each pl
 
 `tikz_generate_diagram` is called only after asset review. `task` feeds the designer-produced semantic graph as an ELK graph IR and the `visioner`-approved asset manifest to `tikz_generate_diagram`, which computes the layout with ELK and emits the compilable TikZ source. `task` never calls `tikz_generate_diagram` with unreviewed or unsubstituted icon assets, and never hand-edits the coordinates it returns.
 
-SVG and other non-TikZ formats are only for icon assets, preview, or compatibility — not for replacing the TikZ main figure. An SVG icon asset is a node pictogram embedded in the TikZ figure; an SVG preview or export is compatibility or review evidence for the TikZ figure. Topology, labels, connectors, node positions, and edge geometry remain TikZ. The `svg-flowchart` Skill is an asset method under `diagram.tikz` that produces monochrome SVG icon assets; it does not author standalone diagrams or own figure layout.
+SVG and other non-TikZ formats are only for icon assets, preview, or compatibility — not for replacing the TikZ main figure. An SVG icon asset is a node pictogram embedded in the TikZ figure; an SVG preview or export is compatibility or review evidence for the TikZ figure. Topology, labels, connectors, node positions, and edge geometry remain TikZ. The `svg-flowchart` Skill is an asset method under the `visual` workflow that produces monochrome SVG icon assets; it does not author standalone diagrams or own figure layout.
 
 ## Compile the dependent Agent chain
 
-For a selected non-simple `diagram.tikz` workflow, the compiled dependency chain has two stages that run in order: the **asset chain** runs before the **figure chain**. Use only native Available Agents already visible; never probe or guess an Agent URI or inventory.
+For a selected non-simple `visual` workflow, the compiled dependency chain has two stages that run in order: the **asset chain** runs before the **figure chain**. Use only native Available Agents already visible; never probe or guess an Agent URI or inventory.
 
 **Asset chain (before layout):**
 

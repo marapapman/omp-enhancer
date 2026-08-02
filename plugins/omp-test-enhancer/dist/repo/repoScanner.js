@@ -1,5 +1,6 @@
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
+import { isFrontendEntryFile } from './testPathUtils.js';
 export async function readRepoFiles(cwd, files) {
     const safeCwd = await safeRealpath(cwd);
     const results = [];
@@ -119,9 +120,6 @@ function routeRelatedTestCandidates(parsed) {
         ...browserTestNameVariants(join('e2e', parsed.dir, routeBase)),
         ...browserTestNameVariants(join('playwright', parsed.dir, routeBase))
     ];
-}
-function isFrontendEntryFile(path) {
-    return /(^|\/)(app|pages|routes)\//i.test(path) || /(^|\/)(page|layout|template|loading|error|not-found|App|Root|main)\.[cm]?[tj]sx?$/.test(path);
 }
 async function existingRelativePaths(cwd, candidates) {
     const results = [];

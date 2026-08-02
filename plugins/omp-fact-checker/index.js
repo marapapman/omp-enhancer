@@ -24,6 +24,11 @@ import { withToolErrorHandling } from './src/tool-error-utils.js';
 
 const EVIDENCE_STATUSES = ['SUPPORTED', 'CONTRADICTED', 'INSUFFICIENT', 'UNVERIFIABLE'];
 const FINAL_VERDICTS = [...EVIDENCE_STATUSES, 'CONFLICTED'];
+// finalOutput claim-verdict aliases: the claim-verdict layer may write these
+// tokens; they are normalized to the canonical report vocabulary before the
+// strict comparison against structured report verdicts.
+const FINAL_OUTPUT_VERDICT_ALIASES = Object.freeze({ LOCAL_UNVERIFIED: 'UNVERIFIABLE' });
+const CLAIM_VERDICT_TOKENS = [...FINAL_VERDICTS, ...Object.keys(FINAL_OUTPUT_VERDICT_ALIASES)];
 function textContent(text) {
   return { type: 'text', text };
 }
@@ -127,17 +132,17 @@ function buildEvidenceRecordSchema(z) {
     observed: z.any().optional().describe('Raw observed data or metadata from the evidence collection process.'),
     evidenceTuple: z.object({
       ...buildCanonicalTupleShape(z),
-      relation: z.enum(FACT_ASSESSMENT_CONTRACT.tupleRelations).describe('Relation between the canonical tuple fields: ENTAILS, CONTRADICTS, NEUTRAL, or AMBIGUOUS. Example: "ENTAILS".'),
-      negatedField: z.enum(FACT_ASSESSMENT_CONTRACT.negatedFields).optional().describe('Field that is negated in this evidence, if applicable. Example: "objectValue".'),
+      relation: z.enum(FACT_ASSESSMENT_CONTRACT.tupleRelations).describe('Relation between the canonical tuple fields: ENTAILS, NEGATES, ADJACENT, or UNKNOWN. Example: "ENTAILS".'),
+      negatedField: z.enum(FACT_ASSESSMENT_CONTRACT.negatedFields).optional().describe('Field that is negated in this evidence, if applicable. Example: "OBJECT_VALUE".'),
     }).optional().describe('Canonical structured evidence tuple with relation assessment.'),
-    strength: z.enum(FACT_ASSESSMENT_CONTRACT.strengths).optional().describe('Strength of the evidence: STRONG, MODERATE, WEAK, or INCONCLUSIVE. Example: "STRONG".'),
+    strength: z.enum(FACT_ASSESSMENT_CONTRACT.strengths).optional().describe('Strength of the evidence: PROVEN, DISPROVED, LIKELY, or HYPOTHESIS. Example: "PROVEN".'),
     limitation: z.object({
-      level: z.enum(FACT_ASSESSMENT_CONTRACT.limitationLevels).describe('Limitation severity: MINOR, MODERATE, or SIGNIFICANT. Example: "MINOR".'),
+      level: z.enum(FACT_ASSESSMENT_CONTRACT.limitationLevels).describe('Limitation severity: NONE, NON_MATERIAL, or MATERIAL. Example: "NON_MATERIAL".'),
       reason: z.string().optional().describe('Explanation of the limitation. Example: "Single source only.".'),
     }).optional().describe('Optional limitation assessment for this evidence record.'),
     countercheck: z.object({
-      status: z.enum(FACT_ASSESSMENT_CONTRACT.countercheckStatuses).describe('Countercheck status: PENDING, PERFORMED, or NOT_APPLICABLE. Example: "PERFORMED".'),
-      outcome: z.enum(FACT_ASSESSMENT_CONTRACT.countercheckOutcomes).describe('Countercheck outcome: CONSISTENT, INCONSISTENT, or INCONCLUSIVE. Example: "CONSISTENT".'),
+      status: z.enum(FACT_ASSESSMENT_CONTRACT.countercheckStatuses).describe('Countercheck status: NOT_REQUIRED, COMPLETED, INCONCLUSIVE, or UNAVAILABLE. Example: "COMPLETED".'),
+      outcome: z.enum(FACT_ASSESSMENT_CONTRACT.countercheckOutcomes).describe('Countercheck outcome: NOT_APPLICABLE, NO_DISCONFIRMING_EVIDENCE, DISCONFIRMING_EVIDENCE, or NO_RESULT. Example: "NO_DISCONFIRMING_EVIDENCE".'),
       note: z.string().optional().describe('Optional note about the countercheck result. Example: "Verified against original source.".'),
     }).optional().describe('Optional countercheck verification for this evidence record.'),
   });
@@ -150,7 +155,7 @@ function buildCanonicalTupleSchema(z) {
 function buildCanonicalTupleShape(z) {
   const tupleField = () => z.object({
     value: z.string().describe('The canonical string value for this tuple field. Example: "sky".'),
-    materiality: z.enum(FACT_ASSESSMENT_CONTRACT.tupleMaterialities).describe('Materiality level for this field: CORE, CONTEXTUAL, or DERIVED. Example: "CORE".'),
+    materiality: z.enum(FACT_ASSESSMENT_CONTRACT.tupleMaterialities).describe('Materiality level for this field: MATERIAL, or NOT_APPLICABLE. Example: "MATERIAL".'),
   });
   return {
     subject: tupleField(),
@@ -311,7 +316,7 @@ export default function factCheckerExtension(omp) {
   omp.registerTool({
     name: 'fact_check_report',
     label: 'Fact Check Report',
-    description: 'Build an advisory source-aware FACT_CHECK_REPORT from supplied claims and evidence. Earlier workflow telemetry is helpful but optional.',
+    description: 'Build an advisory source-aware FACT_CHECK_REPORT from supplied claims and evidence. Earlier workflow telemetry is used only to emit comparison warnings; the supplied structured records are authoritative.',
     defaultInactive: true,
     approval: 'read',
     promptSnippet: 'Generate a verdict report from evidence records.',
@@ -363,11 +368,11 @@ export default function factCheckerExtension(omp) {
   omp.registerTool({
     name: 'fact_check_review',
     label: 'Fact Check Review',
-    description: 'Review fact-check workflow evidence and report missing or inconsistent support. This advisory tool never blocks tools or session completion.',
+    description: 'Review the final fact-check report text (finalOutput) against the given riskLevel and report missing or inconsistent support. Session telemetry is used only as an optional comparison source. This advisory tool never blocks tools or session completion.',
     defaultInactive: true,
     approval: 'read',
-    promptSnippet: 'Review a fact-check plan, evidence, and verdicts for completeness.',
-    promptGuidelines: ['Pass plan, evidence, and/or report data to review.', 'Reports advisory findings; does not execute commands or block completion.', 'Use this for independent quality assurance on fact-check results.'],
+    promptSnippet: 'Review the final fact-check report text and risk level for completeness.',
+    promptGuidelines: ['Pass the final fact-check report text (finalOutput) and an optional riskLevel to review.', 'Reports advisory findings; does not execute commands or block completion.', 'Use this for independent quality assurance on fact-check results.'],
     parameters: buildReviewParameters(z),
     execute: withToolErrorHandling('fact_check_review', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const input = paramsOrEmpty(params);
@@ -647,7 +652,7 @@ function finalVerdictsMatchReport(finalOutput = '', results = []) {
   const text = String(finalOutput);
   return results.every(({ claimId, verdict }) => {
     const id = escapeRegex(claimId);
-    const verdicts = FINAL_VERDICTS.map(escapeRegex).join('|');
+    const verdicts = CLAIM_VERDICT_TOKENS.map(escapeRegex).join('|');
     const occurrence = new RegExp(
       '^\\s*(?:[-*]\\s*)?' + id + '\\s*:\\s*(' + verdicts + ')\\b.*$',
       'i',
@@ -672,9 +677,9 @@ function finalVerdictsMatchReport(finalOutput = '', results = []) {
         canonical: canonical.test(line),
       });
     }
-    return occurrences.length === 1
-      && occurrences[0].canonical
-      && occurrences[0].verdict === verdict;
+    if (occurrences.length !== 1 || !occurrences[0].canonical) return false;
+    const observed = FINAL_OUTPUT_VERDICT_ALIASES[occurrences[0].verdict] ?? occurrences[0].verdict;
+    return observed === verdict;
   });
 }
 

@@ -783,11 +783,40 @@ describe('E2E: MCP protocol compliance', () => {
     assert.ok(renderTool.inputSchema.required?.includes('sourcePath'));
   });
 
-  it('tikz_prepare_asset schema: inputPath is required string', async () => {
+  it('tikz_prepare_asset schema: conditional anyOf requires inputPath or sourceType+relativePath', async () => {
     const resp = await client.request('tools/list');
     const prepTool = resp.result.tools.find(t => t.name === 'tikz_prepare_asset');
     assert.ok(prepTool);
-    assert.ok(prepTool.inputSchema.required?.includes('inputPath'));
+    assert.ok(!prepTool.inputSchema.required?.includes('inputPath'), 'inputPath must not be unconditionally required');
+    assert.equal(prepTool.inputSchema.properties.inputPath.type, 'string');
+    assert.ok(prepTool.inputSchema.properties.sourceType, 'sourceType field must exist');
+    assert.ok(prepTool.inputSchema.properties.relativePath, 'relativePath field must exist');
+    const anyOf = prepTool.inputSchema.anyOf;
+    assert.ok(Array.isArray(anyOf) && anyOf.length === 2, 'conditional anyOf must exist with two branches');
+    assert.ok(anyOf[0].required?.includes('inputPath'), 'raster branch requires inputPath');
+    assert.ok(anyOf[1].required?.includes('sourceType') && anyOf[1].required?.includes('relativePath'), 'source branch requires sourceType+relativePath');
+  });
+
+  it('tikz_prepare_asset without inputPath and without sourceType returns INVALID_PARAMETER', async () => {
+    const resp = await client.request('tools/call', {
+      name: 'tikz_prepare_asset',
+      arguments: {},
+    });
+    assert.equal(resp.result.isError, true, 'missing raster inputPath must error');
+    const text = getErrorText(resp);
+    assert.ok(text.includes('INVALID_PARAMETER'), `error must carry the code: ${text}`);
+    assert.ok(/inputPath/i.test(text), 'error must mention inputPath');
+  });
+
+  it('tikz_prepare_asset with sourceType but no relativePath returns INVALID_PARAMETER', async () => {
+    const resp = await client.request('tools/call', {
+      name: 'tikz_prepare_asset',
+      arguments: { sourceType: 'svg' },
+    });
+    assert.equal(resp.result.isError, true, 'missing relativePath must error');
+    const text = getErrorText(resp);
+    assert.ok(text.includes('INVALID_PARAMETER'), `error must carry the code: ${text}`);
+    assert.ok(/relativePath/i.test(text), 'error must mention relativePath');
   });
 
   it('mermaid_render without source or sourcePath returns a structured INVALID_PARAMETER error', async () => {

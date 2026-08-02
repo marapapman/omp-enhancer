@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 
 import { analyzeWritingLogic } from './src/analyzer.js';
-import { fetchExternalCitationEvidence, parseLocalLiteratureRecords, verifyCitations } from './src/citations.js';
+import { fetchExternalCitationEvidence, parseLocalLiteratureRecords } from './src/citations.js';
 import { loadWritingLogicDocument } from './src/document-loader.js';
 import { analyzeWritingQuality } from './src/quality.js';
 import { formatWritingLogicReport, formatWritingQualityReport } from './src/report.js';
@@ -14,7 +14,7 @@ function buildBaseShape(z) {
     text: z.string().optional().describe('Document text to check in-line, used when no path is provided. Example: \'The document content...\'.'),
     language: z.enum(['zh', 'en', 'auto']).optional().describe('Language of the document: zh (Chinese), en (English), or auto (detect).'),
     mode: z.enum(['redline', 'standard']).optional().describe('Check mode: standard (balanced) or redline (strict, minimal noise).'),
-    maxIssues: z.number().optional().describe('Maximum number of issues to report. Example: 10. Omit for no limit.'),
+    maxIssues: z.number().optional().describe('Maximum number of issues to report. Example: 10. Default: 20 (logic) / 30 (quality).'),
   };
 }
 
@@ -383,6 +383,3 @@ export default function writingLogicExtension(omp) {
     },
   });
 }
-
-export { compareSemanticPreservation, extractSemanticAnchors } from './src/preservation.js';
-export { verifyCitations };

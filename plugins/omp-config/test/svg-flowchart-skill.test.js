@@ -28,8 +28,8 @@ test('SVG flowchart skill defines strict geometry, spacing, and bounded rendered
   assert.match(skill, /Do not review an unchanged artifact again/i);
   assert.match(skill, /Do not claim visual approval from source inspection or the static checker alone/i);
   assert.match(skill, /No review verdict grants permission to publish or complete/i);
-  assert.match(skill, /icon asset method|asset method under `diagram\.tikz`/is);
-  assert.match(skill, /Final layout and whole-figure output belong to diagram\.tikz/is);
+  assert.match(skill, /icon asset method|asset method under the `visual` workflow/is);
+  assert.match(skill, /Final layout and whole-figure output belong to the owning visual workflow/is);
   assert.match(skill, /SVG icon asset static validation only/is);
   assert.doesNotMatch(skill, /standalone diagram workflow|standalone diagram authoring/i);
   assert.doesNotMatch(skill, /Main may assign.+(?:rerun|renderer)|Main (?:runs|reruns|renders|modifies) the (?:checker|SVG|geometry)/is);

@@ -155,6 +155,7 @@ describe('writing-logic extension', () => {
         text: '准确率为 91%。随后准确率为 87%。近年来，随着人工智能技术的快速发展。参考文献 [@ghost2024].',
         language: 'zh',
         checks: ['logic', 'style', 'citation'],
+        mode: 'standard',
       },
       undefined,
       undefined,
@@ -553,6 +554,27 @@ describe('writing-logic extension', () => {
 
     assert.equal(result.ok, false);
     assert.match(result.report, /Unsupported writing checks: bogus/);
+  });
+
+  it('logic slash command clamps --max to the logic bounds', async () => {
+    const api = makeExtensionApi();
+    extension(api);
+    const tempDir = mkdtempSync(join(tmpdir(), 'omp-writing-max-clamp-'));
+    writeFileSync(
+      join(tempDir, 'draft.md'),
+      Array.from({ length: 120 }, (_, i) => `该方法必然优于基线方法 ${i}。`).join('\n'),
+      'utf8',
+    );
+
+    const command = api.registerCommand.mock.calls[0].arguments[1];
+    const clampedLow = await command.handler('draft.md --max 0', { cwd: tempDir });
+    assert.equal(clampedLow.ok, true);
+    assert.equal(clampedLow.details.issues.length, 1);
+
+    const capped = await command.handler('draft.md --max 500', { cwd: tempDir });
+    assert.equal(capped.ok, true);
+    assert.equal(capped.details.summary.total, 120);
+    assert.equal(capped.details.issues.length, 100);
   });
 
   it('declares OMP extension metadata and Pi skill roots', () => {

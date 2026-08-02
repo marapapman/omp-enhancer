@@ -227,7 +227,7 @@ describe('evaluateBrowserEvidenceGate', () => {
     ]))
   })
 
-  it('keeps the generic failed-status result when execution counts are also empty', () => {
+  it('deduplicates the generic failed-status result when the zero-scenario root cause already fired', () => {
     const failed: BrowserEvidence = {
       ...passedEvidence,
       status: 'failed',
@@ -238,16 +238,14 @@ describe('evaluateBrowserEvidenceGate', () => {
       findings: []
     }
 
-    expect(evaluateBrowserEvidenceGate(failed)).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        passed: false,
-        summary: 'Browser check failed without a failing structured finding.'
-      }),
-      expect.objectContaining({
-        passed: false,
-        summary: 'Browser check did not execute any scenarios.'
-      })
-    ]))
+    expect(evaluateBrowserEvidenceGate(failed)).toEqual([{
+      gate: 'browser-interaction',
+      passed: false,
+      severity: 'critical',
+      summary: 'Browser check did not execute any scenarios.',
+      evidence: { scenarioCount: 0, stepCount: 0, captureCount: 0, visualAssertionCount: 0, runId: 'browser-run' },
+      repairHint: 'Run at least one browser scenario with at least one interaction step in the current task context.'
+    }])
   })
 
   it('uses structured findings even when evidence status is passed', () => {

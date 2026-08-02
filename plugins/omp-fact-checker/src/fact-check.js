@@ -164,12 +164,12 @@ export function buildFactCheckPlan({
 } = {}) {
   const allClaims = extractFactClaims({ text, maxClaims: Number.POSITIVE_INFINITY });
   const claims = allClaims.slice(0, normalizeMaxClaims(maxClaims));
-  const highPriority = allClaims.filter((claim) => claim.priority === 'high').length;
+  const highPriority = claims.filter((claim) => claim.priority === 'high').length;
   return {
     claims,
-    riskLevel: highPriority > 0 ? 'high' : allClaims.length > 2 ? 'standard' : 'low',
+    riskLevel: highPriority > 0 ? 'high' : claims.length > 2 ? 'standard' : 'low',
     requiredStages: requiredStagesFor({
-      claims: allClaims,
+      claims,
       crossCheckRequested: crossCheckRequested === true,
     }),
   };
@@ -335,7 +335,6 @@ export function validateFactCheckReview({
   const hasCrossCheck = /\bFACT_CROSS_CHECK\b/i.test(text);
   const hasReview = /\bFACT_REVIEW\b/i.test(text);
   const hasReport = /\bFACT_CHECK_REPORT\b/i.test(text);
-  const hasUsage = /\bFACT_CHECK_USAGE\b/i.test(text);
   const degraded = /\bCROSS_CHECK_DEGRADED\b|network unavailable|api unavailable|insufficient external evidence|无法联网|api 不可用/i.test(text);
 
   if (!hasPlan) missing.push('FACT_CHECK_PLAN');
@@ -344,7 +343,6 @@ export function validateFactCheckReview({
   if (!hasCrossCheck) missing.push('FACT_CROSS_CHECK');
   if (!hasReview) missing.push('FACT_REVIEW');
   if (!hasReport) missing.push('FACT_CHECK_REPORT');
-  if (!hasUsage) missing.push('FACT_CHECK_USAGE');
 
   return {
     ok: missing.length === 0,

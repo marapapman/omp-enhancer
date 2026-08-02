@@ -1,8 +1,4 @@
-function paragraphLocation(text, index, language) {
-  const before = text.slice(0, Math.max(0, index));
-  const paragraph = before.split(/\n\s*\n/u).length;
-  return language === 'zh' ? `第 ${paragraph} 段` : `paragraph ${paragraph}`;
-}
+import { paragraphLocation } from './language.js';
 
 function firstMatch(text, pattern) {
   const match = pattern.exec(text);

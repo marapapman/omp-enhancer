@@ -1,14 +1,16 @@
-import { prepareAsset, registerAssetSource } from './src/asset-prepare.js';
+import { prepareAsset } from './src/asset-prepare.js';
 import { searchCatalog } from './src/catalog-search.js';
-import { renderTikz, runBoundedCommand } from './src/render-tikz.js';
-import { renderMermaid, resolveMermaidCliPath } from './src/mermaid-render.js';
-import { generateTikz, computeLayout, elkToTikz } from './src/generate-tikz.js';
+import { renderTikz } from './src/render-tikz.js';
+import { renderMermaid } from './src/mermaid-render.js';
+import { generateTikz } from './src/generate-tikz.js';
 import { asRuntimeError } from './src/runtime-error.js';
 import { TikzRuntimeError } from './src/runtime-error.js';
-import { requireString, parseJsonParam } from './src/tool-error-utils.js';
+import { parseJsonParam } from './src/tool-error-utils.js';
+import { PRESET_NAMES, DENSITY_NAMES } from './src/layout-presets.js';
+import { resolveExistingProjectFile } from './src/path-policy.js';
 import { readFile, writeFile, mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, dirname, isAbsolute, resolve, sep } from 'node:path';
+import { join } from 'node:path';
 
 function optional(z, schema) {
   return typeof z.optional === 'function' ? z.optional(schema) : schema.optional();
@@ -61,19 +63,21 @@ function catalogParameters(z) {
 
 function assetParameters(z) {
   return z.object({
-    inputPath: z.string().describe('Path to the PNG, JPEG, or WebP image file to normalize.'),
-    outputDirectory: optional(z, z.string()).describe('Output directory for the normalized asset. Defaults to figures/tikz/assets/.'),
+    inputPath: optional(z, z.string()).describe('Path to the PNG, JPEG, or WebP image file to normalize. Required when sourceType is not set.'),
+    outputDirectory: optional(z, z.string()).describe('Output directory for the normalized asset. Defaults to figures/tikz/assets.'),
     nodeId: optional(z, z.string()).describe('Node ID to associate with this asset in the manifest.'),
     prompt: optional(z, z.string()).describe('The generation prompt used if the image was AI-generated.'),
     provider: optional(z, z.string()).describe('The image provider used (e.g., openai, replicate).'),
     model: optional(z, z.string()).describe('The model name used for generation.'),
+    sourceType: optional(z, z.enum(['svg', 'tex'])).describe('Register an existing project-local SVG or TeX source as a content-addressed manifest entry instead of normalizing a raster image.'),
+    relativePath: optional(z, z.string()).describe('Project-relative path to the SVG or TeX source file when sourceType is set.'),
   });
 }
 
 function renderParameters(z) {
   return z.object({
     sourcePath: z.string().describe('Path to the TikZ .tex source file to compile and render.'),
-    outputDirectory: optional(z, z.string()).describe('Directory for output files. Defaults to the same directory as the source file.'),
+    outputDirectory: optional(z, z.string()).describe('Directory for output files. Defaults to figures/tikz/rendered.'),
     timeoutMs: optional(z, z.number()).describe('Timeout in milliseconds for the render process.'),
   });
 }
@@ -82,8 +86,8 @@ function generateParameters(z) {
         graph: z.string().describe('A JSON string of the ELK graph IR. Use JSON.stringify() to convert your graph object. Must include id, children, width, height. Input nodes must omit x and y (the layout engine computes positions). Size each node width and height to fit its exact label plus padding (2pt inner padding applied). Example: \'{"id":"root","children":[{"id":"n1","width":40,"height":20}]}\''),
         layoutOptions: optional(z, z.string()).describe('Optional JSON string of ELK layout options. Use JSON.stringify() to convert your options object. Place elk.algorithm and layout options here. Choose elk.algorithm: layered (flows), mrtree (trees), radial (mind-map), stress, or force. Set elk.direction to RIGHT or DOWN. Fix overlaps by changing layout options or node sizes and regenerating. Example: {"elk.algorithm":"layered","elk.direction":"RIGHT"}'),
         styleOptions: optional(z, z.string()).describe('Optional JSON string of TikZ style options. Use JSON.stringify() to convert your style object. Use - for no arrow, dashed or dotted for line style. Set arrow type with properties.arrow: ->, <-, or <->.'),
-    preset: optional(z, z.enum(['paper-column', 'paper-full', 'slide-16-9', 'slide-4-3'])).describe('Target medium preset: paper-column (double-column paper, ~240pt), paper-full (full text width, ~504pt), slide-16-9, or slide-4-3.'),
-    density: optional(z, z.enum(['compact', 'balanced', 'airy'])).describe('Density tuning: compact (tight), balanced (default), or airy (spacious).'),
+    preset: optional(z, z.enum([...PRESET_NAMES])).describe('Target medium preset: paper-column (double-column paper, ~240pt), paper-full (full text width, ~504pt), slide-16-9, or slide-4-3.'),
+    density: optional(z, z.enum([...DENSITY_NAMES])).describe('Density tuning: compact (tight), balanced (default), or airy (spacious).'),
     targetWidthPt: optional(z, z.number()).describe('Optional target width in points for scaling the diagram.'),
   });
 }
@@ -99,7 +103,7 @@ function mermaidParameters(z) {
   return z.object({
     sourcePath: optional(z, z.string()).describe('Path to the Mermaid .mmd or .md source file to render. Provide exactly one of source or sourcePath.'),
     source: optional(z, z.string()).describe('Inline Mermaid source text. Provide exactly one of source or sourcePath.'),
-    outputDirectory: optional(z, z.string()).describe('Directory for output files. Defaults to figures/mermaid/rendered/.'),
+    outputDirectory: optional(z, z.string()).describe('Directory for output files. Defaults to figures/mermaid/rendered.'),
     theme: optional(z, z.enum(['default', 'forest', 'dark', 'neutral'])).describe('Mermaid theme. Defaults to default.'),
     width: optional(z, z.number()).describe('Optional output width in pixels for the rendered SVG.'),
     timeoutMs: optional(z, z.number()).describe('Timeout in milliseconds for the render process.'),
@@ -107,13 +111,8 @@ function mermaidParameters(z) {
 }
 
 
-export { generateTikz, computeLayout, elkToTikz };
-export { prepareAsset, registerAssetSource } from './src/asset-prepare.js';
-export { searchCatalog } from './src/catalog-search.js';
-export { renderTikz, runBoundedCommand } from './src/render-tikz.js';
-export { renderMermaid, resolveMermaidCliPath } from './src/mermaid-render.js';
-export { checkElkEnvironment, ELK_INSTALL_GUIDANCE } from './src/elk-layout.js';
-export { GEOMETRY_DEPS_GUIDANCE } from './src/geometry-check.js';
+export { generateTikz } from './src/generate-tikz.js';
+export { registerAssetSource } from './src/asset-prepare.js';
 export { previewAssetPreviews };
 
 export default function registerTikzHelper(omp) {
@@ -143,7 +142,7 @@ export default function registerTikzHelper(omp) {
   omp.registerTool({
     name: 'tikz_prepare_asset',
     label: 'Prepare TikZ Node Asset',
-    description: 'Normalize an existing PNG, JPEG, or WebP as a metadata-free, content-addressed PNG inside the project and merge its provenance manifest. This tool never generates an image or uses the network.',
+    description: 'Normalize an existing PNG, JPEG, or WebP image as a metadata-free, content-addressed PNG inside the project, or register an existing project-local SVG or TeX source as a content-addressed manifest entry, and merge its provenance manifest. This tool never generates an image or uses the network.',
     approval: 'exec',
     promptSnippet: 'Import and normalize an already-produced node icon for a TikZ figure.',
     promptGuidelines: [
@@ -280,10 +279,11 @@ async function previewAssetPreviews(input = {}, options = {}) {
   const manifestRel = input.manifestPath && input.manifestPath.trim() !== ''
     ? input.manifestPath
     : 'figures/tikz/assets/assets.manifest.json';
-  const manifestPath = isAbsolute(manifestRel) ? manifestRel : resolve(root, manifestRel.split('/').join(sep));
+  // Route through path-policy so traversal or symlink escape in manifestPath is rejected.
+  const manifestFile = await resolveExistingProjectFile(root, manifestRel, 'manifestPath');
   let manifest;
   try {
-    manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest = JSON.parse(await readFile(manifestFile.path, 'utf8'));
   } catch (error) {
     if (error && typeof error === 'object' && error.code === 'ENOENT') {
       throw new TikzRuntimeError('FILE_NOT_FOUND', `Asset manifest not found: ${manifestRel}`, { path: manifestRel });
@@ -300,7 +300,9 @@ async function previewAssetPreviews(input = {}, options = {}) {
   const tempDir = await mkdtemp(join(tmpdir(), 'omp-tikz-preview-'));
   const previews = [];
   for (const asset of matching) {
-    const sourcePath = isAbsolute(asset.relativePath) ? asset.relativePath : resolve(root, String(asset.relativePath).split('/').join(sep));
+    // Route through path-policy so a manifest asset whose relativePath escapes
+    // the project root (traversal or symlink) is rejected, never previewed.
+    const sourcePath = (await resolveExistingProjectFile(root, String(asset?.relativePath ?? ''), 'relativePath')).path;
     const st = asset.sourceType ?? (asset.outputFormat === 'png' ? 'raster' : null);
     let previewPath = null;
     let limitations = [];

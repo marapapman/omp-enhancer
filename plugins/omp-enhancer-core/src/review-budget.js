@@ -27,6 +27,10 @@ export function buildTaskShapePrompt(taskDescriptor = {}, {
   ].join('\n');
 }
 
+/**
+ * Test-only export: no production consumer in index.js; imported by
+ * test/review-budget.test.js.
+ */
 export function resolveDynamicReviewBudget(taskDescriptor = {}, {
   nativeConcurrencyCapacity = null,
 } = {}) {
@@ -81,6 +85,10 @@ export function resolveDynamicReviewBudget(taskDescriptor = {}, {
   };
 }
 
+/**
+ * Test-only export: no production consumer in index.js; imported by
+ * test/review-budget.test.js.
+ */
 export function buildDynamicReviewBudgetPrompt({
   taskDescriptor = {},
   nativeConcurrencyCapacity = null,

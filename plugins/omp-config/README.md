@@ -5,14 +5,14 @@
 ## Contents
 
 - `assets/CLAUDE.md` and root or agent config templates.
-- `assets/WORKFLOW_CATALOG.md` is the generated catalog version 23 for explicit synchronization and human inspection. Its semantic source lives in `omp-enhancer-core/src/workflows/definitions`; do not edit this asset by hand.
+- `assets/WORKFLOW_CATALOG.md` is the generated workflow catalog for explicit synchronization and human inspection. Its semantic source lives in `omp-enhancer-core/src/workflows/definitions`; do not edit this asset by hand.
 - `skills/omp-enhancer-workflows/` publishes a compact selection table and one on-demand reference card per workflow. The table keeps exact IDs, full Primary conditions, literal card URIs, top-level `D` Skill URIs, and enumerated nested ECC `C` Skill URIs. It guides Main to declare its workflow/Skill plan, load selected resources, and rebase its own detailed TODO; it does not select a workflow, create a runtime gate, require delegation, activate tools, grant permission, or decide completion.
 - `skills/ecc/SKILL.md` publishes one top-level `ecc-skill-catalog` adapter, and `skills/ecc/catalog.md` indexes 255 nested ECC guides for exact, on-demand reads.
 - `assets/AGENTS.md` adds a compact Agent-owned staged plan/load/TODO contract and conditional handoff trace. `assets/WATCHDOG.yml` lets Advisor spend one early ordinary note coaching that contract while retaining its evidence and send limits. Neither imports `OMP_ENHANCER_WORKFLOW_CATALOG.md` nor appends the full catalog to a system prompt.
 - `assets/config.yml` and `assets/mcp.json` remain templates only. The config template carries no concrete `modelRoles` defaults; model selection stays with OMP and the acting Agent.
 - `agents/`, `skills/`, and notify-only `hooks/` copied from the config source. For ordinary code work, Config contributes only the read-only `plan` role; OMP's native `task` owns implementation slices and native `reviewer` remains the semantic-diff reviewer, so neither native role is shadowed. Other packaged Agents are retained only for distinct network, security, visual, or open-source boundaries.
 - `skills/code-development/` is the single general code-process Skill. It covers local and decision-relevant external search, detailed parallel-wave planning, plan review, native task-owned vertical TDD, Main integration and `MAIN REVIEW`, and bounded semantic review/repair; `references/omp-enhancer.md` adds repository-specific generation, packaging, and installed-E2E guidance only when applicable.
-- `hook-templates/` contains optional behavior-changing hook templates (for example, generic tool-result redaction and truncation helpers) that are packaged but not auto-discovered.
+- `hook-templates/` packages generic helper libraries (for example, tool-result redaction and truncation) for optional hook templates; they are not auto-discovered. To use one, copy the helper and the template that references it into a live hook directory.
 - Slash command content for `/omp-config:config`, `/omp-config:config-doctor`, and `/omp-config:config-assets`.
 - Default-inactive runtime tools for extension loading: `omp_config_doctor`, `omp_config_assets`, `omp_config_plan`, and `omp_config_sync_workflow_context`.
 
@@ -24,11 +24,11 @@ This package does not automatically overwrite `~/.omp`. Treat the packaged files
 
 The auto-discovered destructive-command and malformed edit-anchor guard hooks
 are advisory-only: they produce UI warnings, do not rewrite input or output,
-and never return `block: true`. Optional behavior-changing hook templates
-live under `hook-templates/`. They are generic helpers (for example, tool-result
-redaction and truncation) and run only after a user explicitly installs the
-chosen templates together with their referenced `lib/` helpers. The plugin does
-not activate them automatically, and they are not permission gates. The templates
+and never return `block: true`. `hook-templates/` packages generic helper
+libraries (for example, tool-result redaction and truncation) for optional
+hook templates; they run only after a user explicitly installs the chosen
+helper together with a template that references it. The plugin does
+not activate them automatically, and they are not permission gates. The helpers
 are model-agnostic and carry no provider or model-id gating.
 Bundled agents do not declare `blocking: true`, and the config template disables
 `loopGuard` plus compaction `autoContinue` by default. Host sandboxing, approval,

@@ -1,10 +1,11 @@
 import { detectGeometryIssues } from './geometry-check.js';
-import { computeLayout, countNodes } from './elk-layout.js';
+import { computeLayout, countNodes, SERVER_DEFAULT_LAYOUT_OPTIONS } from './elk-layout.js';
 import { elkToTikz } from './tikz-backend.js';
 import {
   LAYOUT_PRESETS, resolvePresetLayoutOptions, resolveTargetWidth, computeFillRatio,
-  densityAdjustment, DENSITY_RELAYOUT_FACTOR, scaleSpacingKeys, sizingReport,
+  densityAdjustment, DENSITY_FACTORS, DENSITY_RELAYOUT_FACTOR, scaleSpacingKeys, sizingReport,
 } from './layout-presets.js';
+import { TikzRuntimeError } from './runtime-error.js';
 
 export async function generateTikz(input = {}, options = {}) {
   const graph = input.graph;
@@ -12,9 +13,19 @@ export async function generateTikz(input = {}, options = {}) {
   const preset = input.preset ?? null;
   const density = input.density ?? 'balanced';
 
-  // Merge layer order: SERVER_DEFAULTS <- preset <- tool layoutOptions <- graph IR
-  // (graph IR wins inside computeLayout; preset sits below tool options here).
-  const presetOptions = preset ? resolvePresetLayoutOptions(preset, density) : {};
+  // Density applies to a COPY of the server-default spacing in both paths
+  // (matching resolvePresetLayoutOptions precedence): SERVER_DEFAULTS <- density
+  // <- tool layoutOptions <- graph IR. Explicit input.layoutOptions always win.
+  const densityFactor = DENSITY_FACTORS[density];
+  if (densityFactor === undefined) {
+    throw new TikzRuntimeError(
+      'INVALID_PRESET',
+      `Unknown density "${density}". Expected one of: compact, balanced, airy.`,
+    );
+  }
+  const presetOptions = preset
+    ? resolvePresetLayoutOptions(preset, density)
+    : scaleSpacingKeys(SERVER_DEFAULT_LAYOUT_OPTIONS, densityFactor);
   const merged = { ...presetOptions, ...(input.layoutOptions ?? {}) };
 
   let layoutResult = await computeLayout(graph, { layoutOptions: merged, importElk: options.importElk });

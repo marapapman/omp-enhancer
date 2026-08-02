@@ -104,6 +104,21 @@ describe('tikz-backend: node shapes and styles', () => {
     assert.match(tikz, /rounded corners=3pt/);
   });
 
+  it('expands shorthand #RGB hex colors to #RRGGBB before parsing', () => {
+    const layout = {
+      id: 'root',
+      children: [
+        { id: 'n1', x: 10, y: 10, width: 40, height: 20, properties: { fill: '#abc' } },
+        { id: 'n2', x: 10, y: 50, width: 40, height: 20, properties: { fill: '#A1B2C3' } },
+      ],
+    };
+    const tikz = elkToTikz(layout);
+    // #abc -> #aabbcc -> red 170, green 187, blue 204
+    assert.match(tikz, /fill=\{rgb,255:red,170;green,187;blue,204\}/);
+    // Full #RRGGBB form still parses unchanged: 0xA1=161, 0xB2=178, 0xC3=195
+    assert.match(tikz, /fill=\{rgb,255:red,161;green,178;blue,195\}/);
+  });
+
   it('defaults to rectangle shape', () => {
     const layout = {
       id: 'root',
