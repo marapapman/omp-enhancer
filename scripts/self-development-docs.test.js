@@ -122,7 +122,7 @@ test('current repository documentation matches the v31 runtime and evidence cont
   ]) {
     assert.match(
       content,
-      /designer.+(?:design|source) revision.+task.+rendering.+compilation.+export.+visioner.+fresh.+read-only.+Main.+setup authorization.+final acceptance.+does not mediate/isu,
+      /designer.+authors the complete Mermaid source in one pass.+`mermaid_render`.+(?:renders|render).+Main performs a simple check.+rendered SVG.+Main retains setup authorization.+final acceptance/is,
       path,
     );
     assert.match(
@@ -151,7 +151,7 @@ test('current repository documentation matches the v31 runtime and evidence cont
     'plugins/writing-helper/index.js',
     'plugins/omp-test-enhancer/dist/extension.js',
     'plugins/omp-fact-checker/index.js',
-    'plugins/tikz-helper/index.js',
+    'plugins/mermaid-helper/index.js',
   ]) {
     assert.match(probe, new RegExp(entry.replaceAll('.', '\\.'), 'u'), entry);
   }

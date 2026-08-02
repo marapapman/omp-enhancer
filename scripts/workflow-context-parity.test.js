@@ -243,7 +243,7 @@ test('README stays user-focused and links the detailed current documentation', a
   assert.match(readme, /Main orchestrates through ANALYZE -> EXECUTE -> REVIEW/i);
   assert.match(readme, /`D` is a top-level Skill exact URI; `C` is an enumerated nested ECC exact URI/i);
   assert.match(readme, /there is no separate pending workflow/i);
-  assert.match(readme, /extension tools except tikz-helper are inactive by default/i);
+  assert.match(readme, /extension tools except mermaid-helper are inactive by default/i);
   assert.match(readme, /\/enhancer-tools enable/i);
   assert.match(readme, /there is no plugin `\/test` command/i);
   assert.match(readme, /docs\/ARCHITECTURE\.md/);

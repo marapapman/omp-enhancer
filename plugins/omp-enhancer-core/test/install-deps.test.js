@@ -84,10 +84,10 @@ test('readPluginDependencies returns the dependencies object from package.json',
   const dir = await mkdtemp(path.join(os.tmpdir(), 'omp-read-deps-'));
   await writeFile(
     path.join(dir, 'package.json'),
-    JSON.stringify({ name: 'x', dependencies: { elkjs: '^0.9.0', lodash: '^4.0.0' } }, null, 2),
+    JSON.stringify({ name: 'x', dependencies: { '@mermaid-js/mermaid-cli': '^11.16.0', lodash: '^4.0.0' } }, null, 2),
   );
   try {
-    assert.deepEqual(readPluginDependencies(dir), { elkjs: '^0.9.0', lodash: '^4.0.0' });
+    assert.deepEqual(readPluginDependencies(dir), { '@mermaid-js/mermaid-cli': '^11.16.0', lodash: '^4.0.0' });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -129,11 +129,11 @@ test('pluginNeedsInstall is false when the dep resolves from the plugin dir', as
   const dir = await mkdtemp(path.join(os.tmpdir(), 'omp-needs-install-false-'));
   await writeFile(
     path.join(dir, 'package.json'),
-    JSON.stringify({ name: 'x', dependencies: { elkjs: '^0.9.0' } }, null, 2),
+    JSON.stringify({ name: 'x', dependencies: { '@mermaid-js/mermaid-cli': '^11.16.0' } }, null, 2),
   );
-  await createInstalledDep(dir, 'elkjs', '0.9.0');
+  await createInstalledDep(dir, '@mermaid-js/mermaid-cli', '11.16.0');
   try {
-    assert.equal(pluginNeedsInstall(dir, { elkjs: '^0.9.0' }), false);
+    assert.equal(pluginNeedsInstall(dir, { '@mermaid-js/mermaid-cli': '^11.16.0' }), false);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -167,11 +167,11 @@ test('verifyDependencies reports ok:true after the node_modules entry is created
   const dir = await mkdtemp(path.join(os.tmpdir(), 'omp-verify-after-'));
   await writeFile(
     path.join(dir, 'package.json'),
-    JSON.stringify({ name: 'x', dependencies: { elkjs: '^0.9.0' } }, null, 2),
+    JSON.stringify({ name: 'x', dependencies: { '@mermaid-js/mermaid-cli': '^11.16.0' } }, null, 2),
   );
-  await createInstalledDep(dir, 'elkjs', '0.9.0');
+  await createInstalledDep(dir, '@mermaid-js/mermaid-cli', '11.16.0');
   try {
-    const result = verifyDependencies(dir, { elkjs: '^0.9.0' });
+    const result = verifyDependencies(dir, { '@mermaid-js/mermaid-cli': '^11.16.0' });
     assert.equal(result.ok, true);
     assert.deepEqual(result.missing, []);
   } finally {
@@ -183,9 +183,9 @@ test('installPluginDeps installs a plugin whose deps are absent, then verifies o
   const ompRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-install-1-'));
   try {
     await writeMarketplace(ompRoot, 'ecc', [
-      { name: 'tikz-helper', version: '1.0.0', skills: ['./skills/tikz'] },
+      { name: 'mermaid-helper', version: '1.0.0', skills: ['./skills/mermaid'] },
     ]);
-    const pluginDir = await createPluginCache(ompRoot, 'ecc', 'tikz-helper', '1.0.0', { [FAKE_DEP]: '^1.0.0' });
+    const pluginDir = await createPluginCache(ompRoot, 'ecc', 'mermaid-helper', '1.0.0', { [FAKE_DEP]: '^1.0.0' });
     const runner = recordingInstallRunner();
 
     const result = await installPluginDeps({ ompRoot, installRunner: runner });
@@ -195,7 +195,7 @@ test('installPluginDeps installs a plugin whose deps are absent, then verifies o
     assert.equal(result.installed.length, 1);
     assert.equal(result.upToDate.length, 0);
     assert.equal(result.errors.length, 0);
-    assert.equal(result.installed[0].plugin, 'tikz-helper');
+    assert.equal(result.installed[0].plugin, 'mermaid-helper');
     assert.deepEqual(result.installed[0].dependencies, [FAKE_DEP]);
     assert.equal(verifyDependencies(pluginDir, { [FAKE_DEP]: '^1.0.0' }).ok, true);
   } finally {
@@ -207,10 +207,10 @@ test('installPluginDeps reports upToDate when deps already resolve and does not 
   const ompRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-install-2-'));
   try {
     await writeMarketplace(ompRoot, 'ecc', [
-      { name: 'tikz-helper', version: '1.0.0', skills: ['./skills/tikz'] },
+      { name: 'mermaid-helper', version: '1.0.0', skills: ['./skills/mermaid'] },
     ]);
-    const pluginDir = await createPluginCache(ompRoot, 'ecc', 'tikz-helper', '1.0.0', { elkjs: '^0.9.0' });
-    await createInstalledDep(pluginDir, 'elkjs', '0.9.0');
+    const pluginDir = await createPluginCache(ompRoot, 'ecc', 'mermaid-helper', '1.0.0', { '@mermaid-js/mermaid-cli': '^11.16.0' });
+    await createInstalledDep(pluginDir, '@mermaid-js/mermaid-cli', '11.16.0');
     const runner = recordingInstallRunner();
 
     const result = await installPluginDeps({ ompRoot, installRunner: runner });
@@ -219,7 +219,7 @@ test('installPluginDeps reports upToDate when deps already resolve and does not 
     assert.equal(result.upToDate.length, 1);
     assert.equal(result.installed.length, 0);
     assert.equal(result.errors.length, 0);
-    assert.equal(result.upToDate[0].plugin, 'tikz-helper');
+    assert.equal(result.upToDate[0].plugin, 'mermaid-helper');
   } finally {
     await rm(ompRoot, { recursive: true, force: true });
   }
@@ -270,9 +270,9 @@ test('installPluginDeps dryRun does not call the runner and reports the plugin a
   const ompRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-install-5-'));
   try {
     await writeMarketplace(ompRoot, 'ecc', [
-      { name: 'tikz-helper', version: '1.0.0', skills: ['./skills/tikz'] },
+      { name: 'mermaid-helper', version: '1.0.0', skills: ['./skills/mermaid'] },
     ]);
-    const pluginDir = await createPluginCache(ompRoot, 'ecc', 'tikz-helper', '1.0.0', { [FAKE_DEP]: '^1.0.0' });
+    const pluginDir = await createPluginCache(ompRoot, 'ecc', 'mermaid-helper', '1.0.0', { [FAKE_DEP]: '^1.0.0' });
     const runner = recordingInstallRunner();
 
     const result = await installPluginDeps({ ompRoot, dryRun: true, installRunner: runner });
@@ -280,7 +280,7 @@ test('installPluginDeps dryRun does not call the runner and reports the plugin a
     assert.equal(runner.calls.length, 0);
     assert.equal(result.installed.length, 1);
     assert.equal(result.installed[0].dryRun, true);
-    assert.equal(result.installed[0].plugin, 'tikz-helper');
+    assert.equal(result.installed[0].plugin, 'mermaid-helper');
     // nothing was actually created
     const { existsSync } = await import('node:fs');
     assert.equal(existsSync(path.join(pluginDir, 'node_modules')), false);
@@ -293,10 +293,10 @@ test('installPluginDeps plugin filter processes only the named plugin', async ()
   const ompRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-install-6-'));
   try {
     await writeMarketplace(ompRoot, 'ecc', [
-      { name: 'tikz-helper', version: '1.0.0', skills: ['./skills/tikz'] },
+      { name: 'mermaid-helper', version: '1.0.0', skills: ['./skills/mermaid'] },
       { name: 'other-helper', version: '1.0.0', skills: ['./skills/other'] },
     ]);
-    await createPluginCache(ompRoot, 'ecc', 'tikz-helper', '1.0.0', { [FAKE_DEP]: '^1.0.0' });
+    await createPluginCache(ompRoot, 'ecc', 'mermaid-helper', '1.0.0', { [FAKE_DEP]: '^1.0.0' });
     await createPluginCache(ompRoot, 'ecc', 'other-helper', '1.0.0', { [FAKE_DEP]: '^1.0.0' });
     const runner = recordingInstallRunner();
 
@@ -316,16 +316,16 @@ test('installPluginDeps records an error (and does not throw) when the runner th
   const ompRoot = await mkdtemp(path.join(os.tmpdir(), 'omp-install-7-'));
   try {
     await writeMarketplace(ompRoot, 'ecc', [
-      { name: 'tikz-helper', version: '1.0.0', skills: ['./skills/tikz'] },
+      { name: 'mermaid-helper', version: '1.0.0', skills: ['./skills/mermaid'] },
     ]);
-    await createPluginCache(ompRoot, 'ecc', 'tikz-helper', '1.0.0', { [FAKE_DEP]: '^1.0.0' });
+    await createPluginCache(ompRoot, 'ecc', 'mermaid-helper', '1.0.0', { [FAKE_DEP]: '^1.0.0' });
     const runner = recordingInstallRunner({ throwOn: 'simulated npm install failure' });
 
     const result = await installPluginDeps({ ompRoot, installRunner: runner });
 
     assert.equal(result.errors.length, 1);
     assert.equal(result.installed.length, 0);
-    assert.equal(result.errors[0].plugin, 'tikz-helper');
+    assert.equal(result.errors[0].plugin, 'mermaid-helper');
     assert.match(result.errors[0].error, /simulated npm install failure/);
   } finally {
     await rm(ompRoot, { recursive: true, force: true });

@@ -187,10 +187,8 @@ test('the consolidated code lifecycle uses analyzer plus native task and reviewe
 });
 
 test('domain workflows expose their role candidates and skills', () => {
-  assert.equal(workflowCatalog.visual.roles.includes('designer'), true);
-  assert.equal(workflowCatalog.visual.roles.includes('task'), true);
-  assert.equal(workflowCatalog.visual.roles.includes('visioner'), true);
-  assert.deepEqual(workflowCatalog.visual.skills, ['mermaid-diagram', 'tikz-diagram', 'svg-flowchart', 'frontend-design', 'canvas-design']);
+  assert.deepEqual(workflowCatalog.visual.roles, ['designer', 'task']);
+  assert.deepEqual(workflowCatalog.visual.skills, ['mermaid-diagram', 'svg-flowchart', 'frontend-design', 'canvas-design']);
 
   assert.deepEqual(workflowCatalog.writing.roles, ['writer', 'zh-writer', 'checker', 'zh-checker', 'task']);
   assert.ok(workflowCatalog.writing.skills.includes('writing-review'));

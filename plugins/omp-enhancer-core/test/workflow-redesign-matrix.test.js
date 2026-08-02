@@ -41,8 +41,8 @@ const EXPECTED_CONTRACTS = {
     skills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
   },
   visual: {
-    roles: ['designer', 'task', 'visioner'],
-    skills: ['mermaid-diagram', 'tikz-diagram', 'svg-flowchart', 'frontend-design', 'canvas-design'],
+    roles: ['designer', 'task'],
+    skills: ['mermaid-diagram', 'svg-flowchart', 'frontend-design', 'canvas-design'],
   },
   operations: {
     roles: [
@@ -83,17 +83,17 @@ test('no definition carries the removed delegation, step, or composition fields'
   }
 });
 
-test('the visual workflow keeps the designer -> task render -> visioner advisory chain in suggestedFlow', () => {
+test('the visual workflow keeps the designer one-pass Mermaid render chain advisory in suggestedFlow', () => {
   const visual = workflowCatalog.visual;
   const flow = visual.suggestedFlow.join(' ');
 
   assert.equal(visual.roles.includes('designer'), true);
   assert.equal(visual.roles.includes('task'), true);
-  assert.equal(visual.roles.includes('visioner'), true);
   assert.match(flow, /Design via designer for complex visuals, or directly for simple diagrams/iu);
-  assert.match(flow, /Render and verify output via task; review via visioner for quality/iu);
+  assert.match(flow, /designer authors the complete Mermaid source in one pass and renders it via mermaid_render/iu);
+  assert.match(flow, /Main performs a simple check of the rendered SVG before delivery/iu);
   assert.match(flow, /Deliver with source files and rendered evidence/iu);
-  assert.match(visual.scopeNotes.join(' '), /Default to Mermaid for academic diagrams unless explicit TikZ\/LaTeX request/iu);
+  assert.match(visual.scopeNotes.join(' '), /All diagrams are authored as Mermaid source and rendered with mermaid_render/iu);
 });
 
 test('the code workflow keeps TDD and analyzer delegation advisory without fixed fanout', () => {

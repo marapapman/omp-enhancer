@@ -33,7 +33,7 @@ test('one plugin workspace inventory matches npm and marketplace metadata', asyn
   }))
 })
 
-test('canonical inventory includes the independently installable TikZ helper last', () => {
+test('canonical inventory includes the independently installable Mermaid helper last', () => {
   assert.deepEqual(
     pluginWorkspaces.map(({ name, workspace }) => ({ name, workspace })),
     [
@@ -42,7 +42,7 @@ test('canonical inventory includes the independently installable TikZ helper las
       { name: 'omp-testing-enhancer', workspace: 'plugins/omp-test-enhancer' },
       { name: 'omp-fact-checker', workspace: 'plugins/omp-fact-checker' },
       { name: 'omp-enhancer-core', workspace: 'plugins/omp-enhancer-core' },
-      { name: 'tikz-helper', workspace: 'plugins/tikz-helper' },
+      { name: 'mermaid-helper', workspace: 'plugins/mermaid-helper' },
     ],
   )
 })

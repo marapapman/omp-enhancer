@@ -153,7 +153,7 @@ test('Beamer skill supplies layout specialization while visioner reviews fresh r
   assert.match(slidesSkill, /Have `designer` perform the final layout pass/i);
   assert.match(slidesSkill, /overlap, crowding, clipping, undersized text, cropped or distorted figures/is);
   assert.match(slidesSkill, /Do not split, add, remove, or reorder frames without explicit user authorization/i);
-  assert.match(visioner, /rendered diagrams and slide decks/i);
+  assert.match(visioner, /slide decks.+UI\/web responsive.+static canvas.+export artifacts/is);
   assert.match(visioner, /latest full-resolution page renders and the overview or contact sheet/i);
   assert.match(visioner, /text and image overlap.+crowding.+clipping.+undersized text.+cropped or distorted images/is);
   assert.match(visioner, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);

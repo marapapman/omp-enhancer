@@ -100,9 +100,6 @@ test('enhancer tools stay inactive until the user explicitly enables a group', a
     'writing_logic_check',
     'fact_check_analyze',
     'omp_test_analyze',
-    'tikz_catalog_search',
-    'tikz_prepare_asset',
-    'tikz_render',
     'mermaid_render',
   ];
   pi.activeTools = ['read'];
@@ -117,13 +114,13 @@ test('enhancer tools stay inactive until the user explicitly enables a group', a
   await command.handler('disable core', ctx);
   assert.deepEqual(pi.activeTools, ['read']);
 
-  await command.handler('enable tikz', ctx);
+  await command.handler('enable mermaid', ctx);
   assert.deepEqual(
     pi.activeTools,
-    ['read', 'tikz_catalog_search', 'tikz_prepare_asset', 'tikz_render', 'mermaid_render'],
+    ['read', 'mermaid_render'],
   );
 
-  await command.handler('disable tikz', ctx);
+  await command.handler('disable mermaid', ctx);
   assert.deepEqual(pi.activeTools, ['read']);
 
   await command.handler('enable all', ctx);

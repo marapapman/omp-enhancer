@@ -11,8 +11,8 @@
 /**
  * Build a model-actionable error message for a malformed tool parameter.
  * @param {object} opts
- * @param {string} opts.toolName — e.g. 'tikz_generate_diagram'
- * @param {string} opts.field — e.g. 'graph'
+ * @param {string} opts.toolName — e.g. 'mermaid_render'
+ * @param {string} opts.field — e.g. 'source'
  * @param {unknown} opts.badValue — what the model actually passed
  * @param {string} opts.expected — human description of the expected type/format
  * @param {string} [opts.example] — a corrected example value or call snippet

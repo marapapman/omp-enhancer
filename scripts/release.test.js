@@ -19,7 +19,7 @@ const fixtureVersions = new Map([
   ['omp-testing-enhancer', '0.1.3'],
   ['omp-fact-checker', '0.1.0'],
   ['omp-enhancer-core', '0.1.0'],
-  ['tikz-helper', '0.1.0'],
+  ['mermaid-helper', '0.1.0'],
 ]);
 
 const pluginFixtures = pluginWorkspaces.map(({ directory, name }) => ({
@@ -165,7 +165,7 @@ test('--catalog-bump updates marketplace metadata during a scoped plugin release
   await withReleaseFixture(async (root) => {
     const result = await runRelease(root, [
       '--plugin',
-      'tikz-helper',
+      'mermaid-helper',
       '--bump',
       'patch',
       '--catalog-bump',
@@ -176,10 +176,10 @@ test('--catalog-bump updates marketplace metadata during a scoped plugin release
     assertReleaseSucceeded(result);
 
     const catalog = await readCatalog(root);
-    const tikzHelper = catalog.plugins.find((plugin) => plugin.name === 'tikz-helper');
+    const mermaidHelper = catalog.plugins.find((plugin) => plugin.name === 'mermaid-helper');
     const core = catalog.plugins.find((plugin) => plugin.name === 'omp-enhancer-core');
     assert.equal(catalog.metadata.version, '1.0.1');
-    assert.equal(tikzHelper.version, '0.1.1');
+    assert.equal(mermaidHelper.version, '0.1.1');
     assert.equal(core.version, '0.1.0');
   });
 });
@@ -282,7 +282,7 @@ test('--plugin all --bump patch bumps every plugin package, every catalog entry,
       ['omp-testing-enhancer', { directory: 'omp-test-enhancer', version: '0.1.4' }],
       ['omp-fact-checker', { directory: 'omp-fact-checker', version: '0.1.1' }],
       ['omp-enhancer-core', { directory: 'omp-enhancer-core', version: '0.1.1' }],
-      ['tikz-helper', { directory: 'tikz-helper', version: '0.1.1' }],
+      ['mermaid-helper', { directory: 'mermaid-helper', version: '0.1.1' }],
     ]);
 
     assert.equal(catalog.metadata.version, '1.0.1');

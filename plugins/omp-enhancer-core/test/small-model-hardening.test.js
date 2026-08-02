@@ -11,17 +11,17 @@ import {
 describe('actionableParamError', () => {
   it('includes field name, bad value, expected format, and example', () => {
     const msg = actionableParamError({
-      toolName: 'tikz_generate_diagram',
-      field: 'graph',
+      toolName: 'mermaid_render',
+      field: 'source',
       badValue: { id: 'root' },
       expected: 'a JSON string (use JSON.stringify())',
-      example: '"graph": "{\\"id\\":\\"root\\"}"',
+      example: '"source": "{\\"id\\":\\"root\\"}"',
     });
-    assert.ok(msg.includes('tikz_generate_diagram'));
-    assert.ok(msg.includes('graph'));
+    assert.ok(msg.includes('mermaid_render'));
+    assert.ok(msg.includes('source'));
     assert.ok(msg.includes('object'));
     assert.ok(msg.includes('JSON string'));
-    assert.ok(msg.includes('"graph"'));
+    assert.ok(msg.includes('"source"'));
   });
 
   it('omits example line when not provided', () => {
@@ -122,18 +122,18 @@ describe('withToolErrorHandling', () => {
     assert.ok(result.content[0].text.includes('bad input'));
   });
 
-  it('preserves code and details from TikzRuntimeError', async () => {
+  it('preserves code and details from a mermaid_render parameter error', async () => {
     const handler = async () => {
-      const err = new Error('invalid graph');
-      err.code = 'INVALID_GRAPH_IR';
-      err.details = { nodeCount: 5 };
+      const err = new Error('missing source');
+      err.code = 'INVALID_PARAMETER';
+      err.details = { field: 'source' };
       throw err;
     };
-    const wrapped = withToolErrorHandling('tikz', handler);
+    const wrapped = withToolErrorHandling('mermaid', handler);
     const result = await wrapped('1', {}, undefined, undefined, {});
     assert.equal(result.isError, true);
-    assert.equal(result.details.code, 'INVALID_GRAPH_IR');
-    assert.deepEqual(result.details.context, { nodeCount: 5 });
+    assert.equal(result.details.code, 'INVALID_PARAMETER');
+    assert.deepEqual(result.details.context, { field: 'source' });
   });
 });
 

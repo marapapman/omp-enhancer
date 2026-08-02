@@ -1,4 +1,0 @@
-interface:
-  display_name: "Mermaid Diagram"
-  short_description: "Author editable Mermaid diagrams and render them to revision-bound SVG"
-  default_prompt: "Use $mermaid-diagram to create an editable, rendered, and reviewed Mermaid flowchart."

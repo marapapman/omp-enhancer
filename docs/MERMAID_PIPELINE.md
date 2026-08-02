@@ -1,16 +1,16 @@
 # Mermaid Diagram Pipeline (mermaid_render)
 
-Contract for the Mermaid code-first diagram pipeline: author Mermaid source as code, convert it to a revision-bound SVG with `mermaid_render`, and review that fresh render as the figure evidence. This is the default pipeline for academic architecture, block-diagram, flowchart, decision-flow, and deploy-pipeline figures; editable TikZ explicitly requested via TikZ or LaTeX source still goes to `diagram.tikz` under the ELK-first contract in [TIKZ_PLUGIN.md](./TIKZ_PLUGIN.md).
+Contract for the Mermaid code-first diagram pipeline: author Mermaid source as code, convert it to a revision-bound SVG with `mermaid_render`, and have Main check that fresh render as the figure evidence. This is the default and only pipeline for academic architecture, block-diagram, flowchart, decision-flow, and deploy-pipeline figures.
 
 ## Pipeline
 
 1. Main fixes audience, target path, output format, node set, labels, icon policy, and evidence requirements.
-2. The author writes Mermaid source as code: semantic graph first (stable node IDs, labels, directed edges, branch conditions, subgraphs, direction), then Mermaid syntax (flowchart TD/LR, node shapes, edge labels, subgraphs, classDef styles). The author never hand-edits SVG coordinates and never invokes the renderer directly.
+2. `designer` authors the complete Mermaid source in one pass: semantic graph first (stable node IDs, labels, directed edges, branch conditions, subgraphs, direction), then Mermaid syntax (flowchart TD/LR, node shapes, edge labels, subgraphs, classDef styles). The author never hand-edits SVG coordinates.
 3. Optional SVG icon assets are prepared with the `svg-flowchart` skill (monochrome, orthogonal, readable) and bound into the asset manifest as node pictograms.
-4. `task` calls `mermaid_render` with the source and the requested theme/width; the tool renders offline and publishes revision-bound SVG evidence.
-5. `visioner` independently reviews only the fresh current-revision render against the semantic spec: real `<text>` elements, a `viewBox`, and no `foreignObject`.
+4. `mermaid_render` renders that exact source with the requested theme/width; the tool renders offline and publishes revision-bound SVG evidence.
+5. Main performs a simple check of the rendered SVG: real `<text>` elements, a `viewBox`, no `foreignObject`, no clipping or overlap, branch labels legible, arrows in the right direction.
 
-`mermaid_render` is a single-purpose converter: Mermaid source in, revision-bound SVG out. It does not replace TikZ layout, is not a router, and adds no completion authority; its findings are advisory evidence for Main.
+`mermaid_render` is a single-purpose converter: Mermaid source in, revision-bound SVG out. It is not a router and adds no completion authority; its findings are advisory evidence for Main.
 
 ## Tool surface
 
@@ -24,7 +24,7 @@ Contract for the Mermaid code-first diagram pipeline: author Mermaid source as c
   - `width` — optional integer target width.
   - `timeoutMs` — render timeout, default 60000, maximum 120000.
 - Constants: `DEFAULT_OUTPUT_DIRECTORY figures/mermaid/rendered`, `DEFAULT_TIMEOUT_MS 60000`, `MAX_TIMEOUT_MS 120000`, `MAX_COMMAND_OUTPUT_BYTES 256 KiB`, `MAX_SOURCE_BYTES 2 MiB`.
-- Dual surface: the tool is registered in the OMP runtime (`index.js`, tool group `tikz` extended by the `mermaid_` prefix, active by default) AND in the standalone stdio MCP server (`mcp-server.js` TOOL_DEFS + HANDLERS; protocolVersion 2024-11-05 unchanged). Both surfaces expose the identical name, approval class, and parameter schema.
+- Dual surface: the tool is registered in the OMP runtime (`index.js`, tool group `mermaid` with the `mermaid_` prefix, active by default) AND in the standalone stdio MCP server (`mcp-server.js` TOOL_DEFS + HANDLERS; protocolVersion 2024-11-05 unchanged). Both surfaces expose the identical name, approval class, and parameter schema.
 
 ## Artifact contract
 
@@ -42,8 +42,8 @@ Contract for the Mermaid code-first diagram pipeline: author Mermaid source as c
 
 ## Error codes and install guidance
 
-- `MERMAID_NOT_INSTALLED` — `@mermaid-js/mermaid-cli` is missing. Run `npm install` at the repo root (npm workspace) so `@mermaid-js/mermaid-cli@^11.16.0` and `puppeteer@^24.15.0` resolve for `plugins/tikz-helper`, then retry from the Mermaid source. Never hand-author SVG coordinates as a fallback.
-- `CHROME_NOT_FOUND` — no usable Chrome executable was found. Detection order is: `PUPPETEER_EXECUTABLE_PATH` (explicit override) → a system chromium (`chromium`, `chromium-browser`, `google-chrome`, `google-chrome-stable`) found on `PATH` (independent of puppeteer, so it works in the installed runtime) → puppeteer's Chrome for Testing cache, permission-checked (regular file with the execute bit). The check does not verify a cached binary can run on this platform (an x86-64 download inside a linux_arm cache dir still has the execute bit); with no PATH chromium and no env override such a binary is selected and a wrong-arch launch then fails as a structured `COMMAND_FAILED` whose details carry the captured stderr. Install a system chromium (apt/snap) or run `node node_modules/puppeteer/install.mjs` (or re-run the npm postinstall) to download Chrome for Testing. Headless Chrome on minimal hosts also needs its shared libraries (libnss3, libatk, libgbm, libasound2, etc.); missing libraries are an environment prerequisite and are reported distinctly from code failures. `PUPPETEER_CACHE_DIR` relocates the cache for CI; `PUPPETEER_SKIP_DOWNLOAD=1` plus an explicit `executablePath` serves locked-down environments.
+- `MERMAID_NOT_INSTALLED` — `@mermaid-js/mermaid-cli` is missing. Run `npm install` at the repo root (npm workspace) so `@mermaid-js/mermaid-cli@^11.16.0` and `puppeteer@^24.15.0` resolve for `plugins/mermaid-helper`, then retry from the Mermaid source. Never hand-author SVG coordinates as a fallback.
+- `CHROME_NOT_FOUND` — no usable Chrome executable was found. Detection order is: `PUPPETEER_EXECUTABLE_PATH` (explicit override) → a system chromium (`chromium`, `chromium-browser`, `google-chrome`, `google-chrome-stable`) found on `PATH` (independent of puppeteer, so it works in the installed runtime) → puppeteer's Chrome for Testing cache, permission-checked (regular file with the execute bit). The check does not verify a cached binary can run on this platform (an x86-64 download inside a linux_arm cache dir still has the execute bit); with no PATH chromium and no env override such a binary is selected and a wrong-arch launch then fails as a structured `COMMAND_FAILED` whose details carry the captured stderr. Install a system chromium (apt/snap) or run `npx puppeteer browsers install chrome` at the repo root, then retry.
 - `INVALID_PARAMETER` — both or neither of `source`/`sourcePath`, wrong `sourcePath` extension (must be `.mmd`/`.md`), a non-dash basename, or `timeoutMs` out of bounds.
 - `PATH_OUTSIDE_PROJECT` / `SYMLINK_ESCAPE` — path-policy rejections.
 - `OUTPUT_LIMIT` / `COMMAND_TIMEOUT` — bounded-command outcomes (stderr cap exceeded; deadline exceeded).
@@ -69,7 +69,3 @@ Contract for the Mermaid code-first diagram pipeline: author Mermaid source as c
 | Missing deps | Chrome absent | `CHROME_NOT_FOUND` with install guidance |
 | Chrome detection | env override → PATH scan → puppeteer cache | probed executable pinned via `executablePath`; system chromium on PATH preferred over an unusable cache binary |
 | Determinism | same source + config + versions | same revision |
-
-## Relationship to TikZ
-
-The TikZ pipeline ([TIKZ_PLUGIN.md](./TIKZ_PLUGIN.md)) stays ELK-first and unchanged for explicit editable-TikZ requests; `diagram.tikz` still owns the ELK graph IR, `tikz_generate_diagram`, and `tikz_render`. The two pipelines share the OMP delegation pattern (designer → task → visioner), the advisory-findings boundary, and the revision-bound evidence discipline, but their tools, skills, and layout engines are separate.

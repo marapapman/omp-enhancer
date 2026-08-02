@@ -21,17 +21,18 @@ test('SVG flowchart skill defines strict geometry, spacing, and bounded rendered
   assert.match(skill, /16 px minimum/i);
   assert.match(skill, /`designer` owns one complete SVG icon asset revision/is);
   assert.match(skill, /`task` runs the bundled checker.+renders the current SVG icon revision.+binds.+revision identifier.+full declared size.+60%/is);
-  assert.match(skill, /`visioner` independently inspect.+fresh.+full-size.+60%/is);
+  assert.match(skill, /Main performs a simple check of the fresh latest full-size and 60% renders/is);
   assert.match(skill, /Agent availability and capacity remain Main decisions/i);
-  assert.match(skill, /supported finding.+`designer` applies.+`task` reruns the checker and rerenders.+`visioner` reviews only fresh rerendered evidence.+at most once/is);
-  assert.match(skill, /Main only authorizes external effects during initial setup and accepts final delivery.+does not check, render, modify, reconcile, or mediate the visual loop/is);
+  assert.match(skill, /supported finding.+`designer` applies.+`task` reruns the checker and rerenders.+Main checks only fresh rerendered evidence.+at most once/is);
+  assert.match(skill, /Main only authorizes external effects during initial setup and accepts final delivery.+does not render, modify, reconcile, or mediate the design/is);
   assert.match(skill, /Do not review an unchanged artifact again/i);
-  assert.match(skill, /Do not claim visual approval from source inspection or the static checker alone/i);
-  assert.match(skill, /No review verdict grants permission to publish or complete/i);
+  assert.match(skill, /Do not claim visual acceptance from source inspection or the static checker alone/i);
+  assert.match(skill, /No check grants permission to publish or complete/i);
   assert.match(skill, /icon asset method|asset method under the `visual` workflow/is);
   assert.match(skill, /Final layout and whole-figure output belong to the owning visual workflow/is);
   assert.match(skill, /SVG icon asset static validation only/is);
   assert.doesNotMatch(skill, /standalone diagram workflow|standalone diagram authoring/i);
+  assert.doesNotMatch(skill, /visioner|tikz/i);
   assert.doesNotMatch(skill, /Main may assign.+(?:rerun|renderer)|Main (?:runs|reruns|renders|modifies) the (?:checker|SVG|geometry)/is);
   assert.doesNotMatch(skill, /maximum of three|finish with zero|have `designer` address every|retry until|repeat until|block:\s*true|continue:\s*true/i);
 });
@@ -42,17 +43,18 @@ test('SVG skill supplies the explicit pure black and white diagram constraint', 
   assert.match(skill, /Use only black.+white.+fill="none"/is);
 });
 
-test('visioner is a read-only rendered-diagram reviewer backed by the vision role', async () => {
+test('visioner is a read-only reviewer for slide decks, UI artifacts, and static exports without diagram review', async () => {
   const visioner = await readFile(visionerUrl, 'utf8');
 
   assert.match(visioner, /^name: visioner$/m);
   assert.match(visioner, /^\s*- pi\/vision$/m);
   assert.match(visioner, /read-only/i);
   assert.match(visioner, /^\s*- inspect_image$/m);
-  assert.match(visioner, /latest full-size and 60% raster renders/i);
+  assert.match(visioner, /slide decks.+UI\/web responsive.+static canvas.+export artifacts/is);
   assert.match(visioner, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);
-  assert.match(visioner, /element IDs?.+visible region.+impact.+requested correction/is);
+  assert.match(visioner, /page number.+visible region.+impact.+requested correction/is);
   assert.match(visioner, /Do not approve a revision by inspecting an older render/i);
+  assert.doesNotMatch(visioner, /diagram|mermaid|tikz/i);
   assert.doesNotMatch(visioner, /^\s*- (?:edit|write)$/m);
   assert.doesNotMatch(visioner, /block:\s*true|continue:\s*true|retry until|repeat until/i);
 });

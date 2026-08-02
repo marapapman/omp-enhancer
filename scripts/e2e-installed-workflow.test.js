@@ -882,7 +882,7 @@ test('linked Skill references are resources rather than independent Skill claims
         role: 'assistant',
         content: [{
           type: 'text',
-          text: 'RESOURCE EXTENSION | source=skill://tikz-diagram | reads=skill://tikz-diagram/references/opentikz-contract.md, skill://tikz-diagram/references/render-review.md',
+          text: 'RESOURCE EXTENSION | source=skill://mermaid-diagram | reads=skill://mermaid-diagram/references/mermaid-authoring.md, skill://mermaid-diagram/references/render-review.md',
         }],
       },
     },
@@ -892,23 +892,23 @@ test('linked Skill references are resources rather than independent Skill claims
         role: 'assistant',
         content: [{
           type: 'toolCall',
-          id: 'read-tikz-skill',
+          id: 'read-mermaid-skill',
           name: 'read',
-          arguments: { path: 'skill://tikz-diagram' },
+          arguments: { path: 'skill://mermaid-diagram' },
         }],
       },
     },
     {
       type: 'tool_execution_end',
-      toolCallId: 'read-tikz-skill',
+      toolCallId: 'read-mermaid-skill',
       toolName: 'read',
-      result: { isError: false, content: [{ type: 'text', text: '---\nname: tikz-diagram\n---' }] },
+      result: { isError: false, content: [{ type: 'text', text: '---\nname: mermaid-diagram\n---' }] },
     },
     { type: 'agent_end' },
   ], { exitCode: 0 });
 
-  assert.deepEqual(summary.observedSkills, ['tikz-diagram']);
-  assert.deepEqual(summary.claimedSkills, ['tikz-diagram']);
+  assert.deepEqual(summary.observedSkills, ['mermaid-diagram']);
+  assert.deepEqual(summary.claimedSkills, ['mermaid-diagram']);
   assert.deepEqual(summary.unobservedClaims, []);
 });
 
@@ -3468,7 +3468,7 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   ]) {
     assert.equal(matrix.defaults.expectations[expectation], true, expectation);
   }
-  assert.equal(matrix.scenarios.length, 11);
+  assert.equal(matrix.scenarios.length, 10);
   const controls = matrix.scenarios.filter(({ category }) => category === 'harness-control');
   assert.deepEqual(controls.map(({ id }) => id), ['fixture-xlsx-control']);
   for (const scenario of matrix.scenarios.filter(({ category }) => category !== 'harness-control')) {
@@ -3496,24 +3496,20 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   assert.equal(fact.expectations.forbiddenFinalPatterns, undefined);
   const docker = matrix.scenarios.find(({ id }) => id === 'natural-docker-compose');
   assert.equal(docker.expectations.maxObservedSkills, 2);
-  const tikz = matrix.scenarios.find(({ id }) => id === 'natural-tikz-diagram');
-  assert.deepEqual(tikz.expectations.requiredSelectedWorkflowIds, ['visual']);
-  assert.deepEqual(tikz.expectations.requiredObservedSkills, ['tikz-diagram', 'svg-flowchart']);
-  assert.ok(tikz.expectations.forbiddenSkills.includes('svg-writing'));
   const mermaid = matrix.scenarios.find(({ id }) => id === 'natural-mermaid-diagram');
-  assert.equal(mermaid.category, 'tikz-helper');
+  assert.equal(mermaid.category, 'mermaid-helper');
   assert.equal(mermaid.fixture, 'skill-discovery-readonly');
   assert.equal(mermaid.expectations.minWorkflowReferenceReads, 1);
   assert.deepEqual(mermaid.expectations.requiredSelectedWorkflowIds, ['visual']);
-  assert.deepEqual(mermaid.expectations.requiredObservedSkills, ['mermaid-diagram', 'svg-flowchart']);
-  assert.equal(mermaid.expectations.maxObservedSkills, 7);
+  assert.deepEqual(mermaid.expectations.requiredObservedSkills, ['mermaid-diagram']);
+  assert.equal(mermaid.expectations.maxObservedSkills, 5);
   assert.ok(mermaid.expectations.forbiddenSkills.includes('svg-writing'));
   assert.ok(mermaid.expectations.forbiddenSkills.includes('writing-review'));
   assert.ok(mermaid.expectations.forbiddenSkills.includes('writing-markdown-helper'));
   assert.match(mermaid.prompt, /mermaid_render/iu);
   assert.match(mermaid.prompt, /revision-bound SVG/iu);
-  assert.match(mermaid.prompt, /never using TikZ/iu);
-  assert.doesNotMatch(mermaid.prompt, /ELK graph IR|tikz_generate_diagram/iu);
+  assert.match(mermaid.prompt, /Author the complete Mermaid source in one pass/iu);
+  assert.match(mermaid.prompt, /simple Main check of the rendered SVG/iu);
   const subagent = matrix.scenarios.find(({ id }) => id === 'natural-subagent-isolation');
   assert.equal(subagent.expectations.requireNativeTaskCompletion, true);
   assert.equal(subagent.expectations.requireSuccessfulToolCalls, false);
@@ -3776,30 +3772,9 @@ test('DeepSeek subagent default matrix keeps native task and hub semantics with 
   assert.match(network.prompt, /pre-deployment configuration-validation checklist/iu);
   assert.match(network.prompt, /advisory migration-risk review/iu);
   assert.doesNotMatch(network.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
-  const diagram = matrix.scenarios.find(({ id }) => id === 'natural-diagram-tikz-subagent-default');
-  assert.ok(diagram, 'natural-diagram-tikz-subagent-default scenario must exist');
-  assert.equal(diagram.fixture, 'visual-tikz-canvas');
-  assert.equal(diagram.category, 'subagent-default/visual');
-  assert.equal(diagram.expectations.requiredWorkflowPrimary, 'visual');
-  assert.deepEqual(diagram.expectations.requiredSelectedWorkflowIds, ['visual']);
-  assert.deepEqual(diagram.expectations.requiredObservedSkills, [
-    'omp-enhancer-workflows',
-    'tikz-diagram',
-    'svg-flowchart',
-  ]);
-  assert.deepEqual(diagram.expectations.requiredNativeTaskAgents, ['designer', 'visioner']);
-  assert.equal(diagram.expectations.minNativeTaskCalls, 1);
-  assert.equal(diagram.expectations.requireNativeTaskCompletion, true);
-  assert.equal(diagram.expectations.requireNativeTodoInit, true);
-  assert.equal(diagram.expectations.requireNativeTodoCompletion, true);
-  assert.match(diagram.prompt, /tikz_generate_diagram/iu);
-  assert.match(diagram.prompt, /ELK graph IR/iu);
-  assert.match(diagram.prompt, /svg-flowchart skill/iu);
-  assert.doesNotMatch(diagram.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
-  assert.equal(diagram.fixtureExpectations.requiredChangedFiles[0], 'docs/deploy-flow.tex');
   const mermaid = matrix.scenarios.find(({ id }) => id === 'diagram-mermaid-subagent-default');
   assert.ok(mermaid, 'diagram-mermaid-subagent-default scenario must exist');
-  assert.equal(mermaid.fixture, 'visual-tikz-canvas');
+  assert.equal(mermaid.fixture, 'visual-mermaid-canvas');
   assert.equal(mermaid.category, 'subagent-default/visual');
   assert.equal(mermaid.timeoutSeconds, 480);
   assert.deepEqual(mermaid.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob', 'write', 'edit']);
@@ -3808,15 +3783,14 @@ test('DeepSeek subagent default matrix keeps native task and hub semantics with 
   assert.deepEqual(mermaid.expectations.requiredObservedSkills, [
     'omp-enhancer-workflows',
     'mermaid-diagram',
-    'svg-flowchart',
   ]);
-  assert.equal(mermaid.expectations.maxObservedSkills, 3);
-  assert.deepEqual(mermaid.expectations.requiredNativeTaskAgents, ['designer', 'visioner']);
+  assert.equal(mermaid.expectations.maxObservedSkills, 2);
+  assert.deepEqual(mermaid.expectations.requiredNativeTaskAgents, ['designer']);
   assert.equal(mermaid.expectations.maxToolCalls, 60);
   assert.match(mermaid.prompt, /mermaid_render with outputDirectory docs/iu);
   assert.match(mermaid.prompt, /rollback edge from release to build/iu);
-  assert.match(mermaid.prompt, /never using TikZ/iu);
-  assert.doesNotMatch(mermaid.prompt, /ELK graph IR|tikz_generate_diagram/iu);
+  assert.match(mermaid.prompt, /complete Mermaid source in one pass/iu);
+  assert.match(mermaid.prompt, /Main performs a simple check of the rendered SVG/iu);
   assert.deepEqual(mermaid.fixtureExpectations.allowedChangedFiles, [
     'docs/deploy-flow.mmd',
     'docs/deploy-flow-*.svg',
@@ -3824,7 +3798,6 @@ test('DeepSeek subagent default matrix keeps native task and hub semantics with 
   assert.equal(mermaid.fixtureExpectations.requiredChangedFiles[0], 'docs/deploy-flow.mmd');
   assert.deepEqual(Object.keys(mermaid.fixtureExpectations.requiredPatterns), [
     'docs/deploy-flow.mmd',
-    'docs/deploy-flow-*.svg',
   ]);
   assert.deepEqual(mermaid.fixtureExpectations.forbiddenPatterns, {
     'docs/deploy-flow-*.svg': ['foreignObject'],
@@ -4304,7 +4277,7 @@ test('workflow consolidation matrix covers representative non-medical workflows 
     'plugins/omp-test-enhancer',
     'plugins/omp-fact-checker',
     'plugins/omp-enhancer-core',
-    'plugins/tikz-helper',
+    'plugins/mermaid-helper',
   ]);
   assert.deepEqual(matrix.defaults.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob']);
   assert.equal(matrix.defaults.expectations.requireNativeTaskCompletion, true);

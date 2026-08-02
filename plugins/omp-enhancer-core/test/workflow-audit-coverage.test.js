@@ -5,7 +5,7 @@ import { workflowDefinitions } from '../src/workflows/catalog.js';
 
 const AUDITOR_ROLES = new Set([
   'reviewer',
-  'visioner',
+  'designer',
   'fact-reviewer',
   'fact-cross-checker',
   'ecc-network-config-reviewer',
@@ -41,7 +41,7 @@ test('each consolidated workflow names its audit owner in suggestedFlow or roles
     code: ['reviewer'],
     writing: ['checker', 'zh-checker'],
     research: ['fact-reviewer', 'fact-cross-checker'],
-    visual: ['visioner'],
+    visual: ['designer'],
     operations: ['reviewer', 'ecc-security-reviewer'],
   };
 

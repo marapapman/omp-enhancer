@@ -30,7 +30,7 @@ Managed `AGENTS.md` 和 `WATCHDOG.yml` 不导入完整目录。Main block 声明
 
 每张 definition 只包含 `id`、`chooseWhen`、`skills`、`catalogSkills`、`roles`、`suggestedFlow` 和 `scopeNotes`。旧 schema 的委派默认、步骤、组合、质量检查或风险字段已全部移除；Main 按任务复杂度选择 direct work 或 delegation，而不是被卡片默认值指派。用户要求 Main-only、matching Agent 或 capacity 不可用、assignment input 不完整、dependency 或 write overlap 使拆分不安全时，Main 记录具体 limitation 并直接 fallback，而不是伪造委派。Writing 域的语言规则：目标正文为中文时选择中文写作 Skill（如 `plain-chinese-writing`、`zh-writing-markdown-helper`），英文时选择英文写作 Skill（如 `writing-review`、`writing-markdown-helper`）；LaTeX、Beamer、Markdown、Word 是格式叠加层，按目标格式加载对应 Skill，不构成独立 workflow。语言仍不明确时询问用户，不循环或猜测。
 
-当前 visual-delivery 建议：`designer` owns the design or source revision；`task` owns rendering, compilation, export, and optional imagegen execution；`visioner` reviews fresh current-revision evidence in a read-only checkpoint。`visual` 域覆盖 Mermaid、TikZ 图表、UI/UX artifact 与带视觉布局的 slides。TikZ 图表使用两阶段链：asset chain（`designer` icon plan -> `task` prepare/preview assets -> `visioner` per-asset review）先于 figure chain（`designer` ELK graph IR and `tikz_generate_diagram` layout -> `task` `tikz_render` -> `visioner` whole-figure review）；只有 `visioner`-approved assets 进入 manifest，`tikz_generate_diagram` 只在 asset review 之后调用。SVG 是 icon asset 与 compatibility supplement，不是并行 primary；topology、labels、connectors、node positions 与 edge geometry 仍属 TikZ。Main retains setup authorization and final acceptance only and does not mediate the visual loop。Agent 缺失时保留具体 checkpoint 或 evidence limitation；这只是 advisory guidance，不是 hard gate、router、fixed fanout、automatic loop 或 completion authority。
+当前 visual-delivery 建议：`designer` authors the complete Mermaid source in one pass；`mermaid_render` renders that exact source；Main performs a simple check of the rendered SVG。`visual` 域覆盖 Mermaid 图表、UI/UX artifact 与带视觉布局的 slides。图表一律以 Mermaid source 为拓扑、标签与几何的唯一来源，`mermaid_render` 计算布局并产出 SVG；author 绝不 hand-edit SVG coordinates。SVG 是 icon asset 与 compatibility supplement，不是并行 primary；topology、labels、connectors、node positions 与 edge geometry 仍属 Mermaid source。Main retains setup authorization and final acceptance only and does not mediate the visual loop。Agent 缺失时保留具体 checkpoint 或 evidence limitation；这只是 advisory guidance，不是 hard gate、router、fixed fanout、automatic loop 或 completion authority。
 
 普通代码任务使用唯一通用 workflow：`code`。原来的 `code.plan`、`code.debug`、`code.test`、`code.review`、`code.build`、`performance.optimize`、`research.technical` 与 `omp.plugin` 均已退役，其选择条件由 `code` 覆盖。`code` 使用唯一通用过程 Skill `code-development`，并把复杂度选择模型具体化为下面的 analyzer、vertical TDD、Main review 和 bounded reviewer lifecycle。
 
@@ -61,9 +61,9 @@ Core 为所有顶层 Main 任务保留一次 capability-gated one-shot orchestra
 | Writing Helper | 确定性写作逻辑、风格、引用检查和写作 Agents/Skills | 阻止交付或自动改写所有发现 |
 | Testing Enhancer | 测试目标/context、浏览器证据、coverage/mutation context、独立 review 和报告 | 执行 `testCommand` 输入、提供 `/test` command、决定会话完成 |
 | Fact Checker | claim plan、双 lane evidence、cross-check、report 和独立 review | 把缺失证据变成生命周期 gate |
-| TikZ Helper | 固定 OpenTikZ catalog/模板/图标、语义图契约、imagegen 资产整理和受限渲染 | 运行时拉取上游、替 imagegen 选权、把审查 verdict 变成完成门 |
+| Mermaid Helper | 受限 Mermaid 渲染（mermaid_render）与 revision-bound SVG 证据 | 运行时拉取上游、把渲染或检查 verdict 变成完成门 |
 
-除 tikz-helper 外，各插件导出的工具都设置为 `defaultInactive`。tikz-helper 的工具在插件加载时默认激活。只有用户显式执行 `/enhancer-tools enable <group>` 后，相应 schema 才加入当前 session 的 active tools。激活工具不是操作授权。
+除 mermaid-helper 外，各插件导出的工具都设置为 `defaultInactive`。mermaid-helper 的工具在插件加载时默认激活。只有用户显式执行 `/enhancer-tools enable <group>` 后，相应 schema 才加入当前 session 的 active tools。激活工具不是操作授权。
 
 ## Review 工具
 

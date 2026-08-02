@@ -221,7 +221,7 @@ node scripts/e2e/omp17-rpc-probe.mjs -- \
   -e plugins/writing-helper/index.js --plugin-dir plugins/writing-helper \
   -e plugins/omp-test-enhancer/dist/extension.js --plugin-dir plugins/omp-test-enhancer \
   -e plugins/omp-fact-checker/index.js --plugin-dir plugins/omp-fact-checker \
-  -e plugins/tikz-helper/index.js --plugin-dir plugins/tikz-helper
+  -e plugins/mermaid-helper/index.js --plugin-dir plugins/mermaid-helper
 ```
 
 Probe 使用隔离的临时 OMP home，只输出 hash、字符数和结构布尔值，不输出完整 prompt 或配置秘密。不要把 `--no-extensions` 与 `-e` 或 `--plugin-dir` 组合；OMP 会同时禁用显式工作树扩展，使对照产生假阳性。默认 probe 不提交 prompt，因此它只验证静态 startup `systemPrompt`、task schema、active tools、完整 catalog import、OMP 原生 Agents，以及 `omp-enhancer-workflows` 和单个顶层 `ecc-skill-catalog` 的原生发现状态。

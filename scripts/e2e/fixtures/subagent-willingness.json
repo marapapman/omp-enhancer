@@ -273,53 +273,12 @@
       }
     },
     {
-      "id": "natural-diagram-tikz-subagent-default",
-      "category": "subagent-default/visual",
-      "fixture": "visual-tikz-canvas",
-      "timeoutSeconds": 480,
-      "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
-      "prompt": "Create docs/deploy-flow.tex as an editable TikZ flowchart of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build. Author an ELK graph IR and call tikz_generate_diagram to compute the layout with ELK, never hand-editing TikZ coordinates. Use the svg-flowchart skill to produce a monochrome SVG icon asset for the release node, run it through the bundled SVG static checker, then integrate the approved icon into the TikZ figure. Render full-size and 60% rasters to docs/deploy-flow-full.png and docs/deploy-flow-60.png, and get independent visual review of the fresh renders before final delivery.",
-      "expectations": {
-        "minNativeTaskCalls": 1,
-        "maxNativeTaskCalls": 6,
-        "minNativeTaskAssignmentAttempts": 1,
-        "maxNativeTaskAssignmentAttempts": 6,
-        "requireNativeTaskCompletion": true,
-        "requireNativeTaskSubmissionForEveryAssignment": true,
-        "requireNonemptyNativeTaskContext": true,
-        "requiredNativeTaskAgents": ["designer", "visioner"],
-        "requiredObservedSkills": ["omp-enhancer-workflows", "tikz-diagram", "svg-flowchart"],
-        "maxObservedSkills": 3,
-        "forbiddenSkills": ["writing-markdown-helper"],
-        "requiredWorkflowPrimary": "visual",
-        "requiredSelectedWorkflowIds": ["visual"],
-        "requireWorkflowPlanBeforeResourceLoads": true,
-        "requireWorkflowPlanFirstVisibleContent": true,
-        "requireWorkflowPlanLoadCallsSameBatch": true,
-        "forbidResourceProjectSameBatch": true,
-        "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
-        "requireWorkflowReadyFirstVisibleContent": true,
-        "requireWorkflowReadyTodoOnlyBatch": true,
-        "requireExactSelectedWorkflowReferences": true,
-        "requireNativeTodoInit": true,
-        "minNativeTodoItems": 3,
-        "requireNativeTodoCompletion": true,
-        "requireNativeTodoInitBeforeSubstantiveTool": true,
-        "maxToolCalls": 60
-      },
-      "fixtureExpectations": {
-        "allowedChangedFiles": ["docs/deploy-flow.tex", "docs/deploy-flow-full.png", "docs/deploy-flow-60.png"],
-        "requiredChangedFiles": ["docs/deploy-flow.tex"],
-        "requiredPatterns": { "docs/deploy-flow.tex": ["\\documentclass", "\\begin{tikzpicture}"] }
-      }
-    },
-    {
       "id": "diagram-mermaid-subagent-default",
       "category": "subagent-default/visual",
-      "fixture": "visual-tikz-canvas",
+      "fixture": "visual-mermaid-canvas",
       "timeoutSeconds": 480,
       "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
-      "prompt": "Create docs/deploy-flow.mmd as an editable Mermaid flowchart of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build. Author the diagram in Mermaid code and call mermaid_render with outputDirectory docs to convert it to a revision-bound SVG (never hand-editing SVG coordinates and never using TikZ). Confirm the published SVG in docs/ contains real text elements (viewBox and text, no foreignObject). Get independent visual review of the fresh render before final delivery.",
+      "prompt": "Create docs/deploy-flow.mmd as an editable Mermaid flowchart of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build. Author the complete Mermaid source in one pass and call mermaid_render with outputDirectory docs to convert it to a revision-bound SVG (never hand-editing SVG coordinates). Confirm the published SVG in docs/ contains real text elements (viewBox and text, no foreignObject). Main performs a simple check of the rendered SVG before final delivery.",
       "expectations": {
         "minNativeTaskCalls": 1,
         "maxNativeTaskCalls": 6,
@@ -328,9 +287,9 @@
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requireNonemptyNativeTaskContext": true,
-        "requiredNativeTaskAgents": ["designer", "visioner"],
-        "requiredObservedSkills": ["omp-enhancer-workflows", "mermaid-diagram", "svg-flowchart"],
-        "maxObservedSkills": 3,
+        "requiredNativeTaskAgents": ["designer"],
+        "requiredObservedSkills": ["omp-enhancer-workflows", "mermaid-diagram"],
+        "maxObservedSkills": 2,
         "forbiddenSkills": ["writing-markdown-helper"],
         "requiredWorkflowPrimary": "visual",
         "requiredSelectedWorkflowIds": ["visual"],
@@ -352,8 +311,7 @@
         "allowedChangedFiles": ["docs/deploy-flow.mmd", "docs/deploy-flow-*.svg"],
         "requiredChangedFiles": ["docs/deploy-flow.mmd"],
         "requiredPatterns": {
-          "docs/deploy-flow.mmd": ["graph (TD|LR)", "-->", "rollback"],
-          "docs/deploy-flow-*.svg": ["viewBox", "<text"]
+          "docs/deploy-flow.mmd": ["graph (TD|LR)", "-->", "rollback"]
         },
         "forbiddenPatterns": { "docs/deploy-flow-*.svg": ["foreignObject"] }
       }

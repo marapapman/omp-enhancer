@@ -956,8 +956,8 @@ test('visual domain detection includes drawing-script generation and Chinese equ
   const { describeNaturalLanguageTask } = await loadDescriptorModule();
 
   // Positive: drawing-script generation recognized as visual
-  const tikz = describeNaturalLanguageTask({ prompt: '画一个 TikZ 架构图，展示部署流水线' });
-  assert.ok(tikz.domains.includes('visual'), 'zh TikZ diagram must be visual domain');
+  const mermaid = describeNaturalLanguageTask({ prompt: '画一个 Mermaid 架构图，展示部署流水线' });
+  assert.ok(mermaid.domains.includes('visual'), 'zh Mermaid diagram must be visual domain');
 
   const svg = describeNaturalLanguageTask({ prompt: 'Create an SVG flowchart of the deploy process' });
   assert.equal(svg.operation, 'create', 'SVG creation must be create operation');
@@ -965,6 +965,10 @@ test('visual domain detection includes drawing-script generation and Chinese equ
 
   const beautify = describeNaturalLanguageTask({ prompt: '美化这张 SVG 流程图' });
   assert.ok(beautify.domains.includes('visual'), 'zh SVG beautification must be visual domain');
+
+  // Regression: a bare Mermaid mention (no flowchart/diagram word) is still visual
+  const bareMermaid = describeNaturalLanguageTask({ prompt: 'Draw this as Mermaid' });
+  assert.ok(bareMermaid.domains.includes('visual'), 'bare Mermaid mention must be visual domain');
 
   // Negative: non-visual must not be flagged
   const memory = describeNaturalLanguageTask({ prompt: 'Help me figure out the memory leak in the cache layer' });

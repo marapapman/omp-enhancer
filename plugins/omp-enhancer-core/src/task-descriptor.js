@@ -627,7 +627,7 @@ function collectSignals(sourceText, prompt, { scopePrompt = prompt, rawPrompt = 
       || /^(?:(?:请|帮我|麻烦)\s*)?(?:为.{1,64})?(?:补充|补|添加|新增|编写|写)\s*(?:一些|一组)?\s*(?:(?:高信号|聚焦|安全|单元|回归|集成|端到端|e2e|边界|错误路径)\s*)*(?:测试(?!报告|总结|说明|结果|覆盖率|计划|文档)|用例)/.test(text.trim()));
   const visualWork = !functionalUiConstructionRequested && (
     /(?:视觉|界面|页面|看板|组件|动效|流程图|架构图|示意图|时序图|拓扑图|海报|幻灯片)/.test(text)
-    || /\b(?:visual|dashboard|landing page|responsive|hover|ui|tikz|svg|flowchart|diagrams?|beamer|poster)\b/.test(text)
+    || /\b(?:visual|dashboard|landing page|responsive|hover|ui|mermaid|svg|flowchart|diagrams?|beamer|poster)\b/.test(text)
   );
   const directCreate = directCodeCreate || directWorkflowCreate || documentArtifactCreateRequested
     || !noWorkspaceWrite && !noActionExecution && visualWork && (/(?:创建|生成|设计(?:并实现)?|搭建)|\b(?:create|build|implement|design)\b/.test(text)
@@ -2705,7 +2705,7 @@ function isVisualEditingDirective(value = '') {
   const proseTarget = /(?:文案|文字|文本|措辞|句子|段落|标题|标签|说明)|\b(?:copy|wording|text|sentence|paragraph|title|label|caption|prose)\b/.test(text);
   if (proseTarget) return false;
   const action = /(?:美化|优化|调整|修改|编辑|改善|润色)|\b(?:polish|edit|improve|refine|style|beautify|adjust|update|modify)\b/.test(text);
-  const visualTarget = /(?:视觉|界面|页面|看板|组件|布局|色彩|颜色|样式|间距|响应式|流程图|架构图|示意图|时序图|拓扑图|海报|幻灯片)|\b(?:visuals?|visually|dashboard|landing\s+page|react\s+component|ui|layout|spacing|typography|colou?rs?|responsive|hover\s+states?|tikz|svg|flowchart|diagrams?|beamer|poster)\b/.test(text);
+  const visualTarget = /(?:视觉|界面|页面|看板|组件|布局|色彩|颜色|样式|间距|响应式|流程图|架构图|示意图|时序图|拓扑图|海报|幻灯片)|\b(?:visuals?|visually|dashboard|landing\s+page|react\s+component|ui|layout|spacing|typography|colou?rs?|responsive|hover\s+states?|mermaid|svg|flowchart|diagrams?|beamer|poster)\b/.test(text);
   return action && visualTarget;
 }
 

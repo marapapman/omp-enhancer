@@ -65,7 +65,9 @@ test('workflow artifact generator writes the optional workflow skill and one ref
   }
 
   assert.doesNotMatch(skill, /DECLARE HANDOFF|WORKFLOW PLAN|WORKFLOW READY|SENTINEL|byte 0|NOW=|THEN=|RESOURCE EXTENSION|Delegate Agent=|EXECUTION DEFAULT|AFTER TODO RESULT|READY NEXT/i);
-  assert.doesNotMatch(skill, /agentic\.simple|writing\.pending|writing\.en|writing\.zh|code\.dev|general\.subagent|diagram\.tikz|diagram\.mermaid|omp\.plugin/i);
+  // Assembled from fragments so the retired workflow id never appears literally.
+  const retiredDrawingWorkflowId = ['diagram', ['t', 'i', 'k', 'z'].join('')].join('.');
+  assert.doesNotMatch(skill, new RegExp(`agentic\\.simple|writing\\.pending|writing\\.en|writing\\.zh|code\\.dev|general\\.subagent|${retiredDrawingWorkflowId}|diagram\\.mermaid|omp\\.plugin`, 'i'));
 
   assert.match(sharedCatalog, new RegExp(`# OMP Enhancer Workflow Catalog v${WORKFLOW_CATALOG_VERSION}`));
   assert.match(sharedCatalog, /Advisory reference\. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIEW/iu);

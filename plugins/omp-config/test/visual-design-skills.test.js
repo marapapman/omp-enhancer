@@ -63,7 +63,7 @@ test('visioner independently reviews UI states and static exports without mutati
   assertAdvisoryOnly(visioner);
 });
 
-test('existing slides and SVG Skills retain designer, current-render, and visioner ordering', async () => {
+test('existing slides retain visioner QA while the SVG icon method ends with a Main simple check', async () => {
   const [slides, svg] = await Promise.all([
     readFile(slidesUrl, 'utf8'),
     readFile(svgUrl, 'utf8'),
@@ -87,8 +87,9 @@ test('existing slides and SVG Skills retain designer, current-render, and vision
     /`designer` owns one complete SVG icon asset revision/is,
     /`task` runs the bundled checker/i,
     /`task` renders the current SVG icon revision/i,
-    /visioner` independently inspect only the fresh latest full-size and 60% renders/i,
+    /Main performs a simple check of the fresh latest full-size and 60% renders/i,
   ]);
+  assert.doesNotMatch(svg, /visioner|tikz/i);
 });
 
 test('architecture records the visual workflow as a soft evidence invariant', async () => {
@@ -96,7 +97,7 @@ test('architecture records the visual workflow as a soft evidence invariant', as
 
   assert.match(
     architecture,
-    /visual-delivery.+`designer` owns the design or source revision.+`task` owns rendering, compilation, export, and optional imagegen execution.+`visioner` reviews fresh current-revision evidence.+Main retains setup authorization and final acceptance only and does not mediate the visual loop.+hard gate.+router.+fixed fanout.+automatic loop.+completion authority/is,
+    /visual-delivery.+`designer` authors the complete Mermaid source in one pass.+`mermaid_render` renders.+Main performs a simple check.+advisory.+hard gate.+router.+fixed fanout.+automatic loop.+completion authority/is,
   );
 });
 
