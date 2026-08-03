@@ -92,8 +92,8 @@ function parseGeometry(inner) {
 
 function stripTags(value) {
   return String(value ?? '')
-    .replace(/<[^>]+>/g, '')
     .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
     .split('\n');
 }
 
@@ -250,12 +250,14 @@ export function checkDrawioLayout(source, { minFontSize = MIN_FONT_SIZE } = {}) 
     absolute.set(box.id, { x, y, w: geometry.width, h: geometry.height });
   }
 
-  // Box overlap and gutter.
+  // Box overlap and gutter. Containers legally contain their children, so
+  // parent-child pairs are skipped (the container margin check covers them).
   for (let i = 0; i < boxes.length; i += 1) {
     for (let j = i + 1; j < boxes.length; j += 1) {
       const a = absolute.get(boxes[i].id);
       const b = absolute.get(boxes[j].id);
       if (!a || !b) continue;
+      if (boxes[i].parent === boxes[j].id || boxes[j].parent === boxes[i].id) continue;
       const overlap = rectsOverlap(a, b);
       if (overlap.width > 0 && overlap.height > 0) {
         findings.push(`ERROR: box overlap between "${boxes[i].id}" and "${boxes[j].id}" (${overlap.width.toFixed(1)}x${overlap.height.toFixed(1)} px).`);
@@ -380,6 +382,24 @@ export function checkDrawioLayout(source, { minFontSize = MIN_FONT_SIZE } = {}) 
       }
     }
 
+    // With explicit waypoints the last segment must approach the entry side
+    // along its normal (perpendicular entry, not tangential).
+    if (hasWaypoints) {
+      const lastSegment = [edge.waypoints.at(-1), entryPoint];
+      if (entryX === 0 && lastSegment[1].x <= lastSegment[0].x) {
+        findings.push(`ERROR: edge "${edge.id}" last segment must enter the left side toward +x.`);
+      }
+      if (entryX === 1 && lastSegment[1].x >= lastSegment[0].x) {
+        findings.push(`ERROR: edge "${edge.id}" last segment must enter the right side toward -x.`);
+      }
+      if (entryY === 0 && lastSegment[1].y >= lastSegment[0].y) {
+        findings.push(`ERROR: edge "${edge.id}" last segment must approach the top side from above (toward -y).`);
+      }
+      if (entryY === 1 && lastSegment[1].y >= lastSegment[0].y) {
+        findings.push(`ERROR: edge "${edge.id}" last segment must approach the bottom side from below (toward +y).`);
+      }
+    }
+
     // Segment sets to check. Waypoint edges are exact. Edges without waypoints
     // use the two monotone orthogonal candidates (horizontal-first and
     // vertical-first): a crossing shared by BOTH candidates means any simple
@@ -391,13 +411,20 @@ export function checkDrawioLayout(source, { minFontSize = MIN_FONT_SIZE } = {}) 
           [exitPoint, { x: entryPoint.x, y: exitPoint.y }, entryPoint],
           [exitPoint, { x: exitPoint.x, y: entryPoint.y }, entryPoint],
         ];
+    // Edges legally cross their own source/target boxes and the containers
+    // that own them (a child edge exits its container boundary). Everything
+    // else must stay clear.
+    const legalBoxIds = new Set([edge.source, edge.target]);
+    for (const ancestor of [sourceBox.parent, targetBox.parent]) {
+      if (ancestor && ancestor !== '1') legalBoxIds.add(ancestor);
+    }
     const crossesByPath = segmentSets.map((points) => {
       const crossed = new Set();
       for (let i = 0; i < points.length - 1; i += 1) {
         const segment = [points[i], points[i + 1]];
         if (segment[0].x === segment[1].x && segment[0].y === segment[1].y) continue;
         for (const box of boxes) {
-          if (box.id === edge.source || box.id === edge.target) continue;
+          if (legalBoxIds.has(box.id)) continue;
           const rect = absolute.get(box.id);
           if (!rect) continue;
           if (segmentIntersectsRect(segment, rect)) crossed.add(box.id);
@@ -421,17 +448,40 @@ export function checkDrawioLayout(source, { minFontSize = MIN_FONT_SIZE } = {}) 
 
     if (hasWaypoints) {
       const points = [exitPoint, ...edge.waypoints, entryPoint];
-      edgeSegments.push(...points.slice(0, -1).map((point, i) => [point, points[i + 1]]));
+      const segments = points.slice(0, -1).map((point, i) => [point, points[i + 1]]);
+      // Every segment must be axis-aligned; a diagonal waypoint segment would
+      // otherwise be silently ignored by the rect-intersection checks.
+      for (const segment of segments) {
+        if (segment[0].x !== segment[1].x && segment[0].y !== segment[1].y) {
+          findings.push(`ERROR: edge "${edge.id}" has a non-orthogonal (diagonal) segment between (${segment[0].x},${segment[0].y}) and (${segment[1].x},${segment[1].y}).`);
+        }
+      }
+      segments.forEach((segment, index) => edgeSegments.push({
+        segment,
+        sourceId: edge.source,
+        targetId: edge.target,
+        first: index === 0,
+        approach: index >= segments.length - 2,
+      }));
     }
   }
 
   // Edge-edge collinear overlap (deterministic waypoint segments only).
+  // Exemptions (draw.io offsets the jets at shared points):
+  // 1. Approach segments (last two) converging on the same target entry point.
+  // 2. Short first segments (< JETTY_MAX px) leaving the same source exit
+  //    point — the jetty zone. Long parallel segments sharing a source exit
+  //    are NOT exempt: they are a real corridor conflict.
+  const JETTY_MAX = 20;
   for (let i = 0; i < edgeSegments.length; i += 1) {
     for (let j = i + 1; j < edgeSegments.length; j += 1) {
-      const length = segmentsOverlapCollinear(edgeSegments[i], edgeSegments[j]);
-      if (length > 0) {
-        findings.push(`ERROR: two edge segments overlap for ${length.toFixed(1)} px (keep parallel edges >= ${MIN_EDGE_GAP} px apart).`);
-      }
+      const left = edgeSegments[i];
+      const right = edgeSegments[j];
+      const overlapLength = segmentsOverlapCollinear(left.segment, right.segment);
+      if (overlapLength <= 0) continue;
+      if (left.approach && right.approach && left.targetId === right.targetId) continue;
+      if (left.first && right.first && left.sourceId === right.sourceId && overlapLength <= JETTY_MAX) continue;
+      findings.push(`ERROR: two edge segments overlap for ${overlapLength.toFixed(1)} px (keep parallel edges >= ${MIN_EDGE_GAP} px apart).`);
     }
   }
 

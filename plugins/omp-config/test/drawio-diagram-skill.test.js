@@ -144,3 +144,22 @@ test('drawio checker rejects edges without orthogonalEdgeStyle', async () => {
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr, /ERROR: edge "e1" must use edgeStyle=orthogonalEdgeStyle/);
 });
+
+test('drawio checker rejects long collinear segments sharing a source exit (jetty exemption is short-segment only)', async () => {
+  const waypointEdge = (id, source, target, points, targetPoint) =>
+    `<mxCell id="${id}" style="${edgeStyle}" edge="1" parent="1" source="${source}" target="${target}"><mxGeometry relative="1" as="geometry">${targetPoint}<Array as="points">${points}</Array></mxGeometry></mxCell>`;
+  const source = drawioXml([
+    box('s', 'S', 0, 0, 120, 60),
+    box('t1', 'T1', 400, 80, 120, 60),
+    box('t2', 'T2', 400, 300, 120, 60),
+    waypointEdge('e1', 's', 't1',
+      '<mxPoint x="200" y="30"/><mxPoint x="200" y="110"/>',
+      '<mxPoint x="400" y="110" as="targetPoint"/>'),
+    waypointEdge('e2', 's', 't2',
+      '<mxPoint x="200" y="30"/><mxPoint x="200" y="330"/>',
+      '<mxPoint x="400" y="330" as="targetPoint"/>'),
+  ]);
+  const result = await runChecker(source);
+  assert.equal(result.exitCode, 1);
+  assert.match(result.stderr, /ERROR: two edge segments overlap/);
+});
