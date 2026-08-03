@@ -873,7 +873,7 @@ test('installed workflow summary does not treat an incidental loaded-skills phra
   assert.deepEqual(summary.unobservedClaims, []);
 });
 
-test('linked Skill references are resources rather than independent Skill claims', () => {
+test('a plain read of skill://drawio-diagram is observed and claimed without a resource-extension marker', () => {
   const summary = summarizeWorkflowEvents([
     { type: 'agent_start' },
     {
@@ -881,34 +881,34 @@ test('linked Skill references are resources rather than independent Skill claims
       message: {
         role: 'assistant',
         content: [{
-          type: 'text',
-          text: 'RESOURCE EXTENSION | source=skill://mermaid-diagram | reads=skill://mermaid-diagram/references/mermaid-authoring.md, skill://mermaid-diagram/references/render-review.md',
+          type: 'toolCall',
+          id: 'read-drawio-skill',
+          name: 'read',
+          arguments: { path: 'skill://drawio-diagram' },
         }],
       },
+    },
+    {
+      type: 'tool_execution_end',
+      toolCallId: 'read-drawio-skill',
+      toolName: 'read',
+      result: { isError: false, content: [{ type: 'text', text: '---\nname: drawio-diagram\n---' }] },
     },
     {
       type: 'message_end',
       message: {
         role: 'assistant',
         content: [{
-          type: 'toolCall',
-          id: 'read-mermaid-skill',
-          name: 'read',
-          arguments: { path: 'skill://mermaid-diagram' },
+          type: 'text',
+          text: 'WORKFLOW READY | skills-loaded=skill://drawio-diagram',
         }],
       },
-    },
-    {
-      type: 'tool_execution_end',
-      toolCallId: 'read-mermaid-skill',
-      toolName: 'read',
-      result: { isError: false, content: [{ type: 'text', text: '---\nname: mermaid-diagram\n---' }] },
     },
     { type: 'agent_end' },
   ], { exitCode: 0 });
 
-  assert.deepEqual(summary.observedSkills, ['mermaid-diagram']);
-  assert.deepEqual(summary.claimedSkills, ['mermaid-diagram']);
+  assert.deepEqual(summary.observedSkills, ['drawio-diagram']);
+  assert.deepEqual(summary.claimedSkills, ['drawio-diagram']);
   assert.deepEqual(summary.unobservedClaims, []);
 });
 
@@ -3496,20 +3496,18 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   assert.equal(fact.expectations.forbiddenFinalPatterns, undefined);
   const docker = matrix.scenarios.find(({ id }) => id === 'natural-docker-compose');
   assert.equal(docker.expectations.maxObservedSkills, 2);
-  const mermaid = matrix.scenarios.find(({ id }) => id === 'natural-mermaid-diagram');
-  assert.equal(mermaid.category, 'mermaid-helper');
-  assert.equal(mermaid.fixture, 'skill-discovery-readonly');
-  assert.equal(mermaid.expectations.minWorkflowReferenceReads, 1);
-  assert.deepEqual(mermaid.expectations.requiredSelectedWorkflowIds, ['visual']);
-  assert.deepEqual(mermaid.expectations.requiredObservedSkills, ['mermaid-diagram']);
-  assert.equal(mermaid.expectations.maxObservedSkills, 5);
-  assert.ok(mermaid.expectations.forbiddenSkills.includes('svg-writing'));
-  assert.ok(mermaid.expectations.forbiddenSkills.includes('writing-review'));
-  assert.ok(mermaid.expectations.forbiddenSkills.includes('writing-markdown-helper'));
-  assert.match(mermaid.prompt, /mermaid_render/iu);
-  assert.match(mermaid.prompt, /revision-bound SVG/iu);
-  assert.match(mermaid.prompt, /Author the complete Mermaid source in one pass/iu);
-  assert.match(mermaid.prompt, /simple Main check of the rendered SVG/iu);
+  const drawio = matrix.scenarios.find(({ id }) => id === 'natural-drawio-diagram');
+  assert.equal(drawio.category, 'omp-config');
+  assert.equal(drawio.fixture, 'skill-discovery-readonly');
+  assert.equal(drawio.expectations.minWorkflowReferenceReads, 1);
+  assert.deepEqual(drawio.expectations.requiredSelectedWorkflowIds, ['visual']);
+  assert.deepEqual(drawio.expectations.requiredObservedSkills, ['drawio-diagram']);
+  assert.equal(drawio.expectations.maxObservedSkills, 5);
+  assert.ok(drawio.expectations.forbiddenSkills.includes('svg-writing'));
+  assert.ok(drawio.expectations.forbiddenSkills.includes('writing-review'));
+  assert.ok(drawio.expectations.forbiddenSkills.includes('writing-markdown-helper'));
+  assert.match(drawio.prompt, /draw\.io XML/iu);
+  assert.match(drawio.prompt, /check-drawio-layout|create_diagram/iu);
   const subagent = matrix.scenarios.find(({ id }) => id === 'natural-subagent-isolation');
   assert.equal(subagent.expectations.requireNativeTaskCompletion, true);
   assert.equal(subagent.expectations.requireSuccessfulToolCalls, false);
@@ -3772,35 +3770,33 @@ test('DeepSeek subagent default matrix keeps native task and hub semantics with 
   assert.match(network.prompt, /pre-deployment configuration-validation checklist/iu);
   assert.match(network.prompt, /advisory migration-risk review/iu);
   assert.doesNotMatch(network.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
-  const mermaid = matrix.scenarios.find(({ id }) => id === 'diagram-mermaid-subagent-default');
-  assert.ok(mermaid, 'diagram-mermaid-subagent-default scenario must exist');
-  assert.equal(mermaid.fixture, 'visual-mermaid-canvas');
-  assert.equal(mermaid.category, 'subagent-default/visual');
-  assert.equal(mermaid.timeoutSeconds, 480);
-  assert.deepEqual(mermaid.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob', 'write', 'edit']);
-  assert.equal(mermaid.expectations.requiredWorkflowPrimary, 'visual');
-  assert.deepEqual(mermaid.expectations.requiredSelectedWorkflowIds, ['visual']);
-  assert.deepEqual(mermaid.expectations.requiredObservedSkills, [
+  const drawio = matrix.scenarios.find(({ id }) => id === 'diagram-drawio-subagent-default');
+  assert.ok(drawio, 'diagram-drawio-subagent-default scenario must exist');
+  assert.equal(drawio.fixture, 'visual-drawio-canvas');
+  assert.equal(drawio.category, 'subagent-default/visual');
+  assert.equal(drawio.timeoutSeconds, 480);
+  assert.deepEqual(drawio.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob', 'write', 'edit']);
+  assert.equal(drawio.expectations.requiredWorkflowPrimary, 'visual');
+  assert.deepEqual(drawio.expectations.requiredSelectedWorkflowIds, ['visual']);
+  assert.deepEqual(drawio.expectations.requiredObservedSkills, [
     'omp-enhancer-workflows',
-    'mermaid-diagram',
+    'drawio-diagram',
   ]);
-  assert.equal(mermaid.expectations.maxObservedSkills, 2);
-  assert.deepEqual(mermaid.expectations.requiredNativeTaskAgents, ['designer']);
-  assert.equal(mermaid.expectations.maxToolCalls, 60);
-  assert.match(mermaid.prompt, /mermaid_render with outputDirectory docs/iu);
-  assert.match(mermaid.prompt, /rollback edge from release to build/iu);
-  assert.match(mermaid.prompt, /complete Mermaid source in one pass/iu);
-  assert.match(mermaid.prompt, /Main performs a simple check of the rendered SVG/iu);
-  assert.deepEqual(mermaid.fixtureExpectations.allowedChangedFiles, [
-    'docs/deploy-flow.mmd',
-    'docs/deploy-flow-*.svg',
+  assert.equal(drawio.expectations.maxObservedSkills, 2);
+  assert.deepEqual(drawio.expectations.requiredNativeTaskAgents, ['designer']);
+  assert.equal(drawio.expectations.maxToolCalls, 60);
+  assert.match(drawio.prompt, /docs\/deploy-flow\.drawio/iu);
+  assert.match(drawio.prompt, /dashed=1/iu);
+  assert.match(drawio.prompt, /check-drawio-layout|create_diagram|open_drawio_xml/iu);
+  assert.deepEqual(drawio.fixtureExpectations.allowedChangedFiles, [
+    'docs/deploy-flow.drawio',
   ]);
-  assert.equal(mermaid.fixtureExpectations.requiredChangedFiles[0], 'docs/deploy-flow.mmd');
-  assert.deepEqual(Object.keys(mermaid.fixtureExpectations.requiredPatterns), [
-    'docs/deploy-flow.mmd',
+  assert.equal(drawio.fixtureExpectations.requiredChangedFiles[0], 'docs/deploy-flow.drawio');
+  assert.deepEqual(Object.keys(drawio.fixtureExpectations.requiredPatterns), [
+    'docs/deploy-flow.drawio',
   ]);
-  assert.deepEqual(mermaid.fixtureExpectations.forbiddenPatterns, {
-    'docs/deploy-flow-*.svg': ['foreignObject'],
+  assert.deepEqual(drawio.fixtureExpectations.forbiddenPatterns, {
+    'docs/deploy-flow.drawio': ['foreignObject'],
   });
   assert.equal(positives.length, 2);
   for (const scenario of positives) {
@@ -4277,7 +4273,6 @@ test('workflow consolidation matrix covers representative non-medical workflows 
     'plugins/omp-test-enhancer',
     'plugins/omp-fact-checker',
     'plugins/omp-enhancer-core',
-    'plugins/mermaid-helper',
   ]);
   assert.deepEqual(matrix.defaults.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob']);
   assert.equal(matrix.defaults.expectations.requireNativeTaskCompletion, true);

@@ -14,12 +14,12 @@ function descriptionOf(skill) {
   return skill.match(/^description:\s*(.+)$/mu)?.[1] ?? '';
 }
 
-test('svg-flowchart metadata uses a positive task-local trigger instead of a hard activation rule', () => {
-  const skill = readSkill('svg-flowchart');
+test('drawio-diagram metadata uses a positive task-local trigger instead of a hard activation rule', () => {
+  const skill = readSkill('drawio-diagram');
   const description = descriptionOf(skill);
 
-  assert.match(description, /Use when a visual workflow figure needs/iu);
-  assert.doesNotMatch(description, /\b(?:whenever|always|must)\b/iu);
+  assert.match(description, /Use when a diagram must be delivered as editable draw\.io XML/iu);
+  assert.doesNotMatch(description, /\b(?:whenever|always)\b|Use this skill\s+(?:whenever|always)/iu);
   assert.doesNotMatch(skill, /## When to Activate/iu);
 });
 

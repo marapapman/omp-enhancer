@@ -9,7 +9,7 @@ import {
 import { defineWorkflowCatalog } from '../src/workflows/schema.js';
 
 test('every workflow definition exposes a non-empty suggestedFlow and a non-empty roles list', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 31);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 32);
   assert.equal(workflowDefinitions.length, 5);
 
   for (const definition of workflowDefinitions) {

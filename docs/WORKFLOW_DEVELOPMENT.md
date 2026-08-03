@@ -74,7 +74,7 @@ Catalog version 31 只有 5 张域卡。新卡片放入最合适的领域文件�
 
 字段规则：
 
-- `id`：全局唯一、稳定、小写；catalog v31 只有 5 个 ID（`code`、`writing`、`research`、`visual`、`operations`），发布后不要随意改名。
+- `id`：全局唯一、稳定、小写；catalog v32 只有 5 个 ID（`code`、`writing`、`research`、`visual`、`operations`），发布后不要随意改名。
 - `chooseWhen`：描述用户可观察的选择条件，不写关键词路由规则。
 - `skills`：精确 Skill frontmatter 名，只列直接支持该域方法的候选项。
 - `catalogSkills`：`skills` 的 subset，表示由 workflow index 显式渲染成 exact `skill://ecc-skill-catalog/<id>/SKILL.md` 的 nested ECC 候选。其余 `skills` 渲染成顶层 exact `skill://<id>`。前者标记为 `C`、后者标记为 `D`，两者都只是 optional candidates；不要把已枚举 `C` 降级为 catalog query。
@@ -220,8 +220,7 @@ node scripts/e2e/omp17-rpc-probe.mjs -- \
   -e plugins/omp-config/index.js --plugin-dir plugins/omp-config \
   -e plugins/writing-helper/index.js --plugin-dir plugins/writing-helper \
   -e plugins/omp-test-enhancer/dist/extension.js --plugin-dir plugins/omp-test-enhancer \
-  -e plugins/omp-fact-checker/index.js --plugin-dir plugins/omp-fact-checker \
-  -e plugins/mermaid-helper/index.js --plugin-dir plugins/mermaid-helper
+  -e plugins/omp-fact-checker/index.js --plugin-dir plugins/omp-fact-checker
 ```
 
 Probe 使用隔离的临时 OMP home，只输出 hash、字符数和结构布尔值，不输出完整 prompt 或配置秘密。不要把 `--no-extensions` 与 `-e` 或 `--plugin-dir` 组合；OMP 会同时禁用显式工作树扩展，使对照产生假阳性。默认 probe 不提交 prompt，因此它只验证静态 startup `systemPrompt`、task schema、active tools、完整 catalog import、OMP 原生 Agents，以及 `omp-enhancer-workflows` 和单个顶层 `ecc-skill-catalog` 的原生发现状态。

@@ -5,7 +5,7 @@ import { visualWorkflows } from './definitions/visual.js';
 import { operationsWorkflows } from './definitions/operations.js';
 import { defineWorkflowCatalog } from './schema.js';
 
-export const WORKFLOW_CATALOG_VERSION = 31;
+export const WORKFLOW_CATALOG_VERSION = 32;
 
 export const workflowDefinitions = defineWorkflowCatalog([
   codeWorkflows,

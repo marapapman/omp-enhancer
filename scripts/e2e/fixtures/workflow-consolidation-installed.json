@@ -12,8 +12,7 @@
       "plugins/writing-helper",
       "plugins/omp-test-enhancer",
       "plugins/omp-fact-checker",
-      "plugins/omp-enhancer-core",
-      "plugins/mermaid-helper"
+      "plugins/omp-enhancer-core"
     ],
     "tools": ["todo", "task", "hub", "read", "grep", "glob"],
     "repeat": 1,

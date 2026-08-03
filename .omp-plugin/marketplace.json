@@ -5,14 +5,14 @@
     "name": "marapapman"
   },
   "metadata": {
-    "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, testing, fact checking, and editable Mermaid diagrams.",
+    "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, testing, fact checking, and editable draw.io diagrams.",
     "version": "1.0.42",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "omp-config",
-      "description": "Optional OMP workflow references, configuration assets, uniquely named agents, notify-only hooks, opt-in hook templates, and diagnostics.",
+      "description": "Optional OMP workflow references, config assets, uniquely named agents, notify-only hooks, opt-in hook templates, and diagnostics.",
       "version": "0.1.59",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
@@ -27,6 +27,7 @@
         "./skills/conventional-commits",
         "./skills/docker-compose",
         "./skills/docx",
+        "./skills/drawio-diagram",
         "./skills/ecc",
         "./skills/ecc/accessibility",
         "./skills/ecc/agent-architecture-audit",
@@ -295,7 +296,6 @@
         "./skills/prototype",
         "./skills/slides-storyline",
         "./skills/spike",
-        "./skills/svg-flowchart",
         "./skills/using-git-worktrees",
         "./skills/writing-skills",
         "./skills/zoom-out"
@@ -303,7 +303,7 @@
     },
     {
       "name": "writing-helper",
-      "description": "Standalone OMP writing helper with logic checks, quality checks, citation verification, writer/checker agents, and writing skills.",
+      "description": "Standalone OMP writing helper plugin with frugal-pi compatible writing skills, agents, logic, style, and citation checks",
       "version": "0.2.20",
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
@@ -342,7 +342,7 @@
     },
     {
       "name": "omp-testing-enhancer",
-      "description": "Advisory OMP testing analysis, public API context, host-observed evidence, browser checks, coverage and mutation context, review, and reports.",
+      "description": "OMP plugin with advisory testing analysis, host-observed evidence, browser, coverage, mutation, review, and reporting tools.",
       "version": "0.1.21",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
@@ -351,7 +351,7 @@
     },
     {
       "name": "omp-fact-checker",
-      "description": "Fact-checking workflow with claim planning, evidence collection, cross-agent validation, reports, and advisory completeness review.",
+      "description": "OMP fact-checking workflow with claim planning, evidence collection, cross-checking, reports, and advisory review.",
       "version": "0.1.14",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-fact-checker",
@@ -372,18 +372,6 @@
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-enhancer-core",
       "repository": "https://github.com/marapapman/omp-enhancer",
       "source": "./omp-enhancer-core"
-    },
-    {
-      "name": "mermaid-helper",
-      "description": "Bounded Mermaid rendering via mermaid_render with the mermaid-diagram Skill and revision-bound SVG evidence.",
-      "version": "0.4.3",
-      "category": "development",
-      "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/mermaid-helper",
-      "repository": "https://github.com/marapapman/omp-enhancer",
-      "source": "./mermaid-helper",
-      "skills": [
-        "./skills/mermaid-diagram"
-      ]
     }
   ]
 }

@@ -11,13 +11,13 @@ import {
 describe('actionableParamError', () => {
   it('includes field name, bad value, expected format, and example', () => {
     const msg = actionableParamError({
-      toolName: 'mermaid_render',
+      toolName: 'open_drawio_xml',
       field: 'source',
       badValue: { id: 'root' },
       expected: 'a JSON string (use JSON.stringify())',
-      example: '"source": "{\\"id\\":\\"root\\"}"',
+      example: '"source": "{\"id\":\"root\"}"',
     });
-    assert.ok(msg.includes('mermaid_render'));
+    assert.ok(msg.includes('open_drawio_xml'));
     assert.ok(msg.includes('source'));
     assert.ok(msg.includes('object'));
     assert.ok(msg.includes('JSON string'));
@@ -122,14 +122,14 @@ describe('withToolErrorHandling', () => {
     assert.ok(result.content[0].text.includes('bad input'));
   });
 
-  it('preserves code and details from a mermaid_render parameter error', async () => {
+  it('preserves code and details from an open_drawio_xml parameter error', async () => {
     const handler = async () => {
       const err = new Error('missing source');
       err.code = 'INVALID_PARAMETER';
       err.details = { field: 'source' };
       throw err;
     };
-    const wrapped = withToolErrorHandling('mermaid', handler);
+    const wrapped = withToolErrorHandling('open_drawio_xml', handler);
     const result = await wrapped('1', {}, undefined, undefined, {});
     assert.equal(result.isError, true);
     assert.equal(result.details.code, 'INVALID_PARAMETER');

@@ -12,38 +12,38 @@ const FORBIDDEN_DRAWING_TERMS = new RegExp(
   'iu',
 );
 
-const SKILL_MD_PATH = new URL('../plugins/mermaid-helper/skills/mermaid-diagram/SKILL.md', import.meta.url);
+const SKILL_MD_PATH = new URL('../plugins/omp-config/skills/drawio-diagram/SKILL.md', import.meta.url);
 
-// Read SKILL.md and verify the mermaid-only contract: one-pass Mermaid
-// authoring rendered via mermaid_render with a simple Main check, and no trace
-// of the retired drawing chain.
-test('mermaid-diagram SKILL.md documents the one-pass Mermaid contract', () => {
+// Read SKILL.md and verify the draw.io-only contract: one-pass draw.io XML
+// authoring verified with the drawio MCP and the bundled geometry checker, no
+// hand-edited SVG or Mermaid, and no trace of the retired drawing chain.
+test('drawio-diagram SKILL.md documents the one-pass draw.io XML contract', () => {
   const skillMd = readFileSync(SKILL_MD_PATH, 'utf-8');
 
-  assert.match(skillMd, /mermaid_render/u);
-  assert.match(skillMd, /author(?:s)? the complete Mermaid source/iu);
-  assert.match(skillMd, /in one pass/iu);
-  assert.match(skillMd, /Main performs a simple check/iu);
+  assert.match(skillMd, /drawio MCP/iu);
+  assert.match(skillMd, /check-drawio-layout|bundled (?:static )?checker/iu);
+  assert.match(skillMd, /author(?:s)? the complete draw\.io XML in one pass/iu);
+  assert.match(skillMd, /never hand-edit SVG or Mermaid/iu);
   assert.doesNotMatch(skillMd, FORBIDDEN_DRAWING_TERMS);
 });
 
-test('visual workflow names designer and task as advisory role candidates', () => {
+test('visual workflow names designer, task, and visioner as advisory role candidates', () => {
   const visual = workflowCatalog['visual'];
 
   assert.ok(visual, 'workflowCatalog must expose the visual workflow');
-  assert.deepEqual(visual.roles, ['designer', 'task']);
+  assert.deepEqual(visual.roles, ['designer', 'task', 'visioner']);
   assert.ok(Array.isArray(visual.suggestedFlow) && visual.suggestedFlow.length > 0);
   assert.ok(
     visual.suggestedFlow.some((line) => /designer/i.test(line)),
     'suggestedFlow should mention the designer role',
   );
   assert.ok(
-    visual.suggestedFlow.some((line) => /mermaid_render/i.test(line)),
-    'suggestedFlow should mention rendering via mermaid_render',
+    visual.suggestedFlow.some((line) => /drawio MCP/i.test(line)),
+    'suggestedFlow should mention verification via the drawio MCP',
   );
   assert.ok(
-    visual.suggestedFlow.some((line) => /Main performs a simple check/i.test(line)),
-    'suggestedFlow should mention the simple Main check of the rendered SVG',
+    visual.suggestedFlow.some((line) => /Main retains setup authorization and final acceptance only/i.test(line)),
+    'suggestedFlow should mention the Main setup-authorization and final-acceptance boundary',
   );
   assert.ok(
     Array.isArray(visual.scopeNotes) && visual.scopeNotes.length > 0,
@@ -53,13 +53,15 @@ test('visual workflow names designer and task as advisory role candidates', () =
   assert.equal(Object.hasOwn(visual, 'steps'), false, 'visual must not carry a steps field');
 });
 
-test('visual workflow advisory notes and mermaid-diagram skill both keep permission boundaries', () => {
+test('visual workflow advisory notes and drawio-diagram skill both keep permission boundaries', () => {
   const skillMd = readFileSync(SKILL_MD_PATH, 'utf-8');
   const scope = workflowCatalog['visual'].scopeNotes.join(' ');
   const flow = workflowCatalog['visual'].suggestedFlow.join(' ');
 
-  assert.match(skillMd, /does not render, modify, reconcile, or mediate/i);
-  assert.match(scope, /mermaid-helper plugin pipeline/i);
+  assert.match(skillMd, /acceptance echo, not a visual layout verdict/i);
+  assert.match(skillMd, /advisory evidence for Main; Main accepts final delivery/i);
+  assert.match(scope, /drawio MCP/i);
+  assert.match(scope, /Mermaid and SVG diagram pipelines are retired/i);
   assert.doesNotMatch(scope, FORBIDDEN_DRAWING_TERMS);
   assert.doesNotMatch(flow, /must (?:fork|delegate)|fixed fanout|hard (?:gate|router)/i);
 });

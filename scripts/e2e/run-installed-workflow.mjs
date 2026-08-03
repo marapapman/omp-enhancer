@@ -1449,9 +1449,7 @@ export async function prepareScenario(scenario) {
       ].join('\n'),
     );
     await writeFile(path.join(cwd, 'article.md'), '# Article\n\n<to be drafted>\n');
-  } else if (scenario.fixture === 'visual-svg-canvas') {
-    await mkdir(path.join(cwd, 'docs'), { recursive: true });
-  } else if (scenario.fixture === 'visual-mermaid-canvas') {
+  } else if (scenario.fixture === 'visual-drawio-canvas') {
     await mkdir(path.join(cwd, 'docs'), { recursive: true });
   } else {
     throw new Error(`Unknown fixture: ${scenario.fixture}`);

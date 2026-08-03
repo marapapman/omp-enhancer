@@ -1,0 +1,3 @@
+name: drawio-diagram
+short_description: "Author draw.io XML diagrams and verify layout geometry"
+default_prompt: "Use $drawio-diagram to create a clean draw.io XML diagram with no overlapping boxes, orthogonal edges that never cross boxes, perpendicular arrows, and fonts sized for PPT or print."

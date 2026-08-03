@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 const frontendUrl = new URL('../skills/frontend-design/SKILL.md', import.meta.url);
 const canvasUrl = new URL('../skills/canvas-design/SKILL.md', import.meta.url);
 const slidesUrl = new URL('../skills/latex-beamer-slides/SKILL.md', import.meta.url);
-const svgUrl = new URL('../skills/svg-flowchart/SKILL.md', import.meta.url);
+const drawioUrl = new URL('../skills/drawio-diagram/SKILL.md', import.meta.url);
 const visionerUrl = new URL('../agents/visioner.md', import.meta.url);
 const architectureUrl = new URL('../../../docs/ARCHITECTURE.md', import.meta.url);
 
@@ -63,10 +63,10 @@ test('visioner independently reviews UI states and static exports without mutati
   assertAdvisoryOnly(visioner);
 });
 
-test('existing slides retain visioner QA while the SVG icon method ends with a Main simple check', async () => {
-  const [slides, svg] = await Promise.all([
+test('existing slides retain visioner QA while drawio diagrams gate on the bundled checker and Main acceptance', async () => {
+  const [slides, drawio] = await Promise.all([
     readFile(slidesUrl, 'utf8'),
-    readFile(svgUrl, 'utf8'),
+    readFile(drawioUrl, 'utf8'),
   ]);
   const generation = markdownSection(slides, 'Generate a new deck');
   const modification = markdownSection(slides, 'Modify an existing deck');
@@ -83,13 +83,13 @@ test('existing slides retain visioner QA while the SVG icon method ends with a M
     /Have `task` recompile and render that exact designer revision/i,
     /Have `visioner` independently review/i,
   ]);
-  assertInOrder(svg, [
-    /`designer` owns one complete SVG icon asset revision/is,
-    /`task` runs the bundled checker/i,
-    /`task` renders the current SVG icon revision/i,
-    /Main performs a simple check of the fresh latest full-size and 60% renders/i,
+  assertInOrder(drawio, [
+    /draw\.io XML is the single source of node positions, edge geometry, and labels/is,
+    /Run the bundled static checker before opening the diagram/is,
+    /Final visual QA happens by opening the `\.drawio` file in the draw\.io editor/is,
+    /Main accepts final delivery/is,
   ]);
-  assert.doesNotMatch(svg, /visioner|tikz/i);
+  assert.doesNotMatch(drawio, /visioner|tikz/i);
 });
 
 test('architecture records the visual workflow as a soft evidence invariant', async () => {
@@ -97,7 +97,7 @@ test('architecture records the visual workflow as a soft evidence invariant', as
 
   assert.match(
     architecture,
-    /visual-delivery.+`designer` authors the complete Mermaid source in one pass.+`mermaid_render` renders.+Main performs a simple check.+advisory.+hard gate.+router.+fixed fanout.+automatic loop.+completion authority/is,
+    /visual-delivery.+`designer` authors the complete draw\.io XML in one pass.+`task` runs the bundled geometry checker.+`visioner` reviews fresh current-revision rendered evidence read-only.+advisory.+hard gate.+router.+fixed fanout.+automatic loop.+completion authority/is,
   );
 });
 

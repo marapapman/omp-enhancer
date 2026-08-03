@@ -273,12 +273,12 @@
       }
     },
     {
-      "id": "diagram-mermaid-subagent-default",
+      "id": "diagram-drawio-subagent-default",
       "category": "subagent-default/visual",
-      "fixture": "visual-mermaid-canvas",
+      "fixture": "visual-drawio-canvas",
       "timeoutSeconds": 480,
       "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
-      "prompt": "Create docs/deploy-flow.mmd as an editable Mermaid flowchart of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build. Author the complete Mermaid source in one pass and call mermaid_render with outputDirectory docs to convert it to a revision-bound SVG (never hand-editing SVG coordinates). Confirm the published SVG in docs/ contains real text elements (viewBox and text, no foreignObject). Main performs a simple check of the rendered SVG before final delivery.",
+      "prompt": "Create docs/deploy-flow.drawio as editable draw.io XML of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build (use dashed=1 in that edge's style). Author the complete draw.io XML in one pass with orthogonal edges, no overlapping boxes, and fontSize of at least 14. Verify the authored XML with the bundled check-drawio-layout.mjs script and the drawio MCP (create_diagram or open_drawio_xml) before final delivery.",
       "expectations": {
         "minNativeTaskCalls": 1,
         "maxNativeTaskCalls": 6,
@@ -288,7 +288,7 @@
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requireNonemptyNativeTaskContext": true,
         "requiredNativeTaskAgents": ["designer"],
-        "requiredObservedSkills": ["omp-enhancer-workflows", "mermaid-diagram"],
+        "requiredObservedSkills": ["omp-enhancer-workflows", "drawio-diagram"],
         "maxObservedSkills": 2,
         "forbiddenSkills": ["writing-markdown-helper"],
         "requiredWorkflowPrimary": "visual",
@@ -308,12 +308,12 @@
         "maxToolCalls": 60
       },
       "fixtureExpectations": {
-        "allowedChangedFiles": ["docs/deploy-flow.mmd", "docs/deploy-flow-*.svg"],
-        "requiredChangedFiles": ["docs/deploy-flow.mmd"],
+        "allowedChangedFiles": ["docs/deploy-flow.drawio"],
+        "requiredChangedFiles": ["docs/deploy-flow.drawio"],
         "requiredPatterns": {
-          "docs/deploy-flow.mmd": ["graph (TD|LR)", "-->", "rollback"]
+          "docs/deploy-flow.drawio": ["<mxfile", "mxCell", "rollback", "dashed=1"]
         },
-        "forbiddenPatterns": { "docs/deploy-flow-*.svg": ["foreignObject"] }
+        "forbiddenPatterns": { "docs/deploy-flow.drawio": ["foreignObject"] }
       }
     },
     {

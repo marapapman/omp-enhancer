@@ -4,7 +4,6 @@ const definitions = [
   { name: 'omp-testing-enhancer', directory: 'omp-test-enhancer' },
   { name: 'omp-fact-checker', directory: 'omp-fact-checker' },
   { name: 'omp-enhancer-core', directory: 'omp-enhancer-core' },
-  { name: 'mermaid-helper', directory: 'mermaid-helper' },
 ]
 
 export const pluginWorkspaces = Object.freeze(definitions.map(({ name, directory }) => Object.freeze({

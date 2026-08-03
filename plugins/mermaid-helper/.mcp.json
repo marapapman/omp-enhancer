@@ -1,7 +1,0 @@
-{
-  "mermaid-helper": {
-    "command": "node",
-    "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server.js"],
-    "timeout": 120000
-  }
-}

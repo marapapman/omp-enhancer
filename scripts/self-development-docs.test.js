@@ -82,7 +82,7 @@ test('current documentation links the self-development and E2E methods without e
   assert.ok(Buffer.byteLength(readme) <= 6500, 'root README keeps development detail under docs');
 });
 
-test('current repository documentation matches the v31 runtime and evidence contracts', async () => {
+test('current repository documentation matches the v32 runtime and evidence contracts', async () => {
   const [agents, architecture, development, workflows] = await Promise.all([
     read('AGENTS.md'),
     read('docs/ARCHITECTURE.md'),
@@ -90,12 +90,12 @@ test('current repository documentation matches the v31 runtime and evidence cont
     read('docs/WORKFLOW_DEVELOPMENT.md'),
   ]);
 
-  assert.match(agents, /Workflow catalog \(v31\)/u);
-  assert.match(agents, /Workflow catalog v31/u);
+  assert.match(agents, /Workflow catalog \(v32\)/u);
+  assert.match(agents, /Workflow catalog v32/u);
   assert.match(architecture, /Catalog version 31.+合并为 5 个域：`code`、`writing`、`research`、`visual`、`operations`/isu);
   assert.match(development, /Catalog version 31.+5 张域卡/isu);
   assert.match(workflows, /Catalog version 31 只有 5 张域卡/isu);
-  assert.match(workflows, /catalog v31 只有 5 个 ID/isu);
+  assert.match(workflows, /catalog v32 只有 5 个 ID/isu);
   assert.doesNotMatch(
     [agents, architecture, development, workflows].join('\n'),
     /Catalog version 23|catalog \(v23\)|catalog v30/iu,
@@ -122,7 +122,7 @@ test('current repository documentation matches the v31 runtime and evidence cont
   ]) {
     assert.match(
       content,
-      /designer.+authors the complete Mermaid source in one pass.+`mermaid_render`.+(?:renders|render).+Main performs a simple check.+rendered SVG.+Main retains setup authorization.+final acceptance/is,
+      /designer.+authors? the complete draw\.io XML in one pass.+geometry checker.+drawio MCP.+visioner.+fresh current-revision rendered evidence read-only.+Main retains setup authorization.+final acceptance/is,
       path,
     );
     assert.match(
@@ -151,7 +151,6 @@ test('current repository documentation matches the v31 runtime and evidence cont
     'plugins/writing-helper/index.js',
     'plugins/omp-test-enhancer/dist/extension.js',
     'plugins/omp-fact-checker/index.js',
-    'plugins/mermaid-helper/index.js',
   ]) {
     assert.match(probe, new RegExp(entry.replaceAll('.', '\\.'), 'u'), entry);
   }

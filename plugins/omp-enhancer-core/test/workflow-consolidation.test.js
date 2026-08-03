@@ -27,7 +27,7 @@ const REMOVED_FIELDS = [
 ];
 
 test('catalog exposes exactly the five consolidated workflows and deliberately omits retired ids', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 31);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 32);
   assert.deepEqual(workflowIds, REQUIRED_WORKFLOWS);
   assert.equal(workflowDefinitions.length, 5);
   for (const id of REQUIRED_WORKFLOWS) {
@@ -162,7 +162,7 @@ test('the shared catalog markdown lists all five workflow cards between managed 
 
   assert.match(sharedCatalog, /<!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->/u);
   assert.match(sharedCatalog, /<!-- OMP-ENHANCER-WORKFLOW-CATALOG:END -->/u);
-  assert.match(sharedCatalog, /# OMP Enhancer Workflow Catalog v31/u);
+  assert.match(sharedCatalog, /# OMP Enhancer Workflow Catalog v32/u);
   assert.match(sharedCatalog, /Advisory reference\. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIEW\./u);
 
   for (const id of REQUIRED_WORKFLOWS) {
@@ -187,8 +187,8 @@ test('the consolidated code lifecycle uses analyzer plus native task and reviewe
 });
 
 test('domain workflows expose their role candidates and skills', () => {
-  assert.deepEqual(workflowCatalog.visual.roles, ['designer', 'task']);
-  assert.deepEqual(workflowCatalog.visual.skills, ['mermaid-diagram', 'svg-flowchart', 'frontend-design', 'canvas-design']);
+  assert.deepEqual(workflowCatalog.visual.roles, ['designer', 'task', 'visioner']);
+  assert.deepEqual(workflowCatalog.visual.skills, ['drawio-diagram', 'frontend-design', 'canvas-design']);
 
   assert.deepEqual(workflowCatalog.writing.roles, ['writer', 'zh-writer', 'checker', 'zh-checker', 'task']);
   assert.ok(workflowCatalog.writing.skills.includes('writing-review'));

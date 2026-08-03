@@ -1,6 +1,6 @@
 # HTML Report Format
 
-The architectural review is rendered as a single self-contained HTML file in the OS temp directory. Tailwind and Mermaid both come from CDNs. Mermaid handles graph-shaped diagrams reliably; hand-built divs and inline SVG handle the more editorial visuals (mass diagrams, cross-sections). Mix the two — don't lean on Mermaid for everything, it'll start to look generic.
+The architectural review is rendered as a single self-contained HTML file in the OS temp directory. Tailwind comes from a CDN under the network boundary. Graphs are hand-built as inline SVG (divs and `<svg>` boxes-and-arrows) — Mermaid is retired. For a complex graph that needs real layout, author it with the drawio MCP as a `.drawio` file (see `skill://drawio-diagram`) and reference it from the report.
 
 ## Scaffold
 
@@ -11,10 +11,6 @@ The architectural review is rendered as a single self-contained HTML file in the
     <meta charset="utf-8" />
     <title>Architecture review — {{repo name}}</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script type="module">
-      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
-    </script>
     <style>
       .seam { stroke-dasharray: 4 4; }
       .leak { stroke: #dc2626; }
@@ -50,11 +46,11 @@ Each candidate is one `<article>`:
 
 Pick the pattern that fits the candidate. Mix them.
 
-### Mermaid graph (the workhorse for dependencies / call flow)
+### Hand-built SVG graph (the workhorse for dependencies / call flow)
 
-Use a Mermaid `flowchart` or `graph` when the point is "X calls Y calls Z, and look at the mess." Style with classDef to colour leakage edges red and the deep module dark.
+Use hand-built inline SVG `boxes-and-arrows` (modules as `<rect>` + `<text>`, leakage edges red with `stroke: #dc2626`, the deep module dark) when the point is "X calls Y calls Z, and look at the mess." Mermaid is retired; for a graph that needs automatic layout, author it with the drawio MCP as a `.drawio` file instead.
 
-### Hand-built boxes-and-arrows (when Mermaid's layout fights you)
+### Hand-built boxes-and-arrows (for small editorial diagrams)
 
 Modules as `<div>`s with borders and labels. Arrows as inline SVG `<line>` or `<path>` elements.
 

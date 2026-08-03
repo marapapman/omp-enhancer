@@ -9,11 +9,10 @@
 ```text
 plugins/
 ├── omp-enhancer-core/   # task facts、runtime hooks、workflow definitions
-├── omp-config/          # config assets、Agents、Skills、hooks、templates
+├── omp-config/          # config assets、Agents、Skills（含 drawio-diagram 画图 Skill）、hooks、templates
 ├── writing-helper/      # writing QA tools、Agents、Skills
 ├── omp-test-enhancer/   # TypeScript testing evidence/review tools
 ├── omp-fact-checker/    # fact plan、evidence、cross-check、review
-└── mermaid-helper/      # Mermaid render Skill and active-by-default mermaid_render tool
 
 scripts/                 # generation、validation、E2E、release、packaging
 docs/                    # current architecture/development documentation
@@ -48,7 +47,7 @@ docs/superpowers/        # historical plans/specs/reports only
 - 多目标 task facts 只用于记录，不得从中编译 route 或静态角色映射。实质 mutation 的 Main 应先检索足够的代码、caller、test 与 configuration anchors，再建立 dependency waves、exclusive write sets 和 complete per-slice assignment input；同 wave batching 是基于真实独立性的软方法，不是固定 fork 或 completion contract。每个 delegated assignment 都携带完整 bounded input 与冻结的 Skills，每次 native `task` call 都有非空顶层 `context`；child 只消费 committed assignment 中冻结的 Skills，不再发现、选择或加载另一套 Skill；缺口作为 limitation 返回 Main。Assignment、host-observed delivery、Main integration/review 和 fallback limitation 都要有 prompt parity 或 event-stream 回归。
 - Plugin `tool_call` hook 不返回 `block: true`；`session_stop` hook 不返回 `continue: true`。
 - Plugin 不安排自动 repair turn，不拥有 host session completion。
-- 除 mermaid-helper 外，所有 extension tools 都是 `defaultInactive`，只能由用户通过 `/enhancer-tools` 显式激活。mermaid-helper 工具在插件加载时默认激活，可通过 `/enhancer-tools disable mermaid` 停用。
+- 所有 extension tools 都是 `defaultInactive`，只能由用户通过 `/enhancer-tools` 显式激活。
 - Testing 和 fact review 的公开名称是 `omp_test_review` 与 `fact_check_review`；不得恢复旧的 `*_gate` alias。
 - Testing Enhancer 不注册 `/test` command，也不执行调用参数或项目配置中的测试命令。
 - Review finding、缺失阶段或缺失证据是 advisory data，不是 tool error；真实参数或 I/O 错误仍返回 error。
@@ -59,7 +58,7 @@ docs/superpowers/        # historical plans/specs/reports only
 ## 代码约定
 
 - 全仓库使用 ES modules，使用 `import`/`export`。
-- Core、Config、Fact Checker、Writing Helper 和 Mermaid Helper 是直接由 Node 执行的 JavaScript；不要无必要增加 build step。
+- Core、Config、Fact Checker 和 Writing Helper 是直接由 Node 执行的 JavaScript；不要无必要增加 build step。
 - Testing Enhancer 使用 TypeScript、`module: NodeNext`、`target: ES2022`、`strict: true`，源码在 `src/`，产物在 `dist/`。
 - JavaScript 文件保持现有分号风格；Testing Enhancer TypeScript 通常不写分号。
 - Public tool names 使用 snake_case；内部函数使用 camelCase。
@@ -93,7 +92,6 @@ npm run pack:dry --workspace plugins/omp-config
 npm test --workspace plugins/writing-helper
 npm run coverage --workspace plugins/writing-helper
 npm test --workspace plugins/omp-fact-checker
-npm test --workspace plugins/mermaid-helper
 cd plugins/omp-test-enhancer && bun run typecheck && bun run build && bun run test
 ```
 
@@ -181,7 +179,7 @@ Apply mode 会备份 `config.yml`，验证持久化后的 ignored list，并确�
 
 Test stacks：
 
-- Core、Config、Writing Helper、Fact Checker、Mermaid Helper：Node `node:test`；
+- Core、Config、Writing Helper、Fact Checker：Node `node:test`；
 - Testing Enhancer：Vitest；
 - `skill-comply`：pytest。
 
@@ -243,8 +241,7 @@ node scripts/e2e/omp17-rpc-probe.mjs -- \
   -e plugins/omp-config/index.js --plugin-dir plugins/omp-config \
   -e plugins/writing-helper/index.js --plugin-dir plugins/writing-helper \
   -e plugins/omp-test-enhancer/dist/extension.js --plugin-dir plugins/omp-test-enhancer \
-  -e plugins/omp-fact-checker/index.js --plugin-dir plugins/omp-fact-checker \
-  -e plugins/mermaid-helper/index.js --plugin-dir plugins/mermaid-helper
+  -e plugins/omp-fact-checker/index.js --plugin-dir plugins/omp-fact-checker
 ```
 
 Probe 使用隔离临时 OMP home，只输出 hash、字符数和结构布尔值。不要把 `--no-extensions` 与显式 `-e`/`--plugin-dir` 混用，否则工作树插件也会被禁用。
@@ -271,11 +268,10 @@ npm run e2e:main:skills -- \
 
 ```bash
 npm run install:deps                              # 所有已安装插件
-npm run install:deps -- --plugin mermaid-helper   # 仅单个插件
 npm run install:deps -- --dry-run                 # 预览不安装
 ```
 
-也可在启用 Core tools 后调用 `omp_core_install_deps`（接受 `dryRun` 与 `plugin`）。`mermaid-helper` 借此获得 `@mermaid-js/mermaid-cli` 与 `puppeteer`，`omp-testing-enhancer` 获得 `playwright`/`pixelmatch`/`pngjs`。playwright 浏览器二进制仍需其自身的 `npx playwright install`。
+也可在启用 Core tools 后调用 `omp_core_install_deps`（接受 `dryRun` 与 `plugin`）。`omp-testing-enhancer` 借此获得 `playwright`/`pixelmatch`/`pngjs`。playwright 浏览器二进制仍需其自身的 `npx playwright install`。
 
 ## Release transaction
 

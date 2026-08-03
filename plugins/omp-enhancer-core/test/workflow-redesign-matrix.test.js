@@ -41,8 +41,8 @@ const EXPECTED_CONTRACTS = {
     skills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
   },
   visual: {
-    roles: ['designer', 'task'],
-    skills: ['mermaid-diagram', 'svg-flowchart', 'frontend-design', 'canvas-design'],
+    roles: ['designer', 'task', 'visioner'],
+    skills: ['drawio-diagram', 'frontend-design', 'canvas-design'],
   },
   operations: {
     roles: [
@@ -83,17 +83,19 @@ test('no definition carries the removed delegation, step, or composition fields'
   }
 });
 
-test('the visual workflow keeps the designer one-pass Mermaid render chain advisory in suggestedFlow', () => {
+test('the visual workflow keeps the designer one-pass draw.io chain advisory in suggestedFlow', () => {
   const visual = workflowCatalog.visual;
   const flow = visual.suggestedFlow.join(' ');
 
   assert.equal(visual.roles.includes('designer'), true);
   assert.equal(visual.roles.includes('task'), true);
+  assert.equal(visual.roles.includes('visioner'), true);
   assert.match(flow, /Design via designer for complex visuals, or directly for simple diagrams/iu);
-  assert.match(flow, /designer authors the complete Mermaid source in one pass and renders it via mermaid_render/iu);
-  assert.match(flow, /Main performs a simple check of the rendered SVG before delivery/iu);
-  assert.match(flow, /Deliver with source files and rendered evidence/iu);
-  assert.match(visual.scopeNotes.join(' '), /All diagrams are authored as Mermaid source and rendered with mermaid_render/iu);
+  assert.match(flow, /designer authors the complete draw\.io XML in one pass; task runs the bundled geometry checker and the drawio MCP \(create_diagram, search_shapes for icons\) on that exact source/iu);
+  assert.match(flow, /visioner reviews fresh current-revision rendered evidence read-only/iu);
+  assert.match(flow, /Main retains setup authorization and final acceptance only; deliver with the \.drawio source file and verified evidence/iu);
+  assert.match(visual.scopeNotes.join(' '), /All diagrams are authored as draw\.io XML and verified with the drawio MCP/iu);
+  assert.match(visual.scopeNotes.join(' '), /The drawio MCP \(hosted app server or local @drawio\/mcp tool server\) is the single diagram pipeline/iu);
 });
 
 test('the code workflow keeps TDD and analyzer delegation advisory without fixed fanout', () => {

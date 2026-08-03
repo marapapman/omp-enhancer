@@ -7,8 +7,7 @@
     "plugins/writing-helper",
     "plugins/omp-test-enhancer",
     "plugins/omp-fact-checker",
-    "plugins/omp-enhancer-core",
-    "plugins/mermaid-helper"
+    "plugins/omp-enhancer-core"
   ],
   "scripts": {
     "test": "npm run check:workflows && npm run check:ecc-skills && node --test scripts/*.test.js && npm test --workspaces --if-present",

@@ -42,7 +42,7 @@ const crossSkillNavigationEntries = [
 const writingAddonEffectfulEntries = [
   'latex-beamer-slides',
   'beamer-to-powerpoint',
-  'svg-flowchart',
+  'drawio-diagram',
   'docx',
   'slides-storyline',
   'ecc/brand-voice',
@@ -136,6 +136,7 @@ test('cross-Skill document references are exact PLAN candidates, not relative la
 
 test('effectful writing Add-on Skills preserve proposal-only language writers', () => {
   for (const relative of writingAddonEffectfulEntries) {
+    if (relative === 'drawio-diagram') continue;
     const content = readSkill(relative);
 
     assert.match(
@@ -144,6 +145,15 @@ test('effectful writing Add-on Skills preserve proposal-only language writers', 
       `${relative}: writer actor guard`,
     );
   }
+});
+
+test('drawio-diagram names its own execution and keeps final acceptance with Main', () => {
+  const content = readSkill('drawio-diagram');
+
+  assert.match(content, /Run the bundled static checker before opening the diagram/i);
+  assert.match(content, /The tool response is server-side validation evidence/i);
+  assert.match(content, /Layout findings are advisory evidence for Main; Main accepts final delivery/iu);
+  assert.doesNotMatch(content, /block:\s*true|continue:\s*true|completion authority/i);
 });
 
 test('research Add-on Skills keep research execution out of language writers', () => {

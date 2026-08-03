@@ -15,6 +15,41 @@ const packageManifests = new Map(await Promise.all(pluginWorkspaces.map(async ({
   JSON.parse(await readFile(path.join(process.cwd(), workspace, 'package.json'), 'utf8')),
 ])))
 
+// Marketplace-level copy that the generator owns (plugin entries and skill
+// paths are derived below; metadata.version is bumped by the release script).
+const MARKETPLACE_DESCRIPTION = 'OMP enhancement plugins for optional workflow references, shared config context, writing, testing, fact checking, and editable draw.io diagrams.'
+
+const PLUGIN_CATEGORIES = Object.freeze({
+  'omp-config': 'development',
+  'writing-helper': 'writing',
+  'omp-testing-enhancer': 'development',
+  'omp-fact-checker': 'development',
+  'omp-enhancer-core': 'development',
+})
+
+function expectedPluginEntries() {
+  return pluginWorkspaces.map(({ name, directory, workspace }) => {
+    const manifest = packageManifests.get(workspace)
+    return {
+      name,
+      description: manifest?.description ?? '',
+      version: manifest?.version ?? '0.0.0',
+      category: PLUGIN_CATEGORIES[name] ?? 'development',
+      homepage: `https://github.com/marapapman/omp-enhancer/tree/main/plugins/${directory}`,
+      repository: 'https://github.com/marapapman/omp-enhancer',
+      source: `./${directory}`,
+    }
+  })
+}
+
+// In write mode the plugin inventory is rebuilt from the canonical source
+// (plugin-workspaces.js + package manifests), which prunes retired plugins and
+// adds new ones; the catalog is a generated file, never hand-edited.
+if (write) {
+  catalog.plugins = expectedPluginEntries()
+  catalog.metadata.description = MARKETPLACE_DESCRIPTION
+}
+
 assertPluginWorkspaceInventory({ rootPackage, packageLock, catalog, packageManifests })
 
 for (let index = 0; index < pluginWorkspaces.length; index += 1) {

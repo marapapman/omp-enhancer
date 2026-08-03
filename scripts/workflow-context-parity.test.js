@@ -21,8 +21,8 @@ const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['plan', 'scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
 const EXPECTED_WORKFLOW_IDS = ['code', 'writing', 'research', 'visual', 'operations'];
 
-test('catalog v31 defines exactly the five consolidated advisory workflows', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 31);
+test('catalog v32 defines exactly the five consolidated advisory workflows', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 32);
   assert.equal(workflowDefinitions.length, 5);
   assert.deepEqual(workflowIds, EXPECTED_WORKFLOW_IDS);
   for (const definition of workflowDefinitions) {
@@ -48,7 +48,7 @@ test('catalog v31 defines exactly the five consolidated advisory workflows', () 
   assert.deepEqual(code.roles, ['analyzer', 'task', 'reviewer', 'scout', 'librarian']);
 });
 
-test('packaged catalog, index, and all references expose catalog v31 advisory content', async () => {
+test('packaged catalog, index, and all references expose catalog v32 advisory content', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -56,7 +56,7 @@ test('packaged catalog, index, and all references expose catalog v31 advisory co
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /# OMP Enhancer Workflow Catalog v31/);
+  assert.match(catalog, /# OMP Enhancer Workflow Catalog v32/);
   assert.match(skillIndex, /Phases: ANALYZE -> EXECUTE -> REVIEW/iu);
   assert.match(skillIndex, /Advisory reference only/i);
   assert.equal(referenceNames.length, 5);
@@ -243,7 +243,7 @@ test('README stays user-focused and links the detailed current documentation', a
   assert.match(readme, /Main orchestrates through ANALYZE -> EXECUTE -> REVIEW/i);
   assert.match(readme, /`D` is a top-level Skill exact URI; `C` is an enumerated nested ECC exact URI/i);
   assert.match(readme, /there is no separate pending workflow/i);
-  assert.match(readme, /extension tools except mermaid-helper are inactive by default/i);
+  assert.match(readme, /extension tools are inactive by default so they do not enlarge the normal prompt/i);
   assert.match(readme, /\/enhancer-tools enable/i);
   assert.match(readme, /there is no plugin `\/test` command/i);
   assert.match(readme, /docs\/ARCHITECTURE\.md/);

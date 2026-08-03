@@ -1,6 +1,6 @@
 # OMP Enhancer
 
-OMP Enhancer is an OMP marketplace for optional workflows, shared config, writing, testing, fact checking, and editable Mermaid diagrams.
+OMP Enhancer is an OMP marketplace for optional workflows, shared config, writing, testing, fact checking, and draw.io diagrams.
 
 OMP exposes available Skills and Agents; Main chooses under native permissions. Plugins neither hard-route nor block, continue sessions, or auto-repair.
 
@@ -13,7 +13,6 @@ OMP exposes available Skills and Agents; Main chooses under native permissions. 
 | `writing-helper` | English and Chinese writing, citation, style, and polish. |
 | `omp-testing-enhancer` | Testing evidence and advisory review. |
 | `omp-fact-checker` | Claim evidence, cross-checking, and advisory review. |
-| `mermaid-helper` | Bounded Mermaid rendering via `mermaid_render` (code-first, revision-bound SVG evidence). |
 
 ## Workflows
 
@@ -25,7 +24,7 @@ Its discovery columns are explicit: `D` is a top-level Skill exact URI; `C` is a
 
 Writing covers prose in any language and format (English, Chinese, LaTeX, Markdown, Beamer, Word). Main selects the matching language and format Skills directly; there is no separate pending workflow.
 
-Diagrams are authored as Mermaid source and rendered with `mermaid_render`; the visual workflow lets `designer` author the complete Mermaid source in one pass and has Main perform a simple check of the rendered SVG.
+Diagrams are authored as draw.io XML and verified with the drawio MCP; the visual workflow lets `designer` author the complete draw.io XML in one pass, `task` runs the bundled geometry checker and the drawio MCP, and `visioner` reviews fresh current-revision rendered evidence read-only. The Mermaid and SVG diagram pipelines are retired.
 
 Main orchestrates through ANALYZE -> EXECUTE -> REVIEW: it analyzes directly for focused work or delegates to the `analyzer` agent for complex multi-slice work, executes directly for simple changes or delegates to `task`/domain agents for substantial work, and reviews simple changes directly or delegates to `reviewer` for complex or risky changes. A concrete safety, capacity, input, or dependency limit records direct fallback. This is not a gate, router, fixed fan-out, or automatic loop.
 
@@ -43,26 +42,26 @@ Add the marketplace and install:
 
 ```bash
 omp plugin marketplace add marapapman/omp-enhancer
-omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer mermaid-helper@omp-enhancer
+omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer
 ```
 
 For a local checkout:
 
 ```bash
 omp plugin marketplace add /path/to/omp-enhancer
-omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer mermaid-helper@omp-enhancer
+omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer
 ```
 
-Then run `npm run install:deps` once to fetch plugin runtime dependencies (`@mermaid-js/mermaid-cli` and `puppeteer` for Mermaid rendering). Start a new OMP session after installing or upgrading plugins.
+Then run `npm run install:deps` once to fetch plugin runtime dependencies (for example, `playwright` for Testing Enhancer browser tools; the drawio MCP needs no plugin dependencies). Start a new OMP session after installing or upgrading plugins.
 
 ## Use
 
-Extension tools except mermaid-helper are inactive by default so they do not enlarge the normal prompt; mermaid-helper tools are active when the plugin loads. Enable or disable groups as needed:
+Extension tools are inactive by default so they do not enlarge the normal prompt; activate groups as needed:
 
 ```text
 /enhancer-tools status
-/enhancer-tools enable <core|config|writing|fact|test|mermaid|all>
-/enhancer-tools disable <core|config|writing|fact|test|mermaid|all>
+/enhancer-tools enable <core|config|writing|fact|test|all>
+/enhancer-tools disable <core|config|writing|fact|test|all>
 ```
 
 Activation exposes tool schemas; it grants no filesystem, command, network, or publication permission.
@@ -72,8 +71,8 @@ Common optional tools include:
 - writing checks such as `writing_logic_check` and `writing_quality_check`;
 - testing analysis, browser, coverage, mutation, `omp_test_review`, and report tools;
 - fact analysis, evidence, report, and `fact_check_review` tools;
-- config diagnostics and managed-context synchronization.
-- Mermaid diagrams authored as code and rendered to revision-bound SVG via `mermaid_render`.
+- config diagnostics and managed-context synchronization;
+- draw.io diagrams authored as XML and verified with the drawio MCP and the bundled geometry checker.
 
 Review tools return advisory findings; they do not execute project commands, block work, or decide completion. Testing commands use the host-authorized shell; there is no plugin `/test` command. `/fact-check` remains available for explicit claim analysis.
 
@@ -102,6 +101,6 @@ The marketplace tracks GitHub `main`; catalog `ref` pins are not part of the rel
 - [Workflow definition and generation guide](docs/WORKFLOW_DEVELOPMENT.md)
 - [OMP Enhancer self-development method](docs/OMP_ENHANCER_SELF_DEVELOPMENT.md)
 - [Workflow and Skill E2E testing](docs/WORKFLOW_E2E_TESTING.md)
-- [Mermaid pipeline contract](docs/MERMAID_PIPELINE.md)
-- Plugin guides: [Config](plugins/omp-config/README.md), [Writing](plugins/writing-helper/README.md), [Testing](plugins/omp-test-enhancer/README.md), [Fact checking](plugins/omp-fact-checker/README.md), and [Mermaid](plugins/mermaid-helper/README.md)
+- [Draw.io pipeline contract](docs/DRAWIO_PIPELINE.md)
+- Plugin guides: [Config](plugins/omp-config/README.md), [Writing](plugins/writing-helper/README.md), [Testing](plugins/omp-test-enhancer/README.md), and [Fact checking](plugins/omp-fact-checker/README.md) (the draw.io diagram skill ships inside Config)
 - [Historical design archive](docs/superpowers/README.md)

@@ -100,13 +100,13 @@ test('enhancer tools stay inactive until the user explicitly enables a group', a
     'writing_logic_check',
     'fact_check_analyze',
     'omp_test_analyze',
-    'mermaid_render',
   ];
   pi.activeTools = ['read'];
   registerCoreEnhancer(pi);
 
+  const notifications = [];
   const command = pi.commands.get('enhancer-tools');
-  const ctx = { ui: { notify: () => undefined } };
+  const ctx = { ui: { notify: (text) => notifications.push(text) } };
   await command.handler('enable core', ctx);
   assert.equal(pi.activeTools.includes('omp_core_observation_status'), true);
   assert.equal(pi.activeTools.includes('omp_config_doctor'), false);
@@ -114,14 +114,21 @@ test('enhancer tools stay inactive until the user explicitly enables a group', a
   await command.handler('disable core', ctx);
   assert.deepEqual(pi.activeTools, ['read']);
 
-  await command.handler('enable mermaid', ctx);
+  await command.handler('enable test', ctx);
   assert.deepEqual(
     pi.activeTools,
-    ['read', 'mermaid_render'],
+    ['read', 'omp_test_analyze'],
   );
 
-  await command.handler('disable mermaid', ctx);
+  await command.handler('disable test', ctx);
   assert.deepEqual(pi.activeTools, ['read']);
+
+  // the mermaid tool group was retired: the group list is core|config|writing|fact|test|all
+  await command.handler('enable mermaid', ctx);
+  assert.deepEqual(pi.activeTools, ['read'], 'unknown group must not change active tools');
+  const usage = notifications.at(-1) ?? '';
+  assert.match(usage, /enable <core\|config\|writing\|fact\|test\|all>/u);
+  assert.doesNotMatch(usage, /mermaid/iu);
 
   await command.handler('enable all', ctx);
   for (const name of pi.allTools.filter((name) => name !== 'read')) {

@@ -36,7 +36,6 @@ const ENHANCER_TOOL_GROUPS = Object.freeze({
   writing: ['writing_'],
   fact: ['fact_check_'],
   test: ['omp_test_'],
-  mermaid: ['mermaid_'],
 });
 
 export default function registerCoreEnhancer(pi) {
@@ -164,10 +163,10 @@ export default function registerCoreEnhancer(pi) {
   pi.registerTool({
     name: 'omp_core_install_deps',
     label: 'Install plugin dependencies',
-    description: 'Run npm install for installed marketplace plugins that declare runtime dependencies (for example @mermaid-js/mermaid-cli and puppeteer for mermaid-helper) so their tools work after install or upgrade. Reports installed, up-to-date, and failed plugins as structured evidence.',
+    description: 'Run npm install for installed marketplace plugins that declare runtime dependencies (for example playwright for omp-testing-enhancer) so their tools work after install or upgrade. Reports installed, up-to-date, and failed plugins as structured evidence.',
     defaultInactive: true,
     approval: 'exec',
-    promptSnippet: 'Install npm runtime dependencies for marketplace plugins (e.g. @mermaid-js/mermaid-cli for mermaid-helper).',
+    promptSnippet: 'Install npm runtime dependencies for marketplace plugins (e.g. playwright for omp-testing-enhancer).',
     promptGuidelines: [
       'Use dryRun: true to preview before applying.',
       'Use the plugin parameter to target a specific plugin instead of all.',
@@ -464,7 +463,7 @@ function registerEnhancerToolsCommand(pi) {
       const prefixes = enhancerToolPrefixes(group);
       if (!['status', 'enable', 'disable'].includes(action) || !prefixes) {
         await ctx.ui?.notify?.(
-          'Usage: /enhancer-tools status | enable <core|config|writing|fact|test|mermaid|all> | disable <group>',
+          'Usage: /enhancer-tools status | enable <core|config|writing|fact|test|all> | disable <group>',
           'warn',
         );
         return;

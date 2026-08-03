@@ -88,7 +88,7 @@ test('buildStagedWorkflowReminder accepts no model parameter and never mentions 
 });
 
 test('the workflow catalog has exactly the five consolidated definitions with the simplified schema', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 31);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 32);
   assert.deepEqual(workflowIds, ['code', 'writing', 'research', 'visual', 'operations']);
   assert.equal(workflowDefinitions.length, 5);
 
