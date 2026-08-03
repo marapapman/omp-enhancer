@@ -21,8 +21,8 @@ const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['plan', 'scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
 const EXPECTED_WORKFLOW_IDS = ['code', 'writing', 'research', 'visual', 'operations'];
 
-test('catalog v32 defines exactly the five consolidated advisory workflows', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 32);
+test('catalog v33 defines exactly the five consolidated advisory workflows', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 33);
   assert.equal(workflowDefinitions.length, 5);
   assert.deepEqual(workflowIds, EXPECTED_WORKFLOW_IDS);
   for (const definition of workflowDefinitions) {
@@ -48,7 +48,7 @@ test('catalog v32 defines exactly the five consolidated advisory workflows', () 
   assert.deepEqual(code.roles, ['analyzer', 'task', 'reviewer', 'scout', 'librarian']);
 });
 
-test('packaged catalog, index, and all references expose catalog v32 advisory content', async () => {
+test('packaged catalog, index, and all references expose catalog v33 advisory content', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -56,7 +56,7 @@ test('packaged catalog, index, and all references expose catalog v32 advisory co
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /# OMP Enhancer Workflow Catalog v32/);
+  assert.match(catalog, /# OMP Enhancer Workflow Catalog v33/);
   assert.match(skillIndex, /Phases: ANALYZE -> EXECUTE -> REVIEW/iu);
   assert.match(skillIndex, /Advisory reference only/i);
   assert.equal(referenceNames.length, 5);
@@ -79,7 +79,7 @@ test('shared catalog and Skill index expose the five domains while references ca
   assert.equal(catalog, buildSharedWorkflowCatalogMarkdown());
   assert.equal(Number(catalog.match(/# OMP Enhancer Workflow Catalog v(\d+)/)?.[1]), WORKFLOW_CATALOG_VERSION);
   assert.deepEqual([...catalog.matchAll(/^## `([^`]+)`$/gm)].map((match) => match[1]), workflowIds);
-  const indexedWorkflowIds = [...skillIndex.matchAll(/^- `([^`]+)` —/gm)].map((match) => match[1]);
+  const indexedWorkflowIds = [...skillIndex.split('## Agent descriptions')[0].matchAll(/^- `([^`]+)` —/gm)].map((match) => match[1]);
   assert.deepEqual(indexedWorkflowIds, workflowIds);
   assert.match(skillIndex, /^## Domain index$/mu);
   assert.match(skillIndex, /^## Usage$/mu);
@@ -98,8 +98,8 @@ test('shared catalog and Skill index expose the five domains while references ca
       `${definition.id} is missing its literal reference URI`,
     );
     assert.ok(section.includes(`- When: ${definition.chooseWhen}`), `${definition.id} chooseWhen is hidden from Main`);
-    assert.ok(section.includes('- Suggested flow:'), `${definition.id} reference must render suggested flow`);
-    assert.ok(section.includes('- Scope notes:'), `${definition.id} reference must render scope notes`);
+    assert.ok(section.includes('- Agent candidates:'), `${definition.id} reference must render agent candidates`);
+    assert.doesNotMatch(section, /- Suggested flow:|- Scope notes:/u, `${definition.id} reference must not render execution or constraint specs`);
     for (const skill of definition.skills) {
       assert.ok(section.includes(`\`${skill}\``), `${definition.id} reference is missing skill ${skill}`);
       assert.ok(catalogSection.includes(`\`${skill}\``), `${definition.id} catalog card is missing skill ${skill}`);
@@ -107,9 +107,6 @@ test('shared catalog and Skill index expose the five domains while references ca
     for (const role of definition.roles) {
       assert.ok(section.includes(`\`${role}\``), `${definition.id} is missing role ${role}`);
       assert.ok(catalogSection.includes(`\`${role}\``), `${definition.id} catalog card is missing role ${role}`);
-    }
-    for (const line of definition.suggestedFlow) {
-      assert.ok(section.includes(line), `${definition.id} reference is missing suggested flow line`);
     }
     assert.doesNotMatch(section, /EXECUTION DEFAULT|READY NEXT|TASK COPY|AFTER TODO RESULT|Delegate Agent=|SENTINEL|byte 0|WORKFLOW READY/i, definition.id);
   }
@@ -203,7 +200,12 @@ test('extension workflow roles have one owner while OMP native roles have no plu
     assert.ok(owners[0].packageFiles.has('agents'), `${owners[0].plugin} does not include agents in package files`);
   }
 
+  // Skills provided by external marketplaces (installed OMP plugins, not
+  // packaged in this repo) that workflow cards may reference as candidates.
+  const externalWorkflowSkills = new Set(['drawio-skill']);
+
   for (const skill of referencedSkills) {
+    if (externalWorkflowSkills.has(skill)) continue;
     const owners = skillEntries.filter(({ name }) => name === skill);
     assert.equal(owners.length, 1, ownerError('workflow skill candidate', skill, owners));
     assert.ok(owners[0].packageFiles.has('skills'), `${owners[0].plugin} does not include skills in package files`);

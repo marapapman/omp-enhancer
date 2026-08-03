@@ -9,7 +9,7 @@
 ```text
 plugins/
 ├── omp-enhancer-core/   # task facts、runtime hooks、workflow definitions
-├── omp-config/          # config assets、Agents、Skills（含 drawio-diagram 画图 Skill）、hooks、templates
+├── omp-config/          # config assets、Agents、Skills、hooks、templates
 ├── writing-helper/      # writing QA tools、Agents、Skills
 ├── omp-test-enhancer/   # TypeScript testing evidence/review tools
 ├── omp-fact-checker/    # fact plan、evidence、cross-check、review

@@ -80,7 +80,6 @@ const expectedBundledSkills = [
   'prototype',
   'slides-storyline',
   'spike',
-  'drawio-diagram',
   'using-git-worktrees',
   'writing-skills',
   'zoom-out',

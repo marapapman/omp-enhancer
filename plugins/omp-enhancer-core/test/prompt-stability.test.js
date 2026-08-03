@@ -45,9 +45,7 @@ test('workflow prompts use the compact three-phase advisory with all five domain
 
   assert.match(index, /1\. Match the task to a domain above\./u);
   assert.match(index, /2\. Load matching skills as needed for methods and evidence rules\./u);
-  assert.match(index, /3\. ANALYZE: Main analyzes directly or delegates to analyzer for complex multi-slice work\./u);
-  assert.match(index, /4\. EXECUTE: Main executes directly or delegates to task\/domain agents\./u);
-  assert.match(index, /5\. REVIEW: Main reviews directly or delegates to reviewer for complex\/risky changes\./u);
+  assert.match(index, /3\. Choose the Agents you need from the descriptions above; OMP exposes their current availability\./u);
 
   for (const marker of LEGACY_MARKERS) {
     assert.doesNotMatch(index, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'iu'), `index must not contain ${marker}`);
@@ -58,8 +56,7 @@ test('workflow prompts use the compact three-phase advisory with all five domain
   assert.match(reference, /- When: Substantive code inspection/u);
   assert.match(reference, /- Skills: `code-development`/u);
   assert.match(reference, /- Agent candidates: `analyzer`, `task`, `reviewer`, `scout`, `librarian`\./u);
-  assert.match(reference, /- Suggested flow:\n  1\. Establish outcome/u);
-  assert.match(reference, /- Scope notes:\n  - Read-only or plan-only requests do not authorize production mutation\./u);
+  assert.doesNotMatch(reference, /- Suggested flow:|- Scope notes:/u);
   for (const marker of LEGACY_MARKERS) {
     assert.doesNotMatch(reference, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'iu'), `reference must not contain ${marker}`);
   }
@@ -81,6 +78,6 @@ test('the generated code reference file matches the advisory card contract', asy
   assert.match(codeRef, /# `code` workflow reference/u);
   assert.match(codeRef, /- When: Substantive code inspection/u);
   assert.match(codeRef, /- Agent candidates: `analyzer`, `task`, `reviewer`, `scout`, `librarian`\./u);
-  assert.match(codeRef, /- Suggested flow:/u);
+  assert.doesNotMatch(codeRef, /- Suggested flow:|- Scope notes:/u);
   assert.doesNotMatch(codeRef, /DECLARE HANDOFF|SENTINEL|byte 0|WORKFLOW PLAN|WORKFLOW READY/u);
 });

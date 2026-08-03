@@ -98,11 +98,10 @@ test('task implementation is native and never reintroduced as a plugin wrapper',
 });
 
 test('removed native-agent specialization remains available through skills', async () => {
-  const [frontend, canvas, beamer, drawio, documentation] = await Promise.all([
+  const [frontend, canvas, beamer, documentation] = await Promise.all([
     readFile(path.join(SKILL_ROOT, 'frontend-design', 'SKILL.md'), 'utf8'),
     readFile(path.join(SKILL_ROOT, 'canvas-design', 'SKILL.md'), 'utf8'),
     readFile(path.join(SKILL_ROOT, 'latex-beamer-slides', 'SKILL.md'), 'utf8'),
-    readFile(path.join(SKILL_ROOT, 'drawio-diagram', 'SKILL.md'), 'utf8'),
     readFile(path.join(SKILL_ROOT, 'ecc', 'documentation-lookup', 'SKILL.md'), 'utf8'),
   ]);
 
@@ -113,7 +112,6 @@ test('removed native-agent specialization remains available through skills', asy
   assert.match(canvas, /generic AI/i);
   assert.match(beamer, /overlap, crowding, clipping, undersized text/is);
   assert.match(beamer, /Do not split, add, remove, or reorder frames without explicit user authorization/i);
-  assert.match(drawio, /draw\.io XML is the single source of node positions, edge geometry, and labels/is);
   assert.match(documentation, /local installed source/i);
   assert.match(documentation, /types?\s*\+\s*implementation|implementation\s*\+\s*tests?/i);
   assert.match(documentation, /exact signature/i);

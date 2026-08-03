@@ -173,8 +173,7 @@ test('an arbitrary top-level model receives the compact orchestration advisory w
   assert.match(result.message.content, /For non-trivial PROJECT work, read `skill:\/\/omp-enhancer-workflows` for the domain reference catalog\./u);
   assert.match(result.message.content, /A verbatim field\/heading lookup needs no workflow or TODO\./u);
   assert.match(result.message.content, /OMP owns tools, permissions, delegation, and completion\./u);
-  assert.match(result.message.content, /WORKFLOW_CANDIDATES/u);
-  assert.match(result.message.content, /CANDIDATES: code/u);
+  assert.doesNotMatch(result.message.content, /WORKFLOW_CANDIDATES|CANDIDATES: code/u);
   assert.match(result.message.content, /Task descriptor resolved language=en; select matching writing skills directly\./u);
 
   for (const marker of FORBIDDEN_REMINDER_MARKERS) {
@@ -183,7 +182,6 @@ test('an arbitrary top-level model receives the compact orchestration advisory w
 
   assert.deepEqual(result.message.details.features, [
     'orchestration-advisory',
-    'workflow-candidates',
     'language-hint',
   ]);
   assert.ok(result.message.content.length < 2500, `reminder length=${result.message.content.length}`);

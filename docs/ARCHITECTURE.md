@@ -19,8 +19,8 @@ OMP Enhancer 采用“OMP 原生编排 + 可选参考信息”的模型：
 工作流 definition 位于 `plugins/omp-enhancer-core/src/workflows/definitions/`，是 workflow card 的唯一语义来源。Catalog version 31 把原来的 31 张卡片合并为 5 个域：`code`、`writing`、`research`、`visual`、`operations`。生成器把它们渲染为：
 
 - `plugins/omp-config/assets/WORKFLOW_CATALOG.md`：用于显式配置同步和人工检查的完整目录（5 张卡片）；
-- `plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md`：紧凑选择索引——每个域一行，列出 chooseWhen 条件、候选 Skill URI 与单卡 reference URI，顶部声明 `ANALYZE -> EXECUTE -> REVIEW` 和 usage 规则。`D` 是顶层 exact URI，`C` 是索引显式暴露的 nested ECC exact URI；二者只是 optional candidates，绝不是 load sets。Main 只选择与请求的方法、证据规则、verdict 或格式匹配的 URI；选中的 `C` 直接读取，不先读取完整 catalog；`skill://ecc-skill-catalog` 仅用于未枚举长尾；
-- `plugins/omp-config/skills/omp-enhancer-workflows/references/*.md`：每个域一张按需参考卡，包含 When、Skills、Agent candidates、Suggested flow 和 Scope notes；没有步骤 ID、delegation 行或任何 sentinel marker。
+- `plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md`：紧凑选择索引——每个域一行，列出 chooseWhen 条件、候选 Skill URI、单卡 reference URI 与各 Agent 的一行描述，顶部声明 `ANALYZE -> EXECUTE -> REVIEW` 和 usage 规则（匹配域、按需加载 Skill、按描述自选 Agent）。`D` 是顶层 exact URI，`C` 是索引显式暴露的 nested ECC exact URI；二者只是 optional candidates，绝不是 load sets。Main 只选择与请求的方法、证据规则、verdict 或格式匹配的 URI；选中的 `C` 直接读取，不先读取完整 catalog；`skill://ecc-skill-catalog` 仅用于未枚举长尾；
+- `plugins/omp-config/skills/omp-enhancer-workflows/references/*.md`：每个域一张按需参考卡，只包含 When、Skills、Agent candidates；Suggested flow 与 Scope notes 不再进入单卡（保留在完整目录与 definitions 中供契约使用）；没有步骤 ID、delegation 行或任何 sentinel marker。
 
 紧凑索引的当前大小由生成与 focused budget test 动态校验；文档不固化会随 workflow rows 和 wording 再生成而变化的 byte snapshot。
 
@@ -30,7 +30,7 @@ Managed `AGENTS.md` 和 `WATCHDOG.yml` 不导入完整目录。Main block 声明
 
 每张 definition 只包含 `id`、`chooseWhen`、`skills`、`catalogSkills`、`roles`、`suggestedFlow` 和 `scopeNotes`。旧 schema 的委派默认、步骤、组合、质量检查或风险字段已全部移除；Main 按任务复杂度选择 direct work 或 delegation，而不是被卡片默认值指派。用户要求 Main-only、matching Agent 或 capacity 不可用、assignment input 不完整、dependency 或 write overlap 使拆分不安全时，Main 记录具体 limitation 并直接 fallback，而不是伪造委派。Writing 域的语言规则：目标正文为中文时选择中文写作 Skill（如 `plain-chinese-writing`、`zh-writing-markdown-helper`），英文时选择英文写作 Skill（如 `writing-review`、`writing-markdown-helper`）；LaTeX、Beamer、Markdown、Word 是格式叠加层，按目标格式加载对应 Skill，不构成独立 workflow。语言仍不明确时询问用户，不循环或猜测。
 
-visual-delivery 建议：`designer` authors the complete draw.io XML in one pass；`task` runs the bundled geometry checker and the drawio MCP；`visioner` reviews fresh current-revision rendered evidence read-only；Main retains setup authorization and final acceptance only。draw.io XML 是拓扑、标签与几何的唯一来源；Mermaid 与 SVG 画图管线已退役。
+visual-delivery 建议：`designer` draws the diagram once with `drawio-skill` (drawio@365-skills) and exports a draft PNG；`visioner` reviews that exported PNG read-only in one pass, flagging edges pressed onto each other or crossing through boxes；`designer` applies at most one fix round before delivery；Main retains setup authorization and final acceptance only。画图统一走 drawio@365-skills；旧 drawio-diagram skill、几何检查器与 drawio MCP 路线已退役。
 
 这只是 advisory guidance，不是 hard gate、router、fixed fanout、automatic loop 或 completion authority。
 
@@ -63,7 +63,7 @@ Core 为所有顶层 Main 任务保留一次 capability-gated one-shot orchestra
 | Writing Helper | 确定性写作逻辑、风格、引用检查和写作 Agents/Skills | 阻止交付或自动改写所有发现 |
 | Testing Enhancer | 测试目标/context、浏览器证据、coverage/mutation context、独立 review 和报告 | 执行 `testCommand` 输入、提供 `/test` command、决定会话完成 |
 | Fact Checker | claim plan、双 lane evidence、cross-check、report 和独立 review | 把缺失证据变成生命周期 gate |
-| Draw.io | draw.io XML 画图管线（drawio MCP + 几何检查器） | 把几何检查或渲染 verdict 变成完成门 |
+| Draw.io | drawio@365-skills 画图管线（drawio-skill 一遍画 + visioner 一轮检查） | 把检查发现或渲染 verdict 变成完成门 |
 
 Marketplace extension tools 默认 inactive，激活不改变权限。只有用户显式执行 `/enhancer-tools enable <group>` 后，相应 schema 才加入当前 session 的 active tools。激活工具不是操作授权。
 

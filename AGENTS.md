@@ -43,7 +43,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 - No hard routers, hard gates, classifier preflights, or plugin-owned completion controllers
 - All marketplace extension tools are `defaultInactive`; activation grants no permission.
-- Visual delivery lets `designer` author the complete draw.io XML in one pass, `task` runs the bundled geometry checker and the drawio MCP, and `visioner` reviews fresh current-revision rendered evidence read-only. Main retains setup authorization and final acceptance only.
+- Visual delivery lets `designer` draw the diagram once with `drawio-skill` (drawio@365-skills) and export a draft PNG, `visioner` reviews that exported PNG read-only in one pass for edges pressed onto each other or crossing through boxes, and `designer` applies at most one fix round before delivery. Main retains setup authorization and final acceptance only.
 - Fact conclusions preserve exact claim tuples (subject, predicate/object, scope, time/version, quantifier); the backward-compatible `verdict` cannot upgrade compatibility evidence into proof, while fail-closed `strictVerdict` controls factual conclusions.
 - Review tools are advisory only — they don't execute commands, block, or gate completion
 
@@ -52,7 +52,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 | Path | Purpose |
 |------|---------|
 | `plugins/omp-enhancer-core/src/` | Core plugin: task facts, workflow definitions, orchestration advisory, task descriptor, and skill/subagent validation |
-| `plugins/omp-enhancer-core/src/workflows/` | Workflow catalog (v32), schema, renderers, definitions (code, writing, research, visual, operations) |
+| `plugins/omp-enhancer-core/src/workflows/` | Workflow catalog (v33), schema, renderers, definitions (code, writing, research, visual, operations) |
 | `plugins/omp-test-enhancer/src/` | Testing enhancer TypeScript source: advisory tools, browser check, session state, and host observation |
 | `plugins/writing-helper/src/` | Quality analysis: logic, style, citations, preservation, language detection, report formatting |
 | `plugins/omp-fact-checker/src/` | Fact-check pipeline: claim extraction, evidence collection (A/B lanes), cross-checking, providers |
@@ -67,7 +67,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 |------|-------------|
 | `plugins/omp-enhancer-core/index.js` | Largest plugin entry: tool registration, lifecycle hooks, one-shot orchestration advisory |
 | `plugins/omp-enhancer-core/src/task-descriptor.js` | 195KB task analysis — signal extraction, domain classification, risk assessment, language detection |
-| `plugins/omp-enhancer-core/src/workflows/catalog.js` | Workflow catalog v32: assembles the 5 domain definitions |
+| `plugins/omp-enhancer-core/src/workflows/catalog.js` | Workflow catalog v33: assembles the 5 domain definitions |
 | `plugins/omp-enhancer-core/src/workflows/definitions/` | Canonical workflow definitions (code.js, writing.js, research.js, operations.js, etc.) |
 | `plugins/omp-enhancer-core/src/skill-usage.js` | `<skill-usage>` block parsing, denied/missing skills detection |
 | `plugins/omp-test-enhancer/src/extension.ts` | Testing Enhancer source registration for seven default-inactive advisory tools, lifecycle observation, and session state; the built runtime entry is `dist/extension.js` |

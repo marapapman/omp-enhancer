@@ -232,8 +232,7 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
     assert.match(referenceText, /- When: /);
     assert.match(referenceText, /- Skills: /);
     assert.match(referenceText, /- Agent candidates: /);
-    assert.match(referenceText, /- Suggested flow:/);
-    assert.match(referenceText, /- Scope notes:/);
+    assert.doesNotMatch(referenceText, /- Suggested flow:|- Scope notes:/);
   }
   assert.doesNotMatch(catalog, /healthcare\.review|ecc-healthcare-reviewer/i);
   assert.match(catalog, /## \`code\`[\s\S]*Agents:/i);

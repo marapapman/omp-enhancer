@@ -1,5 +1,5 @@
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->
-# OMP Enhancer Workflow Catalog v32
+# OMP Enhancer Workflow Catalog v33
 
 Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIEW.
 
@@ -43,14 +43,14 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
 ## `visual`
 
 - When: Diagrams (draw.io), UI/UX design, visual artifacts, slides with visual layout, or rendered figure review.
-- Skills: `drawio-diagram`, `frontend-design`, `canvas-design`
-- Agents: `designer`, `task`, `visioner`
+- Skills: `drawio-skill`, `frontend-design`, `canvas-design`
+- Agents: `designer`, `visioner`
 - Flow:
   1. Clarify diagram type, format, and rendering requirements.
-  2. Design via designer for complex visuals, or directly for simple diagrams.
-  3. designer authors the complete draw.io XML in one pass; task runs the bundled geometry checker and the drawio MCP (create_diagram, search_shapes for icons) on that exact source.
-  4. visioner reviews fresh current-revision rendered evidence read-only — the MCP Apps inline render or the diagram opened in the draw.io editor — plus the checker report.
-  5. Main retains setup authorization and final acceptance only; deliver with the .drawio source file and verified evidence.
+  2. designer draws the diagram once with drawio-skill from drawio@365-skills and exports a draft PNG.
+  3. visioner reviews that exported PNG read-only in one pass, flagging edges pressed onto each other or crossing through boxes.
+  4. designer applies at most one fix round for supported findings and re-exports; deliver the .drawio source with the exported image.
+  5. Main retains setup authorization and final acceptance only; remaining findings are reported as limitations.
 
 ## `operations`
 

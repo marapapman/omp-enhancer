@@ -70,7 +70,7 @@ Apply the **deletion test** to anything you suspect is shallow: would deleting i
 
 Present a concise Markdown report in the response by default. When an authorized HTML artifact was explicitly requested, resolve the OS temp directory and use a fresh `<tmpdir>/architecture-review-<timestamp>.html` path unless the user supplied another safe target. Tell the user the absolute path after a successful write; do not open it automatically.
 
-For an authorized HTML artifact, prefer embedded CSS and SVG so it remains self-contained. Use Tailwind or another CDN only under the network boundary above; Mermaid is retired — draw graphs as hand-built inline SVG, or via the drawio MCP as a `.drawio` file for complex figures. Use a graph only where relationships materially benefit from one; each candidate may include a compact before/after visual when useful.
+For an authorized HTML artifact, prefer embedded CSS and SVG so it remains self-contained. Use Tailwind or another CDN only under the network boundary above; Mermaid is retired — draw graphs as hand-built inline SVG, or via drawio-skill (drawio@365-skills) as a `.drawio` file for complex figures. Use a graph only where relationships materially benefit from one; each candidate may include a compact before/after visual when useful.
 
 For each candidate, use these fields; render them as cards only in an authorized HTML artifact:
 

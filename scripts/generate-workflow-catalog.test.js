@@ -49,7 +49,9 @@ test('workflow artifact generator writes the optional workflow skill and one ref
 
   // The index renders exactly the five consolidated domain rows, each with the
   // chooseWhen text and a literal reference URI.
-  const domainRows = [...skill.matchAll(/^- `([^`]+)` — ([^\n]+)$/gmu)].map((match) => match[1]);
+  const domainSection = skill.split('## Agent descriptions')[0];
+  const agentSection = skill.split('## Agent descriptions')[1] ?? '';
+  const domainRows = [...domainSection.matchAll(/^- `([^`]+)` — ([^\n]+)$/gmu)].map((match) => match[1]);
   assert.deepEqual(domainRows, workflowIds);
   for (const definition of workflowDefinitions) {
     const row = skill
@@ -65,6 +67,15 @@ test('workflow artifact generator writes the optional workflow skill and one ref
   }
 
   assert.doesNotMatch(skill, /DECLARE HANDOFF|WORKFLOW PLAN|WORKFLOW READY|SENTINEL|byte 0|NOW=|THEN=|RESOURCE EXTENSION|Delegate Agent=|EXECUTION DEFAULT|AFTER TODO RESULT|READY NEXT/i);
+  // The compact index exposes one-line Agent descriptions so Main can select
+  // Agents on its own; every role referenced by a workflow must be covered.
+  assert.match(skill, /^## Agent descriptions$/mu);
+  const agentLines = [...agentSection.matchAll(/^- `([^`]+)` — .+$/gmu)].map((match) => match[1]);
+  const referencedRoles = new Set(workflowDefinitions.flatMap(({ roles }) => roles));
+  for (const role of referencedRoles) {
+    assert.ok(agentLines.includes(role), `Agent descriptions must cover workflow role ${role}`);
+  }
+  assert.doesNotMatch(skill, /- Suggested flow:|- Scope notes:/u, 'the compact index must not carry execution or constraint specs');
   // Assembled from fragments so the retired workflow id never appears literally.
   const retiredDrawingWorkflowId = ['diagram', ['t', 'i', 'k', 'z'].join('')].join('.');
   assert.doesNotMatch(skill, new RegExp(`agentic\\.simple|writing\\.pending|writing\\.en|writing\\.zh|code\\.dev|general\\.subagent|${retiredDrawingWorkflowId}|diagram\\.mermaid|omp\\.plugin`, 'i'));
@@ -93,11 +104,7 @@ test('workflow artifact generator writes the optional workflow skill and one ref
     assert.ok(reference.includes(`- When: ${definition.chooseWhen}`), `${definition.id} reference must carry chooseWhen`);
     assert.ok(reference.includes('- Skills:'), `${definition.id} reference must carry Skills`);
     assert.ok(reference.includes('- Agent candidates:'), `${definition.id} reference must carry Agent candidates`);
-    assert.ok(reference.includes('- Suggested flow:'), `${definition.id} reference must carry Suggested flow`);
-    assert.ok(reference.includes('- Scope notes:'), `${definition.id} reference must carry Scope notes`);
-    for (const line of definition.suggestedFlow) {
-      assert.ok(reference.includes(line), `${definition.id} reference is missing suggested flow line: ${line}`);
-    }
+    assert.doesNotMatch(reference, /- Suggested flow:|- Scope notes:/u, `${definition.id} reference must not carry execution or constraint specs`);
     for (const role of definition.roles) {
       assert.ok(reference.includes(`\`${role}\``), `${definition.id} reference is missing role ${role}`);
     }

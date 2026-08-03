@@ -873,7 +873,7 @@ test('installed workflow summary does not treat an incidental loaded-skills phra
   assert.deepEqual(summary.unobservedClaims, []);
 });
 
-test('a plain read of skill://drawio-diagram is observed and claimed without a resource-extension marker', () => {
+test('a plain read of skill://drawio-skill is observed and claimed without a resource-extension marker', () => {
   const summary = summarizeWorkflowEvents([
     { type: 'agent_start' },
     {
@@ -884,7 +884,7 @@ test('a plain read of skill://drawio-diagram is observed and claimed without a r
           type: 'toolCall',
           id: 'read-drawio-skill',
           name: 'read',
-          arguments: { path: 'skill://drawio-diagram' },
+          arguments: { path: 'skill://drawio-skill' },
         }],
       },
     },
@@ -892,7 +892,7 @@ test('a plain read of skill://drawio-diagram is observed and claimed without a r
       type: 'tool_execution_end',
       toolCallId: 'read-drawio-skill',
       toolName: 'read',
-      result: { isError: false, content: [{ type: 'text', text: '---\nname: drawio-diagram\n---' }] },
+      result: { isError: false, content: [{ type: 'text', text: '---\nname: drawio-skill\n---' }] },
     },
     {
       type: 'message_end',
@@ -900,15 +900,15 @@ test('a plain read of skill://drawio-diagram is observed and claimed without a r
         role: 'assistant',
         content: [{
           type: 'text',
-          text: 'WORKFLOW READY | skills-loaded=skill://drawio-diagram',
+          text: 'WORKFLOW READY | skills-loaded=skill://drawio-skill',
         }],
       },
     },
     { type: 'agent_end' },
   ], { exitCode: 0 });
 
-  assert.deepEqual(summary.observedSkills, ['drawio-diagram']);
-  assert.deepEqual(summary.claimedSkills, ['drawio-diagram']);
+  assert.deepEqual(summary.observedSkills, ['drawio-skill']);
+  assert.deepEqual(summary.claimedSkills, ['drawio-skill']);
   assert.deepEqual(summary.unobservedClaims, []);
 });
 
@@ -3473,7 +3473,12 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   assert.deepEqual(controls.map(({ id }) => id), ['fixture-xlsx-control']);
   for (const scenario of matrix.scenarios.filter(({ category }) => category !== 'harness-control')) {
     assert.equal(scenario.fixture, 'skill-discovery-readonly');
-    assert.doesNotMatch(scenario.prompt, /skill:\/\/|\bskills?\b/iu, scenario.id);
+    assert.doesNotMatch(scenario.prompt, /skill:\/\//iu, scenario.id);
+    // natural-drawio-diagram intentionally names drawio-skill (drawio@365-skills)
+    // because the card requires the external marketplace skill by name.
+    if (scenario.id !== 'natural-drawio-diagram') {
+      assert.doesNotMatch(scenario.prompt, /\bskills?\b/iu, scenario.id);
+    }
   }
 
   const nested = matrix.scenarios.find(({ id }) => id === 'natural-ecc-nested');
@@ -3497,17 +3502,17 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   const docker = matrix.scenarios.find(({ id }) => id === 'natural-docker-compose');
   assert.equal(docker.expectations.maxObservedSkills, 2);
   const drawio = matrix.scenarios.find(({ id }) => id === 'natural-drawio-diagram');
-  assert.equal(drawio.category, 'omp-config');
+  assert.equal(drawio.category, 'external-marketplace');
   assert.equal(drawio.fixture, 'skill-discovery-readonly');
   assert.equal(drawio.expectations.minWorkflowReferenceReads, 1);
   assert.deepEqual(drawio.expectations.requiredSelectedWorkflowIds, ['visual']);
-  assert.deepEqual(drawio.expectations.requiredObservedSkills, ['drawio-diagram']);
+  assert.deepEqual(drawio.expectations.requiredObservedSkills, ['drawio-skill']);
   assert.equal(drawio.expectations.maxObservedSkills, 5);
   assert.ok(drawio.expectations.forbiddenSkills.includes('svg-writing'));
   assert.ok(drawio.expectations.forbiddenSkills.includes('writing-review'));
   assert.ok(drawio.expectations.forbiddenSkills.includes('writing-markdown-helper'));
-  assert.match(drawio.prompt, /draw\.io XML/iu);
-  assert.match(drawio.prompt, /check-drawio-layout|create_diagram/iu);
+  assert.match(drawio.prompt, /draw\.io/iu);
+  assert.match(drawio.prompt, /drawio-skill|drawio@365-skills/iu);
   const subagent = matrix.scenarios.find(({ id }) => id === 'natural-subagent-isolation');
   assert.equal(subagent.expectations.requireNativeTaskCompletion, true);
   assert.equal(subagent.expectations.requireSuccessfulToolCalls, false);
@@ -3780,14 +3785,14 @@ test('DeepSeek subagent default matrix keeps native task and hub semantics with 
   assert.deepEqual(drawio.expectations.requiredSelectedWorkflowIds, ['visual']);
   assert.deepEqual(drawio.expectations.requiredObservedSkills, [
     'omp-enhancer-workflows',
-    'drawio-diagram',
+    'drawio-skill',
   ]);
   assert.equal(drawio.expectations.maxObservedSkills, 2);
   assert.deepEqual(drawio.expectations.requiredNativeTaskAgents, ['designer']);
   assert.equal(drawio.expectations.maxToolCalls, 60);
   assert.match(drawio.prompt, /docs\/deploy-flow\.drawio/iu);
   assert.match(drawio.prompt, /dashed=1/iu);
-  assert.match(drawio.prompt, /check-drawio-layout|create_diagram|open_drawio_xml/iu);
+  assert.match(drawio.prompt, /drawio-skill|drawio@365-skills/iu);
   assert.deepEqual(drawio.fixtureExpectations.allowedChangedFiles, [
     'docs/deploy-flow.drawio',
   ]);

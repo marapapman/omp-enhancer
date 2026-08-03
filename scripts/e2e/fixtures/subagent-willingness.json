@@ -278,7 +278,7 @@
       "fixture": "visual-drawio-canvas",
       "timeoutSeconds": 480,
       "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
-      "prompt": "Create docs/deploy-flow.drawio as editable draw.io XML of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build (use dashed=1 in that edge's style). Author the complete draw.io XML in one pass with orthogonal edges, no overlapping boxes, and fontSize of at least 14. Verify the authored XML with the bundled check-drawio-layout.mjs script and the drawio MCP (create_diagram or open_drawio_xml) before final delivery.",
+      "prompt": "Create docs/deploy-flow.drawio as editable draw.io XML of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build (use dashed=1 in that edge's style). Draw it with drawio-skill from the drawio@365-skills marketplace: author the complete draw.io XML in one pass with orthogonal edges, no overlapping boxes, and fontSize of at least 14. Plan the follow-up QA as exactly one visioner read-only pass over the exported draft PNG for edges pressed onto each other or crossing through boxes, plus at most one fix round; in this exercise write only docs/deploy-flow.drawio and skip the actual PNG export.",
       "expectations": {
         "minNativeTaskCalls": 1,
         "maxNativeTaskCalls": 6,
@@ -288,7 +288,7 @@
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requireNonemptyNativeTaskContext": true,
         "requiredNativeTaskAgents": ["designer"],
-        "requiredObservedSkills": ["omp-enhancer-workflows", "drawio-diagram"],
+        "requiredObservedSkills": ["omp-enhancer-workflows", "drawio-skill"],
         "maxObservedSkills": 2,
         "forbiddenSkills": ["writing-markdown-helper"],
         "requiredWorkflowPrimary": "visual",

@@ -7,8 +7,7 @@ import { fileURLToPath } from 'node:url';
 const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 function readSkill(name) {
-  const segments = name === 'drawio-diagram' ? ['skills', name] : ['skills', 'ecc', name];
-  return readFileSync(join(pluginRoot, ...segments, 'SKILL.md'), 'utf8');
+  return readFileSync(join(pluginRoot, 'skills', 'ecc', name, 'SKILL.md'), 'utf8');
 }
 
 function frontmatterDescription(content) {
@@ -28,7 +27,7 @@ function compact(content) {
 }
 
 test('remaining ECC descriptions use task-local selection instead of hard-trigger language', () => {
-  for (const name of ['angular-developer', 'token-budget-advisor', 'vite-patterns', 'drawio-diagram']) {
+  for (const name of ['angular-developer', 'token-budget-advisor', 'vite-patterns']) {
     const description = frontmatterDescription(readSkill(name));
     assert.match(description, /\bUse (?:only )?(?:when|for)\b/iu, `${name}: positive task-local condition`);
     assert.doesNotMatch(

@@ -1,6 +1,6 @@
 # HTML Report Format
 
-The architectural review is rendered as a single self-contained HTML file in the OS temp directory. Tailwind comes from a CDN under the network boundary. Graphs are hand-built as inline SVG (divs and `<svg>` boxes-and-arrows) — Mermaid is retired. For a complex graph that needs real layout, author it with the drawio MCP as a `.drawio` file (see `skill://drawio-diagram`) and reference it from the report.
+The architectural review is rendered as a single self-contained HTML file in the OS temp directory. Tailwind comes from a CDN under the network boundary. Graphs are hand-built as inline SVG (divs and `<svg>` boxes-and-arrows) — Mermaid is retired. For a complex graph that needs real layout, author it as a `.drawio` file with drawio-skill (drawio@365-skills) and reference it from the report.
 
 ## Scaffold
 
@@ -48,7 +48,7 @@ Pick the pattern that fits the candidate. Mix them.
 
 ### Hand-built SVG graph (the workhorse for dependencies / call flow)
 
-Use hand-built inline SVG `boxes-and-arrows` (modules as `<rect>` + `<text>`, leakage edges red with `stroke: #dc2626`, the deep module dark) when the point is "X calls Y calls Z, and look at the mess." Mermaid is retired; for a graph that needs automatic layout, author it with the drawio MCP as a `.drawio` file instead.
+Use hand-built inline SVG `boxes-and-arrows` (modules as `<rect>` + `<text>`, leakage edges red with `stroke: #dc2626`, the deep module dark) when the point is "X calls Y calls Z, and look at the mess." Mermaid is retired; for a graph that needs automatic layout, author it as a `.drawio` file with drawio-skill (drawio@365-skills) instead.
 
 ### Hand-built boxes-and-arrows (for small editorial diagrams)
 

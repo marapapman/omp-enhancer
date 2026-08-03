@@ -40,7 +40,7 @@ scripts/generate-ecc-skill-catalog.js
 scripts/workflow-context-parity.test.js
 ```
 
-Core definitions 是唯一语义来源。Config 不在运行时依赖 Core；它只打包生成后的 Markdown 资产和 Skill 文件。`AGENTS.md` 与 `WATCHDOG.yml` 的 managed blocks 都声明 OMP 原生权威并指向可选 Skill，不自动 import `WORKFLOW_CATALOG.md`。Main block 要求非平凡任务使用 `ANALYZE -> EXECUTE -> REVIEW`：Main 按复杂度选择直接分析或委派 `analyzer`，选择直接执行或委派 `task`/领域 Agent，选择直接复查或委派 `reviewer`；需要方法细节时读取 `skill://omp-enhancer-workflows` 并加载匹配的域 Skill。索引行包含 exact ID、完整 chooseWhen 条件、Skill discovery 指针（`D`/`C` exact URI）与单卡 reference URI。单卡只给出 Suggested flow、Scope notes 与可选 Agent candidates，不暴露步骤 ID、delegation 行或任何 sentinel。Substantive code mutation 先由 Main 检索足够的代码、caller、test 与 configuration anchors，再把 dependency waves、runnable/independent 状态、exclusive write sets、complete assignment input、integration 与 evidence return 写入 TODO；同 wave delegation 是有 capacity 和安全边界时的软方法，不是固定 fork。这些是行为提示，不是运行时 gate。
+Core definitions 是唯一语义来源。Config 不在运行时依赖 Core；它只打包生成后的 Markdown 资产和 Skill 文件。`AGENTS.md` 与 `WATCHDOG.yml` 的 managed blocks 都声明 OMP 原生权威并指向可选 Skill，不自动 import `WORKFLOW_CATALOG.md`。Main block 要求非平凡任务使用 `ANALYZE -> EXECUTE -> REVIEW`：Main 按复杂度选择直接分析或委派 `analyzer`，选择直接执行或委派 `task`/领域 Agent，选择直接复查或委派 `reviewer`；需要方法细节时读取 `skill://omp-enhancer-workflows` 并加载匹配的域 Skill。索引行包含 exact ID、完整 chooseWhen 条件、Skill discovery 指针（`D`/`C` exact URI）与单卡 reference URI；索引还列出每个候选 Agent 的一行描述，供 Main 自行选择。单卡只给出 When、Skills 与 Agent candidates，不暴露 Suggested flow、Scope notes、步骤 ID、delegation 行或任何 sentinel（详细流程留在完整目录与 definitions 中）。Substantive code mutation 先由 Main 检索足够的代码、caller、test 与 configuration anchors，再把 dependency waves、runnable/independent 状态、exclusive write sets、complete assignment input、integration 与 evidence return 写入 TODO；同 wave delegation 是有 capacity 和安全边界时的软方法，不是固定 fork。这些是行为提示，不是运行时 gate。
 
 ## Definition 结构
 
@@ -74,7 +74,7 @@ Catalog version 31 只有 5 张域卡。新卡片放入最合适的领域文件�
 
 字段规则：
 
-- `id`：全局唯一、稳定、小写；catalog v32 只有 5 个 ID（`code`、`writing`、`research`、`visual`、`operations`），发布后不要随意改名。
+- `id`：全局唯一、稳定、小写；catalog v33 只有 5 个 ID（`code`、`writing`、`research`、`visual`、`operations`），发布后不要随意改名。
 - `chooseWhen`：描述用户可观察的选择条件，不写关键词路由规则。
 - `skills`：精确 Skill frontmatter 名，只列直接支持该域方法的候选项。
 - `catalogSkills`：`skills` 的 subset，表示由 workflow index 显式渲染成 exact `skill://ecc-skill-catalog/<id>/SKILL.md` 的 nested ECC 候选。其余 `skills` 渲染成顶层 exact `skill://<id>`。前者标记为 `C`、后者标记为 `D`，两者都只是 optional candidates；不要把已枚举 `C` 降级为 catalog query。
@@ -180,7 +180,7 @@ npm run check:ecc-skills
 新增、删除或改变工作流公开结构时，还要：
 
 1. 在 `plugins/omp-enhancer-core/src/workflows/catalog.js` 增加 catalog version。
-2. 检查完整 Markdown catalog 是否准确表达每个域的 chooseWhen、Skills、Agent candidates、Suggested flow 与 Scope notes；检查 Skill index 包含 exact ID、完整 chooseWhen 条件、`D`/`C` exact URI 与单卡 reference URI，顶部声明 `ANALYZE -> EXECUTE -> REVIEW`；检查单卡只包含 When、Skills、Agent candidates、Suggested flow 与 Scope notes。完整 `skill://` URI 与三个 ID namespace 不得混淆。
+2. 检查完整 Markdown catalog 是否准确表达每个域的 chooseWhen、Skills、Agent candidates、Suggested flow 与 Scope notes；检查 Skill index 包含 exact ID、完整 chooseWhen 条件、`D`/`C` exact URI、单卡 reference URI 与各 Agent 的一行描述，顶部声明 `ANALYZE -> EXECUTE -> REVIEW`；检查单卡只包含 When、Skills、Agent candidates（不含 Suggested flow 与 Scope notes）。完整 `skill://` URI 与三个 ID namespace 不得混淆。
 3. 确认 managed `AGENTS.md` 和 `WATCHDOG.yml` 仍不 import 完整 catalog；非平凡任务遵循 `ANALYZE -> EXECUTE -> REVIEW`，需要方法细节时读取 `skill://omp-enhancer-workflows` 并加载匹配 Skill；机械字段 lookup 无 Skill 或 TODO。Event evaluator 应证明这些读取与 tool batch 的真实时序，而不是只匹配 final 文本。Substantive code mutation 还应观察 analyzer（如委派）完成后的 implementation wave、同 wave 独立 slices 的单次 native `task` `tasks[]` batch、host-observed completed delivery、Main broader verification 与 visible `MAIN REVIEW`、之后才发生的 native reviewer assignment，以及 supported repair 的 task delivery、第二次 Main review 和至多一次 fresh reviewer。每个 assignment 携带完整 bounded input 与非空顶层 `context`；child 不拥有 parent TODO，只消费冻结 Skills，不进行二次 discovery/selection/load。自主选择和 Advisor calibration 可以提示 TODO discipline，但不得新增 router、lifecycle gate、自动重试、fixed fan-out、强制委派、Agent、Skill candidate 或 blocker。
 4. 只有用户层功能、安装方式或常用用法变化时才更新根 `README.md`；不要把完整 catalog 表复制回 README。
 

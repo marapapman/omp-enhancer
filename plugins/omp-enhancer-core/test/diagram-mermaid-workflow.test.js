@@ -14,25 +14,25 @@ import {
 test('the visual workflow is the single draw.io-capable domain with the advisory render chain', () => {
   const workflow = workflowCatalog.visual;
 
-  assert.equal(WORKFLOW_CATALOG_VERSION, 32);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 33);
   assert.ok(workflowIds.includes('visual'));
   assert.ok(workflow);
-  assert.deepEqual(workflow.skills, ['drawio-diagram', 'frontend-design', 'canvas-design']);
+  assert.deepEqual(workflow.skills, ['drawio-skill', 'frontend-design', 'canvas-design']);
   assert.deepEqual(workflow.catalogSkills, []);
-  assert.deepEqual(workflow.roles, ['designer', 'task', 'visioner']);
+  assert.deepEqual(workflow.roles, ['designer', 'visioner']);
   assert.match(workflow.chooseWhen, /Diagrams \(draw\.io\), UI\/UX design, visual artifacts, slides with visual layout, or rendered figure review/iu);
 
   const flow = workflow.suggestedFlow.join(' ');
   const scope = workflow.scopeNotes.join(' ');
 
   assert.match(flow, /Clarify diagram type, format, and rendering requirements/iu);
-  assert.match(flow, /Design via designer for complex visuals, or directly for simple diagrams/iu);
-  assert.match(flow, /designer authors the complete draw\.io XML in one pass; task runs the bundled geometry checker and the drawio MCP \(create_diagram, search_shapes for icons\) on that exact source/iu);
-  assert.match(flow, /visioner reviews fresh current-revision rendered evidence read-only/iu);
-  assert.match(flow, /Main retains setup authorization and final acceptance only; deliver with the \.drawio source file and verified evidence/iu);
+  assert.match(flow, /visioner reviews that exported PNG read-only in one pass, flagging edges pressed onto each other or crossing through boxes/iu);
+  assert.match(flow, /designer applies at most one fix round for supported findings and re-exports/iu);
+  assert.match(flow, /Main retains setup authorization and final acceptance only; remaining findings are reported as limitations/iu);
+  assert.match(flow, /designer draws the diagram once with drawio-skill from drawio@365-skills and exports a draft PNG/iu);
 
-  assert.match(scope, /All diagrams are authored as draw\.io XML and verified with the drawio MCP/iu);
-  assert.match(scope, /The drawio MCP \(hosted app server or local @drawio\/mcp tool server\) is the single diagram pipeline/iu);
+  assert.match(scope, /drawio-skill from the 365-skills marketplace \(drawio@365-skills\) is the single diagram pipeline/iu);
+  assert.match(scope, /QA is one visioner pass plus at most one fix round; no repeated iteration rounds/iu);
 
   assert.equal(Object.hasOwn(workflow, 'delegation'), false);
   assert.equal(Object.hasOwn(workflow, 'steps'), false);
@@ -55,11 +55,11 @@ test('workflow Skill routes academic figures to the visual domain with the drawi
 
   assert.match(
     index,
-    /`visual`[^\n]*Diagrams \(draw\.io\)[^\n]*D=\[`skill:\/\/drawio-diagram`, `skill:\/\/frontend-design`, `skill:\/\/canvas-design`\]/u,
+    /`visual`[^\n]*Diagrams \(draw\.io\)[^\n]*D=\[`skill:\/\/drawio-skill`, `skill:\/\/frontend-design`, `skill:\/\/canvas-design`\]/u,
   );
   assert.match(reference, /^# `visual` workflow reference$/um);
-  assert.match(reference, /Agent candidates: `designer`, `task`, `visioner`\./u);
-  assert.match(reference, /All diagrams are authored as draw\.io XML and verified with the drawio MCP/iu);
+  assert.match(reference, /Agent candidates: `designer`, `visioner`\./u);
+  assert.doesNotMatch(reference, /- Suggested flow:|- Scope notes:/u);
   assert.doesNotMatch(reference, /automatic retry|retry until|repeat until|automatic repair/iu);
   assert.doesNotMatch(index, /standalone SVG.*Primary|Direct standalone SVG/iu);
 });

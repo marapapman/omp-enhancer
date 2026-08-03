@@ -41,8 +41,8 @@ const EXPECTED_CONTRACTS = {
     skills: ['fact-checking', 'claim-extraction', 'source-evaluation', 'citation-authenticity'],
   },
   visual: {
-    roles: ['designer', 'task', 'visioner'],
-    skills: ['drawio-diagram', 'frontend-design', 'canvas-design'],
+    roles: ['designer', 'visioner'],
+    skills: ['drawio-skill', 'frontend-design', 'canvas-design'],
   },
   operations: {
     roles: [
@@ -83,19 +83,18 @@ test('no definition carries the removed delegation, step, or composition fields'
   }
 });
 
-test('the visual workflow keeps the designer one-pass draw.io chain advisory in suggestedFlow', () => {
+test('the visual workflow keeps the drawio-skill one-pass chain advisory in suggestedFlow', () => {
   const visual = workflowCatalog.visual;
   const flow = visual.suggestedFlow.join(' ');
 
   assert.equal(visual.roles.includes('designer'), true);
-  assert.equal(visual.roles.includes('task'), true);
   assert.equal(visual.roles.includes('visioner'), true);
-  assert.match(flow, /Design via designer for complex visuals, or directly for simple diagrams/iu);
-  assert.match(flow, /designer authors the complete draw\.io XML in one pass; task runs the bundled geometry checker and the drawio MCP \(create_diagram, search_shapes for icons\) on that exact source/iu);
-  assert.match(flow, /visioner reviews fresh current-revision rendered evidence read-only/iu);
-  assert.match(flow, /Main retains setup authorization and final acceptance only; deliver with the \.drawio source file and verified evidence/iu);
-  assert.match(visual.scopeNotes.join(' '), /All diagrams are authored as draw\.io XML and verified with the drawio MCP/iu);
-  assert.match(visual.scopeNotes.join(' '), /The drawio MCP \(hosted app server or local @drawio\/mcp tool server\) is the single diagram pipeline/iu);
+  assert.match(flow, /designer draws the diagram once with drawio-skill from drawio@365-skills and exports a draft PNG/iu);
+  assert.match(flow, /visioner reviews that exported PNG read-only in one pass, flagging edges pressed onto each other or crossing through boxes/iu);
+  assert.match(flow, /designer applies at most one fix round for supported findings and re-exports/iu);
+  assert.match(flow, /Main retains setup authorization and final acceptance only; remaining findings are reported as limitations/iu);
+  assert.match(visual.scopeNotes.join(' '), /drawio-skill from the 365-skills marketplace \(drawio@365-skills\) is the single diagram pipeline/iu);
+  assert.match(visual.scopeNotes.join(' '), /QA is one visioner pass plus at most one fix round; no repeated iteration rounds/iu);
 });
 
 test('the code workflow keeps TDD and analyzer delegation advisory without fixed fanout', () => {
@@ -141,10 +140,13 @@ test('every catalog role is OMP-native or marketplace-packaged and every selecte
     registeredMarketplaceAgents(repoRoot),
   ]);
   const nativeAgents = new Set(['analyzer', 'plan', 'task', 'designer', 'librarian', 'reviewer', 'scout']);
+  // Skills provided by external marketplaces (installed OMP plugins, not
+  // packaged in this repo) that workflow cards may reference as candidates.
+  const externalWorkflowSkills = new Set(['drawio-skill']);
   for (const [workflow, meta] of Object.entries(workflowCatalog)) {
     for (const skill of meta.skills) {
       assert.equal(
-        registeredSkills.has(skill),
+        registeredSkills.has(skill) || externalWorkflowSkills.has(skill),
         true,
         `${workflow}: ${skill}`,
       );

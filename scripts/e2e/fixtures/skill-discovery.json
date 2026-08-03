@@ -115,13 +115,13 @@
     },
     {
       "id": "natural-drawio-diagram",
-      "category": "omp-config",
+      "category": "external-marketplace",
       "fixture": "skill-discovery-readonly",
-      "prompt": "Plan an editable draw.io architecture flowchart for a five-module LLM serving stack with one decision branch. Author the complete draw.io XML in one pass with orthogonal edges, no overlapping boxes, and fontSize of at least 14. Verify the authored XML with the bundled check-drawio-layout.mjs script and the drawio MCP (create_diagram or open_drawio_xml). Do not inspect or modify project files and do not use the network.",
+      "prompt": "Plan an editable draw.io architecture flowchart for a five-module LLM serving stack with one decision branch. Draw it with drawio-skill from the drawio@365-skills marketplace: author the .drawio file once, export a draft PNG, have visioner review that PNG read-only in one pass for edges pressed onto each other or crossing through boxes, then apply at most one fix round before delivery. Do not inspect or modify project files and do not use the network.",
       "expectations": {
         "minWorkflowReferenceReads": 1,
         "requiredSelectedWorkflowIds": ["visual"],
-        "requiredObservedSkills": ["drawio-diagram"],
+        "requiredObservedSkills": ["drawio-skill"],
         "maxObservedSkills": 5,
         "forbiddenSkills": ["svg-writing", "writing-review", "writing-markdown-helper"]
       }

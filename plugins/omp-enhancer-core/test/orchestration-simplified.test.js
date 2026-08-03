@@ -47,8 +47,7 @@ test('buildStagedWorkflowReminder emits the compact orchestration advisory for a
   assert.match(reminder.content, /OMP_ORCHESTRATION/u);
   assert.match(reminder.content, /skill:\/\/omp-enhancer-workflows/u);
   assert.ok(reminder.features.includes('orchestration-advisory'));
-  assert.ok(reminder.features.includes('workflow-candidates'));
-  assert.match(reminder.content, /CANDIDATES: code/u);
+  assert.doesNotMatch(reminder.content, /WORKFLOW_CANDIDATES|CANDIDATES: code/u, 'the reminder must not inject workflow candidates');
 
   for (const marker of FORBIDDEN_REMINDER_MARKERS) {
     assert.doesNotMatch(reminder.content, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'iu'), `reminder must not contain ${marker}`);
@@ -88,7 +87,7 @@ test('buildStagedWorkflowReminder accepts no model parameter and never mentions 
 });
 
 test('the workflow catalog has exactly the five consolidated definitions with the simplified schema', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 32);
+  assert.equal(WORKFLOW_CATALOG_VERSION, 33);
   assert.deepEqual(workflowIds, ['code', 'writing', 'research', 'visual', 'operations']);
   assert.equal(workflowDefinitions.length, 5);
 

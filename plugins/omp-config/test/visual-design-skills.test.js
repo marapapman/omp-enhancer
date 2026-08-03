@@ -5,7 +5,6 @@ import { readFile } from 'node:fs/promises';
 const frontendUrl = new URL('../skills/frontend-design/SKILL.md', import.meta.url);
 const canvasUrl = new URL('../skills/canvas-design/SKILL.md', import.meta.url);
 const slidesUrl = new URL('../skills/latex-beamer-slides/SKILL.md', import.meta.url);
-const drawioUrl = new URL('../skills/drawio-diagram/SKILL.md', import.meta.url);
 const visionerUrl = new URL('../agents/visioner.md', import.meta.url);
 const architectureUrl = new URL('../../../docs/ARCHITECTURE.md', import.meta.url);
 
@@ -63,11 +62,8 @@ test('visioner independently reviews UI states and static exports without mutati
   assertAdvisoryOnly(visioner);
 });
 
-test('existing slides retain visioner QA while drawio diagrams gate on the bundled checker and Main acceptance', async () => {
-  const [slides, drawio] = await Promise.all([
-    readFile(slidesUrl, 'utf8'),
-    readFile(drawioUrl, 'utf8'),
-  ]);
+test('existing slides retain visioner QA', async () => {
+  const slides = await readFile(slidesUrl, 'utf8');
   const generation = markdownSection(slides, 'Generate a new deck');
   const modification = markdownSection(slides, 'Modify an existing deck');
 
@@ -83,13 +79,6 @@ test('existing slides retain visioner QA while drawio diagrams gate on the bundl
     /Have `task` recompile and render that exact designer revision/i,
     /Have `visioner` independently review/i,
   ]);
-  assertInOrder(drawio, [
-    /draw\.io XML is the single source of node positions, edge geometry, and labels/is,
-    /Run the bundled static checker before opening the diagram/is,
-    /Final visual QA happens by opening the `\.drawio` file in the draw\.io editor/is,
-    /Main accepts final delivery/is,
-  ]);
-  assert.doesNotMatch(drawio, /visioner|tikz/i);
 });
 
 test('architecture records the visual workflow as a soft evidence invariant', async () => {
@@ -97,7 +86,7 @@ test('architecture records the visual workflow as a soft evidence invariant', as
 
   assert.match(
     architecture,
-    /visual-delivery.+`designer` authors the complete draw\.io XML in one pass.+`task` runs the bundled geometry checker.+`visioner` reviews fresh current-revision rendered evidence read-only.+advisory.+hard gate.+router.+fixed fanout.+automatic loop.+completion authority/is,
+    /visual-delivery.+drawio-skill.+drawio@365-skills.+exported PNG read-only in one pass.+at most one fix round.+advisory.+hard gate.+router.+fixed fanout.+automatic loop.+completion authority/is,
   );
 });
 

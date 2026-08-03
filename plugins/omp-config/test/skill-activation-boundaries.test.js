@@ -14,15 +14,6 @@ function descriptionOf(skill) {
   return skill.match(/^description:\s*(.+)$/mu)?.[1] ?? '';
 }
 
-test('drawio-diagram metadata uses a positive task-local trigger instead of a hard activation rule', () => {
-  const skill = readSkill('drawio-diagram');
-  const description = descriptionOf(skill);
-
-  assert.match(description, /Use when a diagram must be delivered as editable draw\.io XML/iu);
-  assert.doesNotMatch(description, /\b(?:whenever|always)\b|Use this skill\s+(?:whenever|always)/iu);
-  assert.doesNotMatch(skill, /## When to Activate/iu);
-});
-
 test('motion-foundations participates only through the staged Skill plan and never selects itself', () => {
   const skill = readSkill('ecc', 'motion-foundations');
   const description = descriptionOf(skill);

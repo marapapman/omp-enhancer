@@ -10,6 +10,9 @@ import { exactNestedEccSkillUri } from '../plugins/omp-enhancer-core/src/workflo
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const pluginsRoot = path.join(repoRoot, 'plugins');
 const nativeAgents = new Set(['analyzer', 'plan', 'scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
+// Skills provided by external marketplaces (installed OMP plugins, not
+// packaged in this repo) that workflow cards may reference as candidates.
+const externalWorkflowSkills = new Set(['drawio-skill']);
 const packageArtifactDirectories = new Set([
   '.git',
   '.hg',
@@ -32,7 +35,7 @@ test('every packaged Skill entry is named uniquely, portable, and every workflow
     };
   }));
 
-  assert.equal(entries.length, 312, 'update the reviewed all-Skill manifest when the inventory changes');
+  assert.equal(entries.length, 311, 'update the reviewed all-Skill manifest when the inventory changes');
   for (const { file, name, frontmatter } of entries) {
     assert.ok(name, `${path.relative(repoRoot, file)} has no frontmatter name`);
     assert.doesNotMatch(
@@ -48,7 +51,10 @@ test('every packaged Skill entry is named uniquely, portable, and every workflow
   const available = new Set(names);
   const candidates = new Set(workflowDefinitions.flatMap(({ skills }) => skills));
   for (const candidate of candidates) {
-    assert.ok(available.has(candidate), `workflow references missing Skill ${candidate}`);
+    assert.ok(
+      available.has(candidate) || externalWorkflowSkills.has(candidate),
+      `workflow references missing Skill ${candidate}`,
+    );
   }
 });
 
@@ -89,7 +95,7 @@ test('workflow discovery metadata matches direct and ECC-catalog packaging', asy
   assert.equal(catalogCandidates.size, 7, 'update the reviewed enumerated ECC candidate baseline');
 
   for (const definition of workflowDefinitions) {
-    const expectedCatalogSkills = definition.skills.filter((skill) => !directlyVisible.has(skill));
+    const expectedCatalogSkills = definition.skills.filter((skill) => !directlyVisible.has(skill) && !externalWorkflowSkills.has(skill));
     assert.deepEqual(
       definition.catalogSkills,
       expectedCatalogSkills,
@@ -115,7 +121,7 @@ test('every exact Skill URI in packaged Skill Markdown resolves to a real entry 
   const skillFiles = resourceFiles.filter((file) => path.basename(file) === 'SKILL.md');
   const roots = new Map();
 
-  assert.equal(resourceFiles.length, 424, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
+  assert.equal(resourceFiles.length, 421, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
 
   for (const file of skillFiles) {
     const name = frontmatterName(await readFile(file, 'utf8'));
@@ -128,6 +134,7 @@ test('every exact Skill URI in packaged Skill Markdown resolves to a real entry 
     for (const match of content.matchAll(/`(skill:\/\/[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._/-]+)?)`/gu)) {
       const uri = match[1];
       if (uri === 'skill://x') continue;
+      if (uri === 'skill://drawio-skill' || uri.startsWith('skill://drawio-skill/')) continue;
       observed.add(uri);
 
       const withoutScheme = uri.slice('skill://'.length);

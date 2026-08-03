@@ -1,5 +1,6 @@
 import { WORKFLOW_CATALOG_VERSION, workflowDefinitions } from './catalog.js';
 import { WORKFLOW_PHASE_LINE } from './staged-contract.js';
+import { describeAgent } from './agent-descriptions.js';
 import {
   directSkillCandidates,
   exactNestedEccSkillCandidates,
@@ -26,24 +27,30 @@ export function buildWorkflowSkillIndexMarkdown() {
   for (const definition of workflowDefinitions) {
     lines.push(renderIndexRow(definition));
   }
+  lines.push('', ...renderAgentDescriptions(), '## Usage', '');
   lines.push(
-    '',
-    '## Usage',
-    '',
     '1. Match the task to a domain above.',
     '2. Load matching skills as needed for methods and evidence rules.',
-    '3. ANALYZE: Main analyzes directly or delegates to analyzer for complex multi-slice work.',
-    '4. EXECUTE: Main executes directly or delegates to task/domain agents.',
-    '5. REVIEW: Main reviews directly or delegates to reviewer for complex/risky changes.',
+    '3. Choose the Agents you need from the descriptions above; OMP exposes their current availability.',
     '',
   );
   return lines.join('\n');
 }
 
+function renderAgentDescriptions() {
+  const roles = [...new Set(workflowDefinitions.flatMap(({ roles }) => roles))].sort();
+  return [
+    '## Agent descriptions',
+    '',
+    ...roles.map((role) => `- \`${role}\` — ${describeAgent(role)}`),
+    '',
+  ];
+}
+
 export function buildWorkflowSkillReferenceMarkdown(workflowId) {
   const definition = workflowDefinitions.find(({ id }) => id === workflowId);
   if (!definition) throw new Error(`Unknown workflow skill reference: ${workflowId}.`);
-  const lines = [
+  return [
     `# \`${workflowId}\` workflow reference`,
     '',
     'Optional advisory reference. Main orchestrates freely.',
@@ -51,11 +58,8 @@ export function buildWorkflowSkillReferenceMarkdown(workflowId) {
     `- When: ${definition.chooseWhen}`,
     `- Skills: ${codeList(definition.skills)}`,
     `- Agent candidates: ${definition.roles.length ? definition.roles.map(code).join(', ') : 'none suggested'}.`,
-    '- Suggested flow:',
-    ...definition.suggestedFlow.map((text, index) => `  ${index + 1}. ${text}`),
-    ...renderSublist('Scope notes', definition.scopeNotes, 'none'),
-  ];
-  return lines.join('\n');
+    '',
+  ].join('\n');
 }
 
 export function buildWorkflowSkillReferences() {
@@ -81,14 +85,6 @@ function renderSkillDiscovery(definition) {
     ...(direct.length ? [`D=[${direct.join(', ')}]`] : []),
     ...(catalog.length ? [`C=[${catalog.join(', ')}]`] : []),
   ].join(' ') + '.';
-}
-
-function renderSublist(label, values, fallback = '') {
-  const items = values.length ? values : [fallback];
-  return [
-    `- ${label}:`,
-    ...items.map((value) => `  - ${value || 'none'}`),
-  ];
 }
 
 function code(value) {

@@ -6,7 +6,6 @@ import { describeNaturalLanguageTask } from './src/task-descriptor.js';
 import {
   buildTaskShapePrompt,
 } from './src/review-budget.js';
-import { suggestWorkflowCandidates } from './src/workflow-suggester.js';
 import {
   detectPlanMode,
   isPlanSlashCommand,
@@ -373,17 +372,6 @@ export default function registerCoreEnhancer(pi) {
 }
 
 
-function buildWorkflowCandidatePrompt(taskDescriptor = {}) {
-  const suggestion = suggestWorkflowCandidates(taskDescriptor);
-  if (!suggestion.candidates.length) return '';
-  return [
-    'WORKFLOW_CANDIDATES (observed from task signals; non-binding advisory):',
-    `CANDIDATES: ${suggestion.candidates.join(', ')}.`,
-    `RATIONALE: ${suggestion.rationale}`,
-    'Main selects the final domain from the reference catalog; these candidates narrow the search and may be ignored when the catalog reveals a better match. No router or gate.',
-  ].filter(Boolean).join('\n');
-}
-
 export function buildStagedWorkflowReminder({
   hasWorkflowSkill = false,
   workflowIndexSupplied = false,
@@ -418,11 +406,6 @@ export function buildStagedWorkflowReminder({
     if (taskShapePrompt) {
       sections.push(taskShapePrompt);
       features.push('task-shape-facts');
-    }
-    const candidatePrompt = buildWorkflowCandidatePrompt(taskDescriptor);
-    if (candidatePrompt) {
-      sections.push(candidatePrompt);
-      features.push('workflow-candidates');
     }
   }
 
