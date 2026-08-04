@@ -342,7 +342,7 @@
     {
       "name": "omp-testing-enhancer",
       "description": "OMP plugin with advisory testing analysis, host-observed evidence, browser, coverage, mutation, review, and reporting tools.",
-      "version": "0.1.21",
+      "version": "0.1.22",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-test-enhancer",
       "repository": "https://github.com/marapapman/omp-enhancer",
