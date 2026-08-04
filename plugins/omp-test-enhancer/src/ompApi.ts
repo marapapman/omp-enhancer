@@ -11,6 +11,7 @@ export interface AgentToolResult {
 
 export interface ZodSchema {
   describe(description: string): ZodSchema
+  optional(): ZodSchema
 }
 
 export type ToolUpdate = Partial<AgentToolResult>
@@ -64,7 +65,6 @@ export interface ExtensionAPI {
       unknown(): ZodSchema
       array(schema: unknown): ZodSchema
       enum(values: readonly [string, ...string[]]): ZodSchema
-      optional(schema: unknown): ZodSchema
     }
   }
   setLabel(label: string): void

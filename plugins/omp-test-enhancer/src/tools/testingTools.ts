@@ -70,7 +70,6 @@ interface ZodLike {
   unknown(): ZodSchema
   array(schema: unknown): ZodSchema
   enum(values: readonly [string, ...string[]]): ZodSchema
-  optional(schema: unknown): ZodSchema
 }
 
 interface AnalyzeParams {
@@ -160,8 +159,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       defaultInactive: true,
       approval: 'read',
       parameters: z.object({
-        files: z.optional(z.array(z.string())).describe('Array of workspace-relative file paths to analyze. Example: ["src/utils.ts", "src/api.ts"].'),
-        changedFiles: z.optional(z.array(changedFileSchema)).describe('Array of {path, content} objects with actual file content. Use when files are not on disk.')
+        files: z.array(z.string()).optional().describe('Array of workspace-relative file paths to analyze. Example: ["src/utils.ts", "src/api.ts"].'),
+        changedFiles: z.array(changedFileSchema).optional().describe('Array of {path, content} objects with actual file content. Use when files are not on disk.')
       }).describe('Parameters for omp_test_analyze. Provide either files or changedFiles, not both.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
         try {
@@ -212,10 +211,10 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       approval: 'exec',
       parameters: z.object({
         baseUrl: z.string().describe('The base URL of the running dev server or app. Example: "http://localhost:5173".'),
-        serverCommand: z.optional(z.string()).describe('Optional command to start the server. Not executed, used for evidence only.'),
-        artifactDir: z.optional(z.string()).describe('Directory path for browser artifacts (screenshots, traces, videos). Must be writable.'),
-        targetIds: z.optional(z.array(z.string())).describe('Specific target IDs from omp_test_analyze to scope browser checks.'),
-        setup: z.optional(z.unknown()).describe('Optional setup configuration object: headless, viewport, trace (off or retain-on-failure), screenshot (off or only-on-failure), serviceWorkers. screenshot: off disables only the automatic failure screenshot; explicit screenshot steps and visualChecks still capture, and trace-level screenshots are unaffected.'),
+        serverCommand: z.string().optional().describe('Optional command to start the server. Not executed, used for evidence only.'),
+        artifactDir: z.string().optional().describe('Directory path for browser artifacts (screenshots, traces, videos). Must be writable.'),
+        targetIds: z.array(z.string()).optional().describe('Specific target IDs from omp_test_analyze to scope browser checks.'),
+        setup: z.unknown().optional().describe('Optional setup configuration object: headless, viewport, trace (off or retain-on-failure), screenshot (off or only-on-failure), serviceWorkers. screenshot: off disables only the automatic failure screenshot; explicit screenshot steps and visualChecks still capture, and trace-level screenshots are unaffected.'),
         scenarios: z.array(z.unknown()).describe('Array of user interaction scenario objects defining browser automation steps.')
       }).describe('Parameters for omp_test_browser_check. Requires baseUrl and at least one scenario.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
@@ -254,8 +253,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       defaultInactive: true,
       approval: 'read',
       parameters: z.object({
-        coverageReport: z.optional(z.unknown()).describe('Coverage report object in JSON format. Use instead of reportPath when the report is already loaded.'),
-        reportPath: z.optional(z.string()).describe('Workspace-relative path to a coverage report JSON file. Example: "coverage/coverage-final.json".')
+        coverageReport: z.unknown().optional().describe('Coverage report object in JSON format. Use instead of reportPath when the report is already loaded.'),
+        reportPath: z.string().optional().describe('Workspace-relative path to a coverage report JSON file. Example: "coverage/coverage-final.json".')
       }).describe('Parameters for omp_test_coverage_analyze. Provide either coverageReport or reportPath.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
         try {
@@ -280,8 +279,8 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       defaultInactive: true,
       approval: 'read',
       parameters: z.object({
-        mutationReport: z.optional(z.unknown()).describe('Mutation report object in JSON format. Use instead of reportPath when the report is already loaded.'),
-        reportPath: z.optional(z.string()).describe('Workspace-relative path to a mutation report JSON file. Example: "mutation/mutation-report.json".')
+        mutationReport: z.unknown().optional().describe('Mutation report object in JSON format. Use instead of reportPath when the report is already loaded.'),
+        reportPath: z.string().optional().describe('Workspace-relative path to a mutation report JSON file. Example: "mutation/mutation-report.json".')
       }).describe('Parameters for omp_test_mutation_context. Provide either mutationReport or reportPath.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
         try {
@@ -309,7 +308,7 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       parameters: z.object({
         targets: z.array(targetSchema).describe('Array of changed target objects from omp_test_analyze output. Each target describes a file and its test context.'),
         candidate: candidateSchema.describe('Candidate test object describing the test files, actions, and current content.'),
-        testCommand: z.optional(z.string()).describe('Optional test command string to verify against the configured command.')
+        testCommand: z.string().optional().describe('Optional test command string to verify against the configured command.')
       }).describe('Parameters for omp_test_review. Provide targets and candidate from analysis results.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
         try {
@@ -342,7 +341,7 @@ export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCal
       defaultInactive: true,
       approval: 'read',
       parameters: z.object({
-        reviewResults: z.optional(z.array(gateResultSchema)).describe('Optional array of gate result objects from omp_test_review. Omit to use the most recently stored review results.')
+        reviewResults: z.array(gateResultSchema).optional().describe('Optional array of gate result objects from omp_test_review. Omit to use the most recently stored review results.')
       }).describe('Parameters for omp_test_report. Provide reviewResults or omit to use stored results.'),
       execute: async (_toolCallId, params, _signal, _onUpdate, _ctx) => {
         try {

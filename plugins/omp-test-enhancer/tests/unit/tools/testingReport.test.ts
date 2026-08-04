@@ -126,14 +126,13 @@ describe('buildTestReport', () => {
   })
 })
 
-function fakeZod(): ExtensionToolContext extends never ? never : { object(shape: Record<string, unknown>): unknown; string(): unknown; boolean(): unknown; unknown(): unknown; array(schema: unknown): unknown; enum(values: readonly [string, ...string[]]): unknown; optional(schema: unknown): unknown } {
+function fakeZod(): ExtensionToolContext extends never ? never : { object(shape: Record<string, unknown>): unknown; string(): unknown; boolean(): unknown; unknown(): unknown; array(schema: unknown): unknown; enum(values: readonly [string, ...string[]]): unknown } {
   return {
-    object: shape => ({  type: 'object', shape , describe() { return this } }),
-    string: () => ({  type: 'string' , describe() { return this } }),
-    boolean: () => ({  type: 'boolean' , describe() { return this } }),
-    unknown: () => ({  type: 'unknown' , describe() { return this } }),
-    array: schema => ({  type: 'array', schema , describe() { return this } }),
-    enum: values => ({  type: 'enum', values , describe() { return this } }),
-    optional: schema => ({  type: 'optional', schema , describe() { return this } }),
+    object: shape => ({  type: 'object', shape , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
+    string: () => ({  type: 'string' , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
+    boolean: () => ({  type: 'boolean' , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
+    unknown: () => ({  type: 'unknown' , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
+    array: schema => ({  type: 'array', schema , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
+    enum: values => ({  type: 'enum', values , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
   }
 }

@@ -109,12 +109,11 @@ describe('coverage and mutation report path safety', () => {
 
 function fakeZod() {
   return {
-    object: (shape: Record<string, unknown>) => ({  type: 'object', shape , describe() { return this } }),
-    string: () => ({  type: 'string' , describe() { return this } }),
-    boolean: () => ({  type: 'boolean' , describe() { return this } }),
-    unknown: () => ({  type: 'unknown' , describe() { return this } }),
-    array: (schema: unknown) => ({  type: 'array', schema , describe() { return this } }),
-    enum: (values: readonly [string, ...string[]]) => ({  type: 'enum', values , describe() { return this } }),
-    optional: (schema: unknown) => ({  type: 'optional', schema , describe() { return this } }),
+    object: (shape: Record<string, unknown>) => ({  type: 'object', shape , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
+    string: () => ({  type: 'string' , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
+    boolean: () => ({  type: 'boolean' , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
+    unknown: () => ({  type: 'unknown' , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
+    array: (schema: unknown) => ({  type: 'array', schema , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
+    enum: (values: readonly [string, ...string[]]) => ({  type: 'enum', values , describe() { return this }, optional() { return { type: 'optional', schema: this, describe() { return this } } } }),
   }
 }
