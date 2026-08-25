@@ -174,7 +174,9 @@ class FakePi {
   }
 
   getAllTools() {
-    return this.allTools.length ? [...this.allTools] : [...this.tools.keys()];
+    // OMP 18 runtime returns ToolInfo objects ({name, ...}), not plain names.
+    const names = this.allTools.length ? [...this.allTools] : [...this.tools.keys()];
+    return names.map((name) => ({ name }));
   }
 
   getActiveTools() {

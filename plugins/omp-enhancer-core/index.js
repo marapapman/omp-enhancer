@@ -447,15 +447,20 @@ function registerEnhancerToolsCommand(pi) {
       if (!['status', 'enable', 'disable'].includes(action) || !prefixes) {
         await ctx.ui?.notify?.(
           'Usage: /enhancer-tools status | enable <core|config|writing|fact|test|all> | disable <group>',
-          'warn',
+          'warning',
         );
         return;
       }
       if (typeof pi.getActiveTools !== 'function' || typeof pi.getAllTools !== 'function') {
-        await ctx.ui?.notify?.('This OMP runtime does not expose active-tool management.', 'warn');
+        await ctx.ui?.notify?.('This OMP runtime does not expose active-tool management.', 'warning');
         return;
       }
-      const available = unique(pi.getAllTools()).filter((name) => prefixes.some((prefix) => name.startsWith(prefix)));
+      // OMP 18 exposes ToolInfo objects from getAllTools(); older hosts returned
+      // plain names. Normalize both shapes before prefix matching.
+      const allToolNames = pi.getAllTools()
+        .map((tool) => (typeof tool === 'string' ? tool : tool?.name))
+        .filter((name) => typeof name === 'string' && name.length > 0);
+      const available = unique(allToolNames).filter((name) => prefixes.some((prefix) => name.startsWith(prefix)));
       const active = unique(pi.getActiveTools());
       if (action === 'status') {
         const enabled = available.filter((name) => active.includes(name));
@@ -466,7 +471,7 @@ function registerEnhancerToolsCommand(pi) {
         return;
       }
       if (typeof pi.setActiveTools !== 'function') {
-        await ctx.ui?.notify?.('This OMP runtime cannot change active tools.', 'warn');
+        await ctx.ui?.notify?.('This OMP runtime cannot change active tools.', 'warning');
         return;
       }
       const next = action === 'enable'
