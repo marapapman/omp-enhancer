@@ -1,6 +1,6 @@
 {
   "name": "omp-testing-enhancer",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "OMP plugin with advisory testing analysis, host-observed evidence, browser, coverage, mutation, review, and reporting tools.",
   "type": "module",
   "main": "./dist/extension.js",
