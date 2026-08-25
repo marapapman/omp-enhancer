@@ -1,7 +1,7 @@
 import { mkdir, realpath } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { chromium, type Locator, type Page } from 'playwright'
+import type { Browser, BrowserContext, BrowserType, Locator, Page } from 'playwright'
 import { invalidBrowserCheckEvidence, parseBrowserCheckParams } from '../browserSchemas.js'
 import { comparePng } from './imageDiff.js'
 import { isRecord } from '../utils.js'
@@ -79,8 +79,8 @@ export async function executeBrowserCheck(input: unknown, ctx: ExtensionToolCont
   const pageErrors: unknown[] = []
   const failedRequests: unknown[] = []
   const badResponses: unknown[] = []
-  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined
-  let context: Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>['newContext']>> | undefined
+  let browser: Browser | undefined
+  let context: BrowserContext | undefined
   let page: Page | undefined
   let tracingStarted = false
 
@@ -134,8 +134,13 @@ export async function executeBrowserCheck(input: unknown, ctx: ExtensionToolCont
       return buildEvidence(params, runId, headless, viewport, findings, artifacts, executionCounts)
     }
 
-    try {
-      browser = await chromium.launch({ headless })
+            // Playwright is a browser-only runtime dependency. Load it lazily through a
+        // non-literal specifier: the host extension validator walks literal import
+        // edges at every startup, and traversing playwright-core cost ~50s on OMP 18.
+        const playwrightSpecifier = 'playwright'
+        const { chromium } = (await import(playwrightSpecifier)) as { chromium: BrowserType }
+        try {
+            browser = await chromium.launch({ headless });
     } catch (error: unknown) {
       return {
         framework: 'playwright',

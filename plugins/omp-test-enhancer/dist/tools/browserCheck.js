@@ -1,7 +1,6 @@
 import { mkdir, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
-import { chromium } from 'playwright';
 import { invalidBrowserCheckEvidence, parseBrowserCheckParams } from '../browserSchemas.js';
 import { comparePng } from './imageDiff.js';
 import { isRecord } from '../utils.js';
@@ -93,6 +92,11 @@ export async function executeBrowserCheck(input, ctx) {
             });
             return buildEvidence(params, runId, headless, viewport, findings, artifacts, executionCounts);
         }
+        // Playwright is a browser-only runtime dependency. Load it lazily through a
+        // non-literal specifier: the host extension validator walks literal import
+        // edges at every startup, and traversing playwright-core cost ~50s on OMP 18.
+        const playwrightSpecifier = 'playwright';
+        const { chromium } = (await import(playwrightSpecifier));
         try {
             browser = await chromium.launch({ headless });
         }

@@ -137,6 +137,19 @@ const PROPERTY_EXPERIENCE_PATHS = [
 ]
 const PROPERTY_GREP_PATTERN = 'fast-check|fc\\.property|fc\\.assert|property\\(|round[ -]?trip|idempotent|invariant|Object\\.freeze|toThrow|malformed|invalid|boundary|edge case'
 
+type HostExec = NonNullable<ExtensionToolContext['exec']>
+
+let hostExec: HostExec | undefined
+
+/** Inject the host shell bridge at registration. OMP 18 removed ctx.exec; pi.exec remains. */
+export function setTestingToolsHostExec(exec: HostExec | undefined): void {
+  hostExec = exec
+}
+
+function resolveExec(ctx: ExtensionToolContext): HostExec | undefined {
+  return ctx.exec ?? hostExec
+}
+
 export function createTestingEnhancerTools(z: ZodLike, callbacks: TestingToolCallbacks = {}): ToolDefinition[] {
   const changedFileSchema = z.object({ path: z.string().describe('Workspace-relative file path. Example: "src/utils.ts".'), content: z.string().describe('Full text content of the file.') })
   const targetSchema = z.unknown().describe('A changed target object with sourceFile (path), symbolName, risk, kind, relatedTests array, and publicEntryHints array.')
@@ -573,7 +586,7 @@ function buildAdvisoryReviewOutput(results: GateResult[]): ReviewOutput {
 
 async function readCandidateForReview(params: ReviewParams, ctx: ExtensionToolContext): Promise<CandidateTest> {
   const candidate = readCandidate(params)
-  if (!ctx.exec) return candidate
+  if (!resolveExec(ctx)) return candidate
 
   const candidatePaths = candidate.files.map(file => file.path)
   const paths = uniqueStrings(candidatePaths)
@@ -643,10 +656,11 @@ async function enrichTargets(cwd: string, targets: ChangedTarget[]): Promise<Cha
 }
 
 async function readGitPathList(ctx: ExtensionToolContext, args: string[]): Promise<string[]> {
-  if (!ctx.exec) return []
+  const exec = resolveExec(ctx)
+  if (!exec) return []
 
   try {
-    const result = await ctx.exec('git', args, { cwd: contextCwd(ctx), timeout: 10000 })
+    const result = await exec('git', args, { cwd: contextCwd(ctx), timeout: 10000 })
     if (result.exitCode !== 0) return []
     return result.stdout.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   } catch {
@@ -816,7 +830,7 @@ async function collectPropertyRetrievalContext(ctx: ExtensionToolContext, target
 }
 
 async function findLocalPropertySearchPaths(ctx: ExtensionToolContext, target: ChangedTarget, directPathSet: Set<string>): Promise<string[]> {
-  if (!ctx.exec) return []
+  if (!resolveExec(ctx)) return []
 
   const grepPaths = await readGitPropertyGrepPaths(ctx)
   const trackedPaths = await readGitPathList(ctx, ['ls-files'])
@@ -829,10 +843,11 @@ async function findLocalPropertySearchPaths(ctx: ExtensionToolContext, target: C
 }
 
 async function readGitPropertyGrepPaths(ctx: ExtensionToolContext): Promise<string[]> {
-  if (!ctx.exec) return []
+  const exec = resolveExec(ctx)
+  if (!exec) return []
 
   try {
-    const result = await ctx.exec('git', [
+    const result = await exec('git', [
       'grep',
       '-l',
       '-E',

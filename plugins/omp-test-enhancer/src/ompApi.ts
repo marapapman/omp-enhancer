@@ -69,6 +69,12 @@ export interface ExtensionAPI {
   }
   setLabel(label: string): void
   registerTool<TParams>(tool: ToolDefinition<TParams>): void
+  /** Host shell bridge. OMP 18 exposes exec here, not on the tool context. */
+  exec?: (
+    command: string,
+    args: string[],
+    options?: { cwd?: string; timeout?: number }
+  ) => Promise<{ exitCode: number; stdout: string; stderr: string }>
   registerMessageRenderer?(customType: string, renderer: unknown): void
   on(event: string, handler: ExtensionEventHandler): void
   appendEntry(customType: string, data: unknown): Promise<void> | void

@@ -20,7 +20,7 @@ import {
   type TestingReviewState
 } from './session/testingState.js'
 import { readCoreTaskContextIdentityFromEntries, type SessionEntry } from './session/taskContextIdentity.js'
-import { createTestingEnhancerTools } from './tools/testingTools.js'
+import { createTestingEnhancerTools, setTestingToolsHostExec } from './tools/testingTools.js'
 import type { AnalyzeOutput, ReviewOutput } from './tools/testingTools.js'
 import type { BrowserEvidence } from './types.js'
 import { isRecord } from './utils.js'
@@ -130,6 +130,9 @@ export function registerTestingEnhancer(pi: ExtensionAPI): void {
   }
 
   pi.setLabel('OMP Testing Enhancer')
+
+  // OMP 18 removed exec from the tool context; the host bridge lives on pi.
+  setTestingToolsHostExec(typeof pi.exec === 'function' ? pi.exec.bind(pi) : undefined)
 
   for (const tool of createTestingEnhancerTools(pi.zod.z, {
     onAnalyze: recordAnalyzeOutput,

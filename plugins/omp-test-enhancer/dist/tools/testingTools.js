@@ -15,6 +15,14 @@ const PROPERTY_EXPERIENCE_PATHS = [
     '.omp/testing-properties.json'
 ];
 const PROPERTY_GREP_PATTERN = 'fast-check|fc\\.property|fc\\.assert|property\\(|round[ -]?trip|idempotent|invariant|Object\\.freeze|toThrow|malformed|invalid|boundary|edge case';
+let hostExec;
+/** Inject the host shell bridge at registration. OMP 18 removed ctx.exec; pi.exec remains. */
+export function setTestingToolsHostExec(exec) {
+    hostExec = exec;
+}
+function resolveExec(ctx) {
+    return ctx.exec ?? hostExec;
+}
 export function createTestingEnhancerTools(z, callbacks = {}) {
     const changedFileSchema = z.object({ path: z.string().describe('Workspace-relative file path. Example: "src/utils.ts".'), content: z.string().describe('Full text content of the file.') });
     const targetSchema = z.unknown().describe('A changed target object with sourceFile (path), symbolName, risk, kind, relatedTests array, and publicEntryHints array.');
@@ -440,7 +448,7 @@ function buildAdvisoryReviewOutput(results) {
 }
 async function readCandidateForReview(params, ctx) {
     const candidate = readCandidate(params);
-    if (!ctx.exec)
+    if (!resolveExec(ctx))
         return candidate;
     const candidatePaths = candidate.files.map(file => file.path);
     const paths = uniqueStrings(candidatePaths);
@@ -501,10 +509,11 @@ async function enrichTargets(cwd, targets) {
     return enriched;
 }
 async function readGitPathList(ctx, args) {
-    if (!ctx.exec)
+    const exec = resolveExec(ctx);
+    if (!exec)
         return [];
     try {
-        const result = await ctx.exec('git', args, { cwd: contextCwd(ctx), timeout: 10000 });
+        const result = await exec('git', args, { cwd: contextCwd(ctx), timeout: 10000 });
         if (result.exitCode !== 0)
             return [];
         return result.stdout.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
@@ -664,7 +673,7 @@ async function collectPropertyRetrievalContext(ctx, target, existingTests) {
     return { sources, experienceEntries };
 }
 async function findLocalPropertySearchPaths(ctx, target, directPathSet) {
-    if (!ctx.exec)
+    if (!resolveExec(ctx))
         return [];
     const grepPaths = await readGitPropertyGrepPaths(ctx);
     const trackedPaths = await readGitPathList(ctx, ['ls-files']);
@@ -675,10 +684,11 @@ async function findLocalPropertySearchPaths(ctx, target, directPathSet) {
         .slice(0, 16);
 }
 async function readGitPropertyGrepPaths(ctx) {
-    if (!ctx.exec)
+    const exec = resolveExec(ctx);
+    if (!exec)
         return [];
     try {
-        const result = await ctx.exec('git', [
+        const result = await exec('git', [
             'grep',
             '-l',
             '-E',
