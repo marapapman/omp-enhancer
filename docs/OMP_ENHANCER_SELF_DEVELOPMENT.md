@@ -1,4 +1,5 @@
 # OMP Enhancer Self-Development
+> **已被取代。** 代码增强核心已从当前 marketplace 删除；本文件保留旧的代码开发、TDD 和 reviewer 流程，仅用于历史迁移，不是当前运行契约。
 
 本文定义 OMP 如何在当前架构下开发和改进 OMP Enhancer，也定义提示词、workflow、Skill、Agent、hook、工具、打包和 E2E harness 变更的共同方法。具体 workflow schema 见 [WORKFLOW_DEVELOPMENT.md](WORKFLOW_DEVELOPMENT.md)，runner 与矩阵细节见 [WORKFLOW_E2E_TESTING.md](WORKFLOW_E2E_TESTING.md)。
 

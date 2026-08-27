@@ -1,4 +1,5 @@
 # Workflow and Skill E2E Testing
+> **部分已被取代。** 本文件保留旧代码/测试增强矩阵的历史证据；当前只验证 `omp-config`、`writing-helper` 和 `omp-fact-checker`，不用于恢复已删除插件。
 
 本文是 workflow、Skill、TODO、delegation、TDD 和 reviewer 行为测试的当前方法来源。它验证 OMP Main 在真实运行中的自主选择和执行，不把 E2E 变成 runtime gate，也不让 final 自述替代事件证据。
 
