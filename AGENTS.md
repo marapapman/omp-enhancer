@@ -2,12 +2,10 @@
 
 ## Project scope
 
-This npm workspace is the OMP Enhancer marketplace monorepo. It packages five independently installable plugins:
+This npm workspace is the OMP Enhancer marketplace monorepo. It packages three independently installable plugins:
 
-- `omp-enhancer-core`: safe task facts, session-scoped extension-tool activation, and a model-agnostic orchestration advisory (ANALYZE -> EXECUTE -> REVIEW) for all top-level Main models.
 - `omp-config`: shared config assets, optional workflow references, Agents, Skills, notify-only guards, hook templates, and diagnostics.
 - `writing-helper`: writing logic, style, citation, and polish tools plus English and Chinese writing resources.
-- `omp-testing-enhancer` (source directory `plugins/omp-test-enhancer`): testing analysis, host-observed evidence, browser/coverage/mutation context, Agents, advisory review, and reports.
 - `omp-fact-checker`: claim planning, evidence collection, cross-checking, reporting, and advisory review.
 
 Current architecture is documented in `docs/ARCHITECTURE.md`; development and release procedures are in `docs/DEVELOPMENT.md`; workflow schema and generation rules are in `docs/WORKFLOW_DEVELOPMENT.md`.
@@ -16,7 +14,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 ## Architecture & Data Flow
 
-**Monorepo pattern.** npm workspaces with 5 plugins under `plugins/`. Each plugin registers with the OMP harness via a `registerOmpPlugin(pi)` function receiving an `ExtensionAPI` object:
+**Monorepo pattern.** npm workspaces with 3 plugins under `plugins/`. Each plugin registers with the OMP harness via a `registerOmpPlugin(pi)` function receiving an `ExtensionAPI` object:
 
 - `pi.registerTool(tool)` — register ToolDefinition objects
 - `pi.on('event', handler)` — subscribe to `session_start`, `tool_result`, `session_stop`
@@ -24,19 +22,15 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 **Core data flow:**
 
-1. User prompt → `task-descriptor.js` extracts domains, language, risk, operation type
-2. A one-shot orchestration advisory reminds Main it is the orchestrator across `ANALYZE -> EXECUTE -> REVIEW`
-3. `skill://omp-enhancer-workflows` exposes the 5-domain reference catalog (code, writing, research, visual, operations)
-4. Plugin tools execute, observing tool_results and persisting state
+1. `skill://omp-enhancer-workflows` exposes the 3-domain reference catalog (writing, research, visual)
+2. Plugin tools execute, observing tool_results and persisting state
 
 **Plugin responsibilities:**
 
 | Plugin | Role | Entry point |
 |--------|------|-------------|
-| `omp-enhancer-core` | Task facts, session state, extension-tool activation, orchestration advisory, and skill/subagent validation | `index.js` (largest plugin) |
 | `omp-config` | Shared config assets, workflow references, Agents, Skills, hooks, templates, diagnostics | `index.js` |
 | `writing-helper` | Prose quality analysis (logic, style, citations, preservation), bilingual (zh/en) | `index.js` |
-| `omp-test-enhancer` | Seven default-inactive advisory tools for testing analysis, browser evidence, coverage/mutation context, review, and reporting | `dist/extension.js` (built from `src/extension.ts`) |
 | `omp-fact-checker` | Claim extraction, multi-lane evidence verification, cross-checking, verdict reports | `index.js` |
 
 **Key architectural invariants (from docs/ARCHITECTURE.md):**
@@ -51,12 +45,10 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 | Path | Purpose |
 |------|---------|
-| `plugins/omp-enhancer-core/src/` | Core plugin: task facts, workflow definitions, orchestration advisory, task descriptor, and skill/subagent validation |
-| `plugins/omp-enhancer-core/src/workflows/` | Workflow catalog (v33), schema, renderers, definitions (code, writing, research, visual, operations) |
-| `plugins/omp-test-enhancer/src/` | Testing enhancer TypeScript source: advisory tools, browser check, session state, and host observation |
+| `scripts/workflow-definitions.js` | Workflow catalog (v34): writing, research (fact-checking), visual definitions |
 | `plugins/writing-helper/src/` | Quality analysis: logic, style, citations, preservation, language detection, report formatting |
 | `plugins/omp-fact-checker/src/` | Fact-check pipeline: claim extraction, evidence collection (A/B lanes), cross-checking, providers |
-| `plugins/omp-config/` | Shared config assets, ~40+ skills, 9 agents, hooks, hook-templates |
+| `plugins/omp-config/` | Shared config assets, PPT/document/visual skills, 1 agent (visioner), hooks, hook-templates |
 | `docs/` | Architecture, development, workflow docs (current) |
 | `docs/superpowers/` | **Historical archive only** — dated plans/specs/reports, NOT current runtime instructions |
 | `scripts/` | Generator scripts, release orchestrator, E2E runners, migration tools, tests |
@@ -65,31 +57,25 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 | File | Significance |
 |------|-------------|
-| `plugins/omp-enhancer-core/index.js` | Largest plugin entry: tool registration, lifecycle hooks, one-shot orchestration advisory |
-| `plugins/omp-enhancer-core/src/task-descriptor.js` | 195KB task analysis — signal extraction, domain classification, risk assessment, language detection |
-| `plugins/omp-enhancer-core/src/workflows/catalog.js` | Workflow catalog v33: assembles the 5 domain definitions |
-| `plugins/omp-enhancer-core/src/workflows/definitions/` | Canonical workflow definitions (code.js, writing.js, research.js, operations.js, etc.) |
-| `plugins/omp-enhancer-core/src/skill-usage.js` | `<skill-usage>` block parsing, denied/missing skills detection |
-| `plugins/omp-test-enhancer/src/extension.ts` | Testing Enhancer source registration for seven default-inactive advisory tools, lifecycle observation, and session state; the built runtime entry is `dist/extension.js` |
 | `plugins/writing-helper/src/quality.js` | Main quality orchestrator: runs logic, style, citation, preservation checks |
 | `plugins/omp-fact-checker/src/fact-check.js` | Complete fact-check pipeline (31KB): tuple-based claim model, A/B evidence lanes |
-| `.omp-plugin/marketplace.json` | Marketplace catalog: 5 plugins with names, versions, source paths, skills arrays |
-| `scripts/plugin-workspaces.js` | Canonical frozen inventory: 5-entry plugin name→directory mapping, cross-file consistency asserts |
+| `scripts/workflow-definitions.js` / `scripts/workflow-render.js` / `scripts/workflow-schema.js` | Canonical workflow definitions, renderers, and schema (source of generated catalog) |
+| `scripts/generate-workflow-catalog.js` | Standalone generator for WORKFLOW_CATALOG.md and omp-enhancer-workflows skill |
+| `.omp-plugin/marketplace.json` | Marketplace catalog: 3 plugins with names, versions, source paths, skills arrays |
+| `scripts/plugin-workspaces.js` | Canonical frozen inventory: 3-entry plugin name→directory mapping, cross-file consistency asserts |
 
 ## Development Commands
 
-**Package manager:** npm (v3 lockfile), ESM throughout (`"type": "module"`). Bun is optional (used for TS build).
+**Package manager:** npm (v3 lockfile), ESM throughout (`"type": "module"`).
 
 | Command | Purpose |
 |---------|---------|
-| `npm test` | Full validation: `check:workflows` → `check:ecc-skills` → `node --test scripts/*.test.js` → workspace tests |
+| `npm test` | Full validation: `check:workflows` → `node --test scripts/*.test.js` → workspace tests |
 | `npm run generate:workflows` | Regenerate workflow catalog (from definitions to markdown assets in omp-config) |
-| `npm run generate:ecc-skills` | Regenerate ECC skill index/catalog from nested SKILL.md files |
 | `npm run generate:marketplace` | Rewrite marketplace.json skill paths to match filesystem |
 | `npm run check:workflows` | Validate workflow artifacts are current (CI safety gate) |
-| `npm run check:ecc-skills` | Validate ECC skill artifacts are current |
 | `npm run check:marketplace` | Validate marketplace.json skill paths match disk |
-| `npm run pack:all` | `npm pack --dry-run` across all 5 workspaces |
+| `npm run pack:all` | `npm pack --dry-run` across all 3 workspaces |
 | `npm run release -- --plugin <name> --bump <type>` | Version bump transaction (dry-run default, --apply to write) |
 | `npm run coverage -w plugins/writing-helper` | 100% line/branch/function coverage check |
 
@@ -97,20 +83,17 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 | Plugin | Command |
 |--------|---------|
-| omp-enhancer-core | `node --test test/*.test.js` |
 | omp-config | `node --test test/*.test.js` |
 | writing-helper | `node --test test/*.test.js` |
 | omp-fact-checker | `node --test test/*.test.js` |
-| omp-test-enhancer | `cd plugins/omp-test-enhancer && bun run typecheck && bun run build && bun run test` |
 
 ## Testing & QA
 
-**Two test frameworks:**
+**Test framework:**
 
-- **`node:test`** for all JavaScript plugins (core, config, writing-helper, fact-checker) and root scripts
-- **Vitest** exclusively for the TypeScript `omp-test-enhancer` plugin
+- **`node:test`** for all JavaScript plugins (config, writing-helper, fact-checker) and root scripts
 
-**Test organization:** Each plugin has its own `test/` directory (or `tests/` for test-enhancer). Root scripts have co-located `.test.js` in `scripts/`. No root test config.
+**Test organization:** Each plugin has its own `test/` directory. Root scripts have co-located `.test.js` in `scripts/`. No root test config.
 
 **Two dominant patterns:**
 
@@ -125,20 +108,13 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 - `scripts/e2e/workflow-events.mjs` — NDJSON event log evaluator for PLAN/READY/TODO/task/reviewer sequences
 - `scripts/e2e/omp17-rpc-probe.mjs` — static OMP 17 probe for plugin lifecycle without model interaction
 
-**Testing enhancer checks** (advisory only, no blocking):
-
-- `testCommandGate` — validates test command execution evidence
-- `indirectTestGate` — ensures tests test public behavior (not private internals)
-- `testFileScopeGate` — ensures candidate changes limited to test files
-- `browserEvidenceGate` — validates Playwright browser evidence coverage
 
 ## Runtime & Tooling Preferences
 
 - **Node.js:** `^20.19.0 || >=22.12.0` (from package-lock, not declared in package.json)
 - **Package manager:** npm (v3 lockfile); Bun available for TS build (bunx tsc)
 - **Module system:** ESM everywhere (`"type": "module"`)
-- **JavaScript vs TypeScript:** 4 of 5 plugins are pure JavaScript (no build step). Only `omp-test-enhancer` uses TypeScript (NodeNext/ES2022, strict mode, builds to `dist/`)
-- **No root tsconfig** — each TS project is self-contained
+- **JavaScript vs TypeScript:** All 3 plugins are pure JavaScript (no build step).
 - **No editorconfig** — follow local semicolon style
 - **Import paths:** Node ESM with `.js` extensions (no `.ts` in output paths)
 - **No lint/format config** in root — the repo relies on code review for consistency
@@ -148,16 +124,13 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 The default Main path is `agent-selected`:
 
-1. Core extracts JSON-safe task facts only.
-2. It does not preselect workflows, Skills, tools, roles, TODOs, or child assignments.
-3. OMP exposes its native Skill inventory and dynamic Available Agents.
-4. For non-trivial PROJECT work, Main may read the compact `omp-enhancer-workflows` reference catalog (5 domains: code, writing, research, visual, operations) and load matching domain Skills as needed; a mechanical field lookup without analysis uses no Skill or TODO.
-5. Main orchestrates through `ANALYZE -> EXECUTE -> REVIEW`. ANALYZE: Main analyzes directly for focused work, delegates to the `analyzer` agent for complex multi-slice work. EXECUTE: Main executes directly for simple changes, delegates to `task` or domain agents for substantial work. REVIEW: Main reviews simple changes directly, delegates to `reviewer` for complex or risky changes. No byte-0 marker, load sequence, or Delegate-row format is required; the reference cards are advisory.
-6. A selected card shapes this Agent-owned plan but never creates a plugin runtime gate, permission, required fork, or completion condition.
+1. OMP exposes its native Skill inventory and dynamic Available Agents.
+2. For non-trivial PROJECT work, Main may read the compact `omp-enhancer-workflows` reference catalog (3 domains: writing, research, visual) and load matching domain Skills as needed; a mechanical field lookup without analysis uses no Skill or TODO.
+3. Main orchestrates through `ANALYZE -> EXECUTE -> REVIEW`. EXECUTE: Main executes directly for simple changes, delegates to `task` or domain agents for substantial work. REVIEW: Main reviews simple changes directly, delegates to `reviewer` for complex or risky changes. No byte-0 marker, load sequence, or Delegate-row format is required; the reference cards are advisory.
+4. A selected card shapes this Agent-owned plan but never creates a plugin runtime gate, permission, required fork, or completion condition.
 
 Only a mechanical field lookup without analysis may skip workflow, Skill, and TODO preparation. Main chooses delegation width by task complexity: focused work stays with Main, complex multi-slice work is delegated to currently visible Agents. Send runnable independent checkpoints in the same `tasks[]` batch and run dependency-bound checkpoints in order in a later wave. Main retains the parent TODO, integration, verification, permission and external effects decisions, and final response. Direct fallback is limited to a concrete user or native constraint, Agent availability or capacity, incomplete assignment input, unresolved dependency or write-set overlap, safety risk, or a parent-owned action; the TODO records the concrete fallback reason on the affected checkpoint. This remains soft Agent-owned guidance, not a required fork, fixed fanout, hard gate, or automatic loop.
 
-For substantive code mutation, keep the loaded code method's lifecycle through `analyzer`, native `task`, and native `reviewer`. Main is the orchestrator: it writes bounded evidence briefs and delegates local code search to scout and external research to librarian, then delegates the detailed parallel plan to the `analyzer` agent for complex work, which drafts the parallel plan and challenges it. The plan names parallel waves and vertical slices, dependencies, exact non-overlapping write sets, local anchors, the test seam and focused command, the expected RED, the production boundary, required Skills, the integration point, and returned evidence. Main records the analyzer's finding disposition and only then constructs implementation assignments.
 
 For every delegated assignment, Main copies every direct user constraint verbatim into the job body, then carries allowed effects and acceptance evidence; outer context, name, or label cannot substitute. The child follows that bounded assignment and does not own the parent TODO. Failed or partial work is not a completed delivery. Only new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase affected TODO rows.
 
@@ -177,17 +150,13 @@ Advisory lifecycle rules:
 
 All marketplace extension tools are `defaultInactive`; activation grants no permission.
 
-The public testing and fact completeness tools are `omp_test_review` and `fact_check_review`. Legacy gate-named aliases are not supported. Testing Enhancer does not register `/test`; it must never execute a supplied or project-configured test command. Host-authorized shell execution remains outside the review tool.
+The public fact completeness tool is `fact_check_review`. Legacy gate-named aliases are not supported. Host-authorized shell execution remains outside the review tool.
 
 Fact conclusions must preserve the exact claim tuple: subject, predicate plus object/value, scope, time/version, and quantifier. The backward-compatible `verdict` cannot upgrade compatibility evidence into proof. Factual conclusions use fail-closed `strictVerdict`: `SUPPORTED` requires same-tuple `ENTAILS + PROVEN`, while `CONTRADICTED` requires same-tuple `NEGATES + DISPROVED` with a valid negated field. Limitations, a cheapest plausible countercheck, and unresolved proof gaps remain visible instead of being converted into a completion gate.
 
 ## Workflow source and generated assets
 
-Canonical workflow definitions live under:
-
-```text
-plugins/omp-enhancer-core/src/workflows/definitions/
-```
+Canonical workflow definitions live under `scripts/workflow-definitions.js` (with `scripts/workflow-schema.js` and `scripts/workflow-render.js`).
 
 After changing definitions or renderers, run:
 
@@ -206,7 +175,6 @@ plugins/omp-config/skills/omp-enhancer-workflows/references/*.md
 
 Managed `AGENTS.md` and `WATCHDOG.yml` blocks identify the optional workflow Skill but do not import the full catalog. Main receives the compact orchestration advisory (ANALYZE -> EXECUTE -> REVIEW). Advisor may spend at most one early ordinary `DECISION CHECK (optional)` identifying a missing plan, undeclared resource, stale TODO, or a visible code TODO that collapsed plan review, parallel slice boundaries, task-owned TDD, or reviewer evidence handoff; Main remains free to accept, adjust, or ignore it. Workflow/Skill preparation reads and the bounded resource-extension chain keep that window open. Otherwise the first native `task` call or substantive project action closes it. Advisor cannot guess unseen IDs, choose a resource extension, Agent, assignment, fanout, order, dispatch, retry, block, or completion, demand duplicate reads, or demand redispatch solely for planning or metadata. Config sync must preserve unrelated target-file content.
 
-For ECC Skill inventory changes, use `npm run generate:ecc-skills` and `npm run check:ecc-skills`. OMP 17 directly discovers the single top-level `ecc-skill-catalog`; nested guides are exact-URI, on-demand resources.
 
 ## Code conventions
 
@@ -214,11 +182,10 @@ For ECC Skill inventory changes, use `npm run generate:ecc-skills` and `npm run 
 - ES modules throughout (`"type": "module"`, `import`/`export`)
 - Node ESM with `.js` extensions in import paths
 - No CommonJS, no dual publish
-- Core, Config, Writing Helper, and Fact Checker are pure JavaScript; avoid unnecessary build steps
-- Testing Enhancer uses strict TypeScript with NodeNext/ES2022; builds `src/` to `dist/`
+- Config, Writing Helper, and Fact Checker are pure JavaScript; avoid unnecessary build steps
 
 **Naming:**
-- Public tool names use `snake_case` (`omp_test_review`, `omp_config_doctor`, etc.)
+- Public tool names use `snake_case` (`fact_check_review`, `omp_config_doctor`, etc.)
 - Internal functions use camelCase
 - Agent and Skill names must be globally unique across the marketplace
 
@@ -234,10 +201,6 @@ For ECC Skill inventory changes, use `npm run generate:ecc-skills` and `npm run 
 - Custom error classes for domain errors carry structured `code`/`message`/`details` fields
 - Early returns with validation, functional validation patterns
 
-**TypeScript patterns (omp-test-enhancer only):**
-- Custom type-guard functions (`isRecord()`) for safe `unknown → Record` conversion
-- No Zod or runtime schema library — manual validation in `browserSchemas.ts`
-- Strict mode with `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
 
 **Plugin patterns:**
 - Each plugin is self-contained with no external npm dependencies between plugins
@@ -247,13 +210,11 @@ For ECC Skill inventory changes, use `npm run generate:ecc-skills` and `npm run 
 - A workflow may list an Agent or Skill only as an optional candidate; at runtime use only what OMP currently exposes
 
 **Workflow & generated assets:**
-- Never hand-edit generated files: `WORKFLOW_CATALOG.md`, `omp-enhancer-workflows/SKILL.md`, reference markdowns, ECC skill catalogs, marketplace.json
+- Never hand-edit generated files: `WORKFLOW_CATALOG.md`, `omp-enhancer-workflows/SKILL.md`, reference markdowns, marketplace.json
 - After changing workflow definitions or renderers, run `npm run generate:workflows && npm run check:workflows`
-- After changing ECC inventory, run `npm run generate:ecc-skills && npm run check:ecc-skills`
 - Preserve user changes in a dirty worktree. Stage only reviewed paths and never reset unrelated work
 
-**Semicolons:**
-- Match local style: JavaScript normally uses semicolons; Testing Enhancer TypeScript commonly does not
+- Match local style: JavaScript normally uses semicolons
 
 **No lint/format config** — rely on code review for consistency
 
@@ -271,12 +232,10 @@ git diff --check
 Targeted checks:
 
 ```bash
-npm test --workspace plugins/omp-enhancer-core
 npm test --workspace plugins/omp-config
 npm test --workspace plugins/writing-helper
 npm run coverage --workspace plugins/writing-helper
 npm test --workspace plugins/omp-fact-checker
-cd plugins/omp-test-enhancer && bun run typecheck && bun run build && bun run test
 ```
 
 Lifecycle and public-contract tests must prove:
@@ -286,11 +245,9 @@ Lifecycle and public-contract tests must prove:
 - model-agnostic orchestration advisory scope, top-level capability gates, one-shot behavior, the `OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER` diagnostic switch, and native-authority language remain intact;
 - the simplified reminder (ANALYZE -> EXECUTE -> REVIEW) is advisory-only, top-level-only, and never mutates observed events;
 - workflow selection and TODO remain Agent-owned, and plan/assignment trace is never a dispatch or completion gate;
-- substantive code contracts preserve detailed dependency waves, exclusive vertical slices, native `task` TDD delivery, Main current-tree review before reviewer evidence, and bounded task repair without fixed fanout;
 - Advisor coaching stays bounded, pre-final, and unable to route, block, or restart work;
 - review tools are advisory and do not execute commands;
-- `omp_test_review` and `fact_check_review` are registered while old gate names are absent;
-- `/test` is not registered;
+- `fact_check_review` is registered while old gate names are absent;
 - Main/Advisor managed blocks do not import the complete workflow catalog.
 
 Use temporary directories for filesystem fixtures. Writing Helper coverage enforces 100% lines, branches, and functions. Run `npm run check:marketplace` and usually `npm run pack:all` after version, package, Agent, or Skill changes.

@@ -60,27 +60,16 @@ function packageRoot() {
 }
 
 const expectedBundledSkills = [
-  'astrbot-plugin-development',
   'beamer-to-powerpoint',
   'canvas-design',
   'caveman',
-  'code-development',
-  'conventional-commits',
   'docx',
-  'docker-compose',
-  'ecc',
-  'finishing-a-development-branch',
   'frontend-design',
-  'go-testing',
   'grill-with-docs',
   'handoff',
-  'improve-codebase-architecture',
   'latex-beamer-slides',
   'omp-marketplace-plugin-activation',
-  'prototype',
   'slides-storyline',
-  'spike',
-  'using-git-worktrees',
   'writing-skills',
   'zoom-out',
 ];
@@ -223,7 +212,7 @@ test('packaged advisor context assists Agent-owned orchestration without replaci
   assert.doesNotMatch(watchdog, /block:\s*true|continue:\s*true|triggerTurn|hard router/i);
 });
 
-test('ships every omp-config Skill while exposing nested ECC guides through one OMP-discoverable catalog', async () => {
+test('ships every omp-config Skill with matching marketplace inventory', async () => {
   const skillsRoot = path.join(packageRoot(), 'skills');
   const inventorySkills = (await findSkillDirs(skillsRoot))
     .map((skillPath) => path.relative(skillsRoot, skillPath).split(path.sep).join('/'))
@@ -269,103 +258,9 @@ test('ships every omp-config Skill while exposing nested ECC guides through one 
   }
 
   assert.deepEqual(inventorySkills, marketplaceSkills);
-  assert.ok(discoverableSkills.includes('ecc'));
   assert.ok(!discoverableSkills.some((skill) => skill.includes('/')));
-  assert.ok(inventorySkills.includes('ecc/accessibility'));
-  assert.ok(inventorySkills.includes('ecc/tdd-workflow'));
-  assert.ok(inventorySkills.includes('ecc/workspace-surface-audit'));
-
-  const eccIndex = await readFile(path.join(skillsRoot, 'ecc', 'SKILL.md'), 'utf8');
-  const eccCatalog = await readFile(path.join(skillsRoot, 'ecc', 'catalog.md'), 'utf8');
-  assert.match(eccIndex, /^name: ecc-skill-catalog$/mu);
-  for (const nestedSkill of ['accessibility', 'tdd-workflow', 'workspace-surface-audit']) {
-    assert.match(eccCatalog, new RegExp(`skill://ecc-skill-catalog/${nestedSkill}/SKILL\\.md`));
-  }
 });
 
-test('active ECC guides resolve local Skill references and keep continuous learning v1 legacy-only', async () => {
-  const skillsRoot = path.join(packageRoot(), 'skills', 'ecc');
-  const [
-    continuousLearning,
-    iterativeRetrieval,
-    strategicCompact,
-    configureEcc,
-    architectureAudit,
-    calculateMetadata,
-    reactPatterns,
-  ] = await Promise.all([
-    readFile(path.join(skillsRoot, 'continuous-learning', 'SKILL.md'), 'utf8'),
-    readFile(path.join(skillsRoot, 'iterative-retrieval', 'SKILL.md'), 'utf8'),
-    readFile(path.join(skillsRoot, 'strategic-compact', 'SKILL.md'), 'utf8'),
-    readFile(path.join(skillsRoot, 'configure-ecc', 'SKILL.md'), 'utf8'),
-    readFile(path.join(skillsRoot, 'agent-architecture-audit', 'SKILL.md'), 'utf8'),
-    readFile(path.join(skillsRoot, 'remotion-video-creation', 'rules', 'calculate-metadata.md'), 'utf8'),
-    readFile(path.join(skillsRoot, 'react-patterns', 'SKILL.md'), 'utf8'),
-  ]);
-
-  assert.doesNotMatch(continuousLearning, /docs\/continuous-learning-v2-spec\.md/u);
-  const continuousLearningDescription = continuousLearning.match(
-    /^description:\s*"([^"]+)"$/mu,
-  )?.[1] ?? '';
-  assert.doesNotMatch(continuousLearningDescription, /Do not invoke v1/iu);
-  assert.match(
-    continuousLearningDescription,
-    /Use only when the user explicitly requests compatibility work for an existing v1 Stop-hook setup/iu,
-  );
-  assert.match(
-    continuousLearningDescription,
-    /new continuous-learning design uses the separately available v2 method/iu,
-  );
-  assert.match(
-    continuousLearning,
-    /skill:\/\/ecc-skill-catalog\/continuous-learning-v2\/SKILL\.md/u,
-  );
-  assert.match(continuousLearning, /only for explicit legacy Stop-hook compatibility/iu);
-  assert.doesNotMatch(continuousLearning, /v1 skill is still supported/iu);
-
-  assert.match(iterativeRetrieval, /`continuous-learning-v2` skill/iu);
-  assert.match(
-    strategicCompact,
-    /`skill:\/\/ecc-skill-catalog\/continuous-learning-v2\/SKILL\.md`/u,
-  );
-  for (const source of [iterativeRetrieval, strategicCompact]) {
-    assert.doesNotMatch(source, /`continuous-learning` skill/iu);
-  }
-  assert.match(
-    configureEcc,
-    /`continuous-learning`[^\n]*only when the user explicitly requests legacy Stop-hook compatibility/iu,
-  );
-  assert.match(configureEcc, /`continuous-learning-v2`[^\n]*default/iu);
-
-  assert.match(
-    architectureAudit,
-    /`skill:\/\/ecc-skill-catalog\/security-review\/SKILL\.md`[\s\S]*`skill:\/\/ecc-skill-catalog\/security-scan\/SKILL\.md`/u,
-  );
-  assert.doesNotMatch(architectureAudit, /security-review\/scan/u);
-
-  assert.doesNotMatch(calculateMetadata, /mediabunny\/metadata skill/iu);
-  assert.match(
-    calculateMetadata,
-    /\[get-video-duration\]\(skill:\/\/ecc-skill-catalog\/remotion-video-creation\/rules\/get-video-duration\.md\)/u,
-  );
-  assert.match(
-    calculateMetadata,
-    /\[get-video-dimensions\]\(skill:\/\/ecc-skill-catalog\/remotion-video-creation\/rules\/get-video-dimensions\.md\)/u,
-  );
-  assert.match(calculateMetadata, /local `getMediaMetadata\(\)` helper/iu);
-
-  assert.doesNotMatch(reactPatterns, /react-native-patterns/iu);
-  assert.match(reactPatterns, /does not package a React Native-specific guide/iu);
-  assert.match(reactPatterns, /current official React Native documentation/iu);
-  assert.match(reactPatterns, /only when the host currently exposes one/iu);
-  assert.doesNotMatch(reactPatterns, /\.\.\/\.\.\/rules\/react/iu);
-
-  await Promise.all([
-    access(path.join(skillsRoot, 'security-review', 'SKILL.md')),
-    access(path.join(skillsRoot, 'security-scan', 'SKILL.md')),
-    access(path.join(skillsRoot, 'continuous-learning-v2', 'SKILL.md')),
-  ]);
-});
 
 test('runConfigDoctor reads packaged config assets and reports path risks', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'omp-config-doctor-'));
@@ -451,7 +346,7 @@ test('registered defaults resolve bundled package assets from a normal project c
   const assets = tools.find((tool) => tool.name === 'omp_config_assets');
   const assetsResult = await assets.execute('call-2', {}, undefined, undefined, { cwd: projectRoot });
   assert.equal(assetsResult.details.agents.includes('plan.md'), false);
-  assert.ok(assetsResult.details.skills.includes('code-development'));
+  assert.ok(assetsResult.details.skills.includes('canvas-design'));
   assert.equal(assetsResult.details.agents.includes('implementation-task.md'), false);
   assert.equal(assetsResult.details.skills.includes('tdd'), false);
   assert.ok(assetsResult.details.hooks.pre.includes('guard-destructive.ts'));
@@ -475,7 +370,7 @@ test('registered defaults resolve bundled package assets from a normal project c
 
     const commandAssets = await commands.get('config-assets').handler('');
     assert.equal(commandAssets.agents.includes('plan.md'), false);
-    assert.ok(commandAssets.skills.includes('code-development'));
+    assert.ok(commandAssets.skills.includes('canvas-design'));
     assert.equal(commandAssets.agents.includes('implementation-task.md'), false);
     assert.equal(commandAssets.skills.includes('tdd'), false);
     assert.ok(commandAssets.hooks.pre.includes('guard-destructive.ts'));

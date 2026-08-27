@@ -1,6 +1,6 @@
 # OMP Enhancer
 
-OMP Enhancer is an OMP marketplace for optional workflows, shared config, writing, testing, fact checking, and draw.io diagrams.
+OMP Enhancer is an OMP marketplace for optional workflows, shared config, writing, fact checking, and draw.io diagrams.
 
 OMP exposes available Skills and Agents; Main chooses under native permissions. Plugins neither hard-route nor block, continue sessions, or auto-repair.
 
@@ -8,30 +8,28 @@ OMP exposes available Skills and Agents; Main chooses under native permissions. 
 
 | Plugin | Purpose |
 | --- | --- |
-| `omp-enhancer-core` | Task facts, tool activation, and scoped reminders. |
 | `omp-config` | Config, workflow references, Agents, Skills, and diagnostics. |
 | `writing-helper` | English and Chinese writing, citation, style, and polish. |
-| `omp-testing-enhancer` | Testing evidence and advisory review. |
 | `omp-fact-checker` | Claim evidence, cross-checking, and advisory review. |
 
 ## Workflows
 
 Describe the task naturally. Main remains responsible for selecting Skills, Agents, tools, and execution steps under the user instruction and OMP's native permissions.
 
-`omp-config` exposes the optional `omp-enhancer-workflows` reference catalog. It covers 5 domains: code, writing, research, visual, and operations. Main reads `skill://omp-enhancer-workflows` for non-trivial work and selects the matching domain and Skills; a mechanical field lookup without analysis uses no Skill or TODO.
+`omp-config` exposes the optional `omp-enhancer-workflows` reference catalog. It covers 3 domains: writing, research (fact-checking), and visual. Main reads `skill://omp-enhancer-workflows` for non-trivial work and selects the matching domain and Skills; a mechanical field lookup without analysis uses no Skill or TODO.
 
-Its discovery columns are explicit: `D` is a top-level Skill exact URI; `C` is an enumerated nested ECC exact URI. Skills provide methods and evidence rules; the domain cards are advisory.
+Its discovery column is explicit: `D` is a top-level Skill exact URI. Skills provide methods and evidence rules; the domain cards are advisory.
 
 Writing covers prose in any language and format (English, Chinese, LaTeX, Markdown, Beamer, Word). Main selects the matching language and format Skills directly; there is no separate pending workflow.
 
-Diagrams are drawn with `drawio-skill` from `drawio@365-skills`: `designer` draws once and exports a draft PNG, `visioner` reviews that PNG read-only in one pass for edges pressed onto each other or crossing through boxes, and `designer` applies at most one fix round. The previous in-repo drawio skill, geometry checker, and drawio MCP route are retired.
+Diagrams are drawn with `drawio-skill` from `drawio@365-skills`: `designer` draws once and exports a draft PNG, `visioner` reviews that PNG read-only in one pass for edges pressed onto each other or crossing through boxes, and `designer` applies at most one fix round.
 
-Main orchestrates through ANALYZE -> EXECUTE -> REVIEW: it analyzes directly for focused work or delegates to the `analyzer` agent for complex multi-slice work, executes directly for simple changes or delegates to `task`/domain agents for substantial work, and reviews simple changes directly or delegates to `reviewer` for complex or risky changes. A concrete safety, capacity, input, or dependency limit records direct fallback. This is not a gate, router, fixed fan-out, or automatic loop.
+Main orchestrates through ANALYZE -> EXECUTE -> REVIEW: it executes directly for simple changes or delegates to `task`/domain agents for substantial work, and reviews simple changes directly or delegates to `reviewer` for complex or risky changes. A concrete safety, capacity, input, or dependency limit records direct fallback. This is not a gate, router, fixed fan-out, or automatic loop.
 
 You may name a workflow domain to constrain a request, for example:
 
 ```text
-Use code + security. Review only; do not modify files.
+Use writing. Review only; do not modify files.
 ```
 
 Workflow names provide planning context only. They never grant permission to write, execute, publish, or access the network.
@@ -42,17 +40,17 @@ Add the marketplace and install:
 
 ```bash
 omp plugin marketplace add marapapman/omp-enhancer
-omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer
+omp plugin install omp-config@omp-enhancer writing-helper@omp-enhancer omp-fact-checker@omp-enhancer
 ```
 
 For a local checkout:
 
 ```bash
 omp plugin marketplace add /path/to/omp-enhancer
-omp plugin install omp-enhancer-core@omp-enhancer omp-config@omp-enhancer writing-helper@omp-enhancer omp-testing-enhancer@omp-enhancer omp-fact-checker@omp-enhancer
+omp plugin install omp-config@omp-enhancer writing-helper@omp-enhancer omp-fact-checker@omp-enhancer
 ```
 
-Then run `npm run install:deps` once to fetch plugin runtime dependencies (for example, `playwright` for Testing Enhancer browser tools; diagram work also needs the draw.io desktop CLI for drawio@365-skills). Start a new OMP session after installing or upgrading plugins.
+Start a new OMP session after installing or upgrading plugins.
 
 ## Use
 
@@ -60,8 +58,8 @@ Extension tools are inactive by default so they do not enlarge the normal prompt
 
 ```text
 /enhancer-tools status
-/enhancer-tools enable <core|config|writing|fact|test|all>
-/enhancer-tools disable <core|config|writing|fact|test|all>
+/enhancer-tools enable <config|writing|fact|all>
+/enhancer-tools disable <config|writing|fact|all>
 ```
 
 Activation exposes tool schemas; it grants no filesystem, command, network, or publication permission.
@@ -69,12 +67,11 @@ Activation exposes tool schemas; it grants no filesystem, command, network, or p
 Common optional tools include:
 
 - writing checks such as `writing_logic_check` and `writing_quality_check`;
-- testing analysis, browser, coverage, mutation, `omp_test_review`, and report tools;
 - fact analysis, evidence, report, and `fact_check_review` tools;
 - config diagnostics and managed-context synchronization;
 - draw.io diagrams drawn with `drawio-skill` (drawio@365-skills) and reviewed once by `visioner`.
 
-Review tools return advisory findings; they do not execute project commands, block work, or decide completion. Testing commands use the host-authorized shell; there is no plugin `/test` command. `/fact-check` remains available for explicit claim analysis.
+Review tools return advisory findings; they do not execute project commands, block work, or decide completion. `/fact-check` remains available for explicit claim analysis.
 
 To preview and apply the optional managed Main/Advisor context after enabling Config tools:
 
@@ -92,15 +89,13 @@ omp plugin marketplace update omp-enhancer
 omp plugin upgrade
 ```
 
-The marketplace tracks GitHub `main`; catalog `ref` pins are not part of the release contract. Re-run `npm run install:deps` after upgrading.
+The marketplace tracks GitHub `main`; catalog `ref` pins are not part of the release contract.
 
 ## Documentation
 
 - [Architecture and runtime contracts](docs/ARCHITECTURE.md)
 - [Development, validation, and release guide](docs/DEVELOPMENT.md)
 - [Workflow definition and generation guide](docs/WORKFLOW_DEVELOPMENT.md)
-- [OMP Enhancer self-development method](docs/OMP_ENHANCER_SELF_DEVELOPMENT.md)
-- [Workflow and Skill E2E testing](docs/WORKFLOW_E2E_TESTING.md)
 - [Draw.io pipeline contract](docs/DRAWIO_PIPELINE.md)
-- Plugin guides: [Config](plugins/omp-config/README.md), [Writing](plugins/writing-helper/README.md), [Testing](plugins/omp-test-enhancer/README.md), and [Fact checking](plugins/omp-fact-checker/README.md)
+- Plugin guides: [Config](plugins/omp-config/README.md), [Writing](plugins/writing-helper/README.md), and [Fact checking](plugins/omp-fact-checker/README.md)
 - [Historical design archive](docs/superpowers/README.md)

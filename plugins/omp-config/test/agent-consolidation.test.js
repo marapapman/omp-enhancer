@@ -19,61 +19,14 @@ const REMOVED_AGENT_FILES = [
   'librarian.md',
   'reviewer.md',
   'ecc-a11y-architect.md',
-  'ecc-architect.md',
-  'ecc-build-error-resolver.md',
-  'ecc-chief-of-staff.md',
-  'ecc-code-architect.md',
-  'ecc-code-explorer.md',
-  'ecc-code-reviewer.md',
-  'ecc-code-simplifier.md',
-  'ecc-comment-analyzer.md',
-  'ecc-conversation-analyzer.md',
-  'ecc-cpp-build-resolver.md',
-  'ecc-cpp-reviewer.md',
-  'ecc-csharp-reviewer.md',
-  'ecc-dart-build-resolver.md',
-  'ecc-database-reviewer.md',
-  'ecc-django-build-resolver.md',
-  'ecc-django-reviewer.md',
-  'ecc-doc-updater.md',
-  'ecc-docs-lookup.md',
-  'ecc-e2e-runner.md',
-  'ecc-fastapi-reviewer.md',
-  'ecc-flutter-reviewer.md',
-  'ecc-fsharp-reviewer.md',
-  'ecc-gan-evaluator.md',
-  'ecc-gan-generator.md',
-  'ecc-gan-planner.md',
-  'ecc-go-build-resolver.md',
-  'ecc-go-reviewer.md',
-  'ecc-homelab-architect.md',
-  'ecc-harmonyos-app-resolver.md',
-  'ecc-harness-optimizer.md',
-  'ecc-healthcare-reviewer.md',
-  'ecc-java-build-resolver.md',
-  'ecc-java-reviewer.md',
-  'ecc-kotlin-build-resolver.md',
-  'ecc-kotlin-reviewer.md',
-  'ecc-loop-operator.md',
-  'ecc-marketing-agent.md',
-  'ecc-mle-reviewer.md',
-  'ecc-performance-optimizer.md',
-  'ecc-planner.md',
-  'ecc-pr-test-analyzer.md',
-  'ecc-python-reviewer.md',
-  'ecc-pytorch-build-resolver.md',
-  'ecc-react-build-resolver.md',
-  'ecc-react-reviewer.md',
-  'ecc-refactor-cleaner.md',
-  'ecc-rust-build-resolver.md',
-  'ecc-rust-reviewer.md',
-  'ecc-seo-specialist.md',
-  'ecc-silent-failure-hunter.md',
-  'ecc-swift-build-resolver.md',
-  'ecc-swift-reviewer.md',
-  'ecc-tdd-guide.md',
-  'ecc-type-design-analyzer.md',
-  'ecc-typescript-reviewer.md',
+  'analyzer.md',
+  'ecc-network-architect.md',
+  'ecc-security-reviewer.md',
+  'ecc-opensource-forker.md',
+  'ecc-opensource-packager.md',
+  'ecc-network-config-reviewer.md',
+  'ecc-opensource-sanitizer.md',
+  'ecc-network-troubleshooter.md',
 ];
 
 test('legacy agent wrappers are removed after their knowledge moves to workflows and skills', async () => {
@@ -97,25 +50,6 @@ test('task implementation is native and never reintroduced as a plugin wrapper',
   assert.equal(present.has('quick_task.md'), false);
 });
 
-test('removed native-agent specialization remains available through skills', async () => {
-  const [frontend, canvas, beamer, documentation] = await Promise.all([
-    readFile(path.join(SKILL_ROOT, 'frontend-design', 'SKILL.md'), 'utf8'),
-    readFile(path.join(SKILL_ROOT, 'canvas-design', 'SKILL.md'), 'utf8'),
-    readFile(path.join(SKILL_ROOT, 'latex-beamer-slides', 'SKILL.md'), 'utf8'),
-    readFile(path.join(SKILL_ROOT, 'ecc', 'documentation-lookup', 'SKILL.md'), 'utf8'),
-  ]);
-
-  assert.match(frontend, /design tokens.+shared primitives/is);
-  assert.match(frontend, /loading, empty, error, disabled, hover, and focus/i);
-  assert.match(frontend, /responsive/i);
-  assert.match(canvas, /visual hierarchy/i);
-  assert.match(canvas, /generic AI/i);
-  assert.match(beamer, /overlap, crowding, clipping, undersized text/is);
-  assert.match(beamer, /Do not split, add, remove, or reorder frames without explicit user authorization/i);
-  assert.match(documentation, /local installed source/i);
-  assert.match(documentation, /types?\s*\+\s*implementation|implementation\s*\+\s*tests?/i);
-  assert.match(documentation, /exact signature/i);
-});
 
 test('packaged top-level agents never use wildcard or dangling spawn targets', async () => {
   const files = (await readdir(AGENT_ROOT)).filter((file) => file.endsWith('.md'));
@@ -129,49 +63,7 @@ test('packaged top-level agents never use wildcard or dangling spawn targets', a
   }
 });
 
-test('open-source pipeline uses exact OMP roles and returns sanitizer evidence inline', async () => {
-  const skill = await readFile(path.join(SKILL_ROOT, 'ecc', 'opensource-pipeline', 'SKILL.md'), 'utf8');
-  assert.match(skill, /ecc-opensource-forker/);
-  assert.match(skill, /ecc-opensource-sanitizer/);
-  assert.match(skill, /ecc-opensource-packager/);
-  assert.match(skill, /Delegate Agent=<Main-chosen-current-Agent> workflow=<comma-selected-ids> step=<step-id> skills=<comma-loaded-ids-or-none> checkpoint=<verbatim-task-content>/i);
-  assert.match(skill, /native task item `agent` to the row Agent/i);
-  assert.match(skill, /\[workflow=<copy-workflow> step=<copy-step> todo=<copy-checkpoint-verbatim> skills=<copy-skills>\]/i);
-  assert.match(skill, /task body.+direct user constraints.+allowed effects.+acceptance evidence[\s\S]*outer context, name, or label.+not.+substitute/iu);
-  assert.doesNotMatch(skill, /\bAgent\s*\(/);
-  assert.doesNotMatch(skill, /maximum 3 retry attempts|最多三次|maximum of 3/i);
-  assert.doesNotMatch(skill, /gh repo create[^\n]*--push/);
 
-  const sanitizer = await readFile(path.join(AGENT_ROOT, 'ecc-opensource-sanitizer.md'), 'utf8');
-  assert.doesNotMatch(sanitizer, /Generate `SANITIZATION_REPORT\.md`|Generate SANITIZATION_REPORT\.md/i);
-  assert.match(sanitizer, /return.*sanitization/i);
-
-  const forker = await readFile(path.join(AGENT_ROOT, 'ecc-opensource-forker.md'), 'utf8');
-  assert.match(forker, /source (?:directory )?(?:is|remains) read-only/i);
-  assert.match(forker, /reject.*(?:same as|inside|ancestor)/i);
-  assert.doesNotMatch(forker, /git\s+(?:init|commit|push)|gh\s+repo/i);
-
-  const packager = await readFile(path.join(AGENT_ROOT, 'ecc-opensource-packager.md'), 'utf8');
-  assert.match(packager, /write only.*staging/i);
-  assert.match(packager, /do not (?:run|execute).*setup/i);
-  assert.doesNotMatch(packager, /git\s+(?:init|commit|push)|gh\s+repo/i);
-});
-
-test('new skill wrappers exist only for knowledge gaps not already covered by inventory', async () => {
-  for (const skill of [
-    'build-toolchain-diagnostics',
-    'code-documentation',
-    'fsharp-patterns',
-    'harmonyos-patterns',
-    'swift-patterns',
-    'type-design-review',
-    'typescript-patterns',
-  ]) {
-    const source = await readFile(path.join(SKILL_ROOT, 'ecc', skill, 'SKILL.md'), 'utf8');
-    assert.match(source, new RegExp(`^name:\\s*${skill}$`, 'm'));
-    assert.doesNotMatch(source, /\[TODO:|TODO:/);
-  }
-});
 
 test('active skills do not instruct Main to call deleted agent identities', async () => {
   const forbidden = REMOVED_AGENT_FILES

@@ -345,17 +345,6 @@ test('fact-checking agents use an evidence ladder, bounded disconfirmation, and 
   assert.doesNotMatch(researchers, /^\s+alignment:/m);
 });
 
-test('the specialized security reviewer preserves bounded evidence confidence', () => {
-  const securityReviewer = configAgent('ecc-security-reviewer');
-
-  assert.match(securityReviewer, /PROVEN.*LIKELY.*HYPOTHESIS.*DISPROVED/is);
-  assert.match(securityReviewer, /zero findings.*valid/is);
-  assert.match(securityReviewer, /high-impact.*(?:cheapest|lowest-cost|low-cost).*disconfirm/is);
-  assert.match(securityReviewer, /path.*symbol.*(?:exact )?snippet/is);
-  assert.match(securityReviewer, /line (?:number|range).*optional/i);
-  assert.match(securityReviewer, /(?:Main|parent).*(?:must not|cannot).*upgrade.*(?:confidence|evidence level).*new evidence/is);
-});
-
 test('buildFactCheckPlan extracts prioritized factual claims', () => {
   const plan = buildFactCheckPlan({
     text: 'The dataset was released in 2024. The method improves accuracy by 12%. This is a nice paragraph.',

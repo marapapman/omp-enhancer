@@ -197,11 +197,9 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
     ...referenceNames.map((name) => readFile(path.join(referencesDir, name), 'utf8')),
   ]);
   const workflowIds = [
-    'code',
     'writing',
     'research',
     'visual',
-    'operations',
   ];
 
   assert.equal((catalog.match(/^## `/gm) ?? []).length, workflowIds.length);
@@ -235,7 +233,6 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
     assert.doesNotMatch(referenceText, /- Suggested flow:|- Scope notes:/);
   }
   assert.doesNotMatch(catalog, /healthcare\.review|ecc-healthcare-reviewer/i);
-  assert.match(catalog, /## \`code\`[\s\S]*Agents:/i);
   assert.doesNotMatch(catalog, /### \`(?:research\.technical|code\.(?:plan|debug|test|review|build)|performance\.optimize|diagram\.tikz|diagram\.mermaid|writing\.en|writing\.zh|general\.subagent|agentic\.simple|network\.design|database\.change|ml\.debug|omp\.plugin|release\.opensource|marketing\.campaign|factcheck\.document)`/i);
   assert.doesNotMatch(catalog, /`(?:test-planner|test-executor|test-reviewer|omp-target-auditor|implementation-task|config-librarian)`/i);
   assert.match(catalog, new RegExp(CATALOG_BLOCK_START));

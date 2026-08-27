@@ -4216,7 +4216,6 @@ test('installed runner loads worktree plugin content and entrypoints without dis
       noExtensions: false,
       pluginDirs: [
         'plugins/omp-config',
-        'plugins/omp-enhancer-core',
       ],
     },
     scenarios: [{
@@ -4236,7 +4235,6 @@ test('installed runner loads worktree plugin content and entrypoints without dis
     const result = report.results[0];
     const expectedPluginDirs = [
       path.join(repoRoot, 'plugins/omp-config'),
-      path.join(repoRoot, 'plugins/omp-enhancer-core'),
     ];
 
     assert.equal(result.command.includes('--no-extensions'), false);
@@ -4246,7 +4244,6 @@ test('installed runner loads worktree plugin content and entrypoints without dis
     );
     const expectedExtensionEntries = [
       path.join(repoRoot, 'plugins/omp-config/index.js'),
-      path.join(repoRoot, 'plugins/omp-enhancer-core/index.js'),
     ];
     assert.deepEqual(
       result.command.flatMap((argument, index, command) => argument === '-e' ? [command[index + 1]] : []),
@@ -4275,9 +4272,7 @@ test('workflow consolidation matrix covers representative non-medical workflows 
   assert.deepEqual(matrix.defaults.pluginDirs, [
     'plugins/omp-config',
     'plugins/writing-helper',
-    'plugins/omp-test-enhancer',
     'plugins/omp-fact-checker',
-    'plugins/omp-enhancer-core',
   ]);
   assert.deepEqual(matrix.defaults.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob']);
   assert.equal(matrix.defaults.expectations.requireNativeTaskCompletion, true);

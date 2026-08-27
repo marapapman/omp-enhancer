@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { workflowCatalog } from '../plugins/omp-enhancer-core/src/workflows/catalog.js';
+import { workflowDefinitions } from './workflow-definitions.js';
+const workflowCatalog = Object.fromEntries(workflowDefinitions.map((d) => [d.id, d]));
 
 // Retired drawing-chain terms are assembled from fragments so this test
 // source itself never embeds the vocabulary it asserts is absent.

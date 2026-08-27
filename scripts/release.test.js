@@ -16,9 +16,7 @@ const marketplaceCheckScript = join(repoRoot, 'scripts', 'check-marketplace.js')
 const fixtureVersions = new Map([
   ['omp-config', '0.1.0'],
   ['writing-helper', '0.2.1'],
-  ['omp-testing-enhancer', '0.1.3'],
   ['omp-fact-checker', '0.1.0'],
-  ['omp-enhancer-core', '0.1.0'],
 ]);
 
 const pluginFixtures = pluginWorkspaces.map(({ directory, name }) => ({
@@ -176,10 +174,10 @@ test('--catalog-bump updates marketplace metadata during a scoped plugin release
 
     const catalog = await readCatalog(root);
     const configPlugin = catalog.plugins.find((plugin) => plugin.name === 'omp-config');
-    const core = catalog.plugins.find((plugin) => plugin.name === 'omp-enhancer-core');
+    const factChecker = catalog.plugins.find((plugin) => plugin.name === 'omp-fact-checker');
     assert.equal(catalog.metadata.version, '1.0.1');
     assert.equal(configPlugin.version, '0.1.1');
-    assert.equal(core.version, '0.1.0');
+    assert.equal(factChecker.version, '0.1.0');
   });
 });
 
@@ -250,15 +248,12 @@ test('--plugin writing-helper --version tracks main and syncs package, lock, and
     const packageLock = await readPackageLock(root);
     const catalog = await readCatalog(root);
     const writingHelper = catalog.plugins.find((plugin) => plugin.name === 'writing-helper');
-    const testingEnhancer = catalog.plugins.find((plugin) => plugin.name === 'omp-testing-enhancer');
 
     assert.equal(packageJson.version, '0.3.0');
     assert.equal(packageLock.packages['plugins/writing-helper'].version, '0.3.0');
     assert.equal(packageLock.packages['plugins/omp-config'].version, '0.1.0');
     assert.equal(writingHelper.version, '0.3.0');
     assert.equal(Object.hasOwn(writingHelper, 'ref'), false);
-    assert.equal(testingEnhancer.version, '0.1.3');
-    assert.equal(Object.hasOwn(testingEnhancer, 'ref'), false);
     assert.equal(catalog.metadata.version, '1.0.0');
 
     const marketplaceCheck = await runNodeScript(root, marketplaceCheckScript);
@@ -278,9 +273,7 @@ test('--plugin all --bump patch bumps every plugin package, every catalog entry,
     const expectedVersions = new Map([
       ['omp-config', { directory: 'omp-config', version: '0.1.1' }],
       ['writing-helper', { directory: 'writing-helper', version: '0.2.2' }],
-      ['omp-testing-enhancer', { directory: 'omp-test-enhancer', version: '0.1.4' }],
       ['omp-fact-checker', { directory: 'omp-fact-checker', version: '0.1.1' }],
-      ['omp-enhancer-core', { directory: 'omp-enhancer-core', version: '0.1.1' }],
     ]);
 
     assert.equal(catalog.metadata.version, '1.0.1');
@@ -477,12 +470,12 @@ test('--apply repairs a stale selected workspace lock version without changing u
   await withReleaseFixture(async (root) => {
     const lockPath = join(root, 'package-lock.json');
     const staleLock = await readJson(lockPath);
-    staleLock.packages['plugins/omp-enhancer-core'].version = '0.0.9';
+    staleLock.packages['plugins/omp-fact-checker'].version = '0.0.9';
     await writeJson(lockPath, staleLock);
 
     const result = await runRelease(root, [
       '--plugin',
-      'omp-enhancer-core',
+      'omp-fact-checker',
       '--version',
       '0.1.1',
       '--apply',
@@ -490,15 +483,15 @@ test('--apply repairs a stale selected workspace lock version without changing u
 
     assertReleaseSucceeded(result);
 
-    const packageJson = await readPluginPackage(root, 'omp-enhancer-core');
+    const packageJson = await readPluginPackage(root, 'omp-fact-checker');
     const packageLock = await readPackageLock(root);
     const catalog = await readCatalog(root);
-    const core = catalog.plugins.find((plugin) => plugin.name === 'omp-enhancer-core');
+    const factChecker = catalog.plugins.find((plugin) => plugin.name === 'omp-fact-checker');
 
     assert.equal(packageJson.version, '0.1.1');
-    assert.equal(packageLock.packages['plugins/omp-enhancer-core'].version, '0.1.1');
+    assert.equal(packageLock.packages['plugins/omp-fact-checker'].version, '0.1.1');
     assert.equal(packageLock.packages['plugins/writing-helper'].version, '0.2.1');
-    assert.equal(core.version, '0.1.1');
+    assert.equal(factChecker.version, '0.1.1');
   });
 });
 

@@ -4,8 +4,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { workflowDefinitions } from '../plugins/omp-enhancer-core/src/workflows/catalog.js';
-import { exactNestedEccSkillUri } from '../plugins/omp-enhancer-core/src/workflows/skill-discovery.js';
+import { workflowDefinitions } from './workflow-definitions.js';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const pluginsRoot = path.join(repoRoot, 'plugins');
@@ -35,7 +34,7 @@ test('every packaged Skill entry is named uniquely, portable, and every workflow
     };
   }));
 
-  assert.equal(entries.length, 311, 'update the reviewed all-Skill manifest when the inventory changes');
+  assert.equal(entries.length, 45, 'update the reviewed all-Skill manifest when the inventory changes');
   for (const { file, name, frontmatter } of entries) {
     assert.ok(name, `${path.relative(repoRoot, file)} has no frontmatter name`);
     assert.doesNotMatch(
@@ -91,8 +90,6 @@ test('workflow discovery metadata matches direct and ECC-catalog packaging', asy
     if (skillsIndex >= 0 && segments.length - skillsIndex === 3) directlyVisible.add(name);
   }
 
-  const catalogCandidates = new Set(workflowDefinitions.flatMap(({ catalogSkills }) => catalogSkills));
-  assert.equal(catalogCandidates.size, 7, 'update the reviewed enumerated ECC candidate baseline');
 
   for (const definition of workflowDefinitions) {
     const expectedCatalogSkills = definition.skills.filter((skill) => !directlyVisible.has(skill) && !externalWorkflowSkills.has(skill));
@@ -101,18 +98,6 @@ test('workflow discovery metadata matches direct and ECC-catalog packaging', asy
       expectedCatalogSkills,
       `${definition.id} must classify every non-visible candidate as catalog-only`,
     );
-    for (const skill of definition.catalogSkills) {
-      assert.equal(
-        path.relative(repoRoot, locations.get(skill) ?? ''),
-        `plugins/omp-config/skills/ecc/${skill}/SKILL.md`,
-        `${definition.id} catalog candidate ${skill} must map exactly to its packaged ECC directory`,
-      );
-      assert.equal(
-        exactNestedEccSkillUri(skill),
-        `skill://ecc-skill-catalog/${skill}/SKILL.md`,
-        `${definition.id} catalog candidate ${skill} must expose its exact packaged URI`,
-      );
-    }
   }
 });
 
@@ -121,7 +106,7 @@ test('every exact Skill URI in packaged Skill Markdown resolves to a real entry 
   const skillFiles = resourceFiles.filter((file) => path.basename(file) === 'SKILL.md');
   const roots = new Map();
 
-  assert.equal(resourceFiles.length, 421, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
+  assert.equal(resourceFiles.length, 51, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
 
   for (const file of skillFiles) {
     const name = frontmatterName(await readFile(file, 'utf8'));

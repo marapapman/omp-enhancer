@@ -10,11 +10,16 @@
     "pluginDirs": [
       "plugins/omp-config",
       "plugins/writing-helper",
-      "plugins/omp-test-enhancer",
-      "plugins/omp-fact-checker",
-      "plugins/omp-enhancer-core"
+      "plugins/omp-fact-checker"
     ],
-    "tools": ["todo", "task", "hub", "read", "grep", "glob"],
+    "tools": [
+      "todo",
+      "task",
+      "hub",
+      "read",
+      "grep",
+      "glob"
+    ],
     "repeat": 1,
     "timeoutSeconds": 180,
     "expectations": {
@@ -50,7 +55,9 @@
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,
-        "requiredNativeTaskAgents": ["plan"]
+        "requiredNativeTaskAgents": [
+          "plan"
+        ]
       }
     },
     {
@@ -61,7 +68,9 @@
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,
-        "requiredNativeTaskAgents": ["reviewer"]
+        "requiredNativeTaskAgents": [
+          "reviewer"
+        ]
       }
     },
     {
@@ -72,7 +81,9 @@
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,
-        "requiredNativeTaskAgents": ["reviewer"]
+        "requiredNativeTaskAgents": [
+          "reviewer"
+        ]
       }
     },
     {
@@ -83,7 +94,9 @@
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,
-        "requiredNativeTaskAgents": ["ecc-opensource-sanitizer"]
+        "requiredNativeTaskAgents": [
+          "ecc-opensource-sanitizer"
+        ]
       }
     },
     {
@@ -94,7 +107,9 @@
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,
-        "requiredNativeTaskAgents": ["checker"]
+        "requiredNativeTaskAgents": [
+          "checker"
+        ]
       }
     }
   ]

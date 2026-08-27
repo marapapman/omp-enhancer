@@ -185,4 +185,46 @@ export default function registerOmpConfig(pi) {
 
   registerCommandIfAvailable(pi, 'config-doctor', 'Inspect packaged OMP config assets without modifying ~/.omp.', (input) => runConfigDoctor(input.root));
   registerCommandIfAvailable(pi, 'config-assets', 'List packaged OMP config assets.', (input) => listAssets(input.root));
+
+  if (typeof pi.registerCommand === 'function' && typeof pi.getActiveTools === 'function' && typeof pi.getAllTools === 'function') {
+    pi.registerCommand('enhancer-tools', {
+      description: 'Explicitly enable, disable, or inspect opt-in OMP Enhancer tools without changing OMP native defaults.',
+      async handler(args = '', ctx = {}) {
+        const [rawAction = 'status', rawGroup = 'all'] = String(args).trim().toLowerCase().split(/\s+/).filter(Boolean);
+        const action = rawAction || 'status';
+        const group = rawGroup || 'all';
+        const groups = { config: ['omp_config_'], writing: ['writing_'], fact: ['fact_check_'] };
+        const prefixes = group === 'all' ? Object.values(groups).flat() : groups[group] ?? null;
+        if (!['status', 'enable', 'disable'].includes(action) || !prefixes) {
+          await ctx.ui?.notify?.('Usage: /enhancer-tools status | enable <config|writing|fact|all> | disable <group>', 'warning');
+          return;
+        }
+        const allToolNames = pi.getAllTools()
+          .map((tool) => (typeof tool === 'string' ? tool : tool?.name))
+          .filter((name) => typeof name === 'string' && name.length > 0);
+        const available = [...new Set(allToolNames)].filter((name) => prefixes.some((prefix) => name.startsWith(prefix)));
+        const active = [...new Set(pi.getActiveTools())];
+        if (action === 'status') {
+          const enabled = available.filter((name) => active.includes(name));
+          await ctx.ui?.notify?.(
+            enabled.length ? `Enabled enhancer tools: ${enabled.join(', ')}` : 'No enhancer tools are enabled.',
+            'info',
+          );
+          return;
+        }
+        if (typeof pi.setActiveTools !== 'function') {
+          await ctx.ui?.notify?.('This OMP runtime cannot change active tools.', 'warning');
+          return;
+        }
+        const next = action === 'enable'
+          ? [...new Set([...active, ...available])]
+          : active.filter((name) => !available.includes(name));
+        await pi.setActiveTools(next);
+        await ctx.ui?.notify?.(
+          `${action === 'enable' ? 'Enabled' : 'Disabled'} ${available.length} ${group} enhancer tool${available.length === 1 ? '' : 's'}.`,
+          'info',
+        );
+      },
+    });
+  }
 }

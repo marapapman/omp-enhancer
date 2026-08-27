@@ -5,16 +5,12 @@
   "workspaces": [
     "plugins/omp-config",
     "plugins/writing-helper",
-    "plugins/omp-test-enhancer",
-    "plugins/omp-fact-checker",
-    "plugins/omp-enhancer-core"
+    "plugins/omp-fact-checker"
   ],
   "scripts": {
-    "test": "npm run check:workflows && npm run check:ecc-skills && node --test scripts/*.test.js && npm test --workspaces --if-present",
+    "test": "npm run check:workflows && node --test scripts/*.test.js && npm test --workspaces --if-present",
     "generate:workflows": "node scripts/generate-workflow-catalog.js --write",
     "check:workflows": "node scripts/generate-workflow-catalog.js --check",
-    "generate:ecc-skills": "node scripts/generate-ecc-skill-catalog.js --write",
-    "check:ecc-skills": "node scripts/generate-ecc-skill-catalog.js --check",
     "generate:marketplace": "node scripts/check-marketplace.js --write",
     "pack:all": "node scripts/pack-all.js",
     "check:marketplace": "node scripts/check-marketplace.js",
@@ -24,8 +20,6 @@
     "e2e:main:skills": "node scripts/e2e/run-installed-workflow.mjs --matrix scripts/e2e/fixtures/skill-discovery.json",
     "e2e:main:subagents": "node scripts/e2e/run-installed-workflow.mjs --matrix scripts/e2e/fixtures/subagent-willingness.json",
     "e2e:main:advisor": "node scripts/e2e/run-installed-workflow.mjs --matrix scripts/e2e/fixtures/advisor-stress.json",
-    "e2e:main:self-iteration": "node scripts/e2e/run-installed-workflow.mjs --matrix scripts/e2e/fixtures/self-iteration.json",
-    "migrate:legacy-gate-skills": "node scripts/migrate-legacy-gate-skills.mjs",
-    "install:deps": "node scripts/install-plugin-deps.mjs"
+    "e2e:main:self-iteration": "node scripts/e2e/run-installed-workflow.mjs --matrix scripts/e2e/fixtures/self-iteration.json"
   }
 }

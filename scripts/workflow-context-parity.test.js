@@ -6,25 +6,24 @@ import { fileURLToPath } from 'node:url';
 
 import {
   WORKFLOW_CATALOG_VERSION,
-  workflowCatalog,
   workflowDefinitions,
-  workflowIds,
-} from '../plugins/omp-enhancer-core/src/workflows/catalog.js';
-import { buildSharedWorkflowCatalogMarkdown } from '../plugins/omp-enhancer-core/src/workflows/render-shared-markdown.js';
+} from './workflow-definitions.js';
+import { defineWorkflowCatalog } from './workflow-schema.js';
 import {
+  buildSharedWorkflowCatalogMarkdown,
   buildWorkflowSkillReferences,
   workflowReferenceUri,
-} from '../plugins/omp-enhancer-core/src/workflows/render-skill.js';
-import { defineWorkflowCatalog } from '../plugins/omp-enhancer-core/src/workflows/schema.js';
+} from './workflow-render.js';
+
+const workflowCatalog = Object.fromEntries(workflowDefinitions.map((d) => [d.id, d]));
+const workflowIds = Object.freeze(workflowDefinitions.map(({ id }) => id));
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['plan', 'scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
-const EXPECTED_WORKFLOW_IDS = ['code', 'writing', 'research', 'visual', 'operations'];
-
-test('catalog v33 defines exactly the five consolidated advisory workflows', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 33);
-  assert.equal(workflowDefinitions.length, 5);
-  assert.deepEqual(workflowIds, EXPECTED_WORKFLOW_IDS);
+test('catalog v34 defines exactly the three advisory workflows (writing, research, visual)', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 34);
+  assert.equal(workflowDefinitions.length, 3);
+  assert.deepEqual(workflowIds, ['writing', 'research', 'visual']);
   for (const definition of workflowDefinitions) {
     assert.equal(typeof definition.chooseWhen, 'string');
     assert.ok(definition.chooseWhen.length > 0, `${definition.id} chooseWhen`);
@@ -42,13 +41,10 @@ test('catalog v33 defines exactly the five consolidated advisory workflows', () 
     }
   }
   assert.deepEqual(Object.keys(workflowCatalog), workflowIds);
-  const catalogSkillCount = new Set(workflowDefinitions.flatMap(({ catalogSkills }) => catalogSkills)).size;
-  assert.equal(catalogSkillCount, 7, 'research (2) + operations (5) catalog candidates');
-  const code = workflowCatalog.code;
-  assert.deepEqual(code.roles, ['analyzer', 'task', 'reviewer', 'scout', 'librarian']);
+  assert.equal(new Set(workflowDefinitions.flatMap(({ catalogSkills }) => catalogSkills)).size, 0, 'no ECC catalog candidates remain');
 });
 
-test('packaged catalog, index, and all references expose catalog v33 advisory content', async () => {
+test('packaged catalog, index, and all references expose catalog v34 advisory content', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -56,10 +52,10 @@ test('packaged catalog, index, and all references expose catalog v33 advisory co
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /# OMP Enhancer Workflow Catalog v33/);
+  assert.match(catalog, /# OMP Enhancer Workflow Catalog v34/);
   assert.match(skillIndex, /Phases: ANALYZE -> EXECUTE -> REVIEW/iu);
   assert.match(skillIndex, /Advisory reference only/i);
-  assert.equal(referenceNames.length, 5);
+  assert.equal(referenceNames.length, 3);
   assert.deepEqual(referenceNames, workflowIds.map((id) => `${id}.md`).sort());
   assert.doesNotMatch(
     `${catalog}\n${skillIndex}\n${referenceText}`,
@@ -212,28 +208,25 @@ test('extension workflow roles have one owner while OMP native roles have no plu
   }
 });
 
-test('code workflow names the packaged analyzer plus native task, reviewer, scout, and librarian', () => {
-  assert.deepEqual(workflowCatalog.code.roles, ['analyzer', 'task', 'reviewer', 'scout', 'librarian']);
-
+test('no retired or ECC agent roles remain in workflow cards', () => {
   const allRoles = new Set(Object.values(workflowCatalog).flatMap(({ roles }) => roles));
   for (const retired of [
     'explore',
     'implementation-task',
     'config-librarian',
     'omp-target-auditor',
-    'test-planner',
-    'test-executor',
-    'test-reviewer',
+    'analyzer',
+    'code-reviewer',
+    'ecc-network-architect',
+    'ecc-network-config-reviewer',
+    'ecc-network-troubleshooter',
+    'ecc-security-reviewer',
+    'ecc-opensource-sanitizer',
+    'ecc-opensource-forker',
+    'ecc-opensource-packager',
   ]) {
     assert.equal(allRoles.has(retired), false, retired);
   }
-  assert.equal(allRoles.has('ecc-network-architect'), true);
-  assert.equal(allRoles.has('ecc-network-config-reviewer'), true);
-  assert.equal(allRoles.has('ecc-network-troubleshooter'), true);
-  assert.equal(allRoles.has('ecc-security-reviewer'), true);
-  assert.equal(allRoles.has('ecc-opensource-sanitizer'), true);
-  assert.equal(allRoles.has('ecc-opensource-forker'), true);
-  assert.equal(allRoles.has('ecc-opensource-packager'), true);
 });
 
 test('README stays user-focused and links the detailed current documentation', async () => {
@@ -241,13 +234,12 @@ test('README stays user-focused and links the detailed current documentation', a
   assert.ok(readme.split('\n').length <= 110, 'root README should remain a concise user guide');
   assert.ok(Buffer.byteLength(readme) <= 6500, 'development detail belongs under docs');
   assert.match(readme, /OMP exposes available Skills and Agents; Main chooses under native permissions/i);
-  assert.match(readme, /covers 5 domains: code, writing, research, visual, and operations/i);
+  assert.match(readme, /covers 3 domains: writing, research \(fact-checking\), and visual/i);
   assert.match(readme, /Main orchestrates through ANALYZE -> EXECUTE -> REVIEW/i);
-  assert.match(readme, /`D` is a top-level Skill exact URI; `C` is an enumerated nested ECC exact URI/i);
+  assert.match(readme, /`D` is a top-level Skill exact URI/i);
   assert.match(readme, /there is no separate pending workflow/i);
   assert.match(readme, /extension tools are inactive by default so they do not enlarge the normal prompt/i);
   assert.match(readme, /\/enhancer-tools enable/i);
-  assert.match(readme, /there is no plugin `\/test` command/i);
   assert.match(readme, /docs\/ARCHITECTURE\.md/);
   assert.match(readme, /docs\/DEVELOPMENT\.md/);
   assert.match(readme, /docs\/WORKFLOW_DEVELOPMENT\.md/);

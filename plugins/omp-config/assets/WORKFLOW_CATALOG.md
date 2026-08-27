@@ -1,20 +1,7 @@
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->
-# OMP Enhancer Workflow Catalog v33
+# OMP Enhancer Workflow Catalog v34
 
 Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIEW.
-
-## `code`
-
-- When: Substantive code inspection, planning, diagnosis, implementation, refactoring, testing, build repair, performance, database, ML, OMP plugin development, or code review.
-- Skills: `code-development`
-- Agents: `analyzer`, `task`, `reviewer`, `scout`, `librarian`
-- Flow:
-  1. Establish outcome, authority, acceptance criteria, and baseline evidence.
-  2. Gather local evidence via scout and external evidence via librarian when decision-relevant.
-  3. For complex multi-slice work, delegate analysis and planning to analyzer; for focused work, Main plans directly.
-  4. Implement via task slices with TDD (RED → GREEN → REFACTOR) or direct work for simple changes.
-  5. Review: Main reviews simple changes directly; delegate complex or risky changes to reviewer.
-  6. Verify against acceptance criteria and report.
 
 ## `writing`
 
@@ -31,7 +18,7 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
 ## `research`
 
 - When: Source-backed research, web synthesis, comparison, recommendation, fact-checking, or claim-by-claim verdict.
-- Skills: `fact-checking`, `claim-extraction`, `source-evaluation`, `citation-authenticity`, `research-ops`, `deep-research`
+- Skills: `fact-checking`, `claim-extraction`, `source-evaluation`, `citation-authenticity`
 - Agents: `fact-researcher-a`, `fact-researcher-b`, `fact-reviewer`, `fact-cross-checker`, `fact-planner`, `scout`
 - Flow:
   1. Decompose into checkable claims or research questions.
@@ -51,18 +38,5 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
   3. visioner reviews that exported PNG read-only in one pass, flagging edges pressed onto each other or crossing through boxes.
   4. designer applies at most one fix round for supported findings and re-exports; deliver the .drawio source with the exported image.
   5. Main retains setup authorization and final acceptance only; remaining findings are reported as limitations.
-
-## `operations`
-
-- When: General multi-step analysis, investigation, network operations, security review, release/publish, marketing, SEO, or any non-trivial work not matching code, writing, research, or visual.
-- Skills: `conventional-commits`, `finishing-a-development-branch`, `security-review`, `security-scan`, `network-config-validation`, `marketing-campaign`, `seo`
-- Agents: `task`, `reviewer`, `scout`, `ecc-network-architect`, `ecc-network-config-reviewer`, `ecc-network-troubleshooter`, `ecc-security-reviewer`, `ecc-opensource-sanitizer`, `ecc-opensource-forker`, `ecc-opensource-packager`
-- Flow:
-  1. Clarify outcome, authority, and acceptance criteria.
-  2. Gather evidence via scout or domain-specific agents.
-  3. For complex analysis, delegate to analyzer; for focused work, Main analyzes directly.
-  4. Execute via task or domain agents; Main handles simple operations directly.
-  5. Review: Main reviews simple results; delegate complex or security-sensitive work to reviewer.
-  6. Verify and report with limitations.
 
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:END -->

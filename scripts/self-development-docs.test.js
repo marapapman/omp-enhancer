@@ -30,8 +30,6 @@ test('self-development guide defines the agent-owned reviewed TDD lifecycle', as
 
 test('shared generators are single-run mechanical integration slices', async () => {
   const paths = [
-    'plugins/omp-config/skills/code-development/SKILL.md',
-    'plugins/omp-config/skills/code-development/references/omp-enhancer.md',
     'docs/ARCHITECTURE.md',
     'docs/DEVELOPMENT.md',
     'docs/OMP_ENHANCER_SELF_DEVELOPMENT.md',
@@ -82,7 +80,7 @@ test('current documentation links the self-development and E2E methods without e
   assert.ok(Buffer.byteLength(readme) <= 6500, 'root README keeps development detail under docs');
 });
 
-test('current repository documentation matches the v33 runtime and evidence contracts', async () => {
+test('current repository documentation matches the v34 runtime and evidence contracts', async () => {
   const [agents, architecture, development, workflows] = await Promise.all([
     read('AGENTS.md'),
     read('docs/ARCHITECTURE.md'),
@@ -90,31 +88,16 @@ test('current repository documentation matches the v33 runtime and evidence cont
     read('docs/WORKFLOW_DEVELOPMENT.md'),
   ]);
 
-  assert.match(agents, /Workflow catalog \(v33\)/u);
-  assert.match(agents, /Workflow catalog v33/u);
-  assert.match(architecture, /Catalog version 31.+合并为 5 个域：`code`、`writing`、`research`、`visual`、`operations`/isu);
-  assert.match(development, /Catalog version 31.+5 张域卡/isu);
-  assert.match(workflows, /Catalog version 31 只有 5 张域卡/isu);
-  assert.match(workflows, /catalog v33 只有 5 个 ID/isu);
+  assert.match(agents, /Workflow catalog \(v34\)/u);
+  assert.match(workflows, /catalog v34 只有 3 个 ID/isu);
   assert.doesNotMatch(
     [agents, architecture, development, workflows].join('\n'),
-    /Catalog version 23|catalog \(v23\)|catalog v30/iu,
+    /Catalog version 23|catalog \(v23\)|catalog v30|catalog \(v33\)|catalog v33/iu,
   );
   assert.match(
     agents,
-    /`omp-enhancer-core` \| Task facts.+orchestration advisory.+skill\/subagent validation.+`index\.js`/iu,
+    /`omp-fact-checker` \| Claim extraction.+verdict reports.+`index\.js`/iu,
   );
-  assert.doesNotMatch(agents, /`omp-enhancer-core` \|[^\n|]*Workflow routing/iu);
-  assert.doesNotMatch(agents, /`plugins\/omp-enhancer-core\/src\/` \|[^\n|]*routing/iu);
-  assert.match(
-    agents,
-    /`omp-test-enhancer`.+seven default-inactive advisory tools.+`dist\/extension\.js`.+`src\/extension\.ts`/isu,
-  );
-  assert.match(
-    agents,
-    /`plugins\/omp-test-enhancer\/src\/extension\.ts`.+source registration.+seven default-inactive advisory tools.+`dist\/extension\.js`/isu,
-  );
-  assert.doesNotMatch(agents, /advisory review gates|gate orchestration|6 tools/iu);
 
   for (const [path, content] of [
     ['AGENTS.md', agents],
@@ -132,24 +115,11 @@ test('current repository documentation matches the v33 runtime and evidence cont
     );
   }
 
-  for (const [path, content] of [
-    ['docs/DEVELOPMENT.md', development],
-    ['docs/WORKFLOW_DEVELOPMENT.md', workflows],
-  ]) {
-    assert.match(
-      content,
-      /willingness[^\n]*`code` 域与 `operations` 域/isu,
-      path,
-    );
-    assert.doesNotMatch(content, /willingness.+non-mechanical `agentic\.simple`/isu, path);
-  }
 
   const probe = workflows.match(/真实 OMP 兼容验证[\s\S]*?Probe 使用/iu)?.[0] ?? '';
   for (const entry of [
-    'plugins/omp-enhancer-core/index.js',
     'plugins/omp-config/index.js',
     'plugins/writing-helper/index.js',
-    'plugins/omp-test-enhancer/dist/extension.js',
     'plugins/omp-fact-checker/index.js',
   ]) {
     assert.match(probe, new RegExp(entry.replaceAll('.', '\\.'), 'u'), entry);
