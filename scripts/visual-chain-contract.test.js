@@ -13,11 +13,13 @@ const FORBIDDEN_DRAWING_TERMS = new RegExp(
 );
 const RETIRED_PIPELINE_TERMS = /geometry checker|check-drawio-layout|drawio MCP|create_diagram|open_drawio_xml|search_shapes/iu;
 
-test('visual workflow uses drawio-skill (drawio@365-skills) as the single diagram pipeline', () => {
+test('visual workflow stays drawio/static-visual oriented', () => {
   const visual = workflowCatalog['visual'];
 
   assert.ok(visual, 'workflowCatalog must expose the visual workflow');
   assert.deepEqual(visual.skills, ['drawio-skill', 'frontend-design', 'canvas-design']);
+  assert.match(visual.chooseWhen, /Diagrams \(draw\.io\), UI\/UX design, static visual artifacts, or rendered figure review\./iu);
+  assert.doesNotMatch(visual.chooseWhen, /slides?|beamer|powerpoint/iu);
   assert.deepEqual(visual.catalogSkills, []);
   assert.deepEqual(visual.roles, ['designer', 'visioner']);
   assert.ok(Array.isArray(visual.suggestedFlow) && visual.suggestedFlow.length > 0);

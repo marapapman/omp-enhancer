@@ -17,17 +17,19 @@ test('Beamer generation checks the template before committing a story and author
   const discussStory = generation.indexOf('apply the PLAN-loaded `slides-storyline`');
   const generateFrames = generation.indexOf('Generate the deck from the committed template and outline');
   const renderQa = generation.indexOf('Have `task` compile with the native engine');
+  const visualPrecheck = generation.indexOf('single read-only visual precheck');
   const designerLayout = generation.indexOf('Have `designer` perform the final layout pass');
   const reconcileDesigner = generation.indexOf('Have `task` validate and integrate the complete designer revision');
   const freshRerender = generation.indexOf('Have `task` recompile and render that exact designer revision');
   const visionReview = generation.indexOf('Have `visioner` independently inspect');
-
   assert.ok(inspectTemplate >= 0);
   assert.ok(inspectTemplate < discussTemplate);
   assert.ok(discussTemplate < discussStory);
   assert.ok(discussStory < generateFrames);
   assert.ok(generateFrames < renderQa);
-  assert.ok(renderQa < designerLayout);
+  assert.ok(visualPrecheck >= 0);
+  assert.ok(renderQa < visualPrecheck);
+  assert.ok(visualPrecheck < designerLayout);
   assert.ok(designerLayout < reconcileDesigner);
   assert.ok(reconcileDesigner < freshRerender);
   assert.ok(designerLayout < freshRerender);
@@ -45,6 +47,32 @@ test('Beamer generation checks the template before committing a story and author
   assert.match(generation, /supported finding.+`designer` applies.+`task` rerenders.+`visioner` reviews only fresh rerendered evidence.+at most once/is);
   assert.match(generation, /Main only authorizes external effects during initial setup and accepts final delivery.+does not compile, render, modify, reconcile, or mediate the visual loop/is);
   assert.match(generation, /No review verdict grants permission to convert, publish, or complete/i);
+});
+
+test('Beamer uses one advisory current-revision precheck before each designer pass', async () => {
+  const skill = await readFile(slidesSkillUrl, 'utf8');
+  const paths = [
+    markdownSection(skill, 'Generate a new deck'),
+    markdownSection(skill, 'Modify an existing deck'),
+  ];
+
+  for (const path of paths) {
+    const precheckStart = path.indexOf('Perform the single read-only visual precheck');
+    const designerStart = path.indexOf('Have `designer` perform', precheckStart);
+    assert.ok(precheckStart >= 0);
+    assert.ok(designerStart > precheckStart);
+
+    const precheck = path.slice(precheckStart, designerStart);
+    assert.match(precheck, /exactly one owner.+`task` or Main.+chosen by Main.+completed the artifact.+native visual input/is);
+    assert.match(precheck, /same current revision/is);
+    assert.match(precheck, /read-only/is);
+    assert.match(precheck, /advisory findings.+page.+region.+criterion.+evidence.+impact.+limitations/is);
+    assert.doesNotMatch(precheck, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);
+  }
+
+  assert.equal((skill.match(/single read-only visual precheck/gi) ?? []).length, 2);
+  assert.match(skill, /read-only inspection.+does not grant.+compile, render, edit, or reconcile ownership/is);
+  assert.doesNotMatch(skill, /parallel|dual|async|disagreement|findings merge|fallback/i);
 });
 
 test('Beamer dependencies stay inside staged PLAN and LOAD before READY', async () => {
@@ -74,6 +102,16 @@ test('Beamer modification stays bounded to language and existing style', async (
   const skill = await readFile(slidesSkillUrl, 'utf8');
   const modification = markdownSection(skill, 'Modify an existing deck');
 
+  const initialRender = modification.indexOf('Have `task` compile and render the affected deck');
+  const precheck = modification.indexOf('single read-only visual precheck');
+  const designerLayout = modification.indexOf('Have `designer` perform a final layout pass');
+  const freshRerender = modification.indexOf('Have `task` recompile and render that exact designer revision');
+  const visionReview = modification.indexOf('Have `visioner` independently review');
+  assert.ok(initialRender >= 0);
+  assert.ok(precheck > initialRender);
+  assert.ok(designerLayout > precheck);
+  assert.ok(freshRerender > designerLayout);
+  assert.ok(visionReview > freshRerender);
   assert.match(modification, /wording, language-norm, and existing-style changes/i);
   assert.match(modification, /preserve the story arc, frame order, template, logo, layout system/i);
   assert.match(modification, /Do not redesign the template or reopen story planning/i);
@@ -142,6 +180,10 @@ test('Beamer quality reference covers compile and rendered-slide evidence', asyn
   assert.match(reference, /cramped composition/i);
   assert.match(reference, /cropped or distorted image/i);
   assert.match(reference, /Do not report visual QA from compilation alone/i);
+  assert.match(reference, /single read-only visual precheck/i);
+  assert.match(reference, /same current revision.+advisory findings.+page.+region.+criterion.+evidence.+impact.+limitations/is);
+  assert.match(reference, /does not grant.+compile, render, edit, or reconcile ownership/is);
+  assert.doesNotMatch(reference, /parallel|dual|async|disagreement|findings merge|fallback/i);
 });
 
 test('Beamer skill supplies layout specialization while visioner reviews fresh rendered slides read-only', async () => {

@@ -837,6 +837,27 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     expectations.requiredNativeTaskAgentSequence,
     failures,
   );
+  evaluateNativeTaskAssignmentTextBounds(
+    nativeTask,
+    expectations.requiredNativeTaskAssignmentTextBounds,
+    failures,
+  );
+  evaluateNativeTaskDeliveryTextPatterns(
+    nativeTask,
+    expectations.requiredNativeTaskDeliveryTextPatterns,
+    failures,
+  );
+  evaluateNativeTaskDeliveryRevisionMatch(
+    nativeTask,
+    expectations.requiredNativeTaskDeliveryRevisionMatch,
+    failures,
+  );
+  evaluateForbiddenNativeTaskAssignmentTextPatterns(
+    nativeTask,
+    expectations.forbiddenNativeTaskAssignmentTextPatterns,
+    failures,
+  );
+
   if (expectations.requireLongFormWritingPilot != null) {
     evaluateLongFormWritingPilot(
       nativeTask,
@@ -970,6 +991,222 @@ function evaluateRequiredNativeTaskAgentSequence(nativeTask, specification, fail
     }
   }
 }
+function evaluateNativeTaskAssignmentTextBounds(nativeTask, specifications, failures) {
+  if (specifications == null) return;
+  if (!Array.isArray(specifications)) {
+    failures.push('requiredNativeTaskAssignmentTextBounds must be an array');
+    return;
+  }
+  const assignments = [...(nativeTask.assignments ?? [])]
+    .sort((left, right) => left.eventIndex - right.eventIndex || left.index - right.index);
+  for (const specification of specifications) {
+    if (!specification || typeof specification !== 'object'
+      || typeof specification.pattern !== 'string' || !specification.pattern) {
+      failures.push('requiredNativeTaskAssignmentTextBounds contained an invalid specification');
+      continue;
+    }
+    let matcher;
+    try {
+      matcher = new RegExp(specification.pattern, 'giu');
+    } catch (error) {
+      failures.push(
+        `requiredNativeTaskAssignmentTextBounds contained an invalid pattern ${JSON.stringify(specification.pattern)}: ${error.message}`,
+      );
+      continue;
+    }
+    const candidates = assignments.filter(({ agent }) => (
+      !specification.agent || agent === specification.agent
+    ));
+    const matches = [];
+    for (const assignment of candidates) {
+      const text = String(assignment.text ?? assignment.prefix ?? '');
+      matcher.lastIndex = 0;
+      for (const match of text.matchAll(matcher)) {
+        matches.push({ assignment, index: match.index ?? 0 });
+      }
+    }
+    const minCount = Number.isSafeInteger(specification.minCount)
+      ? specification.minCount
+      : 1;
+    const maxCount = Number.isSafeInteger(specification.maxCount)
+      ? specification.maxCount
+      : Number.POSITIVE_INFINITY;
+    if (minCount < 0 || maxCount < minCount) {
+      failures.push(`requiredNativeTaskAssignmentTextBounds had invalid bounds for ${JSON.stringify(specification.pattern)}`);
+      continue;
+    }
+    if (matches.length < minCount) {
+      failures.push(
+        `native task assignment text pattern ${JSON.stringify(specification.pattern)} was observed ${matches.length} time(s), below ${minCount}`,
+      );
+    }
+    if (matches.length > maxCount) {
+      failures.push(
+        `native task assignment text pattern ${JSON.stringify(specification.pattern)} was observed ${matches.length} time(s), exceeded ${maxCount}`,
+      );
+    }
+    if (specification.beforeAssignmentAgent) {
+      const boundary = assignments.find(({ agent }) => agent === specification.beforeAssignmentAgent);
+      if (!boundary || !Number.isFinite(boundary.eventIndex)) {
+        failures.push(
+          `native task assignment text pattern ${JSON.stringify(specification.pattern)} had no ${specification.beforeAssignmentAgent} boundary`,
+        );
+      } else if (matches.some(({ assignment }) => (
+        !Number.isFinite(assignment.eventIndex)
+          || assignment.eventIndex >= boundary.eventIndex
+      ))) {
+        failures.push(
+          `native task assignment text pattern ${JSON.stringify(specification.pattern)} was not observed before ${specification.beforeAssignmentAgent}`,
+        );
+      }
+    }
+  }
+}
+
+function evaluateNativeTaskDeliveryTextPatterns(nativeTask, specifications, failures) {
+  if (specifications == null) return;
+  if (!Array.isArray(specifications)) {
+    failures.push('requiredNativeTaskDeliveryTextPatterns must be an array');
+    return;
+  }
+  const assignments = nativeTask.assignments ?? [];
+  for (const specification of specifications) {
+    if (!specification || typeof specification !== 'object'
+      || typeof specification.pattern !== 'string' || !specification.pattern) {
+      failures.push('requiredNativeTaskDeliveryTextPatterns contained an invalid specification');
+      continue;
+    }
+    let matcher;
+    try {
+      matcher = new RegExp(specification.pattern, 'iu');
+    } catch (error) {
+      failures.push(
+        `requiredNativeTaskDeliveryTextPatterns contained an invalid pattern ${JSON.stringify(specification.pattern)}: ${error.message}`,
+      );
+      continue;
+    }
+    const count = assignments.filter(({ agent, deliveryText }) => (
+      (!specification.agent || agent === specification.agent)
+      && matcher.test(String(deliveryText ?? ''))
+    )).length;
+    const minCount = Number.isSafeInteger(specification.minCount)
+      ? specification.minCount
+      : 1;
+    const maxCount = Number.isSafeInteger(specification.maxCount)
+      ? specification.maxCount
+      : Number.POSITIVE_INFINITY;
+    if (minCount < 0 || maxCount < minCount) {
+      failures.push(`requiredNativeTaskDeliveryTextPatterns had invalid bounds for ${JSON.stringify(specification.pattern)}`);
+      continue;
+    }
+    if (count < minCount) {
+      failures.push(
+        `native task delivery text pattern ${JSON.stringify(specification.pattern)} was observed ${count} time(s), below ${minCount}`,
+      );
+    }
+    if (count > maxCount) {
+      failures.push(
+        `native task delivery text pattern ${JSON.stringify(specification.pattern)} was observed ${count} time(s), exceeded ${maxCount}`,
+      );
+    }
+  }
+}
+
+function evaluateNativeTaskDeliveryRevisionMatch(nativeTask, specification, failures) {
+  if (specification == null) return;
+  if (!specification || typeof specification !== 'object') {
+    failures.push('requiredNativeTaskDeliveryRevisionMatch must be an object');
+    return;
+  }
+  const sourcePattern = compileExpectationPattern(
+    specification.sourcePattern,
+    'requiredNativeTaskDeliveryRevisionMatch.sourcePattern',
+    failures,
+  );
+  const targetPattern = compileExpectationPattern(
+    specification.targetPattern,
+    'requiredNativeTaskDeliveryRevisionMatch.targetPattern',
+    failures,
+  );
+  if (!sourcePattern || !targetPattern) return;
+  const assignments = nativeTask.assignments ?? [];
+  const source = [...assignments]
+    .filter(({ agent, deliveryText }) => (
+      agent === specification.sourceAgent
+      && sourcePattern.test(String(deliveryText ?? ''))
+    ))
+    .sort((left, right) => left.eventIndex - right.eventIndex)
+    .at(-1);
+  const target = [...assignments]
+    .filter(({ agent, deliveryText }) => (
+      agent === specification.targetAgent
+      && targetPattern.test(String(deliveryText ?? ''))
+    ))
+    .sort((left, right) => left.eventIndex - right.eventIndex)
+    .at(-1);
+  const sourceRevision = extractRevisionIdentifier(source?.deliveryText);
+  const targetRevision = extractRevisionIdentifier(target?.deliveryText);
+  if (!sourceRevision || !targetRevision) {
+    failures.push('native task delivery revision evidence was missing from the final render or visioner delivery');
+  } else if (sourceRevision !== targetRevision) {
+    failures.push(
+      `native task delivery revision evidence did not match: ${specification.sourceAgent}=${sourceRevision}, ${specification.targetAgent}=${targetRevision}`,
+    );
+  }
+}
+
+
+function evaluateForbiddenNativeTaskAssignmentTextPatterns(nativeTask, specifications, failures) {
+  if (specifications == null) return;
+  if (!Array.isArray(specifications)) {
+    failures.push('forbiddenNativeTaskAssignmentTextPatterns must be an array');
+    return;
+  }
+  const assignments = [...(nativeTask.assignments ?? [])]
+    .sort((left, right) => left.eventIndex - right.eventIndex || left.index - right.index);
+  const firstDesigner = assignments.find(({ agent }) => agent === 'designer');
+  const preDesignerAssignments = firstDesigner && Number.isFinite(firstDesigner.eventIndex)
+    ? assignments.filter(({ eventIndex }) => (
+      Number.isFinite(eventIndex) && eventIndex < firstDesigner.eventIndex
+    ))
+    : assignments;
+  for (const specification of specifications) {
+    if (typeof specification !== 'string' || !specification) {
+      failures.push('forbiddenNativeTaskAssignmentTextPatterns contained an empty or non-string pattern');
+      continue;
+    }
+    let matcher;
+    try {
+      matcher = new RegExp(specification, 'iu');
+    } catch (error) {
+      failures.push(
+        `forbiddenNativeTaskAssignmentTextPatterns contained an invalid pattern ${JSON.stringify(specification)}: ${error.message}`,
+      );
+      continue;
+    }
+    if (preDesignerAssignments.some(({ text, prefix }) => matcher.test(String(text ?? prefix ?? '')))) {
+      failures.push(`forbidden native task assignment text pattern was observed: ${JSON.stringify(specification)}`);
+    }
+  }
+}
+
+function compileExpectationPattern(value, label, failures) {
+  if (typeof value !== 'string' || !value) {
+    failures.push(`${label} must be a non-empty regular-expression string`);
+    return null;
+  }
+  try {
+    return new RegExp(value, 'iu');
+  } catch (error) {
+    failures.push(`${label} was invalid: ${error.message}`);
+    return null;
+  }
+}
+
+function extractRevisionIdentifier(value) {
+  return /\brevision\s*=\s*([A-Za-z0-9][A-Za-z0-9._-]*)/iu.exec(String(value ?? ''))?.[1] ?? '';
+}
+
 
 // Advisory offline expectation for the long-form writing pilot trace.
 // Asserts the observable pilot contract documented in ORCHESTRATION_AND_DEMODELING_PLAN
@@ -3758,6 +3995,7 @@ function taskAssignmentsFromCall(call) {
         context: typeof args.context === 'string' ? args.context : null,
         name: typeof item.name === 'string' ? item.name : null,
         agent: typeof item.agent === 'string' ? item.agent : null,
+        text: leadingText,
         eventIndex: call.eventIndex,
         completionEventIndex: call.completionEventIndex ?? null,
         jobId: call.taskResult?.jobs?.length === items.length

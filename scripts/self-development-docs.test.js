@@ -80,7 +80,7 @@ test('current documentation links the self-development and E2E methods without e
   assert.ok(Buffer.byteLength(readme) <= 6500, 'root README keeps development detail under docs');
 });
 
-test('current repository documentation matches the v34 runtime and evidence contracts', async () => {
+test('current repository documentation matches the v35 runtime and evidence contracts', async () => {
   const [agents, architecture, development, workflows] = await Promise.all([
     read('AGENTS.md'),
     read('docs/ARCHITECTURE.md'),
@@ -88,11 +88,11 @@ test('current repository documentation matches the v34 runtime and evidence cont
     read('docs/WORKFLOW_DEVELOPMENT.md'),
   ]);
 
-  assert.match(agents, /Workflow catalog \(v34\)/u);
-  assert.match(workflows, /catalog v34 只有 3 个 ID/isu);
+  assert.match(agents, /Workflow catalog \(v35\)/u);
+  assert.match(workflows, /catalog v35 只有 3 个 ID/isu);
   assert.doesNotMatch(
     [agents, architecture, development, workflows].join('\n'),
-    /Catalog version 23|catalog \(v23\)|catalog v30|catalog \(v33\)|catalog v33/iu,
+    /Catalog version 23|catalog \(v23\)|catalog v30|catalog \(v33\)|catalog v34/iu,
   );
   assert.match(
     agents,
@@ -125,6 +125,31 @@ test('current repository documentation matches the v34 runtime and evidence cont
     assert.match(probe, new RegExp(entry.replaceAll('.', '\\.'), 'u'), entry);
   }
 });
+
+test('current docs distinguish the single Beamer precheck from the unchanged draw.io pipeline', async () => {
+  const documents = await Promise.all([
+    ['AGENTS.md', 'AGENTS.md'],
+    ['README.md', 'README.md'],
+    ['docs/ARCHITECTURE.md', 'docs/ARCHITECTURE.md'],
+    ['docs/DEVELOPMENT.md', 'docs/DEVELOPMENT.md'],
+    ['docs/WORKFLOW_DEVELOPMENT.md', 'docs/WORKFLOW_DEVELOPMENT.md'],
+  ].map(async ([label, relative]) => [label, await read(relative)]));
+
+  for (const [label, content] of documents) {
+    assert.match(
+      content,
+      /Beamer[\s\S]{0,500}single read-only visual precheck[\s\S]{0,500}(?:Main or task|task or Main)[\s\S]{0,500}(?:initial render|task's initial)[\s\S]{0,500}before the designer/iu,
+      label,
+    );
+    assert.match(
+      content,
+      /draw\.?io(?: pipeline)? remains unchanged[\s\S]{0,500}designer[\s\S]{0,500}visioner[\s\S]{0,500}at most one fix round/iu,
+      label,
+    );
+  }
+});
+
+
 
 test('current documentation describes the simplified ANALYZE to EXECUTE to REVIEW advisory without making it a gate', async () => {
   const [agents, architecture, development, e2e] = await Promise.all([

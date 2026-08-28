@@ -11,9 +11,9 @@ Phases: ANALYZE -> EXECUTE -> REVIEW. Main chooses direct work or delegation at 
 
 ## Domain index
 
-- `writing` — Prose drafting, revision, translation, or format conversion in any language (English, Chinese) or format (LaTeX, Markdown, Beamer, Word). D=[`skill://writing-review`, `skill://plain-chinese-writing`, `skill://writing-markdown-helper`, `skill://zh-writing-markdown-helper`, `skill://format-markdown2latex`, `skill://format-latex2markdown`, `skill://format-template-latex`, `skill://latex-beamer-slides`, `skill://slides-storyline`, `skill://docx`]. Reference: `skill://omp-enhancer-workflows/references/writing.md`.
+- `writing` — Prose drafting, revision, translation, or format conversion in any language (English, Chinese) or format (LaTeX, Markdown, Beamer, Word). D=[`skill://writing-review`, `skill://plain-chinese-writing`, `skill://writing-markdown-helper`, `skill://zh-writing-markdown-helper`, `skill://format-markdown2latex`, `skill://format-latex2markdown`, `skill://format-template-latex`, `skill://latex-beamer-slides`, `skill://beamer-to-powerpoint`, `skill://slides-storyline`, `skill://docx`]. Reference: `skill://omp-enhancer-workflows/references/writing.md`.
 - `research` — Source-backed research, web synthesis, comparison, recommendation, fact-checking, or claim-by-claim verdict. D=[`skill://fact-checking`, `skill://claim-extraction`, `skill://source-evaluation`, `skill://citation-authenticity`]. Reference: `skill://omp-enhancer-workflows/references/research.md`.
-- `visual` — Diagrams (draw.io), UI/UX design, visual artifacts, slides with visual layout, or rendered figure review. D=[`skill://drawio-skill`, `skill://frontend-design`, `skill://canvas-design`]. Reference: `skill://omp-enhancer-workflows/references/visual.md`.
+- `visual` — Diagrams (draw.io), UI/UX design, static visual artifacts, or rendered figure review. D=[`skill://drawio-skill`, `skill://frontend-design`, `skill://canvas-design`]. Reference: `skill://omp-enhancer-workflows/references/visual.md`.
 
 ## Agent descriptions
 

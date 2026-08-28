@@ -23,8 +23,8 @@ Skill、其他 Skills 与原生 `task` 能力选择最小提示；advisor、suba
 `ANALYZE -> EXECUTE -> REVIEW`、Main 的编排者身份与可选的域目录指引，
 不包含 marker 协议，也不随 provider retry 重复。
 
-Generated-asset tests 再验证紧凑目录：索引包含全部 5 个域（`code`、`writing`、
-`research`、`visual`、`operations`），每行给出 exact ID、chooseWhen 条件、
+Generated-asset tests 再验证紧凑目录：当前 v35 索引包含 3 个域（`writing`、
+`research`、`visual`），每行给出 exact ID、chooseWhen 条件、
 候选 Skill URI（`D` 顶层 exact URI、`C` nested ECC exact URI）与单卡 reference
 URI；索引顶部声明 `ANALYZE -> EXECUTE -> REVIEW` 与 usage 规则。单卡只包含
 When、Skills、Agent candidates、Suggested flow 与 Scope notes，没有步骤 ID、
@@ -79,6 +79,32 @@ npm run e2e:main:self-iteration -- \
 ```
 
 不传 `--scenario` 时同一入口运行 positive 与 mechanical control；单独 pilot 可传对应 scenario ID。默认 matrix 不绑定具体模型；比较不同模型时显式覆盖 `--model` 与 `--thinking`，并使用新的 output 目录。
+
+## Beamer/PPT single-lane precheck fixture
+
+`scripts/e2e/fixtures/subagent-willingness.json` 的
+`beamer-single-visual-precheck` 使用临时 Beamer fixture，覆盖 task 的 initial
+render、exactly one read-only self-check（owner 只能是 Main 或 task）以及它在
+designer 之前的顺序；随后 task 绑定并渲染 current revision，visioner 对该
+revision 做最终独立 review。该 `single read-only visual precheck` marker 只携带
+advisory findings（page、region、criterion、evidence、impact、limitations），不
+产生 review verdict；既有 at-most-one fix round 约束仍适用。同时，draw.io pipeline
+remains unchanged：designer、visioner 和 at most one fix round 的一次性链路保持
+原样。
+
+Evaluator 只使用 parent event stream 的 native task assignment、completed
+delivery 和 event order：bounded assignment-text count/order 检查 marker 与
+initial render，native Agent sequence 检查 task → designer → task → visioner，
+delivery text 检查 final render 与 current revision identifier 是否一致，并以
+`maxNativeTaskAssignmentAttempts` 保持 one-fix 上界。当前 runner 不能看到 task
+child 内部的 visual read（例如 child 内部 `inspect_image`）；报告该 evidence
+limitation，不用 child 自述伪造 read proof。没有具体的用户转换命令时不运行
+PowerPoint conversion；`beamer-to-powerpoint` 只在用户给出 exact command 且
+PPT output 已在 scope 时适用。
+
+该 fixture 的 deterministic shape test 不要求本机 LaTeX toolchain；fixture
+目录由 runner 创建并在每次 run 的 cleanup 中删除。不要为 precheck 增加
+parallel task scheduling、双路自检、findings merge 或专用 fallback 场景。
 
 ## 场景设计原则
 

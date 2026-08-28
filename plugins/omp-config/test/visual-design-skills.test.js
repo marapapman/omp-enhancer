@@ -68,12 +68,16 @@ test('existing slides retain visioner QA', async () => {
   const modification = markdownSection(slides, 'Modify an existing deck');
 
   assertInOrder(generation, [
+    /Have `task` compile with the native engine/i,
+    /single read-only visual precheck/i,
     /Have `designer` perform the final layout pass/i,
     /Have `task` validate and integrate the complete designer revision/i,
     /Have `task` recompile and render that exact designer revision/i,
     /Have `visioner` independently inspect/i,
   ]);
   assertInOrder(modification, [
+    /Have `task` compile and render the affected deck/i,
+    /single read-only visual precheck/i,
     /Have `designer` perform a final layout pass/i,
     /Have `task` validate and integrate the complete designer revision/i,
     /Have `task` recompile and render that exact designer revision/i,

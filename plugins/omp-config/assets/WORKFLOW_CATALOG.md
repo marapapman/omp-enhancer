@@ -1,12 +1,12 @@
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->
-# OMP Enhancer Workflow Catalog v34
+# OMP Enhancer Workflow Catalog v35
 
 Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIEW.
 
 ## `writing`
 
 - When: Prose drafting, revision, translation, or format conversion in any language (English, Chinese) or format (LaTeX, Markdown, Beamer, Word).
-- Skills: `writing-review`, `plain-chinese-writing`, `writing-markdown-helper`, `zh-writing-markdown-helper`, `format-markdown2latex`, `format-latex2markdown`, `format-template-latex`, `latex-beamer-slides`, `slides-storyline`, `docx`
+- Skills: `writing-review`, `plain-chinese-writing`, `writing-markdown-helper`, `zh-writing-markdown-helper`, `format-markdown2latex`, `format-latex2markdown`, `format-template-latex`, `latex-beamer-slides`, `beamer-to-powerpoint`, `slides-storyline`, `docx`
 - Agents: `writer`, `zh-writer`, `checker`, `zh-checker`, `task`
 - Flow:
   1. Identify target language (zh/en) and format (plain/LaTeX/Markdown/Beamer/Word).
@@ -29,7 +29,7 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
 
 ## `visual`
 
-- When: Diagrams (draw.io), UI/UX design, visual artifacts, slides with visual layout, or rendered figure review.
+- When: Diagrams (draw.io), UI/UX design, static visual artifacts, or rendered figure review.
 - Skills: `drawio-skill`, `frontend-design`, `canvas-design`
 - Agents: `designer`, `visioner`
 - Flow:

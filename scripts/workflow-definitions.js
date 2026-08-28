@@ -1,5 +1,5 @@
 import { defineWorkflowCatalog } from './workflow-schema.js';
-export const WORKFLOW_CATALOG_VERSION = 34;
+export const WORKFLOW_CATALOG_VERSION = 35;
 
 const writingWorkflows = [
   {
@@ -14,6 +14,7 @@ const writingWorkflows = [
       'format-latex2markdown',
       'format-template-latex',
       'latex-beamer-slides',
+      'beamer-to-powerpoint',
       'slides-storyline',
       'docx',
     ],
@@ -30,6 +31,8 @@ const writingWorkflows = [
       'Language selection: use zh skills for Chinese prose, en skills for English; detect from target body, not instruction language.',
       'LaTeX/Beamer/Word/Markdown are format overlays, not separate workflows; select matching format skills.',
       'Main chooses whether to delegate writing or handle it directly based on scope.',
+      'For Beamer, a single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task\'s initial render and before designer layout; findings are advisory input to the normal designer pass, then task integrates and renders the final revision for independent visioner review.',
+      'beamer-to-powerpoint is conditional on an explicit user-supplied conversion command; use it only when PowerPoint output is in scope and never choose or invent a converter.',
     ],
   },
 ];
@@ -70,7 +73,7 @@ const researchWorkflows = [
 const visualWorkflows = [
   {
     id: 'visual',
-    chooseWhen: 'Diagrams (draw.io), UI/UX design, visual artifacts, slides with visual layout, or rendered figure review.',
+    chooseWhen: 'Diagrams (draw.io), UI/UX design, static visual artifacts, or rendered figure review.',
     skills: ['drawio-skill', 'frontend-design', 'canvas-design'],
     catalogSkills: [],
     roles: ['designer', 'visioner'],

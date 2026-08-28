@@ -64,4 +64,8 @@ Render every PDF page to an image when local tools allow it. Keep full-resolutio
 
 For a new deck, review every full-resolution page and the deck overview. For a bounded modification, review the full-deck overview plus every changed page and every page influenced by the change; review all pages after a shared template, style, or macro edit.
 
+## Single visual precheck
+
+For both new decks and bounded modifications, after `task` produces and binds the initial task-bound render and before `designer`'s layout pass, use exactly one owner—`task` or Main—chosen by Main according to which completed the artifact and has native visual input—to perform the single read-only visual precheck. Use only the same current revision evidence. Record advisory findings only: page, region, criterion, evidence, impact, and limitations. Findings are inputs to the designer's normal layout pass; the precheck has no final verdict. If Main is that owner, its read-only inspection does not grant compile, render, edit, or reconcile ownership.
+
 Record warnings honestly. Do not report visual QA from compilation alone. Source inspection, designer self-review, an old render, or a contact sheet without inspectable page renders cannot substitute for current-revision `visioner` evidence.

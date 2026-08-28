@@ -22,6 +22,8 @@ Review the latest rendered artifact against its brief. Remain read-only: do not 
 8. Return one verdict for the supplied revision: `APPROVED | CHANGES_REQUIRED | UNREVIEWABLE`. Do not return `PASS`, `FAIL`, or another synonym.
 </procedure>
 
+Task/Main prechecks are advisory and are not independent visioner evidence; they do not replace this final fresh-render review.
+
 For each finding, include:
 
 - severity: blocker, major, or minor

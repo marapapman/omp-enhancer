@@ -18,6 +18,7 @@ test('visioner reviews slide decks, UI artifacts, and static exports read-only w
   assert.match(visioner, /UNREVIEWABLE/);
   assert.match(visioner, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);
   assert.match(visioner, /read-only/i);
+  assert.match(visioner, /task\/Main prechecks.+not independent visioner evidence.+final fresh-render review/is);
   assert.match(visioner, /review a changed revision once/i);
   assert.doesNotMatch(visioner, /^\s*- (?:edit|write)$/m);
   assert.doesNotMatch(visioner, /block:\s*true|continue:\s*true|retry until|repeat until|automatic repair/i);

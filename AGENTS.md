@@ -37,7 +37,8 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 - No hard routers, hard gates, classifier preflights, or plugin-owned completion controllers
 - All marketplace extension tools are `defaultInactive`; activation grants no permission.
-- Visual delivery lets `designer` draw the diagram once with `drawio-skill` (drawio@365-skills) and export a draft PNG, `visioner` reviews that exported PNG read-only in one pass for edges pressed onto each other or crossing through boxes, and `designer` applies at most one fix round before delivery. Main retains setup authorization and final acceptance only.
+- visual-delivery: Draw.io pipeline remains unchanged: `designer` draws the diagram once with `drawio-skill` (drawio@365-skills) and exports a draft PNG, `visioner` reviews that exported PNG read-only in one pass for edges pressed onto each other or crossing through boxes, and `designer` applies at most one fix round before delivery. Main retains setup authorization and final acceptance only.
+- Beamer visual precheck is separate from draw.io: a single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before the designer layout pass; findings are advisory only, task integrates and renders the final revision, and visioner independently reviews the final evidence. It has no verdict or repair loop.
 - Fact conclusions preserve exact claim tuples (subject, predicate/object, scope, time/version, quantifier); the backward-compatible `verdict` cannot upgrade compatibility evidence into proof, while fail-closed `strictVerdict` controls factual conclusions.
 - Review tools are advisory only — they don't execute commands, block, or gate completion
 
@@ -45,7 +46,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 | Path | Purpose |
 |------|---------|
-| `scripts/workflow-definitions.js` | Workflow catalog (v34): writing, research (fact-checking), visual definitions |
+| `scripts/workflow-definitions.js` | Workflow catalog (v35): writing, research (fact-checking), visual definitions |
 | `plugins/writing-helper/src/` | Quality analysis: logic, style, citations, preservation, language detection, report formatting |
 | `plugins/omp-fact-checker/src/` | Fact-check pipeline: claim extraction, evidence collection (A/B lanes), cross-checking, providers |
 | `plugins/omp-config/` | Shared config assets, PPT/document/visual skills, 1 agent (visioner), hooks, hook-templates |

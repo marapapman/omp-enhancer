@@ -1187,6 +1187,181 @@ test('workflow evaluation can require a successful workflow reference read', () 
   }, { minWorkflowReferenceReads: 1 });
   assert.equal(observed.pass, true);
 });
+test('Beamer precheck evaluator accepts one bounded task lane and matching current-revision deliveries', () => {
+  const summary = summarizeWorkflowEvents(beamerVisualTraceEvents(), { exitCode: 0 });
+  assert.equal(summary.nativeTask.assignments.length, 4);
+  assert.equal(summary.nativeTask.assignments.filter(({ agent }) => agent === 'designer').length, 1);
+  assert.equal(summary.nativeTask.assignments.filter(({ agent }) => agent === 'visioner').length, 1);
+
+  const evaluation = evaluateWorkflowSummary(summary, beamerVisualExpectations());
+  assert.equal(evaluation.pass, true, evaluation.failures.join('\n'));
+});
+test('Beamer precheck vocabulary ignores incidental initial-render wording', () => {
+  const incidentalEvents = beamerVisualTraceEvents();
+  const initialTask = incidentalEvents.find((event) => (
+    event.type === 'tool_execution_start' && event.toolName === 'task'
+  ));
+  assert.ok(initialTask);
+  initialTask.args.task = [
+    'Compile and render the initial deck with parallel page rendering and a fallback font check.',
+    initialTask.args.task,
+  ].join(' ');
+  const incidental = evaluateWorkflowSummary(
+    summarizeWorkflowEvents(incidentalEvents, { exitCode: 0 }),
+    beamerVisualExpectations(),
+  );
+  assert.equal(incidental.pass, true, incidental.failures.join('\n'));
+
+  const precheck = evaluateWorkflowSummary(
+    summarizeWorkflowEvents(
+      beamerVisualTraceEvents({
+        markerText: [
+          'single read-only visual precheck',
+          'owner=task',
+          'parallel dual disagreement merge',
+          'APPROVED',
+        ].join(' | '),
+      }),
+      { exitCode: 0 },
+    ),
+    beamerVisualExpectations(),
+  );
+  assert.equal(precheck.pass, false);
+  assert.match(precheck.failures.join('\n'), /forbidden native task assignment text pattern.+APPROVED/iu);
+  assert.match(precheck.failures.join('\n'), /forbidden native task assignment text pattern.+parallel/iu);
+});
+
+
+test('Beamer precheck evaluator rejects duplicate markers, stale revision deliveries, and excess fix rounds', () => {
+  const duplicateMarker = summarizeWorkflowEvents(
+    beamerVisualTraceEvents({ markerCount: 2 }),
+    { exitCode: 0 },
+  );
+  const duplicateEvaluation = evaluateWorkflowSummary(
+    duplicateMarker,
+    beamerVisualExpectations(),
+  );
+  assert.equal(duplicateEvaluation.pass, false);
+  assert.match(
+    duplicateEvaluation.failures.join('\n'),
+    /native task assignment text pattern.+2.+exceeded.+1/iu,
+  );
+
+  const lateMarker = summarizeWorkflowEvents(
+    beamerVisualTraceEvents({ markerAgent: 'final-task' }),
+    { exitCode: 0 },
+  );
+  const lateEvaluation = evaluateWorkflowSummary(lateMarker, beamerVisualExpectations());
+  assert.equal(lateEvaluation.pass, false);
+  assert.match(lateEvaluation.failures.join('\n'), /not observed before designer/iu);
+
+
+  const staleRevision = summarizeWorkflowEvents(
+    beamerVisualTraceEvents({ finalRevision: 'rev-2', visionerRevision: 'rev-1' }),
+    { exitCode: 0 },
+  );
+  const staleEvaluation = evaluateWorkflowSummary(staleRevision, beamerVisualExpectations());
+  assert.equal(staleEvaluation.pass, false);
+  assert.match(staleEvaluation.failures.join('\n'), /revision.+did not match/iu);
+
+  const oneFix = summarizeWorkflowEvents(
+    beamerVisualTraceEvents({ designerFixes: 1 }),
+    { exitCode: 0 },
+  );
+  const oneFixEvaluation = evaluateWorkflowSummary(oneFix, beamerVisualExpectations());
+  assert.equal(oneFixEvaluation.pass, true, oneFixEvaluation.failures.join('\n'));
+
+
+  const excessFixes = summarizeWorkflowEvents(
+    beamerVisualTraceEvents({ designerFixes: 2 }),
+    { exitCode: 0 },
+  );
+  const excessEvaluation = evaluateWorkflowSummary(excessFixes, beamerVisualExpectations());
+  assert.equal(excessEvaluation.pass, false);
+  assert.match(excessEvaluation.failures.join('\n'), /native task assignment attempts 10 exceeded 7/iu);
+
+  const nonAdvisory = summarizeWorkflowEvents(
+    beamerVisualTraceEvents({
+      markerText: [
+        'single read-only visual precheck',
+        'owner=task',
+        'APPROVED',
+        'parallel dual fallback disagreement merge',
+      ].join(' | '),
+    }),
+    { exitCode: 0 },
+  );
+  const nonAdvisoryEvaluation = evaluateWorkflowSummary(
+    nonAdvisory,
+    beamerVisualExpectations(),
+  );
+  assert.equal(nonAdvisoryEvaluation.pass, false);
+  assert.match(nonAdvisoryEvaluation.failures.join('\n'), /forbidden native task assignment text pattern/iu);
+});
+
+test('Beamer precheck fixture shape stays temporary and PowerPoint conversion remains command-conditional', async () => {
+  const matrix = JSON.parse(await readFile(
+    new URL('./e2e/fixtures/subagent-willingness.json', import.meta.url),
+    'utf8',
+  ));
+  const scenario = matrix.scenarios.find(({ id }) => id === 'beamer-single-visual-precheck');
+  assert.ok(scenario);
+  assert.equal(scenario.fixture, 'visual-beamer-deck');
+  assert.equal(scenario.category, 'subagent-default/visual');
+  assert.deepEqual(scenario.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob', 'write', 'edit']);
+  assert.match(
+    scenario.prompt,
+    /task.+(?:initial.+render|render.+initial).+single read-only visual precheck.+before.+designer.+final.+current revision.+visioner/isu,
+  );
+  assert.match(scenario.prompt, /PowerPoint.+exact.+conversion command/isu);
+  assert.match(scenario.prompt, /no conversion command.+do not convert/isu);
+  assert.deepEqual(scenario.expectations.requiredNativeTaskAssignmentTextBounds, [
+    {
+      agent: 'task',
+      pattern: 'initial.+render',
+      minCount: 1,
+      maxCount: 1,
+      beforeAssignmentAgent: 'designer',
+    },
+    {
+      agent: 'task',
+      pattern: 'single read-only visual precheck',
+      minCount: 1,
+      maxCount: 1,
+      beforeAssignmentAgent: 'designer',
+    },
+  ]);
+  assert.deepEqual(scenario.expectations.requiredNativeTaskAgentSequence, [
+    'task',
+    'designer',
+    'task',
+    'visioner',
+  ]);
+  assert.deepEqual(scenario.expectations.requiredNativeTaskDeliveryTextPatterns, [
+    { agent: 'task', pattern: 'final.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
+    { agent: 'visioner', pattern: 'current.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
+  ]);
+  assert.equal(scenario.expectations.maxNativeTaskAssignmentAttempts, 7);
+  assert.deepEqual(scenario.expectations.forbiddenNativeTaskAssignmentTextPatterns, [
+    'APPROVED|CHANGES_REQUIRED|UNREVIEWABLE',
+    'single read-only visual precheck[^\\n]*(?:parallel|dual|fallback|disagreement|merge)',
+  ]);
+
+  const prepared = await prepareScenario(scenario);
+  try {
+    assert.equal(prepared.displayCwd, '<temporary:visual-beamer-deck>');
+    assert.equal(prepared.verifyRoot, prepared.cwd);
+    assert.deepEqual(await readdir(prepared.cwd), ['main.tex']);
+    const source = await readFile(path.join(prepared.cwd, 'main.tex'), 'utf8');
+    assert.match(source, /documentclass\{beamer\}/u);
+    assert.match(source, /frame\}\{Baseline\}/u);
+  } finally {
+    await prepared.cleanup();
+  }
+  await assert.rejects(access(prepared.cwd));
+});
+
+
 
 
 test('workflow evaluation requireLocalSearchBeforeProjectTools enforces ordering', () => {
@@ -5950,6 +6125,138 @@ function toolResultEvent(id, name, result) {
     result,
   };
 }
+function beamerVisualExpectations() {
+  return {
+    requireFinal: false,
+    requiredNativeTaskAgents: ['task', 'designer', 'visioner'],
+    requiredNativeTaskAgentSequence: ['task', 'designer', 'task', 'visioner'],
+    requiredNativeTaskAssignmentTextBounds: [
+      {
+        agent: 'task',
+        pattern: 'initial.+render',
+        minCount: 1,
+        maxCount: 1,
+        beforeAssignmentAgent: 'designer',
+      },
+      {
+        agent: 'task',
+        pattern: 'single read-only visual precheck',
+        minCount: 1,
+        maxCount: 1,
+        beforeAssignmentAgent: 'designer',
+      },
+    ],
+    requiredNativeTaskDeliveryTextPatterns: [
+      { agent: 'task', pattern: 'final.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
+      { agent: 'visioner', pattern: 'current.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
+    ],
+    requiredNativeTaskDeliveryRevisionMatch: {
+      sourceAgent: 'task',
+      sourcePattern: 'final.+revision=rev-[0-9]+',
+      targetAgent: 'visioner',
+      targetPattern: 'current.+revision=rev-[0-9]+',
+    },
+    maxNativeTaskAssignmentAttempts: 7,
+    forbiddenNativeTaskAssignmentTextPatterns: [
+      'APPROVED|CHANGES_REQUIRED|UNREVIEWABLE',
+      'single read-only visual precheck[^\\n]*(?:parallel|dual|fallback|disagreement|merge)',
+    ],
+  };
+}
+
+function appendBeamerTask(events, {
+  id,
+  agent,
+  jobId,
+  task,
+  delivery,
+}) {
+  events.push(
+    toolCallEvent(id, 'task', { agent, task }),
+    toolResultEvent(id, 'task', {
+      isError: false,
+      details: { async: { jobId, state: 'completed' } },
+    }),
+    {
+      type: 'message_end',
+      message: {
+        role: 'custom',
+        customType: 'async-result',
+        content: `<task-result id="${jobId}" status="completed">${delivery}</task-result>`,
+      },
+    },
+  );
+}
+
+function beamerVisualTraceEvents({
+  markerCount = 1,
+  finalRevision = 'rev-1',
+  visionerRevision = finalRevision,
+  designerFixes = 0,
+  markerText = null,
+  markerAgent = 'task',
+} = {}) {
+  const events = [];
+  const markers = markerText
+    ?? Array.from(
+      { length: markerCount },
+      () => 'single read-only visual precheck | owner=task | read-only advisory findings',
+    ).join(' | ');
+  appendBeamerTask(events, {
+    id: 'initial-render',
+    agent: 'task',
+    jobId: 'initial',
+    task: `${markerAgent === 'task' ? `${markers}. ` : ''}Compile and render the initial deck; bind revision=rev-1 to the PDF and page PNG renders.`,
+    delivery: 'Initial PDF and page PNG renders are available for revision=rev-1.',
+  });
+  appendBeamerTask(events, {
+    id: 'designer-layout',
+    agent: 'designer',
+    jobId: 'designer',
+    task: `${markerAgent === 'designer' ? `${markers}. ` : ''}Apply the final layout pass using the initial render findings.`,
+    delivery: 'Layout pass completed without changing the requested story.',
+  });
+  appendBeamerTask(events, {
+    id: 'final-render',
+    agent: 'task',
+    jobId: 'final',
+    task: `${markerAgent === 'final-task' ? `${markers}. ` : ''}Validate the designer revision, then recompile and render the final revision=${finalRevision} PDF and page PNGs.`,
+    delivery: `Final current revision=${finalRevision} PDF and page PNG renders are available.`,
+  });
+  appendBeamerTask(events, {
+    id: 'visioner-review',
+    agent: 'visioner',
+    jobId: 'visioner',
+    task: `Review current revision=${visionerRevision} page PNG renders read-only and return the required visual verdict.`,
+    delivery: `Current revision=${visionerRevision} page PNG renders reviewed. APPROVED.`,
+  });
+
+  for (let index = 1; index <= designerFixes; index += 1) {
+    appendBeamerTask(events, {
+      id: `designer-fix-${index}`,
+      agent: 'designer',
+      jobId: `designer-fix-${index}`,
+      task: `Apply bounded fix round ${index} to revision=${finalRevision}.`,
+      delivery: `Bounded fix round ${index} completed.`,
+    });
+    appendBeamerTask(events, {
+      id: `final-rerender-${index}`,
+      agent: 'task',
+      jobId: `final-rerender-${index}`,
+      task: `Recompile and render the fresh current revision=${finalRevision} PDF and page PNGs.`,
+      delivery: `Fresh current revision=${finalRevision} PDF and page PNG renders are available.`,
+    });
+    appendBeamerTask(events, {
+      id: `visioner-review-${index}`,
+      agent: 'visioner',
+      jobId: `visioner-${index}`,
+      task: `Review fresh current revision=${finalRevision} page PNG renders read-only and return the required visual verdict.`,
+      delivery: `Fresh current revision=${finalRevision} page PNG renders reviewed. APPROVED.`,
+    });
+  }
+  return events;
+}
+
 
 test('requireLongFormWritingPilot asserts the long-form writing pilot trace contract', () => {
   const writerMeta = '[workflow=writing step=step-writer todo=draft-section skills=writing-review]';

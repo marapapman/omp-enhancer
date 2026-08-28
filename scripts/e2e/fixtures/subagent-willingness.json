@@ -317,6 +317,79 @@
       }
     },
     {
+      "id": "beamer-single-visual-precheck",
+      "category": "subagent-default/visual",
+      "fixture": "visual-beamer-deck",
+      "repeat": 1,
+      "timeoutSeconds": 480,
+      "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
+      "prompt": "Create the small Beamer deck in main.tex while preserving its template and frame story. Have task compile and render the initial revision and bind the stable revision=rev-1 identifier to its PDF and page renders. Then perform exactly one single read-only visual precheck owned by task or Main (choose one owner only) on that same current revision before the designer layout pass. Record advisory findings with page, region, criterion, evidence, impact, and limitations; do not issue a final review verdict at this checkpoint. Have designer perform the normal layout pass, have task integrate and render the final current revision=rev-1, then have visioner independently review the current-revision renders and report the same revision=rev-1 evidence. Keep the existing at-most-one fix round bound. PowerPoint conversion is out of scope because no concrete user conversion command is supplied; no conversion command is supplied, so do not convert. Use beamer-to-powerpoint only when the user supplies an exact conversion command. In this exercise write only main.tex.",
+      "expectations": {
+        "minNativeTaskCalls": 4,
+        "maxNativeTaskCalls": 7,
+        "minNativeTaskAssignmentAttempts": 4,
+        "maxNativeTaskAssignmentAttempts": 7,
+        "requireNativeTaskCompletion": true,
+        "requireNativeTaskSubmissionForEveryAssignment": true,
+        "requireNonemptyNativeTaskContext": true,
+        "requiredNativeTaskAgents": ["task", "designer", "visioner"],
+        "requiredNativeTaskAgentSequence": ["task", "designer", "task", "visioner"],
+        "requiredObservedSkills": ["omp-enhancer-workflows", "latex-beamer-slides"],
+        "maxObservedSkills": 3,
+        "forbiddenSkills": ["beamer-to-powerpoint", "drawio-skill"],
+        "requiredWorkflowPrimary": "writing",
+        "requiredSelectedWorkflowIds": ["writing"],
+        "requiredNativeTaskAssignmentTextBounds": [
+          {
+            "agent": "task",
+            "pattern": "initial.+render",
+            "minCount": 1,
+            "maxCount": 1,
+            "beforeAssignmentAgent": "designer"
+          },
+          {
+            "agent": "task",
+            "pattern": "single read-only visual precheck",
+            "minCount": 1,
+            "maxCount": 1,
+            "beforeAssignmentAgent": "designer"
+          }
+        ],
+        "requiredNativeTaskDeliveryTextPatterns": [
+          {
+            "agent": "task",
+            "pattern": "final.+revision=rev-[0-9]+",
+            "minCount": 1,
+            "maxCount": 2
+          },
+          {
+            "agent": "visioner",
+            "pattern": "current.+revision=rev-[0-9]+",
+            "minCount": 1,
+            "maxCount": 2
+          }
+        ],
+        "requiredNativeTaskDeliveryRevisionMatch": {
+          "sourceAgent": "task",
+          "sourcePattern": "final.+revision=rev-[0-9]+",
+          "targetAgent": "visioner",
+          "targetPattern": "current.+revision=rev-[0-9]+"
+        },
+        "forbiddenNativeTaskAssignmentTextPatterns": [
+          "APPROVED|CHANGES_REQUIRED|UNREVIEWABLE",
+          "single read-only visual precheck[^\\n]*(?:parallel|dual|fallback|disagreement|merge)"
+        ],
+        "maxToolCalls": 60
+      },
+      "fixtureExpectations": {
+        "allowedChangedFiles": ["main.tex"],
+        "requiredChangedFiles": ["main.tex"],
+        "requiredPatterns": {
+          "main.tex": ["documentclass\\{beamer\\}", "\\\\begin\\{frame\\}", "Baseline"]
+        }
+      }
+    },
+    {
       "id": "orchestrator-code-delegation-conformance",
       "category": "subagent-default/orchestrator",
       "cwd": ".",

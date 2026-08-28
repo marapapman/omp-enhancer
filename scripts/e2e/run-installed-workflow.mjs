@@ -1451,6 +1451,19 @@ export async function prepareScenario(scenario) {
     await writeFile(path.join(cwd, 'article.md'), '# Article\n\n<to be drafted>\n');
   } else if (scenario.fixture === 'visual-drawio-canvas') {
     await mkdir(path.join(cwd, 'docs'), { recursive: true });
+  } else if (scenario.fixture === 'visual-beamer-deck') {
+    await writeFile(
+      path.join(cwd, 'main.tex'),
+      [
+        '\\documentclass{beamer}',
+        '\\begin{document}',
+        '\\begin{frame}{Baseline}',
+        'A bounded Beamer fixture for visual workflow evidence.',
+        '\\end{frame}',
+        '\\end{document}',
+        '',
+      ].join('\n'),
+    );
   } else {
     throw new Error(`Unknown fixture: ${scenario.fixture}`);
   }

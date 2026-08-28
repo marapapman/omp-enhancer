@@ -1,14 +1,14 @@
 # Workflow Development Guide
 
-本指南说明如何新增或修改 OMP Enhancer 的可选 workflow reference。当前仓库只保留写作、事实核查和视觉/PPT 三类能力；目录是 advisory reference，不是 router、gate、权限或 completion controller。
+本指南说明如何新增或修改 OMP Enhancer 的可选 workflow reference。当前仓库只保留写作、事实核查和视觉三类能力；Beamer/PPT 转换属于 writing 格式 overlay；目录是 advisory reference，不是 router、gate、权限或 completion controller。
 
 ## 当前架构
 
-当前 workflow catalog version 34 只有 3 个 ID：`writing`、`research` 和 `visual`。
+当前 workflow catalog version 35 只有 3 个 ID：`writing`、`research` 和 `visual`。
 
-- `writing`：中英文 prose、翻译、Markdown、LaTeX、Beamer 和 Word；
+- `writing`：中英文 prose、翻译、Markdown、LaTeX、Beamer 和 Word；`beamer-to-powerpoint` 仅在用户提供明确转换命令时适用；
 - `research`：事实核查、claim extraction、来源评估、证据 cross-check 和 verdict；
-- `visual`：draw.io、UI/UX、视觉 artifact、PPT 视觉布局和 rendered figure review。
+- `visual`：draw.io、UI/UX、static visual artifact 和 rendered figure review。
 
 定义、校验和渲染位于仓库脚本：
 
@@ -36,7 +36,7 @@ plugins/omp-config/skills/omp-enhancer-workflows/references/*.md
 ```js
 {
   id: 'visual',
-  chooseWhen: 'Diagrams, UI/UX design, visual artifacts, or slides with visual layout.',
+  chooseWhen: 'Diagrams (draw.io), UI/UX design, static visual artifacts, or rendered figure review.',
   skills: ['drawio-skill', 'frontend-design', 'canvas-design'],
   catalogSkills: [],
   roles: ['designer', 'visioner'],
@@ -47,7 +47,7 @@ plugins/omp-config/skills/omp-enhancer-workflows/references/*.md
 
 字段规则：
 
-- `id` 全局唯一、稳定、小写；catalog v34 只有 3 个 ID（`writing`、`research`、`visual`）；
+- `id` 全局唯一、稳定、小写；catalog v35 只有 3 个 ID（`writing`、`research`、`visual`）；
 - `chooseWhen` 描述用户可观察的选择条件，不写关键词路由规则；
 - `skills` 使用精确 Skill frontmatter 名；
 - `catalogSkills` 保留为空数组，不产生 nested ECC URI；
@@ -60,7 +60,8 @@ Schema 会拒绝未知字段、重复 ID、重复资源名、非法标识符和�
 
 顶层 Skill 通过 `skill://<name>` exact URI 按需读取。当前没有 `ecc-skill-catalog` 或 nested `C` 候选。Main 根据目标语言、格式、证据要求和视觉输出选择最小 Skill 集；Skill 不自动触发其他 Skill、Agent、命令或文件写入。
 
-`writer`/`zh-writer` 只交付 proposal，`checker`/`zh-checker` 只交付 report。事实核查 Agent 保留 evidence lane、cross-check、strict verdict 和 limitation。视觉交付由 `designer` 使用 `drawio-skill` 绘制并导出，`visioner` 只读检查一次，designer 最多应用一轮修正。
+`writer`/`zh-writer` 只交付 proposal，`checker`/`zh-checker` 只交付 report。事实核查 Agent 保留 evidence lane、cross-check、strict verdict 和 limitation。Draw.io pipeline remains unchanged: `designer` draws once with `drawio-skill` (drawio@365-skills) and exports a draft PNG; `visioner` reviews it read-only in one pass; `designer` applies at most one fix round.
+Beamer remains a writing-format overlay, not the visual workflow. A single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before the designer layout pass；findings are advisory only and have no verdict or repair loop。Task integrates and renders the final revision，visioner independently reviews fresh final evidence。PowerPoint conversion uses `beamer-to-powerpoint` only with an exact user-supplied conversion command.
 
 ## 生成目录
 
