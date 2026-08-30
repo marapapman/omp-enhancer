@@ -76,10 +76,10 @@ describe('bundled frugal-pi writing content', () => {
     }
   });
 
-  it('pins writers to the task role and checkers to the slow role', () => {
+  it('pins writers to their configured roles and checkers to the slow role', () => {
     const expectedRoles = new Map([
       ['writer', 'task'],
-      ['zh-writer', 'task'],
+      ['zh-writer', 'smol'],
       ['checker', 'slow'],
       ['zh-checker', 'slow'],
     ]);

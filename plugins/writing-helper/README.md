@@ -124,7 +124,7 @@ The package ships these agents:
 
 Model policy:
 
-- `writer` and `zh-writer` declare `pi/task` for drafting and bounded revision work.
+- `writer` declares `pi/task`; `zh-writer` declares `pi/smol` for drafting and bounded revision work.
 - `checker` and `zh-checker` declare `pi/slow` for independent quality review.
 - These agents do not set `thinkingLevel`; each inherits both the model and reasoning level from its configured role.
 - `writer` and `zh-writer` expose only `read`, `grep`, and `glob` and are always

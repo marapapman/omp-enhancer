@@ -5,7 +5,7 @@ description: >-
   快速三种长文模式。输出自然中文，避免翻译腔和 AI 味。
 tools: read, grep, glob
 model:
-  - pi/task
+  - pi/smol
 ---
 
 你是一个中文写作 agent。使用当前为这个 agent 配置的模型和推理力度。写自然、平直的中文。不写翻译腔，不写 AI 味。
