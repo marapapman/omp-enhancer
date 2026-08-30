@@ -79,6 +79,7 @@ export function buildWorkflowSkillIndexMarkdown() {
     '1. Match the task to a domain above.',
     '2. Load matching skills as needed for methods and evidence rules.',
     '3. Choose the Agents you need from the descriptions above; OMP exposes their current availability.',
+    '4. Load the domain reference before starting matching work; it carries the required step order and checkpoints.',
     '',
   );
   return lines.join('\n');
@@ -103,7 +104,7 @@ function renderAgentDescriptions() {
 function buildWorkflowSkillReferenceMarkdown(workflowId) {
   const definition = workflowDefinitions.find(({ id }) => id === workflowId);
   if (!definition) throw new Error(`Unknown workflow skill reference: ${workflowId}.`);
-  return [
+  const lines = [
     `# \`${workflowId}\` workflow reference`,
     '',
     'Optional advisory reference. Main orchestrates freely.',
@@ -112,9 +113,23 @@ function buildWorkflowSkillReferenceMarkdown(workflowId) {
     `- Skills: ${codeList(definition.skills)}`,
     `- Agent candidates: ${definition.roles.length ? definition.roles.map(code).join(', ') : 'none suggested'}.`,
     '',
-  ].join('\n');
+    '## Required step order',
+    '',
+    'These steps are the required execution order for this domain. The plugin provides no runtime gate, router, or completion condition — that means the runtime never blocks you, not that the steps are optional. Skipping a named step without a stated reason is a workflow violation; report it in the final delivery.',
+    '',
+    ...definition.suggestedFlow.map((text, index) => `${index + 1}. ${text}`),
+    '',
+  ];
+  if (definition.scopeNotes.length > 0) {
+    lines.push(
+      '## Scope notes',
+      '',
+      ...definition.scopeNotes.map((text) => `- ${text}`),
+      '',
+    );
+  }
+  return lines.join('\n');
 }
-
 function renderIndexRow(definition) {
   return `- \`${definition.id}\` — ${definition.chooseWhen} ${renderSkillDiscovery(definition)} Reference: \`${workflowReferenceUri(definition.id)}\`.`;
 }

@@ -142,6 +142,7 @@ test('slides storyline defines a text-only per-page confirmation phase', async (
   assert.match(skill, /page by page|one page at a time/i);
   assert.match(skill, /complete natural-language sentences or paragraphs/i);
   assert.match(skill, /user confirmation.+before visual authoring/is);
+  assert.match(skill, /REQUIRED conversational checkpoint/);
   assert.match(skill, /plain-chinese-writing/i);
   assert.match(skill, /zh-format-humanizer/i);
   assert.match(skill, /ask only when a missing choice materially changes the deck/i);
@@ -199,6 +200,7 @@ test('new Beamer work stages text confirmation before visual authoring and layou
   assert.match(generation, /shorten|condense|精简/i);
   assert.match(generation, /never convert.+(?:phrases|keywords).+body text/is);
   assert.match(generation, /Confirm the basic layout.+before.+refinement/is);
+  assert.match(skill, /REQUIRED conversational checkpoint/);
   assert.match(generation, /existing visual review and refinement path.+advisory/is);
 });
 
@@ -248,6 +250,7 @@ test('Beamer quality reference covers compile and rendered-slide evidence', asyn
   assert.match(reference, /Do not replace.+isolated phrases.+keyword strings.+phrase-only bullet lists/is);
   assert.match(reference, /Chinese slide text.+plain-chinese-writing.+zh-format-humanizer.+zh-writing-review/is);
   assert.match(reference, /basic layout.+user.+confirmation.+before.+refinement/is);
+  assert.match(reference, /REQUIRED conversational checkpoint/);
   assert.match(reference, /multiple explicit.+refinement rounds|current multi-pass.+visual evidence/is);
 });
 

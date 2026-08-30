@@ -20,6 +20,7 @@ test('automatic hook directories contain advisory-only hooks', async () => {
   const autoPost = await listTypeScriptFiles(path.join(pluginRoot, 'hooks', 'post'));
 
   assert.deepEqual(autoPre, [
+    'beamer-checkpoint-reminder.ts',
     'edit-anchor-guard.ts',
     'guard-destructive.ts',
   ]);
@@ -29,8 +30,9 @@ test('automatic hook directories contain advisory-only hooks', async () => {
 test('auto-discovered guard hooks register a tool_call handler and never block', async () => {
   const { default: registerDestructive } = await import('../hooks/pre/guard-destructive.ts');
   const { default: registerEditAnchor } = await import('../hooks/pre/edit-anchor-guard.ts');
+  const { default: registerBeamerReminder } = await import('../hooks/pre/beamer-checkpoint-reminder.ts');
 
-  for (const factory of [registerDestructive, registerEditAnchor]) {
+  for (const factory of [registerDestructive, registerEditAnchor, registerBeamerReminder]) {
     let handler = null;
     factory({
       on(event, candidate) {

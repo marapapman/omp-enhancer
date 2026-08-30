@@ -14,4 +14,5 @@ For non-trivial work, read `skill://omp-enhancer-workflows` for the domain refer
 A verbatim field or heading lookup needs no workflow or TODO. Main selects workflows, Skills, Agents, and delegation width freely. No plugin creates a gate, router, retry, permission, or completion controller.
 
 A tool call skipped with "Skipped due to pending system advisory" must be retried after the advisory is delivered; keep todo and plan updates in sync.
+Steps and checkpoints named in workflow references and domain Skills are required execution order, not runtime gates: the plugin never blocks or enforces them, but skipping a named checkpoint without a stated reason is a workflow violation.
 <!-- OMP-ENHANCER-WORKFLOW-CONTEXT:END -->

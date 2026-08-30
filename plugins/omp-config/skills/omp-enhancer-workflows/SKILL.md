@@ -36,3 +36,4 @@ Phases: ANALYZE -> EXECUTE -> REVIEW. Main chooses direct work or delegation at 
 1. Match the task to a domain above.
 2. Load matching skills as needed for methods and evidence rules.
 3. Choose the Agents you need from the descriptions above; OMP exposes their current availability.
+4. Load the domain reference before starting matching work; it carries the required step order and checkpoints.

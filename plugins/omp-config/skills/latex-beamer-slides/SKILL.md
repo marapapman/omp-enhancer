@@ -56,7 +56,7 @@ No review verdict grants permission to convert, publish, or complete.
 
 Main only authorizes external effects during initial setup and accepts final delivery; it does not compile, render, modify, reconcile, or mediate the visual loop.
 
-Keep unresolved material template, text, and layout choices visible. Ask the user only when a missing choice materially changes the deck; the text and basic-layout confirmations above are deliberate conversational scope checkpoints, not plugin-owned gates or completion conditions.
+Keep unresolved material template, text, and layout choices visible. Ask the user only when a missing choice materially changes the deck; the text and basic-layout confirmations above are REQUIRED conversational checkpoints. "Not plugin-owned gates or completion conditions" means the runtime never blocks you — it does not mean the confirmations are optional. Skipping either confirmation without a stated reason is a workflow violation; report it in the final delivery.
 
 
 ## Modify an existing deck

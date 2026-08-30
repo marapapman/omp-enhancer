@@ -115,6 +115,11 @@ test('shared catalog and Skill index expose the three workflows while references
     );
     assert.ok(section.includes(`- When: ${definition.chooseWhen}`), `${definition.id} chooseWhen is hidden from Main`);
     assert.ok(section.includes('- Agent candidates:'), `${definition.id} reference must render agent candidates`);
+    assert.match(section, /^## Required step order$/mu, `${definition.id} reference must render required step order`);
+    assert.match(section, /^1\. /mu, `${definition.id} reference must render a numbered first flow step`);
+    if (definition.scopeNotes.length > 0) {
+      assert.match(section, /^## Scope notes$/mu, `${definition.id} reference must render scope notes`);
+    }
     assert.doesNotMatch(section, /- Suggested flow:|- Scope notes:/u, `${definition.id} reference must not render execution or constraint specs`);
     for (const skill of definition.skills) {
       assert.ok(section.includes(`\`${skill}\``), `${definition.id} reference is missing skill ${skill}`);

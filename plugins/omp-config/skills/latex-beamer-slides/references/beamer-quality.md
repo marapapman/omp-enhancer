@@ -78,7 +78,7 @@ For both new decks and bounded modifications, after `task` produces and binds th
 
 ## Basic layout confirmation and refinement
 
-After the first complete layout is rendered, present the current PDF and page renders to the user and wait for user confirmation of the basic layout direction before refinement. This is a conversational scope checkpoint, not a plugin-owned gate or completion condition.
+After the first complete layout is rendered, present the current PDF and page renders to the user and wait for user confirmation of the basic layout direction before refinement. This is a REQUIRED conversational checkpoint. "Not a plugin-owned gate or completion condition" means the runtime never blocks you — it does not mean the confirmation is optional.
 
 After that confirmation, preserve the current multi-pass visual evidence chain. Each explicit refinement round uses fresh current-revision evidence: visual review, a supported designer correction, task rerendering, and a new visual review. Main decides whether another bounded round is useful; findings remain advisory, no unchanged artifact is reviewed, and no automatic repair loop is created.
 

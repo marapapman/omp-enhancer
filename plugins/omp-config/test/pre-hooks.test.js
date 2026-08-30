@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import registerDestructiveCommandAdvisory from '../hooks/pre/guard-destructive.ts';
 import registerEditAnchorAdvisory from '../hooks/pre/edit-anchor-guard.ts';
+import registerBeamerCheckpointReminder from '../hooks/pre/beamer-checkpoint-reminder.ts';
 
 function registeredToolCallHandler(factory) {
   let handler = null;
@@ -61,4 +62,43 @@ test('edit anchor hook warns without blocking malformed edit anchors', async () 
   assert.equal(warnings[0].level, 'warning');
   assert.match(warnings[0].message, /锚点 "5" 缺少 hash 后缀/);
   assert.match(warnings[0].message, /仅供参考，不会阻止工具调用/);
+});
+
+
+test('Beamer checkpoint hook reminds once per source path without blocking writes', async () => {
+  const warnings = [];
+  const handler = registeredToolCallHandler(registerBeamerCheckpointReminder);
+  const beamerContent = String.raw`\documentclass{beamer}
+\begin{frame}{Title}
+Body
+\end{frame}`;
+
+  const firstResult = await handler(
+    { toolName: 'write', input: { path: 'deck.tex', content: beamerContent } },
+    warningContext(warnings),
+  );
+
+  assert.equal(firstResult, undefined);
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0].level, 'warning');
+  assert.match(warnings[0].message, /slides-storyline/);
+  assert.ok(warnings[0].message.includes('skill://omp-enhancer-workflows/references/writing.md'));
+
+  assert.equal(await handler(
+    { toolName: 'write', input: { path: 'deck.tex', content: beamerContent } },
+    warningContext(warnings),
+  ), undefined);
+  assert.equal(warnings.length, 1);
+
+  assert.equal(await handler(
+    { toolName: 'write', input: { path: 'notes.md', content: beamerContent } },
+    warningContext(warnings),
+  ), undefined);
+  assert.equal(warnings.length, 1);
+
+  assert.equal(await handler(
+    { toolName: 'write', input: { path: 'plain.tex', content: String.raw`\documentclass{article}\nPlain text` } },
+    warningContext(warnings),
+  ), undefined);
+  assert.equal(warnings.length, 1);
 });
