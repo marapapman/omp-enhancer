@@ -1314,6 +1314,9 @@ test('Beamer precheck fixture shape stays temporary and PowerPoint conversion re
     /task.+(?:initial.+render|render.+initial).+single read-only visual precheck.+before.+designer.+final.+current revision.+visioner/isu,
   );
   assert.match(scenario.prompt, /PowerPoint.+exact.+conversion command/isu);
+  assert.match(scenario.prompt, /text-only.+section-sized.+every page.+user.+confirmation/isu);
+  assert.match(scenario.prompt, /after that confirmation.+add visuals.+page by page.+basic layout.+shorten.+complete sentences.+phrases/isu);
+  assert.match(scenario.prompt, /basic-layout confirmation.+before entering.+visual refinement/isu);
   assert.match(scenario.prompt, /no conversion command.+do not convert/isu);
   assert.deepEqual(scenario.expectations.requiredNativeTaskAssignmentTextBounds, [
     {

@@ -14,9 +14,23 @@ Turn the user's material into an explicit presentation story before authoring sl
 
 ## Establish the brief
 
-1. Reuse information already provided. Ask only for missing choices that materially change the deck.
+1. Reuse information already provided. Ask only when a missing choice materially changes the deck.
 2. Establish the audience, purpose, setting, duration or target slide count, output language, single key takeaway, required topics, source material, and call to action or teaching outcome.
 3. Separate supported facts from ideas that still need evidence. Do not invent examples, citations, numbers, results, or quotations to fill a narrative gap.
+
+## Provisional technical story scaffold
+
+When the deck explains a technical system or research contribution, start with this provisional default narrative scaffold:
+
+1. **Background.** Establish the setting, problem, and reason the topic matters.
+2. **Existing limitations.** Describe what current approaches cannot explain, support, or deploy, using evidence rather than generic criticism.
+3. **Core idea.** State the central idea and explicitly connect it to the existing limitations it is meant to address.
+4. **Concrete technical method.** Explain the system design, key components, data or control flow, and implementation choices needed to realize the core idea.
+5. **Technical experimental effects.** Present the technical evaluation, comparison, ablation, or other evidence that shows what the method changes.
+6. **System deployment effects.** Explain what happens when the method is integrated into a real system, including operational impact, application value, or remaining deployment limits.
+
+This is a provisional starting scaffold, not a fixed order or final outline. Discuss it with the user and turn it into the specific framework and content outline for this deck. Adapt or replace it with the user's material, audience, and purpose; split, merge, or reorder sections when the evidence requires that change.
+Use the scaffold as provisional per-slide slots: Background provides context, Existing limitations provides the tension or question, Core idea provides the explanation or evidence, Concrete technical method provides the mechanism, Technical experimental effects provides evidence or demonstration, and System deployment effects provides synthesis or action. Discuss this mapping with the user before committing the specific framework and content outline.
 
 ## Shape the story
 
@@ -25,8 +39,17 @@ Turn the user's material into an explicit presentation story before authoring sl
 3. Budget time and density. Reserve space for title, transitions, examples, demonstrations, recap, discussion, and references when they serve the talk.
 4. Keep claims, terminology, examples, and visual ideas traceable to the user's sources or mark them as decisions still needed.
 
-## Commit the working outline
+## Text-only page draft
 
-Present a numbered outline with, for each slide, its working title, narrative job, key content or evidence, and likely visual form. State explicit assumptions and decisions that remain reversible.
+Before selecting images, authoring visuals, or writing layout code, produce a text-only page draft in section-sized batches. The batch size is a communication convenience; discuss every page.
 
-When the user requested the complete deck and the supplied brief is sufficient, commit this working outline to Main's plan and continue. Ask only when a missing choice materially changes the deck and cannot be resolved from the request or project context. User feedback may revise the outline, but a second approval is not an automatic completion gate. Do not write a storyline file unless the user requests one or the project already uses one. For Chinese outlines, follow `plain-chinese-writing`; for English outlines, apply the current English writing rules.
+1. For each page, provide its working title, narrative job, detailed body text, evidence or source basis, and a prose description of the intended visual role. Do not create or select the actual visual asset at this stage.
+2. Write the body, captions, and explanations as complete natural-language sentences or paragraphs. Do not replace them with isolated phrases, keyword strings, or phrase-only bullet lists. A title may be concise, but it should state a complete thought when it carries the page's claim.
+3. For Chinese slide text, when Main has declared and supplied the methods, apply `plain-chinese-writing` for direct and natural prose, `zh-format-humanizer` for evidence-based AI-like phrasing removal, and `zh-writing-review` for page-level clarity. Preserve facts, qualifiers, numbers, citations, and causal direction.
+4. Discuss the draft page by page with the user. Revise the current batch from the user's feedback and keep unresolved content decisions visible instead of silently choosing them.
+
+## Confirm the text plan
+
+Present a numbered outline as the complete numbered page draft after the page-level discussion. State explicit assumptions and decisions that remain reversible. Wait for user confirmation before visual authoring begins. The user may confirm a batch after its pages are clear, but no page may enter the visual stage with unresolved content approval.
+
+This confirmation is a conversational scope checkpoint requested by the user, not a plugin-owned gate or permission system. Once the text plan is confirmed, continue to visual authoring without asking for a second approval of the same text. Do not write a storyline file unless the user requests one or the project already uses one.

@@ -18,6 +18,14 @@ Static files alone do not prove success. Compile the smallest representative dec
 
 When readiness is incomplete, discuss the missing decisions with the user. Do not silently copy a familiar institutional template or logo into an unrelated project.
 
+## Text-first content stage
+
+For a new deck, complete the text-only page draft before visual authoring. Work in section-sized batches, but discuss every page with the user. Each page must include a detailed body, evidence or source basis, and a prose description of its visual role without creating or selecting the actual asset.
+
+Write body text, captions, and explanations as complete natural-language sentences or paragraphs. Do not replace them with isolated phrases, keyword strings, or phrase-only bullet lists. For Chinese slide text, apply `plain-chinese-writing` for natural prose, `zh-format-humanizer` for evidence-based AI-like phrasing removal, and `zh-writing-review` for page-level clarity when available. Use `zh-writing-polish` only for actual polishing. Preserve facts, qualifiers, numbers, citations, and causal direction.
+
+Wait for user confirmation of the page content before adding images, authoring visuals, or performing layout. The density rules below apply after that confirmation; they must not turn the text-only draft into keyword fragments.
+
 ## Generation structure
 
 Prefer a stable main file that contains metadata, theme setup, document structure, and ordered `\input` statements. Store one frame per source file when that matches the project. Use sortable names such as `001-topic.tex`.
@@ -67,5 +75,11 @@ For a new deck, review every full-resolution page and the deck overview. For a b
 ## Single visual precheck
 
 For both new decks and bounded modifications, after `task` produces and binds the initial task-bound render and before `designer`'s layout pass, use exactly one owner—`task` or Main—chosen by Main according to which completed the artifact and has native visual input—to perform the single read-only visual precheck. Use only the same current revision evidence. Record advisory findings only: page, region, criterion, evidence, impact, and limitations. Findings are inputs to the designer's normal layout pass; the precheck has no final verdict. If Main is that owner, its read-only inspection does not grant compile, render, edit, or reconcile ownership.
+
+## Basic layout confirmation and refinement
+
+After the first complete layout is rendered, present the current PDF and page renders to the user and wait for user confirmation of the basic layout direction before refinement. This is a conversational scope checkpoint, not a plugin-owned gate or completion condition.
+
+After that confirmation, preserve the current multi-pass visual evidence chain. Each explicit refinement round uses fresh current-revision evidence: visual review, a supported designer correction, task rerendering, and a new visual review. Main decides whether another bounded round is useful; findings remain advisory, no unchanged artifact is reviewed, and no automatic repair loop is created.
 
 Record warnings honestly. Do not report visual QA from compilation alone. Source inspection, designer self-review, an old render, or a contact sheet without inspectable page renders cannot substitute for current-revision `visioner` evidence.

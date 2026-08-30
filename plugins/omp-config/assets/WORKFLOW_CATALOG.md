@@ -1,19 +1,20 @@
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->
-# OMP Enhancer Workflow Catalog v35
+# OMP Enhancer Workflow Catalog v36
 
 Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIEW.
 
 ## `writing`
 
 - When: Prose drafting, revision, translation, or format conversion in any language (English, Chinese) or format (LaTeX, Markdown, Beamer, Word).
-- Skills: `writing-review`, `plain-chinese-writing`, `writing-markdown-helper`, `zh-writing-markdown-helper`, `format-markdown2latex`, `format-latex2markdown`, `format-template-latex`, `latex-beamer-slides`, `beamer-to-powerpoint`, `slides-storyline`, `docx`
+- Skills: `writing-review`, `plain-chinese-writing`, `zh-format-humanizer`, `zh-writing-review`, `zh-writing-polish`, `writing-markdown-helper`, `zh-writing-markdown-helper`, `format-markdown2latex`, `format-latex2markdown`, `format-template-latex`, `latex-beamer-slides`, `beamer-to-powerpoint`, `slides-storyline`, `docx`
 - Agents: `writer`, `zh-writer`, `checker`, `zh-checker`, `task`
 - Flow:
   1. Identify target language (zh/en) and format (plain/LaTeX/Markdown/Beamer/Word).
   2. Load matching language and format skills.
   3. Draft or revise via writer/zh-writer for substantial work, or directly for minor edits.
-  4. Check via checker/zh-checker for substantial work; Main checks minor edits directly.
-  5. Deliver with preservation and consistency verification.
+  4. For new Beamer decks, draft and discuss page content in section-sized text-only batches, confirm each page with the user, and only then begin visual authoring.
+  5. Check via checker/zh-checker for substantial work; Main checks minor edits directly.
+  6. Deliver with preservation and consistency verification.
 
 ## `research`
 

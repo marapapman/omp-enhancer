@@ -12,7 +12,7 @@ OMP 负责系统提示、用户指令、active tools、动态 Available Agents�
 
 ## 工作流信息
 
-工作流 definition 位于 `scripts/workflow-definitions.js`，校验和渲染模块分别是 `scripts/workflow-schema.js` 与 `scripts/workflow-render.js`。当前 catalog version 35 只有三个域：`writing`、`research`（事实核查）和 `visual`。
+工作流 definition 位于 `scripts/workflow-definitions.js`，校验和渲染模块分别是 `scripts/workflow-schema.js` 与 `scripts/workflow-render.js`。当前 catalog version 36 只有三个域：`writing`、`research`（事实核查）和 `visual`。
 
 生成器 `scripts/generate-workflow-catalog.js` 输出：
 
@@ -41,7 +41,7 @@ Writing 域根据目标正文语言选择中文或英文 Skill，根据目标格
 
 PPT 相关能力由 `omp-config` 打包，包括 `latex-beamer-slides`、`beamer-to-powerpoint`、`slides-storyline`、`frontend-design`、`canvas-design` 和 `docx`。PowerPoint 转换只使用用户提供的具体转换命令，并验证生成的 artifact；不自动发布或覆盖用户文件。
 
-Beamer 保持为 writing 格式 overlay，不进入 visual 卡片。A single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before the designer layout pass；findings are advisory only and inform the normal designer pass，不产生 verdict 或 repair loop。Task then integrates and renders the final revision，visioner independently reviews fresh final evidence。Main 不因该预检获得 compile、render、edit 或 reconcile ownership。
+Beamer 保持为 writing 格式 overlay，不进入 visual 卡片。新 deck 先以分段、逐页讨论的纯文字版开始，用户确认每页内容后，才进入逐页配图、基础排版和语义保真的文字精简；用户确认基础排版后，再进入现有视觉精修链。A single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before the designer layout pass；findings are advisory only and inform the normal designer pass，不产生 verdict 或 repair loop。Task then integrates and renders the final revision，visioner independently reviews fresh final evidence。Main 不因该预检获得 compile、render、edit 或 reconcile ownership。
 
 visual-delivery: Draw.io pipeline remains unchanged：`designer` draws the diagram once with `drawio-skill` (drawio@365-skills) and exports a draft PNG；`visioner` reviews that exported PNG read-only in one pass，检查 edges pressed onto each other or crossing through boxes；`designer` applies at most one fix round；这是 advisory，不是 hard gate、router、fixed fanout、automatic loop 或 completion authority。Main retains setup authorization and final acceptance only。画图统一走 drawio@365-skills。
 

@@ -15,7 +15,7 @@ test('Beamer generation checks the template before committing a story and author
   const inspectTemplate = generation.indexOf('Inspect template readiness');
   const discussTemplate = generation.indexOf('If the template is not configured');
   const discussStory = generation.indexOf('apply the PLAN-loaded `slides-storyline`');
-  const generateFrames = generation.indexOf('Generate the deck from the committed template and outline');
+  const generateFrames = generation.toLowerCase().indexOf('generate the deck from the committed template and outline');
   const renderQa = generation.indexOf('Have `task` compile with the native engine');
   const visualPrecheck = generation.indexOf('single read-only visual precheck');
   const designerLayout = generation.indexOf('Have `designer` perform the final layout pass');
@@ -132,17 +132,77 @@ test('Beamer modification stays bounded to language and existing style', async (
   assert.match(skill, /`writing-review`/);
 });
 
-test('slides storyline commits a numbered outline and asks only on material ambiguity', async () => {
+test('slides storyline defines a text-only per-page confirmation phase', async () => {
   const skill = await readFile(storylineSkillUrl, 'utf8');
 
   assert.match(skill, /audience, purpose, setting, duration or target slide count, output language/i);
   assert.match(skill, /Do not invent examples, citations, numbers, results, or quotations/i);
   assert.match(skill, /Present a numbered outline/i);
+  assert.match(skill, /text-only page draft/i);
+  assert.match(skill, /page by page|one page at a time/i);
+  assert.match(skill, /complete natural-language sentences or paragraphs/i);
+  assert.match(skill, /user confirmation.+before visual authoring/is);
+  assert.match(skill, /plain-chinese-writing/i);
+  assert.match(skill, /zh-format-humanizer/i);
   assert.match(skill, /ask only when a missing choice materially changes the deck/i);
   assert.match(skill, /explicit assumptions/i);
-  assert.doesNotMatch(skill, /until the user (?:confirms|approves)|ask the user to approve/i);
   assert.match(skill, /Do not use for ordinary edits to an existing deck/i);
 });
+
+test('slides storyline starts technical decks with a provisional six-part scaffold', async () => {
+  const skill = await readFile(storylineSkillUrl, 'utf8');
+  const briefStart = skill.indexOf('## Establish the brief');
+  const scaffoldStart = skill.indexOf('## Provisional technical story scaffold');
+  const shapeStart = skill.indexOf('## Shape the story');
+  const scaffold = markdownSection(skill, 'Provisional technical story scaffold');
+  const labels = [
+    'Background',
+    'Existing limitations',
+    'Core idea',
+    'Concrete technical method',
+    'Technical experimental effects',
+    'System deployment effects',
+  ];
+
+  assert.ok(briefStart >= 0);
+  assert.ok(scaffoldStart > briefStart);
+  assert.ok(shapeStart > scaffoldStart);
+  let previous = -1;
+  for (const label of labels) {
+    const position = scaffold.indexOf(label);
+    assert.ok(position > previous, `missing or out-of-order scaffold item: ${label}`);
+    previous = position;
+  }
+  assert.match(scaffold, /provisional.+starting scaffold.+adapt or replace.+user/is);
+  assert.match(scaffold, /existing limitations.+tension|core idea.+explanation.+evidence/is);
+  assert.match(scaffold, /discuss.+user.+specific framework.+content outline/is);
+  assert.match(scaffold, /adapt|split|merge|reorder/i);
+  assert.doesNotMatch(scaffold, /fixed outline|mandatory order|must use this exact order/i);
+});
+
+test('new Beamer work stages text confirmation before visual authoring and layout refinement', async () => {
+  const skill = await readFile(slidesSkillUrl, 'utf8');
+  const generation = markdownSection(skill, 'Generate a new deck');
+  const textStage = generation.indexOf('Phase 1: Text-only content');
+  const visualStage = generation.indexOf('Phase 2: Visual authoring');
+  const baseLayout = generation.indexOf('Confirm the basic layout');
+  const refinement = generation.indexOf('existing visual review and refinement path');
+
+  assert.ok(textStage >= 0);
+  assert.ok(visualStage > textStage);
+  assert.ok(baseLayout > visualStage);
+  assert.ok(refinement > baseLayout);
+  assert.match(generation, /section-sized batches.+each page.+complete.+sentences or paragraphs/is);
+  assert.match(generation, /discuss.+page by page.+wait for the user.+confirmation/is);
+  assert.match(generation, /do not.+(?:add images|perform layout|author visuals).+before.+confirmation/is);
+  assert.match(generation, /for every page.+(?:select|create|place).+visual/i);
+  assert.match(generation, /shorten|condense|精简/i);
+  assert.match(generation, /never convert.+(?:phrases|keywords).+body text/is);
+  assert.match(generation, /Confirm the basic layout.+before.+refinement/is);
+  assert.match(generation, /existing visual review and refinement path.+advisory/is);
+});
+
+
 
 test('Beamer visual review is advisory and never an automatic repair controller', async () => {
   const skill = await readFile(slidesSkillUrl, 'utf8');
@@ -184,6 +244,11 @@ test('Beamer quality reference covers compile and rendered-slide evidence', asyn
   assert.match(reference, /same current revision.+advisory findings.+page.+region.+criterion.+evidence.+impact.+limitations/is);
   assert.match(reference, /does not grant.+compile, render, edit, or reconcile ownership/is);
   assert.doesNotMatch(reference, /parallel|dual|async|disagreement|findings merge|fallback/i);
+  assert.match(reference, /text-only page draft.+section-sized batches.+complete natural-language sentences or paragraphs/is);
+  assert.match(reference, /Do not replace.+isolated phrases.+keyword strings.+phrase-only bullet lists/is);
+  assert.match(reference, /Chinese slide text.+plain-chinese-writing.+zh-format-humanizer.+zh-writing-review/is);
+  assert.match(reference, /basic layout.+user.+confirmation.+before.+refinement/is);
+  assert.match(reference, /multiple explicit.+refinement rounds|current multi-pass.+visual evidence/is);
 });
 
 test('Beamer skill supplies layout specialization while visioner reviews fresh rendered slides read-only', async () => {

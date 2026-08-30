@@ -20,8 +20,8 @@ const workflowIds = Object.freeze(workflowDefinitions.map(({ id }) => id));
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['plan', 'scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
-test('catalog v35 defines exactly the three advisory workflows (writing, research, visual)', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 35);
+test('catalog v36 defines exactly the three advisory workflows (writing, research, visual)', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 36);
   assert.equal(workflowDefinitions.length, 3);
   assert.deepEqual(workflowIds, ['writing', 'research', 'visual']);
   for (const definition of workflowDefinitions) {
@@ -60,9 +60,11 @@ test('writing card keeps Beamer conversion direct and command-conditional', () =
     flow,
     /single read-only visual precheck.+Main or task.+(?:initial render|initial revision).+before designer layout/iu,
   );
+  assert.match(scope, /new Beamer decks.+text-only.+confirmation.+visual authoring.+(?:basic|base) layout/iu);
+  assert.match(flow, /plain-chinese-writing.+zh-format-humanizer.+zh-writing-review/iu);
 });
 
-test('packaged catalog, index, and all references expose catalog v35 advisory content', async () => {
+test('packaged catalog, index, and all references expose catalog v36 advisory content', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -70,7 +72,7 @@ test('packaged catalog, index, and all references expose catalog v35 advisory co
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /# OMP Enhancer Workflow Catalog v35/);
+  assert.match(catalog, /# OMP Enhancer Workflow Catalog v36/);
   assert.match(skillIndex, /Phases: ANALYZE -> EXECUTE -> REVIEW/iu);
   assert.match(skillIndex, /Advisory reference only/i);
   assert.equal(referenceNames.length, 3);
@@ -81,7 +83,7 @@ test('packaged catalog, index, and all references expose catalog v35 advisory co
   );
 });
 
-test('shared catalog and Skill index expose the five domains while references carry advisory cards', async () => {
+test('shared catalog and Skill index expose the three workflows while references carry advisory cards', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const agents = await readFile(new URL('../plugins/omp-config/assets/AGENTS.md', import.meta.url), 'utf8');

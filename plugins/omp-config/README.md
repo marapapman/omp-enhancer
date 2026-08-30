@@ -1,173 +1,50 @@
 # OMP Config
 
-`omp-config` packages the baseline OMP configuration assets from the source `omp-config` repository as installable plugin content.
+`omp-config` packages shared OMP workflow references, configuration templates, the read-only `visioner` Agent, notify-only hooks, and configuration diagnostics.
 
 ## Contents
 
-- `assets/CLAUDE.md` and root or agent config templates.
-- `assets/WORKFLOW_CATALOG.md` is the generated workflow catalog for explicit synchronization and human inspection. Its semantic source lives in `omp-enhancer-core/src/workflows/definitions`; do not edit this asset by hand.
-- `skills/omp-enhancer-workflows/` publishes a compact selection table and one on-demand reference card per workflow. The table keeps exact IDs, full Primary conditions, literal card URIs, top-level `D` Skill URIs, and enumerated nested ECC `C` Skill URIs. It guides Main to declare its workflow/Skill plan, load selected resources, and rebase its own detailed TODO; it does not select a workflow, create a runtime gate, require delegation, activate tools, grant permission, or decide completion.
-- `skills/ecc/SKILL.md` publishes one top-level `ecc-skill-catalog` adapter, and `skills/ecc/catalog.md` indexes 255 nested ECC guides for exact, on-demand reads.
-- `assets/AGENTS.md` adds a compact Agent-owned staged plan/load/TODO contract and conditional handoff trace. `assets/WATCHDOG.yml` lets Advisor spend one early ordinary note coaching that contract while retaining its evidence and send limits. Neither imports `OMP_ENHANCER_WORKFLOW_CATALOG.md` nor appends the full catalog to a system prompt.
-- `assets/config.yml` and `assets/mcp.json` remain templates only. The config template carries no concrete `modelRoles` defaults; model selection stays with OMP and the acting Agent.
-- `agents/`, `skills/`, and notify-only `hooks/` copied from the config source. For ordinary code work, Config contributes only the read-only `plan` role; OMP's native `task` owns implementation slices and native `reviewer` remains the semantic-diff reviewer, so neither native role is shadowed. Other packaged Agents are retained only for distinct network, security, visual, or open-source boundaries.
-- `skills/code-development/` is the single general code-process Skill. It covers local and decision-relevant external search, detailed parallel-wave planning, plan review, native task-owned vertical TDD, Main integration and `MAIN REVIEW`, and bounded semantic review/repair; `references/omp-enhancer.md` adds repository-specific generation, packaging, and installed-E2E guidance only when applicable.
-- `hook-templates/` packages generic helper libraries (for example, tool-result redaction and truncation) for optional hook templates; they are not auto-discovered. To use one, copy the helper and the template that references it into a live hook directory.
-- Slash command content for `/omp-config:config`, `/omp-config:config-doctor`, and `/omp-config:config-assets`.
-- Default-inactive runtime tools for extension loading: `omp_config_doctor`, `omp_config_assets`, `omp_config_plan`, and `omp_config_sync_workflow_context`.
+- `assets/WORKFLOW_CATALOG.md` is generated from `scripts/workflow-definitions.js` and contains the three advisory workflow cards for catalog v36.
+- `skills/omp-enhancer-workflows/` publishes the compact domain index and on-demand `writing`, `research`, and `visual` reference cards.
+- `skills/latex-beamer-slides/` and `skills/slides-storyline/` define the staged Beamer deck workflow. `skills/beamer-to-powerpoint/` handles conversion only when the user supplies an exact command.
+- `skills/frontend-design/`, `skills/canvas-design/`, and `skills/docx/` are adjacent visual or document methods, not native PPTX generators.
+- `agents/visioner.md` is a read-only visual reviewer for current slide renders, UI screenshots, and static exports.
+- `assets/AGENTS.md` and `assets/WATCHDOG.yml` contain compact advisory context. They do not import the full workflow catalog or create runtime gates.
+- `assets/config.yml` and `assets/mcp.json` are templates. Model selection remains with OMP and the user.
+- `hook-templates/` contains optional helpers and is not auto-discovered.
+- Runtime tools are default-inactive: `omp_config_doctor`, `omp_config_assets`, `omp_config_plan`, and `omp_config_sync_workflow_context`.
 
-## Safety
+## Staged Beamer/PPT workflow
 
-This package does not automatically overwrite `~/.omp`. Treat the packaged files as templates and review any patch plan before applying changes to a live OMP home.
+Beamer is a `writing` format overlay, not the `visual` workflow.
 
-`omp_config_sync_workflow_context` defaults to dry-run. It manages the dedicated `OMP_ENHANCER_WORKFLOW_CATALOG.md` file and marker-delimited blocks in `AGENTS.md` and `WATCHDOG.yml`; unrelated `AGENTS.md` and Advisor content is preserved. The catalog file is synchronized for optional reference, but the managed blocks do not import it. The catalog itself also carries managed markers, and sync refuses to overwrite a same-named user-owned file without them. Set `apply: true` only after reviewing the reported target and actions. The sync rejects incomplete managed markers, unsupported non-literal Advisor instructions, and symlinked destination files rather than guessing.
+1. **Text-only content.** Build the deck in section-sized batches and discuss every page with the user. Each page gets a title, narrative job, detailed body, evidence or source basis, and a prose description of its visual role. Body text, captions, and explanations use complete natural-language sentences or paragraphs rather than isolated phrases or keyword strings. Chinese text uses `plain-chinese-writing`, `zh-format-humanizer`, and `zh-writing-review` when available.
+2. **Visual authoring and basic layout.** Only after the user confirms the page content, add or create the visual asset for each page, establish the base composition, and shorten text only when needed to fit while preserving meaning and semantic anchors. After the first complete layout is rendered, ask the user to confirm the basic layout direction.
+3. **Layout refinement.** After basic-layout confirmation, use the existing current-revision visual evidence chain: one advisory precheck owned by Main or task, designer layout, task integration and fresh rendering, and independent visioner review. Supported findings may receive the existing bounded fix and fresh-review pass; no automatic repair loop is created.
 
-The auto-discovered destructive-command and malformed edit-anchor guard hooks
-are advisory-only: they produce UI warnings, do not rewrite input or output,
-and never return `block: true`. `hook-templates/` packages generic helper
-libraries (for example, tool-result redaction and truncation) for optional
-hook templates; they run only after a user explicitly installs the chosen
-helper together with a template that references it. The plugin does
-not activate them automatically, and they are not permission gates. The helpers
-are model-agnostic and carry no provider or model-id gating.
-Bundled agents do not declare `blocking: true`, and the config template disables
-`loopGuard` plus compaction `autoContinue` by default. Host sandboxing, approval,
-and system safety policy remain independent of this plugin.
+PowerPoint conversion is conditional. The user must provide the exact conversion command. The plugin does not choose LibreOffice, Pandoc, an online converter, or another replacement, and it does not claim editability or visual fidelity without checking the output.
 
-The packaged Main and Advisor blocks explicitly defer to OMP's native system
-prompt, settings, active tools, dynamic Available Agents list, approval flow,
-and completion behavior. For non-trivial PROJECT work, Main reads the
-`skill://omp-enhancer-workflows` reference catalog (5 domains: code, writing,
-research, visual, operations) and selects the matching domain and Skills as
-needed; a mechanical field lookup without analysis uses no Skill or TODO. Main
-orchestrates through ANALYZE -> EXECUTE -> REVIEW: it analyzes directly for
-focused work or delegates to the `analyzer` agent for complex multi-slice work,
-executes directly for simple changes or delegates to `task`/domain agents for
-substantial work, and reviews simple changes directly or delegates to
-`reviewer` for complex or risky changes. The reference cards are advisory; Main
-selects workflows, Skills, Agents, and delegation width freely, and the
-guidance creates no runtime route, gate, permission, dispatch, or completion
-decision.
+## Runtime boundaries
 
-Every selected workflow is advisory: Main chooses delegation width by task
-complexity. Main prefers a domain Agent named by the selected card, then
-generic native `task`; it batches runnable independent checkpoints and preserves
-dependency order for sequential checkpoints. Main retains the parent TODO,
-integration, final verification, permissions, and external effects. User-required
-Main-only work, unavailable Agent/capacity, incomplete assignment input, or
-unsafe dependencies/write overlap must be recorded as a direct-fallback
-limitation. This chooses no Agent or fork width and creates no gate.
+- OMP remains authoritative for tools, permissions, approvals, delegation, and completion.
+- Workflow cards and review findings are advisory. They do not route, block, grant permission, or decide completion.
+- `writer` and `zh-writer` assignments remain proposal-only; Main or an explicitly capable native Agent owns authorized file effects.
+- `visioner` is read-only and returns `APPROVED | CHANGES_REQUIRED | UNREVIEWABLE` for the supplied current revision.
+- Extension tools are inactive by default. `/enhancer-tools enable <config|writing|fact|all>` exposes schemas but does not grant permissions.
 
-For substantive code mutation, Main searches enough local code and, when relevant, current official/community evidence to write a detailed plan of dependency-ordered waves and non-overlapping vertical slices. For complex multi-slice work, the `analyzer` agent drafts the complete parallel plan from Main's frozen brief; Main reviews it and may dispatch `reviewer` to audit it before production mutation. Main submits all runnable independent slices in one wave through one native `task` `tasks[]` batch; each task owns test mutation, valid RED, minimal production, same-command GREEN, and refactor. Main waits, integrates and runs broader current-tree verification, then dispatches the Main-reviewed bounded diff/evidence to native `reviewer`. Main validates findings; supported material repair returns to native `task`, followed by refreshed evidence and at most one fresh affected review. Missing Agents/capacity or an unsafe split produces an explicit fallback limitation, not a fixed fan-out, router, gate, or automatic loop.
+## Configuration sync
 
-The Advisor block adds only low-noise assistance and evidence rules:
-it does not infer Main capabilities from Advisor's narrower tool schema, defaults
-to one consolidated ordinary note per primary task, closes that ordinary window
-at Main's first native `task` call or substantive project action, and suppresses
-late nits after a complete Main final while preserving native `blocker` delivery.
-It may emit one `DECISION CHECK (optional)` tuple identifying a missing plan,
-undeclared resource, Skill-plan or TODO-plan mismatch, missing Primary,
-collapsed Add-on, reopened fork decision, missing delegation-or-fallback disposition for a selected subagent-driven card, or assignment-schema risk. Main may
-accept, adjust, or ignore it. The Advisor cannot guess unseen IDs, choose an
-Agent or fork width, or require redispatch solely for metadata. These are model-behavior instructions, not a
-runtime guarantee; live workflow, Skill, TODO, and fork observations remain stochastic model samples. The blocks do not change host approval, block a tool call,
-or schedule an Agent continuation.
+`omp_config_sync_workflow_context` defaults to dry-run. It preserves content outside managed markers in target `AGENTS.md` and `WATCHDOG.yml`, refuses unsafe symlinked destinations, and only applies changes when `apply: true` is explicit. Session-start synchronization is idempotent and non-fatal.
 
-When Main visibly treats multiple exact targets as indivisible only because it
-will compare them later, they share a repository, or it prefers to retain
-context, Advisor may use that same one-note budget to ask Main to reapply OMP's
-native independence test. Advisor still does not choose the Agent or fork width.
+## Development
 
-The companion Core plugin may emit a scoped orchestration advisory for a
-top-level Main task; those messages do not alter this package's prompt assets. They
-reinforce `ANALYZE -> EXECUTE -> REVIEW`: Main is the orchestrator, analyzes directly
-for focused work or delegates to `analyzer` for complex multi-slice work, executes
-directly or delegates to `task`/domain agents, and reviews directly or delegates to
-`reviewer` for complex or risky changes; for non-trivial work it may read the
-`skill://omp-enhancer-workflows` reference catalog (5 domains) and load matching
-Skills. Its stored attribution is `user`, while OMP presents
-ordinary custom-hook messages as supplemental developer context, so it explicitly
-yields to the user instruction and native OMP contracts.
+After changing workflow definitions or renderers, run:
 
-The message includes catalog navigation only when that Skill is visible, and
-task-shape or candidate facts only when the corresponding native capability is active
-and allowed. Main owns the detailed plan, native Agent choice, slice width,
-integration, and review decisions. The message does not return or replace
-`systemPrompt`, provide or autoload a Skill, change the native `task` schema or active
-tools, select a workflow, Agent, fork, reviewer count, dispatch, permission, or
-completion condition. Other provider/model tuples, subagents, and Advisor do not
-receive it.
-
-`/model` changes the active session model. The primary request path does not run a
-plugin router or inject a catalog. OMP owns the request workflow. Analytical,
-judgment, composition, coordination, and possible-delegation work uses
-`omp-enhancer-workflows` only as a reference catalog, then loads the smallest
-selected exact `D`/`C` domain Skill set or an unlisted long-tail catalog chain when
-useful; mechanical field lookup uses no Skill. Main still chooses every workflow,
-Agent, Skill, and execution action.
-
-## Commands
-
-- `/omp-config:config` explains the package contents.
-- `/omp-config:config-doctor` asks the runtime tool to inspect packaged config risks.
-- `/omp-config:config-assets` asks the runtime tool to list packaged content.
-
-## Bundled Skills
-
-The plugin ships `skills/` as plugin content, declares it through `pi.skills`,
-and lists its filesystem inventory in the root marketplace catalog. OMP 17's
-normal plugin discovery is deliberately shallower than that inventory: it
-directly discovers only `<plugin>/skills/<child>/SKILL.md`. A nested path such
-as `skills/ecc/accessibility/SKILL.md` is not registered as an independent
-prompt-visible Skill.
-
-For this reason, OMP sees `skills/ecc/SKILL.md` as the single top-level
-`ecc-skill-catalog`. Its 255 nested guides stay out of the permanent system
-prompt. The compact workflow index may nevertheless enumerate a relevant nested
-guide as an exact `C` URI such as
-`skill://ecc-skill-catalog/network-config-validation/SKILL.md`; Main copies a
-selected `C` directly into PLAN/NOW without first reading the full catalog. Only
-an unlisted long-tail need starts with `skill://ecc-skill-catalog`, then follows
-exact URIs visibly disclosed by that loaded source. Do not bulk-load the guides or guess a
-nested URI.
-
-The marketplace `skills` array still recursively lists every directory that
-contains `SKILL.md`, including nested ECC paths. That recursive inventory is
-used by repository validation and the explicitly invoked
-`omp_core_install_skills` compatibility installer; it is not evidence that OMP
-17 directly registers all nested guides during normal plugin discovery. Treat
-the filesystem and generated inventory as authoritative rather than maintaining
-category subtotals by hand.
-
-## Runtime tools
-
-When the extension entrypoint is loaded, the plugin registers the following tools with `defaultInactive: true`:
-
-| Tool | Purpose |
-| --- | --- |
-| `omp_config_doctor` | Reports hardcoded home-path portability risks in the packaged config template without modifying files. |
-| `omp_config_assets` | Lists packaged agents, skills, hooks, and config templates. |
-| `omp_config_plan` | Produces a manual review plan before applying templates to a target OMP home. |
-| `omp_config_sync_workflow_context` | Dry-runs or explicitly applies the optional catalog asset and managed context blocks to a target OMP agent directory. |
-
-They do not enter the default active-tool set. With `omp-enhancer-core` loaded,
-activate them explicitly for the current session with
-`/enhancer-tools enable config`, inspect with `/enhancer-tools status`, and
-disable them again with `/enhancer-tools disable config`. Activation does not
-bypass each tool's read/write approval class.
-
-Example preview and explicit apply tool inputs:
-
-```json
-{"target":"/home/example/.omp/agent"}
+```bash
+npm run generate:workflows
+npm run check:workflows
+npm test --workspace plugins/omp-config
+npm run check:marketplace
 ```
 
-```json
-{"target":"/home/example/.omp/agent","apply":true}
-```
-
-The target defaults to `PI_CODING_AGENT_DIR` when set, otherwise `~/.omp/agent`.
-
-## Validation
-
-Use `npm run pack:dry` from this directory to verify the package includes the copied assets and plugin metadata. From the repository root, run `npm run generate:ecc-skills` after adding, removing, or changing nested ECC guide metadata, and use `npm run check:ecc-skills` in validation to reject stale `SKILL.md` or `catalog.md` adapter output.
+Do not hand-edit generated workflow assets. Keep the catalog version and current documentation synchronized.
