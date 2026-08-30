@@ -83,6 +83,7 @@ Body
   assert.equal(warnings[0].level, 'warning');
   assert.match(warnings[0].message, /slides-storyline/);
   assert.ok(warnings[0].message.includes('skill://omp-enhancer-workflows/references/writing.md'));
+  assert.match(warnings[0].message, /Markdown.*canonical content source|Markdown.*唯一内容源/iu);
 
   assert.equal(await handler(
     { toolName: 'write', input: { path: 'deck.tex', content: beamerContent } },

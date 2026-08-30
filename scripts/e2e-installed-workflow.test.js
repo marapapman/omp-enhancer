@@ -1299,6 +1299,56 @@ test('Beamer precheck evaluator rejects duplicate markers, stale revision delive
   assert.match(nonAdvisoryEvaluation.failures.join('\n'), /forbidden native task assignment text pattern/iu);
 });
 
+function summaryWithMutationTargets(targets, eventIndexes = targets.map((_, index) => index + 1)) {
+  return {
+    tddTrace: {
+      mutationCalls: targets.map((target, index) => ({
+        target,
+        eventIndex: eventIndexes[index] ?? null,
+        completionEventIndex: eventIndexes[index] == null ? null : eventIndexes[index] + 1,
+      })),
+    },
+  };
+}
+
+test('required file write order accepts Markdown before Beamer', () => {
+  const evaluation = evaluateWorkflowSummary(
+    summaryWithMutationTargets(['other.tex', 'slides-content.md', 'main.tex']),
+    { requiredFileWriteOrder: [{ before: 'slides-content.md', after: 'main.tex' }] },
+  );
+  assert.equal(evaluation.pass, true, evaluation.failures.join('\n'));
+});
+
+test('required file write order rejects Beamer before Markdown', () => {
+  const evaluation = evaluateWorkflowSummary(
+    summaryWithMutationTargets(['main.tex', 'slides-content.md']),
+    { requiredFileWriteOrder: [{ before: 'slides-content.md', after: 'main.tex' }] },
+  );
+  assert.equal(evaluation.pass, false);
+  assert.match(evaluation.failures.join('\n'), /required file write order.+slides-content[.]md.+main[.]tex/iu);
+});
+
+test('required file write order fails closed when a mutation is unobserved', () => {
+  const missing = evaluateWorkflowSummary(
+    summaryWithMutationTargets(['slides-content.md']),
+    { requiredFileWriteOrder: [{ before: 'slides-content.md', after: 'main.tex' }] },
+  );
+  assert.equal(missing.pass, false);
+  assert.match(missing.failures.join('\n'), /required file write was not observed: main[.]tex/iu);
+
+  const unknown = evaluateWorkflowSummary(
+    summaryWithMutationTargets(['slides-content.md', 'main.tex'], [1, null]),
+    { requiredFileWriteOrder: [{ before: 'slides-content.md', after: 'main.tex' }] },
+  );
+  assert.equal(unknown.pass, false);
+  assert.match(unknown.failures.join('\n'), /required file write was not observed: main[.]tex/iu);
+});
+
+test('file write order remains opt-in for existing evaluator summaries', () => {
+  const evaluation = evaluateWorkflowSummary({ tddTrace: { mutationCalls: [] } });
+  assert.equal(evaluation.pass, true, evaluation.failures.join('\n'));
+});
+
 test('Beamer precheck fixture shape stays temporary and PowerPoint conversion remains command-conditional', async () => {
   const matrix = JSON.parse(await readFile(
     new URL('./e2e/fixtures/subagent-willingness.json', import.meta.url),
@@ -1315,6 +1365,8 @@ test('Beamer precheck fixture shape stays temporary and PowerPoint conversion re
   );
   assert.match(scenario.prompt, /PowerPoint.+exact.+conversion command/isu);
   assert.match(scenario.prompt, /text-only.+section-sized.+every page.+user.+confirmation/isu);
+  assert.match(scenario.prompt, /slides-content[.]md.+Markdown content plan.+canonical content source/isu);
+  assert.match(scenario.prompt, /content changes.+edit slides-content[.]md.+reconfirm.+regenerate Beamer.+layout/isu);
   assert.match(scenario.prompt, /after that confirmation.+add visuals.+page by page.+basic layout.+shorten.+complete sentences.+phrases/isu);
   assert.match(scenario.prompt, /basic-layout confirmation.+before entering.+visual refinement/isu);
   assert.match(scenario.prompt, /no conversion command.+do not convert/isu);
@@ -1348,6 +1400,11 @@ test('Beamer precheck fixture shape stays temporary and PowerPoint conversion re
   assert.deepEqual(scenario.expectations.forbiddenNativeTaskAssignmentTextPatterns, [
     'APPROVED|CHANGES_REQUIRED|UNREVIEWABLE',
     'single read-only visual precheck[^\\n]*(?:parallel|dual|fallback|disagreement|merge)',
+  ]);
+  assert.deepEqual(scenario.fixtureExpectations.allowedChangedFiles, ['main.tex', 'slides-content.md']);
+  assert.deepEqual(scenario.fixtureExpectations.requiredChangedFiles, ['main.tex', 'slides-content.md']);
+  assert.deepEqual(scenario.expectations.requiredFileWriteOrder, [
+    { before: 'slides-content.md', after: 'main.tex' },
   ]);
 
   const prepared = await prepareScenario(scenario);

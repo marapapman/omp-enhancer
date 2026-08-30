@@ -609,6 +609,9 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   if (expectations.noWeb === true && summary.webCallCount > 0) {
     failures.push(`web tools were called ${summary.webCallCount} time(s)`);
   }
+  if (expectations.requiredFileWriteOrder != null) {
+    evaluateRequiredFileWriteOrder(summary, expectations.requiredFileWriteOrder, failures);
+  }
   if (Number.isFinite(expectations.maxToolCalls) && summary.toolCallCount > expectations.maxToolCalls) {
     failures.push(`tool calls ${summary.toolCallCount} exceeded ${expectations.maxToolCalls}`);
   }
@@ -920,6 +923,40 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   if (summary.timedOut) failures.push('runner hard timeout was reached');
 
   return { pass: failures.length === 0, failures };
+}
+
+function evaluateRequiredFileWriteOrder(summary, specifications, failures) {
+  if (!Array.isArray(specifications) || specifications.length === 0) {
+    failures.push('requiredFileWriteOrder must contain one or more { before, after } specifications');
+    return;
+  }
+
+  const firstEvents = new Map();
+  const mutationCalls = Array.isArray(summary?.tddTrace?.mutationCalls)
+    ? summary.tddTrace.mutationCalls
+    : [];
+  for (const call of mutationCalls) {
+    const target = typeof call?.target === 'string' ? call.target.trim() : '';
+    if (!target || firstEvents.has(target)) continue;
+    firstEvents.set(target, Number.isSafeInteger(call.eventIndex) ? call.eventIndex : null);
+  }
+
+  for (const specification of specifications) {
+    const before = typeof specification?.before === 'string' ? specification.before.trim() : '';
+    const after = typeof specification?.after === 'string' ? specification.after.trim() : '';
+    if (!before || !after || before === after) {
+      failures.push('requiredFileWriteOrder contained an invalid { before, after } specification');
+      continue;
+    }
+
+    const beforeEvent = firstEvents.get(before);
+    const afterEvent = firstEvents.get(after);
+    if (!Number.isSafeInteger(beforeEvent)) failures.push('required file write was not observed: ' + before);
+    if (!Number.isSafeInteger(afterEvent)) failures.push('required file write was not observed: ' + after);
+    if (Number.isSafeInteger(beforeEvent) && Number.isSafeInteger(afterEvent) && beforeEvent >= afterEvent) {
+      failures.push('required file write order was violated: ' + before + ' must be written before ' + after);
+    }
+  }
 }
 
 function evaluateRequiredNativeTodoItemPatterns(initializedItems, specifications, failures) {

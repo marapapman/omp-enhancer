@@ -13,7 +13,7 @@ These steps are the required execution order for this domain. The plugin provide
 1. Identify target language (zh/en) and format (plain/LaTeX/Markdown/Beamer/Word).
 2. Load matching language and format skills.
 3. Draft or revise via writer/zh-writer for substantial work, or directly for minor edits.
-4. For new Beamer decks, draft and discuss page content in section-sized text-only batches, confirm each page with the user, and only then begin visual authoring.
+4. For new Beamer decks, discuss and capture each page in a Markdown content plan, confirm it with the user, and only then translate the plan into Beamer and begin layout.
 5. Check via checker/zh-checker for substantial work; Main checks minor edits directly.
 6. Deliver with preservation and consistency verification.
 
@@ -22,7 +22,7 @@ These steps are the required execution order for this domain. The plugin provide
 - Language selection: use zh skills for Chinese prose, en skills for English; detect from target body, not instruction language.
 - LaTeX/Beamer/Word/Markdown are format overlays, not separate workflows; select matching format skills.
 - Main chooses whether to delegate writing or handle it directly based on scope.
-- New Beamer decks use three user-visible stages: text-only page content and confirmation; per-page visual authoring, base layout, and semantic text reduction; then the existing layout refinement path after the user confirms the base layout.
+- For new Beamer decks, start with a text-only Markdown content plan, discuss and confirm each page with the user, then translate it into Beamer and begin visual authoring and basic layout. The Markdown content plan is the canonical content source and the Beamer .tex files are derived layout artifacts; content changes go to Markdown first, require user reconfirmation, and then regenerate Beamer before layout resumes.
 - Chinese slide copy uses plain-chinese-writing for natural sentences, zh-format-humanizer for AI-like phrasing, and zh-writing-review for page-level clarity; use zh-writing-polish only for actual polishing and never replace body prose with keyword or phrase lists.
 - For Beamer, a single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before designer layout; findings are advisory input to the normal designer pass, then task integrates and renders the final revision for independent visioner review.
 - beamer-to-powerpoint is conditional on an explicit user-supplied conversion command; use it only when PowerPoint output is in scope and never choose or invent a converter.

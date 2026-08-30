@@ -2,6 +2,8 @@
 
 Initial audit: 2026-07-19; second, third, and fourth full scans plus the fifth discovery-organization pass: 2026-07-20
 
+> Historical clarification: the slides-storyline row below records an earlier baseline. It is superseded by the later explicit user requirement to persist and confirm a per-page Markdown content plan before Beamer frame authoring. This file remains historical evidence, not current workflow guidance.
+
 ## Outcome
 
 The 2026-07-19 marketplace baseline contained 313 Skill entrypoints. All 313

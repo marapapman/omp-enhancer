@@ -23,7 +23,7 @@ Skill、其他 Skills 与原生 `task` 能力选择最小提示；advisor、suba
 `ANALYZE -> EXECUTE -> REVIEW`、Main 的编排者身份与可选的域目录指引，
 不包含 marker 协议，也不随 provider retry 重复。
 
-Generated-asset tests 再验证紧凑目录：当前 v36 索引包含 3 个域（`writing`、
+Generated-asset tests 再验证紧凑目录：当前 v37 索引包含 3 个域（`writing`、
 `research`、`visual`），每行给出 exact ID、chooseWhen 条件、
 候选 Skill URI（`D` 顶层 exact URI、`C` nested ECC exact URI）与单卡 reference
 URI；索引顶部声明 `ANALYZE -> EXECUTE -> REVIEW` 与 usage 规则。单卡只包含
@@ -83,7 +83,7 @@ npm run e2e:main:self-iteration -- \
 ## Beamer/PPT staged content and visual refinement fixture
 
 `scripts/e2e/fixtures/subagent-willingness.json` 的
-`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的纯文字版和用户确认，再覆盖用户确认后的逐页配图、基础排版和文字精简。随后它覆盖 task 的 initial
+`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的 Markdown 内容计划和用户确认，再覆盖从已确认 Markdown 翻译出的 Beamer 帧、逐页配图与基础排版。Markdown content plan is the canonical content source; Beamer .tex files are derived layout artifacts. Content changes go to Markdown first, are discussed and reconfirmed with the user, then regenerate Beamer; 内容变化不能在排版阶段直接改 `.tex` 正文。随后它覆盖 task 的 initial
 render、exactly one read-only self-check（owner 只能是 Main 或 task）以及它在
 designer 之前的顺序；用户确认基础排版后，task 绑定并渲染 current revision，visioner 对该
 revision 做最终独立 review。该 `single read-only visual precheck` marker 只携带

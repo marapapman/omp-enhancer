@@ -22,27 +22,32 @@ When readiness is incomplete, discuss the missing decisions with the user. Do no
 
 For a new deck, complete the text-only page draft before visual authoring. Work in section-sized batches, but discuss every page with the user. Each page must include a detailed body, evidence or source basis, and a prose description of its visual role without creating or selecting the actual asset.
 
-Write body text, captions, and explanations as complete natural-language sentences or paragraphs. Do not replace them with isolated phrases, keyword strings, or phrase-only bullet lists. For Chinese slide text, apply `plain-chinese-writing` for natural prose, `zh-format-humanizer` for evidence-based AI-like phrasing removal, and `zh-writing-review` for page-level clarity when available. Use `zh-writing-polish` only for actual polishing. Preserve facts, qualifiers, numbers, citations, and causal direction.
+Persist the page draft in a Markdown content-plan file before visual authoring. The Markdown content plan is the canonical content source; the Beamer .tex files are derived layout artifacts.
 
-Wait for user confirmation of the page content before adding images, authoring visuals, or performing layout. The density rules below apply after that confirmation; they must not turn the text-only draft into keyword fragments.
+Write body text, captions, and explanations as complete natural-language sentences or paragraphs. Do not replace them with isolated phrases, keyword strings, or phrase-only bullet lists. For Chinese slide text, apply plain-chinese-writing for natural prose, zh-format-humanizer for evidence-based AI-like phrasing removal, and zh-writing-review for page-level clarity when available. Use zh-writing-polish only for actual polishing. Preserve facts, qualifiers, numbers, citations, and causal direction.
+
+Wait for user confirmation of the page content before adding images, authoring visuals, or performing layout. Do not create or edit Beamer .tex frames while content is unresolved. If content changes later, return to the Markdown content stage, reconfirm the affected pages, and regenerate the affected Beamer frames.
+
 
 ## Generation structure
 
 Prefer a stable main file that contains metadata, theme setup, document structure, and ordered `\input` statements. Store one frame per source file when that matches the project. Use sortable names such as `001-topic.tex`.
-
 If frames are generated mechanically, add a clear generated-file marker. Cleanup may remove only files carrying that marker. Preserve unmarked frame files.
 
 Use `[fragile]` for frames that require verbatim content. Use `[shrink]` only when the chosen template or project requires it, and still inspect the rendered result. Shrink is not a substitute for splitting an overloaded slide.
 
 ## Density and legibility
 
+Density rules apply to the Markdown content source before translation. Do not rewrite, shorten, or add content in .tex during layout. If density requires a reduction or a split, return to the Markdown content stage, reconfirm the affected pages with the user, and regenerate the affected Beamer frames before layout resumes.
+
 - Give each frame one main point or job.
 - Keep ordinary bullet lists near six items or fewer.
-- Keep code examples short enough to read from the back of the room; split long examples into staged frames.
-- Prefer a diagram, table, image, or worked example when it communicates the point more directly than prose.
+- Keep code examples short enough to read from the back of the room; split long examples in the Markdown content plan before translating them into staged frames.
+- Prefer a diagram, table, image, or worked example when it communicates the point more directly than prose, without changing the confirmed content.
 - Preserve consistent title length, margins, alignment, color roles, and figure treatment.
-- Do not solve overflow by reducing text below the template's readable baseline.
+- Do not solve overflow by reducing text below the template's readable baseline; make any content reduction in Markdown and reconfirm it first.
 - Avoid a cramped composition. Preserve enough whitespace and separation among titles, body text, figures, captions, code, tables, equations, and page furniture to make grouping unambiguous.
+
 
 ## Build and rendered QA
 
@@ -80,6 +85,6 @@ For both new decks and bounded modifications, after `task` produces and binds th
 
 After the first complete layout is rendered, present the current PDF and page renders to the user and wait for user confirmation of the basic layout direction before refinement. This is a REQUIRED conversational checkpoint. "Not a plugin-owned gate or completion condition" means the runtime never blocks you — it does not mean the confirmation is optional.
 
-After that confirmation, preserve the current multi-pass visual evidence chain. Each explicit refinement round uses fresh current-revision evidence: visual review, a supported designer correction, task rerendering, and a new visual review. Main decides whether another bounded round is useful; findings remain advisory, no unchanged artifact is reviewed, and no automatic repair loop is created.
+After that confirmation, preserve the current multi-pass visual evidence chain. Each explicit refinement round uses fresh current-revision evidence: visual review, a supported layout-only designer correction, task rerendering, and a new visual review. If a finding requires content or page-structure changes, return to the Markdown content plan, obtain user confirmation, and regenerate the affected Beamer frames before layout resumes. Main decides whether another bounded round is useful; findings remain advisory, no unchanged artifact is reviewed, and no automatic repair loop is created.
 
 Record warnings honestly. Do not report visual QA from compilation alone. Source inspection, designer self-review, an old render, or a contact sheet without inspectable page renders cannot substitute for current-revision `visioner` evidence.

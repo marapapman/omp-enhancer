@@ -150,6 +150,31 @@ test('slides storyline defines a text-only per-page confirmation phase', async (
   assert.match(skill, /Do not use for ordinary edits to an existing deck/i);
 });
 
+test('new Beamer keeps the confirmed Markdown plan as the canonical content source', async () => {
+  const [storyline, beamer, quality] = await Promise.all([
+    readFile(storylineSkillUrl, 'utf8'),
+    readFile(slidesSkillUrl, 'utf8'),
+    readFile(qualityReferenceUrl, 'utf8'),
+  ]);
+
+  assert.match(storyline, /write the text-only page draft to a Markdown content-plan file/i);
+  assert.match(storyline, /Markdown content plan is the canonical content source/i);
+  assert.match(storyline, /do not create or edit Beamer .tex frames during this stage/i);
+  assert.match(storyline, /content changes.+edit the Markdown.+reconfirm.+regenerate.+Beamer/is);
+  assert.doesNotMatch(storyline, /Do not write a storyline file unless the user requests one/i);
+
+  assert.match(beamer, /create or update a Markdown content-plan file/i);
+  assert.match(beamer, /translate the confirmed Markdown content plan into Beamer frames and then perform layout/i);
+  assert.match(beamer, /sole content source/i);
+  assert.match(beamer, /do not rewrite, shorten, or add content in .tex/i);
+  assert.match(beamer, /return to the Markdown content stage.+reconfirm.+regenerate/is);
+  assert.doesNotMatch(beamer, /Shorten or condense text only to fit/i);
+
+  assert.match(quality, /Markdown content plan is the canonical content source/i);
+  assert.match(quality, /do not rewrite, shorten, or add content in .tex/i);
+  assert.match(quality, /return to the Markdown content stage.+reconfirm.+regenerate/is);
+});
+
 test('slides storyline starts technical decks with a provisional six-part scaffold', async () => {
   const skill = await readFile(storylineSkillUrl, 'utf8');
   const briefStart = skill.indexOf('## Establish the brief');

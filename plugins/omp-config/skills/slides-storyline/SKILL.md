@@ -41,15 +41,16 @@ Use the scaffold as provisional per-slide slots: Background provides context, Ex
 
 ## Text-only page draft
 
-Before selecting images, authoring visuals, or writing layout code, produce a text-only page draft in section-sized batches. The batch size is a communication convenience; discuss every page.
+Before selecting images, authoring visuals, or writing layout code, write the text-only page draft to a Markdown content-plan file (for example, <deck>-content.md) in section-sized batches. The batch size is a communication convenience; discuss every page with the user.
 
 1. For each page, provide its working title, narrative job, detailed body text, evidence or source basis, and a prose description of the intended visual role. Do not create or select the actual visual asset at this stage.
 2. Write the body, captions, and explanations as complete natural-language sentences or paragraphs. Do not replace them with isolated phrases, keyword strings, or phrase-only bullet lists. A title may be concise, but it should state a complete thought when it carries the page's claim.
 3. For Chinese slide text, when Main has declared and supplied the methods, apply `plain-chinese-writing` for direct and natural prose, `zh-format-humanizer` for evidence-based AI-like phrasing removal, and `zh-writing-review` for page-level clarity. Preserve facts, qualifiers, numbers, citations, and causal direction.
 4. Discuss the draft page by page with the user. Revise the current batch from the user's feedback and keep unresolved content decisions visible instead of silently choosing them.
+5. Do not create or edit Beamer .tex frames during this stage. The Markdown content plan is the canonical content source; the Beamer .tex files are derived layout artifacts. When writer or zh-writer is assigned, it proposes this Markdown content plan and Main persists it after the user discussion.
 
 ## Confirm the text plan
 
-Present a numbered outline as the complete numbered page draft after the page-level discussion. State explicit assumptions and decisions that remain reversible. Wait for user confirmation before visual authoring begins. The user may confirm a batch after its pages are clear, but no page may enter the visual stage with unresolved content approval.
+Present a numbered outline as the complete numbered page draft after the page-level discussion. Update the Markdown content-plan file with the agreed page content and state explicit assumptions and decisions that remain reversible. Wait for user confirmation before visual authoring begins. The user may confirm a batch after its pages are clear, but no page may enter the visual stage with unresolved content approval.
 
-This confirmation is a REQUIRED conversational checkpoint requested by the user. "Not a plugin-owned gate or permission system" means the runtime never blocks you — it does not mean the confirmation is optional. Do not begin visual authoring without it. Once the text plan is confirmed, continue to visual authoring without asking for a second approval of the same text. Do not write a storyline file unless the user requests one or the project already uses one.
+This confirmation is a REQUIRED conversational checkpoint requested by the user. "Not a plugin-owned gate or permission system" means the runtime never blocks you — it does not mean the confirmation is optional. Do not begin visual authoring without it. Once the text plan is confirmed, use the Markdown content plan as the sole source for Beamer translation. If content changes later, edit the Markdown first, discuss and reconfirm the affected pages, then regenerate the affected Beamer frames. Never resolve content uncertainty by editing .tex directly.

@@ -35,13 +35,13 @@ docs/superpowers/        # 历史 plans/specs/reports，仅作 archive
 实现变更不得破坏以下契约：
 
 - OMP 的系统提示、用户指令、active tools、动态 Available Agents、权限、审批和完成行为始终具有最终权威；
-- workflow catalog v36 只有 `writing`、`research` 和 `visual` 三个 advisory 域；目录不是 router、gate 或 completion controller；
+- workflow catalog v37 只有 `writing`、`research` 和 `visual` 三个 advisory 域；目录不是 router、gate 或 completion controller；
 - `D` 是顶层 Skill exact URI，当前没有 nested ECC `C` 候选；候选 Skill 和 Agent 只按任务需要选择，不是 load set；
 - Main 可用 `ANALYZE -> EXECUTE -> REVIEW` 组织复杂任务，但插件不强制 delegation、fixed fan-out、retry 或 completion；
 - 所有 extension tools 默认 `defaultInactive`。`omp-config` 提供 `/enhancer-tools status|enable|disable`，组为 `config`、`writing`、`fact` 和 `all`；激活不授予权限；
 - `writer`/`zh-writer` 只交付 proposal，`checker`/`zh-checker` 只交付 report；Main 独自执行获授权的文件修改；
 - Draw.io pipeline remains unchanged: `designer` draws once with `drawio-skill` (drawio@365-skills) and exports a draft PNG；`visioner` read-only reviews it once；`designer` applies at most one fix round。
-- Beamer remains a writing-format overlay. New decks first use a section-sized, page-by-page text-only draft and user discussion; visual authoring, per-page imagery, base layout, and semantic text reduction begin only after the user confirms the page content. After the user confirms the basic layout, the existing visual refinement path applies. A single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before the designer layout pass；findings are advisory only and have no verdict or repair loop。Task integrates and renders the final revision；visioner independently reviews fresh final evidence。PowerPoint conversion uses `beamer-to-powerpoint` only with an exact user-supplied conversion command。
+- Beamer remains a writing-format overlay. New decks first use a section-sized, page-by-page text-only draft and user discussion, persisted in a Markdown content plan that is the canonical content source; Beamer .tex files are derived layout artifacts. Content changes go to Markdown first, are discussed and reconfirmed with the user, then regenerate Beamer; never edit .tex to settle unresolved content during layout. Visual authoring, per-page imagery, and base layout begin only after the user confirms the page content. After the user confirms the basic layout, the existing visual refinement path applies. A single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before the designer layout pass；findings are advisory only and have no verdict or repair loop。Task integrates and renders the final revision；visioner independently reviews fresh final evidence。PowerPoint conversion uses `beamer-to-powerpoint` only with an explicit user-supplied command。
 - Fact Checker 保留精确 claim tuple，`strictVerdict` 对 `SUPPORTED` 和 `CONTRADICTED` 采用 fail-closed 证据规则；
 - hook 可以观察或提醒，但不返回 `block: true` 或 `continue: true`。
 

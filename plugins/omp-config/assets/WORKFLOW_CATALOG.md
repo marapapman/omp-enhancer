@@ -1,5 +1,5 @@
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->
-# OMP Enhancer Workflow Catalog v36
+# OMP Enhancer Workflow Catalog v37
 
 Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIEW.
 
@@ -12,7 +12,7 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
   1. Identify target language (zh/en) and format (plain/LaTeX/Markdown/Beamer/Word).
   2. Load matching language and format skills.
   3. Draft or revise via writer/zh-writer for substantial work, or directly for minor edits.
-  4. For new Beamer decks, draft and discuss page content in section-sized text-only batches, confirm each page with the user, and only then begin visual authoring.
+  4. For new Beamer decks, discuss and capture each page in a Markdown content plan, confirm it with the user, and only then translate the plan into Beamer and begin layout.
   5. Check via checker/zh-checker for substantial work; Main checks minor edits directly.
   6. Deliver with preservation and consistency verification.
 
