@@ -15,7 +15,7 @@ function prose(source) {
 }
 
 const englishSkills = ['writing-mad-writer', 'writing-state-machine'];
-const chineseSkills = ['zh-writing-mad-writer', 'zh-writing-state-machine'];
+const chineseSkills = ['zh-writing-mad-writer', 'zh-writing-state-machine', 'zh-research-achievement-writing'];
 
 describe('advanced writing Skills preserve workflow and effect boundaries', () => {
   it('keeps each method inside the assigned writer child', () => {

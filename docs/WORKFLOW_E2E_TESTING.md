@@ -23,7 +23,7 @@ Skill、其他 Skills 与原生 `task` 能力选择最小提示；advisor、suba
 `ANALYZE -> EXECUTE -> REVIEW`、Main 的编排者身份与可选的域目录指引，
 不包含 marker 协议，也不随 provider retry 重复。
 
-Generated-asset tests 再验证紧凑目录：当前 v37 索引包含 3 个域（`writing`、
+Generated-asset tests 再验证紧凑目录：当前 v38 索引包含 3 个域（`writing`、
 `research`、`visual`），每行给出 exact ID、chooseWhen 条件、
 候选 Skill URI（`D` 顶层 exact URI、`C` nested ECC exact URI）与单卡 reference
 URI；索引顶部声明 `ANALYZE -> EXECUTE -> REVIEW` 与 usage 规则。单卡只包含

@@ -80,7 +80,7 @@ test('current documentation links the self-development and E2E methods without e
   assert.ok(Buffer.byteLength(readme) <= 6500, 'root README keeps development detail under docs');
 });
 
-test('current repository documentation matches the v37 runtime and evidence contracts', async () => {
+test('current repository documentation matches the v38 runtime and evidence contracts', async () => {
   const [agents, architecture, development, workflows] = await Promise.all([
     read('AGENTS.md'),
     read('docs/ARCHITECTURE.md'),
@@ -88,8 +88,8 @@ test('current repository documentation matches the v37 runtime and evidence cont
     read('docs/WORKFLOW_DEVELOPMENT.md'),
   ]);
 
-  assert.match(agents, /Workflow catalog \(v37\)/u);
-  assert.match(workflows, /catalog v37 只有 3 个 ID/isu);
+  assert.match(agents, /Workflow catalog \(v38\)/u);
+  assert.match(workflows, /catalog v38 只有 3 个 ID/isu);
   assert.doesNotMatch(
     [agents, architecture, development, workflows].join('\n'),
     /Catalog version 23|catalog \(v23\)|catalog v30|catalog \(v33\)|catalog v34/iu,
@@ -129,7 +129,7 @@ test('current repository documentation matches the v37 runtime and evidence cont
 test('omp-config README matches the current catalog and staged Beamer workflow', async () => {
   const readme = await read('plugins/omp-config/README.md');
 
-  assert.match(readme, /generated from `scripts\/workflow-definitions\.js`.+catalog v37/isu);
+  assert.match(readme, /generated from `scripts\/workflow-definitions\.js`.+catalog v38/isu);
   assert.match(readme, /text-only content.+visual authoring.+layout refinement/is);
   assert.match(readme, /user confirms.+page content.+basic layout/is);
   assert.doesNotMatch(readme, /omp-enhancer-core|skills\/ecc|5 domains|generate:ecc-skills|check:ecc-skills/iu);

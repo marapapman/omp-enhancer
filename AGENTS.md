@@ -46,7 +46,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 | Path | Purpose |
 |------|---------|
-| `scripts/workflow-definitions.js` | Workflow catalog (v37): writing, research (fact-checking), visual definitions |
+| `scripts/workflow-definitions.js` | Workflow catalog (v38): writing, research (fact-checking), visual definitions |
 | `plugins/writing-helper/src/` | Quality analysis: logic, style, citations, preservation, language detection, report formatting |
 | `plugins/omp-fact-checker/src/` | Fact-check pipeline: claim extraction, evidence collection (A/B lanes), cross-checking, providers |
 | `plugins/omp-config/` | Shared config assets, PPT/document/visual skills, 1 agent (visioner), hooks, hook-templates |

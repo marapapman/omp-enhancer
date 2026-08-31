@@ -160,6 +160,7 @@ not a fork requirement, router, gate, or automatic repair loop.
 The package ships these writing-related skills under their original names:
 
 - `plain-chinese-writing`
+- `zh-research-achievement-writing`
 - `pku-chinese-phd-thesis-checker`
 - `writing-markdown-helper`
 - `writing-state-machine`

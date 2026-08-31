@@ -8,6 +8,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const expectedSkills = [
   'plain-chinese-writing',
+  'zh-research-achievement-writing',
   'pku-chinese-phd-thesis-checker',
   'writing-markdown-helper',
   'writing-state-machine',
@@ -259,6 +260,7 @@ describe('bundled frugal-pi writing content', () => {
       'skills/writing-review/SKILL.md',
       'skills/writing-checkers/SKILL.md',
       'skills/plain-chinese-writing/SKILL.md',
+      'skills/zh-research-achievement-writing/SKILL.md',
       'skills/zh-writing-polish/SKILL.md',
       'skills/zh-writing-review/SKILL.md',
       'skills/zh-writing-checkers/SKILL.md',
@@ -608,5 +610,41 @@ describe('bundled frugal-pi writing content', () => {
     assert.match(scope, /语义锚点/u);
     assert.doesNotMatch(frontmatter, /所有中文输出/u);
     assert.doesNotMatch(scope, /任何时候，只要输出中文|自动生效|回复用户的中文问题|任何形式的中文内容/u);
+  });
+
+  it('keeps the research-achievement skeleton in its dedicated Skill', () => {
+    const contract = [
+      '通过引入 X，克服了 Y 的 Z 缺点，提出一种融合 A 与 B 的方法，应用于 C、D 任务。',
+      '该方法克服了 Y 的 Z 缺点，降低了 C 和 D 算法的误差。',
+      '相关工作发表于 VENUE’YY、VENUE’YY。',
+      '基于所研究的 X 算法，开发并部署一种基于 Y 的系统，支持……判断，已部署地点 N 座楼宇。',
+    ];
+    const dedicated = readFileSync(join(rootDir, 'skills/zh-research-achievement-writing/SKILL.md'), 'utf8');
+
+    assert.match(dedicated, /科研成果凝练体/u);
+    for (const phrase of contract) {
+      assert.equal(dedicated.includes(phrase), true, 'dedicated Skill should preserve contract phrase: ' + phrase);
+    }
+    assert.match(dedicated, /没有发表场所或部署证据时，不要补写/u);
+    assert.match(dedicated, /writer 子 Agent 始终只交付建议稿/u);
+    assert.match(dedicated, /记录该限制[\s\S]{0,100}安全的直接 fallback/u);
+    assert.match(dedicated, /Main 保留[\s\S]{0,100}权限决策[\s\S]{0,100}实际文件修改/u);
+
+    for (const path of [
+      'skills/zh-format-humanizer/SKILL.md',
+      'skills/zh-writing-checkers/SKILL.md',
+    ]) {
+      const source = readFileSync(join(rootDir, path), 'utf8');
+      assert.match(
+        source,
+        /用户明确要求科研成果凝练体时，论文发表列举和系统部署收尾是该体例的有意组成，不报告为机械列举或 AI 味。/u,
+        path + ' should exempt the requested achievement-summary format',
+      );
+    }
+
+    for (const path of ['skills/plain-chinese-writing/SKILL.md', 'agents/zh-writer.md']) {
+      const source = readFileSync(join(rootDir, path), 'utf8');
+      assert.doesNotMatch(source, /通过引入 X，克服了 Y 的 Z 缺点/u, path + ' should not own the specialized skeleton');
+    }
   });
 });

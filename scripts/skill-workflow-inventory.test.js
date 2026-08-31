@@ -34,7 +34,7 @@ test('every packaged Skill entry is named uniquely, portable, and every workflow
     };
   }));
 
-  assert.equal(entries.length, 45, 'update the reviewed all-Skill manifest when the inventory changes');
+  assert.equal(entries.length, 46, 'update the reviewed all-Skill manifest when the inventory changes');
   for (const { file, name, frontmatter } of entries) {
     assert.ok(name, `${path.relative(repoRoot, file)} has no frontmatter name`);
     assert.doesNotMatch(
@@ -106,7 +106,7 @@ test('every exact Skill URI in packaged Skill Markdown resolves to a real entry 
   const skillFiles = resourceFiles.filter((file) => path.basename(file) === 'SKILL.md');
   const roots = new Map();
 
-  assert.equal(resourceFiles.length, 51, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
+  assert.equal(resourceFiles.length, 52, 'update the reviewed packaged Skill Markdown manifest when inventory changes');
 
   for (const file of skillFiles) {
     const name = frontmatterName(await readFile(file, 'utf8'));

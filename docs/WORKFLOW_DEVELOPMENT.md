@@ -4,7 +4,7 @@
 
 ## 当前架构
 
-当前 workflow catalog version 37 只有 3 个 ID：`writing`、`research` 和 `visual`。
+当前 workflow catalog version 38 只有 3 个 ID：`writing`、`research` 和 `visual`。
 
 - `writing`：中英文 prose、翻译、Markdown、LaTeX、Beamer 和 Word；`beamer-to-powerpoint` 仅在用户提供明确转换命令时适用；
 - `research`：事实核查、claim extraction、来源评估、证据 cross-check 和 verdict；
@@ -47,7 +47,7 @@ plugins/omp-config/skills/omp-enhancer-workflows/references/*.md
 
 字段规则：
 
-- `id` 全局唯一、稳定、小写；catalog v37 只有 3 个 ID（`writing`、`research`、`visual`）；
+- `id` 全局唯一、稳定、小写；catalog v38 只有 3 个 ID（`writing`、`research`、`visual`）；
 - `chooseWhen` 描述用户可观察的选择条件，不写关键词路由规则；
 - `skills` 使用精确 Skill frontmatter 名；
 - `catalogSkills` 保留为空数组，不产生 nested ECC URI；

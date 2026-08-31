@@ -1,12 +1,12 @@
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->
-# OMP Enhancer Workflow Catalog v37
+# OMP Enhancer Workflow Catalog v38
 
 Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIEW.
 
 ## `writing`
 
 - When: Prose drafting, revision, translation, or format conversion in any language (English, Chinese) or format (LaTeX, Markdown, Beamer, Word).
-- Skills: `writing-review`, `plain-chinese-writing`, `zh-format-humanizer`, `zh-writing-review`, `zh-writing-polish`, `writing-markdown-helper`, `zh-writing-markdown-helper`, `format-markdown2latex`, `format-latex2markdown`, `format-template-latex`, `latex-beamer-slides`, `beamer-to-powerpoint`, `slides-storyline`, `docx`
+- Skills: `writing-review`, `plain-chinese-writing`, `zh-research-achievement-writing`, `zh-format-humanizer`, `zh-writing-review`, `zh-writing-polish`, `writing-markdown-helper`, `zh-writing-markdown-helper`, `format-markdown2latex`, `format-latex2markdown`, `format-template-latex`, `latex-beamer-slides`, `beamer-to-powerpoint`, `slides-storyline`, `docx`
 - Agents: `writer`, `zh-writer`, `checker`, `zh-checker`, `task`
 - Flow:
   1. Identify target language (zh/en) and format (plain/LaTeX/Markdown/Beamer/Word).

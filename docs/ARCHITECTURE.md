@@ -12,7 +12,7 @@ OMP 负责系统提示、用户指令、active tools、动态 Available Agents�
 
 ## 工作流信息
 
-工作流 definition 位于 `scripts/workflow-definitions.js`，校验和渲染模块分别是 `scripts/workflow-schema.js` 与 `scripts/workflow-render.js`。当前 catalog version 37 只有三个域：`writing`、`research`（事实核查）和 `visual`。
+工作流 definition 位于 `scripts/workflow-definitions.js`，校验和渲染模块分别是 `scripts/workflow-schema.js` 与 `scripts/workflow-render.js`。当前 catalog version 38 只有三个域：`writing`、`research`（事实核查）和 `visual`。
 
 生成器 `scripts/generate-workflow-catalog.js` 输出：
 

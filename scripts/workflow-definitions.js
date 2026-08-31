@@ -1,6 +1,5 @@
 import { defineWorkflowCatalog } from './workflow-schema.js';
-export const WORKFLOW_CATALOG_VERSION = 37;
-
+export const WORKFLOW_CATALOG_VERSION = 38;
 const writingWorkflows = [
   {
     id: 'writing',
@@ -8,6 +7,7 @@ const writingWorkflows = [
     skills: [
       'writing-review',
       'plain-chinese-writing',
+      'zh-research-achievement-writing',
       'zh-format-humanizer',
       'zh-writing-review',
       'zh-writing-polish',

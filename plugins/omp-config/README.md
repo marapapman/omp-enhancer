@@ -4,7 +4,7 @@
 
 ## Contents
 
-- `assets/WORKFLOW_CATALOG.md` is generated from `scripts/workflow-definitions.js` and contains the three advisory workflow cards for catalog v37.
+- `assets/WORKFLOW_CATALOG.md` is generated from `scripts/workflow-definitions.js` and contains the three advisory workflow cards for catalog v38.
 - `skills/omp-enhancer-workflows/` publishes the compact domain index and on-demand `writing`, `research`, and `visual` reference cards.
 - `skills/latex-beamer-slides/` and `skills/slides-storyline/` define the staged Beamer deck workflow. `skills/beamer-to-powerpoint/` handles conversion only when the user supplies an exact command.
 - `skills/frontend-design/`, `skills/canvas-design/`, and `skills/docx/` are adjacent visual or document methods, not native PPTX generators.
