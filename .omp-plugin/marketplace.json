@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, and editable draw.io diagrams.",
-    "version": "1.0.46",
+    "version": "1.0.47",
     "pluginRoot": "plugins"
   },
   "plugins": [
@@ -37,7 +37,7 @@
     {
       "name": "writing-helper",
       "description": "Standalone OMP writing helper plugin with frugal-pi compatible writing skills, agents, logic, style, and citation checks",
-      "version": "0.2.21",
+      "version": "0.2.22",
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",
