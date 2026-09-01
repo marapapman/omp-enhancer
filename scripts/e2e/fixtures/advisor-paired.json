@@ -1,7 +1,6 @@
 {
   "version": 1,
   "defaults": {
-    "model": "opencode-go/deepseek-v4-flash",
     "thinking": "max",
     "approvalMode": "yolo",
     "executionMode": "rpc",

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 
 import { analyzeWritingLogic } from './src/analyzer.js';
 import { fetchExternalCitationEvidence, parseLocalLiteratureRecords } from './src/citations.js';
@@ -31,7 +31,7 @@ function buildQualityParameters(z) {
     bibliography: z.string().optional().describe('Bibliography content as a string, alternative to bibliographyPath.'),
     bibliographyPath: z.string().optional().describe('File path to a bibliography file. Example: \'/path/to/references.bib\'.'),
     literaturePath: z.string().optional().describe('File path to local literature records for citation verification.'),
-    allowNetwork: z.boolean().optional().describe('Allow network access for citation verification via DOI or Crossref. Default: false.'),
+    allowNetwork: z.boolean().optional().describe('Allow network access for citation verification via DOI, arXiv, or Crossref. Default: false.'),
     citationProviders: z.array(z.enum(['local', 'doi', 'arxiv', 'crossref'])).optional().describe('Citation verification providers to use. Example: [\'doi\', \'crossref\'].'),
   });
 }
@@ -126,14 +126,10 @@ function parseCommandArgs(args) {
   return input;
 }
 
-function resolveInputPath(path, cwd) {
-  return isAbsolute(path) ? path : resolve(cwd, path);
-}
-
 function readOptionalFile(path, cwd) {
   if (typeof path !== 'string' || path.trim() === '') return { ok: true, text: '' };
   try {
-    return { ok: true, text: readFileSync(resolveInputPath(path, cwd), 'utf8') };
+    return { ok: true, text: readFileSync(resolve(cwd, path), 'utf8') };
   } catch (error) {
     const message = error.message;
     return { ok: false, error: `Unable to read ${path}: ${message}` };
@@ -145,7 +141,7 @@ function qualityEvidenceCandidates(input, cwd) {
     return { bibliography: [], literature: [] };
   }
 
-  const documentPath = resolveInputPath(input.path, cwd);
+  const documentPath = resolve(cwd, input.path);
   const documentDir = dirname(documentPath);
   const documentBase = basename(documentPath, extname(documentPath));
   return {
@@ -169,7 +165,9 @@ function withDiscoveredQualityEvidence(input, cwd) {
     ...input,
     bibliographyPath:
       input.bibliographyPath ??
-      (input.bibliography ? undefined : firstExistingPath(candidates.bibliography)),
+      (typeof input.bibliography === 'string' && input.bibliography.trim() !== ''
+        ? undefined
+        : firstExistingPath(candidates.bibliography)),
     literaturePath: input.literaturePath ?? firstExistingPath(candidates.literature),
   };
 }
@@ -196,7 +194,9 @@ function enrichQualityInput(input, cwd) {
     ok: true,
     input: {
       ...input,
-      bibliography: input.bibliography ?? bibliographyFile.text,
+      bibliography: typeof input.bibliography === 'string' && input.bibliography.trim() !== ''
+        ? input.bibliography
+        : bibliographyFile.text,
       evidenceRecords: [
         ...(Array.isArray(input.evidenceRecords) ? input.evidenceRecords : []),
         ...parseLocalLiteratureRecords(literatureFile.text),

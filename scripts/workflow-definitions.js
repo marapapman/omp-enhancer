@@ -102,5 +102,3 @@ export const workflowDefinitions = defineWorkflowCatalog([
   researchWorkflows,
   visualWorkflows,
 ]);
-
-export const workflowIds = Object.freeze(workflowDefinitions.map(({ id }) => id));

@@ -1,7 +1,6 @@
 {
   "version": 1,
   "defaults": {
-    "model": "opencode-go/deepseek-v4-flash",
     "thinking": "minimal",
     "approvalMode": "yolo",
     "advisor": false,
@@ -90,12 +89,12 @@
       "id": "opensource-release-worktree-audit",
       "category": "workflow-consolidation",
       "cwd": ".",
-      "prompt": "Audit one operations workflow release-sanitization contract checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"ecc-opensource-sanitizer\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Ask the child to read plugins/omp-enhancer-core/src/workflows/definitions/operations.js and report whether staging, independent sanitization, and separate publish authorization are required. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, execute release commands, publish, or use the network.",
+      "prompt": "Audit one operations workflow release-sanitization contract checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"reviewer\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Ask the child to inspect scripts/release.js and report whether staging, independent sanitization, and separate publish authorization are required. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, execute release commands, publish, or use the network.",
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,
         "requiredNativeTaskAgents": [
-          "ecc-opensource-sanitizer"
+          "reviewer"
         ]
       }
     },
@@ -103,7 +102,7 @@
       "id": "marketing-campaign-worktree-audit",
       "category": "workflow-consolidation",
       "cwd": ".",
-      "prompt": "Audit one operations plus writing contract checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"checker\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Ask the child to read plugins/omp-enhancer-core/src/workflows/definitions/operations.js and report whether marketing facts, claims, and output language are independently checked. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, draft or send external content, browse, or use the network.",
+      "prompt": "Audit one writing contract checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"checker\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Ask the child to inspect plugins/writing-helper/README.md and report whether factual claims, citations, and output language are independently checked. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, draft or send external content, browse, or use the network.",
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,

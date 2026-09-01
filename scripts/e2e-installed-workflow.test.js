@@ -3402,7 +3402,7 @@ test('self-iteration E2E fixture is a bounded real Node project with a green bas
   const scenario = matrix.scenarios.find(({ id }) => id === 'omp-self-iteration-tdd');
   const mechanicalControl = matrix.scenarios.find(({ id }) => id === 'omp-self-iteration-mechanical-control');
 
-  assert.equal(matrix.defaults.model, 'opencode-go/deepseek-v4-flash');
+  assert.equal(matrix.defaults.model, undefined);
   assert.equal(matrix.defaults.thinking, 'max');
   assert.ok(matrix.defaults.tools.includes('todo'));
   assert.ok(matrix.defaults.tools.includes('task'));
@@ -3681,13 +3681,13 @@ test('verifyFixture exact-path entries stay byte-identical and are never treated
   }
 });
 
-test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-only evidence', async () => {
+test('Skill discovery matrix uses natural prompts and strict observed-only evidence', async () => {
   const matrix = JSON.parse(await readFile(
     new URL('./e2e/fixtures/skill-discovery.json', import.meta.url),
     'utf8',
   ));
 
-  assert.equal(matrix.defaults.model, 'opencode-go/deepseek-v4-flash');
+  assert.equal(matrix.defaults.model, undefined);
   assert.equal(matrix.defaults.expectations.maxProvidedSkills, 0);
   assert.equal(matrix.defaults.expectations.expectedProvisionMode, 'none');
   assert.equal(matrix.defaults.expectations.requiredWorkflowPlanFormat, 'block');
@@ -3781,7 +3781,7 @@ test('DeepSeek Skill discovery matrix uses natural prompts and strict observed-o
   }
 });
 
-test('DeepSeek writing-selection and Advisor paired matrices enable strict workflow resource declarations', async () => {
+test('Writing-selection and Advisor paired matrices enable strict workflow resource declarations', async () => {
   const matrices = await Promise.all([
     'writing-selection.json',
     'advisor-paired.json',
@@ -3836,13 +3836,13 @@ test('DeepSeek writing-selection and Advisor paired matrices enable strict workf
   assert.equal(chineseSkillPath.expectations.forbidUnsupportedAdvisorSkillAbsenceClaims, true);
 });
 
-test('DeepSeek subagent default matrix keeps native task and hub semantics with natural controls', async () => {
+test('Subagent default matrix keeps native task and hub semantics with natural controls', async () => {
   const matrix = JSON.parse(await readFile(
     new URL('./e2e/fixtures/subagent-willingness.json', import.meta.url),
     'utf8',
   ));
 
-  assert.equal(matrix.defaults.model, 'opencode-go/deepseek-v4-flash');
+  assert.equal(matrix.defaults.model, undefined);
   assert.equal(matrix.defaults.thinking, 'max');
   assert.equal(matrix.defaults.expectations.requireSuccessfulToolCalls, true);
   assert.equal(matrix.defaults.taskEager, 'preferred');
@@ -4203,10 +4203,10 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
     assert.equal(report.passed, null);
     assert.equal(report.previewValid, true);
     assert.deepEqual(report.runtimeProfiles, [{
-      model: 'opencode-go/deepseek-v4-flash',
+      model: null,
       thinking: 'minimal',
     }]);
-    assert.equal(report.results[0].model, 'opencode-go/deepseek-v4-flash');
+    assert.equal(report.results[0].model, null);
     assert.equal(report.results[0].thinking, 'minimal');
     assert.equal(report.results[0].evaluation.skipped, true);
     const command = report.results[0].command;

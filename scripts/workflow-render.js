@@ -17,7 +17,7 @@ const AGENT_DESCRIPTIONS = Object.freeze({
   'zh-writer': '有界中文写作与修改 agent，支持 LaTeX 段落和只读修改稿，输出自然中文。',
 });
 
-export function describeAgent(role) {
+function describeAgent(role) {
   const description = AGENT_DESCRIPTIONS[role];
   if (!description) throw new Error(`No agent description for workflow role ${role}.`);
   return description;

@@ -2,8 +2,8 @@ import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { buildSharedWorkflowCatalogMarkdown } from './workflow-render.js';
 import {
+  buildSharedWorkflowCatalogMarkdown,
   buildWorkflowSkillIndexMarkdown,
   buildWorkflowSkillReferences,
 } from './workflow-render.js';

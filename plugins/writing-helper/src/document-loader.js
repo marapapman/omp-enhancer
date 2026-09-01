@@ -1,9 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
-
-function resolveInputPath(path, cwd) {
-  return isAbsolute(path) ? path : resolve(cwd, path);
-}
+import { resolve } from 'node:path';
 
 export function loadWritingLogicDocument(input, cwd) {
   if (typeof input.text === 'string') {
@@ -15,7 +11,7 @@ export function loadWritingLogicDocument(input, cwd) {
   }
 
   try {
-    const text = readFileSync(resolveInputPath(input.path, cwd), 'utf8');
+    const text = readFileSync(resolve(cwd, input.path), 'utf8');
     return { ok: true, text, source: input.path };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

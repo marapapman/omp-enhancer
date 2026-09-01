@@ -202,7 +202,7 @@ export function formatFactCheckPlan(plan = {}) {
 export function collectLocalEvidence({ claims = [], evidenceRecords = [], lane = 'A' } = {}) {
   return claims.flatMap((claim) => {
     const matches = evidenceRecords
-      .filter((record) => evidenceRecordMatchesClaim(record, claim))
+      .filter((record) => record.claimId === claim.id)
       .map((record) => normalizeEvidenceRecord(record, claim, lane));
     if (matches.length > 0) return matches;
     return [{
@@ -295,6 +295,7 @@ export function formatFactCheckReport(report = {}) {
     'FACT_CHECK_REPORT',
     `Supported: ${summary.supported}`,
     `Contradicted: ${summary.contradicted}`,
+    `Conflicted: ${summary.conflicted ?? results.filter((item) => item.verdict === 'CONFLICTED').length}`,
     `Insufficient: ${summary.insufficient}`,
     `Unverifiable: ${summary.unverifiable}`,
     `Strict supported: ${summary.strictSupported ?? results.filter((item) => item.strictVerdict === 'SUPPORTED').length}`,
@@ -399,19 +400,6 @@ function requiredStagesFor({ claims = [], crossCheckRequested = false } = {}) {
   ];
 }
 
-function evidenceRecordMatchesClaim(record = {}, claim = {}) {
-  if (record.claimId) return record.claimId === claim.id;
-  const haystack = normalizeWhitespace([
-    record.claim,
-    record.title,
-    record.quote,
-    record.source,
-    record.url,
-  ].filter(Boolean).join(' ')).toLowerCase();
-  const claimTerms = normalizeWhitespace(claim.text).toLowerCase().split(/\s+/u).filter((term) => term.length > 4);
-  if (!haystack || claimTerms.length === 0) return false;
-  return claimTerms.some((term) => haystack.includes(term));
-}
 
 function normalizeEvidenceRecord(record = {}, claim = {}, lane = 'A') {
   return {
@@ -728,7 +716,8 @@ function hasStaleFinding(records = [], crossCheck = {}) {
 function summarizeResults(results = []) {
   return {
     supported: results.filter((item) => item.verdict === 'SUPPORTED').length,
-    contradicted: results.filter((item) => item.verdict === 'CONTRADICTED' || item.verdict === 'CONFLICTED').length,
+    contradicted: results.filter((item) => item.verdict === 'CONTRADICTED').length,
+    conflicted: results.filter((item) => item.verdict === 'CONFLICTED').length,
     insufficient: results.filter((item) => item.verdict === 'INSUFFICIENT').length,
     unverifiable: results.filter((item) => item.verdict === 'UNVERIFIABLE').length,
     strictSupported: results.filter((item) => item.strictVerdict === 'SUPPORTED').length,

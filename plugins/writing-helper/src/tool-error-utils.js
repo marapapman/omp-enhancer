@@ -1,5 +1,5 @@
 /**
- * Vendored from omp-enhancer-core/src/small-model-hardening.js
+ * Vendored from the small-model-hardening utility.
  */
 
 export function withToolErrorHandling(toolName, handler) {

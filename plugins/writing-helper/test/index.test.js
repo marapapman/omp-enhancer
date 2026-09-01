@@ -427,6 +427,35 @@ describe('writing-logic extension', () => {
     assert.equal(result.details.summary.byCategory.citation, 0);
   });
 
+  it('quality check uses colocated bibliography when inline bibliography is empty', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'omp-writing-empty-bibliography-'));
+    writeFileSync(join(tempDir, 'draft.md'), 'CLIP is a common baseline [@radford2021clip].', 'utf8');
+    writeFileSync(
+      join(tempDir, 'draft.bib'),
+      '@inproceedings{radford2021clip, title={Learning Transferable Visual Models From Natural Language Supervision}, author={Radford, Alec}, year={2021}, doi={10.48550/arXiv.2103.00020}}',
+      'utf8',
+    );
+    writeFileSync(
+      join(tempDir, 'literature.md'),
+      [
+        '## Learning Transferable Visual Models From Natural Language Supervision',
+        '',
+        '**Authors:** Alec Radford',
+        '**Year:** 2021',
+        'doi: 10.48550/arXiv.2103.00020',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const result = await runWritingQualityCheck(
+      { path: 'draft.md', bibliography: '', checks: ['citation'] },
+      tempDir,
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.details.citations[0].status, 'VERIFIED');
+  });
+
   it('missing slash command input reports the simple path-only usage', async () => {
     const api = makeExtensionApi();
     extension(api);

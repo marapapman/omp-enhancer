@@ -59,7 +59,7 @@ function authorsOverlap(bibEntry, evidence) {
 
 function arxivIdFromValue(value) {
   const raw = String(value ?? '');
-  return /arxiv[:./](\d{4}\.\d{4,5}(?:v\d+)?)/iu.exec(raw)?.[1] ?? /^\s*(\d{4}\.\d{4,5}(?:v\d+)?)\s*$/u.exec(raw)?.[1];
+  return /arxiv[:./](?:org\/)?(?:abs\/|pdf\/)?(\d{4}\.\d{4,5}(?:v\d+)?)/iu.exec(raw)?.[1] ?? /^\s*(\d{4}\.\d{4,5}(?:v\d+)?)\s*$/u.exec(raw)?.[1];
 }
 
 function normalizedArxivId(value) {
@@ -116,9 +116,9 @@ export function extractCitationTargets(text) {
     add({ kind: 'doi', key: normalizeDoi(match[1]), quote: match[0], index: match.index });
   }
 
-  const arxivRegex = /(?:arXiv:\s*|https?:\/\/arxiv\.org\/abs\/)(\d{4}\.\d{4,5}(?:v\d+)?)/giu;
+  const arxivRegex = /(?:arXiv:\s*|https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\/)(\d{4}\.\d{4,5}(?:v\d+)?)/giu;
   for (const match of text.matchAll(arxivRegex)) {
-    add({ kind: 'arxiv', key: match[1], quote: match[0], index: match.index });
+    add({ kind: 'arxiv', key: normalizedArxivId(match[1]), quote: match[0], index: match.index });
   }
 
   return targets.sort((a, b) => a.index - b.index);
@@ -129,12 +129,12 @@ function recordIdCandidates(record) {
   if (record.id) candidates.push(String(record.id));
   if (record.key) candidates.push(String(record.key));
   if (record.doi) candidates.push(normalizeDoi(record.doi));
-  if (record.arxiv) candidates.push(String(record.arxiv));
+  if (record.arxiv) candidates.push(normalizedArxivId(record.arxiv));
   return candidates;
 }
 
 function evidenceForTarget(target, bibEntry, evidenceRecords) {
-  const targetKey = target.kind === 'doi' ? normalizeDoi(target.key) : String(target.key);
+  const targetKey = target.kind === 'doi' ? normalizeDoi(target.key) : target.kind === 'arxiv' ? normalizedArxivId(target.key) : String(target.key);
   return evidenceRecords.find((record) => {
     const candidates = recordIdCandidates(record);
     if (candidates.some((candidate) => candidate === targetKey)) return true;
@@ -308,7 +308,7 @@ async function lookupDoi(target, fetchImpl) {
 }
 
 async function lookupArxiv(target, fetchImpl) {
-  const id = String(target.key).replace(/v\d+$/u, '');
+  const id = normalizedArxivId(target.key);
   const xml = await fetchText(fetchImpl, `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}`);
   /* node:coverage ignore next */
   if (!xml) return null;
@@ -342,7 +342,7 @@ function externalLookupTargets(text, bibliography) {
       targets.push({ kind: 'doi', key: normalizeDoi(entry.doi), quote: target.quote, index: target.index });
     }
     /* node:coverage ignore next */
-    const arxivId = arxivIdFromValue(entry.doi) ?? arxivIdFromValue(entry.eprint);
+    const arxivId = normalizedArxivId(entry.doi) ?? normalizedArxivId(entry.eprint);
     /* node:coverage ignore next */
     if (arxivId) {
       targets.push({ kind: 'arxiv', key: arxivId, quote: target.quote, index: target.index });

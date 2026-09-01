@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-`writing-helper` is a standalone OMP writing-helper plugin. It registers deterministic writing QA tools and slash commands for logic, style, and citation checks, and bundles frugal-pi/Pi-compatible writer/checker agents and writing/research skills.
+`writing-helper` is the writing-helper plugin package in the `omp-enhancer` monorepo. It registers deterministic writing QA tools and slash commands for logic, style, and citation checks, and bundles frugal-pi/Pi-compatible writer/checker agents and writing/research skills.
 
 Public surfaces:
 
@@ -35,17 +35,17 @@ Error handling pattern:
 - `skills/` - bundled writing, review, research, formatting, and Chinese writing skills; each skill lives at `skills/<name>/SKILL.md`.
 - Root files: `index.js`, `package.json`, `README.md`, and this `AGENTS.md`.
 
-There are no committed `docs/`, `scripts/`, `examples/`, `.github/`, `CONTRIBUTING*`, `CLAUDE.md`, or `GEMINI.md` files in this snapshot.
+Repository-level docs and scripts live under ../../docs/ and ../../scripts/; this package has no local docs/, scripts/, examples/, .github/, CONTRIBUTING*, CLAUDE.md, or GEMINI.md files.
 
 ## Development Commands
 
-Use npm. No lockfile or package-manager pin is committed.
+Run these commands from the repository root; the package is an npm workspace.
 
 ```bash
-npm test
-npm run coverage
-omp plugin link --dry-run --json /absolute/path/to/writing-helper
-npm pack --dry-run
+npm test --workspace plugins/writing-helper
+npm run coverage --workspace plugins/writing-helper
+npm run check:marketplace
+npm run pack:all
 ```
 
 Defined package scripts:
@@ -98,8 +98,8 @@ export function analyzeThing(input = {}) {
 
 ## Runtime/Tooling Preferences
 
-- Runtime: Node.js ESM. No Node version is pinned in-repo.
-- Package manager: npm by documented commands; no lockfile is committed.
+- Runtime: Node.js ESM. The repository targets Node ^20.19.0 || >=22.12.0.
+- Package manager: npm; the repository root commits package-lock.json, and this workspace declares no separate lockfile.
 - Dependencies: `package.json` declares no runtime or dev dependencies.
 - Test framework: Node built-ins only, especially `node:test`, `node:assert`, and `node:test`'s `mock` helper.
 - Formatting/linting: no ESLint, Prettier, Biome, TypeScript, Jest, Vitest, Playwright, Cypress, bundler config, or CI workflow is present.
@@ -130,5 +130,5 @@ Testing patterns:
 
 Packaging QA:
 
-- Run `omp plugin link --dry-run --json /absolute/path/to/writing-helper` when changing extension metadata or package layout.
-- Run `npm pack --dry-run` when changing bundled `agents/`, `skills/`, or package metadata.
+- Run `npm run check:marketplace` and usually `npm run pack:all` after version, package, Agent, or Skill changes.
+- Use the root release script for version changes: `npm run release -- --plugin writing-helper --bump <type>` (dry-run by default; add `--apply` only when authorized).

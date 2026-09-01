@@ -40,16 +40,16 @@ export async function runConfigPlan(input = {}) {
 
 function optionalStringParameters(z) {
   if (typeof z.optional === 'function') {
-    return z.object({ root: z.optional(z.string()).describe('Target OMP agent directory path. Defaults to the current working directory or ctx.cwd.') });
+    return z.object({ root: z.optional(z.string()).describe('Plugin or workspace root used to locate packaged assets. Defaults to the current working directory or ctx.cwd.') });
   }
-  return z.object({ root: z.string().optional().describe('Target OMP agent directory path. Defaults to the current working directory or ctx.cwd.') });
+  return z.object({ root: z.string().optional().describe('Plugin or workspace root used to locate packaged assets. Defaults to the current working directory or ctx.cwd.') });
 }
 
 function workflowContextSyncParameters(z) {
   const optional = (schema) => typeof z.optional === 'function' ? z.optional(schema) : schema.optional();
   return z.object({
-    root: optional(z.string()).describe('Target OMP agent directory path. Defaults to the current working directory or ctx.cwd.'),
-    target: optional(z.string()).describe('Specific workflow context file(s) to sync, e.g. AGENTS.md or WATCHDOG.yml. Omitting syncs all managed assets.'),
+    root: optional(z.string()).describe('Plugin or workspace root used to locate packaged assets. Defaults to the current working directory or ctx.cwd.'),
+    target: optional(z.string()).describe('Target OMP agent directory path. Defaults to PI_CODING_AGENT_DIR or ~/.omp/agent.'),
     apply: optional(z.boolean()).describe('Set to true to apply changes. Defaults to false (dry-run mode).'),
   });
 }
@@ -80,7 +80,7 @@ export default function registerOmpConfig(pi) {
     promptSnippet: 'Inspect packaged OMP config assets and report portability risks.',
     promptGuidelines: [
       'Reports advisory findings only; does not modify files.',
-      'Pass root to inspect a specific agent directory.',
+      'Pass root to locate packaged assets from a specific plugin or workspace root.',
       'Use this before applying config changes to verify safety.',
     ],
     parameters,
@@ -104,7 +104,7 @@ export default function registerOmpConfig(pi) {
     promptGuidelines: [
       'Defaults to dry-run; pass apply: true to write changes.',
       'Preserves content outside managed markers in AGENTS.md.',
-      'Use root to target a specific agent directory.',
+      'Use target to select a specific agent directory; root locates packaged assets.',
     ],
     parameters: syncParameters,
     execute: withToolErrorHandling('omp_config_sync_workflow_context', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
@@ -131,7 +131,7 @@ export default function registerOmpConfig(pi) {
     promptSnippet: 'List packaged OMP config agents, skills, hooks, and templates.',
     promptGuidelines: [
       'Returns a JSON inventory of all packaged config assets.',
-      'Pass root to inspect a specific agent directory.',
+      'Pass root to locate packaged assets from a specific plugin or workspace root.',
       'This tool is read-only; it does not modify files.',
     ],
     parameters,
@@ -155,7 +155,7 @@ export default function registerOmpConfig(pi) {
     promptGuidelines: [
       'Use this tool before omp_config_sync_workflow_context with apply: true.',
       'Reports what would change without modifying any files.',
-      'Pass root to target a specific directory.',
+      'Pass root to locate packaged assets from a specific plugin or workspace root.',
     ],
     parameters,
     execute: withToolErrorHandling('omp_config_plan', async (_toolCallId, params, _signal, _onUpdate, ctx) => {

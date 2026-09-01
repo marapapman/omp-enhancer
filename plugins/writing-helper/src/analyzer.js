@@ -1,7 +1,7 @@
 import { paragraphLocation, resolveLanguage } from './language.js';
 import { MAX_ISSUES_CONFIG, UNLIMITED, clampMaxIssues } from './max-issues.js';
 
-/** Severities kept in redline mode (MINOR/INFO findings are dropped). */
+/** Severities retained by redline style checks. */
 export const REDLINE_SEVERITIES = new Set(['FATAL', 'CRITICAL', 'WARNING', 'IMPORTANT']);
 
 const ZH_STRONG_WORDS = ['所有', '完全', '最优', '显著', '全部', '任何', '必然'];
@@ -205,27 +205,19 @@ function summarize(issues) {
   return { total: issues.length, fatalOrCritical, warningsOrImportant, minor, verdict };
 }
 
-function filterMode(issues, mode) {
-  if (mode === 'standard') return issues;
-  return issues.filter((issue) => REDLINE_SEVERITIES.has(issue.severity));
-}
-
 export function analyzeWritingLogic(input) {
   const text = input.text ?? '';
   const language = resolveLanguage(input.language, text);
   const mode = input.mode ?? 'redline';
   const maxIssues = input.maxIssues === UNLIMITED ? UNLIMITED : clampMaxIssues(input.maxIssues, MAX_ISSUES_CONFIG.logic);
 
-  const allIssues = filterMode(
-    [
-      ...dataConsistencyIssues(text, language),
-      ...strongConclusionIssues(text, language),
-      ...terminologyIssues(text, language),
-      ...contributionMismatchIssues(text, language),
-      ...causalLeapIssues(text, language),
-    ],
-    mode,
-  );
+  const allIssues = [
+    ...dataConsistencyIssues(text, language),
+    ...strongConclusionIssues(text, language),
+    ...terminologyIssues(text, language),
+    ...contributionMismatchIssues(text, language),
+    ...causalLeapIssues(text, language),
+  ];
 
   return {
     ok: true,

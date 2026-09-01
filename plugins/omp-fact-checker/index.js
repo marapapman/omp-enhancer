@@ -95,6 +95,7 @@ function buildReportParameters(z) {
     laneB: z.string().optional().describe('Second evidence lane for comparison. Example: "B".'),
     conflicts: z.array(z.string()).optional().describe('List of specific points of conflict between lanes. Example: ["source_disagrees_on_date"].'),
     findings: z.array(z.string()).optional().describe('Additional findings from the cross-check analysis. Example: ["both_lanes_agree_on_outcome"].'),
+    gaps: z.array(z.string()).optional().describe('Evidence gaps identified for this cross-check. Example: [\"FACT_EVIDENCE_B not supplied\"].'),
   });
   return z.object({
     claims: z.array(claim).optional().describe('Fact-check claims with id/text fields. Use results from fact_check_analyze.'),
@@ -205,6 +206,7 @@ function formatCrossCheckBlock(crossChecks = []) {
       `  laneA: ${item.laneA}`,
       `  laneB: ${item.laneB}`,
       item.conflicts?.length ? `  conflicts: ${item.conflicts.join(', ')}` : null,
+      item.gaps?.length ? `  gaps: ${item.gaps.join(', ')}` : null,
       item.findings?.length ? `  findings: ${item.findings.join(', ')}` : null,
     ].filter(Boolean).join('\n')) : ['- none']),
   ].join('\n');
@@ -601,6 +603,7 @@ function sameCrossChecks(expected = [], observed = []) {
     laneB: item?.laneB ?? '',
     conflicts: [...(item?.conflicts ?? [])].sort(),
     findings: [...(item?.findings ?? [])].sort(),
+    gaps: [...(item?.gaps ?? [])].sort(),
   });
   const left = expected.map(normalize).sort();
   const right = observed.map(normalize).sort();
@@ -650,6 +653,7 @@ function laneCoversClaims(records = [], claims = []) {
 
 function finalVerdictsMatchReport(finalOutput = '', results = []) {
   const text = String(finalOutput);
+  const activeVerdicts = parseActiveClaimVerdicts(text);
   return results.every(({ claimId, verdict }) => {
     const id = escapeRegex(claimId);
     const verdicts = CLAIM_VERDICT_TOKENS.map(escapeRegex).join('|');
@@ -677,10 +681,62 @@ function finalVerdictsMatchReport(finalOutput = '', results = []) {
         canonical: canonical.test(line),
       });
     }
-    if (occurrences.length !== 1 || !occurrences[0].canonical) return false;
-    const observed = FINAL_OUTPUT_VERDICT_ALIASES[occurrences[0].verdict] ?? occurrences[0].verdict;
+    if (occurrences.length === 1 && occurrences[0].canonical) {
+      const observed = FINAL_OUTPUT_VERDICT_ALIASES[occurrences[0].verdict] ?? occurrences[0].verdict;
+      return observed === verdict;
+    }
+    if (occurrences.length !== 0 || !activeVerdicts) return false;
+    const claimNumber = activeClaimNumber(claimId);
+    const activeVerdict = claimNumber === null ? undefined : activeVerdicts.get(claimNumber);
+    if (!activeVerdict) return false;
+    const observed = FINAL_OUTPUT_VERDICT_ALIASES[activeVerdict] ?? activeVerdict;
     return observed === verdict;
   });
+}
+
+function activeClaimNumber(claimId = '') {
+  const match = String(claimId).match(/(?:^|[-_])(\d+)$/u);
+  return match ? Number(match[1]) : null;
+}
+
+function parseActiveClaimVerdicts(text = '') {
+  const verdicts = CLAIM_VERDICT_TOKENS.map(escapeRegex).join('|');
+  const verdictPattern = '^\\s*Verdict:\\s*(' + verdicts + ')\\s*$';
+  const blocks = [];
+  const ignoredSections = new Set(['FACT_EVIDENCE_A', 'FACT_EVIDENCE_B', 'FACT_CROSS_CHECK']);
+  let current = null;
+  let section = '';
+  const finish = () => {
+    if (current) blocks.push(current);
+    current = null;
+  };
+
+  for (const line of String(text).split(/\r?\n/u)) {
+    const header = factCheckSectionHeader(line);
+    if (header) {
+      finish();
+      section = header;
+      continue;
+    }
+    if (ignoredSections.has(section)) continue;
+    const heading = /^\s*###\s+Claim\s+(\d+)\s*$/iu.exec(line);
+    if (heading) {
+      finish();
+      current = { number: Number(heading[1]), verdicts: [] };
+      continue;
+    }
+    if (!current) continue;
+    const verdict = new RegExp(verdictPattern, 'i').exec(line);
+    if (verdict) current.verdicts.push(verdict[1].toUpperCase());
+  }
+  finish();
+
+  const parsed = new Map();
+  for (const block of blocks) {
+    if (!Number.isSafeInteger(block.number) || block.number < 1 || block.verdicts.length !== 1 || parsed.has(block.number)) return null;
+    parsed.set(block.number, block.verdicts[0]);
+  }
+  return parsed;
 }
 
 function factCheckSectionHeader(line = '') {
@@ -690,7 +746,7 @@ function factCheckSectionHeader(line = '') {
     .replace(/\*/gu, '')
     .trim()
     .toUpperCase();
-  return /^FACT_(?:CHECK_PLAN|EVIDENCE_[AB]|CROSS_CHECK|REVIEW|CHECK_REPORT|CHECK_USAGE)$/u.test(normalized)
+  return /^FACT_(?:CHECK_PLAN|EVIDENCE_[AB]|CROSS_CHECK|REVIEW|CHECK_REPORT)$/u.test(normalized)
     ? normalized
     : '';
 }

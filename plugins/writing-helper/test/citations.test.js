@@ -121,6 +121,21 @@ describe('verifyCitations', () => {
     assert.equal(result.citations[0].status, 'VERIFIED');
     assert.equal(result.citations[0].evidence.provider, 'crossref');
   });
+  it('handles ordinary DOI lookup without an arXiv fallback', async () => {
+    const evidence = await fetchExternalCitationEvidence({
+      text: 'See DOI: 10.1145/3366423.3380124.',
+      allowNetwork: true,
+      citationProviders: ['doi'],
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return { message: { DOI: '10.1145/3366423.3380124' } };
+        },
+      }),
+    });
+
+    assert.equal(evidence[0].provider, 'crossref');
+  });
 
   it('falls back to arXiv lookup for BibTeX DOI values that encode arXiv ids', async () => {
     const requestedUrls = [];
@@ -166,6 +181,39 @@ describe('verifyCitations', () => {
 
     assert.deepEqual(result.citations.map((citation) => citation.kind), ['doi', 'arxiv']);
     assert.equal(result.citations.every((citation) => citation.status === 'UNVERIFIED'), true);
+  });
+
+  it('normalizes arXiv versions and URLs across direct targets and evidence records', () => {
+    const result = verifyCitations({
+      text: 'See https://arxiv.org/abs/2103.00020v2.',
+      evidenceRecords: [{ id: 'other-source', provider: 'local-literature' }, { arxiv: 'https://arxiv.org/abs/2103.00020v1', provider: 'local-literature' }],
+    });
+
+    assert.equal(result.citations[0].key, '2103.00020');
+    assert.equal(result.citations[0].status, 'VERIFIED');
+
+    const invalid = verifyCitations({
+      text: 'See arXiv:2103.00020.',
+      evidenceRecords: [{ arxiv: 'not-an-arxiv-id', provider: 'local-literature' }],
+    });
+    assert.equal(invalid.citations[0].status, 'UNVERIFIED');
+
+    const numeric = verifyCitations({
+      text: 'See arXiv:2103.00020.',
+      evidenceRecords: [{ arxiv: '2103.00020v1', provider: 'local-literature' }],
+    });
+    assert.equal(numeric.citations[0].status, 'VERIFIED');
+    const noArxiv = verifyCitations({
+      text: 'See arXiv:2103.00020.',
+      evidenceRecords: [{ id: 'other-source', provider: 'local-literature' }],
+    });
+    assert.equal(noArxiv.citations[0].status, 'UNVERIFIED');
+    const key = verifyCitations({
+      text: 'See [@paper].',
+      bibliography: '@article{paper, eprint={2103.00020}}',
+      evidenceRecords: [{ arxiv: '2103.00020v1', provider: 'local-literature' }],
+    });
+    assert.equal(key.citations[0].status, 'VERIFIED');
   });
 
   it('keeps external evidence opt-in and parses arXiv metadata when enabled', async () => {

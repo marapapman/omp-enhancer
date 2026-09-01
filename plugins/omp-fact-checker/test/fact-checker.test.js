@@ -8,6 +8,7 @@ import factCheckerExtension, {
   buildFactCheckReport,
   collectLocalEvidence,
   crossCheckEvidence,
+  formatFactCheckReport,
   strictClaimVerdict,
   validateFactCheckReview,
 } from '../index.js';
@@ -23,10 +24,6 @@ const factAgent = (name) => readFileSync(
   'utf8',
 );
 
-const configAgent = (name) => readFileSync(
-  new URL(`../../omp-config/agents/${name}.md`, import.meta.url),
-  'utf8',
-);
 
 const tupleField = (value, materiality = 'MATERIAL') => ({ value, materiality });
 
@@ -395,6 +392,40 @@ test('cross-check records a partial result and explicit gap when optional lane B
   assert.equal(result[0].laneB, 'INSUFFICIENT');
   assert.deepEqual(result[0].gaps, ['FACT_EVIDENCE_B not supplied']);
 });
+test('formatted cross-checks expose gaps and compare supplied gap data', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const claim = { id: 'FC-001', text: 'The company was founded in 2020.' };
+  const result = await omp.tools.get('fact_check_report').execute(
+    'cross-check-gaps',
+    {
+      claims: [claim],
+      evidenceRecords: [{
+        claimId: claim.id,
+        lane: 'A',
+        status: 'SUPPORTED',
+        source: 'official history',
+        quote: 'Founded in 2020.',
+      }],
+      crossChecks: [{
+        claimId: claim.id,
+        status: 'PARTIAL',
+        laneA: 'SUPPORTED',
+        laneB: 'INSUFFICIENT',
+        conflicts: [],
+        gaps: ['wrong gap'],
+      }],
+    },
+    undefined,
+    undefined,
+    { cwd: process.cwd(), sessionManager: {} },
+  );
+
+  assert.equal(result.isError, false);
+  assert.ok(result.details.warnings.some((warning) => /crossChecks differed/i.test(warning)));
+  assert.match(result.content[0].text, /gaps: FACT_EVIDENCE_B not supplied/);
+  assert.ok(omp.tools.get('fact_check_report').parameters.shape.crossChecks.item.shape.gaps);
+});
 
 test('buildFactCheckPlan computes risk and stages from the truncated claim set', () => {
   const text = 'The stable value is 42. The medical dose is 5 mg.';
@@ -459,6 +490,10 @@ test('local evidence lanes cross-check to agreement and conflict', () => {
     evidenceRecords: [...supported, ...contradicted],
   });
   assert.equal(reportWithoutCrossCheck.results[0].verdict, 'CONFLICTED');
+  assert.equal(reportWithoutCrossCheck.summary.contradicted, 0);
+  assert.equal(reportWithoutCrossCheck.summary.conflicted, 1);
+  assert.match(formatFactCheckReport(reportWithoutCrossCheck), /Contradicted: 0/);
+  assert.match(formatFactCheckReport(reportWithoutCrossCheck), /Conflicted: 1/);
   assert.equal(reportWithoutCrossCheck.results[0].strictVerdict, 'CONFLICTED');
   assert.equal(strictClaimVerdict({
     claim: claims[0],
@@ -479,6 +514,11 @@ test('explicit claim ids prevent evidence from leaking into a similar claim', ()
       status: 'SUPPORTED',
       quote: 'Accuracy is 91%.',
       source: 'table 1',
+    }, {
+      lane: 'A',
+      status: 'SUPPORTED',
+      quote: 'Accuracy is 87%.',
+      source: 'table 2',
     }],
     lane: 'A',
   });
@@ -597,7 +637,6 @@ test('fact advisory review reports missing plan, evidence, cross-check, review, 
     ].join('\n'),
   });
   assert.equal(passed.ok, true);
-  assert.equal(passed.missing.includes('FACT_CHECK_USAGE'), false);
 });
 
 test('the registered review reports workflow inconsistencies without failing tool execution', async () => {
@@ -764,6 +803,53 @@ test('final verdict alias LOCAL_UNVERIFIED matches a canonical UNVERIFIABLE repo
   assert.equal(reviewed.details.ok, true);
   assert.equal(reviewed.details.ready, true);
   assert.equal(reviewed.details.strictSupportReady, false);
+  assert.deepEqual(reviewed.details.missingObserved, []);
+});
+test('review accepts the active numbered Claim/Verdict format', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+  const analyzed = await omp.tools.get('fact_check_analyze').execute(
+    'numbered-plan', { text: 'The stable fact is 42.' }, undefined, undefined, ctx,
+  );
+  const claims = analyzed.details.claims;
+  const evidence = await omp.tools.get('fact_check_evidence').execute(
+    'numbered-evidence', {
+      claims,
+      lane: 'A',
+      allowNetwork: false,
+      evidenceRecords: [{
+        claimId: 'FC-001',
+        lane: 'A',
+        status: 'SUPPORTED',
+        quote: '42',
+        source: 'a.md',
+      }],
+    }, undefined, undefined, ctx,
+  );
+  const report = await omp.tools.get('fact_check_report').execute(
+    'numbered-report', { claims, evidenceRecords: evidence.details.records }, undefined, undefined, ctx,
+  );
+  assert.equal(report.isError, false);
+
+  const reviewed = await omp.tools.get('fact_check_review').execute(
+    'numbered-review', {
+      finalOutput: [
+        'FACT_CHECK_PLAN',
+        'FACT_EVIDENCE_A',
+        'FACT_CROSS_CHECK',
+        'FACT_REVIEW',
+        'FACT_CHECK_REPORT',
+        '### Claim 1',
+        'Verdict: SUPPORTED',
+        'Evidence: a.md',
+        'Limitation: none',
+      ].join('\n'),
+      riskLevel: 'low',
+    }, undefined, undefined, ctx,
+  );
+  assert.equal(reviewed.isError, false);
+  assert.equal(reviewed.details.ready, true);
   assert.deepEqual(reviewed.details.missingObserved, []);
 });
 
