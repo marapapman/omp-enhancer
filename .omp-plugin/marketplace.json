@@ -5,8 +5,8 @@
     "name": "marapapman"
   },
   "metadata": {
-    "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, and editable draw.io diagrams.",
-    "version": "1.0.49",
+    "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, and Volcengine Ark Coding Plan model integration.",
+    "version": "1.0.50",
     "pluginRoot": "plugins"
   },
   "plugins": [
@@ -88,6 +88,15 @@
         "./skills/fact-checking",
         "./skills/source-evaluation"
       ]
+    },
+    {
+      "name": "volcengine-coding-plan",
+      "description": "Native OMP provider for Volcengine Ark Coding Plan models.",
+      "version": "0.1.1",
+      "category": "development",
+      "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/volcengine-coding-plan",
+      "repository": "https://github.com/marapapman/omp-enhancer",
+      "source": "./volcengine-coding-plan"
     }
   ]
 }

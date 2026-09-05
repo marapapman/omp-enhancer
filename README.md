@@ -1,6 +1,6 @@
 # OMP Enhancer
 
-OMP Enhancer is an OMP marketplace for optional workflows, shared config, writing, fact checking, and draw.io diagrams.
+OMP Enhancer is an OMP marketplace for optional workflows, shared config, writing, fact checking, draw.io diagrams, and Volcengine Ark Coding Plan model access.
 
 OMP exposes available Skills and Agents; Main chooses under native permissions. Plugins neither hard-route nor block, continue sessions, or auto-repair.
 
@@ -11,6 +11,7 @@ OMP exposes available Skills and Agents; Main chooses under native permissions. 
 | `omp-config` | Config, workflow references, Agents, Skills, and diagnostics. |
 | `writing-helper` | English and Chinese writing, citation, style, and polish. |
 | `omp-fact-checker` | Claim evidence, cross-checking, and advisory review. |
+| `volcengine-coding-plan` | Native `/login` and `/model` access to Ark Coding Plan models. |
 
 ## Workflows
 
@@ -41,14 +42,14 @@ Add the marketplace and install:
 
 ```bash
 omp plugin marketplace add marapapman/omp-enhancer
-omp plugin install omp-config@omp-enhancer writing-helper@omp-enhancer omp-fact-checker@omp-enhancer
+omp plugin install omp-config@omp-enhancer writing-helper@omp-enhancer omp-fact-checker@omp-enhancer volcengine-coding-plan@omp-enhancer
 ```
 
 For a local checkout:
 
 ```bash
 omp plugin marketplace add /path/to/omp-enhancer
-omp plugin install omp-config@omp-enhancer writing-helper@omp-enhancer omp-fact-checker@omp-enhancer
+omp plugin install omp-config@omp-enhancer writing-helper@omp-enhancer omp-fact-checker@omp-enhancer volcengine-coding-plan@omp-enhancer
 ```
 
 Start a new OMP session after installing or upgrading plugins.
@@ -98,5 +99,5 @@ The marketplace tracks GitHub `main`; catalog `ref` pins are not part of the rel
 - [Development, validation, and release guide](docs/DEVELOPMENT.md)
 - [Workflow definition and generation guide](docs/WORKFLOW_DEVELOPMENT.md)
 - [Draw.io pipeline contract](docs/DRAWIO_PIPELINE.md)
-- Plugin guides: [Config](plugins/omp-config/README.md), [Writing](plugins/writing-helper/README.md), and [Fact checking](plugins/omp-fact-checker/README.md)
+- Plugin guides: [Config](plugins/omp-config/README.md), [Writing](plugins/writing-helper/README.md), [Fact checking](plugins/omp-fact-checker/README.md), and [Volcengine Coding Plan](plugins/volcengine-coding-plan/README.md)
 - [Historical design archive](docs/superpowers/README.md)

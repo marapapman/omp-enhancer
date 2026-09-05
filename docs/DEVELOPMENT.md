@@ -4,29 +4,30 @@
 
 ## Monorepo 布局
 
-当前 marketplace 只有三个插件：
+当前 marketplace 只有四个插件：
 
 ```text
 plugins/
-├── omp-config/          # workflow references、PPT/文档 Skills、visioner、诊断和 hooks
-├── writing-helper/      # 中英文写作、逻辑、风格、引用和保真检查
-└── omp-fact-checker/    # claim plan、evidence、cross-check、strict verdict 和 review
+├── omp-config/              # workflow references、PPT/文档 Skills、visioner、诊断和 hooks
+├── writing-helper/          # 中英文写作、逻辑、风格、引用和保真检查
+├── omp-fact-checker/        # claim plan、evidence、cross-check、strict verdict 和 review
+└── volcengine-coding-plan/  # 方舟 Coding Plan provider、/login 和 /model 接入
 
-scripts/                 # workflow generation、validation、E2E、release、packaging
-docs/                    # 当前架构与开发文档
-docs/superpowers/        # 历史 plans/specs/reports，仅作 archive
-.omp-plugin/             # marketplace catalog
+scripts/                     # workflow generation、validation、E2E、release、packaging
+docs/                        # 当前架构与开发文档
+docs/superpowers/            # 历史 plans/specs/reports，仅作 archive
+.omp-plugin/                 # marketplace catalog
 ```
 
 重要文件：
 
-- `package.json`：三个 npm workspace 和统一脚本；
+- `package.json`：四个 npm workspace 和统一脚本；
 - `package-lock.json`：唯一提交的 npm lockfile；
 - `.omp-plugin/marketplace.json`：插件版本、source 和 Skill inventory；
 - `scripts/workflow-definitions.js`：writing、research、visual 三域的 workflow 唯一语义来源；
 - `scripts/workflow-schema.js`、`scripts/workflow-render.js`：definition 校验与 Markdown 渲染；
 - `scripts/generate-workflow-catalog.js`：生成共享 workflow 资产；
-- `plugins/writing-helper/src/quality.js`：写作质量分析入口；
+- `plugins/volcengine-coding-plan/index.js`：Coding Plan provider 和原生 `/login` 接入；
 - `plugins/omp-fact-checker/src/fact-check.js`：事实核查 pipeline；
 - `scripts/release.js`：版本与 marketplace release 的唯一写入入口。
 
@@ -66,6 +67,8 @@ npm run pack:dry --workspace plugins/omp-config
 npm test --workspace plugins/writing-helper
 npm run coverage --workspace plugins/writing-helper
 npm test --workspace plugins/omp-fact-checker
+npm test --workspace plugins/volcengine-coding-plan
+npm run pack:dry --workspace plugins/volcengine-coding-plan
 git diff --check
 ```
 
@@ -106,13 +109,14 @@ npm run pack:all
 
 `docs/WORKFLOW_E2E_TESTING.md` 保存事件证据、静态 probe、隔离运行、failure classification 和重复实验方法；一次 live run 只是样本，不能证明稳定提升。`docs/OMP_ENHANCER_SELF_DEVELOPMENT.md` 是历史自开发记录，包含已删除代码增强生命周期，仅用于理解旧迁移背景。
 
-需要检查 OMP 兼容性时，使用当前三个插件：
+需要检查 OMP 兼容性时，使用当前四个插件：
 
 ```bash
 node scripts/e2e/omp17-rpc-probe.mjs -- \
   -e plugins/omp-config/index.js --plugin-dir plugins/omp-config \
   -e plugins/writing-helper/index.js --plugin-dir plugins/writing-helper \
-  -e plugins/omp-fact-checker/index.js --plugin-dir plugins/omp-fact-checker
+  -e plugins/omp-fact-checker/index.js --plugin-dir plugins/omp-fact-checker \
+  -e plugins/volcengine-coding-plan/index.js --plugin-dir plugins/volcengine-coding-plan
 ```
 
 ## Release transaction

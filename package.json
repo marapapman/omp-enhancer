@@ -5,7 +5,8 @@
   "workspaces": [
     "plugins/omp-config",
     "plugins/writing-helper",
-    "plugins/omp-fact-checker"
+    "plugins/omp-fact-checker",
+    "plugins/volcengine-coding-plan"
   ],
   "scripts": {
     "test": "npm run check:workflows && node --test scripts/*.test.js && npm test --workspaces --if-present",

@@ -4,7 +4,7 @@
 
 ## 运行模型
 
-OMP Enhancer 当前只发布三个插件：`omp-config`、`writing-helper` 和 `omp-fact-checker`。代码增强核心、测试增强插件和 ECC 代码技能不再属于当前 marketplace。
+OMP Enhancer 当前只发布四个插件：`omp-config`、`writing-helper`、`omp-fact-checker` 和 `volcengine-coding-plan`。代码增强核心、测试增强插件和 ECC 代码技能不再属于当前 marketplace。
 
 OMP 负责系统提示、用户指令、active tools、动态 Available Agents、权限、审批和完成行为。插件只提供可选的 Skill、Agent、工具、配置资产和观察性提示，不复制宿主权限模型，不创建 hard router、hard gate、completion controller 或 automatic repair loop。
 
@@ -32,8 +32,11 @@ Managed `AGENTS.md`、`CLAUDE.md` 和 `WATCHDOG.yml` 不导入完整目录，只
 | `omp-config` | workflow 参考、PPT/文档/视觉 Skills、`visioner` Agent、配置诊断、managed context 同步、notify-only hooks、`/enhancer-tools` 工具组激活 | 自动覆盖用户配置、自动加载完整目录、授权文件或命令操作 |
 | `writing-helper` | 英文和中文写作逻辑、风格、引用、保真检查，以及 writer/checker Agents 和 Skills | 阻止交付、替用户自动改写、替用户持久化文件 |
 | `omp-fact-checker` | claim extraction、事实计划、A/B evidence、cross-check、strict verdict、报告和 fact review | 把缺失证据变成生命周期 gate、把兼容证据升级为证明 |
+| `volcengine-coding-plan` | 通过 OMP 原生 `registerProvider` 注册 Coding Plan OpenAI 兼容模型，并把 API-key 登录接入原生 `/login` | 不修改宿主认证存储、不替宿主路由、不发现或猜测未公开模型 |
 
-所有 marketplace extension tools 默认 `defaultInactive`。`omp-config` 在宿主提供 active-tool 管理 API 时注册 `/enhancer-tools`，只支持 `config`、`writing`、`fact` 和 `all` 组；激活工具不改变权限。
+`volcengine-coding-plan` 使用 `https://ark.cn-beijing.volces.com/api/coding/v3`，静态暴露官方 Coding Plan 模型名；模型选择、凭证保存和请求发送仍由 OMP 原生 `/login`、`/model`、AuthStorage 与 OpenAI-compatible transport 负责。
+
+所有 marketplace extension tools 默认 `defaultInactive`。`omp-config` 在宿主提供 active-tool 管理 API 时注册 `/enhancer-tools`，只支持 `config`、`writing`、`fact` 和 `all` 组；激活工具不改变权限。Coding Plan provider 是模型扩展，不增加 extension tool 或权限。
 
 ## 写作、PPT 与视觉
 

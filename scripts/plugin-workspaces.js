@@ -2,6 +2,7 @@ const definitions = [
   { name: 'omp-config', directory: 'omp-config' },
   { name: 'writing-helper', directory: 'writing-helper' },
   { name: 'omp-fact-checker', directory: 'omp-fact-checker' },
+  { name: 'volcengine-coding-plan', directory: 'volcengine-coding-plan' },
 ]
 
 export const pluginWorkspaces = Object.freeze(definitions.map(({ name, directory }) => Object.freeze({
