@@ -14,16 +14,16 @@ import extension, {
 } from '../index.js';
 
 const EXPECTED_MODELS = {
-  'ark-code-latest': { contextWindow: 1048576, maxTokens: 384000, input: ['text'] },
-  'doubao-seed-evolving': { contextWindow: 1048576, maxTokens: 262144, input: ['text'] },
-  'doubao-seed-2.1-turbo': { contextWindow: 262144, maxTokens: 65536, input: ['text', 'image'] },
-  'doubao-seed-2.0-lite': { contextWindow: 262144, maxTokens: 131072, input: ['text', 'image'] },
-  'minimax-m3': { contextWindow: 1048576, maxTokens: 131072, input: ['text', 'image'] },
-  'glm-5.3': { contextWindow: 1048576, maxTokens: 131072, input: ['text'] },
-  'glm-5.3-flash': { contextWindow: 1048576, maxTokens: 131072, input: ['text', 'image'] },
-  'deepseek-v4-flash': { contextWindow: 1048576, maxTokens: 384000, input: ['text'] },
-  'deepseek-v4-pro': { contextWindow: 1048576, maxTokens: 384000, input: ['text'] },
-  'kimi-k2.7-code': { contextWindow: 262144, maxTokens: 32000, input: ['text', 'image'] },
+  'ark-code-latest': { reasoning: true, contextWindow: 1048576, maxTokens: 384000, input: ['text'] },
+  'doubao-seed-evolving': { reasoning: true, contextWindow: 1048576, maxTokens: 262144, input: ['text'] },
+  'doubao-seed-2.1-turbo': { reasoning: true, contextWindow: 262144, maxTokens: 65536, input: ['text', 'image'] },
+  'doubao-seed-2.0-lite': { reasoning: true, contextWindow: 262144, maxTokens: 131072, input: ['text', 'image'] },
+  'minimax-m3': { reasoning: true, contextWindow: 1048576, maxTokens: 131072, input: ['text', 'image'] },
+  'glm-5.3': { reasoning: true, contextWindow: 1048576, maxTokens: 131072, input: ['text'] },
+  'glm-5.3-flash': { reasoning: true, contextWindow: 1048576, maxTokens: 131072, input: ['text', 'image'] },
+  'deepseek-v4-flash': { reasoning: true, contextWindow: 1048576, maxTokens: 384000, input: ['text'] },
+  'deepseek-v4-pro': { reasoning: true, contextWindow: 1048576, maxTokens: 384000, input: ['text'] },
+  'kimi-k2.7-code': { reasoning: false, contextWindow: 262144, maxTokens: 32000, input: ['text', 'image'] },
 };
 
 function withEnvironment(values, callback) {
@@ -81,7 +81,7 @@ test('keeps the current static catalog exact, conservative, and tool-capable', (
   for (const model of CODING_PLAN_MODELS) {
     const expected = EXPECTED_MODELS[model.id];
     assert.ok(expected, `unexpected model ${model.id}`);
-    assert.equal(model.reasoning, true);
+    assert.equal(model.reasoning, expected.reasoning);
     const expectedEfforts =
       model.id === 'kimi-k2.7-code'
         ? undefined
