@@ -18,6 +18,7 @@ const fixtureVersions = new Map([
   ['writing-helper', '0.2.1'],
   ['omp-fact-checker', '0.1.0'],
   ['volcengine-coding-plan', '0.1.0'],
+  ['aliyun-bailian-token-plan', '0.1.0'],
 ]);
 
 const pluginFixtures = pluginWorkspaces.map(({ directory, name }) => ({
@@ -276,6 +277,7 @@ test('--plugin all --bump patch bumps every plugin package, every catalog entry,
       ['writing-helper', { directory: 'writing-helper', version: '0.2.2' }],
       ['omp-fact-checker', { directory: 'omp-fact-checker', version: '0.1.1' }],
       ['volcengine-coding-plan', { directory: 'volcengine-coding-plan', version: '0.1.1' }],
+      ['aliyun-bailian-token-plan', { directory: 'aliyun-bailian-token-plan', version: '0.1.1' }],
     ]);
 
     assert.equal(catalog.metadata.version, '1.0.1');
