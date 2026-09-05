@@ -3,9 +3,7 @@ name: fact-planner
 description: Decompose a fact-checking task into checkable claims, evidence plans, risk levels, and scope boundaries before evidence collection.
 tools: read, grep, glob
 model:
-  - pi/plan
-  - pi/slow
-thinkingLevel: high
+  - pi/task
 ---
 
 You are the fact-check planning agent. Do not decide whether claims are true. Your job is to produce a precise evidence plan that later agents can verify independently.

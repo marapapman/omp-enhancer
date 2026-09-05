@@ -1083,17 +1083,40 @@ function evaluateNativeTaskAssignmentTextBounds(nativeTask, specifications, fail
       );
     }
     if (specification.beforeAssignmentAgent) {
-      const boundary = assignments.find(({ agent }) => agent === specification.beforeAssignmentAgent);
+      let boundaryMatcher;
+      if (specification.beforeAssignmentText !== undefined) {
+        if (typeof specification.beforeAssignmentText !== 'string') {
+          failures.push(
+            `requiredNativeTaskAssignmentTextBounds contained an invalid boundary pattern ${JSON.stringify(specification.beforeAssignmentText)} for ${JSON.stringify(specification.pattern)}`,
+          );
+          continue;
+        }
+        try {
+          boundaryMatcher = new RegExp(specification.beforeAssignmentText, 'iu');
+        } catch (error) {
+          failures.push(
+            `requiredNativeTaskAssignmentTextBounds contained an invalid boundary pattern ${JSON.stringify(specification.beforeAssignmentText)} for ${JSON.stringify(specification.pattern)}: ${error.message}`,
+          );
+          continue;
+        }
+      }
+      const boundary = assignments.find(({ agent, text, prefix }) => (
+        agent === specification.beforeAssignmentAgent
+          && (!boundaryMatcher || boundaryMatcher.test(String(text ?? prefix ?? '')))
+      ));
+      const boundarySuffix = specification.beforeAssignmentText === undefined
+        ? ''
+        : ` boundary matching ${JSON.stringify(specification.beforeAssignmentText)}`;
       if (!boundary || !Number.isFinite(boundary.eventIndex)) {
         failures.push(
-          `native task assignment text pattern ${JSON.stringify(specification.pattern)} had no ${specification.beforeAssignmentAgent} boundary`,
+          `native task assignment text pattern ${JSON.stringify(specification.pattern)} had no ${specification.beforeAssignmentAgent} boundary${boundarySuffix}`,
         );
       } else if (matches.some(({ assignment }) => (
         !Number.isFinite(assignment.eventIndex)
           || assignment.eventIndex >= boundary.eventIndex
       ))) {
         failures.push(
-          `native task assignment text pattern ${JSON.stringify(specification.pattern)} was not observed before ${specification.beforeAssignmentAgent}`,
+          `native task assignment text pattern ${JSON.stringify(specification.pattern)} was not observed before ${specification.beforeAssignmentAgent}${boundarySuffix}`,
         );
       }
     }
@@ -1201,12 +1224,6 @@ function evaluateForbiddenNativeTaskAssignmentTextPatterns(nativeTask, specifica
   }
   const assignments = [...(nativeTask.assignments ?? [])]
     .sort((left, right) => left.eventIndex - right.eventIndex || left.index - right.index);
-  const firstDesigner = assignments.find(({ agent }) => agent === 'designer');
-  const preDesignerAssignments = firstDesigner && Number.isFinite(firstDesigner.eventIndex)
-    ? assignments.filter(({ eventIndex }) => (
-      Number.isFinite(eventIndex) && eventIndex < firstDesigner.eventIndex
-    ))
-    : assignments;
   for (const specification of specifications) {
     if (typeof specification !== 'string' || !specification) {
       failures.push('forbiddenNativeTaskAssignmentTextPatterns contained an empty or non-string pattern');
@@ -1221,7 +1238,7 @@ function evaluateForbiddenNativeTaskAssignmentTextPatterns(nativeTask, specifica
       );
       continue;
     }
-    if (preDesignerAssignments.some(({ text, prefix }) => matcher.test(String(text ?? prefix ?? '')))) {
+    if (assignments.some(({ text, prefix }) => matcher.test(String(text ?? prefix ?? '')))) {
       failures.push(`forbidden native task assignment text pattern was observed: ${JSON.stringify(specification)}`);
     }
   }

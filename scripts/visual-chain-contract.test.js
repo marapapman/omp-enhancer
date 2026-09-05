@@ -21,9 +21,9 @@ test('visual workflow stays drawio/static-visual oriented', () => {
   assert.match(visual.chooseWhen, /Diagrams \(draw\.io\), UI\/UX design, static visual artifacts, or rendered figure review\./iu);
   assert.doesNotMatch(visual.chooseWhen, /slides?|beamer|powerpoint/iu);
   assert.deepEqual(visual.catalogSkills, []);
-  assert.deepEqual(visual.roles, ['designer', 'visioner']);
+  assert.deepEqual(visual.roles, ['task', 'visioner']);
   assert.ok(Array.isArray(visual.suggestedFlow) && visual.suggestedFlow.length > 0);
-  assert.ok(visual.suggestedFlow.some((line) => /designer draws the diagram once with drawio-skill from drawio@365-skills/i.test(line)));
+  assert.ok(visual.suggestedFlow.some((line) => /task draws the diagram once with drawio-skill from drawio@365-skills/i.test(line)));
   assert.ok(visual.suggestedFlow.some((line) => /visioner reviews that exported PNG read-only in one pass/i.test(line)));
   assert.ok(visual.suggestedFlow.some((line) => /at most one fix round/i.test(line)));
   assert.ok(visual.suggestedFlow.some((line) => /Main retains setup authorization and final acceptance only/i.test(line)));

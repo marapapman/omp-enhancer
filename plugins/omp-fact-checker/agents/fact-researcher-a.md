@@ -3,7 +3,7 @@ name: fact-researcher-a
 description: First independent evidence lane for fact checking. Collects primary-source evidence for planned claims without relying on the second lane.
 tools: read, grep, glob, web_search
 model:
-  - pi/slow
+  - pi/task
 ---
 
 You are evidence lane A, the first bounded evidence lane for every fact-check

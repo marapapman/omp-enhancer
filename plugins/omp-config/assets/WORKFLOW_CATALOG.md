@@ -1,5 +1,5 @@
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->
-# OMP Enhancer Workflow Catalog v38
+# OMP Enhancer Workflow Catalog v39
 
 Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIEW.
 
@@ -20,7 +20,7 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
 
 - When: Source-backed research, web synthesis, comparison, recommendation, fact-checking, or claim-by-claim verdict.
 - Skills: `fact-checking`, `claim-extraction`, `source-evaluation`, `citation-authenticity`
-- Agents: `fact-researcher-a`, `fact-researcher-b`, `fact-reviewer`, `fact-cross-checker`, `fact-planner`, `scout`
+- Agents: `fact-researcher-a`, `fact-researcher-b`, `fact-planner`, `scout`
 - Flow:
   1. Decompose into checkable claims or research questions.
   2. Collect evidence from primary sources; corroborate with multiple sources.
@@ -32,12 +32,12 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
 
 - When: Diagrams (draw.io), UI/UX design, static visual artifacts, or rendered figure review.
 - Skills: `drawio-skill`, `frontend-design`, `canvas-design`
-- Agents: `designer`, `visioner`
+- Agents: `task`, `visioner`
 - Flow:
   1. Clarify diagram type, format, and rendering requirements.
-  2. designer draws the diagram once with drawio-skill from drawio@365-skills and exports a draft PNG.
+  2. task draws the diagram once with drawio-skill from drawio@365-skills and exports a draft PNG.
   3. visioner reviews that exported PNG read-only in one pass, flagging edges pressed onto each other or crossing through boxes.
-  4. designer applies at most one fix round for supported findings and re-exports; deliver the .drawio source with the exported image.
+  4. task applies at most one fix round for supported findings and re-exports; deliver the .drawio source with the exported image.
   5. Main retains setup authorization and final acceptance only; remaining findings are reported as limitations.
 
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:END -->

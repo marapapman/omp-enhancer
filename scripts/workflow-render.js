@@ -3,12 +3,9 @@ const WORKFLOW_PHASE_LINE = 'ANALYZE -> EXECUTE -> REVIEW';
 
 const AGENT_DESCRIPTIONS = Object.freeze({
   checker: 'Read-only English checker for a narrow semantic-drift, logic, and clarity check or a broad seven-dimension advisory audit.',
-  'fact-cross-checker': 'Compares independent fact-check evidence lanes and identifies agreement, conflicts, stale evidence, and unresolved claims.',
-  designer: 'UI/UX specialist for design implementation, review, and visual refinement.',
   'fact-planner': 'Decomposes a fact-checking task into checkable claims, evidence plans, risk levels, and scope boundaries.',
   'fact-researcher-a': 'First independent evidence lane for fact checking; collects primary-source evidence for planned claims.',
   'fact-researcher-b': 'Second independent evidence lane; looks for corroboration, counter-evidence, and source conflicts.',
-  'fact-reviewer': 'Final fact-check reviewer; reviews plan, evidence, cross-check status, and final verdicts for overclaiming.',
   scout: 'Fast read-only scout returning compressed context for handoff; use for exploratory codebase research and broad pattern searches.',
   task: 'General-purpose subagent with full capabilities for delegated multi-step work.',
   visioner: 'Read-only visual QA specialist for slide decks, UI/web screenshots and interaction states, and static canvas/export artifacts.',

@@ -277,7 +277,7 @@
       "fixture": "visual-drawio-canvas",
       "timeoutSeconds": 480,
       "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
-      "prompt": "Create docs/deploy-flow.drawio as editable draw.io XML of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build (use dashed=1 in that edge's style). Draw it with drawio-skill from the drawio@365-skills marketplace: author the complete draw.io XML in one pass with orthogonal edges, no overlapping boxes, and fontSize of at least 14. Plan the follow-up QA as exactly one visioner read-only pass over the exported draft PNG for edges pressed onto each other or crossing through boxes, plus at most one fix round; in this exercise write only docs/deploy-flow.drawio and skip the actual PNG export.",
+      "prompt": "Create docs/deploy-flow.drawio as editable draw.io XML of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build (use dashed=1 in that edge's style). Have task perform the draw-once step with drawio-skill from the drawio@365-skills marketplace: author the complete draw.io XML in one pass with orthogonal edges, no overlapping boxes, and fontSize of at least 14. Plan the follow-up QA as exactly one visioner read-only pass over the exported draft PNG for edges pressed onto each other or crossing through boxes, plus at most one fix round; in this exercise write only docs/deploy-flow.drawio and skip the actual PNG export.",
       "expectations": {
         "minNativeTaskCalls": 1,
         "maxNativeTaskCalls": 6,
@@ -286,7 +286,7 @@
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requireNonemptyNativeTaskContext": true,
-        "requiredNativeTaskAgents": ["designer"],
+        "requiredNativeTaskAgents": ["task"],
         "requiredObservedSkills": ["omp-enhancer-workflows", "drawio-skill"],
         "maxObservedSkills": 2,
         "forbiddenSkills": ["writing-markdown-helper"],
@@ -322,7 +322,7 @@
       "repeat": 1,
       "timeoutSeconds": 480,
       "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
-      "prompt": "Create the small Beamer deck in main.tex while preserving its template and frame story. First write the text-only page draft to slides-content.md in section-sized batches and discuss every page with the user, with one Markdown entry per page covering title, narrative job, body, evidence, and visual role. Treat the Markdown content plan as the canonical content source and the page-content confirmation as supplied for this fixture. Do not write Beamer frames or perform layout while content is unresolved. After that confirmation, translate the confirmed Markdown plan into Beamer frames, add visuals page by page, establish the basic layout, and do not shorten the .tex content; keep complete sentences rather than phrases or keywords. If content changes, edit slides-content.md first, reconfirm the affected pages, regenerate Beamer, and only then resume layout. Treat the basic-layout confirmation as supplied before entering the existing visual refinement stage. Have task compile and render the initial revision and bind the stable revision=rev-1 identifier to its PDF and page renders. Then perform exactly one single read-only visual precheck owned by task or Main (choose one owner only) before designer performs the final layout pass. Have task integrate the final revision=rev-1, rerender it, and bind fresh current revision evidence for visioner. Have visioner independently review the current revision. PowerPoint conversion is out of scope without an exact user-supplied conversion command; with no conversion command, do not convert.",
+      "prompt": "Create the small Beamer deck in main.tex while preserving its template and frame story. First write the text-only page draft to slides-content.md in section-sized batches and discuss every page with the user, with one Markdown entry per page covering title, narrative job, body, evidence, and visual role. Treat the Markdown content plan as the canonical content source and the page-content confirmation as supplied for this fixture. Do not write Beamer frames or perform layout while content is unresolved. After that confirmation, translate the confirmed Markdown plan into Beamer frames, add visuals page by page, establish the basic layout, and do not shorten the .tex content; keep complete sentences rather than phrases or keywords. If content changes, edit slides-content.md first, reconfirm the affected pages, regenerate Beamer, and only then resume layout. Treat the basic-layout confirmation as supplied before entering the existing visual refinement stage. Have task compile and render the initial revision and bind the stable revision=rev-1 identifier to its PDF and page renders. Then perform exactly one single read-only visual precheck owned by task or Main (choose one owner only) before the task final layout pass. Have task integrate the final revision=rev-1, rerender it, and bind fresh current revision evidence for visioner. Have visioner independently review the current revision. PowerPoint conversion is out of scope without an exact user-supplied conversion command; with no conversion command, do not convert.",
       "expectations": {
         "minNativeTaskCalls": 4,
         "maxNativeTaskCalls": 7,
@@ -331,8 +331,8 @@
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requireNonemptyNativeTaskContext": true,
-        "requiredNativeTaskAgents": ["task", "designer", "visioner"],
-        "requiredNativeTaskAgentSequence": ["task", "designer", "task", "visioner"],
+        "requiredNativeTaskAgents": ["task", "visioner"],
+        "requiredNativeTaskAgentSequence": ["task", "task", "task", "visioner"],
         "requiredObservedSkills": ["omp-enhancer-workflows", "latex-beamer-slides"],
         "maxObservedSkills": 3,
         "forbiddenSkills": ["beamer-to-powerpoint", "drawio-skill"],
@@ -341,17 +341,19 @@
         "requiredNativeTaskAssignmentTextBounds": [
           {
             "agent": "task",
-            "pattern": "initial.+render",
+            "pattern": "initial (?:deck|revision).+revision=rev-1",
             "minCount": 1,
             "maxCount": 1,
-            "beforeAssignmentAgent": "designer"
+            "beforeAssignmentAgent": "task",
+            "beforeAssignmentText": "final layout pass"
           },
           {
             "agent": "task",
             "pattern": "single read-only visual precheck",
             "minCount": 1,
             "maxCount": 1,
-            "beforeAssignmentAgent": "designer"
+            "beforeAssignmentAgent": "task",
+            "beforeAssignmentText": "final layout pass"
           }
         ],
         "requiredNativeTaskDeliveryTextPatterns": [

@@ -1190,7 +1190,7 @@ test('workflow evaluation can require a successful workflow reference read', () 
 test('Beamer precheck evaluator accepts one bounded task lane and matching current-revision deliveries', () => {
   const summary = summarizeWorkflowEvents(beamerVisualTraceEvents(), { exitCode: 0 });
   assert.equal(summary.nativeTask.assignments.length, 4);
-  assert.equal(summary.nativeTask.assignments.filter(({ agent }) => agent === 'designer').length, 1);
+  assert.equal(summary.nativeTask.assignments.filter(({ text }) => /final layout pass/.test(String(text ?? ''))).length, 1);
   assert.equal(summary.nativeTask.assignments.filter(({ agent }) => agent === 'visioner').length, 1);
 
   const evaluation = evaluateWorkflowSummary(summary, beamerVisualExpectations());
@@ -1203,7 +1203,7 @@ test('Beamer precheck vocabulary ignores incidental initial-render wording', () 
   ));
   assert.ok(initialTask);
   initialTask.args.task = [
-    'Compile and render the initial deck with parallel page rendering and a fallback font check.',
+    'Compile and render the deck with parallel page rendering and a fallback font check.',
     initialTask.args.task,
   ].join(' ');
   const incidental = evaluateWorkflowSummary(
@@ -1253,7 +1253,7 @@ test('Beamer precheck evaluator rejects duplicate markers, stale revision delive
   );
   const lateEvaluation = evaluateWorkflowSummary(lateMarker, beamerVisualExpectations());
   assert.equal(lateEvaluation.pass, false);
-  assert.match(lateEvaluation.failures.join('\n'), /not observed before designer/iu);
+  assert.match(lateEvaluation.failures.join('\n'), /not observed before task/iu);
 
 
   const staleRevision = summarizeWorkflowEvents(
@@ -1265,7 +1265,7 @@ test('Beamer precheck evaluator rejects duplicate markers, stale revision delive
   assert.match(staleEvaluation.failures.join('\n'), /revision.+did not match/iu);
 
   const oneFix = summarizeWorkflowEvents(
-    beamerVisualTraceEvents({ designerFixes: 1 }),
+    beamerVisualTraceEvents({ fixRounds: 1 }),
     { exitCode: 0 },
   );
   const oneFixEvaluation = evaluateWorkflowSummary(oneFix, beamerVisualExpectations());
@@ -1273,7 +1273,7 @@ test('Beamer precheck evaluator rejects duplicate markers, stale revision delive
 
 
   const excessFixes = summarizeWorkflowEvents(
-    beamerVisualTraceEvents({ designerFixes: 2 }),
+    beamerVisualTraceEvents({ fixRounds: 2 }),
     { exitCode: 0 },
   );
   const excessEvaluation = evaluateWorkflowSummary(excessFixes, beamerVisualExpectations());
@@ -1361,7 +1361,7 @@ test('Beamer precheck fixture shape stays temporary and PowerPoint conversion re
   assert.deepEqual(scenario.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob', 'write', 'edit']);
   assert.match(
     scenario.prompt,
-    /task.+(?:initial.+render|render.+initial).+single read-only visual precheck.+before.+designer.+final.+current revision.+visioner/isu,
+    /task.+(?:initial.+render|render.+initial).+single read-only visual precheck.+before.+task final layout pass.+current revision.+visioner/isu,
   );
   assert.match(scenario.prompt, /PowerPoint.+exact.+conversion command/isu);
   assert.match(scenario.prompt, /text-only.+section-sized.+every page.+user.+confirmation/isu);
@@ -1373,22 +1373,24 @@ test('Beamer precheck fixture shape stays temporary and PowerPoint conversion re
   assert.deepEqual(scenario.expectations.requiredNativeTaskAssignmentTextBounds, [
     {
       agent: 'task',
-      pattern: 'initial.+render',
+      pattern: 'initial (?:deck|revision).+revision=rev-1',
       minCount: 1,
       maxCount: 1,
-      beforeAssignmentAgent: 'designer',
+      beforeAssignmentAgent: 'task',
+      beforeAssignmentText: 'final layout pass',
     },
     {
       agent: 'task',
       pattern: 'single read-only visual precheck',
       minCount: 1,
       maxCount: 1,
-      beforeAssignmentAgent: 'designer',
+      beforeAssignmentAgent: 'task',
+      beforeAssignmentText: 'final layout pass',
     },
   ]);
   assert.deepEqual(scenario.expectations.requiredNativeTaskAgentSequence, [
     'task',
-    'designer',
+    'task',
     'task',
     'visioner',
   ]);
@@ -4023,7 +4025,7 @@ test('Subagent default matrix keeps native task and hub semantics with natural c
     'drawio-skill',
   ]);
   assert.equal(drawio.expectations.maxObservedSkills, 2);
-  assert.deepEqual(drawio.expectations.requiredNativeTaskAgents, ['designer']);
+  assert.deepEqual(drawio.expectations.requiredNativeTaskAgents, ['task']);
   assert.equal(drawio.expectations.maxToolCalls, 60);
   assert.match(drawio.prompt, /docs\/deploy-flow\.drawio/iu);
   assert.match(drawio.prompt, /dashed=1/iu);
@@ -6188,22 +6190,24 @@ function toolResultEvent(id, name, result) {
 function beamerVisualExpectations() {
   return {
     requireFinal: false,
-    requiredNativeTaskAgents: ['task', 'designer', 'visioner'],
-    requiredNativeTaskAgentSequence: ['task', 'designer', 'task', 'visioner'],
+    requiredNativeTaskAgents: ['task', 'visioner'],
+    requiredNativeTaskAgentSequence: ['task', 'task', 'task', 'visioner'],
     requiredNativeTaskAssignmentTextBounds: [
       {
         agent: 'task',
-        pattern: 'initial.+render',
+        pattern: 'initial (?:deck|revision).+revision=rev-1',
         minCount: 1,
         maxCount: 1,
-        beforeAssignmentAgent: 'designer',
+        beforeAssignmentAgent: 'task',
+        beforeAssignmentText: 'final layout pass',
       },
       {
         agent: 'task',
         pattern: 'single read-only visual precheck',
         minCount: 1,
         maxCount: 1,
-        beforeAssignmentAgent: 'designer',
+        beforeAssignmentAgent: 'task',
+        beforeAssignmentText: 'final layout pass',
       },
     ],
     requiredNativeTaskDeliveryTextPatterns: [
@@ -6252,7 +6256,7 @@ function beamerVisualTraceEvents({
   markerCount = 1,
   finalRevision = 'rev-1',
   visionerRevision = finalRevision,
-  designerFixes = 0,
+  fixRounds = 0,
   markerText = null,
   markerAgent = 'task',
 } = {}) {
@@ -6270,17 +6274,17 @@ function beamerVisualTraceEvents({
     delivery: 'Initial PDF and page PNG renders are available for revision=rev-1.',
   });
   appendBeamerTask(events, {
-    id: 'designer-layout',
-    agent: 'designer',
-    jobId: 'designer',
-    task: `${markerAgent === 'designer' ? `${markers}. ` : ''}Apply the final layout pass using the initial render findings.`,
+    id: 'layout-pass',
+    agent: 'task',
+    jobId: 'layout',
+    task: `${markerAgent === 'layout-task' ? `${markers}. ` : ''}Apply the final layout pass using the initial render findings.`,
     delivery: 'Layout pass completed without changing the requested story.',
   });
   appendBeamerTask(events, {
     id: 'final-render',
     agent: 'task',
     jobId: 'final',
-    task: `${markerAgent === 'final-task' ? `${markers}. ` : ''}Validate the designer revision, then recompile and render the final revision=${finalRevision} PDF and page PNGs.`,
+    task: `${markerAgent === 'final-task' ? `${markers}. ` : ''}Apply the layout revision, then recompile and render the final revision=${finalRevision} PDF and page PNGs.`,
     delivery: `Final current revision=${finalRevision} PDF and page PNG renders are available.`,
   });
   appendBeamerTask(events, {
@@ -6291,11 +6295,11 @@ function beamerVisualTraceEvents({
     delivery: `Current revision=${visionerRevision} page PNG renders reviewed. APPROVED.`,
   });
 
-  for (let index = 1; index <= designerFixes; index += 1) {
+  for (let index = 1; index <= fixRounds; index += 1) {
     appendBeamerTask(events, {
-      id: `designer-fix-${index}`,
-      agent: 'designer',
-      jobId: `designer-fix-${index}`,
+      id: `layout-fix-${index}`,
+      agent: 'task',
+      jobId: `layout-fix-${index}`,
       task: `Apply bounded fix round ${index} to revision=${finalRevision}.`,
       delivery: `Bounded fix round ${index} completed.`,
     });

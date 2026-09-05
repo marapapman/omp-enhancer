@@ -216,14 +216,12 @@ test('fact researchers treat scholarly metadata as discovery rather than claim s
   }
 });
 
-test('fact researcher A uses slow while researcher B uses plan', () => {
-  const researcherA = factAgent('fact-researcher-a');
-  const researcherB = factAgent('fact-researcher-b');
-
-  assert.match(researcherA, /model:\s*\n\s*-\s*pi\/slow/);
-  assert.match(researcherB, /model:\s*\n\s*-\s*pi\/plan/);
-  assert.doesNotMatch(researcherA, /^thinkingLevel:/m);
-  assert.doesNotMatch(researcherB, /^thinkingLevel:/m);
+test('fact agents use the lightweight task role', () => {
+  for (const name of ['fact-planner', 'fact-researcher-a', 'fact-researcher-b']) {
+    const agent = factAgent(name);
+    assert.match(agent, /model:\s*\n\s*-\s*pi\/task/);
+    assert.doesNotMatch(agent, /^thinkingLevel:/m);
+  }
 });
 
 test('fact agents declare canonical OMP search tools', () => {
@@ -231,8 +229,6 @@ test('fact agents declare canonical OMP search tools', () => {
     ['fact-planner', ['read', 'grep', 'glob']],
     ['fact-researcher-a', ['read', 'grep', 'glob', 'web_search']],
     ['fact-researcher-b', ['read', 'grep', 'glob', 'web_search']],
-    ['fact-cross-checker', ['read', 'grep', 'glob']],
-    ['fact-reviewer', ['read', 'grep', 'glob']],
   ]);
 
   for (const [name, expected] of expectedTools) {
@@ -249,8 +245,6 @@ test('fact agents report only assignment-provided loaded Skill metadata', () => 
     'fact-planner',
     'fact-researcher-a',
     'fact-researcher-b',
-    'fact-cross-checker',
-    'fact-reviewer',
   ];
 
   for (const name of names) {
@@ -265,13 +259,10 @@ test('fact lane prompts make A the first bounded lane and keep B conditional', (
   const planner = factAgent('fact-planner');
   const researcherA = factAgent('fact-researcher-a');
   const researcherB = factAgent('fact-researcher-b');
-  const crossChecker = factAgent('fact-cross-checker');
 
   assert.match(planner, /lane A.*first bounded evidence lane/is);
   assert.match(researcherA, /first bounded evidence lane/i);
   assert.match(researcherB, /only.*broad.*high-risk.*explicit.*cross-check/is);
-  assert.match(crossChecker, /FACT_EVIDENCE_B.*optional/is);
-  assert.match(crossChecker, /missing.*FACT_EVIDENCE_B.*PARTIAL.*gap/is);
 });
 
 test('fact package excludes development tests from published files', () => {
@@ -286,14 +277,6 @@ test('fact planner assigns claim-specific freshness and evidence requirements', 
   assert.match(agent, /independence and source-lineage requirements/i);
 });
 
-test('fact reviewer rejects unresolved or metadata-only claims from strict factual conclusions', () => {
-  const agent = factAgent('fact-reviewer');
-
-  assert.match(agent, /exact final wording/i);
-  assert.match(agent, /metadata-only/i);
-  assert.match(agent, /PARTIAL.*CONFLICTED.*temporal-staleness/is);
-  assert.match(agent, /strict `SUPPORTED`/i);
-});
 
 test('fact-checking resources require exact claim entailment and verdict-limitation consistency', () => {
   const workflow = factSkill('fact-checking');
@@ -323,21 +306,15 @@ test('fact-checking resources require exact claim entailment and verdict-limitat
 test('fact-checking agents use an evidence ladder, bounded disconfirmation, and monotonic synthesis', () => {
   const planner = factAgent('fact-planner');
   const researchers = [factAgent('fact-researcher-a'), factAgent('fact-researcher-b')].join('\n');
-  const crossChecker = factAgent('fact-cross-checker');
-  const reviewer = factAgent('fact-reviewer');
 
   assert.match(planner, /subject.*predicate.*object.*scope.*time.*quantifier/is);
   assert.match(researchers, /PROVEN.*LIKELY.*HYPOTHESIS.*DISPROVED/is);
   assert.match(researchers, /high-impact.*(?:cheapest|lowest-cost|low-cost).*disconfirm/is);
   assert.match(researchers, /one.*(?:countercheck|counter-check|disconfirm)/is);
-  assert.match(crossChecker, /subject.*predicate.*object.*scope.*time.*quantifier/is);
   assert.match(planner, /claimTuple.*basePredicate.*objectValue.*timeVersion/is);
   assert.match(researchers, /evidenceTuple.*ENTAILS.*NEGATES.*ADJACENT.*UNKNOWN/is);
   assert.match(researchers, /limitation.*NONE.*NON_MATERIAL.*MATERIAL/is);
   assert.match(researchers, /countercheck.*NOT_REQUIRED.*COMPLETED.*INCONCLUSIVE.*UNAVAILABLE/is);
-  assert.match(reviewer, /limitations?.*verdict/is);
-  assert.match(reviewer, /(?:Main|parent).*(?:must not|cannot).*upgrade.*(?:confidence|evidence level).*new evidence/is);
-  assert.match(reviewer, /zero findings.*valid/is);
   assert.doesNotMatch(researchers, /(?:at least|minimum of)\s+\d+\s+(?:issues|findings|defects)/i);
   assert.doesNotMatch(researchers, /^\s+alignment:/m);
 });
@@ -350,16 +327,15 @@ test('buildFactCheckPlan extracts prioritized factual claims', () => {
   assert.equal(plan.claims.length, 2);
   assert.equal(plan.claims[0].category, 'date');
   assert.equal(plan.claims[1].category, 'numeric');
-  assert.deepEqual(plan.requiredStages.includes('fact-cross-checker'), true);
+  assert.deepEqual(plan.requiredStages.includes('fact_check_report'), true);
 });
 
 test('fact plans always start evidence with bounded lane A and add B only for broad or high-risk scope', () => {
   const lowRisk = buildFactCheckPlan({ text: 'The company was founded in 2020.' });
   assert.deepEqual(lowRisk.requiredStages, [
-    'fact-planner',
     'fact-researcher-a',
-    'fact-cross-checker',
-    'fact-reviewer',
+    'fact_check_report',
+    'fact_check_review',
   ]);
   assert.equal(lowRisk.requiredStages.includes('main-agent evidence pass'), false);
 
@@ -624,7 +600,6 @@ test('cross-check uses claim fields for real conflicts and ignores distinct sour
 test('fact advisory review reports missing plan, evidence, cross-check, review, and report', () => {
   const failed = validateFactCheckReview({ finalOutput: 'FACT_CHECK_PLAN\nFACT_CHECK_REPORT' });
   assert.equal(failed.ok, false);
-  assert.deepEqual(failed.missing.includes('FACT_REVIEW'), true);
 
   const passed = validateFactCheckReview({
     finalOutput: [
@@ -632,7 +607,6 @@ test('fact advisory review reports missing plan, evidence, cross-check, review, 
       'FACT_EVIDENCE_A',
       'FACT_EVIDENCE_B',
       'FACT_CROSS_CHECK',
-      'FACT_REVIEW',
       'FACT_CHECK_REPORT',
     ].join('\n'),
   });
@@ -651,7 +625,6 @@ test('the registered review reports workflow inconsistencies without failing too
     '- FC-001: SUPPORTED',
     'FACT_CROSS_CHECK',
     '- FC-001: AGREED',
-    'FACT_REVIEW',
     'FACT_CHECK_REPORT',
     `- FC-001: ${verdict}`,
   ].join('\n');
@@ -792,7 +765,6 @@ test('final verdict alias LOCAL_UNVERIFIED matches a canonical UNVERIFIABLE repo
         'FACT_CHECK_PLAN',
         'FACT_EVIDENCE_A',
         'FACT_CROSS_CHECK',
-        'FACT_REVIEW',
         'FACT_CHECK_REPORT',
         '- FC-001: LOCAL_UNVERIFIED',
       ].join('\n'),
@@ -838,7 +810,6 @@ test('review accepts the active numbered Claim/Verdict format', async () => {
         'FACT_CHECK_PLAN',
         'FACT_EVIDENCE_A',
         'FACT_CROSS_CHECK',
-        'FACT_REVIEW',
         'FACT_CHECK_REPORT',
         '### Claim 1',
         'Verdict: SUPPORTED',
@@ -875,7 +846,6 @@ test('registered workflow supports stateless advisory use and isolates optional 
         'FACT_CHECK_PLAN',
         'FACT_EVIDENCE_A',
         'FACT_CROSS_CHECK',
-        'FACT_REVIEW',
         'FACT_CHECK_REPORT',
         'FC-001: SUPPORTED',
       ].join('\n'),
@@ -933,7 +903,6 @@ test('analyze rejects ambiguous path plus text and plans risk from the truncated
         'FACT_CHECK_PLAN',
         'FACT_EVIDENCE_A',
         'FACT_CROSS_CHECK',
-        'FACT_REVIEW',
         'FACT_CHECK_REPORT',
         'FC-001: SUPPORTED',
       ].join('\n'),

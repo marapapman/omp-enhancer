@@ -234,7 +234,7 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   }
   assert.doesNotMatch(catalog, /healthcare\.review|ecc-healthcare-reviewer/i);
   assert.doesNotMatch(catalog, /### \`(?:research\.technical|code\.(?:plan|debug|test|review|build)|performance\.optimize|diagram\.tikz|diagram\.mermaid|writing\.en|writing\.zh|general\.subagent|agentic\.simple|network\.design|database\.change|ml\.debug|omp\.plugin|release\.opensource|marketing\.campaign|factcheck\.document)`/i);
-  assert.doesNotMatch(catalog, /`(?:test-planner|test-executor|test-reviewer|omp-target-auditor|implementation-task|config-librarian)`/i);
+  assert.doesNotMatch(catalog, /`(?:test-planner|test-executor|test-reviewer|omp-target-auditor|implementation-task|config-librarian|designer|fact-reviewer|fact-cross-checker)`/i);
   assert.match(catalog, new RegExp(CATALOG_BLOCK_START));
   assert.match(catalog, new RegExp(CATALOG_BLOCK_END));
   assert.doesNotMatch(agents, /@\.\/OMP_ENHANCER_WORKFLOW_CATALOG\.md/);

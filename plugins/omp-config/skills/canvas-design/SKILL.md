@@ -1,6 +1,6 @@
 ---
 name: canvas-design
-description: Create static visual artifacts with designer-owned revisions, current export evidence, and independent visioner visual QA.
+description: Create static visual artifacts with task-owned revisions, current export evidence, and independent visioner visual QA.
 ---
 
 # Canvas design
@@ -14,17 +14,13 @@ Use this when the user asks for a poster, static visual artifact, or exportable 
 
 ## Coordinate design and current-export review
 
-For every static visual design or revision, use a currently exposed `designer`
-for the design checkpoint, `task` for integration and export, and a currently
-exposed `visioner` for the later independent review when each assignment is
-safe and complete.
+For every static visual design or revision, use a currently exposed `task` for the complete design, source revision, integration, and export/render checkpoint, and a currently exposed `visioner` for the later independent review when each assignment is safe and complete.
 
-1. `designer` owns the complete design and source revision checkpoint. Supply the artifact brief, intended dimensions, audience, message, existing visual system, output constraints, and preservation requirements. The designer reconciles its revision against that scope and returns a bounded complete design revision, not completion permission.
-2. `task` owns integration and authorized execution. It integrates the exact designer revision without taking design ownership, binds one revision identifier to the source and its exact current revision, then produces a fresh intended-size export plus a useful reduced preview when relevant. Carry that one revision identifier through the source, exports, preview, and review request; never mix pre-designer, stale, or differently identified evidence.
-3. `visioner` independently reviews only that current-revision evidence, read-only, for hierarchy, composition, alignment, spacing, typography, clipping, contrast, image treatment, and export fidelity. Main review, source checks, static checks, and designer self-review do not count as independent visioner evidence.
-4. For a supported visual finding, `designer` applies the bounded source revision, `task` re-exports and binds fresh evidence, and `visioner` reviews only the fresh export, at most once for that changed revision. Do not review an unchanged artifact.
+1. `task` owns the complete design, source revision, integration, and export/render checkpoint. Supply the artifact brief, intended dimensions, audience, message, existing visual system, output constraints, and preservation requirements. Reconcile the revision against that scope, bind one revision identifier through the source, exports/screenshots, and review request, and never mix stale or mixed-revision evidence.
+2. `visioner` independently reviews only that current-revision evidence, read-only, for hierarchy, composition, alignment, spacing, typography, clipping, contrast, image treatment, and export fidelity. Main review, source checks, static checks, and task self-review do not count as independent visioner evidence.
+3. For a supported visual finding, `task` applies the bounded source revision, re-exports/rerenders and binds fresh evidence, and `visioner` reviews only the fresh export, at most once for that changed revision. Do not review an unchanged artifact.
 
-Main only authorizes external effects during initial setup and accepts final delivery; it does not render, export, modify, reconcile, or mediate the visual loop. If `designer` is unavailable, record the specific unfulfilled design checkpoint and the Agent fallback reason. If `visioner` is unavailable, record the missing independent current-revision visual evidence. Findings remain advisory. This evidence chain does not route, block, select a fanout, launch automatic repairs, or decide completion.
+Main only authorizes external effects during initial setup and accepts final delivery; it does not render, export, modify, reconcile, or mediate the visual loop. If `visioner` is unavailable, record the missing independent current-revision visual evidence. Findings remain advisory. This evidence chain does not route, block, select a fanout, launch automatic repairs, or decide completion.
 
 1. Define the artifact size, audience, message, and visual hierarchy.
 2. Use original composition, color, typography, and spacing.

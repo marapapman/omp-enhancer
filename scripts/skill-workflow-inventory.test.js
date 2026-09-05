@@ -8,7 +8,7 @@ import { workflowDefinitions } from './workflow-definitions.js';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const pluginsRoot = path.join(repoRoot, 'plugins');
-const nativeAgents = new Set(['analyzer', 'plan', 'scout', 'task', 'sonic', 'designer', 'librarian', 'reviewer']);
+const nativeAgents = new Set(['scout', 'task', 'sonic', 'reviewer', 'security-reviewer']);
 // Skills provided by external marketplaces (installed OMP plugins, not
 // packaged in this repo) that workflow cards may reference as candidates.
 const externalWorkflowSkills = new Set(['drawio-skill']);

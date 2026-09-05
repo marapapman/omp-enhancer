@@ -334,7 +334,6 @@ export function validateFactCheckReview({
   const hasEvidenceA = /\bFACT_EVIDENCE_A\b/i.test(text);
   const hasEvidenceB = /\bFACT_EVIDENCE_B\b/i.test(text);
   const hasCrossCheck = /\bFACT_CROSS_CHECK\b/i.test(text);
-  const hasReview = /\bFACT_REVIEW\b/i.test(text);
   const hasReport = /\bFACT_CHECK_REPORT\b/i.test(text);
   const degraded = /\bCROSS_CHECK_DEGRADED\b|network unavailable|api unavailable|insufficient external evidence|无法联网|api 不可用/i.test(text);
 
@@ -342,7 +341,6 @@ export function validateFactCheckReview({
   if (!hasEvidenceA) missing.push('FACT_EVIDENCE_A');
   if (!hasEvidenceB && riskLevel !== 'low' && !degraded) missing.push('FACT_EVIDENCE_B or CROSS_CHECK_DEGRADED');
   if (!hasCrossCheck) missing.push('FACT_CROSS_CHECK');
-  if (!hasReview) missing.push('FACT_REVIEW');
   if (!hasReport) missing.push('FACT_CHECK_REPORT');
 
   return {
@@ -392,11 +390,10 @@ function requiredStagesFor({ claims = [], crossCheckRequested = false } = {}) {
   const highRisk = claims.some((claim) => claim.priority === 'high');
   const broad = claims.length > 2;
   return [
-    'fact-planner',
     'fact-researcher-a',
     ...(broad || highRisk || crossCheckRequested ? ['fact-researcher-b'] : []),
-    'fact-cross-checker',
-    'fact-reviewer',
+    'fact_check_report',
+    'fact_check_review',
   ];
 }
 

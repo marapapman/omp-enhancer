@@ -168,7 +168,7 @@ function summarizeState(state) {
     activeToolNames: tools.map((tool) => tool?.name).filter(Boolean).sort(),
     taskToolSha256: task ? hash(JSON.stringify(task)) : null,
     taskHasNativeAgents: Object.fromEntries(
-      ['scout', 'task', 'sonic', 'plan', 'reviewer', 'designer', 'librarian']
+      ['scout', 'task', 'sonic', 'reviewer', 'security-reviewer']
         .map((name) => [name, JSON.stringify(task ?? {}).includes(name)]),
     ),
     taskHasCodeLifecycleAgents: Object.fromEntries(

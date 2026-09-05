@@ -40,13 +40,7 @@ The plugin does not block tools, retry work automatically, or prevent session co
 - `fact-planner`
 - `fact-researcher-a`
 - `fact-researcher-b`
-- `fact-cross-checker`
-- `fact-reviewer`
 
 Model policy:
 
-- `fact-planner` declares `pi/plan` then `pi/slow` so claim decomposition is not forced onto the generic task model.
-- `fact-cross-checker` and `fact-reviewer` declare `pi/slow` for high-signal review of evidence conflicts and final verdicts.
-- `fact-researcher-a` declares `pi/slow` for the primary-source evidence lane.
-- `fact-researcher-b` declares `pi/plan` for the independent counter-evidence lane.
-- The two researcher agents do not set `thinkingLevel`; each inherits both the model and reasoning level from its configured role.
+- All three agents declare `pi/task`; cross-checking and final review are deterministic: `fact_check_report` recomputes cross-checks and strict verdicts from structured records, and `fact_check_review` validates the final report against session telemetry.
