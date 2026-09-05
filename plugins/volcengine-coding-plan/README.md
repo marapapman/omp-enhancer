@@ -37,6 +37,15 @@ Direct model selectors:
 
 The model names and Coding Plan rules follow the [official quick-start guide](https://docs.volcengine.com/docs/82379/1928261?lang=zh).
 
+## Thinking intensity
+
+Nine models expose manual levels in OMP's thinking selector: `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`, alongside `off` and `auto`. Endpoint behavior was verified live on 2026-09-05:
+
+- `glm-5.3` rejects `minimal` (400 InvalidParameter); its lowest selectable level is `low`.
+- `kimi-k2.7-code` receives reasoning content but ignores both `reasoning_effort` and `enable_thinking`; it intentionally has no manual efforts and remains limited to `off` and `auto`.
+
+For the nine configurable models, selecting `off` sends `reasoning_effort` with that model's lowest listed value (OMP's lowest-effort disable mode), which the endpoint treats as near-zero thinking.
+
 ## Credentials and endpoint
 
 Set `ARK_API_KEY` to use a key without running `/login`:

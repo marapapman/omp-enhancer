@@ -16,11 +16,21 @@ const ZERO_COST = Object.freeze({
   cacheWrite: 0,
 });
 
-function defineModel(id, contextWindow, maxTokens, input) {
+// reasoning_effort values verified live against the Coding Plan endpoint
+// (2026-09-05): nine models validate and accept minimal..max; glm-5.3 rejects
+// "minimal" with 400. kimi-k2.7-code validates nothing — reasoning_effort and
+// enable_thinking are both accepted but ignored (it always emits
+// reasoning_content), so it gets reasoning display but no manual efforts.
+// OMP maps "off" to efforts[0] (lowest-effort disable mode); keep ascending.
+const REASONING_EFFORTS = Object.freeze(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const GLM53_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+
+function defineModel(id, contextWindow, maxTokens, input, efforts = REASONING_EFFORTS) {
   return Object.freeze({
     id,
     name: id,
-    reasoning: false,
+    reasoning: true,
+    ...(efforts ? { thinking: Object.freeze({ mode: 'effort', efforts }) } : {}),
     input: Object.freeze([...input]),
     supportsTools: true,
     cost: ZERO_COST,
@@ -36,11 +46,11 @@ export const CODING_PLAN_MODELS = Object.freeze([
   defineModel('doubao-seed-2.1-turbo', 262144, 65536, ['text', 'image']),
   defineModel('doubao-seed-2.0-lite', 262144, 131072, ['text', 'image']),
   defineModel('minimax-m3', 1048576, 131072, ['text', 'image']),
-  defineModel('glm-5.3', 1048576, 131072, ['text']),
+  defineModel('glm-5.3', 1048576, 131072, ['text'], GLM53_EFFORTS),
   defineModel('glm-5.3-flash', 1048576, 131072, ['text', 'image']),
   defineModel('deepseek-v4-flash', 1048576, 384000, ['text']),
   defineModel('deepseek-v4-pro', 1048576, 384000, ['text']),
-  defineModel('kimi-k2.7-code', 262144, 32000, ['text', 'image']),
+  defineModel('kimi-k2.7-code', 262144, 32000, ['text', 'image'], null),
 ]);
 
 export function resolveApiKey(env = process.env) {

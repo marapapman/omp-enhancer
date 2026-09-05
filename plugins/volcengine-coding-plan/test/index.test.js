@@ -81,8 +81,19 @@ test('keeps the current static catalog exact, conservative, and tool-capable', (
   for (const model of CODING_PLAN_MODELS) {
     const expected = EXPECTED_MODELS[model.id];
     assert.ok(expected, `unexpected model ${model.id}`);
-    assert.equal(model.name, model.id);
-    assert.equal(model.reasoning, false);
+    assert.equal(model.reasoning, true);
+    const expectedEfforts =
+      model.id === 'kimi-k2.7-code'
+        ? undefined
+        : model.id === 'glm-5.3'
+          ? ['low', 'medium', 'high', 'xhigh', 'max']
+          : ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+    if (expectedEfforts) {
+      assert.deepEqual(model.thinking, { mode: 'effort', efforts: expectedEfforts });
+      assert.equal(Object.isFrozen(model.thinking), true);
+    } else {
+      assert.equal(model.thinking, undefined);
+    }
     assert.equal(model.supportsTools, true);
     assert.equal(model.contextWindow, expected.contextWindow);
     assert.equal(model.maxTokens, expected.maxTokens);
@@ -97,7 +108,8 @@ test('keeps the current static catalog exact, conservative, and tool-capable', (
       'name',
       'reasoning',
       'supportsTools',
-    ]);
+      ...(expectedEfforts ? ['thinking'] : []),
+    ].sort());
     assert.equal(Object.isFrozen(model), true);
     assert.equal(Object.isFrozen(model.input), true);
     assert.equal(Object.isFrozen(model.cost), true);

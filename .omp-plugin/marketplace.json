@@ -92,7 +92,7 @@
     {
       "name": "volcengine-coding-plan",
       "description": "Native OMP provider for Volcengine Ark Coding Plan models.",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/volcengine-coding-plan",
       "repository": "https://github.com/marapapman/omp-enhancer",
