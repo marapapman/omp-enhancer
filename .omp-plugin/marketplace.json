@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, Volcengine Ark Coding Plan, and Alibaba Cloud Bailian Token Plan model integration.",
-    "version": "1.0.51",
+    "version": "1.0.52",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "omp-config",
       "description": "Optional OMP workflow references, config assets, uniquely named agents, notify-only hooks, opt-in hook templates, and diagnostics.",
-      "version": "0.1.71",
+      "version": "0.1.72",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -30,6 +30,7 @@
         "./skills/omp-enhancer-workflows",
         "./skills/omp-marketplace-plugin-activation",
         "./skills/slides-storyline",
+        "./skills/slides-visual-repair-pipeline",
         "./skills/writing-skills",
         "./skills/zoom-out"
       ]
