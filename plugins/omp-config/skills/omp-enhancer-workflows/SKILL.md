@@ -23,7 +23,6 @@ Phases: ANALYZE -> EXECUTE -> REVIEW. Main chooses direct work or delegation at 
 - `fact-researcher-b` — Second independent evidence lane; looks for corroboration, counter-evidence, and source conflicts.
 - `scout` — Fast read-only scout returning compressed context for handoff; use for exploratory codebase research and broad pattern searches.
 - `task` — General-purpose subagent with full capabilities for delegated multi-step work.
-- `visioner` — Read-only visual QA specialist for slide decks, UI/web screenshots and interaction states, and static canvas/export artifacts.
 - `writer` — Bounded English writer for drafting or revision, including LaTeX passages and read-only proposed replacements.
 - `zh-checker` — 中文只读 checker，可执行窄范围的语义漂移、逻辑与清晰度核查，或完整七维审查。
 - `zh-writer` — 有界中文写作与修改 agent，支持 LaTeX 段落和只读修改稿，输出自然中文。

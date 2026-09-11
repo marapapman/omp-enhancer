@@ -25,7 +25,7 @@ Describe the task naturally. Main selects Skills, Agents, tools, and execution s
 
 Writing covers prose in any language and format (English, Chinese, LaTeX, Markdown, Beamer, Word). Main selects the matching language and format Skills directly; there is no separate pending workflow.
 
-- Draw.io pipeline remains unchanged: diagrams use `drawio-skill` from `drawio@365-skills`; task draws once and exports a draft PNG, visioner reviews that PNG read-only in one pass for edges pressed onto each other or crossing through boxes, and task applies at most one fix round.
+- Draw.io pipeline remains unchanged: diagrams use `drawio-skill` from `drawio@365-skills`; task draws once and exports a draft PNG, and Main (or a task that did not draw the revision) reviews that PNG read-only in one pass for edges pressed onto each other or crossing through boxes, and task applies at most one fix round.
 - Beamer remains a writing-format overlay. It uses a Markdown content plan as the canonical content source; Beamer .tex files are derived layout artifacts. Content changes go to Markdown, are reconfirmed with the user, then regenerate Beamer. A single read-only visual precheck is performed by Main or task after task's initial render and before the task layout pass; task then renders the final revision.
 
 Main orchestrates through ANALYZE -> EXECUTE -> REVIEW: executing simple changes directly, delegating substantial work to `task`/domain agents, and delegating complex or risky review to `reviewer`. This is not a gate, router, fixed fan-out, or automatic loop.
@@ -73,7 +73,7 @@ Common optional tools include:
 - writing checks such as `writing_logic_check` and `writing_quality_check`;
 - fact analysis, evidence, report, and `fact_check_review` tools;
 - config diagnostics and managed-context synchronization;
-- draw.io diagrams drawn with `drawio-skill` (drawio@365-skills) and reviewed once by `visioner`.
+- draw.io diagrams drawn with `drawio-skill` (drawio@365-skills) and reviewed once read-only by Main (or a task that did not draw the revision).
 
 Review tools return advisory findings; they do not execute project commands, block work, or decide completion. `/fact-check` remains available for explicit claim analysis.
 

@@ -1207,7 +1207,7 @@ function evaluateNativeTaskDeliveryRevisionMatch(nativeTask, specification, fail
   const sourceRevision = extractRevisionIdentifier(source?.deliveryText);
   const targetRevision = extractRevisionIdentifier(target?.deliveryText);
   if (!sourceRevision || !targetRevision) {
-    failures.push('native task delivery revision evidence was missing from the final render or visioner delivery');
+    failures.push('native task delivery revision evidence was missing from the final render or visual-review delivery');
   } else if (sourceRevision !== targetRevision) {
     failures.push(
       `native task delivery revision evidence did not match: ${specification.sourceAgent}=${sourceRevision}, ${specification.targetAgent}=${targetRevision}`,

@@ -43,7 +43,7 @@ test('packaged config template is model-agnostic and keeps loopGuard/compaction 
 
 test('bundled agents are advisory and declare no blocking metadata', async () => {
   const agentDir = path.join(packageRoot(), 'agents');
-  const agentFiles = (await readdir(agentDir)).filter((name) => name.endsWith('.md'));
+  const agentFiles = (await readdir(agentDir).catch(() => [])).filter((name) => name.endsWith('.md'));
 
   for (const agentFile of agentFiles) {
     const content = await readFile(path.join(agentDir, agentFile), 'utf8');

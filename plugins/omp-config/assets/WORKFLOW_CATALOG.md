@@ -32,11 +32,11 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
 
 - When: Diagrams (draw.io), UI/UX design, static visual artifacts, or rendered figure review.
 - Skills: `drawio-skill`, `frontend-design`, `canvas-design`
-- Agents: `task`, `visioner`
+- Agents: `task`
 - Flow:
   1. Clarify diagram type, format, and rendering requirements.
   2. task draws the diagram once with drawio-skill from drawio@365-skills and exports a draft PNG.
-  3. visioner reviews that exported PNG read-only in one pass, flagging edges pressed onto each other or crossing through boxes.
+  3. Review that exported PNG read-only with exactly one owner—Main or a task that did not draw the revision—flagging edges pressed onto each other or crossing through boxes.
   4. task applies at most one fix round for supported findings and re-exports; deliver the .drawio source with the exported image.
   5. Main retains setup authorization and final acceptance only; remaining findings are reported as limitations.
 

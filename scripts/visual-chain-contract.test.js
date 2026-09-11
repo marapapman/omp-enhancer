@@ -21,16 +21,16 @@ test('visual workflow stays drawio/static-visual oriented', () => {
   assert.match(visual.chooseWhen, /Diagrams \(draw\.io\), UI\/UX design, static visual artifacts, or rendered figure review\./iu);
   assert.doesNotMatch(visual.chooseWhen, /slides?|beamer|powerpoint/iu);
   assert.deepEqual(visual.catalogSkills, []);
-  assert.deepEqual(visual.roles, ['task', 'visioner']);
+  assert.deepEqual(visual.roles, ['task']);
   assert.ok(Array.isArray(visual.suggestedFlow) && visual.suggestedFlow.length > 0);
   assert.ok(visual.suggestedFlow.some((line) => /task draws the diagram once with drawio-skill from drawio@365-skills/i.test(line)));
-  assert.ok(visual.suggestedFlow.some((line) => /visioner reviews that exported PNG read-only in one pass/i.test(line)));
+  assert.ok(visual.suggestedFlow.some((line) => /read-only with exactly one owner—Main or a task that did not draw the revision/i.test(line)));
   assert.ok(visual.suggestedFlow.some((line) => /at most one fix round/i.test(line)));
   assert.ok(visual.suggestedFlow.some((line) => /Main retains setup authorization and final acceptance only/i.test(line)));
   assert.ok(Array.isArray(visual.scopeNotes) && visual.scopeNotes.length >= 2);
   const scope = visual.scopeNotes.join(' ');
   assert.match(scope, /drawio-skill from the 365-skills marketplace \(drawio@365-skills\) is the single diagram pipeline/iu);
-  assert.match(scope, /QA is one visioner pass plus at most one fix round; no repeated iteration rounds/iu);
+  assert.match(scope, /QA is one read-only review pass plus at most one fix round; no repeated iteration rounds/iu);
   assert.equal(Object.hasOwn(visual, 'delegation'), false, 'visual must not carry a delegation field');
   assert.equal(Object.hasOwn(visual, 'steps'), false, 'visual must not carry a steps field');
 });
@@ -41,5 +41,6 @@ test('retired drawing pipelines stay out of the visual card', () => {
 
   assert.doesNotMatch(contract, RETIRED_PIPELINE_TERMS);
   assert.doesNotMatch(contract, FORBIDDEN_DRAWING_TERMS);
+  assert.doesNotMatch(contract, /visioner/iu);
   assert.doesNotMatch(contract, /must (?:fork|delegate)|fixed fanout|hard (?:gate|router)/i);
 });

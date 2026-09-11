@@ -9,10 +9,10 @@ Goal: one independent task agent per image and per page for visual check + fix; 
 
 ## Scope and isolation (read first)
 
-- **Lifecycle boundary.** This skill covers recurring visual **maintenance** of an already-delivered deck. Deck authoring, content revision, and the generation-time QA chain (single read-only visual precheck -> layout pass -> visioner review) belong to `latex-beamer-slides` and are unaffected. Content changes discovered here go back through `latex-beamer-slides`' Markdown content plan path; this pipeline only fixes layout/figure defects in place. `latex-beamer-slides` does not need to mention this skill.
+- **Lifecycle boundary.** This skill covers recurring visual **maintenance** of an already-delivered deck. Deck authoring, content revision, and the generation-time QA chain (single read-only visual precheck -> layout pass -> read-only visual review) belong to `latex-beamer-slides` and are unaffected. Content changes discovered here go back through `latex-beamer-slides`' Markdown content plan path; this pipeline only fixes layout/figure defects in place. `latex-beamer-slides` does not need to mention this skill.
 - **Only one-frame-per-file decks** (`slides/slides/*.tex`, one frame per file, e.g. Intro2Computing weekly decks). A repair can shift pagination, so per-page physical page numbers require one frame per source file; multi-frame decks must be split first or handled by another method.
 - **SVG figure sources only**: `images/*.svg` exported via cairosvg to `slides/assets/<name>.pdf`. PNG/JPG bitmap sources and non-Beamer decks are out of scope.
-- **No draw.io takeover**: `.drawio` sources keep the drawio-skill flow (draw once -> one read-only visioner precheck -> at most one fix round). This pipeline neither re-prechecks nor repairs drawio artifacts.
+- **No draw.io takeover**: `.drawio` sources keep the drawio-skill flow (draw once -> one read-only visual review -> at most one fix round). This pipeline neither re-prechecks nor repairs drawio artifacts.
 - **Advisory, Main-owned.** The ledger is a dedup tool, not a gate: it never blocks, routes, or decides completion. OMP-native authority over permissions and completion is unchanged. Repair rounds are Main-orchestrated dispatches; there is no automatic repair loop — each round is an explicit Main decision, and unresolved findings are reported, never silently retried.
 
 ## Repair ledger visual-qa-history.json

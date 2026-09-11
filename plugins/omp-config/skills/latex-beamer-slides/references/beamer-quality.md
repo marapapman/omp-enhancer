@@ -87,4 +87,4 @@ After the first complete layout is rendered, present the current PDF and page re
 
 After that confirmation, preserve the current multi-pass visual evidence chain. Each explicit refinement round uses fresh current-revision evidence: visual review, a supported layout-only task correction, task rerendering, and a new visual review. If a finding requires content or page-structure changes, return to the Markdown content plan, obtain user confirmation, and regenerate the affected Beamer frames before layout resumes. Main decides whether another bounded round is useful; findings remain advisory, no unchanged artifact is reviewed, and no automatic repair loop is created.
 
-Record warnings honestly. Do not report visual QA from compilation alone. Source inspection, task self-review, an old render, or a contact sheet without inspectable page renders cannot substitute for current-revision `visioner` evidence.
+Record warnings honestly. Do not report visual QA from compilation alone. Source inspection, task self-review, an old render, or a contact sheet without inspectable page renders cannot substitute for current-revision visual review evidence.

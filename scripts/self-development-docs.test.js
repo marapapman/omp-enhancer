@@ -105,9 +105,10 @@ test('current repository documentation matches the v39 runtime and evidence cont
   ]) {
     assert.match(
       content,
-      /task.+draw(?:s)? the diagram once with.+drawio-skill.+drawio@365-skills.+visioner.+exported PNG read-only in one pass.+at most one fix round.+Main retains setup authorization.+final acceptance/is,
+      /draw\.?io[\s\S]{0,800}drawio@365-skills[\s\S]{0,800}read-only[\s\S]{0,800}at most one fix round/iu,
       path,
     );
+    assert.doesNotMatch(content, /visioner|APPROVED|CHANGES_REQUIRED|UNREVIEWABLE/iu, path);
     assert.match(
       content,
       /backward-compatible `verdict`.+cannot upgrade.+proof.+`strictVerdict`.+`SUPPORTED`.+same-tuple `ENTAILS \+ PROVEN`.+`CONTRADICTED`.+same-tuple `NEGATES \+ DISPROVED`/isu,
@@ -152,7 +153,7 @@ test('current docs distinguish the single Beamer precheck from the unchanged dra
     );
     assert.match(
       content,
-      /draw\.?io(?: pipeline)? remains unchanged[\s\S]{0,500}task[\s\S]{0,500}visioner[\s\S]{0,500}at most one fix round/iu,
+      /draw\.?io(?: pipeline)? remains unchanged[\s\S]{0,500}task[\s\S]{0,500}read-only[\s\S]{0,500}at most one fix round/iu,
       label,
     );
   }

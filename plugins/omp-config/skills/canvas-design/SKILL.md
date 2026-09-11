@@ -1,6 +1,6 @@
 ---
 name: canvas-design
-description: Create static visual artifacts with task-owned revisions, current export evidence, and independent visioner visual QA.
+description: Create static visual artifacts with task-owned revisions, current export evidence, and a single read-only visual review.
 ---
 
 # Canvas design
@@ -14,13 +14,13 @@ Use this when the user asks for a poster, static visual artifact, or exportable 
 
 ## Coordinate design and current-export review
 
-For every static visual design or revision, use a currently exposed `task` for the complete design, source revision, integration, and export/render checkpoint, and a currently exposed `visioner` for the later independent review when each assignment is safe and complete.
+For every static visual design or revision, use a currently exposed `task` for the complete design, source revision, integration, and export/render checkpoint, and a separate read-only visual review owner selected by Main when each assignment is safe and complete.
 
 1. `task` owns the complete design, source revision, integration, and export/render checkpoint. Supply the artifact brief, intended dimensions, audience, message, existing visual system, output constraints, and preservation requirements. Reconcile the revision against that scope, bind one revision identifier through the source, exports/screenshots, and review request, and never mix stale or mixed-revision evidence.
-2. `visioner` independently reviews only that current-revision evidence, read-only, for hierarchy, composition, alignment, spacing, typography, clipping, contrast, image treatment, and export fidelity. Main review, source checks, static checks, and task self-review do not count as independent visioner evidence.
-3. For a supported visual finding, `task` applies the bounded source revision, re-exports/rerenders and binds fresh evidence, and `visioner` reviews only the fresh export, at most once for that changed revision. Do not review an unchanged artifact.
+2. The single read-only visual review uses exactly one owner—Main, or a task that did not produce the revision. That owner examines only the current-revision evidence, read-only, for hierarchy, composition, alignment, spacing, typography, clipping, contrast, image treatment, and export fidelity. Source checks, static checks, and self-review by the producing agent are not independent visual evidence.
+3. For a supported visual finding, `task` applies the bounded source revision, re-exports/rerenders and binds fresh evidence, and the review owner examines only the fresh export, at most once for that changed revision. Do not review an unchanged artifact.
 
-Main only authorizes external effects during initial setup and accepts final delivery; it does not render, export, modify, reconcile, or mediate the visual loop. If `visioner` is unavailable, record the missing independent current-revision visual evidence. Findings remain advisory. This evidence chain does not route, block, select a fanout, launch automatic repairs, or decide completion.
+Main only authorizes external effects during initial setup and accepts final delivery; it does not render, export, modify, reconcile, or mediate the visual loop. If no read-only visual reviewer is available, record the missing independent current-revision visual evidence. Findings remain advisory. This evidence chain does not route, block, select a fanout, launch automatic repairs, or decide completion.
 
 1. Define the artifact size, audience, message, and visual hierarchy.
 2. Use original composition, color, typography, and spacing.

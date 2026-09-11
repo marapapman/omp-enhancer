@@ -1191,7 +1191,7 @@ test('Beamer precheck evaluator accepts one bounded task lane and matching curre
   const summary = summarizeWorkflowEvents(beamerVisualTraceEvents(), { exitCode: 0 });
   assert.equal(summary.nativeTask.assignments.length, 4);
   assert.equal(summary.nativeTask.assignments.filter(({ text }) => /final layout pass/.test(String(text ?? ''))).length, 1);
-  assert.equal(summary.nativeTask.assignments.filter(({ agent }) => agent === 'visioner').length, 1);
+  assert.equal(summary.nativeTask.assignments.filter(({ text }) => /page PNG renders read-only/.test(String(text ?? ''))).length, 1);
 
   const evaluation = evaluateWorkflowSummary(summary, beamerVisualExpectations());
   assert.equal(evaluation.pass, true, evaluation.failures.join('\n'));
@@ -1257,7 +1257,7 @@ test('Beamer precheck evaluator rejects duplicate markers, stale revision delive
 
 
   const staleRevision = summarizeWorkflowEvents(
-    beamerVisualTraceEvents({ finalRevision: 'rev-2', visionerRevision: 'rev-1' }),
+    beamerVisualTraceEvents({ finalRevision: 'rev-2', reviewRevision: 'rev-1' }),
     { exitCode: 0 },
   );
   const staleEvaluation = evaluateWorkflowSummary(staleRevision, beamerVisualExpectations());
@@ -1361,7 +1361,7 @@ test('Beamer precheck fixture shape stays temporary and PowerPoint conversion re
   assert.deepEqual(scenario.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob', 'write', 'edit']);
   assert.match(
     scenario.prompt,
-    /task.+(?:initial.+render|render.+initial).+single read-only visual precheck.+before.+task final layout pass.+current revision.+visioner/isu,
+    /task.+(?:initial.+render|render.+initial).+single read-only visual precheck.+before.+task final layout pass.+current revision.+read-only/isu,
   );
   assert.match(scenario.prompt, /PowerPoint.+exact.+conversion command/isu);
   assert.match(scenario.prompt, /text-only.+section-sized.+every page.+user.+confirmation/isu);
@@ -1392,11 +1392,11 @@ test('Beamer precheck fixture shape stays temporary and PowerPoint conversion re
     'task',
     'task',
     'task',
-    'visioner',
+    'task',
   ]);
   assert.deepEqual(scenario.expectations.requiredNativeTaskDeliveryTextPatterns, [
     { agent: 'task', pattern: 'final.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
-    { agent: 'visioner', pattern: 'current.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
+    { agent: 'task', pattern: 'current.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
   ]);
   assert.equal(scenario.expectations.maxNativeTaskAssignmentAttempts, 7);
   assert.deepEqual(scenario.expectations.forbiddenNativeTaskAssignmentTextPatterns, [
@@ -6190,8 +6190,8 @@ function toolResultEvent(id, name, result) {
 function beamerVisualExpectations() {
   return {
     requireFinal: false,
-    requiredNativeTaskAgents: ['task', 'visioner'],
-    requiredNativeTaskAgentSequence: ['task', 'task', 'task', 'visioner'],
+    requiredNativeTaskAgents: ['task'],
+    requiredNativeTaskAgentSequence: ['task', 'task', 'task', 'task'],
     requiredNativeTaskAssignmentTextBounds: [
       {
         agent: 'task',
@@ -6212,12 +6212,12 @@ function beamerVisualExpectations() {
     ],
     requiredNativeTaskDeliveryTextPatterns: [
       { agent: 'task', pattern: 'final.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
-      { agent: 'visioner', pattern: 'current.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
+      { agent: 'task', pattern: 'current.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
     ],
     requiredNativeTaskDeliveryRevisionMatch: {
       sourceAgent: 'task',
       sourcePattern: 'final.+revision=rev-[0-9]+',
-      targetAgent: 'visioner',
+      targetAgent: 'task',
       targetPattern: 'current.+revision=rev-[0-9]+',
     },
     maxNativeTaskAssignmentAttempts: 7,
@@ -6255,7 +6255,7 @@ function appendBeamerTask(events, {
 function beamerVisualTraceEvents({
   markerCount = 1,
   finalRevision = 'rev-1',
-  visionerRevision = finalRevision,
+  reviewRevision = finalRevision,
   fixRounds = 0,
   markerText = null,
   markerAgent = 'task',
@@ -6285,14 +6285,14 @@ function beamerVisualTraceEvents({
     agent: 'task',
     jobId: 'final',
     task: `${markerAgent === 'final-task' ? `${markers}. ` : ''}Apply the layout revision, then recompile and render the final revision=${finalRevision} PDF and page PNGs.`,
-    delivery: `Final current revision=${finalRevision} PDF and page PNG renders are available.`,
+    delivery: `Final revision=${finalRevision} PDF and page PNG renders are available.`,
   });
   appendBeamerTask(events, {
-    id: 'visioner-review',
-    agent: 'visioner',
-    jobId: 'visioner',
-    task: `Review current revision=${visionerRevision} page PNG renders read-only and return the required visual verdict.`,
-    delivery: `Current revision=${visionerRevision} page PNG renders reviewed. APPROVED.`,
+    id: 'visual-review',
+    agent: 'task',
+    jobId: 'visual-review',
+    task: `Review current revision=${reviewRevision} page PNG renders read-only and record advisory findings.`,
+    delivery: `Current revision=${reviewRevision} page PNG renders reviewed. Advisory findings recorded.`,
   });
 
   for (let index = 1; index <= fixRounds; index += 1) {
@@ -6308,14 +6308,14 @@ function beamerVisualTraceEvents({
       agent: 'task',
       jobId: `final-rerender-${index}`,
       task: `Recompile and render the fresh current revision=${finalRevision} PDF and page PNGs.`,
-      delivery: `Fresh current revision=${finalRevision} PDF and page PNG renders are available.`,
+      delivery: `Fresh revision=${finalRevision} PDF and page PNG renders are available.`,
     });
     appendBeamerTask(events, {
-      id: `visioner-review-${index}`,
-      agent: 'visioner',
-      jobId: `visioner-${index}`,
-      task: `Review fresh current revision=${finalRevision} page PNG renders read-only and return the required visual verdict.`,
-      delivery: `Fresh current revision=${finalRevision} page PNG renders reviewed. APPROVED.`,
+      id: `visual-review-${index}`,
+      agent: 'task',
+      jobId: `visual-review-${index}`,
+      task: `Review fresh current revision=${finalRevision} page PNG renders read-only and record advisory findings.`,
+      delivery: `Fresh current revision=${finalRevision} page PNG renders reviewed. Advisory findings recorded.`,
     });
   }
   return events;

@@ -6,7 +6,6 @@ const slidesSkillUrl = new URL('../skills/latex-beamer-slides/SKILL.md', import.
 const storylineSkillUrl = new URL('../skills/slides-storyline/SKILL.md', import.meta.url);
 const conversionSkillUrl = new URL('../skills/beamer-to-powerpoint/SKILL.md', import.meta.url);
 const qualityReferenceUrl = new URL('../skills/latex-beamer-slides/references/beamer-quality.md', import.meta.url);
-const visionerUrl = new URL('../agents/visioner.md', import.meta.url);
 
 test('Beamer generation checks the template before committing a story and authoring frames', async () => {
   const skill = await readFile(slidesSkillUrl, 'utf8');
@@ -20,7 +19,7 @@ test('Beamer generation checks the template before committing a story and author
   const visualPrecheck = generation.indexOf('single read-only visual precheck');
   const taskLayout = generation.indexOf('Have `task` perform the final layout pass');
   const freshRerender = generation.indexOf('Have `task` recompile and render that exact layout revision');
-  const visionReview = generation.indexOf('Have `visioner` independently inspect');
+  const visualReview = generation.indexOf('Perform the single read-only visual review of the latest rendered pages');
   assert.ok(inspectTemplate >= 0);
   assert.ok(inspectTemplate < discussTemplate);
   assert.ok(discussTemplate < discussStory);
@@ -30,8 +29,8 @@ test('Beamer generation checks the template before committing a story and author
   assert.ok(renderQa < visualPrecheck);
   assert.ok(visualPrecheck < taskLayout);
   assert.ok(taskLayout < freshRerender);
-  assert.ok(freshRerender < visionReview);
-  assert.ok(taskLayout < visionReview);
+  assert.ok(freshRerender < visualReview);
+  assert.ok(taskLayout < visualReview);
   assert.match(generation, /visual character, logo or explicit no-logo choice, aspect ratio, fonts, colors/i);
   assert.match(generation, /ask the user only when a missing choice materially changes the deck/i);
   assert.match(generation, /only files carrying that marker/i);
@@ -39,11 +38,11 @@ test('Beamer generation checks the template before committing a story and author
   assert.match(generation, /revision identifier.+PDF.+render directory/is);
   assert.match(generation, /committed outline.+output language.+semantic anchors.+LaTeX structure/is);
   assert.match(generation, /text and image overlap.+crowding.+clipping.+undersized text/is);
-  assert.match(generation, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);
-  assert.match(generation, /Do not accept `PASS` or `FAIL` as a substitute/i);
-  assert.match(generation, /supported finding.+`task` applies.+`visioner` reviews only fresh rerendered evidence.+at most once/is);
+  assert.match(generation, /exactly one owner—Main, or a task that did not produce the revision/i);
+  assert.match(generation, /Record advisory findings only/i);
+  assert.match(generation, /supported finding.+`task` applies the bounded layout-only source revision.+(?:the review owner|reviews only fresh rerendered evidence).+at most once/is);
   assert.match(generation, /Main only authorizes external effects during initial setup and accepts final delivery.+does not compile, render, modify, reconcile, or mediate the visual loop/is);
-  assert.match(generation, /No review verdict grants permission to convert, publish, or complete/i);
+  assert.match(generation, /No review finding grants permission to convert, publish, or complete/i);
 });
 
 test('Beamer uses one advisory current-revision precheck before each task layout pass', async () => {
@@ -64,7 +63,6 @@ test('Beamer uses one advisory current-revision precheck before each task layout
     assert.match(precheck, /same current revision/is);
     assert.match(precheck, /read-only/is);
     assert.match(precheck, /advisory findings.+page.+region.+criterion.+evidence.+impact.+limitations/is);
-    assert.doesNotMatch(precheck, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);
   }
 
   assert.equal((skill.match(/single read-only visual precheck/gi) ?? []).length, 2);
@@ -103,23 +101,23 @@ test('Beamer modification stays bounded to language and existing style', async (
   const precheck = modification.indexOf('single read-only visual precheck');
   const taskLayout = modification.indexOf('Have `task` perform a final layout pass');
   const freshRerender = modification.indexOf('Have `task` recompile and render that exact layout revision');
-  const visionReview = modification.indexOf('Have `visioner` independently review');
+  const visualReview = modification.indexOf('Perform the single read-only visual review of the latest renders');
   assert.ok(initialRender >= 0);
   assert.ok(precheck > initialRender);
   assert.ok(taskLayout > precheck);
   assert.ok(freshRerender > taskLayout);
-  assert.ok(visionReview > freshRerender);
+  assert.ok(visualReview > freshRerender);
   assert.match(modification, /wording, language-norm, and existing-style changes/i);
   assert.match(modification, /preserve the story arc, frame order, template, logo, layout system/i);
   assert.match(modification, /Do not redesign the template or reopen story planning/i);
   assert.match(modification, /Do not require template discussion or a story-outline checkpoint/i);
   assert.match(modification, /Have `task` perform a final layout pass on the changed frames and any pages whose layout they can influence/i);
   assert.match(modification, /Have `task` recompile and render that exact layout revision.+revision identifier.+PDF.+render directory/is);
-  assert.match(modification, /Have `visioner` independently review the latest renders/i);
+  assert.match(modification, /Perform the single read-only visual review of the latest renders/i);
   assert.match(modification, /text and image overlap.+crowding.+clipping.+undersized text/is);
-  assert.match(modification, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);
-  assert.match(modification, /Do not accept `PASS` or `FAIL` as a substitute/i);
-  assert.match(modification, /supported finding.+`task` applies.+`visioner` reviews only fresh rerendered evidence.+at most once/is);
+  assert.match(modification, /exactly one owner—Main, or a task that did not produce the revision/i);
+  assert.match(modification, /Record advisory findings only/i);
+  assert.match(modification, /supported finding.+`task` applies the bounded source revision.+(?:the review owner|reviews only fresh rerendered evidence).+at most once/is);
   assert.match(modification, /Main only authorizes external effects during initial setup and accepts final delivery.+does not compile, render, modify, reconcile, or mediate the visual loop/is);
   assert.match(modification, /Do not widen the edit to unrelated pre-existing layout defects/i);
   assert.match(modification, /Do not split, add, remove, or reorder frames without explicit user authorization/i);
@@ -231,7 +229,7 @@ test('Beamer visual review is advisory and never an automatic repair controller'
   const skill = await readFile(slidesSkillUrl, 'utf8');
 
   assert.match(skill, /Agent availability and capacity remain Main decisions/i);
-  assert.match(skill, /No review verdict grants permission to convert, publish, or complete/i);
+  assert.match(skill, /No review finding grants permission to convert, publish, or complete/i);
   assert.doesNotMatch(skill, /designer/i);
 });
 
@@ -274,22 +272,12 @@ test('Beamer quality reference covers compile and rendered-slide evidence', asyn
   assert.match(reference, /multiple explicit.+refinement rounds|current multi-pass.+visual evidence/is);
 });
 
-test('Beamer skill supplies layout specialization while visioner reviews fresh rendered slides read-only', async () => {
-  const [slidesSkill, visioner] = await Promise.all([
-    readFile(slidesSkillUrl, 'utf8'),
-    readFile(visionerUrl, 'utf8'),
-  ]);
+test('Beamer skill supplies layout specialization with a read-only visual review', async () => {
+  const slidesSkill = await readFile(slidesSkillUrl, 'utf8');
 
   assert.match(slidesSkill, /Have `task` perform the final layout pass/i);
   assert.match(slidesSkill, /overlap, crowding, clipping, undersized text, cropped or distorted figures/is);
   assert.match(slidesSkill, /Do not split, add, remove, or reorder frames without explicit user authorization/i);
-  assert.match(visioner, /slide decks.+UI\/web responsive.+static canvas.+export artifacts/is);
-  assert.match(visioner, /latest full-resolution page renders and the overview or contact sheet/i);
-  assert.match(visioner, /text and image overlap.+crowding.+clipping.+undersized text.+cropped or distorted images/is);
-  assert.match(visioner, /APPROVED \| CHANGES_REQUIRED \| UNREVIEWABLE/);
-  assert.match(visioner, /page number.+visible region.+impact.+requested correction/is);
-  assert.match(visioner, /Do not approve.+older render/i);
-  assert.doesNotMatch(visioner, /^\s*- (?:edit|write)$/m);
 });
 
 function markdownSection(markdown, heading) {

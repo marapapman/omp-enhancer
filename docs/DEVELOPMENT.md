@@ -8,7 +8,7 @@
 
 ```text
 plugins/
-├── omp-config/              # workflow references、PPT/文档 Skills、visioner、诊断和 hooks
+├── omp-config/              # workflow references、PPT/文档 Skills、诊断和 hooks
 ├── writing-helper/          # 中英文写作、逻辑、风格、引用和保真检查
 ├── omp-fact-checker/        # claim plan、evidence、cross-check、strict verdict 和 review
 ├── volcengine-coding-plan/  # 方舟 Coding Plan provider、/login 和 /model 接入
@@ -44,8 +44,8 @@ docs/superpowers/            # 历史 plans/specs/reports，仅作 archive
 - Main 可用 `ANALYZE -> EXECUTE -> REVIEW` 组织复杂任务，但插件不强制 delegation、fixed fan-out、retry 或 completion；
 - 所有 extension tools 默认 `defaultInactive`。`omp-config` 提供 `/enhancer-tools status|enable|disable`，组为 `config`、`writing`、`fact` 和 `all`；激活不授予权限；
 - `writer`/`zh-writer` 只交付 proposal，`checker`/`zh-checker` 只交付 report；Main 独自执行获授权的文件修改；
-- Draw.io pipeline remains unchanged: task draws once with drawio-skill (drawio@365-skills) and exports a draft PNG；visioner read-only reviews it once；task applies at most one fix round。
-- Beamer remains a writing-format overlay. New decks first use a section-sized, page-by-page text-only draft and user discussion, persisted in a Markdown content plan that is the canonical content source; Beamer .tex files are derived layout artifacts. Content changes go to Markdown first, are discussed and reconfirmed with the user, then regenerate Beamer; never edit .tex to settle unresolved content during layout. Visual authoring, per-page imagery, and base layout begin only after the user confirms the page content. After the user confirms the basic layout, the existing visual refinement path applies. A single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before the task layout pass；findings are advisory only and have no verdict or repair loop。Task integrates and renders the final revision；visioner independently reviews fresh final evidence。PowerPoint conversion uses `beamer-to-powerpoint` only with an explicit user-supplied command。
+- Draw.io pipeline remains unchanged: task draws once with drawio-skill (drawio@365-skills) and exports a draft PNG；Main (or a task that did not draw the revision) reviews it read-only once；task applies at most one fix round。
+- Beamer remains a writing-format overlay. New decks first use a section-sized, page-by-page text-only draft and user discussion, persisted in a Markdown content plan that is the canonical content source; Beamer .tex files are derived layout artifacts. Content changes go to Markdown first, are discussed and reconfirmed with the user, then regenerate Beamer; never edit .tex to settle unresolved content during layout. Visual authoring, per-page imagery, and base layout begin only after the user confirms the page content. After the user confirms the basic layout, the existing visual refinement path applies. A single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before the task layout pass；findings are advisory only and have no verdict or repair loop。Task integrates and renders the final revision, which Main reviews read-only as the single review owner (a task that did not produce the revision may review instead)。PowerPoint conversion uses `beamer-to-powerpoint` only with an explicit user-supplied command。
 - Fact Checker 保留精确 claim tuple，`strictVerdict` 对 `SUPPORTED` 和 `CONTRADICTED` 采用 fail-closed 证据规则；
 - hook 可以观察或提醒，但不返回 `block: true` 或 `continue: true`。
 
