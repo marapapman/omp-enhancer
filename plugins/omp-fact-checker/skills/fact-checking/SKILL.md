@@ -11,6 +11,22 @@ findings already supplied by Main and returns a proposal; it does not run this
 fact-checking method, invoke Fact Checker tools, collect evidence, or issue a
 verdict. Main or a separate selected fact Agent owns the fact-check checkpoint.
 
+## Pipeline tools
+
+For a document-level request such as “check the facts in this file”, run the
+deterministic pipeline in order instead of improvising a manual pass:
+
+1. `fact_check_analyze` — extract claim candidates and build the plan.
+2. `fact_check_evidence` — collect lane A (and lane B only when warranted) evidence as structured records.
+3. `fact_check_report` — recompute cross-checks and the fail-closed `strictVerdict`s.
+4. `fact_check_review` — advisory completeness review of the final report text.
+
+These four tools ship in the default tool inventory; no activation step is
+required. They are read-only and advisory: they never block tools or session
+completion, and they grant no network or write permission.
+
+## Return format
+
 Return every checked claim in this literal, parse-stable block before any overall limitations:
 
 ```text

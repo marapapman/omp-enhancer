@@ -28,6 +28,11 @@ Provider metadata from Crossref, arXiv, OpenAlex, DataCite, and Google Fact Chec
 
 ## Tools
 
+All four pipeline tools ship in the default tool inventory, so a natural-language
+request to verify a file reaches the pipeline without an activation step. They are
+read-only (`approval: read`) and advisory; being default-active grants no network,
+write, or publication permission.
+
 - `fact_check_analyze` extracts claim candidates and builds a `FACT_CHECK_PLAN`.
 - `fact_check_evidence` collects local or provider evidence for claims and preserves structured tuple, strength, limitation, and countercheck assessments.
 - `fact_check_report` summarizes backward-compatible verdicts and a fail-closed `strictVerdict` into `FACT_CHECK_REPORT`. Strict support requires same-tuple `ENTAILS / PROVEN` evidence, direct evidence in every supporting lane, the planned evidence and independence requirements, claim-specific freshness, no material limitation, and current evidence when the claim requires it. High-priority support also requires a completed countercheck with no disconfirming evidence. Strict contradiction requires same-tuple `NEGATES / DISPROVED` evidence with the negated predicate or object/value identified; a high-priority contradiction also requires a completed countercheck. Staleness remains a temporal finding rather than a compatibility verdict.

@@ -113,7 +113,7 @@ test('registers fact-check tools and command', () => {
   ]);
   assert.equal(omp.commands.has('fact-check'), true);
   for (const tool of omp.tools.values()) {
-    assert.equal(tool.defaultInactive, true, `${tool.name} must be opt-in`);
+    assert.notEqual(tool.defaultInactive, true, `${tool.name} must stay in the default tool inventory`);
     assert.equal(tool.approval, 'read', `${tool.name} must remain read-only`);
   }
 });

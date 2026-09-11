@@ -58,13 +58,18 @@ Start a new OMP session after installing or upgrading plugins.
 
 ## Use
 
-Extension tools are inactive by default so they do not enlarge the normal prompt; activate groups as needed:
+Most extension tools are inactive by default so they do not enlarge the normal prompt; activate groups as needed:
 
 ```text
 /enhancer-tools status
 /enhancer-tools enable <config|writing|fact|all>
 /enhancer-tools disable <config|writing|fact|all>
 ```
+
+The four `fact_check_*` pipeline tools are the exception: they ship in the default
+tool inventory, so a plain request such as “check the facts in docs/draft.md”
+reaches `fact_check_analyze` → `fact_check_evidence` → `fact_check_report` →
+`fact_check_review` without an activation step.
 
 Activation exposes tool schemas; it grants no filesystem, command, network, or publication permission.
 

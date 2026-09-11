@@ -40,7 +40,7 @@ Managed `AGENTS.md`、`CLAUDE.md` 和 `WATCHDOG.yml` 不导入完整目录，只
 `commandcode` 使用 `https://api.commandcode.ai/provider/v1`，静态暴露官方 [模型列表](https://commandcode.ai/docs/reference/cli/models)；每个模型条目携带按模型选择的 `api`，Claude 模型请求 `/provider/v1/messages`，其余请求 `/provider/v1/chat/completions`；模型选择、凭证保存和请求发送仍由 OMP 原生 `/login`、`/model`、AuthStorage 与 transport 负责。
 `aliyun-bailian-token-plan` 使用 `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`，静态暴露 Token Plan 个人版和团队版文档中的文本模型；模型选择、凭证保存和请求发送仍由 OMP 原生 `/login`、`/model`、AuthStorage 与 OpenAI-compatible transport 负责。
 
-所有 marketplace extension tools 默认 `defaultInactive`。`omp-config` 在宿主提供 active-tool 管理 API 时注册 `/enhancer-tools`，只支持 `config`、`writing`、`fact` 和 `all` 组；激活工具不改变权限。Coding Plan provider 是模型扩展，不增加 extension tool 或权限。
+marketplace extension tools 默认 opt-in；四个 `fact_check_*` 管线工具（analyze/evidence/report/review）例外，默认进入工具清单，使自然语言的事实核查请求能直达管线。`omp-config` 在宿主提供 active-tool 管理 API 时注册 `/enhancer-tools`，只支持 `config`、`writing`、`fact` 和 `all` 组；激活工具不改变权限。Coding Plan provider 是模型扩展，不增加 extension tool 或权限。
 
 ## 写作、PPT 与视觉
 

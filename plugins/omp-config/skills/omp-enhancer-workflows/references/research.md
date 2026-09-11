@@ -20,3 +20,4 @@ These steps are the required execution order for this domain. The plugin provide
 
 - Prefer primary sources; corroborate key claims with multiple independent sources.
 - Verdicts preserve exact claim tuples; compatibility evidence is not proof.
+- The deterministic pipeline for a document-level check is fact_check_analyze -> fact_check_evidence (lane A, lane B only when warranted) -> fact_check_report -> fact_check_review; these four tools ship in the default tool inventory, so a natural-language check request needs no activation step.
