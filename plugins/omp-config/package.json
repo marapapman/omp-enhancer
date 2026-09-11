@@ -1,9 +1,9 @@
 {
   "name": "omp-config",
-  "version": "0.1.72",
+  "version": "0.1.73",
   "private": true,
   "type": "module",
-  "description": "Optional OMP workflow references, config assets, uniquely named agents, notify-only hooks, opt-in hook templates, and diagnostics.",
+  "description": "Optional OMP workflow references, config assets, notify-only hooks, opt-in hook templates, and diagnostics.",
   "main": "index.js",
   "exports": {
     ".": "./index.js"
@@ -12,7 +12,6 @@
     "index.js",
     "src",
     "commands",
-    "agents",
     "skills",
     "hooks",
     "hook-templates",
@@ -40,7 +39,6 @@
     "omp-plugin",
     "config",
     "skills",
-    "agents",
     "hooks"
   ],
   "license": "UNLICENSED"
