@@ -7,6 +7,7 @@
     "plugins/writing-helper",
     "plugins/omp-fact-checker",
     "plugins/volcengine-coding-plan",
+    "plugins/commandcode",
     "plugins/aliyun-bailian-token-plan"
   ],
   "scripts": {

@@ -2,12 +2,13 @@
 
 ## Project scope
 
-This npm workspace is the OMP Enhancer marketplace monorepo. It packages five independently installable plugins:
+This npm workspace is the OMP Enhancer marketplace monorepo. It packages six independently installable plugins:
 
 - `omp-config`: shared config assets, optional workflow references, Agents, Skills, notify-only guards, hook templates, and diagnostics.
 - `writing-helper`: writing logic, style, citation, and polish tools plus English and Chinese writing resources.
 - `omp-fact-checker`: claim planning, evidence collection, cross-checking, reporting, and advisory review.
 - `volcengine-coding-plan`: native Volcengine Ark Coding Plan model provider for OMP.
+- `commandcode`: native Command Code Provider API model provider for OMP.
 - `aliyun-bailian-token-plan`: native Alibaba Cloud Bailian Token Plan model provider for OMP.
 
 Current architecture is documented in `docs/ARCHITECTURE.md`; development and release procedures are in `docs/DEVELOPMENT.md`; workflow schema and generation rules are in `docs/WORKFLOW_DEVELOPMENT.md`.
@@ -16,7 +17,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 ## Architecture & Data Flow
 
-**Monorepo pattern.** npm workspaces with 5 plugins under `plugins/`. Each plugin registers an OMP extension factory receiving an `ExtensionAPI` object:
+**Monorepo pattern.** npm workspaces with 6 plugins under `plugins/`. Each plugin registers an OMP extension factory receiving an `ExtensionAPI` object:
 
 - `pi.registerTool(tool)` — register ToolDefinition objects
 - `pi.on('event', handler)` — subscribe to `session_start`, `tool_result`, `session_stop`
@@ -35,6 +36,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 | `writing-helper` | Prose quality analysis (logic, style, citations, preservation), bilingual (zh/en) | `index.js` |
 | `omp-fact-checker` | Claim extraction, multi-lane evidence verification, cross-checking, verdict reports | `index.js` |
 | `volcengine-coding-plan` | Volcengine Ark Coding Plan provider, API-key login, static model catalog | `index.js` |
+| `commandcode` | Command Code Provider API provider, API-key login, static model catalog | `index.js` |
 | `aliyun-bailian-token-plan` | Alibaba Cloud Bailian Token Plan provider, API-key login, static model catalog | `index.js` |
 
 **Key architectural invariants (from docs/ARCHITECTURE.md):**
@@ -55,6 +57,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 | `plugins/omp-fact-checker/src/` | Fact-check pipeline: claim extraction, evidence collection (A/B lanes), cross-checking, providers |
 | `plugins/omp-config/` | Shared config assets, PPT/document/visual skills, 1 agent (visioner), hooks, hook-templates |
 | `plugins/volcengine-coding-plan/` | Native OMP model provider, Coding Plan API-key login, and static model catalog |
+| `plugins/commandcode/` | Native OMP model provider for Command Code Provider API, API-key login, and static model catalog |
 | `plugins/aliyun-bailian-token-plan/` | Native OMP model provider, Token Plan API-key login, and static model catalog |
 | `docs/` | Architecture, development, workflow docs (current) |
 | `docs/superpowers/` | **Historical archive only** — dated plans/specs/reports, NOT current runtime instructions |
@@ -68,9 +71,10 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 | `plugins/omp-fact-checker/src/fact-check.js` | Complete fact-check pipeline (31KB): tuple-based claim model, A/B evidence lanes |
 | `scripts/workflow-definitions.js` / `scripts/workflow-render.js` / `scripts/workflow-schema.js` | Canonical workflow definitions, renderers, and schema (source of generated catalog) |
 | `scripts/generate-workflow-catalog.js` | Standalone generator for WORKFLOW_CATALOG.md and omp-enhancer-workflows skill |
-| `.omp-plugin/marketplace.json` | Marketplace catalog: 5 plugins with names, versions, source paths, skills arrays |
-| `scripts/plugin-workspaces.js` | Canonical frozen inventory: 5-entry plugin name→directory mapping, cross-file consistency asserts |
+| `.omp-plugin/marketplace.json` | Marketplace catalog: 6 plugins with names, versions, source paths, skills arrays |
+| `scripts/plugin-workspaces.js` | Canonical frozen inventory: 6-entry plugin name→directory mapping, cross-file consistency asserts |
 | `plugins/volcengine-coding-plan/index.js` | Coding Plan provider registration, native `/login` callback, and environment credential fallback |
+| `plugins/commandcode/index.js` | Command Code provider registration, native `/login` callback, and environment credential fallback |
 | `plugins/aliyun-bailian-token-plan/index.js` | Alibaba Bailian provider registration, native `/login` callback, and environment credential fallback |
 
 ## Development Commands
@@ -125,7 +129,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 - **Node.js:** `^20.19.0 || >=22.12.0` (from package-lock, not declared in package.json)
 - **Package manager:** npm (v3 lockfile); Bun available for TS build (bunx tsc)
 - **Module system:** ESM everywhere (`"type": "module"`)
-- **JavaScript vs TypeScript:** All 5 plugins are pure JavaScript (no build step).
+- **JavaScript vs TypeScript:** All 6 plugins are pure JavaScript (no build step).
 - **No editorconfig** — follow local semicolon style
 - **Import paths:** Node ESM with `.js` extensions (no `.ts` in output paths)
 - **No lint/format config** in root — the repo relies on code review for consistency
@@ -248,6 +252,7 @@ npm test --workspace plugins/writing-helper
 npm run coverage --workspace plugins/writing-helper
 npm test --workspace plugins/omp-fact-checker
 npm test --workspace plugins/volcengine-coding-plan
+npm test --workspace plugins/commandcode
 npm test --workspace plugins/aliyun-bailian-token-plan
 ```
 

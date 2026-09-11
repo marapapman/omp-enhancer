@@ -102,7 +102,7 @@ npm run pack:all
 git diff --check
 ```
 
-真实 OMP 兼容验证应使用当前五个插件：
+真实 OMP 兼容验证应使用当前六个插件：
 
 ```bash
 node scripts/e2e/omp17-rpc-probe.mjs -- \
@@ -110,9 +110,10 @@ node scripts/e2e/omp17-rpc-probe.mjs -- \
   -e plugins/writing-helper/index.js --plugin-dir plugins/writing-helper \
   -e plugins/omp-fact-checker/index.js --plugin-dir plugins/omp-fact-checker \
   -e plugins/volcengine-coding-plan/index.js --plugin-dir plugins/volcengine-coding-plan \
+  -e plugins/commandcode/index.js --plugin-dir plugins/commandcode \
   -e plugins/aliyun-bailian-token-plan/index.js --plugin-dir plugins/aliyun-bailian-token-plan
 ```
 
-Probe 使用隔离的临时 OMP home，只输出 hash、字符数和结构布尔值，不输出完整 prompt 或配置秘密。它验证当前五个插件的 entrypoint、workflow Skill、PPT/视觉 Skill、写作 Skill、事实核查 Skill，以及两个 Coding/Token Plan provider 的加载状态；不验证已经删除的代码或测试增强插件。
+Probe 使用隔离的临时 OMP home，只输出 hash、字符数和结构布尔值，不输出完整 prompt 或配置秘密。它验证当前六个插件的 entrypoint、workflow Skill、PPT/视觉 Skill、写作 Skill、事实核查 Skill，以及各 provider 插件的加载状态；不验证已经删除的代码或测试增强插件。
 
 详细架构见 [ARCHITECTURE.md](ARCHITECTURE.md)，开发和发布见 [DEVELOPMENT.md](DEVELOPMENT.md)，历史自开发记录见 [OMP_ENHANCER_SELF_DEVELOPMENT.md](OMP_ENHANCER_SELF_DEVELOPMENT.md)，事件和隔离测试见 [WORKFLOW_E2E_TESTING.md](WORKFLOW_E2E_TESTING.md)。

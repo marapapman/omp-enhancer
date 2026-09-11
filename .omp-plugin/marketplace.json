@@ -5,7 +5,7 @@
     "name": "marapapman"
   },
   "metadata": {
-    "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, Volcengine Ark Coding Plan, and Alibaba Cloud Bailian Token Plan model integration.",
+    "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, Command Code, Volcengine Ark Coding Plan, and Alibaba Cloud Bailian Token Plan model integration.",
     "version": "1.0.52",
     "pluginRoot": "plugins"
   },
@@ -98,6 +98,15 @@
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/volcengine-coding-plan",
       "repository": "https://github.com/marapapman/omp-enhancer",
       "source": "./volcengine-coding-plan"
+    },
+    {
+      "name": "commandcode",
+      "description": "Native OMP provider for Command Code Provider API models.",
+      "version": "0.1.0",
+      "category": "development",
+      "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/commandcode",
+      "repository": "https://github.com/marapapman/omp-enhancer",
+      "source": "./commandcode"
     },
     {
       "name": "aliyun-bailian-token-plan",
