@@ -33,6 +33,16 @@ export const FACT_ASSESSMENT_CONTRACT = Object.freeze({
     'NO_RESULT',
   ]),
 });
+// Independent evidence lanes. A is required; B and C are added for broad or
+// high-risk scope. Comparison is over the lanes actually supplied, so a
+// two-lane run keeps exactly the historical A/B semantics.
+export const FACT_LANES = Object.freeze(['A', 'B', 'C']);
+// Document segments are classified into exactly these statuses. Every prose
+// unit the extractor does not turn into a claim is reported with a reason
+// instead of disappearing.
+export const SEGMENT_STATUSES = Object.freeze(['claim', 'non-assertion', 'duplicate', 'truncated', 'structural']);
+export const NON_ASSERTION_REASONS = Object.freeze(['question', 'too-short', 'no-claim-cue']);
+export const CHALLENGE_RESPONSES = Object.freeze(['AGREE', 'REBUT', 'MISSED']);
 const TUPLE_MATERIALITIES = new Set(FACT_ASSESSMENT_CONTRACT.tupleMaterialities);
 const TUPLE_RELATIONS = new Set(FACT_ASSESSMENT_CONTRACT.tupleRelations);
 const NEGATED_FIELDS = new Set(FACT_ASSESSMENT_CONTRACT.negatedFields);
@@ -133,28 +143,175 @@ function isValidTupleField(field) {
     && (materiality !== 'MATERIAL' || Boolean(normalizeWhitespace(field.value)));
 }
 
-function extractFactClaims({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } = {}) {
-  const source = String(text ?? '');
-  const segments = sentenceSegments(source);
-  const claims = [];
+function normalizeMaxClaims(value) {
+  if (!Number.isFinite(value)) return DEFAULT_MAX_CLAIMS;
+  return Math.max(1, Math.min(DEFAULT_MAX_CLAIMS, Math.trunc(value)));
+}
 
-  for (const segment of segments) {
-    const category = claimCategory(segment.text);
-    if (!category) continue;
-    const id = `FC-${String(claims.length + 1).padStart(3, '0')}`;
-    claims.push({
-      id,
-      text: segment.text,
-      category,
-      priority: claimPriority(segment.text, category),
-      location: segment.location,
-      evidencePlan: evidencePlanFor(segment.text, category),
-      freshnessRequirement: freshnessRequirementFor(segment.text),
+export function segmentDocument(text = '') {
+  const normalized = String(text ?? '').replace(/\r\n/gu, '\n');
+  const segments = [];
+  let inFence = false;
+  const push = (value, kind, reason) => {
+    const cleaned = normalizeWhitespace(value);
+    if (!cleaned) return;
+    segments.push({
+      text: cleaned,
+      kind,
+      ...(reason ? { reason } : {}),
+      location: `segment ${segments.length + 1}`,
     });
-    if (claims.length >= maxClaims) break;
+  };
+  for (const rawLine of normalized.split('\n')) {
+    const line = rawLine.replace(/\s+$/u, '');
+    if (/^\s{0,3}(?:```|~~~)/u.test(line)) {
+      inFence = !inFence;
+      push(line, 'structural', 'code-fence');
+      continue;
+    }
+    if (inFence) {
+      push(line, 'structural', 'code-block');
+      continue;
+    }
+    if (!line.trim()) continue;
+    if (/^\s{0,3}#{1,6}\s/u.test(line)) {
+      push(line, 'structural', 'heading');
+      continue;
+    }
+    if (/^\s*\|/u.test(line)) {
+      push(line, 'structural', 'table-row');
+      continue;
+    }
+    if (/^\s{0,3}(?:[-*_]\s*){3,}$/u.test(line)) {
+      push(line, 'structural', 'rule');
+      continue;
+    }
+    const stripped = line
+      .replace(/^\s{0,3}(?:>\s?)+/u, '')
+      .replace(/^\s{0,3}(?:[-*+]|\d+[.)])\s+/u, '');
+    for (const sentence of stripped.split(/(?<=[。！？])|(?<=[.!?])\s+/u)) {
+      push(sentence, 'prose');
+    }
+  }
+  return segments;
+}
+
+export function classifySegment(segment = {}) {
+  if (segment.kind === 'structural') {
+    return { status: 'structural', reason: segment.reason ?? 'structural' };
+  }
+  const text = normalizeWhitespace(segment.text);
+  if (/[?？]\s*$/u.test(text)) return { status: 'non-assertion', reason: 'question' };
+  if (text.length < 8) return { status: 'non-assertion', reason: 'too-short' };
+  const category = claimCategory(text);
+  if (!category) return { status: 'non-assertion', reason: 'no-claim-cue' };
+  return { status: 'claim', category };
+}
+
+function buildClaim({ segment, category, index }) {
+  return {
+    id: `FC-${String(index).padStart(3, '0')}`,
+    text: segment.text,
+    category,
+    priority: claimPriority(segment.text, category),
+    location: segment.location,
+    evidencePlan: evidencePlanFor(segment.text, category),
+    freshnessRequirement: freshnessRequirementFor(segment.text),
+  };
+}
+
+export function analyzeDocument({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } = {}) {
+  const limit = normalizeMaxClaims(maxClaims);
+  const dispositions = [];
+  const claims = [];
+  const seen = new Set();
+
+  for (const segment of segmentDocument(text)) {
+    const classified = classifySegment(segment);
+    if (classified.status === 'structural') {
+      dispositions.push({ ...segment, status: 'structural' });
+      continue;
+    }
+    if (classified.status === 'non-assertion') {
+      dispositions.push({ ...segment, status: 'non-assertion', reason: classified.reason });
+      continue;
+    }
+    const key = normalizeWhitespace(segment.text).toLocaleLowerCase('en-US');
+    if (seen.has(key)) {
+      dispositions.push({ ...segment, status: 'duplicate' });
+      continue;
+    }
+    seen.add(key);
+    if (claims.length >= limit) {
+      dispositions.push({ ...segment, status: 'truncated' });
+      continue;
+    }
+    const claim = buildClaim({ segment, category: classified.category, index: claims.length + 1 });
+    claims.push(claim);
+    dispositions.push({ ...segment, status: 'claim', claimId: claim.id, category: claim.category });
   }
 
-  return claims;
+  return { claims, dispositions, coverage: summarizeCoverage(dispositions) };
+}
+
+function summarizeCoverage(dispositions = []) {
+  const countBy = (predicate) => dispositions.filter(predicate).length;
+  return {
+    totalSegments: dispositions.length,
+    proseSegments: countBy((item) => item.kind === 'prose'),
+    structuralSegments: countBy((item) => item.status === 'structural'),
+    claims: countBy((item) => item.status === 'claim'),
+    nonAssertions: countBy((item) => item.status === 'non-assertion'),
+    duplicates: countBy((item) => item.status === 'duplicate'),
+    truncated: countBy((item) => item.status === 'truncated'),
+    notExtractedReasons: NON_ASSERTION_REASONS.reduce((accumulator, reason) => ({
+      ...accumulator,
+      [reason]: countBy((item) => item.status === 'non-assertion' && item.reason === reason),
+    }), {}),
+  };
+}
+
+export function mergeClaimCandidates({ sources = [], maxClaims = DEFAULT_MAX_CLAIMS } = {}) {
+  const merged = [];
+  const byKey = new Map();
+
+  for (const group of Array.isArray(sources) ? sources : []) {
+    const source = normalizeWhitespace(group?.source ?? '') || 'unknown';
+    for (const candidate of Array.isArray(group?.claims) ? group.claims : []) {
+      const text = normalizeWhitespace(candidate?.text ?? '');
+      if (!text) continue;
+      const key = text.toLocaleLowerCase('en-US');
+      const existing = byKey.get(key);
+      if (existing) {
+        if (!existing.proposedBy.includes(source)) existing.proposedBy.push(source);
+        if (existing.category === 'unclassified' && candidate.category) {
+          existing.category = candidate.category;
+          existing.evidencePlan = evidencePlanFor(text, candidate.category);
+        }
+        continue;
+      }
+      const category = normalizeWhitespace(candidate?.category ?? '') || claimCategory(text) || 'unclassified';
+      const claim = {
+        text,
+        category,
+        priority: candidate.priority ?? claimPriority(text, category),
+        proposedBy: [source],
+        evidencePlan: Array.isArray(candidate.evidencePlan) && candidate.evidencePlan.length
+          ? candidate.evidencePlan
+          : evidencePlanFor(text, category),
+        freshnessRequirement: candidate.freshnessRequirement ?? freshnessRequirementFor(text),
+        ...(candidate.claimTuple ? { claimTuple: candidate.claimTuple } : {}),
+      };
+      byKey.set(key, claim);
+      merged.push(claim);
+    }
+  }
+
+  return merged.slice(0, normalizeMaxClaims(maxClaims)).map((claim, index) => ({
+    ...claim,
+    id: `FC-${String(index + 1).padStart(3, '0')}`,
+    singleLane: claim.proposedBy.length < 2,
+  }));
 }
 
 export function buildFactCheckPlan({
@@ -162,11 +319,11 @@ export function buildFactCheckPlan({
   maxClaims = DEFAULT_MAX_CLAIMS,
   crossCheckRequested = false,
 } = {}) {
-  const allClaims = extractFactClaims({ text, maxClaims: Number.POSITIVE_INFINITY });
-  const claims = allClaims.slice(0, normalizeMaxClaims(maxClaims));
+  const { claims, dispositions, coverage } = analyzeDocument({ text, maxClaims });
   const highPriority = claims.filter((claim) => claim.priority === 'high').length;
   return {
     claims,
+    coverage: { ...coverage, dispositions },
     riskLevel: highPriority > 0 ? 'high' : claims.length > 2 ? 'standard' : 'low',
     requiredStages: requiredStagesFor({
       claims,
@@ -175,13 +332,13 @@ export function buildFactCheckPlan({
   };
 }
 
-function normalizeMaxClaims(value) {
-  if (!Number.isFinite(value)) return DEFAULT_MAX_CLAIMS;
-  return Math.max(1, Math.min(DEFAULT_MAX_CLAIMS, Math.trunc(value)));
-}
+const MAX_LISTED_NOT_EXTRACTED = 20;
 
 export function formatFactCheckPlan(plan = {}) {
   const claims = Array.isArray(plan.claims) ? plan.claims : [];
+  const coverage = plan.coverage ?? {};
+  const dispositions = Array.isArray(coverage.dispositions) ? coverage.dispositions : [];
+  const notExtracted = dispositions.filter((item) => item.status === 'non-assertion');
   return [
     'FACT_CHECK_PLAN',
     `Risk: ${plan.riskLevel ?? 'unknown'}`,
@@ -196,6 +353,21 @@ export function formatFactCheckPlan(plan = {}) {
       `  evidence: ${(claim.evidencePlan ?? []).join(', ') || 'none'}`,
       `  freshness-requirement: ${claim.freshnessRequirement ?? 'NOT_APPLICABLE'}`,
     ]) : ['- none']),
+    '',
+    'Coverage:',
+    `- segments: ${coverage.totalSegments ?? 0} (prose ${coverage.proseSegments ?? 0}, structural ${coverage.structuralSegments ?? 0})`,
+    `- claims: ${coverage.claims ?? claims.length}; duplicate: ${coverage.duplicates ?? 0}; truncated: ${coverage.truncated ?? 0}`,
+    `- not extracted: ${coverage.nonAssertions ?? 0}`
+      + ` (question ${coverage.notExtractedReasons?.question ?? 0}`
+      + `, too-short ${coverage.notExtractedReasons?.['too-short'] ?? 0}`
+      + `, no-claim-cue ${coverage.notExtractedReasons?.['no-claim-cue'] ?? 0})`,
+    ...(notExtracted.length ? [
+      '- sentences the extractor did not turn into claims (review for misses):',
+      ...notExtracted.slice(0, MAX_LISTED_NOT_EXTRACTED).map((item) => `  - ${item.location} [${item.reason}]: ${item.text}`),
+      ...(notExtracted.length > MAX_LISTED_NOT_EXTRACTED
+        ? [`  - ... ${notExtracted.length - MAX_LISTED_NOT_EXTRACTED} more`]
+        : []),
+    ] : []),
   ].join('\n');
 }
 
@@ -226,21 +398,24 @@ export function crossCheckEvidence({ claims = [], evidenceRecords = [] } = {}) {
       if (!lanes.has(lane)) lanes.set(lane, []);
       lanes.get(lane).push(record);
     }
-    const laneARecords = lanes.get('A') ?? [];
-    const laneBRecords = lanes.get('B') ?? [];
-    const laneA = laneStatus(laneARecords);
-    const laneB = laneStatus(laneBRecords);
-    const conflicts = conflictFields(laneARecords, laneBRecords, claim);
-    const baseStatus = crossCheckStatus(laneA, laneB);
-    const gaps = [
-      ...(!laneARecords.length ? ['FACT_EVIDENCE_A not supplied'] : []),
-      ...(!laneBRecords.length ? ['FACT_EVIDENCE_B not supplied'] : []),
-    ];
+    const laneStatuses = {};
+    for (const lane of [...lanes.keys()].sort()) laneStatuses[lane] = laneStatus(lanes.get(lane));
+    const recordedLanes = [...lanes.keys()].sort();
+    const supplied = recordedLanes.filter((lane) => (lanes.get(lane) ?? []).length > 0);
+    const missing = FACT_LANES
+      .slice(0, Math.max(2, ...recordedLanes.map((lane) => FACT_LANES.indexOf(lane) + 1), 0))
+      .filter((lane) => !supplied.includes(lane));
+    const conflicts = conflictFields([...(lanes.get('A') ?? [])], [...(lanes.get('B') ?? [])], claim);
+    const baseStatus = crossCheckStatus(recordedLanes.map((lane) => laneStatuses[lane]));
+    const gaps = missing.map((lane) => `FACT_EVIDENCE_${lane} not supplied`);
     return {
       claimId: claim.id,
       status: conflicts.length > 0 && baseStatus === 'AGREED' ? 'CONFLICTED' : baseStatus,
-      laneA,
-      laneB,
+      // Historical two-lane fields stay populated so existing readers keep working.
+      laneA: laneStatuses.A ?? 'INSUFFICIENT',
+      laneB: laneStatuses.B ?? 'INSUFFICIENT',
+      laneStatuses,
+      lanesSupplied: supplied,
       conflicts,
       gaps,
       findings: hasStaleFinding(records) ? ['STALE_EVIDENCE'] : [],
@@ -267,6 +442,9 @@ export function buildFactCheckReport({ claims = [], evidenceRecords = [], crossC
       strictReasons: strict.reasons,
       strictAssessment: strict,
       crossCheck: cross?.status ?? 'NOT_RUN',
+      laneStatuses: cross?.laneStatuses,
+      lanesSupplied: cross?.lanesSupplied,
+      crossCheckFindings: cross?.findings,
       evidence: records.map((record) => ({
         lane: record.lane,
         provider: record.provider,
@@ -308,6 +486,10 @@ export function formatFactCheckReport(report = {}) {
       `  claim: ${result.claim}`,
       ...(result.claimTuple ? [`  claim-tuple: ${formatCanonicalTuple(result.claimTuple)}`] : []),
       `  cross-check: ${result.crossCheck}`,
+      ...(result.laneStatuses && Object.keys(result.laneStatuses).length > 1
+        ? [`  lanes: ${Object.entries(result.laneStatuses).map(([lane, status]) => `${lane}=${status}`).join(' ')}`]
+        : []),
+      ...(result.crossCheckFindings?.length ? [`  cross-check-findings: ${result.crossCheckFindings.join('; ')}`] : []),
       `  evidence: ${result.evidence.length ? result.evidence.map(formatReportEvidenceSummary).join('; ') : 'none'}`,
       ...result.evidence.flatMap((item) => [
         item.limitation ? `  evidence-limitation-${item.lane ?? '?'}: ${item.limitation.level}${item.limitation.reason ? ` - ${item.limitation.reason}` : ''}` : null,
@@ -332,14 +514,18 @@ export function validateFactCheckReview({
   const missing = [];
   const hasPlan = /\bFACT_CHECK_PLAN\b/i.test(text);
   const hasEvidenceA = /\bFACT_EVIDENCE_A\b/i.test(text);
-  const hasEvidenceB = /\bFACT_EVIDENCE_B\b/i.test(text);
+  const secondLane = FACT_LANES
+    .filter((lane) => lane !== 'A')
+    .find((lane) => new RegExp(`\\bFACT_EVIDENCE_${lane}\\b`, 'i').test(text));
   const hasCrossCheck = /\bFACT_CROSS_CHECK\b/i.test(text);
   const hasReport = /\bFACT_CHECK_REPORT\b/i.test(text);
   const degraded = /\bCROSS_CHECK_DEGRADED\b|network unavailable|api unavailable|insufficient external evidence|无法联网|api 不可用/i.test(text);
 
   if (!hasPlan) missing.push('FACT_CHECK_PLAN');
   if (!hasEvidenceA) missing.push('FACT_EVIDENCE_A');
-  if (!hasEvidenceB && riskLevel !== 'low' && !degraded) missing.push('FACT_EVIDENCE_B or CROSS_CHECK_DEGRADED');
+  // Any second lane section satisfies independence, so a three-lane run that
+  // uses A and C is not reported as missing B.
+  if (!secondLane && riskLevel !== 'low' && !degraded) missing.push('a second FACT_EVIDENCE_<lane> section or CROSS_CHECK_DEGRADED');
   if (!hasCrossCheck) missing.push('FACT_CROSS_CHECK');
   if (!hasReport) missing.push('FACT_CHECK_REPORT');
 
@@ -348,15 +534,6 @@ export function validateFactCheckReview({
     missing,
     degraded,
   };
-}
-
-function sentenceSegments(text = '') {
-  const normalized = String(text ?? '').replace(/\r\n/gu, '\n');
-  const raw = normalized
-    .split(/(?<=[。！？])|(?<=[.!?])\s+|\n+/u)
-    .map((item) => normalizeWhitespace(item))
-    .filter((item) => item.length >= 8);
-  return raw.map((item, index) => ({ text: item, location: `segment ${index + 1}` }));
 }
 
 function claimCategory(text = '') {
@@ -389,9 +566,10 @@ function freshnessRequirementFor(text = '') {
 function requiredStagesFor({ claims = [], crossCheckRequested = false } = {}) {
   const highRisk = claims.some((claim) => claim.priority === 'high');
   const broad = claims.length > 2;
+  const multiLane = broad || highRisk || crossCheckRequested;
   return [
     'fact-researcher-a',
-    ...(broad || highRisk || crossCheckRequested ? ['fact-researcher-b'] : []),
+    ...(multiLane ? ['fact-researcher-b', 'fact-researcher-c'] : []),
     'fact_check_report',
     'fact_check_review',
   ];
@@ -475,13 +653,16 @@ function hasStatusConflict(records = []) {
   return statuses.has('SUPPORTED') && statuses.has('CONTRADICTED');
 }
 
-function crossCheckStatus(a, b) {
-  if (a === 'CONFLICTED' || b === 'CONFLICTED') return 'CONFLICTED';
-  if (a === 'INSUFFICIENT' && b === 'INSUFFICIENT') return 'INSUFFICIENT';
-  if (a === 'UNVERIFIABLE' || b === 'UNVERIFIABLE') return 'UNVERIFIABLE';
-  if (a !== 'INSUFFICIENT' && b !== 'INSUFFICIENT' && a !== b) return 'CONFLICTED';
-  if (a === b && a !== 'INSUFFICIENT') return 'AGREED';
-  return 'PARTIAL';
+function crossCheckStatus(statuses = []) {
+  const values = statuses.map((value) => String(value ?? 'INSUFFICIENT'));
+  if (values.length === 0) return 'INSUFFICIENT';
+  if (values.includes('CONFLICTED')) return 'CONFLICTED';
+  const usable = values.filter((value) => value !== 'INSUFFICIENT');
+  if (usable.length === 0) return 'INSUFFICIENT';
+  if (usable.includes('UNVERIFIABLE')) return 'UNVERIFIABLE';
+  if (new Set(usable).size > 1) return 'CONFLICTED';
+  // Agreement requires support that is not carried by a single lane alone.
+  return usable.length >= 2 && usable.length === values.length ? 'AGREED' : 'PARTIAL';
 }
 
 function conflictFields(a = [], b = [], claim = {}) {

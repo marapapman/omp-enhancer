@@ -4,7 +4,7 @@ Optional advisory reference. Main orchestrates freely.
 
 - When: Source-backed research, web synthesis, comparison, recommendation, fact-checking, or claim-by-claim verdict.
 - Skills: `fact-checking`, `claim-extraction`, `source-evaluation`, `citation-authenticity`
-- Agent candidates: `fact-researcher-a`, `fact-researcher-b`, `fact-planner`, `scout`.
+- Agent candidates: `fact-researcher-a`, `fact-researcher-b`, `fact-researcher-c`, `fact-challenger`, `fact-planner`, `scout`.
 
 ## Required step order
 
@@ -20,4 +20,6 @@ These steps are the required execution order for this domain. The plugin provide
 
 - Prefer primary sources; corroborate key claims with multiple independent sources.
 - Verdicts preserve exact claim tuples; compatibility evidence is not proof.
-- The deterministic pipeline for a document-level check is fact_check_analyze -> fact_check_evidence (lane A, lane B only when warranted) -> fact_check_report -> fact_check_review; these four tools ship in the default tool inventory, so a natural-language check request needs no activation step.
+- The deterministic pipeline for a document-level check is fact_check_analyze -> fact_check_evidence (lane A, lane B and C only when warranted) -> fact_check_report -> fact_check_review; these four tools ship in the default tool inventory, so a natural-language check request needs no activation step.
+- Omission defence is layered: every researcher lane also enumerates the document and returns FACT_CLAIM_CANDIDATES, fact_check_merge takes the union of those candidates (a claim only one observer lists is kept and flagged single-lane rather than dropped), and fact_check_challenge appends MISSED claims back into the plan for a fresh evidence pass.
+- Evidence lanes get different models from the OMP agents hub (/agents), not from /model: /model sets the session model, so unbound lanes would all follow it and cross-checking would compare a model with itself.

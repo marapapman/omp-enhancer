@@ -4,8 +4,10 @@ const WORKFLOW_PHASE_LINE = 'ANALYZE -> EXECUTE -> REVIEW';
 const AGENT_DESCRIPTIONS = Object.freeze({
   checker: 'Read-only English checker for a narrow semantic-drift, logic, and clarity check or a broad seven-dimension advisory audit.',
   'fact-planner': 'Decomposes a fact-checking task into checkable claims, evidence plans, risk levels, and scope boundaries.',
-  'fact-researcher-a': 'First independent evidence lane for fact checking; collects primary-source evidence for planned claims.',
-  'fact-researcher-b': 'Second independent evidence lane; looks for corroboration, counter-evidence, and source conflicts.',
+  'fact-researcher-a': 'First independent evidence lane for fact checking; collects primary-source evidence for planned claims and lists claims the plan omitted.',
+  'fact-researcher-b': 'Second independent evidence lane; looks for corroboration, counter-evidence, source conflicts, and omitted claims.',
+  'fact-researcher-c': 'Third independent evidence lane; third-model corroboration plus an independent enumeration of omitted claims.',
+  'fact-challenger': 'Adversarial reviewer that attacks recorded verdicts and reports claims the plan missed (AGREE / REBUT / MISSED).',
   scout: 'Fast read-only scout returning compressed context for handoff; use for exploratory codebase research and broad pattern searches.',
   task: 'General-purpose subagent with full capabilities for delegated multi-step work.',
   writer: 'Bounded English writer for drafting or revision, including LaTeX passages and read-only proposed replacements.',

@@ -7,6 +7,8 @@ import {
   collectLocalEvidence,
   crossCheckEvidence,
   FACT_ASSESSMENT_CONTRACT,
+  FACT_LANES,
+  CHALLENGE_RESPONSES,
   formatCanonicalTuple,
   formatFactCheckPlan,
   formatFactCheckReport,
@@ -15,6 +17,7 @@ import {
   isValidEvidenceTuple,
   isValidLimitation,
   isValidStrength,
+  mergeClaimCandidates,
   normalizeWhitespace,
   strictClaimVerdict,
   validateFactCheckReview,
@@ -79,7 +82,7 @@ function buildEvidenceParameters(z) {
     text: z.string().optional().describe('Inline text to derive claims when claims are not supplied explicitly. Example: "The Eiffel Tower is 330 meters tall."'),
     claims: z.array(claim).optional().describe('Fact-check claims with id/text fields. Use results from fact_check_analyze. When supplied, evidenceRecords should also be provided.'),
     evidenceRecords: z.array(evidence).optional().describe('Pre-collected evidence records keyed by claimId. Each record requires claimId, lane, and a canonical status.'),
-    lane: z.enum(['A', 'B']).optional().describe('Evidence lane identifier for structured multi-observer fact-checking. Example: "A".'),
+    lane: z.enum(FACT_LANES).optional().describe('Evidence lane identifier for structured multi-observer fact-checking: A, B, or C. Example: "A".'),
     allowNetwork: z.boolean().optional().describe('Allow network access to fetch provider evidence. Set to true only when network access is authorized. Example: false.'),
     providers: z.array(z.enum(['crossref', 'arxiv', 'openalex', 'datacite', 'google-fact-check'])).optional().describe('External evidence providers to query. Only used when allowNetwork is true. Example: ["crossref", "arxiv"].'),
   });
@@ -93,6 +96,8 @@ function buildReportParameters(z) {
     status: z.string().describe('Cross-check status: AGREED, CONFLICTED, PARTIAL, INSUFFICIENT, or UNVERIFIABLE.'),
     laneA: z.string().optional().describe('First evidence lane for comparison. Example: "A".'),
     laneB: z.string().optional().describe('Second evidence lane for comparison. Example: "B".'),
+    laneStatuses: z.array(z.string()).optional().describe('Per-lane status entries as lane=STATUS, needed when a run uses more than two lanes. Example: ["A=SUPPORTED","B=SUPPORTED","C=INSUFFICIENT"].'),
+    lanesSupplied: z.array(z.string()).optional().describe('Lane ids that supplied at least one usable evidence record. Example: ["A","B"].'),
     conflicts: z.array(z.string()).optional().describe('List of specific points of conflict between lanes. Example: ["source_disagrees_on_date"].'),
     findings: z.array(z.string()).optional().describe('Additional findings from the cross-check analysis. Example: ["both_lanes_agree_on_outcome"].'),
     gaps: z.array(z.string()).optional().describe('Evidence gaps identified for this cross-check. Example: [\"FACT_EVIDENCE_B not supplied\"].'),
@@ -120,7 +125,7 @@ function buildClaimSchema(z) {
 function buildEvidenceRecordSchema(z) {
   return z.object({
     claimId: z.string().describe('The claim ID this evidence supports or contradicts. Must match a claim id from fact_check_analyze. Example: "claim-1".'),
-    lane: z.enum(['A', 'B']).optional().describe('Evidence lane identifier for multi-observer fact-checking. Example: "A".'),
+    lane: z.enum(FACT_LANES).optional().describe('Evidence lane identifier for multi-observer fact-checking: A, B, or C. Example: "A".'),
     provider: z.string().optional().describe('Provider name for the evidence source. Example: "crossref".'),
     status: z.enum(EVIDENCE_STATUSES).describe('Evidence status: SUPPORTED, CONTRADICTED, INSUFFICIENT, or UNVERIFIABLE. Example: "SUPPORTED".'),
     quote: z.string().optional().describe('Direct quote from the source supporting the evidence. Example: "The Eiffel Tower is 330 meters tall.".'),
@@ -168,6 +173,57 @@ function buildCanonicalTupleShape(z) {
   };
 }
 
+// Candidates are enumerated before ids exist, so they carry no id: the merge
+// step assigns ids, and a caller-invented id would only be discarded.
+function buildClaimCandidateSchema(z) {
+  return z.object({
+    text: z.string().describe('The claim text. This is the merge identity. Example: "The protocol supports concurrent writes."'),
+    category: z.string().optional().describe('Optional category label. Example: "comparative".'),
+    priority: z.string().optional().describe('Optional priority level. Example: "high".'),
+  });
+}
+
+function buildMergeParameters(z) {
+  const candidate = buildClaimCandidateSchema(z);
+  return z.object({
+    sources: z.array(z.object({
+      source: z.string().describe('Observer or lane label that produced these candidates. Example: "fact-researcher-a".'),
+      claims: z.array(candidate).describe('Claim candidates enumerated by this observer. Text is the identity; ids are assigned on merge.'),
+    })).describe('One entry per independent observer, each with its own claim candidates.'),
+    maxClaims: z.number().optional().describe('Maximum number of merged claims to return. Example: 20.'),
+  });
+}
+
+function formatMergedClaims({ claims = [], sources = [] } = {}) {
+  return [
+    `FACT_CHECK_CLAIMS (${sources.length} observer${sources.length === 1 ? '' : 's'})`,
+    `Observers: ${sources.map((entry) => normalizeWhitespace(entry.source ?? '') || 'unknown').join(', ')}`,
+    `Merged: ${claims.length}; single-observer: ${claims.filter((claim) => claim.singleLane).length}`,
+    '',
+    ...claims.flatMap((claim) => [
+      `- ${claim.id}: ${claim.text}`,
+      `  category: ${claim.category}`,
+      `  priority: ${claim.priority}`,
+      `  proposed-by: ${claim.proposedBy.join(', ')}`,
+      ...(claim.singleLane ? ['  single-lane: verify independently; only one observer listed this claim'] : []),
+      `  evidence: ${(claim.evidencePlan ?? []).join(', ') || 'none'}`,
+    ]),
+  ].join('\n');
+}
+
+function buildChallengeParameters(z) {
+  const candidate = buildClaimCandidateSchema(z);
+  return z.object({
+    challenges: z.array(z.object({
+      claimId: z.string().describe('The planned claim id this response addresses. Example: "FC-001".'),
+      response: z.enum(CHALLENGE_RESPONSES).describe('AGREE to confirm, REBUT to reject the verdict with evidence, MISSED to add a claim the plan omitted.'),
+      reason: z.string().describe('Why this response was reached. A REBUT must name the contradicting record.'),
+      counterEvidence: z.string().optional().describe('Source, quote, or reasoning that rebuts the recorded verdict. Required for REBUT.'),
+      newClaim: candidate.optional().describe('A claim the plan omitted. Required for MISSED; it is appended to the plan with a generated id.'),
+    })).describe('One entry per challenged claim or omitted claim.'),
+  });
+}
+
 function buildReviewParameters(z) {
   return z.object({
     finalOutput: z.string().describe('The final fact-check report text to review for consistency and completeness. Example: "FACT_EVIDENCE_A\n- claim-1: SUPPORTED\n  source: example.com".'),
@@ -198,13 +254,21 @@ function formatEvidenceBlock(lane, records = []) {
   ].join('\n');
 }
 
+function laneStatusEntries(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return Object.entries(value).map(([lane, status]) => `${lane}=${status}`).sort();
+  }
+  return [...(Array.isArray(value) ? value : [])].map(String).sort();
+}
+
 function formatCrossCheckBlock(crossChecks = []) {
   return [
     'FACT_CROSS_CHECK',
     ...(crossChecks.length ? crossChecks.map((item) => [
       `- ${item.claimId}: ${item.status}`,
-      `  laneA: ${item.laneA}`,
-      `  laneB: ${item.laneB}`,
+      ...(laneStatusEntries(item.laneStatuses).length > 1
+        ? [`  lanes: ${laneStatusEntries(item.laneStatuses).join(' ')}`]
+        : [`  laneA: ${item.laneA}`, `  laneB: ${item.laneB}`]),
       item.conflicts?.length ? `  conflicts: ${item.conflicts.join(', ')}` : null,
       item.gaps?.length ? `  gaps: ${item.gaps.join(', ')}` : null,
       item.findings?.length ? `  findings: ${item.findings.join(', ')}` : null,
@@ -244,6 +308,52 @@ export default function factCheckerExtension(omp) {
         details: {
           ...plan,
           source: loaded.source,
+          advisoryOnly: true,
+          telemetry: workflow ? 'session' : 'stateless',
+        },
+        isError: false,
+      };
+    }),
+  });
+
+  omp.registerTool({
+    name: 'fact_check_merge',
+    label: 'Fact Check Merge',
+    description: 'Merge claim candidates enumerated independently by several observers into one union claim list. Single-observer claims are preserved and flagged, never dropped.',
+    approval: 'read',
+    promptSnippet: 'Merge independently enumerated claim candidates into a union plan.',
+    promptGuidelines: [
+      'Pass one sources entry per observer, each with a source label and its claim candidates.',
+      'The union is preserved: a claim found by only one observer is kept and flagged singleLane.',
+      'Use the returned claim ids for fact_check_evidence so every observer claim is verified.',
+    ],
+    parameters: buildMergeParameters(z),
+    execute: withToolErrorHandling('fact_check_merge', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
+      const input = paramsOrEmpty(params);
+      const workflow = workflowStateFor(ctx);
+      const sources = Array.isArray(input.sources) ? input.sources : [];
+      if (!sources.length || !sources.every((entry) => entry && typeof entry === 'object' && Array.isArray(entry.claims))) {
+        return errorResult('Fact-check merge requires at least one source entry, each with an array of claim candidates.');
+      }
+      const claims = mergeClaimCandidates({ sources, maxClaims: input.maxClaims });
+      if (!claims.length) {
+        return errorResult('Fact-check merge found no claim candidates in the supplied sources.');
+      }
+      if (workflow) {
+        workflow.plan = {
+          claims: structuredClone(claims),
+          riskLevel: claims.some((claim) => claim.priority === 'high') ? 'high' : claims.length > 2 ? 'standard' : 'low',
+          sourceObservers: sources.map((entry) => normalizeWhitespace(entry.source ?? '') || 'unknown'),
+        };
+        workflow.evidenceByLane = new Map();
+        workflow.report = null;
+      }
+      return {
+        content: [textContent(formatMergedClaims({ claims, sources }))],
+        details: {
+          claims,
+          observers: sources.map((entry) => normalizeWhitespace(entry.source ?? '') || 'unknown'),
+          singleLaneClaims: claims.filter((claim) => claim.singleLane).map((claim) => claim.id),
           advisoryOnly: true,
           telemetry: workflow ? 'session' : 'stateless',
         },
@@ -349,13 +459,126 @@ export default function factCheckerExtension(omp) {
         return errorResult('Fact-check crossChecks must contain one valid structured result for every planned claim.');
       }
       const report = buildFactCheckReport({ claims, evidenceRecords, crossChecks });
-      if (workflow) workflow.report = structuredClone({ report, crossChecks, evidenceRecords });
+      if (workflow) {
+        workflow.report = structuredClone({ report, crossChecks, evidenceRecords });
+        // The supplied records are authoritative, so they also define the lane
+        // telemetry: requiring a separate fact_check_evidence call before the
+        // review would report a supplied lane as missing.
+        if (sameClaims(workflow.plan?.claims ?? [], claims)) {
+          for (const lane of FACT_LANES) {
+            const laneRecords = evidenceRecords.filter((record) => String(record.lane ?? 'A').toUpperCase() === lane);
+            if (laneRecords.length) workflow.evidenceByLane.set(lane, structuredClone(laneRecords));
+          }
+        }
+      }
       return {
         content: [textContent(`${formatCrossCheckBlock(crossChecks)}\n\n${formatFactCheckReport(report)}`)],
         details: {
           ...report,
           crossChecks,
           warnings,
+          advisoryOnly: true,
+          telemetry: workflow ? 'session' : 'stateless',
+        },
+        isError: false,
+      };
+    }),
+  });
+
+  omp.registerTool({
+    name: 'fact_check_challenge',
+    label: 'Fact Check Challenge',
+    description: 'Record an adversarial review round: confirm a verdict, rebut it with counter-evidence, or report a claim the plan omitted. A MISSED claim is appended to the plan so a fresh evidence pass can cover it.',
+    approval: 'read',
+    promptSnippet: 'Record adversarial challenge responses against the current fact-check findings.',
+    promptGuidelines: [
+      'Requires evidence and a report first: challenge the recorded verdicts, not the raw document.',
+      'REBUT requires counterEvidence; MISSED requires newClaim.',
+      'A MISSED claim is appended to the plan and invalidates the current report so it is rebuilt with the enlarged claim set.',
+    ],
+    parameters: buildChallengeParameters(z),
+    execute: withToolErrorHandling('fact_check_challenge', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
+      const input = paramsOrEmpty(params);
+      const workflow = workflowStateFor(ctx);
+      const challenges = Array.isArray(input.challenges) ? input.challenges : [];
+      if (!challenges.length) {
+        return errorResult('Fact check challenge requires at least one challenge entry.');
+      }
+      const invalid = challenges.find((entry) => (
+        !entry || typeof entry !== 'object'
+        || !CHALLENGE_RESPONSES.includes(String(entry.response ?? '').toUpperCase())
+        || !normalizeWhitespace(entry.reason ?? '')
+        || (String(entry.response).toUpperCase() === 'REBUT' && !normalizeWhitespace(entry.counterEvidence ?? ''))
+        || (String(entry.response).toUpperCase() === 'MISSED'
+          && !(normalizeWhitespace(entry.newClaim?.text ?? '')))
+      ));
+      if (invalid) {
+        return errorResult('Each challenge needs a claimId, an AGREE/REBUT/MISSED response, and a reason; REBUT also needs counterEvidence and MISSED also needs newClaim.text.');
+      }
+
+      const plannedClaims = workflow?.plan?.claims ?? [];
+      const normalized = challenges.map((entry) => ({
+        claimId: normalizeWhitespace(entry.claimId ?? '') || '(unmatched)',
+        response: String(entry.response).toUpperCase(),
+        reason: normalizeWhitespace(entry.reason ?? ''),
+        counterEvidence: normalizeWhitespace(entry.counterEvidence ?? ''),
+        newClaim: entry.newClaim ? {
+          text: normalizeWhitespace(entry.newClaim.text),
+          category: normalizeWhitespace(entry.newClaim.category ?? '') || 'unclassified',
+          priority: normalizeWhitespace(entry.newClaim.priority ?? '') || 'low',
+        } : null,
+      }));
+
+      const unmatched = normalized.filter((entry) => (
+        entry.response !== 'MISSED'
+        && plannedClaims.length > 0
+        && !plannedClaims.some((claim) => claim.id === entry.claimId)
+      ));
+      const missed = normalized.filter((entry) => entry.response === 'MISSED');
+      if (workflow) {
+        workflow.challenges = structuredClone(normalized);
+        if (missed.length) {
+          const nextIndex = plannedClaims.length;
+          const appended = missed.map((entry, offset) => ({
+            id: `FC-${String(nextIndex + offset + 1).padStart(3, '0')}`,
+            text: entry.newClaim.text,
+            category: entry.newClaim.category,
+            priority: entry.newClaim.priority,
+            evidencePlan: [],
+            freshnessRequirement: 'NOT_APPLICABLE',
+            missedBy: entry.claimId,
+          }));
+          workflow.plan = { ...(workflow.plan ?? {}), claims: [...plannedClaims, ...appended] };
+          // The previous report covered a smaller claim set; force a rebuild.
+          workflow.report = null;
+          workflow.evidenceByLane = new Map();
+        }
+      }
+
+      const findings = [
+        ...missed.map((entry) => `MISSED: ${entry.newClaim.text}`),
+        ...normalized.filter((entry) => entry.response === 'REBUT').map((entry) => `REBUT ${entry.claimId}: ${entry.reason}`),
+        ...unmatched.map((entry) => `unknown claimId: ${entry.claimId}`),
+      ];
+      return {
+        content: [textContent([
+          'FACT_CHALLENGE',
+          ...normalized.map((entry) => `- ${entry.claimId}: ${entry.response}${entry.reason ? ` - ${entry.reason}` : ''}`),
+          ...(findings.length ? ['', 'Findings:', ...findings.map((finding) => `- ${finding}`)] : []),
+          ...(missed.length
+            ? [
+              '',
+              'Appended to the plan:',
+              ...(workflow?.plan?.claims ?? []).slice(plannedClaims.length).map((claim) => `- ${claim.id}: ${claim.text}`),
+              `Action: re-run fact_check_evidence for ${missed.length} missed claim(s), then fact_check_report.`,
+            ]
+            : []),
+        ].join('\n'))],
+        details: {
+          challenges: normalized,
+          missedClaims: (workflow?.plan?.claims ?? []).slice(plannedClaims.length),
+          unmatchedClaimIds: unmatched.map((entry) => entry.claimId),
+          reportInvalidated: Boolean(workflow && missed.length),
           advisoryOnly: true,
           telemetry: workflow ? 'session' : 'stateless',
         },
@@ -456,7 +679,7 @@ function stableSessionId(owner) {
 }
 
 function emptyWorkflowState() {
-  return { plan: null, evidenceByLane: new Map(), report: null };
+  return { plan: null, evidenceByLane: new Map(), report: null, challenges: [] };
 }
 
 function errorResult(message) {
@@ -495,7 +718,7 @@ function isValidEvidenceRecordList(records, claims) {
   return Array.isArray(records) && records.every((record) => (
     record && typeof record === 'object'
     && claimIds.has(record.claimId)
-    && ['A', 'B'].includes(String(record.lane ?? '').toUpperCase())
+    && FACT_LANES.includes(String(record.lane ?? '').toUpperCase())
     && isCanonicalEvidenceStatus(record.status)
     && evidenceHasRequiredCitation(record)
     && evidenceAssessmentIsValid(record)
@@ -597,6 +820,7 @@ function sameCrossChecks(expected = [], observed = []) {
     status: item?.status ?? '',
     laneA: item?.laneA ?? '',
     laneB: item?.laneB ?? '',
+    laneStatuses: laneStatusEntries(item?.laneStatuses),
     conflicts: [...(item?.conflicts ?? [])].sort(),
     findings: [...(item?.findings ?? [])].sort(),
     gaps: [...(item?.gaps ?? [])].sort(),
@@ -610,8 +834,9 @@ function sameCrossChecks(expected = [], observed = []) {
 function validateObservedWorkflow({ workflow, finalOutput = '', riskLevel = 'standard' } = {}) {
   const missingObserved = [];
   const planClaims = workflow?.plan?.claims ?? [];
-  const laneA = workflow?.evidenceByLane?.get('A') ?? [];
-  const laneB = workflow?.evidenceByLane?.get('B') ?? [];
+  const laneRecords = new Map(FACT_LANES.map((lane) => [lane, workflow?.evidenceByLane?.get(lane) ?? []]));
+  const laneA = laneRecords.get('A');
+  const coveringLanes = FACT_LANES.filter((lane) => laneCoversClaims(laneRecords.get(lane), planClaims));
   const report = workflow?.report?.report;
   const crossChecks = workflow?.report?.crossChecks ?? [];
   const strictUnresolvedClaimIds = Array.isArray(report?.results)
@@ -619,8 +844,13 @@ function validateObservedWorkflow({ workflow, finalOutput = '', riskLevel = 'sta
     : [];
   if (!isValidClaimList(planClaims)) missingObserved.push('host FACT_CHECK_PLAN');
   if (!laneCoversClaims(laneA, planClaims)) missingObserved.push('host FACT_EVIDENCE_A');
-  if (riskLevel !== 'low' && !laneCoversClaims(laneB, planClaims)) missingObserved.push('host FACT_EVIDENCE_B');
+  // A non-low-risk run needs at least two independent full-coverage lanes; any
+  // lane past A satisfies it, so a three-lane run is not forced to use B.
+  if (riskLevel !== 'low' && coveringLanes.length < 2) missingObserved.push('host second independent evidence lane');
   if (!isValidCrossCheckList(crossChecks, planClaims)) missingObserved.push('host FACT_CROSS_CHECK');
+  // A high-risk run must show an adversarial pass; a MISSED-only round still counts.
+  const challenges = Array.isArray(workflow?.challenges) ? workflow.challenges : [];
+  if (riskLevel === 'high' && !challenges.length) missingObserved.push('host FACT_CHALLENGE');
   if (!report || !Array.isArray(report.results) || report.results.length !== planClaims.length) {
     missingObserved.push('host FACT_CHECK_REPORT');
   } else if (!finalVerdictsMatchReport(finalOutput, report.results)) {
@@ -631,7 +861,9 @@ function validateObservedWorkflow({ workflow, finalOutput = '', riskLevel = 'sta
     summary: {
       plannedClaims: planClaims.length,
       laneAClaims: laneA.length,
-      laneBClaims: laneB.length,
+      laneBClaims: laneRecords.get('B').length,
+      laneCClaims: laneRecords.get('C').length,
+      coveringLanes,
       reportedClaims: Array.isArray(report?.results) ? report.results.length : 0,
       strictSupported: Array.isArray(report?.results)
         ? report.results.filter((item) => item.strictVerdict === 'SUPPORTED').length
@@ -669,7 +901,7 @@ function finalVerdictsMatchReport(finalOutput = '', results = []) {
         section = header;
         continue;
       }
-      if (['FACT_EVIDENCE_A', 'FACT_EVIDENCE_B', 'FACT_CROSS_CHECK'].includes(section)) continue;
+      if (isEvidenceSection(section) || section === 'FACT_CROSS_CHECK') continue;
       const match = occurrence.exec(line);
       if (!match) continue;
       occurrences.push({
@@ -699,7 +931,7 @@ function parseActiveClaimVerdicts(text = '') {
   const verdicts = CLAIM_VERDICT_TOKENS.map(escapeRegex).join('|');
   const verdictPattern = '^\\s*Verdict:\\s*(' + verdicts + ')\\s*$';
   const blocks = [];
-  const ignoredSections = new Set(['FACT_EVIDENCE_A', 'FACT_EVIDENCE_B', 'FACT_CROSS_CHECK']);
+  const ignoredSections = new Set([...FACT_LANES.map((lane) => `FACT_EVIDENCE_${lane}`), 'FACT_CROSS_CHECK']);
   let current = null;
   let section = '';
   const finish = () => {
@@ -735,6 +967,10 @@ function parseActiveClaimVerdicts(text = '') {
   return parsed;
 }
 
+function isEvidenceSection(section = '') {
+  return /^FACT_EVIDENCE_[A-Z]$/u.test(String(section).toUpperCase());
+}
+
 function factCheckSectionHeader(line = '') {
   const normalized = String(line)
     .trim()
@@ -742,7 +978,7 @@ function factCheckSectionHeader(line = '') {
     .replace(/\*/gu, '')
     .trim()
     .toUpperCase();
-  return /^FACT_(?:CHECK_PLAN|EVIDENCE_[AB]|CROSS_CHECK|REVIEW|CHECK_REPORT)$/u.test(normalized)
+  return /^FACT_(?:CHECK_PLAN|EVIDENCE_[A-Z]|CROSS_CHECK|REVIEW|CHECK_REPORT)$/u.test(normalized)
     ? normalized
     : '';
 }
@@ -802,6 +1038,7 @@ export {
   crossCheckEvidence,
   formatFactCheckPlan,
   formatFactCheckReport,
+  mergeClaimCandidates,
   strictClaimVerdict,
   validateFactCheckReview,
 };

@@ -28,14 +28,16 @@ Provider metadata from Crossref, arXiv, OpenAlex, DataCite, and Google Fact Chec
 
 ## Tools
 
-All four pipeline tools ship in the default tool inventory, so a natural-language
+All six pipeline tools ship in the default tool inventory, so a natural-language
 request to verify a file reaches the pipeline without an activation step. They are
 read-only (`approval: read`) and advisory; being default-active grants no network,
 write, or publication permission.
 
-- `fact_check_analyze` extracts claim candidates and builds a `FACT_CHECK_PLAN`.
-- `fact_check_evidence` collects local or provider evidence for claims and preserves structured tuple, strength, limitation, and countercheck assessments.
+- `fact_check_analyze` extracts claim candidates and builds a `FACT_CHECK_PLAN`, including a Coverage block that names every sentence it did not turn into a claim and why.
+- `fact_check_merge` merges claim candidates enumerated independently by several observers into one union list. A claim only one observer reported is kept and flagged `single-lane` instead of dropped.
+- `fact_check_evidence` collects local or provider evidence for claims and preserves structured tuple, strength, limitation, and countercheck assessments. Lane is `A`, `B`, or `C`.
 - `fact_check_report` summarizes backward-compatible verdicts and a fail-closed `strictVerdict` into `FACT_CHECK_REPORT`. Strict support requires same-tuple `ENTAILS / PROVEN` evidence, direct evidence in every supporting lane, the planned evidence and independence requirements, claim-specific freshness, no material limitation, and current evidence when the claim requires it. High-priority support also requires a completed countercheck with no disconfirming evidence. Strict contradiction requires same-tuple `NEGATES / DISPROVED` evidence with the negated predicate or object/value identified; a high-priority contradiction also requires a completed countercheck. Staleness remains a temporal finding rather than a compatibility verdict.
+- `fact_check_challenge` records one adversarial round: `AGREE`, `REBUT` with counter-evidence, or `MISSED` with a claim the plan omitted. A `MISSED` claim is appended to the plan and invalidates the current report so it is rebuilt over the enlarged claim set.
 - `fact_check_review` performs a non-blocking workflow evidence review. `ready` means the expected workflow artifacts are present; `strictSupportReady` separately reports whether every claim has strict factual support. Missing evidence is returned as findings and never controls session completion. The review accepts the `LOCAL_UNVERIFIED` finalOutput claim-verdict alias and matches it to the canonical `UNVERIFIABLE` report verdict.
 
 The plugin does not block tools, retry work automatically, or prevent session completion. Invalid parameters and real file/network execution errors still use normal error results.
@@ -45,7 +47,10 @@ The plugin does not block tools, retry work automatically, or prevent session co
 - `fact-planner`
 - `fact-researcher-a`
 - `fact-researcher-b`
+- `fact-researcher-c`
+- `fact-challenger`
 
 Model policy:
 
-- All three agents declare `pi/task`; cross-checking and final review are deterministic: `fact_check_report` recomputes cross-checks and strict verdicts from structured records, and `fact_check_review` validates the final report against session telemetry.
+- All agents declare `pi/task`; cross-checking and final review are deterministic: `fact_check_report` recomputes cross-checks and strict verdicts from structured records, and `fact_check_review` validates the final report against session telemetry.
+- Bind each lane to a different model from the OMP agents hub (`/agents`), not `/model`: `/model` sets the session model, so unbound lanes all follow it and cross-checking compares a model with itself. Do not pass a `model` argument when dispatching a fact agent — a caller-supplied model silently overrides the whole binding table. A mistyped agent name or `@role` does not error; it falls through to the next resolution source. Verify a binding by reading the child session transcript's recorded `provider`/`model`/`thinkingLevel`, not the spawn result.

@@ -57,6 +57,8 @@ const researchWorkflows = [
     roles: [
       'fact-researcher-a',
       'fact-researcher-b',
+      'fact-researcher-c',
+      'fact-challenger',
       'fact-planner',
       'scout',
     ],
@@ -70,7 +72,9 @@ const researchWorkflows = [
     scopeNotes: [
       'Prefer primary sources; corroborate key claims with multiple independent sources.',
       'Verdicts preserve exact claim tuples; compatibility evidence is not proof.',
-      'The deterministic pipeline for a document-level check is fact_check_analyze -> fact_check_evidence (lane A, lane B only when warranted) -> fact_check_report -> fact_check_review; these four tools ship in the default tool inventory, so a natural-language check request needs no activation step.',
+      'The deterministic pipeline for a document-level check is fact_check_analyze -> fact_check_evidence (lane A, lane B and C only when warranted) -> fact_check_report -> fact_check_review; these four tools ship in the default tool inventory, so a natural-language check request needs no activation step.',
+      'Omission defence is layered: every researcher lane also enumerates the document and returns FACT_CLAIM_CANDIDATES, fact_check_merge takes the union of those candidates (a claim only one observer lists is kept and flagged single-lane rather than dropped), and fact_check_challenge appends MISSED claims back into the plan for a fresh evidence pass.',
+      'Evidence lanes get different models from the OMP agents hub (/agents), not from /model: /model sets the session model, so unbound lanes would all follow it and cross-checking would compare a model with itself.',
     ],
   },
 ];

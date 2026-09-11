@@ -20,7 +20,7 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
 
 - When: Source-backed research, web synthesis, comparison, recommendation, fact-checking, or claim-by-claim verdict.
 - Skills: `fact-checking`, `claim-extraction`, `source-evaluation`, `citation-authenticity`
-- Agents: `fact-researcher-a`, `fact-researcher-b`, `fact-planner`, `scout`
+- Agents: `fact-researcher-a`, `fact-researcher-b`, `fact-researcher-c`, `fact-challenger`, `fact-planner`, `scout`
 - Flow:
   1. Decompose into checkable claims or research questions.
   2. Collect evidence from primary sources; corroborate with multiple sources.

@@ -19,9 +19,13 @@ Suggested workflow:
 3. Classify each claim as numeric, date, entity, citation, causal, comparative, policy/legal, medical/scientific, or unverifiable.
 4. Mark priority as high for medical, legal, financial, safety, public-policy, security, and time-sensitive claims.
 5. Specify primary and fallback evidence sources, corroboration, independence and source-lineage requirements, and the claim-specific freshness cutoff.
-6. Plan lane A as the first bounded evidence lane for every task. Add lane B only
-   for a broad task, a high-risk claim, or an explicit cross-check request.
-7. Return a `FACT_CHECK_PLAN` block.
+6. Plan lane A as the first bounded evidence lane for every task. Add lanes B
+   and C only for a broad task, a high-risk claim, or an explicit cross-check
+   request. Independent enumeration happens inside the researcher lanes: every
+   lane also returns `FACT_CLAIM_CANDIDATES` for checkable claims the plan omits.
+7. Treat planned claims as a starting point, not the full scope. The plan is
+   allowed to miss claims; the lanes and the challenger will add them.
+8. Return a `FACT_CHECK_PLAN` block.
 
 Do not use vague findings. Every claim must have an id such as `FC-001`.
 

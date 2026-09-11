@@ -8,7 +8,9 @@ import factCheckerExtension, {
   buildFactCheckReport,
   collectLocalEvidence,
   crossCheckEvidence,
+  formatFactCheckPlan,
   formatFactCheckReport,
+  mergeClaimCandidates,
   strictClaimVerdict,
   validateFactCheckReview,
 } from '../index.js';
@@ -107,8 +109,10 @@ test('registers fact-check tools and command', () => {
 
   assert.deepEqual([...omp.tools.keys()], [
     'fact_check_analyze',
+    'fact_check_merge',
     'fact_check_evidence',
     'fact_check_report',
+    'fact_check_challenge',
     'fact_check_review',
   ]);
   assert.equal(omp.commands.has('fact-check'), true);
@@ -217,7 +221,7 @@ test('fact researchers treat scholarly metadata as discovery rather than claim s
 });
 
 test('fact agents use the lightweight task role', () => {
-  for (const name of ['fact-planner', 'fact-researcher-a', 'fact-researcher-b']) {
+  for (const name of ['fact-planner', 'fact-researcher-a', 'fact-researcher-b', 'fact-researcher-c', 'fact-challenger']) {
     const agent = factAgent(name);
     assert.match(agent, /model:\s*\n\s*-\s*pi\/task/);
     assert.doesNotMatch(agent, /^thinkingLevel:/m);
@@ -229,6 +233,8 @@ test('fact agents declare canonical OMP search tools', () => {
     ['fact-planner', ['read', 'grep', 'glob']],
     ['fact-researcher-a', ['read', 'grep', 'glob', 'web_search']],
     ['fact-researcher-b', ['read', 'grep', 'glob', 'web_search']],
+    ['fact-researcher-c', ['read', 'grep', 'glob', 'web_search']],
+    ['fact-challenger', ['read', 'grep', 'glob', 'web_search']],
   ]);
 
   for (const [name, expected] of expectedTools) {
@@ -245,6 +251,8 @@ test('fact agents report only assignment-provided loaded Skill metadata', () => 
     'fact-planner',
     'fact-researcher-a',
     'fact-researcher-b',
+    'fact-researcher-c',
+    'fact-challenger',
   ];
 
   for (const name of names) {
@@ -255,14 +263,33 @@ test('fact agents report only assignment-provided loaded Skill metadata', () => 
   }
 });
 
-test('fact lane prompts make A the first bounded lane and keep B conditional', () => {
+test('fact lane prompts make A the first bounded lane and keep later lanes conditional', () => {
   const planner = factAgent('fact-planner');
   const researcherA = factAgent('fact-researcher-a');
   const researcherB = factAgent('fact-researcher-b');
+  const researcherC = factAgent('fact-researcher-c');
 
   assert.match(planner, /lane A.*first bounded evidence lane/is);
   assert.match(researcherA, /first bounded evidence lane/i);
   assert.match(researcherB, /only.*broad.*high-risk.*explicit.*cross-check/is);
+  assert.match(researcherC, /only.*broad.*high-risk.*explicit.*cross-check/is);
+  assert.match(planner, /lane A.*Add lanes B\s+and C/is);
+});
+
+test('every researcher lane enumerates claims and the challenger owns the MISSED path', () => {
+  for (const name of ['fact-researcher-a', 'fact-researcher-b', 'fact-researcher-c']) {
+    const agent = factAgent(name);
+    assert.match(agent, /FACT_CLAIM_CANDIDATES/, `${name}: must return its own candidate block`);
+    assert.match(agent, /does not need a number, a year, or one of the\s+plan's category keywords|keyword-and-number extractor/is, `${name}: enumeration must not be keyword-gated`);
+    assert.match(agent, /never a reason to invent|Zero candidates is valid|Zero candidates is a valid/is, `${name}: zero candidates must stay a valid result`);
+  }
+
+  const challenger = factAgent('fact-challenger');
+  assert.match(challenger, /AGREE|REBUT|MISSED/);
+  assert.match(challenger, /MISSED.*highest-value/is);
+  assert.match(challenger, /REBUT requires counterEvidence|Name the specific evidence record/i);
+  assert.match(challenger, /metadata.*discovery\s+only|metadata is discovery/is);
+  assert.match(challenger, /Never manufacture a challenge|valid result/is);
 });
 
 test('fact package excludes development tests from published files', () => {
@@ -1452,6 +1479,263 @@ test('session telemetry compares tuple and assessment fields while accepting cla
   );
   assert.equal(report.isError, false);
   assert.ok(report.details.warnings.some((warning) => /evidence differs/i.test(warning)));
+});
+
+test('analyze reports every non-claim sentence instead of dropping it silently', () => {
+  const plan = buildFactCheckPlan({
+    text: [
+      '# Heading',
+      'The Great Wall of China is visible from space with the naked eye.',
+      'The Atlas method improves accuracy by 12%.',
+      '```',
+      'const x = 1;',
+      '```',
+      '| a | b |',
+      '- Is the method stable?',
+      '- The Atlas method improves accuracy by 12%.',
+      'Too short',
+    ].join('\n'),
+  });
+
+  const { coverage } = plan;
+  assert.equal(coverage.claims + coverage.nonAssertions + coverage.duplicates + coverage.truncated + coverage.structuralSegments, coverage.totalSegments);
+
+  const missed = coverage.dispositions.filter((item) => item.status === 'non-assertion');
+  const nakedEye = missed.find((item) => /visible from space/i.test(item.text));
+  assert.ok(nakedEye, 'a checkable sentence with no numeric or keyword cue must be listed, not dropped');
+  assert.equal(nakedEye.reason, 'no-claim-cue');
+  assert.equal(missed.find((item) => /Is the method stable/i.test(item.text))?.reason, 'question');
+  assert.ok(coverage.notExtractedReasons['no-claim-cue'] >= 1);
+
+  const structural = coverage.dispositions.filter((item) => item.status === 'structural');
+  assert.ok(structural.some((item) => item.reason === 'heading'));
+  assert.ok(structural.some((item) => item.reason === 'code-block' || item.reason === 'code-fence'));
+  assert.ok(structural.some((item) => item.reason === 'table-row'));
+
+  const duplicates = coverage.dispositions.filter((item) => item.status === 'duplicate');
+  assert.equal(duplicates.length, 1);
+  assert.equal(coverage.duplicates, 1);
+  assert.equal(plan.claims.length, 1);
+
+  const formatted = formatFactCheckPlan(plan);
+  assert.match(formatted, /Coverage:/);
+  assert.match(formatted, /visible from space/i);
+  assert.match(formatted, /not extracted: \d+/);
+});
+
+test('merge keeps a claim only one observer found and flags it single-lane', () => {
+  const claims = mergeClaimCandidates({
+    sources: [
+      {
+        source: 'fact-researcher-a',
+        claims: [{ text: 'The Atlas method improves accuracy by 12%.', category: 'numeric' }],
+      },
+      {
+        source: 'fact-researcher-b',
+        claims: [
+          { text: 'The Atlas method improves accuracy by 12%.', category: 'numeric' },
+          { text: 'The Great Wall of China is visible from space.', category: 'comparative' },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(claims.length, 2);
+  const shared = claims.find((claim) => /12%/.test(claim.text));
+  const unique = claims.find((claim) => /Great Wall/.test(claim.text));
+  assert.deepEqual(shared.proposedBy, ['fact-researcher-a', 'fact-researcher-b']);
+  assert.equal(shared.singleLane, false);
+  assert.deepEqual(unique.proposedBy, ['fact-researcher-b']);
+  assert.equal(unique.singleLane, true);
+  assert.deepEqual(claims.map((claim) => claim.id), ['FC-001', 'FC-002']);
+});
+
+test('the merge tool returns the union and marks single-observer claims', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+
+  const result = await omp.tools.get('fact_check_merge').execute(
+    'merge-union',
+    {
+      sources: [
+        { source: 'lane-a', claims: [{ text: 'The protocol supports concurrent writes.' }] },
+        { source: 'lane-b', claims: [{ text: 'The protocol supports concurrent writes.' }, { text: 'The library has no global lock.' }] },
+      ],
+    },
+    undefined,
+    undefined,
+    ctx,
+  );
+
+  assert.equal(result.isError, false);
+  assert.equal(result.details.claims.length, 2);
+  assert.deepEqual(result.details.singleLaneClaims, ['FC-002']);
+  assert.match(result.content[0].text, /single-lane/);
+  assert.equal(result.details.telemetry, 'session');
+});
+
+test('a MISSED challenge appends the claim and invalidates the stale report', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+  const claim = { id: 'FC-001', text: 'The method improves accuracy by 12%.' };
+
+  await omp.tools.get('fact_check_analyze').execute(
+    'seed-plan', { text: 'The method improves accuracy by 12%.' }, undefined, undefined, ctx,
+  );
+  await omp.tools.get('fact_check_evidence').execute(
+    'seed', {
+      claims: [claim],
+      lane: 'A',
+      evidenceRecords: [{ claimId: 'FC-001', lane: 'A', status: 'SUPPORTED', source: 'a.md', quote: '12%' }],
+    }, undefined, undefined, ctx,
+  );
+  await omp.tools.get('fact_check_report').execute(
+    'seed-report', {
+      claims: [claim],
+      evidenceRecords: [{ claimId: 'FC-001', lane: 'A', status: 'SUPPORTED', source: 'a.md', quote: '12%' }],
+    }, undefined, undefined, ctx,
+  );
+
+  const result = await omp.tools.get('fact_check_challenge').execute(
+    'challenge', {
+      challenges: [
+        { claimId: 'FC-001', response: 'REBUT', reason: 'evidence only covers version 1', counterEvidence: 'release notes for v2' },
+        { claimId: 'FC-001', response: 'MISSED', reason: 'the document also asserts a compatibility guarantee', newClaim: { text: 'The protocol is backwards compatible with v1.', category: 'entity' } },
+      ],
+    },
+    undefined, undefined, ctx,
+  );
+
+  assert.equal(result.isError, false);
+  assert.equal(result.details.missedClaims.length, 1);
+  assert.equal(result.details.missedClaims[0].id, 'FC-002');
+  assert.equal(result.details.reportInvalidated, true);
+  assert.match(result.content[0].text, /re-run fact_check_evidence/);
+
+  const review = await omp.tools.get('fact_check_review').execute(
+    'review-after-miss', { finalOutput: 'FACT_CHECK_PLAN\nFACT_EVIDENCE_A\nFACT_CROSS_CHECK\nFACT_CHECK_REPORT', riskLevel: 'low' },
+    undefined, undefined, ctx,
+  );
+  assert.ok(review.details.missingObserved.includes('host FACT_CHECK_REPORT'), 'the invalidated report must be re-reported');
+});
+
+test('challenge rejects a REBUT without counter-evidence and a MISSED without a claim', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+
+  for (const challenges of [
+    [{ claimId: 'FC-001', response: 'REBUT', reason: 'disagree' }],
+    [{ claimId: 'FC-001', response: 'MISSED', reason: 'something is missing' }],
+    [{ claimId: 'FC-001', response: 'MAYBE', reason: 'unsure' }],
+  ]) {
+    const result = await omp.tools.get('fact_check_challenge').execute(
+      'invalid', { challenges }, undefined, undefined, ctx,
+    );
+    assert.equal(result.isError, true, JSON.stringify(challenges));
+  }
+});
+
+test('three lanes cross-check on the lanes supplied rather than a fixed A/B pair', () => {
+  const claim = { id: 'FC-001', text: 'The company was founded in 2020.' };
+  const record = (lane, status) => ({
+    claimId: claim.id, lane, status, source: `${lane}.md`, quote: 'founded in 2020',
+  });
+
+  const [threeWay] = crossCheckEvidence({ claims: [claim], evidenceRecords: [record('A', 'SUPPORTED'), record('B', 'SUPPORTED'), record('C', 'SUPPORTED')] });
+  assert.equal(threeWay.status, 'AGREED');
+  assert.deepEqual(threeWay.laneStatuses, { A: 'SUPPORTED', B: 'SUPPORTED', C: 'SUPPORTED' });
+  assert.deepEqual(threeWay.gaps, []);
+
+  const [twoOfThree] = crossCheckEvidence({ claims: [claim], evidenceRecords: [record('A', 'SUPPORTED'), record('B', 'SUPPORTED'), record('C', 'INSUFFICIENT')] });
+  assert.equal(twoOfThree.status, 'PARTIAL', 'one dissenting unresolved lane must not read as agreement');
+
+  const [aAndC] = crossCheckEvidence({ claims: [claim], evidenceRecords: [record('A', 'SUPPORTED'), record('C', 'SUPPORTED')] });
+  assert.equal(aAndC.status, 'AGREED');
+  assert.deepEqual(aAndC.gaps, ['FACT_EVIDENCE_B not supplied']);
+
+  const [splitDecision] = crossCheckEvidence({ claims: [claim], evidenceRecords: [record('A', 'SUPPORTED'), record('B', 'SUPPORTED'), record('C', 'CONTRADICTED')] });
+  assert.equal(splitDecision.status, 'CONFLICTED');
+});
+
+test('review accepts any second lane section and still requires one', () => {
+  const output = (lane) => [
+    'FACT_CHECK_PLAN',
+    'FACT_EVIDENCE_A',
+    `FACT_EVIDENCE_${lane}`,
+    'FACT_CROSS_CHECK',
+    'FACT_CHECK_REPORT',
+  ].join('\n');
+
+  assert.equal(validateFactCheckReview({ finalOutput: output('C'), riskLevel: 'standard' }).ok, true);
+  assert.equal(validateFactCheckReview({ finalOutput: output('B'), riskLevel: 'standard' }).ok, true);
+  const singleLane = validateFactCheckReview({
+    finalOutput: ['FACT_CHECK_PLAN', 'FACT_EVIDENCE_A', 'FACT_CROSS_CHECK', 'FACT_CHECK_REPORT'].join('\n'),
+    riskLevel: 'standard',
+  });
+  assert.equal(singleLane.ok, false);
+  assert.ok(singleLane.missing.some((entry) => /second FACT_EVIDENCE/i.test(entry)));
+});
+
+test('the widened union flow reaches a ready review when every lane covers the merged claims', async () => {
+  const omp = new FakeOmp();
+  factCheckerExtension(omp);
+  const ctx = { cwd: process.cwd(), sessionManager: {} };
+
+  await omp.tools.get('fact_check_analyze').execute(
+    'narrow-plan', { text: 'The Atlas method improves accuracy by 12%.' }, undefined, undefined, ctx,
+  );
+
+  // Only lane B's enumeration contains the two qualitative claims, so the
+  // union must widen the plan beyond what the extractor produced.
+  const merged = await omp.tools.get('fact_check_merge').execute(
+    'merge', {
+      sources: [
+        { source: 'lane-a', claims: [{ text: 'The Atlas method improves accuracy by 12%.' }] },
+        {
+          source: 'lane-b',
+          claims: [
+            { text: 'The Atlas method improves accuracy by 12%.' },
+            { text: 'The Great Wall of China is visible from space.' },
+            { text: 'The protocol is backwards compatible with the previous release.' },
+          ],
+        },
+      ],
+    },
+    undefined, undefined, ctx,
+  );
+  const claims = merged.details.claims;
+  assert.equal(claims.length, 3, 'merge must replace the narrow session plan');
+  assert.deepEqual(merged.details.singleLaneClaims, ['FC-002', 'FC-003']);
+
+  const evidenceRecords = claims.flatMap((claim) => ['A', 'B'].map((lane) => ({
+    claimId: claim.id, lane, status: 'SUPPORTED', source: `${lane}.md`, quote: claim.text,
+  })));
+
+  const report = await omp.tools.get('fact_check_report').execute(
+    'widened-report', { claims, evidenceRecords }, undefined, undefined, ctx,
+  );
+  assert.equal(report.isError, false);
+  assert.deepEqual(report.details.results.map((item) => item.crossCheck), ['AGREED', 'AGREED', 'AGREED']);
+  assert.match(report.content[0].text, /lanes: A=SUPPORTED B=SUPPORTED/);
+
+  const finalOutput = [
+    'FACT_CHECK_PLAN',
+    'FACT_EVIDENCE_A',
+    'FACT_EVIDENCE_B',
+    'FACT_CROSS_CHECK',
+    'FACT_CHECK_REPORT',
+    ...report.details.results.map((item) => `- ${item.claimId}: ${item.verdict}`),
+  ].join('\n');
+
+  const review = await omp.tools.get('fact_check_review').execute(
+    'widened-review', { finalOutput, riskLevel: 'standard' }, undefined, undefined, ctx,
+  );
+  assert.deepEqual(review.details.missingObserved, [], 'a widened plan must be the plan the review measures against');
+  assert.equal(review.details.ready, true);
+  assert.equal(review.details.observed.plannedClaims, 3);
 });
 
 function fakeZod() {

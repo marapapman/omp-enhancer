@@ -13,7 +13,7 @@
     {
       "name": "omp-config",
       "description": "Optional OMP workflow references, config assets, notify-only hooks, opt-in hook templates, and diagnostics.",
-      "version": "0.1.74",
+      "version": "0.1.75",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -78,7 +78,7 @@
     {
       "name": "omp-fact-checker",
       "description": "OMP fact-checking workflow with claim planning, evidence collection, cross-checking, reports, and advisory review.",
-      "version": "0.1.17",
+      "version": "0.2.0",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-fact-checker",
       "repository": "https://github.com/marapapman/omp-enhancer",

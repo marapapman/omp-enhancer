@@ -16,14 +16,75 @@ verdict. Main or a separate selected fact Agent owns the fact-check checkpoint.
 For a document-level request such as “check the facts in this file”, run the
 deterministic pipeline in order instead of improvising a manual pass:
 
-1. `fact_check_analyze` — extract claim candidates and build the plan.
-2. `fact_check_evidence` — collect lane A (and lane B only when warranted) evidence as structured records.
-3. `fact_check_report` — recompute cross-checks and the fail-closed `strictVerdict`s.
-4. `fact_check_review` — advisory completeness review of the final report text.
+1. `fact_check_analyze` — extract claim candidates and build the plan, with a Coverage block.
+2. `fact_check_merge` — after each lane returns its own `FACT_CLAIM_CANDIDATES`, merge them into the union claim list. Keep single-observer claims; they are the ones a single model would have missed.
+3. `fact_check_evidence` — collect lane A (and lanes B and C only when warranted) evidence as structured records.
+4. `fact_check_report` — recompute cross-checks and the fail-closed `strictVerdict`s.
+5. `fact_check_challenge` — one adversarial round: AGREE, REBUT, or MISSED. A MISSED claim is appended to the plan; re-run evidence for it, then rebuild the report.
+6. `fact_check_review` — advisory completeness review of the final report text.
 
-These four tools ship in the default tool inventory; no activation step is
-required. They are read-only and advisory: they never block tools or session
-completion, and they grant no network or write permission.
+These tools ship in the default tool inventory; no activation step is required.
+They are read-only and advisory: they never block tools or session completion,
+and they grant no network or write permission.
+
+## Omission defence
+
+A claim list produced once, by one model, is an enumeration, not the document.
+The pipeline is built so a miss by the extractor or the first lane still
+surfaces:
+
+- `fact_check_analyze` reports a Coverage block. Every sentence it does **not**
+  turn into a claim is listed with a reason (`question`, `too-short`,
+  `no-claim-cue`) instead of disappearing. Read that list: those are the
+  candidate misses.
+- Each researcher lane independently re-reads the document and returns
+  `FACT_CLAIM_CANDIDATES`. Lanes disagree by design; agreement is not the goal.
+- `fact_check_merge` takes the **union**. A claim only one observer listed is
+  kept and marked `single-lane`, never dropped. Requiring two observers would
+  discard exactly the discovery you are looking for.
+- `fact_check_challenge` adds a `MISSED` path so the adversarial reviewer can
+  enlarge the claim set, not only dispute verdicts.
+
+## Model configuration
+
+Cross-checking only means something when the lanes run on different models. The
+relevant OMP surfaces are:
+
+| Surface | Scope | Use |
+|---|---|---|
+| `/model` | current session | switching the model you are talking to |
+| `/agents` | per-agent | giving each fact lane its own model — this is the one that matters |
+| `omp config set task.agentModelOverrides '<json>'` | per-agent, scriptable | the same binding without the TUI |
+
+Resolution order, highest first:
+
+```
+model passed by the caller  >  task.agentModelOverrides  >  agent frontmatter  >  current session model
+```
+
+Two consequences to respect:
+
+- Do **not** pass a `model` argument when dispatching a fact agent. It silently
+  overrides the whole binding table and all lanes collapse onto one model.
+- Unbound lanes follow the session model, so leaving the lanes unbound makes
+  cross-checking compare a model against itself. Binds are per agent:
+  `fact-researcher-a`, `fact-researcher-b`, `fact-researcher-c`,
+  `fact-challenger`.
+
+A mistyped agent name or `@role` does not error and does not warn; it falls
+through to the next source in the order above. `modelRoles` is a case-sensitive
+record, so `@WRITER` resolves while `@writer` silently misses.
+
+Verify the binding took effect by reading the child session transcript — a spawn
+returning `completed` proves nothing:
+
+```bash
+D=~/.omp/agent/sessions/<project-slug>/<parent-session-dir>/
+grep -o '"provider":"[^"]*"\|"model":"[^"]*"\|"thinkingLevel":"[^"]*"' "$D"/FactResearcherA.jsonl | sort -u
+```
+
+Compare the recorded `provider` / `model` / `thinkingLevel` against the intended
+selector.
 
 ## Return format
 
