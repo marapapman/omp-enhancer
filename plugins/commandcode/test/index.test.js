@@ -15,12 +15,60 @@ import extension, {
 
 const EXPECTED_MODELS = {
   'claude-sonnet-5': { api: 'anthropic-messages', reasoning: true, contextWindow: 1000000, maxTokens: 64000, input: ['text', 'image'] },
-  'claude-haiku-4-5-20251001': { api: 'anthropic-messages', reasoning: true, contextWindow: 200000, maxTokens: 64000, input: ['text', 'image'] },
+  'claude-haiku-4-5-20251001': { api: 'anthropic-messages', reasoning: false, contextWindow: 200000, maxTokens: 64000, input: ['text', 'image'] },
   'gpt-5.6-sol': { api: 'openai-completions', reasoning: true, contextWindow: 1050000, maxTokens: 128000, input: ['text'] },
   'deepseek/deepseek-v4-flash': { api: 'openai-completions', reasoning: true, contextWindow: 1000000, maxTokens: 384000, input: ['text'] },
-  'moonshotai/Kimi-K3': { api: 'openai-completions', reasoning: false, contextWindow: 1000000, maxTokens: 131072, input: ['text'] },
-  'google/gemini-3.8-flash': { api: 'openai-completions', reasoning: false, contextWindow: 1000000, maxTokens: 65536, input: ['text', 'image'] },
+  'moonshotai/Kimi-K3': { api: 'openai-completions', reasoning: true, contextWindow: 1000000, maxTokens: 131072, input: ['text'] },
+  'google/gemini-3.8-flash': { api: 'openai-completions', reasoning: true, contextWindow: 1000000, maxTokens: 65536, input: ['text', 'image'] },
   'meituan/LongCat-2.0:free': { api: 'openai-completions', reasoning: false, contextWindow: 1048576, maxTokens: 131072, input: ['text'] },
+};
+
+// Exact effort ladder per model, mirroring the official Command Code CLI
+// registry (command-code@1.53.0) that backs its /model and /effort pickers.
+const EXPECTED_LADDERS = {
+  'claude-sonnet-5': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'claude-sonnet-4-6': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'claude-fable-5-1': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'claude-fable-5': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'claude-opus-5': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'claude-opus-4-8': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'claude-opus-4-7': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'gpt-5.6-sol': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'gpt-5.6-terra': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'gpt-5.6-luna': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'gpt-5.5': ['low', 'medium', 'high', 'xhigh'],
+  'gpt-5.4': ['low', 'medium', 'high', 'xhigh'],
+  'gpt-5.3-codex': ['low', 'medium', 'high', 'xhigh'],
+  'gpt-5.4-mini': ['low', 'medium', 'high'],
+  'deepseek/deepseek-v4-pro': ['high', 'max'],
+  'deepseek/deepseek-v4-flash': ['high', 'max'],
+  'deepseek/deepseek-v4-flash-vision-exp': ['high', 'max'],
+  'deepseek/deepseek-v4-flash-fast': ['low', 'high', 'max'],
+  'deepseek/deepseek-v4.1-flash': ['low', 'high', 'max'],
+  'moonshotai/Kimi-K3': ['low', 'high', 'max'],
+  'z-ai/glm-5.3-flash': ['low', 'high', 'max'],
+  'zai-org/GLM-5.3': ['low', 'high', 'max'],
+  'zai-org/GLM-5.2': ['high', 'max'],
+  'MiniMaxAI/MiniMax-M3': ['low', 'medium', 'high'],
+  'Qwen/Qwen3.8-Max-0902': ['low', 'medium', 'xhigh'],
+  'Qwen/Qwen3.8-Max': ['low', 'medium', 'xhigh'],
+  'Qwen/Qwen3.8-27B': ['low', 'medium', 'xhigh'],
+  'Qwen/Qwen3.8-Flash': ['low', 'medium', 'xhigh'],
+  'google/gemini-3.8-flash': ['low', 'medium', 'high'],
+  'google/gemini-3.7-flash': ['low', 'medium', 'high'],
+  'google/gemini-3.6-flash': ['low', 'medium', 'high'],
+  'google/gemini-3.5-flash': ['low', 'medium', 'high'],
+  'google/gemini-3.5-flash-lite': ['low', 'medium', 'high'],
+  'google/gemini-3.1-flash-lite': ['low', 'medium', 'high'],
+  'tencent/hy4-preview': ['low', 'medium', 'high'],
+  'sakana/fugu-ultra': ['high', 'xhigh'],
+  'meta/muse-spark-1.3': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'meta/muse-spark-1.3-contributor': ['low', 'medium', 'high', 'xhigh'],
+  'meta/muse-spark-1.2': ['low', 'medium', 'high', 'xhigh'],
+  'meta/muse-spark-1.2-contributor': ['low', 'medium', 'high', 'xhigh'],
+  'meta/muse-spark-1.1': ['low', 'medium', 'high', 'xhigh'],
+  'xai/grok-4.6': ['low', 'medium', 'high', 'xhigh'],
+  'xai/grok-4.5': ['low', 'medium', 'high'],
 };
 
 function withEnvironment(values, callback) {
@@ -203,30 +251,31 @@ test('claude entries route through anthropic-messages with non-official compat',
   }
 });
 
-test('families without a documented effort contract expose no thinking ladder', () => {
-  const noLadderPrefixes = ['moonshotai/', 'MiniMaxAI/', 'xiaomi/', 'Qwen/', 'google/', 'meta/'];
-  const noLadderExact = new Set([
-  ]);
+test('effort ladders match the official Command Code CLI registry', () => {
+  const laddered = new Map(
+    COMMANDCODE_MODELS.filter((model) => model.thinking).map((model) => [model.id, [...model.thinking.efforts]]),
+  );
+  assert.deepEqual(
+    [...laddered.keys()].sort(),
+    Object.keys(EXPECTED_LADDERS).sort(),
+    'exactly the registry-laddered models expose thinking',
+  );
+  for (const [id, efforts] of Object.entries(EXPECTED_LADDERS)) {
+    assert.deepEqual(laddered.get(id), efforts, `${id} effort ladder`);
+  }
+
   for (const model of COMMANDCODE_MODELS) {
-    const expectedNoLadder = noLadderPrefixes.some((p) => model.id.startsWith(p)) || noLadderExact.has(model.id);
-    if (!expectedNoLadder) continue;
-    assert.equal(model.thinking, undefined, `${model.id} must not synthesize a ladder`);
+    const ladder = EXPECTED_LADDERS[model.id];
+    if (ladder) continue;
+    assert.equal(model.thinking, undefined, `${model.id} must expose no thinking ladder`);
     assert.equal(model.reasoning, false, `${model.id} must not claim reasoning`);
   }
-  const laddered = COMMANDCODE_MODELS.filter((model) => model.thinking);
-  assert.equal(laddered.length, 8 + 7 + 5 + 5, 'claude(8) + gpt(7) + deepseek(5) + glm(5) opt into ladders');
-  assert.deepEqual(
-    laddered.map((m) => m.id).sort(),
-    [
-      ...COMMANDCODE_MODELS.filter((m) => m.id.startsWith('claude')).map((m) => m.id),
-      ...COMMANDCODE_MODELS.filter((m) => m.id.startsWith('gpt-')).map((m) => m.id),
-      ...COMMANDCODE_MODELS.filter((m) => m.id.startsWith('deepseek/')).map((m) => m.id),
-      ...COMMANDCODE_MODELS.filter((m) => m.id.startsWith('zai-org/')).map((m) => m.id),
-    ].sort(),
-    'only claude/gpt/deepseek/glm families opt into effort ladders',
-  );
-  for (const model of laddered) {
+
+  for (const model of COMMANDCODE_MODELS) {
+    const ladder = EXPECTED_LADDERS[model.id];
+    if (!ladder) continue;
     assert.equal(model.reasoning, true, `${model.id} must claim reasoning`);
+    assert.equal(model.thinking.mode, model.id.startsWith('claude') ? 'budget' : 'effort');
   }
 });
 

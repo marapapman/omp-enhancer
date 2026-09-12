@@ -35,13 +35,19 @@ The docs are explicit that Claude models sent to `/chat/completions` fail with a
 
 ## Thinking intensity
 
-Reasoning-capable models expose a thinking ladder in OMP's selector (`off`, `auto`, plus the listed levels); everything else shows only `off`/`auto` and uses upstream default thinking. Ladders are opt-in per model — `defineModel` defaults to `null` and only the families below pass one. Command Code forwards the effort (or budget) upstream. If a model rejects a level with a 400 naming the effort, trim its ladder in `index.js`.
+Reasoning-capable models expose a thinking ladder in OMP's selector (`off`, `auto`, plus the listed levels); everything else shows only `off`/`auto` and uses upstream default thinking. Ladders are opt-in per model — `defineModel` defaults to `null` — and mirror the official Command Code CLI registry (`command-code@1.53.0`), which drives that CLI's own `/model` and `/effort` pickers. Command Code forwards the level upstream as `reasoning_effort` (OpenAI transport) or a thinking budget (Anthropic transport). If a model rejects a level with a 400 naming the effort, trim its ladder in `index.js`.
 
-- Claude: `budget` ladder `minimal`–`xhigh` (sent as thinking budget on `/messages`).
-- GPT: `minimal`–`max`.
-- DeepSeek: `low`, `high`, `max`.
-- GLM (`zai-org/GLM-*`): `minimal`–`max`.
-- Kimi, MiniMax, MiMo, Qwen, Gemini, and all niche ids: no synthesized ladder (default provider behavior) unless you add one.
+Families and their ladders:
+
+- Claude: `low`–`max` (`budget` mode on `/messages`). Haiku 4.5 exposes no ladder.
+- GPT: `low`–`max` for 5.6, `low`–`xhigh` for 5.5/5.4/5.3-codex, `low`–`high` for 5.4-mini.
+- DeepSeek: `high`,`max` for v4-pro/flash/vision-exp; `low`,`high`,`max` for flash-fast and v4.1-flash.
+- GLM: `low`,`high`,`max` for 5.3 and glm-5.3-flash; `high`,`max` for 5.2. GLM 5.2-Fast/5.1/5 expose none.
+- Kimi: `low`,`high`,`max` on K3 only; K2.7/K2.6/K2.5 reason without selectable levels.
+- Qwen: `low`,`medium`,`xhigh` on the 3.8 family; 3.7/3.6 expose none.
+- Gemini: `low`,`medium`,`high` on every entry.
+- Muse Spark: `low`–`xhigh` on 1.1/1.2/1.2-contributor/1.3-contributor; 1.3 adds `max`.
+- Others: MiniMax M3 `low`,`medium`,`high`; Grok 4.5 `low`,`medium`,`high` and 4.6 `low`–`xhigh`; Fugu Ultra `high`,`xhigh`; hy4-preview `low`,`medium`,`high`. LongCat, StepFun, MiMo, MiniMax M2.x, Inkling, Laguna, Ling, Nemotron, hy3, and Qwen 3.7/3.6 expose none.
 
 ## Credentials and endpoint
 
