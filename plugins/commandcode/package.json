@@ -1,6 +1,6 @@
 {
   "name": "commandcode",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Native OMP provider for Command Code Provider API models.",
