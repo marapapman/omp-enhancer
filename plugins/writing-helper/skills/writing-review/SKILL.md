@@ -63,14 +63,22 @@ evidence.
 2. Sort findings as critical, important, or minor while preserving their order
    within each severity.
 3. For an explicitly authorized content revision, propose clarity, grammar,
-   structure, tone, and formatting fixes that preserve claims. A review-only
-   request produces findings rather than a rewritten document.
+   structure, tone, and formatting fixes that preserve claims. Treat AI writing
+   tells as fixable defects: staged "not X but Y" contrasts, one-line closers
+   that only restate, sayings that sound deep, staged run-up openers, forced
+   triads, dashes as universal connectors, inflated significance, shallow -ing
+   riders, borrowed authority, bold as decoration, and chatbot residue.
+   Strongest tells justify an edit on one sighting; weak tells need company from
+   other tells in the same passage. A review-only request produces findings rather than a rewritten document.
 4. Do not silently change a factual statement, central argument, citation
    meaning, or requested scope. Present those items as author decisions.
 5. Compare the result with the source once. Treat any changed semantic anchor
    as an advisory finding, not as a reason to start another repair cycle.
 6. Review the resulting text once and summarize proposed changes, unresolved
    decisions, and evidence limitations.
+7. Report which AI-tell families the revision touched and which tells were left
+   in place because they carry the writer's voice, so the checker can
+   distinguish judgment from omission.
 
 ## Evidence Fidelity
 

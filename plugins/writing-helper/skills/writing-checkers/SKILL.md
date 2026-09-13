@@ -25,7 +25,7 @@ For each dimension below, produce a block in the output. Never skip dimensions, 
 | 2 | **novelty** | Is the contribution genuinely novel? Is differentiation from prior work explicit? Are specific limitations of existing work cited? |
 | 3 | **depth** | Is there non-trivial technical depth? Are actual challenges addressed (not just tuning)? Is the approach more than a straightforward combination? |
 | 4 | **logic** | Are arguments internally consistent? Does every claim have supporting evidence? Are there contradictions or leaps in reasoning? |
-| 5 | **clarity** | Are all terms defined? Are references accurate? Is language precise and unambiguous? Can a knowledgeable reader follow without guessing? |
+| 5 | **clarity** | Are all terms defined? Are references accurate? Is language precise and unambiguous? Do AI writing tells cluster (staged "not X but Y" contrasts, one-line closers, forced triads, dashes, bold labels, inflated significance, chatbot residue)? Can a knowledgeable reader follow without guessing? |
 | 6 | **eval** | Do experiments map to research questions? Are baselines reasonable and fair? Are metrics appropriate for the claims? |
 | 7 | **data** | Do data/code references point to real repositories? Is there a reproduction path (seeds, splits, hyperparameters)? Are reported numbers verifiable? |
 
@@ -84,6 +84,7 @@ After all 7 dimensions, output:
    direction, numbers or units, citations or identifiers, or LaTeX math,
    cross-references, commands, and structure merely for style. When source and
    revision are both available, compare them once and report drift.
+9. **Flag AI writing tells with evidence.** The strongest tells justify a finding on one sighting; weaker tells (forced triads, hyphenated pairs, passive voice, curly quotes) need company from other tells in the same passage before you report them. Leave phrases alone inside quotations, titles, or proper names. Never recommend deleting semantic anchors to remove a tell.
 
 ## Output Destination
 

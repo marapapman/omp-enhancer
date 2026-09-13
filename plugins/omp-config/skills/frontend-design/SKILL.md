@@ -40,4 +40,6 @@ Main only authorizes external effects during initial setup and accepts final del
 
 Do not use generic AI styling as a substitute for product decisions. Avoid decorative glass effects, cyan-purple gradients, gradient metric text, repeated identical card grids, cards nested inside cards, icon-above-heading repetition, center alignment everywhere, or oversized rounded elements unless the existing product system or user request calls for them. Do not flatten every action into the same primary emphasis or use modal dialogs where an inline state is clearer.
 
+Apply the same evidence-based de-AI standard to interface copy. Titles, labels, button text, tooltips, empty states, error messages, and notifications avoid staged run-up, one-line closers, forced triads, inflated significance, borrowed authority, bold as decoration, and chatbot residue such as "Oops!" or "Something went wrong on our end." A strong tell justifies a revision on one sighting; a weak tell needs company from other tells in the same passage. Keep the product's real nouns, numbers, and error details; a friendlier invented claim is never a fix. The standard is advisory method guidance inside this Skill; it adds no runtime gate or automatic check.
+
 Verify the implemented interface in its actual renderer and report concrete limitations. A source-only review is not visual evidence.

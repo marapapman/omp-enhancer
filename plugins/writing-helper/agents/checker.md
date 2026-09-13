@@ -107,6 +107,8 @@ Review **in this exact order**. Each dimension builds on the previous one. Do no
 - Are all terms defined when first introduced? No undefined jargon or acronyms?
 - Are references accurate? Citations match the claims they support?
 - Is the language precise? No ambiguous phrasing, weasel words, or false precision?
+- Do AI writing tells cluster here? Staged "not X but Y" contrasts, one-line closers, forced triads, dashes, bold labels, inflated significance, or chatbot residue signal templated prose; flag the passage with its evidence.
+- A weak-alone tell (a forced triad, a repeated sentence opening, a dash, a stacked qualifier) merits a finding only when other tells share the passage.
 
 ### 6. eval
 - Do the Research Questions align with the proposed design? RQ-design gap?

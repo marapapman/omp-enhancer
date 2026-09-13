@@ -1,11 +1,12 @@
 import { defineWorkflowCatalog } from './workflow-schema.js';
-export const WORKFLOW_CATALOG_VERSION = 39;
+export const WORKFLOW_CATALOG_VERSION = 40;
 const writingWorkflows = [
   {
     id: 'writing',
     chooseWhen: 'Prose drafting, revision, translation, or format conversion in any language (English, Chinese) or format (LaTeX, Markdown, Beamer, Word).',
     skills: [
       'writing-review',
+      'format-humanizer',
       'plain-chinese-writing',
       'zh-research-achievement-writing',
       'zh-format-humanizer',
@@ -36,7 +37,8 @@ const writingWorkflows = [
       'LaTeX/Beamer/Word/Markdown are format overlays, not separate workflows; select matching format skills.',
       'Main chooses whether to delegate writing or handle it directly based on scope.',
       'For new Beamer decks, start with a text-only Markdown content plan, discuss and confirm each page with the user, then translate it into Beamer and begin visual authoring and basic layout. The Markdown content plan is the canonical content source and the Beamer .tex files are derived layout artifacts; content changes go to Markdown first, require user reconfirmation, and then regenerate Beamer before layout resumes.',
-      'Chinese slide copy uses plain-chinese-writing for natural sentences, zh-format-humanizer for AI-like phrasing, and zh-writing-review for page-level clarity; use zh-writing-polish only for actual polishing and never replace body prose with keyword or phrase lists.',
+      'Chinese slide copy uses plain-chinese-writing for natural sentences, zh-format-humanizer for AI-like phrasing, and zh-writing-review for page-level clarity; English slide copy uses format-humanizer for AI-tell removal and writing-review for page-level review; use zh-writing-polish only for actual polishing and never replace body prose with keyword or phrase lists.',
+      'De-AI is evidence-based in every language: strongest tells justify an edit on one sighting, weak tells need company from other tells in the same passage, and specific details that carry the writer voice stay.',
       'For Beamer, a single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task\'s initial render and before task layout; findings are advisory input to the normal task pass, then task integrates and renders the final revision, which Main reviews read-only as the single review owner (a task that did not produce the revision may review instead).',
       'beamer-to-powerpoint is conditional on an explicit user-supplied conversion command; use it only when PowerPoint output is in scope and never choose or invent a converter.',
     ],
@@ -83,7 +85,7 @@ const visualWorkflows = [
   {
     id: 'visual',
     chooseWhen: 'Diagrams (draw.io), UI/UX design, static visual artifacts, or rendered figure review.',
-    skills: ['drawio-skill', 'frontend-design', 'canvas-design'],
+    skills: ['drawio-skill', 'frontend-design', 'canvas-design', 'format-humanizer', 'zh-format-humanizer'],
     catalogSkills: [],
     roles: ['task'],
     suggestedFlow: [
@@ -97,6 +99,7 @@ const visualWorkflows = [
       'drawio-skill from the 365-skills marketplace (drawio@365-skills) is the single diagram pipeline.',
       'QA is one read-only review pass plus at most one fix round; no repeated iteration rounds.',
       'The visual review is read-only and advisory; the reviewer never edits the source or the export.',
+      'Diagram text follows the same evidence-based de-AI standard as prose: box labels, titles, legends, and captions state facts directly and avoid staged contrasts, one-line closers, forced triads, inflated significance, and chatbot residue. Strongest tells justify an edit on one sighting; weak tells need company from other tells in the same passage.',
     ],
   },
 ];

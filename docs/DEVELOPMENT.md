@@ -39,7 +39,7 @@ docs/superpowers/            # 历史 plans/specs/reports，仅作 archive
 实现变更不得破坏以下契约：
 
 - OMP 的系统提示、用户指令、active tools、动态 Available Agents、权限、审批和完成行为始终具有最终权威；
-- workflow catalog v39 只有 `writing`、`research` 和 `visual` 三个 advisory 域；目录不是 router、gate 或 completion controller；
+- workflow catalog v40 只有 `writing`、`research` 和 `visual` 三个 advisory 域；目录不是 router、gate 或 completion controller；
 - `D` 是顶层 Skill exact URI，当前没有 nested ECC `C` 候选；候选 Skill 和 Agent 只按任务需要选择，不是 load set；
 - Main 可用 `ANALYZE -> EXECUTE -> REVIEW` 组织复杂任务，但插件不强制 delegation、fixed fan-out、retry 或 completion；
 - marketplace extension tools 默认 opt-in；`omp-config` 提供 `/enhancer-tools status|enable|disable`，组为 `config`、`writing`、`fact` 和 `all`；激活不授予权限。四个 `fact_check_*` 管线工具例外，默认进入工具清单，让自然语言的事实核查请求直达管线；
