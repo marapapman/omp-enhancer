@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, Command Code, Volcengine Ark Coding Plan, and Alibaba Cloud Bailian Token Plan model integration.",
-    "version": "1.0.54",
+    "version": "1.0.55",
     "pluginRoot": "plugins"
   },
   "plugins": [
@@ -38,7 +38,7 @@
     {
       "name": "writing-helper",
       "description": "Standalone OMP writing helper plugin with frugal-pi compatible writing skills, agents, logic, style, and citation checks",
-      "version": "0.2.24",
+      "version": "0.2.25",
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",
