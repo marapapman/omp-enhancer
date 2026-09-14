@@ -1,5 +1,5 @@
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:START -->
-# OMP Enhancer Workflow Catalog v41
+# OMP Enhancer Workflow Catalog v42
 
 Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIEW.
 
@@ -38,7 +38,7 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
   2. Optional asset prep, only when the user asks for a more vivid diagram or the confirmed plan names image assets: gather node-level raster assets (assetseeker icons or stock; Main pre-generated via the native generate_image tool; bl image via bash for Chinese-text or photoreal nodes) and record provenance before drawing; the draw-once QA chain below is unchanged.
   3. task draws the diagram once with drawio-skill from drawio@365-skills and exports a draft PNG.
   4. Review that exported PNG read-only with exactly one owner—Main or a task that did not draw the revision—flagging edges pressed onto each other or crossing through boxes.
-  5. task applies at most one fix round for supported findings and re-exports; deliver the .drawio source with the exported image.
+  5. task applies at most one fix round for supported findings and re-exports; when the fix round is the last edit, Main may run the mechanical final export (the drawio -e -s 2 command plus the skill PNG repair step) without editing the source; deliver the .drawio source with the exported image.
   6. Main retains setup authorization and final acceptance only; remaining findings are reported as limitations.
 
 <!-- OMP-ENHANCER-WORKFLOW-CATALOG:END -->
