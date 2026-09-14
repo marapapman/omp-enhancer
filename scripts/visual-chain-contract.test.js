@@ -17,7 +17,7 @@ test('visual workflow stays drawio/static-visual oriented', () => {
   const visual = workflowCatalog['visual'];
 
   assert.ok(visual, 'workflowCatalog must expose the visual workflow');
-  assert.deepEqual(visual.skills, ['drawio-skill', 'frontend-design', 'canvas-design', 'format-humanizer', 'zh-format-humanizer']);
+  assert.deepEqual(visual.skills, ['drawio-skill', 'assetseeker', 'frontend-design', 'canvas-design', 'format-humanizer', 'zh-format-humanizer']);
   assert.match(visual.chooseWhen, /Diagrams \(draw\.io\), UI\/UX design, static visual artifacts, or rendered figure review\./iu);
   assert.doesNotMatch(visual.chooseWhen, /slides?|beamer|powerpoint/iu);
   assert.deepEqual(visual.catalogSkills, []);

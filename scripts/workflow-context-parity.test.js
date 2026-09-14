@@ -20,8 +20,8 @@ const workflowIds = Object.freeze(workflowDefinitions.map(({ id }) => id));
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['scout', 'task', 'sonic', 'reviewer', 'security-reviewer']);
-test('catalog v40 defines exactly the three advisory workflows (writing, research, visual)', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 40);
+test('catalog v41 defines exactly the three advisory workflows (writing, research, visual)', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 41);
   assert.equal(workflowDefinitions.length, 3);
   assert.deepEqual(workflowIds, ['writing', 'research', 'visual']);
   for (const definition of workflowDefinitions) {
@@ -66,7 +66,7 @@ test('writing card keeps Beamer conversion direct and command-conditional', () =
   assert.match(flow, /content changes.+Markdown first.+reconfirm.+regenerate.+Beamer/iu);
 });
 
-test('packaged catalog, index, and all references expose catalog v40 advisory content', async () => {
+test('packaged catalog, index, and all references expose catalog v41 advisory content', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -74,7 +74,7 @@ test('packaged catalog, index, and all references expose catalog v40 advisory co
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /# OMP Enhancer Workflow Catalog v40/);
+  assert.match(catalog, /# OMP Enhancer Workflow Catalog v41/);
   assert.match(skillIndex, /Phases: ANALYZE -> EXECUTE -> REVIEW/iu);
   assert.match(skillIndex, /Advisory reference only/i);
   assert.equal(referenceNames.length, 3);
@@ -225,7 +225,7 @@ test('extension workflow roles have one owner while OMP native roles have no plu
 
   // Skills provided by external marketplaces (installed OMP plugins, not
   // packaged in this repo) that workflow cards may reference as candidates.
-  const externalWorkflowSkills = new Set(['drawio-skill']);
+  const externalWorkflowSkills = new Set(['drawio-skill', 'assetseeker']);
 
   for (const skill of referencedSkills) {
     if (externalWorkflowSkills.has(skill)) continue;

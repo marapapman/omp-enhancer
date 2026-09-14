@@ -11,7 +11,7 @@ const pluginsRoot = path.join(repoRoot, 'plugins');
 const nativeAgents = new Set(['scout', 'task', 'sonic', 'reviewer', 'security-reviewer']);
 // Skills provided by external marketplaces (installed OMP plugins, not
 // packaged in this repo) that workflow cards may reference as candidates.
-const externalWorkflowSkills = new Set(['drawio-skill']);
+const externalWorkflowSkills = new Set(['drawio-skill', 'assetseeker']);
 const packageArtifactDirectories = new Set([
   '.git',
   '.hg',
@@ -120,6 +120,7 @@ test('every exact Skill URI in packaged Skill Markdown resolves to a real entry 
       const uri = match[1];
       if (uri === 'skill://x') continue;
       if (uri === 'skill://drawio-skill' || uri.startsWith('skill://drawio-skill/')) continue;
+      if (uri === 'skill://assetseeker' || uri.startsWith('skill://assetseeker/')) continue;
       observed.add(uri);
 
       const withoutScheme = uri.slice('skill://'.length);

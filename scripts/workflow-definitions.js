@@ -1,5 +1,5 @@
 import { defineWorkflowCatalog } from './workflow-schema.js';
-export const WORKFLOW_CATALOG_VERSION = 40;
+export const WORKFLOW_CATALOG_VERSION = 41;
 const writingWorkflows = [
   {
     id: 'writing',
@@ -41,6 +41,7 @@ const writingWorkflows = [
       'De-AI is evidence-based in every language: strongest tells justify an edit on one sighting, weak tells need company from other tells in the same passage, and specific details that carry the writer voice stay.',
       'For Beamer, a single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task\'s initial render and before task layout; findings are advisory input to the normal task pass, then task integrates and renders the final revision, which Main reviews read-only as the single review owner (a task that did not produce the revision may review instead).',
       'beamer-to-powerpoint is conditional on an explicit user-supplied conversion command; use it only when PowerPoint output is in scope and never choose or invent a converter.',
+      'Beamer Phase 2 visual assets follow the visual workflow asset contract: official icons and assetseeker stock first, generated images opt-in with provenance recorded in the content plan; operational detail lives in latex-beamer-slides.',
     ],
   },
 ];
@@ -85,11 +86,12 @@ const visualWorkflows = [
   {
     id: 'visual',
     chooseWhen: 'Diagrams (draw.io), UI/UX design, static visual artifacts, or rendered figure review.',
-    skills: ['drawio-skill', 'frontend-design', 'canvas-design', 'format-humanizer', 'zh-format-humanizer'],
+    skills: ['drawio-skill', 'assetseeker', 'frontend-design', 'canvas-design', 'format-humanizer', 'zh-format-humanizer'],
     catalogSkills: [],
     roles: ['task'],
     suggestedFlow: [
       'Clarify diagram type, format, and rendering requirements.',
+      'Optional asset prep, only when the user asks for a more vivid diagram or the confirmed plan names image assets: gather node-level raster assets (assetseeker icons or stock; Main pre-generated via the native generate_image tool; bl image via bash for Chinese-text or photoreal nodes) and record provenance before drawing; the draw-once QA chain below is unchanged.',
       'task draws the diagram once with drawio-skill from drawio@365-skills and exports a draft PNG.',
       'Review that exported PNG read-only with exactly one owner—Main or a task that did not draw the revision—flagging edges pressed onto each other or crossing through boxes.',
       'task applies at most one fix round for supported findings and re-exports; deliver the .drawio source with the exported image.',
@@ -100,6 +102,9 @@ const visualWorkflows = [
       'QA is one read-only review pass plus at most one fix round; no repeated iteration rounds.',
       'The visual review is read-only and advisory; the reviewer never edits the source or the export.',
       'Diagram text follows the same evidence-based de-AI standard as prose: box labels, titles, legends, and captions state facts directly and avoid staged contrasts, one-line closers, forced triads, inflated significance, and chatbot residue. Strongest tells justify an edit on one sighting; weak tells need company from other tells in the same passage.',
+      'Asset contract: every embedded raster asset is registered with id, type (icon|photo|generated|hand-drawn), file path, and provenance (stock: source URL plus license; generated: provider, model, prompt, seed); the delivery notes list the registry and missing provenance is a review finding.',
+      'Node-level asset selection prefers official icons (Iconify via assetseeker), then stock photos, then generated images; raster assets are opt-in (user request or confirmed plan) and never replace hand-drawn vector nodes wholesale.',
+      'Generation sources: Main may pre-generate assets with the native generate_image tool and hand task the file paths; task generates directly only via bl image (bash) when Main is not preparing assets or Chinese-text rendering is required. Paid generation is proposed with a cost note before running.',
     ],
   },
 ];
