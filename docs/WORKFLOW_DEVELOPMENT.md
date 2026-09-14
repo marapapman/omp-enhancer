@@ -4,7 +4,7 @@
 
 ## 当前架构
 
-当前 workflow catalog version 40 只有 3 个 ID：`writing`、`research` 和 `visual`。
+当前 workflow catalog version 41 只有 3 个 ID：`writing`、`research` 和 `visual`。
 
 - `writing`：中英文 prose、翻译、Markdown、LaTeX、Beamer 和 Word；`beamer-to-powerpoint` 仅在用户提供明确转换命令时适用；
 - `research`：事实核查、claim extraction、来源评估、证据 cross-check 和 verdict；
