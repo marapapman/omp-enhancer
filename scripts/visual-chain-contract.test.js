@@ -31,6 +31,9 @@ test('visual workflow stays drawio/static-visual oriented', () => {
   const scope = visual.scopeNotes.join(' ');
   assert.match(scope, /drawio-skill from the 365-skills marketplace \(drawio@365-skills\) is the single diagram pipeline/iu);
   assert.match(scope, /QA is one read-only review pass plus at most one fix round; no repeated iteration rounds/iu);
+  assert.match(scope, /align=left, imagePosition=left and imageWidth\/imageHeight must all be set/iu);
+  assert.match(scope, /a sub-node inside module A never connects directly to a sub-node inside module B/iu);
+  assert.match(scope, /hyphen chains, arrow glyphs and slash-stacked keyword lists/iu);
   assert.equal(Object.hasOwn(visual, 'delegation'), false, 'visual must not carry a delegation field');
   assert.equal(Object.hasOwn(visual, 'steps'), false, 'visual must not carry a steps field');
 });
