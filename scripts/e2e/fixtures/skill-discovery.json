@@ -104,7 +104,7 @@
       "id": "natural-workflow-reference",
       "category": "omp-config",
       "fixture": "skill-discovery-readonly",
-      "prompt": "Consult the optional OMP Enhancer workflow reference already available in this session, then create a compact, ordered release-readiness checklist for a six-plugin OMP marketplace. Cover implementation validation, independent security review, package verification, rollback readiness, and separate publish authorization. Explain which phases can be composed. Do not inspect or modify project files.",
+      "prompt": "Consult the optional OMP Enhancer workflow reference already available in this session, then create a compact, ordered release-readiness checklist for a four-plugin OMP marketplace. Cover implementation validation, independent security review, package verification, rollback readiness, and separate publish authorization. Explain which phases can be composed. Do not inspect or modify project files.",
       "expectations": {
         "minWorkflowReferenceReads": 1,
         "requiredObservedSkills": ["omp-enhancer-workflows"],

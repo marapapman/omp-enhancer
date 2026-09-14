@@ -4,7 +4,7 @@
 
 ## 运行模型
 
-OMP Enhancer 当前只发布六个插件：`omp-config`、`writing-helper`、`omp-fact-checker`、`volcengine-coding-plan`、`commandcode` 和 `aliyun-bailian-token-plan`。代码增强核心、测试增强插件和 ECC 代码技能不再属于当前 marketplace。
+OMP Enhancer 当前只发布四个插件：`omp-config`、`writing-helper`、`omp-fact-checker` 和 `volcengine-coding-plan`。代码增强核心、测试增强插件和 ECC 代码技能不再属于当前 marketplace。
 
 OMP 负责系统提示、用户指令、active tools、动态 Available Agents、权限、审批和完成行为。插件只提供可选的 Skill、Agent、工具、配置资产和观察性提示，不复制宿主权限模型，不创建 hard router、hard gate、completion controller 或 automatic repair loop。
 
@@ -33,12 +33,8 @@ Managed `AGENTS.md`、`CLAUDE.md` 和 `WATCHDOG.yml` 不导入完整目录，只
 | `writing-helper` | 英文和中文写作逻辑、风格、引用、保真检查，以及 writer/checker Agents 和 Skills | 阻止交付、替用户自动改写、替用户持久化文件 |
 | `omp-fact-checker` | claim extraction、事实计划、A/B evidence、cross-check、strict verdict、报告和 fact review | 把缺失证据变成生命周期 gate、把兼容证据升级为证明 |
 | `volcengine-coding-plan` | 通过 OMP 原生 `registerProvider` 注册 Coding Plan OpenAI 兼容模型，并把 API-key 登录接入原生 `/login` | 不修改宿主认证存储、不替宿主路由、不发现或猜测未公开模型 |
-| `commandcode` | 通过 OMP 原生 `registerProvider` 注册 Command Code Provider API 模型（Claude 走 `anthropic-messages`，其余走 `openai-completions`），并把 API-key 登录接入原生 `/login` | 不修改宿主认证存储、不替宿主路由、不发现或猜测未公开模型 |
-| `aliyun-bailian-token-plan` | 通过 OMP 原生 `registerProvider` 注册百炼 Token Plan OpenAI 兼容模型，并把 API-key 登录接入原生 `/login` | 不修改宿主认证存储、不替宿主路由、不发现或猜测未公开模型 |
 
 `volcengine-coding-plan` 使用 `https://ark.cn-beijing.volces.com/api/coding/v3`，静态暴露官方 Coding Plan 模型名；模型选择、凭证保存和请求发送仍由 OMP 原生 `/login`、`/model`、AuthStorage 与 OpenAI-compatible transport 负责。
-`commandcode` 使用 `https://api.commandcode.ai/provider/v1`，静态暴露官方 [模型列表](https://commandcode.ai/docs/reference/cli/models)；每个模型条目携带按模型选择的 `api`，Claude 模型请求 `/provider/v1/messages`，其余请求 `/provider/v1/chat/completions`；模型选择、凭证保存和请求发送仍由 OMP 原生 `/login`、`/model`、AuthStorage 与 transport 负责。
-`aliyun-bailian-token-plan` 使用 `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`，静态暴露 Token Plan 个人版和团队版文档中的文本模型；模型选择、凭证保存和请求发送仍由 OMP 原生 `/login`、`/model`、AuthStorage 与 OpenAI-compatible transport 负责。
 
 marketplace extension tools 默认 opt-in；四个 `fact_check_*` 管线工具（analyze/evidence/report/review）例外，默认进入工具清单，使自然语言的事实核查请求能直达管线。`omp-config` 在宿主提供 active-tool 管理 API 时注册 `/enhancer-tools`，只支持 `config`、`writing`、`fact` 和 `all` 组；激活工具不改变权限。Coding Plan provider 是模型扩展，不增加 extension tool 或权限。
 
