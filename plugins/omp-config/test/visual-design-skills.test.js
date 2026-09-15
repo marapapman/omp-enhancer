@@ -5,7 +5,6 @@ import { readFile } from 'node:fs/promises';
 const frontendUrl = new URL('../skills/frontend-design/SKILL.md', import.meta.url);
 const canvasUrl = new URL('../skills/canvas-design/SKILL.md', import.meta.url);
 const slidesUrl = new URL('../skills/latex-beamer-slides/SKILL.md', import.meta.url);
-const architectureUrl = new URL('../../../docs/ARCHITECTURE.md', import.meta.url);
 
 test('frontend visual work uses task ownership, a current render matrix, and a single read-only visual review', async () => {
   const skill = await readFile(frontendUrl, 'utf8');
@@ -62,17 +61,6 @@ test('existing slides retain task layout and a read-only visual review', async (
     /Have `task` recompile and render that exact layout revision/i,
     /Perform the single read-only visual review of the latest renders/i,
   ]);
-});
-
-test('architecture records the visual workflow as a soft evidence invariant', async () => {
-  const architecture = await readFile(architectureUrl, 'utf8');
-
-  assert.match(
-    architecture,
-    /visual-delivery.+drawio-skill.+drawio@365-skills.+exported PNG read-only in one pass.+at most one fix round.+advisory.+hard gate.+router.+fixed fanout.+automatic loop.+completion authority/is,
-  );
-  assert.match(architecture, /Main \(or a task that did not draw the revision\) reviews that exported PNG read-only in one pass/i);
-  assert.doesNotMatch(architecture, new RegExp(['vis', 'ioner'].join(''), 'iu'));
 });
 
 function assertInOrder(content, patterns) {

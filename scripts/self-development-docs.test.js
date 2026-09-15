@@ -105,7 +105,7 @@ test('current repository documentation matches the v43 runtime and evidence cont
   ]) {
     assert.match(
       content,
-      /draw\.?io[\s\S]{0,800}drawio@365-skills[\s\S]{0,800}read-only[\s\S]{0,800}at most one fix round/iu,
+      /draw\.?io[\s\S]{0,800}drawio@365-skills[\s\S]{0,800}read-only[\s\S]{0,800}one (?:local )?fix round/iu,
       path,
     );
     assert.doesNotMatch(content, /visioner|APPROVED|CHANGES_REQUIRED|UNREVIEWABLE/iu, path);
@@ -153,7 +153,7 @@ test('current docs distinguish the single Beamer precheck from the unchanged dra
     );
     assert.match(
       content,
-      /draw\.?io(?: pipeline)? remains unchanged[\s\S]{0,500}task[\s\S]{0,500}read-only[\s\S]{0,500}at most one fix round/iu,
+      /draw\.?io(?: pipeline)? (?:remains unchanged|via `drawio-skill`)[\s\S]{0,500}task[\s\S]{0,500}read-only[\s\S]{0,500}one (?:local )?fix round/iu,
       label,
     );
   }

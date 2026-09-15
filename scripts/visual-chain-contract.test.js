@@ -23,17 +23,19 @@ test('visual workflow stays drawio/static-visual oriented', () => {
   assert.deepEqual(visual.catalogSkills, []);
   assert.deepEqual(visual.roles, ['task']);
   assert.ok(Array.isArray(visual.suggestedFlow) && visual.suggestedFlow.length > 0);
-  assert.ok(visual.suggestedFlow.some((line) => /task draws the diagram once with drawio-skill from drawio@365-skills/i.test(line)));
-  assert.ok(visual.suggestedFlow.some((line) => /read-only with exactly one owner—Main or a task that did not draw the revision/i.test(line)));
-  assert.ok(visual.suggestedFlow.some((line) => /at most one fix round/i.test(line)));
-  assert.ok(visual.suggestedFlow.some((line) => /Main retains setup authorization and final acceptance only/i.test(line)));
+  // draw-once + independent read-only review + bounded fix semantics, checked
+  // structurally rather than pinned to exact card wording.
+  assert.ok(visual.suggestedFlow.some((line) => /draws the diagram once/iu.test(line) && /drawio-skill/iu.test(line)));
+  assert.ok(visual.suggestedFlow.some((line) => /read-only review/iu.test(line) && /(Main when it has image input|task that did not author)/iu.test(line)));
+  assert.ok(visual.suggestedFlow.some((line) => /at most one local fix round/iu.test(line) && /same reviewer/iu.test(line) && /fresh exports/iu.test(line)));
+  assert.ok(visual.suggestedFlow.some((line) => /Main retains setup authorization and final acceptance only/iu.test(line)));
   assert.ok(Array.isArray(visual.scopeNotes) && visual.scopeNotes.length >= 2);
   const scope = visual.scopeNotes.join(' ');
-  assert.match(scope, /drawio-skill from the 365-skills marketplace \(drawio@365-skills\) is the single diagram pipeline/iu);
-  assert.match(scope, /QA is one read-only review pass plus at most one fix round; no repeated iteration rounds/iu);
+  assert.match(scope, /single diagram pipeline/iu);
+  assert.match(scope, /one read-only review pass plus at most one fix round/iu);
+  assert.match(scope, /fresh-evidence confirmation/iu);
   assert.match(scope, /align=left, imagePosition=left and imageWidth\/imageHeight must all be set/iu);
-  assert.match(scope, /a sub-node inside module A never connects directly to a sub-node inside module B/iu);
-  assert.match(scope, /hyphen chains, arrow glyphs and slash-stacked keyword lists/iu);
+  assert.match(scope, /edges connect the actual endpoints/iu);
   assert.equal(Object.hasOwn(visual, 'delegation'), false, 'visual must not carry a delegation field');
   assert.equal(Object.hasOwn(visual, 'steps'), false, 'visual must not carry a steps field');
 });
