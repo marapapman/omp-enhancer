@@ -30,6 +30,8 @@ Slide copy has its own AI tells: a title that states a complete claim should not
 
 Wait for user confirmation of the page content before adding images, authoring visuals, or performing layout. Do not create or edit Beamer .tex frames while content is unresolved. If content changes later, return to the Markdown content stage, reconfirm the affected pages, and regenerate the affected Beamer frames.
 
+After that confirmation and before visual authoring, a separate `task` reconciles the slide order on the Markdown content plan: it checks for content overlap between slides, keeps each content module semantically coherent with one main job per slide, and proposes a page order with a logical overall progression from context to conclusion. Main discusses material order changes with the user and applies the agreed reordering in the Markdown content plan before any Beamer frame is generated. When a crossing cannot be fixed by reordering or regrouping alone — for example, content duplicated across pages or a single module split across several pages — the task reports it, and the affected pages return to the Markdown content stage for user reconfirmation instead of being silently dropped. Reordering edits only the Markdown content plan, never the .tex files.
+
 
 ## Generation structure
 

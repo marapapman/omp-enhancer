@@ -1393,12 +1393,21 @@ test('Beamer precheck fixture shape stays temporary and PowerPoint conversion re
     'task',
     'task',
     'task',
+    'task',
   ]);
+  assert.match(
+    scenario.prompt,
+    /separate task reconcile the slide order on slides-content[.]md.+no content overlap.+semantically coherent.+logical overall progression.+reordering or regrouping cannot fix.+Markdown reconfirmation/isu,
+  );
+  assert.match(
+    scenario.prompt,
+    /After that reconciliation, translate the reconciled Markdown plan into Beamer frames/isu,
+  );
   assert.deepEqual(scenario.expectations.requiredNativeTaskDeliveryTextPatterns, [
     { agent: 'task', pattern: 'final.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
     { agent: 'task', pattern: 'current.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
   ]);
-  assert.equal(scenario.expectations.maxNativeTaskAssignmentAttempts, 7);
+  assert.equal(scenario.expectations.maxNativeTaskAssignmentAttempts, 8);
   assert.deepEqual(scenario.expectations.forbiddenNativeTaskAssignmentTextPatterns, [
     'APPROVED|CHANGES_REQUIRED|UNREVIEWABLE',
     'single read-only visual precheck[^\\n]*(?:parallel|dual|fallback|disagreement|merge)',

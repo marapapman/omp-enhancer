@@ -280,6 +280,45 @@ test('Beamer skill supplies layout specialization with a read-only visual review
   assert.match(slidesSkill, /Do not split, add, remove, or reorder frames without explicit user authorization/i);
 });
 
+test('Beamer generation reconciles slide order between text confirmation and visual authoring', async () => {
+  const skill = await readFile(slidesSkillUrl, 'utf8');
+  const generation = markdownSection(skill, 'Generate a new deck');
+
+  const textStage = generation.indexOf('Phase 1: Text-only content');
+  const orderStage = generation.indexOf('Slide-order reconciliation');
+  const visualStage = generation.indexOf('Phase 2: Visual authoring');
+
+  assert.ok(textStage >= 0);
+  assert.ok(orderStage > textStage);
+  assert.ok(visualStage > orderStage);
+  assert.match(generation, /separate `task` to adjust the slide order on the Markdown content plan/is);
+  assert.match(generation, /content overlap between slides/is);
+  assert.match(generation, /semantically coherent with one main job per slide/is);
+  assert.match(generation, /logical progression from context to conclusion/is);
+  assert.match(generation, /proposed reordering with per-move justification/is);
+  assert.match(generation, /Never reorder frames by editing \.tex directly/is);
+  assert.match(generation, /Only after the slide order is reconciled, generate the deck/is);
+});
+
+test('slides storyline defines the slide-order reconciliation stage', async () => {
+  const skill = await readFile(storylineSkillUrl, 'utf8');
+  const reconciliation = markdownSection(skill, 'Slide-order reconciliation');
+
+  assert.match(reconciliation, /separate `task` to reconcile the slide order on the Markdown content plan/is);
+  assert.match(reconciliation, /content overlap between slides/is);
+  assert.match(reconciliation, /every slide keeps one main job/is);
+  assert.match(reconciliation, /before any Beamer frame is generated/is);
+  assert.match(reconciliation, /never the \.tex files/is);
+});
+
+test('Beamer quality reference records the slide-order reconciliation step', async () => {
+  const reference = await readFile(qualityReferenceUrl, 'utf8');
+
+  assert.match(reference, /a separate `task` reconciles the slide order on the Markdown content plan/is);
+  assert.match(reference, /content overlap between slides.+semantically coherent.+logical overall progression/is);
+  assert.match(reference, /Reordering edits only the Markdown content plan, never the \.tex files/is);
+});
+
 function markdownSection(markdown, heading) {
   const start = markdown.indexOf(`## ${heading}`);
   const next = markdown.indexOf('\n## ', start + 1);

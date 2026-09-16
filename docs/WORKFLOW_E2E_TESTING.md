@@ -83,7 +83,7 @@ npm run e2e:main:self-iteration -- \
 ## Beamer/PPT staged content and visual refinement fixture
 
 `scripts/e2e/fixtures/subagent-willingness.json` 的
-`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的 Markdown 内容计划和用户确认，再覆盖从已确认 Markdown 翻译出的 Beamer 帧、逐页配图与基础排版。Markdown content plan is the canonical content source; Beamer .tex files are derived layout artifacts. Content changes go to Markdown first, are discussed and reconfirmed with the user, then regenerate Beamer; 内容变化不能在排版阶段直接改 `.tex` 正文。随后它覆盖 task 的 initial
+`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的 Markdown 内容计划和用户确认，再覆盖独立 task 在 Markdown 计划上的 slide-order reconciliation（无内容交叉、模块语义一致、整体顺序逻辑有序；无法用重排解决的交叉回到 Markdown reconfirmation），随后覆盖从调和后 Markdown 翻译出的 Beamer 帧、逐页配图与基础排版。Markdown content plan is the canonical content source; Beamer .tex files are derived layout artifacts. Content changes go to Markdown first, are discussed and reconfirmed with the user, then regenerate Beamer; 内容变化不能在排版阶段直接改 `.tex` 正文。随后它覆盖 task 的 initial
 render、exactly one read-only self-check（owner 只能是 Main 或 task）以及它在
 task final layout pass 之前的顺序；用户确认基础排版后，task 绑定并渲染 current revision，Main（或未产出该 revision 的 task）对该
 revision 做单一只读 review。该 `single read-only visual precheck` marker 只携带
@@ -94,7 +94,7 @@ remains unchanged：task、单一只读 review 和 at most one fix round 的一�
 
 Evaluator 只使用 parent event stream 的 native task assignment、completed
 delivery 和 event order：bounded assignment-text count/order 检查 marker 与
-initial render，native Agent sequence 检查 task → task(layout) → task → task(review)，
+initial render，native Agent sequence 检查 task → task(reconciliation) → task → task(layout) → task → task(review)，
 delivery text 检查 final render 与 current revision identifier 是否一致，并以
 `maxNativeTaskAssignmentAttempts` 保持 one-fix 上界。当前 runner 不能看到 task
 child 内部的 visual read（例如 child 内部通过 `read <image>?q=<question>` 提出图像问题）；报告该 evidence
