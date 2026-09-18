@@ -23,12 +23,48 @@ symbolPreset: unicode
 theme: 
   dark: titanium
 setupVersion: 1
+modelRoles:
+  default: charm-hyper/glm-5.3-flash:max
+  advisor: openai-codex/gpt-5.6-luna:max
+  smol: commandcode/deepseek/deepseek-v4.1-flash:max
+  slow: charm-hyper/glm-5.3:max
+  plan: openai-codex/gpt-6-astra:high
+  commit: opencode-zen/big-pickle:high
+  task: charm-hyper/glm-5.3-flash:max
+  tiny: charm-hyper/qwen3.8-flash:high
+  vision: charm-hyper/glm-5.3-flash:low
 disabledProviders: []
 enabledModels: []
 task:
-  agentModelOverrides: {}
+  agentModelOverrides:
+    checker: "@task"
+    fact-challenger: "@slow"
+    fact-planner: "@slow"
+    fact-researcher-a: "@task"
+    fact-researcher-b: "@advisor"
+    fact-researcher-c: "@smol"
+    writer: "@tiny"
+    zh-checker: "@task"
+    zh-writer: "@tiny"
   batch: true
   eager: preferred
+retry:
+  fallbackChains:
+    smol:
+      - alibaba-token-plan/deepseek-v4.1-flash
+    advisor:
+      - commandcode/deepseek/deepseek-v4.1-flash
+      - alibaba-token-plan/deepseek-v4.1-flash
+    task:
+      - commandcode/z-ai/glm-5.3-flash
+    default:
+      - commandcode/z-ai/glm-5.3-flash
+    slow:
+      - commandcode/zai-org/GLM-5.3
+    plan:
+      - charm-hyper/kimi-k3
+    vision:
+      - commandcode/z-ai/glm-5.3-flash
 display: 
   shimmer: disabled
 statusLine: 

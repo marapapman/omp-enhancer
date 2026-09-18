@@ -30,11 +30,12 @@ test('findPathRisks reports hardcoded Claude root home paths', () => {
   assert.match(findings[0].evidence, /\/root\/\.claude\/CLAUDE\.md/);
 });
 
-test('packaged config template is model-agnostic and keeps loopGuard/compaction safe defaults', async () => {
+test('packaged config template ships model role defaults and keeps loopGuard/compaction safe defaults', async () => {
   const config = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
 
-  assert.doesNotMatch(config, /modelRoles:/);
-  assert.doesNotMatch(config, /deepseek|mimo|opencode-go/i);
+  assert.match(config, /^modelRoles:\n  default: \S+/mu);
+  assert.match(config, /^task:\n  agentModelOverrides:\n    checker: "@task"/mu);
+  assert.match(config, /^retry:\n  fallbackChains:/mu);
   assert.match(config, /loopGuard:\s*\n\s+enabled:\s+false/);
   assert.doesNotMatch(config, /modelPattern|maxRepeatedSentence|maxRepeatedPhrase|minRepeatedChars/);
   assert.match(config, /compaction:[\s\S]*autoContinue:\s+false/);
@@ -184,17 +185,17 @@ test('package manifest declares bundled skills as plugin content', async () => {
   assert.ok(packageJson.keywords.includes('omp-plugin'));
 });
 
-test('packaged config template is model-agnostic and keeps safe defaults', async () => {
+test('packaged config template ships model role defaults and keeps safe defaults', async () => {
   const template = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
 
-  assert.doesNotMatch(template, /modelRoles:/);
-  assert.doesNotMatch(template, /deepseek|mimo|opencode-go/i);
+  assert.match(template, /^modelRoles:\n  default: \S+/mu);
+  assert.match(template, /^task:\n  agentModelOverrides:\n    checker: "@task"/mu);
+  assert.match(template, /^retry:\n  fallbackChains:/mu);
   assert.doesNotMatch(template, /classifier:|modelTags:/);
   assert.match(template, /webSearch:\s*codex/);
   assert.match(template, /backend:\s*mnemopi/);
   assert.match(template, /loopGuard:\s*\n\s+enabled:\s+false/);
   assert.match(template, /compaction:[\s\S]*autoContinue:\s+false/);
-  assert.match(template, /task:\s*\n\s+agentModelOverrides:\s*\{\}/);
   assert.match(template, /batch:\s+true/);
 });
 

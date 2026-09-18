@@ -45,6 +45,8 @@ const WORKTREE_CONFIG_ALLOWLIST = new Set([
   'interruptMode',
   'disabledProviders',
   'enabledModels',
+  'modelRoles',
+  'retry',
   'task',
 ]);
 const ISOLATION_ENV_KEYS = [
@@ -282,17 +284,22 @@ export async function backupSqliteDatabase(sourcePath, destinationPath) {
 
 function parseModelRoleProviders(config) {
   const providers = new Set();
-  let inModelRoles = false;
+  let section = '';
   for (const line of String(config ?? '').split(/\r?\n/u)) {
     const topLevel = line.match(/^([A-Za-z][A-Za-z0-9_-]*):(?:\s|$)/u);
     if (topLevel) {
-      inModelRoles = topLevel[1] === 'modelRoles';
+      section = topLevel[1];
       continue;
     }
-    if (!inModelRoles) continue;
-    const selector = line.match(/^\s+[^:#]+:\s*["']?([^\s"'#]+)["']?/u)?.[1];
-    const slash = selector?.indexOf('/');
-    if (slash > 0) providers.add(selector.slice(0, slash));
+    if (section !== 'modelRoles' && section !== 'retry') continue;
+    if (section === 'modelRoles') {
+      const selector = line.match(/^\s+[^:#]+:\s*["']?([^\s"'#]+)["']?/u)?.[1];
+      const slash = selector?.indexOf('/');
+      if (slash > 0) providers.add(selector.slice(0, slash));
+      continue;
+    }
+    const provider = line.match(/^\s*-\s*["']?([A-Za-z0-9_.-]+)\//u)?.[1];
+    if (provider) providers.add(provider);
   }
   return providers;
 }

@@ -107,6 +107,12 @@ test('worktree isolation config keeps only the E2E runtime allowlist', () => {
     '  enabled: true',
     'disabledProviders: []',
     'enabledModels: []',
+    'modelRoles:',
+    '  default: charm-hyper/glm-5.3-flash:max',
+    'retry:',
+    '  fallbackChains:',
+    '    task:',
+    '      - commandcode/z-ai/glm-5.3-flash',
     'task:',
     '  batch: true',
     '  eager: preferred',
@@ -117,6 +123,8 @@ test('worktree isolation config keeps only the E2E runtime allowlist', () => {
   assert.match(filtered, /^skills:/mu);
   assert.match(filtered, /^disabledProviders:/mu);
   assert.match(filtered, /^enabledModels:/mu);
+  assert.match(filtered, /^modelRoles:\n  default: charm-hyper\/glm-5\.3-flash:max$/mu);
+  assert.match(filtered, /^retry:\n  fallbackChains:/mu);
   assert.match(filtered, /^task:/mu);
   assert.doesNotMatch(filtered, /^secrets:/mu);
   assert.doesNotMatch(filtered, /^memory:/mu);
@@ -319,7 +327,7 @@ test('worktree isolation seeds current assets and deterministic Skills, then del
   }
 });
 
-test('worktree isolation preserves the packaged model-agnostic config defaults', async () => {
+test('worktree isolation preserves the packaged model role defaults', async () => {
   const stateParent = await mkdtemp(path.join(os.tmpdir(), 'omp-e2e-default-profile-'));
   let isolation;
   try {
@@ -329,10 +337,10 @@ test('worktree isolation preserves the packaged model-agnostic config defaults',
       dryRun: true,
     });
     const config = await readFile(path.join(isolation.agentDir, 'config.yml'), 'utf8');
-    assert.doesNotMatch(config, /modelRoles:/mu);
-    assert.doesNotMatch(config, /deepseek|mimo|opencode-go/i);
+    assert.match(config, /^modelRoles:\n  default: \S+/mu);
+    assert.match(config, /^task:\n  agentModelOverrides:\n    checker: "@task"/mu);
+    assert.match(config, /^retry:\n  fallbackChains:/mu);
     assert.match(config, /^loopGuard:\s*\n\s+enabled:\s+false$/mu);
-    assert.match(config, /^task:\s*\n\s+agentModelOverrides:\s*\{\}/mu);
   } finally {
     await isolation?.cleanup();
     await rm(stateParent, { recursive: true, force: true });

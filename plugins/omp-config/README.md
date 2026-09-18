@@ -9,7 +9,7 @@
 - `skills/latex-beamer-slides/` and `skills/slides-storyline/` define the staged Beamer deck workflow. `skills/beamer-to-powerpoint/` handles conversion only when the user supplies an exact command.
 - `skills/frontend-design/`, `skills/canvas-design/`, and `skills/docx/` are adjacent visual or document methods, not native PPTX generators.
 - `assets/AGENTS.md` and `assets/WATCHDOG.yml` contain compact advisory context. They do not import the full workflow catalog or create runtime gates.
-- `assets/config.yml` and `assets/mcp.json` are templates. Model selection remains with OMP and the user.
+- `assets/config.yml` and `assets/mcp.json` are templates. `config.yml` ships model role defaults; model selection remains overridable by OMP and the user.
 - `hook-templates/` contains optional helpers and is not auto-discovered.
 - Runtime tools are default-inactive: `omp_config_doctor`, `omp_config_assets`, `omp_config_plan`, and `omp_config_sync_workflow_context`.
 

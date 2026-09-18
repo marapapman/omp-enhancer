@@ -87,7 +87,7 @@ Call omp_config_sync_workflow_context with apply=false.
 Review the proposed changes, then call it with apply=true if desired.
 ```
 
-Sync preserves unrelated `AGENTS.md` and `WATCHDOG.yml` content. Main and Advisor model selection is user-configured; the plugin does not bind to any specific model. Reminders remain advisory.
+Sync preserves unrelated `AGENTS.md` and `WATCHDOG.yml` content. The packaged config template ships model role defaults; Main and Advisor model selection remains user-overridable. Reminders remain advisory.
 
 ## Upgrade
 

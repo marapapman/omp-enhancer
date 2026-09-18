@@ -144,7 +144,7 @@ The plugins have no active hard gate, hard router, classifier preflight, plugin-
 
 The simplified orchestration advisory is intentional and must remain. It is capability-gated, scoped to a top-level Main task, and emitted at most once per active task. It tells Main it is the orchestrator across ANALYZE -> EXECUTE -> REVIEW, points at the reference catalog, and may include non-binding task-shape facts and workflow candidates. It must not independently choose a plugin workflow, Skill candidate, Agent, or fork, create a runtime gate or authority, replace `systemPrompt`, change the next natural provider request, or mutate observed events. One generic diagnostic switch is available: `OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER` disables the advisory.
 
-The packaged config template leaves Main and Advisor model selection to the user; the plugin does not bind to any specific model.
+The packaged config template ships the current workstation's model roles, task agent overrides, and retry fallback chains as defaults; users may override any of them in their own OMP config. The plugin's runtime behavior stays model-agnostic.
 
 Advisory lifecycle rules:
 
