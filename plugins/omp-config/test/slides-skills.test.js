@@ -6,6 +6,7 @@ const slidesSkillUrl = new URL('../skills/latex-beamer-slides/SKILL.md', import.
 const storylineSkillUrl = new URL('../skills/slides-storyline/SKILL.md', import.meta.url);
 const conversionSkillUrl = new URL('../skills/beamer-to-powerpoint/SKILL.md', import.meta.url);
 const qualityReferenceUrl = new URL('../skills/latex-beamer-slides/references/beamer-quality.md', import.meta.url);
+const definitionsUrl = new URL('../../../scripts/workflow-definitions.js', import.meta.url);
 
 test('Beamer generation checks the template before committing a story and authoring frames', async () => {
   const skill = await readFile(slidesSkillUrl, 'utf8');
@@ -351,17 +352,44 @@ test('slide content bans contrast-repetition constructions and one-sentence summ
   assert.match(shaping, /In one sentence/is);
   // Body copy follows the same bans; label-colon lead-ins in bullets are banned too.
   assert.match(draft, /bullets and captions must not open with a label-colon lead-in \("方法：…", "结果：…", "Method: …"\)/is);
-  assert.match(draft, /"不是X，而是Y" contrast-repetition constructions and opening\/closing one-sentence summaries/is);
+  assert.match(draft, /"不是X，而是Y" contrast-repetition constructions, opening\/closing one-sentence summaries, defensive writing, and "specifics then sweep" summary clauses/is);
   // Reconciliation checks the body bans as content findings.
-  assert.match(reconciliation, /no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction and no opening\/closing one-sentence summary anywhere in page text/is);
+  assert.match(reconciliation, /no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction, no opening\/closing one-sentence summary, no defensive writing \(unsourced hedging qualifiers, boilerplate disclaimers, over-attribution, or apologia\), and no "specifics then sweep" summary clause anywhere in page text/is);
   assert.match(reconciliation, /A title or body violation is a content finding/is);
   // Beamer generation and quality reference carry the same bans.
-  assert.match(generation, /Body copy obeys the same phrasing bans as titles.+no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction.+no page opens or closes with a one-sentence summary/is);
+  assert.match(generation, /Body copy obeys the same phrasing bans as titles.+no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction.+no page opens or closes with a one-sentence summary of itself, no defensive writing anywhere.+no "specifics then sweep" summary clause/is);
   assert.match(generation, /Title and body violations are content findings that return to the Markdown content plan with the user, never \.tex edits/is);
   assert.match(quality, /no "不是X，而是Y" contrast-repetition construction or its English equivalents \("not X, but Y", "not just X, it's Y"\)/is);
   assert.match(quality, /no opening or closing one-sentence summary \("一句话总结", "In one sentence", "The takeaway"\)/is);
-  assert.match(quality, /no label-colon bullet or caption lead-ins, no "不是X，而是Y"\/"not X, but Y" contrast-repetition constructions, and no opening or closing one-sentence summaries/is);
+  assert.match(quality, /no label-colon bullet or caption lead-ins, no "不是X，而是Y"\/"not X, but Y" contrast-repetition constructions, no opening or closing one-sentence summaries, no defensive writing \(unsourced hedging, boilerplate disclaimers, over-attribution, apologia\), and no "specifics then sweep" summary clauses/is);
   assert.match(quality, /A title or body violation is a content finding/is);
+  assert.match(quality, /no "specifics then sweep" summary clause: a concrete factual clause followed by a summarizing clause that elevates it to a sweeping whole/is);
+  assert.match(quality, /"画面＋全称升华" two-beat sentence/is);
+  // Defensive writing ban: storyline, workflow definitions, and quality reference.
+  assert.match(shaping, /No defensive writing anywhere in the deck.+no hedging qualifiers that dilute a claim/is);
+  assert.match(shaping, /unless the hedge is itself a sourced fact.+measured variance, a cited confidence interval, a genuinely known scope limit/is);
+  assert.match(shaping, /no boilerplate disclaimers or "本文仅代表个人观点"; no over-attribution \("许多研究表明" without a citation\)/is);
+  assert.match(quality, /no defensive writing — no unsourced hedging qualifiers \(可能\/或许\/某种程度上, "possibly\/perhaps\/somewhat\/relatively", "it is worth noting that", "值得注意的是"\)/is);
+  assert.match(quality, /State the result and its actual scope; cut the armor/is);
+});
+
+test('writing workflow bans defensive writing in every deliverable', async () => {
+  const definitions = await readFile(definitionsUrl, 'utf8');
+
+  assert.match(definitions, /No defensive writing in any deliverable: never pad a claim with hedging qualifiers that dilute it/is);
+  assert.match(definitions, /可能\/或许\/大概\/某种程度上\/在一定条件下\/通常来说/is);
+  assert.match(definitions, /"可能\/possibly\/perhaps\/somewhat\/relatively\/fairly\/quite", "it is worth noting that", "值得注意的是", "generally speaking", "to some extent"/is);
+  assert.match(definitions, /unless the hedge is itself a sourced fact \(measured variance, a cited confidence interval, a genuinely known scope limit\)/is);
+  assert.match(definitions, /Never add self-protective filler: boilerplate disclaimers, "本文仅代表个人观点", over-attribution \("许多研究表明" without a citation\), apologia for limitations nobody asked about, or a paragraph that argues against its own claim before making it/is);
+  assert.match(definitions, /State the result and its actual scope; cut the armor/is);
+  // Visual labels carry the same defensive-writing ban.
+  assert.match(definitions, /no defensive writing — no unsourced hedging qualifiers \(可能\/或许\/"possibly"\/"approximately" without a measured basis\), no disclaimer text, no over-attribution, no apologia in explanation text/is);
+  // "Specifics then sweep" pseudo-parallel summary clause ban.
+  assert.match(definitions, /No "specifics then sweep" summary clause: do not follow a concrete factual clause with a summarizing clause that elevates it to a sweeping whole/is);
+  assert.match(definitions, /这些共同构成了……\/这一切标志着……\/正是这些……成就了……/is);
+  assert.match(definitions, /"Together, these \.\.\.", "All of this marked \.\.\.", "It was these \.\.\. that \.\.\."/is);
+  assert.match(definitions, /same object, scope adverb, agent, completion verb\), forming a loose pseudo-parallel couplet/is);
+  assert.match(definitions, /documentary-narration "画面＋全称升华" two-beat sentence — a stock template of AI-written popular history/is);
 });
 
 test('Beamer quality reference records the slide-order reconciliation step', async () => {

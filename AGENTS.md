@@ -146,6 +146,8 @@ The simplified orchestration advisory is intentional and must remain. It is capa
 
 The packaged config template ships the current workstation's model roles, task agent overrides, and retry fallback chains as defaults; users may override any of them in their own OMP config. The plugin's runtime behavior stays model-agnostic.
 
+The Advisor carries a bilingual writing-norm reminder duty: whenever Main produces prose, slides, diagrams, or documents, the Advisor reminds Main once if the deliverable or its plan violates any hard writing ban — the "不是X，而是Y"/"not X, but Y" contrast-repetition construction; the "specifics then sweep" pseudo-parallel summary clause (documentary-narration "画面＋全称升华" two-beat sentence); "XX：XX" label+colon+label titles and label-colon bullet lead-ins; opening/closing one-sentence summaries; and defensive writing. The reminder is advisory: the Advisor never rewrites the deliverable and never withholds acceptance on phrasing alone.
+
 Advisory lifecycle rules:
 
 - A `tool_call` hook may observe and warn but must never return `block: true`.

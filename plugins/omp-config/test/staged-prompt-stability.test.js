@@ -22,6 +22,9 @@ test('managed prompts expose one unambiguous positive orchestration advisory', a
   assert.match(watchdog, /Main is the orchestrator\. Phases: ANALYZE -> EXECUTE -> REVIEW/u);
   assert.match(watchdog, /Main selects workflows, Skills, Agents, and delegation width freely/u);
   assert.match(watchdog, /No plugin creates a gate, router, retry, permission, or completion controller/u);
+  assert.match(watchdog, /Writing-norm reminder \(zh\/en, advisory\)/u);
+  assert.match(watchdog, /"画面＋全称升华" two-beat sentence/u);
+  assert.match(watchdog, /This is a reminder duty, not a blocking authority/u);
   assert.doesNotMatch(
     `${agents}\n${watchdog}`,
     /DISCOVER -> DECLARE -> LOAD|WORKFLOW PLAN|WORKFLOW READY|RESOURCE EXTENSION|Delegate Agent=|NOW=|THEN=|after (?:optional )?hidden thinking|All resources loaded|WRONG:|CORRECT:/iu,
