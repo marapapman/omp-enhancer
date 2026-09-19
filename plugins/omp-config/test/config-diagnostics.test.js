@@ -213,7 +213,8 @@ test('packaged advisor context assists Agent-owned orchestration without replaci
   assert.match(watchdog, /"specifics then sweep" summary clause/u);
   assert.match(watchdog, /"画面＋全称升华" two-beat sentence/u);
   assert.match(watchdog, /"XX：XX" label\+colon\+label titles and label-colon bullet lead-ins/u);
-  assert.match(watchdog, /opening\/closing one-sentence summaries; and defensive writing/u);
+  assert.match(watchdog, /opening\/closing one-sentence summaries; the "understanding promise" transition/u);
+  assert.match(watchdog, /and defensive writing \(unsourced hedging, boilerplate disclaimers, over-attribution, apologia\)/u);
   assert.match(watchdog, /This is a reminder duty, not a blocking authority/u);
   assert.doesNotMatch(watchdog, /DECISION CHECK|WORKFLOW PLAN|WORKFLOW READY|RESOURCE EXTENSION|Delegate Agent=|DISCOVER -> DECLARE -> LOAD|byte 0|writing\.pending/i);
   assert.ok(watchdog.length < 4900, `Advisor policy should stay compact, got ${watchdog.length} characters`);

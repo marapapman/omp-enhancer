@@ -24,7 +24,7 @@ This skill covers English prose. For Chinese text use `zh-format-humanizer`; the
 
 A language model defaults to the most statistically likely phrasing for the widest audience, so ordinary facts come out generalized, hedged, and inflated. Vocabulary lists change with every model release; the structural habits below persist. Every pattern is one form of the same default choice, so fix the structure, not only the vocabulary.
 
-Two rules follow. Every sentence kept must add something the reader did not already have. A tell justifies an edit in proportion to how rarely a careful writer makes it on purpose: the strongest patterns (§1–§5) justify an edit on one sighting, while a pattern marked *weak alone* needs company from other tells in the same passage.
+Two rules follow. Every sentence kept must add something the reader did not already have. Any listed tell justifies an edit on its first sighting — prefer an over-correction to a miss. Only quotations, titles, proper names, passages discussing a phrase rather than using it, text predating November 30, 2022, and details that carry the writer's voice (specific unusual details, mixed feelings, first-person choices) are exempt.
 
 ## How to work
 
@@ -51,7 +51,7 @@ If the user supplies a writing sample, match its sentence length, word choice, p
 
 **§5 Arguing with no one.** "I'm not saying", "To be clear", "This isn't about", "Don't get me wrong", "A tempting approach would be", "Some might say... but". These answer objections that appear nowhere else in the text, usually left over from an earlier draft. Remove the defense; if it carries a real claim, state the claim.
 
-### Rhythm by rule — weak alone, edit when they cluster
+### Rhythm by rule — edit on first sighting
 
 **§6 Forced triads.** Adjective triplets ("clear, concise, and compelling") and three-part examples where the meaning has two parts or five. Check that each item adds a distinct idea; merge examples, develop the strongest one, or vary the structure. Keep three real items when the meaning needs three.
 
@@ -89,7 +89,7 @@ If the user supplies a writing sample, match its sentence length, word choice, p
 
 **§21 Decorative headings.** Title case on every heading, emoji or arrows on headings and list items, a horizontal rule between every section, a top-level heading that repeats the document title, headings that contain only other headings, and skipped heading levels. Use sentence case and let the title stand once.
 
-**§22 Curly quotes.** "..." where the target format uses straight quotes. Most editors auto-curl, so this is *weak alone*.
+**§22 Curly quotes.** "..." where the target format uses straight quotes. Most editors auto-curl, so this rarely changes meaning — still fix it when the format requires straight quotes.
 
 ### Leftovers from the chat and the draft — remove outright
 
@@ -103,7 +103,7 @@ If the user supplies a writing sample, match its sentence length, word choice, p
 
 ## When not to act
 
-Act on a *weak alone* tell only when several tells share a passage. Leave a watched phrase alone inside a quotation, a title, a proper name, or a passage that discusses the phrase rather than uses it. Salutations and sign-offs on a letter predate chatbots. Text written before November 30, 2022 predates these tells. Keep the details that carry the writer's voice: a specific unusual detail, mixed feelings and unresolved tension, dated era-bound references, a first-person choice the writer can explain, and genuine asides or self-corrections.
+Act on any listed tell at its first sighting; no listed tell above is clustering-gated. Leave a watched phrase alone inside a quotation, a title, a proper name, or a passage that discusses the phrase rather than uses it. Salutations and sign-offs on a letter predate chatbots. Text written before November 30, 2022 predates these tells. Keep the details that carry the writer's voice: a specific unusual detail, mixed feelings and unresolved tension, dated era-bound references, a first-person choice the writer can explain, and genuine asides or self-corrections.
 
 ## Preservation
 

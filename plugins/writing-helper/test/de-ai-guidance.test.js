@@ -44,8 +44,8 @@ describe('de-AI guidance content contracts', () => {
     ]) {
       assert.ok(en.includes(phrase), `English humanizer should cover: ${phrase}`);
     }
-    assert.match(en, /strongest patterns \(§1–§5\) justify an edit on one sighting/u);
-    assert.match(en, /marked \*weak alone\* needs company from other tells in the same passage/u);
+    assert.match(en, /Any listed tell justifies an edit on its first sighting/u);
+    assert.doesNotMatch(en, /needs company from other tells/u);
     assert.match(en, /For Chinese text use `zh-format-humanizer`/u);
     assert.match(en, /Signs of AI writing/u);
     assert.match(en, /blader\/humanizer/u);
@@ -83,6 +83,9 @@ describe('de-AI guidance content contracts', () => {
       assert.ok(zh.includes(phrase), `Chinese humanizer should cover: ${phrase}`);
     }
     assert.match(zh, /强特征（一次出现即建议修改）/u);
+    assert.match(zh, /弱特征（一次出现即建议修改）/u);
+    assert.match(zh, /宁可误杀，不可放过/u);
+    assert.doesNotMatch(zh, /需在同段落聚集|聚集才构成修改依据/u);
     assert.match(zh, /Signs of AI writing/u);
     assert.match(zh, /blader\/humanizer/u);
     assert.match(zh, /强度分级/u);
@@ -110,8 +113,9 @@ describe('de-AI guidance content contracts', () => {
   it('exposes structural de-AI families to writers and checkers in both languages', () => {
     const writer = read('agents/writer.md');
     assert.match(writer, /## Plain Prose/u);
-    assert.match(writer, /strong tell justifies an edit on one sighting/iu);
-    assert.match(writer, /a weak tell matters only when\s+other tells cluster/iu);
+    assert.match(writer, /Any\s+listed tell justifies an edit on its first sighting/iu);
+    assert.match(writer, /prefer an over-correction\s+to a miss/iu);
+    assert.doesNotMatch(writer, /a weak tell matters only when/iu);
     assert.match(writer, /assigned de-AI Skill body/u);
     assert.doesNotMatch(writer, /format-humanizer/iu);
 
@@ -121,8 +125,8 @@ describe('de-AI guidance content contracts', () => {
     assert.match(zhWriter, /不写「希望这对你有帮助」这类聊天残留/u);
 
     const checker = read('agents/checker.md');
-    assert.match(checker, /Do AI writing tells cluster here\?/iu);
-    assert.match(checker, /weak-alone tell/iu);
+    assert.match(checker, /Do AI writing tells appear here\?/iu);
+    assert.match(checker, /first appearance; prefer an over-correction to a miss/iu);
     for (const banned of ['format-humanizer', 'writing-review', 'zh-writing-review', 'zh-writing-polish']) {
       assert.doesNotMatch(checker, new RegExp(banned, 'iu'), `checker must not advertise ${banned}`);
     }
@@ -135,17 +139,18 @@ describe('de-AI guidance content contracts', () => {
   it('wires the strength doctrine into the checker and reviewer Skills', () => {
     const checkers = read('skills/writing-checkers/SKILL.md');
     assert.match(checkers, /9\. \*\*Flag AI writing tells with evidence\.\*\*/iu);
-    assert.match(checkers, /weaker tells \(forced triads, hyphenated pairs, passive voice, curly quotes\) need company/iu);
-    assert.match(checkers, /Do AI writing tells cluster \(staged "not X but Y" contrasts/iu);
+    assert.match(checkers, /Any listed tell justifies a finding at its first sighting/u);
+    assert.doesNotMatch(checkers, /need company from other tells/iu);
+    assert.match(checkers, /Do AI writing tells appear \(staged "not X but Y" contrasts/iu);
 
     const review = read('skills/writing-review/SKILL.md');
     assert.match(review, /Treat AI writing\s+tells as fixable defects/iu);
-    assert.match(review, /Strongest tells justify an edit on one sighting; weak tells need company/iu);
+    assert.match(review, /Any listed tell justifies an edit on its first sighting/iu);
     assert.match(review, /Report which AI-tell families the revision touched/iu);
 
     const zhCheckers = read('skills/zh-writing-checkers/SKILL.md');
     assert.match(zhCheckers, /#### 结构性特征/u);
-    assert.match(zhCheckers, /强特征一次出现即报告；弱特征需在同段落与其他特征聚集才报告/u);
+    assert.match(zhCheckers, /强特征和弱特征都一次出现即报告/u);
     assert.match(zhCheckers, /否定式对偶和意义拔高是结构问题，证据明确时报告/u);
   });
 
@@ -173,7 +178,8 @@ describe('de-AI guidance content contracts', () => {
       /For English slide text, apply format-humanizer for AI-tell removal and writing-review for page-level clarity when available\./iu,
     );
     assert.match(quality, /Slide copy has its own AI tells:/iu);
-    assert.match(quality, /A weak tell matters only when it clusters with other tells on the same page\./iu);
+    assert.match(quality, /Any listed tell justifies a revision on its first sighting on the page/iu);
+    assert.doesNotMatch(quality, /matters only when it clusters/iu);
     assert.match(
       storyline,
       /For English slide text, apply `format-humanizer` for AI-tell removal and `writing-review` for page-level review when Main has declared and supplied them\./iu,

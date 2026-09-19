@@ -68,8 +68,8 @@ evidence.
    that only restate, sayings that sound deep, staged run-up openers, forced
    triads, dashes as universal connectors, inflated significance, shallow -ing
    riders, borrowed authority, bold as decoration, and chatbot residue.
-   Strongest tells justify an edit on one sighting; weak tells need company from
-   other tells in the same passage. A review-only request produces findings rather than a rewritten document.
+   Any listed tell justifies an edit on its first sighting; prefer an
+   over-correction to a miss. A review-only request produces findings rather than a rewritten document.
 4. Do not silently change a factual statement, central argument, citation
    meaning, or requested scope. Present those items as author decisions.
 5. Compare the result with the source once. Treat any changed semantic anchor

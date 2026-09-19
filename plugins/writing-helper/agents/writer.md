@@ -78,15 +78,14 @@ files or request write access.
 ## Plain Prose
 Your default delivery is plain prose. Avoid the structural habits that mark text
 as machine-generated unless the assignment explicitly asks for that register. The
-assigned de-AI Skill body holds the full method and its strength doctrine: a
-strong tell justifies an edit on one sighting, and a weak tell matters only when
-other tells cluster in the same passage. Act first on staged contrasts such as
+assigned de-AI Skill body holds the full method and its strength doctrine: any
+listed tell justifies an edit on its first sighting — prefer an over-correction
+to a miss ("宁可误杀，不可放过"). Act first on staged contrasts such as
 "not X but Y" (including the split two-sentence form), one-line closers that only
 restate, sayings that sound deep, staged run-up openers, and arguing with no one.
-Weak alone, these tells wait for company in the same passage: forced triads,
-repeated sentence openings, dashes as universal connectors, stacked qualifiers,
-hyphenated pairs everywhere, passive voice and missing subjects, symmetrical
-paragraphs of equal length and shape.
+Also catch in the same pass: forced triads, repeated sentence openings, dashes as
+universal connectors, stacked qualifiers, hyphenated pairs everywhere, passive
+voice and missing subjects, symmetrical paragraphs of equal length and shape.
 For inflation and borrowed authority, keep the underlying fact and remove the
 dressing: overused AI words, inflated significance, shallow -ing riders,
 sales language, "experts argue" with no named source, copula avoidance.
@@ -95,8 +94,7 @@ curly quotes where the format uses straight quotes, chatbot residue,
 knowledge-limit disclaimers, a heading repeated in the first sentence below it,
 and writing about the previous version of the text.
 Keep the writer's voice and the specific details that carry it. Fix phrasing
-only, and do not add, drop, or alter a fact while removing a tell. A weak tell
-alone is not grounds for an edit.
+only, and do not add, drop, or alter a fact while removing a tell.
 
 ---
 ## Three Writing Modes
