@@ -7,7 +7,7 @@
 - `assets/WORKFLOW_CATALOG.md` is generated from `scripts/workflow-definitions.js` and contains the three advisory workflow cards for catalog v43.
 - `skills/omp-enhancer-workflows/` publishes the compact domain index and on-demand `writing`, `research`, and `visual` reference cards.
 - `skills/latex-beamer-slides/` and `skills/slides-storyline/` define the staged Beamer deck workflow. `skills/beamer-to-powerpoint/` handles conversion only when the user supplies an exact command.
-- `skills/frontend-design/`, `skills/canvas-design/`, and `skills/docx/` are adjacent visual or document methods, not native PPTX generators.
+- `skills/frontend-design/` and `skills/canvas-design/` are adjacent visual methods, not native PPTX generators. `skills/docx/` drives the officecli-backed Office flow: `.docx`/`.xlsx`/`.pptx` create, read, edit, validate, and rendered preview through a single external binary.
 - `assets/AGENTS.md` and `assets/WATCHDOG.yml` contain compact advisory context. They do not import the full workflow catalog or create runtime gates.
 - `assets/config.yml` and `assets/mcp.json` are templates. `config.yml` ships model role defaults; model selection remains overridable by OMP and the user.
 - `hook-templates/` contains optional helpers and is not auto-discovered.
@@ -23,6 +23,24 @@ Beamer is a `writing` format overlay, not the `visual` workflow.
 4. **Layout refinement.** After basic-layout confirmation, use the existing current-revision visual evidence chain: one advisory precheck owned by Main or task, task layout without changing confirmed content, task integration and fresh rendering, and a single read-only visual review of the fresh renders. Supported findings may receive the existing bounded fix and fresh-review pass; no automatic repair loop is created.
 
 PowerPoint conversion is conditional. The user must provide the exact conversion command. The plugin does not choose LibreOffice, Pandoc, an online converter, or another replacement, and it does not claim editability or visual fidelity without checking the output.
+
+## External dependencies
+
+Office document skills (`.docx`/`.xlsx`/`.pptx` via the `docx` skill) require the
+[officecli](https://github.com/iOfficeAI/OfficeCLI) binary. OMP's plugin install
+does not run npm lifecycle scripts, so dependency installation is explicit:
+
+```bash
+npm run setup:deps -w plugins/omp-config   # repo checkout
+bash <installed-plugin>/scripts/install.sh # installed plugin directory
+```
+
+The script is idempotent: it checks the environment, installs what is missing,
+and exits 0 when everything is present. `--check` reports without installing.
+At session start the plugin probes `officecli --version` (read-only; no install,
+no writes) and warns once when it is missing
+(`OMP_ENHANCER_DISABLE_CONFIG_AUTO_SYNC=1` silences it), and
+`omp_config_dependency_check` reports the same state on demand.
 
 ## Runtime boundaries
 

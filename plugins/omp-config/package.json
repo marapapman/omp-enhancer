@@ -1,6 +1,6 @@
 {
   "name": "omp-config",
-  "version": "0.1.87",
+  "version": "0.1.88",
   "private": true,
   "type": "module",
   "description": "Optional OMP workflow references, config assets, notify-only hooks, opt-in hook templates, and diagnostics.",
@@ -16,11 +16,13 @@
     "hooks",
     "hook-templates",
     "assets",
+    "scripts",
     "package.json",
     "README.md"
   ],
   "scripts": {
     "test": "node --test test/*.test.js",
+    "setup:deps": "bash scripts/install.sh",
     "pack:dry": "npm pack --dry-run"
   },
   "omp": {

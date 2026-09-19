@@ -27,7 +27,7 @@ plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md
 plugins/omp-config/skills/omp-enhancer-workflows/references/*.md
 ```
 
-`writing-helper` 和 `omp-fact-checker` 是独立插件；它们不依赖 workflow generator 或其他插件源码。PPT/视觉 Skills 由 `omp-config` 打包，当前包括 `latex-beamer-slides`、`beamer-to-powerpoint`、`slides-storyline`、`frontend-design`、`canvas-design` 和 `docx`；中文幻灯片文字使用 `writing-helper` 提供的 `plain-chinese-writing`、`zh-format-humanizer`、`zh-writing-review`，需要实际润色时再使用 `zh-writing-polish`。
+`writing-helper` 和 `omp-fact-checker` 是独立插件；它们不依赖 workflow generator 或其他插件源码。PPT/视觉 Skills 由 `omp-config` 打包，当前包括 `latex-beamer-slides`、`beamer-to-powerpoint`、`slides-storyline`、`frontend-design`、`canvas-design` 和 `docx`（Office 文档统一走 [officecli](https://github.com/iOfficeAI/OfficeCLI) 单二进制：`.docx`/`.xlsx`/`.pptx` 的创建、编辑、校验与渲染）；中文幻灯片文字使用 `writing-helper` 提供的 `plain-chinese-writing`、`zh-format-humanizer`、`zh-writing-review`，需要实际润色时再使用 `zh-writing-polish`。
 
 ## Definition 结构
 

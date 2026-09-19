@@ -13,14 +13,16 @@ These steps are the required execution order for this domain. The plugin provide
 1. Identify target language (zh/en) and format (plain/LaTeX/Markdown/Beamer/Word).
 2. Load matching language and format skills.
 3. Draft or revise via writer/zh-writer for substantial work, or directly for minor edits.
-4. For new Beamer decks, discuss and capture each page in a Markdown content plan whose titles avoid the "XX：XX" label+colon+label pattern and read as coherent prose in deck order, confirm it with the user, reconcile the slide order with a separate task, and only then translate the plan into Beamer and begin layout.
-5. Check via checker/zh-checker for substantial work; Main checks minor edits directly.
-6. Deliver with preservation and consistency verification.
+4. For Word output, apply the approved content through officecli (docx skill) and verify with officecli validate and a rendered view.
+5. For new Beamer decks, discuss and capture each page in a Markdown content plan whose titles avoid the "XX：XX" label+colon+label pattern and read as coherent prose in deck order, confirm it with the user, reconcile the slide order with a separate task, and only then translate the plan into Beamer and begin layout.
+6. Check via checker/zh-checker for substantial work; Main checks minor edits directly.
+7. Deliver with preservation and consistency verification.
 
 ## Scope notes
 
 - Language selection: use zh skills for Chinese prose, en skills for English; detect from target body, not instruction language.
 - LaTeX/Beamer/Word/Markdown are format overlays, not separate workflows; select matching format skills.
+- Word (.docx) documents are produced and edited through officecli (single binary, no Office install): create/draft content via writer/zh-writer, apply it with officecli add/set, then verify with officecli validate and view issues, and render view html/screenshot for visual confirmation before delivery. officecli also covers .xlsx and .pptx, and its merge command fills {{key}} templates from JSON.
 - Main chooses whether to delegate writing or handle it directly based on scope.
 - For new Beamer decks, start with a text-only Markdown content plan, discuss and confirm each page with the user, then launch a separate task to reconcile the slide order on the plan (no content overlap, semantically coherent modules, logical overall progression; page titles avoid the "XX：XX" label+colon+label pattern and all titles read as coherent prose in deck order; crossings that reordering or regrouping cannot fix return to Markdown reconfirmation) before translating it into Beamer and beginning visual authoring and basic layout. The Markdown content plan is the canonical content source and the Beamer .tex files are derived layout artifacts; content changes go to Markdown first, require user reconfirmation, and then regenerate Beamer before layout resumes.
 - Chinese slide copy uses plain-chinese-writing for natural sentences, zh-format-humanizer for AI-like phrasing, and zh-writing-review for page-level clarity; English slide copy uses format-humanizer for AI-tell removal and writing-review for page-level review; use zh-writing-polish only for actual polishing and never replace body prose with keyword or phrase lists.

@@ -42,7 +42,7 @@ marketplace extension tools 默认 opt-in；四个 `fact_check_*` 管线工具�
 
 Writing 域根据目标正文语言选择中文或英文 Skill，根据目标格式选择 Markdown、LaTeX、Beamer 或 Word Skill。`writer`/`zh-writer` 交付 proposal，`checker`/`zh-checker` 交付只读 report；Main 独自决定并执行任何获授权的文件修改。
 
-PPT 相关能力由 `omp-config` 打包，包括 `latex-beamer-slides`、`beamer-to-powerpoint`、`slides-storyline`、`frontend-design`、`canvas-design` 和 `docx`。PowerPoint 转换只使用用户提供的具体转换命令，并验证生成的 artifact；不自动发布或覆盖用户文件。
+PPT 相关能力由 `omp-config` 打包，包括 `latex-beamer-slides`、`beamer-to-powerpoint`、`slides-storyline`、`frontend-design`、`canvas-design` 和 `docx`。PowerPoint 转换只使用用户提供的具体转换命令，并验证生成的 artifact；不自动发布或覆盖用户文件。Office 文档（`.docx`/`.xlsx`/`.pptx`）的创建、编辑、校验和渲染统一通过 [officecli](https://github.com/iOfficeAI/OfficeCLI) 单二进制完成，`docx` skill 提供其使用契约。
 
 Beamer 保持为 writing 格式 overlay，不进入 visual 卡片。新 deck 先以分段、逐页讨论的纯文字版开始，并将逐页内容持久化为 Markdown content plan；Markdown content plan is the canonical content source, and Beamer .tex files are derived layout artifacts. Content changes go to Markdown first, are discussed and reconfirmed with the user, then regenerate Beamer; never edit .tex to settle unresolved content during layout. 用户确认每页内容后，由一个独立 task 在 Markdown content plan 上先做页序审查（消除内容交叉、保持内容模块语义一致、整体顺序逻辑有序），审查通过并经用户确认后才进入逐页配图和基础排版；用户确认基础排版后，再进入现有视觉精修链。A single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before the task layout pass；findings are advisory only and inform the normal task pass，不产生 verdict 或 repair loop。Task then integrates and renders the final revision, which Main reviews read-only as the single review owner (a task that did not produce the revision may review instead)。Main 不因该预检获得 compile、render、edit 或 reconcile ownership。
 

@@ -421,6 +421,7 @@ test('index registers doctor assets and plan tools safely', async () => {
   assert.equal(pi.label, 'OMP Config');
   assert.deepEqual(registered.map((tool) => tool.name), [
     'omp_config_doctor',
+    'omp_config_dependency_check',
     'omp_config_sync_workflow_context',
     'omp_config_assets',
     'omp_config_plan',

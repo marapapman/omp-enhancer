@@ -1,4 +1,5 @@
 import { runConfigDoctor } from './src/doctor.js';
+import { runDependencyCheck, formatDependencyCheckReport } from './src/dependency-check.js';
 import { listAssets } from './src/asset-index.js';
 import { formatDoctorReport, formatPlanReport, formatWorkflowContextSyncReport } from './src/report.js';
 import { resolvePluginRoot } from './src/plugin-root.js';
@@ -22,6 +23,7 @@ function pluginRootFromParams(params, ctx) {
 }
 
 export { runConfigDoctor } from './src/doctor.js';
+export { runDependencyCheck, formatDependencyCheckReport } from './src/dependency-check.js';
 export { listAssets } from './src/asset-index.js';
 export { syncWorkflowContext } from './src/workflow-context-sync.js';
 
@@ -88,6 +90,28 @@ export default function registerOmpConfig(pi) {
       const result = await runConfigDoctor(pluginRootFromParams(params, ctx));
       return {
         content: [textContent(formatDoctorReport(result))],
+        details: result,
+        isError: false,
+      };
+    }),
+  });
+
+  pi.registerTool({
+    name: 'omp_config_dependency_check',
+    label: 'OMP Config Dependency Check',
+    description: 'Check external dependencies required by omp-config Office workflows (officecli binary). Read-only probe; never installs or blocks.',
+    defaultInactive: true,
+    approval: 'read',
+    promptSnippet: 'Check external dependencies for omp-config Office workflows.',
+    promptGuidelines: [
+      'Read-only probe of the officecli binary; it never installs anything and never blocks.',
+      'When dependencies are missing, point the user at npm run setup:deps -w plugins/omp-config or scripts/install.sh.',
+    ],
+    parameters,
+    execute: withToolErrorHandling('omp_config_dependency_check', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
+      const result = await runDependencyCheck(pluginRootFromParams(params, ctx));
+      return {
+        content: [textContent(formatDependencyCheckReport(result))],
         details: result,
         isError: false,
       };
@@ -179,6 +203,27 @@ export default function registerOmpConfig(pi) {
       await syncWorkflowContext({ apply: true });
     } catch {
       // Non-fatal: plugin lifecycle must not break on a sync failure.
+    }
+    return undefined;
+  });
+
+  // Session-start dependency notice: remind once per session when external
+  // Office dependencies (officecli) are missing. This runs a read-only
+  // `officecli --version` probe (no install, no writes). Advisory only —
+  // never blocks or continues the host lifecycle; installation stays an
+  // explicit user action.
+  pi.on?.('session_start', async (_event, ctx) => {
+    if (process.env.OMP_ENHANCER_DISABLE_CONFIG_AUTO_SYNC) return undefined;
+    try {
+      const check = await runDependencyCheck();
+      if (!check.ok) {
+        await ctx?.ui?.notify?.(
+          `omp-config: ${check.summary}. ${check.installHint}`,
+          'warning',
+        );
+      }
+    } catch {
+      // Non-fatal: plugin lifecycle must not break on a check failure.
     }
     return undefined;
   });
