@@ -151,12 +151,15 @@ git push origin main
 git rev-parse HEAD
 git ls-remote origin refs/heads/main
 
-cp .omp-plugin/marketplace.json ~/.omp/plugins/cache/marketplaces/omp-enhancer/marketplace.json
-cp .omp-plugin/marketplace.json ~/.omp/plugins/cache/marketplaces/omp-enhancer/.omp-plugin/marketplace.json
-omp plugin discover
+omp plugin marketplace update omp-enhancer
+git -C ~/.omp/plugins/cache/marketplaces/omp-enhancer log --oneline -1   # 必须显示刚 push 的 release 提交
 omp plugin upgrade <changed-plugin>@omp-enhancer
 omp plugin list
+diff -q plugins/<changed-plugin>/<changed-asset> \
+  ~/.omp/plugins/cache/plugins/*___<changed-plugin>___<new-version>/<changed-asset>
 ```
+
+`omp plugin marketplace update` 会 fetch 并 reset 缓存的 marketplace clone 到远端默认分支，使缓存里的插件源码树（不只是 manifest）与远端一致。不要只手工拷贝 `.omp-plugin/marketplace.json` 到缓存：那只会同步目录里的版本号，缓存中的插件源码树仍是旧的，`omp plugin upgrade` 会从旧源码树安装却报新版本号。升级后必须 diff 校验安装产物，而不是只看 `omp plugin list` 的版本号。
 
 Config context 需要显式同步时，在新 session 中启用 Config tools，先调用 `omp_config_sync_workflow_context` 的 `apply=false`，审查后再决定是否使用 `apply=true`。
 

@@ -274,16 +274,23 @@ Use `--plugin all` only when every plugin changed. The marketplace tracks GitHub
 
 Commit, push, marketplace refresh, and local plugin upgrade require explicit user authorization. Verify the remote commit before upgrading an installation that tracks the marketplace.
 
-Local OMP plugin upgrade must use `omp plugin upgrade <name>@omp-enhancer` against the marketplace. After `npm run release --apply`, sync the updated marketplace manifest to the OMP cache before upgrading:
+Local OMP plugin upgrade must use `omp plugin upgrade <name>@omp-enhancer` against the marketplace. After `npm run release --apply`, commit and push the release, then refresh the marketplace clone and upgrade:
 
 ```bash
-cp .omp-plugin/marketplace.json ~/.omp/plugins/cache/marketplaces/omp-enhancer/marketplace.json
-cp .omp-plugin/marketplace.json ~/.omp/plugins/cache/marketplaces/omp-enhancer/.omp-plugin/marketplace.json
-omp plugin discover
+git push origin main
+omp plugin marketplace update omp-enhancer
+git -C ~/.omp/plugins/cache/marketplaces/omp-enhancer log --oneline -1   # must show the pushed release commit
 omp plugin upgrade <name>@omp-enhancer
+omp plugin list
 ```
 
-Never use `omp plugin link` to point at a local repo checkout — that bypasses the marketplace and masks version drift between the repository source and the installed runtime. After a successful upgrade, verify the installed version with `omp plugin list`.
+`omp plugin marketplace update` fetches and resets the cached marketplace clone to the remote default branch, so the cloned plugin payload (not just the manifest) is current. Do not rely on manually copying `.omp-plugin/marketplace.json` into the cache: that syncs the catalog version number but leaves the cached plugin source tree stale, and `omp plugin upgrade` installs from that stale tree while still reporting the new version. `marketplace update` may leave a scratch `marketplace.json` at the clone root (untracked); leave it or remove it — upgrade only requires the managed `.omp-plugin/marketplace.json`. After upgrading, verify the installed payload, not just the version:
+
+```bash
+diff -q plugins/<name>/assets/<changed-asset> ~/.omp/plugins/cache/plugins/*___<name>___<version>/<asset-path>
+```
+
+Never use `omp plugin link` to point at a local repo checkout — that bypasses the marketplace and masks version drift between the repository source and the installed runtime. After a successful upgrade, verify the installed version with `omp plugin list` and diff a changed asset against the installed cache (see above); `omp plugin list` can report the new version while installed content is stale if the marketplace clone was not refreshed.
 
 ## Documentation boundaries
 

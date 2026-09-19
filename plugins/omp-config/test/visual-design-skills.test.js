@@ -19,6 +19,7 @@ test('frontend visual work uses task ownership, a current render matrix, and a s
   assert.match(skill, /one revision identifier.+never mix.+stale.+evidence/is);
   assert.match(skill, /no read-only visual reviewer is available.+missing independent current-revision visual evidence/is);
   assert.match(skill, /source checks.+static checks.+self-review by the producing agent.+not independent visual evidence/is);
+  assert.match(skill, /no "不是X，而是Y" contrast-repetition construction or its English equivalents \("not X, but Y"\); no opening or closing one-sentence summary; and no "XX：XX" label\+colon\+label titles/is);
   assert.doesNotMatch(skill, /Main (?:reconciles|integrates|binds|runs|renders|modifies) the (?:designer|visual|current)/i);
   assert.doesNotMatch(skill, /designer/i);
   assertAdvisoryOnly(skill);
@@ -37,6 +38,7 @@ test('canvas visual work uses task ownership, current exports, and a single read
   assert.match(skill, /one revision identifier.+never mix.+stale.+evidence/is);
   assert.match(skill, /no read-only visual reviewer is available.+missing independent current-revision visual evidence/is);
   assert.match(skill, /source checks.+static checks.+self-review by the producing agent.+not independent visual evidence/is);
+  assert.match(skill, /no "不是X，而是Y" contrast-repetition construction or its English equivalents \("not X, but Y"\); no opening or closing one-sentence summary that restates what the artifact shows; and no "XX：XX" label\+colon\+label headlines/is);
   assert.doesNotMatch(skill, /Main (?:reconciles|integrates|binds|runs|renders|exports|modifies) the (?:designer|visual|current)/i);
   assert.doesNotMatch(skill, /designer/i);
   assertAdvisoryOnly(skill);

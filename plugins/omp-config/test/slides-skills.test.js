@@ -295,6 +295,9 @@ test('Beamer generation reconciles slide order between text confirmation and vis
   assert.match(generation, /content overlap between slides/is);
   assert.match(generation, /semantically coherent with one main job per slide/is);
   assert.match(generation, /logical progression from context to conclusion/is);
+  assert.match(generation, /no page title uses the "XX：XX" two-part label pattern/is);
+  assert.match(generation, /reading all page titles in deck order forms a coherent, grammatical narrative/is);
+  assert.match(generation, /Title and body violations are content findings that return to the Markdown content plan with the user, never \.tex edits/is);
   assert.match(generation, /proposed reordering with per-move justification/is);
   assert.match(generation, /Never reorder frames by editing \.tex directly/is);
   assert.match(generation, /Only after the slide order is reconciled, generate the deck/is);
@@ -307,8 +310,58 @@ test('slides storyline defines the slide-order reconciliation stage', async () =
   assert.match(reconciliation, /separate `task` to reconcile the slide order on the Markdown content plan/is);
   assert.match(reconciliation, /content overlap between slides/is);
   assert.match(reconciliation, /every slide keeps one main job/is);
+  assert.match(reconciliation, /no page title uses the "XX：XX" two-part label pattern/is);
+  assert.match(reconciliation, /reading all titles in deck order forms a coherent, grammatical narrative/is);
+  assert.match(reconciliation, /A title or body violation is a content finding.+with the user, not a \.tex edit/is);
   assert.match(reconciliation, /before any Beamer frame is generated/is);
   assert.match(reconciliation, /never the \.tex files/is);
+});
+
+test('slides storyline defines the two title phrasing rules in story shaping and the page draft', async () => {
+  const skill = await readFile(storylineSkillUrl, 'utf8');
+  const shaping = markdownSection(skill, 'Shape the story');
+  const draft = markdownSection(skill, 'Text-only page draft');
+
+  assert.match(shaping, /Titles must completely avoid the "XX：XX" pattern/is);
+  assert.match(shaping, /full-width `：` or ASCII `:`/is);
+  assert.match(shaping, /forbids the "第X部分：标题" and "01 \/ 主题" numbering styles/is);
+  assert.match(shaping, /Titles must read as continuous prose in sequence/is);
+  assert.match(shaping, /reading the titles aloud in order/is);
+  assert.match(draft, /no "XX：XX" two-part label pattern, and the full title sequence reads as coherent prose in deck order/is);
+});
+
+test('slide content bans contrast-repetition constructions and one-sentence summaries', async () => {
+  const [storyline, beamer, quality] = await Promise.all([
+    readFile(storylineSkillUrl, 'utf8'),
+    readFile(slidesSkillUrl, 'utf8'),
+    readFile(qualityReferenceUrl, 'utf8'),
+  ]);
+  const shaping = markdownSection(storyline, 'Shape the story');
+  const draft = markdownSection(storyline, 'Text-only page draft');
+  const reconciliation = markdownSection(storyline, 'Slide-order reconciliation');
+  const generation = markdownSection(beamer, 'Generate a new deck');
+
+  // Contrast-repetition ban ("不是X，而是Y" / "not X, but Y") everywhere.
+  assert.match(shaping, /Completely ban contrast-repetition constructions everywhere in the deck.+不是X，而是Y/is);
+  assert.match(shaping, /"not X, but Y", "not just X, it's Y"/is);
+  assert.match(shaping, /Never build a bullet list as staged contrasts/is);
+  // One-sentence summary ban at openings and closings.
+  assert.match(shaping, /No one-sentence summary at the opening or closing of a page or of the whole deck/is);
+  assert.match(shaping, /一句话总结/is);
+  assert.match(shaping, /In one sentence/is);
+  // Body copy follows the same bans; label-colon lead-ins in bullets are banned too.
+  assert.match(draft, /bullets and captions must not open with a label-colon lead-in \("方法：…", "结果：…", "Method: …"\)/is);
+  assert.match(draft, /"不是X，而是Y" contrast-repetition constructions and opening\/closing one-sentence summaries/is);
+  // Reconciliation checks the body bans as content findings.
+  assert.match(reconciliation, /no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction and no opening\/closing one-sentence summary anywhere in page text/is);
+  assert.match(reconciliation, /A title or body violation is a content finding/is);
+  // Beamer generation and quality reference carry the same bans.
+  assert.match(generation, /Body copy obeys the same phrasing bans as titles.+no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction.+no page opens or closes with a one-sentence summary/is);
+  assert.match(generation, /Title and body violations are content findings that return to the Markdown content plan with the user, never \.tex edits/is);
+  assert.match(quality, /no "不是X，而是Y" contrast-repetition construction or its English equivalents \("not X, but Y", "not just X, it's Y"\)/is);
+  assert.match(quality, /no opening or closing one-sentence summary \("一句话总结", "In one sentence", "The takeaway"\)/is);
+  assert.match(quality, /no label-colon bullet or caption lead-ins, no "不是X，而是Y"\/"not X, but Y" contrast-repetition constructions, and no opening or closing one-sentence summaries/is);
+  assert.match(quality, /A title or body violation is a content finding/is);
 });
 
 test('Beamer quality reference records the slide-order reconciliation step', async () => {
@@ -316,6 +369,9 @@ test('Beamer quality reference records the slide-order reconciliation step', asy
 
   assert.match(reference, /a separate `task` reconciles the slide order on the Markdown content plan/is);
   assert.match(reference, /content overlap between slides.+semantically coherent.+logical overall progression/is);
+  assert.match(reference, /no page title uses the "XX：XX" two-part label pattern.+full-width `：` or ASCII `:`/is);
+  assert.match(reference, /reading all page titles in deck order forms a coherent, grammatical narrative/is);
+  assert.match(reference, /A title or body violation is a content finding.+never a direct \.tex edit/is);
   assert.match(reference, /Reordering edits only the Markdown content plan, never the \.tex files/is);
 });
 

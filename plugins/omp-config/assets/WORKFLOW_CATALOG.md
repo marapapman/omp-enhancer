@@ -12,7 +12,7 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
   1. Identify target language (zh/en) and format (plain/LaTeX/Markdown/Beamer/Word).
   2. Load matching language and format skills.
   3. Draft or revise via writer/zh-writer for substantial work, or directly for minor edits.
-  4. For new Beamer decks, discuss and capture each page in a Markdown content plan, confirm it with the user, reconcile the slide order with a separate task, and only then translate the plan into Beamer and begin layout.
+  4. For new Beamer decks, discuss and capture each page in a Markdown content plan whose titles avoid the "XX：XX" label+colon+label pattern and read as coherent prose in deck order, confirm it with the user, reconcile the slide order with a separate task, and only then translate the plan into Beamer and begin layout.
   5. Check via checker/zh-checker for substantial work; Main checks minor edits directly.
   6. Deliver with preservation and consistency verification.
 
