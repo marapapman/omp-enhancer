@@ -107,7 +107,7 @@ Review **in this exact order**. Each dimension builds on the previous one. Do no
 - Are all terms defined when first introduced? No undefined jargon or acronyms?
 - Are references accurate? Citations match the claims they support?
 - Is the language precise? No ambiguous phrasing, weasel words, or false precision?
-- Do AI writing tells appear here? Staged "not X but Y" contrasts, one-line closers, forced triads, dashes, bold labels, inflated significance, or chatbot residue signal templated prose; flag the passage with its evidence.
+- Do AI writing tells appear here? Staged "not X but Y" contrasts, one-line closers, forced triads, dashes, bold labels, inflated significance, or chatbot residue signal templated prose; so do "specifics then sweep" clauses (a concrete fact followed by a sweeping abstraction that adds no new fact), abstract-restatement echoes (a concrete fact restated as a quoted or nominalized concept one level up), announcer transitions ("The real question is ..."), and rhythm-matched paired-phrase closers ("faster, cheaper, better") — flag the passage with its evidence.
 - Any listed tell (a forced triad, a repeated sentence opening, a dash, a stacked qualifier) merits a finding at its first appearance; prefer an over-correction to a miss.
 
 ### 6. eval

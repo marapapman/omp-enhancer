@@ -14,8 +14,9 @@ Advisory reference. Main orchestrates freely through ANALYZE -> EXECUTE -> REVIE
   3. Draft or revise via writer/zh-writer for substantial work, or directly for minor edits.
   4. For Word output, apply the approved content through officecli (docx skill) and verify with officecli validate and a rendered view.
   5. For new Beamer decks, discuss and capture each page in a Markdown content plan whose titles avoid the "XX：XX" label+colon+label pattern and read as coherent prose in deck order, confirm it with the user, reconcile the slide order with a separate task, and only then translate the plan into Beamer and begin layout.
-  6. Check via checker/zh-checker for substantial work; Main checks minor edits directly.
-  7. Deliver with preservation and consistency verification.
+  6. For substantial de-AI work, apply the format-humanizer/zh-format-humanizer rules one at a time before checking: a scan task inventories the tell families present, then one independent task per found family runs strictly sequentially — Main verifies each task's semantic-anchor check and hands its output to the next task; no mixed single rewriting pass. A single direct pass is allowed only when the scan found exactly one tell family.
+  7. Check via checker/zh-checker for substantial work; Main checks minor edits directly.
+  8. Deliver with preservation and consistency verification.
 
 ## `research`
 

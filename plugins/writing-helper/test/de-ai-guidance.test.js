@@ -30,16 +30,19 @@ describe('de-AI guidance content contracts', () => {
       '§9 Stacked qualifiers',
       '§13 Overused AI words',
       '§14 Inflated significance',
-      '§15 Shallow -ing riders',
-      '§16 Sales language',
-      '§17 Borrowed authority',
-      '§19 Copula avoidance',
-      '§20 Bold as decoration',
-      '§21 Decorative headings',
-      '§23 Chatbot residue',
-      '§24 Knowledge-limit disclaimers and guesses',
-      '§25 A heading repeated in the first sentence',
-      '§26 Writing about the previous version',
+      '§15 Abstract-restatement echo',
+      '§16 Announcer transitions',
+      '§17 Rhythm-matched paired-phrase closer',
+      '§18 Shallow -ing riders',
+      '§19 Sales language',
+      '§20 Borrowed authority',
+      '§22 Copula avoidance',
+      '§23 Bold as decoration',
+      '§24 Decorative headings',
+      '§26 Chatbot residue',
+      '§27 Knowledge-limit disclaimers and guesses',
+      '§28 A heading repeated in the first sentence',
+      '§29 Writing about the previous version',
       'When not to act',
     ]) {
       assert.ok(en.includes(phrase), `English humanizer should cover: ${phrase}`);
@@ -61,6 +64,10 @@ describe('de-AI guidance content contracts', () => {
       '铺垫式开场',
       '与不存在的对手辩论',
       '意义拔高',
+      '理解承诺句',
+      '抽象复述回声',
+      '宣布式过渡',
+      '节奏对仗收尾',
       '三连排比',
       '重复句首',
       '叠加限定',
@@ -119,6 +126,22 @@ describe('de-AI guidance content contracts', () => {
     assert.match(writer, /assigned de-AI Skill body/u);
     assert.doesNotMatch(writer, /format-humanizer/iu);
 
+    const enHumanizer = read('skills/format-humanizer/SKILL.md');
+    assert.match(enHumanizer, /One task owns one tell family/iu);
+    assert.match(enHumanizer, /Scan task/iu);
+    assert.match(enHumanizer, /strictly sequential/iu);
+    assert.match(enHumanizer, /semantic-anchor check/iu);
+    assert.match(enHumanizer, /exactly one tell family/iu);
+    assert.doesNotMatch(enHumanizer, /one focused pass/iu);
+
+    const zhHumanizer = read('skills/zh-format-humanizer/SKILL.md');
+    assert.match(zhHumanizer, /一类特征一个独立任务/u);
+    assert.match(zhHumanizer, /扫描任务/u);
+    assert.match(zhHumanizer, /严格串行/u);
+    assert.match(zhHumanizer, /语义锚点核查/u);
+    assert.match(zhHumanizer, /仅命中一个特征家族/u);
+    assert.doesNotMatch(zhHumanizer, /一次聚焦处理/u);
+
     const zhWriter = read('agents/zh-writer.md');
     assert.match(zhWriter, /不写否定式对偶/u);
     assert.match(zhWriter, /不写「彰显了」「见证了」这类意义拔高/u);
@@ -167,6 +190,16 @@ describe('de-AI guidance content contracts', () => {
     const writingCard = workflowDefinitions.find(({ id }) => id === 'writing');
     assert.ok(writingCard.skills.includes('format-humanizer'), 'writing card must offer the English de-AI method');
     assert.ok(writingCard.skills.includes('zh-format-humanizer'), 'writing card must offer the Chinese de-AI method');
+    const deAiFlowStepIndex = writingCard.suggestedFlow.findIndex((step) => /de-AI/.test(step));
+    const checkerStepIndex = writingCard.suggestedFlow.findIndex((step) => /Check via checker/.test(step));
+    assert.ok(deAiFlowStepIndex !== -1, 'writing card flow must carry an explicit per-rule de-AI step');
+    assert.ok(deAiFlowStepIndex < checkerStepIndex, 'de-AI per-family chain must run before the checker step');
+    const deAiFlowStep = writingCard.suggestedFlow[deAiFlowStepIndex];
+    assert.match(deAiFlowStep, /scan task inventories the tell families present/iu);
+    assert.match(deAiFlowStep, /strictly sequentially/iu);
+    assert.match(deAiFlowStep, /semantic-anchor check/iu);
+    assert.match(deAiFlowStep, /no mixed single rewriting pass/iu);
+    assert.match(deAiFlowStep, /exactly one tell family/iu);
     const writing = read('skills/writing-review/SKILL.md');
 
     const beamer = readConfig('skills/latex-beamer-slides/SKILL.md');
@@ -190,7 +223,7 @@ describe('de-AI guidance content contracts', () => {
     );
     assert.match(
       writing,
-      /Treat AI writing\s+tells as fixable defects[\s\S]{0,600}chatbot residue\./iu,
+      /Treat AI writing\s+tells as fixable defects[\s\S]{0,600}rhythm-matched paired-phrase closers/iu,
     );
   });
 

@@ -67,7 +67,10 @@ evidence.
    tells as fixable defects: staged "not X but Y" contrasts, one-line closers
    that only restate, sayings that sound deep, staged run-up openers, forced
    triads, dashes as universal connectors, inflated significance, shallow -ing
-   riders, borrowed authority, bold as decoration, and chatbot residue.
+   riders, borrowed authority, bold as decoration, chatbot residue,
+   abstract-restatement echoes (a fact restated as a quoted or nominalized
+   concept one level up), announcer transitions ("The real question is ..."),
+   and rhythm-matched paired-phrase closers ("faster, cheaper, better").
    Any listed tell justifies an edit on its first sighting; prefer an
    over-correction to a miss. A review-only request produces findings rather than a rewritten document.
 4. Do not silently change a factual statement, central argument, citation

@@ -24,6 +24,9 @@ test('managed prompts expose one unambiguous positive orchestration advisory', a
   assert.match(watchdog, /No plugin creates a gate, router, retry, permission, or completion controller/u);
   assert.match(watchdog, /Writing-norm reminder \(zh\/en, advisory\)/u);
   assert.match(watchdog, /"画面＋全称升华" two-beat sentence/u);
+  assert.match(watchdog, /the abstract-restatement echo/u);
+  assert.match(watchdog, /the announcer transition/u);
+  assert.match(watchdog, /the rhythm-matched paired-phrase closer/u);
   assert.match(watchdog, /This is a reminder duty, not a blocking authority/u);
   assert.doesNotMatch(
     `${agents}\n${watchdog}`,

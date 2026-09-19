@@ -6,9 +6,10 @@ description: "Remove AI writing traces — detect and replace structural AI tell
 # Format Humanizer
 
 Scan a document for AI-generated writing patterns and produce authorized,
-meaning-preserving replacements in one focused pass. Use one-at-a-time
-confirmation only when the user explicitly requests interactive review or a
-replacement would alter meaning.
+meaning-preserving replacements. For substantial documents the rules are
+applied one tell family at a time by independent tasks — never one mixed
+rewriting pass. Use one-at-a-time confirmation only when the user explicitly
+requests interactive review or a replacement would alter meaning.
 
 This writer child is always proposal-only. Return the complete revised text,
 using SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer.
@@ -28,10 +29,34 @@ Two rules follow. Every sentence kept must add something the reader did not alre
 
 ## How to work
 
-1. **Scan.** Read the whole document once and mark every tell, strongest patterns first. Look at paragraph shape, list shape, and headings, not only sentences: a contrast split across two sentences, three parallel examples, or the same closer after every section is the same tell at a larger scale.
-2. **Draft the rewrite.** Keep every supported claim. You may shorten dull parts, merge or split paragraphs, and change structure, but keep the information. Do not add a fact, name, number, date, quote, or citation that is not in the source. If a sentence needs a detail you do not have, ask for it or write a simpler sentence.
-3. **Check the draft.** Read it once and ask what still sounds machine-made, and whether the rewrite added or dropped any fact, number, date, quote, citation, or claim. Then search for the five tells that most often survive a rewrite: a not-X-but-Y contrast, a one-line closer, a dash, a triad, a bold label.
-4. **Deliver.** State each point naturally instead of patching flagged phrases one at a time. Vary sentence length; real writing alternates short and long.
+One task owns one tell family. A substantial de-AI run is a chain of
+single-family tasks, not one pass that applies every rule at once.
+
+1. **Scan task.** Read the whole document once and produce a family
+   inventory: which tell families actually appear, with one cited example
+   each, strongest first. Look at paragraph shape, list shape, and headings,
+   not only sentences: a contrast split across two sentences, three parallel
+   examples, or the same closer after every section is the same tell at a
+   larger scale. Families with no findings are skipped later.
+2. **Per-family tasks, strictly sequential.** Main dispatches one task per
+   found family in the scan's order. Task N+1 is dispatched only after task N
+   returns and Main verifies its semantic-anchor check: hedges, modality,
+   scope, negation, causal direction, numbers, units, quotes, and citations
+   unchanged; no fact added or dropped. Each task handles only its one family
+   on the full current text (which includes all earlier tasks' accepted
+   edits), keeps every supported claim, and may shorten dull parts, merge or
+   split paragraphs, and change structure without losing information. It must
+   not add a fact, name, number, date, quote, or citation that is not in the
+   source. It returns SEARCH/REPLACE blocks or a unified diff scoped to its
+   family.
+3. **Check inside each task.** Read the rewritten result once and ask what
+   still sounds machine-made *for that family*, and whether the rewrite added
+   or dropped any fact, number, date, quote, citation, or claim.
+4. **Deliver.** Main assembles the per-family results in order, resolves any
+   family that flagged a meaning-changing replacement as an author decision,
+   and owns file effects. Minor edits keep the single pass only when the scan
+   found exactly one tell family; two or more families always go through the
+   per-family chain.
 
 ### Voice
 
@@ -73,33 +98,39 @@ If the user supplies a writing sample, match its sentence length, word choice, p
 
 **§14 Inflated significance.** "stands as a testament", "marks a pivotal moment", "plays a crucial role", "underscores its importance", "enduring legacy", and the stock "Challenges and Future Outlook" closing section ("Despite these challenges, ... continues to thrive"). Keep the fact and end on the last concrete point; if the source states real plans, use those.
 
-**§15 Shallow -ing riders.** "..., highlighting...", "..., underscoring...", "..., reflecting...", "..., fostering..." tacked onto a simple fact. Keep the rider only when the source supports what it claims; attaching it to a named person does not make it true.
+**§15 Abstract-restatement echo.** A concrete fact followed by the same fact restated as a quoted or nominalized abstraction: "Counting rods and abacuses could add and subtract." then "“Being able to calculate” came early to humanity." Zero information gain — the second sentence repeats the first one level up, and the scare quotes around a commonplace fake depth. Delete the echo; replace it with a fact that advances the text.
 
-**§16 Sales language.** "boasts", "vibrant", "rich cultural heritage", "nestled", "in the heart of", "renowned", "breathtaking", "seamlessly", "commitment to". State what the thing is.
+**§16 Announcer transitions.** "The real question is ...", "But here is the deeper problem ...", "This raises a new question ...". The writer does not declare on the reader's behalf which question matters next; the facts carry the transition, or a concrete dependency states it ("Two obstacles remain at this point"). Announcing significance is lecture voice; in prose it is narration.
 
-**§17 Borrowed authority.** "experts argue", "industry reports", "observers have cited", "some critics", and prestige outlet lists standing in for what was said. Use the named source and what it actually said; otherwise cut the unsupported claim or the list. Never invent a source. A missing citation alone is not a tell.
+**§17 Rhythm-matched paired-phrase closer.** Ending a sentence or paragraph with neatly matched phrases — "faster, cheaper, better", "whether it is fast enough, whether it can be automated" — unless every item is a real, independently justified dimension of the claim. Matched rhythm is earned by content, not composed for cadence; if one item can be cut without losing meaning, cut the whole flourish and state the single point.
 
-**§18 Vague connection.** "associated with", "linked to", "in connection with" where the relationship is not stated. Name the relationship the source gives; if the source does not say, keep the vague wording rather than inventing a role.
+**§18 Shallow -ing riders.** "..., highlighting...", "..., underscoring...", "..., reflecting...", "..., fostering..." tacked onto a simple fact. Keep the rider only when the source supports what it claims; attaching it to a named person does not make it true.
 
-**§19 Copula avoidance.** "serves as", "stands as", "functions as", "boasts", "features" instead of is, are, has.
+**§19 Sales language.** "boasts", "vibrant", "rich cultural heritage", "nestled", "in the heart of", "renowned", "breathtaking", "seamlessly", "commitment to". State what the thing is.
+
+**§20 Borrowed authority.** "experts argue", "industry reports", "observers have cited", "some critics", and prestige outlet lists standing in for what was said. Use the named source and what it actually said; otherwise cut the unsupported claim or the list. Never invent a source. A missing citation alone is not a tell.
+
+**§21 Vague connection.** "associated with", "linked to", "in connection with" where the relationship is not stated. Name the relationship the source gives; if the source does not say, keep the vague wording rather than inventing a role.
+
+**§22 Copula avoidance.** "serves as", "stands as", "functions as", "boasts", "features" instead of is, are, has.
 
 ### Formatting by rule
 
-**§20 Bold as decoration.** Words bolded without a reason, and vertical lists where every item is "**Bold label:** description". Remove the bold; turn a labeled list into prose when the labels carry no information of their own.
+**§23 Bold as decoration.** Words bolded without a reason, and vertical lists where every item is "**Bold label:** description". Remove the bold; turn a labeled list into prose when the labels carry no information of their own.
 
-**§21 Decorative headings.** Title case on every heading, emoji or arrows on headings and list items, a horizontal rule between every section, a top-level heading that repeats the document title, headings that contain only other headings, and skipped heading levels. Use sentence case and let the title stand once.
+**§24 Decorative headings.** Title case on every heading, emoji or arrows on headings and list items, a horizontal rule between every section, a top-level heading that repeats the document title, headings that contain only other headings, and skipped heading levels. Use sentence case and let the title stand once.
 
-**§22 Curly quotes.** "..." where the target format uses straight quotes. Most editors auto-curl, so this rarely changes meaning — still fix it when the format requires straight quotes.
+**§25 Curly quotes.** "..." where the target format uses straight quotes. Most editors auto-curl, so this rarely changes meaning — still fix it when the format requires straight quotes.
 
 ### Leftovers from the chat and the draft — remove outright
 
-**§23 Chatbot residue.** "I hope this helps", "Of course!", "Great question!", "You're absolutely right", "Would you like...", "Let me know". Remove the wrapper and keep the content.
+**§26 Chatbot residue.** "I hope this helps", "Of course!", "Great question!", "You're absolutely right", "Would you like...", "Let me know". Remove the wrapper and keep the content.
 
-**§24 Knowledge-limit disclaimers and guesses.** "as of my last update", "not widely documented", "based on available information, likely [X]". State what the source does not show, or cut the sentence. Never present a guess as a fact.
+**§27 Knowledge-limit disclaimers and guesses.** "as of my last update", "not widely documented", "based on available information, likely [X]". State what the source does not show, or cut the sentence. Never present a guess as a fact.
 
-**§25 A heading repeated in the first sentence.** "## Performance" followed by "Speed matters." Delete the repeated sentence and start on the real content.
+**§28 A heading repeated in the first sentence.** "## Performance" followed by "Speed matters." Delete the repeated sentence and start on the real content.
 
-**§26 Writing about the previous version.** "This function was added to replace the old approach of..." belongs in change logs, release notes, and migration guides, not in documentation of current behavior.
+**§29 Writing about the previous version.** "This function was added to replace the old approach of..." belongs in change logs, release notes, and migration guides, not in documentation of current behavior.
 
 ## When not to act
 

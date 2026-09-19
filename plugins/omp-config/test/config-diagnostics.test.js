@@ -212,6 +212,9 @@ test('packaged advisor context assists Agent-owned orchestration without replaci
   assert.match(watchdog, /"不是X，而是Y"\/"not X, but Y" contrast-repetition construction/u);
   assert.match(watchdog, /"specifics then sweep" summary clause/u);
   assert.match(watchdog, /"画面＋全称升华" two-beat sentence/u);
+  assert.match(watchdog, /the abstract-restatement echo \(a concrete fact restated as a quoted or nominalized concept one level up/u);
+  assert.match(watchdog, /the announcer transition \("新的问题是……", "真正的问题是……", "The real question is \.\.\."\)/u);
+  assert.match(watchdog, /the rhythm-matched paired-phrase closer \("够不够快、能不能自动", "faster, cheaper, better"/u);
   assert.match(watchdog, /"XX：XX" label\+colon\+label titles and label-colon bullet lead-ins/u);
   assert.match(watchdog, /opening\/closing one-sentence summaries; the "understanding promise" transition/u);
   assert.match(watchdog, /and defensive writing \(unsourced hedging, boilerplate disclaimers, over-attribution, apologia\)/u);

@@ -25,7 +25,7 @@ For each dimension below, produce a block in the output. Never skip dimensions, 
 | 2 | **novelty** | Is the contribution genuinely novel? Is differentiation from prior work explicit? Are specific limitations of existing work cited? |
 | 3 | **depth** | Is there non-trivial technical depth? Are actual challenges addressed (not just tuning)? Is the approach more than a straightforward combination? |
 | 4 | **logic** | Are arguments internally consistent? Does every claim have supporting evidence? Are there contradictions or leaps in reasoning? |
-| 5 | **clarity** | Are all terms defined? Are references accurate? Is language precise and unambiguous? Do AI writing tells appear (staged "not X but Y" contrasts, one-line closers, forced triads, dashes, bold labels, inflated significance, chatbot residue) — flag each at first sighting? Can a knowledgeable reader follow without guessing? |
+| 5 | **clarity** | Are all terms defined? Are references accurate? Is language precise and unambiguous? Do AI writing tells appear (staged "not X but Y" contrasts, one-line closers, forced triads, dashes, bold labels, inflated significance, chatbot residue, "specifics then sweep" clauses (a concrete fact followed by a sweeping abstraction that adds no new fact), abstract-restatement echoes, announcer transitions, rhythm-matched paired-phrase closers) — flag each at first sighting? Can a knowledgeable reader follow without guessing? |
 | 6 | **eval** | Do experiments map to research questions? Are baselines reasonable and fair? Are metrics appropriate for the claims? |
 | 7 | **data** | Do data/code references point to real repositories? Is there a reproduction path (seeds, splits, hyperparameters)? Are reported numbers verifiable? |
 

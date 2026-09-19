@@ -89,6 +89,13 @@ voice and missing subjects, symmetrical paragraphs of equal length and shape.
 For inflation and borrowed authority, keep the underlying fact and remove the
 dressing: overused AI words, inflated significance, shallow -ing riders,
 sales language, "experts argue" with no named source, copula avoidance.
+Also act on the four structural echoes: the "specifics then sweep" clause (a
+concrete fact followed by a sweeping abstraction that adds no new fact), the
+abstract-restatement echo (a fact restated as a quoted or nominalized concept
+one level up — never scare-quote a commonplace), announcer transitions ("The
+real question is ..."), and rhythm-matched paired-phrase closers ("faster,
+cheaper, better") where the rhythm is not earned by real, independently
+justified dimensions.
 Formatting follows the same test: bold as decoration, decorative headings,
 curly quotes where the format uses straight quotes, chatbot residue,
 knowledge-limit disclaimers, a heading repeated in the first sentence below it,

@@ -352,9 +352,9 @@ test('slide content bans contrast-repetition constructions and one-sentence summ
   assert.match(shaping, /In one sentence/is);
   // Body copy follows the same bans; label-colon lead-ins in bullets are banned too.
   assert.match(draft, /bullets and captions must not open with a label-colon lead-in \("方法：…", "结果：…", "Method: …"\)/is);
-  assert.match(draft, /"不是X，而是Y" contrast-repetition constructions, opening\/closing one-sentence summaries, defensive writing, and "specifics then sweep" summary clauses/is);
+  assert.match(draft, /"不是X，而是Y" contrast-repetition constructions, opening\/closing one-sentence summaries, defensive writing, "specifics then sweep" summary clauses, abstract-restatement echoes, announcer transitions, and rhythm-matched paired-phrase closers/is);
   // Reconciliation checks the body bans as content findings.
-  assert.match(reconciliation, /no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction, no opening\/closing one-sentence summary, no defensive writing \(unsourced hedging qualifiers, boilerplate disclaimers, over-attribution, or apologia\), and no "specifics then sweep" summary clause anywhere in page text/is);
+  assert.match(reconciliation, /no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction, no opening\/closing one-sentence summary, no defensive writing \(unsourced hedging qualifiers, boilerplate disclaimers, over-attribution, or apologia\), no "specifics then sweep" summary clause anywhere in page text, no abstract-restatement echo, no announcer transitions/is);
   assert.match(reconciliation, /A title or body violation is a content finding/is);
   // Beamer generation and quality reference carry the same bans.
   assert.match(generation, /Body copy obeys the same phrasing bans as titles.+no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction.+no page opens or closes with a one-sentence summary of itself, no defensive writing anywhere.+no "specifics then sweep" summary clause/is);
@@ -381,6 +381,11 @@ test('writing workflow bans defensive writing in every deliverable', async () =>
   assert.match(definitions, /"可能\/possibly\/perhaps\/somewhat\/relatively\/fairly\/quite", "it is worth noting that", "值得注意的是", "generally speaking", "to some extent"/is);
   assert.match(definitions, /unless the hedge is itself a sourced fact \(measured variance, a cited confidence interval, a genuinely known scope limit\)/is);
   assert.match(definitions, /Never add self-protective filler: boilerplate disclaimers, "本文仅代表个人观点", over-attribution \("许多研究表明" without a citation\), apologia for limitations nobody asked about, or a paragraph that argues against its own claim before making it/is);
+  // De-AI is applied per tell family by strictly sequential independent tasks, never one mixed pass.
+  assert.match(definitions, /De-AI application is per-rule, not one mixed pass/is);
+  assert.match(definitions, /dispatch one independent task per found tell family strictly sequentially/is);
+  assert.match(definitions, /task N completes and Main verifies its semantic-anchor check/is);
+  assert.match(definitions, /A single direct pass is allowed only when the scan found exactly one tell family/is);
   assert.match(definitions, /State the result and its actual scope; cut the armor/is);
   // Visual labels carry the same defensive-writing ban.
   assert.match(definitions, /no defensive writing — no unsourced hedging qualifiers \(可能\/或许\/"possibly"\/"approximately" without a measured basis\), no disclaimer text, no over-attribution, no apologia in explanation text/is);
