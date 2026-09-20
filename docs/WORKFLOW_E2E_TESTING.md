@@ -23,7 +23,7 @@ Skill、其他 Skills 与原生 `task` 能力选择最小提示；advisor、suba
 `ANALYZE -> EXECUTE -> REVIEW`、Main 的编排者身份与可选的域目录指引，
 不包含 marker 协议，也不随 provider retry 重复。
 
-Generated-asset tests 再验证紧凑目录：当前 v43 索引包含 3 个域（`writing`、
+Generated-asset tests 再验证紧凑目录：当前 v44 索引包含 3 个域（`writing`、
 `research`、`visual`），每行给出 exact ID、chooseWhen 条件、
 候选 Skill URI（`D` 顶层 exact URI、`C` nested ECC exact URI）与单卡 reference
 URI；索引顶部声明 `ANALYZE -> EXECUTE -> REVIEW` 与 usage 规则。单卡只包含
@@ -44,14 +44,23 @@ deterministic context tests 证明注入机制，绝不把它升级成 block、r
 retry 或 completion control。
 
 Writing Helper 的 deterministic content tests 与 static probe 另外验证
-`writer`/`zh-writer` 只暴露 `read`、`grep`、`glob` 并始终只返回完整
+`writer`/`zh-writer`（专用的语言匹配文本工具，非独立通用 agent；因当前 OMP
+ExtensionAPI 只暴露 `registerTool` 命令工具注册、无插件模型调用 API，它们由
+宿主打包 Agent 文件作为兼容适配器承载，适配器元数据保持不变）只暴露 `read`、
+`grep`、`glob` 并始终只返回完整
 proposal 或 bounded diff。`checker`/`zh-checker` 没有 `write`/`edit`，保留
 `web_search` 仅用于宿主与用户网络权限允许的证据核查，并始终只返回
 in-band report。完整 proposal/report 必须进入 terminal child delivery；若
 宿主没有专用 terminal handoff，ordinary final response 就是该 host-neutral
-delivery。文件授权不改变 child capability；Main 独自做 finding disposition
-并实施获授权的持久化。这一边界不能只依靠 live child 自述，
-因为 parent event stream 看不到未暴露的 child 内部 tool history。
+delivery。文件授权不改变 child capability；Main 负责 finding disposition，并仅在授权后原样应用 writer/zh-writer proposal。
+该边界不能只依靠 live child 自述，因为 parent event stream 看不到未暴露的 child 内部 tool history。
+
+E2E 对 writing、research 和 visual 的文字边界使用同一判定：所有 prose/copy（起草、改写、翻译、标题、正文、caption、label、narrative 和 UI copy）必须由正文语言匹配的专用文本工具 `writer` 或 `zh-writer` 交付。它们不是通用 agent，而是专用文本能力；当前宿主用打包 Agent 适配器承载它们。Main 只识别语言、调用文本工具、传递约束、把 proposal 原样机械集成并做最终验收；`task`、research Agent 和 visual Agent 只能做证据、结构、绘图、版式、转换和检查。PPT/Beamer/Word/PPTX 的布局、转换、OfficeCLI 应用和视觉检查不得改变文字，文字变化必须返回 writer。该证据约束不增加 runtime router、lifecycle gate、自动重试或 completion controller。
+每个 writing proposal 必须可追溯到完整文本或有界 diff；Main 的 mutation 只能原样持久化/应用该返回值，不能在 parent trace 中自行起草、改写、润色或替代 writer。任何 task 的 formatter、lint、test 或 generator 行为都不属于文字作者证据；workflow source 完成后，生成资产由 Main 只运行一次 `npm run generate:workflows`。
+
+The writing evidence order is a `writer`/`zh-writer` text-tool proposal first, then a `checker`/`zh-checker` report of logic, evidence, and style findings, then Main disposition and any substantive repair by the same language-matched text tool. Logic and evidence are resolved before sentence polish. Checker remains report-only; Main performs mechanical integration and final acceptance only, and Main, `task`, and checker never rewrite prose. If the matching text tool is unavailable, the trace records a limitation rather than treating another role as a silent author.
+
+For PPT/Beamer text, the trace must preserve `writer`/`zh-writer` as the sole author. `task` may perform structural, layout, conversion, rendering, validation, and visual inspection only; any copy change returns to the matching writer. Evaluators should flag announcer transitions (`The real question is`, `A new question is`, `This raises a deeper question`, `Let us turn to`, `新的问题是`, `真正的问题是`, `这就引出了一个更深的问题`, `接下来我们看`) and hollow unsupported significance claims (`this is important/significant/transformative`, `this demonstrates the power/value`, `意义重大`, `具有重要意义`, `标志着`, `彰显了`, `开创了`, `充分说明`). Replace or remove those claims using concrete evidence, scope, or source; retaining significance/evaluation is the evidence-backed exception and requires that support to be stated.
 
 ## 自我迭代 fixture
 
@@ -83,7 +92,8 @@ npm run e2e:main:self-iteration -- \
 ## Beamer/PPT staged content and visual refinement fixture
 
 `scripts/e2e/fixtures/subagent-willingness.json` 的
-`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的 Markdown 内容计划和用户确认，再覆盖独立 task 在 Markdown 计划上的 slide-order reconciliation（无内容交叉、模块语义一致、整体顺序逻辑有序；无法用重排解决的交叉回到 Markdown reconfirmation），随后覆盖从调和后 Markdown 翻译出的 Beamer 帧、逐页配图与基础排版。Markdown content plan is the canonical content source; Beamer .tex files are derived layout artifacts. Content changes go to Markdown first, are discussed and reconfirmed with the user, then regenerate Beamer; 内容变化不能在排版阶段直接改 `.tex` 正文。随后它覆盖 task 的 initial
+`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的 Markdown 内容计划和用户确认，再覆盖独立 task 在 Markdown 计划上的 slide-order reconciliation（无内容交叉、模块语义一致、整体顺序逻辑有序；无法用重排解决的交叉回到 Markdown reconfirmation），随后覆盖从 writer-approved 的调和后 Markdown 机械生成的 Beamer 帧、逐页配图与基础排版。Markdown content plan is the canonical content source; Beamer .tex files are derived layout artifacts. Content changes go to Markdown first, are discussed and reconfirmed with the user, then regenerate Beamer; 内容变化不能在排版阶段直接改 `.tex` 正文。随后它覆盖 task 的 initial
+
 render、exactly one read-only self-check（owner 只能是 Main 或 task）以及它在
 task final layout pass 之前的顺序；用户确认基础排版后，task 绑定并渲染 current revision，Main（或未产出该 revision 的 task）对该
 revision 做单一只读 review。该 `single read-only visual precheck` marker 只携带
@@ -91,6 +101,7 @@ advisory findings（page、region、criterion、evidence、impact、limitations�
 产生 review verdict；现有视觉精修链的 bounded fix round 约束仍适用。同时，draw.io pipeline
 remains unchanged：task、单一只读 review 和 at most one fix round 的一次性链路保持
 原样。
+Beamer fixture 中从 Markdown content plan 到 `.tex`/frame 的步骤仅允许机械格式整合，不是 task 的文字翻译或改写；writer/zh-writer 产出的标题、正文、caption 和 label 必须作为唯一文案来源。任何 copy 变化都回到对应语言的 writer proposal 路径。
 
 Evaluator 只使用 parent event stream 的 native task assignment、completed
 delivery 和 event order：bounded assignment-text count/order 检查 marker 与
@@ -98,9 +109,7 @@ initial render，native Agent sequence 检查 task → task(reconciliation) → 
 delivery text 检查 final render 与 current revision identifier 是否一致，并以
 `maxNativeTaskAssignmentAttempts` 保持 one-fix 上界。当前 runner 不能看到 task
 child 内部的 visual read（例如 child 内部通过 `read <image>?q=<question>` 提出图像问题）；报告该 evidence
-limitation，不用 child 自述伪造 read proof。没有具体的用户转换命令时不运行
-PowerPoint conversion；`beamer-to-powerpoint` 只在用户给出 exact command 且
-PPT output 已在 scope 时适用。
+该 fixture intentionally remains Beamer-only：它不加载 `beamer-to-powerpoint`，也不转换或断言 PPTX 输出，因而保留现有的 no-PPTX behavior。可选 PPTX 分支仅在最终已验证的 Beamer visual revision 完成后、PowerPoint output 进入 scope 且具备最终已验证的 Beamer PDF 和可用的对应 `.tex`、宏和字体源时，才使用固定外部 `beamer2pptx` Skill/repository（`https://github.com/xdmlxdml/beamer2pptx/tree/main/beamer2pptx`）。Producing `task` 负责转换、绑定一个 current PPTX revision 并渲染该 revision；一个未产出该 revision 的独立只读 reviewer 检查当前渲染的页数/顺序、可编辑性、裁切/溢出、重叠、边距/对齐、层级/字体、宽高比、栅格/矢量处理和相对最终 Beamer PDF 的 fidelity。Producing task 最多做一次 bounded layout-only fix，保留可见内容、公式、页序以及 Markdown/Beamer 源，重新渲染 fresh evidence 后由同一 reviewer 确认一次；内容或页结构问题返回 Markdown/Beamer regeneration 路径。该证据链是 advisory，不是 hard gate、router、自动修复 loop 或 completion authority，且不引入 fallback converter。
 
 该 fixture 的 deterministic shape test 不要求本机 LaTeX toolchain；fixture
 目录由 runner 创建并在每次 run 的 cleanup 中删除。不要为 precheck 增加
@@ -145,8 +154,9 @@ contract。只读写作 fixture 则反向要求没有 target mutation。
 `writing` 域的写作场景要求 writer/zh-writer 的 proposal 与 checker/zh-checker 的
 in-band report 都完整进入 terminal child delivery，不能只留在更早消息后以
 status-only 或 artifact-reference-only 句子结束；这个断言不绑定特定 host
-handoff schema。Main 独自做 finding disposition，任何获授权的文件修改都来自
-disposition 之后可观察的 Main call。
+handoff schema。Main 负责 finding disposition；任何获授权的文字持久化只能原样应用 writer/zh-writer proposal，其他文件修改也必须来自 disposition 之后可观察的 Main call。
+
+对于 writing fixture，`disposition` 之后的 parent mutation 只能原样应用 writer/zh-writer 返回的完整 proposal 或有界 diff；Main 不得在应用时补写、重排句子、润色或替代 writer。结构重排、证据归并、绘图、布局和 OfficeCLI/格式转换仍可由 Main 或 task 完成，但一旦改变文字就必须回到 writer。
 
 `edit` 可能以 basename snapshot anchor 发起，但成功结果会返回 canonical `[absolute/path#tag]`。Evaluator 必须用隔离 project root 把结果路径还原为 `test/...` 或 `src/...` 后再匹配 mutation pattern；只保留 basename 会把真实 TDD 误判为“没有修改”。Fixture snapshot 还要保存 baseline root 的 realpath 与 filesystem identity，在验证前后拒绝 root replacement 和任何 symlink，并在读取 semantic sentinel 前确认文件 realpath 仍在原真实 project root 内；lexical `src/...` 或 `test/...` 名称本身不是 containment evidence。
 

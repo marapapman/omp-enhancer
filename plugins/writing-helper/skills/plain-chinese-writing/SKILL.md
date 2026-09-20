@@ -14,7 +14,7 @@ description: 中文 prose deliverable 的局部清晰写作方法，要求平直
 
 本 Skill 只规定平直、自然的中文写法和语义锚点保护方法，不选择或调度 Agent，也不能替代 writer、checker 或父级编排。Main 保留父级 TODO、委派、集成、finding disposition、最终验证和面向用户的交付权。
 
-writer 子 Agent 始终只交付建议稿。返回完整建议文本；有界补丁更清楚时，使用
+`zh-writer` 文本工具始终只交付建议稿。返回完整建议文本；有界补丁更清楚时，使用
 SEARCH/REPLACE 块或 unified diff。Main 保留权限决策和实际文件修改。
 
 用户使用中文提问、任务结果恰好需要中文说明、事实核查、代码修改或机械字段查询，本身都不会触发本 Skill。是否使用其他写作、审查、事实核查或格式 Skill，由 Main 按已选工作流另行判断。
@@ -929,7 +929,7 @@ Smith 等人（2023）在模型中引入注意力机制来处理长序列。他�
 
 ## 16. 简短提示词
 
-在工作流 `writing` 已选择、其精确 workflow reference 与本 Skill 均已加载后，需要给受派 writer 简短方法提示时，可使用。
+在工作流 `writing` 已选择、其精确 workflow reference 与本 Skill 均已加载后，需要给 `zh-writer` 文本工具调用附加简短方法提示时，可使用。
 
 ```text
 请按 plain-chinese-writing Skill 要求输出中文。

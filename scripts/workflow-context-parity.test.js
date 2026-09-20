@@ -20,8 +20,8 @@ const workflowIds = Object.freeze(workflowDefinitions.map(({ id }) => id));
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['scout', 'task', 'sonic', 'reviewer', 'security-reviewer']);
-test('catalog v43 defines exactly the three advisory workflows (writing, research, visual)', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 43);
+test('catalog v44 defines exactly the three advisory workflows (writing, research, visual)', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 44);
   assert.equal(workflowDefinitions.length, 3);
   assert.deepEqual(workflowIds, ['writing', 'research', 'visual']);
   for (const definition of workflowDefinitions) {
@@ -44,7 +44,7 @@ test('catalog v43 defines exactly the three advisory workflows (writing, researc
   assert.equal(new Set(workflowDefinitions.flatMap(({ catalogSkills }) => catalogSkills)).size, 0, 'no ECC catalog candidates remain');
 });
 
-test('writing card keeps Beamer conversion direct and command-conditional', () => {
+test('writing card keeps the optional fixed beamer2pptx branch bounded', () => {
   const writing = workflowCatalog['writing'];
 
   assert.ok(writing, 'workflowCatalog must expose the writing workflow');
@@ -53,9 +53,16 @@ test('writing card keeps Beamer conversion direct and command-conditional', () =
   const scope = writing.scopeNotes.join(' ');
   assert.match(
     scope,
-    /`?beamer-to-powerpoint`? is conditional on an explicit user-supplied conversion command/iu,
+    /PPTX output is optional, not automatic.+requested after the final validated Beamer visual revision.+fixed external `beamer2pptx` Skill\/repository.+https:\/\/github\.com\/xdmlxdml\/beamer2pptx\/tree\/main\/beamer2pptx/iu,
   );
+  assert.doesNotMatch(scope, /conditional on an explicit user-supplied conversion command|ask for the exact command/i);
   const flow = [...writing.suggestedFlow, ...writing.scopeNotes].join(' ');
+  assert.match(
+    flow,
+    /final validated Beamer.+producing `?task`?.+PPTX.+(?:render|revision).+independent read-only.+reviewer.+at most one.+layout-only.+fresh.+same reviewer.+confirm/iu,
+  );
+  assert.match(flow, /either a new or existing Beamer deck.+final validated Beamer visual revision/iu);
+  assert.match(flow, /preserve visible content, formulas, slide order, and Markdown\/Beamer sources.+return content or page-structure issues.+Markdown plan.+Beamer regeneration path/iu);
   assert.match(
     flow,
     /single read-only visual precheck.+Main or task.+(?:initial render|initial revision).+before task layout/iu,
@@ -64,9 +71,91 @@ test('writing card keeps Beamer conversion direct and command-conditional', () =
   assert.match(scope, /Markdown content plan.+canonical content source.+derived layout artifacts/iu);
   assert.match(flow, /plain-chinese-writing.+zh-format-humanizer.+zh-writing-review/iu);
   assert.match(flow, /content changes.+Markdown first.+reconfirm.+regenerate.+Beamer/iu);
+  assert.match(scope, /no automatic loop or hard gate/i);
+  assert.doesNotMatch(flow, /block:\s*true|continue:\s*true/i);
 });
 
-test('packaged catalog, index, and all references expose catalog v43 advisory content', async () => {
+test('workflow cards and packaged references make language-routed writers the only text authors', async () => {
+  for (const definition of workflowDefinitions) {
+    const contract = [
+      definition.chooseWhen,
+      ...definition.suggestedFlow,
+      ...definition.scopeNotes,
+    ].join(' ');
+    assert.ok(definition.roles.includes('writer'), `${definition.id} must expose writer`);
+    assert.ok(definition.roles.includes('zh-writer'), `${definition.id} must expose zh-writer`);
+    assert.match(
+      contract,
+      /English(?:\s+text|\s+prose|\s+body)?[^.]{0,140}\bwriter\b/iu,
+      `${definition.id} must route English text to writer`,
+    );
+    assert.match(
+      contract,
+      /Chinese(?:\s+text|\s+prose|\s+body)?[^.]{0,140}\bzh-writer\b/iu,
+      `${definition.id} must route Chinese text to zh-writer`,
+    );
+    assert.match(
+      contract,
+      /mixed-language[^.]{0,140}(?:separate|independent)[^.]{0,100}(?:writer|agents?)/iu,
+      `${definition.id} must split mixed-language authoring`,
+    );
+    assert.match(
+      contract,
+      /(?:writer-only|(?:draft|rewrite|translation?|heading|title|body|caption|label|narrative|UI copy)[^.]{0,180}(?:writer|zh-writer)[^.]{0,100}(?:only|sole))/iu,
+      `${definition.id} must make text authoring writer-only`,
+    );
+    assert.match(
+      contract,
+      /Main[^.]{0,220}(?:dispatch|forward|persist|apply|integrat|verbatim)[^.]{0,180}(?:never|must not)[^.]{0,100}(?:draft|rewrite|translate|polish|author)/iu,
+      `${definition.id} must forbid Main prose authorship`,
+    );
+    assert.doesNotMatch(
+      contract,
+      /Main\s+(?:draft|rewrite|translate|polish|author)\b[^.]{0,120}(?:text|copy|wording)/iu,
+      `${definition.id} must not permit direct Main prose`,
+    );
+    assert.doesNotMatch(
+      contract,
+      /\btask\s+(?:draft|rewrite|translate|polish|author)\b[^.]{0,120}(?:text|copy|wording)/iu,
+      `${definition.id} must not make task a text author`,
+    );
+  }
+
+  const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
+  const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
+  const referenceNames = (await readdir(referencesDir)).filter((name) => name.endsWith('.md')).sort();
+  const packagedReferenceText = (
+    await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')))
+  ).join('\n');
+  const generatedReferences = buildWorkflowSkillReferences();
+  for (const definition of workflowDefinitions) {
+    const reference = referenceSection(packagedReferenceText, definition.id);
+    const generatedReference = referenceSection(Object.values(generatedReferences).join('\n'), definition.id);
+    const packaged = `${catalogSectionOf(catalog, definition.id)}\n${reference}\n${generatedReference}`;
+    assert.match(
+      packaged,
+      /English(?:\s+text|\s+prose|\s+body)?[^.]{0,140}\bwriter\b/iu,
+      `${definition.id} packaged card/reference must route English text`,
+    );
+    assert.match(
+      packaged,
+      /Chinese(?:\s+text|\s+prose|\s+body)?[^.]{0,140}\bzh-writer\b/iu,
+      `${definition.id} packaged card/reference must route Chinese text`,
+    );
+    assert.match(
+      packaged,
+      /mixed-language[^.]{0,140}(?:separate|independent)[^.]{0,100}(?:writer|agents?)/iu,
+      `${definition.id} packaged card/reference must split mixed-language authoring`,
+    );
+    assert.match(
+      packaged,
+      /Main[^.]{0,220}(?:dispatch|forward|persist|apply|integrat|verbatim)[^.]{0,180}(?:never|must not)[^.]{0,100}(?:draft|rewrite|translate|polish|author)/iu,
+      `${definition.id} packaged card/reference must forbid Main prose authorship`,
+    );
+  }
+});
+
+test('packaged catalog, index, and all references expose catalog v44 advisory content', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -74,7 +163,7 @@ test('packaged catalog, index, and all references expose catalog v43 advisory co
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /# OMP Enhancer Workflow Catalog v43/);
+  assert.match(catalog, /# OMP Enhancer Workflow Catalog v44/);
   assert.match(skillIndex, /Phases: ANALYZE -> EXECUTE -> REVIEW/iu);
   assert.match(skillIndex, /Advisory reference only/i);
   assert.equal(referenceNames.length, 3);
@@ -93,8 +182,8 @@ test('shared catalog and Skill index expose the three workflows while references
   const watchdog = await readFile(new URL('../plugins/omp-config/assets/WATCHDOG.yml', import.meta.url), 'utf8');
   const referencesByWorkflow = buildWorkflowSkillReferences();
   const skillReferences = Object.values(referencesByWorkflow).join('\n');
-
   assert.equal(catalog, buildSharedWorkflowCatalogMarkdown());
+
   assert.equal(Number(catalog.match(/# OMP Enhancer Workflow Catalog v(\d+)/)?.[1]), WORKFLOW_CATALOG_VERSION);
   assert.deepEqual([...catalog.matchAll(/^## `([^`]+)`$/gm)].map((match) => match[1]), workflowIds);
   const indexedWorkflowIds = [...skillIndex.split('## Agent descriptions')[0].matchAll(/^- `([^`]+)` —/gm)].map((match) => match[1]);
@@ -116,7 +205,7 @@ test('shared catalog and Skill index expose the three workflows while references
       `${definition.id} is missing its literal reference URI`,
     );
     assert.ok(section.includes(`- When: ${definition.chooseWhen}`), `${definition.id} chooseWhen is hidden from Main`);
-    assert.ok(section.includes('- Agent candidates:'), `${definition.id} reference must render agent candidates`);
+    assert.ok(section.includes('- Agent candidates (host runtime adapter labels):'), `${definition.id} reference must render agent candidates`);
     assert.match(section, /^## Required step order$/mu, `${definition.id} reference must render required step order`);
     assert.match(section, /^1\. /mu, `${definition.id} reference must render a numbered first flow step`);
     if (definition.scopeNotes.length > 0) {

@@ -6,14 +6,24 @@ description: "Remove AI writing traces — detect and replace structural AI tell
 # Format Humanizer
 
 Scan a document for AI-generated writing patterns and produce authorized,
-meaning-preserving replacements. For substantial documents the rules are
-applied one tell family at a time by independent tasks — never one mixed
-rewriting pass. Use one-at-a-time confirmation only when the user explicitly
-requests interactive review or a replacement would alter meaning.
+meaning-preserving replacements. For substantial documents the rules are applied
+one tell family at a time by independent tasks—never one mixed rewriting pass.
+Record the family inventory before any `writer` text-tool call changes prose.
 
-This writer child is always proposal-only. Return the complete revised text,
+All substantive English prose work—including initial writing or drafting,
+substantive polishing or revision, translation, and logical revision—must be
+performed through language-matched `writer` text-tool calls. This skill does not
+authorize Main, `task`, or `checker` to write prose. The `writer` returns the
+proposal first; an independent `checker` only reports logic, evidence, or
+semantic-drift findings. Any substantive repair returns to the same
+language-matched `writer`.
+
+The `writer` text tool is always proposal-only. Return the complete revised text,
 using SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer.
-Main retains permission decisions and actual file changes.
+Main retains permission decisions and actual file changes and integrates only
+the returned proposal verbatim. If a current permitted limitation prevents a safe
+`writer` call, Main records the inability to call the text tool and must not
+silently use another Agent or a direct writing fallback.
 
 ## Trigger
 
@@ -27,6 +37,16 @@ A language model defaults to the most statistically likely phrasing for the wide
 
 Two rules follow. Every sentence kept must add something the reader did not already have. Any listed tell justifies an edit on its first sighting — prefer an over-correction to a miss. Only quotations, titles, proper names, passages discussing a phrase rather than using it, text predating November 30, 2022, and details that carry the writer's voice (specific unusual details, mixed feelings, first-person choices) are exempt.
 
+## Revision order
+
+Every substantive pass uses this order: claims and evidence plus semantic anchors
+first; logic and structure second; sentence and style polish last. Before any
+replacement, record supported claims, evidence boundaries, qualifiers, modality,
+scope, negation, numbers and units, citations, and causal direction. Settle
+unsupported leaps, dependencies, and paragraph or heading order before changing
+wording. Only then remove AI tells or polish sentences. Preserve every anchor;
+do not add or drop a fact, source, citation, or limitation.
+
 ## How to work
 
 One task owns one tell family. A substantial de-AI run is a chain of
@@ -38,25 +58,28 @@ single-family tasks, not one pass that applies every rule at once.
    not only sentences: a contrast split across two sentences, three parallel
    examples, or the same closer after every section is the same tell at a
    larger scale. Families with no findings are skipped later.
-2. **Per-family tasks, strictly sequential.** Main dispatches one task per
-   found family in the scan's order. Task N+1 is dispatched only after task N
-   returns and Main verifies its semantic-anchor check: hedges, modality,
-   scope, negation, causal direction, numbers, units, quotes, and citations
-   unchanged; no fact added or dropped. Each task handles only its one family
-   on the full current text (which includes all earlier tasks' accepted
-   edits), keeps every supported claim, and may shorten dull parts, merge or
-   split paragraphs, and change structure without losing information. It must
-   not add a fact, name, number, date, quote, or citation that is not in the
-   source. It returns SEARCH/REPLACE blocks or a unified diff scoped to its
-   family.
+2. **Per-family writer text-tool passes, strictly sequentially.** Main routes each
+substantive family rewrite through a language-matched `writer` text-tool call in
+scan order. Call N+1 goes out only after call N returns and Main verifies its
+semantic-anchor check:
+hedges, modality, scope, negation, causal direction, numbers, units, quotes, and
+citations unchanged; no fact added or dropped. Each writer text-tool pass handles
+only its one
+family on the full current text (which includes all earlier tasks' accepted edits),
+keeps every supported claim, and may shorten dull parts, merge or split paragraphs,
+and change structure without losing information. It must not add a fact, name,
+number, date, quote, or citation that is not in the source. It returns
+SEARCH/REPLACE blocks or a unified diff scoped to its family.
 3. **Check inside each task.** Read the rewritten result once and ask what
    still sounds machine-made *for that family*, and whether the rewrite added
    or dropped any fact, number, date, quote, citation, or claim.
-4. **Deliver.** Main assembles the per-family results in order, resolves any
-   family that flagged a meaning-changing replacement as an author decision,
-   and owns file effects. Minor edits keep the single pass only when the scan
-   found exactly one tell family; two or more families always go through the
-   per-family chain.
+4. **Deliver.** Main assembles the per-family writer proposals in order and
+integrates only accepted proposals verbatim. An independent `checker` only
+reports semantic, logic, or evidence findings; it never rewrites. Any substantive
+repair returns to the same `writer` text tool. Minor edits keep the single pass
+only when
+the scan found exactly one tell family; two or more families always go through
+the per-family chain.
 
 ### Voice
 
@@ -92,15 +115,15 @@ If the user supplies a writing sample, match its sentence length, word choice, p
 
 **§12 Symmetrical paragraphs.** Every paragraph the same length and shape, with sentence 2 elaborating and sentence 3 transitioning, and no rhythm variation. Merge short adjacent paragraphs, rewrite identical openers, and vary sentence length.
 
+**§13 Overused AI words.** Replace generic filler such as "delve", "landscape", "robust", "seamless", "crucial", or "significant" only when it adds no supported information. Keep the word when the source gives a concrete technical meaning or measured scope.
+
 ### Inflation and borrowed authority — keep the fact, drop the dressing
 
-**§13 Overused AI words.** additionally, bolstered, crucial, delve, emphasizing, enduring, enhance, fostering, garner, highlight (verb), interplay, intricate, meticulous, pivotal, robust (figurative), showcase, tapestry, testament, underscore (verb), vibrant. This is the only vocabulary list in the skill; a formal word outside it is not a tell by itself, and a word's literal use stays.
-
-**§14 Inflated significance.** "stands as a testament", "marks a pivotal moment", "plays a crucial role", "underscores its importance", "enduring legacy", and the stock "Challenges and Future Outlook" closing section ("Despite these challenges, ... continues to thrive"). Keep the fact and end on the last concrete point; if the source states real plans, use those.
+**§14 Inflated significance and hollow assertions.** "stands as a testament", "marks a pivotal moment", "plays a crucial role", "underscores its importance", "enduring legacy", and the stock "Challenges and Future Outlook" closing section ("Despite these challenges, ... continues to thrive"). Hollow assertions such as "this is important/significant/transformative" and "this demonstrates the power/value" are not evidence. Replace them with concrete facts, evidence, scope, or a stated limitation, or delete unsupported wording. Retain evidence-backed claims and state the support. Keep the fact and end on the last concrete point; if the source states real plans, use those.
 
 **§15 Abstract-restatement echo.** A concrete fact followed by the same fact restated as a quoted or nominalized abstraction: "Counting rods and abacuses could add and subtract." then "“Being able to calculate” came early to humanity." Zero information gain — the second sentence repeats the first one level up, and the scare quotes around a commonplace fake depth. Delete the echo; replace it with a fact that advances the text.
 
-**§16 Announcer transitions.** "The real question is ...", "But here is the deeper problem ...", "This raises a new question ...". The writer does not declare on the reader's behalf which question matters next; the facts carry the transition, or a concrete dependency states it ("Two obstacles remain at this point"). Announcing significance is lecture voice; in prose it is narration.
+**§16 Announcer transitions.** "The real question is ...", "A new question is ...", "This raises a deeper question ...", "But here is the deeper problem ...", and "This raises a new question ...". Do not announce on the reader's behalf which question matters next. Apply this ban to prose used in headings, body text, captions, notes, and labels; quotations, titles, proper names, and passages discussing the phrase remain exempt. Let the facts carry the transition, or state a concrete dependency ("Two obstacles remain at this point"). Replace the announcement with a concrete fact, evidence, scope, or limitation, or delete it.
 
 **§17 Rhythm-matched paired-phrase closer.** Ending a sentence or paragraph with neatly matched phrases — "faster, cheaper, better", "whether it is fast enough, whether it can be automated" — unless every item is a real, independently justified dimension of the claim. Matched rhythm is earned by content, not composed for cadence; if one item can be cut without losing meaning, cut the whole flourish and state the single point.
 

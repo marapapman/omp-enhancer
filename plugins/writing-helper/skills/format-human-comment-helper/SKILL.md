@@ -7,7 +7,7 @@ description: "Process human review comments — parse, categorize, and suggest r
 
 Help process human review comments on a document. Parse feedback, categorize each point, suggest responses, and estimate effort. If the user already authorized revisions, include non-substantive wording fixes in the proposal; confirm changes to core claims, evidence, or scope.
 
-This writer child is always proposal-only. Return the complete revised text,
+The `writer` text tool is always proposal-only. Return the complete revised text,
 using SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer.
 Main retains permission decisions and actual file changes.
 

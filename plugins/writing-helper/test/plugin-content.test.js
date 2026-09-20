@@ -145,12 +145,12 @@ describe('bundled frugal-pi writing content', () => {
     }
   });
 
-  it('puts complete writing proposals and reports in the terminal child delivery', () => {
+  it('puts complete writing proposals and reports in terminal text delivery', () => {
     const contracts = new Map([
       [
         'writer',
         {
-          complete: /complete proposal[\s\S]{0,80}terminal child delivery/iu,
+          complete: /complete proposal[\s\S]{0,80}terminal (?:child )?text delivery/iu,
           handoff: /host\s+exposes a terminal handoff[\s\S]{0,100}current handoff schema[\s\S]{0,120}ordinary\s+final response/iu,
           terminal: /not leave the complete\s+proposal only in an earlier\s+ordinary\s+message[\s\S]{0,100}status-only\s+terminal\s+sentence/iu,
         },
@@ -166,7 +166,7 @@ describe('bundled frugal-pi writing content', () => {
       [
         'zh-writer',
         {
-          complete: /完整建议稿[\s\S]{0,60}终态 child delivery/u,
+          complete: /完整建议稿[\s\S]{0,60}终态(?: child)?文本交付/u,
           handoff: /host 暴露终态 handoff[\s\S]{0,80}当前 schema[\s\S]{0,100}普通 final response/u,
           terminal: /不得只在较早的普通消息中给出完整建议稿[\s\S]{0,80}status-only 句/u,
         },
@@ -305,18 +305,18 @@ describe('bundled frugal-pi writing content', () => {
     assert.match(englishReview, /assigned English LaTeX prose polish[\s\S]*first\s+review[\s\S]*then produce/i);
     assert.match(
       englishReview,
-      /writer child is always proposal-only[\s\S]*complete proposed text[\s\S]*(?:SEARCH\/REPLACE|unified diff)[\s\S]*Main (?:retains|owns)[\s\S]*actual file changes/iu,
+      /`?writer`? text tool is always proposal-only[\s\S]*complete proposed text[\s\S]*(?:SEARCH\/REPLACE|unified diff)[\s\S]*Main (?:retains|owns)[\s\S]*actual file changes/iu,
     );
     assert.match(englishReview, /Preserve custom\s+commands and revision markup/i);
     assert.match(englishReview, /writing-checkers[\s\S]*broad whole-document or project-wide argument\s+review/i);
     assert.match(englishReview, /`writing-checkers` is a broad review Skill, not the `checker` Agent/i);
     assert.match(englishReview, /local[\s\S]*Main may independently choose a currently exposed `checker`[\s\S]*semantic drift, logic, and clarity/i);
-    assert.match(englishReview, /Reading this Skill prepares a writer assignment[\s\S]*by itself it does not turn\s+Main into the executor/i);
+    assert.match(englishReview, /Reading this Skill prepares a writer assignment[\s\S]*by itself it does not turn\s+Main\s+into the executor/i);
     assert.match(englishReview, /one-pass[\s\S]*never satisfies the independent checker checkpoint/i);
     assert.match(englishReview, /The user need not\s+request delegation explicitly/i);
     assert.match(englishReview, /Target length only bounds the executor method and finding count/iu);
-    assert.match(englishReview, /It is not a\s+Main direct-fallback reason/iu);
-    assert.match(englishReview, /read-only delivery[\s\S]*(?:an )?integrated final\s+response[\s\S]*coordination overhead[\s\S]*not fallback reasons/iu);
+    assert.match(englishReview, /If a current permitted limitation prevents a safe `writer` call[\s\S]+Main records[\s\S]+delegate[\s\S]+must not silently draft or route substantive prose to another Agent/iu);
+    assert.match(englishReview, /read-only delivery[\s\S]*(?:an )?integrated final\s+response[\s\S]*coordination overhead[\s\S]*do not[\s\S]+authorize bypassing the writer/iu);
     assert.match(englishReview, /^## Assigned Writer One-Pass Method$/mu);
     assert.match(
       englishReview,
@@ -324,11 +324,11 @@ describe('bundled frugal-pi writing content', () => {
     );
     assert.match(
       englishReview,
-      /Main may declare and[\s\S]*load `writing-checkers` during PLAN[\s\S]*writer child neither loads it/iu,
+      /Main may declare and[\s\S]*load `writing-checkers` during PLAN[\s\S]*writer text-tool pass neither loads it/iu,
     );
     assert.match(
       englishReview,
-      /This finishes\s+only the writer-child pass; it neither completes the parent workflow nor\s+replaces an independent checker delivery/iu,
+      /This finishes\s+only the writer text-tool pass; it neither completes the parent workflow nor\s+replaces an independent checker delivery/iu,
     );
 
     const chineseReview = readFileSync(join(rootDir, 'skills/zh-writing-review/SKILL.md'), 'utf8');
@@ -342,18 +342,18 @@ describe('bundled frugal-pi writing content', () => {
     assert.match(chineseReview, /用户无需显式要求委派/);
     assert.match(
       chineseReview,
-      /writer 子 Agent 始终只交付建议稿[\s\S]*完整建议文本[\s\S]*(?:SEARCH\/REPLACE|unified diff)[\s\S]*Main 保留[\s\S]*实际文件修改/u,
+      /`zh-writer` 文本工具始终只交付建议稿[\s\S]*完整建议文本[\s\S]*(?:SEARCH\/REPLACE|unified diff)[\s\S]*Main 保留[\s\S]*实际文件修改/u,
     );
-    assert.match(chineseReview, /^## 受派 Writer 子 Agent 单轮方法$/mu);
+    assert.match(chineseReview, /^## 受派 Writer 文本工具单轮方法$/mu);
     assert.match(
       chineseReview,
       /Main 侧的 Skill 加载[\s\S]*writer 局部自检[\s\S]*`zh-writing-checkers` Skill 加载[\s\S]*不构成独立 checker 的执行或证据/,
     );
-    assert.match(chineseReview, /Main 可以在 PLAN 阶段[\s\S]*加载 `zh-writing-checkers`[\s\S]*writer 子 Agent 不自行加载/iu);
+    assert.match(chineseReview, /Main 可以在 PLAN 阶段[\s\S]*加载 `zh-writing-checkers`[\s\S]*writer 文本工具不自行加载/iu);
     assert.match(chineseReview, /assignment 已包含并加载 `plain-chinese-writing`[\s\S]*不触发额外加载/iu);
     assert.match(
       chineseReview,
-      /这只完成 writer 子 Agent 的有界审查；既不完成父级工作流，也不替代独立 checker delivery/,
+      /这只完成 writer 文本工具的有界审查；既不完成父级工作流，也不替代独立 checker delivery/,
     );
 
     const englishEditor = readFileSync(join(rootDir, 'skills/writing-markdown-helper/SKILL.md'), 'utf8');
@@ -382,14 +382,14 @@ describe('bundled frugal-pi writing content', () => {
 
     for (const path of english) {
       const source = readFileSync(join(rootDir, path), 'utf8');
-      assert.match(source, /writer child is (?:always )?proposal-only/iu, `${path} should state the capability boundary`);
+      assert.match(source, /`?writer`? text tool is (?:always )?proposal-only/iu, `${path} should state the capability boundary`);
       assert.match(source, /Main\s+(?:retains|owns)\s+permission decisions\s+and actual file changes/iu, `${path} should keep persistence with Main`);
       assert.doesNotMatch(source, /(?:call|use)[^\n]{0,40}`(?:write|edit)`|write the target file|append[^\n]{0,60}review log/iu, `${path} must not direct file mutation`);
     }
 
     for (const path of chinese) {
       const source = readFileSync(join(rootDir, path), 'utf8');
-      assert.match(source, /writer 子 Agent 始终只交付建议稿/u, `${path} 应声明能力边界`);
+      assert.match(source, /`zh-writer` 文本工具始终只交付建议稿/u, `${path} 应声明能力边界`);
       assert.match(source, /Main 保留权限决策\s*和实际文件修改/u, `${path} 应把落盘职责留给 Main`);
       assert.doesNotMatch(source, /调用 `(?:write|edit)`|写入目标文件|追加[^\n]{0,50}review log/u, `${path} 不得要求文件修改`);
     }
@@ -401,7 +401,7 @@ describe('bundled frugal-pi writing content', () => {
       'skills/format-human-comment-helper/SKILL.md',
     ]) {
       const source = readFileSync(join(rootDir, path), 'utf8');
-      assert.match(source, /writer child is always proposal-only/iu, path);
+      assert.match(source, /`?writer`? text tool is always proposal-only/iu, path);
       assert.match(source, /Main\s+(?:retains|owns)\s+permission decisions\s+and actual file changes/iu, path);
     }
 
@@ -410,7 +410,7 @@ describe('bundled frugal-pi writing content', () => {
       'skills/plain-chinese-writing/SKILL.md',
     ]) {
       const source = readFileSync(join(rootDir, path), 'utf8');
-      assert.match(source, /writer 子 Agent 始终只交付建议稿/u, path);
+      assert.match(source, /`zh-writer` 文本工具始终只交付建议稿/u, path);
       assert.match(source, /Main 保留权限决策\s*和实际文件修改/u, path);
     }
 
@@ -461,39 +461,59 @@ describe('bundled frugal-pi writing content', () => {
     }
   });
 
-  it('keeps writing actor boundaries subagent-driven while preserving a safe Main fallback', () => {
+  it('keeps writing actor boundaries writer-routed, proposal-only, and without a Main direct fallback', () => {
     const englishWriter = readFileSync(join(rootDir, 'agents/writer.md'), 'utf8');
     assert.match(englishWriter, /Bounded English writer[\s\S]*LaTeX passages[\s\S]*read-only proposed replacements/i);
-    assert.match(englishWriter, /bounded writer-child assignment/i);
+    assert.match(englishWriter, /bounded (?:writer-child|text-tool) assignment/i);
     assert.match(englishWriter, /local self-check[\s\S]{0,160}never replaces the independent checker/i);
     assert.match(
       englishWriter,
-      /Main owns the parent TODO, checker dispatch, finding disposition, integration, final verification, and user-visible delivery/i,
+      /Main owns the parent TODO, checker dispatch, finding disposition, final verification, and user-visible delivery/i,
     );
-    assert.match(englishWriter, /assigned Skill body[\s\S]{0,160}never substitutes for the later independent checker Agent delivery/i);
+    assert.match(englishWriter, /integration is limited to verbatim application of (?:your )?proposal plus non-text changes/i);
+    assert.match(englishWriter, /assigned Skill bod(?:y|ies)[\s\S]{0,160}never substitutes for the later independent checker(?: Agent)? delivery/i);
     assert.doesNotMatch(englishWriter, /`writing-markdown-helper`[^\n]*Direct English markdown revision by default/i);
-    assert.match(englishWriter, /records? that limitation[\s\S]{0,120}safe direct fallback/i);
+    assert.doesNotMatch(
+      englishWriter,
+      /records? that limitation[\s\S]{0,120}safe direct fallback/i,
+      'writer must not authorize a Main direct writing fallback',
+    );
+    assert.match(
+      englishWriter,
+      /records? that limitation[\s\S]{0,180}does not draft, rewrite, polish, translate, or use a direct writing fallback/i,
+    );
     assert.match(englishWriter, /always proposal-only[\s\S]{0,180}complete proposed replacement[\s\S]{0,180}(?:SEARCH\/REPLACE|unified diff)/iu);
     assert.match(englishWriter, /even when\s+the assignment authorizes file mutation[\s\S]{0,180}do not modify project files/iu);
     assert.match(englishWriter, /Main retains[\s\S]{0,140}permission decisions[\s\S]{0,140}actual\s+file changes/iu);
+    assert.match(
+      englishWriter,
+      /integration is limited to verbatim application of (?:your )?proposal plus non-text changes/i,
+    );
     assert.doesNotMatch(englishWriter, /Apply a targeted edit to the target file/iu);
     assert.doesNotMatch(englishWriter, /Apply targeted edits to an existing file/iu);
     assert.doesNotMatch(englishWriter, /(?:may|can) use `?write`? or `?edit`?/iu);
     assert.match(englishWriter, /tools:\s*read, grep, glob/i);
 
     const chineseWriter = readFileSync(join(rootDir, 'agents/zh-writer.md'), 'utf8');
-    assert.match(chineseWriter, /有界的写作子 Agent 任务/);
+    assert.match(chineseWriter, /(?:有界的写作子 Agent 任务|有界文本工具调用)/u);
     assert.match(chineseWriter, /局部自检[\s\S]{0,80}不能替代由 Main 调度的独立 checker/);
     assert.match(
       chineseWriter,
-      /Main 保留父级 TODO、checker 调度、finding disposition、集成、最终验证和面向用户的交付权/,
+      /Main 保留父级 TODO、checker 调度、finding disposition、最终验证和面向用户的交付权/,
     );
-    assert.match(chineseWriter, /受派 Skill 正文[\s\S]{0,100}不能替代\s*后续独立 checker Agent delivery/);
+    assert.match(chineseWriter, /集成仅限于原样应用建议稿和非文字改动/u);
+    assert.match(chineseWriter, /受派 Skill 正文[\s\S]{0,100}不能替代\s*后续独立 checker(?: Agent)? delivery/);
     assert.doesNotMatch(chineseWriter, /zh-writing-markdown-helper[^\n]*默认直接修改中文 Markdown/);
-    assert.match(chineseWriter, /记录该限制[\s\S]{0,80}安全的直接 fallback/);
+    assert.doesNotMatch(
+      chineseWriter,
+      /记录该限制[\s\S]{0,80}安全的直接 fallback/u,
+      'zh-writer must not authorize a Main direct writing fallback',
+    );
+    assert.match(chineseWriter, /Main 记录限制，不得自行起草、改写、润色、翻译，也不得使用直接写作 fallback/u);
     assert.match(chineseWriter, /始终只交付建议稿[\s\S]{0,140}完整替换文本[\s\S]{0,140}(?:SEARCH\/REPLACE|unified diff)/u);
     assert.match(chineseWriter, /即使 assignment 授权文件修改[\s\S]{0,120}也不得修改项目文件/u);
     assert.match(chineseWriter, /Main 保留[\s\S]{0,100}权限决策[\s\S]{0,100}实际文件修改/u);
+    assert.match(chineseWriter, /集成仅限于原样应用建议稿和非文字改动/u);
     assert.doesNotMatch(chineseWriter, /4\. 用 edit 写入目标文件/u);
     assert.doesNotMatch(chineseWriter, /检查格式 → 用 edit 写入/u);
     assert.doesNotMatch(chineseWriter, /(?:可以|才可)调用 `?write`? 或 `?edit`?/u);
@@ -535,7 +555,7 @@ describe('bundled frugal-pi writing content', () => {
       );
     }
 
-    assert.match(englishWriter, /Skill[\s\S]*independent checker Agent delivery/i);
+    assert.match(englishWriter, /Skill[\s\S]*independent checker(?: Agent)? delivery/i);
     const englishChecker = readFileSync(join(rootDir, 'agents/checker.md'), 'utf8');
     assert.match(englishChecker, /narrow semantic-drift, logic, and clarity check[\s\S]*broad seven-dimension audit/i);
     assert.match(englishChecker, /use only the mode requested by the parent assignment/i);
@@ -552,8 +572,11 @@ describe('bundled frugal-pi writing content', () => {
     ];
     for (const path of englishMutationSkills) {
       const source = readFileSync(join(rootDir, path), 'utf8');
-      assert.match(source, /assigned writer child's bounded local method/i, `${path} should identify its executor`);
+      assert.match(source, /text tool's[\s\S]{0,40}bounded local method/i, `${path} should identify its executor`);
       assert.match(source, /does not select or dispatch Agents/i, `${path} should not own delegation`);
+      assert.match(source, /`?writer`? text tool is always proposal-only/iu, `${path} should keep proposal-only behavior`);
+      assert.match(source, /Return (?:the )?complete proposed text/iu, `${path} should return complete proposed text`);
+      assert.match(source, /Main\s+retains permission decisions[\s\S]{0,20}and actual file changes/iu, `${path} should keep Main persistence ownership`);
       assert.match(
         source,
         /writer's local self-check does not replace the independent checker/i,
@@ -561,10 +584,14 @@ describe('bundled frugal-pi writing content', () => {
       );
       assert.match(
         source,
-        /Main\s+owns the parent TODO, finding disposition,\s+integration, final verification, and user-visible delivery/i,
+        /Main\s+owns the parent TODO, finding disposition,[\s\S]{0,80}integration, final verification, and user-visible delivery/i,
         `${path} should preserve Main ownership`,
       );
-      assert.match(source, /records?\s+the limitation[\s\S]{0,160}safe direct\s+fallback/i, `${path} should allow safe fallback`);
+      assert.doesNotMatch(
+        source,
+        /records?\s+the limitation[\s\S]{0,160}safe direct\s+fallback/i,
+        `${path} must not authorize a Main direct writing fallback`,
+      );
     }
 
     const chineseMutationSkills = [
@@ -574,15 +601,24 @@ describe('bundled frugal-pi writing content', () => {
     ];
     for (const path of chineseMutationSkills) {
       const source = readFileSync(join(rootDir, path), 'utf8');
-      assert.match(source, /受派写作子 Agent 的有界局部方法/, `${path} 应标明执行者`);
+      assert.match(source, /文本工具的有界局部方法/, `${path} 应标明执行者`);
       assert.match(source, /不\s*选择或调度 Agent/, `${path} 不应拥有委派权`);
       assert.match(source, /写作者的局部自检不能替代独立 checker/, `${path} 应保留独立审查`);
       assert.match(
         source,
-        /Main 保留父级 TODO、finding disposition、集成、最终验证和面向用户\s*的交付权/,
+        /文本工具始终只交付建议稿[\s\S]{0,220}Main 保留权限决策[\s\S]{0,30}实际文件修改/u,
+        `${path} 应保持建议稿交接`,
+      );
+      assert.match(
+        source,
+        /Main 保留父级 TODO、finding disposition、[\s\S]{0,80}集成、最终验证和面向用户\s*的交付权/,
         `${path} 应保留 Main 的所有权`,
       );
-      assert.match(source, /记录该限制[\s\S]{0,100}安全的直接 fallback/, `${path} 应允许安全 fallback`);
+      assert.doesNotMatch(
+        source,
+        /记录该限制[\s\S]{0,100}安全的直接 fallback/u,
+        `${path} 不得授权 Main 直接写作 fallback`,
+      );
     }
 
     assert.doesNotMatch(
@@ -626,9 +662,14 @@ describe('bundled frugal-pi writing content', () => {
       assert.equal(dedicated.includes(phrase), true, 'dedicated Skill should preserve contract phrase: ' + phrase);
     }
     assert.match(dedicated, /没有发表场所或部署证据时，不要补写/u);
-    assert.match(dedicated, /writer 子 Agent 始终只交付建议稿/u);
-    assert.match(dedicated, /记录该限制[\s\S]{0,100}安全的直接 fallback/u);
-    assert.match(dedicated, /Main 保留[\s\S]{0,100}权限决策[\s\S]{0,100}实际文件修改/u);
+    assert.match(
+      dedicated,
+      /`zh-writer` 文本工具始终只交付建议稿[\s\S]{0,160}完整建议文本[\s\S]{0,160}Main 保留权限决策和实际文件修改/u,
+    );
+    assert.doesNotMatch(
+      dedicated,
+      /记录该限制[\s\S]{0,100}安全的直接 fallback/u,
+    );
 
     for (const path of [
       'skills/zh-format-humanizer/SKILL.md',

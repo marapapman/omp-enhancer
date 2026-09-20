@@ -10,9 +10,9 @@ const AGENT_DESCRIPTIONS = Object.freeze({
   'fact-challenger': 'Adversarial reviewer that attacks recorded verdicts and reports claims the plan missed (AGREE / REBUT / MISSED).',
   scout: 'Fast read-only scout returning compressed context for handoff; use for exploratory codebase research and broad pattern searches.',
   task: 'General-purpose subagent with full capabilities for delegated multi-step work.',
-  writer: 'Bounded English writer for drafting or revision, including LaTeX passages and read-only proposed replacements.',
+  writer: 'Dedicated English text tool: the only author for English prose/copy (drafting, revision, translation, polishing, titles, labels, captions, notes, UI copy), including LaTeX passages; returns proposals read-only. Served by the host\'s packaged Agent adapter because the current OMP ExtensionAPI exposes model workers only as agents; this label is not a second general-purpose writer agent and grants no code or file permissions.',
   'zh-checker': '中文只读 checker，可执行窄范围的语义漂移、逻辑与清晰度核查，或完整七维审查。',
-  'zh-writer': '有界中文写作与修改 agent，支持 LaTeX 段落和只读修改稿，输出自然中文。',
+  'zh-writer': '专用中文文本工具：中文散文/文案（起草、修订、翻译、润色、标题、标签、图注、笔记、界面文案）的唯一作者，支持 LaTeX 段落，返回只读修改稿，输出自然中文。因当前 OMP ExtensionAPI 仅以 Agent 形式暴露模型 worker，由宿主打包 Agent 适配器承载；该标识不是第二个通用写作 agent，不授予代码或文件权限。',
 });
 
 function describeAgent(role) {
@@ -47,7 +47,7 @@ function renderWorkflowCard(definition) {
     '',
     `- When: ${definition.chooseWhen}`,
     `- Skills: ${codeList(definition.skills)}`,
-    `- Agents: ${definition.roles.length ? codeList(definition.roles) : 'none suggested'}`,
+    `- Agents (host runtime adapter labels): ${definition.roles.length ? codeList(definition.roles) : 'none suggested'}`,
     '- Flow:',
     ...definition.suggestedFlow.map((text, index) => `  ${index + 1}. ${text}`),
   ];
@@ -96,6 +96,8 @@ function renderAgentDescriptions() {
     '',
     ...roles.map((role) => `- \`${role}\` — ${describeAgent(role)}`),
     '',
+    'Compatibility note: the `writer` and `zh-writer` text tools are listed above under their packaged Agent adapter names because the current OMP host exposes model workers through agents (the ExtensionAPI offers `registerTool` for command tools only). That backend label is a compatibility adapter, not a second general-purpose writer agent, and it grants no code or file permissions; `writer`/`zh-writer` remain the dedicated language-matched text capabilities, while Main/task own code and other non-text actions.',
+    '',
   ];
 }
 
@@ -109,7 +111,9 @@ function buildWorkflowSkillReferenceMarkdown(workflowId) {
     '',
     `- When: ${definition.chooseWhen}`,
     `- Skills: ${codeList(definition.skills)}`,
-    `- Agent candidates: ${definition.roles.length ? definition.roles.map(code).join(', ') : 'none suggested'}.`,
+    `- Agent candidates (host runtime adapter labels): ${definition.roles.length ? definition.roles.map(code).join(', ') : 'none suggested'}.`,
+    '',
+    'Text capability note: `writer` and `zh-writer` are the dedicated language-matched text tools for all English/Chinese prose and copy; they appear under their packaged Agent adapter names only because the current OMP host exposes model workers that way. That backend label is not a second general-purpose writer agent and grants no code or file permissions; Main/task own code and other non-text actions.',
     '',
     '## Required step order',
     '',

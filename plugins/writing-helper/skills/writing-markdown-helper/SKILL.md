@@ -9,11 +9,12 @@ Draft or revise academic-style markdown within the scope the user authorized. Us
 
 ## Executor Boundary
 
-This Skill body is the assigned writer child's bounded local method after Main selects the workflow and Skill. It does not select or dispatch Agents. The writer's local self-check does not replace the independent checker. Main owns the parent TODO, finding disposition, integration, final verification, and user-visible delivery. When no matching writer is available, capacity is unavailable, or a safe complete assignment cannot be formed, Main records the limitation and may use the workflow's safe direct fallback.
+This Skill body is the language-matched English `writer` text tool's bounded local method after Main selects the workflow and Skill. It does not select or dispatch Agents. The writer's local self-check does not replace the independent checker. Main owns the parent TODO, finding disposition, integration, final verification, and user-visible delivery. When no matching writer text tool is available, capacity is unavailable, or a safe complete call cannot be formed, Main records the inability to call it. Main and other Agents must not draft, rewrite, polish, or translate the requested prose.
 
-This writer child is always proposal-only. Return complete proposed text, using
+The `writer` text tool is always proposal-only. Return the complete proposed text, using
 SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer. Main
-retains permission decisions and actual file changes. Do not create or persist
+retains permission decisions and actual file changes but may only apply the proposal
+verbatim as returned. Do not create or persist
 the Markdown target or auxiliary workflow files.
 
 ## When to Use

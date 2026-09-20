@@ -1,6 +1,6 @@
 ---
 name: zh-writing-mad-writer
-description: "Main 选择 writing 并把写作任务派给 zh-writer 子 Agent 后，用于快速批量起草多个中文章节并做一轮聚焦多维自检。不用于克制润色、只读审查或严格证据矩阵写作。"
+description: "Main 选择 writing 并把写作任务交给 `zh-writer` 文本工具调用后，用于快速批量起草多个中文章节并做一轮聚焦多维自检。不用于克制润色、只读审查或严格证据矩阵写作。"
 ---
 
 # 中文快速写作技能
@@ -9,11 +9,11 @@ description: "Main 选择 writing 并把写作任务派给 zh-writer 子 Agent �
 
 ## 工作流边界
 
-只在 Main 选择工作流 `writing`、加载其精确 workflow reference 和本 Skill，再把任务派给 `zh-writer` 子 Agent 后使用本 Skill。这是受派 writer 子 Agent 的有界局部方法，不选择或调度 Agent。不要递归 fork、spawn 或 delegate。Main 保留父级 TODO、集成、最终验证和面向用户的交付权。
+只在 Main 选择工作流 `writing`、加载其精确 workflow reference 和本 Skill，再把任务交给 `zh-writer` 文本工具调用后使用本 Skill。这是 `zh-writer` 文本工具的有界局部方法，不选择或调度 Agent。不要递归 fork、spawn 或 delegate。Main 保留父级 TODO、集成、最终验证和面向用户的交付权。
 
 下列七个维度只是 writer 局部自检，不能满足或替代独立 `zh-checker` delivery。只做一次有界局部处理；不启动自动修复循环，也不创建完成门禁。把修订文本、证据、局限和作者决策返回给 Main。
 
-writer 子 Agent 始终只交付建议稿。返回完整建议文本；有界补丁更清楚时，使用
+`zh-writer` 文本工具始终只交付建议稿。返回完整建议文本；有界补丁更清楚时，使用
 SEARCH/REPLACE 块或 unified diff。Main 保留权限决策和实际文件修改。不要创建或
 持久化目标文档、研究产物或 review log。
 

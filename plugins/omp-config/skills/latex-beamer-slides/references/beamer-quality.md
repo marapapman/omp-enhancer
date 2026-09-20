@@ -24,6 +24,31 @@ For a new deck, complete the text-only page draft before visual authoring. Work 
 
 Persist the page draft in a Markdown content-plan file before visual authoring. The Markdown content plan is the canonical content source; the Beamer .tex files are derived layout artifacts.
 
+### Writer-owned logic and style sequence
+
+For the Markdown content plan and every Beamer copy surface, the independent
+language-matched `writer` (English) or `zh-writer` (Chinese) proposes the
+complete text. That proposal establishes claims, evidence order, scope, and
+source basis before stylistic polishing; mixed-language content uses separate
+writers for each language slice. An independent checker may report logic,
+evidence, or style defects, but `task`, visual review, conversion, and Main do
+not rewrite prose. Any substantive wording repair, rewrite, translation, or
+polishing returns to the same `writer` or `zh-writer`, and Main applies the
+complete writer proposal verbatim.
+
+### Copy bans
+
+Across titles, body text, captions, labels, speaker notes, and narrative text,
+ban reader-facing stage announcements, including `The real question is`, `A new
+question is`, `This raises a deeper question`, and `Let us turn to` in English,
+and `新的问题是`, `真正的问题是`, `这就引出了一个更深的问题`, and
+`接下来我们看` in Chinese when they only announce a stage. Ban hollow or
+unsupported abstract significance claims such as
+`this is important/significant/transformative`, `this demonstrates the power/value`,
+`意义重大`, `具有重要意义`, `标志着`, `彰显了`, `开创了`, and `充分说明`.
+Retain an importance or evaluation claim only when its concrete result, scope,
+or source is stated; otherwise replace it with that evidence or a limitation.
+
 Write body text, captions, and explanations as complete natural-language sentences or paragraphs. Do not replace them with isolated phrases, keyword strings, or phrase-only bullet lists. Bullets and captions must not open with a label-colon lead-in ("方法：…", "结果：…", "Method: …"); write the sentence directly. These bans apply to titles, body, captions, and labels, and are fixed whenever found rather than treated as weak clustering tells: no "XX：XX" label+colon+label pattern; no "不是X，而是Y" contrast-repetition construction or its English equivalents ("not X, but Y", "not just X, it's Y") — state the claim once, directly, and never stage a bullet list as paired contrasts; no opening or closing one-sentence summary ("一句话总结", "In one sentence", "The takeaway") that restates what the page just showed; and no defensive writing — no unsourced hedging qualifiers (可能/或许/某种程度上, "possibly/perhaps/somewhat/relatively", "it is worth noting that", "值得注意的是"), no boilerplate disclaimers, no over-attribution ("许多研究表明" without a citation), no apologia for limitations nobody asked about — unless the hedge is itself a sourced fact such as a measured variance or a cited confidence interval. Also no "specifics then sweep" summary clause: a concrete factual clause followed by a summarizing clause that elevates it to a sweeping whole ("这些共同构成了……/这一切标志着……"; English "Together, these ...", "All of this marked ...") — the second clause adds no new fact, only inflation, and its skeleton often mirrors the first clause, forming the documentary-narration "画面＋全称升华" two-beat sentence. Keep the concrete clause; cut the sweep. No abstract-restatement echo either: a concrete fact followed by the same fact restated as a quoted or nominalized abstraction ("算筹、算盘就能做加减乘除。" then "“会算”这件事人类很早就做到了。") — zero information gain; never wrap a commonplace in quotation marks or turn it into a concept object. No announcer transitions ("新的问题是……", "真正的问题是……", "这就引出了一个更深的问题……", "The real question is ..."): the facts carry the transition; never declare on the reader's behalf which question matters next. No rhythm-matched paired-phrase closer: do not end a page with neatly matched phrases ("够不够快、能不能自动", "faster, cheaper, better") unless every item is a real, independently justified dimension; matched rhythm is earned by content, not composed for cadence. State the result and its actual scope; cut the armor. For Chinese slide text, apply plain-chinese-writing for natural prose, zh-format-humanizer for evidence-based AI-like phrasing removal, and zh-writing-review for page-level clarity when available. Use zh-writing-polish only for actual polishing. For English slide text, apply format-humanizer for AI-tell removal and writing-review for page-level clarity when available. Preserve facts, qualifiers, numbers, citations, and causal direction.
 
 Slide copy has its own AI tells: a title that states a complete claim should not be followed by a bullet list of staged contrasts; one-line closers and dramatic fragments replace real content; forced triads pad bullet lists; bold as decoration labels every bullet; inflated significance appears in titles such as Awards and recognition; and a stock Challenges and Future Outlook page pads the ending. The "XX：XX" title pattern (label + colon + label) is itself a tell: it reads as a scaffold, not a claim. Any listed tell justifies a revision on its first sighting on the page — prefer an over-correction to a miss; the "XX：XX" title pattern and a broken title sequence are title-rule violations, fixed whenever found.
@@ -92,3 +117,38 @@ After the first complete layout is rendered, present the current PDF and page re
 After that confirmation, preserve the current multi-pass visual evidence chain. Each explicit refinement round uses fresh current-revision evidence: visual review, a supported layout-only task correction, task rerendering, and a new visual review. If a finding requires content or page-structure changes, return to the Markdown content plan, obtain user confirmation, and regenerate the affected Beamer frames before layout resumes. Main decides whether another bounded round is useful; findings remain advisory, no unchanged artifact is reviewed, and no automatic repair loop is created.
 
 Record warnings honestly. Do not report visual QA from compilation alone. Source inspection, task self-review, an old render, or a contact sheet without inspectable page renders cannot substitute for current-revision visual review evidence.
+
+## Optional PPTX output branch
+
+After either a new deck or a bounded existing-deck modification reaches its final validated Beamer visual revision, PPTX output may branch from that revision when requested. Do not convert every Beamer deck automatically. Require the final validated Beamer PDF and the corresponding `.tex`, macro, and font sources when available. Preserve the Markdown and Beamer sources as the content authority.
+
+Use the fixed external `beamer2pptx` Skill/repository:
+https://github.com/xdmlxdml/beamer2pptx/tree/main/beamer2pptx.
+Do not ask for, require, or invent a user-supplied conversion command, and do
+not substitute another converter. Conversion does not rewrite prose, formulas,
+figures, slide order, page structure, Markdown, `.tex`, macros, or fonts.
+
+1. One producing `task` creates, renders, and binds one PPTX revision to the
+   exact input PDF, available source evidence, candidate `.pptx`, reports, and
+   current render directory. Use existing OfficeCLI guidance where appropriate.
+   Report package or structural validity, visual fidelity, and editability as
+   separate results; do not claim checks that were not performed. OfficeCLI or
+   a local package check does not prove compatibility with Microsoft PowerPoint.
+2. One independent read-only visual-review owner—Main, or a `task` that did not
+   produce this revision—checks only the current PPTX renders and associated
+   reports. Review slide count and order; text and formula editability where
+   supported; clipping, overflow, and missing content; overlap, margins, and
+   alignment; hierarchy, typography, font substitution, and legibility; aspect
+   ratio and page geometry; raster versus vector treatment; and visible fidelity
+   against the final validated Beamer PDF. Findings are advisory.
+3. For a supported layout defect, the producing task may apply at most one
+   bounded layout-only fix to the editable PPTX. Preserve visible content,
+   formulas, slide order, and the Markdown and Beamer sources; change only
+   placement, sizing, spacing, alignment, fonts, or equivalent layout
+   properties. Rerender the exact changed revision and bind fresh evidence; the
+   same reviewer confirms only those recorded findings once.
+4. Do not start an automatic repair loop, impose a hard gate, redispatch
+   automatically, or review unchanged evidence. If a finding requires content
+   or page-structure changes, return to the Markdown content plan and Beamer
+   regeneration path. No PPTX finding grants permission to convert, publish,
+   or complete.

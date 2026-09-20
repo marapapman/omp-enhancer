@@ -7,29 +7,42 @@ description: Use for a bounded review, correction, revision, or polish of existi
 
 ## Executor Boundary
 
-Reading this Skill prepares a writer assignment; by itself it does not turn
-Main into the executor. This body is the assigned writer child's bounded local method
-after Main selects the workflow and Skill. This Skill does not select or dispatch Agents;
-Main retains Agent selection and dispatch.
+Reading this Skill prepares a writer assignment; by itself it does not turn Main
+into the executor. This body is the language-matched English `writer` text tool's
+bounded local method,
+after Main selects the workflow and
+Skill. This Skill does not select or dispatch Agents; Main retains Agent selection
+and dispatch.
 The one-pass method never satisfies the independent checker checkpoint, and
 the writer's local self-check does not replace the independent checker. Main
 owns the parent TODO, finding disposition,
 integration, final verification, and user-visible delivery.
 
+All substantive English prose work—including initial writing or drafting,
+translation, rewriting, logical revision, and polishing—must be performed through
+language-matched `writer` text-tool calls. Main, `task`, and `checker` do not
+write that prose. The
+writer proposal comes first; an independent `checker` only reports logic,
+evidence, or semantic-drift findings. Any substantive textual repair returns to
+the same language-matched `writer`.
+
 The user need not request delegation explicitly.
 Target length only bounds the executor method and finding count.
-It is not a Main direct-fallback reason.
-Read-only delivery, an integrated final response, and coordination overhead are
-not fallback reasons. The assigned writer returns the complete requested
+It does not authorize Main or another Agent to draft, rewrite, polish, or translate
+the requested prose.
+Read-only delivery, an integrated final response, and coordination overhead do not
+authorize bypassing the writer. The assigned `writer` text tool returns the complete requested
 proposal; the selected workflow keeps its writer delivery,
 dependent checker delivery, and parent integration checkpoints.
-If a current permitted limitation prevents dispatch, Main records the limitation
-and uses safe direct fallback only for that affected checkpoint.
+If a current permitted limitation prevents a safe `writer` call, Main records the
+inability to
+delegate; it must not silently draft or route substantive prose to another Agent.
 
-This writer child is always proposal-only. Return the complete proposed text
+The `writer` text tool is always proposal-only. Return the complete proposed text
 requested by the assignment, using SEARCH/REPLACE blocks or a unified diff
 when that makes a bounded change clearer. Main retains permission decisions
-and actual file changes. Do not create or persist review artifacts.
+and actual file changes but integrates only that returned proposal verbatim.
+Do not create or persist review artifacts.
 
 When the user identifies a target file or passage, review that target directly.
 Use `.pi/research/checker_report.md` only when the user supplies or references
@@ -56,30 +69,44 @@ evidence.
 
 ## Assigned Writer One-Pass Method
 
-1. Read the exact target once and record semantic anchors in the source:
+Use this order: claims and evidence plus semantic anchors first; logic and
+structure second; sentence and style polish last.
+
+1. Read the exact target once and first inventory its claims, evidence or source
+   support and limits, then record semantic anchors:
    qualifiers, modality, scope,
    negation, direction, numbers and units, citations and identifiers, and
    LaTeX math, cross-references, commands, and structure.
-2. Sort findings as critical, important, or minor while preserving their order
-   within each severity.
-3. For an explicitly authorized content revision, propose clarity, grammar,
-   structure, tone, and formatting fixes that preserve claims. Treat AI writing
-   tells as fixable defects: staged "not X but Y" contrasts, one-line closers
-   that only restate, sayings that sound deep, staged run-up openers, forced
-   triads, dashes as universal connectors, inflated significance, shallow -ing
-   riders, borrowed authority, bold as decoration, chatbot residue,
+2. Check that each claim stays within its evidence and inspect logic and
+   structure: argument order, dependencies, unsupported leaps, causal direction,
+   and where evidence-backed claims end. Mark unsupported significance or
+   evaluation language for replacement or deletion.
+3. Only after the claims, evidence, logic, and structure are stable, propose
+   clarity, grammar, sentence, style, and formatting fixes that preserve claims.
+   Treat AI writing tells as fixable defects: staged "not X but Y" contrasts,
+   one-line closers that only restate, sayings that sound deep, staged run-up
+   openers, forced triads, dashes as universal connectors, inflated significance,
+   shallow -ing riders, borrowed authority, bold as decoration, chatbot residue,
    abstract-restatement echoes (a fact restated as a quoted or nominalized
-   concept one level up), announcer transitions ("The real question is ..."),
-   and rhythm-matched paired-phrase closers ("faster, cheaper, better").
-   Any listed tell justifies an edit on its first sighting; prefer an
-   over-correction to a miss. A review-only request produces findings rather than a rewritten document.
+   concept one level up), announcer transitions ("The real question is ...",
+   "A new question is ...", "This raises a deeper question ..."), and
+   rhythm-matched paired-phrase closers ("faster, cheaper, better").
+   Reject hollow assertions such as "this is important/significant/transformative"
+   and "this demonstrates the power/value". Replace them with concrete facts,
+   evidence, scope, or a stated limitation, or delete unsupported wording.
+   Retain evidence-backed claims and state the support. Any listed tell justifies
+   an edit on its first sighting; prefer an over-correction to a miss. A review-only
+   request produces findings rather than a rewritten document.
 4. Do not silently change a factual statement, central argument, citation
    meaning, or requested scope. Present those items as author decisions.
 5. Compare the result with the source once. Treat any changed semantic anchor
    as an advisory finding, not as a reason to start another repair cycle.
-6. Review the resulting text once and summarize proposed changes, unresolved
+6. An independent `checker` may report logic, evidence, or semantic-drift
+   findings only; it must not rewrite prose. Return every substantive repair to
+   this same language-matched `writer`, then give Main the resulting proposal.
+7. Review the resulting text once and summarize proposed changes, unresolved
    decisions, and evidence limitations.
-7. Report which AI-tell families the revision touched and which tells were left
+8. Report which AI-tell families the revision touched and which tells were left
    in place because they carry the writer's voice, so the checker can
    distinguish judgment from omission.
 
@@ -115,7 +142,7 @@ For one abstract or another short passage, report at most five material
 findings. Keep the semantic-anchor inventory internal, omit
 empty severity sections and full-source restatements, and return the delivery
 to Main as soon as the complete target supports the findings. This finishes
-only the writer-child pass; it neither completes the parent workflow nor
+only the writer text-tool pass; it neither completes the parent workflow nor
 replaces an independent checker delivery.
 
 ## Optional Interactive Mode
@@ -134,6 +161,6 @@ merely to satisfy this Skill.
 
 When an additional broad review was explicitly requested, Main may declare and
 load `writing-checkers` during PLAN through the runtime's normal Skill
-mechanism. This writer child neither loads it nor treats its body as independent
+mechanism. This writer text-tool pass neither loads it nor treats its body as independent
 checker execution. Legacy slash-skill text is documentation, not a command to
 attempt.

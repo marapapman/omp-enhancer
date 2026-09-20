@@ -12,7 +12,7 @@ OMP 负责系统提示、用户指令、active tools、动态 Available Agents�
 
 ## 工作流信息
 
-工作流 definition 位于 `scripts/workflow-definitions.js`，校验和渲染模块分别是 `scripts/workflow-schema.js` 与 `scripts/workflow-render.js`。当前 catalog version 43 只有三个域：`writing`、`research`（事实核查）和 `visual`。
+工作流 definition 位于 `scripts/workflow-definitions.js`，校验和渲染模块分别是 `scripts/workflow-schema.js` 与 `scripts/workflow-render.js`。当前 catalog version 44 只有三个域：`writing`、`research`（事实核查）和 `visual`。
 
 生成器 `scripts/generate-workflow-catalog.js` 输出：
 
@@ -24,7 +24,7 @@ OMP 负责系统提示、用户指令、active tools、动态 Available Agents�
 
 Managed `AGENTS.md`、`CLAUDE.md` 和 `WATCHDOG.yml` 不导入完整目录，只说明 OMP 原生权威与 `ANALYZE -> EXECUTE -> REVIEW` advisory。它们指向 `skill://omp-enhancer-workflows` 的三域目录；Main 按任务需要选择 Skill 和 Agent。
 
-共享 generator 重写完整输出集合，因此 **the downstream exclusive integration slice** 只能在全部 **source dependencies** 完成后执行，并独占 generated write set，且 **exactly once**。这是 **mechanical generation slice**：证据包括 generator exit、check/parity 结果与 **no-unexpected-diff**；不得伪造 TDD RED。Main 检查 generated diff 后只运行 check-only parity，**does not rerun the generator**。
+共享 generator 重写完整输出集合，因此 **the downstream exclusive integration slice** 只能在全部 **source dependencies** 完成后执行，并独占 generated write set，且 **exactly once**。这是 **mechanical generation slice**：只有 Main 在所有 workflow source 文件完成后运行一次 `npm run generate:workflows`；task/worker 不运行 generator 或直接修改生成物。证据包括 generator exit、check/parity 结果与 **no-unexpected-diff**；Main 检查 generated diff 后只执行 check-only parity，不得再次运行 generator，也不得伪造 TDD RED。
 
 ## 插件职责
 | 插件 | 运行职责 | 不负责的事项 |
@@ -40,9 +40,17 @@ marketplace extension tools 默认 opt-in；四个 `fact_check_*` 管线工具�
 
 ## 写作、PPT 与视觉
 
-Writing 域根据目标正文语言选择中文或英文 Skill，根据目标格式选择 Markdown、LaTeX、Beamer 或 Word Skill。`writer`/`zh-writer` 交付 proposal，`checker`/`zh-checker` 交付只读 report；Main 独自决定并执行任何获授权的文件修改。
+Writing、research 和 visual 三域共享同一文字作者边界：所有 prose/copy（包括起草、改写、翻译、标题、正文、caption、label、narrative 和 UI copy）都必须由语言匹配的专用文本工具产出；英文使用 `writer`，中文使用 `zh-writer`，混合语言分别调度。`writer`/`zh-writer` 不是独立通用 agent，也不授予代码或文件权限；当前 OMP ExtensionAPI 只暴露 `registerTool`（命令类工具），没有插件可注册的模型调用 API，因此这两个文本工具由宿主的打包 Agent（`agents/writer.md`、`agents/zh-writer.md`，含既有 frontmatter/model/tool 元数据）作为兼容适配器承载。Main 只识别目标正文语言、调度对应文本工具、传递约束、原样接收返回文本并做机械集成和最终验收，禁止直接起草、改写、润色或替代文本工具；Main/task 保留代码、证据收集、结构、绘图、版式、格式转换、校验和文件机械操作等非文字职责。
+`writer`/`zh-writer` 是 proposal-only：只返回完整文本或有界 diff，不直接写文件。Main 只能原样持久化或应用获授权的 proposal，不得在应用前后自行改写其内容。`checker`/`zh-checker` 只提供独立只读 report。
+`task`、research Agent 和 visual Agent 可以收集证据、重排结构、绘图、执行版式、格式转换和视觉检查，但不替代 writer 起草或改变文字；任何文字变化都必须返回对应语言的 writer/`zh-writer`。PPT/Beamer/Word/PPTX 的布局、转换、OfficeCLI 应用和视觉检查仍可由 Main 或 task 负责，但只能机械集成已返回的文字，不能借这些步骤修改文案。
 
-PPT 相关能力由 `omp-config` 打包，包括 `latex-beamer-slides`、`beamer-to-powerpoint`、`slides-storyline`、`frontend-design`、`canvas-design` 和 `docx`。PowerPoint 转换只使用用户提供的具体转换命令，并验证生成的 artifact；不自动发布或覆盖用户文件。Office 文档（`.docx`/`.xlsx`/`.pptx`）的创建、编辑、校验和渲染统一通过 [officecli](https://github.com/iOfficeAI/OfficeCLI) 单二进制完成，`docx` skill 提供其使用契约。
+For substantive prose and PPT copy, the language-matched `writer`/`zh-writer` text tool is called first for drafting, logical/semantic revision, translation, and polishing. English uses `writer`, Chinese uses `zh-writer`, and mixed-language segments call both tools. Resolve logic and evidence before sentence polish. A tool proposal precedes the `checker`/`zh-checker` report of logic, evidence, and style findings; the checker is report-only, and any substantive repair returns to the same language-matched text tool. Main performs mechanical integration and final acceptance only; Main, `task`, and checker never rewrite prose. If the matching text tool cannot be safely called, record that limitation instead of silently drafting through another role.
+
+For Beamer/PPT titles, body text, captions, labels, notes, and narrative copy, `writer`/`zh-writer` remains the sole text author. PPT text work by `task` is structural/layout/conversion-only: it may reconcile order, place writer-proposed text, render, convert, validate, or inspect visuals, but must not draft, rewrite, translate, or polish wording; copy changes return to the matching writer.
+
+PPT copy must avoid announcer transitions such as `The real question is`, `A new question is`, `This raises a deeper question`, `Let us turn to`, `新的问题是`, `真正的问题是`, `这就引出了一个更深的问题`, and `接下来我们看`; facts or a concrete dependency should carry the transition. It must also avoid hollow unsupported significance claims such as `this is important/significant/transformative`, `this demonstrates the power/value`, `意义重大`, `具有重要意义`, `标志着`, `彰显了`, `开创了`, and `充分说明`. Replace those claims with concrete evidence, scope, or source, or remove them. The evidence-backed exception is to retain significance/evaluation wording only when that concrete evidence, scope, or source is stated.
+
+PPT 相关能力由 `omp-config` 打包，包括 `latex-beamer-slides`、`beamer-to-powerpoint`、`slides-storyline`、`frontend-design`、`canvas-design` 和 `docx`。PowerPoint 输出是可选分支：在最终已验证的 Beamer visual revision 之后、且仅当 PPTX 在 scope 时，`beamer-to-powerpoint` 使用固定外部 `beamer2pptx` Skill/repository（`https://github.com/xdmlxdml/beamer2pptx/tree/main/beamer2pptx`），不要求用户另行选择转换器。输入必须是最终已验证的 Beamer PDF，并在可用时提供对应 `.tex`、宏和字体源；转换只读，不修改 Markdown/Beamer 内容。一个 producing `task` 绑定单一 current PPTX revision 并返回当前渲染证据；一个未产出该 revision 的独立只读 reviewer（Main 或 task）检查页数与顺序、可编辑性、裁切/溢出、重叠、边距/对齐、层级/字体、宽高比、栅格/矢量处理以及相对最终 Beamer PDF 的 fidelity。若发现支持的版式问题，producing task 最多对可编辑 PPTX 做一次 bounded layout-only fix，保留可见内容、公式、页序以及 Markdown/Beamer 源，重新渲染 fresh evidence 后由同一 reviewer 确认一次；内容或页结构问题返回 Markdown content plan 和 Beamer regeneration 路径。所有 findings 都是 advisory，不是 hard gate、router、自动修复 loop 或 completion authority；不自动发布或覆盖用户文件。Office 文档（`.docx`/`.xlsx`/`.pptx`）的创建、编辑、校验和渲染统一通过 [officecli](https://github.com/iOfficeAI/OfficeCLI) 单二进制完成，`docx` skill 提供其使用契约。
 
 Beamer 保持为 writing 格式 overlay，不进入 visual 卡片。新 deck 先以分段、逐页讨论的纯文字版开始，并将逐页内容持久化为 Markdown content plan；Markdown content plan is the canonical content source, and Beamer .tex files are derived layout artifacts. Content changes go to Markdown first, are discussed and reconfirmed with the user, then regenerate Beamer; never edit .tex to settle unresolved content during layout. 用户确认每页内容后，由一个独立 task 在 Markdown content plan 上先做页序审查（消除内容交叉、保持内容模块语义一致、整体顺序逻辑有序），审查通过并经用户确认后才进入逐页配图和基础排版；用户确认基础排版后，再进入现有视觉精修链。A single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before the task layout pass；findings are advisory only and inform the normal task pass，不产生 verdict 或 repair loop。Task then integrates and renders the final revision, which Main reviews read-only as the single review owner (a task that did not produce the revision may review instead)。Main 不因该预检获得 compile、render、edit 或 reconcile ownership。
 

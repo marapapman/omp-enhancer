@@ -10,13 +10,13 @@ description: "仅在用户明确要求把科研工作、研究方向或项目业
 本 Skill 是 `writing` 中处理“科研成果凝练体” prose deliverable 的局部方法。只有同时满足以下条件时才使用。
 
 1. 用户明确要求撰写、改写或凝练科研成果、研究方向、项目业绩或个人学术简介，并要求类似科研成果简介的行文风格。
-2. Main 选择工作流 `writing`、加载其精确 workflow reference 和本 Skill，再把任务派给 `zh-writer` 子 Agent 后，才在 writer assignment 中使用本 Skill。
+2. Main 选择工作流 `writing`、加载其精确 workflow reference 和本 Skill，再把任务交给 `zh-writer` 文本工具调用后，才在 writer assignment 中使用本 Skill。
 
-这是受派 writer 子 Agent 的有界局部方法，不选择或调度 Agent。不要递归 fork、spawn 或 delegate。Main 保留父级 TODO、集成、最终验证和面向用户的交付权，并负责 finding disposition。
+这是 `zh-writer` 文本工具的有界局部方法，不选择或调度 Agent。不要递归 fork、spawn 或 delegate。Main 保留父级 TODO、集成、最终验证和面向用户的交付权，并负责 finding disposition。
 
-没有匹配的 writer、容量不足或无法形成安全完整的任务时，Main 记录该限制，并可采用工作流中的安全的直接 fallback。
+没有可用的匹配文本工具、容量不足或无法形成安全完整的调用时，Main 记录无法调用的限制；Main 或其他 Agent 均不得起草、改写、润色或翻译正文。
 
-writer 子 Agent 始终只交付建议稿。返回完整建议文本；有界补丁更清楚时，使用 SEARCH/REPLACE 块或 unified diff。Main 保留权限决策和实际文件修改。
+`zh-writer` 文本工具始终只交付建议稿。返回完整建议文本；有界补丁更清楚时，使用 SEARCH/REPLACE 块或 unified diff。Main 保留权限决策和实际文件修改权限，但只能原样应用 writer 返回的建议稿；Main 或其他 Agent 均不得自行起草、改写、润色或翻译正文。
 
 本 Skill 不用于普通中文润色、去 AI 味、完整七维审查、语义逻辑审查、邮件、日常说明或一般论文段落。普通文本仍使用 `plain-chinese-writing`，真正的去 AI 味任务使用 `zh-format-humanizer`，保守润色使用 `zh-writing-polish`。
 

@@ -77,7 +77,7 @@ describe('marketplace install metadata', () => {
       assert.doesNotMatch(content, /\/skill:/, relative);
     }
     assert.match(await readText(join(root, 'skills/writing-review/SKILL.md')), /Assigned Writer One-Pass Method/);
-    assert.match(await readText(join(root, 'skills/zh-writing-review/SKILL.md')), /受派 Writer 子 Agent 单轮方法/);
+    assert.match(await readText(join(root, 'skills/zh-writing-review/SKILL.md')), /受派 Writer 文本工具单轮方法/);
   });
 
 });

@@ -1,6 +1,6 @@
 ---
 name: writing-state-machine
-description: Use after Main selects writing and assigns a writer child for hallucination-sensitive English drafting or revision where citations, numbers, and factual claims require an explicit source-to-text evidence matrix. Not for ordinary prose editing; isolate paragraph context only when explicitly requested.
+description: Use after Main selects writing and passes the assignment to a `writer` text-tool call for hallucination-sensitive English drafting or revision where citations, numbers, and factual claims require an explicit source-to-text evidence matrix. Not for ordinary prose editing; isolate paragraph context only when explicitly requested.
 ---
 
 # Writing State Machine Skill
@@ -11,11 +11,11 @@ explicitly requests paragraph context isolation.
 
 ## Workflow boundary
 
-Use this Skill only after Main selects workflow `writing`, loads its exact workflow reference and this Skill, and dispatches a `writer` child. This is the assigned writer child's bounded local method. It does not select or dispatch Agents. Do not recursively fork, spawn, or delegate. Main retains the parent TODO, integration, final verification, and user-visible delivery.
+Use this Skill only after Main selects workflow `writing`, loads its exact workflow reference and this Skill, and passes the assignment to a `writer` text-tool call. This is the `writer` text tool's bounded local method. It does not select or dispatch Agents. Do not recursively fork, spawn, or delegate. Main retains the parent TODO, integration, final verification, and user-visible delivery.
 
 The evidence matrix is a writer-local self-check. It does not satisfy or replace an independent `checker` delivery selected by Main. Run one bounded local pass; it never starts an automatic repair loop or creates a completion gate. Return the paragraph, matrix, provenance, and unresolved gaps to Main.
 
-This writer child is proposal-only. Return the complete proposed text, using
+The `writer` text tool is proposal-only. Return the complete proposed text, using
 SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer. Main
 retains permission decisions and actual file changes. Do not create or persist
 target files, research artifacts, or review logs.
@@ -91,4 +91,4 @@ In explicitly requested strict-isolation mode:
 - Use the self-check matrix once for the current paragraph.
 - Start the next cycle with only the context needed for that paragraph.
 
-In every mode, this Skill completes only the assigned writer-local method. Main decides whether to integrate it, request an independent checker delivery, or start another assignment.
+In every mode, this Skill completes only the assigned `writer` text-tool method. Main decides whether to integrate it, request an independent checker delivery, or start another assignment.

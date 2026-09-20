@@ -101,7 +101,7 @@ describe('de-AI guidance content contracts', () => {
 
   it('keeps proposal-only boundaries in both humanizers', () => {
     const en = read('skills/format-humanizer/SKILL.md');
-    assert.match(en, /writer child is always proposal-only/iu);
+    assert.match(en, /`?writer`? text tool is always proposal-only/iu);
     assert.match(en, /Main\s+(?:retains|owns)\s+permission decisions\s+and actual file changes/iu);
     assert.doesNotMatch(
       en,
@@ -109,7 +109,7 @@ describe('de-AI guidance content contracts', () => {
     );
 
     const zh = read('skills/zh-format-humanizer/SKILL.md');
-    assert.match(zh, /writer 子 Agent 始终只交付建议稿/u);
+    assert.match(zh, /`zh-writer` 文本工具始终只交付建议稿/u);
     assert.match(zh, /Main 保留权限决策\s*和实际文件修改/u);
     assert.doesNotMatch(zh, /调用 `(?:write|edit)`|写入目标文件|追加[^\n]{0,50}review log/u);
     assert.ok(
@@ -168,7 +168,7 @@ describe('de-AI guidance content contracts', () => {
 
     const review = read('skills/writing-review/SKILL.md');
     assert.match(review, /Treat AI writing\s+tells as fixable defects/iu);
-    assert.match(review, /Any listed tell justifies an edit on its first sighting/iu);
+    assert.match(review, /Any listed tell justifies\s+an edit\s+on its first sighting/iu);
     assert.match(review, /Report which AI-tell families the revision touched/iu);
 
     const zhCheckers = read('skills/zh-writing-checkers/SKILL.md');
@@ -198,8 +198,8 @@ describe('de-AI guidance content contracts', () => {
     assert.match(deAiFlowStep, /scan task inventories the tell families present/iu);
     assert.match(deAiFlowStep, /strictly sequentially/iu);
     assert.match(deAiFlowStep, /semantic-anchor check/iu);
-    assert.match(deAiFlowStep, /no mixed single rewriting pass/iu);
-    assert.match(deAiFlowStep, /exactly one tell family/iu);
+    assert.match(deAiFlowStep, /all rewriting stays with the text tools and no pass mixes families/iu);
+    assert.match(deAiFlowStep, /per found family/iu);
     const writing = read('skills/writing-review/SKILL.md');
 
     const beamer = readConfig('skills/latex-beamer-slides/SKILL.md');

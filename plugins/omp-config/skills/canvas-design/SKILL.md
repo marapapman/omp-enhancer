@@ -5,10 +5,25 @@ description: Create static visual artifacts with task-owned revisions, current e
 
 # Canvas design
 
-When this Skill is part of a `writer` or `zh-writer` assignment, that child
-remains proposal-only: it runs no command and writes no file, and returns the
-complete proposed artifact or diff. Main or a separate explicitly capable
-Main-selected Agent owns authorized effects.
+When this Skill is part of a `writer` or `zh-writer` assignment, that invocation
+(the dedicated language-matched text tool, hosted by its packaged Agent compatibility adapter) remains proposal-only: it runs no command and writes no file, and returns the complete proposed artifact or diff. Main or a separate explicitly capable Main-selected Agent owns authorized effects; that owner performs no prose drafting or revision, which belongs to the text tool alone.
+## Artifact-text ownership
+
+Before any artifact text is created or changed, Main identifies the target
+language from the requested content and calls the `writer` text tool for
+English; Chinese artifacts use the `zh-writer` text tool. Mixed-language
+artifacts run one text-tool pass per language slice. The invoked `writer` or
+`zh-writer` text tool is the sole author of headlines, labels, captions, body
+copy, annotations, alt text, and other narrative text. Main only forwards
+context and results, applies the complete proposal verbatim, and performs
+mechanical non-text integration. Main must not draft, rewrite, translate, or
+polish artifact text. `task` owns composition, drawing, layout, source edits,
+and export only; it must not draft, rewrite, translate, polish, or invent
+copy. Visual reviewers may inspect and report text findings but must not edit
+them; return findings to the corresponding `writer` or `zh-writer` text tool.
+This is an advisory ownership rule, not a router, lifecycle gate, retry
+policy, or completion controller.
+
 
 Use this when the user asks for a poster, static visual artifact, or exportable visual layout.
 
@@ -17,6 +32,10 @@ Use this when the user asks for a poster, static visual artifact, or exportable 
 For every static visual design or revision, use a currently exposed `task` for the complete design, source revision, integration, and export/render checkpoint, and a separate read-only visual review owner selected by Main when each assignment is safe and complete.
 
 1. `task` owns the complete design, source revision, integration, and export/render checkpoint. Supply the artifact brief, intended dimensions, audience, message, existing visual system, output constraints, and preservation requirements. Reconcile the revision against that scope, bind one revision identifier through the source, exports/screenshots, and review request, and never mix stale or mixed-revision evidence.
+The task's source revision treats writer-proposed text as immutable input: it
+may place, style, draw around, and export that text, but never alter the
+words. Text defects go to the corresponding `writer` or `zh-writer` text tool
+through a new call and are not repaired in the drawing source or layout.
 2. The single read-only visual review uses exactly one owner—Main, or a task that did not produce the revision. That owner examines only the current-revision evidence, read-only, for hierarchy, composition, alignment, spacing, typography, clipping, contrast, image treatment, and export fidelity. Source checks, static checks, and self-review by the producing agent are not independent visual evidence.
 3. For a supported visual finding, `task` applies the bounded source revision, re-exports/rerenders and binds fresh evidence, and the review owner examines only the fresh export, at most once for that changed revision. Do not review an unchanged artifact.
 

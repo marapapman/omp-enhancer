@@ -6,11 +6,12 @@ description: "用于克制地润色已有中文学术文本，只修正口语化
 # 中文论文润色技能
 
 ## 执行者边界
+本技能正文是语言匹配的 `zh-writer` 文本工具的有界局部方法，在 Main 选定工作流和 Skill 后使用。本技能不选择或调度 Agent。写作者的局部自检不能替代独立 checker。Main 保留父级 TODO、finding disposition、集成、最终验证和面向用户的交付权。没有可用的匹配文本工具、容量不足或无法形成安全完整的调用时，Main 记录无法调用的限制；Main 或其他 Agent 均不得起草、改写、润色或翻译正文。
 
-本技能正文是受派写作子 Agent 的有界局部方法，在 Main 选定工作流和 Skill 后使用。本技能不选择或调度 Agent。写作者的局部自检不能替代独立 checker。Main 保留父级 TODO、finding disposition、集成、最终验证和面向用户的交付权。没有匹配的 writer、容量不足或无法形成安全完整的任务时，Main 记录该限制，并可采用工作流中的安全的直接 fallback。
-
-writer 子 Agent 始终只交付建议稿。返回完整建议文本；有界补丁更清楚时，使用
-SEARCH/REPLACE 块或 unified diff。Main 保留权限决策和实际文件修改。不要创建或
+`zh-writer` 文本工具始终只交付建议稿。返回完整建议文本；有界补丁更清楚时，使用
+SEARCH/REPLACE 块或 unified diff。Main 保留权限决策和实际文件修改权限，但只能
+原样应用 writer 返回的建议稿；Main 或其他 Agent 均不得自行起草、改写、润色或
+翻译正文。不要创建或
 持久化目标文档或 review 产物。
 
 对中文论文段落进行专业审视与润色。核心原则：尊重原著，克制修改。
