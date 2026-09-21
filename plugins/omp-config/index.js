@@ -33,7 +33,7 @@ export async function runConfigPlan(input = {}) {
   const plan = [
     `Review packaged templates under ${pluginRoot}/assets.`,
     'Compare assets/config.yml, assets/mcp.json, assets/AGENTS.md, assets/WORKFLOW_CATALOG.md, and assets/WATCHDOG.yml with the target OMP home; the shared catalog installs under its OMP Enhancer namespaced filename.',
-    'Compare bundled agents and skills with the target installation.',
+    'Compare bundled skills with the target installation.',
     'Dry-run omp_config_sync_workflow_context against the intended OMP agent directory.',
     'Apply the managed workflow context only after explicit user review; preserve unrelated AGENTS.md and WATCHDOG.yml content.',
   ];
@@ -149,10 +149,10 @@ export default function registerOmpConfig(pi) {
   pi.registerTool({
     name: 'omp_config_assets',
     label: 'OMP Config Assets',
-    description: 'List packaged OMP config agents, skills, hooks, and templates.',
+    description: 'List packaged OMP config skills, hooks, and templates.',
     defaultInactive: true,
     approval: 'read',
-    promptSnippet: 'List packaged OMP config agents, skills, hooks, and templates.',
+    promptSnippet: 'List packaged OMP config skills, hooks, and templates.',
     promptGuidelines: [
       'Returns a JSON inventory of all packaged config assets.',
       'Pass root to locate packaged assets from a specific plugin or workspace root.',

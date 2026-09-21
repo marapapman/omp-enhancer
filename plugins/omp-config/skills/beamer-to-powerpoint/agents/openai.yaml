@@ -1,4 +1,4 @@
 interface:
   display_name: "Beamer to PowerPoint"
-  short_description: "Convert a verified Beamer deck with a user command"
-  default_prompt: "Use $beamer-to-powerpoint to run my Beamer-to-PowerPoint conversion command and verify the output."
+  short_description: "Convert Beamer PDF through beamer2pptx with PPTX visual QA"
+  default_prompt: "Use $beamer-to-powerpoint for optional PowerPoint output: have a producing task run the fixed beamer2pptx workflow from the final validated Beamer PDF and available TeX sources, bind and render one PPTX revision, then use an independent read-only reviewer for PPTX visual QA; allow at most one layout-only fix and fresh confirmation."

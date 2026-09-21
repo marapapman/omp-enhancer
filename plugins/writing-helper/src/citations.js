@@ -88,7 +88,7 @@ function parseBibEntries(bibliography = '') {
   return entries;
 }
 
-export function extractCitationTargets(text) {
+function extractCitationTargets(text) {
   const targets = [];
   const seen = new Set();
   function add(target) {

@@ -48,7 +48,7 @@ Current architecture is documented in `docs/ARCHITECTURE.md`; development and re
 
 | Path | Purpose |
 |------|---------|
-| `scripts/workflow-definitions.js` | Workflow catalog (v43): writing, research (fact-checking), visual definitions |
+| `scripts/workflow-definitions.js` | Workflow catalog (v44): writing, research (fact-checking), visual definitions |
 | `plugins/writing-helper/src/` | Quality analysis: logic, style, citations, preservation, language detection, report formatting |
 | `plugins/omp-fact-checker/src/` | Fact-check pipeline: claim extraction, evidence collection (A/B lanes), cross-checking, providers |
 | `plugins/omp-config/` | Shared config assets, PPT/document/visual skills, hooks, hook-templates |
@@ -132,13 +132,15 @@ The default Main path is `agent-selected`:
 
 1. OMP exposes its native Skill inventory and dynamic Available Agents.
 2. For non-trivial PROJECT work, Main may read the compact `omp-enhancer-workflows` reference catalog (3 domains: writing, research, visual) and load matching domain Skills as needed; a mechanical field lookup without analysis uses no Skill or TODO.
-3. Main orchestrates through `ANALYZE -> EXECUTE -> REVIEW`. EXECUTE: Main executes directly for simple changes, delegates to `task` or domain agents for substantial work. REVIEW: Main reviews simple changes directly, delegates to `reviewer` for complex or risky changes. No byte-0 marker, load sequence, or Delegate-row format is required; the reference cards are advisory.
+3. Main orchestrates through `ANALYZE -> EXECUTE -> REVIEW`. For non-text and mechanical work, Main may execute simple changes directly and delegates substantial work to `task` or domain agents. For every prose/copy change, Main identifies the target body language and dispatches the independent `writer` or `zh-writer`; it never drafts, rewrites, polishes, or replaces that writer. REVIEW remains direct only for mechanical/simple checks; textual changes return to the language-matched writer. No byte-0 marker, load sequence, or Delegate-row format is required; the reference cards are advisory.
 4. A selected card shapes this Agent-owned plan but never creates a plugin runtime gate, permission, required fork, or completion condition.
 
-Only a mechanical field lookup without analysis may skip workflow, Skill, and TODO preparation. Main chooses delegation width by task complexity: focused work stays with Main, complex multi-slice work is delegated to currently visible Agents. Send runnable independent checkpoints in the same `tasks[]` batch and run dependency-bound checkpoints in order in a later wave. Main retains the parent TODO, integration, verification, permission and external effects decisions, and final response. Direct fallback is limited to a concrete user or native constraint, Agent availability or capacity, incomplete assignment input, unresolved dependency or write-set overlap, safety risk, or a parent-owned action; the TODO records the concrete fallback reason on the affected checkpoint. This remains soft Agent-owned guidance, not a required fork, fixed fanout, hard gate, or automatic loop.
+Only a mechanical field lookup without analysis may skip workflow, Skill, and TODO preparation. Main chooses delegation width by task complexity: focused non-text/mechanical work may stay with Main, while complex or text-producing work is delegated to the currently visible Agents and language-matched writer. Send runnable independent checkpoints in the same `tasks[]` batch and run dependency-bound checkpoints in order in a later wave. Main retains the parent TODO, integration, verification, permission and external effects decisions, and final response. Direct fallback is limited to a concrete user or native constraint, Agent availability or capacity, incomplete assignment input, unresolved dependency or write-set overlap, safety risk, or a parent-owned mechanical action; there is no direct/minor-edit fallback for text. The TODO records the concrete fallback reason on the affected checkpoint. This remains soft Agent-owned guidance, not a required fork, fixed fanout, hard gate, or automatic loop.
 
 
 For every delegated assignment, Main copies every direct user constraint verbatim into the job body, then carries allowed effects and acceptance evidence; outer context, name, or label cannot substitute. The child follows that bounded assignment and does not own the parent TODO. Failed or partial work is not a completed delivery. Only new dependency, scope, permission, tool, Agent, schema, capacity, Skill-load failure, or contradictory project evidence may rebase affected TODO rows.
+
+Global text-author boundary: all prose/copy in writing, research, and visual workflows—including drafting, rewriting, translation, titles, body text, captions, labels, narrative prose, and UI copy—comes from an independent language-matched `writer` (English) or `zh-writer` (Chinese); mixed-language deliverables dispatch both. Main only identifies language, dispatches the writer, passes constraints, integrates the returned proposal verbatim, and performs final acceptance. `writer`/`zh-writer` are proposal-only and return complete text or a bounded diff; Main may persist or apply only that exact authorized result. `task`, research, and visual agents may handle evidence, structure, drawing, layout, conversion, OfficeCLI, and visual review, but never copy. Any text change returns to the writer. This is advisory coordination, not a hard router, lifecycle gate, automatic retry, or completion controller.
 
 The plugins have no active hard gate, hard router, classifier preflight, plugin-owned completion controller, or automatic repair loop. Never reintroduce one under a compatibility or review name.
 
@@ -146,7 +148,7 @@ The simplified orchestration advisory is intentional and must remain. It is capa
 
 The packaged config template ships the current workstation's model roles, task agent overrides, and retry fallback chains as defaults; users may override any of them in their own OMP config. The plugin's runtime behavior stays model-agnostic.
 
-The Advisor carries a bilingual writing-norm reminder duty: whenever Main produces prose, slides, diagrams, or documents, the Advisor reminds Main once if the deliverable or its plan violates any hard writing ban — the "不是X，而是Y"/"not X, but Y" contrast-repetition construction; the "specifics then sweep" pseudo-parallel summary clause (documentary-narration "画面＋全称升华" two-beat sentence); the abstract-restatement echo (a concrete fact restated as a quoted or nominalized concept one level up, like "算筹、算盘就能做加减乘除" followed by "“会算”这件事人类很早就做到了" — zero information gain, and never scare-quote a commonplace); the announcer transition ("新的问题是……", "真正的问题是……", "The real question is ..."); the rhythm-matched paired-phrase closer ("够不够快、能不能自动", "faster, cheaper, better" — matched rhythm must be earned by real, independently justified dimensions); "XX：XX" label+colon+label titles and label-colon bullet lead-ins; opening/closing one-sentence summaries; the "understanding promise" transition ("说清楚 X，A、B 和 C 就容易理解了" / "X is the key to understanding Y"); and defensive writing. Every listed tell is fixed at its first sighting — prefer an over-correction to a miss. The reminder is advisory: the Advisor never rewrites the deliverable and never withholds acceptance on phrasing alone.
+The Advisor carries a bilingual writing-norm reminder duty: whenever a deliverable or its plan contains prose, slides, diagrams, or documents, the Advisor reminds Main once if the deliverable or its plan violates any hard writing ban — the "不是X，而是Y"/"not X, but Y" contrast-repetition construction; the "specifics then sweep" pseudo-parallel summary clause (documentary-narration "画面＋全称升华" two-beat sentence); the abstract-restatement echo (a concrete fact restated as a quoted or nominalized concept one level up, like "算筹、算盘就能做加减乘除" followed by "“会算”这件事人类很早就做到了" — zero information gain, and never scare-quote a commonplace); the announcer transition ("新的问题是……", "真正的问题是……", "The real question is ..."); the rhythm-matched paired-phrase closer ("够不够快、能不能自动", "faster, cheaper, better" — matched rhythm must be earned by real, independently justified dimensions); "XX：XX" label+colon+label titles and label-colon bullet lead-ins; opening/closing one-sentence summaries; the "understanding promise" transition ("说清楚 X，A、B 和 C 就容易理解了" / "X is the key to understanding Y"); and defensive writing. Every listed tell is fixed at its first sighting — prefer an over-correction to a miss. The reminder is advisory: the Advisor never rewrites the deliverable and never withholds acceptance on phrasing alone.
 
 Advisory lifecycle rules:
 
@@ -172,6 +174,8 @@ After changing definitions or renderers, run:
 npm run generate:workflows
 npm run check:workflows
 ```
+
+After all workflow source files are complete, only Main runs `npm run generate:workflows`, exactly once, in the exclusive generated-write-set integration slice. Tasks never run the generator or hand-edit generated assets; Main may run only check-only parity afterward.
 
 Never hand-edit these generated outputs:
 
@@ -219,7 +223,7 @@ Managed `AGENTS.md` and `WATCHDOG.yml` blocks identify the optional workflow Ski
 
 **Workflow & generated assets:**
 - Never hand-edit generated files: `WORKFLOW_CATALOG.md`, `omp-enhancer-workflows/SKILL.md`, reference markdowns, marketplace.json
-- After changing workflow definitions or renderers, run `npm run generate:workflows && npm run check:workflows`
+- After all workflow source changes are complete, Main runs `npm run generate:workflows` exactly once and then check-only parity; task/worker agents never run the generator.
 - Preserve user changes in a dirty worktree. Stage only reviewed paths and never reset unrelated work
 
 - Match local style: JavaScript normally uses semicolons
@@ -305,11 +309,13 @@ OMP's native system prompt, settings, active tools, dynamic Available Agents, ap
 
 Main is the orchestrator. Phases: ANALYZE -> EXECUTE -> REVIEW.
 
-- ANALYZE: Main analyzes directly for focused work; delegates to analyzer for complex multi-slice work requiring detailed planning.
-- EXECUTE: Main executes directly for simple changes; delegates to task or domain agents for substantial work.
-- REVIEW: Main reviews simple changes directly; delegates to reviewer for complex or risky changes.
+- ANALYZE: Main analyzes requirements and identifies the target body language; it dispatches `writer`/`zh-writer` for every prose/copy change and delegates complex non-text planning to analyzer.
+- EXECUTE: Main may perform simple mechanical/non-text changes directly; it dispatches the language-matched writer for all drafting, rewriting, translation, titles, body, captions, labels, narrative, and UI copy, and delegates substantial structure/layout/evidence work to task or domain agents.
+- REVIEW: Main reviews mechanical integration directly when simple; it delegates risky visual/evidence review to reviewer and returns every textual change to `writer`/`zh-writer`. It never authors or rewrites copy.
 
 For non-trivial work, read `skill://omp-enhancer-workflows` for the domain reference catalog (3 domains: writing, research, visual). Load domain skills as needed for methods and evidence rules.
+
+All writing, research, and visual prose/copy must come from the independent language-matched writer; Main integrates returned text verbatim. This guidance remains advisory and never creates a router, lifecycle gate, automatic retry, or completion controller.
 
 A verbatim field or heading lookup needs no workflow or TODO. Main selects workflows, Skills, Agents, and delegation width freely. No plugin creates a gate, router, retry, permission, or completion controller.
 

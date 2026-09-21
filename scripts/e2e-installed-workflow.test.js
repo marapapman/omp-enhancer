@@ -1307,6 +1307,55 @@ test('Beamer precheck evaluator rejects duplicate markers, stale revision delive
   assert.match(nonAdvisoryEvaluation.failures.join('\n'), /forbidden native task assignment text pattern/iu);
 });
 
+test('optional PPTX conversion follows the final Beamer revision through one independent review and one fresh-evidence fix', () => {
+  const events = pptxVisualTraceEvents();
+  const summary = summarizeWorkflowEvents(events, { exitCode: 0 });
+  const assignments = [...summary.nativeTask.assignments].sort((left, right) => left.eventIndex - right.eventIndex);
+
+  assert.equal(assignments.length, 5);
+  assert.equal(assignments[0].agent, 'task');
+  assert.equal(assignments[1].agent, 'task');
+  assert.equal(assignments[2].agent, 'task');
+  assert.equal(assignments[4].agent, assignments[2].agent);
+  assert.match(assignments[0].text, /final validated Beamer visual revision=beamer-rev-7.+PDF.+renders/isu);
+  assert.match(assignments[1].text, /final validated Beamer visual revision=beamer-rev-7.+beamer2pptx.+PPTX revision=pptx-rev-1/isu);
+  assert.ok(assignments[0].eventIndex < assignments[1].eventIndex);
+  assert.ok(assignments[1].eventIndex < assignments[2].eventIndex);
+  assert.ok(assignments[2].eventIndex < assignments[3].eventIndex);
+  assert.ok(assignments[3].eventIndex < assignments[4].eventIndex);
+  assert.ok(assignments[0].deliveryEventIndex < assignments[1].eventIndex);
+  assert.ok(assignments[1].deliveryEventIndex < assignments[2].eventIndex);
+  assert.ok(assignments[2].deliveryEventIndex < assignments[3].eventIndex);
+  assert.ok(assignments[3].deliveryEventIndex < assignments[4].eventIndex);
+
+  const expectations = pptxVisualExpectations();
+  const evaluation = evaluateWorkflowSummary(summary, expectations);
+  assert.equal(evaluation.pass, true, evaluation.failures.join('\n'));
+
+  const staleReview = evaluateWorkflowSummary(
+    summarizeWorkflowEvents(pptxVisualTraceEvents({ reviewRevision: 'pptx-rev-0' }), { exitCode: 0 }),
+    expectations,
+  );
+  assert.equal(staleReview.pass, false);
+  assert.match(staleReview.failures.join('\n'), /assignment text pattern.+pptx-rev-1.+below/iu);
+
+  const producingReviewer = evaluateWorkflowSummary(
+    summarizeWorkflowEvents(pptxVisualTraceEvents({
+      reviewTask: 'Convert the final validated Beamer visual revision=beamer-rev-7 with fixed beamer2pptx; create PPTX revision=pptx-rev-1.',
+    }), { exitCode: 0 }),
+    expectations,
+  );
+  assert.equal(producingReviewer.pass, false);
+  assert.match(producingReviewer.failures.join('\n'), /native task assignment text pattern.+independent read-only PPTX visual review/iu);
+
+  const excessFixes = evaluateWorkflowSummary(
+    summarizeWorkflowEvents(pptxVisualTraceEvents({ fixRounds: 2 }), { exitCode: 0 }),
+    expectations,
+  );
+  assert.equal(excessFixes.pass, false);
+  assert.match(excessFixes.failures.join('\n'), /native task assignment attempts 7 exceeded 5/iu);
+});
+
 function summaryWithMutationTargets(targets, eventIndexes = targets.map((_, index) => index + 1)) {
   return {
     tddTrace: {
@@ -1357,7 +1406,7 @@ test('file write order remains opt-in for existing evaluator summaries', () => {
   assert.equal(evaluation.pass, true, evaluation.failures.join('\n'));
 });
 
-test('Beamer precheck fixture shape stays temporary and PowerPoint conversion remains command-conditional', async () => {
+test('Beamer precheck fixture stays Beamer-only while PPTX output remains an optional branch', async () => {
   const matrix = JSON.parse(await readFile(
     new URL('./e2e/fixtures/subagent-willingness.json', import.meta.url),
     'utf8',
@@ -1369,16 +1418,39 @@ test('Beamer precheck fixture shape stays temporary and PowerPoint conversion re
   assert.deepEqual(scenario.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob', 'write', 'edit']);
   assert.match(
     scenario.prompt,
+    /independent writer.+English text-only.+slides-content[.]md.+sole author.+(?:title|body|label|caption).+Main.+verbatim.+task must not.+(?:draft|rewrite|author).+copy/isu,
+  );
+  assert.match(
+    scenario.prompt,
+    /task reconcile the slide order on slides-content[.]md.+(?:reorder|structural metadata).+must not rewrite.+writer-proposed text/isu,
+  );
+  assert.match(
+    scenario.prompt,
     /task.+(?:initial.+render|render.+initial).+single read-only visual precheck.+before.+task final layout pass.+current revision.+read-only/isu,
   );
-  assert.match(scenario.prompt, /PowerPoint.+exact.+conversion command/isu);
+  assert.match(scenario.prompt, /PowerPoint output is not requested.+Beamer-only fixture.+do not load beamer-to-powerpoint.+convert/isu);
   assert.match(scenario.prompt, /text-only.+section-sized.+every page.+user.+confirmation/isu);
   assert.match(scenario.prompt, /slides-content[.]md.+Markdown content plan.+canonical content source/isu);
-  assert.match(scenario.prompt, /content changes.+edit slides-content[.]md.+reconfirm.+regenerate Beamer.+layout/isu);
-  assert.match(scenario.prompt, /after that confirmation.+add visuals.+page by page.+basic layout.+shorten.+complete sentences.+phrases/isu);
+  assert.match(scenario.prompt, /content changes.+writer.+slides-content[.]md.+reconfirm.+regenerate Beamer.+layout/isu);
   assert.match(scenario.prompt, /basic-layout confirmation.+before entering.+visual refinement/isu);
-  assert.match(scenario.prompt, /no conversion command.+do not convert/isu);
+  assert.doesNotMatch(scenario.prompt, /exact user-supplied conversion command|no conversion command.+do not convert/isu);
   assert.deepEqual(scenario.expectations.requiredNativeTaskAssignmentTextBounds, [
+    {
+      agent: 'writer',
+      pattern: '(?:text-only|Markdown).+(?:title|body|label|caption|visual role)',
+      minCount: 1,
+      maxCount: 1,
+      beforeAssignmentAgent: 'task',
+      beforeAssignmentText: 'reconcile.+slide order',
+    },
+    {
+      agent: 'task',
+      pattern: 'reconcile.+slide order.+(?:reorder|structural).+(?:must not|never).+(?:rewrite|alter|edit).+(?:text|copy)',
+      minCount: 1,
+      maxCount: 1,
+      beforeAssignmentAgent: 'task',
+      beforeAssignmentText: 'initial (?:deck|revision).+revision=rev-1',
+    },
     {
       agent: 'task',
       pattern: 'initial (?:deck|revision).+revision=rev-1',
@@ -1397,6 +1469,7 @@ test('Beamer precheck fixture shape stays temporary and PowerPoint conversion re
     },
   ]);
   assert.deepEqual(scenario.expectations.requiredNativeTaskAgentSequence, [
+    'writer',
     'task',
     'task',
     'task',
@@ -1415,11 +1488,14 @@ test('Beamer precheck fixture shape stays temporary and PowerPoint conversion re
     { agent: 'task', pattern: 'final.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
     { agent: 'task', pattern: 'current.+revision=rev-[0-9]+', minCount: 1, maxCount: 2 },
   ]);
-  assert.equal(scenario.expectations.maxNativeTaskAssignmentAttempts, 8);
+  assert.equal(scenario.expectations.maxNativeTaskAssignmentAttempts, 9);
   assert.deepEqual(scenario.expectations.forbiddenNativeTaskAssignmentTextPatterns, [
     'APPROVED|CHANGES_REQUIRED|UNREVIEWABLE',
     'single read-only visual precheck[^\\n]*(?:parallel|dual|fallback|disagreement|merge)',
+    '\\btask\\s+(?:draft|write|author|compose|rewrite|translate|polish|retype)\\b[^\\n]{0,160}(?:text|copy|title|body|caption|label|notes?)',
+    '\\btask\\s+(?:text|copy|title|body|caption|label|notes?)[^\\n]{0,160}(?:draft|write|author|compose|rewrite|translate|polish|retype)\\b',
   ]);
+  assert.deepEqual(scenario.expectations.forbiddenSkills, ['beamer-to-powerpoint', 'drawio-skill']);
   assert.deepEqual(scenario.fixtureExpectations.allowedChangedFiles, ['main.tex', 'slides-content.md']);
   assert.deepEqual(scenario.fixtureExpectations.requiredChangedFiles, ['main.tex', 'slides-content.md']);
   assert.deepEqual(scenario.expectations.requiredFileWriteOrder, [
@@ -1472,6 +1548,56 @@ test('workflow evaluation requireLocalSearchBeforeProjectTools enforces ordering
     toolCalls: [],
   }, { requireLocalSearchBeforeProjectTools: false });
   assert.equal(falseExpectationSkips.pass, true);
+});
+
+test('Beamer text ownership accepts writer proposals and rejects task-authored copy', () => {
+  const expectations = {
+    requireFinal: false,
+    requiredNativeTaskAgentSequence: ['writer', 'task'],
+    requiredNativeTaskAssignmentTextBounds: [
+      {
+        agent: 'writer',
+        pattern: '(?:text-only|Markdown).+(?:title|body|label|caption)',
+        minCount: 1,
+        maxCount: 1,
+      },
+    ],
+    forbiddenNativeTaskAssignmentTextPatterns: [
+      '\\b(?:draft|author|compose|rewrite|translate|polish|retype|write)\\b[^\\n]{0,160}(?:text|copy|title|body|caption|label|notes?)',
+      '(?:text|copy|title|body|caption|label|notes?)[^\\n]{0,160}\\b(?:draft|author|compose|rewrite|translate|polish|retype|write)\\b',
+    ],
+  };
+  const trace = (taskText) => {
+    const events = [];
+    appendBeamerTask(events, {
+      id: 'writer-stage',
+      agent: 'writer',
+      jobId: 'writer-stage',
+      task: 'Return the complete text-only Markdown proposal for every title, body, label, and caption.',
+      delivery: 'Complete writer proposal delivered verbatim.',
+    });
+    appendBeamerTask(events, {
+      id: 'task-stage',
+      agent: 'task',
+      jobId: 'task-stage',
+      task: taskText,
+      delivery: 'Structural layout work completed without changing copy.',
+    });
+    return summarizeWorkflowEvents(events, { exitCode: 0 });
+  };
+
+  const valid = evaluateWorkflowSummary(
+    trace('Reorder page structure and adjust spacing only; preserve writer-proposed text and captions.'),
+    expectations,
+  );
+  assert.equal(valid.pass, true, valid.failures.join('\n'));
+
+  const invalid = evaluateWorkflowSummary(
+    trace('Draft replacement captions and rewrite body copy in the Beamer frames.'),
+    expectations,
+  );
+  assert.equal(invalid.pass, false);
+  assert.match(invalid.failures.join('\n'), /forbidden native task assignment text pattern/iu);
 });
 
 test('workflow evaluation requireWebSearchBeforeProjectTools enforces ordering', () => {
@@ -6241,6 +6367,67 @@ function beamerVisualExpectations() {
     forbiddenNativeTaskAssignmentTextPatterns: [
       'APPROVED|CHANGES_REQUIRED|UNREVIEWABLE',
       'single read-only visual precheck[^\\n]*(?:parallel|dual|fallback|disagreement|merge)',
+      '(?:draft|author|compose|rewrite|translate|polish|retype|write)[^\\n]{0,160}(?:text|copy|title|body|caption|label|notes?)',
+      '(?:text|copy|title|body|caption|label|notes?)[^\\n]{0,160}(?:draft|author|compose|rewrite|translate|polish|retype|write)',
+    ],
+  };
+}
+function pptxVisualExpectations() {
+  return {
+    requireFinal: false,
+    requiredNativeTaskAgents: ['task'],
+    requiredNativeTaskAgentSequence: ['task', 'task', 'task', 'task', 'task'],
+    requiredNativeTaskAssignmentTextBounds: [
+      {
+        agent: 'task',
+        pattern: 'final validated Beamer visual revision=beamer-rev-7.+PDF.+renders',
+        minCount: 1,
+        maxCount: 1,
+      },
+      {
+        agent: 'task',
+        pattern: 'Convert.+final validated Beamer visual revision=beamer-rev-7.+beamer2pptx.+PPTX revision=pptx-rev-1',
+        minCount: 1,
+        maxCount: 1,
+      },
+      {
+        agent: 'task',
+        pattern: 'independent read-only PPTX visual review.+revision=pptx-rev-1',
+        minCount: 1,
+        maxCount: 1,
+      },
+      {
+        agent: 'task',
+        pattern: 'at most one bounded layout-only fix.+PPTX revision=pptx-rev-1.+preserve.+visible content.+formulas.+slide order.+Markdown.+Beamer.+rerender fresh',
+        minCount: 1,
+        maxCount: 1,
+      },
+      {
+        agent: 'task',
+        pattern: 'same reviewer confirms only recorded findings.+fresh.+PPTX revision=pptx-rev-2',
+        minCount: 1,
+        maxCount: 1,
+      },
+    ],
+    requiredNativeTaskDeliveryTextPatterns: [
+      { agent: 'task', pattern: 'Final validated Beamer visual revision=beamer-rev-7', minCount: 1, maxCount: 1 },
+      { agent: 'task', pattern: 'PPTX revision=pptx-rev-1 was created', minCount: 1, maxCount: 1 },
+      { agent: 'task', pattern: 'Current PPTX revision=pptx-rev-1 renders reviewed', minCount: 1, maxCount: 1 },
+      { agent: 'task', pattern: 'Fresh PPTX revision=pptx-rev-2 renders are available', minCount: 1, maxCount: 1 },
+      { agent: 'task', pattern: 'Fresh PPTX revision=pptx-rev-2 renders confirmed', minCount: 1, maxCount: 1 },
+    ],
+    requiredNativeTaskDeliveryRevisionMatch: {
+      sourceAgent: 'task',
+      sourcePattern: 'Fresh PPTX revision=pptx-rev-[0-9]+ renders are available',
+      targetAgent: 'task',
+      targetPattern: 'Fresh PPTX revision=pptx-rev-[0-9]+ renders confirmed',
+    },
+    maxNativeTaskAssignmentAttempts: 5,
+    forbiddenNativeTaskAssignmentTextPatterns: [
+      'APPROVED|CHANGES_REQUIRED|UNREVIEWABLE',
+      'automatic repair loop|redispatch automatically|retry until|repeat until|block:\\s*true|continue:\\s*true',
+      '(?:draft|author|compose|rewrite|translate|polish|retype|write)[^\\n]{0,160}(?:text|copy|title|body|caption|label|notes?)',
+      '(?:text|copy|title|body|caption|label|notes?)[^\\n]{0,160}(?:draft|author|compose|rewrite|translate|polish|retype|write)',
     ],
   };
 }
@@ -6338,6 +6525,55 @@ function beamerVisualTraceEvents({
   return events;
 }
 
+
+function pptxVisualTraceEvents({
+  reviewTask = null,
+  reviewRevision = 'pptx-rev-1',
+  fixRounds = 1,
+} = {}) {
+  const events = [];
+  appendBeamerTask(events, {
+    id: 'final-beamer',
+    agent: 'task',
+    jobId: 'final-beamer',
+    task: 'Compile and render the final validated Beamer visual revision=beamer-rev-7 PDF and page renders after the Beamer visual review.',
+    delivery: 'Final validated Beamer visual revision=beamer-rev-7 PDF and renders are available.',
+  });
+  appendBeamerTask(events, {
+    id: 'pptx-producer',
+    agent: 'task',
+    jobId: 'pptx-producer',
+    task: 'Convert the final validated Beamer visual revision=beamer-rev-7 with fixed beamer2pptx; create, render, and bind PPTX revision=pptx-rev-1 without changing content.',
+    delivery: 'PPTX revision=pptx-rev-1 was created from final Beamer revision=beamer-rev-7 and its current renders are available.',
+  });
+  appendBeamerTask(events, {
+    id: 'pptx-review',
+    agent: 'task',
+    jobId: 'pptx-review',
+    task: reviewTask ?? `Perform an independent read-only PPTX visual review of current revision=${reviewRevision}; inspect slide order, editability, clipping, overlap, margins, hierarchy, fonts, aspect ratio, and raster/vector treatment.`,
+    delivery: `Current PPTX revision=${reviewRevision} renders reviewed; advisory findings recorded.`,
+  });
+
+  for (let index = 1; index <= fixRounds; index += 1) {
+    const priorRevision = `pptx-rev-${index}`;
+    const revision = `pptx-rev-${index + 1}`;
+    appendBeamerTask(events, {
+      id: `pptx-fix-${index}`,
+      agent: 'task',
+      jobId: `pptx-fix-${index}`,
+      task: `Apply at most one bounded layout-only fix to editable PPTX revision=${priorRevision}; preserve visible content, formulas, slide order, and Markdown and Beamer sources, then rerender fresh evidence as revision=${revision}.`,
+      delivery: `Fresh PPTX revision=${revision} renders are available after the bounded layout-only fix; visible content, formulas, slide order, and sources are preserved.`,
+    });
+    appendBeamerTask(events, {
+      id: `pptx-confirm-${index}`,
+      agent: 'task',
+      jobId: `pptx-confirm-${index}`,
+      task: `The same reviewer confirms only recorded findings against fresh PPTX revision=${revision}; do not start a second review or fix loop.`,
+      delivery: `Fresh PPTX revision=${revision} renders confirmed by the same reviewer; advisory findings remain the only completion evidence.`,
+    });
+  }
+  return events;
+}
 
 test('requireLongFormWritingPilot asserts the long-form writing pilot trace contract', () => {
   const writerMeta = '[workflow=writing step=step-writer todo=draft-section skills=writing-review]';
@@ -6455,6 +6691,33 @@ test('requireLongFormWritingPilot asserts the long-form writing pilot trace cont
   assert.equal(sequentialEvaluation.pass, true, sequentialEvaluation.failures.join('\n'));
 });
 
+
+test('long-form writing fixtures keep English authorship with writer before checker', async () => {
+  const matrix = JSON.parse(await readFile(
+    new URL('./e2e/fixtures/long-form-writing.json', import.meta.url),
+    'utf8',
+  ));
+  for (const id of ['ordinary-writing', 'long-form-single-agent-baseline', 'long-form-pilot']) {
+    const scenario = matrix.scenarios.find((candidate) => candidate.id === id);
+    assert.ok(scenario, `${id} fixture scenario must exist`);
+    assert.match(
+      scenario.prompt,
+      /(?:English[^.]{0,180}(?:author|writer)|(?:author|writer)[^.]{0,180}English)/iu,
+    );
+    assert.match(scenario.prompt, /(?:sole|only)[^.]{0,120}(?:author|authors?|writer)/iu);
+    assert.match(scenario.prompt, /Main[^.]{0,180}(?:verbatim|integrat)[^.]{0,120}(?:never|without)[^.]{0,100}(?:draft|rewrite)/isu);
+    assert.doesNotMatch(scenario.prompt, /Main[^.]{0,120}(?:directly|handle directly)[^.]{0,100}(?:draft|write|rewrite|polish)/isu);
+    if (id !== 'long-form-pilot') {
+      assert.deepEqual(scenario.expectations.requiredNativeTaskAgentSequence, ['writer', 'checker']);
+      assert.equal(scenario.expectations.requiredNativeTaskAssignmentTextBounds[0].agent, 'writer');
+      assert.equal(scenario.expectations.requiredNativeTaskAssignmentTextBounds[0].beforeAssignmentAgent, 'checker');
+    } else {
+      assert.equal(scenario.expectations.requiredNativeTaskAssignmentTextBounds[0].agent, 'writer');
+      assert.ok(scenario.expectations.requiredNativeTaskAssignmentTextBounds[0].minCount >= 3);
+      assert.match(scenario.prompt, /writers are proposal-only and the sole English text authors/iu);
+    }
+  }
+});
 test('parseNdjson retains valid events and reports malformed lines', () => {
   const parsed = parseNdjson('{"type":"agent_start"}\nnot-json\n{"type":"agent_end"}\n');
   assert.deepEqual(parsed.events.map(({ type }) => type), ['agent_start', 'agent_end']);

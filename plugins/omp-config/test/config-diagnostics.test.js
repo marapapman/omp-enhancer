@@ -137,39 +137,25 @@ async function hasSkillDoc(dir) {
   }
 }
 
-test('listAssets lists packaged agents, skills, hooks, and templates from plugin root', async () => {
+test('listAssets lists packaged skills, pre-hooks, and templates from plugin root', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'omp-config-assets-'));
   await writePluginPackage(root);
-  await mkdir(path.join(root, 'agents'));
   await mkdir(path.join(root, 'skills'));
   await mkdir(path.join(root, 'hooks', 'pre'), { recursive: true });
-  await mkdir(path.join(root, 'hooks', 'post'), { recursive: true });
-  await mkdir(path.join(root, 'hook-templates', 'pre'), { recursive: true });
-  await mkdir(path.join(root, 'hook-templates', 'post'), { recursive: true });
   await mkdir(path.join(root, 'assets'));
   await writeFile(path.join(root, 'assets', 'config.yml'), 'packaged template\n');
   await writeFile(path.join(root, 'assets', '.secret'), 'hidden template\n');
-  await writeFile(path.join(root, 'agents', 'task.md'), '# Task');
-  await writeFile(path.join(root, 'agents', '.hidden.md'), '# Hidden');
   await mkdir(path.join(root, 'skills', 'tdd'));
   await writeFile(path.join(root, 'skills', 'tdd', 'SKILL.md'), '# TDD');
   await writeFile(path.join(root, 'hooks', 'pre', 'guard-destructive.ts'), 'export default {};\n');
   await writeFile(path.join(root, 'hooks', 'pre', '.hidden.ts'), 'export default {};\n');
-  await writeFile(path.join(root, 'hook-templates', 'pre', 'example-pre-template.ts'), 'export default {};\n');
-  await writeFile(path.join(root, 'hook-templates', 'post', 'example-post-template.ts'), 'export default {};\n');
 
   const assets = await listAssets(root);
 
   assert.deepEqual(assets, {
-    agents: ['task.md'],
     skills: ['tdd'],
     hooks: {
       pre: ['guard-destructive.ts'],
-      post: [],
-    },
-    hookTemplates: {
-      pre: ['example-pre-template.ts'],
-      post: ['example-post-template.ts'],
     },
     templates: ['config.yml'],
   });
@@ -357,15 +343,12 @@ test('registered defaults resolve bundled package assets from a normal project c
 
   const assets = tools.find((tool) => tool.name === 'omp_config_assets');
   const assetsResult = await assets.execute('call-2', {}, undefined, undefined, { cwd: projectRoot });
-  assert.equal(assetsResult.details.agents.includes('plan.md'), false);
+  assert.equal('agents' in assetsResult.details, false);
   assert.ok(assetsResult.details.skills.includes('canvas-design'));
-  assert.equal(assetsResult.details.agents.includes('implementation-task.md'), false);
   assert.equal(assetsResult.details.skills.includes('tdd'), false);
   assert.ok(assetsResult.details.hooks.pre.includes('guard-destructive.ts'));
-  assert.deepEqual(assetsResult.details.hooks.post, []);
-  assert.ok(assetsResult.details.hooks.pre.includes('edit-anchor-guard.ts'));
-  assert.deepEqual(assetsResult.details.hookTemplates.pre, []);
-  assert.deepEqual(assetsResult.details.hookTemplates.post, []);
+  assert.equal('post' in assetsResult.details.hooks, false);
+  assert.equal('hookTemplates' in assetsResult.details, false);
   assert.ok(assetsResult.details.templates.includes('config.yml'));
   assert.ok(assetsResult.details.templates.includes('WATCHDOG.yml'));
 
@@ -381,15 +364,12 @@ test('registered defaults resolve bundled package assets from a normal project c
     assert.equal(commandDoctor.summary, 'No config risks found.');
 
     const commandAssets = await commands.get('config-assets').handler('');
-    assert.equal(commandAssets.agents.includes('plan.md'), false);
+    assert.equal('agents' in commandAssets, false);
     assert.ok(commandAssets.skills.includes('canvas-design'));
-    assert.equal(commandAssets.agents.includes('implementation-task.md'), false);
     assert.equal(commandAssets.skills.includes('tdd'), false);
     assert.ok(commandAssets.hooks.pre.includes('guard-destructive.ts'));
-    assert.deepEqual(commandAssets.hooks.post, []);
-    assert.ok(commandAssets.hooks.pre.includes('edit-anchor-guard.ts'));
-    assert.deepEqual(commandAssets.hookTemplates.pre, []);
-    assert.deepEqual(commandAssets.hookTemplates.post, []);
+    assert.equal('post' in commandAssets.hooks, false);
+    assert.equal('hookTemplates' in commandAssets, false);
     assert.ok(commandAssets.templates.includes('config.yml'));
     assert.ok(commandAssets.templates.includes('WATCHDOG.yml'));
 
@@ -432,10 +412,8 @@ test('index registers doctor assets and plan tools safely', async () => {
 
   const root = await mkdtemp(path.join(tmpdir(), 'omp-config-index-'));
   await mkdir(path.join(root, 'assets'));
-  await mkdir(path.join(root, 'agents'));
   await mkdir(path.join(root, 'skills'));
   await writeFile(path.join(root, 'assets', 'config.yml'), 'customDirectories:\n  - /root/.omp/skills\n');
-  await writeFile(path.join(root, 'agents', 'task.md'), '# Task');
   await mkdir(path.join(root, 'skills', 'tdd'));
   await writeFile(path.join(root, 'skills', 'tdd', 'SKILL.md'), '# TDD');
 
@@ -449,10 +427,8 @@ test('index registers doctor assets and plan tools safely', async () => {
   const assets = registered.find((tool) => tool.name === 'omp_config_assets');
   const assetsResult = await assets.execute('call-2', { root }, undefined, undefined, { cwd: process.cwd() });
   assert.deepEqual(assetsResult.details, {
-    agents: ['task.md'],
     skills: ['tdd'],
-    hooks: { pre: [], post: [] },
-    hookTemplates: { pre: [], post: [] },
+    hooks: { pre: [] },
     templates: ['config.yml'],
   });
 

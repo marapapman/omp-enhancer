@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -49,7 +49,12 @@ async function resolveExistingDirectory(target) {
     if (!stats.isDirectory() && !stats.isSymbolicLink()) {
       throw new Error(`Workflow context target is not a directory: ${target}`);
     }
-    return await realpath(target);
+    const resolved = await realpath(target);
+    const resolvedStats = await stat(resolved);
+    if (!resolvedStats.isDirectory()) {
+      throw new Error(`Workflow context target is not a directory: ${target}`);
+    }
+    return resolved;
   } catch (error) {
     if (error?.code === 'ENOENT') return target;
     throw error;

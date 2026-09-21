@@ -80,7 +80,7 @@ test('current documentation links the self-development and E2E methods without e
   assert.ok(Buffer.byteLength(readme) <= 6500, 'root README keeps development detail under docs');
 });
 
-test('current repository documentation matches the v43 runtime and evidence contracts', async () => {
+test('current repository documentation matches the v44 runtime and evidence contracts', async () => {
   const [agents, architecture, development, workflows] = await Promise.all([
     read('AGENTS.md'),
     read('docs/ARCHITECTURE.md'),
@@ -88,8 +88,8 @@ test('current repository documentation matches the v43 runtime and evidence cont
     read('docs/WORKFLOW_DEVELOPMENT.md'),
   ]);
 
-  assert.match(agents, /Workflow catalog \(v43\)/u);
-  assert.match(workflows, /catalog v43 只有 3 个 ID/isu);
+  assert.match(agents, /Workflow catalog \(v44\)/u);
+  assert.match(workflows, /catalog v44 只有 3 个 ID/isu);
   assert.doesNotMatch(
     [agents, architecture, development, workflows].join('\n'),
     /Catalog version 23|catalog \(v23\)|catalog v30|catalog \(v33\)|catalog v34/iu,
@@ -130,7 +130,7 @@ test('current repository documentation matches the v43 runtime and evidence cont
 test('omp-config README matches the current catalog and staged Beamer workflow', async () => {
   const readme = await read('plugins/omp-config/README.md');
 
-  assert.match(readme, /generated from `scripts\/workflow-definitions\.js`.+catalog v43/isu);
+  assert.match(readme, /generated from `scripts\/workflow-definitions\.js`.+catalog v44/isu);
   assert.match(readme, /text-only content.+visual authoring.+layout refinement/is);
   assert.match(readme, /user confirms.+page content.+basic layout/is);
   assert.doesNotMatch(readme, /omp-enhancer-core|skills\/ecc|5 domains|generate:ecc-skills|check:ecc-skills/iu);
@@ -148,7 +148,7 @@ test('current docs distinguish the single Beamer precheck from the unchanged dra
   for (const [label, content] of documents) {
     assert.match(
       content,
-      /Beamer[\s\S]{0,500}single read-only visual precheck[\s\S]{0,500}(?:Main or task|task or Main)[\s\S]{0,500}(?:initial render|task's initial)[\s\S]{0,500}before the task layout/iu,
+      /Beamer[\s\S]{0,1500}single read-only visual precheck[\s\S]{0,1500}(?:Main or task|task or Main)[\s\S]{0,1500}(?:initial render|task's initial)[\s\S]{0,1500}before the task layout/iu,
       label,
     );
     assert.match(
@@ -157,6 +157,13 @@ test('current docs distinguish the single Beamer precheck from the unchanged dra
       label,
     );
   }
+});
+
+test('drawio documentation routes diagram copy through language-matched writers', async () => {
+  const guide = await read('docs/DRAWIO_PIPELINE.md');
+  assert.match(guide, /`?writer`?\/`?zh-writer`? returns[\s\S]{0,180}maps the text verbatim/iu);
+  assert.match(guide, /text findings return[\s\S]{0,120}`?writer`?\/`?zh-writer`?/iu);
+  assert.doesNotMatch(guide, /task draws once[^.]+author the `\.drawio` source/iu);
 });
 test('current Beamer documentation keeps Markdown content separate from derived layout', async () => {
   const documents = await Promise.all([

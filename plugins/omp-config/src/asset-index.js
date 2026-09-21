@@ -4,25 +4,15 @@ import { resolvePluginRoot } from './plugin-root.js';
 
 export async function listAssets(root = process.cwd()) {
   const pluginRoot = await resolvePluginRoot(root);
-  const [agents, skills, preHooks, postHooks, preHookTemplates, postHookTemplates, templates] = await Promise.all([
-    safeList(path.join(pluginRoot, 'agents')),
+  const [skills, preHooks, templates] = await Promise.all([
     safeListSkills(path.join(pluginRoot, 'skills')),
     safeList(path.join(pluginRoot, 'hooks', 'pre')),
-    safeList(path.join(pluginRoot, 'hooks', 'post')),
-    safeList(path.join(pluginRoot, 'hook-templates', 'pre')),
-    safeList(path.join(pluginRoot, 'hook-templates', 'post')),
     safeList(path.join(pluginRoot, 'assets')),
   ]);
   return {
-    agents,
     skills,
     hooks: {
       pre: preHooks,
-      post: postHooks,
-    },
-    hookTemplates: {
-      pre: preHookTemplates,
-      post: postHookTemplates,
     },
     templates,
   };

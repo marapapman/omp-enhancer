@@ -37,7 +37,7 @@ plugins/omp-config/skills/omp-enhancer-workflows/references/*.md
 {
   id: 'visual',
   chooseWhen: 'Diagrams (draw.io), UI/UX design, static visual artifacts, or rendered figure review.',
-  skills: ['drawio-skill', 'frontend-design', 'canvas-design'],
+  skills: ['drawio-skill', 'assetseeker', 'frontend-design', 'canvas-design', 'format-humanizer', 'zh-format-humanizer'],
   catalogSkills: [],
   roles: ['task'],
   suggestedFlow: ['Clarify requirements.', 'Draw once.', 'Review once.', 'Deliver.'],

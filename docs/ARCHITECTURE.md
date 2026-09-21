@@ -22,7 +22,7 @@ OMP 负责系统提示、用户指令、active tools、动态 Available Agents�
 
 索引与卡片都是 advisory reference。顶层 Skill 使用 `D` exact URI；当前没有 nested ECC `C` 候选。它们不构成 load set、路由、权限或完成条件。完整定义只包含 `id`、`chooseWhen`、`skills`、`catalogSkills`、`roles`、`suggestedFlow` 和 `scopeNotes`。
 
-Managed `AGENTS.md`、`CLAUDE.md` 和 `WATCHDOG.yml` 不导入完整目录，只说明 OMP 原生权威与 `ANALYZE -> EXECUTE -> REVIEW` advisory。它们指向 `skill://omp-enhancer-workflows` 的三域目录；Main 按任务需要选择 Skill 和 Agent。
+`AGENTS.md` 和 `WATCHDOG.yml` 由 `syncWorkflowContext` 管理；`CLAUDE.md` 是随插件打包的镜像资产，需手动更新。该同步流程实际只写入 catalog、`AGENTS.md` 和 `WATCHDOG.yml` 三个目标，不安装或更新 `CLAUDE.md`。三者不导入完整目录，只说明 OMP 原生权威与 `ANALYZE -> EXECUTE -> REVIEW` advisory。它们指向 `skill://omp-enhancer-workflows` 的三域目录；Main 按任务需要选择 Skill 和 Agent。
 
 共享 generator 重写完整输出集合，因此 **the downstream exclusive integration slice** 只能在全部 **source dependencies** 完成后执行，并独占 generated write set，且 **exactly once**。这是 **mechanical generation slice**：只有 Main 在所有 workflow source 文件完成后运行一次 `npm run generate:workflows`；task/worker 不运行 generator 或直接修改生成物。证据包括 generator exit、check/parity 结果与 **no-unexpected-diff**；Main 检查 generated diff 后只执行 check-only parity，不得再次运行 generator，也不得伪造 TDD RED。
 
@@ -60,7 +60,7 @@ visual-delivery: Draw.io pipeline via `drawio-skill` (drawio@365-skills)：task 
 
 Fact Checker 保留精确 claim tuple：subject、predicate plus object/value、scope、time/version 和 quantifier。Backward-compatible `verdict` cannot upgrade compatibility evidence into proof。`strictVerdict` 采用 fail-closed 规则：`SUPPORTED` requires same-tuple `ENTAILS + PROVEN`；`CONTRADICTED` requires same-tuple `NEGATES + DISPROVED` 并带有效 negated field。
 
-Evidence lane A 是默认起点；只有 broad 或 high-risk scope 才增加 lane B。cross-check 保留 agreement、conflict、staleness、limitations、cheapest plausible countercheck 和 unresolved proof gaps。普通 finding 使用成功的 advisory result；参数、I/O 和真正执行失败才返回 error。
+Evidence lane A 是默认起点；broad、high-risk 或显式请求 cross-check 时增加 lane B 和 lane C。cross-check 保留 agreement、conflict、staleness、limitations、cheapest plausible countercheck 和 unresolved proof gaps。普通 finding 使用成功的 advisory result；参数、I/O 和真正执行失败才返回 error。
 
 ## 状态与安全边界
 

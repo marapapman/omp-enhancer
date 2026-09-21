@@ -184,6 +184,18 @@ test('workflow target file module preserves WATCHDOG.yaml fallback and changed-o
   assert.equal(await readFile(unchangedPath, 'utf8'), 'keep\n');
   assert.equal(await readFile(createdPath, 'utf8'), 'created\n');
 });
+test('workflow context target rejects symlink-to-file targets', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'omp-config-target-symlink-file-'));
+  const realFile = path.join(root, 'target.txt');
+  const symlinkPath = path.join(root, 'symlink-to-file');
+  await writeFile(realFile, 'not a directory\n');
+  await symlink(realFile, symlinkPath);
+
+  await assert.rejects(
+    resolveWorkflowContextTarget(symlinkPath),
+    { message: `Workflow context target is not a directory: ${symlinkPath}` },
+  );
+});
 
 test('shared assets keep the catalog managed while exposing only neutral optional references', async () => {
   const assets = path.join(packageRoot(), 'assets');

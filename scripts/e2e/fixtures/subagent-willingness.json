@@ -322,23 +322,39 @@
       "repeat": 1,
       "timeoutSeconds": 480,
       "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
-      "prompt": "Create the small Beamer deck in main.tex while preserving its template and frame story. First write the text-only page draft to slides-content.md in section-sized batches and discuss every page with the user, with one Markdown entry per page covering title, narrative job, body, evidence, and visual role. Treat the Markdown content plan as the canonical content source and the page-content confirmation as supplied for this fixture. Do not write Beamer frames or perform layout while content is unresolved. After that confirmation, have a separate task reconcile the slide order on slides-content.md: no content overlap between slides, semantically coherent content modules with one main job per slide, and a logical overall progression; crossings that reordering or regrouping cannot fix are reported and return to the Markdown reconfirmation path. After that reconciliation, translate the reconciled Markdown plan into Beamer frames, add visuals page by page, establish the basic layout, and do not shorten the .tex content; keep complete sentences rather than phrases or keywords. If content changes, edit slides-content.md first, reconfirm the affected pages, regenerate Beamer, and only then resume layout. Treat the basic-layout confirmation as supplied before entering the existing visual refinement stage. Have task compile and render the initial revision and bind the stable revision=rev-1 identifier to its PDF and page renders. Then perform exactly one single read-only visual precheck owned by task or Main (choose one owner only) before the task final layout pass. Have task integrate the final revision=rev-1, rerender it, and bind fresh current revision evidence. Main (or a task that did not draw the revision) reviews that current revision read-only and records advisory findings. PowerPoint conversion is out of scope without an exact user-supplied conversion command; with no conversion command, do not convert.",
+      "prompt": "Create the small Beamer deck in main.tex while preserving its template and frame story. First dispatch an independent writer for the English text-only, section-sized page draft in slides-content.md; the writer is the sole author of every title, body, label, caption, and visual-role sentence and returns a complete proposal. Main only persists that proposal verbatim and performs non-text integration; task must not draft, rewrite, translate, polish, or otherwise author copy. Discuss every page with the user, with one Markdown entry per page covering title, narrative job, body, evidence, and visual role. Treat the Markdown content plan as the canonical content source and the page-content confirmation as supplied for this fixture. Do not write Beamer frames or perform layout while content is unresolved. After that confirmation, have a separate task reconcile the slide order on slides-content.md: no content overlap between slides, semantically coherent content modules with one main job per slide, and a logical overall progression; the task may only reorder pages or structural metadata and must not rewrite any writer-proposed text; crossings that reordering or regrouping cannot fix are reported and return to the Markdown reconfirmation path. After that reconciliation, translate the reconciled Markdown plan into Beamer frames, add visuals page by page, establish the basic layout, and do not shorten the .tex content; keep complete sentences rather than phrases or keywords. If content changes, return them to the writer and edit slides-content.md only with the complete writer proposal, reconfirm the affected pages, regenerate Beamer, and only then resume layout. Treat the basic-layout confirmation as supplied before entering the existing visual refinement stage. Have task compile and render the initial revision and bind the stable revision=rev-1 identifier to its PDF and page renders. Then perform exactly one single read-only visual precheck owned by task or Main (choose one owner only) before the task final layout pass. Have task integrate the final revision=rev-1, rerender it, and bind fresh current revision evidence. Main (or a task that did not draw the revision) reviews that current revision read-only and records advisory findings. PowerPoint output is not requested for this Beamer-only fixture; do not load beamer-to-powerpoint or convert.",
       "expectations": {
-        "minNativeTaskCalls": 5,
-        "maxNativeTaskCalls": 8,
-        "minNativeTaskAssignmentAttempts": 5,
-        "maxNativeTaskAssignmentAttempts": 8,
+        "minNativeTaskCalls": 6,
+        "maxNativeTaskCalls": 9,
+        "minNativeTaskAssignmentAttempts": 6,
+        "maxNativeTaskAssignmentAttempts": 9,
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requireNonemptyNativeTaskContext": true,
-        "requiredNativeTaskAgents": ["task"],
-        "requiredNativeTaskAgentSequence": ["task", "task", "task", "task", "task"],
+        "requiredNativeTaskAgents": ["writer", "task"],
+        "requiredNativeTaskAgentSequence": ["writer", "task", "task", "task", "task", "task"],
         "requiredObservedSkills": ["omp-enhancer-workflows", "latex-beamer-slides"],
         "maxObservedSkills": 3,
         "forbiddenSkills": ["beamer-to-powerpoint", "drawio-skill"],
         "requiredWorkflowPrimary": "writing",
         "requiredSelectedWorkflowIds": ["writing"],
         "requiredNativeTaskAssignmentTextBounds": [
+          {
+            "agent": "writer",
+            "pattern": "(?:text-only|Markdown).+(?:title|body|label|caption|visual role)",
+            "minCount": 1,
+            "maxCount": 1,
+            "beforeAssignmentAgent": "task",
+            "beforeAssignmentText": "reconcile.+slide order"
+          },
+          {
+            "agent": "task",
+            "pattern": "reconcile.+slide order.+(?:reorder|structural).+(?:must not|never).+(?:rewrite|alter|edit).+(?:text|copy)",
+            "minCount": 1,
+            "maxCount": 1,
+            "beforeAssignmentAgent": "task",
+            "beforeAssignmentText": "initial (?:deck|revision).+revision=rev-1"
+          },
           {
             "agent": "task",
             "pattern": "initial (?:deck|revision).+revision=rev-1",
@@ -378,7 +394,9 @@
         },
         "forbiddenNativeTaskAssignmentTextPatterns": [
           "APPROVED|CHANGES_REQUIRED|UNREVIEWABLE",
-          "single read-only visual precheck[^\\n]*(?:parallel|dual|fallback|disagreement|merge)"
+          "single read-only visual precheck[^\\n]*(?:parallel|dual|fallback|disagreement|merge)",
+          "\\btask\\s+(?:draft|write|author|compose|rewrite|translate|polish|retype)\\b[^\\n]{0,160}(?:text|copy|title|body|caption|label|notes?)",
+          "\\btask\\s+(?:text|copy|title|body|caption|label|notes?)[^\\n]{0,160}(?:draft|write|author|compose|rewrite|translate|polish|retype)\\b"
         ],
         "requiredFileWriteOrder": [
           { "before": "slides-content.md", "after": "main.tex" }

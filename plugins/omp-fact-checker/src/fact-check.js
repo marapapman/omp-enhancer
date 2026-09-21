@@ -40,7 +40,6 @@ export const FACT_LANES = Object.freeze(['A', 'B', 'C']);
 // Document segments are classified into exactly these statuses. Every prose
 // unit the extractor does not turn into a claim is reported with a reason
 // instead of disappearing.
-export const SEGMENT_STATUSES = Object.freeze(['claim', 'non-assertion', 'duplicate', 'truncated', 'structural']);
 export const NON_ASSERTION_REASONS = Object.freeze(['question', 'too-short', 'no-claim-cue']);
 export const CHALLENGE_RESPONSES = Object.freeze(['AGREE', 'REBUT', 'MISSED']);
 const TUPLE_MATERIALITIES = new Set(FACT_ASSESSMENT_CONTRACT.tupleMaterialities);
@@ -59,14 +58,14 @@ export function normalizeDoi(value = '') {
   return normalizeWhitespace(value).replace(/^https?:\/\/(?:dx\.)?doi\.org\//iu, '').replace(/[),.;]+$/u, '').toLowerCase();
 }
 
-export function normalizeClaimTuple(tuple = {}) {
+function normalizeClaimTuple(tuple = {}) {
   return Object.fromEntries(CANONICAL_TUPLE_FIELDS.map((field) => [
     field,
     normalizeTupleField(tuple?.[field]),
   ]));
 }
 
-export function normalizeEvidenceTuple(tuple = {}) {
+function normalizeEvidenceTuple(tuple = {}) {
   const normalized = {
     ...normalizeClaimTuple(tuple),
     relation: String(tuple?.relation ?? '').toUpperCase(),
@@ -148,7 +147,7 @@ function normalizeMaxClaims(value) {
   return Math.max(1, Math.min(DEFAULT_MAX_CLAIMS, Math.trunc(value)));
 }
 
-export function segmentDocument(text = '') {
+function segmentDocument(text = '') {
   const normalized = String(text ?? '').replace(/\r\n/gu, '\n');
   const segments = [];
   let inFence = false;
@@ -196,7 +195,7 @@ export function segmentDocument(text = '') {
   return segments;
 }
 
-export function classifySegment(segment = {}) {
+function classifySegment(segment = {}) {
   if (segment.kind === 'structural') {
     return { status: 'structural', reason: segment.reason ?? 'structural' };
   }
@@ -220,7 +219,7 @@ function buildClaim({ segment, category, index }) {
   };
 }
 
-export function analyzeDocument({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } = {}) {
+function analyzeDocument({ text = '', maxClaims = DEFAULT_MAX_CLAIMS } = {}) {
   const limit = normalizeMaxClaims(maxClaims);
   const dispositions = [];
   const claims = [];
