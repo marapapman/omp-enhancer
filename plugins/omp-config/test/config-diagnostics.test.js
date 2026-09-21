@@ -78,6 +78,7 @@ const expectedBundledSkills = [
 function createRegistrationHarness() {
   const tools = [];
   const commands = new Map();
+  const eventHandlers = new Map();
   const pi = {
     zod: {
       z: {
@@ -96,11 +97,42 @@ function createRegistrationHarness() {
     registerCommand(name, command) {
       commands.set(name, command);
     },
+    on(event, handler) {
+      const handlers = eventHandlers.get(event) ?? [];
+      handlers.push(handler);
+      eventHandlers.set(event, handlers);
+    },
   };
 
   registerOmpConfig(pi);
-  return { pi, tools, commands };
+  return { pi, tools, commands, eventHandlers };
 }
+
+test('workflow reminder diagnostic switch skips session-start sync without writing files', async () => {
+  const target = await mkdtemp(path.join(tmpdir(), 'omp-config-workflow-reminder-'));
+  const previousWorkflowReminder = process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER;
+  const previousConfigAutoSync = process.env.OMP_ENHANCER_DISABLE_CONFIG_AUTO_SYNC;
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+
+  try {
+    process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER = '1';
+    delete process.env.OMP_ENHANCER_DISABLE_CONFIG_AUTO_SYNC;
+    process.env.PI_CODING_AGENT_DIR = target;
+
+    const { eventHandlers } = createRegistrationHarness();
+    const [sessionStartSync] = eventHandlers.get('session_start') ?? [];
+    assert.equal(typeof sessionStartSync, 'function');
+    assert.equal(await sessionStartSync(), undefined);
+    assert.deepEqual(await readdir(target), []);
+  } finally {
+    if (previousWorkflowReminder === undefined) delete process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER;
+    else process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER = previousWorkflowReminder;
+    if (previousConfigAutoSync === undefined) delete process.env.OMP_ENHANCER_DISABLE_CONFIG_AUTO_SYNC;
+    else process.env.OMP_ENHANCER_DISABLE_CONFIG_AUTO_SYNC = previousConfigAutoSync;
+    if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+  }
+});
 
 async function findSkillDirs(rootDir) {
   const result = [];

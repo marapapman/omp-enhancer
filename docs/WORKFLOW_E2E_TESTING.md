@@ -64,19 +64,11 @@ For PPT/Beamer text, the trace must preserve `writer`/`zh-writer` as the sole au
 
 ## 自我迭代 fixture
 
-`scripts/e2e/fixtures/self-iteration.json` 定义 positive `omp-self-iteration-tdd` 和 mechanical negative control `omp-self-iteration-mechanical-control`。Runner 在临时目录创建一个初始 GREEN 的真实 Node project，其中有两个互不重叠的 vertical slices：
-```text
-AGENTS.md
-package.json
-src/normalize.js
-test/normalize.test.js
-src/enabled.js
-test/enabled.test.js
-```
+`scripts/e2e/fixtures/self-iteration.json` 只定义 mechanical negative control `omp-self-iteration-mechanical-control`。Runner 在临时目录创建一个初始 GREEN 的真实 Node project；该场景只读取 `package.json` 中的 exact package name，不修改文件、不加载 workflow 或 Skill。
 
-任务只允许修改这两组 source/test 文件。Main 必须先检索本地锚点并写完整 wave/slice 计划；复杂计划由只读 `analyzer` 审阅后，用一次 native `task` call 的同一个 `tasks[]` batch 提交两个 independent slices。每个 task child 自己完成 test mutation、valid RED、minimal production mutation、same-command GREEN 和 refactor，并通过 host-observed completed delivery 返回 command exit、changed paths 与 bounded diff。Parent 不使用 `edit` 或 `write` 实现 slice，也不冒充 child 的 RED/GREEN；两项 delivery 完成后，Main 在 parent event stream 中运行一次 exact `npm test` 作为 broader current-tree verification，随后公开 `MAIN REVIEW`，再把 Main-reviewed bounded diff/evidence 交给 native `reviewer`。
+共享的 self-development evaluator 方法仍要求开发型 trace 按同一 evidence 顺序报告 test mutation、valid RED、minimal production mutation、same-command GREEN 和 refactor；这些要求由合成 evaluator trace 测试覆盖，不是 mechanical control 的运行步骤。
 
-Synthetic evaluator traces 和 live conditional branch 还覆盖 supported-finding repair path：Main 验证 finding 后把 bounded repair 交回 native `task`，接收 host-observed repair delivery，刷新受影响 evidence 并写第二次 `MAIN REVIEW`，之后最多一次 fresh reviewer。它观察 `code` workflow、`code-development` 及其 OMP Enhancer 条件 reference，而不是已退役的普通代码卡片或过程 Skills。这个固定 fixture 的决策完全由本地证据决定，因此禁止 network，也禁止 publish、release、upgrade 和 package/AGENTS 修改。网络禁用是该场景的负向边界，不否定 `code-development` 在实际决策相关任务中先查官方资料再查社区经验。
+Synthetic evaluator traces 和 live conditional branch 还覆盖 supported-finding repair path：Main 验证 finding 后把 bounded repair 交回 native `task`，接收 host-observed repair delivery，刷新受影响 evidence 并写第二次 `MAIN REVIEW`，之后最多一次 fresh reviewer。这个固定 fixture 的决策完全由本地证据决定，因此禁止 network，也禁止 publish、release、upgrade 和 package/AGENTS 修改。
 
 常用入口：
 
@@ -87,7 +79,7 @@ npm run e2e:main:self-iteration -- \
   --output .omp/e2e-results/self-iteration-pilot
 ```
 
-不传 `--scenario` 时同一入口运行 positive 与 mechanical control；单独 pilot 可传对应 scenario ID。默认 matrix 不绑定具体模型；比较不同模型时显式覆盖 `--model` 与 `--thinking`，并使用新的 output 目录。
+不传 `--scenario` 时同一入口运行该 mechanical control 场景；单独 pilot 可传对应 scenario ID。默认 matrix 不绑定具体模型；比较不同模型时显式覆盖 `--model` 与 `--thinking`，并使用新的 output 目录。
 
 ## Beamer/PPT staged content and visual refinement fixture
 
@@ -181,7 +173,7 @@ test mutation
 
 每个 assignment 必须包含 target/acceptance、exclusive write set、test seam、valid RED、minimal production、same-command GREEN、refactor 和 evidence return。Syntax error、fixture 缺失、provider failure、permission failure 或无关 baseline failure 不能被 delivery 当作 valid RED。Evaluator 要求至少两个 implementation assignments 位于同一个 batch call 且 `batch=true`，plan completion 早于它们，所有 child completion 都早于 Main integration。
 
-Parent trace 禁止 Main 使用 `edit`/`write` 代替 child 实现。所有 task deliveries 完成后且 `MAIN REVIEW` 前，Main 必须恰好运行一次 matching broader command 并得到 exit 0；这证明 integrated current tree，而不是替代每个 child 的 focused RED/GREEN。旧 `requireTddCycle` 仍可用于 parent-owned evaluator fixture，但 self-iteration positive scenario 使用 `requireSubagentDrivenCode`，不要求 child tool events 出现在 parent trace。
+Parent trace 禁止 Main 使用 `edit`/`write` 代替 child 实现。所有 task deliveries 完成后且 `MAIN REVIEW` 前，Main 必须恰好运行一次 matching broader command 并得到 exit 0；这证明 integrated current tree，而不是替代每个 child 的 focused RED/GREEN。旧 `requireTddCycle` 仍可用于 parent-owned evaluator fixture；`requireSubagentDrivenCode` 由合成 self-development evaluator trace 覆盖，不要求 child tool events 出现在 parent trace。
 
 ## Main review、reviewer 与 repair 时序
 

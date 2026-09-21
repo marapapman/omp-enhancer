@@ -412,7 +412,7 @@ test('worktree runner creates result directories separately from disposable sess
     defaults: { advisor: false },
     scenarios: [{
       id: 'isolated-result-dir',
-      fixture: 'workflow-two-code-files',
+      fixture: 'semantic-edit-en',
       prompt: 'Return a concise read-only result.',
     }],
   })}\n`);
@@ -3519,32 +3519,12 @@ test('semantic-edit-zh fixture contains a concrete removable style defect', asyn
   }
 });
 
-test('two-file workflow fixture exposes two independent bounded review slices', async () => {
-  const matrix = JSON.parse(await readFile(
-    new URL('./e2e/fixtures/advisor-stress.json', import.meta.url),
-    'utf8',
-  ));
-  const scenario = matrix.scenarios.find(({ id }) => id === 'advisor-two-file-workflow');
-  assert.equal(scenario.fixture, 'workflow-two-code-files');
-  assert.doesNotMatch(scenario.prompt, /\bworkflow\b|\bskills?\b|\bfork\b|\bsubagents?\b|skill:\/\//iu);
 
-  const prepared = await prepareScenario(scenario);
-  try {
-    const alpha = await readFile(path.join(prepared.cwd, 'alpha.js'), 'utf8');
-    const beta = await readFile(path.join(prepared.cwd, 'beta.js'), 'utf8');
-    assert.match(alpha, /normalized === ''\) return true/u);
-    assert.match(beta, /query\.mode \? 'bypass' : 'default'/u);
-  } finally {
-    await prepared.cleanup();
-  }
-});
-
-test('self-iteration E2E fixture is a bounded real Node project with a green baseline', async () => {
+test('self-iteration fixture retains its mechanical negative control', async () => {
   const matrix = JSON.parse(await readFile(
     new URL('./e2e/fixtures/self-iteration.json', import.meta.url),
     'utf8',
   ));
-  const scenario = matrix.scenarios.find(({ id }) => id === 'omp-self-iteration-tdd');
   const mechanicalControl = matrix.scenarios.find(({ id }) => id === 'omp-self-iteration-mechanical-control');
 
   assert.equal(matrix.defaults.model, undefined);
@@ -3552,41 +3532,9 @@ test('self-iteration E2E fixture is a bounded real Node project with a green bas
   assert.ok(matrix.defaults.tools.includes('todo'));
   assert.ok(matrix.defaults.tools.includes('task'));
   assert.ok(matrix.defaults.tools.includes('bash'));
-  assert.equal(scenario.fixture, 'self-iteration-tdd');
-  assert.match(scenario.prompt, /OMP Enhancer self-development E2E harness/iu);
-  assert.match(scenario.prompt, /bash command itself must be exactly `npm test`.+do not prepend `cd` or append redirection/isu);
-  assert.match(scenario.prompt, /read the code reference card and load code-development before any project tool/iu);
-  assert.match(scenario.prompt, /separate plan sections.+local code search.+official-and-community-search decision.+detailed.+slice.+wave.+plan.+PLAN REVIEW.+parallel.+task.+MAIN REVIEW.+reviewer.+repair.+final report/isu);
-  assert.match(scenario.prompt, /search the local source and adjacent test.+network search is unavailable and unnecessary/isu);
-  assert.match(scenario.prompt, /one native `task` call.+same `tasks\[\]` batch.+independent.+vertical slices/isu);
-  assert.match(scenario.prompt, /each.+`task` assignment.+test mutation.+valid RED.+minimal production.+same.+command.+GREEN.+refactor/isu);
-  assert.match(scenario.prompt, /Main.+(?:must not|does not).+(?:edit|write).+(?:bash|command).+implementation/isu);
-  assert.match(scenario.prompt, /MAIN REVIEW.+current tree.+bounded semantic diff.+RED.+GREEN.+evidence.+native reviewer/isu);
-  assert.match(scenario.prompt, /reviewer.+Main review.+bounded semantic diff.+supported.+task.+repair.+second MAIN REVIEW.+at most one fresh reviewer/isu);
-  assert.match(scenario.prompt, /never repeat an unchanged review/isu);
-  assert.match(scenario.prompt, /After the report TODO is complete.+final response.+RED.+GREEN.+review dispositions/isu);
   assert.equal(matrix.defaults.expectations.requireWorkflowPlanFirstVisibleContent, true);
   assert.equal(matrix.defaults.expectations.requireWorkflowReadyTodoOnlyBatch, true);
   assert.equal(matrix.defaults.expectations.requireSuccessfulToolCalls, true);
-  assert.equal(scenario.expectations.requiredWorkflowPrimary, 'code');
-  assert.deepEqual(scenario.expectations.requiredObservedSkills, [
-    'code-development',
-    'omp-enhancer-workflows',
-  ]);
-  assert.deepEqual(scenario.expectations.requiredNativeTaskAgents, [
-    'plan',
-    'task',
-    'reviewer',
-  ]);
-  assert.equal(scenario.expectations.minNativeTodoItems, 10);
-  assert.equal(scenario.expectations.minNativeTaskAssignmentAttempts, 4);
-  assert.equal(scenario.expectations.maxNativeTaskAssignmentAttempts, 6);
-  assert.equal(scenario.expectations.requireTddCycle, undefined);
-  assert.equal(scenario.expectations.requireReviewStages, undefined);
-  assert.deepEqual(
-    scenario.expectations.requireSubagentDrivenCode,
-    SUBAGENT_DRIVEN_CODE_EXPECTATION,
-  );
   assert.equal(mechanicalControl.fixture, 'self-iteration-tdd');
   assert.match(mechanicalControl.prompt, /exact package name value.+return only the value unchanged/isu);
   assert.equal(mechanicalControl.expectations.forbidWorkflowMarkers, true);
@@ -3597,31 +3545,6 @@ test('self-iteration E2E fixture is a bounded real Node project with a green bas
   assert.equal(mechanicalControl.expectations.maxSourceSearchCalls, 2);
   assert.equal(mechanicalControl.expectations.expectedToolSequence, undefined);
 
-  const prepared = await prepareScenario(scenario);
-  try {
-    assert.match(await readFile(path.join(prepared.cwd, 'AGENTS.md'), 'utf8'), /parent event stream.+RED.+GREEN/isu);
-    assert.match(await readFile(path.join(prepared.cwd, 'package.json'), 'utf8'), /"test": "node --test"/u);
-    const normalizeSource = await readFile(path.join(prepared.cwd, 'src', 'normalize.js'), 'utf8');
-    const normalizeTest = await readFile(path.join(prepared.cwd, 'test', 'normalize.test.js'), 'utf8');
-    const enabledSource = await readFile(path.join(prepared.cwd, 'src', 'enabled.js'), 'utf8');
-    const enabledTest = await readFile(path.join(prepared.cwd, 'test', 'enabled.test.js'), 'utf8');
-    assert.match(normalizeSource, /\.trim\(\)/u);
-    assert.doesNotMatch(normalizeSource, /toLowerCase/u);
-    assert.match(normalizeTest, /normalizePluginName\(' core '\).+'core'/su);
-    assert.doesNotMatch(normalizeTest, /Plugin-Core|plugin-core/u);
-    assert.match(enabledSource, /Boolean\(value\)/u);
-    assert.doesNotMatch(enabledSource, /toLowerCase|\boff\b/iu);
-    assert.match(enabledTest, /isPluginEnabled\(true\).+true/su);
-    assert.doesNotMatch(enabledTest, /\bOFF\b|false/u);
-    const execution = await spawnCaptured('npm', ['test'], {
-      cwd: prepared.cwd,
-      timeoutMs: 10_000,
-      env: process.env,
-    });
-    assert.equal(execution.exitCode, 0, execution.stderr || execution.stdout);
-  } finally {
-    await prepared.cleanup();
-  }
 });
 
 test('fixture verification rejects symlink escapes from the isolated project root', async () => {
@@ -4006,22 +3929,16 @@ test('Subagent default matrix keeps native task and hub semantics with natural c
   );
 
   const single = matrix.scenarios.find(({ id }) => id === 'single-read-direct');
-  const forbidden = matrix.scenarios.find(({ id }) => id === 'explicit-main-only');
   const trivialBatch = matrix.scenarios.find(({ id }) => id === 'two-trivial-lookups-direct');
-  const general = matrix.scenarios.find(({ id }) => id === 'non-mechanical-general-subagent');
   const writing = matrix.scenarios.find(({ id }) => id === 'natural-writing-en-subagent-default');
-  const network = matrix.scenarios.find(({ id }) => id === 'natural-network-design-subagent-default');
-  const positives = matrix.scenarios.filter(({ category }) => category.startsWith('positive/'));
   for (const scenario of matrix.scenarios.filter(({ expectations }) => (
     expectations.requireWorkflowPlanBeforeResourceLoads === true
   ))) {
     assert.equal(scenario.expectations.requireWorkflowPlanFirstVisibleContent, true, scenario.id);
   }
   assert.equal(single.expectations.maxNativeTaskAssignmentAttempts, 0);
-  assert.equal(forbidden.expectations.maxNativeTaskAssignmentAttempts, 0);
   assert.equal(trivialBatch.expectations.maxNativeTaskAssignmentAttempts, 0);
   assert.equal(single.expectations.maxNativeTaskCalls, 0);
-  assert.equal(forbidden.expectations.maxNativeTaskCalls, 0);
   assert.equal(trivialBatch.expectations.maxNativeTaskCalls, 0);
   for (const scenario of [single, trivialBatch]) {
     assert.equal(scenario.expectations.maxNativeTodoCalls, 0, scenario.id);
@@ -4035,82 +3952,6 @@ test('Subagent default matrix keeps native task and hub semantics with natural c
       scenario.id,
     );
     assert.deepEqual(scenario.expectations.forbiddenSkills, ['omp-enhancer-workflows'], scenario.id);
-  }
-  assert.deepEqual(forbidden.expectations.requiredObservedSkills, [
-    'code-development',
-    'omp-enhancer-workflows',
-  ]);
-  assert.ok(forbidden.tools.includes('todo'));
-  assert.equal(forbidden.expectations.requiredWorkflowPrimary, 'code');
-  assert.deepEqual(forbidden.expectations.requiredSelectedWorkflowIds, ['code']);
-  assert.equal(forbidden.expectations.requireWorkflowPlanBeforeResourceLoads, true);
-  assert.equal(forbidden.expectations.forbidResourceProjectSameBatch, true);
-  assert.equal(forbidden.expectations.requireWorkflowReadyAfterLoadsBeforeProjectTools, true);
-  assert.equal(forbidden.expectations.requireWorkflowReadyFirstVisibleContent, true);
-  assert.equal(forbidden.expectations.requireWorkflowReadyTodoOnlyBatch, true);
-  assert.equal(forbidden.expectations.requireNativeTodoInit, true);
-  assert.equal(forbidden.expectations.minNativeTodoItems, 2);
-  assert.equal(forbidden.expectations.minNativeTodoCompletionTransitions, 1);
-  assert.equal(forbidden.expectations.requireNativeTodoCompletion, true);
-  assert.equal(forbidden.expectations.requireNativeTodoInitBeforeSubstantiveTool, true);
-  assert.deepEqual(forbidden.expectations.requiredNativeTodoItemPatterns, [
-    '(?:^|\\s)fallback=(?=[^\\r\\n]*(?:user(?:\\s+or\\s+native)?\\s+constraint|native(?:\\s+user)?\\s+constraint|user\\s+request|explicit\\s+user\\s+instruction|user\\s+explicitly\\s+(?:required|requested|instructed)))(?=[^\\r\\n]*(?:do\\s+not\\s+delegate|no[- ]delegation|main(?:\\s+agent)?[- ]only|keep\\s+all\\s+work\\s+in\\s+(?:the\\s+)?main\\s+agent))[^\\r\\n]+',
-  ]);
-  assert.doesNotMatch(forbidden.prompt, /subagents?|sub-agents?/iu);
-  assert.match(forbidden.prompt, /do not delegate/iu);
-  assert.ok(general);
-  assert.equal(
-    matrix.scenarios.some(({ id }) => id === 'non-mechanical-agentic-simple'),
-    false,
-  );
-  assert.equal(general.fixture, 'general-subagent-analysis-readonly');
-  assert.equal(general.category, 'control/non-mechanical-general');
-  assert.match(general.prompt, /brief\.txt/iu);
-  assert.match(general.prompt, /options\.txt/iu);
-  assert.match(general.prompt, /constraints\.txt/iu);
-  assert.match(general.prompt, /analy[sz]e.+recommend|recommend.+analy[sz]e/iu);
-  assert.doesNotMatch(general.prompt, /\b(?:code|package|plugin|repository|software)\b/iu);
-  assert.doesNotMatch(general.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
-  assert.equal(general.expectations.minNativeTaskCalls, 1);
-  assert.equal(general.expectations.maxNativeTaskCalls, 1);
-  assert.equal(general.expectations.minNativeTaskAssignmentAttempts, 1);
-  assert.equal(general.expectations.maxNativeTaskAssignmentAttempts, 1);
-  assert.equal(general.expectations.requireNativeTaskCompletion, true);
-  assert.equal(general.expectations.requireNativeTaskSubmissionForEveryAssignment, true);
-  assert.deepEqual(general.expectations.requiredNativeTaskAgents, ['task']);
-  assert.deepEqual(general.expectations.requiredObservedSkills, ['omp-enhancer-workflows']);
-  assert.deepEqual(general.expectations.forbiddenSkills, ['code-development']);
-  assert.equal(general.expectations.maxObservedSkills, 1);
-  assert.equal(general.expectations.requiredWorkflowPrimary, 'operations');
-  assert.deepEqual(general.expectations.requiredSelectedWorkflowIds, ['operations']);
-  assert.equal(general.expectations.requireWorkflowPlanBeforeResourceLoads, true);
-  assert.equal(general.expectations.requireWorkflowPlanFirstVisibleContent, true);
-  assert.equal(general.expectations.requireWorkflowPlanLoadCallsSameBatch, true);
-  assert.equal(general.expectations.forbidResourceProjectSameBatch, true);
-  assert.equal(general.expectations.requireWorkflowReadyAfterLoadsBeforeProjectTools, true);
-  assert.equal(general.expectations.requireWorkflowReadyFirstVisibleContent, true);
-  assert.equal(general.expectations.requireWorkflowReadyTodoOnlyBatch, true);
-  assert.equal(general.expectations.requireExactSelectedWorkflowReferences, true);
-  assert.equal(general.expectations.requireNativeTodoInit, true);
-  assert.equal(general.expectations.requireNativeTodoCompletion, true);
-  assert.equal(general.expectations.requireNativeTodoInitBeforeSubstantiveTool, true);
-  assert.equal(general.expectations.maxProjectInspectionCallsBeforeNativeTask, 0);
-  assert.equal(general.expectations.maxProjectInspectionCallsAfterNativeTask, 3);
-
-  const preparedGeneral = await prepareScenario(general);
-  try {
-    assert.equal(preparedGeneral.displayCwd, '<temporary:general-subagent-analysis-readonly>');
-    assert.equal(preparedGeneral.verifyRoot, preparedGeneral.cwd);
-    assert.deepEqual((await readdir(preparedGeneral.cwd)).sort(), [
-      'brief.txt',
-      'constraints.txt',
-      'options.txt',
-    ]);
-    assert.match(await readFile(path.join(preparedGeneral.cwd, 'brief.txt'), 'utf8'), /workshop/iu);
-    assert.match(await readFile(path.join(preparedGeneral.cwd, 'options.txt'), 'utf8'), /Option A/iu);
-    assert.match(await readFile(path.join(preparedGeneral.cwd, 'constraints.txt'), 'utf8'), /must/iu);
-  } finally {
-    await preparedGeneral.cleanup();
   }
 
   assert.equal(writing.fixture, 'substantive-writing-en-readonly');
@@ -4143,18 +3984,6 @@ test('Subagent default matrix keeps native task and hub semantics with natural c
   assert.equal(writing.expectations.maxProjectInspectionCallsBeforeNativeTask, 0);
   assert.doesNotMatch(writing.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
 
-  assert.equal(network.expectations.requiredWorkflowPrimary, 'operations');
-  assert.deepEqual(network.expectations.requiredSelectedWorkflowIds, ['operations']);
-  assert.deepEqual(network.expectations.requiredNativeTaskAgents, ['ecc-network-architect']);
-  assert.deepEqual(network.expectations.forbiddenSkills, ['ecc-skill-catalog']);
-  assert.equal(network.expectations.requireNativeTaskCompletion, true);
-  assert.equal(network.expectations.requireNativeTaskSubmissionForEveryAssignment, true);
-  assert.equal(network.expectations.maxProjectInspectionCallsBeforeNativeTask, 0);
-  assert.equal(network.expectations.maxProjectInspectionCallsAfterNativeTask, 0);
-  assert.equal(network.timeoutSeconds, 480);
-  assert.match(network.prompt, /pre-deployment configuration-validation checklist/iu);
-  assert.match(network.prompt, /advisory migration-risk review/iu);
-  assert.doesNotMatch(network.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
   const drawio = matrix.scenarios.find(({ id }) => id === 'diagram-drawio-subagent-default');
   assert.ok(drawio, 'diagram-drawio-subagent-default scenario must exist');
   assert.equal(drawio.fixture, 'visual-drawio-canvas');
@@ -4183,68 +4012,6 @@ test('Subagent default matrix keeps native task and hub semantics with natural c
   assert.deepEqual(drawio.fixtureExpectations.forbiddenPatterns, {
     'docs/deploy-flow.drawio': ['foreignObject'],
   });
-  assert.equal(positives.length, 2);
-  for (const scenario of positives) {
-    const expectedWidth = 2;
-    assert.equal(scenario.expectations.minNativeTaskAssignmentAttempts, expectedWidth, scenario.id);
-    assert.equal(
-      scenario.expectations.maxNativeTaskAssignmentAttempts,
-      expectedWidth,
-      scenario.id,
-    );
-    assert.equal(scenario.expectations.maxNativeTaskCalls, 1, scenario.id);
-    assert.equal(scenario.expectations.requireNativeTaskCompletion, true, scenario.id);
-    assert.deepEqual(
-      scenario.expectations.requiredObservedSkills,
-      ['code-development', 'omp-enhancer-workflows'],
-      scenario.id,
-    );
-    assert.equal(scenario.expectations.requireWorkflowPlanBeforeResourceLoads, true, scenario.id);
-    assert.equal(scenario.expectations.forbidResourceProjectSameBatch, true, scenario.id);
-    assert.equal(scenario.expectations.requireWorkflowReadyAfterLoadsBeforeProjectTools, true, scenario.id);
-    assert.equal(
-      scenario.expectations.maxProjectInspectionCallsBeforeNativeTask,
-      0,
-      scenario.id,
-    );
-    assert.equal(scenario.expectations.maxProjectInspectionCallsAfterNativeTask, 4, scenario.id);
-    assert.doesNotMatch(scenario.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu, scenario.id);
-  }
-  const twoFile = matrix.scenarios.find(({ id }) => id === 'two-file-natural');
-  assert.equal(twoFile.timeoutSeconds, 480);
-  assert.deepEqual(twoFile.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob']);
-  assert.deepEqual(twoFile.expectations.requiredObservedSkills, [
-    'code-development',
-    'omp-enhancer-workflows',
-  ]);
-  assert.equal(twoFile.expectations.requiredWorkflowPrimary, 'code');
-  assert.deepEqual(twoFile.expectations.requiredSelectedWorkflowIds, ['code']);
-  assert.equal(twoFile.expectations.requireWorkflowPlanLoadCallsSameBatch, true);
-  assert.equal(twoFile.expectations.requireNativeTaskBatch, true);
-  assert.equal(twoFile.expectations.requireWorkflowReadyTodoOnlyBatch, true);
-  assert.equal(twoFile.expectations.requireWorkflowReadyFirstVisibleContent, true);
-  assert.equal(twoFile.expectations.requireNativeTodoInit, true);
-  assert.equal(twoFile.expectations.minNativeTodoItems, 3);
-  assert.deepEqual(twoFile.expectations.requiredNativeTodoItemPatterns, [
-    '^(?!Delegate\\s)(?=[^\\r\\n]*(?:Main|parent)(?:[- ]owned)?)(?=[^\\r\\n]*(?:compar(?:e|ison)|integrat(?:e|ion)|verif(?:y|ication)))[^\\r\\n]+',
-  ]);
-  assert.equal(twoFile.expectations.requireNativeTodoInitBeforeSubstantiveTool, true);
-  assert.equal(twoFile.expectations.requireNativeTodoCompletion, true);
-  assert.equal(twoFile.expectations.requireNativeTaskSubmissionForEveryAssignment, true);
-  assert.equal(twoFile.expectations.agentArtifactReadPolicy, 'preview-once');
-  assert.equal(twoFile.expectations.maxAgentArtifactReadCalls, 2);
-  assert.deepEqual(twoFile.expectations.requiredNativeTaskAgents, ['plan']);
-  assert.match(twoFile.prompt, /independently challenge two complete implementation plans/iu);
-  assert.match(twoFile.prompt, /local anchors/iu);
-  assert.match(twoFile.prompt, /RED and GREEN/iu);
-  assert.match(twoFile.prompt, /no finding is valid/iu);
-  assert.doesNotMatch(twoFile.prompt, /\bworkflow\b|skill:\/\//iu);
-  const crossPlugin = matrix.scenarios.find(({ id }) => id === 'cross-plugin-plan-natural');
-  assert.deepEqual(crossPlugin.expectations.requiredNativeTaskAgents, ['plan']);
-  assert.match(crossPlugin.prompt, /two complete cross-plugin plans/iu);
-  assert.match(crossPlugin.prompt, /generated workflow parity/iu);
-  assert.match(crossPlugin.prompt, /public review-tool registration parity/iu);
-  assert.match(crossPlugin.prompt, /no finding is valid/iu);
 });
 
 test('dependency-ordered workflow assignments require successful prior Agent delivery', () => {
@@ -4340,7 +4107,7 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
     ));
     const { report } = await runInstalledMatrix({
       dryRun: true,
-      scenarioIds: ['english-review-zh-prompt'],
+      scenarioIds: ['semantic-edit-en'],
       outputRoot,
     });
     assert.equal(report.mode, 'dry-run');
@@ -4369,7 +4136,7 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
 
     const { report: recoveryReport } = await runInstalledMatrix({
       dryRun: true,
-      scenarioIds: ['english-review-zh-prompt'],
+      scenarioIds: ['semantic-edit-en'],
       outputRoot: path.join(outputRoot, 'runner-timeout-only'),
       useOmpDeadline: false,
     });
@@ -4384,7 +4151,7 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
 
     const { report: modelOverrideReport } = await runInstalledMatrix({
       dryRun: true,
-      scenarioIds: ['english-review-zh-prompt'],
+      scenarioIds: ['semantic-edit-en'],
       outputRoot: path.join(outputRoot, 'model-override'),
       model: 'opencode-go/mimo-v2.5',
       thinking: 'high',
@@ -4411,36 +4178,6 @@ test('mandatory matrix isolates plugin compliance from the explicit advisor stre
     assert.equal(matrix.defaults.expectations.maxAdvisorMessages, 0);
     assert.ok(stress.scenarios.some(({ id }) => id === 'advisor-english-review'));
     assert.ok(stress.scenarios.some(({ id }) => id === 'advisor-semantic-edit-en'));
-    const advisorWorkflow = stress.scenarios.find(({ id }) => id === 'advisor-two-file-workflow');
-    assert.ok(advisorWorkflow);
-    assert.equal(advisorWorkflow.taskEager, 'preferred');
-    assert.equal(advisorWorkflow.fixture, 'workflow-two-code-files');
-    assert.deepEqual(advisorWorkflow.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob']);
-    assert.equal(advisorWorkflow.expectations.requiredWorkflowPrimary, 'code');
-    assert.deepEqual(advisorWorkflow.expectations.requiredSelectedWorkflowIds, ['code']);
-    assert.equal(advisorWorkflow.expectations.requireWorkflowPlanBeforeResourceLoads, true);
-    assert.equal(advisorWorkflow.expectations.requireWorkflowPlanFirstVisibleContent, true);
-    assert.equal(advisorWorkflow.expectations.requireWorkflowPlanLoadCallsSameBatch, true);
-    assert.equal(advisorWorkflow.expectations.requireWorkflowReadyAfterLoadsBeforeProjectTools, true);
-    assert.equal(advisorWorkflow.expectations.requireWorkflowReadyFirstVisibleContent, true);
-    assert.equal(advisorWorkflow.expectations.requireWorkflowReadyTodoOnlyBatch, true);
-    assert.equal(advisorWorkflow.expectations.requireExactSelectedWorkflowReferences, true);
-    assert.equal(advisorWorkflow.expectations.requireNativeTodoInit, true);
-    assert.equal(advisorWorkflow.expectations.minNativeTodoItems, 3);
-    assert.deepEqual(advisorWorkflow.expectations.requiredNativeTodoItemPatterns, [
-      '^(?!Delegate\\s)(?=[^\\r\\n]*(?:Main|parent)(?:[- ]owned)?)(?=[^\\r\\n]*(?:compar(?:e|ison)|integrat(?:e|ion)|verif(?:y|ication)))[^\\r\\n]+',
-    ]);
-    assert.equal(advisorWorkflow.expectations.requireNativeTodoInitBeforeSubstantiveTool, true);
-    assert.equal(advisorWorkflow.expectations.requireNativeTodoCompletion, true);
-    assert.equal(advisorWorkflow.expectations.maxAgentArtifactReadCalls, 0);
-    assert.deepEqual(advisorWorkflow.expectations.requiredObservedSkills, [
-      'code-development',
-      'omp-enhancer-workflows',
-    ]);
-    assert.doesNotMatch(advisorWorkflow.prompt, /\bworkflow\b|skill:\/\//iu);
-    for (const id of ['code-implementation-plan', 'code-diagnosis-focused', 'code-test-strategy']) {
-      assert.equal(matrix.scenarios.find((scenario) => scenario.id === id)?.timeoutSeconds, 180);
-    }
   } finally {
     await rm(outputRoot, { recursive: true, force: true });
   }

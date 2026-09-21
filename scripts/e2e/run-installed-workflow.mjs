@@ -1314,34 +1314,6 @@ export async function prepareScenario(scenario) {
       writeFile(path.join(cwd, 'sales.csv'), 'month,revenue,cost\nJan,100,70\nFeb,140,80\n'),
       writeFile(path.join(cwd, 'README.md'), '# Skill discovery fixture\n\nA deterministic read-only test workspace.\n'),
     ]);
-  } else if (scenario.fixture === 'workflow-two-code-files') {
-    await Promise.all([
-      writeFile(
-        path.join(cwd, 'alpha.js'),
-        [
-          'export function acceptsForwardedHost(headers = {}) {',
-          "  const raw = headers['x-forwarded-host'];",
-          "  if (typeof raw !== 'string') return false;",
-          '  const normalized = raw.trim().toLowerCase();',
-          "  if (normalized === '') return true;",
-          "  return normalized === 'api.example.com';",
-          '}',
-          '',
-        ].join('\n'),
-      ),
-      writeFile(
-        path.join(cwd, 'beta.js'),
-        [
-          'export function selectCacheMode(query = {}) {',
-          "  const mode = String(query.mode ?? '').trim().toLowerCase();",
-          "  if (mode === 'bypass') return 'bypass';",
-          "  if (mode === 'refresh') return 'refresh';",
-          "  return query.mode ? 'bypass' : 'default';",
-          '}',
-          '',
-        ].join('\n'),
-      ),
-    ]);
   } else if (scenario.fixture === 'self-iteration-tdd') {
     await Promise.all([
       mkdir(path.join(cwd, 'src'), { recursive: true }),

@@ -196,9 +196,11 @@ export default function registerOmpConfig(pi) {
   // AGENTS.md, WORKFLOW_CATALOG.md) after plugin install or upgrade without
   // requiring the user to manually invoke omp_config_sync_workflow_context.
   // Idempotent: only writes when files actually differ. Preserves content
-  // outside managed markers. Set OMP_ENHANCER_DISABLE_CONFIG_AUTO_SYNC=1 to skip.
+  // outside managed markers. CONFIG_AUTO_SYNC skips this entire automatic
+  // sync; WORKFLOW_REMINDER skips only the session-start advisory injection.
   pi.on?.('session_start', async () => {
     if (process.env.OMP_ENHANCER_DISABLE_CONFIG_AUTO_SYNC) return undefined;
+    if (process.env.OMP_ENHANCER_DISABLE_WORKFLOW_REMINDER) return undefined;
     try {
       await syncWorkflowContext({ apply: true });
     } catch {

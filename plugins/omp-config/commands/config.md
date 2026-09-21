@@ -1,6 +1,6 @@
 # OMP Config
 
-This plugin provides OMP config assets, agents, skills, hooks, and safe config diagnostics.
+This plugin provides OMP config assets, skills, hooks, and safe config diagnostics.
 
 Use:
 
