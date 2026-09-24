@@ -68,8 +68,11 @@ test('visual workflow routes every textual surface to the body-language writer',
 test('retired drawing pipelines stay out of the visual card', () => {
   const visual = workflowCatalog['visual'];
   const contract = [visual.chooseWhen, ...visual.suggestedFlow, ...visual.scopeNotes].join(' ');
+  const allowedHelper = /scripts\/check-drawio-layout\.py/giu;
+  const contractWithoutApprovedHelper = contract.replace(allowedHelper, '');
 
-  assert.doesNotMatch(contract, RETIRED_PIPELINE_TERMS);
+  assert.match(contract, allowedHelper, 'the repo-owned geometry assertion script remains discoverable');
+  assert.doesNotMatch(contractWithoutApprovedHelper, RETIRED_PIPELINE_TERMS);
   assert.doesNotMatch(contract, FORBIDDEN_DRAWING_TERMS);
   assert.doesNotMatch(contract, /visioner/iu);
   assert.doesNotMatch(contract, /must (?:fork|delegate)|fixed fanout|hard (?:gate|router)/i);
