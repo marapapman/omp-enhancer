@@ -13,12 +13,13 @@
     {
       "name": "omp-config",
       "description": "Optional OMP workflow references, config assets, notify-only hooks, opt-in hook templates, and diagnostics.",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
       "source": "./omp-config",
       "skills": [
+        "./skills/beamer-pptx-local",
         "./skills/beamer-to-powerpoint",
         "./skills/canvas-design",
         "./skills/caveman",
