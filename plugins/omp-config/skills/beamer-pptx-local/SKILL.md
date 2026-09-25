@@ -5,6 +5,9 @@ description: Convert a compiled Beamer PDF into an editable local .pptx without 
 
 # Beamer PPTX Local
 
+When this Skill is part of a `writer` or `zh-writer` assignment, that invocation
+(the dedicated language-matched text tool, hosted by its packaged Agent compatibility adapter) remains proposal-only: it runs no command and writes no file, and returns the complete proposed artifact or diff. Main or a separate explicitly capable Main-selected Agent owns authorized effects; that owner performs no prose drafting or revision, which belongs to the text tool alone.
+
 Local, dependency-light conversion of compiled Beamer decks into editable
 PowerPoint files. Text and layout become editable objects; formulas stay as
 editable text fragments (not native Office Math). Use this skill when the
