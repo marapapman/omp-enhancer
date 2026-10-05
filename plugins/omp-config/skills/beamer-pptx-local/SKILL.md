@@ -20,8 +20,10 @@ is available.
 
 This skill performs mechanical conversion only. It never drafts, rewrites, or
 polishes slide content. Any text change goes through the language-matched
-`writer` or `zh-writer` text tool, then back through the Markdown content plan
-and Beamer regeneration — never by patching the PPTX.
+`writer` or `zh-writer` text tool, and the approved proposal is applied in
+place where the finding was found; a content or layout finding is resolved in
+place at the stage where it is found and is not propagated back to the Markdown
+content plan.
 
 ## Pipeline
 

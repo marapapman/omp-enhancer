@@ -59,10 +59,11 @@ test('writing card keeps the optional fixed beamer2pptx branch bounded', () => {
   const flow = [...writing.suggestedFlow, ...writing.scopeNotes].join(' ');
   assert.match(
     flow,
-    /final validated Beamer.+producing `?task`?.+PPTX.+(?:render|revision).+independent read-only.+reviewer.+at most one.+layout-only.+fresh.+same reviewer.+confirm/iu,
+    /final validated Beamer.+producing `?task`?.+PPTX.+(?:render|revision).+independent read-only.+reviewer.+at most one bounded fix.+fresh.+same reviewer.+confirm/iu,
   );
   assert.match(flow, /either a new or existing Beamer deck.+final validated Beamer visual revision/iu);
-  assert.match(flow, /preserve visible content, formulas, slide order, and Markdown\/Beamer sources.+return content or page-structure issues.+Markdown plan.+Beamer regeneration path/iu);
+  assert.match(flow, /preserve visible content, formulas, slide order, and Markdown\/Beamer sources/iu);
+  assert.match(flow, /resolved in place[\s\S]{0,200}not propagated back to the Markdown content plan/iu);
   assert.match(
     flow,
     /single read-only visual precheck.+Main or task.+(?:initial render|initial revision).+before task layout/iu,
@@ -70,7 +71,8 @@ test('writing card keeps the optional fixed beamer2pptx branch bounded', () => {
   assert.match(scope, /new Beamer decks.+text-only.+confirm(?:ation)?.+visual authoring.+(?:basic|base) layout/iu);
   assert.match(scope, /Markdown content plan.+canonical content source.+derived layout artifacts/iu);
   assert.match(flow, /plain-chinese-writing.+zh-format-humanizer.+zh-writing-review/iu);
-  assert.match(flow, /content changes.+Markdown first.+reconfirm.+regenerate.+Beamer/iu);
+  assert.match(flow, /resolved in place[\s\S]{0,200}not propagated back to the Markdown content plan/iu);
+  assert.doesNotMatch(flow, /reconfirm\s+the\s+affected\s+pages|do\s+not\s+patch\s+the\s+PPTX/iu);
   assert.match(scope, /no automatic loop or hard gate/i);
   assert.doesNotMatch(flow, /block:\s*true|continue:\s*true/i);
 });

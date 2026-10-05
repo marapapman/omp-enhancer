@@ -179,7 +179,8 @@ test('current Beamer documentation keeps Markdown content separate from derived 
   for (const [path, content] of documents) {
     assert.match(content, /Markdown content plan.+canonical content source/isu, path);
     assert.match(content, /Beamer .tex files?.+derived layout artifacts/isu, path);
-    assert.match(content, /content changes.+Markdown.+(?:reconfirm|重新与用户确认).+regenerate.+Beamer/isu, path);
+    assert.match(content, /resolved in place[\s\S]{0,200}not propagated back to the Markdown content plan/isu, path);
+    assert.doesNotMatch(content, /reconfirm\s+the\s+affected\s+pages|do\s+not\s+patch\s+the\s+PPTX/isu, path);
   }
 });
 

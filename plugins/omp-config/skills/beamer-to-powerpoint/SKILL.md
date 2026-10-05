@@ -1,6 +1,6 @@
 ---
 name: beamer-to-powerpoint
-description: Convert a final validated Beamer PDF into an editable `.pptx` through the fixed external `beamer2pptx` Skill, with task-bound rendering, independent read-only PPTX visual QA, and at most one bounded layout-only repair when PowerPoint output is in scope.
+description: Convert a final validated Beamer PDF into an editable `.pptx` through the fixed external `beamer2pptx` Skill, with task-bound rendering, independent read-only PPTX visual QA, and at most one bounded repair when PowerPoint output is in scope.
 ---
 
 # Beamer to PowerPoint
@@ -20,9 +20,11 @@ may only preserve, inspect, or adjust layout around the approved source text.
 They must not draft, rewrite, translate, polish, add, remove, or retype prose, formulas,
 labels, captions, notes, or other copy. Main must not draft, rewrite, translate,
 or polish any PPTX text; it only forwards results and applies approved writer
-proposals verbatim through the Markdown/Beamer path. If text is wrong
+proposals verbatim in place. If text is wrong
 or missing, Main generates replacement text with a new `writer` or `zh-writer`
-text-tool call and regenerates Beamer; do not patch the PPTX text. OfficeCLI may apply an approved writer proposal only
+text-tool call and applies the approved proposal in place; a content or layout
+finding is resolved in place at the stage where it is found and is not
+propagated back to the Markdown content plan. OfficeCLI may apply an approved writer proposal only
 verbatim and then validate it; it must not compose or revise content. This is
 an advisory ownership rule, not a router, lifecycle gate, retry policy, or
 completion controller.
@@ -92,7 +94,8 @@ conversion workflow selected here. Do not ask for, require, or invent a user-sup
 4. Conversion is read-only with respect to the content source. Do not rewrite
    prose, formulas, figures, slide order, page structure, Markdown, `.tex`,
    macros, or fonts during conversion. A content or page-structure problem
-   returns to the Markdown plan and Beamer regeneration path.
+   discovered after conversion is resolved in place at the stage where it is
+   found; it is not propagated back to the Markdown content plan.
 5. Load the external `beamer2pptx` Skill and its referenced runtime, formula,
    and validation guidance before dispatching the producing task. Use its
    prescribed runtime and scripts, a separate build directory, and no
@@ -160,7 +163,9 @@ After the producing task binds the current revision, Main selects exactly one in
 The visual reviewer is read-only for content: it may report a text or formula
 fidelity finding, but it must not edit wording, formulas, labels, captions, or
 notes. A content finding goes through a new `writer` or `zh-writer` text-tool
-call, then to the Markdown content plan and Beamer regeneration path.
+call, and the approved proposal is applied in place; the finding is resolved in
+place at the stage where it is found and is not propagated back to the Markdown
+content plan.
 
 
 The review covers:
@@ -175,14 +180,15 @@ The review covers:
 - visible fidelity against the validated Beamer PDF.
 
 If the reviewer reports a supported layout defect, the producing task may
-apply **at most one** bounded layout-only fix to the editable PPTX. The task
+apply **at most one** bounded fix to the editable PPTX. The task
 must preserve all visible content, formulas, slide order, and the Markdown and Beamer sources; it may adjust only placement, sizing, spacing, alignment, fonts, or equivalent layout properties.
 It then rerenders the exact changed revision and binds fresh evidence. The same reviewer confirms only those recorded findings once against the fresh evidence.
 Do not start another review/fix round, redispatch automatically, or review unchanged evidence.
 
-If a finding requires rewriting content, changing a formula, adding/removing
-material, or splitting/reordering pages, do not patch the PPTX. Return it to
-the Markdown content plan and Beamer regeneration path. If the one bounded
+A content or layout finding is resolved in place at the stage where it is
+found; it is not propagated back to the Markdown content plan. A prose or
+formula change comes from a complete language-matched `writer` or `zh-writer`
+proposal and is applied verbatim in place. If the one bounded
 repair does not resolve a finding, report it as unresolved.
 
 ## Limitations and failure handling
@@ -217,7 +223,7 @@ Report:
 - the current PPTX render directory and the separate package-validity,
   visual-fidelity, and editability results;
 - the independent review owner, criteria, findings, and limitations;
-- whether the single bounded layout-only repair ran and whether the same
+- whether the single bounded repair ran and whether the same
   reviewer confirmed its fresh evidence; and
 - unavailable PowerPoint/OfficeCLI/runtime/font/formula evidence and every
   unresolved finding.

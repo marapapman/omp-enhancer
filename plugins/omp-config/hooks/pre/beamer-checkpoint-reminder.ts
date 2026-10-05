@@ -19,7 +19,7 @@ export default function (pi: HookAPI): void {
     ctx.ui.notify(
       `检测到 Beamer slides 制作（${path}）。工作流检查点提醒（warn-only，不会阻止本次调用）：
 0. 内容阶段：先和用户逐页沟通，在 Markdown 内容计划文件（*.md）中记录每页内容；Markdown 是唯一内容源，未确认前不要写入或修改 Beamer .tex；
-1. 用户确认 Markdown 内容后，才从该文件翻译并生成 Beamer 帧，再开始排版；排版阶段不直接改正文，内容变更先回到 Markdown；slides-storyline 与 latex-beamer-slides 的完整顺序见下方 reference；
+1. 用户确认 Markdown 内容后，才从该文件翻译并生成 Beamer 帧，再开始排版；生成后的内容/排版发现一律 resolved in place（在发现阶段就地修复），not propagated back to the Markdown content plan（不回写 Markdown 内容计划）；slides-storyline 与 latex-beamer-slides 的完整顺序见下方 reference；
 2. 首轮完整渲染后：latex-beamer-slides 要求用户确认基础版式方向再进入版式精修；
 3. 角色链：task 编译/渲染、版式处理并绑定同一 revision 证据 → 单一只读 owner（Main，或未产出该 revision 的 task）复核并给出 advisory findings。
 完整步骤顺序见 skill://omp-enhancer-workflows/references/writing.md。`,

@@ -53,7 +53,7 @@ Write body text, captions, and explanations as complete natural-language sentenc
 
 Slide copy has its own AI tells: a title that states a complete claim should not be followed by a bullet list of staged contrasts; one-line closers and dramatic fragments replace real content; forced triads pad bullet lists; bold as decoration labels every bullet; inflated significance appears in titles such as Awards and recognition; and a stock Challenges and Future Outlook page pads the ending. The "XX：XX" title pattern (label + colon + label) is itself a tell: it reads as a scaffold, not a claim. Any listed tell justifies a revision on its first sighting on the page — prefer an over-correction to a miss; the "XX：XX" title pattern and a broken title sequence are title-rule violations, fixed whenever found.
 
-Wait for user confirmation of the page content before adding images, authoring visuals, or performing layout. Do not create or edit Beamer .tex frames while content is unresolved. If content changes later, return to the Markdown content stage, reconfirm the affected pages, and regenerate the affected Beamer frames.
+Wait for user confirmation of the page content before adding images, authoring visuals, or performing layout. Do not create or edit Beamer .tex frames while content is unresolved. After generation, a content or layout finding is resolved in place at the stage where it is found; it is not propagated back to the Markdown content plan.
 
 After that confirmation and before visual authoring, a separate `task` reconciles the slide order on the Markdown content plan: it checks for content overlap between slides, keeps each content module semantically coherent with one main job per slide, and proposes a page order with a logical overall progression from context to conclusion. It also verifies the title rules: no page title uses the "XX：XX" two-part label pattern (label + colon + label, full-width `：` or ASCII `:`, in either language — this also forbids "第X部分：标题" and "01 / 主题" numbering styles), and reading all page titles in deck order forms a coherent, grammatical narrative of the talk. It also checks the body bans across page text: no label-colon bullet or caption lead-ins, no "不是X，而是Y"/"not X, but Y" contrast-repetition constructions, no opening or closing one-sentence summaries, no defensive writing (unsourced hedging, boilerplate disclaimers, over-attribution, apologia), and no "specifics then sweep" summary clauses. A title or body violation is a content finding: the affected titles return to the Markdown content stage for user reconfirmation, never a direct .tex edit. Main discusses material order changes with the user and applies the agreed reordering in the Markdown content plan before any Beamer frame is generated. When a crossing cannot be fixed by reordering or regrouping alone — for example, content duplicated across pages or a single module split across several pages — the task reports it, and the affected pages return to the Markdown content stage for user reconfirmation instead of being silently dropped. Reordering edits only the Markdown content plan, never the .tex files.
 
@@ -67,14 +67,14 @@ Use `[fragile]` for frames that require verbatim content. Use `[shrink]` only wh
 
 ## Density and legibility
 
-Density rules apply to the Markdown content source before translation. Do not rewrite, shorten, or add content in .tex during layout. If density requires a reduction or a split, return to the Markdown content stage, reconfirm the affected pages with the user, and regenerate the affected Beamer frames before layout resumes.
+Density rules apply to the Markdown content source before translation. During layout, a density finding requiring a reduction or a split is resolved in place at the stage where it is found; it is not propagated back to the Markdown content plan.
 
 - Give each frame one main point or job.
 - Keep ordinary bullet lists near six items or fewer.
 - Keep code examples short enough to read from the back of the room; split long examples in the Markdown content plan before translating them into staged frames.
 - Prefer a diagram, table, image, or worked example when it communicates the point more directly than prose, without changing the confirmed content.
 - Preserve consistent title length, margins, alignment, color roles, and figure treatment.
-- Do not solve overflow by reducing text below the template's readable baseline; make any content reduction in Markdown and reconfirm it first.
+- Do not solve overflow by reducing text below the template's readable baseline; a needed content reduction is resolved in place at the stage where it is found and is not propagated back to the Markdown content plan.
 - Avoid a cramped composition. Preserve enough whitespace and separation among titles, body text, figures, captions, code, tables, equations, and page furniture to make grouping unambiguous.
 
 
@@ -114,7 +114,7 @@ For both new decks and bounded modifications, after `task` produces and binds th
 
 After the first complete layout is rendered, present the current PDF and page renders to the user and wait for user confirmation of the basic layout direction before refinement. This is a REQUIRED conversational checkpoint. "Not a plugin-owned gate or completion condition" means the runtime never blocks you — it does not mean the confirmation is optional.
 
-After that confirmation, preserve the current multi-pass visual evidence chain. Each explicit refinement round uses fresh current-revision evidence: visual review, a supported layout-only task correction, task rerendering, and a new visual review. If a finding requires content or page-structure changes, return to the Markdown content plan, obtain user confirmation, and regenerate the affected Beamer frames before layout resumes. Main decides whether another bounded round is useful; findings remain advisory, no unchanged artifact is reviewed, and no automatic repair loop is created.
+After that confirmation, preserve the current multi-pass visual evidence chain. Each explicit refinement round uses fresh current-revision evidence: visual review, a supported task correction, task rerendering, and a new visual review. A content or layout finding is resolved in place at the stage where it is found; it is not propagated back to the Markdown content plan. Main decides whether another bounded round is useful; findings remain advisory, no unchanged artifact is reviewed, and no automatic repair loop is created.
 
 Record warnings honestly. Do not report visual QA from compilation alone. Source inspection, task self-review, an old render, or a contact sheet without inspectable page renders cannot substitute for current-revision visual review evidence.
 
@@ -142,13 +142,13 @@ figures, slide order, page structure, Markdown, `.tex`, macros, or fonts.
    ratio and page geometry; raster versus vector treatment; and visible fidelity
    against the final validated Beamer PDF. Findings are advisory.
 3. For a supported layout defect, the producing task may apply at most one
-   bounded layout-only fix to the editable PPTX. Preserve visible content,
+   bounded fix to the editable PPTX. Preserve visible content,
    formulas, slide order, and the Markdown and Beamer sources; change only
    placement, sizing, spacing, alignment, fonts, or equivalent layout
    properties. Rerender the exact changed revision and bind fresh evidence; the
    same reviewer confirms only those recorded findings once.
 4. Do not start an automatic repair loop, impose a hard gate, redispatch
-   automatically, or review unchanged evidence. If a finding requires content
-   or page-structure changes, return to the Markdown content plan and Beamer
-   regeneration path. No PPTX finding grants permission to convert, publish,
-   or complete.
+   automatically, or review unchanged evidence. A content or layout finding is
+   resolved in place at the stage where it is found; it is not propagated back
+   to the Markdown content plan. No PPTX finding grants permission to convert,
+   publish, or complete.

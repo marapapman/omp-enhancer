@@ -105,7 +105,7 @@ Before selecting images, authoring visuals, or writing layout code, write the te
 
 Present a numbered outline as the complete numbered page draft after the page-level discussion. Update the Markdown content-plan file with the agreed page content and state explicit assumptions and decisions that remain reversible. Wait for user confirmation before visual authoring begins. The user may confirm a batch after its pages are clear, but no page may enter the visual stage with unresolved content approval.
 
-This confirmation is a REQUIRED conversational checkpoint requested by the user. "Not a plugin-owned gate or permission system" means the runtime never blocks you — it does not mean the confirmation is optional. Do not begin visual authoring without it. Once the text plan is confirmed, use the Markdown content plan as the sole source for Beamer translation. If content changes later, edit the Markdown first, discuss and reconfirm the affected pages, then regenerate the affected Beamer frames. Never resolve content uncertainty by editing .tex directly.
+This confirmation is a REQUIRED conversational checkpoint requested by the user. "Not a plugin-owned gate or permission system" means the runtime never blocks you — it does not mean the confirmation is optional. Do not begin visual authoring without it. Once the text plan is confirmed, use the Markdown content plan as the sole source for Beamer translation. After generation, a content or layout finding is resolved in place at the stage where it is found; it is not propagated back to the Markdown content plan. Any prose change still comes from the language-matched `writer` or `zh-writer` text tool and is applied verbatim in place.
 
 ## Slide-order reconciliation
 

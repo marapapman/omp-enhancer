@@ -84,7 +84,7 @@ npm run e2e:main:self-iteration -- \
 ## Beamer/PPT staged content and visual refinement fixture
 
 `scripts/e2e/fixtures/subagent-willingness.json` 的
-`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的 Markdown 内容计划和用户确认，再覆盖独立 task 在 Markdown 计划上的 slide-order reconciliation（无内容交叉、模块语义一致、整体顺序逻辑有序；无法用重排解决的交叉回到 Markdown reconfirmation），随后覆盖从 writer-approved 的调和后 Markdown 机械生成的 Beamer 帧、逐页配图与基础排版。Markdown content plan is the canonical content source; Beamer .tex files are derived layout artifacts. Content changes go to Markdown first, are discussed and reconfirmed with the user, then regenerate Beamer; 内容变化不能在排版阶段直接改 `.tex` 正文。随后它覆盖 task 的 initial
+`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的 Markdown 内容计划和用户确认，再覆盖独立 task 在 Markdown 计划上的 slide-order reconciliation（无内容交叉、模块语义一致、整体顺序逻辑有序；无法用重排解决的交叉回到 Markdown reconfirmation），随后覆盖从 writer-approved 的调和后 Markdown 机械生成的 Beamer 帧、逐页配图与基础排版。Markdown content plan is the canonical content source; Beamer .tex files are derived layout artifacts. A content or layout finding is resolved in place at the stage where it is found; it is not propagated back to the Markdown content plan。随后它覆盖 task 的 initial
 
 render、exactly one read-only self-check（owner 只能是 Main 或 task）以及它在
 task final layout pass 之前的顺序；用户确认基础排版后，task 绑定并渲染 current revision，Main（或未产出该 revision 的 task）对该
@@ -101,7 +101,7 @@ initial render，native Agent sequence 检查 task → task(reconciliation) → 
 delivery text 检查 final render 与 current revision identifier 是否一致，并以
 `maxNativeTaskAssignmentAttempts` 保持 one-fix 上界。当前 runner 不能看到 task
 child 内部的 visual read（例如 child 内部通过 `read <image>?q=<question>` 提出图像问题）；报告该 evidence
-该 fixture intentionally remains Beamer-only：它不加载 `beamer-to-powerpoint`，也不转换或断言 PPTX 输出，因而保留现有的 no-PPTX behavior。可选 PPTX 分支仅在最终已验证的 Beamer visual revision 完成后、PowerPoint output 进入 scope 且具备最终已验证的 Beamer PDF 和可用的对应 `.tex`、宏和字体源时，才使用固定外部 `beamer2pptx` Skill/repository（`https://github.com/xdmlxdml/beamer2pptx/tree/main/beamer2pptx`）。Producing `task` 负责转换、绑定一个 current PPTX revision 并渲染该 revision；一个未产出该 revision 的独立只读 reviewer 检查当前渲染的页数/顺序、可编辑性、裁切/溢出、重叠、边距/对齐、层级/字体、宽高比、栅格/矢量处理和相对最终 Beamer PDF 的 fidelity。Producing task 最多做一次 bounded layout-only fix，保留可见内容、公式、页序以及 Markdown/Beamer 源，重新渲染 fresh evidence 后由同一 reviewer 确认一次；内容或页结构问题返回 Markdown/Beamer regeneration 路径。该证据链是 advisory，不是 hard gate、router、自动修复 loop 或 completion authority，且不引入 fallback converter。
+该 fixture intentionally remains Beamer-only：它不加载 `beamer-to-powerpoint`，也不转换或断言 PPTX 输出，因而保留现有的 no-PPTX behavior。可选 PPTX 分支仅在最终已验证的 Beamer visual revision 完成后、PowerPoint output 进入 scope 且具备最终已验证的 Beamer PDF 和可用的对应 `.tex`、宏和字体源时，才使用固定外部 `beamer2pptx` Skill/repository（`https://github.com/xdmlxdml/beamer2pptx/tree/main/beamer2pptx`）。Producing `task` 负责转换、绑定一个 current PPTX revision 并渲染该 revision；一个未产出该 revision 的独立只读 reviewer 检查当前渲染的页数/顺序、可编辑性、裁切/溢出、重叠、边距/对齐、层级/字体、宽高比、栅格/矢量处理和相对最终 Beamer PDF 的 fidelity。Producing task 最多做一次 bounded fix，保留可见内容、公式、页序以及 Markdown/Beamer 源，重新渲染 fresh evidence 后由同一 reviewer 确认一次；A content or layout finding is resolved in place at the stage where it is found; it is not propagated back to the Markdown content plan。该证据链是 advisory，不是 hard gate、router、自动修复 loop 或 completion authority，且不引入 fallback converter。
 
 该 fixture 的 deterministic shape test 不要求本机 LaTeX toolchain；fixture
 目录由 runner 创建并在每次 run 的 cleanup 中删除。不要为 precheck 增加
