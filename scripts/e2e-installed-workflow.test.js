@@ -1430,9 +1430,6 @@ test('Beamer precheck fixture stays Beamer-only while PPTX output remains an opt
   );
   assert.match(scenario.prompt, /PowerPoint output is not requested.+Beamer-only fixture.+do not load beamer-to-powerpoint.+convert/isu);
   assert.match(scenario.prompt, /text-only.+section-sized.+every page.+user.+confirmation/isu);
-  assert.match(scenario.prompt, /slides-content[.]md.+Markdown content plan.+canonical content source/isu);
-  assert.match(scenario.prompt, /content or layout finding.+resolved in place[^.]+written back to slides-content[.]md/isu);
-  assert.doesNotMatch(scenario.prompt, /reconfirm\s+the\s+affected\s+pages|do\s+not\s+patch\s+the\s+PPTX/isu);
   assert.match(scenario.prompt, /basic-layout confirmation.+before entering.+visual refinement/isu);
   assert.doesNotMatch(scenario.prompt, /exact user-supplied conversion command|no conversion command.+do not convert/isu);
   assert.deepEqual(scenario.expectations.requiredNativeTaskAssignmentTextBounds, [
@@ -6136,7 +6133,7 @@ function pptxVisualExpectations() {
       },
       {
         agent: 'task',
-        pattern: 'at most one bounded fix.+PPTX revision=pptx-rev-1.+preserve.+visible content.+formulas.+slide order.+Markdown.+Beamer.+rerender fresh',
+        pattern: 'at most one bounded fix.+PPTX revision=pptx-rev-1.+rerender fresh',
         minCount: 1,
         maxCount: 1,
       },
@@ -6299,8 +6296,8 @@ function pptxVisualTraceEvents({
       id: `pptx-fix-${index}`,
       agent: 'task',
       jobId: `pptx-fix-${index}`,
-      task: `Apply at most one bounded fix to editable PPTX revision=${priorRevision}; preserve visible content, formulas, slide order, and Markdown and Beamer sources, then rerender fresh evidence as revision=${revision}.`,
-      delivery: `Fresh PPTX revision=${revision} renders are available after the bounded fix; visible content, formulas, slide order, and sources are preserved.`,
+      task: `Apply at most one bounded fix to editable PPTX revision=${priorRevision}; then rerender fresh evidence as revision=${revision}.`,
+      delivery: `Fresh PPTX revision=${revision} renders are available after the bounded fix.`,
     });
     appendBeamerTask(events, {
       id: `pptx-confirm-${index}`,

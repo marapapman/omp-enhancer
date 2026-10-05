@@ -84,7 +84,7 @@ npm run e2e:main:self-iteration -- \
 ## Beamer/PPT staged content and visual refinement fixture
 
 `scripts/e2e/fixtures/subagent-willingness.json` 的
-`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的 Markdown 内容计划和用户确认，再覆盖独立 task 在 Markdown 计划上的 slide-order reconciliation（无内容交叉、模块语义一致、整体顺序逻辑有序；无法用重排解决的交叉回到 Markdown reconfirmation），随后覆盖从 writer-approved 的调和后 Markdown 机械生成的 Beamer 帧、逐页配图与基础排版。Markdown content plan is the canonical content source; Beamer .tex files are derived layout artifacts. A content or layout finding is resolved in place at the stage where it is found; it is not propagated back to the Markdown content plan。随后它覆盖 task 的 initial
+`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的 Markdown 内容计划和用户确认，再覆盖独立 task 在 Markdown 计划上的 slide-order reconciliation（无内容交叉、模块语义一致、整体顺序逻辑有序；无法用重排解决的交叉回到 Markdown reconfirmation），随后覆盖从 writer-approved 的调和后 Markdown 机械生成的 Beamer 帧、逐页配图与基础排版。本次初始生成范围内 Markdown 内容计划仍是唯一内容源，Beamer .tex 与派生 PDF/PPTX 都是排版产物。后续修改按目标对象走单项通路：storyline-only 不触 .tex/PDF/PPTX，也不自动从 Markdown 重新生成任何 deck；Beamer-only 不回写 Markdown，必要时改必要目标依赖并编译/重渲染当前 deck，但不自动从 Beamer 转 PPTX；PPTX-only 不动 .tex/源 PDF/源 Markdown，也不由既有 Beamer 重新转换 PPTX 以覆盖 PPTX 端就地修改。内容或排版发现在当前目标对象上就地修复，不回写 Markdown 内容计划，也不反向回填 source。该 fixture 在初始生成流程里同时改动 Markdown 计划与 Beamer 两端，只反映 deck creation 的双端写集；任一独立修改通路的验收证据只能来自按该通路目标对象写集构造的独立 fixture（目标写集命中、旁侧文件 SHA-256 保持不变），与本 fixture 解耦。随后它覆盖 task 的 initial
 
 render、exactly one read-only self-check（owner 只能是 Main 或 task）以及它在
 task final layout pass 之前的顺序；用户确认基础排版后，task 绑定并渲染 current revision，Main（或未产出该 revision 的 task）对该

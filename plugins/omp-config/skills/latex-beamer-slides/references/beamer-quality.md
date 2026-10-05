@@ -22,7 +22,7 @@ When readiness is incomplete, discuss the missing decisions with the user. Do no
 
 For a new deck, complete the text-only page draft before visual authoring. Work in section-sized batches, but discuss every page with the user. Each page must include a detailed body, evidence or source basis, and a prose description of its visual role without creating or selecting the actual asset.
 
-Persist the page draft in a Markdown content-plan file before visual authoring. The Markdown content plan is the canonical content source; the Beamer .tex files are derived layout artifacts.
+Persist the page draft in a Markdown content-plan file before visual authoring. The Markdown content plan is the canonical content source **for the initial Beamer generation only**; the Beamer `.tex` files are derived layout artifacts of that initial generation, after which the deck's current revision is the canonical source for any later Beamer edit. The Markdown content plan is never authoritative for ordinary edits to an existing deck, and edits here never propagate back to the plan.
 
 ### Writer-owned logic and style sequence
 
@@ -59,6 +59,8 @@ After that confirmation and before visual authoring, a separate `task` reconcile
 
 
 ## Generation structure
+
+These rules apply to the initial Beamer generation. The Markdown content plan is the canonical content source for that initial pass, and the `.tex` files are derived layout artifacts. For any later edit to an existing deck, the deck's current revision is the canonical source: never regenerate the plan, recompile unrelated frames, or reconvert a downstream PPTX solely to fix divergence between the plan and the deck.
 
 Prefer a stable main file that contains metadata, theme setup, document structure, and ordered `\input` statements. Store one frame per source file when that matches the project. Use sortable names such as `001-topic.tex`.
 If frames are generated mechanically, add a clear generated-file marker. Cleanup may remove only files carrying that marker. Preserve unmarked frame files.
@@ -134,6 +136,8 @@ figures, slide order, page structure, Markdown, `.tex`, macros, or fonts.
    Report package or structural validity, visual fidelity, and editability as
    separate results; do not claim checks that were not performed. OfficeCLI or
    a local package check does not prove compatibility with Microsoft PowerPoint.
+
+The conversion precondition ("final validated Beamer PDF + sources") applies only to conversion. It does NOT apply when the user later asks for a direct edit to the already-existing `.pptx`: in that case switch to PPTX-only mode through the `docx` Skill and OfficeCLI, and do not require a re-validated Beamer PDF, do not chase agreement with the Markdown plan or `.tex`, and do not recompile the Beamer deck. A subsequent PPTX edit never propagates back to the Beamer source or to the Markdown content plan, and a Beamer edit never forces a reconversion to "fix" divergence with the existing PPTX.
 2. One independent read-only visual-review owner—Main, or a `task` that did not
    produce this revision—checks only the current PPTX renders and associated
    reports. Review slide count and order; text and formula editability where

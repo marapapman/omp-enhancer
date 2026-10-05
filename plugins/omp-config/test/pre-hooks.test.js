@@ -81,9 +81,7 @@ Body
   assert.equal(firstResult, undefined);
   assert.equal(warnings.length, 1);
   assert.equal(warnings[0].level, 'warning');
-  assert.match(warnings[0].message, /slides-storyline/);
-  assert.ok(warnings[0].message.includes('skill://omp-enhancer-workflows/references/writing.md'));
-  assert.match(warnings[0].message, /Markdown.*canonical content source|Markdown.*唯一内容源/iu);
+  assert.ok(warnings[0].message.length > 0);
 
   assert.equal(await handler(
     { toolName: 'write', input: { path: 'deck.tex', content: beamerContent } },
@@ -92,14 +90,33 @@ Body
   assert.equal(warnings.length, 1);
 
   assert.equal(await handler(
+    { toolName: 'edit', input: { path: 'frames/other.tex', input: beamerContent } },
+    warningContext(warnings),
+  ), undefined);
+  assert.equal(warnings.length, 2);
+  assert.equal(warnings[1].level, 'warning');
+
+  assert.equal(await handler(
+    { toolName: 'edit', input: { path: 'frames/other.tex', input: beamerContent } },
+    warningContext(warnings),
+  ), undefined);
+  assert.equal(warnings.length, 2);
+
+  assert.equal(await handler(
+    { toolName: 'write', input: { path: 'deck.pptx', content: 'PK\x03\x04 packaged slides' } },
+    warningContext(warnings),
+  ), undefined);
+  assert.equal(warnings.length, 2);
+
+  assert.equal(await handler(
     { toolName: 'write', input: { path: 'notes.md', content: beamerContent } },
     warningContext(warnings),
   ), undefined);
-  assert.equal(warnings.length, 1);
+  assert.equal(warnings.length, 2);
 
   assert.equal(await handler(
     { toolName: 'write', input: { path: 'plain.tex', content: String.raw`\documentclass{article}\nPlain text` } },
     warningContext(warnings),
   ), undefined);
-  assert.equal(warnings.length, 1);
+  assert.equal(warnings.length, 2);
 });

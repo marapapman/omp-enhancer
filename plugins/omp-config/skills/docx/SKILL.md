@@ -40,6 +40,8 @@ officecli --version
 ## Strategy
 
 1. Identify whether the task is read-only, conversion, creation, or modification. Before any text operation, Main makes the corresponding `writer` or `zh-writer` text-tool call and treats its complete proposal as the only content source.
+
+PPTX-specific standalone editing boundary: when the requested artifact is an already-existing `.pptx`, this Skill runs in PPTX-only mode. The current revision of the requested PPTX is the canonical source. OfficeCLI operates on that existing PPTX directly: it does not require a validated Beamer PDF, does not chase agreement with the upstream Markdown content plan or `.tex`, does not recompile the Beamer deck, and does not reconvert the PPTX from any upstream source. A PPTX edit here never propagates back to the Beamer source or to the Markdown content plan, and a Beamer-side change or storyline-side change never forces an OfficeCLI pass on the PPTX to "fix" alleged disagreement. Conversion from Beamer to PPTX remains in the `beamer-to-powerpoint` / `beamer-pptx-local` Skills; this Skill does not perform that conversion. Word and Excel policies are unchanged by this PPTX-only boundary.
 2. Work at the highest layer that works: DOM ops (`add`/`set`/`get`/`query`/`remove`) before raw XML (`raw`/`raw-set`), applying only exact writer-proposed strings and preserving all other text.
 3. When unsure about a property name or value format, run `officecli help <format> <element>` instead of guessing.
 4. Quote element paths (`'/body/p[3]'`, `'/slide[1]'`) — brackets are shell globs.
@@ -52,8 +54,12 @@ All OfficeCLI commands that carry text or copy must apply an approved writer
 proposal verbatim; Main and `task` may perform only mechanical integration and
 non-text edits. If validation or visual review finds a text problem, Main
 generates the replacement text with a new `writer` or `zh-writer` text-tool
-call and returns to the source document rather than editing the artifact ad
+call and returns to the **requested** source document (the document the user
+explicitly asked to edit) rather than editing a different artifact ad
 hoc.
+For a PPTX edit in PPTX-only mode, "returns to the source document" means
+the existing requested `.pptx` itself — never the upstream Markdown content
+plan, the Beamer `.tex`, or the Beamer PDF, and the approved writer proposal is applied in place on that PPTX only.
 
 
 ## Quick reference

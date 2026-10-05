@@ -1,4 +1,4 @@
 interface:
   display_name: "LaTeX Beamer Slides"
-  short_description: "Create or revise polished LaTeX Beamer slide decks"
-  default_prompt: "Use $latex-beamer-slides to create or revise a Beamer deck with task layout and a single read-only visual review of fresh renders."
+  short_description: "Create or revise polished LaTeX Beamer slide decks (Beamer-only)"
+  default_prompt: "Use $latex-beamer-slides to create or revise a Beamer deck with task layout and a single read-only visual review of fresh renders. The Markdown content plan is canonical only for the initial generation; edits to existing decks use the deck's current revision as the canonical source, and downstream PPTX edits never trigger Beamer recompilation or reconversion here."

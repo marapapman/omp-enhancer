@@ -46,6 +46,7 @@ test('Beamer generation checks the template before committing a story and author
   assert.match(generation, /No review finding grants permission to convert, publish, or complete/i);
 });
 
+
 test('Beamer uses one advisory current-revision precheck before each task layout pass', async () => {
   const skill = await readFile(slidesSkillUrl, 'utf8');
   const paths = [
@@ -126,6 +127,7 @@ test('Beamer modification stays bounded to language and existing style', async (
   assert.match(skill, /`plain-chinese-writing`/);
   assert.match(skill, /`writing-review`/);
 });
+
 
 test('slides storyline defines a text-only per-page confirmation phase', async () => {
   const skill = await readFile(storylineSkillUrl, 'utf8');
@@ -286,32 +288,6 @@ test('slide copy routes drafting and polishing through writers before logic and 
 });
 
 
-test('new Beamer keeps the confirmed Markdown plan as the canonical content source', async () => {
-  const [storyline, beamer, quality] = await Promise.all([
-    readFile(storylineSkillUrl, 'utf8'),
-    readFile(slidesSkillUrl, 'utf8'),
-    readFile(qualityReferenceUrl, 'utf8'),
-  ]);
-
-  assert.match(storyline, /write the text-only page draft to a Markdown content-plan file/i);
-  assert.match(storyline, /Markdown content plan is the canonical content source/i);
-  assert.match(storyline, /do not create or edit Beamer .tex frames during this stage/i);
-  assert.match(storyline, /resolved in place[\s\S]{0,200}not propagated back to the Markdown content plan/i);
-  assert.doesNotMatch(storyline, /reconfirm\s+the\s+affected\s+pages|do\s+not\s+patch\s+the\s+PPTX/i);
-  assert.doesNotMatch(storyline, /Do not write a storyline file unless the user requests one/i);
-
-  assert.match(beamer, /create or update a Markdown content-plan file/i);
-  assert.match(beamer, /translate the confirmed Markdown content plan into Beamer frames and then perform layout/i);
-  assert.match(beamer, /sole content source/i);
-  assert.match(beamer, /resolved in place[\s\S]{0,200}not propagated back to the Markdown content plan/i);
-  assert.doesNotMatch(beamer, /reconfirm\s+the\s+affected\s+pages|do\s+not\s+patch\s+the\s+PPTX/i);
-  assert.doesNotMatch(beamer, /Shorten or condense text only to fit/i);
-
-  assert.match(quality, /Markdown content plan is the canonical content source/i);
-  assert.match(quality, /resolved in place[\s\S]{0,200}not propagated back to the Markdown content plan/i);
-  assert.doesNotMatch(quality, /reconfirm\s+the\s+affected\s+pages|do\s+not\s+patch\s+the\s+PPTX/i);
-});
-
 test('slides storyline starts technical decks with a provisional six-part scaffold', async () => {
   const skill = await readFile(storylineSkillUrl, 'utf8');
   const briefStart = skill.indexOf('## Establish the brief');
@@ -376,11 +352,12 @@ test('Beamer visual review is advisory and never an automatic repair controller'
   assert.doesNotMatch(skill, /designer/i);
 });
 
+
 test('Beamer skill keeps optional PPTX generation after the final visual revision', async () => {
   const skill = await readFile(slidesSkillUrl, 'utf8');
   const branch = markdownSection(skill, 'Optional PPTX output branch');
 
-  assert.match(branch, /either a new deck or an existing deck.+only after the final validated Beamer visual revision/is);
+  assert.match(branch, /PowerPoint output is in scope.+only after the final validated Beamer visual revision/is);
   assert.match(branch, /PPTX output is optional.+do not convert every Beamer deck automatically/is);
   assert.match(branch, /fixed external `beamer2pptx` Skill\/repository.+https:\/\/github\.com\/xdmlxdml\/beamer2pptx\/tree\/main\/beamer2pptx/is);
   assert.match(branch, /producing `task`.+create, render, and bind one PPTX revision/is);
@@ -389,6 +366,36 @@ test('Beamer skill keeps optional PPTX generation after the final visual revisio
   assert.match(branch, /resolved in place[\s\S]{0,200}not propagated back to the Markdown content plan/i);
   assert.match(branch, /no automatic repair loop.+hard gate|automatic repair loop.+hard gate/is);
   assert.doesNotMatch(branch, /block:\s*true|continue:\s*true/i);
+});
+
+test('PPT artifact edits stay single-target and never write back to the Markdown plan', async () => {
+  const [storyline, beamer, quality, conversion, localConversion, docxSkill] = await Promise.all([
+    readFile(storylineSkillUrl, 'utf8'),
+    readFile(slidesSkillUrl, 'utf8'),
+    readFile(qualityReferenceUrl, 'utf8'),
+    readFile(conversionSkillUrl, 'utf8'),
+    readFile(new URL('../skills/beamer-pptx-local/SKILL.md', import.meta.url), 'utf8'),
+    readFile(new URL('../skills/docx/SKILL.md', import.meta.url), 'utf8'),
+  ]);
+
+  for (const [name, source] of [
+    ['slides storyline', storyline],
+    ['Beamer generation', beamer],
+    ['Beamer quality reference', quality],
+    ['PowerPoint conversion', conversion],
+  ]) {
+    assert.match(
+      source,
+      /not\s+propagated\s+back\s+to\s+the\s+Markdown\s+content\s+plan/i,
+      `${name} must keep the no-write-back rule`,
+    );
+  }
+  assert.match(localConversion, /not\s+propagated\s+back\s+to\s+the\s+Markdown\s+content\s+plan/i);
+  assert.match(docxSkill, /never\s+the\s+upstream\s+Markdown\s+content\s+plan|not\s+propagated\s+back\s+to\s+the\s+Markdown\s+content\s+plan/i);
+  assert.match(storyline, /storyline-only/i);
+  assert.match(storyline, /no\s+compile,\s+no\s+render,\s+no\s+convert/i);
+  assert.match(beamer, /PPTX-only edit/i);
+  assert.match(beamer, /never reconverts? to overwrite its own in-place edits|never reconvert/i);
 });
 
 test('PowerPoint conversion uses the optional fixed beamer2pptx branch and verifies the artifact', async () => {
@@ -405,14 +412,13 @@ test('PowerPoint conversion uses the optional fixed beamer2pptx branch and verif
   assert.match(skill, /exactly one\s+independent read-only visual-review owner[\s\S]+Main[\s\S]+`?task`?\s+that did not\s+produce/is);
   assert.match(skill, /slide count and order.+text and formula editability.+clipping.+overflow.+overlap.+margins.+alignment.+aspect ratio.+raster versus vector/is);
   assert.match(skill, /at most one.+bounded fix.+editable PPTX/is);
-  assert.doesNotMatch(skill, /reconfirm\s+the\s+affected\s+pages|do\s+not\s+patch\s+the\s+PPTX/i);
-  assert.match(skill, /preserve all visible content, formulas, slide order, and the Markdown and Beamer sources/is);
   assert.match(skill, /rerenders.+fresh evidence.+same reviewer confirms only those recorded findings once/is);
   assert.match(skill, /Findings are advisory/is);
   assert.match(skill, /Do not ask for, require, or invent a user-supplied conversion command/i);
   assert.doesNotMatch(skill, /exact conversion command supplied by the user|Check first whether the user provided a concrete conversion command|If the command is missing, ask for the exact command/i);
   assert.doesNotMatch(skill, /retry until|repeat until|automatic repair loop|block:\s*true|continue:\s*true/i);
 });
+
 
 
 

@@ -1,6 +1,6 @@
 ---
 name: beamer-pptx-local
-description: Convert a compiled Beamer PDF into an editable local .pptx without external services — LibreOffice pdfimport pipeline with built-in QA gates (page count parity, no full-slide images) and an optional python-pptx line-merged text layer rebuild from a beamer2pptx extraction manifest.
+description: Convert a compiled Beamer PDF into an editable local .pptx (conversion-only branch) without external services — LibreOffice pdfimport pipeline with built-in QA gates (page count parity, no full-slide images) and an optional python-pptx line-merged text layer rebuild from a beamer2pptx extraction manifest. This Skill runs the conversion path only; an edit to an already-existing `.pptx` is a separate PPTX-only task that uses the `docx` Skill with OfficeCLI on the existing PPTX and does not require reconversion, recompilation, or a Beamer source recompute. The conversion preconditions here do NOT apply to standalone PPTX edits, and a PPTX edit never propagates back to the Beamer source or to the Markdown content plan.
 ---
 
 # Beamer PPTX Local
@@ -62,6 +62,8 @@ and a manifest produced by the external beamer2pptx skill's
 - `xelatex` or `pdflatex` for `.tex` input (with `TEXINPUTS` and `cwd` set to
   the TeX source directory, so `\includegraphics`/`\input` with relative
   paths resolve)
+
+Use this Skill only for the conversion path. PPTX-only edits (changes to any already-existing `.pptx`) use the `docx` Skill with OfficeCLI on the existing PPTX; they do not require reconversion and do not invoke this conversion pipeline.
 
 ## Known limitations
 

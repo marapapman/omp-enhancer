@@ -1,12 +1,53 @@
 ---
 name: slides-storyline
-description: Develop the narrative and a numbered working outline for a new presentation. Use when a user wants a new deck, talk, lecture, pitch, or report presentation and the agent needs to establish audience, purpose, duration, language, key takeaway, evidence, and narrative arc. Do not use for ordinary edits to an existing deck.
+description: Develop the narrative and a numbered working outline for a new presentation, or revise an existing Markdown content plan when the user explicitly asks. Use when a user wants a new deck, talk, lecture, pitch, or report presentation and the agent must establish audience, purpose, duration, language, key takeaway, evidence, and narrative arc, or when the user explicitly asks to revise the existing Markdown content plan without producing slides. This Skill runs in `storyline-only` mode on the Markdown content plan. It never edits, recompiles, renders, or converts Beamer `.tex`, the Beamer PDF, or a Beamer `.pptx`; a plan-only revision leaves downstream artifacts exactly as-is. A downstream Beamer or PPTX edit does not propagate back automatically; back-flow into the plan is an independent user-initiated plan modification, not a reverse-sync trigger. Do not use for ordinary edits to an existing deck.
 ---
 
 # Slides Storyline
 
 When this Skill is part of a `writer` or `zh-writer` assignment, that invocation
 (the dedicated language-matched text tool, hosted by its packaged Agent compatibility adapter) remains proposal-only: it runs no command and writes no file, and returns the complete proposed artifact or diff. Main or a separate explicitly capable Main-selected Agent owns authorized effects; that owner performs no prose drafting or revision, which belongs to the text tool alone.
+## storyline-only mode and edit boundary
+
+This Skill operates exclusively in `storyline-only` mode. The Markdown
+content plan is its sole edit target. The Skill never generates,
+regenerates, compiles, renders, or converts Beamer `.tex`, the Beamer
+PDF, or a Beamer `.pptx`. A plan-only revision here leaves every
+downstream artifact exactly as the current revision already is — no
+compile, no render, no convert, no PPTX reconversion — unless the user
+separately and explicitly asks for a one-direction regeneration pass
+targeted at that artifact.
+
+Downstream artifact handling stays Main-owned for effects and scope,
+and the responsibility rests with the named Skills:
+
+- The deck (`.tex` source, compiled PDF, layout, visual review,
+ recompile, the bounded single-review visual evidence chain) is the
+ responsibility of `latex-beamer-slides`. Recurring visual maintenance
+ of an already-delivered deck is the responsibility of
+ `slides-visual-repair-pipeline`.
+- The Beamer → PowerPoint conversion path (extraction, rendering,
+ PPTX visual QA, the single bounded repair) is the responsibility of
+ `beamer-to-powerpoint` and `beamer-pptx-local`.
+- Direct edits to an already-existing requested `.pptx` are the
+ responsibility of the `docx` Skill in its standalone PPTX mode.
+
+Reading the downstream Beamer deck or PPTX for context is permitted
+as read-only input. A plain divergence between the plan and a
+downstream artifact is context, not a defect: this Skill does not
+report it as a finding, does not realign either side, does not
+redraft the plan, and does not ask the counterpart Skills to
+regenerate merely because disagreement was observed. The reverse
+path (downstream edit back into this plan) runs only as an
+independent user-initiated plan modification through the same
+`writer` or `zh-writer` text-tool path — never as a side effect of
+inspecting a downstream artifact.
+
+The pre-generation slide-order reconciliation task runs only before
+the initial Beamer generation; it does not re-run when the user asks
+for an edit or revision downstream, and it never propagates forward
+into a recompile or reconversion.
+
 ## Text ownership and language
 
 Before any prose work, Main identifies the target language from the requested
@@ -99,13 +140,13 @@ Before selecting images, authoring visuals, or writing layout code, write the te
 2. Write the body, captions, and explanations as complete natural-language sentences or paragraphs. Do not replace them with isolated phrases, keyword strings, or phrase-only bullet lists. A title may be concise, but it should state a complete thought when it carries the page's claim. The "XX：XX" ban extends to body copy: bullets and captions must not open with a label-colon lead-in ("方法：…", "结果：…", "Method: …"); write the sentence directly. Body and captions also obey the Shape-the-story bans on "不是X，而是Y" contrast-repetition constructions, opening/closing one-sentence summaries, defensive writing, "specifics then sweep" summary clauses, abstract-restatement echoes, announcer transitions, and rhythm-matched paired-phrase closers.
 3. For Chinese slide text, when Main has declared and supplied the methods, apply `plain-chinese-writing` for direct and natural prose, `zh-format-humanizer` for evidence-based AI-like phrasing removal, and `zh-writing-review` for page-level clarity. For English slide text, apply `format-humanizer` for AI-tell removal and `writing-review` for page-level review when Main has declared and supplied them. Preserve facts, qualifiers, numbers, citations, and causal direction.
 4. Discuss the draft page by page with the user. Revise the current batch from the user's feedback and keep unresolved content decisions visible instead of silently choosing them.
-5. Do not create or edit Beamer .tex frames during this stage. The Markdown content plan is the canonical content source; the Beamer .tex files are derived layout artifacts. When writer or zh-writer is assigned, it proposes this Markdown content plan and Main persists it after the user discussion.
+5. Do not create or edit Beamer `.tex` frames or PPTX files during this stage. The Markdown content plan is the canonical content source for the initial Beamer generation only. The Beamer `.tex` files and any PPTX are derived layout artifacts; later edits to either derived artifact flow through their own Skills and never trigger a regeneration or re-confirmation of this plan. Reading a Beamer PDF or PPTX during this stage is read-only context and is never used to overwrite the plan. When `writer` or `zh-writer` is assigned, it proposes this Markdown content plan and Main persists it after the user discussion.
 
 ## Confirm the text plan
 
 Present a numbered outline as the complete numbered page draft after the page-level discussion. Update the Markdown content-plan file with the agreed page content and state explicit assumptions and decisions that remain reversible. Wait for user confirmation before visual authoring begins. The user may confirm a batch after its pages are clear, but no page may enter the visual stage with unresolved content approval.
 
-This confirmation is a REQUIRED conversational checkpoint requested by the user. "Not a plugin-owned gate or permission system" means the runtime never blocks you — it does not mean the confirmation is optional. Do not begin visual authoring without it. Once the text plan is confirmed, use the Markdown content plan as the sole source for Beamer translation. After generation, a content or layout finding is resolved in place at the stage where it is found; it is not propagated back to the Markdown content plan. Any prose change still comes from the language-matched `writer` or `zh-writer` text tool and is applied verbatim in place.
+This confirmation is a REQUIRED conversational checkpoint requested by the user. "Not a plugin-owned gate or permission system" means the runtime never blocks you — it does not mean the confirmation is optional. Do not begin visual authoring without it. Once the text plan is confirmed, use the Markdown content plan as the sole source for the initial Beamer translation. The post-confirmation plan is canonical for the initial generation only; subsequent edits to Beamer or PPTX use the selected target's current revision as their own canonical source. A content or layout finding discovered after the initial generation is resolved in place at the stage where it is found and is not propagated back to the Markdown content plan. Any prose change still comes from the language-matched `writer` or `zh-writer` text tool and is applied verbatim in place.
 
 ## Slide-order reconciliation
 

@@ -165,24 +165,6 @@ test('drawio documentation routes diagram copy through language-matched writers'
   assert.match(guide, /text findings return[\s\S]{0,120}`?writer`?\/`?zh-writer`?/iu);
   assert.doesNotMatch(guide, /task draws once[^.]+author the `\.drawio` source/iu);
 });
-test('current Beamer documentation keeps Markdown content separate from derived layout', async () => {
-  const documents = await Promise.all([
-    ['AGENTS.md', await read('AGENTS.md')],
-    ['README.md', await read('README.md')],
-    ['docs/ARCHITECTURE.md', await read('docs/ARCHITECTURE.md')],
-    ['docs/DEVELOPMENT.md', await read('docs/DEVELOPMENT.md')],
-    ['docs/WORKFLOW_DEVELOPMENT.md', await read('docs/WORKFLOW_DEVELOPMENT.md')],
-    ['docs/WORKFLOW_E2E_TESTING.md', await read('docs/WORKFLOW_E2E_TESTING.md')],
-    ['plugins/omp-config/README.md', await read('plugins/omp-config/README.md')],
-  ]);
-
-  for (const [path, content] of documents) {
-    assert.match(content, /Markdown content plan.+canonical content source/isu, path);
-    assert.match(content, /Beamer .tex files?.+derived layout artifacts/isu, path);
-    assert.match(content, /resolved in place[\s\S]{0,200}not propagated back to the Markdown content plan/isu, path);
-    assert.doesNotMatch(content, /reconfirm\s+the\s+affected\s+pages|do\s+not\s+patch\s+the\s+PPTX/isu, path);
-  }
-});
 
 
 

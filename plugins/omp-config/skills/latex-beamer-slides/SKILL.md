@@ -1,12 +1,69 @@
 ---
 name: latex-beamer-slides
-description: Create or revise LaTeX Beamer presentations while preserving project templates, source structure, language rules, and visual style, with task-owned layout refinement and a single read-only visual review of fresh renders. When PowerPoint output is in scope, optionally convert the final validated Beamer deck to an editable `.pptx` through the fixed external `beamer2pptx` Skill/repository with task-bound rendering, independent read-only PPTX visual QA, and at most one bounded fix. Use for new Beamer decks, slide-by-slide `.tex` generation, edits to existing Beamer slides, template readiness checks, compilation, or rendered-slide QA. In a staged workflow, declare applicable visible language, storyline, and authorized conversion dependencies in WORKFLOW PLAN and load them before WORKFLOW READY instead of late-loading them during execution.
+description: Create or revise LaTeX Beamer presentations while preserving project templates, source structure, language rules, and visual style, with task-owned layout refinement and a single read-only visual review of fresh renders. When PowerPoint output is in scope, optionally convert the final validated Beamer deck to an editable `.pptx` through the fixed external `beamer2pptx` Skill/repository with task-bound rendering, independent read-only PPTX visual QA, and at most one bounded fix. Use for new Beamer decks, slide-by-slide `.tex` generation, edits to existing Beamer slides, template readiness checks, compilation, or rendered-slide QA. The Markdown content plan from `slides-storyline`, when present, supplies the canonical content solely for an explicit, user-initiated initial generation pass; for ordinary modifications to an existing deck the deck's current revision is the canonical source. Edits here never propagate back to the Markdown content plan, and an edit to an already-produced `.pptx` stays in PPTX-only mode rather than triggering Beamer recompilation or reconversion. In a staged workflow, declare applicable visible language, storyline, and authorized conversion dependencies in WORKFLOW PLAN and load them before WORKFLOW READY instead of late-loading them during execution.
 ---
 
 # LaTeX Beamer Slides
 
 When this Skill is part of a `writer` or `zh-writer` assignment, that invocation
 (the dedicated language-matched text tool, hosted by its packaged Agent compatibility adapter) remains proposal-only: it runs no command and writes no file, and returns the complete proposed artifact or diff. Main or a separate explicitly capable Main-selected Agent owns authorized effects; that owner performs no prose drafting or revision, which belongs to the text tool alone.
+## Edit mode names and canonical-source scope
+
+This Skill runs in three explicit modes whose canonical sources are bounded
+by the user's requested operation, not by the abstract notion of a
+generation action. The follow-on mode never materializes automatically
+from one mode's residue, from a counterpart divergence, or from a
+one-time read of the other side.
+
+- **Initial generation and single-direction regenerate**
+  (storyline selection committed). This mode covers the initial Beamer
+  generation pass and any user-requested single-direction regenerate
+  from a confirmed plan. A user-confirmed Markdown content plan from
+  `slides-storyline` is the locked content snapshot. The requested
+  Beamer output — `.tex` frames, the compiled PDF, page renders, and
+  the optional PPTX when authorized — is written once from that
+  snapshot using the existing template. The snapshot is consumed as
+  input only; it is not rewritten back, reconfirmed, or regenerated
+  as a side effect. On a regenerate the new-deck template, story,
+  content, and base-layout interviews do not restart; the existing
+  template, the confirmed snapshot, and prior structural choices are
+  reused rather than re-opened.
+
+- **Beamer-only edit (existing deck).** The canonical source is the
+  deck's current revision — the requested `.tex` frames, dependencies,
+  current PDF, and current page renders — bounded by the requested
+  edit operation. The Markdown content plan, if present, is read-only
+  context retained for traceability; it does not authorize wording,
+  does not trigger regeneration, and is not consulted for authoritative
+  agreement on this edit. Storyline stays untouched, no PPTX
+  conversion runs automatically, and the visual chain stays inside
+  the existing bounded QA chain — single precheck, one review owner
+  per fresh revision, at most one bounded fix, fresh evidence only.
+
+- **PPTX-only edit (already-produced `.pptx`).** The canonical source
+  is the existing PPTX package, bounded by the requested edit
+  operation. The `docx` Skill and OfficeCLI operate on that PPTX
+  directly; the Markdown content plan, the Beamer `.tex`, and the
+  source PDF are not required, not consulted for authority, and not
+  loaded to drive a reconversion. A PPTX edit never propagates back
+  to the Beamer source or to the Markdown content plan, and an
+  in-place PPTX edit is never overwritten by a reconvert from the
+  Beamer side.
+
+Storing new story content is the `slides-storyline` Skill scope and is
+not a downstream effect of any of the three modes above. Re-entering
+storyline mode after the initial generation requires a fresh, explicit
+user authoring pass; it never materializes because the deck and the plan
+diverge, because a visual review flagged content flavour, or because a
+PPTX edit touched wording.
+
+Plain divergence between the Markdown content plan and the deck's
+current revision does not, on its own, mandate a finding or a sync.
+The current revision is the edit baseline; the counterpart is read-only
+context. A finding is recorded only when the current target has an
+actual in-scope problem in the requested operation, not because the
+counterpart reads differently.
+
 ## Text ownership and language
 
 Before drafting or revising any text, Main identifies the target language from
@@ -126,7 +183,18 @@ Keep unresolved material template, text, and layout choices visible. Ask the use
 
 ## Optional PPTX output branch
 
-For either a new deck or an existing deck, enter this branch only after the final validated Beamer visual revision and its current PDF and page-render evidence are complete. PPTX output is optional; do not convert every Beamer deck automatically.
+This branch applies only when PowerPoint output is in scope for an explicit
+generation or refresh action — the conversion is the requested effect. Enter
+this branch only after the final validated Beamer visual revision — its
+current PDF plus available `.tex`, macro, and font sources — is complete.
+PPTX output is optional; do not convert every Beamer deck automatically.
+The conversion writes the authorized PPTX output for the user-requested
+generation action; the Markdown content plan, the Beamer `.tex` sources,
+and the source PDF are preserved on their own paths and are not modified
+by the conversion. A PPTX-only edit to an already-existing produced PPTX
+does not flow through this branch: it stays in PPTX-only mode via the
+`docx` Skill and OfficeCLI on the existing PPTX package, never re-runs
+Beamer, and never reconverts to overwrite its own in-place edits.
 
 1. Apply the PLAN-loaded `beamer-to-powerpoint` Skill with the fixed external `beamer2pptx` Skill/repository: https://github.com/xdmlxdml/beamer2pptx/tree/main/beamer2pptx. Provide the final validated Beamer PDF and the corresponding `.tex`, macro, and font sources when available. Do not ask for, require, or invent a user-supplied conversion command, and do not substitute another converter. Conversion is read-only with respect to the Markdown and Beamer content sources.
 2. Dispatch one producing `task` to create, render, and bind one PPTX revision. Bind the exact input PDF, available source evidence, candidate `.pptx`, manifests or reports, and render directory to that revision. Use the existing OfficeCLI guidance where appropriate. Report package or structural validity, visual fidelity, and editability as separate results, do not claim any result that was not inspected, and do not treat OfficeCLI or a local package check as proof of Microsoft PowerPoint compatibility.
@@ -136,7 +204,28 @@ For either a new deck or an existing deck, enter this branch only after the fina
 
 ## Modify an existing deck
 
+This section runs in Beamer-only edit mode. The canonical source is the
+existing deck's current revision — the requested `.tex` frames,
+dependencies, current PDF, and current page renders. The Markdown content
+plan, if present, is read-only traceability context retained for
+visibility; it does not authorize wording, does not trigger regeneration,
+and is not consulted for authoritative agreement on this edit. A wording
+or layout finding discovered during an existing-deck edit is resolved in
+place in the deck; it is not propagated back to the Markdown content plan,
+it does not trigger a fresh storyline authoring pass, it does not resume
+the new-deck template, story, content, or base-layout interviews, and it
+does not auto-copy into the optional PPTX. The ordinary edit uses the
+existing bounded QA chain — single precheck, one review owner per fresh
+revision, at most one bounded fix, fresh evidence only — and stops at the
+authorized scope.
+
 1. Read the exact requested frames and enough surrounding source to identify the current wording, language, macros, and visual conventions.
+
+For a direct edit to an existing already-produced `.pptx`, this section is
+out of scope. Switch to the `docx` Skill with OfficeCLI in PPTX-only mode:
+operate on the existing PPTX package directly, do not re-run this branch,
+do not recompile the Beamer deck, and do not regenerate a new PPTX from
+the Markdown content plan or `.tex` only to refresh the existing PPTX.
 2. For any requested wording, translation, or prose revision, Main first generates the replacement text with a new `writer` or `zh-writer` text-tool call. Apply only the requested wording, language-norm, and existing-style changes through that text tool's complete proposal verbatim; Main and `task` must not draft, rewrite, translate, or polish the text.
 3. Match the existing title pattern, terminology, capitalization, spacing, color roles, content density, and figure treatment. Preserve the story arc, frame order, template, logo, layout system, and unrelated content unless the user explicitly expands scope. Do not redesign the template or reopen story planning.
 4. Compare semantic and LaTeX anchors once after editing. Have `task` compile and render the affected deck when a build is available, then identify the changed frames and any pages whose layout they can influence.
@@ -145,7 +234,7 @@ For either a new deck or an existing deck, enter this branch only after the fina
 7. Have `task` recompile and render that exact layout revision, checking it against the requested semantic diff, LaTeX anchors, and authorized scope. Task binds one revision identifier, the PDF, the render directory, fresh high-resolution renders of every affected page, and a current full-deck overview or contact sheet. If a shared template, style, or macro changed, render and review every page.
 8. Perform the single read-only visual review of the latest renders with exactly one owner—Main, or a task that did not produce the revision—for text and image overlap, crowding, clipping, undersized text, image treatment, margins, readability, and consistency with the existing deck. Record advisory findings only.
 9. For a supported finding, `task` applies the bounded source revision, rerenders it, and the review owner examines only fresh rerendered evidence, at most once for that changed revision. Do not redispatch automatically or review an unchanged artifact. Report unresolved blocker or major findings honestly.
-If any review or layout finding concerns wording, translation, or copy, Main generates the replacement text with a new `writer` or `zh-writer` text-tool call and applies the approved proposal in place; a content or layout finding is resolved in place at the stage where it is found and is not propagated back to the Markdown content plan. After a new proposal is approved, apply it and rerun the affected layout checks.
+If any review or layout finding concerns wording, translation, or copy, Main generates the replacement text with a new `writer` or `zh-writer` text-tool call and applies the approved proposal in place on the requested target — the deck's current `.tex` frames for a Beamer edit, the existing PPTX package for a PPTX edit — and never on the Markdown content plan as a side effect. A content or layout finding is resolved in place at the stage where it is found; it is not propagated back to the Markdown content plan, it does not trigger a Beamer regenerate or recompile outside the authorized scope, and it does not auto-copy into the optional PPTX. After a new proposal is approved, apply it, recompile only the affected frames, and rerun only the affected layout checks. Plain divergence between the Markdown content plan and the deck's current revision is reported when a review surfaces it; it does not by itself trigger reapproval, a fresh storyline pass, or a PPTX conversion.
 10. **Optional PPTX output.** After this existing-deck path reaches the final validated Beamer visual revision, if PowerPoint output is requested, follow the shared `## Optional PPTX output branch` above. PPTX layout fixes preserve visible content, formulas, slide order, and the Markdown and Beamer sources; a content or page-structure finding is resolved in place at the stage where it is found and is not propagated back to the Markdown content plan.
 
 Main only authorizes external effects during initial setup and accepts final delivery; it does not compile, render, modify, reconcile, or mediate the visual loop.

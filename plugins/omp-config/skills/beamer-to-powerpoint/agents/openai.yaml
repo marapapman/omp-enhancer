@@ -1,4 +1,4 @@
 interface:
   display_name: "Beamer to PowerPoint"
-  short_description: "Convert Beamer PDF through beamer2pptx with PPTX visual QA"
-  default_prompt: "Use $beamer-to-powerpoint for optional PowerPoint output: have a producing task run the fixed beamer2pptx workflow from the final validated Beamer PDF and available TeX sources, bind and render one PPTX revision, then use an independent read-only reviewer for PPTX visual QA; allow at most one bounded fix and fresh confirmation."
+  short_description: "Convert Beamer PDF through beamer2pptx with PPTX visual QA (conversion-only)"
+  default_prompt: "Use $beamer-to-powerpoint for optional PowerPoint output: have a producing task run the fixed beamer2pptx workflow from the final validated Beamer PDF and available TeX sources, bind and render one PPTX revision, then use an independent read-only reviewer for PPTX visual QA; allow at most one bounded fix and fresh confirmation. This Skill runs only the conversion path. Direct edits to an existing requested PPTX use the docx/OfficeCLI Skill in PPTX-only mode and do not require a re-validated Beamer PDF; PPTX edits never propagate back to the Beamer source or the Markdown content plan."

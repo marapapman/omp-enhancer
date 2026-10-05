@@ -1,6 +1,6 @@
 ---
 name: beamer-to-powerpoint
-description: Convert a final validated Beamer PDF into an editable `.pptx` through the fixed external `beamer2pptx` Skill, with task-bound rendering, independent read-only PPTX visual QA, and at most one bounded repair when PowerPoint output is in scope.
+description: Convert a final validated Beamer PDF into an editable `.pptx` (conversion-only branch) through the fixed external `beamer2pptx` Skill, with task-bound rendering, independent read-only PPTX visual QA, and at most one bounded repair when PowerPoint output is in scope. The conversion preconditions apply ONLY to conversion. Direct edits to an already-existing requested `.pptx` are out of scope here and use the `docx` Skill with OfficeCLI in PPTX-only mode, without requiring a validated Beamer PDF, without chasing agreement with the upstream Markdown content plan or `.tex`, and without recompiling the Beamer deck. This Skill does not perform standalone content authoring on a PPTX, and the produced PPTX is never used to overwrite the Beamer source.
 ---
 
 # Beamer to PowerPoint
@@ -163,9 +163,9 @@ After the producing task binds the current revision, Main selects exactly one in
 The visual reviewer is read-only for content: it may report a text or formula
 fidelity finding, but it must not edit wording, formulas, labels, captions, or
 notes. A content finding goes through a new `writer` or `zh-writer` text-tool
-call, and the approved proposal is applied in place; the finding is resolved in
+call, and the approved proposal is applied **in place on the requested PPTX**; the finding is resolved in
 place at the stage where it is found and is not propagated back to the Markdown
-content plan.
+content plan or to the Beamer source. Reading the Beamer source during this stage is read-only context and is never used to recompile the deck or rewrite the PPTX from upstream sources solely to chase agreement.
 
 
 The review covers:
