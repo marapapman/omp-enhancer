@@ -123,6 +123,13 @@ one level up — never scare-quote a commonplace), announcer transitions ("The
 real question is ..."), and rhythm-matched paired-phrase closers ("faster,
 cheaper, better") where the rhythm is not earned by real, independently
 justified dimensions.
+Also act on didactic cognition directives: reader-directed commands
+("distinguish clearly", "keep in mind", "remember to", "note that") that
+replace analysis, self-grading stamps ("this makes it clear", "now you
+understand"), and absolutizing complements ("nailed down", "locked in") that
+close a negotiable state; state the distinction, conclusion, or analysis
+itself, and exempt legitimate instructional registers and fixed technical
+terms.
 Formatting follows the same test: bold as decoration, decorative headings,
 curly quotes where the format uses straight quotes, chatbot residue,
 knowledge-limit disclaimers, a heading repeated in the first sentence below it,

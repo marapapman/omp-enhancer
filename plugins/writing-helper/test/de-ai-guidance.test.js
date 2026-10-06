@@ -43,6 +43,7 @@ describe('de-AI guidance content contracts', () => {
       '§27 Knowledge-limit disclaimers and guesses',
       '§28 A heading repeated in the first sentence',
       '§29 Writing about the previous version',
+      '§30 Didactic cognition directives',
       'When not to act',
     ]) {
       assert.ok(en.includes(phrase), `English humanizer should cover: ${phrase}`);
@@ -68,6 +69,7 @@ describe('de-AI guidance content contracts', () => {
       '抽象复述回声',
       '宣布式过渡',
       '节奏对仗收尾',
+      '说教式认知指令',
       '三连排比',
       '重复句首',
       '叠加限定',
@@ -84,6 +86,7 @@ describe('de-AI guidance content contracts', () => {
       '装饰性标题',
       '聊天残留',
       '知识截止声明与臆测',
+      '定死',
       '何时不处理',
       '语义锚点',
     ]) {
@@ -146,6 +149,8 @@ describe('de-AI guidance content contracts', () => {
     assert.match(zhWriter, /不写否定式对偶/u);
     assert.match(zhWriter, /不写「彰显了」「见证了」这类意义拔高/u);
     assert.match(zhWriter, /不写「希望这对你有帮助」这类聊天残留/u);
+    assert.match(zhWriter, /不写「分清楚」「看清楚」「搞清楚」「记住」「请注意」「划重点」这类对读者发指令的说教认知句/u);
+    assert.match(zhWriter, /不用「定死」「框死」「锁死」这类绝对化补语/u);
 
     const checker = read('agents/checker.md');
     assert.match(checker, /Do AI writing tells appear here\?/iu);
@@ -156,6 +161,7 @@ describe('de-AI guidance content contracts', () => {
 
     const zhChecker = read('agents/zh-checker.md');
     assert.match(zhChecker, /结构性 AI 痕迹：否定式对偶、单句收尾、三连排比、破折号、黑体装饰、意义拔高、借用权威/u);
+    assert.match(zhChecker, /说教式认知指令（「分清楚」「看清楚」「搞清楚」「记住」「请注意」「划重点」对读者发指令/u);
     assert.doesNotMatch(zhChecker, /zh-format-humanizer/iu);
   });
 

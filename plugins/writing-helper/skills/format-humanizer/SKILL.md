@@ -155,6 +155,24 @@ If the user supplies a writing sample, match its sentence length, word choice, p
 
 **§29 Writing about the previous version.** "This function was added to replace the old approach of..." belongs in change logs, release notes, and migration guides, not in documentation of current behavior.
 
+**§30 Didactic cognition directives.** Cognition verbs with resultative
+complements aimed at the reader or the text itself: "distinguish clearly",
+"see clearly", "keep in mind", "remember that", "note this carefully",
+"don't confuse X with Y", "let that sink in". Three forms: a command that
+replaces the analysis (after "distinguish A from B" the text never actually
+distinguishes them — delete the sentence and check whether its promise exists
+elsewhere), a stamp certifying the text's own clarity ("this makes it clear",
+"now the picture is complete", "you now understand"), and absolutizing
+complements ("nailed down", "locked in", "settled for good") that turn a
+negotiable state into an end state. Preaching register ("remember this",
+"key takeaway") is chatbot residue leaking into prose; treat it as the same
+family. State the distinction, the conclusion, or the analysis itself; when a
+command precedes real analysis, delete the command and keep the analysis;
+when expressing a fixed choice, give the concrete value or constraint and say
+which parts remain adjustable. Exemptions: legitimate instructional registers
+(step-by-step manuals, dialogue, interactive teaching), fixed technical terms
+("hard-coded", "lock-free"), quotations, and proper names.
+
 ## When not to act
 
 Act on any listed tell at its first sighting; no listed tell above is clustering-gated. Leave a watched phrase alone inside a quotation, a title, a proper name, or a passage that discusses the phrase rather than uses it. Salutations and sign-offs on a letter predate chatbots. Text written before November 30, 2022 predates these tells. Keep the details that carry the writer's voice: a specific unusual detail, mixed feelings and unresolved tension, dated era-bound references, a first-person choice the writer can explain, and genuine asides or self-corrections.

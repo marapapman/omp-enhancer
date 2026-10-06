@@ -526,9 +526,10 @@ test('slide content bans contrast-repetition constructions and one-sentence summ
   assert.match(shaping, /In one sentence/is);
   // Body copy follows the same bans; label-colon lead-ins in bullets are banned too.
   assert.match(draft, /bullets and captions must not open with a label-colon lead-in \("方法：…", "结果：…", "Method: …"\)/is);
-  assert.match(draft, /"不是X，而是Y" contrast-repetition constructions, opening\/closing one-sentence summaries, defensive writing, "specifics then sweep" summary clauses, abstract-restatement echoes, announcer transitions, and rhythm-matched paired-phrase closers/is);
+  assert.match(draft, /"不是X，而是Y" contrast-repetition constructions, opening\/closing one-sentence summaries, defensive writing, "specifics then sweep" summary clauses, abstract-restatement echoes, announcer transitions, rhythm-matched paired-phrase closers, and didactic cognition directives \("分清楚"\/"keep in mind" reader commands, "这就说清楚了" clarity stamps, "定死" absolutizing complements\)/is);
   // Reconciliation checks the body bans as content findings.
   assert.match(reconciliation, /no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction, no opening\/closing one-sentence summary, no defensive writing \(unsourced hedging qualifiers, boilerplate disclaimers, over-attribution, or apologia\), no "specifics then sweep" summary clause anywhere in page text, no abstract-restatement echo, no announcer transitions/is);
+  assert.match(reconciliation, /no didactic cognition directives \(reader-directed cognition commands like "分清楚"\/"keep in mind", clarity stamps like "这就说清楚了", absolutizing complements like "定死"\)/is);
   assert.match(reconciliation, /A title or body violation is a content finding/is);
   // Beamer generation and quality reference carry the same bans.
   assert.match(generation, /Body copy obeys the same phrasing bans as titles.+no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction.+no page opens or closes with a one-sentence summary of itself, no defensive writing anywhere.+no "specifics then sweep" summary clause/is);
