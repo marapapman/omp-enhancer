@@ -1,0 +1,35 @@
+{
+  "name": "alibaba-token-plan-media",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OMP loopback bridges that expose Alibaba Bailian Token Plan image and speech models to the native image and speech roles.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "omp": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "keywords": [
+    "pi-package",
+    "omp",
+    "omp-extension",
+    "alibaba",
+    "bailian",
+    "token-plan",
+    "image",
+    "tts"
+  ],
+  "license": "UNLICENSED"
+}

@@ -3,6 +3,7 @@ const definitions = [
   { name: 'writing-helper', directory: 'writing-helper' },
   { name: 'omp-fact-checker', directory: 'omp-fact-checker' },
   { name: 'volcengine-coding-plan', directory: 'volcengine-coding-plan' },
+  { name: 'alibaba-token-plan-media', directory: 'alibaba-token-plan-media' },
 ]
 
 export const pluginWorkspaces = Object.freeze(definitions.map(({ name, directory }) => Object.freeze({

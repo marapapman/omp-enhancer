@@ -4,7 +4,7 @@
 
 ## 运行模型
 
-OMP Enhancer 当前只发布四个插件：`omp-config`、`writing-helper`、`omp-fact-checker` 和 `volcengine-coding-plan`。代码增强核心、测试增强插件和 ECC 代码技能不再属于当前 marketplace。
+OMP Enhancer 当前只发布五个插件：`omp-config`、`writing-helper`、`omp-fact-checker`、`volcengine-coding-plan` 和 `alibaba-token-plan-media`。代码增强核心、测试增强插件和 ECC 代码技能不再属于当前 marketplace。
 
 OMP 负责系统提示、用户指令、active tools、动态 Available Agents、权限、审批和完成行为。插件只提供可选的 Skill、Agent、工具、配置资产和观察性提示，不复制宿主权限模型，不创建 hard router、hard gate、completion controller 或 automatic repair loop。
 
@@ -33,6 +33,7 @@ OMP 负责系统提示、用户指令、active tools、动态 Available Agents�
 | `writing-helper` | 英文和中文写作逻辑、风格、引用、保真检查，以及 writer/checker Agents 和 Skills | 阻止交付、替用户自动改写、替用户持久化文件 |
 | `omp-fact-checker` | claim extraction、事实计划、A/B evidence、cross-check、strict verdict、报告和 fact review | 把缺失证据变成生命周期 gate、把兼容证据升级为证明 |
 | `volcengine-coding-plan` | 通过 OMP 原生 `registerProvider` 注册 Coding Plan OpenAI 兼容模型，并把 API-key 登录接入原生 `/login` | 不修改宿主认证存储、不替宿主路由、不发现或猜测未公开模型 |
+| `alibaba-token-plan-media` | 通过 OMP 原生 `registerProvider` 注册 provider，把阿里云百炼 Token Plan 的生图与语音模型暴露给原生 image 和 speech 角色，进程内起一个只监听 127.0.0.1 的 HTTP 桥 | 不覆盖内置同名 provider、不注册工具、不改默认角色 |
 
 `volcengine-coding-plan` 使用 `https://ark.cn-beijing.volces.com/api/coding/v3`，静态暴露官方 Coding Plan 模型名；模型选择、凭证保存和请求发送仍由 OMP 原生 `/login`、`/model`、AuthStorage 与 OpenAI-compatible transport 负责。
 

@@ -17,13 +17,14 @@ const packageManifests = new Map(await Promise.all(pluginWorkspaces.map(async ({
 
 // Marketplace-level copy that the generator owns (plugin entries and skill
 // paths are derived below; metadata.version is bumped by the release script).
-const MARKETPLACE_DESCRIPTION = 'OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, and Volcengine Ark Coding Plan model integration.'
+const MARKETPLACE_DESCRIPTION = 'OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, Volcengine Ark Coding Plan model integration, and Alibaba Bailian Token Plan image and speech bridges.'
 
 const PLUGIN_CATEGORIES = Object.freeze({
   'omp-config': 'development',
   'writing-helper': 'writing',
   'omp-fact-checker': 'development',
   'volcengine-coding-plan': 'development',
+  'alibaba-token-plan-media': 'development',
 })
 
 function expectedPluginEntries() {
