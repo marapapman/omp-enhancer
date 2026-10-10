@@ -241,6 +241,8 @@ Main only authorizes external effects during initial setup and accepts final del
 
 Do not require template discussion or a story-outline checkpoint merely because an existing deck lacks a separate template manifest. Do not widen the edit to unrelated pre-existing layout defects. Do not split, add, remove, or reorder frames without explicit user authorization. Escalate only a concrete ambiguity that prevents the requested edit.
 
+Whole-deck de-AI removal is a requested scope of its own. When the user asks to remove AI tells from the whole deck, every frame is in scope and the scan covers all of them. An ordinary local edit counts only the frames it touches. A tell found in untouched legacy content during that local edit is collected into an advisory list with frame and line references for the user; it is not fixed inside the local edit, and it does not widen the edit's scope. The user may then authorize a separate whole-deck pass.
+
 ## Hand off
 
 Report the main `.tex` file, generated or changed frame files, final revision identifier, output PDF, compiler command, render directory, layout and visual review evidence, and unresolved warnings. If conversion was requested, report the verified PowerPoint artifact separately.

@@ -173,6 +173,22 @@ which parts remain adjustable. Exemptions: legitimate instructional registers
 (step-by-step manuals, dialogue, interactive teaching), fixed technical terms
 ("hard-coded", "lock-free"), quotations, and proper names.
 
+### Punctuation skeletons — act on one sighting
+
+**§31 Claim-colon skeleton.** A colon splices a label or a short claim onto a sentence: "Latency: the cache cut it in half", "成本：降了三成", "Method: measure twice", and the caption "Left: input; Right: output". The colon makes a fragment read like a finding and leaves the subject, the verb, or the relation between the two halves for the reader to supply. Write the sentence directly ("The cache cut latency in half"). A colon is allowed only before an enumeration of three or more items, a definition, a formula, or code. Split captions carry the same skeleton: "Left: …; Right: …" becomes two complete sentences or one sentence that names the relation between the parts. Table headers are exempt.
+
+### Document scale — count before you edit
+
+The families below belong to the whole document, so the scan counts them across every page, frame, or panel before any rewrite; each one is still fixed whenever it is found.
+
+**§32 Slide-scale uniformity.** A fixed page shape across a deck: the same bullet count on nearly every frame, the same sentence pattern inside each bullet, the same title length. Count the bullets per frame and the share taken by the most common count; when one count dominates, the template set the shape. The per-page bullet count follows that page's content, never a fixed three, and no page is padded to three. A deck where 131 of 144 bullet-bearing frames carry exactly three bullets has this tell.
+
+**§33 Cross-slide refrain.** One claim or one phrase repeated verbatim across frames (a single sentence appearing on ten frames, or a group of six or more characters repeated on three or more). Write a definition in full once, allow it on a summary or index page at most once more, and replace the other occurrences with a new fact or delete them. Count repeated sentences of six or more characters across the deck and list each group with its frame numbers.
+
+**§34 Caption echo.** The extension of §28 to captions and bullets. A caption that restates its frame's title or its bullets adds nothing to the figure, and a bullet that restates the title adds nothing to the page. Compare the caption, the title, and the bullet text by two-character shingles; a caption or bullet sharing half or more of its shingles with the title or with the bullets is an echo. Delete the echo, or replace it with what the figure or the page adds beyond the title and the bullets.
+
+**§35 Table scaffolding.** A standalone sentence before a table, or after it, that only announces the table or summarizes what its rows already show. Keep such a sentence only when it states a fact the table does not carry; otherwise delete it. The census reports each frame that carries a sentence before or after a table.
+
 ## When not to act
 
 Act on any listed tell at its first sighting; no listed tell above is clustering-gated. Leave a watched phrase alone inside a quotation, a title, a proper name, or a passage that discusses the phrase rather than uses it. Salutations and sign-offs on a letter predate chatbots. Text written before November 30, 2022 predates these tells. Keep the details that carry the writer's voice: a specific unusual detail, mixed feelings and unresolved tension, dated era-bound references, a first-person choice the writer can explain, and genuine asides or self-corrections.

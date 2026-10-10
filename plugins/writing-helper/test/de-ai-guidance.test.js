@@ -44,10 +44,17 @@ describe('de-AI guidance content contracts', () => {
       '§28 A heading repeated in the first sentence',
       '§29 Writing about the previous version',
       '§30 Didactic cognition directives',
+      '§31 Claim-colon skeleton',
+      '§32 Slide-scale uniformity',
+      '§33 Cross-slide refrain',
+      '§34 Caption echo',
+      '§35 Table scaffolding',
       'When not to act',
     ]) {
       assert.ok(en.includes(phrase), `English humanizer should cover: ${phrase}`);
     }
+    assert.match(en, /a colon is allowed only before an enumeration of three or more items, a definition, a formula, or code/iu);
+    assert.match(en, /never a fixed three, and no page is padded to three/iu);
     assert.match(en, /Any listed tell justifies an edit on its first sighting/u);
     assert.doesNotMatch(en, /needs company from other tells/u);
     assert.match(en, /For Chinese text use `zh-format-humanizer`/u);
@@ -87,11 +94,26 @@ describe('de-AI guidance content contracts', () => {
       '聊天残留',
       '知识截止声明与臆测',
       '定死',
+      '冒号句式',
+      '全稿层面',
+      '每页结构雷同',
+      '跨页重复',
+      '图注和标题复述',
+      '表格前后的套话',
       '何时不处理',
       '语义锚点',
     ]) {
       assert.ok(zh.includes(phrase), `Chinese humanizer should cover: ${phrase}`);
     }
+    assert.match(zh, /### S12\. 冒号句式/u);
+    assert.match(zh, /### G1\. /u);
+    assert.match(zh, /### G2\. /u);
+    assert.match(zh, /### G3\. /u);
+    assert.match(zh, /### G4\. /u);
+    assert.match(zh, /冒号只留给三项以上的列举、定义、公式和代码/u);
+    assert.match(zh, /条数按内容定，至多 3 条/u);
+    assert.match(zh, /只有写出表外新事实的句子才保留/u);
+    assert.match(zh, /deck-census\.mjs/u);
     assert.match(zh, /强特征（一次出现即建议修改）/u);
     assert.match(zh, /弱特征（一次出现即建议修改）/u);
     assert.match(zh, /宁可误杀，不可放过/u);
@@ -151,6 +173,12 @@ describe('de-AI guidance content contracts', () => {
     assert.match(zhWriter, /不写「希望这对你有帮助」这类聊天残留/u);
     assert.match(zhWriter, /不写「分清楚」「看清楚」「搞清楚」「记住」「请注意」「划重点」这类对读者发指令的说教认知句/u);
     assert.match(zhWriter, /不用「定死」「框死」「锁死」这类绝对化补语/u);
+    assert.match(zhWriter, /不写冒号句式/u);
+    assert.match(zhWriter, /不写每页结构雷同的稿子/u);
+    assert.match(zhWriter, /不写跨页重复/u);
+    assert.match(zhWriter, /不写图注和标题复述/u);
+    assert.match(zhWriter, /不写表格前后的套话/u);
+    assert.match(zhWriter, /不写口语化评判词/u);
 
     const checker = read('agents/checker.md');
     assert.match(checker, /Do AI writing tells appear here\?/iu);
@@ -162,6 +190,11 @@ describe('de-AI guidance content contracts', () => {
     const zhChecker = read('agents/zh-checker.md');
     assert.match(zhChecker, /结构性 AI 痕迹：否定式对偶、单句收尾、三连排比、破折号、黑体装饰、意义拔高、借用权威/u);
     assert.match(zhChecker, /说教式认知指令（「分清楚」「看清楚」「搞清楚」「记住」「请注意」「划重点」对读者发指令/u);
+    assert.match(zhChecker, /冒号句式（标题、要点、图注里用冒号把标签或论断拼到句子前面/u);
+    assert.match(zhChecker, /每页结构雷同（要点条数和句式一页接一页不变）/u);
+    assert.match(zhChecker, /跨页重复（同一句话在 3 页以上原样出现）/u);
+    assert.match(zhChecker, /图注和标题复述（图注或要点把标题再说一遍）/u);
+    assert.match(zhChecker, /表格前后的套话（表前表后复述表内内容或下格言式判断）/u);
     assert.doesNotMatch(zhChecker, /zh-format-humanizer/iu);
   });
 
@@ -188,7 +221,14 @@ describe('de-AI guidance content contracts', () => {
     assert.match(plain, /### 7\.6 结构性 AI 痕迹/u);
     assert.match(plain, /完整的分级特征清单见 `zh-format-humanizer` 技能/u);
     assert.match(plain, /强特征（一次出现即修改）：否定式对偶/u);
+    assert.match(plain, /冒号句式和全稿层面特征/u);
+    assert.match(plain, /冒号只留给三项以上的列举、定义、公式、代码/u);
     assert.match(plain, /判断依据是证据，不是词频/u);
+
+    const zhCheckers = read('skills/zh-writing-checkers/SKILL.md');
+    assert.match(zhCheckers, /冒号句式和全稿层面特征/u);
+    assert.match(zhCheckers, /每页结构雷同（要点条数和句式一页接一页不变）/u);
+    assert.match(zhCheckers, /后四类要按整份文档计数，单看一页看不出来/u);
   });
 
   it('routes English de-AI through the writing workflow and Beamer language methods', async () => {

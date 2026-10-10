@@ -20,7 +20,52 @@ function issue({ id, pattern, language, text, match, severity = 'MINOR', problem
   };
 }
 
-const ZH_RULES = [
+export const ZH_RULES = [
+  {
+    pattern: 'zh-colon-claim',
+    regex: /：(?![^\n]*[、，,；][^\n]*[、，,；])(?![ \u3000]*\$)(?![ \u3000]*\\texttt)(?![ \u3000]*\\verb)(?![ \u3000]*\\begin\{)(?![^。；\n]{0,30}是指)(?![^。；\n]{0,30}定义为)/u,
+    severity: 'IMPORTANT',
+    problem: '冒号把标签或论断直接接在句子上，读起来像标题式断言。',
+    suggestion: '只有三项以上的列举、定义、公式和代码之前可以用冒号，其他情况改写成完整句子。',
+  },
+  {
+    pattern: 'zh-negation-couplet-variant',
+    regex: /不在(?:于)?[^。；\n]{1,30}而在(?:于)?/u,
+    severity: 'IMPORTANT',
+    problem: '“不在……而在……”式的否定对偶是套话结构。',
+    suggestion: '直接写正面结论，删掉对比铺垫。',
+  },
+  {
+    pattern: 'zh-pseudo-profound',
+    regex: /核心思想是|其实是同一件事|本质上是/u,
+    severity: 'IMPORTANT',
+    problem: '用“本质”“核心”给结论盖章，没有增加信息。',
+    suggestion: '改写成具体的机制、条件或结果。',
+  },
+  {
+    pattern: 'zh-number-bundling',
+    regex: /这三件事|这三处|两大|缺一不可/u,
+    problem: '用数字打包把内容概括成口号。',
+    suggestion: '把每一项单独写清楚，或改成具体的数量关系。',
+  },
+  {
+    pattern: 'zh-x-decides-y',
+    regex: /[^。；\n]{1,20}决定了?[^。；\n]{1,20}/u,
+    problem: '“X 决定 Y”把关系压缩成口号式判断。',
+    suggestion: '写清楚 X 通过什么机制影响 Y，或给出具体条件。',
+  },
+  {
+    pattern: 'zh-colloquial-judgement',
+    regex: /一眼看出|一眼可分|一眼就能|最能说明|又快又稳|划算得多|瞬间完成|躲不过|涨得最凶|越悬殊/u,
+    problem: '口语化评判词替代了具体依据。',
+    suggestion: '给出可核对的数字、条件或现象。',
+  },
+  {
+    pattern: 'zh-didactic-cognition',
+    regex: /(?<!栈)记住|请注意|划重点|分清楚|看清楚|搞清楚|(?:定|堵|卡|限)死/u,
+    problem: '对读者发指令的说教式认知句。',
+    suggestion: '删掉指令，直接陈述读者需要知道的事实；「栈记住」「写死」「锁死」「框死」这类字面用法除外。',
+  },
   {
     pattern: 'zh-empty-opener',
     regex: /近年来，?随着[^。！？\n]{0,40}(快速发展|不断发展|持续发展)/u,

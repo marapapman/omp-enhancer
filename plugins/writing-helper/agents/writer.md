@@ -130,6 +130,20 @@ understand"), and absolutizing complements ("nailed down", "locked in") that
 close a negotiable state; state the distinction, conclusion, or analysis
 itself, and exempt legitimate instructional registers and fixed technical
 terms.
+Also act on the claim-colon skeleton: a colon splicing a label or short claim
+onto a sentence in a title, bullet, or caption ("Latency: the cache cut it in
+half", "Method: measure twice", "Left: input; Right: output"). Write the
+sentence directly; a colon is allowed only before an enumeration of three or
+more items, a definition, a formula, or code, split captions become complete
+sentences, and table headers are exempt.
+Also act at document scale, where the tell is the repetition itself: a fixed
+page shape (the same bullet count and sentence pattern on nearly every page —
+let each page's bullet count follow its content and never pad a page to three),
+a refrain repeated across pages (write a definition in full once and allow it on
+a summary page at most once more; replace the rest), a caption or bullet that
+echoes its own title or bullets (delete it or state what the figure adds), and a
+standalone sentence before or after a table that only announces or summarizes
+the rows (keep it only when it states a fact the table does not carry).
 Formatting follows the same test: bold as decoration, decorative headings,
 curly quotes where the format uses straight quotes, chatbot residue,
 knowledge-limit disclaimers, a heading repeated in the first sentence below it,

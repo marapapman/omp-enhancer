@@ -3,6 +3,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 
 import { analyzeWritingLogic } from './src/analyzer.js';
 import { fetchExternalCitationEvidence, parseLocalLiteratureRecords } from './src/citations.js';
+import { censusDeck, formatDeckCensusReport } from './src/deck-census.js';
 import { loadWritingLogicDocument } from './src/document-loader.js';
 import { analyzeWritingQuality } from './src/quality.js';
 import { formatWritingLogicReport, formatWritingQualityReport } from './src/report.js';
@@ -218,6 +219,11 @@ function networkFallbackAllowed(input) {
   return input.allowNetwork === true;
 }
 
+function isDeckSource(input, text) {
+  if (typeof input.path !== 'string' || !input.path.endsWith('.tex')) return false;
+  return text.includes('\\input') || text.includes('\\include');
+}
+
 export function runWritingLogicCheck(input, cwd) {
   const loaded = loadWritingLogicDocument(input, cwd);
   if (!loaded.ok) {
@@ -247,6 +253,26 @@ export async function runWritingQualityCheck(input, cwd) {
       ok: false,
       report: loaded.error,
       details: { error: loaded.error, source: loaded.source },
+    };
+  }
+
+  if (isDeckSource(input, loaded.text)) {
+    const census = censusDeck({
+      mainPath: resolve(cwd, input.path),
+      mainText: loaded.text,
+      readFile: (path) => readFileSync(path, 'utf8'),
+    });
+    if (!census.ok) {
+      return {
+        ok: false,
+        report: census.error,
+        details: { error: census.error },
+      };
+    }
+    return {
+      ok: true,
+      report: formatDeckCensusReport(census),
+      details: { deck: census },
     };
   }
 
