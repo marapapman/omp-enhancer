@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Standalone deterministic regression smoke suite for A1/R3/F1/V1 layout checks.
+"""Standalone deterministic regression smoke suite for A1/R3/R4/R5/C1/F1/V1 layout checks.
 
 Synthetic fixture tests run unconditionally; optional real-artifact tests are gated
 behind --golden (currently conformant .drawio with measured crop pixel width),
@@ -32,6 +32,21 @@ def rhombus_vertex(cell_id, x, y, width=100, height=100):
 def edge(cell_id, source, target, exit_y="0.5", entry_y="0.5", exit_x="1", entry_x="0"):
     style = ("edgeStyle=none;html=1;exitX=%s;exitY=%s;entryX=%s;entryY=%s;"
              % (exit_x, exit_y, entry_x, entry_y))
+    return ('<mxCell id="%s" value="" style="%s" edge="1" parent="1" '
+            'source="%s" target="%s"><mxGeometry relative="1" as="geometry"/>'
+            '</mxCell>') % (cell_id, style, source, target)
+
+
+def styled_vertex(cell_id, x, y, style, width=20, height=16):
+    return ('<mxCell id="%s" value="" style="%s" vertex="1" parent="1">'
+            '<mxGeometry x="%s" y="%s" width="%s" height="%s" as="geometry"/>'
+            '</mxCell>') % (cell_id, style, x, y, width, height)
+
+
+def styled_edge(cell_id, source, target, extra_style, exit_y="0.5", entry_y="0.5",
+                exit_x="1", entry_x="0"):
+    style = ("edgeStyle=none;html=1;%sexitX=%s;exitY=%s;entryX=%s;entryY=%s;"
+             % (extra_style, exit_x, exit_y, entry_x, entry_y))
     return ('<mxCell id="%s" value="" style="%s" edge="1" parent="1" '
             'source="%s" target="%s"><mxGeometry relative="1" as="geometry"/>'
             '</mxCell>') % (cell_id, style, source, target)
@@ -269,6 +284,105 @@ def check_a1_image_intersections():
     print("PASS: A1 rejects unrelated containing nodes and exempts the XML parent")
     print(result.stdout.rstrip())
 
+
+def check_r5_arrow_geometry():
+    vertices = [vertex("s", 20, 40), vertex("t", 140, 40)]
+    result = run_checker(diagram(vertices, [
+        styled_edge("ok", "s", "t", "endArrow=block;endFill=1;endSize=6;")]))
+    if result.returncode != 0 or "[PASS] R5: ok" not in result.stdout:
+        raise AssertionError("R5 expected pass for a small head on a long run\n%s"
+                             % result.stdout)
+    print("PASS: R5 accepts endSize=6 on a long run")
+    print(result.stdout.rstrip())
+
+    result = run_checker(diagram(vertices, [
+        styled_edge("big", "s", "t", "endArrow=block;endFill=1;endSize=9;")]))
+    if (result.returncode != 1 or "[FAIL] R5: big" not in result.stdout
+            or "endSize=9" not in result.stdout):
+        raise AssertionError("R5 expected an oversized-head failure\n%s" % result.stdout)
+    print("PASS: R5 rejects endSize above the cap")
+    print(result.stdout.rstrip())
+
+    close = [vertex("s", 20, 40), vertex("t", 52, 40)]
+    result = run_checker(diagram(close, [
+        styled_edge("stub", "s", "t", "endArrow=block;endFill=1;endSize=5;")]))
+    if (result.returncode != 1 or "[FAIL] R5: stub" not in result.stdout
+            or "末段 run=" not in result.stdout):
+        raise AssertionError("R5 expected a short-run failure\n%s" % result.stdout)
+    print("PASS: R5 rejects a run below the floor")
+    print(result.stdout.rstrip())
+
+    bare_edge = ('<mxCell id="na" value="" style="edgeStyle=none;html=1;'
+                 'endArrow=block;endFill=1;" edge="1" parent="1" source="s" '
+                 'target="t"><mxGeometry relative="1" as="geometry"/></mxCell>')
+    result = run_checker(diagram(vertices, [bare_edge]))
+    if result.returncode != 0 or "[NOT-APPLICABLE] R5: na" not in result.stdout:
+        raise AssertionError("R5 expected NOT-APPLICABLE without declared ports\n%s"
+                             % result.stdout)
+    print("PASS: R5 reports NOT-APPLICABLE without declared ports")
+
+    # Auto-routed orthogonal edge without waypoints: the rendered last leg is the
+    # entry-side axis leg (|dx|), not the Euclidean distance.
+    orth_edge = ('<mxCell id="orth" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;'
+                 'endArrow=block;endFill=1;endSize=5;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" '
+                 'edge="1" parent="1" source="s" target="t">'
+                 '<mxGeometry relative="1" as="geometry"/></mxCell>')
+    tall = [vertex("s", 20, 40), vertex("t", 52, 140)]
+    result = run_checker(diagram(tall, [orth_edge]))
+    if (result.returncode != 1 or "[FAIL] R5: orth" not in result.stdout
+            or "末段 run=12.0u" not in result.stdout
+            or "正交入口轴向水平腿" not in result.stdout):
+        raise AssertionError("R5 expected the orthogonal entry-axis leg to fail\n%s"
+                             % result.stdout)
+    print("PASS: R5 estimates orthogonal entry-axis legs")
+    print(result.stdout.rstrip())
+
+
+def check_c1_fill_palette():
+    accent = styled_vertex("accent", 30, 30, "fillColor=#1668B5;strokeColor=#000000;fontSize=16;")
+    result = run_checker(diagram([accent], []))
+    if result.returncode != 0 or "[PASS] C1: accent" not in result.stdout:
+        raise AssertionError("C1 expected a palette accent fill to pass\n%s" % result.stdout)
+    print("PASS: C1 accepts palette accent fills")
+    print(result.stdout.rstrip())
+
+    gray = styled_vertex("wash", 30, 30, "fillColor=#F5F5F5;strokeColor=#000000;fontSize=16;")
+    result = run_checker(diagram([gray], []))
+    fail_lines = [line for line in result.stdout.splitlines() if "[FAIL]" in line]
+    if (result.returncode != 1 or len(fail_lines) != 1 or "[FAIL] C1: wash" not in fail_lines[0]
+            or "灰底" not in fail_lines[0]):
+        raise AssertionError("C1 expected a gray fill to fail alone, got %r\n%s"
+                             % (fail_lines, result.stdout))
+    print("PASS: C1 rejects gray fills")
+    print(result.stdout.rstrip())
+
+    off = styled_vertex("off", 30, 30, "fillColor=#00FF00;strokeColor=#000000;fontSize=16;")
+    result = run_checker(diagram([off], []))
+    if result.returncode != 1 or "[FAIL] C1: off" not in result.stdout:
+        raise AssertionError("C1 expected an off-palette hue to fail\n%s" % result.stdout)
+    print("PASS: C1 rejects off-palette hues")
+    print(result.stdout.rstrip())
+
+    grad = styled_vertex("grad", 30, 30,
+                         "fillColor=#FFFFFF;gradientColor=#D5171A;strokeColor=#000000;fontSize=16;")
+    result = run_checker(diagram([grad], []))
+    if result.returncode != 1 or "[FAIL] C1: grad" not in result.stdout:
+        raise AssertionError("C1 expected a gradient fill to fail\n%s" % result.stdout)
+    print("PASS: C1 rejects gradient fills")
+    print(result.stdout.rstrip())
+
+    named = [
+        styled_vertex("named-white", 30, 30, "fillColor=white;strokeColor=black;fontSize=16;"),
+        styled_vertex("short-hex", 80, 30, "fillColor=#fff;strokeColor=#000;fontSize=16;"),
+        styled_vertex("named-black", 130, 30, "fillColor=black;strokeColor=white;fontSize=16;"),
+    ]
+    result = run_checker(diagram(named, []))
+    if result.returncode != 0 or "[FAIL] C1:" in result.stdout:
+        raise AssertionError("C1 expected white/black names and short hex to pass\n%s"
+                             % result.stdout)
+    print("PASS: C1 accepts white/black names and short hex")
+    print(result.stdout.rstrip())
+
 def check_golden(path, crop_px):
     result = run_path_checker(path, crop_px)
     if result.returncode != 0:
@@ -396,6 +510,8 @@ def main():
     check_rhombus_interior_bbox_port()
     check_rhombus_nonnumeric_port_fails_cleanly()
     check_a1_image_intersections()
+    check_r5_arrow_geometry()
+    check_c1_fill_palette()
     check_synthetic_preview_mismatch()
     check_preview_without_frame()
     check_zero_width_frame_stroke()

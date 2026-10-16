@@ -231,7 +231,10 @@ test('shared catalog and Skill index expose the three workflows while references
   assert.match(agents, /Schematic house style \(advisory\)/u);
   assert.match(agents, /#D5171A/i);
   assert.match(agents, /#037870/i);
+  assert.match(agents, /#1668B5/i);
+  assert.match(agents, /#E08A1E/i);
   assert.match(claude, /Schematic house style \(advisory\)/u);
+  assert.match(claude, /#1668B5/i);
   assert.ok(
     (await stat(new URL('../plugins/omp-config/assets/diagram-style-board.png', import.meta.url))).size > 100_000,
     'the diagram house-style board must ship inside the packaged plugin assets',

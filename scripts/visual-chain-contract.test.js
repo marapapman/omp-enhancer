@@ -36,6 +36,12 @@ test('visual workflow stays drawio/static-visual oriented', () => {
   assert.match(scope, /#000000/iu);
   assert.match(scope, /#d5171a[^.]{0,120}(?:error|failure|risk)|(?:error|failure|risk)[^.]{0,120}#d5171a/iu);
   assert.match(scope, /#037870[^.]{0,120}(?:success|verified|correct)|(?:success|verified|correct)[^.]{0,120}#037870/iu);
+  assert.match(scope, /#1668b5/iu);
+  assert.match(scope, /#e08a1e/iu);
+  assert.match(scope, /never as a box or section fill/iu);
+  assert.match(scope, /boxes default to no fill/iu);
+  assert.match(scope, /endSize of 5–7/iu);
+  assert.match(scope, /never below 18 units/iu);
   assert.doesNotMatch(scope, /at most one accent|single accent color/iu);
   assert.match(scope, /single diagram pipeline/iu);
   assert.match(scope, /one read-only review pass plus at most one fix round/iu);
@@ -52,6 +58,8 @@ test('visual workflow routes every textual surface to the body-language writer',
 
   assert.match(contract, /house schematic style/iu);
   assert.match(contract, /code-drawn schematics \(draw\.io[\s\S]{0,120}imagegen-generated schematics/iu);
+  assert.match(contract, /arrowhead size against the visible shaft/iu);
+  assert.match(contract, /no gray or pale fills/iu);
   assert.match(
     contract,
     /English(?:\s+text)?[^.]{0,120}\bwriter\b[^.]{0,120}Chinese(?:\s+text)?[^.]{0,120}\bzh-writer\b/iu,

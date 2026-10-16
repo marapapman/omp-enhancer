@@ -15,7 +15,12 @@
       也不与任何边段相交（含其自身标注的边）
   R3  同向走廊（水平/垂直分别聚类）间距 ≥ 2×最大字号
   R4  只允许直线（单段）或正交折线；曲线样式 = 失败
+  R5  箭头几何：有头边 endSize ≤ 7（缺省按 6 计）；目标前末段直线 run ≥ max(3×endSize, 18u)
+      （无 waypoint 的正交边按入口轴向腿长估算末段，轴向不可判时回退欧氏距离）
   R6  边段不得穿越无关节点矩形（剔除自身 source/target 与背景框）
+  C1  填色配额：非 text 顶点 fillColor 仅 none/#FFFFFF/#000000/调色板四色（#D5171A/#037870/#1668B5/#E08A1E）；
+      gradientColor 仅 none 或等于 fillColor；灰底、浅色水洗、调色板外彩色 = 失败
+      （white/black 颜色名与三位短十六进制归一化后判定）
   R10 f_print_pt = fs × (W_print_mm/25.4×72) / 实际裁剪像素宽 ≥ f_min（全部 fontSize）
   W1  CJK 行宽公式: n_cjk×fs + 0.6×n_ascii×fs + 0.5×n_sep×fs ≤ 盒内宽 − padding
       覆盖文本顶点（inner = w − 2×padding）与含 value 的节点/容器
@@ -200,6 +205,124 @@ def edge_segment(cell, verts):
     if cell.find(".//Array") is not None: return None   # 带 waypoints：非单段
     return P, Q
 
+ARROW_HEAD_MAX_U = 7.0
+ARROW_RUN_MIN_U = 18.0
+ARROW_DEFAULT_HEAD_U = 6.0
+PALETTE_FILLS = frozenset((
+    "none", "#ffffff", "#000000", "#d5171a", "#037870", "#1668b5", "#e08a1e",
+))
+
+
+def arrow_head_size(cell):
+    """箭头长度与来源说明；endArrow=none 返回 (None, 说明)；endSize 非数字返回 (False, 说明)。"""
+    st = style_dict(cell)
+    arrow = st.get("endArrow", "classic").strip().lower()
+    if arrow in ("none", "0"):
+        return None, "endArrow=none（无箭头）"
+    size = st.get("endSize")
+    if size is None:
+        return ARROW_DEFAULT_HEAD_U, "endSize 缺省按 %g 计" % ARROW_DEFAULT_HEAD_U
+    try:
+        return float(size), "endSize=%s" % size
+    except ValueError:
+        return False, "endSize 非数字: %r" % size
+
+
+def edge_polyline(cell, verts):
+    """端口 + waypoints（绝对坐标约定）派生的折线顶点；缺端口或 waypoint 非法返回 None。"""
+    P = absolute_ports(cell, verts, "exit")
+    Q = absolute_ports(cell, verts, "entry")
+    if P is None or Q is None:
+        return None
+    points = [P]
+    arr = cell.find(".//Array")
+    if arr is not None:
+        for mx in arr.findall("mxPoint"):
+            mx_x, mx_y = mx.get("x"), mx.get("y")
+            if mx_x is None or mx_y is None:
+                return None
+            try:
+                points.append((float(mx_x), float(mx_y)))
+            except ValueError:
+                return None
+    points.append(Q)
+    return points
+
+
+def last_run_length(points):
+    """末段（最后一个与终点不同的折点 → 终点）长度。"""
+    Q = points[-1]
+    for P in reversed(points[:-1]):
+        length = math.hypot(Q[0] - P[0], Q[1] - P[1])
+        if length > 1e-9:
+            return length
+    return 0.0
+
+
+def last_run_estimate(cell, verts):
+    """末段 run 估计，返回 (run, 依据)；端口/waypoint 无法派生返回 None。
+    显式 waypoint 折线逐段精确；无 waypoints 的正交边按入口轴向取腿长
+    （entryX=0/1 且 entryY=0.5 → 水平腿 |dx|；entryY=0/1 且 entryX=0.5 → 垂直腿 |dy|）；
+    入口为角点/内部端口或轴向腿长为零时回退欧氏距离（fail-open）。"""
+    points = edge_polyline(cell, verts)
+    if points is None:
+        return None
+    if len(points) > 2:
+        return last_run_length(points), "waypoint 折线"
+    P, Q = points[0], points[1]
+    dx, dy = abs(Q[0] - P[0]), abs(Q[1] - P[1])
+    if "orthogonalEdgeStyle" in cell.get("style", ""):
+        st = style_dict(cell)
+        try:
+            fx = float(st["entryX"]) if "entryX" in st else None
+            fy = float(st["entryY"]) if "entryY" in st else None
+        except ValueError:
+            fx = fy = None
+        near = lambda value, target: value is not None and abs(value - target) <= 1e-9
+        if ((near(fx, 0.0) or near(fx, 1.0)) and (fy is None or near(fy, 0.5))
+                and dx > 1e-9):
+            return dx, "正交入口轴向水平腿"
+        if ((near(fy, 0.0) or near(fy, 1.0)) and (fx is None or near(fx, 0.5))
+                and dy > 1e-9):
+            return dy, "正交入口轴向垂直腿"
+    return math.hypot(Q[0] - P[0], Q[1] - P[1]), "欧氏距离"
+
+
+COLOR_ALIASES = {"white": "#ffffff", "black": "#000000"}
+
+
+def canonical_color(value):
+    """颜色归一化：white/black 颜色名与三位短十六进制（#abc→#aabbcc），供调色板比较。"""
+    normalized = value.strip().lower()
+    normalized = COLOR_ALIASES.get(normalized, normalized)
+    if len(normalized) == 4 and normalized.startswith("#"):
+        normalized = "#" + "".join(ch * 2 for ch in normalized[1:])
+    return normalized
+
+
+def fill_palette_violation(cell):
+    """fillColor/gradientColor 越界判定；(ok, 说明)。"""
+    st = style_dict(cell)
+    fill = st.get("fillColor")
+    normalized = canonical_color(fill) if fill is not None else None
+    if normalized is not None and normalized not in PALETTE_FILLS:
+        gray = ""
+        if normalized.startswith("#") and len(normalized) == 7:
+            try:
+                r, g, b = (int(normalized[i:i + 2], 16) for i in (1, 3, 5))
+                if r == g == b:
+                    gray = "（灰底）"
+            except ValueError:
+                pass
+        return False, ("fillColor=%s 不在调色板（none/#FFFFFF/#000000/"
+                       "#D5171A/#037870/#1668B5/#E08A1E）%s" % (fill, gray))
+    gradient = st.get("gradientColor")
+    if gradient is not None:
+        grad = canonical_color(gradient)
+        if grad not in ("none", "") and grad != (normalized or ""):
+            return False, "gradientColor=%s 仅允许 none 或等于 fillColor" % gradient
+    return True, "fillColor=%s gradientColor=%s" % (fill, gradient)
+
 def strip_html(v):
     v = re.sub(r"<br\s*/?>", "\n", v or "")
     v = re.sub(r"<[^>]+>", "", v)
@@ -283,6 +406,13 @@ def main():
                   "内嵌图标 %s_icon（容器 %s）渲染范围未单独界定，可能与子节点 %s 相交"
                   % (cid, cid, child_id))
 
+    # C1: 填色配额（非 text 顶点）
+    for cid, r in verts.items():
+        if r[5].get("style", "").startswith("text;"):
+            continue
+        c1_ok, c1_detail = fill_palette_violation(r[5])
+        check("C1", c1_ok, "%s %s" % (cid, c1_detail))
+
     # R10: 字号折算（style fontSize + value 内联 font-size）
     f_pt = lambda fs: fs * (args.print_width_mm / 25.4 * 72) / args.crop_px
     for cid, r in verts.items():
@@ -322,6 +452,30 @@ def main():
         for nid, nr in node_rects.items():
             if nid in (src, dst, "frame"): continue
             check("R6", not seg_in_rect(seg[0], seg[1], nr), "%s 不穿越 %s" % (eid, nid))
+
+    # R5: 箭头几何 —— endSize 上限与末段直线 run 下限
+    for eid, c in edges.items():
+        head, head_note = arrow_head_size(c)
+        if head is None:
+            continue
+        if head is False:
+            check("R5", False, "%s %s" % (eid, head_note))
+            continue
+        if head > ARROW_HEAD_MAX_U:
+            check("R5", False, "%s 箭头 endSize=%g 超过上限 %g" % (eid, head, ARROW_HEAD_MAX_U))
+            continue
+        try:
+            estimate = last_run_estimate(c, verts)
+        except (TypeError, ValueError, OverflowError):
+            estimate = None
+        if estimate is None:
+            print("  [NOT-APPLICABLE] R5: %s 端口未声明或 waypoint 非数字，末段长度无法派生" % eid)
+            continue
+        run, basis = estimate
+        required = max(3.0 * head, ARROW_RUN_MIN_U)
+        check("R5", run + 1e-9 >= required,
+              "%s 末段 run=%.1fu ≥ max(3×%g, %gu)=%.1fu（%s；%s）"
+              % (eid, run, head, ARROW_RUN_MIN_U, required, head_note, basis))
 
     # R2: 标签盒 vs 节点（豁免：XML parent 即该节点，或完全落在该节点顶部标题带内）
     #     vs 边段（含自身边，无豁免）
