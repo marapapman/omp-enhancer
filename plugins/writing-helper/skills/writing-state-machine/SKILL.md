@@ -9,6 +9,8 @@ Use a Read → Draft → Self-check → Handoff matrix for hallucination-sensiti
 content. Fresh isolated sessions are an optional mode only when the user
 explicitly requests paragraph context isolation.
 
+This skill inherits the writer text tool's built-in technical prose style and applies it inside the format the user or the target document defines.
+
 ## Workflow boundary
 
 Use this Skill only after Main selects workflow `writing`, loads its exact workflow reference and this Skill, and passes the assignment to a `writer` text-tool call. This is the `writer` text tool's bounded local method. It does not select or dispatch Agents. Do not recursively fork, spawn, or delegate. Main retains the parent TODO, integration, final verification, and user-visible delivery.
@@ -32,16 +34,16 @@ When the user explicitly requests strict paragraph isolation, process one paragr
 
 ### 1. Read — Only What You Need
 
-Read the specific source data for THIS paragraph only. Do not read anything for other paragraphs. Acceptable reads:
+Read the specific source data for THIS paragraph. When continuity requires it, also read adjacent paragraphs' transition sentences and terminology; never read unrelated paragraphs. A previous paragraph's claims still never substitute for this paragraph's evidence. Acceptable reads:
 - The target document (scan section structure only)
 - The specific source document, data table, or reference cited in this paragraph
 - The section's metadata/description if available
 
 Use network access only when the user or host authorizes it and a live network capability is exposed. If local evidence is insufficient and either condition is absent, do not browse; return the source gap to Main.
 
-### 2. Write — Exactly One Paragraph
+### 2. Write — Natural Paragraphs by Default
 
-Output exactly one paragraph with this structure:
+Default output is the natural paragraph or paragraphs the assigned content needs, with correct `[@citation]` markers. Use this structure only when the user explicitly asks for the paragraph-node template or the target document uses it:
 
 ```markdown
 ###### Title — topic sentence (≤50 chars)
@@ -50,8 +52,7 @@ Body text (≤500 chars) with correct `[@citation]` markers.
 ```
 
 Constraints:
-- **Title** ≤50 characters — the topic sentence, not a heading label
-- **Body** ≤500 characters — supporting text with inline citations
+- **Title** ≤50 characters and **Body** ≤500 characters only when that template is in effect; otherwise paragraph length follows the task and the argument
 - **Citations** must be exact — copy from source, do not paraphrase reference tags
 - **Metadata** — attach source provenance and any proposed review-log entry to the delivery, never as HTML comments in the document
 
@@ -59,8 +60,8 @@ Constraints:
 
 | Check | Pass/Fail |
 |-------|-----------|
-| Title ≤50 chars | — |
-| Body ≤500 chars | — |
+| Title ≤50 chars (only when the node template is in effect) | — |
+| Body ≤500 chars (only when the node template is in effect) | — |
 | Every citation `[@...]` in body appears in the source | — |
 | Source provenance includes a real path in the delivery or an authorized review log | — |
 | No claims beyond what source data supports | — |

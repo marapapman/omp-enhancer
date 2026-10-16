@@ -8,6 +8,8 @@ description: Use after Main selects writing and passes the assignment to a `writ
 
 Write document sections, run one focused inline check, fix clear local issues, and flag evidence or author-decision gaps. Additional write-check-fix passes are optional and run only when the user explicitly asks for iterative revision.
 
+This skill inherits the writer text tool's built-in technical prose style and applies it inside the format the user or the target document defines.
+
 ## Workflow boundary
 
 Use this Skill only after Main selects workflow `writing`, loads its exact workflow reference and this Skill, and passes the assignment to a `writer` text-tool call. This is the `writer` text tool's bounded local method. It does not select or dispatch Agents. Do not recursively fork, spawn, or delegate. Main retains the parent TODO, integration, final verification, and user-visible delivery.
@@ -35,7 +37,7 @@ Read the supplied inputs. Identify empty sections (blank or `[TODO]`/`[FILL]` ma
 
 ### Default pass: Write → Check → Fix
 
-**1. Write Sprint** — For each empty/sparse section: read context + `<!-- description: ... -->`, write topic sentence (Level-6 heading, ≤50 chars) + body (≤500 chars), cite literature.
+**1. Write Sprint** — For each empty/sparse section: read context + `<!-- description: ... -->`, then write the section's text in complete natural paragraphs and cite literature; use a Level-6 heading node with 50/500-char limits only when the user or the document gives that template, and let length follow the task and the argument.
 
 **2. Writer-local multidimensional self-check** — Run all 7 checks. Cite specific evidence per finding. No fabricated issues.
 
@@ -70,7 +72,7 @@ Next steps: [what user should do].
 
 ## Rules
 
-1. **Level-6 only** — write paragraphs (topic ≤50 chars, body ≤500 chars). Do not modify structural headings.
+1. **Structure follows the document** — write natural paragraphs; use the Level-6 topic-sentence node with a ≤50-char topic and ≤500-char body only when the user or the document gives that template, and let length follow the task and the argument. Do not modify structural headings.
 2. **Cite or flag** — claims need citations; if none, add `[citation needed]`.
 3. **Never fabricate** — skip unverifiable papers and report the evidence gap.
 4. **Evidence per issue** — quote text, cite section/paragraph. One issue per bullet.

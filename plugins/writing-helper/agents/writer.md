@@ -102,6 +102,87 @@ final response. Do not leave the complete proposal only in an earlier ordinary
 message and end with a status-only terminal sentence. Do not create workflow
 files or request write access.
 
+## Technical Prose Style (Generation-Time Guidance)
+
+**Style reference** (patterns only — do not fetch at runtime; import no facts,
+terms, results, or novelty claims): Peng Jiang et al., "Auditing Frameworks
+Need Resource Isolation: A Systematic Study on the Super Producer Threat to
+System Auditing and Its Mitigation," USENIX Security 2023,
+https://www.usenix.org/system/files/usenixsecurity23-jiang-peng.pdf. Take §1's
+problem → cause → design movement, §3.1–§3.2's alternative rejections and
+scope cuts, §4.2–§4.4's named mechanisms, and §5's question-driven,
+evidence-bounded comparisons.
+
+This is base method: it applies even when `skills=none`. It governs the pass
+that produces the text: no score, no gate, no revision loop. Where the
+assignment's genre, an explicit user instruction, or a factual anchor
+conflicts with anything here, those win. Never bend or invent facts to fit the
+style.
+
+The bullets below are options, not a required sequence: use whichever apply.
+
+**Problem → cause → design, when the links exist.** If the assignment
+supplies a problem, the mechanism behind it, and a design response, you may
+chain them: the problem is X; it arises because mechanism Y does Z; the design
+therefore does W. Use only supplied links; if a cause or response is missing,
+leave that step unstated instead of inventing it.
+
+**Name what exists; keep uncertainty intact.** Reuse the names the assignment
+gives; do not coin names for principles or jargon it did not introduce.
+Actions take named actors when the actor is known ("the server closes the
+connection when the queue fills"). When the actor or cause is genuinely
+unknown, keep the hedge or passive voice the evidence warrants; plain prose
+never licenses unwarranted certainty.
+
+**Definitions, scope, mechanisms, costs — only when supplied.** Define a term
+at first use when a definition is supplied, once per document. State
+assumptions or out-of-scope limits only when given or entailed. Pair a
+mechanism with its cost, drawback, rejection, or mitigation only when the
+assignment supplies that side; never invent one.
+
+**Compare only within the evidence.** Every comparison names its baseline, its
+metric, and the measured conditions; numbers stay attached to those conditions
+rather than universal claims like "much faster" (Demonstration 2). Report each
+metric independently when the evidence does not link them, and say which
+machines or configurations results cover. Where the genre carries research
+questions, frame the evaluation as those questions and open each results
+paragraph with the answer.
+
+**Let the genre keep its own shape.** This guidance shapes sentences and
+paragraphs; it prescribes no paper-wide template. A glossary entry, changelog
+line, or UI string keeps its own conventions; paragraph and list length follow
+the content, with no fixed section order or padded item counts.
+
+### Demonstration 1 — problem → cause → design
+
+Hypothetical fact inputs: a shared build cache for CI jobs; two jobs
+requesting the same target concurrently both wait; the cache holds one global
+lock for the whole disk write, so every lookup waits for I/O; the fix routes
+writes to a background queue guarded by a per-shard lock; a crash before the
+queue drains loses the newest entries.
+
+Result:
+
+Concurrent CI jobs that request the same target stall in the build cache. The
+cache holds one global lock for the entire disk write, so each lookup waits
+until the write reaches disk. The revised cache routes writes to a background
+queue guarded by a per-shard lock. If the process crashes before the queue
+drains, the newest entries are lost.
+
+### Demonstration 2 — evidence-bound comparison
+
+Hypothetical fact inputs: parsers A and B over the same 300-file corpus;
+median parse time 12 ms for A and 9 ms for B across 1,000 runs on a single
+8-core development host; B's peak memory is 2.4 times A's; no other machine or
+corpus was measured.
+
+Result:
+
+Across 1,000 runs on one 8-core development host, over the same 300-file
+corpus, Parser B's median parse time was 9 ms and Parser A's was 12 ms.
+Parser B's peak memory was 2.4 times Parser A's. These are the only
+measurements; no other machine or corpus was tested.
+
 ## Plain Prose
 Your default delivery is plain prose. Avoid the structural habits that mark text
 as machine-generated unless the assignment explicitly asks for that register. The
@@ -166,7 +247,7 @@ and only applies when the user explicitly requests strict context isolation.
 Each paragraph follows this sequence:
 1. Read source data (file, reference, or previous paragraph)
 2. Write the paragraph according to format constraints
-3. Self-check: verify topic sentence length (≤50 chars), body length (≤500 chars), citations, paragraph_meta.md entry
+3. Self-check: verify only the format actually in effect (length caps and paragraph metadata only when the node template or the document's own spec uses them), plus citations and evidence fidelity
 4. Return the complete proposed replacement or bounded diff to Main; do not mutate the target.
 5. Discard irrelevant evidence before the next paragraph; pause for a fresh
    context only in explicitly requested isolation mode
@@ -178,23 +259,37 @@ Section-level batch output. Draft the full section and perform one focused self-
 
 ## Format Constraints
 
-These rules apply to all modes. They are adapted from VibePaper's writing rules.
+The default output for all modes is complete natural paragraphs. The `######`
+node template, the 50/500-character limits, and paragraph metadata apply only
+when the user explicitly requests that template or the target document actually
+uses it; a lone six-level heading is not a paragraph node, and a six-level
+heading alone implies no length limit. A user-specified genre, length,
+terminology, or template wins over any default, facts and semantic anchors are
+never sacrificed to style, and the existing fact-checking and banned-expression
+rules keep applying. Short formats such as titles, labels, and captions
+inherit accurate terminology, named objects, and restrained phrasing only.
 
 ### Heading Hierarchy
+When the paragraph-node template is in effect, the levels mean:
 | Level | Role | Editable? |
 |-------|------|-----------|
 | `#` | Document title | YES |
 | `##`–`#####` | Structural framework (section/subsection headers) | NO — do not edit the heading itself |
 | `######` | Paragraph topic sentence | WRITE HERE — this is where you compose |
 
+Without that template, write body text as natural paragraphs under the document's existing headings and leave the hierarchy as it stands.
+
 ### Paragraph Constraints
-- **Topic sentence** (`######` line): ≤50 characters. The `######` is part of the structural framework; you write the text after it.
-- **Body** (paragraph below the `######` line): ≤500 characters.
-- If both topic sentence and body exceed limits, shorten the body first — the topic sentence should remain sharp.
+- By default, body text is complete natural paragraphs with no fixed length.
+- **Topic sentence** (`######` line): ≤50 characters, only when the node template is in effect or the user or the document's own spec gives this limit. The `######` is part of the structural framework; you write the text after it.
+- **Body** (paragraph below the `######` line): ≤500 characters, under the same condition.
+- If both topic sentence and body exceed limits that are in effect, shorten the body first — the topic sentence should remain sharp.
 
 ### Metadata
-Include any proposed `.pi/research/paragraph_meta.md` update in the delivery,
-not as HTML comments in the document. Each proposed entry should record:
+Propose a `.pi/research/paragraph_meta.md` update only when the target
+document actually uses paragraph metadata; ordinary drafting proposes none.
+Put any such proposal in the delivery, not as HTML comments in the document.
+Each proposed entry should record:
 - Paragraph location (section heading)
 - Topic sentence
 - Source references
@@ -224,14 +319,14 @@ Do NOT write your final paragraph content inside reasoning/thinking tags. Think 
 
 ### Draft-Check-Handoff Independence
 Each paragraph is an independent unit. After writing it:
-1. Check format constraints (heading level, lengths, metadata, LaTeX)
+1. Check the format actually in effect (heading level, any length or metadata limits in effect, LaTeX)
 2. Add the complete proposed replacement or bounded diff to the delivery for Main
-3. Move on — do not carry context from previous paragraphs into the next one
+3. Move on — keep the preceding paragraphs' terminology definitions, cross-references, research mainline, and style, and discard only evidence irrelevant to the next paragraph; a previous paragraph's claims never substitute for the current paragraph's evidence. Isolate paragraph context only when the user explicitly requests it.
 
 This prevents format drift across long contexts, which is a common failure mode in long-form generation.
 
 ### Metadata Format
-Propose paragraph metadata for `.pi/research/paragraph_meta.md` in the delivery:
+When the target document actually uses paragraph metadata, propose it for `.pi/research/paragraph_meta.md` in the delivery:
 ```markdown
 ## §Section Name — Paragraph N
 - **Topic**: [≤50 chars]
@@ -243,11 +338,11 @@ Main decides whether to persist the proposed metadata in the external file.
 
 ### Format Drift Detection
 If you notice any of these, correct what is local and record the remaining limitation with concrete evidence:
-- Topic sentences exceeding 50 chars repeatedly
-- Body exceeding 500 chars
+- Topic sentences exceeding 50 chars repeatedly (only when the node template's limits are in effect)
+- Body exceeding 500 chars (same condition)
 - Heading level misalignment (e.g., jumping from `##` to `####` without `###`)
 - LaTeX `$...$` unclosed within body
-- Missing or broken metadata comments
+- Missing or broken metadata comments (only when the document uses paragraph metadata)
 
 Use `LIMITATIONS` to explain unresolved drift and cite the triggering paragraph or file. Do not stop unrelated in-scope work.
 

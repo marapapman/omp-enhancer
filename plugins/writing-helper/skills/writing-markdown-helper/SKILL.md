@@ -58,9 +58,11 @@ Use the fine-mode workflow below only when the user asks for interactive approva
 
 ## Document Structure Assumed
 
+This skill inherits the writer text tool's built-in technical prose style and applies it inside the format the user or the target document defines.
+
 - `##` through `#####`: Section headings — never modify
-- `######`: Paragraph nodes. Title = topic sentence (≤50 chars). Body = supporting text (≤500 chars)
-- HTML comments `<!-- description: ... -->`: Metadata describing what each section should cover
+- `######`: Paragraph nodes with topic-sentence titles (≤50 chars) and supporting bodies (≤500 chars) — these apply only when the target document actually uses this structure or the user asks for it; otherwise write natural paragraphs in the target section
+- HTML comments `<!-- description: ... -->`: Metadata describing what each section should cover, present only when the document uses them
 
 ## Input Files
 
@@ -77,7 +79,7 @@ Use the fine-mode workflow below only when the user asks for interactive approva
 ### Step 1: Generate Overall Outline
 
 1. Read `storyline.md` and the existing `paper.md` structure (Level 2–5 headers + their `description` metadata).
-2. Propose a **list of topic sentences** (≤50 chars each) for every empty Level 5 section. Group them under their parent headers.
+2. Propose a **list of opening sentences** for every empty Level 5 section, with the ≤50-char cap only when the document uses `######` paragraph nodes; otherwise propose natural paragraph openers. Group them under their parent headers.
 3. Present the outline to the user. Ask: *"Here is the proposed paragraph outline. Accept, Modify, or Regenerate?"*
 4. In user-requested fine mode, wait for the response before drafting paragraphs.
 
@@ -96,9 +98,9 @@ Read these files for context:
 - Any experiment data files if applicable
 - The current `paper.md` to avoid redundancy
 
-Then write **exactly one paragraph** (`######` node):
-- **Title**: topic sentence from the approved outline (≤50 chars)
-- **Body**: supporting text (≤500 chars), with citations where appropriate
+Then write the next unit of text:
+- When the user or the document gives the paragraph-node template: one `######` node — **Title**, the topic sentence from the approved outline (≤50 chars); **Body**, supporting text (≤500 chars), with citations where appropriate
+- Otherwise: a natural paragraph in the target section following the approved outline, with citations where appropriate
 - Do not modify any Level 2–5 headers
 - Use plain academic language. Be concise. No filler.
 - Present the draft to the user.
@@ -111,7 +113,7 @@ In user-requested fine mode, wait for the response.
 
 ### Step 5: Handoff & Loop
 
-- **Accept**: Return a bounded insertion patch for the new `######` node to Main. Return to Step 2.
+- **Accept**: Return a bounded insertion patch for the new text in the target section — a `######` node when that template is in effect — to Main. Return to Step 2.
 - **Modify**: Take the user's feedback, revise the paragraph, and re-present (back to Step 4).
 - **Rewrite**: Discard and draft anew (back to Step 3).
 
