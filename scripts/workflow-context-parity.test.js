@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -228,6 +228,14 @@ test('shared catalog and Skill index expose the three workflows while references
   assert.match(agents, /A verbatim field or heading lookup needs no workflow or TODO/iu);
   assert.match(agents, /No plugin creates a gate, router, retry, permission, or completion controller/iu);
   assert.doesNotMatch(agents, /WORKFLOW PLAN|WORKFLOW READY|SENTINEL|byte 0|RESOURCE EXTENSION|Delegate Agent=|writing\.pending/i);
+  assert.match(agents, /Schematic house style \(advisory\)/u);
+  assert.match(agents, /#D5171A/i);
+  assert.match(agents, /#037870/i);
+  assert.match(claude, /Schematic house style \(advisory\)/u);
+  assert.ok(
+    (await stat(new URL('../plugins/omp-config/assets/diagram-style-board.png', import.meta.url))).size > 100_000,
+    'the diagram house-style board must ship inside the packaged plugin assets',
+  );
   assert.match(claude, /ANALYZE -> EXECUTE -> REVIEW/u);
   assert.match(claude, /never routes, blocks, grants permission, starts a task, or decides completion/iu);
   assert.match(watchdog, /Main is the orchestrator\. Phases: ANALYZE -> EXECUTE -> REVIEW/u);

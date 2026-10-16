@@ -324,5 +324,7 @@ All writing, research, and visual prose/copy must come from the independent lang
 
 A verbatim field or heading lookup needs no workflow or TODO. Main selects workflows, Skills, Agents, and delegation width freely. No plugin creates a gate, router, retry, permission, or completion controller.
 
+Schematic house style (advisory): code-drawn schematics and imagegen-generated schematics default to the house schematic style — opaque white background, black ink, gray steps as the base, red #D5171A only for failure or risk, teal #037870 only for success or verification, thick black rounded outlines, solid arrowheads, black sans-serif labels, flat vector with generous whitespace. Photographs, UI mockups, and slide template art fall outside it, and an explicit user-given style wins; the full definition lives at skill://omp-enhancer-workflows/references/visual.md
+
 A tool call skipped with "Skipped due to pending system advisory" must be retried after the advisory is delivered; keep todo and plan updates in sync.
 <!-- OMP-ENHANCER-WORKFLOW-CONTEXT:END -->
