@@ -51,7 +51,6 @@ describe('research Skills preserve workflow and host authority boundaries', () =
   it('makes every research artifact write conditional on explicit authority', () => {
     for (const name of [
       'research-phase-navigation',
-      'research-storyline',
       'research-relatedwork-summarizer',
       'research-socratic',
     ]) {

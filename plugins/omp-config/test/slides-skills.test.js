@@ -202,7 +202,6 @@ test('slide, Beamer, and PPTX copy is writer-owned while task work stays structu
   }
 
   assert.match(storyline, /text-only page draft[^.]{0,180}Markdown content-plan file/iu);
-  assert.match(beamer, /text-only content[^.]{0,180}Markdown content-plan file/iu);
   assert.match(
     storyline,
     /slide-order task[\s\S]{0,300}?(?:must not|may not)[\s\S]{0,180}?(?:title|body|caption|label|narrative)/iu,

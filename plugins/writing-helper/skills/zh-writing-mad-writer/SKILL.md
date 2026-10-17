@@ -24,6 +24,9 @@ SEARCH/REPLACE 块或 unified diff。Main 保留权限决策和实际文件修�
 - paper.md（必须有）— 当前文档
 - .pi/research/storyline.md（如果存在）— 研究叙事
 - .pi/research/literature.md（如果存在）— 相关工作上下文
+- 已确认的故事快照（仅当任务显式给出路径与版本），如 .storyline/exports/r<版本>/storyline.md 与同目录的 story.json
+
+任务显式传入已确认的故事快照路径与版本时，该快照就是交付物的故事来源，优先于 .pi/research/storyline.md 以及目标现稿的旧大纲。普通局部修改仍以目标现稿的当前版本为准。据快照写作时，按快照的节点结构和层级组织章节与段落，不把每个节点强制转成固定层级的标题。交付说明里列出所有节点 ID 的覆盖情况，未使用的节点写明原因并交回用户，不得静默丢弃证据。
 
 只读取任务已提供的输入和 host 授权的安全路径。约定路径本身不代表可以探测或修改。
 

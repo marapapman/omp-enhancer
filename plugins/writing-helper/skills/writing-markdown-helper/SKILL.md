@@ -69,10 +69,22 @@ This skill inherits the writer text tool's built-in technical prose style and ap
 | File | Purpose |
 |------|---------|
 | `paper.md` | Primary document; scan for empty sections, read for context |
+| `.storyline/exports/r<revision>/storyline.md` | Confirmed story snapshot exported from the workbench; the assignment names the revision |
 | `storyline.md` | Research narrative, insights, method — read before drafting |
 | `.pi/research/literature.md` | Literature summaries; read to find which paper summaries apply to the current section |
 | `.pi/research/papers/` | Downloaded papers — read only the ones relevant to the current section |
 | `.pi/research/storyline.md` | Alternative storyline path (if `storyline.md` absent) |
+
+When the assignment supplies an explicitly confirmed story snapshot path plus
+its revision, that snapshot is the story source for the deliverable and it wins
+over any generic or older outline, `storyline.md` and
+`.pi/research/storyline.md` included. Ordinary local edits keep using the
+target's current revision.
+
+Drafting from a confirmed snapshot organizes sections and paragraphs from that
+snapshot rather than forcing every node into a fixed level-one heading. Return
+every node ID in the coverage note, and list each unused node with its reason so
+the decision returns to the user.
 
 ## Optional Fine-Mode Writing Workflow
 

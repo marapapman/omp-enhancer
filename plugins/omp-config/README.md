@@ -7,6 +7,7 @@
 - `assets/WORKFLOW_CATALOG.md` is generated from `scripts/workflow-definitions.js` and contains the three advisory workflow cards for catalog v44.
 - `skills/omp-enhancer-workflows/` publishes the compact domain index and on-demand `writing`, `research`, and `visual` reference cards.
 - `skills/latex-beamer-slides/` and `skills/slides-storyline/` define the staged Beamer deck workflow. `skills/beamer-to-powerpoint/` provides an optional PPTX branch backed by the fixed external `beamer2pptx` Skill/repository (`https://github.com/xdmlxdml/beamer2pptx/tree/main/beamer2pptx`) after the final validated Beamer visual revision when PowerPoint output is in scope; it consumes the final validated Beamer PDF and corresponding `.tex`, macro, and font sources when available.
+- `skills/storyline-workbench/` builds a new article's or deck's story as a tree before any prose exists, with one `topic` root, `claim` branches, and `evidence` leaves; every node has an editable title, ordered `markdown`/`table`/`image`/`math` content blocks, sources, and revision-bound comments. It runs one local website per project, keeps the tree in that project's `.storyline/` directory, binds `127.0.0.1` only with a per-session token in the URL fragment, and registers no plugin tool or model provider; `references/protocol.md` carries the JSON and HTTP contracts.
 - `skills/frontend-design/` and `skills/canvas-design/` are adjacent visual methods, not native PPTX generators. `skills/docx/` drives the officecli-backed Office flow: `.docx`/`.xlsx`/`.pptx` create, read, edit, validate, and rendered preview through a single external binary.
 - `assets/AGENTS.md` and `assets/WATCHDOG.yml` contain compact advisory context. They do not import the full workflow catalog or create runtime gates.
 - `assets/config.yml` and `assets/mcp.json` are templates. `config.yml` ships model role defaults; model selection remains overridable by OMP and the user.
@@ -35,6 +36,21 @@ PPT copy avoids announcer transitions such as `The real question is`, `A new que
 4. **Layout refinement.** After basic-layout confirmation, use the existing current-revision visual evidence chain: one advisory precheck owned by Main or task, task layout without changing confirmed content, task integration and fresh rendering, and a single read-only visual review of the fresh renders. Supported findings may receive the existing bounded fix and fresh-review pass; no automatic repair loop is created.
 
 PowerPoint conversion is an optional branch after the final validated Beamer visual revision and only when PPTX output is in scope. The fixed external `beamer2pptx` Skill/repository (`https://github.com/xdmlxdml/beamer2pptx/tree/main/beamer2pptx`) is the only converter; do not substitute another converter. The source contract is the final validated Beamer PDF (the visual authority for this conversion) plus available corresponding `.tex`, macro, and font sources; conversion does not edit Markdown, Beamer, formulas, figures, slide order, or page structure. Editing an existing .pptx is the separate PPTX-only mode that goes through the officecli-backed `docx` flow rather than regenerating from Beamer; an isolated PPTX edit does not trigger a regeneration. One producing `task` binds a single current PPTX revision and renders it; one independent read-only reviewer (Main or a task that did not produce the revision) checks current renders for slide count/order, editability where supported, clipping/overflow, overlap, margins/alignment, hierarchy/fonts, aspect ratio, raster/vector treatment, and visual fidelity. The producing task may apply at most one bounded fix to the editable PPTX, preserving visible content, formulas, slide order, and Markdown/Beamer sources, then rerenders fresh evidence for the same reviewer to confirm once. A content or layout finding is resolved in place at the stage where it is found; it is not propagated back to the Markdown content plan. Findings remain advisory: this chain does not route, block, grant permission, decide completion, launch an automatic repair loop, or silently fall back to another converter.
+
+## Storyline workbench CLI
+
+`scripts/storyline-workbench.mjs` is the CLI entry point, and it resolves the plugin root from its own location, so no machine path is hardcoded.
+
+```text
+node <pluginRoot>/scripts/storyline-workbench.mjs init --project <dir> --kind article|slides --title <text>
+node <pluginRoot>/scripts/storyline-workbench.mjs serve --project <dir> [--port <n>]
+node <pluginRoot>/scripts/storyline-workbench.mjs context --project <dir> --round <id>
+node <pluginRoot>/scripts/storyline-workbench.mjs propose --project <dir> --file <proposal.json>
+```
+
+`init` creates `.storyline/story.json` and its `assets/` directory with a single topic root. `serve` starts the loopback site and prints its URL with the session token in the fragment. `context` prints the round's frozen snapshot, open comments included, for the language-matched `writer`/`zh-writer`. `propose` imports that proposal file while the server is live, and the user accepts or rejects the whole proposal in the site.
+
+A second server on the same project refuses to start while `.storyline/server.lock` holds a live PID. From a remote machine, reach the printed URL over an SSH port forward; the server does not listen beyond `127.0.0.1`.
 
 ## External dependencies
 

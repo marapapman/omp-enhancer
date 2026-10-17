@@ -1,6 +1,6 @@
 ---
 name: slides-storyline
-description: Develop the narrative and a numbered working outline for a new presentation, or revise an existing Markdown content plan when the user explicitly asks. Use when a user wants a new deck, talk, lecture, pitch, or report presentation and the agent must establish audience, purpose, duration, language, key takeaway, evidence, and narrative arc, or when the user explicitly asks to revise the existing Markdown content plan without producing slides. This Skill runs in `storyline-only` mode on the Markdown content plan. It never edits, recompiles, renders, or converts Beamer `.tex`, the Beamer PDF, or a Beamer `.pptx`; a plan-only revision leaves downstream artifacts exactly as-is. A downstream Beamer or PPTX edit does not propagate back automatically; back-flow into the plan is an independent user-initiated plan modification, not a reverse-sync trigger. Do not use for ordinary edits to an existing deck.
+description: Develop the presentation story as a tree in the local `storyline-workbench` site, then turn the confirmed story snapshot into a numbered Markdown content plan for a new presentation, or revise an existing Markdown content plan when the user explicitly asks. Use when a user wants a new deck, talk, lecture, pitch, or report presentation and the agent must establish audience, purpose, duration, language, key takeaway, evidence, and narrative arc, or when the user explicitly asks to revise the existing Markdown content plan without producing slides. The user builds and confirms the tree in the workbench and submits a round; Main reads that round with the CLI `context` command, the language-matched `writer` or `zh-writer` text tool writes the per-page Markdown content plan from that confirmed snapshot, and Main persists it. This Skill runs in `storyline-only` mode on the Markdown content plan. It never edits, recompiles, renders, or converts Beamer `.tex`, the Beamer PDF, or a Beamer `.pptx`; a plan-only revision leaves downstream artifacts exactly as-is. A downstream Beamer or PPTX edit does not propagate back automatically; back-flow into the plan is an independent user-initiated plan modification, not a reverse-sync trigger. Do not use for ordinary edits to an existing deck, local polishing, or translation of finished material.
 ---
 
 # Slides Storyline
@@ -9,8 +9,27 @@ When this Skill is part of a `writer` or `zh-writer` assignment, that invocation
 (the dedicated language-matched text tool, hosted by its packaged Agent compatibility adapter) remains proposal-only: it runs no command and writes no file, and returns the complete proposed artifact or diff. Main or a separate explicitly capable Main-selected Agent owns authorized effects; that owner performs no prose drafting or revision, which belongs to the text tool alone.
 ## storyline-only mode and edit boundary
 
-This Skill operates exclusively in `storyline-only` mode. The Markdown
-content plan is its sole edit target. The Skill never generates,
+The story stage begins in the local `storyline-workbench` site. The user
+and the agent build the story tree there: a topic root, claim branches,
+and evidence leaves, each node carrying an editable title, ordered
+content blocks, sources, and revision-bound comments. When the user is
+ready, the site freezes the tree and its open comments into an immutable
+round. A story that already exists in confirmed form can be loaded into
+the site for continued editing instead of being rebuilt from scratch.
+Main reads the round with the `storyline-workbench` CLI `context` command
+and calls the language-matched `writer` or `zh-writer` text tool,
+which writes the per-page Markdown content plan from the confirmed
+snapshot; Main persists the complete proposal verbatim. The confirmed
+story revision is exported under `.storyline/exports/r<revision>/`, and
+the page plan records that revision as `storyRevision`. This Skill edits
+neither the tree, its store, nor its exports.
+
+The tree stage carries story material, including images that already
+exist as evidence. Final slide layout starts only after the page content
+is confirmed.
+
+This Skill operates exclusively in `storyline-only` mode. Its sole edit
+target is the Markdown content plan. The Skill never generates,
 regenerates, compiles, renders, or converts Beamer `.tex`, the Beamer
 PDF, or a Beamer `.pptx`. A plan-only revision here leaves every
 downstream artifact exactly as the current revision already is — no
@@ -134,9 +153,9 @@ Use the scaffold as provisional per-slide slots: Background provides context, Ex
 
 ## Text-only page draft
 
-Before selecting images, authoring visuals, or writing layout code, write the text-only page draft to a Markdown content-plan file (for example, <deck>-content.md) in section-sized batches. The batch size is a communication convenience; discuss every page with the user.
+The per-page Markdown content plan is the language-matched `writer` or `zh-writer` proposal written from the confirmed tree round, and Main persists it verbatim in a Markdown content-plan file (for example, <deck>-content.md) in section-sized batches. The batch size is a communication convenience; discuss every page with the user. The final slide visual asset for a page is created or selected only after that page's content is confirmed, when layout work begins.
 
-1. For each page, provide its working title, narrative job, detailed body text, evidence or source basis, and a prose description of the intended visual role. Do not create or select the actual visual asset at this stage. Every working title must satisfy the two title rules from "Shape the story": no "XX：XX" two-part label pattern, and the full title sequence reads as coherent prose in deck order.
+1. A tree node is not a slide. One page may cite several node IDs, and one claim may be split across pages. For each page, provide its working title, narrative job, detailed body text, evidence or source basis, its `sourceNodeIds` and `storyRevision` trace metadata, and a prose description of the intended visual role. Do not create or select the final slide visual asset at this stage. Every working title must satisfy the two title rules from "Shape the story": no "XX：XX" two-part label pattern, and the full title sequence reads as coherent prose in deck order.
 2. Write the body, captions, and explanations as complete natural-language sentences or paragraphs. Do not replace them with isolated phrases, keyword strings, or phrase-only bullet lists. A title may be concise, but it should state a complete thought when it carries the page's claim. The "XX：XX" ban extends to body copy: bullets and captions must not open with a label-colon lead-in ("方法：…", "结果：…", "Method: …"); write the sentence directly. Body and captions also obey the Shape-the-story bans on "不是X，而是Y" contrast-repetition constructions, opening/closing one-sentence summaries, defensive writing, "specifics then sweep" summary clauses, abstract-restatement echoes, announcer transitions, rhythm-matched paired-phrase closers, and didactic cognition directives ("分清楚"/"keep in mind" reader commands, "这就说清楚了" clarity stamps, "定死" absolutizing complements). The same ban list covers a claim or label spliced onto a colon in a title, bullet, or caption (including split captions "Left: …; Right: …"); a bullet count that repeats across pages when each page's count should follow its own content; a claim or phrase repeated across pages; a caption or bullet that echoes its own page title or bullets; and a standalone sentence before or after a table that only announces or summarizes the rows.
 3. For Chinese slide text, when Main has declared and supplied the methods, apply `plain-chinese-writing` for direct and natural prose, `zh-format-humanizer` for evidence-based AI-like phrasing removal, and `zh-writing-review` for page-level clarity. For English slide text, apply `format-humanizer` for AI-tell removal and `writing-review` for page-level review when Main has declared and supplied them. Preserve facts, qualifiers, numbers, citations, and causal direction.
 4. Discuss the draft page by page with the user. Revise the current batch from the user's feedback and keep unresolved content decisions visible instead of silently choosing them.
@@ -144,7 +163,7 @@ Before selecting images, authoring visuals, or writing layout code, write the te
 
 ## Confirm the text plan
 
-Present a numbered outline as the complete numbered page draft after the page-level discussion. Update the Markdown content-plan file with the agreed page content and state explicit assumptions and decisions that remain reversible. Wait for user confirmation before visual authoring begins. The user may confirm a batch after its pages are clear, but no page may enter the visual stage with unresolved content approval.
+Present a numbered outline as the complete numbered page draft after the page-level discussion, using the text that the language-matched `writer` or `zh-writer` text tool wrote from the confirmed tree round. Update the Markdown content-plan file with the agreed page content and state explicit assumptions and decisions that remain reversible. Wait for user confirmation before visual authoring begins. The user may confirm a batch after its pages are clear, but no page may enter the visual stage with unresolved content approval. After that confirmation, the separate slide-order reconciliation task in the next section operates on this unchanged plan, and it runs before any Beamer frame is generated.
 
 This confirmation is a REQUIRED conversational checkpoint requested by the user. "Not a plugin-owned gate or permission system" means the runtime never blocks you — it does not mean the confirmation is optional. Do not begin visual authoring without it. Once the text plan is confirmed, use the Markdown content plan as the sole source for the initial Beamer translation. The post-confirmation plan is canonical for the initial generation only; subsequent edits to Beamer or PPTX use the selected target's current revision as their own canonical source. A content or layout finding discovered after the initial generation is resolved in place at the stage where it is found and is not propagated back to the Markdown content plan. Any prose change still comes from the language-matched `writer` or `zh-writer` text tool and is applied verbatim in place.
 

@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, Volcengine Ark Coding Plan model integration, and Alibaba Bailian Token Plan image and speech bridges.",
-    "version": "1.0.59",
+    "version": "1.0.60",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "omp-config",
       "description": "Optional OMP workflow references, config assets, notify-only hooks, opt-in hook templates, and diagnostics.",
-      "version": "0.2.12",
+      "version": "0.2.13",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -32,6 +32,7 @@
         "./skills/omp-marketplace-plugin-activation",
         "./skills/slides-storyline",
         "./skills/slides-visual-repair-pipeline",
+        "./skills/storyline-workbench",
         "./skills/writing-skills",
         "./skills/zoom-out"
       ]
@@ -39,7 +40,7 @@
     {
       "name": "writing-helper",
       "description": "Standalone OMP writing helper plugin with frugal-pi compatible writing skills, agents, logic, style, and citation checks",
-      "version": "0.2.32",
+      "version": "0.2.33",
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",

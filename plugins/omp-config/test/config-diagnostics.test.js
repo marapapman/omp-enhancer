@@ -71,6 +71,7 @@ const expectedBundledSkills = [
   'latex-beamer-slides',
   'omp-marketplace-plugin-activation',
   'slides-storyline',
+  'storyline-workbench',
   'writing-skills',
   'zoom-out',
 ];

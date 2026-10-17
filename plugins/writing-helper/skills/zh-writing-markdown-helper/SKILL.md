@@ -53,6 +53,9 @@ SEARCH/REPLACE 块或 unified diff。Main 保留权限决策和实际文件修�
 | storyline.md | 研究叙事、核心想法、方法 |
 | .pi/research/literature.md | 文献摘要 |
 | .pi/research/papers/ | 下载的论文，只读当前段落相关的 |
+| .storyline/exports/r<版本>/ | 已确认的故事快照，含 storyline.md 与 story.json |
+
+任务显式传入已确认的故事快照路径与版本时，该快照就是交付物的故事来源，优先于 storyline.md、.pi/research/storyline.md 以及目标现稿的旧大纲。普通局部修改仍以目标现稿的当前版本为准。据快照写作时，按快照的节点结构和层级组织章节与段落，不把每个节点强制转成固定层级的标题。交付说明里列出所有节点 ID 的覆盖情况，未使用的节点写明原因并交回用户，不得静默丢弃证据。
 
 ## 可选精细模式
 

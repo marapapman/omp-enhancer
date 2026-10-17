@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "note": "Bundled browser distributions. The workbench runs offline and never loads a CDN. Files were extracted from the official npm tarballs listed below and verified against the registry integrity values before extraction.",
+  "packages": [
+    {
+      "name": "markdown-it",
+      "version": "14.1.0",
+      "license": "MIT",
+      "registry": "https://registry.npmjs.org/markdown-it/14.1.0",
+      "tarball": "https://registry.npmjs.org/markdown-it/-/markdown-it-14.1.0.tgz",
+      "tarballIntegrity": "sha512-a54IwgWPaeBCAAsv13YgmALOF1elABB08FxO9i+r4VFk5Vl4pKokRPeX8u5TCgSsPi6ec1otfLjdOpVcgbpshg==",
+      "tarballShasum": "3c3c5992883c633db4714ccb4d7b5935d98b7d45",
+      "extractedFrom": "package/dist/markdown-it.min.js",
+      "files": [
+        {
+          "path": "markdown-it/markdown-it.min.js",
+          "integrity": "sha512-LMzdh9f2IrP9SNTjJ5n7W3DNIyKn9WmMUP1zSXNR9hy388KJ2WetvVgTkxx/QHmbuVN8uiBkaiZtYjjl99oeRw=="
+        },
+        {
+          "path": "markdown-it/LICENSE",
+          "integrity": "sha512-Nv2sy0QRUdQZLQm3WpHARdL4SlkoN8GCFWv3R1Lpp5eEv6gsr5R6zCkRNcIDdmwYis3bBnD6GuWp8hVZL0w6Ag=="
+        }
+      ]
+    },
+    {
+      "name": "katex",
+      "version": "0.16.22",
+      "license": "MIT",
+      "registry": "https://registry.npmjs.org/katex/0.16.22",
+      "tarball": "https://registry.npmjs.org/katex/-/katex-0.16.22.tgz",
+      "tarballIntegrity": "sha512-XCHRdUw4lf3SKBaJe4EvgqIuWwkPSo9XoeO8GjQW94Bp7TWv9hNhzZjZ+OH9yf1UmLygb7DIT5GSFQiyt16zYg==",
+      "tarballShasum": "d2b3d66464b1e6d69e6463b28a86ced5a02c5ccd",
+      "extractedFrom": "package/dist/{katex.min.js,katex.min.css,fonts/*}",
+      "files": [
+        {
+          "path": "katex/katex.min.js",
+          "integrity": "sha512-yt1Fwa8fRL2vGW3JsQTx2uspBD8NxZFV/+IoR1EKBDkKC3qFlADUIKYmIE9/xd2wfBkxHeHGayXhnCVZ0+EmqA=="
+        },
+        {
+          "path": "katex/katex.min.css",
+          "integrity": "sha512-fn414+8Ct7Q3RJpEyj+sYuwe05y4MStoCgD+isYLrclbBjtpRja4RAhW9/Xowsyeaw77WBF5smVsfh6XVYxwlg=="
+        },
+        {
+          "path": "katex/LICENSE",
+          "integrity": "sha512-bjkE+o6cXdw0nF9qFkbKTsS7/IIKIV3S2m+L+RlwAuLxhjZ5sS1ZlN8IvSiCnExWwkT6db1UUXzSaRIiLn+mDg=="
+        }
+      ],
+      "fonts": {
+        "directory": "katex/fonts",
+        "count": 60,
+        "bundleIntegrity": "sha512-tyYTjGeohZUpzlw+jQz2Zx53q7T4ff/36h5mNlt9WN9ANibApV+6WT/Pj7udEgE5LL5X5FBlB47wisTCyFlJug==",
+        "bundleIntegrityNote": "SHA-512 over the concatenated bytes of the font files sorted by file name."
+      }
+    }
+  ]
+}

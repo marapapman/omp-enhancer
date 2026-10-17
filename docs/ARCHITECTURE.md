@@ -29,11 +29,13 @@ OMP 负责系统提示、用户指令、active tools、动态 Available Agents�
 ## 插件职责
 | 插件 | 运行职责 | 不负责的事项 |
 | --- | --- | --- |
-| `omp-config` | workflow 参考、PPT/文档/视觉 Skills、配置诊断、managed context 同步、notify-only hooks、`/enhancer-tools` 工具组激活 | 自动覆盖用户配置、自动加载完整目录、授权文件或命令操作 |
+| `omp-config` | workflow 参考、PPT/文档/视觉 Skills、故事树工作台（本地网站与 `.storyline/` 数据）、配置诊断、managed context 同步、notify-only hooks、`/enhancer-tools` 工具组激活 | 自动覆盖用户配置、自动加载完整目录、授权文件或命令操作 |
 | `writing-helper` | 英文和中文写作逻辑、风格、引用、保真检查，以及 writer/checker Agents 和 Skills | 阻止交付、替用户自动改写、替用户持久化文件 |
 | `omp-fact-checker` | claim extraction、事实计划、A/B evidence、cross-check、strict verdict、报告和 fact review | 把缺失证据变成生命周期 gate、把兼容证据升级为证明 |
 | `volcengine-coding-plan` | 通过 OMP 原生 `registerProvider` 注册 Coding Plan OpenAI 兼容模型，并把 API-key 登录接入原生 `/login` | 不修改宿主认证存储、不替宿主路由、不发现或猜测未公开模型 |
 | `alibaba-token-plan-media` | 通过 OMP 原生 `registerProvider` 注册 provider，把阿里云百炼 Token Plan 的生图与语音模型暴露给原生 image 和 speech 角色，进程内起一个只监听 127.0.0.1 的 HTTP 桥 | 不覆盖内置同名 provider、不注册工具、不改默认角色 |
+
+`omp-config` 同时打包故事树工作台。每个项目对应一个只绑定 `127.0.0.1` 的本地网站，数据保存在项目内的 `.storyline/` 目录；插件内的 `scripts/storyline-workbench.mjs` 是 CLI 入口，提供 `init`、`serve`、`context` 和 `propose` 四个子命令。工作台不注册插件工具、事件 hook、自启动器或模型 provider，不增加第六个插件，也不把宿主变成多人平台。
 
 `volcengine-coding-plan` 使用 `https://ark.cn-beijing.volces.com/api/coding/v3`，静态暴露官方 Coding Plan 模型名；模型选择、凭证保存和请求发送仍由 OMP 原生 `/login`、`/model`、AuthStorage 与 OpenAI-compatible transport 负责。
 
@@ -52,6 +54,8 @@ For Beamer/PPT titles, body text, captions, labels, notes, and narrative copy, `
 PPT copy must avoid announcer transitions such as `The real question is`, `A new question is`, `This raises a deeper question`, `Let us turn to`, `新的问题是`, `真正的问题是`, `这就引出了一个更深的问题`, and `接下来我们看`; facts or a concrete dependency should carry the transition. It must also avoid hollow unsupported significance claims such as `this is important/significant/transformative`, `this demonstrates the power/value`, `意义重大`, `具有重要意义`, `标志着`, `彰显了`, `开创了`, and `充分说明`. Replace those claims with concrete evidence, scope, or source, or remove them. The evidence-backed exception is to retain significance/evaluation wording only when that concrete evidence, scope, or source is stated.
 
 PPT 相关能力由 `omp-config` 打包，包括 `latex-beamer-slides`、`beamer-to-powerpoint`、`slides-storyline`、`frontend-design`、`canvas-design` 和 `docx`。PowerPoint 输出是可选分支：在最终已验证的 Beamer visual revision 之后、且仅当 PPTX 在 scope 时，`beamer-to-powerpoint` 使用固定外部 `beamer2pptx` Skill/repository（`https://github.com/xdmlxdml/beamer2pptx/tree/main/beamer2pptx`），不要求用户另行选择转换器。输入必须是最终已验证的 Beamer PDF，并在可用时提供对应 `.tex`、宏和字体源；转换只读，不修改 Markdown/Beamer 内容。一个 producing `task` 绑定单一 current PPTX revision 并返回当前渲染证据；一个未产出该 revision 的独立只读 reviewer（Main 或 task）检查页数与顺序、可编辑性、裁切/溢出、重叠、边距/对齐、层级/字体、宽高比、栅格/矢量处理以及相对最终 Beamer PDF 的 fidelity。若发现支持的版式问题，producing task 最多对可编辑 PPTX 做一次 bounded fix，保留可见内容、公式、页序以及 Markdown/Beamer 源，重新渲染 fresh evidence 后由同一 reviewer 确认一次；内容或排版发现在发现阶段就地修复，不回写 Markdown 内容计划。本节三类操作走单项通路、且互不反向：storyline-only 修改只动 Markdown 内容计划，不触及 .tex/PDF/PPTX，也不自动生成或重新生成任何 deck；Beamer-only 修改只动 Beamer、必要目标依赖以及当前 deck 的编译/重渲染，不回写 Markdown，且不自动从 Beamer 重建 PPTX；PPTX-only 修改只动既有 PPTX，不动 .tex/源 PDF/源 Markdown，也不由既有 Beamer 重新转换 PPTX 以覆盖 PPTX 端就地修改；只有用户明确要求从 storyline 重生成新 deck、或明确要求从既有 Beamer 转 PPTX 时才执行一次单向通路，不反向回填、不与 storyline 反复对齐。所有 findings 都是 advisory，不是 hard gate、router、自动修复 loop 或 completion authority；不自动发布或覆盖用户文件。Office 文档（`.docx`/`.xlsx`/`.pptx`）的创建、编辑、校验和渲染统一通过 [officecli](https://github.com/iOfficeAI/OfficeCLI) 单二进制完成，`docx` skill 提供其使用契约。
+
+新文章或新演示稿的故事阶段先在 `storyline-workbench` 网站里搭成树并确认。文章按该确认快照组织章节，演示稿的逐页 Markdown 内容计划由对应语言的写作工具据同一快照写成，并记录 `sourceNodeIds` 与 `storyRevision`。已确认的树可以反复载入继续编辑，该版本的导出位于 `.storyline/exports/r<版本>/`。
 
 Beamer 保持为 writing 格式 overlay，不进入 visual 卡片。新 deck 先以分段、逐页讨论的纯文字版开始，并将逐页内容持久化为 Markdown content plan；本次初始生成范围内 Markdown 内容计划是唯一内容源，Beamer .tex 是派生排版产物。后续修改按目标对象走单项通路：storyline-only 不触 .tex/PDF/PPTX，且不自动从 Markdown 重新生成任何 deck；Beamer-only 不回写 Markdown、必要时可改必要目标依赖并编译/重渲染当前 deck，但不自动从 Beamer 转 PPTX；PPTX-only 不动 .tex/源 PDF/源 Markdown，也不由既有 Beamer 重新转换 PPTX 以覆盖 PPTX 端就地修改。内容或排版发现在当前目标对象上就地修复，不回写 Markdown 内容计划，任何发现都不能反向回填 source。用户确认每页内容后，由一个独立 task 在 Markdown content plan 上先做页序审查（消除内容交叉、保持内容模块语义一致、整体顺序逻辑有序），审查通过并经用户确认后才进入逐页配图和基础排版；用户确认基础排版后，再进入现有视觉精修链。A single read-only visual precheck is performed by Main or task, with Main naturally selecting the one owner (never both), after task's initial render and before the task layout pass；findings are advisory only and inform the normal task pass，不产生 verdict 或 repair loop。Task then integrates and renders the final revision, which Main reviews read-only as the single review owner (a task that did not produce the revision may review instead)。Main 不因该预检获得 compile、render、edit 或 reconcile ownership。
 

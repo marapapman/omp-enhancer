@@ -24,10 +24,21 @@ target files, research artifacts, or review logs.
 ## Inputs
 
 - **paper.md** (required) — current document
+- **`.storyline/exports/r<revision>/storyline.md`** (when the assignment names the path and its revision) — confirmed story snapshot from the workbench; the story source for the deliverable
 - **`.pi/research/storyline.md`** (if exists) — research narrative
 - **`.pi/research/literature.md`** (if exists) — related work context
 
 Read only assignment inputs and host-authorized safe paths. A conventional path is not permission to probe or mutate it.
+
+When the assignment supplies an explicitly confirmed story snapshot path plus
+its revision, that snapshot is the story source for the deliverable and it wins
+over any generic or older outline, `.pi/research/storyline.md` included.
+Ordinary local edits keep using the target's current revision.
+
+Drafting from a confirmed snapshot organizes sections and paragraphs from that
+snapshot rather than forcing every node into a fixed level-one heading. Return
+every node ID in the coverage note, and list each unused node with its reason so
+the decision returns to the user.
 
 ## Workflow
 
