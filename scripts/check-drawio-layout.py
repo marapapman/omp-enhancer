@@ -21,6 +21,10 @@
   C1  填色配额：非 text 顶点 fillColor 仅 none/#FFFFFF/#000000/调色板四色（#D5171A/#037870/#1668B5/#E08A1E）；
       gradientColor 仅 none 或等于 fillColor；灰底、浅色水洗、调色板外彩色 = 失败
       （white/black 颜色名与三位短十六进制归一化后判定）
+  C2  墨色配额：全部顶点与边的 strokeColor/fontColor 仅 none/default/灰阶（R=G=B）/调色板；
+      调色板外色相（含偏色灰如 #AEB8BD、纯红 #FF0000）= 失败
+  S1  描边分级：未填色（fillColor none/白，缺省按白）黑描边节点的 strokeWidth ≥ 2（缺省按 1 计）；
+      text/edgeLabel/image/frame、灰描边与调色板填色小色块豁免
   R10 f_print_pt = fs × (W_print_mm/25.4×72) / 实际裁剪像素宽 ≥ f_min（全部 fontSize）
   W1  CJK 行宽公式: n_cjk×fs + 0.6×n_ascii×fs + 0.5×n_sep×fs ≤ 盒内宽 − padding
       覆盖文本顶点（inner = w − 2×padding）与含 value 的节点/容器
@@ -299,6 +303,57 @@ def canonical_color(value):
         normalized = "#" + "".join(ch * 2 for ch in normalized[1:])
     return normalized
 
+def is_gray_hex(normalized):
+    """七位十六进制且 R=G=B（含黑白）。"""
+    if not (normalized.startswith("#") and len(normalized) == 7):
+        return False
+    try:
+        r, g, b = (int(normalized[i:i + 2], 16) for i in (1, 3, 5))
+    except ValueError:
+        return False
+    return r == g == b
+
+
+def ink_palette_violations(cell):
+    """strokeColor/fontColor 越界列表；允许 none/default/灰阶/调色板。"""
+    st = style_dict(cell)
+    bad = []
+    for key in ("strokeColor", "fontColor"):
+        value = st.get(key)
+        if value is None:
+            continue
+        normalized = canonical_color(value)
+        if normalized in ("none", "default") or normalized in PALETTE_FILLS or is_gray_hex(normalized):
+            continue
+        bad.append("%s=%s" % (key, value))
+    return bad
+
+
+OUTLINE_MIN_WIDTH = 2.0
+
+
+def outline_weight_violation(cell_id, cell):
+    """未填色黑描边节点的描边宽度；返回 None（不适用）或 (ok, 说明)。"""
+    style = cell.get("style", "")
+    if cell_id == "frame" or style.startswith("text;") or style.startswith("edgeLabel"):
+        return None
+    st = style_dict(cell)
+    if st.get("shape") == "image":
+        return None
+    fill = canonical_color(st.get("fillColor", "#ffffff"))
+    if fill not in ("none", "#ffffff"):
+        return None
+    stroke = canonical_color(st.get("strokeColor", "#000000"))
+    if stroke not in ("#000000", "default"):
+        return None
+    try:
+        width = float(st.get("strokeWidth", "1"))
+    except ValueError:
+        return False, "strokeWidth=%s 非数字" % st.get("strokeWidth")
+    return (width >= OUTLINE_MIN_WIDTH,
+            "黑描边节点 strokeWidth=%g ≥ %g" % (width, OUTLINE_MIN_WIDTH))
+
+
 
 def fill_palette_violation(cell):
     """fillColor/gradientColor 越界判定；(ok, 说明)。"""
@@ -412,6 +467,18 @@ def main():
             continue
         c1_ok, c1_detail = fill_palette_violation(r[5])
         check("C1", c1_ok, "%s %s" % (cid, c1_detail))
+
+    # C2: 墨色配额（全部顶点与边的描边/字色）
+    for cid, c in list((i, r[5]) for i, r in verts.items()) + list(edges.items()):
+        bad = ink_palette_violations(c)
+        if bad:
+            check("C2", False, "%s %s 不在灰阶/调色板" % (cid, " ".join(bad)))
+
+    # S1: 描边分级（未填色黑描边节点 ≥ 2）
+    for cid, r in verts.items():
+        s1 = outline_weight_violation(cid, r[5])
+        if s1 is not None:
+            check("S1", s1[0], "%s %s" % (cid, s1[1]))
 
     # R10: 字号折算（style fontSize + value 内联 font-size）
     f_pt = lambda fs: fs * (args.print_width_mm / 25.4 * 72) / args.crop_px

@@ -48,6 +48,22 @@ test('visual workflow stays drawio/static-visual oriented', () => {
   assert.match(scope, /fresh-evidence confirmation/iu);
   assert.match(scope, /align=left, imagePosition=left and imageWidth\/imageHeight must all be set/iu);
   assert.match(scope, /edges connect the actual endpoints/iu);
+  // Aesthetic recipe: generation-first icons, color rhythm, and structural hierarchy
+  // must not regress to the opt-in, ban-only rules that produced bare wireframes.
+  assert.match(scope, /generation-first/iu);
+  assert.doesNotMatch(scope, /raster assets (?:are|stay) opt-in/iu);
+  assert.match(scope, /5–12%/u);
+  assert.match(scope, /lead decorative hue/iu);
+  assert.match(scope, /65–85%/u);
+  assert.match(scope, /[（(]C2[)）]/u);
+  assert.match(scope, /[（(]S1[)）]/u);
+  assert.ok(visual.suggestedFlow.some((line) => /image-capable task/iu.test(line) && /text-only/iu.test(line)));
+  // v3 refinements after the probe review must not silently regress either.
+  assert.match(scope, /chartjunk/iu);
+  assert.match(scope, /ink bounding box/iu);
+  assert.match(scope, /0\.4–0\.8× the card width/iu);
+  assert.match(scope, /intentional bundling/iu);
+  assert.match(scope, /never merge them[\s\S]{0,220}does not forbid/iu);
   assert.equal(Object.hasOwn(visual, 'delegation'), false, 'visual must not carry a delegation field');
   assert.equal(Object.hasOwn(visual, 'steps'), false, 'visual must not carry a steps field');
 });
