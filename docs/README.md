@@ -7,11 +7,10 @@ Current contracts and development guides:
 - [Workflow definitions and generation](WORKFLOW_DEVELOPMENT.md)
 
 Current marketplace scope includes `omp-config`, `writing-helper`,
-`omp-fact-checker`, `volcengine-coding-plan`, `alibaba-token-plan-media`,
-and `opendesign-coding-plan`. The workflow catalog contains `writing`,
-`research`, and `visual` domains. Code-enhancement core, testing-enhancer,
-ECC coding skills, and their runtime guidance are not part of the current
-installation.
+`omp-fact-checker`, `volcengine-coding-plan`, and `opendesign-coding-plan`. The
+workflow catalog contains `writing`, `research`, and `visual` domains.
+Code-enhancement core, testing-enhancer, ECC coding skills, and their runtime
+guidance are not part of the current installation.
 
 All workflow cards are advisory. Main orchestrates through ANALYZE -> EXECUTE
 -> REVIEW; Skills, Agents, permissions, external effects, and completion remain

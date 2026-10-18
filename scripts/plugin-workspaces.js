@@ -3,7 +3,6 @@ const definitions = [
   { name: 'writing-helper', directory: 'writing-helper' },
   { name: 'omp-fact-checker', directory: 'omp-fact-checker' },
   { name: 'volcengine-coding-plan', directory: 'volcengine-coding-plan' },
-  { name: 'alibaba-token-plan-media', directory: 'alibaba-token-plan-media' },
   { name: 'opendesign-coding-plan', directory: 'opendesign-coding-plan' },
 ]
 
