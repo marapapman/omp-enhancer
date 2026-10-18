@@ -138,18 +138,6 @@
       }
     },
     {
-      "id": "natural-ecc-nested",
-      "category": "omp-config-ecc",
-      "fixture": "skill-discovery-readonly",
-      "prompt": "Create a concise troubleshooting checklist for a home Pi-hole installation where DHCP clients intermittently bypass local DNS and DNS-over-HTTPS is enabled. Distinguish router, DHCP, client, upstream, and cache checks. Do not inspect files, change configuration, or use the network.",
-      "expectations": {
-        "minWorkflowReferenceReads": 1,
-        "requiredObservedSkills": ["homelab-pihole-dns"],
-        "forbiddenSkills": ["ecc-skill-catalog", "docker-compose", "frontend-design", "xlsx"],
-        "maxObservedSkills": 3
-      }
-    },
-    {
       "id": "natural-subagent-isolation",
       "category": "omp-native-agent-control",
       "fixture": "skill-discovery-readonly",
@@ -172,7 +160,7 @@
         "minNativeTaskForks": 1,
         "maxNativeTaskAssignmentAttempts": 1,
         "requireNativeTaskCompletion": true,
-        "forbiddenSkills": ["writing-review", "fact-checking", "docker-compose", "omp-enhancer-workflows", "xlsx", "ecc-skill-catalog"]
+        "forbiddenSkills": ["writing-review", "fact-checking", "docker-compose", "omp-enhancer-workflows", "xlsx"]
       }
     },
     {
@@ -194,7 +182,7 @@
         "maxNativeTodoCalls": 0,
         "maxNativeTaskCalls": 0,
         "maxObservedSkills": 0,
-        "forbiddenSkills": ["writing-review", "fact-checking", "docker-compose", "omp-enhancer-workflows", "xlsx", "pdf", "frontend-design", "webapp-testing", "ecc-skill-catalog"]
+        "forbiddenSkills": ["writing-review", "fact-checking", "docker-compose", "omp-enhancer-workflows", "xlsx", "pdf", "frontend-design", "webapp-testing"]
       }
     }
   ]

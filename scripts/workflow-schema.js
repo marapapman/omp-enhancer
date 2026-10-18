@@ -4,7 +4,6 @@ const WORKFLOW_FIELDS = new Set([
   'id',
   'chooseWhen',
   'skills',
-  'catalogSkills',
   'roles',
   'suggestedFlow',
   'scopeNotes',
@@ -25,23 +24,10 @@ function normalizeWorkflow(raw, seen) {
   if (seen.has(id)) throw new Error(`Duplicate workflow id: ${id}.`);
   seen.add(id);
 
-  const skills = frozenUniqueIdentifiers(raw.skills, `${id}.skills`, RESOURCE_ID);
-  const catalogSkills = frozenUniqueIdentifiers(
-    raw.catalogSkills,
-    `${id}.catalogSkills`,
-    RESOURCE_ID,
-  );
-  for (const skill of catalogSkills) {
-    if (!skills.includes(skill)) {
-      throw new Error(`${id}.catalogSkills contains non-candidate ${skill}.`);
-    }
-  }
-
   return Object.freeze({
     id,
     chooseWhen: requiredText(raw.chooseWhen, `${id}.chooseWhen`),
-    skills,
-    catalogSkills,
+    skills: frozenUniqueIdentifiers(raw.skills, `${id}.skills`, RESOURCE_ID),
     roles: frozenUniqueIdentifiers(raw.roles, `${id}.roles`, RESOURCE_ID),
     suggestedFlow: requiredStrings(raw.suggestedFlow, `${id}.suggestedFlow`),
     scopeNotes: frozenStrings(raw.scopeNotes, `${id}.scopeNotes`),

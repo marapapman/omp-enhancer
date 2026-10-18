@@ -190,8 +190,6 @@ function summarizeState(state) {
       commandOnlyNames: skillNames.filter((name) => !promptSkillNameSet.has(name)),
       systemPromptReminderCount: count(joined, skillDiscoveryReminder),
       reminderInTaskSchema: JSON.stringify(task ?? {}).includes(skillDiscoveryReminder),
-      eccCatalogVisible: promptSkillNameSet.has('ecc-skill-catalog'),
-      nestedEccExampleDirectlyVisible: promptSkillNameSet.has('angular-developer'),
       representativeVisibility: Object.fromEntries([
         'writing-review',
         'plain-chinese-writing',

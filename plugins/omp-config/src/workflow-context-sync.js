@@ -1,12 +1,6 @@
 import { resolvePluginRoot } from './plugin-root.js';
 import { loadWorkflowContextAssets } from './workflow-context-assets.js';
 import {
-  ADVISOR_BLOCK_END,
-  ADVISOR_BLOCK_START,
-  AGENTS_BLOCK_END,
-  AGENTS_BLOCK_START,
-  CATALOG_BLOCK_END,
-  CATALOG_BLOCK_START,
   mergeManagedCatalog,
   mergeMarkdownManagedBlock,
   mergeWatchdogManagedBlock,
@@ -16,18 +10,6 @@ import {
   readWorkflowContextTargetFiles,
   resolveWorkflowContextTarget,
 } from './workflow-target-files.js';
-
-export {
-  ADVISOR_BLOCK_END,
-  ADVISOR_BLOCK_START,
-  AGENTS_BLOCK_END,
-  AGENTS_BLOCK_START,
-  CATALOG_BLOCK_END,
-  CATALOG_BLOCK_START,
-  mergeManagedCatalog,
-  mergeMarkdownManagedBlock,
-  mergeWatchdogManagedBlock,
-};
 
 export async function syncWorkflowContext(input = {}) {
   const pluginRoot = await resolvePluginRoot(input.root);

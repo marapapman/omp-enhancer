@@ -20,7 +20,7 @@ OMP 负责系统提示、用户指令、active tools、动态 Available Agents�
 - `plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md`：紧凑选择索引；
 - `plugins/omp-config/skills/omp-enhancer-workflows/references/*.md`：每个域一张按需参考卡。
 
-索引与卡片都是 advisory reference。顶层 Skill 使用 `D` exact URI；当前没有 nested ECC `C` 候选。它们不构成 load set、路由、权限或完成条件。完整定义只包含 `id`、`chooseWhen`、`skills`、`catalogSkills`、`roles`、`suggestedFlow` 和 `scopeNotes`。
+索引与卡片都是 advisory reference。顶层 Skill 使用 `D` exact URI。它们不构成 load set、路由、权限或完成条件。完整定义只包含 `id`、`chooseWhen`、`skills`、`roles`、`suggestedFlow` 和 `scopeNotes`。
 
 `AGENTS.md` 和 `WATCHDOG.yml` 由 `syncWorkflowContext` 管理；`CLAUDE.md` 是随插件打包的镜像资产，需手动更新。该同步流程实际只写入 catalog、`AGENTS.md` 和 `WATCHDOG.yml` 三个目标，不安装或更新 `CLAUDE.md`。三者不导入完整目录，只说明 OMP 原生权威与 `ANALYZE -> EXECUTE -> REVIEW` advisory。它们指向 `skill://omp-enhancer-workflows` 的三域目录；Main 按任务需要选择 Skill 和 Agent。
 

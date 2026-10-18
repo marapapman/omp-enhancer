@@ -75,29 +75,22 @@ test('every workflow Agent candidate resolves to a packaged or native Agent', as
   }
 });
 
-test('workflow discovery metadata matches direct and ECC-catalog packaging', async () => {
+test('workflow Skill candidates are top-level packaged Skills or external marketplace Skills', async () => {
   const skillFiles = (await findPackagedSkillMarkdownFiles())
     .filter((file) => path.basename(file) === 'SKILL.md');
-  const locations = new Map();
   const directlyVisible = new Set();
 
   for (const file of skillFiles) {
     const name = frontmatterName(await readFile(file, 'utf8'));
     if (!name) continue;
-    locations.set(name, file);
     const segments = file.split(path.sep);
     const skillsIndex = segments.lastIndexOf('skills');
     if (skillsIndex >= 0 && segments.length - skillsIndex === 3) directlyVisible.add(name);
   }
 
-
   for (const definition of workflowDefinitions) {
-    const expectedCatalogSkills = definition.skills.filter((skill) => !directlyVisible.has(skill) && !externalWorkflowSkills.has(skill));
-    assert.deepEqual(
-      definition.catalogSkills,
-      expectedCatalogSkills,
-      `${definition.id} must classify every non-visible candidate as catalog-only`,
-    );
+    const hidden = definition.skills.filter((skill) => !directlyVisible.has(skill) && !externalWorkflowSkills.has(skill));
+    assert.deepEqual(hidden, [], `${definition.id} Skill candidates must be directly visible`);
   }
 });
 

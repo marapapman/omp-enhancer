@@ -28,20 +28,15 @@ test('catalog v45 defines exactly the three advisory workflows (writing, researc
     assert.equal(typeof definition.chooseWhen, 'string');
     assert.ok(definition.chooseWhen.length > 0, `${definition.id} chooseWhen`);
     assert.ok(Array.isArray(definition.skills) && definition.skills.length > 0, `${definition.id} skills`);
-    assert.ok(Array.isArray(definition.catalogSkills), `${definition.id} catalogSkills`);
-    for (const skill of definition.catalogSkills) {
-      assert.ok(definition.skills.includes(skill), `${definition.id} catalogSkills must be a subset of skills`);
-    }
     assert.ok(Array.isArray(definition.roles) && definition.roles.length > 0, `${definition.id} roles`);
     assert.ok(Array.isArray(definition.suggestedFlow) && definition.suggestedFlow.length > 0, `${definition.id} suggestedFlow`);
     for (const line of definition.suggestedFlow) assert.equal(typeof line, 'string', `${definition.id} suggestedFlow line`);
     assert.ok(Array.isArray(definition.scopeNotes), `${definition.id} scopeNotes`);
-    for (const retired of ['steps', 'delegation', 'delegationDefault', 'composeWith', 'qualityChecks', 'riskNotes']) {
+    for (const retired of ['steps', 'delegation', 'delegationDefault', 'composeWith', 'qualityChecks', 'riskNotes', 'catalogSkills']) {
       assert.equal(Object.hasOwn(definition, retired), false, `${definition.id} must not carry ${retired}`);
     }
   }
   assert.deepEqual(Object.keys(workflowCatalog), workflowIds);
-  assert.equal(new Set(workflowDefinitions.flatMap(({ catalogSkills }) => catalogSkills)).size, 0, 'no ECC catalog candidates remain');
 });
 
 test('writing card keeps the optional fixed beamer2pptx branch bounded', () => {
@@ -49,7 +44,6 @@ test('writing card keeps the optional fixed beamer2pptx branch bounded', () => {
 
   assert.ok(writing, 'workflowCatalog must expose the writing workflow');
   assert.ok(writing.skills.includes('beamer-to-powerpoint'));
-  assert.deepEqual(writing.catalogSkills, []);
   const scope = writing.scopeNotes.join(' ');
   assert.match(
     scope,
@@ -251,7 +245,6 @@ test('workflow schema rejects drift-prone definitions', () => {
     id: 'example.base',
     chooseWhen: 'An example is needed.',
     skills: ['example-skill'],
-    catalogSkills: [],
     roles: ['task'],
     suggestedFlow: ['Perform the example.'],
     scopeNotes: [],
@@ -279,10 +272,7 @@ test('workflow schema rejects drift-prone definitions', () => {
     })]]),
     /reserved managed marker/,
   );
-  assert.throws(
-    () => defineWorkflowCatalog([[valid({ catalogSkills: ['unlisted-candidate'] })]]),
-    /non-candidate/,
-  );
+  assert.throws(() => defineWorkflowCatalog([[valid({ catalogSkills: [] })]]), /unknown field catalogSkills/);
   assert.throws(
     () => defineWorkflowCatalog([[valid({ skills: ['example-skill', 'example-skill'] })]]),
     /duplicate/,

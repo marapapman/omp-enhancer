@@ -2,7 +2,7 @@ export const PROVIDER_ID = 'volcengine-coding-plan';
 export const PROVIDER_NAME = 'Volcengine Ark Coding Plan';
 export const CODING_PLAN_BASE_URL = 'https://ark.cn-beijing.volces.com/api/coding/v3';
 export const CODING_PLAN_API_KEY_URL = 'https://console.volcengine.com/ark/region:ark+cn-beijing/apikey';
-export const CODING_PLAN_API_KEY_INSTRUCTIONS =
+const CODING_PLAN_API_KEY_INSTRUCTIONS =
   'Copy an API key from the Volcengine Ark Coding Plan API-key page.';
 export const CODING_PLAN_API_KEY_ENV_VARS = Object.freeze([
   'ARK_API_KEY',

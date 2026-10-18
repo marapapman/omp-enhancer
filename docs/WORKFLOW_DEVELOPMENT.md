@@ -38,7 +38,6 @@ plugins/omp-config/skills/omp-enhancer-workflows/references/*.md
   id: 'visual',
   chooseWhen: 'Diagrams (draw.io), UI/UX design, static visual artifacts, or rendered figure review.',
   skills: ['drawio-skill', 'assetseeker', 'frontend-design', 'canvas-design', 'format-humanizer', 'zh-format-humanizer'],
-  catalogSkills: [],
   roles: ['task'],
   suggestedFlow: ['Clarify requirements.', 'Draw once.', 'Review once.', 'Deliver.'],
   scopeNotes: ['Keep review advisory and bounded.'],
@@ -50,15 +49,14 @@ plugins/omp-config/skills/omp-enhancer-workflows/references/*.md
 - `id` 全局唯一、稳定、小写；catalog v44 只有 3 个 ID（`writing`、`research`、`visual`）；
 - `chooseWhen` 描述用户可观察的选择条件，不写关键词路由规则；
 - `skills` 使用精确 Skill frontmatter 名；
-- `catalogSkills` 保留为空数组，不产生 nested ECC URI；
 - `roles` 是可选候选，不绑定步骤或强制 delegation；
 - `suggestedFlow` 和 `scopeNotes` 只提供 advisory 信息，不授予权限。
 
-Schema 会拒绝未知字段、重复 ID、重复资源名、非法标识符和不完整的必填数组。不要恢复 `steps`、`delegation`、`composeWith`、`qualityChecks` 或 `riskNotes`。
+Schema 会拒绝未知字段、重复 ID、重复资源名、非法标识符和不完整的必填数组。不要恢复 `steps`、`delegation`、`composeWith`、`qualityChecks`、`riskNotes` 或 `catalogSkills`。
 
 ## Skill 与 Agent 选择
 
-顶层 Skill 通过 `skill://<name>` exact URI 按需读取。当前没有 `ecc-skill-catalog` 或 nested `C` 候选。Main 根据目标语言、格式、证据要求和视觉输出选择最小 Skill 集；Skill 不自动触发其他 Skill、Agent、命令或文件写入。
+顶层 Skill 通过 `skill://<name>` exact URI 按需读取。Main 根据目标语言、格式、证据要求和视觉输出选择最小 Skill 集；Skill 不自动触发其他 Skill、Agent、命令或文件写入。
 
 `writer`/`zh-writer` 是唯一文字作者，也是专用的语言匹配文本工具（非独立通用 agent）：所有 prose/copy（起草、改写、翻译、标题、正文、caption、label、narrative 和 UI copy）按目标正文语言分别交给英文 `writer` 或中文 `zh-writer`，混合语言分别调度；不存在 Main 直接处理 minor edit 的 fallback。Main 只识别语言、调度文本工具、传递完整约束、原样机械集成返回文本并做最终验收。当前 OMP ExtensionAPI 只暴露 `registerTool`（命令类工具），无插件模型调用 API，这两个文本工具由宿主打包 Agent 文件作为兼容适配器承载，适配器元数据保持不变，也不授予文本工具代码或文件权限。`writer`/`zh-writer` 始终 proposal-only，只返回完整文本或有界 diff；Main 不得改写 proposal。`checker`/`zh-checker` 只交付 report。
 

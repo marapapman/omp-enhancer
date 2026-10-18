@@ -13,7 +13,7 @@ function snapshotNode(node) {
   return canonicalNode({ ...node, revision: node.revision ?? 1 });
 }
 
-export function exportStoryJson(snapshot) {
+function exportStoryJson(snapshot) {
   return {
     schemaVersion: SCHEMA_VERSION,
     projectId: snapshot.projectId,
@@ -31,7 +31,7 @@ export function exportStoryJson(snapshot) {
   };
 }
 
-export function escapeTableCell(value) {
+function escapeTableCell(value) {
   return String(value)
     .replace(/\r\n?|\n/gu, '<br>')
     .replace(/\|/gu, '\\|');
@@ -158,7 +158,7 @@ export function renderStoryMarkdown(snapshot) {
   return `${sections.join('\n\n')}\n`;
 }
 
-export function buildFeedbackJson(snapshot, { generatedAt }) {
+function buildFeedbackJson(snapshot, { generatedAt }) {
   const revisions = new Map(snapshot.nodes.map((node) => [node.id, node.revision ?? 1]));
   return {
     schemaVersion: SCHEMA_VERSION,

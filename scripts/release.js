@@ -29,7 +29,7 @@ async function main() {
   }
 }
 
-export function parseArgs(args) {
+function parseArgs(args) {
   const options = {
     plugin: null,
     version: null,
@@ -177,7 +177,7 @@ export async function applyRelease(result, transactionOptions) {
   ], transactionOptions)
 }
 
-export async function writeJsonFilesTransaction(files, { onStep } = {}) {
+async function writeJsonFilesTransaction(files, { onStep } = {}) {
   if (!Array.isArray(files) || files.length === 0) return
   if (onStep !== undefined && typeof onStep !== 'function') {
     throw new Error('release transaction onStep must be a function')

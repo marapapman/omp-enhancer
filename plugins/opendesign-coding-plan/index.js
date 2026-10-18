@@ -36,12 +36,12 @@ const execFileAsync = promisify(execFile)
 export const PROVIDER_ID = 'opendesign'
 export const PROVIDER_NAME = 'OpenDesign'
 export const BASE_URL = (process.env.OPENDESIGN_LINK_BASE ?? 'https://amr-link.open-design.ai/v1').replace(/\/+$/, '')
-export const CONTROL_BASE = (process.env.OPENDESIGN_CONTROL_BASE ?? 'https://amr-api.open-design.ai/api/v1').replace(/\/+$/, '')
-export const API_KEY_URL = 'https://open-design.ai/cloud/api-keys'
-export const API_KEY_INSTRUCTIONS = 'Create an API key in the OpenDesign cloud console, then paste it here.'
+const CONTROL_BASE = (process.env.OPENDESIGN_CONTROL_BASE ?? 'https://amr-api.open-design.ai/api/v1').replace(/\/+$/, '')
+const API_KEY_URL = 'https://open-design.ai/cloud/api-keys'
+const API_KEY_INSTRUCTIONS = 'Create an API key in the OpenDesign cloud console, then paste it here.'
 export const API_KEY_ENV_VARS = Object.freeze(['OPENDESIGN_API_KEY', 'OPENDESIGN_RUNTIME_KEY'])
 export const VELA_PACKAGE = '@powerformer/vela-cli'
-export const VELA_INSTALL_HINT = `install the Vela CLI (npm i -g ${VELA_PACKAGE}) or point OPENDESIGN_VELA_PATH at it`
+const VELA_INSTALL_HINT = `install the Vela CLI (npm i -g ${VELA_PACKAGE}) or point OPENDESIGN_VELA_PATH at it`
 
 const HTTP_TIMEOUT_MS = 10_000
 const VELA_TIMEOUT_MS = 20_000
@@ -93,7 +93,7 @@ function positive(value, fallback) {
   return n !== undefined && n > 0 ? Math.floor(n) : fallback
 }
 
-export function resolveEnvApiKey(env = process.env) {
+function resolveEnvApiKey(env = process.env) {
   if (!env || typeof env !== 'object') return undefined
   for (const name of API_KEY_ENV_VARS) {
     const value = env[name]
@@ -102,7 +102,7 @@ export function resolveEnvApiKey(env = process.env) {
   return undefined
 }
 
-export function mapAmrModel(raw) {
+function mapAmrModel(raw) {
   const id = firstString(raw?.id)
   if (!id || raw?.enabled === false) return null
   const metadata = raw?.metadata && typeof raw.metadata === 'object' ? raw.metadata : {}
@@ -121,7 +121,7 @@ export function mapAmrModel(raw) {
   }
 }
 
-export async function fetchAmrModels(apiKey, fetchImpl = fetch) {
+async function fetchAmrModels(apiKey, fetchImpl = fetch) {
   const res = await fetchImpl(`${BASE_URL}/models`, {
     headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
@@ -175,7 +175,7 @@ export function readDesktopProfile(configPath, env = process.env) {
   return null
 }
 
-export function velaInstallCandidates(env = process.env, platform = process.platform) {
+function velaInstallCandidates(env = process.env, platform = process.platform) {
   const exe = platform === 'win32' ? 'vela.exe' : 'vela'
   if (platform === 'win32') {
     const candidates = []
@@ -205,12 +205,12 @@ function defaultIsExecutable(path) {
   }
 }
 
-export function npmExecutable(env = process.env, platform = process.platform) {
+function npmExecutable(env = process.env, platform = process.platform) {
   return firstString(env?.OPENDESIGN_NPM_PATH, platform === 'win32' ? 'npm.cmd' : 'npm')
 }
 
-export function resolveControlContext(env = process.env, configPath) {
-  const desktop = readDesktopProfile(configPath, env)
+function resolveControlContext(env = process.env) {
+  const desktop = readDesktopProfile(undefined, env)
   return {
     controlKey: firstString(env.OPENDESIGN_CONTROL_KEY, env.VELA_CONTROL_KEY, desktop?.controlKey),
     workspaceId: firstString(env.OPENDESIGN_WORKSPACE_ID, env.VELA_WORKSPACE_ID, desktop?.workspaceId),
@@ -219,7 +219,7 @@ export function resolveControlContext(env = process.env, configPath) {
   }
 }
 
-export async function runVelaJson(velaPath, args, { env = process.env, timeoutMs = VELA_TIMEOUT_MS, execFileImpl = execFileAsync } = {}) {
+async function runVelaJson(velaPath, args, { env = process.env, timeoutMs = VELA_TIMEOUT_MS, execFileImpl = execFileAsync } = {}) {
   let stdout
   try {
     ;({ stdout } = await execFileImpl(velaPath, args, { timeout: timeoutMs, maxBuffer: 1_048_576, encoding: 'utf8', windowsHide: true, env }))
@@ -238,7 +238,7 @@ export async function runVelaJson(velaPath, args, { env = process.env, timeoutMs
   }
 }
 
-export async function velaIsRunnable(velaPath, { env = process.env, execFileImpl = execFileAsync } = {}) {
+async function velaIsRunnable(velaPath, { env = process.env, execFileImpl = execFileAsync } = {}) {
   try {
     await execFileImpl(velaPath, ['--version'], { timeout: 20_000, encoding: 'utf8', windowsHide: true, env })
     return true
@@ -247,7 +247,7 @@ export async function velaIsRunnable(velaPath, { env = process.env, execFileImpl
   }
 }
 
-export async function installVelaCli({ env = process.env, execFileImpl = execFileAsync, timeoutMs = VELA_INSTALL_TIMEOUT_MS } = {}) {
+async function installVelaCli({ env = process.env, execFileImpl = execFileAsync, timeoutMs = VELA_INSTALL_TIMEOUT_MS } = {}) {
   const npm = npmExecutable(env)
   try {
     await execFileImpl(npm, ['install', '--global', VELA_PACKAGE], { timeout: timeoutMs, maxBuffer: 1_048_576, encoding: 'utf8', windowsHide: true, env })
@@ -299,7 +299,7 @@ export function parseVelaLoginOutput(text) {
   return { url, code }
 }
 
-export function velaLoginAuthMessage({ url, code }) {
+function velaLoginAuthMessage({ url, code }) {
   return {
     url,
     instructions: code ? `Enter code ${code} in the browser page to approve this device.` : 'Approve the sign-in request in your browser.',
@@ -454,7 +454,7 @@ export async function loginOpenDesign(callbacks, deps = {}) {
   return key
 }
 
-export function pickWorkspaceId(payload) {
+function pickWorkspaceId(payload) {
   const direct = findWorkspaceId(payload)
   if (direct) return direct
   const list = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : Array.isArray(payload?.data) ? payload.data : null
@@ -515,7 +515,7 @@ function windowIdFor(durationMs) {
   return `${Math.round(durationMs / 60_000)}m`
 }
 
-export function windowLabel(durationMs) {
+function windowLabel(durationMs) {
   const id = windowIdFor(durationMs)
   if (!id) return undefined
   const unit = { h: 'hours', d: 'days', m: 'minutes' }[id.at(-1)]

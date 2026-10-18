@@ -137,16 +137,8 @@ function renderIndexRow(definition) {
 }
 
 function renderSkillDiscovery(definition) {
-  const direct = definition.skills
-    .filter((skill) => !definition.catalogSkills.includes(skill))
-    .map((skill) => code(`skill://${skill}`));
-  const catalog = definition.catalogSkills
-    .map((directory) => code(`skill://ecc-skill-catalog/${directory}/SKILL.md`));
-  if (!direct.length && !catalog.length) return 'S=[none].';
-  return [
-    ...(direct.length ? [`D=[${direct.join(', ')}]`] : []),
-    ...(catalog.length ? [`C=[${catalog.join(', ')}]`] : []),
-  ].join(' ') + '.';
+  if (!definition.skills.length) return 'S=[none].';
+  return `D=[${definition.skills.map((skill) => code(`skill://${skill}`)).join(', ')}].`;
 }
 
 export function workflowReferenceUri(workflowId) {

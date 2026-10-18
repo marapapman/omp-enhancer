@@ -4,7 +4,8 @@ import { access, mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'n
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import registerOmpConfig, { syncWorkflowContext } from '../index.js';
+import registerOmpConfig from '../index.js';
+import { syncWorkflowContext } from '../src/workflow-context-sync.js';
 import {
   ADVISOR_BLOCK_END,
   ADVISOR_BLOCK_START,
@@ -13,9 +14,8 @@ import {
   CATALOG_BLOCK_END,
   CATALOG_BLOCK_START,
   mergeWatchdogManagedBlock,
-} from '../src/workflow-context-sync.js';
+} from '../src/workflow-managed-blocks.js';
 import { loadWorkflowContextAssets } from '../src/workflow-context-assets.js';
-import * as managedBlocks from '../src/workflow-managed-blocks.js';
 import {
   applyWorkflowContextChanges,
   readWorkflowContextTargetFiles,
@@ -112,24 +112,6 @@ function registrationHarness() {
   registerOmpConfig(pi);
   return tools;
 }
-
-test('workflow context facade preserves the managed-block API after modularization', async () => {
-  const facade = await import('../src/workflow-context-sync.js');
-
-  for (const name of [
-    'ADVISOR_BLOCK_END',
-    'ADVISOR_BLOCK_START',
-    'AGENTS_BLOCK_END',
-    'AGENTS_BLOCK_START',
-    'CATALOG_BLOCK_END',
-    'CATALOG_BLOCK_START',
-    'mergeManagedCatalog',
-    'mergeMarkdownManagedBlock',
-    'mergeWatchdogManagedBlock',
-  ]) {
-    assert.equal(facade[name], managedBlocks[name], name);
-  }
-});
 
 test('workflow context asset loader reads packaged files and extracts pure managed blocks', async () => {
   const assets = await loadWorkflowContextAssets(packageRoot());
@@ -237,7 +219,7 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   assert.doesNotMatch(skillIndex, /WORKFLOW PLAN|WORKFLOW READY|EXECUTION DEFAULT|SENTINEL|byte 0|writing\.pending/i);
   const referenceText = references.join('\n');
   assert.doesNotMatch(referenceText, /EXECUTION DEFAULT|SENTINEL|byte 0|READY NEXT|TASK COPY|AFTER TODO RESULT|Delegate Agent=|WORKFLOW READY|\[workflow=/iu);
-  for (const [index, workflowId] of workflowIds.entries()) {
+  for (const workflowId of workflowIds) {
     assert.match(referenceText, new RegExp(`# \`${workflowId}\` workflow reference`), `${workflowId} reference heading`);
     assert.match(referenceText, /- When: /);
     assert.match(referenceText, /- Skills: /);

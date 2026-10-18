@@ -40,7 +40,7 @@ export const FACT_LANES = Object.freeze(['A', 'B', 'C']);
 // Document segments are classified into exactly these statuses. Every prose
 // unit the extractor does not turn into a claim is reported with a reason
 // instead of disappearing.
-export const NON_ASSERTION_REASONS = Object.freeze(['question', 'too-short', 'no-claim-cue']);
+const NON_ASSERTION_REASONS = Object.freeze(['question', 'too-short', 'no-claim-cue']);
 export const CHALLENGE_RESPONSES = Object.freeze(['AGREE', 'REBUT', 'MISSED']);
 const TUPLE_MATERIALITIES = new Set(FACT_ASSESSMENT_CONTRACT.tupleMaterialities);
 const TUPLE_RELATIONS = new Set(FACT_ASSESSMENT_CONTRACT.tupleRelations);

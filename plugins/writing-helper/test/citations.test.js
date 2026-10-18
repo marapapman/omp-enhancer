@@ -64,6 +64,25 @@ describe('verifyCitations', () => {
     assert.deepEqual(result.citations[0].mismatches, ['author']);
   });
 
+  it('degrades gracefully when evidence records carry malformed field types', () => {
+    const result = verifyCitations({
+      text: 'CLIP is a common baseline [@radford2021clip].',
+      bibliography: '@inproceedings{radford2021clip, title={Learning Transferable Visual Models}, author={Radford, Alec}, year={2021}}',
+      evidenceRecords: [
+        {
+          id: 'radford2021clip',
+          title: 2021,
+          authors: 'Radford, Alec',
+          year: '2021',
+          provider: 'local-literature',
+        },
+      ],
+    });
+
+    assert.equal(result.citations[0].status, 'MISMATCH');
+    assert.deepEqual(result.citations[0].mismatches, ['title']);
+  });
+
   it('never upgrades missing evidence to verified', () => {
     const result = verifyCitations({
       text: 'A doubtful claim cites a missing source [@ghost2024].',

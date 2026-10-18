@@ -17,7 +17,7 @@ const PLUGIN_CONTINUATION_TYPES = new Set([
 ]);
 const EQUIVALENT_SKILL_NAMESPACE_PREFIXES = ['superpowers-'];
 const ORCHESTRATION_TOOLS = new Set(['task', 'todo']);
-export const TASK_METADATA_PREFIX_CHAR_LIMIT = 120;
+const TASK_METADATA_PREFIX_CHAR_LIMIT = 120;
 const TASK_ASSIGNMENT_METADATA_FIELDS = ['workflow', 'step', 'todo', 'skills'];
 const WORKFLOW_PLAN_PATTERN = /^[ \t]*(?:#{1,6}[ \t]+)?(?:\*{1,3}|_{1,3})?WORKFLOW[ \t]+PLAN(?:\*{1,3}|_{1,3})?[ \t]*(?=\||\r?$)/gimu;
 const WORKFLOW_READY_PATTERN = /\bWORKFLOW\s+READY(?:\s*(?:\*{1,3}|_{1,3}))?\s*\|/iu;
@@ -103,7 +103,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
           eventSource: event?.type === 'session_custom' ? 'session-fallback' : 'live',
           eventIndex,
         };
-        if (['autoload', 'user'].includes(locatedEvidence.source)) {
+        if (locatedEvidence.source === 'user') {
           providedSkills.add(locatedEvidence.name);
         }
         const identity = skillEvidenceIdentity(locatedEvidence);
@@ -315,13 +315,7 @@ export function summarizeWorkflowEvents(events = [], metadata = {}) {
       };
     })
     .filter(Boolean);
-  const provisionMode = [...providedSkillEvidence.values()].some(({ source }) => source === 'autoload')
-    ? 'native'
-    : customMessages.some(({ customType }) => customType === 'omp-enhancer-core.workflow-guidance')
-      ? 'workflow-fallback'
-      : providedSkillEvidence.size
-        ? 'user-invoked'
-        : 'none';
+  const provisionMode = providedSkillEvidence.size ? 'user-invoked' : 'none';
   const agentArtifactReads = summarizeAgentArtifactReads(calls, agentArtifactPreviews);
 
   return {
@@ -1263,14 +1257,12 @@ function extractRevisionIdentifier(value) {
 
 
 // Advisory offline expectation for the long-form writing pilot trace.
-// Asserts the observable pilot contract documented in ORCHESTRATION_AND_DEMODELING_PLAN
-// §6.3/§7.4: >=2 writer assignments in the same native task batch when batching is
-// available; all writer deliveries occur before the parent integration marker (a
-// successful parent write/edit of the target article); exactly one checker assignment
-// after integration; no native reviewer; at most one repair writer. The batch
-// assertion is skippable (marked not-evaluable) when batching is unavailable in the
-// run, mirroring the plan's treatment of batch-disabled parallel evidence. This is
-// an offline trace expectation, never a runtime gate.
+// Asserts the observable pilot contract: >=2 writer assignments in the same native
+// task batch when batching is available; all writer deliveries occur before the parent
+// integration marker (a successful parent write/edit of the target article); exactly
+// one checker assignment after integration; no native reviewer; at most one repair
+// writer. The batch assertion is skippable (marked not-evaluable) when batching is
+// unavailable in the run. This is an offline trace expectation, never a runtime gate.
 function evaluateLongFormWritingPilot(nativeTask, tddTrace, expectation, failures) {
   const options = typeof expectation === 'object' && expectation ? expectation : {};
   const writerAgent = options.writerAgent ?? 'writer';
@@ -2431,11 +2423,7 @@ function normalizeCustom(value) {
 }
 
 function normalizeProvidedSkillEvidence(details, attribution) {
-  const coreAutoload = attribution === 'agent'
-    && details.provisionProvider === 'omp-enhancer-core'
-    && details.provisionSchemaVersion === 1;
-  const source = coreAutoload ? 'autoload' : attribution === 'user' ? 'user' : 'untrusted';
-  const routed = new Set((details.routedSkills ?? []).map(normalizeSkillName).filter(Boolean));
+  const source = attribution === 'user' ? 'user' : 'untrusted';
   const records = Array.isArray(details.providedSkillRecords)
     ? details.providedSkillRecords
     : [];
@@ -2443,13 +2431,9 @@ function normalizeProvidedSkillEvidence(details, attribution) {
     name: normalizeSkillName(record?.name),
     path: String(record?.path ?? '').trim(),
     requestedSkill: normalizeSkillName(record?.requestedSkill),
-    source: coreAutoload
-      && routed.has(normalizeSkillName(record?.requestedSkill))
-      && /(?:^|\/)SKILL\.md$/i.test(String(record?.path ?? '').replace(/\\/g, '/'))
-      ? source
-      : coreAutoload ? 'untrusted' : source,
+    source,
   })).filter(({ name }) => name);
-  if (!evidence.length && !coreAutoload) {
+  if (!evidence.length) {
     const name = normalizeSkillName(details.name);
     if (name) evidence.push({
       name,
@@ -2748,9 +2732,6 @@ function summarizeWorkflowPreparation(calls, assistantBatches) {
     (callsByBatch.get(batchIndex)?.length ?? 0) > 0
   ));
   const firstToolBatch = toolBatches.at(0) ?? null;
-  const firstToolBatchCalls = firstToolBatch
-    ? callsByBatch.get(firstToolBatch.batchIndex) ?? []
-    : [];
   const unattributedCallIds = primaryCalls
     .filter(({ assistantBatchIndex }) => !Number.isFinite(assistantBatchIndex))
     .map(({ id }) => id);

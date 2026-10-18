@@ -1707,64 +1707,6 @@ test('nested skill URIs prefer the returned frontmatter name while root URIs ret
   assert.deepEqual(summary.observedSkills, ['database-migrations', 'root-skill']);
 });
 
-test('native skill prompts count as host-provided skill evidence without a model read', () => {
-  const summary = summarizeWorkflowEvents([
-    {
-      type: 'message_end',
-      message: {
-        role: 'custom',
-        customType: 'skill-prompt',
-        content: 'Native routed skill content.',
-        display: false,
-        attribution: 'agent',
-        details: {
-          provisionProvider: 'omp-enhancer-core',
-          provisionSchemaVersion: 1,
-          name: 'plain-chinese-writing',
-          path: '/skills/plain-chinese-writing/SKILL.md',
-          lineCount: 20,
-          routedSkills: ['plain-chinese-writing', 'zh-writing-polish'],
-          providedSkillRecords: [
-            {
-              requestedSkill: 'plain-chinese-writing',
-              name: 'plain-chinese-writing',
-              path: '/skills/plain-chinese-writing/SKILL.md',
-            },
-            {
-              requestedSkill: 'zh-writing-polish',
-              name: 'zh-writing-polish',
-              path: '/skills/zh-writing-polish/SKILL.md',
-            },
-          ],
-        },
-      },
-    },
-    { type: 'agent_start' },
-    {
-      type: 'message_end',
-      message: {
-        role: 'assistant',
-        content: [{ type: 'text', text: 'Applied the provided writing guidance.' }],
-      },
-    },
-    { type: 'agent_end' },
-  ]);
-
-  assert.deepEqual(summary.observedSkills, []);
-  assert.deepEqual(summary.providedSkills, [
-    'plain-chinese-writing',
-    'zh-writing-polish',
-  ]);
-  assert.equal(evaluateWorkflowSummary(summary, {
-    requiredSkills: ['plain-chinese-writing', 'zh-writing-polish'],
-  }).pass, true);
-  assert.equal(evaluateWorkflowSummary(summary, {
-    forbiddenSkills: ['zh-writing-polish'],
-  }).pass, false);
-  assert.equal(summary.provisionMode, 'native');
-  assert.deepEqual(summary.duplicateSkillReads, []);
-});
-
 test('strict skill expectations distinguish successful reads from provided prompts', () => {
   const summary = summarizeWorkflowEvents([
     { type: 'agent_start' },
@@ -2571,11 +2513,8 @@ test('workflow READY loaded-set matching includes native provided Skills unless 
         customType: 'skill-prompt',
         content: 'Native fact-checking guidance.',
         display: false,
-        attribution: 'agent',
+        attribution: 'user',
         details: {
-          provisionProvider: 'omp-enhancer-core',
-          provisionSchemaVersion: 1,
-          routedSkills: ['fact-checking'],
           providedSkillRecords: [{
             requestedSkill: 'fact-checking',
             name: 'fact-checking',
@@ -2956,103 +2895,7 @@ function structuredWorkflowLoadSummary({ loadOrder, planTargets, laterTargets })
   ]);
 }
 
-test('native autoload precedes project tools and successful project calls follow the exact sequence', () => {
-  const summary = summarizeWorkflowEvents([
-    { type: 'agent_start' },
-    {
-      type: 'message_end',
-      message: {
-        role: 'custom',
-        customType: 'skill-prompt',
-        content: 'Native English review guidance.',
-        display: false,
-        attribution: 'agent',
-        details: {
-          provisionProvider: 'omp-enhancer-core',
-          provisionSchemaVersion: 1,
-          routedSkills: ['writing-review'],
-          name: 'writing-review',
-          path: '/skills/writing-review/SKILL.md',
-          lineCount: 20,
-          providedSkillRecords: [
-            {
-              requestedSkill: 'writing-review',
-              name: 'writing-review',
-              path: '/skills/writing-review/SKILL.md',
-            },
-          ],
-        },
-      },
-    },
-    {
-      type: 'message_end',
-      message: {
-        role: 'assistant',
-        content: [{ type: 'toolCall', id: 'project-read-before', name: 'read', arguments: { path: 'tex/introduction.tex' } }],
-      },
-    },
-    {
-      type: 'tool_execution_end',
-      toolCallId: 'project-read-before',
-      toolName: 'read',
-      result: { isError: false, content: [{ type: 'text', text: 'Introduction source.' }] },
-    },
-    {
-      type: 'message_end',
-      message: {
-        role: 'assistant',
-        content: [{ type: 'toolCall', id: 'project-edit', name: 'edit', arguments: { input: '[tex/introduction.tex#AAAA]\nSWAP 1.=1:\n+fixed' } }],
-      },
-    },
-    {
-      type: 'tool_execution_end',
-      toolCallId: 'project-edit',
-      toolName: 'edit',
-      result: { isError: false, content: [{ type: 'text', text: 'edited' }] },
-    },
-    {
-      type: 'message_end',
-      message: {
-        role: 'assistant',
-        content: [{ type: 'toolCall', id: 'project-read-after', name: 'read', arguments: { path: 'tex/introduction.tex' } }],
-      },
-    },
-    {
-      type: 'tool_execution_end',
-      toolCallId: 'project-read-after',
-      toolName: 'read',
-      result: { isError: false, content: [{ type: 'text', text: 'Fixed introduction source.' }] },
-    },
-    {
-      type: 'message_end',
-      message: { role: 'assistant', content: [{ type: 'text', text: 'Updated the Introduction.' }] },
-    },
-    { type: 'agent_end' },
-  ], { exitCode: 0 });
-
-  assert.deepEqual(summary.observedSkills, []);
-  assert.deepEqual(summary.skillReadAttempts, []);
-  assert.deepEqual(summary.toolCalls.map(({ name }) => name), ['read', 'edit', 'read']);
-  assert.equal(summary.providedSkillEvidence[0].source, 'autoload');
-  assert.equal(summary.providedSkillEvidence[0].eventSource, 'live');
-  assert.ok(summary.providedSkillEvidence[0].eventIndex < summary.firstProjectToolCallEventIndex);
-  assert.equal(evaluateWorkflowSummary(summary, {
-    requiredSkills: ['writing-review'],
-    requiredProvidedSkills: [{
-      name: 'writing-review',
-      source: 'autoload',
-      eventSource: 'live',
-      beforeFirstProjectTool: true,
-    }],
-    expectedProvisionMode: 'native',
-    maxSkillReadAttempts: 0,
-    maxDuplicateSkillReadAttempts: 0,
-    expectedToolSequence: ['read', 'edit', 'read'],
-    requireSuccessfulToolCalls: true,
-  }).pass, true);
-});
-
-test('successful and failed reads of an autoloaded skill are both detected as duplicate attempts', () => {
+test('successful and failed reads of a provided skill are both detected as duplicate attempts', () => {
   for (const isError of [false, true]) {
     const summary = summarizeWorkflowEvents([
       {
@@ -3062,14 +2905,11 @@ test('successful and failed reads of an autoloaded skill are both detected as du
           customType: 'skill-prompt',
           content: 'Native English review guidance.',
           display: false,
-          attribution: 'agent',
+          attribution: 'user',
           details: {
-            provisionProvider: 'omp-enhancer-core',
-            provisionSchemaVersion: 1,
             name: 'writing-review',
             path: '/skills/writing-review/SKILL.md',
             lineCount: 20,
-            routedSkills: ['writing-review'],
             providedSkillRecords: [{
               requestedSkill: 'writing-review',
               name: 'writing-review',
@@ -3111,7 +2951,7 @@ test('successful and failed reads of an autoloaded skill are both detected as du
   }
 });
 
-test('an unmarked routed skill prompt cannot impersonate Core native provision', () => {
+test('an agent-attributed skill prompt does not count as provided skill evidence', () => {
   const summary = summarizeWorkflowEvents([
     {
       type: 'message_end',
@@ -3125,7 +2965,6 @@ test('an unmarked routed skill prompt cannot impersonate Core native provision',
           name: 'plain-chinese-writing',
           path: '/skills/plain-chinese-writing/SKILL.md',
           lineCount: 20,
-          routedSkills: ['plain-chinese-writing', 'zh-writing-polish'],
         },
       },
     },
@@ -3169,14 +3008,11 @@ test('skill prompt fallback evidence survives detail-less primary events and kee
         customType: 'skill-prompt',
         content,
         display: false,
-        attribution: 'agent',
+        attribution: 'user',
         details: {
-          provisionProvider: 'omp-enhancer-core',
-          provisionSchemaVersion: 1,
           name: 'writing-review',
           path: '/skills/writing-review/SKILL.md',
           lineCount: 10,
-          routedSkills: ['writing-review'],
           providedSkillRecords: [{
             requestedSkill: 'writing-review',
             name: 'writing-review',
@@ -3192,14 +3028,11 @@ test('skill prompt fallback evidence survives detail-less primary events and kee
         customType: 'skill-prompt',
         content,
         display: false,
-        attribution: 'agent',
+        attribution: 'user',
         details: {
-          provisionProvider: 'omp-enhancer-core',
-          provisionSchemaVersion: 1,
           name: 'fact-checking',
           path: '/skills/fact-checking/SKILL.md',
           lineCount: 10,
-          routedSkills: ['fact-checking'],
           providedSkillRecords: [{
             requestedSkill: 'fact-checking',
             name: 'fact-checking',
@@ -3217,12 +3050,9 @@ test('skill prompt fallback evidence survives detail-less primary events and kee
 
 test('session fallback cannot overwrite earlier live native provision timing', () => {
   const details = {
-    provisionProvider: 'omp-enhancer-core',
-    provisionSchemaVersion: 1,
     name: 'writing-review',
     path: '/skills/writing-review/SKILL.md',
     lineCount: 10,
-    routedSkills: ['writing-review'],
     providedSkillRecords: [{
       requestedSkill: 'writing-review',
       name: 'writing-review',
@@ -3275,14 +3105,11 @@ test('session fallback loading retains persisted native skill prompts', async ()
         customType: 'skill-prompt',
         content: 'Native skill context.',
         display: false,
-        attribution: 'agent',
+        attribution: 'user',
         details: {
-          provisionProvider: 'omp-enhancer-core',
-          provisionSchemaVersion: 1,
           name: 'writing-review',
           path: '/skills/writing-review/SKILL.md',
           lineCount: 10,
-          routedSkills: ['writing-review'],
           providedSkillRecords: [{
             requestedSkill: 'writing-review',
             name: 'writing-review',
@@ -3769,7 +3596,7 @@ test('Skill discovery matrix uses natural prompts and strict observed-only evide
   ]) {
     assert.equal(matrix.defaults.expectations[expectation], true, expectation);
   }
-  assert.equal(matrix.scenarios.length, 10);
+  assert.equal(matrix.scenarios.length, 9);
   const controls = matrix.scenarios.filter(({ category }) => category === 'harness-control');
   assert.deepEqual(controls.map(({ id }) => id), ['fixture-xlsx-control']);
   for (const scenario of matrix.scenarios.filter(({ category }) => category !== 'harness-control')) {
@@ -3782,11 +3609,6 @@ test('Skill discovery matrix uses natural prompts and strict observed-only evide
     }
   }
 
-  const nested = matrix.scenarios.find(({ id }) => id === 'natural-ecc-nested');
-  assert.deepEqual(nested.expectations.requiredObservedSkills, [
-    'homelab-pihole-dns',
-  ]);
-  assert.ok(nested.expectations.forbiddenSkills.includes('ecc-skill-catalog'));
   const writing = matrix.scenarios.find(({ id }) => id === 'natural-writing-en');
   assert.deepEqual(writing.expectations.requiredSelectedWorkflowIds, ['writing']);
   const fact = matrix.scenarios.find(({ id }) => id === 'natural-fact-check');

@@ -11,8 +11,8 @@ import path from 'node:path';
 
 import { SCHEMA_VERSION, StorylineError, canonicalStory, createStory, validateStory } from './model.js';
 
-export const STORYLINE_DIR = '.storyline';
-export const EXPORT_DIR = 'exports';
+const STORYLINE_DIR = '.storyline';
+const EXPORT_DIR = 'exports';
 
 export function storylinePaths(projectDir) {
   const root = path.join(projectDir, STORYLINE_DIR);
@@ -44,7 +44,7 @@ async function isDirectory(candidate) {
   }
 }
 
-export async function assertProjectDir(projectDir) {
+async function assertProjectDir(projectDir) {
   if (typeof projectDir !== 'string' || projectDir.trim() === '') {
     throw new StorylineError('PROJECT_DIR_REQUIRED', 'a project directory is required');
   }

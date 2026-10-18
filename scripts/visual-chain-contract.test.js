@@ -20,7 +20,6 @@ test('visual workflow stays drawio/static-visual oriented', () => {
   assert.deepEqual(visual.skills, ['drawio-skill', 'assetseeker', 'frontend-design', 'canvas-design', 'format-humanizer', 'zh-format-humanizer']);
   assert.match(visual.chooseWhen, /Diagrams \(draw\.io\), UI\/UX design, static visual artifacts, or rendered figure review\./iu);
   assert.doesNotMatch(visual.chooseWhen, /slides?|beamer|powerpoint/iu);
-  assert.deepEqual(visual.catalogSkills, []);
   assert.deepEqual(visual.roles, ['task', 'writer', 'zh-writer']);
   assert.ok(Array.isArray(visual.suggestedFlow) && visual.suggestedFlow.length > 0);
   // draw-once + independent read-only review + bounded fix semantics, checked

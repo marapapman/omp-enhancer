@@ -22,11 +22,6 @@ function pluginRootFromParams(params, ctx) {
   return process.cwd();
 }
 
-export { runConfigDoctor } from './src/doctor.js';
-export { runDependencyCheck, formatDependencyCheckReport } from './src/dependency-check.js';
-export { listAssets } from './src/asset-index.js';
-export { syncWorkflowContext } from './src/workflow-context-sync.js';
-
 export async function runConfigPlan(input = {}) {
   const root = typeof input.root === 'string' && input.root.trim() !== '' ? input.root : process.cwd();
   const pluginRoot = await resolvePluginRoot(root);
@@ -41,18 +36,14 @@ export async function runConfigPlan(input = {}) {
 }
 
 function optionalStringParameters(z) {
-  if (typeof z.optional === 'function') {
-    return z.object({ root: z.optional(z.string()).describe('Plugin or workspace root used to locate packaged assets. Defaults to the current working directory or ctx.cwd.') });
-  }
   return z.object({ root: z.string().optional().describe('Plugin or workspace root used to locate packaged assets. Defaults to the current working directory or ctx.cwd.') });
 }
 
 function workflowContextSyncParameters(z) {
-  const optional = (schema) => typeof z.optional === 'function' ? z.optional(schema) : schema.optional();
   return z.object({
-    root: optional(z.string()).describe('Plugin or workspace root used to locate packaged assets. Defaults to the current working directory or ctx.cwd.'),
-    target: optional(z.string()).describe('Target OMP agent directory path. Defaults to PI_CODING_AGENT_DIR or ~/.omp/agent.'),
-    apply: optional(z.boolean()).describe('Set to true to apply changes. Defaults to false (dry-run mode).'),
+    root: z.string().optional().describe('Plugin or workspace root used to locate packaged assets. Defaults to the current working directory or ctx.cwd.'),
+    target: z.string().optional().describe('Target OMP agent directory path. Defaults to PI_CODING_AGENT_DIR or ~/.omp/agent.'),
+    apply: z.boolean().optional().describe('Set to true to apply changes. Defaults to false (dry-run mode).'),
   });
 }
 

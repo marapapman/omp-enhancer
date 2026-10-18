@@ -224,5 +224,5 @@ main()
   })
   .catch((error) => {
     process.stderr.write(`${describeError(error)}\n`);
-    process.exit(error?.exitCode ?? (error?.details?.status === 409 ? 1 : 1));
+    process.exit(error?.exitCode ?? 1);
   });

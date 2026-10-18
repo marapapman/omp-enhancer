@@ -23,7 +23,6 @@ const writingWorkflows = [
       'storyline-workbench',
       'docx',
     ],
-    catalogSkills: [],
     roles: ['writer', 'zh-writer', 'checker', 'zh-checker', 'task'],
     suggestedFlow: [
       'Identify target language (zh/en) and format (plain/LaTeX/Markdown/Beamer/Word/PowerPoint/PPTX).',
@@ -85,7 +84,6 @@ const researchWorkflows = [
       'source-evaluation',
       'citation-authenticity',
     ],
-    catalogSkills: [],
     roles: [
       'fact-researcher-a',
       'fact-researcher-b',
@@ -120,7 +118,6 @@ const visualWorkflows = [
     id: 'visual',
     chooseWhen: 'Diagrams (draw.io), UI/UX design, static visual artifacts, or rendered figure review.',
     skills: ['drawio-skill', 'assetseeker', 'frontend-design', 'canvas-design', 'format-humanizer', 'zh-format-humanizer'],
-    catalogSkills: [],
     roles: ['task', 'writer', 'zh-writer'],
     suggestedFlow: [
       'Clarify the diagram type, target language, information claims, real nodes and directed relations (including conditions and grouping meaning), output paths, physical width and the destination rectangle\'s aspect ratio (4:3 or 16:9 for PPT, page-width or half-page for A4/US letter), the at most 3 key messages the figure must foreground, and any names, math symbols, or terms that must not change. Before drawing, route every user-facing English label, caption, narrative, and UI copy to the dedicated text tool writer and every Chinese equivalent to the dedicated text tool zh-writer (mixed-language output uses separate writer and zh-writer text-tool calls); task may perform only structural mapping, drawing, layout, export, and evidence-based review. For diagram-only branches, use drawio-skill (drawio@365-skills) plus the one authoring reference for the chosen method. Asset prep is a default planning step: Main names the hero node or path, the lead decorative hue, and an icon for every concrete component node, then, unless the user asked for vector-only or text-only output, pre-generates one coherent house-style icon family with the native generate_image tool (style board as input), adds Iconify glyphs via assetseeker for standard technical symbols, assetseeker stock for photographic content, and bl image via bash for Chinese-text or photoreal nodes, recording provenance before drawing. For a new figure Main may also generate one composition thumbnail as a private layout reference; its text is ignored and it is never delivered.',

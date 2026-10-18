@@ -26,9 +26,7 @@ function splitSentences(text) {
   const matches = [];
   const pattern = /[^。！？.!?\n]+[。！？.!?]?/gu;
   for (const match of text.matchAll(pattern)) {
-    const sentence = match[0].trim();
-    /* node:coverage ignore next */
-    if (sentence.length > 0) matches.push({ sentence, index: match.index ?? 0 });
+    matches.push({ sentence: match[0].trim(), index: match.index });
   }
   return matches;
 }
@@ -48,11 +46,9 @@ function strongConclusionIssues(text, language) {
   const strongWords = language === 'zh' ? ZH_STRONG_WORDS : EN_STRONG_WORDS;
 
   for (const sentence of splitSentences(text)) {
-    /* node:coverage ignore next */
     if (!hasAny(sentence.sentence, strongWords)) continue;
     const localWindow = text.slice(Math.max(0, sentence.index - 120), sentence.index + sentence.sentence.length + 120);
     const hasUniversal = hasAny(sentence.sentence, ['所有', 'all', 'always', 'every', '任何']);
-    /* node:coverage ignore next */
     if (hasAny(localWindow, SCOPE_WORDS) && !hasUniversal) continue;
 
     issues.push({
@@ -90,8 +86,7 @@ function dataConsistencyIssues(text, language) {
       id: `data-${issues.length + 1}`,
       severity: language === 'zh' ? 'FATAL' : 'CRITICAL',
       dimension: 'data',
-      /* node:coverage ignore next */
-      location: paragraphLocation(text, first?.index ?? 0, language),
+      location: paragraphLocation(text, first.index, language),
       quote: values.map((match) => match[0]).join('；'),
       problem:
         language === 'zh'
@@ -117,7 +112,6 @@ function terminologyIssues(text, language) {
   const issues = [];
   for (const [left, right] of pairs) {
     if (!text.includes(left) || !text.includes(right)) continue;
-    /* node:coverage ignore next */
     if (text.includes(`${left}（${right}）`) || text.includes(`${right}（${left}）`)) continue;
 
     const index = Math.max(0, text.indexOf(right));
@@ -170,7 +164,6 @@ function causalLeapIssues(text, language) {
   const strongWords = language === 'zh' ? ZH_STRONG_WORDS : EN_STRONG_WORDS;
 
   for (const sentence of splitSentences(text)) {
-    /* node:coverage ignore next */
     if (!hasAny(sentence.sentence, conclusionMarkers)) continue;
     /* node:coverage ignore next */
     if (!hasAny(sentence.sentence, strongWords)) continue;
@@ -178,7 +171,6 @@ function causalLeapIssues(text, language) {
 
     issues.push({
       id: `logic-${issues.length + 1}`,
-      /* node:coverage ignore next */
       severity: language === 'zh' ? 'WARNING' : 'IMPORTANT',
       dimension: 'logic',
       location: paragraphLocation(text, sentence.index, language),

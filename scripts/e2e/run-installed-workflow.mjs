@@ -88,7 +88,7 @@ const activeChildren = new Set();
 const activeRunSignalSealers = new Set();
 const interruptState = { signal: null, handling: null };
 let atomicWriteSequence = 0;
-export const DEFAULT_NDJSON_CAPTURE_LIMITS = Object.freeze({
+const DEFAULT_NDJSON_CAPTURE_LIMITS = Object.freeze({
   maxLineCharacters: 2 * 1024 * 1024,
   maxCapturedCharacters: 32 * 1024 * 1024,
   maxCapturedLines: 100_000,
@@ -1462,7 +1462,7 @@ export async function prepareScenario(scenario) {
  * `*` matches any characters within one path segment (`[^/]*`, no `**` support).
  * All other regex metacharacters in the entry are escaped.
  */
-export function matchesFixturePath(entry, file) {
+function matchesFixturePath(entry, file) {
   if (!entry.includes('*')) return entry === file;
   const pattern = entry
     .replace(/[.+?^${}()|[\]\\]/g, '\\$&')

@@ -68,10 +68,6 @@ function httpClient(server) {
   return { base, call, authorization };
 }
 
-function assetIdOf(story, offset = 0) {
-  return story.assets[offset]?.id;
-}
-
 async function hashFile(target) {
   return createHash('sha256').update(await readFile(target)).digest('hex');
 }
@@ -415,7 +411,7 @@ describe('storyline workbench rounds and proposals', () => {
 
   test('import changes nothing, accept applies the diff and resolves listed comments, reject changes nothing', async () => {
     const fixture = await roundFixture();
-    const { client, round, rootId, claim, evidence, story } = fixture;
+    const { client, round, rootId, claim, evidence } = fixture;
     const candidate = round.nodes.map((entry) => {
       if (entry.id === evidence) return { ...entry, title: '压测数据（毫秒）' };
       return entry;

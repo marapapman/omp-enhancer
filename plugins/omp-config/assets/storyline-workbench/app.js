@@ -9,8 +9,6 @@ import '/vendor/markdown-it/markdown-it.min.js';
 import '/vendor/katex/katex.min.js';
 
 const TOKEN_KEY = `storyline-workbench:${location.origin}`;
-const NODE_KINDS = ['topic', 'claim', 'evidence'];
-const BLOCK_TYPES = ['markdown', 'table', 'image', 'math'];
 
 const state = {
   token: null,
@@ -287,12 +285,6 @@ function showNotice({ title, rows = [], pre = null, actions = [] }) {
   }
 }
 
-function clearNotice() {
-  const container = document.getElementById('notice');
-  container.hidden = true;
-  container.replaceChildren();
-}
-
 function showDialog(message, buttons) {
   const dialog = document.getElementById('confirm-dialog');
   const actions = document.getElementById('confirm-actions');
@@ -346,10 +338,6 @@ function ancestorsOf(nodeId) {
     current = current.parentId === null ? null : byId.get(current.parentId);
   }
   return chain;
-}
-
-function nodeRevisionCurrent(nodeId) {
-  return nodesById().get(nodeId)?.revision ?? null;
 }
 
 function unresolvedCount(nodeId) {
@@ -445,13 +433,6 @@ function applyStory(story) {
   render();
 }
 
-function currentDraftNode() {
-  if (!state.draft) return null;
-  const node = nodesById().get(state.draft.nodeId);
-  if (!node) return null;
-  return serializeNode({ ...node, title: state.draft.title, blocks: state.draft.blocks, sources: state.draft.sources });
-}
-
 function draftProblem() {
   if (!state.draft) return null;
   const assetIds = new Set(state.story.assets.map((asset) => asset.id));
@@ -534,7 +515,6 @@ function renderTree() {
   container.replaceChildren();
   const byId = nodesById();
   const root = byId.get(state.story.rootId);
-  const hasChildren = (id) => childrenOf(id).length > 0;
 
   const buildRow = (node) => {
     const item = el('li', { role: 'treeitem' });

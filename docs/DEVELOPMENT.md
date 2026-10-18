@@ -38,7 +38,7 @@ docs/superpowers/            # 历史 plans/specs/reports，仅作 archive
 
 - OMP 的系统提示、用户指令、active tools、动态 Available Agents、权限、审批和完成行为始终具有最终权威；
 - workflow catalog v44 只有 `writing`、`research` 和 `visual` 三个 advisory 域；目录不是 router、gate 或 completion controller；
-- `D` 是顶层 Skill exact URI，当前没有 nested ECC `C` 候选；候选 Skill 和 Agent 只按任务需要选择，不是 load set；
+- `D` 是顶层 Skill exact URI；候选 Skill 和 Agent 只按任务需要选择，不是 load set；
 - Main 可用 `ANALYZE -> EXECUTE -> REVIEW` 组织复杂任务，但插件不强制 delegation、fixed fan-out、retry 或 completion；
 - marketplace extension tools 默认 opt-in；`omp-config` 提供 `/enhancer-tools status|enable|disable`，组为 `config`、`writing`、`fact` 和 `all`；激活不授予权限。四个 `fact_check_*` 管线工具例外，默认进入工具清单，让自然语言的事实核查请求直达管线；
 - `writer`/`zh-writer` 是唯一的文字作者，也是专用的语言匹配文本工具（非独立通用 agent）：所有 prose/copy（起草、改写、翻译、标题、正文、caption、label、narrative 和 UI copy）按正文语言分别交给英文 `writer` 或中文 `zh-writer`；Main 只负责识别语言、调度、传递结果、原样机械集成和最终验收，禁止直接起草、改写、润色或替代 writer。Main/task 保留代码与非文字动作。当前 OMP ExtensionAPI 只暴露 `registerTool`（命令类工具），无插件模型调用 API，故这两个文本工具由宿主打包 Agent 文件作为兼容适配器承载，适配器元数据保持不变。

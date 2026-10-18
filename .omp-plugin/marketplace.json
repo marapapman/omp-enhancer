@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, Volcengine Ark Coding Plan model integration, and OpenDesign (AMR) models with Vela CLI sign-in.",
-    "version": "1.0.62",
+    "version": "1.0.63",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "omp-config",
       "description": "Optional OMP workflow references, config assets, notify-only hooks, opt-in hook templates, and diagnostics.",
-      "version": "0.2.13",
+      "version": "0.2.14",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-config",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -40,7 +40,7 @@
     {
       "name": "writing-helper",
       "description": "Standalone OMP writing helper plugin with frugal-pi compatible writing skills, agents, logic, style, and citation checks",
-      "version": "0.2.33",
+      "version": "0.2.34",
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -80,7 +80,7 @@
     {
       "name": "omp-fact-checker",
       "description": "OMP fact-checking workflow with claim planning, evidence collection, cross-checking, reports, and advisory review.",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/omp-fact-checker",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -95,7 +95,7 @@
     {
       "name": "volcengine-coding-plan",
       "description": "Native OMP provider for Volcengine Ark Coding Plan models.",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/volcengine-coding-plan",
       "repository": "https://github.com/marapapman/omp-enhancer",
@@ -104,7 +104,7 @@
     {
       "name": "opendesign-coding-plan",
       "description": "Native OMP provider for OpenDesign (AMR) models with Vela CLI sign-in and Design Plan quota.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/opendesign-coding-plan",
       "repository": "https://github.com/marapapman/omp-enhancer",

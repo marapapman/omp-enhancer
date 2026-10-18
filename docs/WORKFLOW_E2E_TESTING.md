@@ -25,7 +25,7 @@ Skill、其他 Skills 与原生 `task` 能力选择最小提示；advisor、suba
 
 Generated-asset tests 再验证紧凑目录：当前 v44 索引包含 3 个域（`writing`、
 `research`、`visual`），每行给出 exact ID、chooseWhen 条件、
-候选 Skill URI（`D` 顶层 exact URI、`C` nested ECC exact URI）与单卡 reference
+候选 Skill URI（`D` 顶层 exact URI）与单卡 reference
 URI；索引顶部声明 `ANALYZE -> EXECUTE -> REVIEW` 与 usage 规则。单卡只包含
 When、Skills、Agent candidates、Suggested flow 与 Scope notes，没有步骤 ID、
 delegation 行或任何 sentinel。Index 大小由生成与预算 contract tests 针对
@@ -126,7 +126,7 @@ Self-iteration matrix 的 assignments 分别覆盖计划审阅（复杂时委派
 Evaluator 从 parent event stream 恢复：
 
 - workflow/Skill 读取（含域索引 `skill://omp-enhancer-workflows`），或场景明确记录的 exact native `skill-prompt` body named `omp-enhancer-workflows`；managed context、Available Skills 描述或其他 Skill body 都不算 supplied body；
-- `D`/`C` 只是 optional candidates、绝不是 load sets；Main 只读取与 requested method、evidence rule、verdict 或 format 匹配的最小 URI 集；
+- `D` 只是 optional candidates、绝不是 load sets；Main 只读取与 requested method、evidence rule、verdict 或 format 匹配的最小 URI 集；
 - native TODO init、transition 与 completion；
 - parent `write`/`edit` mutation target、call ID 和事件位置；
 - parent `bash` command、exit code、timeout 与完成位置；

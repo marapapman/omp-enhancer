@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 import {
   buildSharedWorkflowCatalogMarkdown,
@@ -10,7 +10,7 @@ import {
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
-export const workflowCatalogTarget = path.join(
+const workflowCatalogTarget = path.join(
   repoRoot,
   'plugins',
   'omp-config',
@@ -18,7 +18,7 @@ export const workflowCatalogTarget = path.join(
   'WORKFLOW_CATALOG.md',
 );
 
-export const workflowSkillRoot = path.join(
+const workflowSkillRoot = path.join(
   repoRoot,
   'plugins',
   'omp-config',
@@ -26,11 +26,8 @@ export const workflowSkillRoot = path.join(
   'omp-enhancer-workflows',
 );
 
-export async function checkWorkflowArtifacts({
-  catalogTarget = workflowCatalogTarget,
-  skillRoot = workflowSkillRoot,
-} = {}) {
-  const expected = workflowArtifacts({ catalogTarget, skillRoot });
+async function checkWorkflowArtifacts() {
+  const expected = workflowArtifacts();
   const results = await Promise.all(expected.map(async (artifact) => {
     const actual = await readFile(artifact.target, 'utf8').catch((error) => {
       if (error?.code === 'ENOENT') return null;
@@ -38,7 +35,7 @@ export async function checkWorkflowArtifacts({
     });
     return { ...artifact, actual, ok: actual === artifact.expected };
   }));
-  const unexpected = await unexpectedWorkflowReferences(skillRoot, expected);
+  const unexpected = await unexpectedWorkflowReferences(expected);
   results.push(...unexpected.map((target) => ({
     target,
     expected: null,
@@ -52,12 +49,9 @@ export async function checkWorkflowArtifacts({
   };
 }
 
-export async function writeWorkflowArtifacts({
-  catalogTarget = workflowCatalogTarget,
-  skillRoot = workflowSkillRoot,
-} = {}) {
-  const artifacts = workflowArtifacts({ catalogTarget, skillRoot });
-  const removed = await unexpectedWorkflowReferences(skillRoot, artifacts);
+async function writeWorkflowArtifacts() {
+  const artifacts = workflowArtifacts();
+  const removed = await unexpectedWorkflowReferences(artifacts);
   await Promise.all(removed.map((target) => unlink(target)));
   for (const artifact of artifacts) {
     await mkdir(path.dirname(artifact.target), { recursive: true });
@@ -73,8 +67,8 @@ export async function writeWorkflowArtifacts({
   };
 }
 
-async function unexpectedWorkflowReferences(skillRoot, artifacts) {
-  const referencesRoot = path.join(skillRoot, 'references');
+async function unexpectedWorkflowReferences(artifacts) {
+  const referencesRoot = path.join(workflowSkillRoot, 'references');
   const entries = await readdir(referencesRoot, { withFileTypes: true }).catch((error) => {
     if (error?.code === 'ENOENT') return [];
     throw error;
@@ -87,13 +81,13 @@ async function unexpectedWorkflowReferences(skillRoot, artifacts) {
     .sort();
 }
 
-function workflowArtifacts({ catalogTarget, skillRoot }) {
+function workflowArtifacts() {
   const references = buildWorkflowSkillReferences();
   return [
-    { target: catalogTarget, expected: buildSharedWorkflowCatalogMarkdown() },
-    { target: path.join(skillRoot, 'SKILL.md'), expected: buildWorkflowSkillIndexMarkdown() },
+    { target: workflowCatalogTarget, expected: buildSharedWorkflowCatalogMarkdown() },
+    { target: path.join(workflowSkillRoot, 'SKILL.md'), expected: buildWorkflowSkillIndexMarkdown() },
     ...Object.entries(references).map(([workflowId, expected]) => ({
-      target: path.join(skillRoot, 'references', `${workflowId}.md`),
+      target: path.join(workflowSkillRoot, 'references', `${workflowId}.md`),
       expected,
     })),
   ];
@@ -133,9 +127,7 @@ async function main(argv = process.argv.slice(2)) {
   process.stdout.write(`Workflow artifacts are current (${result.results.length} files).\n`);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  main().catch((error) => {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
-  });
-}
+main().catch((error) => {
+  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.exitCode = 1;
+});

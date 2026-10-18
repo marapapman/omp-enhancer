@@ -1,8 +1,7 @@
 import { paragraphLocation } from './language.js';
 
 function normalizeWhitespace(value) {
-  /* node:coverage ignore next */
-  return String(value ?? '').replace(/\s+/gu, ' ').trim();
+  return String(value).replace(/\s+/gu, ' ').trim();
 }
 
 function normalizeTitle(value) {
@@ -44,9 +43,7 @@ function bibAuthors(value) {
 }
 
 function evidenceAuthors(value) {
-  /* node:coverage ignore next */
-  if (!Array.isArray(value)) return [];
-  return value.map(normalizeAuthorName).filter(Boolean);
+  return (Array.isArray(value) ? value : []).map(normalizeAuthorName).filter(Boolean);
 }
 
 function authorsOverlap(bibEntry, evidence) {
@@ -80,8 +77,7 @@ function parseBibEntries(bibliography = '') {
     const fields = { key };
     const fieldRegex = /(title|author|year|doi|eprint|journal|booktitle|venue)\s*=\s*(?:\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}|"([^"]*)")/giu;
     for (const fieldMatch of body.matchAll(fieldRegex)) {
-      /* node:coverage ignore next */
-      fields[fieldMatch[1].toLowerCase()] = normalizeWhitespace(fieldMatch[2] ?? fieldMatch[3] ?? '');
+      fields[fieldMatch[1].toLowerCase()] = normalizeWhitespace(fieldMatch[2] ?? fieldMatch[3]);
     }
     entries.set(key, fields);
   }
@@ -162,7 +158,6 @@ function bibEntryForTarget(target, bibEntries) {
 
 function compareBibToEvidence(bibEntry, evidence) {
   const mismatches = [];
-  /* node:coverage ignore next */
   if (!bibEntry || !evidence) return mismatches;
   if (bibEntry.title && evidence.title && normalizeTitle(bibEntry.title) !== normalizeTitle(evidence.title)) {
     mismatches.push('title');
@@ -195,7 +190,6 @@ function issueFromCitation(citation, text, language) {
     location: paragraphLocation(text, citation.index, language),
     quote: citation.quote,
     problem: language === 'zh'
-      /* node:coverage ignore next */
       ? (citation.status === 'MISMATCH' ? `引用元数据与证据不一致：${citation.mismatches.join(', ')}。` : '没有证据来源核实该引用。')
       : problem,
     suggestion: language === 'zh'
@@ -217,7 +211,6 @@ export function verifyCitations({ text = '', bibliography = '', evidenceRecords 
         problem: 'No evidence source verified this citation.',
       };
     }
-    /* node:coverage ignore next */
     const mismatches = compareBibToEvidence(bibEntry, evidence);
     if (mismatches.length > 0) {
       return {
@@ -272,7 +265,7 @@ function wantedProviders(providers) {
   return new Set(providers);
 }
 
-async function fetchJson(fetchImpl, url, headers = {}) {
+async function fetchJson(fetchImpl, url, headers) {
   const response = await fetchImpl(url, { headers });
   if (!response.ok) return null;
   return response.json();
@@ -292,7 +285,6 @@ async function lookupDoi(target, fetchImpl) {
     { Accept: 'application/json' },
   );
   const message = data?.message;
-  /* node:coverage ignore next */
   if (!message) return null;
   return {
     id: doi,
@@ -310,12 +302,9 @@ async function lookupDoi(target, fetchImpl) {
 async function lookupArxiv(target, fetchImpl) {
   const id = normalizedArxivId(target.key);
   const xml = await fetchText(fetchImpl, `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}`);
-  /* node:coverage ignore next */
   if (!xml) return null;
   const entry = /<entry>([\s\S]*?)<\/entry>/u.exec(xml)?.[1];
-  /* node:coverage ignore next */
   if (!entry) return null;
-  /* node:coverage ignore next */
   const title = /<title>([\s\S]*?)<\/title>/u.exec(entry)?.[1];
   const year = /<published>(\d{4})/u.exec(entry)?.[1];
   const authors = [...entry.matchAll(/<author>\s*<name>([\s\S]*?)<\/name>\s*<\/author>/gu)]
@@ -337,17 +326,13 @@ function externalLookupTargets(text, bibliography) {
     const entry = bibEntries.get(target.key);
     if (!entry) return [target];
     const targets = [];
-    /* node:coverage ignore next */
     if (entry.doi) {
       targets.push({ kind: 'doi', key: normalizeDoi(entry.doi), quote: target.quote, index: target.index });
     }
-    /* node:coverage ignore next */
     const arxivId = normalizedArxivId(entry.doi) ?? normalizedArxivId(entry.eprint);
-    /* node:coverage ignore next */
     if (arxivId) {
       targets.push({ kind: 'arxiv', key: arxivId, quote: target.quote, index: target.index });
     }
-    /* node:coverage ignore next */
     return targets.length > 0 ? targets : [target];
   });
 
