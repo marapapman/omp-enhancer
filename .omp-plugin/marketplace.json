@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, Volcengine Ark Coding Plan model integration, and OpenDesign (AMR) models with Vela CLI sign-in.",
-    "version": "1.0.61",
+    "version": "1.0.62",
     "pluginRoot": "plugins"
   },
   "plugins": [
