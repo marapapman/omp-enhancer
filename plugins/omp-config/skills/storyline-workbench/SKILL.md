@@ -1,12 +1,14 @@
 ---
 name: storyline-workbench
-description: Organize the story of a new article or slide deck as a tree of topic, claims, and evidence before any prose is written, and continue editing a confirmed tree in the project's local workbench site. Use when a user starts a new article or presentation whose story must be structured first, or returns to an existing tree for another round. It does not trigger for local polishing, translation, or edits to an existing finished document, which keep their own revision as the baseline.
+description: Organize the story of a new article or slide deck as a tree before any prose is written, with the whole topic at the root, chapters and sections grouping it, and each leaf holding one paragraph or one page titled with its topic sentence, and continue editing a confirmed tree in the project's local workbench site. Use when a user starts a new article or presentation whose story must be structured first, or returns to an existing tree for another round. It does not trigger for local polishing, translation, or edits to an existing finished document, which keep their own revision as the baseline.
 ---
 
 # Storyline Workbench
 
-Organize a piece of writing as an editable tree before prose exists: a topic
-root, claim branches, evidence leaves, and editable content on every node.
+Organize a piece of writing as an editable tree before prose exists: the root
+holds the whole topic, chapters and sections group it, and each leaf is one
+paragraph or one page whose title is its topic sentence and whose blocks hold
+its content.
 
 ## Who owns what
 
@@ -57,17 +59,23 @@ node <pluginRoot>/scripts/storyline-workbench.mjs propose --project <dir> --file
 
 ## Tree model
 
-The root node is the topic, `claim` nodes are its branches, and `evidence`
-nodes are its leaves. A claim may sit under the topic or another claim;
-evidence sits only under a claim and has no children. Exactly one node is the
-topic, it equals `rootId`, and its parent is empty. Sibling `position` is
-contiguous from 0, parents must exist, and cycles, orphans, duplicate IDs,
-kind changes, and root identity changes are rejected.
+The root `topic` node is the whole topic of the article or deck. `claim`
+nodes are the chapters directly under the root and the sections nested
+deeper, and they group the leaves; each may carry an optional description in
+its own blocks. Each `evidence` leaf is exactly one paragraph of the article
+or one page of the slide deck. Its title is that paragraph's or page's topic
+sentence, and its blocks hold the paragraph body or the page content. A claim
+may sit under the topic or another claim; evidence sits only under a claim
+and has no children. Exactly one node is the topic, it equals `rootId`, and
+its parent is empty. Sibling `position` is contiguous from 0, parents must
+exist, and cycles, orphans, duplicate IDs, kind changes, and root identity
+changes are rejected.
 
 The root cannot be deleted or moved, and its title, blocks, and sources stay
-editable. A claim with no evidence saves as a draft and shows a
-missing-evidence hint, with nothing auto-filled; a deleted node takes its
-subtree with it after the site reports the removed count.
+editable. A chapter or section whose whole subtree holds no leaf saves as a
+draft and the site marks it empty, with nothing auto-filled; a chapter that
+holds only sections that do have leaves is not empty. A deleted node takes
+its subtree with it after the site reports the removed count.
 
 ## Node editing
 
@@ -77,6 +85,16 @@ blocks carry columns, rows, and a caption; image blocks reference a stored
 asset with role `figure` or `icon` plus alt text and a caption; math blocks
 carry raw LaTeX and a display flag. Blocks and nodes can be added, edited,
 moved, and deleted, and the editor renders Markdown without HTML.
+
+The site shows a header with the whole topic and the counts of chapters,
+sections, and leaves. The table of contents shows numbered chapters and
+sections with their leaf counts. The story canvas renders the tree in order,
+with chapters and sections as numbered headings and each leaf as a numbered
+paragraph in an article or a page card in a deck, switchable between a
+topic-sentence-only view and a full-content view. The editor panel for the
+selected node carries the role-specific fields (topic, chapter or section
+title, topic sentence), the structure actions (add, insert after, move,
+re-parent, delete), and that node's comments.
 
 ## Comments
 
@@ -107,8 +125,10 @@ Export writes `.storyline/exports/r<revision>/` with `story.json`,
 `storyline.md`, and `feedback.json`, and repeating a revision returns the same
 result without rewriting an existing snapshot.
 
-An article takes its sections from the confirmed export revision, and a slide
-plan records `sourceNodeIds` and `storyRevision` per page.
+An article takes its chapters, sections, and paragraphs, one paragraph per
+leaf, from the confirmed export revision. A slide plan writes one page per
+leaf in tree order and records that leaf's ID in `sourceNodeIds` together
+with `storyRevision`.
 
 ## Portability and remote access
 

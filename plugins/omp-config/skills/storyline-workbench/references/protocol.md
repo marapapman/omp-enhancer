@@ -53,9 +53,14 @@ refused.
 - Exactly one node has `kind: "topic"`; it equals `rootId` and has no parent.
 - A `claim` may nest under a `topic` or another `claim`, while `evidence` sits
   only under a `claim` and has no children.
+- The `topic` root is the whole topic, `claim` nodes are the chapters and
+  sections that group the leaves, and each `evidence` leaf is one paragraph of
+  the article or one page of the deck, titled with its topic sentence.
 - Parents must exist; cycles, orphans, duplicate IDs, kind changes, and root
   identity changes are rejected, and sibling `position` is contiguous from 0.
-- A claim with no evidence saves as a draft with a missing-evidence hint.
+- A chapter or section whose whole subtree holds no leaf saves as a draft and
+  the site marks it empty, with nothing auto-filled; a chapter that holds only
+  sections that do have leaves is not empty.
 - The root cannot be deleted or moved; its `title`, `blocks`, and `sources`
   stay editable, and deleting another node deletes its subtree after the site
   reports the removed count.

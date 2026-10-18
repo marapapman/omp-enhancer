@@ -1,6 +1,6 @@
 ---
 name: research-storyline
-description: Build a research article's story as a tree in the local storyline workbench, with the topic at the root, claims as branches, and evidence as leaves; each round returns one proposal to Main, which owns the site and every file write
+description: Build a research article's story as a tree in the local storyline workbench, with the whole topic at the root, chapters and sections grouping it, and each leaf holding one paragraph titled with its topic sentence; each round returns one proposal to Main, which owns the site and every file write
 ---
 
 # Research Storyline Skill
@@ -13,9 +13,10 @@ complete proposed artifact or diff. Main or an explicitly capable generic
 ## Purpose
 
 A research article's story lives as a tree in the workbench, before any prose
-exists. The root node holds the topic, claim nodes branch into the
-sub-arguments, and evidence leaves hold the support. A claim that nests its own
-argument takes child claims above its own evidence. Every node carries an
+exists. The root node holds the whole topic, and chapters and sections carry the
+argument's structure and nest where a sub-argument needs its own section.
+Each leaf is one paragraph whose title is its topic sentence and whose content
+presents that paragraph's support. Every node carries an
 editable title, ordered content blocks, sources, and comments, and each round
 ends with one proposal for Main to import into the tree.
 
@@ -31,10 +32,11 @@ what the user and the tree supply.
 1. **Enter an open tree.** Read the tree and the open comments of the round the
    assignment supplies. The workbench runs per project under Main's control,
    and Main starts, stops, and persists it.
-2. **Grow the argument.** Take the root topic into claim branches and evidence
-   leaves, and add child claims where a sub-argument needs its own support. A
-   claim without evidence stays a draft and the tree shows that gap; supply no
-   evidence of your own.
+2. **Grow the argument.** Grow chapters and sections from the root topic, and
+   give each section its paragraphs, one leaf per paragraph titled with its
+   topic sentence and carrying its support in the content. A chapter or
+   section without a paragraph stays a draft and the tree shows that gap;
+   supply no evidence of your own.
 3. **Keep every node editable.** Titles, content blocks, sources, and comments
    stay editable at every node, so a later round can re-cut an argument an
    earlier round fixed.
@@ -112,7 +114,7 @@ mixed-language material is produced per language slice and merged mechanically.
 - **The tree follows the argument.** Let the argument decide the branch order, and use the 20 questions above only to find what a branch may still be missing.
 - **Comments brief the next round.** Treat a comment as a bounded change request for its node at the revision it names, and keep comment text out of the article body.
 - **Wait through Main.** Do not auto-advance or generate content without a supplied response.
-- **Never invent.** Rephrase for clarity and polish, but do not add facts, claims, numbers, or sources the user did not provide, and never fill an empty claim with invented evidence.
+- **Never invent.** Rephrase for clarity and polish, but do not add facts, claims, numbers, or sources the user did not provide, and never fill an empty chapter, section, or paragraph with invented evidence.
 - **Honor effect authority.** No command runs and no file is written from this body; Main owns the workbench run and every persisted change.
 
 ## Pi Compatibility

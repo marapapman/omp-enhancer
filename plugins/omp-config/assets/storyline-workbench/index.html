@@ -4,69 +4,62 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>Storyline workbench</title>
+<title></title>
 <link rel="stylesheet" href="/vendor/katex/katex.min.css">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="topbar-main">
-    <h1 id="app-title"></h1>
-    <div class="topbar-meta">
-      <span id="kind-label" class="chip"></span>
-      <span id="revision-label" class="chip"></span>
-      <span id="dirty-badge" class="chip chip-warn" hidden></span>
-    </div>
+<header class="app-header">
+  <div class="header-main">
+    <p class="eyebrow" id="app-eyebrow"></p>
+    <h1 class="root-title-wrap"><button type="button" id="root-title" class="root-title"></button></h1>
+    <div class="chips" id="header-chips"></div>
   </div>
-  <div class="topbar-actions">
+  <div class="header-actions">
     <button type="button" id="submit-round" class="button"></button>
     <button type="button" id="export-story" class="button button-primary"></button>
   </div>
 </header>
 
-<nav class="tabs" id="tabs" aria-label="view">
-  <button type="button" data-tab="tree" id="tab-tree" aria-pressed="true"></button>
-  <button type="button" data-tab="detail" id="tab-detail" aria-pressed="false"></button>
+<div id="status-line" class="status-line" role="status" aria-live="polite"></div>
+
+<nav class="tabbar" id="tabbar">
+  <button type="button" data-tab="outline" id="tab-outline"></button>
+  <button type="button" data-tab="story" id="tab-story"></button>
+  <button type="button" data-tab="editor" id="tab-editor"></button>
 </nav>
 
-<div id="status-line" class="status-line" role="status" aria-live="polite"></div>
-<div id="notice" class="notice" hidden></div>
-
-<main class="layout" id="layout" data-tab="tree">
-  <aside class="tree-panel" id="tree-panel" aria-labelledby="tree-heading">
+<div class="app-body" id="app-body" data-tab="story" data-toc-open="false">
+  <aside class="panel toc-panel" id="toc-panel">
     <div class="panel-head">
-      <h2 id="tree-heading"></h2>
+      <h2 id="toc-heading"></h2>
       <div class="panel-head-actions">
         <button type="button" id="expand-all" class="button button-small"></button>
         <button type="button" id="collapse-all" class="button button-small"></button>
       </div>
     </div>
-    <div class="tree-toolbar" id="tree-toolbar"></div>
-    <ul class="tree" id="tree" role="tree" aria-label="story tree"></ul>
-    <p class="hint" id="tree-hint"></p>
+    <nav class="toc" id="toc-nav"></nav>
   </aside>
 
-  <section class="detail-panel" id="detail-panel" aria-labelledby="detail-heading">
-    <div class="panel-head">
-      <h2 id="detail-heading"></h2>
+  <main class="panel canvas" id="canvas">
+    <div class="canvas-toolbar">
+      <div class="view-switch" id="view-switch" role="group">
+        <button type="button" id="view-outline" class="segment"></button>
+        <button type="button" id="view-full" class="segment"></button>
+      </div>
+      <button type="button" id="toc-toggle" class="button button-small"></button>
     </div>
-    <nav class="breadcrumb" id="breadcrumb" aria-label="breadcrumb"></nav>
+    <div class="workflow-zone" id="workflow-zone" hidden></div>
+    <div class="story-body" id="story-body"></div>
+  </main>
+
+  <aside class="panel inspector" id="inspector">
+    <div class="inspector-head" id="inspector-head"></div>
     <div class="conflict-banner" id="conflict-banner" hidden></div>
-    <div class="node-editor" id="node-editor"></div>
-    <section class="comments" id="comments-section">
-      <h3 id="comments-heading"></h3>
-      <div id="comments"></div>
-    </section>
-    <section class="proposals" id="proposals-section">
-      <h3 id="proposals-heading"></h3>
-      <div id="proposals"></div>
-    </section>
-    <section class="orphan-comments" id="orphan-comments-section">
-      <h3 id="orphan-comments-heading"></h3>
-      <div id="orphan-comments"></div>
-    </section>
-  </section>
-</main>
+    <div id="node-editor"></div>
+    <div class="save-bar" id="save-bar"></div>
+  </aside>
+</div>
 
 <dialog id="confirm-dialog" class="dialog">
   <p id="confirm-message"></p>
