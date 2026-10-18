@@ -93,6 +93,47 @@ describe('bundled frugal-pi writing content', () => {
     }
   });
 
+  it('makes the supplied Chinese style baseline mandatory for every Chinese writing task', () => {
+    const source = readFileSync(join(rootDir, 'agents/zh-writer.md'), 'utf8');
+    assert.match(source, /## 默认中文风格（所有中文写作任务的基线）/u);
+    assert.match(source, /所有中文写作任务[\s\S]{0,80}默认采用下面基准文本的文风/u);
+    assert.match(source, /下面的文本是文风基准，不是内容素材/u);
+    assert.match(source, /只模仿它的句法、段落推进、论证层次和书面语词汇/u);
+    assert.match(source, /“那是最好的岁月，也是最坏的岁月/u);
+    assert.match(source, /即长期目标的实现。\n````/u);
+    assert.match(source, /长句为主[\s\S]{0,80}短句只用于收束、转折或强调/u);
+    assert.match(source, /不复制基准文本的具体政治判断/u);
+    assert.match(source, /受派 Skill 的局部文风清单与本节冲突时，以本节基线为准/u);
+    assert.match(source, /短格式任务只保留基准文本的书面语分量[\s\S]{0,60}不强加论文结构/u);
+    assert.match(
+      source,
+      /不模仿：“不是……而是……”“不仅仅是……而且也是……”式对偶[\s\S]{0,160}“综上所述”式元衔接[\s\S]{0,160}“苦练内功、积蓄力量、探索道路”式三连排比/u,
+    );
+
+    for (const path of [
+      'skills/zh-writing-mad-writer/SKILL.md',
+      'skills/zh-writing-markdown-helper/SKILL.md',
+      'skills/zh-writing-state-machine/SKILL.md',
+    ]) {
+      const skill = readFileSync(join(rootDir, path), 'utf8');
+      assert.match(skill, /内置中文风格基线/u, `${path} should defer to the baseline`);
+      assert.match(skill, /与内置中文风格基线冲突时，以基线为准/u, `${path} should state baseline precedence`);
+    }
+
+    const plain = readFileSync(join(rootDir, 'skills/plain-chinese-writing/SKILL.md'), 'utf8');
+    assert.match(plain, /两者冲突时，基线优先/u);
+
+    const checker = readFileSync(join(rootDir, 'agents/zh-checker.md'), 'utf8');
+    assert.match(checker, /默认以 `zh-writer` 的内置中文风格基线为文风基准/u);
+
+    const humanizer = readFileSync(join(rootDir, 'skills/zh-format-humanizer/SKILL.md'), 'utf8');
+    assert.match(humanizer, /长句、书面语四字格、历史铺垫和第一人称研究立场本身不是 AI 痕迹/u);
+    assert.match(humanizer, /基线不豁免否定式对偶、三连排比、意义拔高、元衔接和节奏对仗收尾/u);
+
+    const readme = readFileSync(join(rootDir, 'README.md'), 'utf8');
+    assert.match(readme, /所有中文写作任务默认按该文风输出/u);
+  });
+
   it('keeps writer agents proposal-only at both capability and prompt levels', () => {
     const contracts = new Map([
       [
