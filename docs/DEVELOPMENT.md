@@ -4,7 +4,7 @@
 
 ## Monorepo 布局
 
-当前 marketplace 有五个插件：
+当前 marketplace 有六个插件：
 
 ```text
 plugins/
@@ -12,7 +12,8 @@ plugins/
 ├── writing-helper/          # 中英文写作、逻辑、风格、引用和保真检查
 ├── omp-fact-checker/        # claim plan、evidence、cross-check、strict verdict 和 review
 ├── volcengine-coding-plan/ # 方舟 Coding Plan provider、/login 和 /model 接入
-└── alibaba-token-plan-media/ # 阿里云百炼 Token Plan 生图与语音 provider、127.0.0.1 HTTP 桥
+├── alibaba-token-plan-media/ # 阿里云百炼 Token Plan 生图与语音 provider、127.0.0.1 HTTP 桥
+└── opendesign-coding-plan/ # OpenDesign (AMR) provider、Vela CLI 设备码登录、/model 与 /usage 接入
 
 scripts/                     # workflow generation、validation、E2E、release、packaging
 docs/                        # 当前架构与开发文档
@@ -21,7 +22,7 @@ docs/superpowers/            # 历史 plans/specs/reports，仅作 archive
 ```
 
 重要文件：
-- `package.json`：五个 npm workspace 和统一脚本；
+- `package.json`：六个 npm workspace 和统一脚本；
 - `package-lock.json`：唯一提交的 npm lockfile；
 - `.omp-plugin/marketplace.json`：插件版本、source 和 Skill inventory；
 - `scripts/workflow-definitions.js`：writing、research、visual 三域的 workflow 唯一语义来源；
@@ -30,6 +31,7 @@ docs/superpowers/            # 历史 plans/specs/reports，仅作 archive
 - `plugins/volcengine-coding-plan/index.js`：Coding Plan provider 和原生 `/login` 接入；
 - `plugins/omp-fact-checker/src/fact-check.js`：事实核查 pipeline；
 - `plugins/alibaba-token-plan-media/index.js`：阿里云百炼 Token Plan 生图与语音 provider 和 127.0.0.1 HTTP 桥；
+- `plugins/opendesign-coding-plan/index.js`：OpenDesign (AMR) provider、Vela CLI 设备码登录和 `/usage` 额度读取；
 - `scripts/release.js`：版本与 marketplace release 的唯一写入入口。
 
 ## Runtime invariants
@@ -81,6 +83,7 @@ npm run coverage --workspace plugins/writing-helper
 npm test --workspace plugins/omp-fact-checker
 npm test --workspace plugins/volcengine-coding-plan
 npm test --workspace plugins/alibaba-token-plan-media
+npm test --workspace plugins/opendesign-coding-plan
 git diff --check
 ```
 
@@ -121,7 +124,7 @@ npm run pack:all
 
 `docs/WORKFLOW_E2E_TESTING.md` 保存事件证据、静态 probe、隔离运行、failure classification 和重复实验方法；一次 live run 只是样本，不能证明稳定提升。`docs/OMP_ENHANCER_SELF_DEVELOPMENT.md` 是历史自开发记录，包含已删除代码增强生命周期，仅用于理解旧迁移背景。
 
-需要检查 OMP 兼容性时，使用当前五个插件：
+需要检查 OMP 兼容性时，使用当前六个插件：
 
 ```bash
 node scripts/e2e/omp17-rpc-probe.mjs -- \
@@ -129,7 +132,8 @@ node scripts/e2e/omp17-rpc-probe.mjs -- \
   -e plugins/writing-helper/index.js --plugin-dir plugins/writing-helper \
   -e plugins/omp-fact-checker/index.js --plugin-dir plugins/omp-fact-checker \
   -e plugins/volcengine-coding-plan/index.js --plugin-dir plugins/volcengine-coding-plan \
-  -e plugins/alibaba-token-plan-media/index.js --plugin-dir plugins/alibaba-token-plan-media
+  -e plugins/alibaba-token-plan-media/index.js --plugin-dir plugins/alibaba-token-plan-media \
+  -e plugins/opendesign-coding-plan/index.js --plugin-dir plugins/opendesign-coding-plan
 ```
 
 ## Release transaction

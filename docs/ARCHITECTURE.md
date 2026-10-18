@@ -4,7 +4,7 @@
 
 ## 运行模型
 
-OMP Enhancer 当前只发布五个插件：`omp-config`、`writing-helper`、`omp-fact-checker`、`volcengine-coding-plan` 和 `alibaba-token-plan-media`。代码增强核心、测试增强插件和 ECC 代码技能不再属于当前 marketplace。
+OMP Enhancer 当前只发布六个插件：`omp-config`、`writing-helper`、`omp-fact-checker`、`volcengine-coding-plan`、`alibaba-token-plan-media` 和 `opendesign-coding-plan`。代码增强核心、测试增强插件和 ECC 代码技能不再属于当前 marketplace。
 
 OMP 负责系统提示、用户指令、active tools、动态 Available Agents、权限、审批和完成行为。插件只提供可选的 Skill、Agent、工具、配置资产和观察性提示，不复制宿主权限模型，不创建 hard router、hard gate、completion controller 或 automatic repair loop。
 
@@ -34,10 +34,13 @@ OMP 负责系统提示、用户指令、active tools、动态 Available Agents�
 | `omp-fact-checker` | claim extraction、事实计划、A/B evidence、cross-check、strict verdict、报告和 fact review | 把缺失证据变成生命周期 gate、把兼容证据升级为证明 |
 | `volcengine-coding-plan` | 通过 OMP 原生 `registerProvider` 注册 Coding Plan OpenAI 兼容模型，并把 API-key 登录接入原生 `/login` | 不修改宿主认证存储、不替宿主路由、不发现或猜测未公开模型 |
 | `alibaba-token-plan-media` | 通过 OMP 原生 `registerProvider` 注册 provider，把阿里云百炼 Token Plan 的生图与语音模型暴露给原生 image 和 speech 角色，进程内起一个只监听 127.0.0.1 的 HTTP 桥 | 不覆盖内置同名 provider、不注册工具、不改默认角色 |
+| `opendesign-coding-plan` | 通过 OMP 原生 `registerProvider` 注册 OpenDesign (AMR) provider，把 Vela CLI 设备码登录接入原生 `/login`，把账号实时模型清单接入 `/model`，把会员等级、credits 与 Design Plan 窗口接入 `/usage` | 不注册工具、不替宿主路由、不改动 Vela CLI 自己的 session 文件 |
 
-`omp-config` 同时打包故事树工作台。每个项目对应一个只绑定 `127.0.0.1` 的本地网站，数据保存在项目内的 `.storyline/` 目录；插件内的 `scripts/storyline-workbench.mjs` 是 CLI 入口，提供 `init`、`serve`、`context` 和 `propose` 四个子命令。工作台不注册插件工具、事件 hook、自启动器或模型 provider，不增加第六个插件，也不把宿主变成多人平台。
+`omp-config` 同时打包故事树工作台。每个项目对应一个只绑定 `127.0.0.1` 的本地网站，数据保存在项目内的 `.storyline/` 目录；插件内的 `scripts/storyline-workbench.mjs` 是 CLI 入口，提供 `init`、`serve`、`context` 和 `propose` 四个子命令。工作台不注册插件工具、事件 hook、自启动器或模型 provider，不增加第七个插件，也不把宿主变成多人平台。
 
 `volcengine-coding-plan` 使用 `https://ark.cn-beijing.volces.com/api/coding/v3`，静态暴露官方 Coding Plan 模型名；模型选择、凭证保存和请求发送仍由 OMP 原生 `/login`、`/model`、AuthStorage 与 OpenAI-compatible transport 负责。
+
+`opendesign-coding-plan` 通过 OMP 原生 `registerProvider` 注册 OpenDesign (AMR) provider，`/login opendesign` 在缺少 Vela CLI 时先安装 `npm install --global @powerformer/vela-cli` 再走设备码登录，CLI 不可安装或其登录失败时回退到控制台 API key，`/model` 拉取账号的实时模型清单，`/usage` 从已登录的 Vela session 读取会员等级、credits、今日消费和 Design Plan 窗口；模型选择、凭证保存和请求发送仍由 OMP 原生 `/login`、`/model`、AuthStorage 与 OpenAI-compatible transport 负责。
 
 marketplace extension tools 默认 opt-in；四个 `fact_check_*` 管线工具（analyze/evidence/report/review）例外，默认进入工具清单，使自然语言的事实核查请求能直达管线。`omp-config` 在宿主提供 active-tool 管理 API 时注册 `/enhancer-tools`，只支持 `config`、`writing`、`fact` 和 `all` 组；激活工具不改变权限。Coding Plan provider 是模型扩展，不增加 extension tool 或权限。
 

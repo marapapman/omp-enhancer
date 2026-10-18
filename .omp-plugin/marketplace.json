@@ -5,8 +5,8 @@
     "name": "marapapman"
   },
   "metadata": {
-    "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, Volcengine Ark Coding Plan model integration, and Alibaba Bailian Token Plan image and speech bridges.",
-    "version": "1.0.60",
+    "description": "OMP enhancement plugins for optional workflow references, shared config context, writing, fact checking, editable draw.io diagrams, Volcengine Ark Coding Plan model integration, Alibaba Bailian Token Plan image and speech bridges, and OpenDesign (AMR) models with Vela CLI sign-in.",
+    "version": "1.0.61",
     "pluginRoot": "plugins"
   },
   "plugins": [
@@ -109,6 +109,15 @@
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/alibaba-token-plan-media",
       "repository": "https://github.com/marapapman/omp-enhancer",
       "source": "./alibaba-token-plan-media"
+    },
+    {
+      "name": "opendesign-coding-plan",
+      "description": "Native OMP provider for OpenDesign (AMR) models with Vela CLI sign-in and Design Plan quota.",
+      "version": "0.1.0",
+      "category": "development",
+      "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/opendesign-coding-plan",
+      "repository": "https://github.com/marapapman/omp-enhancer",
+      "source": "./opendesign-coding-plan"
     }
   ]
 }

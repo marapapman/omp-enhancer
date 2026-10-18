@@ -19,6 +19,7 @@ const fixtureVersions = new Map([
   ['omp-fact-checker', '0.1.0'],
   ['volcengine-coding-plan', '0.1.0'],
   ['alibaba-token-plan-media', '0.1.0'],
+  ['opendesign-coding-plan', '0.1.0'],
 ]);
 
 const pluginFixtures = pluginWorkspaces.map(({ directory, name }) => ({
@@ -278,6 +279,7 @@ test('--plugin all --bump patch bumps every plugin package, every catalog entry,
       ['omp-fact-checker', { directory: 'omp-fact-checker', version: '0.1.1' }],
       ['volcengine-coding-plan', { directory: 'volcengine-coding-plan', version: '0.1.1' }],
       ['alibaba-token-plan-media', { directory: 'alibaba-token-plan-media', version: '0.1.1' }],
+      ['opendesign-coding-plan', { directory: 'opendesign-coding-plan', version: '0.1.1' }],
     ]);
 
     assert.equal(catalog.metadata.version, '1.0.1');

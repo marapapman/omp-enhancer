@@ -7,7 +7,8 @@
     "plugins/writing-helper",
     "plugins/omp-fact-checker",
     "plugins/volcengine-coding-plan",
-    "plugins/alibaba-token-plan-media"
+    "plugins/alibaba-token-plan-media",
+    "plugins/opendesign-coding-plan"
   ],
   "scripts": {
     "test": "npm run check:workflows && node --test scripts/*.test.js && npm test --workspaces --if-present",

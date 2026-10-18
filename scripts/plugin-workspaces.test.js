@@ -33,7 +33,7 @@ test('one plugin workspace inventory matches npm and marketplace metadata', asyn
   }))
 })
 
-test('canonical inventory lists the five plugin workspaces in order', () => {
+test('canonical inventory lists the six plugin workspaces in order', () => {
   assert.deepEqual(
     pluginWorkspaces.map(({ name, workspace }) => ({ name, workspace })),
     [
@@ -42,6 +42,7 @@ test('canonical inventory lists the five plugin workspaces in order', () => {
       { name: 'omp-fact-checker', workspace: 'plugins/omp-fact-checker' },
       { name: 'volcengine-coding-plan', workspace: 'plugins/volcengine-coding-plan' },
       { name: 'alibaba-token-plan-media', workspace: 'plugins/alibaba-token-plan-media' },
+      { name: 'opendesign-coding-plan', workspace: 'plugins/opendesign-coding-plan' },
     ],
   )
 })
