@@ -8,7 +8,7 @@ description: Use after Main selects writing and passes the assignment to a `writ
 
 Write document sections, run one focused inline check, fix clear local issues, and flag evidence or author-decision gaps. Additional write-check-fix passes are optional and run only when the user explicitly asks for iterative revision.
 
-This skill inherits the writer text tool's built-in technical prose style and applies it inside the format the user or the target document defines.
+This skill inherits the writer text tool's built-in technical prose style and applies it inside the format the user or the target document defines. Its local style list is a supplement; where it conflicts with that baseline, the baseline wins, and an explicit user style still wins.
 
 ## Workflow boundary
 

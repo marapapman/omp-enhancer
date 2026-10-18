@@ -85,6 +85,8 @@ the per-family chain.
 
 If the user supplies a writing sample, match its sentence length, word choice, punctuation, openings, and transitions; the sample overrides §8, including its dash rate. Without a sample, take the voice from the kind of text: opinion and blog prose keep the writer's uncertainty, asides, and humor; reference and technical prose stays neutral and plain. Removing tells is half the job; the result must still sound like a person.
 
+When the writer's built-in technical prose baseline is the active style, long information-dense sentences, formal technical vocabulary, first-person plural methods, explicit definitions followed by examples, and problem → approach framing are not AI tells by themselves; still flag the listed structures, unsupported significance, and copied citation markers.
+
 ## Pattern catalog
 
 ### Staging instead of stating — act on one sighting

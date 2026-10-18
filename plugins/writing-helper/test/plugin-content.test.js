@@ -134,6 +134,41 @@ describe('bundled frugal-pi writing content', () => {
     assert.match(readme, /所有中文写作任务默认按该文风输出/u);
   });
 
+  it('makes the supplied English technical prose baseline mandatory for every English writing task', () => {
+    const source = readFileSync(join(rootDir, 'agents/writer.md'), 'utf8');
+    assert.match(source, /## Technical Prose Style \(Generation-Time Guidance\)/u);
+    assert.match(source, /default English prose baseline for every English writing task/u);
+    assert.match(source, /Software systems have become more complex, distributed, and increasingly reliant on third-party functionality\./u);
+    assert.match(source, /We have also assessed the time and memory tradeoffs of the algorithm with respect to the decomposition parameter\./u);
+    assert.match(source, /never reproduce its content, citations, footnote markers,\s+numbers, examples, or claims/u);
+    assert.match(source, /Where an assigned Skill's local style\s+list conflicts with this baseline, this baseline wins/u);
+    assert.match(source, /A short format such as a title, label,\s+caption, or UI string keeps its own conventions/u);
+    assert.match(source, /Long, information-dense sentences with explicit links/u);
+    assert.match(source, /Define the term, then instantiate it/u);
+    assert.match(source, /short, plain result sentences are not the style target/u);
+    assert.match(source, /Never copy the\s+baseline's citations, footnote markers, numbers, policy example, or system\s+names/u);
+
+    for (const path of [
+      'skills/writing-mad-writer/SKILL.md',
+      'skills/writing-markdown-helper/SKILL.md',
+      'skills/writing-state-machine/SKILL.md',
+    ]) {
+      const skill = readFileSync(join(rootDir, path), 'utf8');
+      assert.match(skill, /built-in technical prose style/u, `${path} should inherit the baseline`);
+      assert.match(skill, /baseline wins/u, `${path} should state baseline precedence`);
+    }
+
+    const checker = readFileSync(join(rootDir, 'agents/checker.md'), 'utf8');
+    assert.match(checker, /built-in technical prose baseline is the default register/u);
+    assert.match(checker, /long information-dense sentences[\s\S]{0,160}are not defects by themselves/u);
+
+    const humanizer = readFileSync(join(rootDir, 'skills/format-humanizer/SKILL.md'), 'utf8');
+    assert.match(humanizer, /long information-dense sentences[\s\S]{0,160}are not AI tells by themselves/u);
+
+    const readme = readFileSync(join(rootDir, 'README.md'), 'utf8');
+    assert.match(readme, /内置英文技术散文基线/u);
+  });
+
   it('keeps writer agents proposal-only at both capability and prompt levels', () => {
     const contracts = new Map([
       [

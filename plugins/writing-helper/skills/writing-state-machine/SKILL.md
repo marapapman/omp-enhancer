@@ -9,7 +9,7 @@ Use a Read → Draft → Self-check → Handoff matrix for hallucination-sensiti
 content. Fresh isolated sessions are an optional mode only when the user
 explicitly requests paragraph context isolation.
 
-This skill inherits the writer text tool's built-in technical prose style and applies it inside the format the user or the target document defines.
+This skill inherits the writer text tool's built-in technical prose style and applies it inside the format the user or the target document defines. Its local style list is a supplement; where it conflicts with that baseline, the baseline wins, and an explicit user style still wins.
 
 ## Workflow boundary
 

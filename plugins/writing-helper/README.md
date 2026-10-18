@@ -138,6 +138,8 @@ Model policy:
 
 `zh-writer` 的内置中文风格基线采用用户指定的基准文本；所有中文写作任务默认按该文风输出，用户显式给出另一种风格时以用户为准。基准文本只用于模仿文风，不作为事实、立场或案例来源。
 
+`writer` 的内置英文技术散文基线采用用户指定的基准文本；所有英文写作任务默认按该文风输出，用户显式给出另一种风格时以用户为准。基准文本只用于模仿文风，不作为事实、引用或案例来源。
+
 Composed workflows freeze one shared Skill list for assignment metadata, so it
 may include methods owned by sibling checkpoints. Each writing child treats
 those bodies as context rather than a new assignment and applies only the

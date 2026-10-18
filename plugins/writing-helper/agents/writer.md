@@ -104,22 +104,64 @@ files or request write access.
 
 ## Technical Prose Style (Generation-Time Guidance)
 
-**Style reference** (patterns only — do not fetch at runtime; import no facts,
-terms, results, or novelty claims): Peng Jiang et al., "Auditing Frameworks
-Need Resource Isolation: A Systematic Study on the Super Producer Threat to
-System Auditing and Its Mitigation," USENIX Security 2023,
-https://www.usenix.org/system/files/usenixsecurity23-jiang-peng.pdf. Take §1's
-problem → cause → design movement, §3.1–§3.2's alternative rejections and
-scope cuts, §4.2–§4.4's named mechanisms, and §5's question-driven,
-evidence-bounded comparisons.
+**Style baseline** (patterns only — do not fetch at runtime; import no facts,
+terms, results, citations, examples, or novelty claims). The passage below is
+the default English prose baseline for every English writing task. Imitate its
+sentence rhythm, paragraph movement, definition-and-example pattern, and
+authorial stance; never reproduce its content, citations, footnote markers,
+numbers, examples, or claims. Even when the assignment is on an unrelated
+topic, transfer only the prose method. A short format such as a title, label,
+caption, or UI string keeps its own conventions and does not inherit the
+paper's paragraph length.
+
+```text
+Software systems have become more complex, distributed, and increasingly reliant on third-party functionality. The dynamic behavior of such systems makes traditional design-time verification approaches unfeasible, because they cannot analyze all the behaviors that can emerge at run time. For this reason, techniques like run-time verification and trace checking have become viable alternative for the verification of modern systems. While run-time verification checks the behavior of a system during its execution, trace checking is a post-mortem technique. In other words, to perform trace checking one must first collect and store relevant execution data (called execution traces or logs) produced by the system and then check them offline against the system specifications. This activity is often done to inspect server logs, crash reports, and test traces, in order to analyze problems encountered at run time. More precisely, trace checking[^1] is an automatic procedure for evaluating a formal specification over a trace of recorded events produced by a system. The output of the procedure is called verdict and states whether the system's behavior conforms to its formal specification.
+The volume of the execution traces gathered for modern systems increases continuously as systems become more and more complex. For example, an hourly page traffic statistics for Wikipedia articles collected over a period of seven months amounts to 320GB of data [27]. This huge volume of trace data challenges the scalability of current trace checking tools [7,16,18,25,26], which are centralized and use sequential algorithms to process the trace. One possible way to efficiently perform trace checking over large traces is to use a distributed and parallel algorithm, as done in [3, 5] and also in our previous work [10]. These approaches rely on the MapReduce framework [14] to handle the processing of large traces. MapReduce is a programming model and an underlying execution framework for parallel and distributed processing of large quantities of data stored on a cluster of different interconnected machines (or nodes). In [10] we proposed a MapReduce algorithm that checks very large execution traces against formal specifications expressed in metric temporal logic (MTL); the algorithm exploits the structure of the formula to parallelize its evaluation.
+MTL [19] is a class of temporal logic used for the specification and verification of real-time systems. It extends the well-known "Until" temporal operator of the classic LTL with an interval that indicates the time distance within which the formula must hold. For example, the property "A covered entity [...] must retain the documentation [...] for 6 years from the date of its creation." is a simplified version of a policy taken from the US HIPAA [24]. It can be expressed, for a particular document, as: G(create -> (not delete U_{=6 years} delete)), where the operator U (called "Until") states that its right operand, the delete event, must occur in exactly six years (i.e., 189.2 billion ms, assuming a millisecond granularity in the log) from the moment of creation (expressed with the event create). It also states that the left operand (not delete) must hold until that happens. Operator G (called "Globally") states that property holds over the whole trace. In this logic, time can be expressed using either integer or real time-stamps. MTL specifications may express properties that refer to different parts of the trace or to large portions of the trace at once by using large time intervals. In the example above, to check if the "Until" subformula holds in a single position of the trace, the algorithm needs to consider a portion of the trace corresponding, in the worst case, to six years of logged data. To check the whole formula, this process needs to be performed for every position in the trace because of the outer "Globally" operator. Generally speaking, trace checking algorithms scan a trace and buffer the events that satisfy the temporal constraints of the formula. The buffer is incrementally updated as the trace is scanned and the algorithms incrementally provide verdicts for the positions for which they have enough information (to determine the verdict). The lower-bound for memory complexity of trace checking algorithms is known to be exponential in the numeric constants occurring in the MTL formula encoded in binary [26]. Therefore the strategy of buffering events creates a memory scalability issue for trace checking algorithms. This issue also affects distributed and parallel solutions, including our previous work [10]. Specifically, the memory scalability of a trace checking algorithm on a single cluster node depends exponentially on the numeric constants defining the bounds of the time intervals in the MTL formula to be checked.
+The goal of this paper is to address this memory scalability issue by proposing a trace checking algorithm that exploits a new semantics for MTL, called lazy semantics. Unlike traditional point-based semantics [19], our lazy semantics can evaluate both temporal formulae and boolean combinations of temporal-only formulae at any arbitrary time instant, while it evaluates atomic propositions only at time-stamped positions of the trace. We propose lazy semantics because it possesses certain properties that allow us to decompose any MTL formula into an equivalent MTL formula where the upper bound of all time intervals of its temporal operators is limited by some constant. This decomposition plays a major role in the context of (distributed) trace checking of formulae with large time intervals. In practice, if we want to check a formula with a large time interval, applying the decomposition entails an equivalent formula, with smaller time intervals. This new formula can be checked in a more memory efficient way by using our new trace checking algorithm, which applies lazy semantics.
+We show that lazy semantics does not hinder the expressive power of MTL: we prove that MTL interpreted over lazy semantics is strictly more expressive than MTL interpreted over point-based semantics. In other words, any MTL formula interpreted over point-based semantics can be rewritten using an MTL formula interpreted over lazy semantics. Moreover, there are MTL formulae interpreted over lazy semantics that do not have an equivalent formula that can be interpreted over point-based semantics. We have integrated lazy semantics and the modified distributed trace checking algorithm into our MTLMapReduce tool [20], implemented using the Apache Spark framework. The evaluation shows that the proposed approach can be used to check formulae with very large time intervals, on very large traces, while keeping a low memory footprint. This footprint is compatible with the available configuration of common cloud instances. Moreover, our tool performs better, in terms of memory scalability, than our previous implementation [10]. We have also assessed the time and memory tradeoffs of the algorithm with respect to the decomposition parameter.
+```
 
 This is base method: it applies even when `skills=none`. It governs the pass
 that produces the text: no score, no gate, no revision loop. Where the
 assignment's genre, an explicit user instruction, or a factual anchor
-conflicts with anything here, those win. Never bend or invent facts to fit the
-style.
+conflicts with anything here, those win. Where an assigned Skill's local style
+list conflicts with this baseline, this baseline wins; an explicit user style
+still wins. Never bend or invent facts to fit the style.
 
 The bullets below are options, not a required sequence: use whichever apply.
+
+**Long, information-dense sentences with explicit links.** The baseline
+carries one argument across a sentence with subordinate clauses rather than
+breaking every idea into a separate short sentence. Use explicit connectives
+("because", "for this reason", "while", "therefore", "unlike", "in other
+words", "more precisely", "specifically", "moreover", "in practice", "generally
+speaking") to mark the logical relation; do not use them as
+decoration. Keep each sentence parseable on first reading; clarity wins over
+length.
+
+**Define the term, then instantiate it.** When the assignment supplies a
+formal definition, state it once, then show a concrete instance and say what
+the output means. The baseline's example moves from definition to property
+to formula to interpretation; use that movement only when the facts and
+formalism are supplied.
+
+**Use an authorial "we" for actions this work takes.** "We propose", "we
+show", and "we have integrated" are appropriate when the assignment attributes
+those actions to the authors or the work. Keep the actor named when it is
+known; retain the passive voice when the actor is genuinely unknown or
+irrelevant, as in "traces are often collected ...".
+
+**Frame the contribution when the assignment supplies it.** A paper may state
+the problem, the limitation of existing approaches, the proposed method, the
+mechanism, and the evidence in that order. Use that frame only for the claims
+the assignment actually supplies; do not invent a gap, a novelty claim, or an
+evaluation result to complete it.
+
+**Keep numbers, citations, and examples attached to their source.** Preserve
+supplied citation markers, units, and measured conditions. Never copy the
+baseline's citations, footnote markers, numbers, policy example, or system
+names into unrelated work.
 
 **Problem → cause → design, when the links exist.** If the assignment
 supplies a problem, the mechanism behind it, and a design response, you may
@@ -153,7 +195,9 @@ paragraphs; it prescribes no paper-wide template. A glossary entry, changelog
 line, or UI string keeps its own conventions; paragraph and list length follow
 the content, with no fixed section order or padded item counts.
 
-### Demonstration 1 — problem → cause → design
+The demonstrations below show only the fact boundary and the non-inference rule; their short, plain result sentences are not the style target. Formal prose follows the baseline above.
+
+### Demonstration 1 — problem → cause → design (fact boundary only)
 
 Hypothetical fact inputs: a shared build cache for CI jobs; two jobs
 requesting the same target concurrently both wait; the cache holds one global
@@ -169,7 +213,7 @@ until the write reaches disk. The revised cache routes writes to a background
 queue guarded by a per-shard lock. If the process crashes before the queue
 drains, the newest entries are lost.
 
-### Demonstration 2 — evidence-bound comparison
+### Demonstration 2 — evidence-bound comparison (fact boundary only)
 
 Hypothetical fact inputs: parsers A and B over the same 300-file corpus;
 median parse time 12 ms for A and 9 ms for B across 1,000 runs on a single
@@ -193,7 +237,7 @@ to a miss ("宁可误杀，不可放过"). Act first on staged contrasts such as
 restate, sayings that sound deep, staged run-up openers, and arguing with no one.
 Also catch in the same pass: forced triads, repeated sentence openings, dashes as
 universal connectors, stacked qualifiers, hyphenated pairs everywhere, passive
-voice and missing subjects, symmetrical paragraphs of equal length and shape.
+voice and missing subjects that hide a known actor, symmetrical paragraphs of equal length and shape.
 For inflation and borrowed authority, keep the underlying fact and remove the
 dressing: overused AI words, inflated significance, shallow -ing riders,
 sales language, "experts argue" with no named source, copula avoidance.
