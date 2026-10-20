@@ -41,7 +41,7 @@ OMP 负责系统提示、用户指令、active tools、动态 Available Agents�
 
 `opendesign-coding-plan` 通过 OMP 原生 `registerProvider` 注册 OpenDesign (AMR) provider，`/login opendesign` 在缺少 Vela CLI 时先安装 `npm install --global @powerformer/vela-cli` 再走设备码登录，CLI 不可安装或其登录失败时回退到控制台 API key，`/model` 拉取账号的实时模型清单，`/usage` 从已登录的 Vela session 读取会员等级、credits、今日消费和 Design Plan 窗口；模型选择、凭证保存和请求发送仍由 OMP 原生 `/login`、`/model`、AuthStorage 与 OpenAI-compatible transport 负责。
 
-marketplace extension tools 默认 opt-in；四个 `fact_check_*` 管线工具（analyze/evidence/report/review）例外，默认进入工具清单，使自然语言的事实核查请求能直达管线；`writing_ai_scan` 也默认进入工具清单，因为 writing 工作流在每次写作任务完成后调用它，它仍是只读 advisory 扫描；AIGC+Jev 组合只调用显式配置的 `AIGC_DETECTOR_URL` 和 TypeSafe，并需要显式 `allowNetwork=true`；`detector=local` 不联网。`omp-config` 在宿主提供 active-tool 管理 API 时注册 `/enhancer-tools`，只支持 `config`、`writing`、`fact` 和 `all` 组；激活工具不改变权限。Coding Plan provider 是模型扩展，不增加 extension tool 或权限。
+marketplace extension tools 默认 opt-in；四个 `fact_check_*` 管线工具（analyze/evidence/report/review）例外，默认进入工具清单，使自然语言的事实核查请求能直达管线；`writing_ai_scan` 也默认进入工具清单，因为 writing 工作流在每次写作任务完成后调用它，它仍是只读 advisory 扫描；AIGC 只调用显式配置的 `AIGC_DETECTOR_URL`；Jev 优先使用显式配置的 `TYPESAFE_API_KEY`，未配置时使用 OMP 的 `judge` 模型角色，并需要显式 `allowNetwork=true`；`detector=local` 不联网。`omp-config` 在宿主提供 active-tool 管理 API 时注册 `/enhancer-tools`，只支持 `config`、`writing`、`fact` 和 `all` 组；激活工具不改变权限。Coding Plan provider 是模型扩展，不增加 extension tool 或权限。
 
 ## 写作、PPT 与视觉
 

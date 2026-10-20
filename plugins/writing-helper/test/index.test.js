@@ -209,6 +209,42 @@ describe('writing-logic extension', () => {
     assert.equal(withoutKeywords.details.issues.length > 0, true);
   });
 
+  it('AI scan tool resolves the OMP judge model when the TypeSafe key is absent', async () => {
+    const api = makeExtensionApi();
+    api.pi = { settings: { getModelRoles: () => ({ judge: 'opencode-zen/jev-1.13-free' }) } };
+    extension(api);
+
+    const savedAigc = process.env.AIGC_DETECTOR_URL;
+    const savedKey = process.env.TYPESAFE_API_KEY;
+    delete process.env.AIGC_DETECTOR_URL;
+    delete process.env.TYPESAFE_API_KEY;
+    try {
+      const aiTool = api.registerTool.mock.calls[2].arguments[0];
+      const output = await aiTool.execute(
+        'call-ai-judge',
+        { text: 'The server starts. The worker drains the queue. The cache clears old entries.', language: 'en', allowNetwork: true, detector: 'auto' },
+        undefined,
+        undefined,
+        {
+          cwd: process.cwd(),
+          models: { list: () => [{ provider: 'opencode-zen' }] },
+          modelRegistry: {
+            getProviderModels: () => [{ id: 'jev-1.13-free', provider: 'opencode-zen', kind: 'judge', api: 'typesafe', baseUrl: 'https://judge' }],
+            hasConcreteAuth: () => true,
+            getApiKeyAndHeaders: async () => ({ apiKey: 'omp-key', headers: {} }),
+          },
+        },
+      );
+
+      assert.equal(output.isError, false);
+      assert.equal(output.details.detector, 'local');
+      assert.deepEqual(output.details.ensemble.missing, ['AIGC_DETECTOR_URL']);
+    } finally {
+      if (savedAigc === undefined) delete process.env.AIGC_DETECTOR_URL; else process.env.AIGC_DETECTOR_URL = savedAigc;
+      if (savedKey === undefined) delete process.env.TYPESAFE_API_KEY; else process.env.TYPESAFE_API_KEY = savedKey;
+    }
+  });
+
   it('quality check leaves missing citation evidence unresolved when network opt-in is omitted', async () => {
     const oldFetch = globalThis.fetch;
     let calls = 0;

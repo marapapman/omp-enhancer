@@ -149,6 +149,7 @@ describe('Jev detector adapter', () => {
     assert.equal(output.probability, 0.07);
     assert.equal(output.confidence, 0.86);
     assert.equal(output.model, 'jev-test');
+    assert.equal(output.source, 'typesafe');
     assert.equal(captured.url, 'https://api.typesafe.ai/v1/systemone');
     assert.equal(captured.init.headers.authorization, 'Bearer key');
     const body = JSON.parse(captured.init.body);
@@ -251,10 +252,108 @@ describe('slow detector adapter and ensemble configuration', () => {
     assert.match(failed.error, /HTTP 500/u);
   });
 
+  it('uses an OMP judge model when no TypeSafe key is set', async () => {
+    let captured;
+    const output = await fetchJevProbability({
+      text: 'hello',
+      env: {},
+      judgeModel: {
+        id: 'jev-1.13-free',
+        provider: 'opencode-zen',
+        baseUrl: 'https://judge.example/zen/',
+        headers: { authorization: 'Bearer omp' },
+      },
+      fetchImpl: async (url, init) => {
+        captured = { url, init };
+        return response({
+          model: 'jev-1.13-free',
+          answers: { authorship: { type: 'choice', choice: 'ai', probabilities: { human: 0.2, ai: 0.8 } } },
+        });
+      },
+    });
+    assert.equal(output.probability, 0.8);
+    assert.equal(output.model, 'jev-1.13-free');
+    assert.equal(output.source, 'omp-judge');
+    assert.equal(captured.url, 'https://judge.example/zen/v1/systemone');
+    assert.equal(captured.init.headers.authorization, 'Bearer omp');
+    assert.equal(JSON.parse(captured.init.body).model, 'jev-1.13-free');
+  });
+
+  it('rejects a judge model without a base URL or model id', async () => {
+    const output = await fetchJevProbability({
+      text: 'x',
+      env: {},
+      judgeModel: { id: '', baseUrl: '', headers: {} },
+      fetchImpl: async () => response({}),
+    });
+    assert.equal(output.code, 'jev_not_configured');
+    assert.match(output.error, /no base URL or model id/u);
+  });
+
+  it('rejects malformed judge probabilities and incomplete judge models', async () => {
+    const stringProbability = await fetchJevProbability({
+      text: 'x',
+      env: {},
+      judgeModel: { id: 'jev', baseUrl: 'https://judge', headers: {} },
+      fetchImpl: async () => response({ answers: { authorship: { probabilities: { ai: '0.8' } } } }),
+    });
+    assert.equal(stringProbability.code, 'jev_invalid_response');
+
+    const infiniteProbability = await fetchJevProbability({
+      text: 'x',
+      env: {},
+      judgeModel: { id: 'jev', baseUrl: 'https://judge', headers: {} },
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async text() {
+          return '{"answers":{"authorship":{"probabilities":{"ai":1e999}}}}';
+        },
+      }),
+    });
+    assert.equal(infiniteProbability.code, 'jev_invalid_response');
+
+    const missingId = await fetchJevProbability({
+      text: 'x',
+      env: {},
+      judgeModel: { id: '', baseUrl: 'https://judge', headers: {} },
+      fetchImpl: async () => response({}),
+    });
+    assert.equal(missingId.code, 'jev_not_configured');
+
+    const missingBaseUrl = await fetchJevProbability({
+      text: 'x',
+      env: {},
+      judgeModel: { id: 'jev', headers: {} },
+      fetchImpl: async () => response({}),
+    });
+    assert.equal(missingBaseUrl.code, 'jev_not_configured');
+  });
+
   it('reports which ensemble variables are missing', () => {
-    assert.deepEqual(ensembleConfiguration({ AIGC_DETECTOR_URL: 'x', TYPESAFE_API_KEY: 'k' }), { ready: true, missing: [] });
-    assert.deepEqual(ensembleConfiguration({ AIGC_DETECTOR_URL: 'x' }), { ready: false, missing: ['TYPESAFE_API_KEY'] });
-    assert.deepEqual(ensembleConfiguration({ TYPESAFE_API_KEY: 'k' }), { ready: false, missing: ['AIGC_DETECTOR_URL'] });
-    assert.deepEqual(ensembleConfiguration({}), { ready: false, missing: ['AIGC_DETECTOR_URL', 'TYPESAFE_API_KEY'] });
+    assert.deepEqual(
+      ensembleConfiguration({ AIGC_DETECTOR_URL: 'x', TYPESAFE_API_KEY: 'k' }),
+      { ready: true, missing: [], jevSource: 'typesafe' },
+    );
+    assert.deepEqual(
+      ensembleConfiguration({ AIGC_DETECTOR_URL: 'x' }),
+      { ready: false, missing: ['TYPESAFE_API_KEY'], jevSource: null },
+    );
+    assert.deepEqual(
+      ensembleConfiguration({ TYPESAFE_API_KEY: 'k' }),
+      { ready: false, missing: ['AIGC_DETECTOR_URL'], jevSource: 'typesafe' },
+    );
+    assert.deepEqual(
+      ensembleConfiguration({}),
+      { ready: false, missing: ['AIGC_DETECTOR_URL', 'TYPESAFE_API_KEY'], jevSource: null },
+    );
+    assert.deepEqual(
+      ensembleConfiguration({ AIGC_DETECTOR_URL: 'x' }, { judgeAvailable: true }),
+      { ready: true, missing: [], jevSource: 'omp-judge' },
+    );
+    assert.deepEqual(
+      ensembleConfiguration({}, { judgeAvailable: true }),
+      { ready: false, missing: ['AIGC_DETECTOR_URL'], jevSource: 'omp-judge' },
+    );
   });
 });

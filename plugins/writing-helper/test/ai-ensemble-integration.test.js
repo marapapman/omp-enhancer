@@ -68,6 +68,98 @@ describe('writing_ai_scan ensemble integration', () => {
     assert.equal(output.details.ensemble.label, 'ai');
   });
 
+  it('uses the OMP judge model when TYPESAFE_API_KEY is absent', async () => {
+    const output = await runWritingAiScan(
+      { text: TEXT, language: 'en', detector: 'ensemble', allowNetwork: true, mode: 'standard' },
+      process.cwd(),
+      {
+        env: { AIGC_DETECTOR_URL: 'http://aigc' },
+        judge: async () => ({
+          ok: true,
+          model: {
+            id: 'jev-1.13-free',
+            provider: 'opencode-zen',
+            baseUrl: 'https://judge.example/zen',
+            headers: { authorization: 'Bearer omp' },
+          },
+        }),
+        fetchImpl: async (url, init) => {
+          if (url === 'http://aigc') return response({ aiProbability: 0.9 });
+          if (url === 'https://judge.example/zen/v1/systemone') {
+            assert.equal(init.headers.authorization, 'Bearer omp');
+            return response({
+              model: 'jev-1.13-free',
+              answers: { authorship: { type: 'choice', choice: 'ai', probabilities: { human: 0.2, ai: 0.8 } } },
+            });
+          }
+          throw new Error(`unexpected URL ${url}`);
+        },
+      },
+    );
+
+    assert.equal(output.ok, true);
+    assert.equal(output.details.detector, 'ensemble');
+    assert.equal(output.details.ensemble.score, 0.8325);
+    assert.equal(output.details.ensemble.jevSource, 'omp-judge');
+    assert.equal(output.details.ensemble.jevProvider, 'opencode-zen');
+    assert.equal(output.details.ensemble.jevModel, 'jev-1.13-free');
+    assert.match(output.report, /Jev model = jev-1.13-free/u);
+  });
+
+  it('records why the judge fallback was unavailable', async () => {
+    const output = await runWritingAiScan(
+      { text: TEXT, language: 'en', detector: 'auto', allowNetwork: true },
+      process.cwd(),
+      { env: { AIGC_DETECTOR_URL: 'http://aigc' }, judge: async () => ({ ok: false, reason: 'no_judge_model' }) },
+    );
+    assert.equal(output.ok, true);
+    assert.equal(output.details.detector, 'local');
+    assert.deepEqual(output.details.ensemble.missing, ['TYPESAFE_API_KEY']);
+    assert.equal(output.details.ensemble.judgeReason, 'no_judge_model');
+  });
+
+  it('records a judge resolver exception without failing the local scan', async () => {
+    const output = await runWritingAiScan(
+      { text: TEXT, language: 'en', detector: 'auto', allowNetwork: true },
+      process.cwd(),
+      {
+        env: { AIGC_DETECTOR_URL: 'http://aigc' },
+        judge: async () => {
+          throw new Error('registry unavailable');
+        },
+      },
+    );
+    assert.equal(output.ok, true);
+    assert.equal(output.details.detector, 'local');
+    assert.equal(output.details.ensemble.judgeReason, 'registry unavailable');
+  });
+
+
+  it('defaults a reasonless judge failure to no_judge_model', async () => {
+    const output = await runWritingAiScan(
+      { text: TEXT, language: 'en', detector: 'auto', allowNetwork: true },
+      process.cwd(),
+      { env: { AIGC_DETECTOR_URL: 'http://aigc' }, judge: async () => ({ ok: false }) },
+    );
+    assert.equal(output.details.detector, 'local');
+    assert.equal(output.details.ensemble.judgeReason, 'no_judge_model');
+  });
+
+  it('records a non-Error judge rejection as text', async () => {
+    const output = await runWritingAiScan(
+      { text: TEXT, language: 'en', detector: 'auto', allowNetwork: true },
+      process.cwd(),
+      {
+        env: { AIGC_DETECTOR_URL: 'http://aigc' },
+        judge: async () => {
+          throw 'judge offline';
+        },
+      },
+    );
+    assert.equal(output.details.detector, 'local');
+    assert.equal(output.details.ensemble.judgeReason, 'judge offline');
+  });
+
   it('uses the slow fallback only inside the uncertainty band', async () => {
     const output = await runWritingAiScan(
       { text: TEXT, language: 'en', detector: 'ensemble', allowNetwork: true },

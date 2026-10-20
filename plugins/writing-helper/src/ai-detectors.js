@@ -78,13 +78,25 @@ export async function fetchAigcProbability({ text, language, env = process.env, 
   }
 }
 
-export async function fetchJevProbability({ text, env = process.env, fetchImpl = fetch }) {
+export async function fetchJevProbability({ text, env = process.env, fetchImpl = fetch, judgeModel = null }) {
   const token = envValue(env, 'TYPESAFE_API_KEY');
-  if (!token) {
-    return { ok: false, code: 'jev_not_configured', error: 'TYPESAFE_API_KEY is not set' };
+  if (!token && !judgeModel) {
+    return {
+      ok: false,
+      code: 'jev_not_configured',
+      error: 'TYPESAFE_API_KEY is not set and no OMP judge model is available',
+    };
   }
-  const baseUrl = (envValue(env, 'TYPESAFE_BASE_URL') || DEFAULT_TYPESAFE_BASE_URL).replace(/\/+$/u, '');
-  const model = envValue(env, 'TYPESAFE_MODEL') || DEFAULT_TYPESAFE_MODEL;
+  const baseUrl = (token
+    ? (envValue(env, 'TYPESAFE_BASE_URL') || DEFAULT_TYPESAFE_BASE_URL)
+    : String(judgeModel.baseUrl ?? '')).replace(/\/+$/u, '');
+  const model = token
+    ? (envValue(env, 'TYPESAFE_MODEL') || DEFAULT_TYPESAFE_MODEL)
+    : judgeModel.id;
+  const headers = token ? authHeaders(token) : { ...judgeModel.headers };
+  if (!baseUrl || !model) {
+    return { ok: false, code: 'jev_not_configured', error: 'The Jev model has no base URL or model id' };
+  }
   const payload = {
     model,
     state: text,
@@ -100,17 +112,24 @@ export async function fetchJevProbability({ text, env = process.env, fetchImpl =
     const data = await postJson(
       fetchImpl,
       `${baseUrl}/v1/systemone`,
-      authHeaders(token),
+      headers,
       payload,
       'Jev detector',
     );
     const answer = data?.answers?.authorship;
+    const source = token ? 'typesafe' : 'omp-judge';
     const probability = answer?.probabilities?.ai;
     if (typeof probability === 'number' && Number.isFinite(probability)) {
-      return { ok: true, probability, confidence: answer.confidence, model: data.model ?? model };
+      return { ok: true, probability, confidence: answer.confidence, model: data.model ?? model, source };
     }
     if (answer?.choice === 'ai' || answer?.choice === 'human') {
-      return { ok: true, probability: answer.choice === 'ai' ? 1 : 0, confidence: answer.confidence, model: data.model ?? model };
+      return {
+        ok: true,
+        probability: answer.choice === 'ai' ? 1 : 0,
+        confidence: answer.confidence,
+        model: data.model ?? model,
+        source,
+      };
     }
     return { ok: false, code: 'jev_invalid_response', error: 'Jev response has no authorship probability or choice' };
   } catch (error) {
@@ -142,9 +161,14 @@ export async function fetchSlowLabel({ text, language, env = process.env, fetchI
   }
 }
 
-export function ensembleConfiguration(env = process.env) {
+export function ensembleConfiguration(env = process.env, { judgeAvailable = false } = {}) {
   const missing = [];
   if (!envValue(env, 'AIGC_DETECTOR_URL')) missing.push('AIGC_DETECTOR_URL');
-  if (!envValue(env, 'TYPESAFE_API_KEY')) missing.push('TYPESAFE_API_KEY');
-  return { ready: missing.length === 0, missing };
+  const hasTypesafeKey = Boolean(envValue(env, 'TYPESAFE_API_KEY'));
+  if (!hasTypesafeKey && !judgeAvailable) missing.push('TYPESAFE_API_KEY');
+  return {
+    ready: missing.length === 0,
+    missing,
+    jevSource: hasTypesafeKey ? 'typesafe' : judgeAvailable ? 'omp-judge' : null,
+  };
 }

@@ -8,6 +8,7 @@ import { formatAiScanReport, scanAiStyle } from './src/ai-scan.js';
 import { fetchExternalCitationEvidence, parseLocalLiteratureRecords } from './src/citations.js';
 import { censusDeck, formatDeckCensusReport } from './src/deck-census.js';
 import { loadWritingLogicDocument } from './src/document-loader.js';
+import { resolveOmpJudge } from './src/omp-judge.js';
 import { analyzeWritingQuality } from './src/quality.js';
 import { formatWritingLogicReport, formatWritingQualityReport } from './src/report.js';
 import { withToolErrorHandling } from './src/tool-error-utils.js';
@@ -45,8 +46,8 @@ function buildAiScanParameters(z) {
     ...buildBaseShape(z),
     includeKeywordRules: z.boolean().optional().describe('Include keyword and phrase rules in addition to the statistical scan. Default: true.'),
     baseline: z.string().optional().describe('Optional JSON object mapping terms to expected occurrences per 1000 tokens, e.g. \'{"delve":0.1}\'. Rates override the built-in reference distribution.'),
-    detector: z.enum(['auto', 'ensemble', 'local']).optional().describe('Detector mode: auto uses AIGC+Jev when configured and local statistics otherwise; ensemble requires allowNetwork, AIGC_DETECTOR_URL, and TYPESAFE_API_KEY; local runs only the built-in scanner.'),
-    allowNetwork: z.boolean().optional().describe('Allow the ensemble to send the text to AIGC_DETECTOR_URL and TypeSafe. Default: false; local scanning never uses the network.'),
+    detector: z.enum(['auto', 'ensemble', 'local']).optional().describe('Detector mode: auto uses AIGC+Jev when configured and local statistics otherwise; ensemble requires allowNetwork and AIGC_DETECTOR_URL, plus either TYPESAFE_API_KEY or an OMP judge model; local runs only the built-in scanner.'),
+    allowNetwork: z.boolean().optional().describe('Allow the ensemble to send the text to AIGC_DETECTOR_URL and to TypeSafe or the OMP judge model. Default: false; local scanning never uses the network.'),
   });
 }
 
@@ -317,12 +318,24 @@ export async function runWritingAiScan(input, cwd, options = {}) {
   }
 
   const env = options.env ?? process.env;
-  const configuration = ensembleConfiguration(env);
+  const hasTypesafeKey = typeof env.TYPESAFE_API_KEY === 'string' && env.TYPESAFE_API_KEY.trim() !== '';
+  let judgeModel = null;
+  let judgeReason = null;
+  if (!hasTypesafeKey && typeof options.judge === 'function') {
+    try {
+      const resolved = await options.judge();
+      if (resolved?.ok) judgeModel = resolved.model;
+      else judgeReason = resolved?.reason ?? 'no_judge_model';
+    } catch (error) {
+      judgeReason = error?.message ?? String(error);
+    }
+  }
+  const configuration = ensembleConfiguration(env, { judgeAvailable: Boolean(judgeModel) });
   if (!configuration.ready) {
     const result = {
       ...base,
       detector: 'local',
-      ensemble: { status: 'unavailable', missing: configuration.missing },
+      ensemble: { status: 'unavailable', missing: configuration.missing, judgeReason },
     };
     if (detector === 'ensemble') {
       const title = base.language === 'zh'
@@ -357,7 +370,7 @@ export async function runWritingAiScan(input, cwd, options = {}) {
     };
   }
 
-  const jev = await fetchJevProbability({ text: loaded.text, env, fetchImpl });
+  const jev = await fetchJevProbability({ text: loaded.text, env, fetchImpl, judgeModel });
   if (!jev.ok) {
     const result = { ...base, detector: 'ensemble', ensemble: { status: 'error', component: 'jev', error: jev.error } };
     return {
@@ -405,6 +418,8 @@ export async function runWritingAiScan(input, cwd, options = {}) {
         slow: slowLabel,
       },
       jevModel: jev.model,
+      jevSource: jev.source,
+      jevProvider: judgeModel?.provider ?? null,
       jevPrompt: JEV_AUTHORSHIP_PROMPT,
       slowError,
     },
@@ -551,15 +566,15 @@ export default function writingLogicExtension(omp) {
     name: 'writing_ai_scan',
     label: 'Writing AI Style Scan',
     description:
-      'Detect AI-generated prose with the AIGC + Jev score ensemble: 0.325 * AIGC P(AI) + 0.675 * Jev P(AI), decision threshold 0.38, and an optional slow-model fallback inside a 0.20 uncertainty band. AIGC comes from AIGC_DETECTOR_URL; Jev comes from TypeSafe with TYPESAFE_API_KEY. The built-in keyword and distribution scan supplies supporting evidence and can run alone with detector=local. Run it with allowNetwork=true after every completed writing task and after each repair pass. Advisory only; it reports findings and does not rewrite.',
+      'Detect AI-generated prose with the AIGC + Jev score ensemble: 0.325 * AIGC P(AI) + 0.675 * Jev P(AI), decision threshold 0.38, and an optional slow-model fallback inside a 0.20 uncertainty band. AIGC comes from AIGC_DETECTOR_URL; Jev uses TYPESAFE_API_KEY when set and otherwise the configured OMP judge model. The built-in keyword and distribution scan supplies supporting evidence and can run alone with detector=local. Run it with allowNetwork=true after every completed writing task and after each repair pass. Advisory only; it reports findings and does not rewrite.',
     defaultInactive: false,
     approval: 'read',
     promptSnippet: 'Run the AIGC + Jev ensemble after every completed writing task and after each repair pass.',
     promptGuidelines: [
       'Run writing_ai_scan with detector=ensemble and allowNetwork=true on the final text of every completed writing task before checker review and delivery, then rerun it after each writer/zh-writer repair pass.',
       'The ensemble is 0.325 * AIGC P(AI) + 0.675 * Jev P(AI) with threshold 0.38; do not re-tune those values per invocation.',
-      'When network access is not allowed or AIGC_DETECTOR_URL/TYPESAFE_API_KEY is missing, record that limitation instead of presenting the local scanner as the ensemble.',
-      'Ensemble mode sends the text to AIGC_DETECTOR_URL and TypeSafe; use detector=local for offline or sensitive text.',
+      'When network access is not allowed, AIGC_DETECTOR_URL is missing, or no Jev source is available (neither TYPESAFE_API_KEY nor an OMP judge model), record that limitation instead of presenting the local scanner as the ensemble.',
+      'Ensemble mode sends the text to AIGC_DETECTOR_URL and the configured Jev source (TypeSafe or the OMP judge model); use detector=local for offline or sensitive text.',
       'Treat the label and local score as advisory distribution evidence, not as a gate or a quality verdict.',
       'Neither the AIGC+Jev authorship score nor the local metrics replace the sentence-level information-gain review — they cannot tell whether a sentence adds a new fact, a necessary qualification, or a key logical relation — so the writer/zh-writer self-check runs first and this scan stays advisory evidence.',
       'Use detector=local only for diagnostics; it is a simple statistical scan, not the ensemble.',
@@ -567,7 +582,13 @@ export default function writingLogicExtension(omp) {
     ],
     parameters: aiScanParameters,
     execute: withToolErrorHandling('writing_ai_scan', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-      const output = await runWritingAiScan(paramsOrEmpty(params), cwdFromContext(ctx));
+      const output = await runWritingAiScan(paramsOrEmpty(params), cwdFromContext(ctx), {
+        judge: () => resolveOmpJudge({
+          settings: omp.pi?.settings,
+          modelRegistry: ctx?.modelRegistry,
+          models: ctx?.models,
+        }),
+      });
       return {
         content: [textContent(output.report)],
         details: output.details,

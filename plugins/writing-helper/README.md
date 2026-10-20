@@ -37,7 +37,8 @@ The scan does not replace the sentence-level information-gain review. Neither th
 ### AIGC + Jev ensemble
 
 `detector` defaults to `auto`: the ensemble runs when `allowNetwork` is true and
-both required settings are present; otherwise the local scanner runs alone.
+`AIGC_DETECTOR_URL` is set together with a Jev source (`TYPESAFE_API_KEY` or an
+OMP judge model); otherwise the local scanner runs alone.
 `detector=ensemble` fails closed when network access is not allowed or a setting
 is missing; `detector=local` always uses the local scanner and never uses the
 network.
@@ -45,7 +46,7 @@ network.
 | Setting | Purpose |
 | --- | --- |
 | `AIGC_DETECTOR_URL` | HTTP endpoint that accepts `{text, language}` and returns `{"aiProbability": 0.0-1.0}`. `AIGC_DETECTOR_TOKEN` is sent as a bearer token when set. |
-| `TYPESAFE_API_KEY` | TypeSafe System One key for Jev. |
+| `TYPESAFE_API_KEY` | TypeSafe System One key for Jev. Optional when OMP has a usable `judge` role; the judge model is used otherwise. |
 | `TYPESAFE_BASE_URL` | Optional TypeSafe base URL, default `https://api.typesafe.ai`. |
 | `TYPESAFE_MODEL` | Optional Jev model, default `jev-latest`. |
 | `SLOW_DETECTOR_URL` | Optional fallback endpoint that accepts `{text, language}` and returns `{"label":"human"}` or `{"label":"ai"}`. `SLOW_DETECTOR_TOKEN` is optional. |
@@ -63,7 +64,7 @@ The Jev prompt sent to TypeSafe is fixed and auditable:
 }
 ```
 
-The AIGC classifier is language-routed outside this plugin: `yuchuantian/AIGC_detector_zhv3` for Chinese and `yuchuantian/AIGC_detector_env3` for English. The writing-helper package stays pure JavaScript; it calls the configured HTTP service and TypeSafe, and stores no credentials.
+The AIGC classifier is language-routed outside this plugin: `yuchuantian/AIGC_detector_zhv3` for Chinese and `yuchuantian/AIGC_detector_env3` for English. The writing-helper package stays pure JavaScript; it calls the configured HTTP service and the Jev source, TypeSafe or the OMP judge model, and stores no credentials; OMP supplies judge credentials at call time.
 
 Ensemble mode sends the full text to those configured services. The tool requires
 explicit `allowNetwork=true` in addition to the environment settings; `auto`
@@ -76,6 +77,7 @@ reference server (requires `torch` and `transformers`):
 ```bash
 python3 scripts/aigc-detector-server.py --port 8765
 export AIGC_DETECTOR_URL=http://127.0.0.1:8765
+# Optional when the OMP judge role is configured; the judge model is used otherwise.
 export TYPESAFE_API_KEY=...
 ```
 
