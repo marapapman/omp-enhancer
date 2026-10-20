@@ -54,7 +54,10 @@ single-family tasks, not one pass that applies every rule at once.
 
 1. **Scan task.** Read the whole document once and produce a family
    inventory: which tell families actually appear, with one cited example
-   each, strongest first. Look at paragraph shape, list shape, and headings,
+   each, strongest first. If the host exposes `writing_ai_scan`, use its
+   distribution evidence (sentence rhythm, opening entropy, connective
+   density, repeated n-grams, word-habit z-scores) to prioritize families;
+   a keyword hit alone is not a verdict. Look at paragraph shape, list shape, and headings,
    not only sentences: a contrast split across two sentences, three parallel
    examples, or the same closer after every section is the same tell at a
    larger scale. Families with no findings are skipped later.
@@ -97,6 +100,8 @@ When the writer's built-in technical prose baseline is the active style, long in
 
 **§3 Sayings that sound deep.** "the real question is", "at its core", "what really matters", "X is the Y of Z", "X is not a tool but a mirror". Replace the aphorism with the specific claim it dresses up.
 
+**§3b Neat metaphor that tidies a complex concept.** A short, catchy analogy that compresses a mechanism into a tidy image ("X is the engine of Y", "X is a bridge", "think of X as Y") without saying where the analogy breaks. Keep a metaphor only when the assignment supplies it, it bears weight, and its limits are stated; otherwise replace it with the mechanism, conditions, and costs. A metaphor is not evidence.
+
 **§4 Staged run-up.** "Let's dive in", "Here's what you need to know", "Let's be honest", "Look,", "Without further ado", "In this section, we will". Remove the run-up, not just its tone.
 
 **§5 Arguing with no one.** "I'm not saying", "To be clear", "This isn't about", "Don't get me wrong", "A tempting approach would be", "Some might say... but". These answer objections that appear nowhere else in the text, usually left over from an earlier draft. Remove the defense; if it carries a real claim, state the claim.
@@ -104,6 +109,8 @@ When the writer's built-in technical prose baseline is the active style, long in
 ### Rhythm by rule — edit on first sighting
 
 **§6 Forced triads.** Adjective triplets ("clear, concise, and compelling") and three-part examples where the meaning has two parts or five. Check that each item adds a distinct idea; merge examples, develop the strongest one, or vary the structure. Keep three real items when the meaning needs three.
+
+**§6b Parallelism and parallelism setup.** More than two clauses or items with the same syntactic shape, or a sentence that announces a list before delivering it ("three forces", "two things", "first ... second ... third ...", "not only ... but also ...", "both ... and ...", "from X to Y to Z"). Use parallelism only when every item is independently justified and the structure carries a real comparison; otherwise vary the syntax or state the items separately. A numbered setup with no real list is a tell.
 
 **§7 Repeated sentence openings.** Several sentences in a row starting with the same subject, handled by rule instead of by ear. Merge the sentences, change the subject, or begin with the action. Do not ban the word; a remaining sentence may still start with "She".
 

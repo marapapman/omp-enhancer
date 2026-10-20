@@ -6,8 +6,8 @@
 
 Public surfaces:
 
-- OMP tools: `writing_logic_check`, `writing_quality_check`
-- Slash commands: `/writing-logic paper.md`, `/writing-quality paper.md`
+- OMP tools: `writing_logic_check`, `writing_quality_check`, `writing_ai_scan`
+- Slash commands: `/writing-logic paper.md`, `/writing-quality paper.md`, `/writing-ai-scan paper.md`
 - Package entrypoint: `index.js`, exported as the package root and declared in `package.json` under `omp.extensions`
 
 ## Architecture & Data Flow
@@ -18,8 +18,9 @@ The runtime is a small Node ESM pipeline with `index.js` as the composition root
 - Logic flow: input `text` or UTF-8 `path` -> `src/document-loader.js` -> `src/analyzer.js` -> `src/report.js`.
 - Quality flow: input -> document load -> evidence discovery/enrichment -> `src/quality.js` -> optional citation network lookup -> second quality pass -> report formatting.
 - Citation flow: `src/citations.js` extracts Markdown citations, LaTeX `\cite{...}`, DOI strings/URLs, and arXiv IDs/URLs; compares against BibTeX and local literature records; marks citations `VERIFIED`, `MISMATCH`, or `UNVERIFIED`.
+- AI scan flow: input -> document load -> `src/ai-scan.js` local evidence -> `src/ai-detectors.js` AIGC and TypeSafe Jev adapters (when configured) -> `src/ai-ensemble.js` weighted decision (0.325/0.675, threshold 0.38, optional slow fallback) -> report. `detector=auto` falls back to local only when both required settings are absent; `detector=ensemble` fails closed.
 - The code is intentionally deterministic. Logic and style checks are regex/string heuristics over plain text, not model calls.
-- Most code is synchronous. The main async path is `runWritingQualityCheck()` because citation evidence may use `globalThis.fetch`.
+- Most code is synchronous. The async paths are `runWritingQualityCheck()` (citation evidence) and `runWritingAiScan()` (AIGC/Jev/slow HTTP adapters).
 
 Error handling pattern:
 
@@ -88,6 +89,9 @@ export function analyzeThing(input = {}) {
 - `src/quality.js` - orchestrates logic, style, and citation checks.
 - `src/citations.js` - citation extraction, BibTeX/local literature parsing, metadata comparison, optional Crossref/arXiv lookup.
 - `src/style.js` - Chinese and English style-pattern rules.
+- `src/ai-scan.js` - local keyword, distribution, and style-profile scanner.
+- `src/ai-detectors.js` - AIGC HTTP, TypeSafe Jev, and optional slow-detector adapters; no credentials are stored.
+- `src/ai-ensemble.js` - AIGC+Jev weighted policy, threshold, and slow fallback.
 - `src/document-loader.js` - inline text vs relative/absolute UTF-8 path loading.
 - `src/language.js` - `zh`/`en` auto-detection by CJK and Latin character counts.
 - `src/report.js` - Markdown-like human report formatting.

@@ -2,6 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 
 import { analyzeWritingLogic } from './src/analyzer.js';
+import { AI_ENSEMBLE_SLOW_MARGIN, decideAiEnsemble } from './src/ai-ensemble.js';
+import { JEV_AUTHORSHIP_PROMPT, ensembleConfiguration, fetchAigcProbability, fetchJevProbability, fetchSlowLabel } from './src/ai-detectors.js';
+import { formatAiScanReport, scanAiStyle } from './src/ai-scan.js';
 import { fetchExternalCitationEvidence, parseLocalLiteratureRecords } from './src/citations.js';
 import { censusDeck, formatDeckCensusReport } from './src/deck-census.js';
 import { loadWritingLogicDocument } from './src/document-loader.js';
@@ -34,6 +37,16 @@ function buildQualityParameters(z) {
     literaturePath: z.string().optional().describe('File path to local literature records for citation verification.'),
     allowNetwork: z.boolean().optional().describe('Allow network access for citation verification via DOI, arXiv, or Crossref. Default: false.'),
     citationProviders: z.array(z.enum(['local', 'doi', 'arxiv', 'crossref'])).optional().describe('Citation verification providers to use. Example: [\'doi\', \'crossref\'].'),
+  });
+}
+
+function buildAiScanParameters(z) {
+  return z.object({
+    ...buildBaseShape(z),
+    includeKeywordRules: z.boolean().optional().describe('Include keyword and phrase rules in addition to the statistical scan. Default: true.'),
+    baseline: z.string().optional().describe('Optional JSON object mapping terms to expected occurrences per 1000 tokens, e.g. \'{"delve":0.1}\'. Rates override the built-in reference distribution.'),
+    detector: z.enum(['auto', 'ensemble', 'local']).optional().describe('Detector mode: auto uses AIGC+Jev when configured and local statistics otherwise; ensemble requires allowNetwork, AIGC_DETECTOR_URL, and TYPESAFE_API_KEY; local runs only the built-in scanner.'),
+    allowNetwork: z.boolean().optional().describe('Allow the ensemble to send the text to AIGC_DETECTOR_URL and TypeSafe. Default: false; local scanning never uses the network.'),
   });
 }
 
@@ -118,6 +131,21 @@ function parseCommandArgs(args) {
     }
     if (token === '--citation-providers') {
       input.citationProviders = parseChecks(tokens[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (token === '--baseline') {
+      input.baseline = tokens[index + 1];
+      index += 1;
+      continue;
+    }
+    if (token === '--no-keywords') {
+      input.includeKeywordRules = false;
+      continue;
+    }
+    if (token === '--detector') {
+      const value = tokens[index + 1];
+      if (['auto', 'ensemble', 'local'].includes(value)) input.detector = value;
       index += 1;
       continue;
     }
@@ -246,6 +274,144 @@ export function runWritingLogicCheck(input, cwd) {
   };
 }
 
+function ensembleFailureReport(language, title, lines) {
+  const heading = language === 'zh' ? '## AIGC + Jev 组合检测失败' : '## AIGC + Jev Ensemble Failed';
+  return [heading, '', title, ...lines.map((line) => `- ${line}`)].join('\n');
+}
+
+export async function runWritingAiScan(input, cwd, options = {}) {
+  const loaded = loadWritingLogicDocument(input, cwd);
+  if (!loaded.ok) {
+    return {
+      ok: false,
+      report: loaded.error,
+      details: { error: loaded.error, source: loaded.source },
+    };
+  }
+
+  const base = scanAiStyle({
+    ...input,
+    text: loaded.text,
+  });
+  const detector = input.detector ?? 'auto';
+  if (detector === 'local') {
+    const result = { ...base, detector: 'local' };
+    return { ok: true, report: formatAiScanReport(result), details: result };
+  }
+
+  if (input.allowNetwork !== true) {
+    const result = { ...base, detector: 'local', ensemble: { status: 'unavailable', reason: 'network_not_allowed' } };
+    if (detector === 'ensemble') {
+      const title = base.language === 'zh'
+        ? '网络访问未授权：allowNetwork 必须为 true'
+        : 'Network access is not allowed: allowNetwork must be true';
+      return {
+        ok: false,
+        report: ensembleFailureReport(base.language, title, base.language === 'zh'
+          ? ['显式传入 allowNetwork=true 后重试，或使用 detector=local。']
+          : ['Pass allowNetwork=true explicitly and retry, or use detector=local.']),
+        details: result,
+      };
+    }
+    return { ok: true, report: formatAiScanReport(result), details: result };
+  }
+
+  const env = options.env ?? process.env;
+  const configuration = ensembleConfiguration(env);
+  if (!configuration.ready) {
+    const result = {
+      ...base,
+      detector: 'local',
+      ensemble: { status: 'unavailable', missing: configuration.missing },
+    };
+    if (detector === 'ensemble') {
+      const title = base.language === 'zh'
+        ? `缺少配置：${configuration.missing.join('、')}`
+        : `Missing configuration: ${configuration.missing.join(', ')}`;
+      return {
+        ok: false,
+        report: ensembleFailureReport(base.language, title, base.language === 'zh'
+          ? ['设置这些环境变量后重试，或显式使用 detector=local。']
+          : ['Set those environment variables and retry, or pass detector=local explicitly.']),
+        details: result,
+      };
+    }
+    return { ok: true, report: formatAiScanReport(result), details: result };
+  }
+
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const aigc = await fetchAigcProbability({
+    text: loaded.text,
+    language: base.language,
+    env,
+    fetchImpl,
+  });
+  if (!aigc.ok) {
+    const result = { ...base, detector: 'ensemble', ensemble: { status: 'error', component: 'aigc', error: aigc.error } };
+    return {
+      ok: false,
+      report: ensembleFailureReport(base.language, aigc.error, base.language === 'zh'
+        ? ['检查 AIGC_DETECTOR_URL 指向的服务。']
+        : ['Check the service behind AIGC_DETECTOR_URL.']),
+      details: result,
+    };
+  }
+
+  const jev = await fetchJevProbability({ text: loaded.text, env, fetchImpl });
+  if (!jev.ok) {
+    const result = { ...base, detector: 'ensemble', ensemble: { status: 'error', component: 'jev', error: jev.error } };
+    return {
+      ok: false,
+      report: ensembleFailureReport(base.language, jev.error, base.language === 'zh'
+        ? ['检查 TYPESAFE_API_KEY，以及 TYPESAFE_BASE_URL 和 TYPESAFE_MODEL。']
+        : ['Check TYPESAFE_API_KEY, TYPESAFE_BASE_URL, and TYPESAFE_MODEL.']),
+      details: result,
+    };
+  }
+
+  let decision = decideAiEnsemble({ aigcP: aigc.probability, jevP: jev.probability });
+  const slowBand = decideAiEnsemble({
+    aigcP: aigc.probability,
+    jevP: jev.probability,
+    slowMargin: AI_ENSEMBLE_SLOW_MARGIN,
+  });
+  let slowLabel = null;
+  let slowError = null;
+  if (slowBand.uncertain) {
+    const slow = await fetchSlowLabel({ text: loaded.text, language: base.language, env, fetchImpl });
+    if (slow.ok) {
+      slowLabel = slow.label;
+      decision = decideAiEnsemble({
+        aigcP: aigc.probability,
+        jevP: jev.probability,
+        slowLabel,
+        slowMargin: AI_ENSEMBLE_SLOW_MARGIN,
+      });
+    } else if (slow.code !== 'slow_not_configured') {
+      slowError = slow.error;
+      decision = { ...decision, uncertain: true };
+    }
+  }
+
+  const result = {
+    ...base,
+    detector: 'ensemble',
+    ensemble: {
+      status: 'decided',
+      ...decision,
+      components: {
+        aigc: aigc.probability,
+        jev: jev.probability,
+        slow: slowLabel,
+      },
+      jevModel: jev.model,
+      jevPrompt: JEV_AUTHORSHIP_PROMPT,
+      slowError,
+    },
+  };
+  return { ok: true, report: formatAiScanReport(result), details: result };
+}
+
 export async function runWritingQualityCheck(input, cwd) {
   const loaded = loadWritingLogicDocument(input, cwd);
   if (!loaded.ok) {
@@ -329,6 +495,7 @@ export default function writingLogicExtension(omp) {
   const z = omp.zod.z;
   const logicParameters = buildLogicParameters(z);
   const qualityParameters = buildQualityParameters(z);
+  const aiScanParameters = buildAiScanParameters(z);
   omp.registerTool({
     name: 'writing_logic_check',
     label: 'Writing Logic Check',
@@ -379,6 +546,34 @@ export default function writingLogicExtension(omp) {
     }),
   });
 
+  omp.registerTool({
+    name: 'writing_ai_scan',
+    label: 'Writing AI Style Scan',
+    description:
+      'Detect AI-generated prose with the AIGC + Jev score ensemble: 0.325 * AIGC P(AI) + 0.675 * Jev P(AI), decision threshold 0.38, and an optional slow-model fallback inside a 0.20 uncertainty band. AIGC comes from AIGC_DETECTOR_URL; Jev comes from TypeSafe with TYPESAFE_API_KEY. The built-in keyword and distribution scan supplies supporting evidence and can run alone with detector=local. Run it with allowNetwork=true after every completed writing task and after each repair pass. Advisory only; it reports findings and does not rewrite.',
+    defaultInactive: false,
+    approval: 'read',
+    promptSnippet: 'Run the AIGC + Jev ensemble after every completed writing task and after each repair pass.',
+    promptGuidelines: [
+      'Run writing_ai_scan with detector=ensemble and allowNetwork=true on the final text of every completed writing task before checker review and delivery, then rerun it after each writer/zh-writer repair pass.',
+      'The ensemble is 0.325 * AIGC P(AI) + 0.675 * Jev P(AI) with threshold 0.38; do not re-tune those values per invocation.',
+      'When network access is not allowed or AIGC_DETECTOR_URL/TYPESAFE_API_KEY is missing, record that limitation instead of presenting the local scanner as the ensemble.',
+      'Ensemble mode sends the text to AIGC_DETECTOR_URL and TypeSafe; use detector=local for offline or sensitive text.',
+      'Treat the label and local score as advisory distribution evidence, not as a gate or a quality verdict.',
+      'Use detector=local only for diagnostics; it is a simple statistical scan, not the ensemble.',
+      'Do not use this tool to rewrite documents; it reports findings only.',
+    ],
+    parameters: aiScanParameters,
+    execute: withToolErrorHandling('writing_ai_scan', async (_toolCallId, params, _signal, _onUpdate, ctx) => {
+      const output = await runWritingAiScan(paramsOrEmpty(params), cwdFromContext(ctx));
+      return {
+        content: [textContent(output.report)],
+        details: output.details,
+        isError: !output.ok,
+      };
+    }),
+  });
+
   omp.registerCommand('writing-logic', {
     description: 'Check a document path for substantive writing logic issues.',
     async handler(args, ctx) {
@@ -403,6 +598,21 @@ export default function writingLogicExtension(omp) {
         output = await runWritingQualityCheck(input, cwdFromContext(ctx));
       } else {
         output = missingCommandInputResult('writing-quality');
+      }
+      notifyResult(ctx, output);
+      return output;
+    },
+  });
+
+  omp.registerCommand('writing-ai-scan', {
+    description: 'Check a document path for AI-style tells with keyword and statistical evidence.',
+    async handler(args, ctx) {
+      const input = parseCommandArgs(typeof args === 'string' ? args : '');
+      let output;
+      if (hasCommandInput(input)) {
+        output = await runWritingAiScan(input, cwdFromContext(ctx));
+      } else {
+        output = missingCommandInputResult('writing-ai-scan');
       }
       notifyResult(ctx, output);
       return output;

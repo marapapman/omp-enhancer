@@ -4,7 +4,7 @@ import { describe, it, mock } from 'node:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import extension, { runWritingLogicCheck, runWritingQualityCheck } from '../index.js';
+import extension, { runWritingAiScan, runWritingLogicCheck, runWritingQualityCheck } from '../index.js';
 
 function schema(kind, data = {}) {
   return { __ompZodSchema: true, kind, ...data, describe: () => schema(kind, data) };
@@ -61,11 +61,11 @@ describe('writing-logic extension', () => {
     extension(api);
     assert.deepEqual(
       api.registerTool.mock.calls.map((call) => call.arguments[0].name),
-      ['writing_logic_check', 'writing_quality_check'],
+      ['writing_logic_check', 'writing_quality_check', 'writing_ai_scan'],
     );
     assert.deepEqual(
       api.registerCommand.mock.calls.map((call) => call.arguments[0]),
-      ['writing-logic', 'writing-quality'],
+      ['writing-logic', 'writing-quality', 'writing-ai-scan'],
     );
   });
 
@@ -167,6 +167,46 @@ describe('writing-logic extension', () => {
     assert.equal(response.details.summary.byCategory.logic > 0, true);
     assert.equal(response.details.summary.byCategory.style > 0, true);
     assert.equal(response.details.summary.byCategory.citation > 0, true);
+  });
+
+  it('AI scan tool returns statistical details and can suppress keyword rules', async () => {
+    const api = makeExtensionApi();
+    extension(api);
+
+    const aiTool = api.registerTool.mock.calls[2].arguments[0];
+    assert.equal(aiTool.defaultInactive, false);
+    assert.equal(aiTool.approval, 'read');
+    assert.match(aiTool.description, /every completed writing task/iu);
+    assert.match(aiTool.description, /0\.325 \* AIGC/u);
+    assert.match(aiTool.promptGuidelines.join('\n'), /every completed writing task before checker review and delivery, then rerun it/iu);
+    assert.equal(aiTool.parameters.shape.includeKeywordRules.kind, 'boolean');
+    assert.equal(aiTool.parameters.shape.baseline.kind, 'string');
+    assert.deepEqual(aiTool.parameters.shape.detector.values, ['auto', 'ensemble', 'local']);
+    assert.equal(aiTool.parameters.shape.allowNetwork.kind, 'boolean');
+
+    const text = 'We delve into intricate challenges. We foster robust frameworks. We showcase vibrant ecosystems. The platform is the engine of innovation. The method is like a compass.';
+    const withKeywords = await aiTool.execute(
+      'call-ai-1',
+      { text, language: 'en', mode: 'standard', maxIssues: 50, detector: 'local' },
+      undefined,
+      undefined,
+      { cwd: process.cwd() },
+    );
+    assert.equal(withKeywords.isError, false);
+    assert.match(withKeywords.content[0].text, /AI Style Scan Results/);
+    assert.equal(withKeywords.details.metrics.tokens > 0, true);
+    assert.equal(withKeywords.details.issues.some((issue) => issue.source === 'keyword'), true);
+
+    const withoutKeywords = await aiTool.execute(
+      'call-ai-2',
+      { text, language: 'en', mode: 'standard', includeKeywordRules: false, maxIssues: 50, detector: 'local' },
+      undefined,
+      undefined,
+      { cwd: process.cwd() },
+    );
+    assert.equal(withoutKeywords.isError, false);
+    assert.equal(withoutKeywords.details.issues.some((issue) => issue.source === 'keyword'), false);
+    assert.equal(withoutKeywords.details.issues.length > 0, true);
   });
 
   it('quality check leaves missing citation evidence unresolved when network opt-in is omitted', async () => {
@@ -501,6 +541,57 @@ describe('writing-logic extension', () => {
 
     assert.equal(output.ok, false);
     assert.match(output.report, /Either text or path is required/);
+  });
+
+  it('AI scan slash command reports simple path-only usage for missing input', async () => {
+    const api = makeExtensionApi();
+    extension(api);
+
+    const command = api.registerCommand.mock.calls[2].arguments[1];
+    const notifications = [];
+    const result = await command.handler('', {
+      cwd: process.cwd(),
+      ui: { notify: (message, level) => notifications.push({ message, level }) },
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.report, /Usage: \/writing-ai-scan paper\.md/);
+    assert.equal(notifications[0].level, 'error');
+  });
+
+  it('AI scan check returns a structured load error for missing input', async () => {
+    const output = await runWritingAiScan({}, process.cwd());
+
+    assert.equal(output.ok, false);
+    assert.match(output.report, /Either text or path is required/);
+  });
+
+  it('AI scan slash command parses baseline and keyword flags', async () => {
+    const api = makeExtensionApi();
+    extension(api);
+    const tempDir = mkdtempSync(join(tmpdir(), 'omp-writing-ai-options-'));
+    writeFileSync(
+      join(tempDir, 'draft.md'),
+      'We delve into intricate challenges. We foster robust frameworks. We showcase vibrant ecosystems. The platform is the engine of innovation. The method is like a compass.',
+      'utf8',
+    );
+
+    const command = api.registerCommand.mock.calls[2].arguments[1];
+    const notifications = [];
+    const result = await command.handler(
+      'draft.md --baseline {"delve":0.01} --no-keywords --max 5 --standard --lang en --detector local',
+      {
+        cwd: tempDir,
+        ui: { notify: (message, level) => notifications.push({ message, level }) },
+      },
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.details.mode, 'standard');
+    assert.equal(result.details.baselineError, null);
+    assert.equal(result.details.issues.length <= 5, true);
+    assert.equal(result.details.issues.every((issue) => issue.source !== 'keyword'), true);
+    assert.equal(notifications[0].level, 'info');
   });
 
   it('quality check reports unreadable bibliography paths before analysis', async () => {

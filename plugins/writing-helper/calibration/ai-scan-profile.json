@@ -1,0 +1,840 @@
+{
+  "name": "writing-ai-scan profile calibration",
+  "generatedAt": "2026-10-19",
+  "languageModel": "bilingual function-word/punctuation/sentence-shape profile with directional weights",
+  "tokenization": "production scanAiStyle: EN_WORD_RE for English, Intl.Segmenter word tokens for Chinese lexical density, CJK characters for Chinese profile rates, splitSentences for sentence stats",
+  "corpus": {
+    "en-human": "pre-2020 English articles: Paul Graham 4 (2004-2019), Julia Evans 1 (2019), The Guardian long reads 5 (2019)",
+    "en-ai": "2026 English AI/AI-assisted web articles: aiblogsai 8, wpseoai 1 (self-disclosed AI), aitoolpipelines 1, perspectiveai 1, SimilarLabs 1",
+    "zh-human": "pre-2020 Chinese articles: 独立中文笔会 2019 essays 6, 博客园 2019 technical posts 4",
+    "zh-ai": "2026 Chinese AI/AI-assisted web articles: 博客园 AI daily/content posts 4, SimilarLabs 中文 1, publicdata.online 1"
+  },
+  "extraction": {
+    "method": "HTTP GET, parse main article container, strip nav/script/style/figure, normalize whitespace",
+    "cleaning": [
+      "remove [googlesitekit-end-of-content] and trailing share widgets",
+      "remove Illustration:/Photograph: leads and PG date lines",
+      "remove 数据来源/生成时间/Share buttons metadata",
+      "remove leading markdown artifacts from cnblogs-liuq"
+    ],
+    "note": "Source text is not vendored; URLs below reproduce the corpus."
+  },
+  "labelNotes": "Human labels are publication dates (pre-2020). AI labels are self-disclosure or inferred from mass-produced AI-content-farm patterns; they are weaker than the human labels.",
+  "thresholds": {
+    "moderate": 20,
+    "high": 60
+  },
+  "summary": {
+    "en-human": {
+      "count": 10,
+      "scoreMin": 0,
+      "scoreMax": 4,
+      "moderatePlus": 0
+    },
+    "en-ai": {
+      "count": 12,
+      "scoreMin": 20,
+      "scoreMax": 72,
+      "moderatePlus": 12
+    },
+    "zh-human": {
+      "count": 10,
+      "scoreMin": 0,
+      "scoreMax": 14,
+      "moderatePlus": 0
+    },
+    "zh-ai": {
+      "count": 6,
+      "scoreMin": 28,
+      "scoreMax": 53,
+      "moderatePlus": 6
+    }
+  },
+  "humanReference": {
+    "en": {
+      "fw_the": {
+        "mean": 55.3993,
+        "sd": 12.6427
+      },
+      "fw_and": {
+        "mean": 18.0339,
+        "sd": 5.1417
+      },
+      "fw_that": {
+        "mean": 15.0954,
+        "sd": 2.6583
+      },
+      "fw_have": {
+        "mean": 5.3623,
+        "sd": 2.4172
+      },
+      "fw_would": {
+        "mean": 2.6568,
+        "sd": 1.2158
+      },
+      "fw_was": {
+        "mean": 9.2435,
+        "sd": 6.216
+      },
+      "fw_with": {
+        "mean": 4.6646,
+        "sd": 1.7901
+      },
+      "fw_but": {
+        "mean": 6.1339,
+        "sd": 1.833
+      },
+      "fw_i": {
+        "mean": 6.0575,
+        "sd": 6.2933
+      },
+      "fw_you": {
+        "mean": 11.1786,
+        "sd": 11.395
+      },
+      "fw_he": {
+        "mean": 3.1329,
+        "sd": 3.3755
+      },
+      "fw_it": {
+        "mean": 10.593,
+        "sd": 3.3855
+      },
+      "pron_1p": {
+        "mean": 12.5164,
+        "sd": 6.8414
+      },
+      "pron_2p": {
+        "mean": 13.1579,
+        "sd": 13.2331
+      },
+      "pron_3p": {
+        "mean": 16.7415,
+        "sd": 9.9187
+      },
+      "contractions": {
+        "mean": 9.7179,
+        "sd": 12.3027
+      },
+      "nominalization": {
+        "mean": 23.2823,
+        "sd": 5.5628
+      },
+      "adverb_ly": {
+        "mean": 17.868,
+        "sd": 3.4702
+      },
+      "long_words": {
+        "mean": 154.1545,
+        "sd": 25.3982
+      },
+      "mean_word_len": {
+        "mean": 4.7369,
+        "sd": 0.2
+      },
+      "colon": {
+        "mean": 0.8612,
+        "sd": 0.8382
+      },
+      "comma": {
+        "mean": 8.9965,
+        "sd": 1.8561
+      },
+      "semicolon": {
+        "mean": 0.1869,
+        "sd": 0.1275
+      },
+      "dash": {
+        "mean": 0.1799,
+        "sd": 0.2746
+      },
+      "paren": {
+        "mean": 0.9463,
+        "sd": 1.0916
+      },
+      "sent_cv": {
+        "mean": 0.5967,
+        "sd": 0.0538
+      },
+      "short_sent": {
+        "mean": 30.0279,
+        "sd": 21.278
+      },
+      "long_sent": {
+        "mean": 14.8831,
+        "sd": 15.5898
+      },
+      "adj_corr": {
+        "mean": 0.0677,
+        "sd": 0.1387
+      }
+    },
+    "zh": {
+      "fw_的": {
+        "mean": 40.2376,
+        "sd": 11.2983
+      },
+      "fw_了": {
+        "mean": 11.8717,
+        "sd": 5.6635
+      },
+      "fw_是": {
+        "mean": 25.9079,
+        "sd": 11.1681
+      },
+      "fw_在": {
+        "mean": 10.1626,
+        "sd": 3.25
+      },
+      "fw_和": {
+        "mean": 3.1254,
+        "sd": 3.2
+      },
+      "fw_与": {
+        "mean": 0.7325,
+        "sd": 0.914
+      },
+      "fw_对": {
+        "mean": 3.3558,
+        "sd": 2.4813
+      },
+      "fw_从": {
+        "mean": 1.5536,
+        "sd": 1.2809
+      },
+      "fw_为": {
+        "mean": 6.2781,
+        "sd": 2.8714
+      },
+      "fw_被": {
+        "mean": 0.993,
+        "sd": 1.2875
+      },
+      "fw_把": {
+        "mean": 1.6025,
+        "sd": 1.3081
+      },
+      "fw_也": {
+        "mean": 6.0715,
+        "sd": 4.4035
+      },
+      "fw_都": {
+        "mean": 3.2061,
+        "sd": 2.2838
+      },
+      "fw_就": {
+        "mean": 8.3885,
+        "sd": 6.7145
+      },
+      "fw_而": {
+        "mean": 2.8784,
+        "sd": 1.5065
+      },
+      "fw_但": {
+        "mean": 2.0344,
+        "sd": 1.4051
+      },
+      "fw_并": {
+        "mean": 0.8356,
+        "sd": 0.6816
+      },
+      "fw_其": {
+        "mean": 2.5632,
+        "sd": 2.3113
+      },
+      "fw_这": {
+        "mean": 11.2418,
+        "sd": 6.828
+      },
+      "fw_那": {
+        "mean": 1.9704,
+        "sd": 1.6689
+      },
+      "pron_我": {
+        "mean": 15.8219,
+        "sd": 8.8594
+      },
+      "pron_我们": {
+        "mean": 4.886,
+        "sd": 6.1804
+      },
+      "pron_你": {
+        "mean": 1.8824,
+        "sd": 1.8506
+      },
+      "pron_你们": {
+        "mean": 0.097,
+        "sd": 0.2185
+      },
+      "pron_他": {
+        "mean": 3.6902,
+        "sd": 4.1246
+      },
+      "pron_他们": {
+        "mean": 1.3053,
+        "sd": 1.4792
+      },
+      "suf_性": {
+        "mean": 1.764,
+        "sd": 1.6124
+      },
+      "suf_化": {
+        "mean": 1.3479,
+        "sd": 1.924
+      },
+      "suf_度": {
+        "mean": 1.7186,
+        "sd": 2.1886
+      },
+      "suf_力": {
+        "mean": 2.1446,
+        "sd": 3.0178
+      },
+      "suf_感": {
+        "mean": 1.177,
+        "sd": 1.1903
+      },
+      "suf_者": {
+        "mean": 1.4467,
+        "sd": 1.7716
+      },
+      "comma": {
+        "mean": 46.9927,
+        "sd": 18.3398
+      },
+      "colon": {
+        "mean": 2.6088,
+        "sd": 1.5387
+      },
+      "dash": {
+        "mean": 0.2167,
+        "sd": 0.4834
+      },
+      "paren": {
+        "mean": 1.5588,
+        "sd": 3.4765
+      },
+      "dunhao": {
+        "mean": 4.671,
+        "sd": 7.3385
+      },
+      "period": {
+        "mean": 21.6561,
+        "sd": 10.1308
+      },
+      "sent_cv": {
+        "mean": 0.6429,
+        "sd": 0.0795
+      },
+      "short_sent": {
+        "mean": 32.631,
+        "sd": 21.1589
+      },
+      "long_sent": {
+        "mean": 12.63,
+        "sd": 23.3917
+      },
+      "adj_corr": {
+        "mean": 0.0634,
+        "sd": 0.1289
+      }
+    }
+  },
+  "directionWeights": {
+    "en": {
+      "fw_the": -0.1511,
+      "fw_and": 0.4132,
+      "fw_that": -0.3321,
+      "fw_have": -0.2498,
+      "fw_would": -0.2156,
+      "fw_was": -0.2269,
+      "fw_with": 0.2969,
+      "fw_but": -0.3599,
+      "fw_i": -0.1028,
+      "fw_you": -0.0274,
+      "fw_he": -0.1526,
+      "fw_it": 0.0284,
+      "pron_1p": -0.2234,
+      "pron_2p": 0.0252,
+      "pron_3p": -0.187,
+      "contractions": -0.0454,
+      "nominalization": 0.1672,
+      "adverb_ly": 0.0646,
+      "long_words": 0.1375,
+      "mean_word_len": 0.2656,
+      "colon": 0.2822,
+      "comma": -0.0925,
+      "semicolon": 0.1558,
+      "dash": -0.0008,
+      "paren": -0.0174,
+      "sent_cv": -0.1245,
+      "short_sent": -0.0337,
+      "long_sent": -0.1493,
+      "adj_corr": -0.0866
+    },
+    "zh": {
+      "fw_的": -0.0449,
+      "fw_了": -0.117,
+      "fw_是": -0.1905,
+      "fw_在": -0.1226,
+      "fw_和": 0.009,
+      "fw_与": 0.3415,
+      "fw_对": -0.0254,
+      "fw_从": 0.2209,
+      "fw_为": -0.0424,
+      "fw_被": 0.0935,
+      "fw_把": 0.1828,
+      "fw_也": -0.1168,
+      "fw_都": -0.1477,
+      "fw_就": -0.1184,
+      "fw_而": 0.1275,
+      "fw_但": -0.1524,
+      "fw_并": 0.0313,
+      "fw_其": -0.0914,
+      "fw_这": -0.0758,
+      "fw_那": -0.2016,
+      "pron_我": -0.1449,
+      "pron_我们": -0.0443,
+      "pron_你": 0.2028,
+      "pron_你们": -0.0697,
+      "pron_他": -0.1587,
+      "pron_他们": -0.1949,
+      "suf_性": 0.0064,
+      "suf_化": 0.2114,
+      "suf_度": 0.0766,
+      "suf_力": -0.1842,
+      "suf_感": -0.0286,
+      "suf_者": 0.0969,
+      "comma": -0.277,
+      "colon": 0.3816,
+      "dash": 0.3514,
+      "paren": 0.015,
+      "dunhao": -0.019,
+      "period": -0.1577,
+      "sent_cv": 0.0439,
+      "short_sent": 0.0528,
+      "long_sent": -0.0316,
+      "adj_corr": 0.0603
+    }
+  },
+  "documents": [
+    {
+      "group": "en-human",
+      "name": "guardian-air",
+      "label": "human",
+      "url": "https://www.theguardian.com/environment/2019/aug/29/the-air-conditioning-trap-how-cold-air-is-heating-the-world",
+      "tokens": 4441,
+      "score": 0,
+      "band": "low",
+      "directional": 0.201,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "en-human",
+      "name": "guardian-cars",
+      "label": "human",
+      "url": "https://www.theguardian.com/technology/2019/oct/03/collision-course-pedestrian-deaths-rising-driverless-cars",
+      "tokens": 5094,
+      "score": 1,
+      "band": "low",
+      "directional": 0.095,
+      "lexicalZ": 1.29
+    },
+    {
+      "group": "en-human",
+      "name": "guardian-essex",
+      "label": "human",
+      "url": "https://www.theguardian.com/news/2019/jun/27/the-invention-of-essex-how-a-county-became-a-caricature",
+      "tokens": 6201,
+      "score": 3,
+      "band": "low",
+      "directional": 0.236,
+      "lexicalZ": 0.1
+    },
+    {
+      "group": "en-human",
+      "name": "guardian-euthanasia",
+      "label": "human",
+      "url": "https://www.theguardian.com/news/2019/jan/18/death-on-demand-has-euthanasia-gone-too-far-netherlands-assisted-dying",
+      "tokens": 5248,
+      "score": 2,
+      "band": "low",
+      "directional": -0.078,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "en-human",
+      "name": "guardian-palme",
+      "label": "human",
+      "url": "https://www.theguardian.com/news/2019/may/16/olof-palme-sweden-prime-minister-unsolved-murder-new-evidence",
+      "tokens": 5044,
+      "score": 1,
+      "band": "low",
+      "directional": -0.069,
+      "lexicalZ": -0.01
+    },
+    {
+      "group": "en-human",
+      "name": "jvns-debug",
+      "label": "human",
+      "url": "https://jvns.ca/blog/2019/06/23/a-few-debugging-resources",
+      "tokens": 2175,
+      "score": 3,
+      "band": "low",
+      "directional": 0.194,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "en-human",
+      "name": "pg-essay",
+      "label": "human",
+      "url": "https://paulgraham.com/essay.html",
+      "tokens": 4612,
+      "score": 0,
+      "band": "low",
+      "directional": -0.177,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "en-human",
+      "name": "pg-fp",
+      "label": "human",
+      "url": "https://paulgraham.com/fp.html",
+      "tokens": 193,
+      "score": 4,
+      "band": "low",
+      "directional": 0.01,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "en-human",
+      "name": "pg-love",
+      "label": "human",
+      "url": "https://paulgraham.com/love.html",
+      "tokens": 4681,
+      "score": 1,
+      "band": "low",
+      "directional": -0.364,
+      "lexicalZ": 0.07
+    },
+    {
+      "group": "en-human",
+      "name": "pg-re",
+      "label": "human",
+      "url": "https://paulgraham.com/re.html",
+      "tokens": 7053,
+      "score": 0,
+      "band": "low",
+      "directional": -0.048,
+      "lexicalZ": -0.35
+    },
+    {
+      "group": "en-ai",
+      "name": "aiblogs-anthropic",
+      "label": "ai",
+      "url": "https://aiblogsai.com/anthropics-ethical-stance-against-military-ai-applications/",
+      "tokens": 580,
+      "score": 47,
+      "band": "moderate",
+      "directional": 1.798,
+      "lexicalZ": 1.65
+    },
+    {
+      "group": "en-ai",
+      "name": "aiblogs-cudis",
+      "label": "ai",
+      "url": "https://aiblogsai.com/the-rise-of-ai-coaching-cudis-and-personalized-health/",
+      "tokens": 578,
+      "score": 66,
+      "band": "high",
+      "directional": 1.813,
+      "lexicalZ": 6.01
+    },
+    {
+      "group": "en-ai",
+      "name": "aiblogs-microsoft",
+      "label": "ai",
+      "url": "https://aiblogsai.com/microsoft-and-openai-a-stronger-partnership-amidst-competition/",
+      "tokens": 669,
+      "score": 66,
+      "band": "high",
+      "directional": 1.746,
+      "lexicalZ": 6.74
+    },
+    {
+      "group": "en-ai",
+      "name": "aiblogs-pentagon",
+      "label": "ai",
+      "url": "https://aiblogsai.com/exploring-openais-role-in-the-pentagons-classified-network/",
+      "tokens": 578,
+      "score": 68,
+      "band": "high",
+      "directional": 1.873,
+      "lexicalZ": 8.56
+    },
+    {
+      "group": "en-ai",
+      "name": "aiblogs-polite",
+      "label": "ai",
+      "url": "https://aiblogsai.com/the-debate-on-polite-prompting-in-ai-interactions/",
+      "tokens": 693,
+      "score": 52,
+      "band": "moderate",
+      "directional": 1.821,
+      "lexicalZ": 2.81
+    },
+    {
+      "group": "en-ai",
+      "name": "aiblogs-reddit",
+      "label": "ai",
+      "url": "https://aiblogsai.com/ai-mines-reddit-for-real-world-weight-loss-drug-side-effects/",
+      "tokens": 869,
+      "score": 47,
+      "band": "moderate",
+      "directional": 1.648,
+      "lexicalZ": 3.43
+    },
+    {
+      "group": "en-ai",
+      "name": "aiblogs-weather",
+      "label": "ai",
+      "url": "https://aiblogsai.com/ai-doubles-down-on-long-range-weather-forecasting-accuracy/",
+      "tokens": 909,
+      "score": 56,
+      "band": "moderate",
+      "directional": 1.821,
+      "lexicalZ": 4.0
+    },
+    {
+      "group": "en-ai",
+      "name": "aiblogs-xcode",
+      "label": "ai",
+      "url": "https://aiblogsai.com/xcode-26-3-enhancing-development-with-ai-support-from-claude-agent-and-codex/",
+      "tokens": 522,
+      "score": 72,
+      "band": "high",
+      "directional": 1.669,
+      "lexicalZ": 8.71
+    },
+    {
+      "group": "en-ai",
+      "name": "aitoolpipelines",
+      "label": "ai",
+      "url": "https://www.aitoolpipelines.com/articles/best-ai-writing-tools",
+      "tokens": 1056,
+      "score": 20,
+      "band": "moderate",
+      "directional": 1.162,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "en-ai",
+      "name": "perspectiveai",
+      "label": "ai",
+      "url": "https://perspectiveai.xyz/best-ai-for-creative-writing-2026",
+      "tokens": 2109,
+      "score": 43,
+      "band": "moderate",
+      "directional": 1.52,
+      "lexicalZ": 0.89
+    },
+    {
+      "group": "en-ai",
+      "name": "similarlabs-en",
+      "label": "ai",
+      "url": "https://similarlabs.com/blog/ai-content-creation-guide-2026",
+      "tokens": 4164,
+      "score": 45,
+      "band": "moderate",
+      "directional": 1.497,
+      "lexicalZ": 4.5
+    },
+    {
+      "group": "en-ai",
+      "name": "wpseoai-disclosure",
+      "label": "ai",
+      "url": "https://wpseoai.com/blog/should-you-disclose-that-your-blog-posts-are-ai-assisted/",
+      "tokens": 1960,
+      "score": 20,
+      "band": "moderate",
+      "directional": 1.228,
+      "lexicalZ": 1.61
+    },
+    {
+      "group": "zh-human",
+      "name": "chinesepen-acheng",
+      "label": "human",
+      "url": "https://www.chinesepen.org/blog/archives/120096",
+      "tokens": 2458,
+      "score": 1,
+      "band": "low",
+      "directional": -0.177,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "zh-human",
+      "name": "chinesepen-caichu",
+      "label": "human",
+      "url": "https://www.chinesepen.org/blog/archives/123149",
+      "tokens": 905,
+      "score": 1,
+      "band": "low",
+      "directional": 0.09,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "zh-human",
+      "name": "chinesepen-huping",
+      "label": "human",
+      "url": "https://www.chinesepen.org/blog/archives/108595",
+      "tokens": 3691,
+      "score": 5,
+      "band": "low",
+      "directional": 0.036,
+      "lexicalZ": -0.62
+    },
+    {
+      "group": "zh-human",
+      "name": "chinesepen-renze",
+      "label": "human",
+      "url": "https://www.chinesepen.org/blog/archives/123055",
+      "tokens": 3681,
+      "score": 8,
+      "band": "low",
+      "directional": 0.443,
+      "lexicalZ": 3.07
+    },
+    {
+      "group": "zh-human",
+      "name": "chinesepen-yili",
+      "label": "human",
+      "url": "https://www.chinesepen.org/blog/archives/123094",
+      "tokens": 1716,
+      "score": 14,
+      "band": "low",
+      "directional": 0.102,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "zh-human",
+      "name": "chinesepen-zhangxiaoyan",
+      "label": "human",
+      "url": "https://www.chinesepen.org/blog/archives/123144",
+      "tokens": 1759,
+      "score": 0,
+      "band": "low",
+      "directional": -0.022,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "zh-human",
+      "name": "cnblogs-binary",
+      "label": "human",
+      "url": "https://www.cnblogs.com/yellowgg/p/11272908.html",
+      "tokens": 253,
+      "score": 3,
+      "band": "low",
+      "directional": -0.218,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "zh-human",
+      "name": "cnblogs-jprofiler",
+      "label": "human",
+      "url": "https://www.cnblogs.com/yellowgg/p/11237659.html",
+      "tokens": 245,
+      "score": 0,
+      "band": "low",
+      "directional": -0.005,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "zh-human",
+      "name": "cnblogs-nginx",
+      "label": "human",
+      "url": "https://www.cnblogs.com/yellowgg/p/11205243.html",
+      "tokens": 314,
+      "score": 0,
+      "band": "low",
+      "directional": -0.157,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "zh-human",
+      "name": "cnblogs-tomcat",
+      "label": "human",
+      "url": "https://www.cnblogs.com/yellowgg/p/11241022.html",
+      "tokens": 1250,
+      "score": 7,
+      "band": "low",
+      "directional": -0.092,
+      "lexicalZ": 0.0
+    },
+    {
+      "group": "zh-ai",
+      "name": "cnblogs-itech",
+      "label": "ai",
+      "url": "https://www.cnblogs.com/itech/p/22868036",
+      "tokens": 1378,
+      "score": 28,
+      "band": "moderate",
+      "directional": 1.283,
+      "lexicalZ": 2.95
+    },
+    {
+      "group": "zh-ai",
+      "name": "cnblogs-itech2",
+      "label": "ai",
+      "url": "https://www.cnblogs.com/itech/p/22834092",
+      "tokens": 1289,
+      "score": 28,
+      "band": "moderate",
+      "directional": 1.143,
+      "lexicalZ": 5.99
+    },
+    {
+      "group": "zh-ai",
+      "name": "cnblogs-lisering",
+      "label": "ai",
+      "url": "https://www.cnblogs.com/lisering/articles/22756734",
+      "tokens": 2679,
+      "score": 29,
+      "band": "moderate",
+      "directional": 1.17,
+      "lexicalZ": 3.02
+    },
+    {
+      "group": "zh-ai",
+      "name": "cnblogs-liuq",
+      "label": "ai",
+      "url": "https://www.cnblogs.com/Liuq-24/p/20238192",
+      "tokens": 1436,
+      "score": 31,
+      "band": "moderate",
+      "directional": 1.189,
+      "lexicalZ": 4.66
+    },
+    {
+      "group": "zh-ai",
+      "name": "publicdata",
+      "label": "ai",
+      "url": "https://publicdata.online/articles/2026-05-17-ai-content-creation-2026.html",
+      "tokens": 1427,
+      "score": 53,
+      "band": "moderate",
+      "directional": 1.133,
+      "lexicalZ": 7.49
+    },
+    {
+      "group": "zh-ai",
+      "name": "similarlabs-zh",
+      "label": "ai",
+      "url": "https://similarlabs.com/zh/blog/ai-content-creation-guide-2026",
+      "tokens": 4690,
+      "score": 32,
+      "band": "moderate",
+      "directional": 1.299,
+      "lexicalZ": 3.01
+    }
+  ]
+}

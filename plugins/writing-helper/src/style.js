@@ -1,9 +1,10 @@
 import { paragraphLocation } from './language.js';
 
-function firstMatch(text, pattern) {
-  const match = pattern.exec(text);
-  if (!match) return null;
-  return { index: match.index, quote: match[0] };
+function firstMatch(text, pattern, minMatches = 1) {
+  const flags = `${pattern.flags.replace('g', '')}g`;
+  const matches = [...text.matchAll(new RegExp(pattern.source, flags))];
+  if (matches.length < minMatches) return null;
+  return { index: matches[0].index, quote: matches[0][0] };
 }
 
 function issue({ id, pattern, language, text, match, severity = 'MINOR', problem, suggestion }) {
@@ -145,7 +146,8 @@ const EN_RULES = [
   {
     pattern: 'en-repetitive-transition',
     regex: /\b(furthermore|moreover|in addition|consequently|nevertheless|thus|therefore),/iu,
-    problem: 'Formulaic transition can make paragraph flow mechanical.',
+    minMatches: 3,
+    problem: 'Repeated formulaic transitions can make paragraph flow mechanical.',
     suggestion: 'Use the logical relationship directly or merge adjacent claims.',
   },
   {
@@ -184,7 +186,7 @@ export function styleIssues(text, language) {
   const rules = language === 'zh' ? ZH_RULES : EN_RULES;
   const issues = [];
   for (const rule of rules) {
-    const match = firstMatch(text, new RegExp(rule.regex.source, rule.regex.flags));
+    const match = firstMatch(text, new RegExp(rule.regex.source, rule.regex.flags), rule.minMatches ?? 1);
     if (!match) continue;
     issues.push(issue({
       id: `${rule.pattern}-${issues.length + 1}`,

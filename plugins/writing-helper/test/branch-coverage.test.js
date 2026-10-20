@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, mock } from 'node:test';
 
-import extension, { runWritingQualityCheck } from '../index.js';
+import extension, { runWritingAiScan, runWritingQualityCheck } from '../index.js';
 import { analyzeWritingLogic } from '../src/analyzer.js';
 import { fetchExternalCitationEvidence, parseLocalLiteratureRecords, verifyCitations } from '../src/citations.js';
 import { loadWritingLogicDocument } from '../src/document-loader.js';
@@ -100,13 +100,17 @@ describe('coverage branch cases', () => {
 
     const logicTool = api.registerTool.mock.calls[0].arguments[0];
     const qualityTool = api.registerTool.mock.calls[1].arguments[0];
+    const aiTool = api.registerTool.mock.calls[2].arguments[0];
     const logicCommand = api.registerCommand.mock.calls[0].arguments[1];
     const qualityCommand = api.registerCommand.mock.calls[1].arguments[1];
+    const aiCommand = api.registerCommand.mock.calls[2].arguments[1];
 
     assert.equal((await logicTool.execute()).isError, true);
     assert.equal((await qualityTool.execute()).isError, true);
+    assert.equal((await aiTool.execute()).isError, true);
     assert.equal((await logicCommand.handler()).ok, false);
     assert.equal((await qualityCommand.handler()).ok, false);
+    assert.equal((await aiCommand.handler()).ok, false);
 
     const tempDir = mkdtempSync(join(tmpdir(), 'omp-writing-branch-'));
     writeFileSync(join(tempDir, 'draft.md'), 'CLIP is a common baseline [@missing].', 'utf8');

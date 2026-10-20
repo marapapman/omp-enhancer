@@ -38,6 +38,7 @@ describe('marketplace install metadata', () => {
       'src',
       'agents',
       'skills',
+      'calibration',
       'package.json',
       'README.md',
     ]);

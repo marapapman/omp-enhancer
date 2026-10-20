@@ -23,9 +23,11 @@ describe('de-AI guidance content contracts', () => {
       '§1 Not X but Y',
       '§2 One-line closers and dramatic fragments',
       '§3 Sayings that sound deep',
+      '§3b Neat metaphor that tidies a complex concept',
       '§4 Staged run-up',
       '§5 Arguing with no one',
       '§6 Forced triads',
+      '§6b Parallelism and parallelism setup',
       '§8 Dashes as the universal connector',
       '§9 Stacked qualifiers',
       '§13 Overused AI words',
@@ -69,6 +71,7 @@ describe('de-AI guidance content contracts', () => {
       '否定式对偶',
       '单句收尾与戏剧化短句',
       '貌似深刻的说法',
+      '顺口比喻',
       '铺垫式开场',
       '与不存在的对手辩论',
       '意义拔高',
@@ -78,6 +81,7 @@ describe('de-AI guidance content contracts', () => {
       '节奏对仗收尾',
       '说教式认知指令',
       '三连排比',
+      '排比与预备排比',
       '重复句首',
       '叠加限定',
       '被动与主语缺失',
@@ -149,6 +153,8 @@ describe('de-AI guidance content contracts', () => {
     assert.match(writer, /prefer an over-correction\s+to a miss/iu);
     assert.doesNotMatch(writer, /a weak tell matters only when/iu);
     assert.match(writer, /assigned de-AI Skill body/u);
+    assert.match(writer, /neat metaphors that compress a complex mechanism/iu);
+    assert.match(writer, /parallelism or a setup that announces a parallel list/iu);
     assert.doesNotMatch(writer, /format-humanizer/iu);
 
     const enHumanizer = read('skills/format-humanizer/SKILL.md');
@@ -169,6 +175,8 @@ describe('de-AI guidance content contracts', () => {
 
     const zhWriter = read('agents/zh-writer.md');
     assert.match(zhWriter, /不写否定式对偶/u);
+    assert.match(zhWriter, /不写顺口比喻/u);
+    assert.match(zhWriter, /不写排比或预备排比/u);
     assert.match(zhWriter, /不写「彰显了」「见证了」这类意义拔高/u);
     assert.match(zhWriter, /不写「希望这对你有帮助」这类聊天残留/u);
     assert.match(zhWriter, /不写「分清楚」「看清楚」「搞清楚」「记住」「请注意」「划重点」这类对读者发指令的说教认知句/u);
@@ -182,13 +190,15 @@ describe('de-AI guidance content contracts', () => {
 
     const checker = read('agents/checker.md');
     assert.match(checker, /Do AI writing tells appear here\?/iu);
+    assert.match(checker, /neat metaphors that tidy a complex concept/iu);
+    assert.match(checker, /parallelism or a setup that announces a parallel list/iu);
     assert.match(checker, /first appearance; prefer an over-correction to a miss/iu);
     for (const banned of ['format-humanizer', 'writing-review', 'zh-writing-review', 'zh-writing-polish']) {
       assert.doesNotMatch(checker, new RegExp(banned, 'iu'), `checker must not advertise ${banned}`);
     }
 
     const zhChecker = read('agents/zh-checker.md');
-    assert.match(zhChecker, /结构性 AI 痕迹：否定式对偶、单句收尾、三连排比、破折号、黑体装饰、意义拔高、借用权威/u);
+    assert.match(zhChecker, /结构性 AI 痕迹：否定式对偶、单句收尾、三连排比、顺口比喻[\s\S]{0,80}排比与预备排比/u);
     assert.match(zhChecker, /说教式认知指令（「分清楚」「看清楚」「搞清楚」「记住」「请注意」「划重点」对读者发指令/u);
     assert.match(zhChecker, /冒号句式（标题、要点、图注里用冒号把标签或论断拼到句子前面/u);
     assert.match(zhChecker, /每页结构雷同（要点条数和句式一页接一页不变）/u);
@@ -237,9 +247,25 @@ describe('de-AI guidance content contracts', () => {
     assert.ok(writingCard.skills.includes('format-humanizer'), 'writing card must offer the English de-AI method');
     assert.ok(writingCard.skills.includes('zh-format-humanizer'), 'writing card must offer the Chinese de-AI method');
     const deAiFlowStepIndex = writingCard.suggestedFlow.findIndex((step) => /de-AI/.test(step));
+    const scanFlowStepIndex = writingCard.suggestedFlow.findIndex((step) => /writing_ai_scan/.test(step));
     const checkerStepIndex = writingCard.suggestedFlow.findIndex((step) => /Check via checker/.test(step));
     assert.ok(deAiFlowStepIndex !== -1, 'writing card flow must carry an explicit per-rule de-AI step');
     assert.ok(deAiFlowStepIndex < checkerStepIndex, 'de-AI per-family chain must run before the checker step');
+    assert.ok(scanFlowStepIndex !== -1, 'writing card flow must call writing_ai_scan after every writing task');
+    assert.ok(
+      deAiFlowStepIndex < scanFlowStepIndex && scanFlowStepIndex < checkerStepIndex,
+      'the final scan must run after de-AI repairs and before checker review',
+    );
+    const scanFlowStep = writingCard.suggestedFlow[scanFlowStepIndex];
+    assert.match(scanFlowStep, /every completed writing task/iu);
+    assert.match(scanFlowStep, /detector=ensemble/iu);
+    assert.match(scanFlowStep, /allowNetwork=true/iu);
+    assert.match(scanFlowStep, /rerun the scan on the revised text/iu);
+    assert.match(scanFlowStep, /advisory evidence, not a quality verdict/iu);
+    assert.match(
+      writingCard.scopeNotes.join(' '),
+      /Every writing task ends with a writing_ai_scan check/iu,
+    );
     const deAiFlowStep = writingCard.suggestedFlow[deAiFlowStepIndex];
     assert.match(deAiFlowStep, /scan task inventories the tell families present/iu);
     assert.match(deAiFlowStep, /strictly sequentially/iu);

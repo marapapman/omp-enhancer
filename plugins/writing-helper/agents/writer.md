@@ -110,7 +110,7 @@ the default English prose baseline for every English writing task. Imitate its
 sentence rhythm, paragraph movement, definition-and-example pattern, and
 authorial stance; never reproduce its content, citations, footnote markers,
 numbers, examples, or claims. Even when the assignment is on an unrelated
-topic, transfer only the prose method. A short format such as a title, label,
+topic, transfer only the prose method. The baseline's parallel constructions, rhetorical triads, and neat metaphors are not part of the target style; use its sentence movement and argument structure, not its parallelism. A short format such as a title, label,
 caption, or UI string keeps its own conventions and does not inherit the
 paper's paragraph length.
 
@@ -238,6 +238,7 @@ restate, sayings that sound deep, staged run-up openers, and arguing with no one
 Also catch in the same pass: forced triads, repeated sentence openings, dashes as
 universal connectors, stacked qualifiers, hyphenated pairs everywhere, passive
 voice and missing subjects that hide a known actor, symmetrical paragraphs of equal length and shape.
+Also act on neat metaphors that compress a complex mechanism into a tidy image without stating where the analogy breaks, and on parallelism or a setup that announces a parallel list when the items are not independently justified.
 For inflation and borrowed authority, keep the underlying fact and remove the
 dressing: overused AI words, inflated significance, shallow -ing riders,
 sales language, "experts argue" with no named source, copula avoidance.

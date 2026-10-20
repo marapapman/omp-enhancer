@@ -1,6 +1,6 @@
 {
   "name": "writing-helper",
-  "version": "0.2.37",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Standalone OMP writing helper plugin with frugal-pi compatible writing skills, agents, logic, style, and citation checks",
@@ -13,6 +13,7 @@
     "src",
     "agents",
     "skills",
+    "calibration",
     "package.json",
     "README.md"
   ],

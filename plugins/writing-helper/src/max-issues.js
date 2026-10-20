@@ -12,6 +12,7 @@ export const UNLIMITED = 'unlimited';
 export const MAX_ISSUES_CONFIG = {
   logic: { default: 20, min: 1, max: 100 },
   quality: { default: 30, min: 1, max: 150 },
+  aiStyle: { default: 20, min: 1, max: 100 },
 };
 
 /**
