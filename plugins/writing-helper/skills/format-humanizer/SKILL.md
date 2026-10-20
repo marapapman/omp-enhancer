@@ -14,9 +14,9 @@ All substantive English prose work—including initial writing or drafting,
 substantive polishing or revision, translation, and logical revision—must be
 performed through language-matched `writer` text-tool calls. This skill does not
 authorize Main, `task`, or `checker` to write prose. The `writer` returns the
-proposal first; an independent `checker` only reports logic, evidence, or
-semantic-drift findings. Any substantive repair returns to the same
-language-matched `writer`.
+proposal first; an independent `checker` only reports logic, evidence,
+semantic-drift, and clarity findings, including information-gain findings.
+Any substantive repair returns to the same language-matched `writer`.
 
 The `writer` text tool is always proposal-only. Return the complete revised text,
 using SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer.
@@ -35,7 +35,7 @@ This skill covers English prose. For Chinese text use `zh-format-humanizer`; the
 
 A language model defaults to the most statistically likely phrasing for the widest audience, so ordinary facts come out generalized, hedged, and inflated. Vocabulary lists change with every model release; the structural habits below persist. Every pattern is one form of the same default choice, so fix the structure, not only the vocabulary.
 
-Two rules follow. Every sentence kept must add something the reader did not already have. Any listed tell justifies an edit on its first sighting — prefer an over-correction to a miss. Only quotations, titles, proper names, passages discussing a phrase rather than using it, text predating November 30, 2022, and details that carry the writer's voice (specific unusual details, mixed feelings, first-person choices) are exempt.
+Two rules follow. First, information gain decides what stays. Every sentence must center on a stated point and keep only what supplies a new fact, a necessary qualifier, or a key logical relation. Do not re-explain what the reader can infer from context, pad with modifiers that add no information, or enumerate process mechanically for completeness. Reasonable omission is allowed so the reader completes a simple inference, and a revision deletes redundant expression first instead of restating it in more words. A focused sentence may carry several necessary clauses, so never delete a unique fact, number, unit, scope, condition, modality, negation, causal direction, citation, safety instruction, or reproducibility step to raise information gain, and never force needless explanation or uniformly short sentences onto the baseline's long linked sentences while each clause still informs. Apply the rule inside the revision order below — claims, evidence, and anchors decide what must stay, and information gain then decides how the wording is trimmed. The second rule: any listed tell justifies an edit on its first sighting — prefer an over-correction to a miss. Only quotations, titles, proper names, passages discussing a phrase rather than using it, text predating November 30, 2022, and details that carry the writer's voice (specific unusual details, mixed feelings, first-person choices) are exempt.
 
 ## Revision order
 
@@ -78,7 +78,8 @@ SEARCH/REPLACE blocks or a unified diff scoped to its family.
    or dropped any fact, number, date, quote, citation, or claim.
 4. **Deliver.** Main assembles the per-family writer proposals in order and
 integrates only accepted proposals verbatim. An independent `checker` only
-reports semantic, logic, or evidence findings; it never rewrites. Any substantive
+reports semantic, logic, evidence, and clarity findings, including
+information-gain findings; it never rewrites. Any substantive
 repair returns to the same `writer` text tool. Minor edits keep the single pass
 only when
 the scan found exactly one tell family; two or more families always go through

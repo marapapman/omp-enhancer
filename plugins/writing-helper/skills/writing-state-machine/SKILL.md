@@ -65,6 +65,7 @@ Constraints:
 | Every citation `[@...]` in body appears in the source | — |
 | Source provenance includes a real path in the delivery or an authorized review log | — |
 | No claims beyond what source data supports | — |
+| Sentence keeps only a new fact, necessary qualifier, or key logical relation; redundant wording deleted first, anchors and citations untouched | — |
 
 Fix failed checks that can be resolved from available evidence inside this bounded writer pass. Report unresolved checks as limitations and continue only within the assigned scope.
 

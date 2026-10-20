@@ -57,7 +57,7 @@ describe('de-AI guidance content contracts', () => {
     }
     assert.match(en, /a colon is allowed only before an enumeration of three or more items, a definition, a formula, or code/iu);
     assert.match(en, /never a fixed three, and no page is padded to three/iu);
-    assert.match(en, /Any listed tell justifies an edit on its first sighting/u);
+    assert.match(en, /any listed tell justifies an edit on its first sighting/iu);
     assert.doesNotMatch(en, /needs company from other tells/u);
     assert.match(en, /For Chinese text use `zh-format-humanizer`/u);
     assert.match(en, /Signs of AI writing/u);

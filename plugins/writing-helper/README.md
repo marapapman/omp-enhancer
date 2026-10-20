@@ -32,6 +32,8 @@ writer/zh-writer repair pass. Findings are advisory and return to the
 language-matched writer; the scan never rewrites the text and never decides
 completion by itself.
 
+The scan does not replace the sentence-level information-gain review. Neither the AIGC + Jev authorship score nor the local density metrics can tell whether a sentence adds a new fact, a necessary qualification, or a key logical relation — the language-matched writer/zh-writer runs that self-check on its own text first, and when a checker review is used, low-information-gain sentences come back as advisory clarity findings. Deleting redundant wording comes before explaining the same point again; unique facts, numbers, qualifiers, scope, modality, negation, citations, safety instructions, and reproducibility steps stay; and neither tool rewrites the text.
+
 ### AIGC + Jev ensemble
 
 `detector` defaults to `auto`: the ensemble runs when `allowNetwork` is true and

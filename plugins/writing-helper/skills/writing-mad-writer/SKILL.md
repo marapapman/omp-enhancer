@@ -58,13 +58,13 @@ Read the supplied inputs. Identify empty sections (blank or `[TODO]`/`[FILL]` ma
 | novelty | Differentiated from prior work? Specific limitations cited? |
 | depth | Non-trivial technical challenges addressed? |
 | logic | Arguments consistent? Claims supported? No leaps/contradictions? |
-| clarity | All terms defined? Language precise? Unambiguous? |
+| clarity | All terms defined? Language precise? Unambiguous? Each sentence adds a new fact, necessary qualifier, or key logical relation — flag redundant or reader-inferable wording for deletion first, never unique facts or anchors? |
 | eval | Experiments map to RQs? Baselines fair? Metrics appropriate? |
 | data | Data/code references real? Reproducibility path clear? |
 
 Severity: CRITICAL (undermines whole claim) / IMPORTANT (needs fix for rigor) / MINOR (nice-to-have).
 
-**3. Fix supported local issues** — Within the assigned pass, define unclear terms, replace vague wording with evidence-backed specifics, expand supported sparse material, and clean formatting. Do not fill factual gaps from assumptions. Return issues that require real experiment data, domain expertise, a user decision, or resolution of contradictory requirements.
+**3. Fix supported local issues** — Within the assigned pass, define unclear terms, replace vague wording with evidence-backed specifics, expand supported sparse material, delete redundant or reader-inferable wording before restating it, and clean formatting. Do not fill factual gaps from assumptions. Return issues that require real experiment data, domain expertise, a user decision, or resolution of contradictory requirements.
 
 **4. Decide Next** — Deliver the improved section and flag unresolved evidence or author decisions. Offer another focused pass instead of starting one automatically.
 

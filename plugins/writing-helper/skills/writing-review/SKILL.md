@@ -23,8 +23,9 @@ translation, rewriting, logical revision, and polishing—must be performed thro
 language-matched `writer` text-tool calls. Main, `task`, and `checker` do not
 write that prose. The
 writer proposal comes first; an independent `checker` only reports logic,
-evidence, or semantic-drift findings. Any substantive textual repair returns to
-the same language-matched `writer`.
+evidence, semantic-drift, and clarity findings, including information-gain
+findings. Any substantive textual repair returns to the same
+language-matched `writer`.
 
 The user need not request delegation explicitly.
 Target length only bounds the executor method and finding count.
@@ -95,15 +96,23 @@ structure second; sentence and style polish last.
    and "this demonstrates the power/value". Replace them with concrete facts,
    evidence, scope, or a stated limitation, or delete unsupported wording.
    Retain evidence-backed claims and state the support. Any listed tell justifies
-   an edit on its first sighting; prefer an over-correction to a miss. A review-only
+   an edit on its first sighting; prefer an over-correction to a miss. In this
+   same polish step, apply information gain. Keep only what adds a new fact, a
+   necessary qualifier, or a key logical relation, omit wording the reader can
+   infer from context, and delete redundant expression instead of restating it.
+   Never cut a unique fact, number, unit, scope, condition, modality, negation,
+   causal direction, citation, safety instruction, or reproducibility step, and
+   never force needless explanation or uniformly short sentences onto long
+   linked sentences while each clause still informs. A review-only
    request produces findings rather than a rewritten document.
 4. Do not silently change a factual statement, central argument, citation
    meaning, or requested scope. Present those items as author decisions.
 5. Compare the result with the source once. Treat any changed semantic anchor
    as an advisory finding, not as a reason to start another repair cycle.
-6. An independent `checker` may report logic, evidence, or semantic-drift
-   findings only; it must not rewrite prose. Return every substantive repair to
-   this same language-matched `writer`, then give Main the resulting proposal.
+6. An independent `checker` may report only logic, evidence, semantic-drift,
+   and clarity findings, including information-gain findings; it must not
+   rewrite prose. Return every substantive repair to this same
+   language-matched `writer`, then give Main the resulting proposal.
 7. Review the resulting text once and summarize proposed changes, unresolved
    decisions, and evidence limitations.
 8. Report which AI-tell families the revision touched and which tells were left

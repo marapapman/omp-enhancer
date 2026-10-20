@@ -4,7 +4,7 @@
 
 ## 当前架构
 
-当前 workflow catalog version 44 只有 3 个 ID：`writing`、`research` 和 `visual`。
+当前 workflow catalog version 46 只有 3 个 ID：`writing`、`research` 和 `visual`。
 
 - `writing`：中英文 prose、翻译、Markdown、LaTeX、Beamer 和 Word；`beamer-to-powerpoint` 是可选的 PPTX 输出分支，在最终已验证的 Beamer visual revision 之后、且仅在 PowerPoint 输出进入 scope 时使用固定外部 `beamer2pptx` Skill/repository（`https://github.com/xdmlxdml/beamer2pptx/tree/main/beamer2pptx`），输入为最终已验证的 Beamer PDF，并在可用时附带对应 `.tex`、宏和字体源；
 - `research`：事实核查、claim extraction、来源评估、证据 cross-check 和 verdict；
@@ -46,7 +46,7 @@ plugins/omp-config/skills/omp-enhancer-workflows/references/*.md
 
 字段规则：
 
-- `id` 全局唯一、稳定、小写；catalog v44 只有 3 个 ID（`writing`、`research`、`visual`）；
+- `id` 全局唯一、稳定、小写；catalog v46 只有 3 个 ID（`writing`、`research`、`visual`）；
 - `chooseWhen` 描述用户可观察的选择条件，不写关键词路由规则；
 - `skills` 使用精确 Skill frontmatter 名；
 - `roles` 是可选候选，不绑定步骤或强制 delegation；

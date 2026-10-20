@@ -54,6 +54,16 @@ redundant wording. Rejecting one unsafe candidate rejects only that candidate;
 for example, one occurrence of an accidentally repeated adjacent word can be
 removed when the remaining occurrence preserves the meaning.
 
+Information gain is the deletion-first part of that evaluation. Each sentence
+keeps only what supplies a new fact, a necessary qualifier, or a key logical
+relation; wording the reader can infer from context, modifiers with no
+information, and mechanical step-by-step narration are deleted rather than
+restated at greater length. Omission is allowed where the reader completes a
+simple inference. Unique facts, numbers, units, scope, conditions, modality,
+negation, causal direction, citations, safety instructions, and
+reproducibility steps stay, and
+the check never demands needless explanation or uniformly short sentences.
+
 Use the fine-mode workflow below only when the user asks for interactive approval at each paragraph or when a genuinely material ambiguity requires a choice.
 
 ## Document Structure Assumed

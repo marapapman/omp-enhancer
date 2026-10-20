@@ -37,7 +37,7 @@ docs/superpowers/            # 历史 plans/specs/reports，仅作 archive
 实现变更不得破坏以下契约：
 
 - OMP 的系统提示、用户指令、active tools、动态 Available Agents、权限、审批和完成行为始终具有最终权威；
-- workflow catalog v44 只有 `writing`、`research` 和 `visual` 三个 advisory 域；目录不是 router、gate 或 completion controller；
+- workflow catalog v46 只有 `writing`、`research` 和 `visual` 三个 advisory 域；目录不是 router、gate 或 completion controller；
 - `D` 是顶层 Skill exact URI；候选 Skill 和 Agent 只按任务需要选择，不是 load set；
 - Main 可用 `ANALYZE -> EXECUTE -> REVIEW` 组织复杂任务，但插件不强制 delegation、fixed fan-out、retry 或 completion；
 - marketplace extension tools 默认 opt-in；`omp-config` 提供 `/enhancer-tools status|enable|disable`，组为 `config`、`writing`、`fact` 和 `all`；激活不授予权限。四个 `fact_check_*` 管线工具例外，默认进入工具清单，让自然语言的事实核查请求直达管线；`writing_ai_scan` 也默认激活，因为 writing 工作流在每次写作任务完成后调用它，它仍是只读 advisory 扫描；AIGC+Jev 组合只调用显式配置的 `AIGC_DETECTOR_URL` 和 TypeSafe，`detector=local` 不联网；
@@ -54,6 +54,8 @@ Writing、research 和 visual workflow 共享同一作者契约。任何文字�
 `writer`/`zh-writer` 保持 proposal-only，只返回完整文本或有界 diff，不直接写文件。Main 只能把获授权的 proposal 原样持久化或应用，不得在应用前后自行改写；PPT/Beamer/Word/PPTX 的布局、转换、OfficeCLI 应用和视觉检查可以由 Main 或 task 完成，但只能机械集成已返回的文案。Workflow cards、Agents 和 review findings 仍是 advisory，不增加 hard router、lifecycle gate、自动重试或 completion controller。
 
 For substantive writing, the sequence is language-matched `writer`/`zh-writer` proposal for drafting, logical/semantic revision, translation, or polishing; logic and evidence are settled before sentence polish. The proposal precedes a `checker`/`zh-checker` report of logic, evidence, and style findings. The checker is report-only, substantive repairs return to the same language-matched writer, and Main performs mechanical integration and final acceptance only. Main, `task`, and checker never rewrite prose; if a matching writer cannot be safely dispatched, record the limitation rather than silently drafting through another role.
+
+中文 prose/copy 的起草与修改常开信息增量原则。每句围绕表达重点，只保留新事实、必要限定和关键逻辑关系；冗余优先删除，不用更长的解释替换；省略仅限读者能从上下文直接推断的环节，独有事实、数字和单位、条件范围、模态与不确定性、否定、因果方向、引用、安全说明和复现步骤不受影响。该规则由 `zh-writer` 内置基线承载、`zh-checker` 按「信息增量（全局核查）」常开核查，仍是 advisory，不构成 gate；冗余或篇幅长本身不能证明 AI 作者身份，已列入清单的结构性 AI 痕迹仍按原有规则报告。
 
 For PPT/Beamer titles, body text, captions, labels, notes, and narrative copy, `writer`/`zh-writer` remains the sole text author. `task` is structural/layout/conversion-only for PPT text: it may place writer-proposed copy, reconcile order, render, convert, validate, or inspect visuals, but must not draft, rewrite, translate, or polish wording. Any copy change returns to the matching writer.
 

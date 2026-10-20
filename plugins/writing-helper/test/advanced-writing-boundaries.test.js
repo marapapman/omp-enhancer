@@ -92,7 +92,7 @@ describe('advanced writing Skills preserve workflow and effect boundaries', () =
         `${name} should settle logic before style`,
       );
       assert.match(source, /(?:`?writer`? proposal comes first|`?writer`? returns (?:the )?proposal first)/iu, `${name} should put the writer proposal first`);
-      assert.match(source, /independent `?checker`? only reports logic, evidence, or (?:semantic-drift|semantic drift) findings/iu, `${name} should keep checker output advisory`);
+      assert.match(source, /independent `?checker`? only reports logic, evidence, semantic-drift, and clarity findings, including information-gain findings/iu, `${name} should keep checker output advisory within the clarity scope`);
       assert.match(source, /substantive (?:textual )?repair returns to the same (?:language-matched )?`?writer`?/iu, `${name} should return repairs to the same writer`);
 
       for (const phrase of [

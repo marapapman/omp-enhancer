@@ -36,6 +36,8 @@ not rewrite prose. Any substantive wording repair, rewrite, translation, or
 polishing returns to the same `writer` or `zh-writer`, and Main applies the
 complete writer proposal verbatim.
 
+The information-gain principle applies to the content plan and to every Beamer copy surface: each sentence keeps one clear expressive focus and only new facts, necessary qualifications, or key logical relations; wording the reader can infer from the page or its context is not re-explained, modifiers with no information gain are cut, and step-by-step process narration is cut only when it pads the text for completeness — task-required instructional and reproducibility steps, including compile and render procedures, stay. A reasonable omission lets the reader complete the simple inference, so a revision deletes redundant wording before writing more words, while unique facts, numbers, qualifiers, scope, modality, negation, citations, and safety instructions stay. The writer/zh-writer runs this self-check on its own draft before the ensemble scan, an independent checker reports violations read-only when that review is used, and no scanner score or local metric replaces the sentence-level review. Captions, labels, and notes keep their genre, and layout, slide-order, and conversion tasks never change wording silently.
+
 ### Copy bans
 
 Across titles, body text, captions, labels, speaker notes, and narrative text,

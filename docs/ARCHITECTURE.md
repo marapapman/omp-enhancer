@@ -12,7 +12,7 @@ OMP 负责系统提示、用户指令、active tools、动态 Available Agents�
 
 ## 工作流信息
 
-工作流 definition 位于 `scripts/workflow-definitions.js`，校验和渲染模块分别是 `scripts/workflow-schema.js` 与 `scripts/workflow-render.js`。当前 catalog version 44 只有三个域：`writing`、`research`（事实核查）和 `visual`。
+工作流 definition 位于 `scripts/workflow-definitions.js`，校验和渲染模块分别是 `scripts/workflow-schema.js` 与 `scripts/workflow-render.js`。当前 catalog version 46 只有三个域：`writing`、`research`（事实核查）和 `visual`。
 
 生成器 `scripts/generate-workflow-catalog.js` 输出：
 
@@ -50,6 +50,8 @@ Writing、research 和 visual 三域共享同一文字作者边界：所有 pros
 `task`、research Agent 和 visual Agent 可以收集证据、重排结构、绘图、执行版式、格式转换和视觉检查，但不替代 writer 起草或改变文字；任何文字变化都必须返回对应语言的 writer/`zh-writer`。PPT/Beamer/Word/PPTX 的布局、转换、OfficeCLI 应用和视觉检查仍可由 Main 或 task 负责，但只能机械集成已返回的文字，不能借这些步骤修改文案。
 
 For substantive prose and PPT copy, the language-matched `writer`/`zh-writer` text tool is called first for drafting, logical/semantic revision, translation, and polishing. English uses `writer`, Chinese uses `zh-writer`, and mixed-language segments call both tools. Resolve logic and evidence before sentence polish. A tool proposal precedes the `checker`/`zh-checker` report of logic, evidence, and style findings; the checker is report-only, and any substantive repair returns to the same language-matched text tool. Main performs mechanical integration and final acceptance only; Main, `task`, and checker never rewrite prose. If the matching text tool cannot be safely called, record that limitation instead of silently drafting through another role.
+
+The information-gain principle is always on across writing, research, and visual copy, even when no Skill is loaded. Every sentence serves one clear expressive focus and keeps only what adds a new fact, a necessary qualification, or a key logical relation; text the reader can infer from the context is not re-explained, modifiers with no information gain are cut, a process is not narrated step by step only for completeness, and a reasonable omission lets the reader complete the simple inference, so a revision deletes redundant wording before adding an explanation. Deletion removes redundant expression, never unique evidence: a focused sentence may carry several necessary clauses, and unique facts, numbers, units, qualifiers, scope, modality, negation, causal direction, citations, safety instructions, reproducibility steps, and task-required content stay. The language-matched `writer`/`zh-writer` applies the principle while drafting and revising, so its self-check runs before `writing_ai_scan`; `checker`/`zh-checker` reports violations read-only in the clarity review when that review is used; and the AIGC+Jev authorship score and the local scanner metrics never replace this sentence-level review. The existing scan invocation, weights, threshold, and fail-closed settings are unchanged, and the principle adds no runtime gate and no authorship claim.
 
 For Beamer/PPT titles, body text, captions, labels, notes, and narrative copy, `writer`/`zh-writer` remains the sole text author. PPT text work by `task` is structural/layout/conversion-only: it may reconcile order, place writer-proposed text, render, convert, validate, or inspect visuals, but must not draft, rewrite, translate, or polish wording; copy changes return to the matching writer.
 

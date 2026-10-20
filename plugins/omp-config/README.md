@@ -4,7 +4,7 @@
 
 ## Contents
 
-- `assets/WORKFLOW_CATALOG.md` is generated from `scripts/workflow-definitions.js` and contains the three advisory workflow cards for catalog v44.
+- `assets/WORKFLOW_CATALOG.md` is generated from `scripts/workflow-definitions.js` and contains the three advisory workflow cards for catalog v46.
 - `skills/omp-enhancer-workflows/` publishes the compact domain index and on-demand `writing`, `research`, and `visual` reference cards.
 - `skills/latex-beamer-slides/` and `skills/slides-storyline/` define the staged Beamer deck workflow. `skills/beamer-to-powerpoint/` provides an optional PPTX branch backed by the fixed external `beamer2pptx` Skill/repository (`https://github.com/xdmlxdml/beamer2pptx/tree/main/beamer2pptx`) after the final validated Beamer visual revision when PowerPoint output is in scope; it consumes the final validated Beamer PDF and corresponding `.tex`, macro, and font sources when available.
 - `skills/storyline-workbench/` builds a new article's or deck's story as a tree before any prose exists, with one `topic` root holding the whole topic, `claim` chapters and sections grouping the leaves, and each `evidence` leaf holding one paragraph or one deck page titled with its topic sentence; every node has an editable title, ordered `markdown`/`table`/`image`/`math` content blocks, sources, and revision-bound comments. It runs one local website per project, keeps the tree in that project's `.storyline/` directory, binds `127.0.0.1` only with a per-session token in the URL fragment, and registers no plugin tool or model provider; `references/protocol.md` carries the JSON and HTTP contracts.

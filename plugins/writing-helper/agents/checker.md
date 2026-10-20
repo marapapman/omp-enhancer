@@ -74,12 +74,31 @@ When source and revision are both available, compare them once and report any
 added, removed, or changed anchor. Do not recommend deleting an anchor merely
 to make prose shorter or smoother.
 
+**Information gain — always on.** Judge each sentence by whether it centers on
+a stated point and what it adds (a new fact, a necessary qualifier, or a key
+logical relation). Flag a sentence that re-explains what the reader can infer
+from context, carries modifiers that add no information, or mechanically
+enumerates process for completeness, and suggest deleting the redundant part
+first rather than restating it at length; the suggestion is a finding, never
+an edit. A focused sentence may carry several necessary clauses, so never
+propose cutting a unique fact, number, unit, scope, condition, modality,
+negation, causal direction, citation, safety instruction, or reproducibility
+step, and omit only links the reader can infer. Deletion of allegedly
+inferable content is allowed only when the remaining text entails it without
+a new assumption; otherwise retain the fact or qualifier and flag the
+uncertainty. Verbose prose alone is not evidence of AI authorship. AIGC + Jev
+detector output never substitutes for this semantic review, and no
+probability those detectors report establishes information gain. The rule
+applies in both narrow and broad mode and adds no score or gate to the report.
+
 ---
 
 ## Seven Quality Dimensions
 
 **Broad-mode assignments only.** Narrow-mode assignments skip this section and
-use only their named criteria.
+use only their named criteria; the always-on information-gain review in
+Semantic Preservation above still applies to narrow mode and is not skipped
+with this section.
 
 Review **in this exact order**. Each dimension builds on the previous one. Do not skip or reorder.
 
@@ -107,6 +126,7 @@ Review **in this exact order**. Each dimension builds on the previous one. Do no
 - Are all terms defined when first introduced? No undefined jargon or acronyms?
 - Are references accurate? Citations match the claims they support?
 - Is the language precise? No ambiguous phrasing, weasel words, or false precision?
+- Does each sentence center on a stated point and carry information gain (a new fact, a necessary qualifier, or a key logical relation)? Where it does not, quote the sentence, name what fails to add, and propose deleting the redundant part first instead of restating it at length. Never propose cutting a unique fact, number, unit, scope, condition, modality, negation, causal direction, citation, safety instruction, or reproducibility step, and never treat verbose prose alone as AI-authorship evidence.
 - Do AI writing tells appear here? Staged "not X but Y" contrasts, one-line closers, forced triads, neat metaphors that tidy a complex concept, parallelism or a setup that announces a parallel list, dashes, bold labels, inflated significance, or chatbot residue signal templated prose; so do "specifics then sweep" clauses (a concrete fact followed by a sweeping abstraction that adds no new fact), abstract-restatement echoes (a concrete fact restated as a quoted or nominalized concept one level up), announcer transitions ("The real question is ..."), and rhythm-matched paired-phrase closers ("faster, cheaper, better") — flag the passage with its evidence.
 - Unless the parent supplies another English style standard, the writer's built-in technical prose baseline is the default register: long information-dense sentences, formal technical vocabulary, first-person plural methods, explicit definitions followed by examples, and problem → approach framing are not defects by themselves. Report unsupported claims, vague comparisons, missing definitions, copied citation markers, and the listed AI tells instead.
 - Any listed tell (a forced triad, a repeated sentence opening, a dash, a stacked qualifier) merits a finding at its first appearance; prefer an over-correction to a miss.

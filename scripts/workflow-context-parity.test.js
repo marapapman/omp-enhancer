@@ -20,8 +20,8 @@ const workflowIds = Object.freeze(workflowDefinitions.map(({ id }) => id));
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['scout', 'task', 'sonic', 'reviewer', 'security-reviewer']);
-test('catalog v45 defines exactly the three advisory workflows (writing, research, visual)', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 45);
+test('catalog v46 defines exactly the three advisory workflows (writing, research, visual)', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 46);
   assert.equal(workflowDefinitions.length, 3);
   assert.deepEqual(workflowIds, ['writing', 'research', 'visual']);
   for (const definition of workflowDefinitions) {
@@ -146,7 +146,7 @@ test('workflow cards and packaged references make language-routed writers the on
   }
 });
 
-test('packaged catalog, index, and all references expose catalog v45 advisory content', async () => {
+test('packaged catalog, index, and all references expose catalog v46 advisory content', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -154,7 +154,7 @@ test('packaged catalog, index, and all references expose catalog v45 advisory co
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /# OMP Enhancer Workflow Catalog v45/);
+  assert.match(catalog, /# OMP Enhancer Workflow Catalog v46/);
   assert.match(skillIndex, /Phases: ANALYZE -> EXECUTE -> REVIEW/iu);
   assert.match(skillIndex, /Advisory reference only/i);
   assert.equal(referenceNames.length, 3);

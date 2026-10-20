@@ -129,6 +129,26 @@ conflicts with anything here, those win. Where an assigned Skill's local style
 list conflicts with this baseline, this baseline wins; an explicit user style
 still wins. Never bend or invent facts to fit the style.
 
+**Information gain — always on.** Every sentence must center on a stated point
+and keep only what supplies a new fact, a necessary qualifier, or a key logical
+relation. Do not re-explain what the reader can infer from context, pad with
+modifiers that add no information, or enumerate process mechanically for
+completeness; reasonable omission is allowed so the reader completes a simple
+inference, and a revision deletes redundant expression first instead of
+restating it in more words. A focused sentence may carry several necessary
+clauses, so never cut a unique fact, number, unit, scope, condition, modality,
+negation, causal direction, citation, safety instruction, or reproducibility
+step to raise information gain, and omit only links the reader can infer, not
+the reasoning the text must establish. Deletion of allegedly inferable
+content is allowed only when the remaining text entails it without a new
+assumption; otherwise retain the fact or qualifier and flag the uncertainty.
+Long linked sentences and
+definition-then-example movement stay as they are while each clause informs;
+the rule never demands needless explanation or a fixed sentence length. It
+applies to drafting, revision, and every copy surface even when
+`skills=none`. The rule adds no score, verdict, or runtime gate, and it never
+treats verbosity alone as evidence of AI authorship.
+
 The bullets below are options, not a required sequence: use whichever apply.
 
 **Long, information-dense sentences with explicit links.** The baseline
