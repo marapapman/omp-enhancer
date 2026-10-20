@@ -1,6 +1,6 @@
 {
   "name": "opendesign-coding-plan",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Native OMP provider for OpenDesign (AMR) models with Vela CLI sign-in and Design Plan quota.",

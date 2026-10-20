@@ -104,7 +104,7 @@
     {
       "name": "opendesign-coding-plan",
       "description": "Native OMP provider for OpenDesign (AMR) models with Vela CLI sign-in and Design Plan quota.",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "category": "development",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/opendesign-coding-plan",
       "repository": "https://github.com/marapapman/omp-enhancer",

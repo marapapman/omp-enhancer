@@ -26,7 +26,7 @@ Set `OPENDESIGN_SKIP_VELA_INSTALL=1` to keep the flow from installing the CLI, a
 
 `/model` lists the account's live model roster, fetched from the gateway with the stored runtime key. The bundled fallback roster keeps the provider usable before the first successful fetch.
 
-`/usage` reports the plan read from the signed-in Vela session: membership tier and status, available credits, today's spend, the billing period end, and the Design Plan windows from `vela billing preflight`. The personal account API rejects a personal control key on `/billing/summary` and `/wallet/balance`, so those HTTP probes only serve team workspaces.
+`/usage` reports the plan read from the signed-in Vela session: membership tier and status, available credits, today's spend, the billing period end, and the Design Plan windows from `vela billing preflight`. Each window shows used/remaining percentage plus its reset time (`windowStart` + duration when Vela omits `resetsAt`). The personal account API rejects a personal control key on `/billing/summary` and `/wallet/balance`, so those HTTP probes only serve team workspaces; when the summary fails but preflight succeeds, `/usage` shows the Design Plan windows and a note instead of hiding them.
 
 ## Credentials and endpoints
 

@@ -54,8 +54,20 @@ const PREFLIGHT = {
   codingPlan: {
     eligible: true,
     windows: [
-      { limitCredits: 1000, usedCredits: 250, durationSeconds: 18000, resetsAt: 1792300000 },
-      { limitCredits: 5000, usedCredits: 5000, durationSeconds: 604800, resetsAt: 1792500000 },
+      {
+        limitCredits: '1000',
+        usedCredits: '250',
+        durationSeconds: 18000,
+        windowStart: '2026-10-20T04:35:05.000Z',
+        resetsAt: '2026-10-20T09:35:05.000Z',
+      },
+      {
+        limitCredits: '5000',
+        usedCredits: '5000',
+        durationSeconds: 604800,
+        windowStart: '2026-10-14T09:35:05.000Z',
+        resetsAt: '2026-10-21T09:35:05.000Z',
+      },
     ],
   },
 }
@@ -364,13 +376,29 @@ test('mapCodingPlanWindows builds percentage rows with window metadata', () => {
   const [fiveHours, weekly] = limits
   assert.equal(fiveHours.label, 'Design Plan 5 hours')
   assert.equal(fiveHours.window.id, '5h')
+  assert.equal(fiveHours.window.resetsAt, Date.parse('2026-10-20T09:35:05.000Z'))
   assert.equal(fiveHours.amount.remaining, 75)
   assert.equal(fiveHours.status, 'ok')
   assert.equal(weekly.label, 'Design Plan 7 days')
+  assert.equal(weekly.window.resetsAt, Date.parse('2026-10-21T09:35:05.000Z'))
   assert.equal(weekly.status, 'exhausted')
   assert.equal(weekly.amount.usedFraction, 1)
   assert.deepEqual(mapCodingPlanWindows({ codingPlan: { windows: [] } }), [])
   assert.deepEqual(mapCodingPlanWindows({ codingPlan: { windows: [{ limitCredits: 0 }] } }), [])
+})
+
+test('mapCodingPlanWindows derives resetsAt from windowStart when the source omits it', () => {
+  const payload = {
+    codingPlan: {
+      windows: [
+        { limitCredits: 100, usedCredits: 10, durationSeconds: 3600, windowStart: 1792400000 },
+        { limitCredits: 100, usedCredits: 10, durationSeconds: 3600 },
+      ],
+    },
+  }
+  const [derived, missing] = mapCodingPlanWindows(payload)
+  assert.equal(derived.window.resetsAt, 1792403600000)
+  assert.equal(missing.window.resetsAt, undefined)
 })
 
 test('fetchUsageReport reports plan notes and preflight windows from the Vela CLI', async () => {
@@ -400,6 +428,28 @@ test('fetchUsageReport reports plan notes and preflight windows from the Vela CL
     ['Design Plan 5 hours', 'Design Plan 7 days'],
   )
   assert.deepEqual(velaCalls, ['billing summary --format json', 'billing preflight --workspace-id ws-test --format json'])
+})
+
+test('fetchUsageReport keeps Design Plan windows when vela summary fails', async () => {
+  const dir = tempDir()
+  const configPath = writeConfig(dir, { controlKey: 'ck-live', runtimeKey: 'rk-live', user: { email: 'user@example.com' } })
+  const env = {
+    OPENDESIGN_CONFIG_PATH: configPath,
+    OPENDESIGN_WORKSPACE_ID: 'ws-test',
+    OPENDESIGN_CONTROL_KEY: 'ck-live',
+  }
+  const { report, problems } = await fetchUsageReport({ apiKey: 'rk-live' }, env, async () => jsonResponse(401, {}), {
+    runVela: async (path, args) => {
+      if (args[1] === 'summary') throw new Error('fetch billing summary: API request failed with status 403')
+      return PREFLIGHT
+    },
+  })
+
+  assert.equal(report.limits.length, 2)
+  assert.equal(report.limits[0].window.resetsAt, Date.parse('2026-10-20T09:35:05.000Z'))
+  assert.ok(report.notes.every((note) => !/quota unavailable/i.test(note)))
+  assert.match(report.notes[0], /Plan details unavailable/)
+  assert.match(problems[0], /vela summary/)
 })
 
 test('fetchUsageReport explains how to restore quota when no Vela session exists', async () => {

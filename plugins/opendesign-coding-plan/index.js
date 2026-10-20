@@ -13,7 +13,9 @@
 //   workspace  GET /api/v1/workspaces/current (control key)    personal workspace id
 // The account API rejects a personal control key with 403 on /billing/summary and
 // /wallet/balance, so the Vela CLI is the working quota source; those HTTP paths
-// stay as secondary probes for team workspaces.
+// stay as secondary probes for team workspaces. Vela windows carry ISO
+// `windowStart`/`resetsAt` and string credits; the usage rows normalize
+// timestamps to epoch milliseconds for OMP's usage model.
 //
 // `/login opendesign` reuses a signed-in Vela session when ~/.amr/config.json
 // already holds a runtime key, otherwise it makes sure the Vela CLI is installed
@@ -91,6 +93,23 @@ function numberOrUndefined(value) {
 function positive(value, fallback) {
   const n = numberOrUndefined(value)
   return n !== undefined && n > 0 ? Math.floor(n) : fallback
+}
+
+// Vela reports timestamps as ISO strings (`windowStart`, `resetsAt`) while other
+// sources use epoch seconds or milliseconds; OMP's usage model wants epoch ms.
+function timestampOrUndefined(value) {
+  if (value instanceof Date) {
+    const time = value.getTime()
+    return Number.isFinite(time) && time > 0 ? time : undefined
+  }
+  const numeric = numberOrUndefined(value)
+  if (numeric !== undefined) {
+    if (numeric <= 0) return undefined
+    return Math.round(numeric < 1e12 ? numeric * 1000 : numeric)
+  }
+  if (typeof value !== 'string' || !value.trim()) return undefined
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
 function resolveEnvApiKey(env = process.env) {
@@ -530,7 +549,11 @@ export function mapCodingPlanWindows(payload, accountId) {
     const limitCredits = numberOrUndefined(raw?.limitCredits)
     const usedCredits = numberOrUndefined(raw?.usedCredits)
     const durationMs = (numberOrUndefined(raw?.durationSeconds) ?? 0) * 1000
-    const resetsAtSeconds = numberOrUndefined(raw?.resetsAt)
+    const windowStart = timestampOrUndefined(raw?.windowStart)
+    let resetsAt = timestampOrUndefined(raw?.resetsAt)
+    if (resetsAt === undefined && windowStart !== undefined && durationMs > 0) {
+      resetsAt = windowStart + durationMs
+    }
     if (limitCredits === undefined || limitCredits <= 0 || usedCredits === undefined) continue
     const windowId = windowIdFor(durationMs) ?? `window-${index}`
     const label = windowLabel(durationMs) ?? `window ${index + 1}`
@@ -545,7 +568,7 @@ export function mapCodingPlanWindows(payload, accountId) {
         id: windowId,
         label,
         ...(durationMs > 0 ? { durationMs } : {}),
-        ...(resetsAtSeconds ? { resetsAt: resetsAtSeconds < 1e12 ? resetsAtSeconds * 1000 : resetsAtSeconds } : {}),
+        ...(resetsAt !== undefined ? { resetsAt } : {}),
       },
       amount: {
         used: Number((usedFraction * 100).toFixed(2)),
@@ -625,8 +648,6 @@ export async function fetchUsageReport(credential, env = process.env, fetchImpl 
     const mapped = mapBillingSummary(summary, accountId)
     notes.push(...mapped.notes)
     Object.assign(metadata, mapped.metadata)
-  } else {
-    notes.push('Plan quota unavailable: run /login opendesign to create a Vela session (~/.amr/config.json)')
   }
 
   let resolvedWorkspaceId = workspaceId
@@ -659,7 +680,12 @@ export async function fetchUsageReport(credential, env = process.env, fetchImpl 
   if (plan && limits.length === 0 && plan?.codingPlan?.eligible !== false) {
     problems.push('coding plan returned no usable windows')
   }
-  if (limits.length === 0 && notes.length === 0) return null
+  if (limits.length === 0) {
+    if (!summary) notes.push('Plan quota unavailable: run /login opendesign to create a Vela session (~/.amr/config.json)')
+    if (notes.length === 0) return null
+  } else if (summary === undefined) {
+    notes.push('Plan details unavailable from vela billing summary; showing Design Plan windows only')
+  }
   return { report: { provider: PROVIDER_ID, fetchedAt: Date.now(), notes, metadata, limits }, problems }
 }
 
@@ -695,7 +721,7 @@ export function buildProviderConfig(logger) {
     },
     usage: {
       id: PROVIDER_ID,
-      cacheVersion: 4,
+      cacheVersion: 5,
       async fetchUsage(params, helpers) {
         const fetchImpl = helpers?.fetch ?? fetch
         try {
