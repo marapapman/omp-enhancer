@@ -225,7 +225,7 @@ Model policy:
   decides whether a proposed change or report may be persisted and performs the
   authorized file mutation.
 
-`zh-writer` 的内置中文风格基线按任务用途选取正向要求，覆盖技术说明、教学讲解、学术正文、日常沟通四种文体；技术说明和教学讲解的参照选段与各文体风格卡存放在 `plugins/writing-helper/skills/plain-chinese-writing/references/style-profiles.md`。用户显式指定的文体、读者、术语、篇幅或风格参照优先。参照文本只作风格参照，不作为事实、引用或案例来源。
+`zh-writer` 默认按规范书面短句书写，这条基线管措辞与句法。用规范书面语，句子短，一句写一个动作或一个事实；因果由句子顺序体现，动词取中性书面形式；术语首次出现时给一句定义，口语词不用。文体卡管内容组织、读者适配和示例范围，与书写基线同时适用。技术说明和教学讲解的参照选段与四张文体卡存放在 `plugins/writing-helper/skills/plain-chinese-writing/references/style-profiles.md`。用户逐任务指定的风格、术语和篇幅优先。参照文本只作风格参照，不作为事实、引用或案例来源。
 
 `writer` 的内置英文技术散文基线采用用户指定的基准文本；所有英文写作任务默认按该文风输出，用户显式给出另一种风格时以用户为准。基准文本只用于模仿文风，不作为事实、引用或案例来源。
 
