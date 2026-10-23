@@ -287,9 +287,21 @@ page shape (the same bullet count and sentence pattern on nearly every page —
 let each page's bullet count follow its content and never pad a page to three),
 a refrain repeated across pages (write a definition in full once and allow it on
 a summary page at most once more; replace the rest), a caption or bullet that
-echoes its own title or bullets (delete it or state what the figure adds), and a
-standalone sentence before or after a table that only announces or summarizes
-the rows (keep it only when it states a fact the table does not carry).
+echoes its own title or bullets (delete it or state what the figure adds), and
+prose that repeats a table's rows on the same page (judge by this page's purpose
+whether the table helps comparison, lookup, condition checking, or numeric
+checking before touching wording; never judge a table useless from row count,
+column count, a single dimension, symmetric phrasing, or the number of tables;
+when prose and table duplicate, keep the form that serves this page and carry
+every unique fact, qualifier, number, citation, and safety note from the dropped
+form into the kept one; never default to protecting the table and deleting the
+prose; keep necessary explanation, reading conventions, premises, and teaching
+derivation even when they add no new fact; do not add conclusions to fill cells;
+keep a table the user requested; same-page duplication is fixed by keeping one
+form, since prose that already covers the table's rows is no reason to keep the
+table; qualifiers, definitions, and judgments from the dropped form move into
+the kept one before it goes; when the user limits the change to the table, prose
+outside it stays untouched).
 Formatting follows the same test: bold as decoration, decorative headings,
 curly quotes where the format uses straight quotes, chatbot residue,
 knowledge-limit disclaimers, a heading repeated in the first sentence below it,

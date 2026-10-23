@@ -588,18 +588,15 @@ test('slide copy bans claim-colon skeletons and document-scale repeats', async (
   assert.match(draft, /a claim or label spliced onto a colon in a title, bullet, or caption \(including split captions "Left: …; Right: …"\)/is);
   assert.match(draft, /a bullet count that repeats across pages when each page's count should follow its own content/is);
   assert.match(draft, /a caption or bullet that echoes its own page title or bullets/is);
-  assert.match(draft, /a standalone sentence before or after a table that only announces or summarizes the rows/is);
   assert.match(reconciliation, /each page's bullet count follows that page's content and is not a fixed count/is);
   assert.match(reconciliation, /no claim or label is spliced onto a colon in a title, bullet, or caption/is);
   assert.match(reconciliation, /no claim or phrase repeats across pages beyond the one definition page and at most one summary page/is);
   assert.match(reconciliation, /no caption or bullet echoes its own page title or bullets/is);
-  assert.match(reconciliation, /no standalone sentence before or after a table only announces or summarizes the rows/is);
 
   // The quality reference carries the same standards plus the read-only census step.
   assert.match(quality, /The colon standard applies to every title, bullet, and caption on a page\./is);
   assert.match(quality, /a claim or label spliced onto a colon \("Latency: half", "方法：分两阶段", split captions "Left: …; Right: …"\) is rewritten as a direct sentence/is);
   assert.match(quality, /A caption that restates its frame's title or its bullets is a caption echo/is);
-  assert.match(quality, /A standalone sentence before or after a table is kept only when it states a fact the table does not carry/is);
   assert.match(quality, /The per-page bullet count follows that page's content, never a fixed three/is);
   assert.match(quality, /run one read-only census over the deck sources when the project provides a census tool/is);
   assert.match(quality, /The census lists candidates and changes no file/is);
@@ -621,7 +618,6 @@ test('the writing workflow card bans claim-colon skeletons and document-scale re
   assert.match(definitions, /The per-page bullet count follows that page\\?'s content, never a fixed three, and no page is padded to three/is);
   assert.match(definitions, /No cross-slide refrain: one claim or a phrase of six or more characters repeated verbatim across three or more frames/is);
   assert.match(definitions, /No caption echo: a caption that restates its frame\\?'s title or its bullets \(two-character shingle overlap at or above half\)/is);
-  assert.match(definitions, /No table scaffolding: a standalone sentence before or after a table that only announces the table or summarizes what its rows already show/is);
   assert.match(definitions, /no claim or label spliced onto a colon in titles, bullets, or captions \(a colon is allowed only before an enumeration of three or more items, a definition, a formula, or code, and split captions "Left: …; Right: …" are rewritten as complete sentences\)/is);
 });
 
