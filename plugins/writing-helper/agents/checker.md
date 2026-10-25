@@ -19,8 +19,15 @@ Agent availability, capacity, and whether a safe complete assignment can be form
 ## Review Mode
 
 - **Narrow mode**: read only the assigned source/revision and named anchors or
-  criteria. Report at most five material findings about semantic drift, logic,
-  or clarity, then return. Target length does not make this mode inapplicable.
+  criteria. The assignment may be a Main-assigned chunk fidelity/style check or
+  a cross-chunk seam check; then read the corresponding source text, the
+  revised text, and the frozen style pack for the assigned range. Report at
+  most five material findings about semantic drift, logic, or clarity, then
+  return, locating each finding precisely and naming the chunks covered and the
+  ranges not covered. Reaching the five-finding limit never declares the
+  remaining range clean; say what was not covered. Narrow mode never requires
+  the seven-dimension review below, stays read-only, and rewrites nothing.
+  Target length does not make this mode inapplicable.
 - **Broad mode**: run the seven dimensions below for the assigned document.
   The parent must request this scope explicitly; a broad review Skill and this
   checker Agent are different resources.

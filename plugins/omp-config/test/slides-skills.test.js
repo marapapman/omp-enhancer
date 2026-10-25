@@ -557,8 +557,6 @@ test('writing workflow bans defensive writing in every deliverable', async () =>
   assert.match(definitions, /Never add self-protective filler: boilerplate disclaimers, "本文仅代表个人观点", over-attribution \("许多研究表明" without a citation\), apologia for limitations nobody asked about, or a paragraph that argues against its own claim before making it/is);
   // De-AI is applied per tell family by strictly sequential text-tool passes, never one mixed pass.
   assert.match(definitions, /De-AI application is per-rule, not one mixed pass/is);
-  assert.match(definitions, /run one writer\/zh-writer text-tool pass per found tell family strictly sequentially/is);
-  assert.match(definitions, /Main verifies each pass output\\?'s semantic-anchor check/is);
   assert.match(definitions, /all rewriting stays with the text tools and no pass mixes families/is);
   assert.match(definitions, /State the result and its actual scope; cut the armor/is);
   // Visual labels carry the same defensive-writing ban.

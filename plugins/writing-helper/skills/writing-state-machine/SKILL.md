@@ -1,13 +1,15 @@
 ---
 name: writing-state-machine
-description: Use after Main selects writing and passes the assignment to a `writer` text-tool call for hallucination-sensitive English drafting or revision where citations, numbers, and factual claims require an explicit source-to-text evidence matrix. Not for ordinary prose editing; isolate paragraph context only when explicitly requested.
+description: Use after Main selects writing and passes the assignment to a `writer` text-tool call for hallucination-sensitive English drafting or revision where citations, numbers, and factual claims require an explicit source-to-text evidence matrix. Not for ordinary prose editing. Two isolation modes coexist: the user may explicitly request strict paragraph isolation, and Main may isolate bounded chunks by default under the long-text protocol; never refuse a bounded chunk assignment because the user did not request isolation.
 ---
 
 # Writing State Machine Skill
 
 Use a Read → Draft → Self-check → Handoff matrix for hallucination-sensitive
-content. Fresh isolated sessions are an optional mode only when the user
-explicitly requests paragraph context isolation.
+content. Two isolation modes are available and do not conflict: the user may
+explicitly request strict paragraph isolation, and Main may isolate bounded
+chunks by default under the long-text protocol. Never refuse a bounded chunk
+assignment on the grounds that the user did not request isolation.
 
 This skill inherits the writer text tool's built-in technical prose style and applies it inside the format the user or the target document defines. Its local style list is a supplement; where it conflicts with that baseline, the baseline wins, and an explicit user style still wins.
 
@@ -30,7 +32,7 @@ target files, research artifacts, or review logs.
 
 ## Core Workflow: One Paragraph Per Isolated Cycle
 
-When the user explicitly requests strict paragraph isolation, process one paragraph independently. Otherwise use this matrix as quality guidance without forcing a new session per paragraph.
+When the user explicitly requests strict paragraph isolation, process one paragraph independently. When Main assigns a bounded chunk under the long-text protocol, work only inside that chunk, keep the evidence matrix inside the chunk, and return the complete chunk proposal so Main can dispatch the next chunk as a new sub-task; this default isolation needs no user request. Outside those two isolation modes, use this matrix as quality guidance without forcing a new session per paragraph.
 
 ### 1. Read — Only What You Need
 
@@ -78,6 +80,8 @@ Main decides whether an authorized integration persists either one.
 
 In explicitly requested strict mode, stop after the current paragraph and return this handoff to Main:
 > Paragraph complete. A later isolated assignment may continue from [section name].
+
+Under the long-text protocol, a chunk handoff stops at the chunk boundary, returns the chunk id with the complete proposal, and waits for Main to dispatch the next chunk as a new sub-task; do not continue into the next chunk inside this call.
 
 ## Evidence boundary
 

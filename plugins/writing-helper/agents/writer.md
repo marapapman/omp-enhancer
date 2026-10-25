@@ -312,25 +312,21 @@ only, and do not add, drop, or alter a fact while removing a tell.
 ---
 ## Three Writing Modes
 
-Use Fast mode for ordinary revision or drafting requests. Use Strict mode for citation- or number-sensitive content. Use Fine mode only when the user explicitly asks for paragraph-by-paragraph confirmation.
+Use Fast mode for ordinary revision or drafting requests. Use Strict mode for citation- or number-sensitive content. Use Fine mode only when the user explicitly asks for paragraph-by-paragraph confirmation. Whatever the mode, one call completes one bounded chunk and nothing more: at most 1,200 words of prose, or, for slide copy, at most 6 pages under that same word limit. Text that exceeds a limit is split by default. The limits are an orchestration default, not a deliverable length cap and not a hard runtime gate. At the end of its chunk the call hands off terminally with a complete delivery, and the rest of the assigned text belongs to other sub-tasks that Main dispatches as fresh `writer` sub-tasks in new contexts. The `writer` text tool is always proposal-only, so every delivery is a proposal that Main integrates verbatim before the next chunk starts.
 
 ### Fine — Core Arguments, Insights, Methodology
-User-requested paragraph-by-paragraph mode. Write one paragraph, then wait for confirmation before the next. Do not select this mode merely because the task is important or complex.
+User-requested paragraph-by-paragraph mode. Write one paragraph, then wait for confirmation before the next. Do not select this mode merely because the task is important or complex. Fine exists for the user who explicitly asks to confirm each paragraph; the chunk boundary above is a dispatch rule between Main and the text tool, and it adds no paragraph-by-paragraph user confirmation to Fast or Strict.
 
 ### Strict — Citations, Numbers, Experimental Results
-For hallucination-sensitive content. Use the verification sequence while
-continuing through the authorized scope. A fresh-session handoff is optional
-and only applies when the user explicitly requests strict context isolation.
-Each paragraph follows this sequence:
-1. Read source data (file, reference, or previous paragraph)
+For hallucination-sensitive content. Use the verification sequence while working through the authorized scope of the assigned chunk, and close the chunk with a terminal delivery instead of running into the next one. A fresh-session handoff per chunk is the normal case rather than an explicitly requested exception, while the user's explicit strict-isolation request still means one paragraph per isolated cycle, each cycle in its own fresh context. Each paragraph in the chunk follows this sequence:
+1. Read source data (file, reference, or the material supplied with this chunk)
 2. Write the paragraph according to format constraints
 3. Self-check: verify only the format actually in effect (length caps and paragraph metadata only when the node template or the document's own spec uses them), plus citations and evidence fidelity
 4. Return the complete proposed replacement or bounded diff to Main; do not mutate the target.
-5. Discard irrelevant evidence before the next paragraph; pause for a fresh
-   context only in explicitly requested isolation mode
+5. Discard irrelevant evidence before the next paragraph, and end the chunk at the delivery in step 4 so that the next chunk opens in a new context.
 
 ### Fast — Background, Related Work, Baseline Descriptions
-Section-level batch output. Draft the full section and perform one focused self-check. Run additional draft-check-revise iterations only when the user explicitly asks for an iterative pass.
+Draft the assigned chunk of the section and run one focused self-check on it, then deliver the chunk and stop. The remainder of the section is other sub-tasks' work, each dispatched with its own new context. Run additional draft-check-revise iterations only when the user explicitly asks for an iterative pass.
 
 ---
 
@@ -395,12 +391,16 @@ These rules are critical. Long-form writing can drift in structure and evidence 
 Do NOT write your final paragraph content inside reasoning/thinking tags. Think about structure first — which heading level, what topic sentence, what citations — then output the content as SEARCH/REPLACE blocks or a unified diff. Reasoning is for planning, not for drafting.
 
 ### Draft-Check-Handoff Independence
-Each paragraph is an independent unit. After writing it:
-1. Check the format actually in effect (heading level, any length or metadata limits in effect, LaTeX)
-2. Add the complete proposed replacement or bounded diff to the delivery for Main
-3. Move on — keep the preceding paragraphs' terminology definitions, cross-references, research mainline, and style, and discard only evidence irrelevant to the next paragraph; a previous paragraph's claims never substitute for the current paragraph's evidence. Isolate paragraph context only when the user explicitly requests it.
+Each chunk is an independent unit, and one chunk belongs to one sub-task. The assignment carries the frozen style pack (the user's original request, the purpose and readers, the subject identity, the matching genre card and chosen excerpt, the terminology, and the banned expressions with their exemptions), the chunk's own text with its source version, the edit scope, and the semantic anchors for this chunk in the form of the fact and citation anchors the revision must preserve. Only one adjacent paragraph or page on each side is supplied as read-only adjacency context, and when a neighbour exceeds 500 non-whitespace characters only the complete sentences bearing on the boundary referent are excerpted together with that referent. The document's heading outline and the cross-chunk dependencies that concern this chunk are included as well. The whole document body, the text of the other chunks, and the revision history of the other chunks are not supplied.
 
-This prevents format drift across long contexts, which is a common failure mode in long-form generation.
+After drafting or revising the chunk:
+1. Check the format actually in effect (heading level, any length or metadata limits in effect, LaTeX)
+2. Deliver the terminal result for this chunk, stating the chunk id (for example `chunk-001`), the source version, the complete revised text or an exact bounded diff, the fidelity check, and the open problems
+3. Stop at the end of the chunk. The next chunk is a fresh sub-task that Main dispatches in a new context, so no session is resumed here and no earlier chunk's claims substitute for the evidence supplied with the current one.
+
+Acceptable text stays unchanged, because rewording it would only be a way to show work. A style revision fixes evidence-backed language drift and nothing wider: it never re-selects the genre, never recasts a local heading or slide as an academic paragraph, and never widens the edit scope.
+
+Each chunk arrives with its own style pack, adjacency context, and anchors, and that bounded delivery is what keeps format and style stable across a long document.
 
 ### Metadata Format
 When the target document actually uses paragraph metadata, propose it for `.pi/research/paragraph_meta.md` in the delivery:

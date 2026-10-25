@@ -7,8 +7,9 @@ description: "Remove AI writing traces — detect and replace structural AI tell
 
 Scan a document for AI-generated writing patterns and produce authorized,
 meaning-preserving replacements. For substantial documents the rules are applied
-one tell family at a time by independent tasks—never one mixed rewriting pass.
-Record the family inventory before any `writer` text-tool call changes prose.
+one tell family at a time by independent tasks—never one mixed rewriting pass;
+within one family the text is split into bounded chunks and each chunk is
+revised by a fresh `writer` sub-task. Record the family inventory before any `writer` text-tool call changes prose.
 
 All substantive English prose work—including initial writing or drafting,
 substantive polishing or revision, translation, and logical revision—must be
@@ -62,28 +63,33 @@ single-family tasks, not one pass that applies every rule at once.
    examples, or the same closer after every section is the same tell at a
    larger scale. Families with no findings are skipped later.
 2. **Per-family writer text-tool passes, strictly sequentially.** Main routes each
-substantive family rewrite through a language-matched `writer` text-tool call in
-scan order. Call N+1 goes out only after call N returns and Main verifies its
-semantic-anchor check:
+substantive family rewrite through language-matched `writer` text-tool calls in
+scan order, and a later family receives the integrated version only after every
+authorized chunk of the current family has returned and Main verifies each
+pass's semantic-anchor check:
 hedges, modality, scope, negation, causal direction, numbers, units, quotes, and
-citations unchanged; no fact added or dropped. Each writer text-tool pass handles
-only its one
-family on the full current text (which includes all earlier tasks' accepted edits),
-keeps every supported claim, and may shorten dull parts, merge or split paragraphs,
-and change structure without losing information. It must not add a fact, name,
+citations unchanged; no fact added or dropped. Inside one tell family the
+non-overlapping chunks may run in parallel, each in a fresh `writer` sub-task;
+each pass handles exactly one bounded chunk of that family (at most 1,200 words
+or 6 slides) and reviews only its own range. Main integrates the returned
+proposals mechanically by stable chunk id in document order, never by completion
+order. Duplicated, out-of-range, stale-version, or truncated results never
+overwrite the target: Main re-reads the affected chunk and schedules one bounded
+repair for that chunk only. Each pass keeps every supported claim, may shorten
+dull parts, merge or split paragraphs inside its chunk, and change structure
+within its range without losing information. It must not add a fact, name,
 number, date, quote, or citation that is not in the source. It returns
-SEARCH/REPLACE blocks or a unified diff scoped to its family.
+SEARCH/REPLACE blocks or a unified diff scoped to its family and chunk.
 3. **Check inside each task.** Read the rewritten result once and ask what
    still sounds machine-made *for that family*, and whether the rewrite added
    or dropped any fact, number, date, quote, citation, or claim.
-4. **Deliver.** Main assembles the per-family writer proposals in order and
-integrates only accepted proposals verbatim. An independent `checker` only
-reports semantic, logic, evidence, and clarity findings, including
-information-gain findings; it never rewrites. Any substantive
-repair returns to the same `writer` text tool. Minor edits keep the single pass
-only when
-the scan found exactly one tell family; two or more families always go through
-the per-family chain.
+4. **Deliver.** Main assembles the per-family writer proposals in document
+order and integrates only accepted proposals verbatim. An independent `checker`
+only reports semantic, logic, evidence, and clarity findings, including
+information-gain findings; it never rewrites. Any substantive repair returns to
+the same `writer` text tool. Inside a chunk, minor edits keep the single pass
+only when the scan found exactly one tell family; two or more families always
+go through the per-family chain.
 
 ### Voice
 
@@ -189,7 +195,18 @@ which parts remain adjustable. Exemptions: legitimate instructional registers
 
 ### Document scale — count before you edit
 
-The families below belong to the whole document. §32, §33, and §34 need the count across every page, frame, or panel before any rewrite. §35's duplication between a table and its surrounding prose shows on the single page that carries both, so judge it there; the whole deck is still handled in one §35 round, with no added review round. Each found instance is fixed when it is found.
+The families below belong to the whole document, and the census and the rewrite
+are separate steps. §32, §33, and §34 need the count across every page, frame,
+or panel before any rewrite; the census still counts across the whole document,
+and Main converts its result into a per-location keep/change list with the
+supporting evidence, while each chunk edits only its own range. §35's
+duplication between a table and its surrounding prose shows on the single page
+that carries both, so judge it there; the whole deck still counts as one §35
+round with no added review round, executed chunk by chunk. When a fix must move
+a fact or merge paragraphs across chunk boundaries, Main forms a dependency
+group of just the affected units, withdraws their independent write scope, and
+one new `writer` sub-task proposes a bounded replacement covering both ends,
+never a whole-document rewrite. Each found instance is fixed when it is found.
 
 **§32 Slide-scale uniformity.** A fixed page shape across a deck: the same bullet count on nearly every frame, the same sentence pattern inside each bullet, the same title length. Count the bullets per frame and the share taken by the most common count; when one count dominates, the template set the shape. The per-page bullet count follows that page's content, never a fixed three, and no page is padded to three. A deck where 131 of 144 bullet-bearing frames carry exactly three bullets has this tell.
 

@@ -30,6 +30,10 @@ target files, research artifacts, or review logs.
 
 Read only assignment inputs and host-authorized safe paths. A conventional path is not permission to probe or mutate it.
 
+The current document may arrive as the bounded chunk Main assigned, together
+with its read-only adjacency context and frozen style pack; that chunk, not the
+whole document, is the drafting scope for this assignment.
+
 When the assignment supplies an explicitly confirmed story snapshot path plus
 its revision, that snapshot is the story source for the deliverable and it wins
 over any generic or older outline, `.pi/research/storyline.md` included.
@@ -48,7 +52,7 @@ Read the supplied inputs. Identify empty sections (blank or `[TODO]`/`[FILL]` ma
 
 ### Default pass: Write → Check → Fix
 
-**1. Write Sprint** — For each empty/sparse section: read context + `<!-- description: ... -->`, then write the section's text in complete natural paragraphs and cite literature; use a Level-6 heading node with 50/500-char limits only when the user or the document gives that template, and let length follow the task and the argument.
+**1. Write Sprint** — Draft the assigned chunk only. For each empty/sparse section in the chunk: read context + `<!-- description: ... -->`, then write the section's text in complete natural paragraphs and cite literature; use a Level-6 heading node with 50/500-char limits only when the user or the document gives that template, and let length follow the task and the argument.
 
 **2. Writer-local multidimensional self-check** — Run all 7 checks. Cite specific evidence per finding. No fabricated issues.
 
@@ -93,5 +97,5 @@ Next steps: [what user should do].
 
 - Default to one pass.
 - Run another pass only when the user explicitly requests it.
-- Keep each pass to at most five sections so findings stay reviewable.
+- Each call handles exactly one chunk that Main delimited, at most 1,200 words, and the remaining sections belong to other sub-tasks; the five-section figure no longer bounds a call.
 - Unfixable issues are reported as limitations and never trigger an automatic retry or hard stop for unrelated work.
