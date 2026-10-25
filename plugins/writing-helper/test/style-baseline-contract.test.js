@@ -174,4 +174,19 @@ describe('Chinese writing baseline contract', () => {
     assert.doesNotMatch(rule, /^- 第.项/mu);
     assert.match(rule, /反例：先把成果数量当结论报出/u);
   });
+
+  it('keeps the slide-body figure, table, code, and citation rules', () => {
+    const profiles = read('skills/plain-chinese-writing/references/style-profiles.md');
+    const card = profiles.match(/## 幻灯片正文[\s\S]*?(?=^## 日常沟通)/mu)?.[0] ?? '';
+
+    assert.ok(card.length > 0, 'the slide-body card must exist');
+    assert.match(card, /\*\*图、表、代码与引用\*\*/u);
+    assert.match(card, /图内只保留读图必需的信息/u);
+    assert.match(card, /解释、过程描述和评价写进正文/u);
+    assert.match(card, /表格不写「注：」式补充说明/u);
+    assert.match(card, /代码注释只写意图、边界条件和易错点，不复述语句行为/u);
+    assert.match(card, /没有非说不可的内容就不写注释/u);
+    assert.match(card, /引用只在材料给出确切来源时使用/u);
+    assert.match(card, /图、表或代码下补一行来源标注，材料里并没有给出这个出处/u);
+  });
 });

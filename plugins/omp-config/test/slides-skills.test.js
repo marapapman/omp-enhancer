@@ -638,3 +638,20 @@ function markdownSection(markdown, heading) {
   assert.ok(start >= 0, `missing section ${heading}`);
   return markdown.slice(start, next < 0 ? markdown.length : next);
 }
+
+test('Slide figures, tables, code, and citations stay free of over-annotation', async () => {
+  const quality = await readFile(qualityReferenceUrl, 'utf8');
+  const section = quality.match(/## Figures, tables, code, and citations[\s\S]*?(?=^Slide copy has its own AI tells)/mu)?.[0] ?? '';
+  assert.ok(section.length > 0, 'beamer-quality must carry the annotation section');
+  assert.match(section, /axis names, units,\s+key values, and a necessary legend/iu);
+  assert.match(section, /no `Note:`-style supplementary comments and no trailing evaluation/iu);
+  assert.match(section, /never\s+what a statement does/iu);
+  assert.match(section, /no per-line comments/iu);
+  assert.match(section, /only when the material gives an exact source/iu);
+  assert.match(section, /no invented references, years, or links/iu);
+
+  const storyline = await readFile(storylineSkillUrl, 'utf8');
+  assert.match(storyline, /7\. Apply the figures, tables, code, and citations constraints at this stage/iu);
+  assert.match(storyline, /never invented references, years, or links/iu);
+  assert.match(storyline, /slide-body card in `plain-chinese-writing`/iu);
+});
