@@ -558,6 +558,7 @@ test('styleIssues reports the new Chinese AI-tell rules per line', () => {
     'zh-x-decides-y',
     'zh-colloquial-judgement',
     'zh-didactic-cognition',
+    'zh-concession-restatement-close',
   ]) {
     assert.ok(patterns.has(pattern), `${pattern} should be exported`);
   }
@@ -597,4 +598,18 @@ test('styleIssues reports the new Chinese AI-tell rules per line', () => {
   assert.equal(matches('三要素与三部分的关系。', 'zh-number-bundling'), 0);
   assert.equal(matches('两个条件都要满足。', 'zh-number-bundling'), 0);
   assert.equal(styleIssues('English text only.', 'zh').length, 0);
+  assert.equal(matches('一个 CPU 核同时只能执行一条指令，物理内存只有一份，程序再多，这一点不变。', 'zh-concession-restatement-close'), 1);
+  assert.equal(matches('任务再复杂，这一点也不变。', 'zh-concession-restatement-close'), 1);
+  assert.equal(matches('物理内存只有一份，程序开得再多也不变。', 'zh-concession-restatement-close'), 1);
+  assert.equal(matches('开着的程序再多，一个核在同一时刻也只能执行一条指令，物理内存也仍然只有这一份。', 'zh-concession-restatement-close'), 1);
+  assert.equal(matches('程序开得再多，这两样也不会变多。', 'zh-concession-restatement-close'), 1);
+  assert.equal(matches('物理内存是程序运行的时候存放数据的地方,一台机器只有一份,程序开得再多,机器里的物理内存还是这一份。', 'zh-concession-restatement-close'), 1);
+  assert.equal(matches('程序开得再多,这两点都不变。', 'zh-concession-restatement-close'), 1);
+  assert.equal(matches('程序开得再多,这两点都不变,所以需要调度。', 'zh-concession-restatement-close'), 1);
+  assert.equal(matches('无论程序多少，这一点不变。', 'zh-concession-restatement-close'), 1);
+  assert.equal(matches('在单核顺序执行模型中，一个 CPU 核同一时刻只执行一条指令。', 'zh-concession-restatement-close'), 0);
+  assert.equal(matches('程序数量增加不会改变 CPU 核和物理内存的总量。', 'zh-concession-restatement-close'), 0);
+  assert.equal(matches('在已测的批大小 1 到 64 范围内，结果保持不变。', 'zh-concession-restatement-close'), 0);
+  assert.equal(matches('程序再次启动. 这一点不变。', 'zh-concession-restatement-close'), 0);
+  assert.equal(matches('并发任务增加时，队列容量也会相应增加，写入阻塞因此减少。', 'zh-concession-restatement-close'), 0);
 });

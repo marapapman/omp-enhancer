@@ -396,6 +396,48 @@ describe('AI scan scoring and reports', () => {
     assert.equal(chineseAll.issues.some((issue) => issue.id.startsWith('ai-parallel-')), true);
     assert.match(formatAiScanReport(chineseAll), /AI 味扫描结果/);
   });
+  it('flags concession clauses closed by an abstract restatement', () => {
+    const result = scanAiStyle({
+      text: '一个 CPU 核同时只能执行一条指令，物理内存只有一份，程序再多，这一点不变。',
+      language: 'zh',
+      detector: 'local',
+      mode: 'standard',
+    });
+    const finding = result.issues.find((issue) => issue.pattern === 'zh-concession-restatement-close');
+    assert.ok(finding);
+    assert.equal(finding.severity, 'IMPORTANT');
+    assert.equal(finding.quote, '程序再多，这一点不变');
+    assert.equal(result.summary.verdict, 'needs_revision');
+    const bare = scanAiStyle({ text: '物理内存只有一份，程序开得再多也不变。', language: 'zh', mode: 'standard' });
+    assert.equal(bare.issues.some((issue) => issue.pattern === 'zh-concession-restatement-close'), true);
+    for (const text of [
+      '开着的程序再多，一个核在同一时刻也只能执行一条指令，物理内存也仍然只有这一份。',
+      '物理内存是程序运行的时候存放数据的地方,一台机器只有一份,程序开得再多,机器里的物理内存还是这一份。',
+      '程序开得再多,这两点都不变。',
+      '程序开得再多,这两点都不变,所以需要调度。',
+      '程序开得再多，这两样也不会变多。',
+    ]) {
+      assert.equal(scanAiStyle({ text, language: 'zh', mode: 'standard' }).issues.some(
+        (issue) => issue.pattern === 'zh-concession-restatement-close',
+      ), true, text);
+    }
+
+
+
+    for (const text of [
+      '在单核顺序执行模型中，一个 CPU 核同一时刻只执行一条指令。',
+      '程序数量增加不会改变 CPU 核和物理内存的总量。',
+      '在已测的批大小 1 到 64 范围内，结果保持不变。',
+      '缓存只保存已经计算过的结果，再次调用时直接读取。',
+      '程序再次启动. 这一点不变。',
+      '并发任务增加时，队列容量也会相应增加，写入阻塞因此减少。',
+    ]) {
+      assert.equal(scanAiStyle({ text, language: 'zh', mode: 'standard' }).issues.some(
+        (issue) => issue.pattern === 'zh-concession-restatement-close',
+      ), false, text);
+    }
+  });
+
 
   it('formats a reliable English report without the short-text warning', () => {
     const report = formatAiScanReport(scanAiStyle({

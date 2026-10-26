@@ -32,6 +32,9 @@ describe('sentence-level writing-norm reminder contracts', () => {
     assert.match(agents[0], /This is a reminder duty, not a blocking authority/u);
     assert.match(agents[1], /setup → emphasis → restatement/u);
     assert.match(agents[1], /never becomes a second message/u);
+    assert.match(agents[1], /Main calls writing_ai_scan with detector=ensemble and allowNetwork=true on the exact final text before checker review and delivery/u);
+    assert.match(agents[1], /local-only scan as a separately labelled fallback/u);
+    assert.match(agents[1], /keeps the scan advisory rather than a completion gate/u);
   });
 
   it('carries the same bans into the indented WATCHDOG block without a second reminder', () => {
@@ -42,6 +45,8 @@ describe('sentence-level writing-norm reminder contracts', () => {
     assert.match(watchdog, /^ {2}Information-gain part of the one-shot writing-norm reminder/mu);
     assert.equal(watchdog.match(/the sentence-level restatement ban/gu)?.length, 1);
     assert.equal(watchdog.match(/the unscoped-absolute ban/gu)?.length, 1);
+    assert.match(watchdog, /Main calls writing_ai_scan with detector=ensemble and allowNetwork=true on the exact final text before checker review and delivery/u);
+    assert.match(watchdog, /keeps the scan advisory rather than a completion gate/u);
   });
 
   it('keeps the repository Advisor duty advisory while naming both sentence-level bans', () => {

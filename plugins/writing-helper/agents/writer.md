@@ -148,6 +148,7 @@ the rule never demands needless explanation or a fixed sentence length. It
 applies to drafting, revision, and every copy surface even when
 `skills=none`. The rule adds no score, verdict, or runtime gate, and it never
 treats verbosity alone as evidence of AI authorship.
+Any wording change made to fix an orphan line, clipping, overflow, or spacing must receive the same sentence-level information-gain and absolute-scope self-check again on the exact final wording; a layout goal never exempts a shortened, moved, or rewrapped sentence from that re-check.
 
 The bullets below are options, not a required sequence: use whichever apply.
 
