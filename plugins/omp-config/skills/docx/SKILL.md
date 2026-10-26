@@ -29,6 +29,22 @@ completion controller.
 
 For long documents, Main splits the work into writer context chunks under the chunk protocol in `skill://omp-enhancer-workflows/references/writing.md`: the communication batch (how much the user discusses at once), the layout batch (how much one task or OfficeCLI pass applies at once), and the writer context chunk (how much one `writer` or `zh-writer` sub-task revises at once) stay distinct, each chunk is revised by a new writer sub-task (a PPTX chunk is also capped at 6 pages), a section-sized batch never implies that one writer sub-task rewrites the whole section, and a chunk boundary never forces a user confirmation. Every chunk carries the figure, table, code, and citation rules: figures keep only reading-required annotations, code comments state intent and boundary conditions rather than restating each line, citations are never added, and necessary scope statements, units, qualifiers, existing citations, and safety notes stay.
 
+### Long-document chunk handoff
+
+Under the writing workflow's chunking contract
+(`skill://omp-enhancer-workflows/references/writing.md`), Main builds the
+chunk list in source order with stable chunk ids and records each chunk's
+target file, paragraph/page/shape range, and source version. Each chunk goes
+to a fresh language-matched `writer`/`zh-writer` sub-task with a frozen style
+pack and acceptance checks — never a resumed session or a whole-document
+round trip — and at most four sub-tasks run in parallel. Main integrates the
+authorized text in source order into the current complete artifact first and
+only then applies it through officecli; structural, layout, and conversion
+work stays with Main or `task`. `officecli validate` plus a rendered view
+verifies the integrated artifact for uncovered content, missing paragraphs
+or pages, truncated objects, unmerged changes, repeated text, and broken
+cross-references.
+
 
 Use this when a task involves a Word `.docx`, Excel `.xlsx`, or PowerPoint
 `.pptx` file. `officecli` is a single self-contained binary (no Office, no

@@ -38,6 +38,15 @@ Use only the configured reviewer model for this agent. Do not request automatic 
 
 If evidence or tools are unavailable, report the concrete limitation and next useful action while still returning completed findings.
 
+## Narrow Passage Review
+
+The bounded-range contract above governs this review: one bounded range, the named anchors or criteria, and findings for that range only. Under a chunk assignment:
+
+- Main assigns a bounded chunk together with its file version, paragraph/page range, frozen style pack, and acceptance checks, and the checker judges the chunk against those inputs. A chunk review does not require the whole document, and a local problem never becomes a demand to re-run the entire document.
+- Every finding carries the chunk id with its exact location (for example `chunk-003, Section 2, paragraph 4`), the quoted evidence, and its issue type (dimension and severity), so Main can schedule one bounded repair for that chunk.
+- Wording repair goes to a new independent writer sub-task that Main dispatches. The checker stays read-only, advisory, and proposal-only; it never rewrites the text itself and never dispatches the repair.
+- When a question is genuinely cross-chunk, such as terminology, repeated closers, page templatization, or style coverage across the opening, middle, and closing, the check is split across chunks so no single checker receives the whole document. State which chunks were covered and which ranges were not.
+
 ## Assignment Skill Contract
 
 Main freezes the assignment's `skills` metadata after READY. Use exactly the
@@ -134,6 +143,8 @@ Review **in this exact order**. Each dimension builds on the previous one. Do no
 - Are references accurate? Citations match the claims they support?
 - Is the language precise? No ambiguous phrasing, weasel words, or false precision?
 - Does each sentence center on a stated point and carry information gain (a new fact, a necessary qualifier, or a key logical relation)? Where it does not, quote the sentence, name what fails to add, and propose deleting the redundant part first instead of restating it at length. Never propose cutting a unique fact, number, unit, scope, condition, modality, negation, causal direction, citation, safety instruction, or reproducibility step, and never treat verbose prose alone as AI-authorship evidence.
+- Does a sentence's second half add a new fact, a necessary qualifier, or a key logical relation, or does it only re-emphasize or restate the first half? Does the setup → emphasis → restatement pattern appear, where one sentence sets up a claim, a second emphasizes it, and a third restates it? Quote the sentence as evidence and keep the sentence that carries the fact; never propose deleting a necessary qualifier or a precondition to fix the restatement.
+- Does an absolute quantifier ("all", "any", "only", "always", "never", "every", "must", "exactly") match the scope the evidence supports? Quote the sentence with its stated scope — the covered cases, the exception, or the untested case — instead of flagging the bare quantifier; never recommend deleting a qualifier or a precondition to narrow the claim.
 - Do AI writing tells appear here? Staged "not X but Y" contrasts, one-line closers, forced triads, neat metaphors that tidy a complex concept, parallelism or a setup that announces a parallel list, dashes, bold labels, inflated significance, or chatbot residue signal templated prose; so do "specifics then sweep" clauses (a concrete fact followed by a sweeping abstraction that adds no new fact), abstract-restatement echoes (a concrete fact restated as a quoted or nominalized concept one level up), announcer transitions ("The real question is ..."), and rhythm-matched paired-phrase closers ("faster, cheaper, better") — flag the passage with its evidence.
 - Unless the parent supplies another English style standard, the writer's built-in technical prose baseline is the default register: long information-dense sentences, formal technical vocabulary, first-person plural methods, explicit definitions followed by examples, and problem → approach framing are not defects by themselves. Report unsupported claims, vague comparisons, missing definitions, copied citation markers, and the listed AI tells instead.
 - Any listed tell (a forced triad, a repeated sentence opening, a dash, a stacked qualifier) merits a finding at its first appearance; prefer an over-correction to a miss.

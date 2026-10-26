@@ -239,7 +239,12 @@ test('packaged advisor context assists Agent-owned orchestration without replaci
   assert.match(watchdog, /and defensive writing \(unsourced hedging, boilerplate disclaimers, over-attribution, apologia\)/u);
   assert.match(watchdog, /This is a reminder duty, not a blocking authority/u);
   assert.doesNotMatch(watchdog, /DECISION CHECK|WORKFLOW PLAN|WORKFLOW READY|RESOURCE EXTENSION|Delegate Agent=|DISCOVER -> DECLARE -> LOAD|byte 0|writing\.pending/i);
-  assert.ok(watchdog.length < 4900, `Advisor policy should stay compact, got ${watchdog.length} characters`);
+  assert.equal(watchdog.match(/Writing-norm reminder \(zh\/en, advisory\)/gu)?.length, 1, 'Advisor policy keeps one writing-norm reminder instead of accumulating duplicate guidance');
+  assert.equal(watchdog.match(/Information-gain part of the one-shot writing-norm reminder/gu)?.length, 1, 'The information-gain duty rides in the same single reminder');
+  // Size guard for the per-session injected prompt. The sentence-level restatement
+  // and unscoped-absolute bans added ~1.2k characters (now ~6.0k); 6500 leaves
+  // bounded headroom and still fails on unchecked advisory growth.
+  assert.ok(watchdog.length < 6500, `Advisor policy should stay compact, got ${watchdog.length} characters`);
   assert.doesNotMatch(watchdog, /block:\s*true|continue:\s*true|triggerTurn|hard router/i);
 });
 

@@ -36,7 +36,7 @@ This skill covers English prose. For Chinese text use `zh-format-humanizer`; the
 
 A language model defaults to the most statistically likely phrasing for the widest audience, so ordinary facts come out generalized, hedged, and inflated. Vocabulary lists change with every model release; the structural habits below persist. Every pattern is one form of the same default choice, so fix the structure, not only the vocabulary.
 
-Two rules follow. First, information gain decides what stays. Every sentence must center on a stated point and keep only what supplies a new fact, a necessary qualifier, or a key logical relation. Do not re-explain what the reader can infer from context, pad with modifiers that add no information, or enumerate process mechanically for completeness. Reasonable omission is allowed so the reader completes a simple inference, and a revision deletes redundant expression first instead of restating it in more words. A focused sentence may carry several necessary clauses, so never delete a unique fact, number, unit, scope, condition, modality, negation, causal direction, citation, safety instruction, or reproducibility step to raise information gain, and never force needless explanation or uniformly short sentences onto the baseline's long linked sentences while each clause still informs. Apply the rule inside the revision order below — claims, evidence, and anchors decide what must stay, and information gain then decides how the wording is trimmed. The second rule: any listed tell justifies an edit on its first sighting — prefer an over-correction to a miss. Only quotations, titles, proper names, passages discussing a phrase rather than using it, text predating November 30, 2022, and details that carry the writer's voice (specific unusual details, mixed feelings, first-person choices) are exempt.
+Two rules follow. First, information gain decides what stays. Every sentence must center on a stated point and keep only what supplies a new fact, a necessary qualifier, or a key logical relation. Do not re-explain what the reader can infer from context, pad with modifiers that add no information, or enumerate process mechanically for completeness. Reasonable omission is allowed so the reader completes a simple inference, and a revision deletes redundant expression first instead of restating it in more words. A focused sentence may carry several necessary clauses, so never delete a unique fact, number, unit, scope, condition, modality, negation, causal direction, citation, safety instruction, or reproducibility step to raise information gain, and never force needless explanation or uniformly short sentences onto the baseline's long linked sentences while each clause still informs. Apply the rule inside the revision order below — claims, evidence, and anchors decide what must stay, and information gain then decides how the wording is trimmed. Its sentence-level forms are §36 and §37 in *Sentence-level information and scope*, and the scan covers them with the other families. The second rule: any listed tell justifies an edit on its first sighting — prefer an over-correction to a miss. Only quotations, titles, proper names, passages discussing a phrase rather than using it, text predating November 30, 2022, and details that carry the writer's voice (specific unusual details, mixed feelings, first-person choices) are exempt.
 
 ## Revision order
 
@@ -47,6 +47,18 @@ scope, negation, numbers and units, citations, and causal direction. Settle
 unsupported leaps, dependencies, and paragraph or heading order before changing
 wording. Only then remove AI tells or polish sentences. Preserve every anchor;
 do not add or drop a fact, source, citation, or limitation.
+
+The order runs one tell family at a time in scan order, and the unit of each
+`writer` call is one authorized chunk under the shared chunking contract: at
+most 1,200 words or 6 slides, a fresh independent `writer` sub-task per chunk,
+read-only adjacency context, and no resumed session or whole-document input.
+The `writer` stays proposal-only; Main integrates the accepted proposals
+verbatim into one current complete artifact, which is what the next family and
+the checker read. The independent `checker` covers terminology and subject use,
+repeated closers and page templatization, and style coverage across the
+opening, middle, and closing chunks; it reports located findings and never
+rewrites, and every wording repair returns to a new independent `writer`
+sub-task for the affected chunk.
 
 ## How to work
 
@@ -61,7 +73,13 @@ single-family tasks, not one pass that applies every rule at once.
    a keyword hit alone is not a verdict. Look at paragraph shape, list shape, and headings,
    not only sentences: a contrast split across two sentences, three parallel
    examples, or the same closer after every section is the same tell at a
-   larger scale. Families with no findings are skipped later.
+   larger scale. The inventory covers the sentence-level families too: §36's
+   re-emphasizing second half, consecutive emphasis, repeated explanation after
+   a full explanation, and setup → emphasis → restatement, and §37's unscoped
+   quantifiers (all, any, only, always, never, every, must, exactly), each
+   entry cited with its sentence location and the scope evidence, so the
+   sentence-level checks reach each chunk along with its other evidence.
+   Families with no findings are skipped later.
 2. **Per-family writer text-tool passes, strictly sequentially.** Main routes each
 substantive family rewrite through language-matched `writer` text-tool calls in
 scan order, and a later family receives the integrated version only after every
@@ -83,13 +101,20 @@ SEARCH/REPLACE blocks or a unified diff scoped to its family and chunk.
 3. **Check inside each task.** Read the rewritten result once and ask what
    still sounds machine-made *for that family*, and whether the rewrite added
    or dropped any fact, number, date, quote, citation, or claim.
-4. **Deliver.** Main assembles the per-family writer proposals in document
-order and integrates only accepted proposals verbatim. An independent `checker`
-only reports semantic, logic, evidence, and clarity findings, including
-information-gain findings; it never rewrites. Any substantive repair returns to
-the same `writer` text tool. Inside a chunk, minor edits keep the single pass
-only when the scan found exactly one tell family; two or more families always
-go through the per-family chain.
+4. **Deliver.** The unit of each `writer` call stays one authorized chunk under
+the shared chunking contract — bounded limits, a fresh independent sub-task,
+proposal-only output. Main assembles the per-family writer proposals in
+document order and integrates only accepted proposals verbatim into one
+current complete artifact, the version later families and the checker read. An
+independent `checker` only reports semantic, logic, evidence, and clarity
+findings, including information-gain findings; it covers terminology and
+subject use, repeated closers and page templatization, and style coverage
+across the opening, middle, and closing chunks, locating each finding to its
+chunk, and it never rewrites. Any substantive repair returns to the same
+`writer` text tool as a new independent sub-task for the affected chunk.
+Inside a chunk, minor edits keep the single pass only when the scan found
+exactly one tell family; two or more families always go through the per-family
+chain.
 
 ### Voice
 
@@ -196,17 +221,25 @@ which parts remain adjustable. Exemptions: legitimate instructional registers
 ### Document scale — count before you edit
 
 The families below belong to the whole document, and the census and the rewrite
-are separate steps. §32, §33, and §34 need the count across every page, frame,
-or panel before any rewrite; the census still counts across the whole document,
-and Main converts its result into a per-location keep/change list with the
-supporting evidence, while each chunk edits only its own range. §35's
+are separate steps. The scan task inventories §32–§35 over the whole document
+and hands each chunk only its own evidence — the cited examples, the frame
+numbers, and the keep/change positions Main derived from the count — so no
+writer or checker has to ingest the whole document to revise one chunk. §32,
+§33, and §34 are counted across every page, frame, or panel while the per-chunk
+work stays bounded: each chunk edits only its own range under the shared
+chunking contract, and each found instance is fixed when it is found. §35's
 duplication between a table and its surrounding prose shows on the single page
-that carries both, so judge it there; the whole deck still counts as one §35
-round with no added review round, executed chunk by chunk. When a fix must move
-a fact or merge paragraphs across chunk boundaries, Main forms a dependency
-group of just the affected units, withdraws their independent write scope, and
-one new `writer` sub-task proposes a bounded replacement covering both ends,
-never a whole-document rewrite. Each found instance is fixed when it is found.
+that carries both, so it is judged on that page by the reader task stated in
+§35 below, with neither the table nor the prose deleted by default; the
+judgment decides which form stays and carries over the unique facts,
+qualifiers, and citations. The whole deck still counts as one §35 round with no
+added review round, executed chunk by chunk. All wording repair goes to the
+same `writer` text tool as a new independent sub-task for one authorized
+chunk. When a fix must move a fact or merge paragraphs across chunk boundaries,
+Main forms a dependency group of just the affected units, withdraws their
+independent write scope, and one new `writer` sub-task proposes a bounded
+replacement covering both ends, never a whole-document rewrite. There is no
+single all-family rewrite and no final whole-document polish pass.
 
 **§32 Slide-scale uniformity.** A fixed page shape across a deck: the same bullet count on nearly every frame, the same sentence pattern inside each bullet, the same title length. Count the bullets per frame and the share taken by the most common count; when one count dominates, the template set the shape. The per-page bullet count follows that page's content, never a fixed three, and no page is padded to three. A deck where 131 of 144 bullet-bearing frames carry exactly three bullets has this tell.
 
@@ -215,6 +248,12 @@ never a whole-document rewrite. Each found instance is fixed when it is found.
 **§34 Caption echo.** The extension of §28 to captions and bullets. A caption that restates its frame's title or its bullets adds nothing to the figure, and a bullet that restates the title adds nothing to the page. Compare the caption, the title, and the bullet text by two-character shingles; a caption or bullet sharing half or more of its shingles with the title or with the bullets is an echo. Delete the echo, or replace it with what the figure or the page adds beyond the title and the bullets.
 
 **§35 Table necessity and prose duplication.** A table earns its place on a page when it helps the reader compare, look something up, check a condition, or check a number; judge that question before touching wording, and never call a table useless from its row count, its column count, a single dimension, symmetric phrasing, or the number of tables on the page. When the prose and the table carry the same content, keep whichever form serves this page and move every unique fact, qualifier, number, citation, and safety note from the dropped form into the kept one; never default to protecting the table and deleting the prose. Same-page duplication is the defect itself, so prose that already covers the table's rows is never a reason to keep the table, and the table's shape is no reason to drop it; the page states the content in one form. Moving the unique information out of the removed form is required rather than the author's choice: approximation qualifiers such as "about" and "roughly", conditional qualifiers such as "when necessary", definitions, and judgments move into the form that stays before the other form goes. When the user limits the change to the table, prose outside the table is out of scope, and a sentence the material already carries is never deleted on the grounds that the writer sees no support for it; record it as an open verification item instead. Necessary explanation, reading conventions, premises, and teaching derivation are not redundancy and stay even when they add no new fact. Do not add conclusions such as "faster" or "stronger" to fill cells, and keep a table the user requested. A report cites the exact cell and the duplicated prose, states the reader task, the unique information, whether to keep the table, adjust it, or rewrite it as prose, and which technical statements need verification; a wording finding is never reported as a factual conclusion or an AI-authorship judgment. The census flags each frame that carries a sentence before or after a table; that flag marks a candidate, and the final judgment reads the full frame.
+
+### Sentence-level information and scope — act on one sighting
+
+**§36 Sentence-level restatement and emphasis.** Three shapes: a second half that only re-emphasizes or restates the first half, adding no new fact, necessary qualifier, or key logical relation; consecutive emphasis that stacks assertions or intensifiers on the same claim within one sentence or across adjacent sentences; and the setup → emphasis → restatement pattern, where one sentence sets up a claim, a second emphasizes it, and a third restates it in other words. Before: "The rollout cut error rates by nearly half, reducing errors dramatically." After: "The rollout cut error rates by nearly half." The fix: delete the re-emphasizing second half, cut the stacked emphasis, and keep the sentence that carries the fact; explain a concept fully once, then carry it forward with the term plus new facts, conditions, scope, method, or cost instead of another explanation. Exemptions: a second half that carries a necessary qualifier, a precondition, or genuinely new information stays, and the one place where a concept is explained in full is the explanation the text keeps.
+
+**§37 Unscoped absolutes.** "all", "any", "only", "always", "never", "every", "must", and "exactly" each trigger a scope check against the evidence. Keep one only when the stated scope is present and matches the evidence; otherwise narrow or delete it and state the scope, the exception, or the untested case, so the sentence does not read as unjustified certainty. Before: "The parser handles any malformed input." After: "The parser handled every malformed input in the test corpus; malformed inputs outside that corpus were not tested." Exemptions: a measured claim whose stated scope matches the evidence, fixed technical terms ("exactly-once semantics", "all-pairs comparison"), quotations, and proper names.
 
 ## When not to act
 
@@ -234,17 +273,26 @@ Treat frequency and intensity qualifiers, modality, scope, negation, comparison 
    - Suggested replacement
    - Whether it is a safe expression-only replacement or needs an author decision
 
-3. **Revise.** Include safe replacements in the complete proposal. Present only
-   substantive decisions to the user; Main owns any authorized persistence.
+3. **Revise.** Include safe replacements in the complete proposal for the chunk
+   they belong to — the full revised text of that authorized chunk, and of the
+   whole document only when the document is itself one chunk. Present only
+   substantive decisions to the user; Main owns any authorized persistence and
+   integrates the accepted proposals verbatim into the current complete
+   artifact.
 
-4. **Output comparison.** After all findings are processed, show:
-   - **Before** — full original text
-   - **After** — full revised text
+4. **Output comparison.** After a chunk's findings are processed, show:
+   - **Before** — that chunk's original text
+   - **After** — that chunk's revised text
    - **Changes** — count of replacements by pattern type
+   Main reports whole-document totals from the integrated chunks; no call
+   returns a whole-document rewrite for a substantial document.
 
 ## Optional Interactive Output
 
 Use this format only when the user requested issue-by-issue confirmation:
+
+For a substantial document, show this comparison per authorized chunk instead
+of one whole-document pair.
 
 ```
 --- Finding 1 / N ---

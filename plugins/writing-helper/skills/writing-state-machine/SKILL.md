@@ -32,7 +32,7 @@ target files, research artifacts, or review logs.
 
 ## Core Workflow: One Paragraph Per Isolated Cycle
 
-When the user explicitly requests strict paragraph isolation, process one paragraph independently. When Main assigns a bounded chunk under the long-text protocol, work only inside that chunk, keep the evidence matrix inside the chunk, and return the complete chunk proposal so Main can dispatch the next chunk as a new sub-task; this default isolation needs no user request. Outside those two isolation modes, use this matrix as quality guidance without forcing a new session per paragraph.
+One paragraph per isolated cycle remains the strict evidence method. When the user explicitly requests strict paragraph isolation, process one paragraph independently; strict context isolation happens only on that explicit request. When Main assigns a bounded chunk under the long-text protocol, the delivery unit is the authorized chunk rather than the whole document. Work only inside that chunk, run the evidence matrix paragraph by paragraph inside it, and return the complete chunk proposal as a terminal delivery so Main can dispatch the next chunk as a new sub-task; this default isolation needs no user request and adds no per-paragraph confirmation. Outside those two isolation modes, use this matrix as quality guidance without forcing a new session per paragraph.
 
 ### 1. Read — Only What You Need
 
@@ -73,7 +73,7 @@ Fix failed checks that can be resolved from available evidence inside this bound
 
 ### 4. Handoff — Preserve effect authority
 
-Return the complete paragraph proposal and any bounded insertion patch to Main.
+Return the complete proposal for the assigned unit together with any bounded insertion patch to Main. The assigned unit is one paragraph in strict isolation mode and the whole authorized chunk under the long-text protocol.
 Main decides whether an authorized integration persists either one.
 
 ### 5. Reset — Return an isolation handoff
@@ -82,6 +82,12 @@ In explicitly requested strict mode, stop after the current paragraph and return
 > Paragraph complete. A later isolated assignment may continue from [section name].
 
 Under the long-text protocol, a chunk handoff stops at the chunk boundary, returns the chunk id with the complete proposal, and waits for Main to dispatch the next chunk as a new sub-task; do not continue into the next chunk inside this call.
+
+## Scope Guidance
+
+- The unit is the one authorized chunk Main delimited. Each chunk arrives as a new `writer` sub-task, at most four run in parallel, and this call stops at its chunk boundary with a terminal delivery instead of continuing into the next chunk.
+- Strict paragraph-by-paragraph context isolation happens only when the user explicitly requests it. Main's default chunk isolation needs no user request and adds no per-paragraph user confirmation.
+- The full chunk protocol is the shared chunking contract; it is quoted verbatim once, in the writing-mad-writer Skill's Scope Guidance, and this Skill references that contract here instead of repeating the list.
 
 ## Evidence boundary
 
