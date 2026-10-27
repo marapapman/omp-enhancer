@@ -237,7 +237,7 @@ test('packaged advisor context assists Agent-owned orchestration without replaci
   assert.match(watchdog, /"XX：XX" label\+colon\+label titles and label-colon bullet lead-ins/u);
   assert.match(watchdog, /opening\/closing one-sentence summaries; the "understanding promise" transition/u);
   assert.match(watchdog, /and defensive writing \(unsourced hedging, boilerplate disclaimers, over-attribution, apologia\)/u);
-  assert.match(watchdog, /the anaphoric passive rider 「，斜杠由它补上」\/"with … added by it"/u);
+  assert.match(watchdog, /the anaphoric passive rider 「，斜杠由它补上」\/"with … added by it"; 回指回扣小句/u);
   assert.equal(watchdog.match(/the anaphoric passive rider /gu)?.length, 1, 'The rider phrase joins the existing sentence-level item exactly once');
   assert.match(watchdog, /This is a reminder duty, not a blocking authority/u);
   assert.doesNotMatch(watchdog, /DECISION CHECK|WORKFLOW PLAN|WORKFLOW READY|RESOURCE EXTENSION|Delegate Agent=|DISCOVER -> DECLARE -> LOAD|byte 0|writing\.pending/i);

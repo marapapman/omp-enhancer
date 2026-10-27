@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "defaults": {
+    "approvalMode": "yolo",
+    "advisor": false,
+    "executionMode": "rpc",
+    "timeoutSeconds": 420,
+    "tools": [
+      "task",
+      "read",
+      "edit",
+      "writing_ai_scan"
+    ],
+    "repeat": 1,
+    "expectations": {
+      "noWeb": true,
+      "requireFinal": true,
+      "requiredNativeTaskAgents": [
+        "zh-writer"
+      ],
+      "requireNativeTaskCompletion": true
+    }
+  },
+  "scenarios": [
+    {
+      "id": "zh-anaphoric-callback-delivery",
+      "category": "writing/zh-anaphoric-callback",
+      "fixture": "anaphoric-callback-zh",
+      "prompt": "润色 paper.md，只修改这个文件，只处理冗余句式，不要重写事实或改换叙述顺序。保留 1989 年、CERN、HTML、URL、HTTP、万维网和搜索引擎这些事实；调用 zh-writer 完成文字修改，终态交付后集成。修改后只报告改动位置和保留的事实，不在报告里引用、复述或逐字转写被删掉、被改写的原句。",
+      "expectations": {
+        "requiredNativeTaskDeliveryTextPatterns": [
+          {
+            "agent": "zh-writer",
+            "pattern": "(?:HTML[\\s\\S]{0,200}万维网|万维网[\\s\\S]{0,200}HTML)",
+            "minCount": 1,
+            "maxCount": 2
+          }
+        ],
+        "forbiddenFinalPatterns": [
+          "(?<!里)(?<!中)(?<!下)(?<!时)(?<!后)(?<!前)(?<!以来)(?<!以前)(?<!方面)[，,](?!因为|由于|如果|若|当|除非|虽然|尽管|即使|所以|因此|因而|于是|但|但是|而|否则)(?:(?:这|那|此)[^，。！？；,.!?;\\n\\d]{0,10}(?:就是|正是|便是|才是|是|成了|成为|构成|意味着|标志着|说明|证明|被[^，。！？；,.!?;\\n\\d]{0,8}视为|被视为|让|使得|使)|(?:正是|就是|便是|才是|成了|成为|构成|意味着|标志着))[^，。！？；,.!?;\\n\\d]{1,24}(?=[。！？.!?，,；;]|$)"
+        ]
+      },
+      "fixtureExpectations": {
+        "allowedChangedFiles": [
+          "paper.md"
+        ],
+        "requiredChangedFiles": [
+          "paper.md"
+        ],
+        "requiredPatterns": {
+          "paper.md": [
+            "1989",
+            "CERN",
+            "HTML",
+            "URL",
+            "HTTP",
+            "万维网",
+            "搜索引擎",
+            "(?:HTML[\\s\\S]{0,200}万维网|万维网[\\s\\S]{0,200}HTML)"
+          ]
+        },
+        "forbiddenPatterns": {
+          "paper.md": [
+            "(?<!里)(?<!中)(?<!下)(?<!时)(?<!后)(?<!前)(?<!以来)(?<!以前)(?<!方面)[，,](?!因为|由于|如果|若|当|除非|虽然|尽管|即使|所以|因此|因而|于是|但|但是|而|否则)(?:这|那|此)[^，。！？；,.!?;\\n\\d]{0,10}(?:就是|正是|便是|才是|是|成了|成为|构成|意味着|标志着|说明|证明|被[^，。！？；,.!?;\\n\\d]{0,8}视为|被视为|让|使得|使)[^，。！？；,.!?;\\n\\d]{1,24}(?=[。！？.!?，,；;]|$)"
+          ]
+        }
+      }
+    }
+  ]
+}

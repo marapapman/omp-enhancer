@@ -69,6 +69,7 @@ Constraints:
 | No claims beyond what source data supports | — |
 | Sentence keeps only a new fact, necessary qualifier, or key logical relation; redundant wording deleted first, anchors and citations untouched | — |
 | An anaphoric passive rider — a complete main clause plus a comma and a with + object + past participle + by + anaphoric actor adjunct — has its action and new object merged into the main clause, the actor named once only when recoverable, never invented | — |
+| An anaphoric callback clause — a complete main clause plus a comma and a clause headed by this, that, which, or these whose predicate only labels or stamps what precedes — has a fact-carrying tail folded into the main clause, a labelling-only tail deleted, and no fact or name invented to complete the merged sentence | — |
 
 Fix failed checks that can be resolved from available evidence inside this bounded writer pass. Report unresolved checks as limitations and continue only within the assigned scope.
 

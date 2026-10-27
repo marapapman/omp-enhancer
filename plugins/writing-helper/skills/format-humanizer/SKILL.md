@@ -76,10 +76,13 @@ single-family tasks, not one pass that applies every rule at once.
    larger scale. The inventory covers the sentence-level families too: §36's
    re-emphasizing second half, consecutive emphasis, repeated explanation after
    a full explanation, and setup → emphasis → restatement; §37's unscoped
-   quantifiers (all, any, only, always, never, every, must, exactly); and
-   §38's anaphoric passive riders (a complete main clause plus a comma and a
-   with + object + past participle + by + anaphoric actor adjunct), each
-   entry cited with its sentence location and the scope evidence, so the
+   quantifiers (all, any, only, always, never, every, must, exactly); §38's
+   anaphoric passive riders (a complete main clause plus a comma and a
+   with + object + past participle + by + anaphoric actor adjunct); and §39's
+   anaphoric callback clauses (a complete main clause plus a comma and a
+   clause headed by this, that, which, or these whose predicate only labels or
+   stamps what precedes), each entry cited with its sentence location and the
+   scope evidence, so the
    sentence-level checks reach each chunk along with its other evidence.
    Families with no findings are skipped later.
 2. **Per-family writer text-tool passes, strictly sequentially.** Main routes each
@@ -258,6 +261,8 @@ single all-family rewrite and no final whole-document polish pass.
 **§37 Unscoped absolutes.** "all", "any", "only", "always", "never", "every", "must", and "exactly" each trigger a scope check against the evidence. Keep one only when the stated scope is present and matches the evidence; otherwise narrow or delete it and state the scope, the exception, or the untested case, so the sentence does not read as unjustified certainty. Before: "The parser handles any malformed input." After: "The parser handled every malformed input in the test corpus; malformed inputs outside that corpus were not tested." Exemptions: a measured claim whose stated scope matches the evidence, fixed technical terms ("exactly-once semantics", "all-pairs comparison"), quotations, and proper names.
 
 **§38 Anaphoric passive riders.** A complete main clause followed by a comma and a `with` phrase in the shape with + object + past participle + by + an anaphoric actor; the `with` phrase is a participial adjunct, never a finite clause, and the rider carries the operation's second action behind an anaphoric actor. Before: "Documents and report.txt are joined into one path, with the separator added by it." After: "The function joins Documents and report.txt and adds the separator." The fix merges the rider's action and new object into the main clause; no deletion branch exists. Write the actor's name once only when it is recoverable from the main clause or earlier context; when it is not recoverable, keep the anaphor or split the rider into an independent sentence, and never invent an actor. §36 covers pure repetition, §18 covers shallow -ing riders, and §38 covers anaphoric passive riders carrying an action or a new object. Exemptions: independent sentences, explicit non-anaphoric actors, quotations, proper names, and code; no blanket exemption for interface documentation or technical passive voice. This is fixed whenever found, not clustering-gated.
+
+**§39 Anaphoric callback clauses.** A complete main clause followed by a comma and then a clause headed by "this", "that", "which", or "these" whose predicate only labels or stamps what precedes — a copula, a causative, or an abstract category such as "the product of" or "the starting point of". Before: "The browser assembles the three pieces, which is the World Wide Web." After: "The browser assembles HTML, URL, and HTTP into the World Wide Web." The fix has two branches: fold a tail that carries a fact into the main clause, and delete a tail that only names or stamps what the main clause already said. The report applies to every anaphoric callback form, not to a predicate subset. §36 covers pure repetition, §18 covers shallow -ing riders, §38 covers anaphoric passive riders carrying an action or a new object, and §39 covers anaphoric callback clauses. Never invent a fact or a name to complete the merged sentence. Exemptions: independent sentences, quotations, proper names, code, and tails carrying a measured number or a new condition; no blanket exemption for technical documentation. This is fixed whenever found, not clustering-gated.
 
 ## When not to act
 

@@ -560,6 +560,7 @@ test('styleIssues reports the new Chinese AI-tell rules per line', () => {
     'zh-didactic-cognition',
     'zh-concession-restatement-close',
     'zh-anaphoric-passive-rider',
+    'zh-anaphoric-callback-clause',
   ]) {
     assert.ok(patterns.has(pattern), `${pattern} should be exported`);
   }
@@ -611,6 +612,14 @@ test('styleIssues reports the new Chinese AI-tell rules per line', () => {
   assert.equal(matches('路径为空时直接返回，如果斜杠由它补上则继续。', 'zh-anaphoric-passive-rider'), 0);
   assert.equal(matches('在旧版实现里，分隔符由它补上。', 'zh-anaphoric-passive-rider'), 0);
   assert.equal(matches('路径为空时，分隔符由它补上。', 'zh-anaphoric-passive-rider'), 0);
+  assert.equal(matches('浏览器把这三样凑齐，这就是万维网。', 'zh-anaphoric-callback-clause'), 1);
+  assert.equal(matches('网站会在 robots.txt 里声明规则，这是基本的网络礼仪。', 'zh-anaphoric-callback-clause'), 1);
+  assert.equal(matches('第一台 IMP 上线，这一天被很多人视为互联网真正的生日。', 'zh-anaphoric-callback-clause'), 1);
+  assert.equal(matches('万维网的诞生，正是这场长期争论的产物。', 'zh-anaphoric-callback-clause'), 1);
+  assert.equal(matches('这台机器负责读卡，打印机负责输出。', 'zh-anaphoric-callback-clause'), 0);
+  assert.equal(matches('这一步把延迟从 4.2 秒降到 1.8 秒。', 'zh-anaphoric-callback-clause'), 0);
+  assert.equal(matches('在旧版实现里，这就是默认行为。', 'zh-anaphoric-callback-clause'), 0);
+  assert.equal(matches('路径为空时，这正是我们要的结果。', 'zh-anaphoric-callback-clause'), 0);
   assert.equal(styleIssues('English text only.', 'zh').length, 0);
   assert.equal(matches('一个 CPU 核同时只能执行一条指令，物理内存只有一份，程序再多，这一点不变。', 'zh-concession-restatement-close'), 1);
   assert.equal(matches('任务再复杂，这一点也不变。', 'zh-concession-restatement-close'), 1);

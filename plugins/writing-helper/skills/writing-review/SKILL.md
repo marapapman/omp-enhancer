@@ -89,7 +89,9 @@ structure second; sentence and style polish last.
    openers, forced triads, dashes as universal connectors, inflated significance,
    shallow -ing riders, anaphoric passive riders (a complete main clause plus a
    comma and a with + object + past participle + by + anaphoric actor adjunct),
-   borrowed authority, bold as decoration, chatbot residue,
+   anaphoric callback clauses (a complete main clause plus a comma and a clause
+   headed by this, that, which, or these whose predicate only labels or stamps
+   what precedes), borrowed authority, bold as decoration, chatbot residue,
    abstract-restatement echoes (a fact restated as a quoted or nominalized
    concept one level up), announcer transitions ("The real question is ...",
    "A new question is ...", "This raises a deeper question ..."), and
@@ -107,7 +109,11 @@ structure second; sentence and style polish last.
    the main clause or earlier context, otherwise keep the anaphor or split the
    sentence, and never invent an actor. Pure repetition belongs to the
    restatement family, shallow -ing riders to their own family, and anaphoric
-   passive riders carrying an action or a new object to this one.
+   passive riders carrying an action or a new object to this one. For an
+   anaphoric callback clause, fold a tail that carries a fact into the main
+   clause and delete a tail that only names or stamps what the main clause
+   already said, and never invent a fact or a name to complete the merged
+   sentence.
    Never cut a unique fact, number, unit, scope, condition, modality, negation,
    causal direction, citation, safety instruction, or reproducibility step, and
    never force needless explanation or uniformly short sentences onto long

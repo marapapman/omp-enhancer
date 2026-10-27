@@ -64,6 +64,7 @@ negation, causal direction, citations, safety instructions, and
 reproducibility steps stay, and
 the check never demands needless explanation or uniformly short sentences.
 An anaphoric passive rider — a complete main clause plus a comma and a with + object + past participle + by + anaphoric actor adjunct — has its action and new object merged into the main clause; the actor's name is written once only when it is recoverable from the main clause or earlier context, otherwise the anaphor stays or the sentence is split, and no actor is invented.
+An anaphoric callback clause — a complete main clause plus a comma and a clause headed by this, that, which, or these whose predicate only labels or stamps what precedes — has a fact-carrying tail folded into the main clause; a tail that only names or stamps what the main clause already said is deleted, and no fact or name is invented to complete the merged sentence.
 
 Use the fine-mode workflow below only when the user asks for interactive approval at each paragraph or when a genuinely material ambiguity requires a choice.
 

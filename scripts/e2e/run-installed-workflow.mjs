@@ -1435,6 +1435,13 @@ export async function prepareScenario(scenario) {
       path.join(cwd, 'paper.md'),
       'path.join 用来拼接路径。Documents 和 report.txt 拼成一条路径，斜杠由它补上。\n',
     );
+  } else if (scenario.fixture === 'anaphoric-callback-zh') {
+    // Final-text fixture for the anaphoric callback clause family. The drafted text
+    // ends with a comma callback that stamps a label instead of adding a fact.
+    await writeFile(
+      path.join(cwd, 'paper.md'),
+      '1989 年，蒂姆·伯纳斯-李在 CERN 提出万维网方案，确定了 HTML、URL、HTTP 三项技术。浏览器把这三样凑齐，这就是万维网。此后网页数量迅速增长，搜索引擎开始索引公开页面。\n',
+    );
   } else if (scenario.fixture === 'visual-drawio-canvas') {
     await mkdir(path.join(cwd, 'docs'), { recursive: true });
   } else if (scenario.fixture === 'visual-beamer-deck') {

@@ -531,8 +531,11 @@ test('slide content bans contrast-repetition constructions and one-sentence summ
   assert.match(reconciliation, /no didactic cognition directives \(reader-directed cognition commands like "分清楚"\/"keep in mind", clarity stamps like "这就说清楚了", absolutizing complements like "定死"\)/is);
   // Anaphoric passive riders join the same sentence-level ban set at all three stages.
   assert.match(shaping, /An anaphoric passive rider — a complete main clause plus a comma and a with \+ object \+ past participle \+ by \+ anaphoric actor adjunct — is fixed by merging its action and new object into the main clause/is);
+  assert.match(shaping, /An anaphoric callback clause — a complete main clause plus a comma and a clause headed by this, that, which, or these whose predicate only labels or stamps what precedes — is fixed by folding a tail that carries a fact/is);
   assert.match(draft, /An anaphoric passive rider — a complete main clause plus a comma and a with \+ object \+ past participle \+ by \+ anaphoric actor adjunct — has its action and new object merged into the main clause/is);
-  assert.match(reconciliation, /The task also checks the three sentence-level rules/is);
+  assert.match(draft, /An anaphoric callback clause — a complete main clause plus a comma and a clause headed by this, that, which, or these whose predicate only labels or stamps what precedes — has a fact-carrying tail folded into the main clause/is);
+  assert.match(reconciliation, /The task also checks the four sentence-level rules/is);
+  assert.match(reconciliation, /an anaphoric callback clause \(a complete main clause plus a comma and a clause headed by this, that, which, or these whose predicate only labels or stamps what precedes\)/is);
   assert.match(reconciliation, /an anaphoric passive rider \(a complete main clause plus a comma and a with \+ object \+ past participle \+ by \+ anaphoric actor adjunct\), reported as a content finding so the wording returns to `writer`\/`zh-writer`/is);
   assert.match(reconciliation, /A title or body violation is a content finding/is);
   // Beamer generation and quality reference carry the same bans.

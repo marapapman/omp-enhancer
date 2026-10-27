@@ -51,6 +51,7 @@ describe('de-AI guidance content contracts', () => {
       '§33 Cross-slide refrain',
       '§34 Caption echo',
       '§38 Anaphoric passive riders',
+      '§39 Anaphoric callback clauses',
       'When not to act',
     ]) {
       assert.ok(en.includes(phrase), `English humanizer should cover: ${phrase}`);
@@ -105,6 +106,7 @@ describe('de-AI guidance content contracts', () => {
       '图注和标题复述',
       '何时不处理',
       '回指被动尾句',
+      '回指回扣小句',
       '语义锚点',
     ]) {
       assert.ok(zh.includes(phrase), `Chinese humanizer should cover: ${phrase}`);
@@ -113,6 +115,9 @@ describe('de-AI guidance content contracts', () => {
     assert.match(zh, /### S15\. 回指被动尾句/u);
     assert.match(zh, /清单还要定位句级特征 S13 与 S14 的命中，S15 回指被动尾句同样在这一层定位/u);
     assert.match(zh, /纯重复归 S13，本族只处理带动作或新对象的尾句/u);
+    assert.match(zh, /### S16\. 回指回扣小句/u);
+    assert.match(zh, /S16 回指回扣小句也在这里定位/u);
+    assert.match(zh, /本族只管以「这」「那」「此」起头、只对前面作一次命名或定性的回扣小句/u);
     assert.match(zh, /### G1\. /u);
     assert.match(zh, /### G2\. /u);
     assert.match(zh, /### G3\. /u);
@@ -161,6 +166,8 @@ describe('de-AI guidance content contracts', () => {
     assert.match(writer, /the with phrase is a participial adjunct, never a finite clause/u);
     assert.match(writer, /never invent an actor/u);
     assert.match(writer, /§36 covers pure repetition, §18 covers shallow -ing riders, and this rule covers anaphoric passive riders/u);
+    assert.match(writer, /Anaphoric callback clauses\.\*\* A complete main clause followed by a comma and then a clause headed by this, that, which, or these/u);
+    assert.match(writer, /The self-check runs while drafting as well as while revising/u);
     assert.doesNotMatch(writer, /format-humanizer/iu);
 
     const enHumanizer = read('skills/format-humanizer/SKILL.md');
@@ -195,7 +202,9 @@ describe('de-AI guidance content contracts', () => {
     assert.match(zhWriter, /不写口语化评判词/u);
     assert.match(zhWriter, /不写回指被动尾句，完整主句后用逗号接「前置宾语＋由＋回指施事＋动词」的小句/u);
     assert.match(zhWriter, /施事能从主句或前文还原时写一次具体名称，还原不出来时保留回指或拆成独立句，不臆造名称/u);
-    assert.match(zhWriter, /都必须在最终句子上重新执行本条的信息增量、范围词与回指被动尾句自查/u);
+    assert.match(zhWriter, /都必须在最终句子上重新执行本条的信息增量、范围词、回指被动尾句与回指回扣小句自查/u);
+    assert.match(zhWriter, /不写回指回扣小句，完整主句后用逗号接以「这」「那」「此」开头的回指小句/u);
+    assert.match(zhWriter, /上述自查在起草和修订时都执行，不停留在成稿润色这一步/u);
 
     const checker = read('agents/checker.md');
     assert.match(checker, /Do AI writing tells appear here\?/iu);
@@ -206,6 +215,8 @@ describe('de-AI guidance content contracts', () => {
     assert.match(checker, /the participial adjunct with its object, by plus an anaphoric actor, and a final verb; if any element is missing, do not report/u);
     assert.match(checker, /never invent an actor/u);
     assert.match(checker, /Pure repetition without an action-carrying rider is reported under the sentence-level restatement family, not here/u);
+    assert.match(checker, /the demonstrative heading the tail, a labelling predicate, and that the tail adds no new fact/u);
+    assert.match(checker, /folds? a tail that carries a fact into the main clause and deletes? a tail that only names or stamps/u);
     for (const banned of ['format-humanizer', 'writing-review', 'zh-writing-review', 'zh-writing-polish']) {
       assert.doesNotMatch(checker, new RegExp(banned, 'iu'), `checker must not advertise ${banned}`);
     }
@@ -220,6 +231,8 @@ describe('de-AI guidance content contracts', () => {
     assert.match(zhChecker, /回指被动尾句（完整主句后用逗号接「前置宾语＋由＋回指施事＋动词」的小句/u);
     assert.match(zhChecker, /逐项核对主句完整、逗号接尾、宾语前置、由＋回指施事、尾句落动词，缺一项不报告/u);
     assert.match(zhChecker, /技术文档照此报告，接口说明和技术被动语态不构成豁免/u);
+    assert.match(zhChecker, /回指回扣小句（完整主句后用逗号接以「这」「那」「此」开头的回指小句/u);
+    assert.match(zhChecker, /核对主句完整、逗号、回指主语、判断或使役或定性谓词，缺一项不报告/u);
     assert.doesNotMatch(zhChecker, /zh-format-humanizer/iu);
   });
 
@@ -227,6 +240,7 @@ describe('de-AI guidance content contracts', () => {
     const checkers = read('skills/writing-checkers/SKILL.md');
     assert.match(checkers, /9\. \*\*Flag AI writing tells with evidence\.\*\*/iu);
     assert.match(checkers, /Any listed tell justifies a finding at its first sighting/u);
+    assert.match(checkers, /Four sentence-level families carry the same first-sighting rule/u);
     assert.doesNotMatch(checkers, /need company from other tells/iu);
     assert.match(checkers, /Do AI writing tells appear \(staged "not X but Y" contrasts/iu);
 
@@ -307,7 +321,7 @@ describe('de-AI guidance content contracts', () => {
     );
     assert.match(
       writing,
-      /Treat AI writing\s+tells as fixable defects[\s\S]{0,750}rhythm-matched paired-phrase closers/iu,
+      /Treat AI writing\s+tells as fixable defects[\s\S]{0,900}rhythm-matched paired-phrase closers/iu,
     );
     assert.match(writing, /anaphoric passive riders \(a complete main clause plus a\s+comma and a with \+ object \+ past participle \+ by \+ anaphoric actor adjunct\)/iu);
   });

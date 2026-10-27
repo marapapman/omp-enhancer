@@ -476,6 +476,42 @@ describe('AI scan scoring and reports', () => {
     }
   });
 
+  it('flags anaphoric callback clauses', () => {
+    const result = scanAiStyle({
+      text: '浏览器把这三样凑齐，这就是万维网。',
+      language: 'zh',
+      detector: 'local',
+      mode: 'standard',
+    });
+    const finding = result.issues.find((issue) => issue.pattern === 'zh-anaphoric-callback-clause');
+    assert.ok(finding);
+    assert.equal(finding.severity, 'IMPORTANT');
+    assert.equal(result.summary.verdict, 'needs_revision');
+    for (const text of [
+      '网站会在 robots.txt 里声明规则，这是基本的网络礼仪。',
+      '第一台 IMP 上线，这一天被很多人视为互联网真正的生日。',
+      '报文拆成小块独立转发，这让任何一段链路中断都不影响其余部分。',
+      '万维网的诞生，正是这场长期争论的产物。',
+    ]) {
+      assert.equal(scanAiStyle({ text, language: 'zh', mode: 'standard' }).issues.some(
+        (issue) => issue.pattern === 'zh-anaphoric-callback-clause',
+      ), true, text);
+    }
+    for (const text of [
+      '这台机器负责读卡，打印机负责输出。',
+      '这一步把延迟从 4.2 秒降到 1.8 秒。',
+      '它拼接路径。斜杠由它补上。',
+      '因为斜杠由它补上时会失败，代码先判断路径是否为空。',
+      '在旧版实现里，这就是默认行为。',
+      '路径为空时，这正是我们要的结果。',
+      '浏览器把这三样凑齐，并补上斜杠。',
+    ]) {
+      assert.equal(scanAiStyle({ text, language: 'zh', mode: 'standard' }).issues.some(
+        (issue) => issue.pattern === 'zh-anaphoric-callback-clause',
+      ), false, text);
+    }
+  });
+
   it('formats a reliable English report without the short-text warning', () => {
     const report = formatAiScanReport(scanAiStyle({
       text: 'The server starts the request and waits for the client. The client connects to the queue and sends a message. The queue fills with work and blocks new arrivals. The worker drains the queue and updates the cache. The cache clears the old entries and logs the change. The log rotates the file and archives the record. The monitor alerts the operator and opens a ticket. The operator responds to the alert and checks the trace. The system recovers the service and reports the state. The service resumes the work and clears the backlog.',
