@@ -50,6 +50,7 @@ describe('de-AI guidance content contracts', () => {
       '§32 Slide-scale uniformity',
       '§33 Cross-slide refrain',
       '§34 Caption echo',
+      '§38 Anaphoric passive riders',
       'When not to act',
     ]) {
       assert.ok(en.includes(phrase), `English humanizer should cover: ${phrase}`);
@@ -103,11 +104,15 @@ describe('de-AI guidance content contracts', () => {
       '跨页重复',
       '图注和标题复述',
       '何时不处理',
+      '回指被动尾句',
       '语义锚点',
     ]) {
       assert.ok(zh.includes(phrase), `Chinese humanizer should cover: ${phrase}`);
     }
     assert.match(zh, /### S12\. 冒号句式/u);
+    assert.match(zh, /### S15\. 回指被动尾句/u);
+    assert.match(zh, /清单还要定位句级特征 S13 与 S14 的命中，S15 回指被动尾句同样在这一层定位/u);
+    assert.match(zh, /纯重复归 S13，本族只处理带动作或新对象的尾句/u);
     assert.match(zh, /### G1\. /u);
     assert.match(zh, /### G2\. /u);
     assert.match(zh, /### G3\. /u);
@@ -152,6 +157,10 @@ describe('de-AI guidance content contracts', () => {
     assert.match(writer, /assigned de-AI Skill body/u);
     assert.match(writer, /neat metaphors that compress a complex mechanism/iu);
     assert.match(writer, /parallelism or a setup that announces a parallel list/iu);
+    assert.match(writer, /Anaphoric passive riders\.\*\* A complete main clause followed by a comma and a with \+ object \+ past participle \+ by \+ an anaphoric actor phrase/u);
+    assert.match(writer, /the with phrase is a participial adjunct, never a finite clause/u);
+    assert.match(writer, /never invent an actor/u);
+    assert.match(writer, /§36 covers pure repetition, §18 covers shallow -ing riders, and this rule covers anaphoric passive riders/u);
     assert.doesNotMatch(writer, /format-humanizer/iu);
 
     const enHumanizer = read('skills/format-humanizer/SKILL.md');
@@ -184,12 +193,19 @@ describe('de-AI guidance content contracts', () => {
     assert.match(zhWriter, /不写图注和标题复述/u);
     assert.match(zhWriter, /不写表格前后的套话/u);
     assert.match(zhWriter, /不写口语化评判词/u);
+    assert.match(zhWriter, /不写回指被动尾句，完整主句后用逗号接「前置宾语＋由＋回指施事＋动词」的小句/u);
+    assert.match(zhWriter, /施事能从主句或前文还原时写一次具体名称，还原不出来时保留回指或拆成独立句，不臆造名称/u);
+    assert.match(zhWriter, /都必须在最终句子上重新执行本条的信息增量、范围词与回指被动尾句自查/u);
 
     const checker = read('agents/checker.md');
     assert.match(checker, /Do AI writing tells appear here\?/iu);
     assert.match(checker, /neat metaphors that tidy a complex concept/iu);
     assert.match(checker, /parallelism or a setup that announces a parallel list/iu);
     assert.match(checker, /first appearance; prefer an over-correction to a miss/iu);
+    assert.match(checker, /comma and a with \+ object \+ past participle \+ by \+ anaphoric actor adjunct/u);
+    assert.match(checker, /the participial adjunct with its object, by plus an anaphoric actor, and a final verb; if any element is missing, do not report/u);
+    assert.match(checker, /never invent an actor/u);
+    assert.match(checker, /Pure repetition without an action-carrying rider is reported under the sentence-level restatement family, not here/u);
     for (const banned of ['format-humanizer', 'writing-review', 'zh-writing-review', 'zh-writing-polish']) {
       assert.doesNotMatch(checker, new RegExp(banned, 'iu'), `checker must not advertise ${banned}`);
     }
@@ -201,6 +217,9 @@ describe('de-AI guidance content contracts', () => {
     assert.match(zhChecker, /每页结构雷同（要点条数和句式一页接一页不变）/u);
     assert.match(zhChecker, /跨页重复（同一句话在 3 页以上原样出现）/u);
     assert.match(zhChecker, /图注和标题复述（图注或要点把标题再说一遍）/u);
+    assert.match(zhChecker, /回指被动尾句（完整主句后用逗号接「前置宾语＋由＋回指施事＋动词」的小句/u);
+    assert.match(zhChecker, /逐项核对主句完整、逗号接尾、宾语前置、由＋回指施事、尾句落动词，缺一项不报告/u);
+    assert.match(zhChecker, /技术文档照此报告，接口说明和技术被动语态不构成豁免/u);
     assert.doesNotMatch(zhChecker, /zh-format-humanizer/iu);
   });
 
@@ -288,8 +307,9 @@ describe('de-AI guidance content contracts', () => {
     );
     assert.match(
       writing,
-      /Treat AI writing\s+tells as fixable defects[\s\S]{0,600}rhythm-matched paired-phrase closers/iu,
+      /Treat AI writing\s+tells as fixable defects[\s\S]{0,750}rhythm-matched paired-phrase closers/iu,
     );
+    assert.match(writing, /anaphoric passive riders \(a complete main clause plus a\s+comma and a with \+ object \+ past participle \+ by \+ anaphoric actor adjunct\)/iu);
   });
 
   it('carries the de-AI standard into visual artifact copy guidance', () => {

@@ -63,6 +63,7 @@ simple inference. Unique facts, numbers, units, scope, conditions, modality,
 negation, causal direction, citations, safety instructions, and
 reproducibility steps stay, and
 the check never demands needless explanation or uniformly short sentences.
+An anaphoric passive rider — a complete main clause plus a comma and a with + object + past participle + by + anaphoric actor adjunct — has its action and new object merged into the main clause; the actor's name is written once only when it is recoverable from the main clause or earlier context, otherwise the anaphor stays or the sentence is split, and no actor is invented.
 
 Use the fine-mode workflow below only when the user asks for interactive approval at each paragraph or when a genuinely material ambiguity requires a choice.
 

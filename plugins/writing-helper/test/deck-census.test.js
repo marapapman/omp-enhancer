@@ -559,6 +559,7 @@ test('styleIssues reports the new Chinese AI-tell rules per line', () => {
     'zh-colloquial-judgement',
     'zh-didactic-cognition',
     'zh-concession-restatement-close',
+    'zh-anaphoric-passive-rider',
   ]) {
     assert.ok(patterns.has(pattern), `${pattern} should be exported`);
   }
@@ -597,6 +598,19 @@ test('styleIssues reports the new Chinese AI-tell rules per line', () => {
   assert.equal(matches('这个常量写死，上限锁死，范围框死。', 'zh-didactic-cognition'), 0);
   assert.equal(matches('三要素与三部分的关系。', 'zh-number-bundling'), 0);
   assert.equal(matches('两个条件都要满足。', 'zh-number-bundling'), 0);
+  assert.equal(matches('Documents 和 report.txt 拼成一条路径，斜杠由它补上。', 'zh-anaphoric-passive-rider'), 1);
+  assert.equal(matches('结果写入缓存，异常由它统一处理。', 'zh-anaphoric-passive-rider'), 1);
+  assert.equal(matches('配置从文件读取，默认值由该模块补齐。', 'zh-anaphoric-passive-rider'), 1);
+  assert.equal(matches('配置从文件读取，默认值由此过程补齐。', 'zh-anaphoric-passive-rider'), 1);
+  assert.equal(matches('path.join 把 Documents 和 report.txt 拼成一条路径，并补上斜杠。', 'zh-anaphoric-passive-rider'), 0);
+  assert.equal(matches('它拼接路径。斜杠由它补上。', 'zh-anaphoric-passive-rider'), 0);
+  assert.equal(matches('它拼接路径，斜杠由 path.join 补上。', 'zh-anaphoric-passive-rider'), 0);
+  assert.equal(matches('报告已经返回，报告由其他作者补写。', 'zh-anaphoric-passive-rider'), 0);
+  assert.equal(matches('问题已经定位，问题由其中一项引起。', 'zh-anaphoric-passive-rider'), 0);
+  assert.equal(matches('它只在路径缺失时调用 join，因为斜杠由它补上时会失败。', 'zh-anaphoric-passive-rider'), 0);
+  assert.equal(matches('路径为空时直接返回，如果斜杠由它补上则继续。', 'zh-anaphoric-passive-rider'), 0);
+  assert.equal(matches('在旧版实现里，分隔符由它补上。', 'zh-anaphoric-passive-rider'), 0);
+  assert.equal(matches('路径为空时，分隔符由它补上。', 'zh-anaphoric-passive-rider'), 0);
   assert.equal(styleIssues('English text only.', 'zh').length, 0);
   assert.equal(matches('一个 CPU 核同时只能执行一条指令，物理内存只有一份，程序再多，这一点不变。', 'zh-concession-restatement-close'), 1);
   assert.equal(matches('任务再复杂，这一点也不变。', 'zh-concession-restatement-close'), 1);

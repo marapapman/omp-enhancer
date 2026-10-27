@@ -68,6 +68,7 @@ Constraints:
 | Source provenance includes a real path in the delivery or an authorized review log | — |
 | No claims beyond what source data supports | — |
 | Sentence keeps only a new fact, necessary qualifier, or key logical relation; redundant wording deleted first, anchors and citations untouched | — |
+| An anaphoric passive rider — a complete main clause plus a comma and a with + object + past participle + by + anaphoric actor adjunct — has its action and new object merged into the main clause, the actor named once only when recoverable, never invented | — |
 
 Fix failed checks that can be resolved from available evidence inside this bounded writer pass. Report unresolved checks as limitations and continue only within the assigned scope.
 

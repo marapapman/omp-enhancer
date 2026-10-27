@@ -150,6 +150,8 @@ applies to drafting, revision, and every copy surface even when
 treats verbosity alone as evidence of AI authorship.
 Any wording change made to fix an orphan line, clipping, overflow, or spacing must receive the same sentence-level information-gain and absolute-scope self-check again on the exact final wording; a layout goal never exempts a shortened, moved, or rewrapped sentence from that re-check.
 
+**Anaphoric passive riders.** A complete main clause followed by a comma and a with + object + past participle + by + an anaphoric actor phrase; the with phrase is a participial adjunct, never a finite clause. Before: "Documents and report.txt are joined into one path, with the separator added by it." After: "The function joins Documents and report.txt and adds the separator." The fix merges the rider's action and new object into the main clause; no deletion branch exists. Write the actor's name once only when it is recoverable from the main clause or earlier context; when it is not recoverable, keep the anaphor or split the rider into an independent sentence, and never invent an actor. §36 covers pure repetition, §18 covers shallow -ing riders, and this rule covers anaphoric passive riders carrying an action or a new object. Independent sentences, explicit non-anaphoric actors, quotations, proper names, and code are exempt, with no blanket exemption for interface documentation or technical passive.
+
 The bullets below are options, not a required sequence: use whichever apply.
 
 **Long, information-dense sentences with explicit links.** The baseline

@@ -1428,6 +1428,13 @@ export async function prepareScenario(scenario) {
       ].join('\n'),
     );
     await writeFile(path.join(cwd, 'article.md'), '# Article\n\n<to be drafted>\n');
+  } else if (scenario.fixture === 'anaphoric-passive-rider-zh') {
+    // Final-text fixture for the anaphoric passive rider family. The drafted sentence
+    // carries the exact rider shape the rule bans; the only file is the target paper.
+    await writeFile(
+      path.join(cwd, 'paper.md'),
+      'path.join 用来拼接路径。Documents 和 report.txt 拼成一条路径，斜杠由它补上。\n',
+    );
   } else if (scenario.fixture === 'visual-drawio-canvas') {
     await mkdir(path.join(cwd, 'docs'), { recursive: true });
   } else if (scenario.fixture === 'visual-beamer-deck') {

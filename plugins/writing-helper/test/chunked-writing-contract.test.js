@@ -97,16 +97,18 @@ describe('chunked writing and sentence-level contracts', () => {
     assert.match(zh, /这三项由扫描任务在全稿尺度计数并给出位置清单/u);
     assert.match(zh, /不为改一块而读整份文档/u);
     assert.match(zh, /不做最后整篇统一润色/u);
-    assert.match(zh, /清单还要定位句级特征 S13 与 S14 的命中/u);
+    assert.match(zh, /清单还要定位句级特征 S13 与 S14 的命中，S15 回指被动尾句同样在这一层定位/u);
     assert.match(zh, /### S13\. 句内同义强调与铺垫、强调、复述链/u);
     assert.match(zh, /### S14\. 绝对化范围词/u);
+    assert.match(zh, /### S15\. 回指被动尾句/u);
   });
 
   it('carries sentence-level bans into slide and document handoff guidance', () => {
     const storyline = readConfig('skills/slides-storyline/SKILL.md');
     assert.match(storyline, /Also banned at the sentence level: a second half that only re-emphasizes or restates the first half/u);
     assert.match(storyline, /The Shape-the-story sentence-level bans extend to every body sentence/u);
-    assert.match(storyline, /The task also checks the two sentence-level rules and reports each hit as a content finding/u);
+    assert.match(storyline, /The task also checks the three sentence-level rules and reports each hit as a content finding/u);
+    assert.match(storyline, /an anaphoric passive rider \(a complete main clause plus a comma and a with \+ object \+ past participle \+ by \+ anaphoric actor adjunct\), reported as a content finding so the wording returns to `writer`\/`zh-writer`/u);
     assert.match(storyline, /Necessary preconditions and qualifiers are never reported as violations/u);
 
     const quality = readConfig('skills/latex-beamer-slides/references/beamer-quality.md');

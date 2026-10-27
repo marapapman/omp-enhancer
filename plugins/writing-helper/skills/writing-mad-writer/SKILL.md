@@ -68,7 +68,7 @@ Read the supplied inputs. Identify empty sections (blank or `[TODO]`/`[FILL]` ma
 
 Severity: CRITICAL (undermines whole claim) / IMPORTANT (needs fix for rigor) / MINOR (nice-to-have).
 
-**3. Fix supported local issues** — Within the assigned pass, define unclear terms, replace vague wording with evidence-backed specifics, expand supported sparse material, delete redundant or reader-inferable wording before restating it, and clean formatting. Do not fill factual gaps from assumptions. Return issues that require real experiment data, domain expertise, a user decision, or resolution of contradictory requirements.
+**3. Fix supported local issues** — Within the assigned pass, define unclear terms, replace vague wording with evidence-backed specifics, expand supported sparse material, delete redundant or reader-inferable wording before restating it, merge an anaphoric passive rider's action and new object into the main clause (the rider is a complete main clause plus a comma and a with + object + past participle + by + anaphoric actor adjunct; the actor's name is written once only when it is recoverable from the main clause or earlier context, and never invented), and clean formatting. Do not fill factual gaps from assumptions. Return issues that require real experiment data, domain expertise, a user decision, or resolution of contradictory requirements.
 
 **4. Decide Next** — Deliver the improved section and flag unresolved evidence or author decisions. Offer another focused pass instead of starting one automatically.
 

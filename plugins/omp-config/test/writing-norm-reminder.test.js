@@ -28,6 +28,7 @@ describe('sentence-level writing-norm reminder contracts', () => {
     }
     assert.match(agents[0], /the sentence-level restatement ban/u);
     assert.match(agents[0], /the unscoped-absolute ban/u);
+    assert.match(agents[0], /the anaphoric passive rider 「，斜杠由它补上」\/"with … added by it"/u);
     assert.match(agents[0], /都\/只能\/任何\/一定 plus 必然\/始终\/绝不\/全部\/唯一/u);
     assert.match(agents[0], /This is a reminder duty, not a blocking authority/u);
     assert.match(agents[1], /setup → emphasis → restatement/u);
@@ -45,6 +46,7 @@ describe('sentence-level writing-norm reminder contracts', () => {
     assert.match(watchdog, /^ {2}Information-gain part of the one-shot writing-norm reminder/mu);
     assert.equal(watchdog.match(/the sentence-level restatement ban/gu)?.length, 1);
     assert.equal(watchdog.match(/the unscoped-absolute ban/gu)?.length, 1);
+    assert.equal(watchdog.match(/the anaphoric passive rider 「，斜杠由它补上」/gu)?.length, 1);
     assert.match(watchdog, /Main calls writing_ai_scan with detector=ensemble and allowNetwork=true on the exact final text before checker review and delivery/u);
     assert.match(watchdog, /keeps the scan advisory rather than a completion gate/u);
   });
@@ -55,6 +57,7 @@ describe('sentence-level writing-norm reminder contracts', () => {
     assert.ok(advisor, 'root Advisor paragraph exists');
     assert.match(advisor, /the sentence-level restatement ban/u);
     assert.match(advisor, /the unscoped-absolute ban/u);
+    assert.match(advisor, /the anaphoric passive rider 「，斜杠由它补上」\/"with … added by it"/u);
     assert.match(advisor, /The reminder is advisory: the Advisor never rewrites the deliverable and never withholds acceptance on phrasing alone/u);
   });
 
@@ -63,10 +66,14 @@ describe('sentence-level writing-norm reminder contracts', () => {
     assert.match(canvas, /no sentence-level restatement/u);
     assert.match(canvas, /no unscoped absolutes \(all, any, only, always, never, every, must, exactly\)/u);
     assert.match(canvas, /never justifies dropping a fact, number, or citation/u);
+    assert.match(canvas, /no anaphoric passive rider \(a complete main clause plus a comma and a "with" \+ object \+ past participle \+ "by" \+ anaphoric actor adjunct/u);
+    assert.match(canvas, /never invent an actor/u);
 
     const frontend = readFileSync(join(packageRoot(), 'skills', 'frontend-design', 'SKILL.md'), 'utf8');
     assert.match(frontend, /no sentence-level restatement/u);
     assert.match(frontend, /no unscoped absolutes \(all, any, only, always, never, every, must, exactly\)/u);
+    assert.match(frontend, /no anaphoric passive rider \(a complete main clause plus a comma and a "with" \+ object \+ past participle \+ "by" \+ anaphoric actor adjunct/u);
+    assert.match(frontend, /never invent an actor/u);
     assert.match(frontend, /Keep the product's real nouns, numbers, and error details/u);
   });
 });

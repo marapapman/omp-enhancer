@@ -87,7 +87,9 @@ structure second; sentence and style polish last.
    Treat AI writing tells as fixable defects: staged "not X but Y" contrasts,
    one-line closers that only restate, sayings that sound deep, staged run-up
    openers, forced triads, dashes as universal connectors, inflated significance,
-   shallow -ing riders, borrowed authority, bold as decoration, chatbot residue,
+   shallow -ing riders, anaphoric passive riders (a complete main clause plus a
+   comma and a with + object + past participle + by + anaphoric actor adjunct),
+   borrowed authority, bold as decoration, chatbot residue,
    abstract-restatement echoes (a fact restated as a quoted or nominalized
    concept one level up), announcer transitions ("The real question is ...",
    "A new question is ...", "This raises a deeper question ..."), and
@@ -100,6 +102,12 @@ structure second; sentence and style polish last.
    same polish step, apply information gain. Keep only what adds a new fact, a
    necessary qualifier, or a key logical relation, omit wording the reader can
    infer from context, and delete redundant expression instead of restating it.
+   For an anaphoric passive rider, fold the rider's action and new object into
+   the main clause; write the actor's name once only when it is recoverable from
+   the main clause or earlier context, otherwise keep the anaphor or split the
+   sentence, and never invent an actor. Pure repetition belongs to the
+   restatement family, shallow -ing riders to their own family, and anaphoric
+   passive riders carrying an action or a new object to this one.
    Never cut a unique fact, number, unit, scope, condition, modality, negation,
    causal direction, citation, safety instruction, or reproducibility step, and
    never force needless explanation or uniformly short sentences onto long

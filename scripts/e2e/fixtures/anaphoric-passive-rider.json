@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "defaults": {
+    "approvalMode": "yolo",
+    "advisor": false,
+    "executionMode": "rpc",
+    "timeoutSeconds": 300,
+    "tools": ["task", "read", "edit", "writing_ai_scan"],
+    "repeat": 1,
+    "expectations": {
+      "noWeb": true,
+      "requireFinal": true,
+      "requiredNativeTaskAgents": ["zh-writer"],
+      "requireNativeTaskCompletion": true
+    }
+  },
+  "scenarios": [
+    {
+      "id": "zh-anaphoric-passive-rider-delivery",
+      "category": "writing/zh-anaphoric-passive-rider",
+      "fixture": "anaphoric-passive-rider-zh",
+      "prompt": "润色 paper.md，只修改这个文件。保留 path.join、Documents、report.txt 和补上斜杠这些事实；调用 zh-writer 完成文字修改，终态交付后集成。修改后只简要报告，不复读原句。",
+      "expectations": {
+        "forbiddenFinalPatterns": [
+          "(?<!里)(?<!中)(?<!下)(?<!时)(?<!后)(?<!前)(?<!以来)(?<!以前)(?<!方面)[，,](?!因为|由于|如果|若|当|除非|虽然|尽管|即使|所以|因此|因而|于是|但|但是|而|否则)[^，。！？；,.!?;\\n]{1,24}由(?:它们|它|其(?!他|中|余)|该[^，。！？；,.!?;\\n]{0,8}|这个[^，。！？；,.!?;\\n]{0,8}|这种[^，。！？；,.!?;\\n]{0,8}|上述[^，。！？；,.!?;\\n]{0,8}|此[^，。！？；,.!?;\\n]{0,8})[^，。！？；,.!?;\\n]{1,16}(?=[。！？.!?，,；;]|$)"
+        ],
+        "requiredNativeTaskDeliveryTextPatterns": [
+          {
+            "agent": "zh-writer",
+            "pattern": "(?:path\\.join|它)[^。\\n]*Documents[^。\\n]*report\\.txt[^。\\n]*补上斜杠",
+            "minCount": 1,
+            "maxCount": 2
+          }
+        ]
+      },
+      "fixtureExpectations": {
+        "allowedChangedFiles": ["paper.md"],
+        "requiredChangedFiles": ["paper.md"],
+        "requiredPatterns": {
+          "paper.md": [
+            "path\\.join",
+            "Documents",
+            "report\\.txt",
+            "(?:path\\.join|它)[^。\\n]*Documents[^。\\n]*report\\.txt[^。\\n]*补上斜杠"
+          ]
+        },
+        "forbiddenPatterns": {
+          "paper.md": [
+            "(?<!里)(?<!中)(?<!下)(?<!时)(?<!后)(?<!前)(?<!以来)(?<!以前)(?<!方面)[，,](?!因为|由于|如果|若|当|除非|虽然|尽管|即使|所以|因此|因而|于是|但|但是|而|否则)[^，。！？；,.!?;\\n]{1,24}由(?:它们|它|其(?!他|中|余)|该[^，。！？；,.!?;\\n]{0,8}|这个[^，。！？；,.!?;\\n]{0,8}|这种[^，。！？；,.!?;\\n]{0,8}|上述[^，。！？；,.!?;\\n]{0,8}|此[^，。！？；,.!?;\\n]{0,8})[^，。！？；,.!?;\\n]{1,16}(?=[。！？.!?，,；;]|$)"
+          ]
+        }
+      }
+    }
+  ]
+}

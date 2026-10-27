@@ -439,6 +439,43 @@ describe('AI scan scoring and reports', () => {
   });
 
 
+  it('flags anaphoric passive riders', () => {
+    const result = scanAiStyle({
+      text: 'Documents 和 report.txt 拼成一条路径，斜杠由它补上。',
+      language: 'zh',
+      detector: 'local',
+      mode: 'standard',
+    });
+    const finding = result.issues.find((issue) => issue.pattern === 'zh-anaphoric-passive-rider');
+    assert.ok(finding);
+    assert.equal(finding.severity, 'IMPORTANT');
+    assert.equal(result.summary.verdict, 'needs_revision');
+    for (const text of [
+      '结果写入缓存，异常由它统一处理。',
+      '配置从文件读取，默认值由该模块补齐。',
+      '配置从文件读取，默认值由此过程补齐。',
+    ]) {
+      assert.equal(scanAiStyle({ text, language: 'zh', mode: 'standard' }).issues.some(
+        (issue) => issue.pattern === 'zh-anaphoric-passive-rider',
+      ), true, text);
+    }
+    for (const text of [
+      'path.join 把 Documents 和 report.txt 拼成一条路径，并补上斜杠。',
+      '它拼接路径。斜杠由它补上。',
+      '它拼接路径，斜杠由 path.join 补上。',
+      '报告已经返回，报告由其他作者补写。',
+      '问题已经定位，问题由其中一项引起。',
+      '它只在路径缺失时调用 join，因为斜杠由它补上时会失败。',
+      '路径为空时直接返回，如果斜杠由它补上则继续。',
+      '在旧版实现里，分隔符由它补上。',
+      '路径为空时，分隔符由它补上。',
+    ]) {
+      assert.equal(scanAiStyle({ text, language: 'zh', mode: 'standard' }).issues.some(
+        (issue) => issue.pattern === 'zh-anaphoric-passive-rider',
+      ), false, text);
+    }
+  });
+
   it('formats a reliable English report without the short-text warning', () => {
     const report = formatAiScanReport(scanAiStyle({
       text: 'The server starts the request and waits for the client. The client connects to the queue and sends a message. The queue fills with work and blocks new arrivals. The worker drains the queue and updates the cache. The cache clears the old entries and logs the change. The log rotates the file and archives the record. The monitor alerts the operator and opens a ticket. The operator responds to the alert and checks the trace. The system recovers the service and reports the state. The service resumes the work and clears the backlog.',

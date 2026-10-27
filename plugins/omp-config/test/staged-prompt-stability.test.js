@@ -27,6 +27,7 @@ test('managed prompts expose one unambiguous positive orchestration advisory', a
   assert.match(watchdog, /the abstract-restatement echo/u);
   assert.match(watchdog, /the announcer transition/u);
   assert.match(watchdog, /the rhythm-matched paired-phrase closer/u);
+  assert.match(watchdog, /the anaphoric passive rider 「，斜杠由它补上」/u);
   assert.match(watchdog, /This is a reminder duty, not a blocking authority/u);
   assert.doesNotMatch(
     `${agents}\n${watchdog}`,
