@@ -5,10 +5,12 @@ description: "Pre-submission checklist — verify all formatting, citations, fig
 
 # Format Submission Precheck
 
-When this Skill is part of a `writer` or `zh-writer` assignment, that child
-remains proposal-only: it runs no command and writes no file, and returns the
-complete proposed artifact or diff. Main or an explicitly capable generic
-`task` owns authorized effects.
+Main performs this method directly in its own context; the former `writer` and
+`zh-writer` agents are removed and no work is routed to them. Any user-facing
+prose the method produces is drafted by Main, passed through the `polisher`
+tool, and inserted verbatim from the returned text before it reaches a
+deliverable or the user. Commands, file writes, and other effects belong to Main
+or to an explicitly capable generic `task`.
 
 Checklist-based pre-submission review. Run all 8 checks, report PASS/FAIL per item with specific issues.
 

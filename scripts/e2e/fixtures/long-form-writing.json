@@ -5,7 +5,16 @@
     "advisor": false,
     "executionMode": "rpc",
     "taskEager": "preferred",
-    "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
+    "tools": [
+      "todo",
+      "task",
+      "hub",
+      "read",
+      "grep",
+      "glob",
+      "write",
+      "edit"
+    ],
     "repeat": 3,
     "timeoutSeconds": 1500,
     "expectations": {
@@ -54,7 +63,9 @@
         "requireWorkflowReadyAfterLoadsBeforeProjectTools": false,
         "requireWorkflowReadyTodoOnlyBatch": false,
         "requireExactSelectedWorkflowReferences": false,
-        "forbiddenSkills": ["omp-enhancer-workflows"],
+        "forbiddenSkills": [
+          "omp-enhancer-workflows"
+        ],
         "maxToolCalls": 2,
         "maxSourceSearchCalls": 2
       }
@@ -63,123 +74,185 @@
       "id": "ordinary-writing",
       "category": "control/ordinary-writing",
       "fixture": "substantive-writing-en-readonly",
-      "tools": ["todo", "task", "hub", "read", "grep", "glob"],
-      "prompt": "Read the two English LaTeX paragraphs in section.tex and propose a conservative revision that improves their claim-evidence relationship, resolves the ambiguous phrase 'This improvement', and makes the comparison between stopping rules easier to follow. Preserve every qualifier, modality, negation, number, citation, LaTeX command, experimental limitation, and the distinction between observed results and an equal-compute counterfactual. Independently check the complete proposed revision for semantic drift and explain the final wording. The independent writer is the sole author of the English revision; Main only passes the complete proposal to integration verbatim and never drafts or rewrites prose. Do not modify files, delegate more than one writer and one checker, or use the network.",
+      "tools": [
+        "todo",
+        "read",
+        "grep",
+        "glob",
+        "polisher",
+        "writing_quality_check",
+        "writing_ai_scan"
+      ],
+      "prompt": "Read the two English LaTeX paragraphs in section.tex and propose a conservative revision that improves their claim-evidence relationship, resolves the ambiguous phrase 'This improvement', and makes the comparison between stopping rules easier to follow. Main drafts the revision itself: draft each bounded paragraph, call polisher on that passage, and use the returned text verbatim; the writer and checker agents have been removed, so dispatch no agent. Preserve every qualifier, modality, negation, number, citation, LaTeX command, experimental limitation, and the distinction between observed results and an equal-compute counterfactual. Then run writing_quality_check on the complete revision with the original paragraphs as originalText and the preservation check enabled, and explain the final wording from its advisory findings. Do not modify files or use the network.",
       "expectations": {
-        "minNativeTaskCalls": 2,
-        "maxNativeTaskCalls": 3,
-        "minNativeTaskAssignmentAttempts": 2,
-        "maxNativeTaskAssignmentAttempts": 3,
-        "requireNativeTaskCompletion": true,
-        "requireNativeTaskSubmissionForEveryAssignment": true,
-        "requireNonemptyNativeTaskContext": true,
-        "requiredNativeTaskAgents": ["writer", "checker"],
-        "requiredNativeTaskAgentSequence": ["writer", "checker"],
-        "forbiddenNativeTaskAgents": ["reviewer"],
-        "requiredNativeTaskAssignmentTextBounds": [
+        "maxNativeTaskCalls": 0,
+        "forbiddenToolCalls": [
+          "task"
+        ],
+        "requiredToolCalls": [
           {
-            "agent": "writer",
-            "pattern": "\\b(?:draft|revise|propose)\\b",
-            "minCount": 1,
-            "maxCount": 1,
-            "beforeAssignmentAgent": "checker",
-            "beforeAssignmentText": "check|semantic drift"
+            "name": "polisher",
+            "min": 2
+          },
+          {
+            "name": "polisher",
+            "min": 1,
+            "argumentsPattern": "37\\.5[\\s\\S]*12\\.5"
+          },
+          {
+            "name": "writing_quality_check",
+            "min": 1
           }
         ],
-        "requiredObservedSkills": ["omp-enhancer-workflows", "writing-review"],
+        "requiredToolCallOrder": [
+          {
+            "before": "polisher",
+            "after": "writing_quality_check"
+          }
+        ],
+        "requiredObservedSkills": [
+          "omp-enhancer-workflows",
+          "writing-review"
+        ],
         "requiredWorkflowPrimary": "writing",
-        "requiredSelectedWorkflowIds": ["writing"],
+        "requiredSelectedWorkflowIds": [
+          "writing"
+        ],
         "requireNativeTodoInit": true,
         "minNativeTodoItems": 3,
         "requireNativeTodoCompletion": true,
-        "requireNativeTodoInitBeforeSubstantiveTool": true,
-        "maxProjectInspectionCallsBeforeNativeTask": 0,
-        "maxProjectInspectionCallsAfterNativeTask": 1
+        "requireNativeTodoInitBeforeSubstantiveTool": true
       }
     },
     {
       "id": "long-form-single-agent-baseline",
       "category": "wave0/single-agent-long-form-baseline",
       "fixture": "long-form-writing-baseline",
-      "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
-      "prompt": "Treat this temporary project as the target of a long-form writing baseline. Read brief.md for the frozen terminology and voice, then draft the full article into article.md in a single writer pass covering all three sections below, and have one independent checker review the integrated draft for semantic drift before finalizing. Sections: (1) 'Orchestration primitives' — what orchestrator-worker, maker-checker, and fan-out mean and when each fits; (2) 'Context isolation' — why subagent context isolation saves tokens and what it costs; (3) 'Single-agent first' — the empirical case for trying one agent before fanning out. Each section uses the frozen terminology and cites (Orchestration Plan 2026). Use exactly one writer assignment for the whole draft and one checker assignment after the parent integrates the draft into article.md; the writer is the sole author of the English article, and Main only integrates the complete proposal verbatim without drafting or rewriting prose. Do not fan out one writer per section. Do not use the network.",
+      "tools": [
+        "todo",
+        "read",
+        "grep",
+        "glob",
+        "write",
+        "edit",
+        "polisher",
+        "writing_quality_check",
+        "writing_ai_scan"
+      ],
+      "prompt": "Treat this temporary project as the target of a long-form writing baseline. Read brief.md for the frozen terminology and voice, then Main drafts the full article into article.md in a single pass covering all three sections below. Draft each section as a bounded passage, call polisher on that passage, and use the returned text verbatim before it is written into article.md; the writer and checker agents have been removed, so dispatch no agent and do not fan out. Sections: (1) 'Orchestration primitives' — what orchestrator-worker, maker-checker, and fan-out mean and when each fits; (2) 'Context isolation' — why subagent context isolation saves tokens and what it costs; (3) 'Single-agent first' — the empirical case for trying one agent before fanning out. Each section uses the frozen terminology and cites (Orchestration Plan 2026). After integration, run writing_quality_check on article.md with the preservation check enabled and record its advisory findings before finalizing. Do not use the network.",
       "expectations": {
-        "minNativeTaskCalls": 2,
-        "maxNativeTaskCalls": 3,
-        "minNativeTaskAssignmentAttempts": 2,
-        "maxNativeTaskAssignmentAttempts": 3,
-        "requireNativeTaskCompletion": true,
-        "requireNativeTaskSubmissionForEveryAssignment": true,
-        "requireNonemptyNativeTaskContext": true,
-        "requiredNativeTaskAgents": ["writer", "checker"],
-        "requiredNativeTaskAgentSequence": ["writer", "checker"],
-        "forbiddenNativeTaskAgents": ["reviewer"],
-        "requiredNativeTaskAssignmentTextBounds": [
+        "maxNativeTaskCalls": 0,
+        "forbiddenToolCalls": [
+          "task"
+        ],
+        "requiredToolCalls": [
           {
-            "agent": "writer",
-            "pattern": "\\b(?:draft|write|propose)\\b",
-            "minCount": 1,
-            "maxCount": 1,
-            "beforeAssignmentAgent": "checker",
-            "beforeAssignmentText": "check|semantic drift"
+            "name": "polisher",
+            "min": 2
+          },
+          {
+            "name": "writing_quality_check",
+            "min": 1
           }
         ],
-        "requiredObservedSkills": ["omp-enhancer-workflows", "writing-review"],
+        "requiredToolCallBeforeFileWrite": [
+          {
+            "tool": "polisher",
+            "file": "article.md"
+          }
+        ],
+        "requiredToolCallOrder": [
+          {
+            "before": "polisher",
+            "after": "writing_quality_check"
+          }
+        ],
+        "requiredObservedSkills": [
+          "omp-enhancer-workflows",
+          "writing-review"
+        ],
         "requiredWorkflowPrimary": "writing",
-        "requiredSelectedWorkflowIds": ["writing"],
+        "requiredSelectedWorkflowIds": [
+          "writing"
+        ],
         "requireNativeTodoInit": true,
         "minNativeTodoItems": 3,
         "requireNativeTodoCompletion": true,
-        "requireNativeTodoInitBeforeSubstantiveTool": true,
-        "maxProjectInspectionCallsBeforeNativeTask": 0,
-        "maxProjectInspectionCallsAfterNativeTask": 6
+        "requireNativeTodoInitBeforeSubstantiveTool": true
       },
       "fixtureExpectations": {
-        "allowedChangedFiles": ["article.md"],
-        "requiredChangedFiles": ["article.md"]
+        "allowedChangedFiles": [
+          "article.md"
+        ],
+        "requiredChangedFiles": [
+          "article.md"
+        ]
       }
     },
     {
-      "id": "long-form-pilot",
+      "id": "long-form-multi-section",
       "category": "wave3/long-form-pilot-positive",
       "fixture": "long-form-writing",
-      "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
-      "prompt": "Treat this temporary project as the target of a long-form writing task. Read brief.md for the frozen terminology and voice, then draft a NEW article into article.md with exactly three independently specifiable sections, each with a complete disjoint brief below. Fan out one writer assignment per section in the same native task batch when batching is available, then integrate all writer proposals into article.md as the parent, then run exactly one checker assignment on the integrated draft, then apply at most one repair writer if the checker reports a material finding. Sections: (1) 'Orchestration primitives' — define orchestrator-worker, maker-checker, and fan-out; explain when each fits; give one concrete trigger per pattern; cite (Orchestration Plan 2026); (2) 'Context isolation' — explain why subagent context isolation saves tokens, what it costs, and the parent-delivery contract; cite (Orchestration Plan 2026); (3) 'Single-agent first' — present the empirical case for trying one agent before fanning out, including the Princeton single-agent result; mark any unverified claim [INFERENCE]. Each section's brief is disjoint: do not reference another section's content. The shared terminology and voice in brief.md are frozen and apply to every section. Writers are proposal-only and the sole English text authors: they return the full section text and never write article.md; Main only integrates each complete proposal verbatim and never drafts or rewrites prose; the parent owns integration and the authorized write. Do not use a native reviewer. Do not use the network.",
+      "tools": [
+        "todo",
+        "read",
+        "grep",
+        "glob",
+        "write",
+        "edit",
+        "polisher",
+        "writing_quality_check",
+        "writing_ai_scan"
+      ],
+      "prompt": "Treat this temporary project as the target of a long-form writing task. Read brief.md for the frozen terminology and voice, then draft a NEW article into article.md with exactly three independently specifiable sections, each with a complete disjoint brief below. Main drafts every section itself and calls polisher once per section before that section's text is written; the returned text goes in verbatim. Then integrate the three sections into article.md, run writing_quality_check on the integrated draft with the preservation check enabled, and apply at most one polisher repair pass if it reports a material finding. The writer and checker agents have been removed, so dispatch no agent. Sections: (1) 'Orchestration primitives' — define orchestrator-worker, maker-checker, and fan-out; explain when each fits; give one concrete trigger per pattern; cite (Orchestration Plan 2026); (2) 'Context isolation' — explain why subagent context isolation saves tokens, what it costs, and the parent-delivery contract; cite (Orchestration Plan 2026); (3) 'Single-agent first' — present the empirical case for trying one agent before fanning out, including the Princeton single-agent result; mark any unverified claim [INFERENCE]. Each section's brief is disjoint: do not reference another section's content. The shared terminology and voice in brief.md are frozen and apply to every section. Main owns the only authorized write of article.md. Do not use the network.",
       "expectations": {
-        "requireLongFormWritingPilot": {
-          "integrationTarget": "article.md",
-          "maxRepairWriters": 1
-        },
-        "minNativeTaskCalls": 2,
-        "maxNativeTaskCalls": 3,
-        "minNativeTaskAssignmentAttempts": 4,
-        "maxNativeTaskAssignmentAttempts": 5,
-        "requireNativeTaskCompletion": true,
-        "requireNativeTaskSubmissionForEveryAssignment": true,
-        "requireNonemptyNativeTaskContext": true,
-        "forbiddenNativeTaskAgents": ["reviewer"],
-        "requiredNativeTaskAssignmentTextBounds": [
+        "maxNativeTaskCalls": 0,
+        "forbiddenToolCalls": [
+          "task"
+        ],
+        "requiredToolCalls": [
           {
-            "agent": "writer",
-            "pattern": "\\b(?:draft|write|propose|return)\\b",
-            "minCount": 3,
-            "maxCount": 4
+            "name": "polisher",
+            "min": 3
+          },
+          {
+            "name": "writing_quality_check",
+            "min": 1
           }
         ],
-        "requiredObservedSkills": ["omp-enhancer-workflows", "writing-review"],
+        "requiredToolCallBeforeFileWrite": [
+          {
+            "tool": "polisher",
+            "file": "article.md"
+          }
+        ],
+        "requiredToolCallOrder": [
+          {
+            "before": "polisher",
+            "after": "writing_quality_check"
+          }
+        ],
+        "requiredObservedSkills": [
+          "omp-enhancer-workflows",
+          "writing-review"
+        ],
         "requiredWorkflowPrimary": "writing",
-        "requiredSelectedWorkflowIds": ["writing"],
+        "requiredSelectedWorkflowIds": [
+          "writing"
+        ],
         "requireWorkflowPlanFirstVisibleContent": true,
         "requireNativeTodoInit": true,
         "minNativeTodoItems": 4,
         "requireNativeTodoCompletion": true,
-        "requireNativeTodoInitBeforeSubstantiveTool": true,
-        "maxProjectInspectionCallsBeforeNativeTask": 0,
-        "maxProjectInspectionCallsAfterNativeTask": 2
+        "requireNativeTodoInitBeforeSubstantiveTool": true
       },
       "fixtureExpectations": {
-        "allowedChangedFiles": ["article.md"],
-        "requiredChangedFiles": ["article.md"]
+        "allowedChangedFiles": [
+          "article.md"
+        ],
+        "requiredChangedFiles": [
+          "article.md"
+        ]
       }
     }
   ]

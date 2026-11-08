@@ -7,43 +7,24 @@ description: "用于对已有中文段落或文件做有界、证据化审查，
 
 ## 执行者边界
 
-读取本 Skill 只为准备 writer assignment；仅凭这次读取不会让 Main 成为执行者。
-这里的 assignment 专门交给语言匹配的 `zh-writer`；本 Skill 中的 writer 指
-`zh-writer`。本技能正文是 `zh-writer` 文本工具的有界局部方法，在 Main 选定
-工作流和 Skill 后使用；
-本 Skill 不选择或调度 Agent，选择与调度仍由 Main 负责。单轮方法不能满足或替代
-独立 checker checkpoint，写作者的局部自检不能替代独立 checker。单轮方法只完成
-`zh-writer` 文本工具的有界 pass，不能满足或替代独立 checker checkpoint。
-Main 保留父级 TODO、finding disposition、集成、最终验证和面向用户的交付权。
-所有实质性中文文本工作，包括初稿、起草、翻译、改写、逻辑修订和润色，都必须
-通过语言匹配的 `zh-writer` 文本工具调用完成。Main、`task` 和 checker 不得起草、改写或润色正文。
-先由 `zh-writer` 返回建议稿；独立 `zh-checker` 只报告逻辑、证据或语义漂移问题。
-任何实质性文字修复都必须返回同一个语言匹配的 `zh-writer`。
+本技能由 Main 自己执行：原来的 `zh-writer`、`zh-checker` 文本工具与 Agent 已移除，
+这里不把工作交给它们。Main 保留父级 TODO、finding disposition、集成、最终验证和
+面向用户的交付权。目标长度只限制本方法和工作项数量。
+
+审出替换文字时，替换稿由 Main 起草，经 `polisher` 工具润色，Main 原样使用返回
+文本；之后任何措辞改动都要重新过 `polisher`。只读审查只给问题，不重写整篇正文。
+不要创建或持久化 review 产物。
 
 用户指定了文件或段落时，直接审查该目标。只有用户提供或明确引用
 `.pi/research/checker_report.md`，或者当前工作流已经给出该报告时才使用它。
 不要为了判断报告是否存在而主动探测 `.pi` 目录。
 
-用户无需显式要求委派。目标长度只限制执行方法和 findings 数量，不授权
-Main 或其他 Agent 起草、改写、润色或翻译正文。只读交付、统一的最终响应和协调开销也不能绕过 writer。受派的 `zh-writer` 文本工具返回完整的请求建议稿；选定工作流
-保留 writer delivery、依赖后的 checker delivery 和父级集成 checkpoint。
-只有当前许可限制确实阻止安全的 `zh-writer` 调用时，Main 才记录无法调用文本工具的限制；Main 或其他
-Agent 均不得在受影响的 checkpoint 中起草、改写、润色或翻译正文，也不得静默
-改用直接写作 fallback。
+`zh-writing-checkers` 是宽范围整篇审查方法，不是单独的审查角色。局部润色不需要
+加载这个宽范围方法；做有界的语义漂移、逻辑和清晰度核查时，Main 直接运行
+`writing_quality_check`、`writing_logic_check` 或自己的只读复核。宽范围
+`zh-writing-checkers` 的产出仍是建议，所有文字修复都回到 `polisher`。
 
-`zh-writing-checkers` 是宽范围审查 Skill，不是 `zh-checker` Agent。局部润色
-不需要加载这个宽范围 Skill；在工作流的软默认下，Main 可以从当前暴露的
-Agents 中自主选择 `zh-checker` 做有界的语义漂移、逻辑和清晰度核查，本 Skill
-不选择或调度该 Agent。Main 侧的 Skill 加载、writer 局部自检或宽范围
-`zh-writing-checkers` Skill 加载，都不构成独立 checker 的执行或证据。
-
-`zh-writer` 文本工具始终只交付建议稿；本中文 Skill 中的 writer 指 `zh-writer`。
-按 assignment 返回完整建议文本；有界变更使用 SEARCH/REPLACE 块或 unified diff
-更清楚时，采用该格式。Main 保留权限决策和实际文件修改，但只能把 `zh-writer`
-返回的建议稿原样整合（verbatim）。Main 或其他 Agent 均不得自行起草、改写、润色
-或翻译正文。独立 checker 只报告，不改写。`zh-writer` 不创建或持久化 review 产物。
-
-## 受派 Writer 文本工具单轮方法
+## 单轮方法
 
 方法顺序固定：先核对主张、证据和语义锚点，再处理逻辑与结构，最后进行
 句子和风格层面的润色。
@@ -68,8 +49,8 @@ Agents 中自主选择 `zh-checker` 做有界的语义漂移、逻辑和清晰�
    有证据支撑的评价可以保留，但必须写明支撑。仅审查任务只返回问题，不改写整篇正文。
 4. 不擅自改变事实声明、核心论点、引用含义或任务范围。把这些项目列为作者决定。
 5. 拟稿后只比对一次语义锚点。把任何漂移作为建议报告，不自动开启新的修复轮次。
-6. 独立 `zh-checker` 只能报告语义漂移、逻辑、证据以及表达清晰度问题（含「信息增量（全局核查）」的冗余发现），不得改写正文；任何实质性
-   修复都返回同一个 `zh-writer`，再把建议稿交给 Main。
+6. 只读核查只能报告语义漂移、逻辑、证据以及表达清晰度问题（含「信息增量（全局核查）」的冗余发现），不得改写正文；任何实质性
+   修复都由 Main 重新起草，交给 `polisher`，并把返回文本原样落到文本里。
 7. 汇总已处理问题、未决问题和证据局限。
 
 ## 文本证据准确性
@@ -85,7 +66,7 @@ Agents 中自主选择 `zh-checker` 做有界的语义漂移、逻辑和清晰�
 
 成功读取已经到达目标文件末尾时，这一次读取足以完成有界审查。只有结果明确显示截断标记或请求范围不完整时，才换 selector 重读。除非缺少定义会导致对可见文字作出具体错误判断，否则不搜索宏定义或无关仓库上下文。
 
-审查一个摘要或其他短文本时，受派的 writer 文本工具最多报告五个实质问题。语义锚点清单只用于内部核对，不在最终响应中逐项复述；省略没有问题的严重级别和原文全文。完整目标已经足以支持问题时，立即收束这一文本工具 pass 并把 delivery 返回 Main。这只完成 writer 文本工具的有界审查；既不完成父级工作流，也不替代独立 checker delivery。
+审查一个摘要或其他短文本时，最多报告五个实质问题。语义锚点清单只用于内部核对，不在最终响应中逐项复述；省略没有问题的严重级别和原文全文。完整目标已经足以支持问题时，立即收束这一轮审查。这只完成本 Skill 的审查和随后的 `polisher` 步骤；既不完成父级工作流，也不替代后续核查。
 
 ## 可选逐项模式
 
@@ -93,8 +74,8 @@ Agents 中自主选择 `zh-checker` 做有界的语义漂移、逻辑和清晰�
 
 ## 记录
 
-当前工作流确实使用 `.pi/research/review_log.md` 时，返回已处理、待决定或跳过问题的建议记录。Main 决定是否在获授权的集成阶段持久化。不要只为满足本技能而创建工作流文件。
+当前工作流确实使用 `.pi/research/review_log.md` 时，在用户授权写入的前提下记录已处理、待决定或跳过的问题。不要只为满足本技能而创建工作流文件。
 
-用户明确要求额外的宽范围审查时，Main 可以在 PLAN 阶段通过运行时正常的 Skill 机制声明并加载 `zh-writing-checkers`；受派的 writer 文本工具不自行加载，也不把该 Skill 正文当作独立 checker 的执行证据。旧式斜杠技能写法只是文档，不是需要尝试的命令。
+用户明确要求额外的宽范围审查时，Main 可以在 PLAN 阶段通过运行时正常的 Skill 机制加载 `zh-writing-checkers`，把它当作自己的只读审查来运行，不当作改写。旧式斜杠技能写法只是文档，不是需要尝试的命令。
 
-assignment 已包含并加载 `plain-chinese-writing` 时，写作遵守其相关规范；本 Skill 不触发额外加载。
+`plain-chinese-writing` 已加载时，写作遵守其相关规范；本 Skill 不触发额外加载。

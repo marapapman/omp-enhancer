@@ -1,25 +1,45 @@
 ---
 name: writing-mad-writer
-description: Use after Main selects writing and passes the assignment to a `writer` text-tool call to draft multiple English sections quickly with one focused multidimensional self-check. Not for conservative polishing, bounded review-only work, or strict evidence-matrix writing.
+description: Use after Main selects writing to draft multiple English sections quickly with one focused multidimensional self-check. Main authors the text and passes each drafted passage through the `polisher` tool before delivery. Not for conservative polishing, bounded review-only work, or strict evidence-matrix writing.
 ---
 # Writing Mad-Writer
 
 ## Purpose
 
-Write the assigned chunk of document sections, run one focused inline check, fix clear local issues, and flag evidence or author-decision gaps. The unit of work is the authorized chunk rather than the whole document. Each chunk arrives as its own `writer` sub-task with the frozen style pack and acceptance checks as inputs, and at most four run in parallel. Additional write-check-fix passes are optional and run only when the user explicitly asks for iterative revision.
+Main writes the assigned chunk of document sections itself, runs one focused
+inline check, fixes clear local issues, and flags evidence or author-decision
+gaps. The unit of work is the authorized chunk rather than the whole document.
+Main drafts each chunk, sends that chunk's prose to `polisher`, and inserts the
+returned text verbatim; chunks are handled one at a time, so no chunk's draft
+displaces another's. Additional write-check-fix passes are optional and run only
+when the user explicitly asks for iterative revision.
 
-This skill inherits the writer text tool's built-in technical prose style and applies it inside the format the user or the target document defines. Its local style list is a supplement; where it conflicts with that baseline, the baseline wins, and an explicit user style still wins.
+This skill inherits Main's technical prose baseline and applies it inside the
+format the user or the target document defines. Its local style list is a
+supplement; where it conflicts with that baseline, the baseline wins, and an
+explicit user style still wins.
 
 ## Workflow boundary
 
-Use this Skill only after Main selects workflow `writing`, loads its exact workflow reference and this Skill, and passes the assignment to a `writer` text-tool call. This is the `writer` text tool's bounded local method. It does not select or dispatch Agents. Do not recursively fork, spawn, or delegate. Main retains the parent TODO, integration, final verification, and user-visible delivery.
+Use this Skill only after Main selects workflow `writing` and loads its exact
+workflow reference and this Skill. This is Main's bounded local method for
+drafting one chunk; nothing here selects or dispatches another agent. Main
+retains the parent TODO, integration, final verification, and user-visible
+delivery, and every drafted passage reaches delivery only after a `polisher`
+call whose returned text Main inserts verbatim.
 
-The seven dimensions below are a writer-local self-check. This self-check does not satisfy or replace an independent `checker` delivery selected by Main. Run one bounded local pass; it never starts an automatic repair loop or creates a completion gate. Return the revised text, evidence, limitations, and any author decisions to Main.
+The seven dimensions below are Main's local self-check. They are advisory and do
+not replace Main's own read-only review, which can run `writing_quality_check`
+and `writing_logic_check` over the current artifact. Run one bounded local pass;
+it never starts an automatic repair loop or creates a completion gate. Record
+the revised text, evidence, limitations, and any author decisions in the
+delivery.
 
-The `writer` text tool is proposal-only. Return complete proposed text, using
-SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer. Main
-retains permission decisions and actual file changes. Do not create or persist
-target files, research artifacts, or review logs.
+The drafted text reaches the deliverable only as the text `polisher` returned.
+Draft the chunk, call `polisher` once per prose segment, and insert that returned
+text verbatim. When a `polisher` call returns `ok:false`, record its error code
+and report the failure instead of presenting unpolished text as polished output.
+Do not create or persist target files, research artifacts, or review logs.
 
 ## Inputs
 
@@ -48,13 +68,13 @@ the decision returns to the user.
 
 ### Iteration 0: Setup
 
-Read the supplied inputs. Identify empty sections (blank or `[TODO]`/`[FILL]` markers). If related work is missing, extract 3–8 keywords from the storyline. Use network access only when the user or host authorizes it and a live network capability is exposed. When both conditions hold, search up to three results per keyword and read selected sources before using them. Otherwise, continue from local evidence and return the missing-source gap to Main.
+Read the supplied inputs. Identify empty sections (blank or `[TODO]`/`[FILL]` markers). If related work is missing, extract 3–8 keywords from the storyline. Use network access only when the user or host authorizes it and a live network capability is exposed. When both conditions hold, search up to three results per keyword and read selected sources before using them. Otherwise, continue from local evidence and record the missing-source gap as a limitation.
 
 ### Default pass: Write → Check → Fix
 
 **1. Write Sprint** — Draft the assigned chunk only. For each empty/sparse section in the chunk: read context + `<!-- description: ... -->`, then write the section's text in complete natural paragraphs and cite literature; use a Level-6 heading node with 50/500-char limits only when the user or the document gives that template, and let length follow the task and the argument.
 
-**2. Writer-local multidimensional self-check** — Run all 7 checks. Cite specific evidence per finding. No fabricated issues.
+**2. Main's local multidimensional self-check** — Run all 7 checks. Cite specific evidence per finding. No fabricated issues.
 
 | Dimension | Check |
 |-----------|-------|
@@ -82,8 +102,8 @@ Next steps: [what user should do].
 
 ## Evidence and effect boundaries
 
-- Never invent placeholder or fake facts, citations, measurements, or numbers. When evidence is insufficient, omit or mark the unsupported claim and return the exact evidence gap to Main.
-- Keep every writer effect in-band as proposed text or a bounded patch; Main owns any authorized persistence.
+- Never invent placeholder or fake facts, citations, measurements, or numbers. When evidence is insufficient, omit or mark the unsupported claim and record the exact evidence gap as a limitation.
+- Keep every effect in-band as drafted text that `polisher` has returned, or as a bounded patch carrying that text; Main owns any authorized persistence.
 
 ## Rules
 
@@ -97,9 +117,9 @@ Next steps: [what user should do].
 
 - Default to one pass. One pass means one write → check → fix pass over the authorized chunk, never a whole-document round trip.
 - Run another pass only when the user explicitly requests it.
-- Each call handles exactly one chunk that Main delimited, at most 1,200 words, and the remaining sections belong to other sub-tasks; the five-section figure no longer bounds a call.
+- Each bounded step handles exactly one chunk Main delimited, at most 1,200 words, and the remaining sections belong to later steps; the five-section figure no longer bounds a step.
 - Unfixable issues are reported as limitations and never trigger an automatic retry or hard stop for unrelated work.
 
 The full chunk protocol this Skill works under is the shared chunking contract, quoted verbatim once here:
 
-> Long text orchestration is chunked and context-isolated: Main builds the chunk list in source order with stable ids (chunk-001, chunk-002, …) and records for each chunk its target file, paragraph/page/shape range, and source version; the limits (Chinese at most 2,000 non-whitespace characters per chunk, English at most 1,200 words, slides at most 6 pages, mixed text split by language segment) are a conservative initial orchestration default that splits by default near-2,000-character or near-1,200-word English text to writer and Chinese text to zh-writer, which never continues the previous chunk, never resumes its session, and never receives the whole document or another chunk's round trips; independence never requires a different model. At most four sub-tasks run at once, and lower host capacity batches them while still creating a new context per chunk. Each per-chunk assignment carries a frozen style pack (the original user request, the purpose and readers, output format and template, terminology and subject use, relevant evidence, nearby context and global constraints, and task-specific operation rules) plus style-provenance facts (whether this is a baseline draft, a targeted replacement, or a cross-chunk continuation, and the section names and authoritative text of the supplied methods), the delivery contract (full revised text for an exact replacement, a bounded patch for a small repair, or a diagnosis only for a review, with allowed effects), and acceptance checks covering the factual anchors, numbers, terminology, citations, logical and semantic anchors, structural headings, and formats to preserve. Every semantic or wording change returns a replacement or a bounded patch, never advice alone; a diagnosis-only checker returns exact locations, evidence, and issue types. The original prompt is immutable for the round, and no task, reviewer, summary, template, or later user message may silently narrow or delete its requirements; scope expansion needs new authorization, and any assumption, missing evidence, or unresolved item returns as an explicit limitation. A change to purpose, audience, evidence, scope, format, or template closes the current chunk list and version and opens a new chunking round instead of mutating old tasks. Main integrates the authorized results in source order into a current complete artifact and records file version and coverage, never concatenating scattered terminal messages into the deliverable; task, checker, and reviewer outputs stay proposals until Main integrates them. The independent checker covers terminology and subject use, repeated closers and page templatization, and style coverage across the opening, middle, and closing chunks; the check may be split across chunks so no single checker receives the whole document, each problem is located to a specific chunk, and every wording repair goes to a new writer/zh-writer sub-task, with no final whole-document polish pass. At integration the whole artifact is checked for uncovered content, missing paragraphs or pages, truncated objects, unmerged changes, repeated text, broken cross-references, layout or format faults, and requirement loss; the final report lists covered scope, integrated chunk count and range, checks performed, resolved findings, residual risks, and undelivered items. Every chunk takes one write then check then repair path, with the repair kept narrow; a local format problem is repaired within the chunk's authorization and never blocks other chunks. This is prompt and method orchestration only: no runtime gate, no automatic retry loop, no plugin state, and no permission change.
+> Long text orchestration is chunked and context-isolated: Main builds the chunk list in source order with stable ids (chunk-001, chunk-002, …) and records for each chunk its target file, paragraph/page/shape range, and source version; the limits (Chinese at most 2,000 non-whitespace characters per chunk, English at most 1,200 words, slides at most 6 pages, mixed text split by language segment) are a conservative initial drafting default that splits by default near those limits. Main drafts each chunk itself and sends only that chunk's prose to `polisher`, one call per prose segment, and inserts the returned text verbatim; later chunks never re-read an earlier chunk's full round trips, and no single `polisher` call receives the whole document when a chunk suffices. Each per-chunk unit carries a frozen style pack (the original user request, the purpose and readers, output format and template, terminology and subject use, relevant evidence, nearby context and global constraints, and task-specific operation rules) plus style-provenance facts (whether this is a baseline draft, a targeted replacement, or a cross-chunk continuation, and the section names and authoritative text of the supplied methods), the delivery contract (full revised text for an exact replacement, a bounded patch for a small repair, or a diagnosis only for a review), and acceptance checks covering the factual anchors, numbers, terminology, citations, logical and semantic anchors, structural headings, and formats to preserve. Every semantic or wording change lands as a replacement or a bounded patch, never advice alone; a diagnosis-only review returns exact locations, evidence, and issue types. The original prompt is immutable for the round, and no task, reviewer, summary, template, or later user message may silently narrow or delete its requirements; scope expansion needs new authorization, and any assumption, missing evidence, or unresolved item returns as an explicit limitation. A change to purpose, audience, evidence, scope, format, or template closes the current chunk list and version and opens a new chunking round instead of mutating old tasks. Main integrates the results in source order into a current complete artifact and records file version and coverage, never concatenating scattered messages into the deliverable. Main runs the read-only review tools itself (`writing_quality_check`, `writing_logic_check`, `writing_ai_scan`) or its own read-only pass; their findings are advisory, they never rewrite text, and every wording repair returns to `polisher` for the affected chunk, with no final whole-document polish pass. At integration the whole artifact is checked for uncovered content, missing paragraphs or pages, truncated objects, unmerged changes, repeated text, broken cross-references, layout or format faults, and requirement loss; the final report lists covered scope, integrated chunk count and range, checks performed, resolved findings, residual risks, and undelivered items. Every chunk takes one write then check then repair path, with the repair kept narrow; a local format problem is repaired within the chunk's authorization and never blocks other chunks. This is prompt and method orchestration only: no runtime gate, no automatic retry loop, no plugin state, and no permission change.

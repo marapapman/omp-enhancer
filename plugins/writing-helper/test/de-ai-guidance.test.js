@@ -15,7 +15,6 @@ function readConfig(relative) {
   return readFileSync(join(configDir, relative), 'utf8');
 }
 
-
 describe('de-AI guidance content contracts', () => {
   it('covers the strongest structural tells in the English humanizer', () => {
     const en = read('skills/format-humanizer/SKILL.md');
@@ -135,40 +134,57 @@ describe('de-AI guidance content contracts', () => {
     assert.match(zh, /五个最容易残留的结构痕迹：否定式对偶、单句收尾、三连排比、破折号、黑体标签/u);
   });
 
-  it('keeps proposal-only boundaries in both humanizers', () => {
+  it('keeps the polisher handoff in both humanizers', () => {
     const en = read('skills/format-humanizer/SKILL.md');
-    assert.match(en, /`?writer`? text tool is always proposal-only/iu);
-    assert.match(en, /Main\s+(?:retains|owns)\s+permission decisions\s+and actual file changes/iu);
+    assert.match(en, /`polisher`/u);
+    assert.match(en, /(?:Main drafts|drafted by Main|Main's own draft)/iu);
+    assert.match(en, /verbatim/iu);
     assert.doesNotMatch(
       en,
       /(?:call|use)[^\n]{0,40}`(?:write|edit)`|write the target file|append[^\n]{0,60}review log/iu,
     );
 
     const zh = read('skills/zh-format-humanizer/SKILL.md');
-    assert.match(zh, /`zh-writer` 文本工具始终只交付建议稿/u);
-    assert.match(zh, /Main 保留权限决策\s*和实际文件修改/u);
+    assert.match(zh, /`polisher`/u);
+    assert.match(zh, /Main[\s\S]{0,40}(?:起草|撰写)/u);
+    assert.match(zh, /原样/u);
     assert.doesNotMatch(zh, /调用 `(?:write|edit)`|写入目标文件|追加[^\n]{0,50}review log/u);
     assert.ok(
       zh.includes('用户明确要求科研成果凝练体时，论文发表列举和系统部署收尾是该体例的有意组成，不报告为机械列举或 AI 味。'),
     );
   });
 
-  it('exposes structural de-AI families to writers and checkers in both languages', () => {
-    const writer = read('agents/writer.md');
-    assert.match(writer, /## Plain Prose/u);
-    assert.match(writer, /Any\s+listed tell justifies an edit on its first sighting/iu);
-    assert.match(writer, /prefer an over-correction\s+to a miss/iu);
-    assert.doesNotMatch(writer, /a weak tell matters only when/iu);
-    assert.match(writer, /assigned de-AI Skill body/u);
-    assert.match(writer, /neat metaphors that compress a complex mechanism/iu);
-    assert.match(writer, /parallelism or a setup that announces a parallel list/iu);
-    assert.match(writer, /Anaphoric passive riders\.\*\* A complete main clause followed by a comma and a with \+ object \+ past participle \+ by \+ an anaphoric actor phrase/u);
-    assert.match(writer, /the with phrase is a participial adjunct, never a finite clause/u);
-    assert.match(writer, /never invent an actor/u);
-    assert.match(writer, /§36 covers pure repetition, §18 covers shallow -ing riders, and this rule covers anaphoric passive riders/u);
-    assert.match(writer, /Anaphoric callback clauses\.\*\* A complete main clause followed by a comma and then a clause headed by this, that, which, or these/u);
-    assert.match(writer, /The self-check runs while drafting as well as while revising/u);
-    assert.doesNotMatch(writer, /format-humanizer/iu);
+  it('exposes structural de-AI families to the polisher and the writing methods', () => {
+    const enPrompt = read('polisher/prompt-en.md');
+    for (const phrase of [
+      'contrast-repetition construction',
+      'abstract restatement echo',
+      'announcer transitions',
+      'rhythm-matched paired-phrase closer',
+      'didactic cognition directives',
+      'forced triads',
+      'stacked qualifiers',
+      'absolute quantifier',
+      'anaphoric passive rider',
+      'anaphoric callback clause',
+      'colon that splices a label or short claim',
+      'caption restate its title',
+    ]) {
+      assert.ok(enPrompt.includes(phrase), `the polisher prompt should expose: ${phrase}`);
+    }
+
+    const zhPrompt = read('polisher/prompt-zh.md');
+    for (const phrase of [
+      '否定式对偶',
+      '顺口比喻',
+      '三连排比',
+      '回指被动尾句',
+      '回指回扣小句',
+      '范围词只在原文写明且与依据相符时保留',
+      '图注不重复本页标题或要点',
+    ]) {
+      assert.ok(zhPrompt.includes(phrase), `the polisher prompt should expose: ${phrase}`);
+    }
 
     const enHumanizer = read('skills/format-humanizer/SKILL.md');
     assert.match(enHumanizer, /One task owns one tell family/iu);
@@ -185,58 +201,9 @@ describe('de-AI guidance content contracts', () => {
     assert.match(zhHumanizer, /语义锚点核查/u);
     assert.match(zhHumanizer, /仅命中一个特征家族/u);
     assert.doesNotMatch(zhHumanizer, /一次聚焦处理/u);
-
-    const zhWriter = read('agents/zh-writer.md');
-    assert.match(zhWriter, /不写否定式对偶/u);
-    assert.match(zhWriter, /不写顺口比喻/u);
-    assert.match(zhWriter, /不写排比或预备排比/u);
-    assert.match(zhWriter, /不写「彰显了」「见证了」这类意义拔高/u);
-    assert.match(zhWriter, /不写「希望这对你有帮助」这类聊天残留/u);
-    assert.match(zhWriter, /不写「分清楚」「看清楚」「搞清楚」「记住」「请注意」「划重点」这类对读者发指令的说教认知句/u);
-    assert.match(zhWriter, /不用「定死」「框死」「锁死」这类绝对化补语/u);
-    assert.match(zhWriter, /不写冒号句式/u);
-    assert.match(zhWriter, /不写每页结构雷同的稿子/u);
-    assert.match(zhWriter, /不写跨页重复/u);
-    assert.match(zhWriter, /不写图注和标题复述/u);
-    assert.match(zhWriter, /不写表格前后的套话/u);
-    assert.match(zhWriter, /不写口语化评判词/u);
-    assert.match(zhWriter, /不写回指被动尾句，完整主句后用逗号接「前置宾语＋由＋回指施事＋动词」的小句/u);
-    assert.match(zhWriter, /施事能从主句或前文还原时写一次具体名称，还原不出来时保留回指或拆成独立句，不臆造名称/u);
-    assert.match(zhWriter, /都必须在最终句子上重新执行本条的信息增量、范围词、回指被动尾句与回指回扣小句自查/u);
-    assert.match(zhWriter, /不写回指回扣小句，完整主句后用逗号接以「这」「那」「此」开头的回指小句/u);
-    assert.match(zhWriter, /上述自查在起草和修订时都执行，不停留在成稿润色这一步/u);
-
-    const checker = read('agents/checker.md');
-    assert.match(checker, /Do AI writing tells appear here\?/iu);
-    assert.match(checker, /neat metaphors that tidy a complex concept/iu);
-    assert.match(checker, /parallelism or a setup that announces a parallel list/iu);
-    assert.match(checker, /first appearance; prefer an over-correction to a miss/iu);
-    assert.match(checker, /comma and a with \+ object \+ past participle \+ by \+ anaphoric actor adjunct/u);
-    assert.match(checker, /the participial adjunct with its object, by plus an anaphoric actor, and a final verb; if any element is missing, do not report/u);
-    assert.match(checker, /never invent an actor/u);
-    assert.match(checker, /Pure repetition without an action-carrying rider is reported under the sentence-level restatement family, not here/u);
-    assert.match(checker, /the demonstrative heading the tail, a labelling predicate, and that the tail adds no new fact/u);
-    assert.match(checker, /folds? a tail that carries a fact into the main clause and deletes? a tail that only names or stamps/u);
-    for (const banned of ['format-humanizer', 'writing-review', 'zh-writing-review', 'zh-writing-polish']) {
-      assert.doesNotMatch(checker, new RegExp(banned, 'iu'), `checker must not advertise ${banned}`);
-    }
-
-    const zhChecker = read('agents/zh-checker.md');
-    assert.match(zhChecker, /结构性 AI 痕迹：否定式对偶、单句收尾、三连排比、顺口比喻[\s\S]{0,80}排比与预备排比/u);
-    assert.match(zhChecker, /说教式认知指令（「分清楚」「看清楚」「搞清楚」「记住」「请注意」「划重点」对读者发指令/u);
-    assert.match(zhChecker, /冒号句式（标题、要点、图注里用冒号把标签或论断拼到句子前面/u);
-    assert.match(zhChecker, /每页结构雷同（要点条数和句式一页接一页不变）/u);
-    assert.match(zhChecker, /跨页重复（同一句话在 3 页以上原样出现）/u);
-    assert.match(zhChecker, /图注和标题复述（图注或要点把标题再说一遍）/u);
-    assert.match(zhChecker, /回指被动尾句（完整主句后用逗号接「前置宾语＋由＋回指施事＋动词」的小句/u);
-    assert.match(zhChecker, /逐项核对主句完整、逗号接尾、宾语前置、由＋回指施事、尾句落动词，缺一项不报告/u);
-    assert.match(zhChecker, /技术文档照此报告，接口说明和技术被动语态不构成豁免/u);
-    assert.match(zhChecker, /回指回扣小句（完整主句后用逗号接以「这」「那」「此」开头的回指小句/u);
-    assert.match(zhChecker, /核对主句完整、逗号、回指主语、判断或使役或定性谓词，缺一项不报告/u);
-    assert.doesNotMatch(zhChecker, /zh-format-humanizer/iu);
   });
 
-  it('wires the strength doctrine into the checker and reviewer Skills', () => {
+  it('wires the strength doctrine into the review Skills', () => {
     const checkers = read('skills/writing-checkers/SKILL.md');
     assert.match(checkers, /9\. \*\*Flag AI writing tells with evidence\.\*\*/iu);
     assert.match(checkers, /Any listed tell justifies a finding at its first sighting/u);
@@ -274,30 +241,35 @@ describe('de-AI guidance content contracts', () => {
     assert.ok(writingCard.skills.includes('zh-format-humanizer'), 'writing card must offer the Chinese de-AI method');
     const deAiFlowStepIndex = writingCard.suggestedFlow.findIndex((step) => /de-AI/.test(step));
     const scanFlowStepIndex = writingCard.suggestedFlow.findIndex((step) => /writing_ai_scan/.test(step));
-    const checkerStepIndex = writingCard.suggestedFlow.findIndex((step) => /Check via checker/.test(step));
     assert.ok(deAiFlowStepIndex !== -1, 'writing card flow must carry an explicit per-rule de-AI step');
-    assert.ok(deAiFlowStepIndex < checkerStepIndex, 'de-AI per-family chain must run before the checker step');
     assert.ok(scanFlowStepIndex !== -1, 'writing card flow must call writing_ai_scan after every writing task');
-    assert.ok(
-      deAiFlowStepIndex < scanFlowStepIndex && scanFlowStepIndex < checkerStepIndex,
-      'the final scan must run after de-AI repairs and before checker review',
-    );
+    assert.ok(deAiFlowStepIndex < scanFlowStepIndex, 'de-AI per-family chain must run before the final scan');
+
     const scanFlowStep = writingCard.suggestedFlow[scanFlowStepIndex];
     assert.match(scanFlowStep, /every completed writing task/iu);
     assert.match(scanFlowStep, /detector=ensemble/iu);
     assert.match(scanFlowStep, /allowNetwork=true/iu);
     assert.match(scanFlowStep, /rerun the scan on the revised text/iu);
-    assert.match(scanFlowStep, /advisory evidence, not a quality verdict/iu);
+    assert.match(scanFlowStep, /before delivery/iu);
+    assert.doesNotMatch(scanFlowStep, /before checker review/iu);
+    assert.match(scanFlowStep, /`?polisher`?/iu);
+    assert.match(
+      writingCard.scopeNotes.join(' '),
+      /the scan is advisory evidence rather than a gate/iu,
+    );
     assert.match(
       writingCard.scopeNotes.join(' '),
       /Every writing task ends with a writing_ai_scan check/iu,
     );
+
     const deAiFlowStep = writingCard.suggestedFlow[deAiFlowStepIndex];
-    assert.match(deAiFlowStep, /scan task inventories the tell families present/iu);
+    assert.match(deAiFlowStep, /one polisher pass per found family/iu);
     assert.match(deAiFlowStep, /strictly sequentially/iu);
     assert.match(deAiFlowStep, /semantic-anchor check/iu);
-    assert.match(deAiFlowStep, /all rewriting stays with the text tools and no pass mixes families/iu);
-    assert.match(deAiFlowStep, /per found family/iu);
+    assert.match(deAiFlowStep, /All rewriting stays with the polisher and no pass mixes families/u);
+    assert.match(deAiFlowStep, /bounded chunks/iu);
+    assert.doesNotMatch(deAiFlowStep, /writer|zh-writer|checker/iu);
+
     const writing = read('skills/writing-review/SKILL.md');
 
     const beamer = readConfig('skills/latex-beamer-slides/SKILL.md');

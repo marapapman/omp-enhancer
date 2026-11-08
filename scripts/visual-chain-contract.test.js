@@ -20,7 +20,10 @@ test('visual workflow stays drawio/static-visual oriented', () => {
   assert.deepEqual(visual.skills, ['drawio-skill', 'assetseeker', 'frontend-design', 'canvas-design', 'format-humanizer', 'zh-format-humanizer']);
   assert.match(visual.chooseWhen, /Diagrams \(draw\.io\), UI\/UX design, static visual artifacts, or rendered figure review\./iu);
   assert.doesNotMatch(visual.chooseWhen, /slides?|beamer|powerpoint/iu);
-  assert.deepEqual(visual.roles, ['task', 'writer', 'zh-writer']);
+  assert.deepEqual(visual.roles, ['task']);
+  for (const removed of ['writer', 'zh-writer', 'checker', 'zh-checker']) {
+    assert.equal(visual.roles.includes(removed), false, `visual roles must not include the removed agent ${removed}`);
+  }
   assert.ok(Array.isArray(visual.suggestedFlow) && visual.suggestedFlow.length > 0);
   // draw-once + independent read-only review + bounded fix semantics, checked
   // structurally rather than pinned to exact card wording.
@@ -67,7 +70,7 @@ test('visual workflow stays drawio/static-visual oriented', () => {
   assert.equal(Object.hasOwn(visual, 'steps'), false, 'visual must not carry a steps field');
 });
 
-test('visual workflow routes every textual surface to the body-language writer', () => {
+test('visual card routes every label, caption, and UI string through Main and the polisher', () => {
   const visual = workflowCatalog['visual'];
   const contract = [visual.chooseWhen, ...visual.suggestedFlow, ...visual.scopeNotes].join(' ');
 
@@ -75,25 +78,48 @@ test('visual workflow routes every textual surface to the body-language writer',
   assert.match(contract, /code-drawn schematics \(draw\.io[\s\S]{0,120}imagegen-generated schematics/iu);
   assert.match(contract, /arrowhead size against the visible shaft/iu);
   assert.match(contract, /no gray or pale fills/iu);
+
+  // The removed text agents are gone: Main drafts every surface and the
+  // stateless polisher tool rewrites it before it enters the diagram.
+  assert.match(contract, /\bpolisher\b/iu, 'the visual card must name the polisher tool');
+  assert.match(contract, /\blabels?\b/iu, 'the visual card must name label text');
+  assert.match(contract, /\bcaptions?\b/iu, 'the visual card must name caption text');
+  assert.match(contract, /(?:UI|interface)\s+(?:strings?|copy|text|labels?)/iu, 'the visual card must name UI text');
   assert.match(
     contract,
-    /English(?:\s+text)?[^.]{0,120}\bwriter\b[^.]{0,120}Chinese(?:\s+text)?[^.]{0,120}\bzh-writer\b/iu,
-  );
-  assert.match(contract, /mixed-language[^.]{0,120}(?:separate|independent)[^.]{0,120}(?:writer|agents?)/iu);
-  assert.match(
-    contract,
-    /(?:labels?|captions?|text|copy|explanation text)[^.]{0,180}(?:writer|zh-writer)[^.]{0,180}(?:only|sole|must)/iu,
+    /(?:Main[^.]{0,400}(?:draft|author|writ)|(?:draft|author|written|writes)[^.]{0,160}\bMain\b)/iu,
+    'Main must draft the diagram copy',
   );
   assert.match(
     contract,
-    /Main[^.]{0,180}(?:verbatim|forwards|integrat)[^.]{0,120}(?:writer|proposal)[^.]{0,120}(?:never|must not)[^.]{0,120}(?:draft|rewrite|author|polish)/iu,
+    /(?:label|caption|UI|text|copy|string|note)[^.]{0,400}\bpolisher\b|\bpolisher\b[^.]{0,300}(?:label|caption|UI|text|copy|string|note)/iu,
+    'each drafted string must pass through the polisher',
   );
   assert.match(
     contract,
-    /\btask\b[^.]{0,180}(?:draw|layout|structure|conversion|evidence)[^.]{0,180}(?:must not|never)[^.]{0,120}(?:draft|rewrite|author|polish|copy|text)/iu,
+    /(?:before|prior to|then|after)[^.]{0,300}(?:map|insert|place|put|writ|draw)/iu,
+    'the polished text must be settled before it is mapped into the diagram',
   );
-  assert.doesNotMatch(contract, /Main\s+(?:draft|rewrite|author|polish)\b[^.]{0,120}(?:text|copy|label|caption)/iu);
-  assert.doesNotMatch(contract, /\btask\s+(?:draft|rewrite|author|polish)\b[^.]{0,120}(?:text|copy|label|caption)/iu);
+  assert.match(
+    contract,
+    /verbatim|returned (?:text|copy|string|wording)|polished (?:text|copy|string|wording|label|caption|output)/iu,
+    'the polished text is used as returned',
+  );
+  assert.match(
+    contract,
+    /\btask\b[^.]{0,260}(?:never|must not|does not|do not)[^.]{0,200}(?:reword|rewrite|polish|edit|shorten|author)/iu,
+    'task must never reword copy',
+  );
+  assert.match(
+    contract,
+    /findings?[^.]{0,260}\bpolisher\b|\bpolisher\b[^.]{0,260}findings?/iu,
+    'text findings must return to the polisher',
+  );
+  assert.doesNotMatch(
+    contract,
+    /\b(?:writer|zh-writer|zh-checker)\b|\b(?:the|a|an)\s+checker\b/iu,
+    'the visual card must not route text to a removed agent',
+  );
 });
 
 test('retired drawing pipelines stay out of the visual card', () => {

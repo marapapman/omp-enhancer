@@ -5,10 +5,12 @@ description: "Reference checklist for an already Main-selected research checkpoi
 
 # Research Phase Navigation
 
-When this Skill is part of a `writer` or `zh-writer` assignment, that child
-remains proposal-only: it runs no command and writes no file, and returns the
-complete proposed artifact or diff. Main or an explicitly capable generic
-`task` owns authorized effects.
+Main performs this method directly in its own context; the former `writer` and
+`zh-writer` agents are removed and no work is routed to them. Any user-facing
+prose the method produces is drafted by Main, passed through the `polisher`
+tool, and inserted verbatim from the returned text before it reaches a
+deliverable or the user. Commands, file writes, and other effects belong to Main
+or to an explicitly capable generic `task`.
 
 Use this reference checklist only after Main has selected and loaded it. It helps
 inspect or propose a change to research phase state; it does not select, route,
@@ -57,8 +59,7 @@ Use when the user asks about or changes the research phase: "what phase", "curre
 5. **Jump to phase**: Map any alias (`latex`→`writing`, `socratic`→`discussion`, `related work`→`literature`, `experiment`→`experiments`, `paper`→`writing`) to a valid name. Set the target to `[>]`, mark all phases before it `[x]`, and all phases after it `[ ]`.
 
 6. **Skip phase**: Mark the current `[>]` phase as `[x]`. If the reason is not
-   provided in an assigned child task, return that interactive question to Main;
-   Main decides whether to ask the user. Record a supplied reason as a comment:
+   provided, ask the user for it. Record a supplied reason as a comment:
    `[x] storyline — skipped: <reason>`. Advance the next phase to `[>]`.
 
 7. **Apply changes**: Compute and show the complete new state. Write to

@@ -1391,10 +1391,10 @@ export async function prepareScenario(scenario) {
       ),
     ]);
   } else if (scenario.fixture === 'long-form-writing') {
-    // Temporary project for the long-form writing pilot E2E. Contains a frozen shared
-    // brief and an empty target article; the model chooses workflows/skills, but the
-    // prompt supplies complete disjoint per-section briefs so the pilot predicate can
-    // match. No model is hardcoded by the fixture.
+    // Temporary project for the long-form writing E2E. Contains a frozen shared brief
+    // and an empty target article; the model chooses workflows/skills, but the prompt
+    // supplies complete disjoint per-section briefs so the multi-section polisher
+    // expectations can match. No model is hardcoded by the fixture.
     await writeFile(
       path.join(cwd, 'brief.md'),
       [
@@ -1411,8 +1411,8 @@ export async function prepareScenario(scenario) {
     );
     await writeFile(path.join(cwd, 'article.md'), '# Article\n\n<to be drafted>\n');
   } else if (scenario.fixture === 'long-form-writing-baseline') {
-    // Same temp project shape as long-form-writing; the scenario prompt instructs a
-    // single-writer draft so the baseline is the admission denominator, not the pilot.
+    // Same temp project shape as long-form-writing; the scenario prompt instructs one
+    // Main-drafted pass so it stays the single-pass baseline.
     await writeFile(
       path.join(cwd, 'brief.md'),
       [

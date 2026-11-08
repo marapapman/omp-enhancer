@@ -5,26 +5,27 @@ description: "Remove AI writing traces — detect and replace structural AI tell
 
 # Format Humanizer
 
-Scan a document for AI-generated writing patterns and produce authorized,
+Scan a document for AI-generated writing patterns and produce
 meaning-preserving replacements. For substantial documents the rules are applied
-one tell family at a time by independent tasks—never one mixed rewriting pass;
-within one family the text is split into bounded chunks and each chunk is
-revised by a fresh `writer` sub-task. Record the family inventory before any `writer` text-tool call changes prose.
+one tell family at a time—never one mixed rewriting pass; within one family the
+text is split into bounded chunks and Main revises each chunk itself. Record the
+family inventory before any wording changes.
 
-All substantive English prose work—including initial writing or drafting,
-substantive polishing or revision, translation, and logical revision—must be
-performed through language-matched `writer` text-tool calls. This skill does not
-authorize Main, `task`, or `checker` to write prose. The `writer` returns the
-proposal first; an independent `checker` only reports logic, evidence,
-semantic-drift, and clarity findings, including information-gain findings.
-Any substantive repair returns to the same language-matched `writer`.
+Main drafts every replacement and passes each drafted passage through the
+`polisher` tool, which returns the same passage after a language edit and de-AI
+rewrite. Main uses the returned text verbatim; it does not reword polished text
+by hand. Read-only checks (`writing_quality_check`, `writing_logic_check`,
+`writing_ai_scan`) or Main's own read-only pass report logic, evidence,
+semantic-drift, and clarity findings, including information-gain findings, and
+never rewrite. Any later wording repair goes back through `polisher` for the
+affected passage.
 
-The `writer` text tool is always proposal-only. Return the complete revised text,
-using SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer.
-Main retains permission decisions and actual file changes and integrates only
-the returned proposal verbatim. If a current permitted limitation prevents a safe
-`writer` call, Main records the inability to call the text tool and must not
-silently use another Agent or a direct writing fallback.
+`polisher` is stateless: one prose passage in, the same passage out. It reads no
+files, calls no tools, and applies no patch. Fenced code is rejected, so Main
+sends prose segments one at a time. When a `polisher` call returns `ok:false`,
+Main records the error code and reports the failure instead of presenting
+unpolished text as polished output. Main keeps permission decisions and performs
+the actual file changes, inserting the returned text verbatim.
 
 ## Trigger
 
@@ -36,7 +37,7 @@ This skill covers English prose. For Chinese text use `zh-format-humanizer`; the
 
 A language model defaults to the most statistically likely phrasing for the widest audience, so ordinary facts come out generalized, hedged, and inflated. Vocabulary lists change with every model release; the structural habits below persist. Every pattern is one form of the same default choice, so fix the structure, not only the vocabulary.
 
-Two rules follow. First, information gain decides what stays. Every sentence must center on a stated point and keep only what supplies a new fact, a necessary qualifier, or a key logical relation. Do not re-explain what the reader can infer from context, pad with modifiers that add no information, or enumerate process mechanically for completeness. Reasonable omission is allowed so the reader completes a simple inference, and a revision deletes redundant expression first instead of restating it in more words. A focused sentence may carry several necessary clauses, so never delete a unique fact, number, unit, scope, condition, modality, negation, causal direction, citation, safety instruction, or reproducibility step to raise information gain, and never force needless explanation or uniformly short sentences onto the baseline's long linked sentences while each clause still informs. Apply the rule inside the revision order below — claims, evidence, and anchors decide what must stay, and information gain then decides how the wording is trimmed. Its sentence-level forms are §36, §37, and §38 in *Sentence-level information and scope*, and the scan covers them with the other families. The second rule: any listed tell justifies an edit on its first sighting — prefer an over-correction to a miss. Only quotations, titles, proper names, passages discussing a phrase rather than using it, text predating November 30, 2022, and details that carry the writer's voice (specific unusual details, mixed feelings, first-person choices) are exempt.
+Two rules follow. First, information gain decides what stays. Every sentence must center on a stated point and keep only what supplies a new fact, a necessary qualifier, or a key logical relation. Do not re-explain what the reader can infer from context, pad with modifiers that add no information, or enumerate process mechanically for completeness. Reasonable omission is allowed so the reader completes a simple inference, and a revision deletes redundant expression first instead of restating it in more words. A focused sentence may carry several necessary clauses, so never delete a unique fact, number, unit, scope, condition, modality, negation, causal direction, citation, safety instruction, or reproducibility step to raise information gain, and never force needless explanation or uniformly short sentences onto the baseline's long linked sentences while each clause still informs. Apply the rule inside the revision order below — claims, evidence, and anchors decide what must stay, and information gain then decides how the wording is trimmed. Its sentence-level forms are §36, §37, and §38 in *Sentence-level information and scope*, and the scan covers them with the other families. The second rule: any listed tell justifies an edit on its first sighting — prefer an over-correction to a miss. Only quotations, titles, proper names, passages discussing a phrase rather than using it, text predating November 30, 2022, and details that carry the author's voice (specific unusual details, mixed feelings, first-person choices) are exempt.
 
 ## Revision order
 
@@ -49,16 +50,14 @@ wording. Only then remove AI tells or polish sentences. Preserve every anchor;
 do not add or drop a fact, source, citation, or limitation.
 
 The order runs one tell family at a time in scan order, and the unit of each
-`writer` call is one authorized chunk under the shared chunking contract: at
-most 1,200 words or 6 slides, a fresh independent `writer` sub-task per chunk,
-read-only adjacency context, and no resumed session or whole-document input.
-The `writer` stays proposal-only; Main integrates the accepted proposals
-verbatim into one current complete artifact, which is what the next family and
-the checker read. The independent `checker` covers terminology and subject use,
-repeated closers and page templatization, and style coverage across the
-opening, middle, and closing chunks; it reports located findings and never
-rewrites, and every wording repair returns to a new independent `writer`
-sub-task for the affected chunk.
+`polisher` call is one bounded passage: at most 1,200 words or 6 slides, only
+that passage plus its read-only adjacency context, and never the whole document
+when one passage suffices. Main integrates the returned text verbatim into one
+current complete artifact, which is what the next family reads. Main then runs
+the read-only checks or its own read-only pass over terminology and subject use,
+repeated closers and page templatization, and style coverage across the opening,
+middle, and closing passages; those findings never rewrite, and every wording
+repair goes back through `polisher` for the affected passage.
 
 ## How to work
 
@@ -85,47 +84,44 @@ single-family tasks, not one pass that applies every rule at once.
    scope evidence, so the
    sentence-level checks reach each chunk along with its other evidence.
    Families with no findings are skipped later.
-2. **Per-family writer text-tool passes, strictly sequentially.** Main routes each
-substantive family rewrite through language-matched `writer` text-tool calls in
-scan order, and a later family receives the integrated version only after every
-authorized chunk of the current family has returned and Main verifies each
-pass's semantic-anchor check:
+2. **Per-family passes, strictly sequentially.** Main revises each substantive
+family itself in scan order, and a later family receives the integrated version
+only after every passage of the current family has returned from `polisher` and
+Main verifies each pass's semantic-anchor check:
 hedges, modality, scope, negation, causal direction, numbers, units, quotes, and
 citations unchanged; no fact added or dropped. Inside one tell family the
-non-overlapping chunks may run in parallel, each in a fresh `writer` sub-task;
-each pass handles exactly one bounded chunk of that family (at most 1,200 words
-or 6 slides) and reviews only its own range. Main integrates the returned
-proposals mechanically by stable chunk id in document order, never by completion
-order. Duplicated, out-of-range, stale-version, or truncated results never
-overwrite the target: Main re-reads the affected chunk and schedules one bounded
-repair for that chunk only. Each pass keeps every supported claim, may shorten
-dull parts, merge or split paragraphs inside its chunk, and change structure
-within its range without losing information. It must not add a fact, name,
-number, date, quote, or citation that is not in the source. It returns
-SEARCH/REPLACE blocks or a unified diff scoped to its family and chunk.
-3. **Check inside each task.** Read the rewritten result once and ask what
-   still sounds machine-made *for that family*, and whether the rewrite added
+non-overlapping passages are polished one `polisher` call at a time; each call
+handles exactly one bounded passage of that family (at most 1,200 words or 6
+slides) and reviews only its own range. Main integrates the returned text
+mechanically by stable passage id in document order. Duplicated, out-of-range,
+stale-version, or truncated results never overwrite the target: Main re-reads
+the affected passage and runs one bounded repair for that passage only. Each
+pass keeps every supported claim, may shorten dull parts, merge or split
+paragraphs inside its passage, and change structure within its range without
+losing information. It must not add a fact, name, number, date, quote, or
+citation that is not in the source.
+3. **Check inside each pass.** Read the polished result once and ask what
+   still sounds machine-made *for that family*, and whether it added
    or dropped any fact, number, date, quote, citation, or claim.
-4. **Deliver.** The unit of each `writer` call stays one authorized chunk under
-the shared chunking contract — bounded limits, a fresh independent sub-task,
-proposal-only output. Main assembles the per-family writer proposals in
-document order and integrates only accepted proposals verbatim into one
-current complete artifact, the version later families and the checker read. An
-independent `checker` only reports semantic, logic, evidence, and clarity
-findings, including information-gain findings; it covers terminology and
-subject use, repeated closers and page templatization, and style coverage
-across the opening, middle, and closing chunks, locating each finding to its
-chunk, and it never rewrites. Any substantive repair returns to the same
-`writer` text tool as a new independent sub-task for the affected chunk.
-Inside a chunk, minor edits keep the single pass only when the scan found
-exactly one tell family; two or more families always go through the per-family
-chain.
+4. **Deliver.** Every `polisher` call stays one bounded passage — prose only,
+   no fenced code, returned text used verbatim. Main assembles the per-family
+   results in document order into one current complete artifact, the version
+   later families read. Main runs the read-only checks or its own read-only
+   pass over semantic, logic, evidence, and clarity findings, including
+   information-gain findings; they cover terminology and subject use, repeated
+   closers and page templatization, and style coverage across the opening,
+   middle, and closing passages, locating each finding to its passage, and they
+   never rewrite. Any substantive repair goes back through `polisher` for the
+   affected passage.
+Inside a single passage, minor edits keep the single pass only when the scan
+found exactly one tell family; two or more families always go through the
+per-family chain.
 
 ### Voice
 
-If the user supplies a writing sample, match its sentence length, word choice, punctuation, openings, and transitions; the sample overrides §8, including its dash rate. Without a sample, take the voice from the kind of text: opinion and blog prose keep the writer's uncertainty, asides, and humor; reference and technical prose stays neutral and plain. Removing tells is half the job; the result must still sound like a person.
+If the user supplies a writing sample, match its sentence length, word choice, punctuation, openings, and transitions; the sample overrides §8, including its dash rate. Without a sample, take the voice from the kind of text: opinion and blog prose keep the author's uncertainty, asides, and humor; reference and technical prose stays neutral and plain. Removing tells is half the job; the result must still sound like a person.
 
-When the writer's built-in technical prose baseline is the active style, long information-dense sentences, formal technical vocabulary, first-person plural methods, explicit definitions followed by examples, and problem → approach framing are not AI tells by themselves; still flag the listed structures, unsupported significance, and copied citation markers.
+When Main's technical prose baseline is the active style, long information-dense sentences, formal technical vocabulary, first-person plural methods, explicit definitions followed by examples, and problem → approach framing are not AI tells by themselves; still flag the listed structures, unsupported significance, and copied citation markers.
 
 ## Pattern catalog
 
@@ -226,24 +222,23 @@ which parts remain adjustable. Exemptions: legitimate instructional registers
 ### Document scale — count before you edit
 
 The families below belong to the whole document, and the census and the rewrite
-are separate steps. The scan task inventories §32–§35 over the whole document
-and hands each chunk only its own evidence — the cited examples, the frame
+are separate steps. The scan inventories §32–§35 over the whole document
+and hands each passage only its own evidence — the cited examples, the frame
 numbers, and the keep/change positions Main derived from the count — so no
-writer or checker has to ingest the whole document to revise one chunk. §32,
-§33, and §34 are counted across every page, frame, or panel while the per-chunk
-work stays bounded: each chunk edits only its own range under the shared
-chunking contract, and each found instance is fixed when it is found. §35's
+single `polisher` call has to ingest the whole document to revise one passage.
+§32, §33, and §34 are counted across every page, frame, or panel while the
+per-passage work stays bounded: each passage edits only its own range, and each
+found instance is fixed when it is found. §35's
 duplication between a table and its surrounding prose shows on the single page
 that carries both, so it is judged on that page by the reader task stated in
 §35 below, with neither the table nor the prose deleted by default; the
 judgment decides which form stays and carries over the unique facts,
 qualifiers, and citations. The whole deck still counts as one §35 round with no
-added review round, executed chunk by chunk. All wording repair goes to the
-same `writer` text tool as a new independent sub-task for one authorized
-chunk. When a fix must move a fact or merge paragraphs across chunk boundaries,
-Main forms a dependency group of just the affected units, withdraws their
-independent write scope, and one new `writer` sub-task proposes a bounded
-replacement covering both ends, never a whole-document rewrite. There is no
+added review round, executed passage by passage. All wording repair goes through
+`polisher`, one call per prose passage. When a fix must move a fact or merge
+paragraphs across passage boundaries, Main forms a dependency group of just the
+affected units, drafts a bounded replacement covering both ends, and sends that
+replacement through `polisher`, never a whole-document rewrite. There is no
 single all-family rewrite and no final whole-document polish pass.
 
 **§32 Slide-scale uniformity.** A fixed page shape across a deck: the same bullet count on nearly every frame, the same sentence pattern inside each bullet, the same title length. Count the bullets per frame and the share taken by the most common count; when one count dominates, the template set the shape. The per-page bullet count follows that page's content, never a fixed three, and no page is padded to three. A deck where 131 of 144 bullet-bearing frames carry exactly three bullets has this tell.
@@ -252,7 +247,7 @@ single all-family rewrite and no final whole-document polish pass.
 
 **§34 Caption echo.** The extension of §28 to captions and bullets. A caption that restates its frame's title or its bullets adds nothing to the figure, and a bullet that restates the title adds nothing to the page. Compare the caption, the title, and the bullet text by two-character shingles; a caption or bullet sharing half or more of its shingles with the title or with the bullets is an echo. Delete the echo, or replace it with what the figure or the page adds beyond the title and the bullets.
 
-**§35 Table necessity and prose duplication.** A table earns its place on a page when it helps the reader compare, look something up, check a condition, or check a number; judge that question before touching wording, and never call a table useless from its row count, its column count, a single dimension, symmetric phrasing, or the number of tables on the page. When the prose and the table carry the same content, keep whichever form serves this page and move every unique fact, qualifier, number, citation, and safety note from the dropped form into the kept one; never default to protecting the table and deleting the prose. Same-page duplication is the defect itself, so prose that already covers the table's rows is never a reason to keep the table, and the table's shape is no reason to drop it; the page states the content in one form. Moving the unique information out of the removed form is required rather than the author's choice: approximation qualifiers such as "about" and "roughly", conditional qualifiers such as "when necessary", definitions, and judgments move into the form that stays before the other form goes. When the user limits the change to the table, prose outside the table is out of scope, and a sentence the material already carries is never deleted on the grounds that the writer sees no support for it; record it as an open verification item instead. Necessary explanation, reading conventions, premises, and teaching derivation are not redundancy and stay even when they add no new fact. Do not add conclusions such as "faster" or "stronger" to fill cells, and keep a table the user requested. A report cites the exact cell and the duplicated prose, states the reader task, the unique information, whether to keep the table, adjust it, or rewrite it as prose, and which technical statements need verification; a wording finding is never reported as a factual conclusion or an AI-authorship judgment. The census flags each frame that carries a sentence before or after a table; that flag marks a candidate, and the final judgment reads the full frame.
+**§35 Table necessity and prose duplication.** A table earns its place on a page when it helps the reader compare, look something up, check a condition, or check a number; judge that question before touching wording, and never call a table useless from its row count, its column count, a single dimension, symmetric phrasing, or the number of tables on the page. When the prose and the table carry the same content, keep whichever form serves this page and move every unique fact, qualifier, number, citation, and safety note from the dropped form into the kept one; never default to protecting the table and deleting the prose. Same-page duplication is the defect itself, so prose that already covers the table's rows is never a reason to keep the table, and the table's shape is no reason to drop it; the page states the content in one form. Moving the unique information out of the removed form is required rather than the author's choice: approximation qualifiers such as "about" and "roughly", conditional qualifiers such as "when necessary", definitions, and judgments move into the form that stays before the other form goes. When the user limits the change to the table, prose outside the table is out of scope, and a sentence the material already carries is never deleted on the grounds that no support is stated for it; record it as an open verification item instead. Necessary explanation, reading conventions, premises, and teaching derivation are not redundancy and stay even when they add no new fact. Do not add conclusions such as "faster" or "stronger" to fill cells, and keep a table the user requested. A report cites the exact cell and the duplicated prose, states the reader task, the unique information, whether to keep the table, adjust it, or rewrite it as prose, and which technical statements need verification; a wording finding is never reported as a factual conclusion or an AI-authorship judgment. The census flags each frame that carries a sentence before or after a table; that flag marks a candidate, and the final judgment reads the full frame.
 
 ### Sentence-level information and scope — act on one sighting
 
@@ -266,7 +261,7 @@ single all-family rewrite and no final whole-document polish pass.
 
 ## When not to act
 
-Act on any listed tell at its first sighting; no listed tell above is clustering-gated. Leave a watched phrase alone inside a quotation, a title, a proper name, or a passage that discusses the phrase rather than uses it. Salutations and sign-offs on a letter predate chatbots. Text written before November 30, 2022 predates these tells. Keep the details that carry the writer's voice: a specific unusual detail, mixed feelings and unresolved tension, dated era-bound references, a first-person choice the writer can explain, and genuine asides or self-corrections.
+Act on any listed tell at its first sighting; no listed tell above is clustering-gated. Leave a watched phrase alone inside a quotation, a title, a proper name, or a passage that discusses the phrase rather than uses it. Salutations and sign-offs on a letter predate chatbots. Text written before November 30, 2022 predates these tells. Keep the details that carry the author's voice: a specific unusual detail, mixed feelings and unresolved tension, dated era-bound references, a first-person choice the author can explain, and genuine asides or self-corrections.
 
 ## Preservation
 
@@ -282,25 +277,26 @@ Treat frequency and intensity qualifiers, modality, scope, negation, comparison 
    - Suggested replacement
    - Whether it is a safe expression-only replacement or needs an author decision
 
-3. **Revise.** Include safe replacements in the complete proposal for the chunk
-   they belong to — the full revised text of that authorized chunk, and of the
-   whole document only when the document is itself one chunk. Present only
-   substantive decisions to the user; Main owns any authorized persistence and
-   integrates the accepted proposals verbatim into the current complete
+3. **Revise.** Draft the replacement for the passage a finding belongs to,
+   send that passage through `polisher`, and use the returned text verbatim —
+   the full revised text of that passage, and of the
+   whole document only when the document is itself one passage. Present only
+   substantive decisions to the user; Main performs any authorized write and
+   inserts the returned text verbatim into the current complete
    artifact.
 
-4. **Output comparison.** After a chunk's findings are processed, show:
-   - **Before** — that chunk's original text
-   - **After** — that chunk's revised text
+4. **Output comparison.** After a passage's findings are processed, show:
+   - **Before** — that passage's original text
+   - **After** — the text `polisher` returned for it
    - **Changes** — count of replacements by pattern type
-   Main reports whole-document totals from the integrated chunks; no call
-   returns a whole-document rewrite for a substantial document.
+   Main reports whole-document totals from the integrated passages; no
+   `polisher` call returns a whole-document rewrite for a substantial document.
 
 ## Optional Interactive Output
 
 Use this format only when the user requested issue-by-issue confirmation:
 
-For a substantial document, show this comparison per authorized chunk instead
+For a substantial document, show this comparison per passage instead
 of one whole-document pair.
 
 ```

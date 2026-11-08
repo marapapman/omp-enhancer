@@ -9,6 +9,7 @@ import { fetchExternalCitationEvidence, parseLocalLiteratureRecords } from './sr
 import { censusDeck, formatDeckCensusReport } from './src/deck-census.js';
 import { loadWritingLogicDocument } from './src/document-loader.js';
 import { resolveOmpJudge } from './src/omp-judge.js';
+import { createCompletionLoader, runPolisher } from './src/polisher.js';
 import { analyzeWritingQuality } from './src/quality.js';
 import { formatWritingLogicReport, formatWritingQualityReport } from './src/report.js';
 import { withToolErrorHandling } from './src/tool-error-utils.js';
@@ -48,6 +49,13 @@ function buildAiScanParameters(z) {
     baseline: z.string().optional().describe('Optional JSON object mapping terms to expected occurrences per 1000 tokens, e.g. \'{"delve":0.1}\'. Rates override the built-in reference distribution.'),
     detector: z.enum(['auto', 'ensemble', 'local']).optional().describe('Detector mode: auto uses AIGC+Jev when configured and local statistics otherwise; ensemble requires allowNetwork and AIGC_DETECTOR_URL, plus either TYPESAFE_API_KEY or an OMP judge model; local runs only the built-in scanner.'),
     allowNetwork: z.boolean().optional().describe('Allow the ensemble to send the text to AIGC_DETECTOR_URL and to TypeSafe or the OMP judge model. Default: false; local scanning never uses the network.'),
+  });
+}
+
+function buildPolisherParameters(z) {
+  return z.object({
+    text: z.string().describe('The prose passage to polish, passed verbatim. Prose only: split fenced code blocks out before calling. Example: \'针对……的问题，本文提出……\'.'),
+    language: z.enum(['zh', 'en', 'auto']).optional().describe('Language of the passage: zh, en, or auto (detect). The polisher never translates.'),
   });
 }
 
@@ -506,11 +514,57 @@ export async function runWritingQualityCheck(input, cwd) {
   };
 }
 
-export default function writingLogicExtension(omp) {
+export default function writingLogicExtension(omp, options = {}) {
   const z = omp.zod.z;
   const logicParameters = buildLogicParameters(z);
   const qualityParameters = buildQualityParameters(z);
   const aiScanParameters = buildAiScanParameters(z);
+  const polisherParameters = buildPolisherParameters(z);
+  /* node:coverage ignore next */
+  const defaultImporter = () => import('@oh-my-pi/pi-ai');
+  const loadCompletion = createCompletionLoader(options.completeSimple, options.importer ?? defaultImporter);
+
+  omp.registerTool({
+    name: 'polisher',
+    label: 'Polisher',
+    description:
+      'Polish and de-AI one passage of prose with the configured polisher model role. One stateless language call: text in, rewritten text out. It reads no files, calls no tools, runs no agentic work, and handles no code. Main drafts every prose and copy surface itself, calls polisher on that passage, and inserts the returned text verbatim before the article, slide, document, or UI copy is written or delivered.',
+    defaultInactive: false,
+    approval: 'read',
+    promptSnippet: 'Polish every drafted prose or copy passage through the polisher before writing or delivering it.',
+    promptGuidelines: [
+      'Call polisher on each bounded prose passage before inserting it into an article, Beamer/PPT deck, document, figure, or UI copy, and use the returned text verbatim.',
+      'Pass prose only. Split fenced code blocks out first; the tool never polishes code.',
+      'Keep planning, evidence, structure, layout, conversion, and every tool call with Main. The polisher is a stateless language tool that may run on an older or smaller model, so never assign it agentic work.',
+      'Any later wording change, including one motivated by an orphan line, clipping, overflow, or spacing, goes back through polisher; Main and task never reword polished text themselves.',
+      'Use one call per bounded passage. Do not ask polisher to summarize, translate, restructure, or review facts.',
+      'Keep each passage within the chunk limits and under 120,000 characters. If polisher returns truncated_output, split the passage into smaller pieces and retry instead of inserting partial text.',
+      'If polisher is unavailable, record that limitation in the delivery instead of silently shipping unpolished prose.',
+    ],
+    parameters: polisherParameters,
+    execute: withToolErrorHandling('polisher', async (_toolCallId, params, signal, _onUpdate, ctx) => {
+      const completeSimple = await loadCompletion();
+      const output = await runPolisher(paramsOrEmpty(params), {
+        models: ctx?.models,
+        modelRegistry: ctx?.modelRegistry,
+        signal,
+        completeSimple,
+      });
+      if (!output.ok) {
+        return {
+          content: [textContent(output.report)],
+          details: { ok: false, code: output.code, ...output.details },
+          isError: true,
+        };
+      }
+      return {
+        content: [textContent(output.text)],
+        details: { ok: true, ...output.details },
+        isError: false,
+      };
+    }),
+  });
+
   omp.registerTool({
     name: 'writing_logic_check',
     label: 'Writing Logic Check',
@@ -548,7 +602,7 @@ export default function writingLogicExtension(omp) {
       'Treat UNVERIFIED citations as needing evidence, not as fabricated or true.',
       'Set allowNetwork to true only when network access is authorized; tool activation alone is not network permission.',
       'Pass originalText and enable preservation check; drift findings are advisory and never block editing.',
-      'Sentence-level information gain is semantic and stays outside this tool: route it to the writer/zh-writer self-check and the checker/zh-checker clarity review, while this tool reports only its supported checks — writing logic, language-specific style, citation authenticity, and optional semantic preservation — and never presents them as an information-gain finding.',
+      'Sentence-level information gain is semantic and stays outside this tool: Main checks it while drafting and the polisher pass enforces it, while this tool reports only its supported checks — writing logic, language-specific style, citation authenticity, and optional semantic preservation — and never presents them as an information-gain finding.',
       'Do not use this tool to rewrite documents; it reports issues only.',
     ],
     parameters: qualityParameters,
@@ -566,17 +620,17 @@ export default function writingLogicExtension(omp) {
     name: 'writing_ai_scan',
     label: 'Writing AI Style Scan',
     description:
-      'Detect AI-generated prose with the AIGC + Jev score ensemble: 0.325 * AIGC P(AI) + 0.675 * Jev P(AI), decision threshold 0.38, and an optional slow-model fallback inside a 0.20 uncertainty band. AIGC comes from AIGC_DETECTOR_URL; Jev uses TYPESAFE_API_KEY when set and otherwise the configured OMP judge model. The built-in keyword and distribution scan supplies supporting evidence and can run alone with detector=local. Run it with allowNetwork=true after every completed writing task and after each repair pass. Advisory only; it reports findings and does not rewrite.',
+      'Detect AI-generated prose with the AIGC + Jev score ensemble: 0.325 * AIGC P(AI) + 0.675 * Jev P(AI), decision threshold 0.38, and an optional slow-model fallback inside a 0.20 uncertainty band. AIGC comes from AIGC_DETECTOR_URL; Jev uses TYPESAFE_API_KEY when set and otherwise the configured OMP judge model. The built-in keyword and distribution scan supplies supporting evidence and can run alone with detector=local. Run it with allowNetwork=true after every completed writing task and after each polisher repair pass. Advisory only; it reports findings and does not rewrite.',
     defaultInactive: false,
     approval: 'read',
     promptSnippet: 'Run the AIGC + Jev ensemble after every completed writing task and after each repair pass.',
     promptGuidelines: [
-      'Run writing_ai_scan with detector=ensemble and allowNetwork=true on the final text of every completed writing task before checker review and delivery, then rerun it after each writer/zh-writer repair pass.',
+      'Run writing_ai_scan with detector=ensemble and allowNetwork=true on the exact final text of every completed writing task before delivery, then rerun it after each polisher repair pass.',
       'The ensemble is 0.325 * AIGC P(AI) + 0.675 * Jev P(AI) with threshold 0.38; do not re-tune those values per invocation.',
       'When network access is not allowed, AIGC_DETECTOR_URL is missing, or no Jev source is available (neither TYPESAFE_API_KEY nor an OMP judge model), record that limitation instead of presenting the local scanner as the ensemble.',
       'Ensemble mode sends the text to AIGC_DETECTOR_URL and the configured Jev source (TypeSafe or the OMP judge model); use detector=local for offline or sensitive text.',
       'Treat the label and local score as advisory distribution evidence, not as a gate or a quality verdict.',
-      'Neither the AIGC+Jev authorship score nor the local metrics replace the sentence-level information-gain review — they cannot tell whether a sentence adds a new fact, a necessary qualification, or a key logical relation — so the writer/zh-writer self-check runs first and this scan stays advisory evidence.',
+      'Neither the AIGC+Jev authorship score nor the local metrics replace the sentence-level information-gain review — they cannot tell whether a sentence adds a new fact, a necessary qualification, or a key logical relation — so the Main drafting check and the polisher pass run first and this scan stays advisory evidence.',
       'Use detector=local only for diagnostics; it is a simple statistical scan, not the ensemble.',
       'Do not use this tool to rewrite documents; it reports findings only.',
     ],

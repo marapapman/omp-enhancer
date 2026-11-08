@@ -9,7 +9,7 @@ OMP exposes available Skills and Agents; Main chooses under native permissions. 
 | Plugin | Purpose |
 | --- | --- |
 | `omp-config` | Config, workflow references, Agents, Skills, and diagnostics. |
-| `writing-helper` | English and Chinese writing, citation, style, and polish. |
+| `writing-helper` | Writing skills, a model-backed `polisher` tool, and citation, style, and polish checks. |
 | `omp-fact-checker` | Claim evidence, cross-checking, and advisory review. |
 | `volcengine-coding-plan` | Native `/login` and `/model` access to Ark Coding Plan models. |
 | `opendesign-coding-plan` | OpenDesign (AMR) models with Vela CLI sign-in and Design Plan quota. |
@@ -26,7 +26,7 @@ Writing covers prose in any language and format (English, Chinese, LaTeX, Markdo
 
 - Draw.io pipeline via `drawio-skill` (`drawio@365-skills`); task draws once and exports a draft PNG; Main (or a task that did not draw the revision) reviews that PNG read-only once for pressed edges or crossed boxes; task applies at most one fix round.
 - Beamer overlays writing in three editing modes: storyline-only (Markdown plan), Beamer-only (.tex/PDF), and PPTX-only (.pptx). Edits stay inside the chosen target, whose current revision is the baseline; counterparts stay read-only, and divergence triggers no realignment, propagation, or overwrite. Only explicit generation or conversion consumes a source snapshot: confirm page content, a separate task reconciles slide order on the unchanged plan (reconfirm on material reorders), then task converts and renders. For Beamer→PPTX the Beamer PDF is the visual authority; editing an existing .pptx uses officecli and never regenerates from Beamer. A single read-only visual precheck is performed by Main or task after task's initial render and before the task layout pass; task renders the final revision.
-- Long text is split by default into bounded chunks (2,000 Chinese characters, 1,200 English words, or 6 slide pages), and each chunk goes to a new `writer`/`zh-writer` sub-task with a fixed style pack and only its adjacent context. Main integrates the chunk results in document order and runs a read-only consistency check across chunk seams; those numbers are orchestration defaults, not hard gates.
+- Long text is split by default into bounded chunks (2,000 Chinese characters, 1,200 English words, or 6 slide pages). Main drafts each chunk itself with a fixed style pack and only its adjacent context, passes the drafted passage through the `polisher` tool, and inserts the returned text verbatim in document order; Main then runs a read-only consistency check across chunk seams. Those numbers are orchestration defaults, not hard gates.
 
 Main orchestrates through ANALYZE -> EXECUTE -> REVIEW: simple changes execute directly, substantial work goes to `task`/domain agents, complex or risky review to `reviewer`. No gate, router, fixed fan-out, or automatic loop.
 
@@ -70,8 +70,9 @@ The `fact_check_*` pipeline tools ship in the default tool inventory, so a plain
 
 Activation exposes tool schemas and grants no filesystem, command, network, or publication permission.
 
-Common optional tools:
+Common tools:
 
+- `polisher`, active by default: Main sends a drafted passage and inserts the returned text verbatim;
 - writing checks such as `writing_logic_check` and `writing_quality_check`;
 - fact analysis, evidence, report, and `fact_check_review` tools;
 - config diagnostics and managed-context synchronization;

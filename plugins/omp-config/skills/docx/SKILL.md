@@ -5,40 +5,41 @@ description: Create, read, edit, convert, and validate Office documents (.docx, 
 
 # Office documents via officecli
 
-When this Skill is part of a `writer` or `zh-writer` assignment, that invocation
-(the dedicated language-matched text tool, hosted by its packaged Agent compatibility adapter) remains proposal-only: it runs no command and writes no file, and returns the complete proposed artifact or diff. Main or a separate explicitly capable Main-selected Agent owns authorized effects; that owner performs no prose drafting or revision, which belongs to the text tool alone.
+Main drafts every prose passage in this Skill's document, then passes it
+through the `polisher` tool and inserts the returned text verbatim. `polisher`
+is stateless: one passage in, the same passage polished out; it reads no file,
+calls no tool, plans nothing, and verifies no fact. Code, structure, layout,
+conversion, and validation stay with Main and `task`, are never sent to
+`polisher`, and `task` never rewords copy. Review stays advisory:
+`writing_quality_check` and `writing_ai_scan` report findings and never route,
+block, retry, or decide completion.
+
 ## Text ownership and language
 
-Before any document text is created, revised, translated, or replaced, Main
-identifies the target language from the requested content and calls the
-`writer` text tool for English; Chinese documents use the `zh-writer` text
-tool. Mixed-language content runs one text-tool pass per language slice. The
-invoked `writer` or `zh-writer` text tool is the sole author of headings,
-paragraphs, table text, cell prose, slide copy, labels, captions, notes, and
-other narrative content. Main only forwards context, persists or applies the
-complete proposal verbatim, and performs non-text integration. Main must not
-draft, rewrite, translate, or polish document text; it only forwards the
-writer proposal and performs mechanical non-text integration. `task`,
-OfficeCLI, visual/layout agents, and reviewers may inspect or report text
-findings but must not draft, rewrite, translate, polish, or invent copy. Text
-findings return to the corresponding `writer` or `zh-writer` text tool.
-OfficeCLI may only apply an approved writer proposal verbatim and then
+Main drafts headings, paragraphs, table text, cell prose, slide copy, labels,
+captions, notes, and other narrative content, and passes each passage through
+the `polisher` tool; Main then inserts the returned text verbatim and performs
+non-text integration. `task`, OfficeCLI, visual/layout agents, and reviewers
+may inspect or report text findings but must not draft, rewrite, translate,
+polish, or invent copy. Text findings go back to Main, which drafts the
+replacement and passes it through `polisher`.
+OfficeCLI may only apply the polished text verbatim and then
 validate the artifact; it is not a writing or copy-editing tool. This is an
 advisory ownership rule, not a router, lifecycle gate, retry policy, or
 completion controller.
 
-For long documents, Main splits the work into writer context chunks under the chunk protocol in `skill://omp-enhancer-workflows/references/writing.md`: the communication batch (how much the user discusses at once), the layout batch (how much one task or OfficeCLI pass applies at once), and the writer context chunk (how much one `writer` or `zh-writer` sub-task revises at once) stay distinct, each chunk is revised by a new writer sub-task (a PPTX chunk is also capped at 6 pages), a section-sized batch never implies that one writer sub-task rewrites the whole section, and a chunk boundary never forces a user confirmation. Every chunk carries the figure, table, code, and citation rules: figures keep only reading-required annotations, code comments state intent and boundary conditions rather than restating each line, citations are never added, and necessary scope statements, units, qualifiers, existing citations, and safety notes stay.
+For long documents, Main splits the work into polish chunks under the chunk protocol in `skill://omp-enhancer-workflows/references/writing.md`: the communication batch (how much the user discusses at once), the layout batch (how much one task or OfficeCLI pass applies at once), and the polish chunk (how much text Main sends through `polisher` at once) stay distinct, each chunk is drafted by Main, polished by `polisher`, and inserted verbatim (a PPTX chunk is also capped at 6 pages), a section-sized batch never implies that one chunk covers the whole section, and a chunk boundary never forces a user confirmation. Every chunk carries the figure, table, code, and citation rules: figures keep only reading-required annotations, code comments state intent and boundary conditions rather than restating each line, citations are never added, and necessary scope statements, units, qualifiers, existing citations, and safety notes stay.
 
 ### Long-document chunk handoff
 
 Under the writing workflow's chunking contract
 (`skill://omp-enhancer-workflows/references/writing.md`), Main builds the
 chunk list in source order with stable chunk ids and records each chunk's
-target file, paragraph/page/shape range, and source version. Each chunk goes
-to a fresh language-matched `writer`/`zh-writer` sub-task with a frozen style
-pack and acceptance checks — never a resumed session or a whole-document
-round trip — and at most four sub-tasks run in parallel. Main integrates the
-authorized text in source order into the current complete artifact first and
+target file, paragraph/page/shape range, and source version. Main drafts each
+chunk and passes it through the `polisher` tool with a frozen style pack and
+acceptance checks before inserting the returned text verbatim — never a
+resumed session or a whole-document round trip. Main integrates the
+polished text in source order into the current complete artifact first and
 only then applies it through officecli; structural, layout, and conversion
 work stays with Main or `task`. `officecli validate` plus a rendered view
 verifies the integrated artifact for uncovered content, missing paragraphs
@@ -57,10 +58,10 @@ officecli --version
 
 ## Strategy
 
-1. Identify whether the task is read-only, conversion, creation, or modification. Before any text operation, Main makes the corresponding `writer` or `zh-writer` text-tool call and treats its complete proposal as the only content source.
+1. Identify whether the task is read-only, conversion, creation, or modification. Before any text operation, Main drafts the text, passes it through the `polisher` tool, and treats the returned text as the only content source.
 
 PPTX-specific standalone editing boundary: when the requested artifact is an already-existing `.pptx`, this Skill runs in PPTX-only mode. The current revision of the requested PPTX is the canonical source. OfficeCLI operates on that existing PPTX directly: it does not require a validated Beamer PDF, does not chase agreement with the upstream Markdown content plan or `.tex`, does not recompile the Beamer deck, and does not reconvert the PPTX from any upstream source. A PPTX edit here never propagates back to the Beamer source or to the Markdown content plan, and a Beamer-side change or storyline-side change never forces an OfficeCLI pass on the PPTX to "fix" alleged disagreement. Conversion from Beamer to PPTX remains in the `beamer-to-powerpoint` / `beamer-pptx-local` Skills; this Skill does not perform that conversion. Word and Excel policies are unchanged by this PPTX-only boundary. Text for such an edit is extracted from the current `.pptx` while keeping its slide and shape anchoring, and neither the Beamer target nor the Markdown content plan is read or overwritten by this path; text that exists only inside an already rendered image is not replaced by OCR guessing, so report that limitation instead.
-2. Work at the highest layer that works: DOM ops (`add`/`set`/`get`/`query`/`remove`) before raw XML (`raw`/`raw-set`), applying only exact writer-proposed strings and preserving all other text.
+2. Work at the highest layer that works: DOM ops (`add`/`set`/`get`/`query`/`remove`) before raw XML (`raw`/`raw-set`), applying only exact polished strings and preserving all other text.
 3. When unsure about a property name or value format, run `officecli help <format> <element>` instead of guessing.
 4. Quote element paths (`'/body/p[3]'`, `'/slide[1]'`) — brackets are shell globs.
 5. Verify after edits: `officecli validate <file>` and `officecli view <file> issues`; for visual work render with `officecli view <file> html -o out.html` or `view screenshot -o page.png` and look at the result.
@@ -68,21 +69,21 @@ PPTX-specific standalone editing boundary: when the requested artifact is an alr
 7. Never overwrite the only source document unless the user explicitly asked for that destructive change.
 8. For conversions, keep a clear source-to-output mapping and state any unsupported formatting.
 9. Run `officecli close <file>` before handing the file to any non-officecli program.
-All OfficeCLI commands that carry text or copy must apply an approved writer
-proposal verbatim; Main and `task` may perform only mechanical integration and
+All OfficeCLI commands that carry text or copy must apply the polished text
+verbatim; Main and `task` may perform only mechanical integration and
 non-text edits. If validation or visual review finds a text problem, Main
-generates the replacement text with a new `writer` or `zh-writer` text-tool
-call and returns to the **requested** source document (the document the user
+drafts the replacement, passes it through `polisher`, and inserts the returned
+text before returning to the **requested** source document (the document the user
 explicitly asked to edit) rather than editing a different artifact ad
 hoc.
 For a PPTX edit in PPTX-only mode, "returns to the source document" means
 the existing requested `.pptx` itself — never the upstream Markdown content
-plan, the Beamer `.tex`, or the Beamer PDF, and the approved writer proposal is applied in place on that PPTX only.
+plan, the Beamer `.tex`, or the Beamer PDF, and the polished text is applied in place on that PPTX only.
 
 
 ## Quick reference
 Literal text values in the examples (such as `"Summary"`, `"draft"`, and
-`"final"`) stand for exact writer proposals; do not invent or revise them in
+`"final"`) stand for exact polished text; do not invent or revise them in
 OfficeCLI.
 
 

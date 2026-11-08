@@ -32,20 +32,17 @@ modelRoles:
   commit: opencode-zen/big-pickle:high
   task: charm-hyper/glm-5.3-flash:max
   tiny: charm-hyper/qwen3.8-flash:high
+  polisher: charm-hyper/qwen3.8-flash:high
   vision: charm-hyper/glm-5.3-flash:low
 disabledProviders: []
 enabledModels: []
 task:
   agentModelOverrides:
-    checker: "@task"
     fact-challenger: "@slow"
     fact-planner: "@slow"
     fact-researcher-a: "@task"
     fact-researcher-b: "@advisor"
     fact-researcher-c: "@smol"
-    writer: "@tiny"
-    zh-checker: "@task"
-    zh-writer: "@tiny"
   batch: true
   eager: preferred
 retry:

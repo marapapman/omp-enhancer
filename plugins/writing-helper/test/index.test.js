@@ -61,7 +61,7 @@ describe('writing-logic extension', () => {
     extension(api);
     assert.deepEqual(
       api.registerTool.mock.calls.map((call) => call.arguments[0].name),
-      ['writing_logic_check', 'writing_quality_check', 'writing_ai_scan'],
+      ['polisher', 'writing_logic_check', 'writing_quality_check', 'writing_ai_scan'],
     );
     assert.deepEqual(
       api.registerCommand.mock.calls.map((call) => call.arguments[0]),
@@ -69,19 +69,84 @@ describe('writing-logic extension', () => {
     );
   });
 
+  it('registers the polisher before every other writing tool', async () => {
+    const api = makeExtensionApi();
+    extension(api, {
+      completeSimple: async () => ({ content: [{ type: 'text', text: '润色后的原文。' }], stopReason: 'stop' }),
+    });
+
+    const tool = api.registerTool.mock.calls[0].arguments[0];
+    assert.equal(tool.name, 'polisher');
+    assert.equal(tool.defaultInactive, false);
+    assert.equal(tool.approval, 'read');
+    assert.equal(tool.parameters.shape.text.kind, 'string');
+    assert.deepEqual(tool.parameters.shape.language.values, ['zh', 'en', 'auto']);
+    assert.match(tool.description, /stateless language call/iu);
+    assert.match(tool.promptGuidelines.join('\n'), /returned text verbatim/iu);
+
+    const response = await tool.execute(
+      'polish-1',
+      { text: '原文。', language: 'zh' },
+      undefined,
+      undefined,
+      {
+        models: { resolve: (selector) => (selector === '@polisher' ? { id: 'small', provider: 'local', maxTokens: 512 } : undefined) },
+        modelRegistry: { getApiKeyAndHeaders: async () => ({ apiKey: 'key', headers: {} }) },
+      },
+    );
+    assert.equal(response.isError, false);
+    assert.equal(response.content[0].text, '润色后的原文。');
+    assert.equal(response.details.ok, true);
+    assert.equal(response.details.selector, '@polisher');
+
+    const rejected = await tool.execute(
+      'polish-empty',
+      { text: '' },
+      undefined,
+      undefined,
+      { cwd: process.cwd() },
+    );
+    assert.equal(rejected.isError, true);
+    assert.equal(rejected.details.code, 'empty_text');
+    assert.match(rejected.content[0].text, /no text/u);
+  });
+
+  it('reports a host completion import failure as a tool error', async () => {
+    const api = makeExtensionApi();
+    extension(api, {
+      importer: async () => {
+        throw new Error('host completion unavailable');
+      },
+    });
+
+    const tool = api.registerTool.mock.calls[0].arguments[0];
+    const response = await tool.execute(
+      'polish-import-failure',
+      { text: 'Hello.' },
+      undefined,
+      undefined,
+      {
+        models: { resolve: (selector) => (selector === '@polisher' ? { id: 'small', provider: 'local' } : undefined) },
+        modelRegistry: { getApiKeyAndHeaders: async () => ({}) },
+      },
+    );
+    assert.equal(response.isError, true);
+    assert.match(response.content[0].text, /host completion unavailable/u);
+  });
+
   it('registers tool metadata for prompt routing', () => {
     const api = makeExtensionApi();
 
     extension(api);
 
-    const tool = api.registerTool.mock.calls[0].arguments[0];
+    const tool = api.registerTool.mock.calls[1].arguments[0];
     assert.equal(typeof tool.promptSnippet, 'string');
     assert.equal(Array.isArray(tool.promptGuidelines), true);
     assert.equal(typeof tool.description, 'string');
     assert.equal(tool.defaultInactive, true);
     assert.equal(tool.approval, 'read');
 
-    const qualityTool = api.registerTool.mock.calls[1].arguments[0];
+    const qualityTool = api.registerTool.mock.calls[2].arguments[0];
     assert.equal(qualityTool.defaultInactive, true);
     assert.equal(qualityTool.approval, 'read');
   });
@@ -90,7 +155,7 @@ describe('writing-logic extension', () => {
     const api = makeExtensionApi();
     extension(api);
 
-    const qualityTool = api.registerTool.mock.calls[1].arguments[0];
+    const qualityTool = api.registerTool.mock.calls[2].arguments[0];
     assert.equal(qualityTool.parameters.shape.allowNetwork.kind, 'boolean');
     assert.deepEqual(qualityTool.parameters.shape.citationProviders.item.values, ['local', 'doi', 'arxiv', 'crossref']);
     assert.match(qualityTool.description, /UNVERIFIED/);
@@ -101,7 +166,7 @@ describe('writing-logic extension', () => {
     const api = makeExtensionApi();
     extension(api);
 
-    const qualityTool = api.registerTool.mock.calls[1].arguments[0];
+    const qualityTool = api.registerTool.mock.calls[2].arguments[0];
     assert.equal(qualityTool.parameters.shape.originalText.kind, 'string');
     assert.equal(qualityTool.parameters.shape.preservation.kind, 'boolean');
     assert.equal(qualityTool.parameters.shape.checks.item.values.includes('preservation'), true);
@@ -127,7 +192,7 @@ describe('writing-logic extension', () => {
     const api = makeExtensionApi();
     extension(api);
 
-    const tool = api.registerTool.mock.calls[0].arguments[0];
+    const tool = api.registerTool.mock.calls[1].arguments[0];
     const response = await tool.execute(
       'call-1',
       {
@@ -148,7 +213,7 @@ describe('writing-logic extension', () => {
     const api = makeExtensionApi();
     extension(api);
 
-    const qualityTool = api.registerTool.mock.calls[1].arguments[0];
+    const qualityTool = api.registerTool.mock.calls[2].arguments[0];
     const response = await qualityTool.execute(
       'call-2',
       {
@@ -173,12 +238,12 @@ describe('writing-logic extension', () => {
     const api = makeExtensionApi();
     extension(api);
 
-    const aiTool = api.registerTool.mock.calls[2].arguments[0];
+    const aiTool = api.registerTool.mock.calls[3].arguments[0];
     assert.equal(aiTool.defaultInactive, false);
     assert.equal(aiTool.approval, 'read');
     assert.match(aiTool.description, /every completed writing task/iu);
     assert.match(aiTool.description, /0\.325 \* AIGC/u);
-    assert.match(aiTool.promptGuidelines.join('\n'), /every completed writing task before checker review and delivery, then rerun it/iu);
+    assert.match(aiTool.promptGuidelines.join('\n'), /every completed writing task before delivery, then rerun it/iu);
     assert.equal(aiTool.parameters.shape.includeKeywordRules.kind, 'boolean');
     assert.equal(aiTool.parameters.shape.baseline.kind, 'string');
     assert.deepEqual(aiTool.parameters.shape.detector.values, ['auto', 'ensemble', 'local']);
@@ -219,7 +284,7 @@ describe('writing-logic extension', () => {
     delete process.env.AIGC_DETECTOR_URL;
     delete process.env.TYPESAFE_API_KEY;
     try {
-      const aiTool = api.registerTool.mock.calls[2].arguments[0];
+      const aiTool = api.registerTool.mock.calls[3].arguments[0];
       const output = await aiTool.execute(
         'call-ai-judge',
         { text: 'The server starts. The worker drains the queue. The cache clears old entries.', language: 'en', allowNetwork: true, detector: 'auto' },

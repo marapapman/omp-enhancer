@@ -147,7 +147,7 @@ test('slides storyline defines a text-only per-page confirmation phase', async (
   assert.match(skill, /Do not use for ordinary edits to an existing deck/i);
 });
 
-test('slide, Beamer, and PPTX copy is writer-owned while task work stays structural', async () => {
+test('slide, Beamer, and PPTX copy is Main-drafted and polisher-rewritten while task work stays structural', async () => {
   const [storyline, beamer, conversion] = await Promise.all([
     readFile(storylineSkillUrl, 'utf8'),
     readFile(slidesSkillUrl, 'utf8'),
@@ -159,68 +159,61 @@ test('slide, Beamer, and PPTX copy is writer-owned while task work stays structu
     ['Beamer generation', beamer],
     ['PowerPoint conversion', conversion],
   ]) {
+    const text = source.replace(/\s+/gu, ' ').trim();
+
+    assert.match(text, /`polisher`/iu, `${name} must name the polisher tool`);
     assert.match(
-      source,
-      /target language[^.]{0,120}(?:independent\s+)?`?writer`?[^.]{0,160}(?:Chinese|中文)[^.]{0,120}(?:independent\s+)?`?zh-writer`?/iu,
-      `${name} must route English and Chinese body text independently`,
+      text,
+      /Main drafts[\s\S]{0,200}`polisher`[\s\S]{0,160}verbatim/iu,
+      `${name} must have Main draft each passage and insert the polished result verbatim`,
     );
     assert.match(
-      source,
-      /mixed-language[^.]{0,160}runs?\s+one\s+text-tool\s+pass(?:es)?\s+per\s+language\s+slice/iu,
-      `${name} must run one text-tool pass per language slice for mixed-language text`,
+      text,
+      /(?:stateless|reads? no file|calls? no tool)/iu,
+      `${name} must keep the polisher a stateless text tool`,
     );
     assert.match(
-      source,
-      /`?writer`?[^.]{0,80}text tool/iu,
-      `${name} must name writer as a dedicated text tool`,
+      text,
+      /`task`[\s\S]{0,220}(?:never|must not|does not)[\s\S]{0,100}(?:reword|rewrite|draft|polish|translate|invent|alter)[\s\S]{0,60}(?:copy|text|prose|wording)/iu,
+      `${name} must forbid task from authoring or reworking copy`,
+    );
+    assert.match(
+      text,
+      /(?:text findings|copy findings|wording findings?|text defects?|copy defects?|text is wrong|text change)[\s\S]{0,200}(?:go(?:es)? back (?:to Main|through)|returns? to|Main drafts)[\s\S]{0,120}`polisher`/iu,
+      `${name} must send text findings back to Main and the polisher`,
+    );
+    assert.match(
+      text,
+      /(?:stay with|belong to|are owned by)[\s\S]{0,60}(?:Main and `?task`?|Main or (?:an )?(?:explicitly capable )?(?:generic )?`?task`?)/iu,
+      `${name} must keep non-text effects with Main or task`,
     );
     assert.doesNotMatch(
-      source,
-      /dispatch[^.]{0,80}`?(?:writer|zh-writer)`?|separate\s+(?:agents?|writers?)/iu,
-      `${name} must not describe the text tools as dispatched agents`,
-    );
-    assert.match(
-      source,
-      /writer[^.]{0,180}(?:sole|only|canonical)[^.]{0,180}(?:title|body|caption|label|copy|notes?|narrative)/iu,
-      `${name} must make text surfaces writer-owned`,
-    );
-    assert.match(
-      source,
-      /Main[^.]{0,260}(?:never|must not|does not)[^.]{0,140}(?:draft|rewrite|translate|polish|author)/iu,
-      `${name} must keep Main from direct prose authorship`,
-    );
-    assert.match(
-      source,
-      /Main[^.]{0,260}(?:verbatim|complete proposal|forwards|integrat)/iu,
-      `${name} must keep Main on verbatim proposal integration`,
-    );
-    assert.doesNotMatch(
-      source,
-      /Main[^.]{0,120}(?:may|can|chooses to|handles?)\s+(?:directly\s+)?(?:draft|write|rewrite|translate|polish|author)\b/iu,
-      `${name} must not restore a direct Main prose fallback`,
+      text,
+      /language-matched `?writer`?|`zh-writer`|\bwriter\/zh-writer\b/iu,
+      `${name} must not route writing to a removed role`,
     );
   }
 
-  assert.match(storyline, /text-only page draft[^.]{0,180}Markdown content-plan file/iu);
+  assert.match(storyline, /text-only page draft[\s\S]{0,320}Markdown content-plan file/iu);
   assert.match(
     storyline,
     /slide-order task[\s\S]{0,300}?(?:must not|may not)[\s\S]{0,180}?(?:title|body|caption|label|narrative)/iu,
   );
   assert.match(
     beamer,
-    /producing `?task`?[\s\S]{0,260}?(?:only|must)[\s\S]{0,140}?(?:structure|placement|sizing|spacing|layout)[\s\S]{0,180}?must not[\s\S]{0,120}?(?:rewrite|alter|edit)[\s\S]{0,100}?(?:text|copy|content)/iu,
+    /`task`[\s\S]{0,300}?(?:must not|never|may not)[\s\S]{0,160}?(?:rewrite|alter|edit|write|modify|draft|polish)[\s\S]{0,100}?(?:text|copy|prose|content|labels?)/iu,
   );
   assert.match(
     conversion,
-    /producing `?task`?[\s\S]{0,300}?(?:must not|may not)[\s\S]{0,160}?(?:draft|rewrite|translate|polish|add|remove|retype)[\s\S]{0,100}?(?:prose|labels?|captions?|copy|text)/iu,
+    /`task`[\s\S]{0,300}?(?:must not|may not)[\s\S]{0,160}?(?:draft|rewrite|translate|polish|add|remove|retype)[\s\S]{0,100}?(?:prose|labels?|captions?|copy|text)/iu,
   );
   assert.match(
     conversion,
-    /OfficeCLI[^.]{0,220}(?:only|approved writer proposal verbatim)[^.]{0,180}(?:must not|not)[^.]{0,120}(?:compose|rewrite|translate|correct)[^.]{0,60}(?:text|content|copy)/iu,
+    /OfficeCLI[^.]{0,220}(?:only|verbatim)[^.]{0,180}(?:must not|not)[^.]{0,120}(?:compose|rewrite|translate|correct)[^.]{0,60}(?:text|content|copy)/iu,
   );
 });
 
-test('slide copy routes drafting and polishing through writers before logic and style review', async () => {
+test('slide copy settles claims and evidence before polishing and keeps review advisory', async () => {
   const sources = await Promise.all([
     ['slides storyline', storylineSkillUrl],
     ['Beamer generation', slidesSkillUrl],
@@ -253,23 +246,23 @@ test('slide copy routes drafting and polishing through writers before logic and 
   for (const [name, source] of sources) {
     const text = source.replace(/\s+/gu, ' ').trim();
 
+    assert.match(text, /`polisher`/iu, `${name} should name the polisher tool`);
     assert.match(
       text,
-      /(?:independent\s+)?(?:Main calls the\s+)?(?:generated by a new\s+)?(?:proposal from a\s+)?language-matched `?writer`? \(English\) or `?zh-writer`? \(Chinese\)(?:\s+text[ -]tool)?/iu,
-      `${name} should name the language-matched text tools`,
-    );
-    assert.match(
-      text,
-      /(?:writer|zh-writer)[\s\S]{0,240}(?:the )?(?:claims, evidence order|claims and evidence order|source basis)[\s\S]{0,160}before stylistic polishing/iu,
+      /(?:Main drafts[\s\S]{0,120}|That (?:draft|text) establishes )claims, evidence order, scope, and source basis before stylistic polishing/iu,
       `${name} should establish claims and evidence before polishing`,
     );
-    assert.match(text, /independent checker may report logic, evidence, or style defects/iu, `${name} should keep checker findings advisory`);
+    assert.match(text, /Advisory review through/iu, `${name} should keep review advisory`);
     assert.match(
       text,
-      /Any substantive (?:wording )?repair[\s\S]{0,200}(?:a new|the same) (?:language-matched )?`?(?:writer|zh-writer)`?/iu,
-      `${name} should generate substantive repairs through a writer or zh-writer text-tool call`,
+      /Any substantive (?:wording )?repair[\s\S]{0,200}(?:goes back through|returns to)[\s\S]{0,60}`polisher`/iu,
+      `${name} should send substantive repairs through the polisher`,
     );
-    assert.match(text, /Main applies (?:the )?complete writer proposal verbatim/iu, `${name} should integrate only the complete proposal`);
+    assert.match(
+      text,
+      /(?:inserts?|applies?)[\s\S]{0,40}returned text verbatim/iu,
+      `${name} should integrate the returned text verbatim`,
+    );
     assert.match(
       text,
       /(?:titles?|body text|captions?|labels?|speaker notes?|narrative text)[\s\S]{0,180}(?:ban|hollow|unsupported)/iu,
@@ -280,9 +273,10 @@ test('slide copy routes drafting and polishing through writers before logic and 
     }
     assert.match(
       text,
-      /concrete result, scope, or source[\s\S]{0,180}(?:otherwise|without)[\s\S]{0,140}(?:replace|return it to the writer|limitation)/iu,
+      /concrete result, scope, or source[\s\S]{0,180}(?:otherwise|without)[\s\S]{0,140}(?:replace|Main drafts|limitation)/iu,
       `${name} should replace hollow claims with concrete evidence or a limitation`,
     );
+    assert.doesNotMatch(text, /independent `?checker`?/iu, `${name} should not name a removed checker role`);
   }
 });
 
@@ -536,7 +530,7 @@ test('slide content bans contrast-repetition constructions and one-sentence summ
   assert.match(draft, /An anaphoric callback clause — a complete main clause plus a comma and a clause headed by this, that, which, or these whose predicate only labels or stamps what precedes — has a fact-carrying tail folded into the main clause/is);
   assert.match(reconciliation, /The task also checks the four sentence-level rules/is);
   assert.match(reconciliation, /an anaphoric callback clause \(a complete main clause plus a comma and a clause headed by this, that, which, or these whose predicate only labels or stamps what precedes\)/is);
-  assert.match(reconciliation, /an anaphoric passive rider \(a complete main clause plus a comma and a with \+ object \+ past participle \+ by \+ anaphoric actor adjunct\), reported as a content finding so the wording returns to `writer`\/`zh-writer`/is);
+  assert.match(reconciliation, /an anaphoric passive rider \(a complete main clause plus a comma and a with \+ object \+ past participle \+ by \+ anaphoric actor adjunct\), reported as a content finding so the wording goes back to Main/is);
   assert.match(reconciliation, /A title or body violation is a content finding/is);
   // Beamer generation and quality reference carry the same bans.
   assert.match(generation, /Body copy obeys the same phrasing bans as titles.+no "不是X，而是Y"\/"not X, but Y" contrast-repetition construction.+no page opens or closes with a one-sentence summary of itself, no defensive writing anywhere.+no "specifics then sweep" summary clause/is);
@@ -563,9 +557,9 @@ test('writing workflow bans defensive writing in every deliverable', async () =>
   assert.match(definitions, /"可能\/possibly\/perhaps\/somewhat\/relatively\/fairly\/quite", "it is worth noting that", "值得注意的是", "generally speaking", "to some extent"/is);
   assert.match(definitions, /unless the hedge is itself a sourced fact \(measured variance, a cited confidence interval, a genuinely known scope limit\)/is);
   assert.match(definitions, /Never add self-protective filler: boilerplate disclaimers, "本文仅代表个人观点", over-attribution \("许多研究表明" without a citation\), apologia for limitations nobody asked about, or a paragraph that argues against its own claim before making it/is);
-  // De-AI is applied per tell family by strictly sequential text-tool passes, never one mixed pass.
+  // De-AI is applied per tell family by strictly sequential polisher passes, never one mixed pass.
   assert.match(definitions, /De-AI application is per-rule, not one mixed pass/is);
-  assert.match(definitions, /all rewriting stays with the text tools and no pass mixes families/is);
+  assert.match(definitions, /All rewriting stays with the polisher and no pass mixes families/is);
   assert.match(definitions, /State the result and its actual scope; cut the armor/is);
   // Visual labels carry the same defensive-writing ban.
   assert.match(definitions, /no defensive writing — no unsourced hedging qualifiers \(可能\/或许\/"possibly"\/"approximately" without a measured basis\), no disclaimer text, no over-attribution, no apologia in explanation text/is);

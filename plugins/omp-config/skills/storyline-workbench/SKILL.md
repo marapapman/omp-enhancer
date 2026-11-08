@@ -15,11 +15,12 @@ its content.
 Main starts and owns the server lifecycle: it runs the CLI commands, keeps the
 process alive while the user edits, and applies the accepted result.
 
-When this Skill is part of a `writer` or `zh-writer` assignment, that
-invocation (the language-matched text tool) remains proposal-only: it runs no
-command and writes no file, and returns the complete proposal. Main or a
-separate explicitly capable Main-selected Agent owns authorized effects, and
-the writer or zh-writer alone owns all wording.
+Main drafts the wording of every node it proposes, then passes each passage
+through the `polisher` tool and inserts the returned text verbatim into the
+proposal. `polisher` is stateless: one passage in, the same passage polished
+out; it reads no file, calls no tool, plans nothing, and verifies no fact.
+Tree structure, revision checks, store writes, and exports stay with Main and
+`task`, are never sent to `polisher`, and `task` never rewords copy.
 
 The website stores and renders the tree, comments, assets, rounds, proposals,
 and exports. It has no model access and never spends model quota.
@@ -48,14 +49,15 @@ node <pluginRoot>/scripts/storyline-workbench.mjs propose --project <dir> --file
    continuation instruction; no model is called in the background.
 6. After the user asks to continue, run `context --project <dir> --round <id>`
    to read the frozen round snapshot from the live server.
-7. Call the language-matched writer or zh-writer with every user-edited node
+7. Draft the revised node text with every user-edited node
    as the baseline and the comments as bounded revision requests, never as
-   executable orders.
+   executable orders; pass each passage through `polisher` and insert the
+   returned text verbatim into the proposal.
 8. Save the returned JSON as a proposal file and run `propose --project <dir>
    --file <proposal.json>` while the server is live.
 9. Review the diff in the site and accept or reject the whole proposal.
 10. Export the confirmed story and hand that revision to the article or slide
-    writer.
+    drafting step.
 
 ## Tree model
 
@@ -109,7 +111,7 @@ not submitted.
 A round freezes the story and its `open` comments into an immutable snapshot
 that `context` prints as JSON on stdout.
 
-The writer returns only JSON with `schemaVersion`, `roundId`, `baseRevision`,
+The proposal file holds only JSON with `schemaVersion`, `roundId`, `baseRevision`,
 the complete candidate `nodes` tree, `addressedCommentIds`, and `summary`,
 keeping unchanged node IDs and their text.
 

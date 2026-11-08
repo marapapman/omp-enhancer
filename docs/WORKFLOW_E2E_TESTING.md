@@ -43,24 +43,21 @@ Main 任务一次、Advisor/subagent/disable 分支无注入、context 输入不
 deterministic context tests 证明注入机制，绝不把它升级成 block、router、gate、
 retry 或 completion control。
 
-Writing Helper 的 deterministic content tests 与 static probe 另外验证
-`writer`/`zh-writer`（专用的语言匹配文本工具，非独立通用 agent；因当前 OMP
-ExtensionAPI 只暴露 `registerTool` 命令工具注册、无插件模型调用 API，它们由
-宿主打包 Agent 文件作为兼容适配器承载，适配器元数据保持不变）只暴露 `read`、
-`grep`、`glob` 并始终只返回完整
-proposal 或 bounded diff。`checker`/`zh-checker` 没有 `write`/`edit`，保留
-`web_search` 仅用于宿主与用户网络权限允许的证据核查，并始终只返回
-in-band report。完整 proposal/report 必须进入 terminal child delivery；若
-宿主没有专用 terminal handoff，ordinary final response 就是该 host-neutral
-delivery。文件授权不改变 child capability；Main 负责 finding disposition，并仅在授权后原样应用 writer/zh-writer proposal。
-该边界不能只依靠 live child 自述，因为 parent event stream 看不到未暴露的 child 内部 tool history。
+Writing Helper 的 deterministic content tests 与 static probe 另外验证 `polisher`
+的工具契约：一次调用只接收一段 prose，返回润色、去 AI 味后的同一段文本；它不
+读文件、不调用工具、不做 agentic 工作，也不处理 code（fenced code 返回
+`code_not_supported`）；模型按 `modelRoles.polisher` → `@tiny` → `@smol` →
+会话当前模型的顺序解析；该工具默认 active。这些结论来自工具注册、参数 schema
+与 runner 的 deterministic 路径，不依赖任何 child 自述。`writing_logic_check`、
+`writing_quality_check` 与 `writing_ai_scan` 保持只读 advisory，不返回 mutation。
+这些检查验证可观察协议，不构成 runtime dispatch 或 completion gate。
 
-E2E 对 writing、research 和 visual 的文字边界使用同一判定：所有 prose/copy（起草、改写、翻译、标题、正文、caption、label、narrative 和 UI copy）必须由正文语言匹配的专用文本工具 `writer` 或 `zh-writer` 交付。它们不是通用 agent，而是专用文本能力；当前宿主用打包 Agent 适配器承载它们。Main 只识别语言、调用文本工具、传递约束、把 proposal 原样机械集成并做最终验收；`task`、research Agent 和 visual Agent 只能做证据、结构、绘图、版式、转换和检查。PPT/Beamer/Word/PPTX 的布局、转换、OfficeCLI 应用和视觉检查不得改变文字，文字变化必须返回 writer。该证据约束不增加 runtime router、lifecycle gate、自动重试或 completion controller。
-每个 writing proposal 必须可追溯到完整文本或有界 diff；Main 的 mutation 只能原样持久化/应用该返回值，不能在 parent trace 中自行起草、改写、润色或替代 writer。任何 task 的 formatter、lint、test 或 generator 行为都不属于文字作者证据；workflow source 完成后，生成资产由 Main 只运行一次 `npm run generate:workflows`。
+E2E 对 writing、research 和 visual 的文字边界使用同一判定：所有 prose/copy（起草、改写、翻译、标题、正文、caption、label、narrative 和 UI copy）由 Main 起草，逐段经 `polisher` 返回后原样集成。trace 必须能观察到 parent 侧的 `polisher` tool call、其返回文本、把该文本写入 target 的 parent mutation call，以及 fixture outcome；`task`、research Agent 和 visual Agent 只能做证据、结构、绘图、版式、转换和检查。PPT/Beamer/Word/PPTX 的布局、转换、OfficeCLI 应用和视觉检查不得改变文字，文字变化必须回到 `polisher`。该证据约束不增加 runtime router、lifecycle gate、自动重试或 completion controller。
+每段最终文字必须可追溯到一次 `polisher` 返回；Main 的 mutation 只能原样持久化该返回值，不能在 parent trace 中自行改写、润色或补写句子。任何 task 的 formatter、lint、test 或 generator 行为都不属于文字润色证据；workflow source 完成后，生成资产由 Main 只运行一次 `npm run generate:workflows`。
 
-The writing evidence order is a `writer`/`zh-writer` text-tool proposal first, then a `checker`/`zh-checker` report of logic, evidence, and style findings, then Main disposition and any substantive repair by the same language-matched text tool. Logic and evidence are resolved before sentence polish. Checker remains report-only; Main performs mechanical integration and final acceptance only, and Main, `task`, and checker never rewrite prose. If the matching text tool is unavailable, the trace records a limitation rather than treating another role as a silent author.
+The writing evidence order is a `polisher` call for each drafted passage, its returned text inserted verbatim, then Main disposition of any advisory findings from `writing_quality_check`, `writing_logic_check`, or `writing_ai_scan`, with substantive repair going back through `polisher`. Logic and evidence are resolved before sentence polish, and the review tools stay read-only. If `polisher` is unavailable, the trace records a limitation rather than shipping unpolished prose.
 
-For PPT/Beamer text, the trace must preserve `writer`/`zh-writer` as the sole author. `task` may perform structural, layout, conversion, rendering, validation, and visual inspection only; any copy change returns to the matching writer. Evaluators should flag announcer transitions (`The real question is`, `A new question is`, `This raises a deeper question`, `Let us turn to`, `新的问题是`, `真正的问题是`, `这就引出了一个更深的问题`, `接下来我们看`) and hollow unsupported significance claims (`this is important/significant/transformative`, `this demonstrates the power/value`, `意义重大`, `具有重要意义`, `标志着`, `彰显了`, `开创了`, `充分说明`). Replace or remove those claims using concrete evidence, scope, or source; retaining significance/evaluation is the evidence-backed exception and requires that support to be stated.
+For PPT/Beamer text, the trace must show Main drafting the copy and each passage passing through `polisher`, with only returned text placed in the deck. `task` may perform structural, layout, conversion, rendering, validation, and visual inspection only; any copy change returns to `polisher`. Evaluators should flag announcer transitions (`The real question is`, `A new question is`, `This raises a deeper question`, `Let us turn to`, `新的问题是`, `真正的问题是`, `这就引出了一个更深的问题`, `接下来我们看`) and hollow unsupported significance claims (`this is important/significant/transformative`, `this demonstrates the power/value`, `意义重大`, `具有重要意义`, `标志着`, `彰显了`, `开创了`, `充分说明`). Replace or remove those claims using concrete evidence, scope, or source; retaining significance/evaluation is the evidence-backed exception and requires that support to be stated.
 
 ## 自我迭代 fixture
 
@@ -84,7 +81,7 @@ npm run e2e:main:self-iteration -- \
 ## Beamer/PPT staged content and visual refinement fixture
 
 `scripts/e2e/fixtures/subagent-willingness.json` 的
-`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的 Markdown 内容计划和用户确认，再覆盖独立 task 在 Markdown 计划上的 slide-order reconciliation（无内容交叉、模块语义一致、整体顺序逻辑有序；无法用重排解决的交叉回到 Markdown reconfirmation），随后覆盖从 writer-approved 的调和后 Markdown 机械生成的 Beamer 帧、逐页配图与基础排版。本次初始生成范围内 Markdown 内容计划仍是唯一内容源，Beamer .tex 与派生 PDF/PPTX 都是排版产物。后续修改按目标对象走单项通路：storyline-only 不触 .tex/PDF/PPTX，也不自动从 Markdown 重新生成任何 deck；Beamer-only 不回写 Markdown，必要时改必要目标依赖并编译/重渲染当前 deck，但不自动从 Beamer 转 PPTX；PPTX-only 不动 .tex/源 PDF/源 Markdown，也不由既有 Beamer 重新转换 PPTX 以覆盖 PPTX 端就地修改。内容或排版发现在当前目标对象上就地修复，不回写 Markdown 内容计划，也不反向回填 source。该 fixture 在初始生成流程里同时改动 Markdown 计划与 Beamer 两端，只反映 deck creation 的双端写集；任一独立修改通路的验收证据只能来自按该通路目标对象写集构造的独立 fixture（目标写集命中、旁侧文件 SHA-256 保持不变），与本 fixture 解耦。随后它覆盖 task 的 initial
+`beamer-single-visual-precheck` 使用临时 Beamer fixture，先覆盖 section-sized、逐页讨论的 Markdown 内容计划和用户确认，再覆盖独立 task 在 Markdown 计划上的 slide-order reconciliation（无内容交叉、模块语义一致、整体顺序逻辑有序；无法用重排解决的交叉回到 Markdown reconfirmation），随后覆盖从 Main 起草并经 `polisher` 返回的调和后 Markdown 机械生成的 Beamer 帧、逐页配图与基础排版。本次初始生成范围内 Markdown 内容计划仍是唯一内容源，Beamer .tex 与派生 PDF/PPTX 都是排版产物。后续修改按目标对象走单项通路：storyline-only 不触 .tex/PDF/PPTX，也不自动从 Markdown 重新生成任何 deck；Beamer-only 不回写 Markdown，必要时改必要目标依赖并编译/重渲染当前 deck，但不自动从 Beamer 转 PPTX；PPTX-only 不动 .tex/源 PDF/源 Markdown，也不由既有 Beamer 重新转换 PPTX 以覆盖 PPTX 端就地修改。内容或排版发现在当前目标对象上就地修复，不回写 Markdown 内容计划，也不反向回填 source。该 fixture 在初始生成流程里同时改动 Markdown 计划与 Beamer 两端，只反映 deck creation 的双端写集；任一独立修改通路的验收证据只能来自按该通路目标对象写集构造的独立 fixture（目标写集命中、旁侧文件 SHA-256 保持不变），与本 fixture 解耦。随后它覆盖 task 的 initial
 
 render、exactly one read-only self-check（owner 只能是 Main 或 task）以及它在
 task final layout pass 之前的顺序；用户确认基础排版后，task 绑定并渲染 current revision，Main（或未产出该 revision 的 task）对该
@@ -93,7 +90,7 @@ advisory findings（page、region、criterion、evidence、impact、limitations�
 产生 review verdict；现有视觉精修链的 bounded fix round 约束仍适用。同时，draw.io pipeline
 remains unchanged：task、单一只读 review 和 at most one fix round 的一次性链路保持
 原样。
-Beamer fixture 中从 Markdown content plan 到 `.tex`/frame 的步骤仅允许机械格式整合，不是 task 的文字翻译或改写；writer/zh-writer 产出的标题、正文、caption 和 label 必须作为唯一文案来源。任何 copy 变化都回到对应语言的 writer proposal 路径。
+Beamer fixture 中从 Markdown content plan 到 `.tex`/frame 的步骤仅允许机械格式整合，不是 task 的文字翻译或改写；标题、正文、caption 和 label 必须来自 Main 起草并经 `polisher` 返回的文本，作为唯一文案来源。任何 copy 变化都回到 `polisher` 通路。
 
 Evaluator 只使用 parent event stream 的 native task assignment、completed
 delivery 和 event order：bounded assignment-text count/order 检查 marker 与
@@ -136,19 +133,19 @@ Evaluator 从 parent event stream 恢复：
 
 Thinking、final 声明、history text 或未完成 child preview 不能补造缺失事件。Host-observed delivery 可以证明 OMP 把 child output 交回 parent，并允许校验它报告的 slice paths、RED/GREEN exits 和 bounded diff；它不能证明未暴露在 parent stream 中的 child 内部 tool-call sequence。Child 只消费冻结 assignment Skills、不得二次 discovery/selection/load 的边界应由 Agent prompt 与 assignment contract test 证明；parent E2E 只验证可观察的冻结元数据，不对不可见内部历史作结论。真实文件 outcome 由 fixture snapshot 验证，但 snapshot 只说明“发生了变化”，不说明“谁修改了文件”。Runner 对每个 changed file 记录 `mutationAttribution.files[]`：存在匹配 target 的 parent mutation call 时标为 `parent-observed` 并保存 `parentMutationCallIds`；没有匹配 call 时标为 `unattributed-shared-workspace`。汇总 classification 只能是 `none`、`parent-observed`、`unattributed-shared-workspace` 或 `mixed`。共享工作区中的变化即使出现在 child assignment 与 delivery 之间，也不能仅凭 parent event stream 断言为 child write。Broader integration 仍由 Main 的 parent command 验证。Capture malformed、truncated、oversized 或 capacity-dropped 时，严格 run 失败。
 
-对要求持久化的写作 fixture，严格正向证据顺序是 writer proposal delivery、
-checker in-band report delivery、Main finding disposition，以及之后匹配 target
-的 parent mutation call 和 fixture outcome。没有 parent call 的变化保留为
-`unattributed-shared-workspace`，不能计作 Main-owned apply，也不能反向计作
-writer 越权；writer 无 mutation capability 的结论来自 deterministic/static
-contract。只读写作 fixture 则反向要求没有 target mutation。
+对要求持久化的写作 fixture，严格正向证据顺序是 `polisher` tool call 及其返回文本、
+Main 原样写入该文本的 parent mutation call、fixture outcome，以及可选的 advisory
+review 结果。没有 parent call 的变化保留为 `unattributed-shared-workspace`，不能
+计作 Main-owned apply。只读写作 fixture 则反向要求没有 target mutation。
+`polisher` 不写文件、不授予文件权限的结论来自工具注册、参数 schema 与
+deterministic contract test，不依赖 live child 自述。
 
-`writing` 域的写作场景要求 writer/zh-writer 的 proposal 与 checker/zh-checker 的
-in-band report 都完整进入 terminal child delivery，不能只留在更早消息后以
-status-only 或 artifact-reference-only 句子结束；这个断言不绑定特定 host
-handoff schema。Main 负责 finding disposition；任何获授权的文字持久化只能原样应用 writer/zh-writer proposal，其他文件修改也必须来自 disposition 之后可观察的 Main call。
+`writing` 域的写作场景要求 `polisher` 的调用与返回文本都出现在 parent event stream
+中，且写入 target 的内容与该返回文本逐字一致；这个断言不绑定特定 host handoff
+schema。review findings 由 Main 处置；任何获授权的文字持久化只能原样应用
+`polisher` 返回文本，其他文件修改也必须来自可观察的 Main call。
 
-对于 writing fixture，`disposition` 之后的 parent mutation 只能原样应用 writer/zh-writer 返回的完整 proposal 或有界 diff；Main 不得在应用时补写、重排句子、润色或替代 writer。结构重排、证据归并、绘图、布局和 OfficeCLI/格式转换仍可由 Main 或 task 完成，但一旦改变文字就必须回到 writer。
+对于 writing fixture，`disposition` 之后的 parent mutation 只能原样应用 `polisher` 返回的文本；Main 不得在应用时补写、重排句子或自行润色。结构重排、证据归并、绘图、布局和 OfficeCLI/格式转换仍可由 Main 或 task 完成，但一旦改变文字就必须回到 `polisher`。
 
 `edit` 可能以 basename snapshot anchor 发起，但成功结果会返回 canonical `[absolute/path#tag]`。Evaluator 必须用隔离 project root 把结果路径还原为 `test/...` 或 `src/...` 后再匹配 mutation pattern；只保留 basename 会把真实 TDD 误判为“没有修改”。Fixture snapshot 还要保存 baseline root 的 realpath 与 filesystem identity，在验证前后拒绝 root replacement 和任何 symlink，并在读取 semantic sentinel 前确认文件 realpath 仍在原真实 project root 内；lexical `src/...` 或 `test/...` 名称本身不是 containment evidence。
 
@@ -192,7 +189,7 @@ Main broader verification GREEN 后必须出现 visible `MAIN REVIEW`。它至�
 3. `tools` 是否只包含场景需要的原生接口。
 4. workflow/Skill expectations 是否验证 observed successful reads，而不是 final claim。
 5. TODO/task expectations 是否检查 init、metadata、parallel batch、submission、host-observed delivery、completion 和必要时序。
-6. Child delivery、parent mutation prohibition、broader command 与 fixture outcome 是否共同排除 Main 代做、production-first 和假 RED；写作场景是否相反地要求 proposal/report 后由 Main apply。
+6. Child delivery、parent mutation prohibition、broader command 与 fixture outcome 是否共同排除 Main 代做、production-first 和假 RED；写作场景是否相反地要求先有 `polisher` 返回文本、再由 Main 原样写入。
 7. `fixtureExpectations` 是否拒绝 lexical traversal、symlink/realpath 越界与缺失 semantic outcome。
 8. 每个 changed file 是否记录 parent call ID 或 `unattributed-shared-workspace`，且没有把共享工作区变化误归因给 child。
 9. timeout 是否足够覆盖模型、task jobs 和 cleanup，同时仍有 runner hard limit。

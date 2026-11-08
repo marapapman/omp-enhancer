@@ -5,8 +5,14 @@ description: Convert a compiled Beamer PDF into an editable local .pptx (convers
 
 # Beamer PPTX Local
 
-When this Skill is part of a `writer` or `zh-writer` assignment, that invocation
-(the dedicated language-matched text tool, hosted by its packaged Agent compatibility adapter) remains proposal-only: it runs no command and writes no file, and returns the complete proposed artifact or diff. Main or a separate explicitly capable Main-selected Agent owns authorized effects; that owner performs no prose drafting or revision, which belongs to the text tool alone.
+Main drafts every prose passage in this Skill's deliverable, then passes it
+through the `polisher` tool and inserts the returned text verbatim. `polisher`
+is stateless: one passage in, the same passage polished out; it reads no file,
+calls no tool, plans nothing, and verifies no fact. Code, formulas, citations,
+structure, layout, conversion, and validation stay with Main and `task`, are
+never sent to `polisher`, and `task` never rewords copy. Review stays advisory:
+`writing_quality_check` and `writing_ai_scan` report findings and never route,
+block, retry, or decide completion.
 
 Local, dependency-light conversion of compiled Beamer decks into editable
 PowerPoint files. Text and layout become editable objects; formulas stay as
@@ -19,11 +25,10 @@ is available.
 ## Ownership boundary
 
 This skill performs mechanical conversion only. It never drafts, rewrites, or
-polishes slide content. Any text change goes through the language-matched
-`writer` or `zh-writer` text tool, and the approved proposal is applied in
-place where the finding was found; a content or layout finding is resolved in
-place at the stage where it is found and is not propagated back to the Markdown
-content plan.
+polishes slide content. Any text change is drafted by Main, passed through the
+`polisher` tool, and inserted verbatim where the finding was found; a content
+or layout finding is resolved in place at the stage where it is found and is
+not propagated back to the Markdown content plan.
 
 ## Pipeline
 

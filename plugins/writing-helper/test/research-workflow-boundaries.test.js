@@ -31,7 +31,7 @@ describe('research Skills preserve workflow and host authority boundaries', () =
     assert.match(text, /missing project state path does not mean that a Skill is unavailable/iu);
   });
 
-  it('keeps research methods child-local without taking Main orchestration ownership', () => {
+  it('keeps research methods Main-owned without dispatching removed text agents', () => {
     for (const name of [
       'research-storyline',
       'research-relatedwork-summarizer',
@@ -39,12 +39,11 @@ describe('research Skills preserve workflow and host authority boundaries', () =
     ]) {
       const source = prose(readSkill(name));
 
-      assert.match(source, /assigned child-local method/iu, `${name} should declare child-local scope`);
-      assert.match(source, /does not require Main to execute the method directly/iu, `${name} should remain delegable`);
-      assert.match(source, /do not recursively (?:fork|spawn|delegate)/iu, `${name} children must not recurse`);
-      assert.match(source, /Main retains the parent TODO, user interaction, and integration/iu, `${name} should preserve Main ownership`);
-      assert.match(source, /Return (?:an interactive question|interactive questions|any interactive question) to Main/iu, `${name} should return questions to Main`);
-      assert.match(source, /Main decides whether to ask the user/iu, `${name} should leave user interaction to Main`);
+      assert.match(source, /Main (?:performs|runs) this method (?:itself|directly)/iu, `${name} should name Main as the executor`);
+      assert.match(source, /(?:holds|keeps) the parent TODO, the user\s+interaction, and the integration/iu, `${name} should preserve Main ownership`);
+      assert.match(source, /`polisher`/u, `${name} should route prose through the polisher`);
+      assert.doesNotMatch(source, /assigned child-local method/iu, `${name} should not describe a child-local role`);
+      assert.doesNotMatch(source, /(?:dispatch|delegate)[^.]{0,80}`?(?:writer|zh-writer|checker|zh-checker)`?/iu, `${name} should not dispatch removed agents`);
     }
   });
 

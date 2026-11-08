@@ -2,7 +2,6 @@ import { WORKFLOW_CATALOG_VERSION, workflowDefinitions } from './workflow-defini
 const WORKFLOW_PHASE_LINE = 'ANALYZE -> EXECUTE -> REVIEW';
 
 const AGENT_DESCRIPTIONS = Object.freeze({
-  checker: 'Read-only English checker for a narrow semantic-drift, logic, and clarity check or a broad seven-dimension advisory audit.',
   'fact-planner': 'Decomposes a fact-checking task into checkable claims, evidence plans, risk levels, and scope boundaries.',
   'fact-researcher-a': 'First independent evidence lane for fact checking; collects primary-source evidence for planned claims and lists claims the plan omitted.',
   'fact-researcher-b': 'Second independent evidence lane; looks for corroboration, counter-evidence, source conflicts, and omitted claims.',
@@ -10,9 +9,6 @@ const AGENT_DESCRIPTIONS = Object.freeze({
   'fact-challenger': 'Adversarial reviewer that attacks recorded verdicts and reports claims the plan missed (AGREE / REBUT / MISSED).',
   scout: 'Fast read-only scout returning compressed context for handoff; use for exploratory codebase research and broad pattern searches.',
   task: 'General-purpose subagent with full capabilities for delegated multi-step work.',
-  writer: 'Dedicated English text tool: the only author for English prose/copy (drafting, revision, translation, polishing, titles, labels, captions, notes, UI copy), including LaTeX passages; returns proposals read-only. Served by the host\'s packaged Agent adapter because the current OMP ExtensionAPI exposes model workers only as agents; this label is not a second general-purpose writer agent and grants no code or file permissions.',
-  'zh-checker': '中文只读 checker，可执行窄范围的语义漂移、逻辑与清晰度核查，或完整七维审查。',
-  'zh-writer': '专用中文文本工具：中文散文/文案（起草、修订、翻译、润色、标题、标签、图注、笔记、界面文案）的唯一作者，支持 LaTeX 段落，返回只读修改稿，输出自然中文。因当前 OMP ExtensionAPI 仅以 Agent 形式暴露模型 worker，由宿主打包 Agent 适配器承载；该标识不是第二个通用写作 agent，不授予代码或文件权限。',
 });
 
 function describeAgent(role) {
@@ -47,7 +43,7 @@ function renderWorkflowCard(definition) {
     '',
     `- When: ${definition.chooseWhen}`,
     `- Skills: ${codeList(definition.skills)}`,
-    `- Agents (host runtime adapter labels): ${definition.roles.length ? codeList(definition.roles) : 'none suggested'}`,
+    `- Agents: ${definition.roles.length ? codeList(definition.roles) : 'none suggested'}`,
     '- Flow:',
     ...definition.suggestedFlow.map((text, index) => `  ${index + 1}. ${text}`),
   ];
@@ -96,7 +92,7 @@ function renderAgentDescriptions() {
     '',
     ...roles.map((role) => `- \`${role}\` — ${describeAgent(role)}`),
     '',
-    'Compatibility note: the `writer` and `zh-writer` text tools are listed above under their packaged Agent adapter names because the current OMP host exposes model workers through agents (the ExtensionAPI offers `registerTool` for command tools only). That backend label is a compatibility adapter, not a second general-purpose writer agent, and it grants no code or file permissions; `writer`/`zh-writer` remain the dedicated language-matched text capabilities, while Main/task own code and other non-text actions.',
+    'Text capability note: `polisher` is a writing-helper tool, not an Agent. It is a stateless language pass: Main drafts every prose and copy surface, sends one bounded passage to `polisher`, and inserts the returned text verbatim. The polisher model role may be older or smaller because the tool has no tools, no file access, and no agentic work; planning, evidence, structure, layout, conversion, and validation stay with Main/task.',
     '',
   ];
 }
@@ -111,9 +107,9 @@ function buildWorkflowSkillReferenceMarkdown(workflowId) {
     '',
     `- When: ${definition.chooseWhen}`,
     `- Skills: ${codeList(definition.skills)}`,
-    `- Agent candidates (host runtime adapter labels): ${definition.roles.length ? definition.roles.map(code).join(', ') : 'none suggested'}.`,
+    `- Agent candidates: ${definition.roles.length ? definition.roles.map(code).join(', ') : 'none suggested'}.`,
     '',
-    'Text capability note: `writer` and `zh-writer` are the dedicated language-matched text tools for all English/Chinese prose and copy; they appear under their packaged Agent adapter names only because the current OMP host exposes model workers that way. That backend label is not a second general-purpose writer agent and grants no code or file permissions; Main/task own code and other non-text actions.',
+    'Text capability note: `polisher` is a writing-helper tool, not an Agent. Main drafts the text, calls `polisher` on each bounded passage, and inserts the returned text verbatim; code, evidence, structure, layout, and validation stay with Main/task, and the polisher model may be older or smaller because it performs only language polishing.',
     '',
     '## Required step order',
     '',

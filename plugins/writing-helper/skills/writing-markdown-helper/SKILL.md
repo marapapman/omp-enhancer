@@ -9,27 +9,33 @@ Draft or revise academic-style markdown within the scope the user authorized. Us
 
 ## Executor Boundary
 
-This Skill body is the language-matched English `writer` text tool's bounded local method after Main selects the workflow and Skill. It does not select or dispatch Agents. The writer's local self-check does not replace the independent checker. Main owns the parent TODO, finding disposition, integration, final verification, and user-visible delivery. When no matching writer text tool is available, capacity is unavailable, or a safe complete call cannot be formed, Main records the inability to call it. Main and other Agents must not draft, rewrite, polish, or translate the requested prose.
+Main performs this method itself: the former `writer` and `zh-writer` agents are
+removed, and nothing here routes work to them. Main owns the parent TODO, finding
+disposition, integration, final verification, and user-visible delivery. Every
+drafted passage is Main's own text passed through the `polisher` tool, and Main
+inserts the returned text verbatim.
 
-The `writer` text tool is always proposal-only. Return the complete proposed text, using
-SEARCH/REPLACE blocks or a unified diff when a bounded patch is clearer. Main
-retains permission decisions and actual file changes but may only apply the proposal
-verbatim as returned. Do not create or persist
-the Markdown target or auxiliary workflow files.
+The drafted text reaches the deliverable only as the text `polisher` returned.
+Draft inside the authorized scope, call `polisher` once per prose segment, and
+use the returned text verbatim; a bounded insertion patch carries that returned
+text. When a `polisher` call returns `ok:false`, record its error code and report
+the failure instead of presenting unpolished text as polished output. Do not
+create or persist the Markdown target or auxiliary workflow files.
 
 ## When to Use
 
 - User wants to draft or revise an English markdown document
 - User explicitly requests paragraph-by-paragraph or line-by-line review
 
-## Default Writer Workflow
+## Default Workflow
 
 For ordinary requests such as "polish the abstract" or "revise this section":
 
 1. Read the exact target text and only the nearby context required for the revision.
    Do not repeat a successful complete read before drafting unless it contains
    an explicit truncation marker or an incomplete requested range.
-2. Return the complete proposed revision or a bounded patch to Main.
+2. Draft the complete revision, pass it through `polisher`, and keep the
+   returned text as the replacement for that passage.
 3. Review meaning, structure, citations, and formatting once.
 4. Report material limitations. Do not require a new confirmation merely because this skill was loaded.
 
@@ -70,7 +76,7 @@ Use the fine-mode workflow below only when the user asks for interactive approva
 
 ## Document Structure Assumed
 
-This skill inherits the writer text tool's built-in technical prose style and applies it inside the format the user or the target document defines. Its local style list is a supplement; where it conflicts with that baseline, the baseline wins, and an explicit user style still wins.
+This skill inherits Main's technical prose baseline and applies it inside the format the user or the target document defines. Its local style list is a supplement; where it conflicts with that baseline, the baseline wins, and an explicit user style still wins.
 
 - `##` through `#####`: Section headings — never modify
 - `######`: Paragraph nodes with topic-sentence titles (≤50 chars) and supporting bodies (≤500 chars) — these apply only when the target document actually uses this structure or the user asks for it; otherwise write natural paragraphs in the target section
@@ -127,7 +133,8 @@ Then write the next unit of text:
 - Otherwise: a natural paragraph in the target section following the approved outline, with citations where appropriate
 - Do not modify any Level 2–5 headers
 - Use precise academic language. Be concise in content, not necessarily in sentence length. No filler; the built-in technical prose baseline governs sentence length and register.
-- Present the draft to the user.
+- Present the draft to the user after `polisher` returns its text, and use that
+  returned text verbatim.
 
 ### Step 4: User Review
 
@@ -137,11 +144,11 @@ In user-requested fine mode, wait for the response.
 
 ### Step 5: Handoff & Loop
 
-- **Accept**: Return a bounded insertion patch for the new text in the target section — a `######` node when that template is in effect — to Main. Return to Step 2.
-- **Modify**: Take the user's feedback, revise the paragraph, and re-present (back to Step 4).
+- **Accept**: Insert a bounded patch for the new text in the target section — a `######` node when that template is in effect — using the text `polisher` returned. Return to Step 2.
+- **Modify**: Take the user's feedback, revise the paragraph, run the revision through `polisher` again, and re-present the returned text (back to Step 4).
 - **Rewrite**: Discard and draft anew (back to Step 3).
 
-When fine mode was explicitly requested, do not auto-advance to the next paragraph without confirmation at Steps 1, 2, and 4. In the default writer workflow, complete the requested scope in one focused pass.
+When fine mode was explicitly requested, do not auto-advance to the next paragraph without confirmation at Steps 1, 2, and 4. In the default workflow, complete the requested scope in one focused pass.
 
 ## Anti-Patterns
 

@@ -5,7 +5,7 @@ import nodePath from 'node:path';
 // resource loads settle and before the first project tool call (read/grep/glob/edit/write
 // on workspace files) or native task dispatch. Skill URI reads during DECLARE->LOAD
 // are not project actions. Offline tasks (networkAccess: forbidden) and workflows
-// where the card explicitly names task/writer as first project actor are exempt.
+// where the card explicitly names task as first project actor are exempt.
 //
 
 const SOURCE_SEARCH_TOOLS = new Set(['read', 'grep', 'glob', 'find']);
@@ -572,6 +572,19 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
       failures.push(`tool sequence was ${actualSequence.join(' -> ') || '<empty>'}, expected ${expectations.expectedToolSequence.join(' -> ') || '<empty>'}`);
     }
   }
+  evaluateRequiredToolCalls(summary, expectations.requiredToolCalls, failures);
+  evaluateRequiredToolCallSequence(
+    summary,
+    expectations.requiredToolCallSequence,
+    failures,
+  );
+  evaluateRequiredToolCallOrder(summary, expectations.requiredToolCallOrder, failures);
+  evaluateForbiddenToolCalls(summary, expectations.forbiddenToolCalls, failures);
+  evaluateRequiredToolCallBeforeFileWrite(
+    summary,
+    expectations.requiredToolCallBeforeFileWrite,
+    failures,
+  );
   if (expectations.requireSuccessfulToolCalls === true) {
     const unsuccessful = (summary.toolCalls ?? []).filter(({ completed, isError }) => (
       completed !== true || isError !== false
@@ -855,14 +868,6 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
     failures,
   );
 
-  if (expectations.requireLongFormWritingPilot != null) {
-    evaluateLongFormWritingPilot(
-      nativeTask,
-      summary.tddTrace ?? { mutationCalls: [], commandCalls: [] },
-      expectations.requireLongFormWritingPilot,
-      failures,
-    );
-  }
   for (const workflow of expectations.requiredNativeTaskWorkflows ?? []) {
     if (!nativeTaskWorkflows.has(workflow)) failures.push(`required native task workflow was not observed: ${workflow}`);
   }
@@ -917,6 +922,192 @@ export function evaluateWorkflowSummary(summary, expectations = {}) {
   if (summary.timedOut) failures.push('runner hard timeout was reached');
 
   return { pass: failures.length === 0, failures };
+}
+
+function toolCallArgumentsText(call) {
+  try {
+    return JSON.stringify(call?.arguments ?? {});
+  } catch {
+    return '';
+  }
+}
+
+function compileToolCallPattern(specification, label, failures) {
+  if (typeof specification !== 'string' || specification.length === 0) {
+    failures.push(`${label} must be a nonempty regular-expression string`);
+    return null;
+  }
+  try {
+    return new RegExp(specification, 'iu');
+  } catch (error) {
+    failures.push(`${label} contained an invalid pattern ${JSON.stringify(specification)}: ${error.message}`);
+    return null;
+  }
+}
+
+function orderedToolCalls(summary) {
+  const calls = Array.isArray(summary?.toolCalls) ? [...summary.toolCalls] : [];
+  if (!calls.every((call) => Number.isFinite(call?.eventIndex))) return calls;
+  return calls.sort((left, right) => left.eventIndex - right.eventIndex);
+}
+
+function evaluateRequiredToolCalls(summary, specifications, failures) {
+  if (specifications == null) return;
+  if (!Array.isArray(specifications)) {
+    failures.push('requiredToolCalls must be an array of { name, min? } specifications');
+    return;
+  }
+  const calls = Array.isArray(summary?.toolCalls) ? summary.toolCalls : [];
+  for (const specification of specifications) {
+    const name = typeof specification?.name === 'string' ? specification.name.trim() : '';
+    if (!name) {
+      failures.push('requiredToolCalls contained a specification without a tool name');
+      continue;
+    }
+    const min = Number.isSafeInteger(specification.min) && specification.min >= 0
+      ? specification.min
+      : 1;
+    const max = Number.isSafeInteger(specification.max) && specification.max >= 0
+      ? specification.max
+      : null;
+    const requireSuccess = specification.requireSuccess !== false;
+    const argumentsPattern = specification.argumentsPattern == null
+      ? null
+      : compileToolCallPattern(
+        specification.argumentsPattern,
+        `requiredToolCalls.argumentsPattern for ${name}`,
+        failures,
+      );
+    if (specification.argumentsPattern != null && argumentsPattern === null) continue;
+    const resultPattern = specification.resultPattern == null
+      ? null
+      : compileToolCallPattern(
+        specification.resultPattern,
+        `requiredToolCalls.resultPattern for ${name}`,
+        failures,
+      );
+    if (specification.resultPattern != null && resultPattern === null) continue;
+    const matching = calls.filter((call) => {
+      if (call?.name !== name) return false;
+      if (requireSuccess && (call.completed !== true || call.isError !== false)) return false;
+      if (argumentsPattern && !argumentsPattern.test(toolCallArgumentsText(call))) return false;
+      if (resultPattern && !resultPattern.test(String(call.resultPreview ?? ''))) return false;
+      return true;
+    });
+    const qualifiers = [
+      requireSuccess ? 'successful' : null,
+      argumentsPattern ? `matching ${JSON.stringify(specification.argumentsPattern)}` : null,
+      resultPattern ? `with result matching ${JSON.stringify(specification.resultPattern)}` : null,
+    ].filter(Boolean);
+    const qualifierText = qualifiers.length ? ` (${qualifiers.join(', ')})` : '';
+    if (matching.length < min) {
+      failures.push(`required tool call ${name}${qualifierText} was observed ${matching.length} time(s), below ${min}`);
+    }
+    if (max != null && matching.length > max) {
+      failures.push(`required tool call ${name}${qualifierText} was observed ${matching.length} time(s), above ${max}`);
+    }
+  }
+}
+
+function evaluateRequiredToolCallSequence(summary, specification, failures) {
+  if (specification == null) return;
+  if (!Array.isArray(specification)
+    || specification.length === 0
+    || specification.some((name) => typeof name !== 'string' || !name.trim())) {
+    failures.push('requiredToolCallSequence must be a nonempty array of tool names');
+    return;
+  }
+  const names = specification.map((name) => name.trim());
+  const calls = orderedToolCalls(summary);
+  let cursor = 0;
+  for (const [position, name] of names.entries()) {
+    const index = calls.findIndex((call, callIndex) => callIndex >= cursor && call.name === name);
+    if (index < 0) {
+      const prior = position > 0 ? ` after ${names[position - 1]}` : '';
+      failures.push(
+        `required tool call sequence ${names.join(' -> ')} was missing ${name}${prior}`,
+      );
+      return;
+    }
+    cursor = index + 1;
+  }
+}
+
+function evaluateRequiredToolCallOrder(summary, specifications, failures) {
+  if (specifications == null) return;
+  if (!Array.isArray(specifications)) {
+    failures.push('requiredToolCallOrder must be an array of { before, after } tool-name pairs');
+    return;
+  }
+  const calls = orderedToolCalls(summary);
+  const firstIndex = (name) => calls.findIndex((call) => call.name === name);
+  for (const specification of specifications) {
+    const before = typeof specification?.before === 'string' ? specification.before.trim() : '';
+    const after = typeof specification?.after === 'string' ? specification.after.trim() : '';
+    if (!before || !after || before === after) {
+      failures.push('requiredToolCallOrder contained an invalid { before, after } specification');
+      continue;
+    }
+    const beforeIndex = firstIndex(before);
+    const afterIndex = firstIndex(after);
+    if (beforeIndex < 0) failures.push(`required tool call order was missing ${before}`);
+    if (afterIndex < 0) failures.push(`required tool call order was missing ${after}`);
+    if (beforeIndex >= 0 && afterIndex >= 0 && beforeIndex >= afterIndex) {
+      failures.push(`required tool call order was violated: ${before} must be called before ${after}`);
+    }
+  }
+}
+
+function evaluateForbiddenToolCalls(summary, specification, failures) {
+  if (specification == null) return;
+  if (!Array.isArray(specification)
+    || specification.some((name) => typeof name !== 'string' || !name.trim())) {
+    failures.push('forbiddenToolCalls must be an array of tool names');
+    return;
+  }
+  const observed = new Set((summary?.toolCalls ?? []).map(({ name }) => name));
+  for (const name of specification) {
+    if (observed.has(name.trim())) failures.push(`forbidden tool call was observed: ${name.trim()}`);
+  }
+}
+
+function evaluateRequiredToolCallBeforeFileWrite(summary, specifications, failures) {
+  if (specifications == null) return;
+  if (!Array.isArray(specifications)) {
+    failures.push('requiredToolCallBeforeFileWrite must be an array of { tool, file } specifications');
+    return;
+  }
+  const mutationCalls = Array.isArray(summary?.tddTrace?.mutationCalls)
+    ? summary.tddTrace.mutationCalls
+    : [];
+  for (const specification of specifications) {
+    const tool = typeof specification?.tool === 'string' ? specification.tool.trim() : '';
+    const file = typeof specification?.file === 'string' ? specification.file.trim() : '';
+    if (!tool || !file) {
+      failures.push('requiredToolCallBeforeFileWrite contained a specification without a tool name and file');
+      continue;
+    }
+    const min = Number.isSafeInteger(specification.min) && specification.min > 0
+      ? specification.min
+      : 1;
+    const write = mutationCalls
+      .filter((call) => call?.target === file && Number.isFinite(call.eventIndex))
+      .sort((left, right) => left.eventIndex - right.eventIndex)[0];
+    if (!write) {
+      failures.push(`required tool call ${tool} could not be positioned before an unobserved file write: ${file}`);
+      continue;
+    }
+    const before = (summary?.toolCalls ?? []).filter((call) => {
+      if (call.name !== tool || call.completed !== true || call.isError !== false) return false;
+      const completionIndex = Number.isFinite(call.completionEventIndex)
+        ? call.completionEventIndex
+        : call.eventIndex;
+      return Number.isFinite(completionIndex) && completionIndex < write.eventIndex;
+    }).length;
+    if (before < min) {
+      failures.push(`required tool call ${tool} occurred ${before} time(s) before the write of ${file}, below ${min}`);
+    }
+  }
 }
 
 function evaluateRequiredFileWriteOrder(summary, specifications, failures) {
@@ -1255,116 +1446,6 @@ function extractRevisionIdentifier(value) {
   return /\brevision\s*=\s*([A-Za-z0-9][A-Za-z0-9._-]*)/iu.exec(String(value ?? ''))?.[1] ?? '';
 }
 
-
-// Advisory offline expectation for the long-form writing pilot trace.
-// Asserts the observable pilot contract: >=2 writer assignments in the same native
-// task batch when batching is available; all writer deliveries occur before the parent
-// integration marker (a successful parent write/edit of the target article); exactly
-// one checker assignment after integration; no native reviewer; at most one repair
-// writer. The batch assertion is skippable (marked not-evaluable) when batching is
-// unavailable in the run. This is an offline trace expectation, never a runtime gate.
-function evaluateLongFormWritingPilot(nativeTask, tddTrace, expectation, failures) {
-  const options = typeof expectation === 'object' && expectation ? expectation : {};
-  const writerAgent = options.writerAgent ?? 'writer';
-  const checkerAgent = options.checkerAgent ?? 'checker';
-  const reviewerAgent = options.reviewerAgent ?? 'reviewer';
-  const maxRepairWriters = Number.isFinite(options.maxRepairWriters)
-    ? options.maxRepairWriters
-    : 1;
-  const assignments = [...(nativeTask.assignments ?? [])]
-    .sort((left, right) => left.eventIndex - right.eventIndex || left.index - right.index);
-  const writerAssignments = assignments.filter(({ agent }) => agent === writerAgent);
-  const checkerAssignments = assignments.filter(({ agent }) => agent === checkerAgent);
-  const agents = new Set(nativeTask.agents ?? []);
-
-  if (agents.has(reviewerAgent)) {
-    failures.push(`long-form writing pilot observed a forbidden native reviewer: ${reviewerAgent}`);
-  }
-  if (writerAssignments.length < 2) {
-    failures.push(`long-form writing pilot required >=2 writer assignments, observed ${writerAssignments.length}`);
-  }
-
-  // Batch assertion: skippable when batching is unavailable in the run.
-  const batchAvailable = (nativeTask.multiForkBatchCallCount ?? 0) > 0;
-  if (batchAvailable) {
-    const batchCallIds = new Set();
-    for (const writer of writerAssignments) {
-      if (writer.batch) batchCallIds.add(writer.callId);
-    }
-    const sharedBatch = [...batchCallIds].some((callId) => (
-      writerAssignments.filter((writer) => writer.callId === callId).length >= 2
-    ));
-    if (!sharedBatch) {
-      failures.push('long-form writing pilot did not place >=2 writer assignments in the same native task batch');
-    }
-  }
-  // When batchAvailable is false, the plan mandates sequential fallback and the
-  // parallel-evidence assertion is not-evaluable rather than a failure.
-
-  // Integration marker: first successful parent write/edit of the target article.
-  // When integrationTarget is given, restrict to mutations of that path; otherwise
-  // fall back to the first successful parent mutation.
-  const integrationTarget = typeof options.integrationTarget === 'string'
-    ? options.integrationTarget.trim()
-    : '';
-  const mutationCalls = [...(tddTrace.mutationCalls ?? [])]
-    .sort((left, right) => left.eventIndex - right.eventIndex);
-  const integrationMutations = integrationTarget
-    ? mutationCalls.filter(({ target }) => target === integrationTarget)
-    : mutationCalls;
-  const integration = integrationMutations[0] ?? null;
-  if (!integration || !Number.isFinite(integration.eventIndex)) {
-    failures.push('long-form writing pilot did not observe a parent integration marker (successful write/edit of the target article)');
-    return;
-  }
-  const integrationEventIndex = integration.eventIndex;
-
-  // A conditional-repair writer is dispatched after the checker delivery, so it is
-  // legitimately delivered after the parent integration marker. Compute the checker
-  // delivery first and exclude repair writers from the section-writer ordering check.
-  const checkerDelivery = checkerAssignments
-    .map(({ deliveryEventIndex }) => deliveryEventIndex)
-    .filter(Number.isFinite)
-    .sort((left, right) => left - right)[0];
-  const isRepairWriter = (writer) => (
-    Number.isFinite(checkerDelivery)
-    && Number.isFinite(writer.eventIndex)
-    && writer.eventIndex > checkerDelivery
-  );
-
-  // All SECTION writer deliveries (excluding repair writers) must occur before the
-  // parent integration marker.
-  for (const writer of writerAssignments) {
-    if (isRepairWriter(writer)) continue;
-    if (writer.jobStatus !== 'completed' || !Number.isFinite(writer.jobCompletionEventIndex)) {
-      failures.push(`long-form writing pilot writer assignment did not complete successfully before integration: ${writer.name ?? writer.jobId ?? '<writer>'}`);
-      continue;
-    }
-    if (!writer.deliveryText || !Number.isFinite(writer.deliveryEventIndex)) {
-      failures.push(`long-form writing pilot writer assignment did not return a successful delivery before integration: ${writer.name ?? writer.jobId ?? '<writer>'}`);
-      continue;
-    }
-    if (writer.deliveryEventIndex >= integrationEventIndex) {
-      failures.push(`long-form writing pilot writer assignment was delivered after the parent integration marker: ${writer.name ?? writer.jobId ?? '<writer>'}`);
-    }
-  }
-
-  // Exactly one checker assignment after integration.
-  const checkersAfterIntegration = checkerAssignments.filter(({ eventIndex }) => (
-    Number.isFinite(eventIndex) && eventIndex > integrationEventIndex
-  ));
-  if (checkersAfterIntegration.length !== 1) {
-    failures.push(`long-form writing pilot required exactly one checker assignment after integration, observed ${checkersAfterIntegration.length}`);
-  }
-
-  // Conditional-repair bound: at most one repair writer after the checker delivery.
-  if (Number.isFinite(checkerDelivery)) {
-    const repairWriters = writerAssignments.filter((writer) => isRepairWriter(writer));
-    if (repairWriters.length > maxRepairWriters) {
-      failures.push(`long-form writing pilot repair writers ${repairWriters.length} exceeded ${maxRepairWriters}`);
-    }
-  }
-}
 
 export function classifyWorkflowRun(summary = {}, evaluation = {}) {
   const eventCapture = summary.eventCapture ?? {};

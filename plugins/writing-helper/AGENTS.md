@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-`writing-helper` is the writing-helper plugin package in the `omp-enhancer` monorepo. It registers deterministic writing QA tools and slash commands for logic, style, and citation checks, and bundles frugal-pi/Pi-compatible writer/checker agents and writing/research skills.
+`writing-helper` is the writing-helper plugin package in the `omp-enhancer` monorepo. It registers deterministic writing QA tools, a model-backed `polisher` tool, and slash commands for logic, style, and citation checks, and bundles frugal-pi/Pi-compatible writing/research skills.
 
 Public surfaces:
 
-- OMP tools: `writing_logic_check`, `writing_quality_check`, `writing_ai_scan`
+- OMP tools: `polisher`, `writing_logic_check`, `writing_quality_check`, `writing_ai_scan`
 - Slash commands: `/writing-logic paper.md`, `/writing-quality paper.md`, `/writing-ai-scan paper.md`
 - Package entrypoint: `index.js`, exported as the package root and declared in `package.json` under `omp.extensions`
 
@@ -19,8 +19,9 @@ The runtime is a small Node ESM pipeline with `index.js` as the composition root
 - Quality flow: input -> document load -> evidence discovery/enrichment -> `src/quality.js` -> optional citation network lookup -> second quality pass -> report formatting.
 - Citation flow: `src/citations.js` extracts Markdown citations, LaTeX `\cite{...}`, DOI strings/URLs, and arXiv IDs/URLs; compares against BibTeX and local literature records; marks citations `VERIFIED`, `MISMATCH`, or `UNVERIFIED`.
 - AI scan flow: input -> document load -> `src/ai-scan.js` local evidence -> `src/ai-detectors.js` AIGC and TypeSafe Jev adapters (when configured) -> `src/ai-ensemble.js` weighted decision (0.325/0.675, threshold 0.38, optional slow fallback) -> report. `detector=auto` falls back to local only when both required settings are absent; `detector=ensemble` fails closed.
-- The code is intentionally deterministic. Logic and style checks are regex/string heuristics over plain text, not model calls.
-- Most code is synchronous. The async paths are `runWritingQualityCheck()` (citation evidence) and `runWritingAiScan()` (AIGC/Jev/slow HTTP adapters).
+- Polisher flow: inline `text` and optional `language` -> `src/polisher.js` input check (non-empty, at most 120,000 characters, no fenced code) -> language resolution -> model resolution (`modelRoles.polisher` selector, then `@tiny`, `@smol`, then the session model) -> one completion call with `polisher/prompt-{en,zh}.md` -> returned text, or a structured error (`empty_text`, `text_too_large`, `code_not_supported`, `no_model`, `no_completion_api`, `model_error`, `truncated_output`, `empty_output`). It never reads files and never writes them.
+- The check code is intentionally deterministic. Logic and style checks are regex/string heuristics over plain text, not model calls; `polisher` is the only model-callable prose tool.
+- Most check code is synchronous. The async paths are `runPolisher()`, `runWritingQualityCheck()` (citation evidence), and `runWritingAiScan()` (AIGC/Jev/slow HTTP adapters).
 
 Error handling pattern:
 
@@ -30,9 +31,9 @@ Error handling pattern:
 
 ## Key Directories
 
-- `src/` - deterministic analyzers, citation verification, language detection, document loading, and report formatting.
+- `src/` - deterministic analyzers, citation verification, language detection, document loading, report formatting, and the `polisher.js` model-call runner.
 - `test/` - flat Node test suite, `*.test.js` files only.
-- `agents/` - bundled English and Chinese writer/checker role prompts.
+- `polisher/` - English and Chinese polisher prompts (`prompt-en.md`, `prompt-zh.md`).
 - `skills/` - bundled writing, review, research, formatting, and Chinese writing skills; each skill lives at `skills/<name>/SKILL.md`.
 - Root files: `index.js`, `package.json`, `README.md`, and this `AGENTS.md`.
 
@@ -70,7 +71,7 @@ No `build`, `dev`, `lint`, `format`, or `typecheck` script exists. There is no t
 - Preserve conservative citation semantics. A citation is only `VERIFIED` when evidence confirms it; otherwise use `MISMATCH` for contradictions or `UNVERIFIED` for insufficient evidence.
 - Keep document input boundaries clear. The plugin reads inline text or UTF-8 text files. It does not parse binary `.docx` or `.pdf` files.
 - Style/report text is bilingual in places. Preserve Chinese wording and no-em-dash expectations where tests assert them.
-- Bundled prompt content is compatibility-sensitive. Do not rename `agents/*.md` or `skills/*/SKILL.md` paths without updating package-content tests.
+- Bundled prompt content is compatibility-sensitive. Do not rename `polisher/prompt-*.md` or `skills/*/SKILL.md` paths without updating package-content tests.
 
 Common implementation shape:
 
@@ -92,12 +93,14 @@ export function analyzeThing(input = {}) {
 - `src/ai-scan.js` - local keyword, distribution, and style-profile scanner.
 - `src/ai-detectors.js` - AIGC HTTP, TypeSafe Jev, and optional slow-detector adapters; no credentials are stored.
 - `src/ai-ensemble.js` - AIGC+Jev weighted policy, threshold, and slow fallback.
+- `src/polisher.js` - stateless polisher runner: input validation, prompt loading, model-role resolution with `@tiny`/`@smol` fallback, one completion call, result normalization.
+- `polisher/prompt-en.md`, `polisher/prompt-zh.md` - the English and Chinese polisher prompts.
 - `src/document-loader.js` - inline text vs relative/absolute UTF-8 path loading.
 - `src/language.js` - `zh`/`en` auto-detection by CJK and Latin character counts.
 - `src/report.js` - Markdown-like human report formatting.
 - `test/index.test.js` - highest-level extension/tool/command behavior tests.
 - `test/branch-coverage.test.js` - defensive branch coverage for parser defaults and edge cases.
-- `test/plugin-content.test.js` - packaging invariants for bundled agents and skills.
+- `test/plugin-content.test.js` - packaging invariants for bundled prompts and skills.
 - `README.md` - user-facing tool surface, citation model, package layout, and validation commands.
 
 ## Runtime/Tooling Preferences
@@ -107,7 +110,7 @@ export function analyzeThing(input = {}) {
 - Dependencies: `package.json` declares no runtime or dev dependencies.
 - Test framework: Node built-ins only, especially `node:test`, `node:assert`, and `node:test`'s `mock` helper.
 - Formatting/linting: no ESLint, Prettier, Biome, TypeScript, Jest, Vitest, Playwright, Cypress, bundler config, or CI workflow is present.
-- OMP host expectations: the host supplies `omp.registerTool`, `omp.registerCommand`, `omp.zod.z`, `ctx.cwd`, and optionally `ctx.ui.notify`.
+- OMP host expectations: the host supplies `omp.registerTool`, `omp.registerCommand`, `omp.zod.z`, `ctx.cwd`, optionally `ctx.ui.notify`, and for `polisher` a model facade (`ctx.models.resolve`/`current`) plus `ctx.modelRegistry` and the host completion module imported at call time.
 - External citation lookup is local-first. Network fallback is controlled by `allowNetwork` and `citationProviders`; `--no-network` and `--disable-network` must prevent remote calls.
 
 ## Testing & QA
@@ -134,5 +137,5 @@ Testing patterns:
 
 Packaging QA:
 
-- Run `npm run check:marketplace` and usually `npm run pack:all` after version, package, Agent, or Skill changes.
+- Run `npm run check:marketplace` and usually `npm run pack:all` after version, package, prompt, or Skill changes.
 - Use the root release script for version changes: `npm run release -- --plugin writing-helper --bump <type>` (dry-run by default; add `--apply` only when authorized).

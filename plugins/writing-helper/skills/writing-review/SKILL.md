@@ -7,68 +7,42 @@ description: Use for a bounded review, correction, revision, or polish of existi
 
 ## Executor Boundary
 
-Reading this Skill prepares a writer assignment; by itself it does not turn Main
-into the executor. This body is the language-matched English `writer` text tool's
-bounded local method,
-after Main selects the workflow and
-Skill. This Skill does not select or dispatch Agents; Main retains Agent selection
-and dispatch.
-The one-pass method never satisfies the independent checker checkpoint, and
-the writer's local self-check does not replace the independent checker. Main
-owns the parent TODO, finding disposition,
-integration, final verification, and user-visible delivery.
+Main performs this review itself: the former `writer`, `zh-writer`, `checker`, and
+`zh-checker` agents are removed, and nothing here routes work to them. Main owns
+the parent TODO, finding disposition, integration, final verification, and
+user-visible delivery. Target length only bounds this method and the finding
+count.
 
-All substantive English prose work—including initial writing or drafting,
-translation, rewriting, logical revision, and polishing—must be performed through
-language-matched `writer` text-tool calls. Main, `task`, and `checker` do not
-write that prose. The
-writer proposal comes first; an independent `checker` only reports logic,
-evidence, semantic-drift, and clarity findings, including information-gain
-findings. Any substantive textual repair returns to the same
-language-matched `writer`.
-
-The user need not request delegation explicitly.
-Target length only bounds the executor method and finding count.
-It does not authorize Main or another Agent to draft, rewrite, polish, or translate
-the requested prose.
-Read-only delivery, an integrated final response, and coordination overhead do not
-authorize bypassing the writer. The assigned `writer` text tool returns the complete requested
-proposal; the selected workflow keeps its writer delivery,
-dependent checker delivery, and parent integration checkpoints.
-If a current permitted limitation prevents a safe `writer` call, Main records the
-inability to
-delegate; it must not silently draft or route substantive prose to another Agent.
-
-The `writer` text tool is always proposal-only. Return the complete proposed text
-requested by the assignment, using SEARCH/REPLACE blocks or a unified diff
-when that makes a bounded change clearer. Main retains permission decisions
-and actual file changes but integrates only that returned proposal verbatim.
-Do not create or persist review artifacts.
+Every revised passage is Main's own draft passed through the `polisher` tool, and
+Main inserts the returned text verbatim. A review that produces replacement text
+sends that text to `polisher` before delivery, and any later wording change goes
+back through `polisher` again. A review-only request produces findings rather
+than rewritten prose. Do not create or persist review artifacts.
 
 When the user identifies a target file or passage, review that target directly.
 Use `.pi/research/checker_report.md` only when the user supplies or references
 it, or the active workflow already exposes it. Do not probe `.pi` merely to
 discover whether a prior report exists.
 
-For an assigned English LaTeX prose polish, first review the requested passage
-against its semantic and LaTeX anchors, then produce the requested revision in
-the same bounded proposal-only pass.
+For an English LaTeX prose polish, first review the requested passage
+against its semantic and LaTeX anchors, then draft the revision and pass it
+through `polisher`, using the returned text as the replacement.
 Preserve custom
 commands and revision markup; revise only the user-authorized active prose
 inside them. A host-provided skill body is already loaded and must not be read
 again.
 
-`writing-checkers` is a broad review Skill, not the `checker` Agent. Use that
-Skill as a companion only for a broad whole-document or project-wide argument
-review. A local section, paragraph, or sentence polish does not need the broad
-Skill unless the user explicitly asks for that review. Under the workflow's
-soft default, Main may independently choose a currently exposed `checker`
-Agent for a bounded semantic drift, logic, and clarity check; this Skill does
-not select or dispatch that Agent. A Main-side Skill load, writer self-check,
-or broad `writing-checkers` Skill load is not independent-checker execution or
-evidence.
+`writing-checkers` is a broad whole-document audit method, not a separate review
+role. Use it as a companion only for a broad whole-document or project-wide
+argument review. A local section, paragraph, or sentence polish does not need the
+broad method unless the user explicitly asks for that review. For a bounded
+semantic drift, logic, and clarity check, Main runs
+`writing_quality_check`/`writing_logic_check` or its own read-only pass; this
+Skill neither selects nor dispatches anything. Running the broad
+`writing-checkers` method is a review step, not a rewrite: its findings are
+advisory and every wording repair goes back through `polisher`.
 
-## Assigned Writer One-Pass Method
+## One-Pass Method
 
 Use this order: claims and evidence plus semantic anchors first; logic and
 structure second; sentence and style polish last.
@@ -123,14 +97,14 @@ structure second; sentence and style polish last.
    meaning, or requested scope. Present those items as author decisions.
 5. Compare the result with the source once. Treat any changed semantic anchor
    as an advisory finding, not as a reason to start another repair cycle.
-6. An independent `checker` may report only logic, evidence, semantic-drift,
-   and clarity findings, including information-gain findings; it must not
-   rewrite prose. Return every substantive repair to this same
-   language-matched `writer`, then give Main the resulting proposal.
-7. Review the resulting text once and summarize proposed changes, unresolved
+6. The read-only checks may report only logic, evidence, semantic-drift,
+   and clarity findings, including information-gain findings; they must not
+   rewrite prose. Every substantive repair is Main's own redraft passed through
+   `polisher`, and the returned text is what lands in the artifact.
+7. Review the resulting text once and summarize changes, unresolved
    decisions, and evidence limitations.
 8. Report which AI-tell families the revision touched and which tells were left
-   in place because they carry the writer's voice, so the checker can
+   in place because they carry the author's voice, so a later review can
    distinguish judgment from omission.
 
 ## Evidence Fidelity
@@ -146,7 +120,7 @@ structure second; sentence and style polish last.
   the source already says.
 
 Process at most 20 findings in one pass. Summarize any remainder without
-starting another checker/review cycle automatically.
+starting another review cycle automatically.
 
 For a read-only review, return evidence-backed findings and concise local
 replacement suggestions only where they help explain a finding. Do not append
@@ -163,10 +137,10 @@ visible prose.
 
 For one abstract or another short passage, report at most five material
 findings. Keep the semantic-anchor inventory internal, omit
-empty severity sections and full-source restatements, and return the delivery
-to Main as soon as the complete target supports the findings. This finishes
-only the writer text-tool pass; it neither completes the parent workflow nor
-replaces an independent checker delivery.
+empty severity sections and full-source restatements, and deliver as soon as
+the complete target supports the findings. This finishes
+only this review pass and the `polisher` step it feeds; it does not complete the
+parent workflow.
 
 ## Optional Interactive Mode
 
@@ -177,13 +151,13 @@ writing fixes and do not require a confirmation after every issue.
 
 ## Logging
 
-When `.pi/research/review_log.md` is part of the active workflow, return a short
-proposed record for each addressed, deferred, or skipped finding. Main decides
-whether an authorized integration persists it. Do not create workflow files
+When `.pi/research/review_log.md` is part of the active workflow, record a short
+entry for each addressed, deferred, or skipped finding when the user authorizes
+that write. Do not create workflow files
 merely to satisfy this Skill.
 
-When an additional broad review was explicitly requested, Main may declare and
-load `writing-checkers` during PLAN through the runtime's normal Skill
-mechanism. This writer text-tool pass neither loads it nor treats its body as independent
-checker execution. Legacy slash-skill text is documentation, not a command to
+When an additional broad review was explicitly requested, Main may load
+`writing-checkers` during PLAN through the runtime's normal Skill
+mechanism and run it as its own read-only audit; the body never treats that
+audit as a rewrite. Legacy slash-skill text is documentation, not a command to
 attempt.

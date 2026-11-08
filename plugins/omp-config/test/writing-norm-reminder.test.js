@@ -33,7 +33,8 @@ describe('sentence-level writing-norm reminder contracts', () => {
     assert.match(agents[0], /This is a reminder duty, not a blocking authority/u);
     assert.match(agents[1], /setup → emphasis → restatement/u);
     assert.match(agents[1], /never becomes a second message/u);
-    assert.match(agents[1], /Main calls writing_ai_scan with detector=ensemble and allowNetwork=true on the exact final text before checker review and delivery/u);
+    assert.match(agents[1], /writing_ai_scan with detector=ensemble and allowNetwork=true[\s\S]{0,120}before delivery/u);
+    assert.doesNotMatch(agents[1], /before checker review/u);
     assert.match(agents[1], /local-only scan as a separately labelled fallback/u);
     assert.match(agents[1], /keeps the scan advisory rather than a completion gate/u);
   });
@@ -47,7 +48,8 @@ describe('sentence-level writing-norm reminder contracts', () => {
     assert.equal(watchdog.match(/the sentence-level restatement ban/gu)?.length, 1);
     assert.equal(watchdog.match(/the unscoped-absolute ban/gu)?.length, 1);
     assert.equal(watchdog.match(/the anaphoric passive rider 「，斜杠由它补上」\/"with … added by it"; 回指回扣小句/gu)?.length, 1);
-    assert.match(watchdog, /Main calls writing_ai_scan with detector=ensemble and allowNetwork=true on the exact final text before checker review and delivery/u);
+    assert.match(watchdog, /writing_ai_scan with detector=ensemble and allowNetwork=true[\s\S]{0,120}before delivery/u);
+    assert.doesNotMatch(watchdog, /before checker review/u);
     assert.match(watchdog, /keeps the scan advisory rather than a completion gate/u);
   });
 
@@ -63,6 +65,9 @@ describe('sentence-level writing-norm reminder contracts', () => {
 
   it('applies sentence-level bans to canvas and frontend copy guidance', () => {
     const canvas = readFileSync(join(packageRoot(), 'skills', 'canvas-design', 'SKILL.md'), 'utf8');
+    assert.match(canvas, /`polisher`/u);
+    assert.match(canvas, /Main drafts every prose passage[\s\S]{0,120}`polisher`[\s\S]{0,80}verbatim/iu);
+    assert.match(canvas, /`task` never rewords copy/u);
     assert.match(canvas, /no sentence-level restatement/u);
     assert.match(canvas, /no unscoped absolutes \(all, any, only, always, never, every, must, exactly\)/u);
     assert.match(canvas, /never justifies dropping a fact, number, or citation/u);
@@ -71,6 +76,9 @@ describe('sentence-level writing-norm reminder contracts', () => {
     assert.match(canvas, /no anaphoric callback clause \(a complete main clause plus a comma and a clause headed by "this", "that", "which", or "these"/u);
 
     const frontend = readFileSync(join(packageRoot(), 'skills', 'frontend-design', 'SKILL.md'), 'utf8');
+    assert.match(frontend, /`polisher`/u);
+    assert.match(frontend, /Main drafts every prose passage[\s\S]{0,120}`polisher`[\s\S]{0,80}verbatim/iu);
+    assert.match(frontend, /`task` never rewords copy/u);
     assert.match(frontend, /no sentence-level restatement/u);
     assert.match(frontend, /no unscoped absolutes \(all, any, only, always, never, every, must, exactly\)/u);
     assert.match(frontend, /no anaphoric passive rider \(a complete main clause plus a comma and a "with" \+ object \+ past participle \+ "by" \+ anaphoric actor adjunct/u);

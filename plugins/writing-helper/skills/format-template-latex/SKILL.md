@@ -5,10 +5,12 @@ description: "Apply a named or provided LaTeX venue template and its formatting 
 
 # Format Template LaTeX
 
-When this Skill is part of a `writer` or `zh-writer` assignment, that child
-remains proposal-only: it runs no command and writes no file, and returns the
-complete proposed artifact or diff. Main or an explicitly capable generic
-`task` owns authorized effects.
+Main performs this method directly in its own context; the former `writer` and
+`zh-writer` agents are removed and no work is routed to them. Any user-facing
+prose the method produces is drafted by Main, passed through the `polisher`
+tool, and inserted verbatim from the returned text before it reaches a
+deliverable or the user. Commands, file writes, and other effects belong to Main
+or to an explicitly capable generic `task`.
 
 Apply a conference or journal LaTeX template to an existing paper markdown. Merge content sections into the template, handle double-column formatting, author blocks, citation style, and bibliography wiring.
 

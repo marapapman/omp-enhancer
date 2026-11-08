@@ -88,14 +88,17 @@ After all 7 dimensions, output:
 
 ## Output Destination
 
-This checker method is read-only and report-only. Return the complete structured report in
-the final response. Main decides persistence when the user requested a report
-file; the checker neither creates `.pi` nor requests write access.
+This audit is read-only and report-only. Present the complete structured report
+in the response, and write a report file only when the user asked for one and the
+host authorizes that path. The audit itself rewrites nothing; every wording
+repair it recommends goes back through `polisher`.
 
 ## Pi Integration
 
 - **Skill body:** already loaded for this checkpoint; do not read
   `writing-checkers` again or attempt an invented slash command.
 - **Tools used:** `read`, `grep`, `glob` (to understand document structure and verify references).
-- **Output:** return the complete report in the final response. Main owns any authorized persistence; the checker creates no files.
+- **Output:** present the complete report in the response. When the user asked
+  for a report file, Main writes it to an authorized path; the audit creates no
+  files on its own.
 - **No HTML comments.** No `.pi/research/state.md`. No external CLI calls.

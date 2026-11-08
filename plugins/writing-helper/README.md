@@ -1,24 +1,26 @@
 # writing-helper
 
-Standalone OMP writing helper plugin with frugal-pi compatible writing skills, writer/checker agents, deterministic writing checks, and local-first citation verification.
+Standalone OMP writing helper plugin with frugal-pi compatible writing skills, a model-backed `polisher` tool, deterministic writing checks, and local-first citation verification.
 
 
 ## What it provides
 
 ### OMP tools
 
-The plugin registers three model-callable tools:
+The plugin registers four model-callable tools:
 
 | Tool | Purpose |
 | --- | --- |
+| `polisher` | Polishes and de-AIs one prose passage: text in, rewritten text out. Stateless; reads no files, calls no tools, runs no agentic work, and rejects fenced code. Main calls it for every drafted passage and inserts the returned text verbatim. |
 | `writing_logic_check` | Checks substantive writing logic: unsupported conclusions, data inconsistencies, terminology drift, causal leaps, and contribution/evidence mismatches. |
 | `writing_quality_check` | Runs logic, style, citation authenticity, and optional semantic preservation checks. Citation findings are `VERIFIED`, `MISMATCH`, or `UNVERIFIED`. |
 | `writing_ai_scan` | Runs the AIGC + Jev score ensemble: `0.325 * AIGC P(AI) + 0.675 * Jev P(AI)`, threshold `0.38`, with an optional slow-model fallback inside a `0.20` uncertainty band. The built-in keyword and statistical scan supplies supporting evidence and can run alone with `detector=local`. Advisory only. |
 
-All three tools accept inline `text` or a UTF-8 text `path`.
-`writing_ai_scan` is active by default because the writing workflow runs it after
-every completed writing task and after each repair pass; the other two tools
-remain opt-in.
+`polisher` accepts inline `text` plus an optional `language` (`zh`, `en`, or `auto`; it never translates) and is one model call with no file access. The three check tools accept inline `text` or a UTF-8 text `path`.
+`polisher` and `writing_ai_scan` are active by default: the writing workflow calls
+`polisher` on every drafted passage and `writing_ai_scan` after every completed
+writing task and after each polisher repair pass; the other two tools remain
+opt-in.
 
 `writing_ai_scan` also reports the local density-normalized score, the metric
 values behind it, and evidence-bearing findings. A custom `baseline` JSON object
@@ -27,12 +29,12 @@ reference rates for that invocation. The local score is supporting evidence, not
 the ensemble label, and never rewrites the text.
 
 The writing workflow calls `writing_ai_scan` on the final text of every completed
-writing task before checker review and delivery, then reruns it after each
-writer/zh-writer repair pass. Findings are advisory and return to the
-language-matched writer; the scan never rewrites the text and never decides
+writing task before delivery, then reruns it after each polisher repair pass.
+Findings are advisory and return to Main, which sends any wording change back
+through `polisher`; the scan never rewrites the text and never decides
 completion by itself.
 
-The scan does not replace the sentence-level information-gain review. Neither the AIGC + Jev authorship score nor the local density metrics can tell whether a sentence adds a new fact, a necessary qualification, or a key logical relation — the language-matched writer/zh-writer runs that self-check on its own text first, and when a checker review is used, low-information-gain sentences come back as advisory clarity findings. Deleting redundant wording comes before explaining the same point again; unique facts, numbers, qualifiers, scope, modality, negation, citations, safety instructions, and reproducibility steps stay; and neither tool rewrites the text.
+The scan does not replace the sentence-level information-gain review. Neither the AIGC + Jev authorship score nor the local density metrics can tell whether a sentence adds a new fact, a necessary qualification, or a key logical relation — Main applies that self-check while drafting and the `polisher` prompt enforces it on each polished passage; when `writing_quality_check` is run, low-information-gain sentences come back as advisory clarity findings. Deleting redundant wording comes before explaining the same point again; unique facts, numbers, qualifiers, scope, modality, negation, citations, safety instructions, and reproducibility steps stay; and none of these tools rewrites the text.
 
 ### AIGC + Jev ensemble
 
@@ -146,9 +148,9 @@ Slash commands are path-oriented. Use the tools directly when you need inline `t
 - `MISMATCH`: evidence contradicts the bibliography or citation metadata.
 - `UNVERIFIED`: no evidence source confirms the citation.
 
-`UNVERIFIED` does not mean fabricated. It means the checker did not have enough evidence.
+`UNVERIFIED` does not mean fabricated. It means the check had insufficient evidence.
 
-The checker uses local evidence first:
+The citation check uses local evidence first:
 
 1. Inline `bibliography` from tool input.
 2. `bibliographyPath` / `literaturePath` from tool input.
@@ -168,12 +170,12 @@ or replace OMP host and user permissions. Exposing the tool through
 lookup disabled explicitly.
 
 Passing `citationProviders: ['local']` (or `--citation-providers local`) pins the
-checker to local-only mode: all external DOI/arXiv/Crossref lookups are
+citation check to local-only mode: all external DOI/arXiv/Crossref lookups are
 suppressed even when `allowNetwork: true` is set.
 
 ## Supported citation forms
 
-The checker extracts citation targets from:
+The citation check extracts citation targets from:
 
 ```markdown
 [@radford2021clip]
@@ -202,55 +204,39 @@ BibTeX fields used for comparison include:
 
 ## Bundled frugal-pi compatible content
 
-### Agents
+### Polisher
 
-The package ships these agents:
+`polisher` is a tool, not an agent. It makes one stateless model call per passage
+and resolves its model from `modelRoles.polisher`; when that role is unset it
+falls back to `@tiny`, then `@smol`, then the session's current model. It ships
+active, so no `/enhancer-tools` activation is needed. It exposes no tools and no
+file access, runs no agentic loop, does not summarize, translate, restructure, or
+review facts, and rejects fenced code with `code_not_supported`. Main splits code,
+equations, and citation mechanics out first and calls it once per bounded prose
+passage; the returned text is inserted verbatim.
 
-- `writer`
-- `zh-writer`
-- `checker`
-- `zh-checker`
+Prompts live in `polisher/prompt-en.md` and `polisher/prompt-zh.md`. Language
+`auto` detects the passage language and picks the matching prompt; the tool never
+translates between them.
 
-Model policy:
+`polisher/prompt-zh.md` 承载中文书写基线：规范、自然的书面表达，段首先写问题、对象或任务，动词具体并带方法层级，机制随方法交代，结果句带数字、量级与比较对象，主语按任务和材料指定，句长与标点服从信息关系，不机械拆句。科研叙述体只在科研成果凝练与学术正文里启用，增加针对式开段、结果显示引出、写明具体作用对象和范围的贡献收尾，以及承载必要限定与条件的长复句；贡献收尾、量化成效和必要长复句的豁免只在这两类任务里生效，量化成效必须有实测和比较基准，其他文体不豁免，意义拔高照常报告。文体卡决定内容组织、读者适配和示例范围，与书写基线同时适用；两处出现实质冲突时按任务用途和材料判断并说明取舍。技术说明、教学讲解的参照选段与六张文体卡（五张既有卡加一张幻灯片正文卡）存放在 `plugins/writing-helper/skills/plain-chinese-writing/references/style-profiles.md`。用户逐任务指定的风格、术语和篇幅优先。参照文本只作风格参照，不作为事实、引用或案例来源。
 
-- `writer` declares `pi/task`; `zh-writer` declares `pi/smol` for drafting and bounded revision work.
-- `checker` and `zh-checker` declare `pi/slow` for independent quality review.
-- These agents do not set `thinkingLevel`; each inherits both the model and reasoning level from its configured role.
-- `writer` and `zh-writer` expose only `read`, `grep`, and `glob` and are always
-  proposal-only: even when the assignment authorizes a file change, they return
-  a complete proposed replacement, SEARCH/REPLACE block, or unified diff.
-  `checker` and `zh-checker` additionally expose `web_search` for evidence
-  verification, subject to current host and user network permission; they have
-  no `write` or `edit`, remain read-only, and return reports in-band. Main alone
-  decides whether a proposed change or report may be persisted and performs the
-  authorized file mutation.
+`polisher/prompt-en.md` 的内置英文技术散文基线采用用户指定的基准文本；所有英文润色默认按该文风输出，用户显式给出另一种风格或原文风格更合适时以用户为准。基准文本只用于模仿文风，不作为事实、引用或案例来源。
 
-`zh-writer` 默认按通用书写基线写：规范、自然的书面表达，段首先写问题、对象或任务，动词具体并带方法层级，机制随方法交代，结果句带数字、量级与比较对象，主语按任务和材料指定，句长与标点服从信息关系，不机械拆句。科研叙述体只在科研成果凝练与学术正文里启用，增加针对式开段、结果显示引出、写明具体作用对象和范围的贡献收尾，以及承载必要限定与条件的长复句；贡献收尾、量化成效和必要长复句的豁免只在这两类任务里生效，量化成效必须有实测和比较基准，其他文体不豁免，意义拔高照常报告。文体卡决定内容组织、读者适配和示例范围，与书写基线同时适用；两处出现实质冲突时按任务用途和材料判断并说明取舍。技术说明、教学讲解的参照选段与六张文体卡（五张既有卡加一张幻灯片正文卡）存放在 `plugins/writing-helper/skills/plain-chinese-writing/references/style-profiles.md`。用户逐任务指定的风格、术语和篇幅优先。参照文本只作风格参照，不作为事实、引用或案例来源。
-
-`writer` 的内置英文技术散文基线采用用户指定的基准文本；所有英文写作任务默认按该文风输出，用户显式给出另一种风格时以用户为准。基准文本只用于模仿文风，不作为事实、引用或案例来源。
-
-Composed workflows freeze one shared Skill list for assignment metadata, so it
-may include methods owned by sibling checkpoints. Each writing child treats
-those bodies as context rather than a new assignment and applies only the
-method needed by its byte-0 `step` and `todo`. It never executes another
-checkpoint's command, delegation, revision, publication, or file effect;
-checker `web_search` remains limited to its own parent-selected review mode.
-
-`writing` is the single marketplace writing workflow. Main gives the language-matched
-writer (writer or zh-writer) a complete bounded drafting or revision assignment and
-receives a proposal, then gives the language-matched checker (checker or zh-checker)
-the source, proposal, and exact acceptance anchors for an independent in-band review.
-Main validates each finding; accepted findings may return once to the writer for one
-corrected proposal. Main alone applies any authorized file change and then verifies
-content anchors, format, and the resulting artifact. Writer and checker are
-dependency-ordered rather than parallel. If the user requires Main-only work, a
-role/capacity is unavailable, or the artifact/assignment is incomplete or unsafe to
-split, Main records the direct fallback. This remains Agent-selected soft guidance,
-not a fork requirement, router, gate, or automatic repair loop.
+`writing` is the single marketplace writing workflow, and Main does its writing
+work directly. Main drafts every prose and copy surface, calls `polisher` once per
+bounded passage, inserts the returned text verbatim, and then runs the advisory
+read-only checks (`writing_quality_check`, `writing_logic_check`,
+`writing_ai_scan`) and decides the disposition of their findings. Any later
+wording change, including one motivated by an orphan line, clipping, overflow, or
+spacing, goes back through `polisher`; Main never rewords polished text itself.
+If `polisher` is unavailable, Main records the limitation instead of shipping
+unpolished prose. This remains Agent-selected soft guidance, not a fork
+requirement, router, gate, or automatic repair loop.
 
 ### Skills
 
-The package ships these writing-related skills under their original names:
+The package ships these writing-related skills under their original names. These are Skill identifiers: the former `writer`, `zh-writer`, `checker`, and `zh-checker` agents are removed from this marketplace, so a name containing `writer` or `checker` identifies a Skill, not an agent.
 
 - `plain-chinese-writing`
 - `zh-research-achievement-writing`
@@ -341,8 +327,8 @@ npm pack --dry-run --workspace plugins/writing-helper
 ```text
 writing-helper/
   index.js              # OMP extension entrypoint
-  src/                  # deterministic analyzers and report formatting
-  agents/               # bundled writer/checker agents
+  src/                  # deterministic analyzers, the polisher runner, and report formatting
+  polisher/             # prompt-en.md and prompt-zh.md
   skills/               # bundled frugal-pi compatible writing skills
   test/                 # node:test suite and coverage cases
   package.json

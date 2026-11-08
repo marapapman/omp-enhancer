@@ -205,7 +205,7 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
   for (const heading of [
     'When:',
     'Skills:',
-    'Agents (host runtime adapter labels):',
+    'Agents:',
     'Flow:',
   ]) {
     const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -223,7 +223,7 @@ test('shared assets keep the catalog managed while exposing only neutral optiona
     assert.match(referenceText, new RegExp(`# \`${workflowId}\` workflow reference`), `${workflowId} reference heading`);
     assert.match(referenceText, /- When: /);
     assert.match(referenceText, /- Skills: /);
-    assert.match(referenceText, /- Agent candidates \(host runtime adapter labels\): /);
+    assert.match(referenceText, /- Agent candidates: /);
     assert.doesNotMatch(referenceText, /- Suggested flow:|- Scope notes:/);
   }
   assert.doesNotMatch(catalog, /healthcare\.review|ecc-healthcare-reviewer/i);

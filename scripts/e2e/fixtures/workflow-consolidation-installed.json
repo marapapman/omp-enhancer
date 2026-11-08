@@ -102,12 +102,12 @@
       "id": "marketing-campaign-worktree-audit",
       "category": "workflow-consolidation",
       "cwd": ".",
-      "prompt": "Audit one writing contract checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"checker\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Ask the child to inspect plugins/writing-helper/README.md and report whether factual claims, citations, and output language are independently checked. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, draft or send external content, browse, or use the network.",
+      "prompt": "Audit one writing contract checkpoint. Your first tool call must be native todo with exactly one pending item named audit. Do not use read, grep, or glob in the parent. Then make exactly one native task call using the tasks[] batch form. The tasks[0].agent JSON value must be exactly \"task\"; do not use another role or alias. Set the task batch context to \"single read-only checkpoint\". Ask the child to inspect plugins/writing-helper/README.md and report whether the writing contract routes every Main-drafted prose or copy passage through the polisher tool before delivery, and whether factual claims, citations, and output language still receive an independent advisory check; the former writer and checker agents are removed, so no agent may be requested for that role. Wait for it, mark the one todo complete, and return one sentence. Do not modify files, draft or send external content, browse, or use the network.",
       "expectations": {
         "minNativeTaskAssignmentAttempts": 1,
         "maxNativeTaskAssignmentAttempts": 1,
         "requiredNativeTaskAgents": [
-          "checker"
+          "task"
         ]
       }
     }

@@ -4,9 +4,9 @@ Optional advisory reference. Main orchestrates freely.
 
 - When: Source-backed research, web synthesis, comparison, recommendation, fact-checking, or claim-by-claim verdict.
 - Skills: `fact-checking`, `claim-extraction`, `source-evaluation`, `citation-authenticity`
-- Agent candidates (host runtime adapter labels): `fact-researcher-a`, `fact-researcher-b`, `fact-researcher-c`, `fact-challenger`, `fact-planner`, `scout`, `writer`, `zh-writer`.
+- Agent candidates: `fact-researcher-a`, `fact-researcher-b`, `fact-researcher-c`, `fact-challenger`, `fact-planner`, `scout`.
 
-Text capability note: `writer` and `zh-writer` are the dedicated language-matched text tools for all English/Chinese prose and copy; they appear under their packaged Agent adapter names only because the current OMP host exposes model workers that way. That backend label is not a second general-purpose writer agent and grants no code or file permissions; Main/task own code and other non-text actions.
+Text capability note: `polisher` is a writing-helper tool, not an Agent. Main drafts the text, calls `polisher` on each bounded passage, and inserts the returned text verbatim; code, evidence, structure, layout, and validation stay with Main/task, and the polisher model may be older or smaller because it performs only language polishing.
 
 ## Required step order
 
@@ -15,14 +15,14 @@ These steps are the required execution order for this domain. The plugin provide
 1. Decompose into checkable claims or research questions.
 2. Collect evidence from primary sources; corroborate with multiple sources.
 3. Cross-check evidence lanes for agreement, conflicts, and staleness.
-4. Route all user-facing research text through the language-matched dedicated text tool before synthesis: English goes to writer, Chinese goes to zh-writer, and mixed-language output uses separate writer and zh-writer text-tool calls.
-5. The writer/zh-writer text tool drafts the source-linked synthesis with confidence levels; Main integrates the returned text verbatim.
+4. Route every user-facing research text through Main drafting and the polisher tool before synthesis: Main drafts the passage in its body language, calls polisher with the matching zh or en prompt, and inserts the returned text verbatim; mixed-language output is polished segment by segment.
+5. Main drafts the source-linked synthesis with confidence levels itself and passes it through polisher; code, evidence collection, source comparison, and structural work stay with the research roles and Main.
 6. Review verdicts for overclaiming; report limitations without drafting or rewriting prose.
 
 ## Scope notes
 
 - Prefer primary sources; corroborate key claims with multiple independent sources.
-- Research roles handle evidence collection, claim extraction, and source comparison. Any user-facing prose — summaries, recommendations, verdicts, explanations, titles, captions, labels, narrative copy, and UI copy — is authored only by the language-matched dedicated text tool, keeping research prose writer-only: route English to writer and Chinese to zh-writer, using both for mixed-language output. Main only calls the text tools and integrates returned text verbatim; Main never drafts, rewrites, translates, polishes, or otherwise edits wording.
+- Research roles handle evidence collection, claim extraction, and source comparison. Every user-facing prose surface — summaries, recommendations, verdicts, explanations, titles, captions, labels, narrative copy, and UI copy — is drafted by Main and then rewritten by the polisher tool in its body language; Main inserts each returned text verbatim. Code, evidence, and structure stay with the research roles and Main. The polisher never reviews facts, plans, or tools, and Main never delegates evidence or agentic work to it.
 - Information-gain principle, inherited from the writing card: every user-facing sentence in this domain — prose, summary, explanation, caption, label, or UI copy — serves one clear expressive focus and keeps only new facts, necessary qualifications, or key logical relations; delete redundant wording before explaining the same point again, leave reader-inferable links out, let the reader complete the simple inference, and keep every unique fact, number, qualifier, scope, modality, negation, citation, safety instruction, and reproducibility step. Captions and labels keep their own genre conventions, and no scanner score or local metric replaces this sentence-level review.
 - Verdicts preserve exact claim tuples; compatibility evidence is not proof.
 - The deterministic pipeline for a document-level check is fact_check_analyze -> fact_check_evidence (lane A, lane B and C only when warranted) -> fact_check_report -> fact_check_review; these four tools ship in the default tool inventory, so a natural-language check request needs no activation step.

@@ -120,7 +120,7 @@ in stored content executes as shell, LaTeX command, or web instruction.
 |`POST /api/assets?filename=<encoded>`|raw file body with the correct Content-Type, verified type, returns the asset record; no disk path or remote URL, and the server never fetches a URL|
 |`GET /api/assets/:id`|the project file behind authentication, 404 when unknown|
 |`POST /api/rounds`|`{expectedRevision}` creates `{id,baseRevision,createdAt,projectId,kind,rootId,nodes,comments,assets}` with only `open` comments; immutable snapshot, returns that round|
-|`GET /api/rounds/:id`|the exact context for the next writer round|
+|`GET /api/rounds/:id`|the exact context for the next proposal round|
 |`POST /api/proposals`|import a proposal; returns the pending proposal, changes no body text|
 |`POST /api/proposals/:id/decision`|`{expectedRevision,decision:"accept"|"reject"}`; accept re-validates the base revision first, reject changes no tree|
 |`POST /api/exports`|`{expectedRevision}`; confirms the current story and writes an immutable export snapshot, returns the path and revision|
@@ -175,9 +175,9 @@ re-apply. There is no automatic retry and no last-write-wins.
 snapshot holding only `open` comments with `id`, `baseRevision`, `createdAt`,
 `projectId`, `kind`, `rootId`, `nodes`, `comments`, and `assets`. Creating a
 round leaves the story `revision` unchanged, and `GET /api/rounds/:id`
-returns the snapshot as the exact context for the next writer round.
+returns the snapshot as the exact context for the next proposal round.
 
-`POST /api/proposals` imports the writer's JSON and changes no body text. The
+`POST /api/proposals` imports the proposal JSON and changes no body text. The
 input fields are `schemaVersion` (1), `roundId` (an existing round),
 `baseRevision` (equal to the origin snapshot and the current revision),
 `nodes` (the complete candidate tree, unchanged IDs and text, no server

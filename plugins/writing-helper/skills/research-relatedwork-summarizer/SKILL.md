@@ -5,16 +5,19 @@ description: "Summarize downloaded papers — extract core contribution, method,
 
 # Research Related Work Summarizer
 
-When this Skill is part of a `writer` or `zh-writer` assignment, that child
-remains proposal-only: it runs no command and writes no file, and returns the
-complete proposed artifact or diff. Main or an explicitly capable generic
-`task` owns authorized effects.
+Main performs this method directly in its own context; the former `writer` and
+`zh-writer` agents are removed and no work is routed to them. Any user-facing
+prose the method produces is drafted by Main, passed through the `polisher`
+tool, and inserted verbatim from the returned text before it reaches a
+deliverable or the user. Commands, file writes, and other effects belong to Main
+or to an explicitly capable generic `task`.
 
 Summarize downloaded paper files into structured related-work entries.
 
-This is an assigned child-local method; it does not require Main to execute the
-method directly. Do not recursively fork, spawn, or delegate. Main retains the
-parent TODO, user interaction, and integration.
+Main performs this method itself and keeps the parent TODO, the user
+interaction, and the integration. Every summary sentence is Main's draft passed
+through the `polisher` tool, and Main inserts the returned text verbatim into
+the entry.
 
 ## When to Use
 

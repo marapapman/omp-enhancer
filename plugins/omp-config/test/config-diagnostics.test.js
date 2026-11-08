@@ -34,7 +34,7 @@ test('packaged config template ships model role defaults and keeps loopGuard/com
   const config = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
 
   assert.match(config, /^modelRoles:\n  default: \S+/mu);
-  assert.match(config, /^task:\n  agentModelOverrides:\n    checker: "@task"/mu);
+  assertConfigRoles(config);
   assert.match(config, /^retry:\n  fallbackChains:/mu);
   assert.match(config, /loopGuard:\s*\n\s+enabled:\s+false/);
   assert.doesNotMatch(config, /modelPattern|maxRepeatedSentence|maxRepeatedPhrase|minRepeatedChars/);
@@ -58,6 +58,31 @@ async function writePluginPackage(root) {
 
 function packageRoot() {
   return path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+}
+
+function configBlock(source, header) {
+  const start = source.indexOf(header);
+  if (start < 0) return '';
+  const rest = source.slice(start + header.length);
+  const end = rest.search(/^\S/mu);
+  return end < 0 ? rest : rest.slice(0, end);
+}
+
+function assertConfigRoles(source) {
+  const modelRoles = configBlock(source, 'modelRoles:\n');
+  assert.match(modelRoles, /^  polisher: \S+/mu, 'modelRoles must define the polisher role');
+
+  assert.match(source, /^task:\n  agentModelOverrides:/mu, 'the task agent overrides must stay in the template');
+  const overrides = configBlock(source, '  agentModelOverrides:\n');
+  for (const removed of ['writer', 'zh-writer', 'checker', 'zh-checker']) {
+    assert.doesNotMatch(
+      overrides,
+      new RegExp(`^    ${removed}:`, 'mu'),
+      `task.agentModelOverrides must not keep ${removed}`,
+    );
+  }
+  assert.match(overrides, /^    fact-challenger: "@slow"/mu, 'the fact-check overrides should stay');
+  assert.match(overrides, /^    fact-planner: "@slow"/mu, 'the fact-check overrides should stay');
 }
 
 const expectedBundledSkills = [
@@ -208,7 +233,7 @@ test('packaged config template ships model role defaults and keeps safe defaults
   const template = await readFile(path.join(packageRoot(), 'assets', 'config.yml'), 'utf8');
 
   assert.match(template, /^modelRoles:\n  default: \S+/mu);
-  assert.match(template, /^task:\n  agentModelOverrides:\n    checker: "@task"/mu);
+  assertConfigRoles(template);
   assert.match(template, /^retry:\n  fallbackChains:/mu);
   assert.doesNotMatch(template, /classifier:|modelTags:/);
   assert.match(template, /webSearch:\s*codex/);
@@ -243,10 +268,10 @@ test('packaged advisor context assists Agent-owned orchestration without replaci
   assert.doesNotMatch(watchdog, /DECISION CHECK|WORKFLOW PLAN|WORKFLOW READY|RESOURCE EXTENSION|Delegate Agent=|DISCOVER -> DECLARE -> LOAD|byte 0|writing\.pending/i);
   assert.equal(watchdog.match(/Writing-norm reminder \(zh\/en, advisory\)/gu)?.length, 1, 'Advisor policy keeps one writing-norm reminder instead of accumulating duplicate guidance');
   assert.equal(watchdog.match(/Information-gain part of the one-shot writing-norm reminder/gu)?.length, 1, 'The information-gain duty rides in the same single reminder');
-  // Size guard for the per-session injected prompt. The sentence-level restatement
-  // and unscoped-absolute bans added ~1.2k characters (now ~6.0k); 6500 leaves
-  // bounded headroom and still fails on unchecked advisory growth.
-  assert.ok(watchdog.length < 6500, `Advisor policy should stay compact, got ${watchdog.length} characters`);
+  // Size guard for the per-session injected prompt. The sentence-level bans added
+  // ~1.2k characters, and the polisher writing boundary added ~1.0k more (now
+  // ~7.3k); 8000 leaves bounded headroom and still fails on unchecked growth.
+  assert.ok(watchdog.length < 8000, `Advisor policy should stay compact, got ${watchdog.length} characters`);
   assert.doesNotMatch(watchdog, /block:\s*true|continue:\s*true|triggerTurn|hard router/i);
 });
 

@@ -338,7 +338,11 @@ test('worktree isolation preserves the packaged model role defaults', async () =
     });
     const config = await readFile(path.join(isolation.agentDir, 'config.yml'), 'utf8');
     assert.match(config, /^modelRoles:\n  default: \S+/mu);
-    assert.match(config, /^task:\n  agentModelOverrides:\n    checker: "@task"/mu);
+    assert.match(config, /^modelRoles:\n(?:  .*\n)*  polisher: \S+/mu);
+    assert.doesNotMatch(
+      config,
+      /agentModelOverrides:[\s\S]*?\n\s+(?:zh-writer|zh-checker|writer|checker):/u,
+    );
     assert.match(config, /^retry:\n  fallbackChains:/mu);
     assert.match(config, /^loopGuard:\s*\n\s+enabled:\s+false$/mu);
   } finally {
@@ -1406,6 +1410,170 @@ test('file write order remains opt-in for existing evaluator summaries', () => {
   assert.equal(evaluation.pass, true, evaluation.failures.join('\n'));
 });
 
+function summaryWithRecordedToolCalls(calls) {
+  return {
+    toolCalls: calls.map((call, index) => ({
+      completed: true,
+      isError: false,
+      eventIndex: index * 2,
+      arguments: {},
+      ...call,
+    })),
+    tddTrace: { mutationCalls: [] },
+  };
+}
+
+test('required tool calls count only successful filtered calls', () => {
+  const summary = summaryWithRecordedToolCalls([
+    { name: 'polisher', arguments: { text: '第一段提到 1989 年和 CERN。', language: 'zh' } },
+    { name: 'polisher', arguments: { text: '第二段讨论 HTML 和万维网。', language: 'zh' } },
+    { name: 'polisher', completed: false, isError: true, arguments: { text: '失败的一段。' } },
+    { name: 'write', arguments: { path: 'paper.md', content: '正文' } },
+  ]);
+
+  const accepted = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredToolCalls: [
+      { name: 'polisher', min: 2 },
+      { name: 'polisher', min: 1, argumentsPattern: '1989[\\s\\S]*CERN' },
+      { name: 'write', min: 1 },
+    ],
+  });
+  assert.equal(accepted.pass, true, accepted.failures.join('\n'));
+
+  const tooFew = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredToolCalls: [{ name: 'polisher', min: 3 }],
+  });
+  assert.equal(tooFew.pass, false);
+  assert.match(
+    tooFew.failures.join('\n'),
+    /required tool call polisher.+was observed 2 time\(s\), below 3/u,
+  );
+
+  const mismatched = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredToolCalls: [{ name: 'polisher', min: 1, argumentsPattern: 'CERN[\\s\\S]*万维网' }],
+  });
+  assert.equal(mismatched.pass, false);
+  assert.match(mismatched.failures.join('\n'), /required tool call polisher.+below 1/u);
+
+  const forbidden = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    forbiddenToolCalls: ['polisher'],
+  });
+  assert.equal(forbidden.pass, false);
+  assert.match(forbidden.failures.join('\n'), /forbidden tool call was observed: polisher/u);
+
+  const unconstrained = evaluateWorkflowSummary(summary, { requireFinal: false });
+  assert.equal(unconstrained.pass, true, unconstrained.failures.join('\n'));
+});
+
+test('required tool call sequence and pre-write position prove polisher precedes the write', () => {
+  const summary = {
+    toolCalls: [
+      { name: 'read', eventIndex: 1, completed: true, isError: false, arguments: { path: 'paper.md' } },
+      { name: 'polisher', eventIndex: 3, completed: true, isError: false, arguments: { text: '润色稿' } },
+      { name: 'write', eventIndex: 5, completed: true, isError: false, arguments: { path: 'paper.md' } },
+      { name: 'writing_quality_check', eventIndex: 7, completed: true, isError: false, arguments: {} },
+    ],
+    tddTrace: { mutationCalls: [{ target: 'paper.md', eventIndex: 5 }] },
+  };
+
+  const accepted = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredToolCallSequence: ['read', 'polisher', 'write'],
+    requiredToolCallOrder: [{ before: 'polisher', after: 'writing_quality_check' }],
+    requiredToolCallBeforeFileWrite: [{ tool: 'polisher', file: 'paper.md' }],
+  });
+  assert.equal(accepted.pass, true, accepted.failures.join('\n'));
+
+  const missingPolisher = evaluateWorkflowSummary({
+    toolCalls: [
+      { name: 'read', eventIndex: 1, completed: true, isError: false },
+      { name: 'write', eventIndex: 5, completed: true, isError: false, arguments: { path: 'paper.md' } },
+    ],
+    tddTrace: { mutationCalls: [{ target: 'paper.md', eventIndex: 5 }] },
+  }, {
+    requireFinal: false,
+    requiredToolCalls: [{ name: 'polisher', min: 1 }],
+    requiredToolCallSequence: ['polisher', 'write'],
+    requiredToolCallBeforeFileWrite: [{ tool: 'polisher', file: 'paper.md' }],
+  });
+  assert.equal(missingPolisher.pass, false);
+  const failures = missingPolisher.failures.join('\n');
+  assert.match(failures, /required tool call polisher.+below 1/u);
+  assert.match(failures, /required tool call sequence polisher -> write was missing polisher/u);
+  assert.match(failures, /required tool call polisher occurred 0 time\(s\) before the write of paper[.]md/u);
+
+  const lateWrite = evaluateWorkflowSummary({
+    toolCalls: [
+      { name: 'write', eventIndex: 2, completed: true, isError: false, arguments: { path: 'paper.md' } },
+      { name: 'polisher', eventIndex: 4, completed: true, isError: false, arguments: { text: '润色稿' } },
+    ],
+    tddTrace: { mutationCalls: [{ target: 'paper.md', eventIndex: 2 }] },
+  }, {
+    requireFinal: false,
+    requiredToolCallBeforeFileWrite: [{ tool: 'polisher', file: 'paper.md' }],
+    requiredToolCallOrder: [{ before: 'polisher', after: 'write' }],
+  });
+  assert.equal(lateWrite.pass, false);
+  const lateFailures = lateWrite.failures.join('\n');
+  assert.match(lateFailures, /required tool call polisher occurred 0 time\(s\) before the write of paper[.]md/u);
+  assert.match(lateFailures, /required tool call order was violated: polisher must be called before write/u);
+
+  const overlapping = evaluateWorkflowSummary({
+    toolCalls: [
+      { name: 'polisher', eventIndex: 1, completionEventIndex: 6, completed: true, isError: false, arguments: { text: '润色稿' } },
+      { name: 'write', eventIndex: 3, completionEventIndex: 4, completed: true, isError: false, arguments: { path: 'paper.md' } },
+    ],
+    tddTrace: { mutationCalls: [{ target: 'paper.md', eventIndex: 3 }] },
+  }, {
+    requireFinal: false,
+    requiredToolCallBeforeFileWrite: [{ tool: 'polisher', file: 'paper.md' }],
+  });
+  assert.equal(overlapping.pass, false);
+  assert.match(
+    overlapping.failures.join('\n'),
+    /required tool call polisher occurred 0 time\(s\) before the write of paper[.]md/u,
+  );
+
+  const unobservedWrite = evaluateWorkflowSummary({
+    toolCalls: [{ name: 'polisher', eventIndex: 2, completed: true, isError: false }],
+    tddTrace: { mutationCalls: [] },
+  }, {
+    requireFinal: false,
+    requiredToolCallBeforeFileWrite: [{ tool: 'polisher', file: 'paper.md' }],
+  });
+  assert.equal(unobservedWrite.pass, false);
+  assert.match(
+    unobservedWrite.failures.join('\n'),
+    /could not be positioned before an unobserved file write: paper[.]md/u,
+  );
+});
+
+test('tool call expectations reject malformed specifications', () => {
+  const summary = summaryWithRecordedToolCalls([
+    { name: 'polisher', arguments: { text: '润色稿' } },
+  ]);
+  const malformed = evaluateWorkflowSummary(summary, {
+    requireFinal: false,
+    requiredToolCalls: [{ min: 1 }, { name: 'polisher', argumentsPattern: '(' }],
+    requiredToolCallSequence: [],
+    requiredToolCallOrder: [{ before: 'polisher', after: 'polisher' }],
+    forbiddenToolCalls: [42],
+    requiredToolCallBeforeFileWrite: [{ tool: 'polisher' }],
+  });
+  assert.equal(malformed.pass, false);
+  const failures = malformed.failures.join('\n');
+  assert.match(failures, /requiredToolCalls contained a specification without a tool name/u);
+  assert.match(failures, /requiredToolCalls[.]argumentsPattern for polisher contained an invalid pattern/u);
+  assert.match(failures, /requiredToolCallSequence must be a nonempty array of tool names/u);
+  assert.match(failures, /requiredToolCallOrder contained an invalid \{ before, after \} specification/u);
+  assert.match(failures, /forbiddenToolCalls must be an array of tool names/u);
+  assert.match(failures, /requiredToolCallBeforeFileWrite contained a specification without a tool name and file/u);
+});
+
 test('Beamer precheck fixture stays Beamer-only while PPTX output remains an optional branch', async () => {
   const matrix = JSON.parse(await readFile(
     new URL('./e2e/fixtures/subagent-willingness.json', import.meta.url),
@@ -1415,15 +1583,25 @@ test('Beamer precheck fixture stays Beamer-only while PPTX output remains an opt
   assert.ok(scenario);
   assert.equal(scenario.fixture, 'visual-beamer-deck');
   assert.equal(scenario.category, 'subagent-default/visual');
-  assert.deepEqual(scenario.tools, ['todo', 'task', 'hub', 'read', 'grep', 'glob', 'write', 'edit']);
-  assert.match(
-    scenario.prompt,
-    /independent writer.+English text-only.+slides-content[.]md.+sole author.+(?:title|body|label|caption).+Main.+verbatim.+task must not.+(?:draft|rewrite|author).+copy/isu,
+  assert.deepEqual(
+    scenario.tools,
+    ['todo', 'task', 'hub', 'read', 'grep', 'glob', 'write', 'edit', 'polisher'],
   );
   assert.match(
     scenario.prompt,
-    /task reconcile the slide order on slides-content[.]md.+(?:reorder|structural metadata).+must not rewrite.+writer-proposed text/isu,
+    /Main drafts.+English text-only.+slides-content[.]md.+sole author.+(?:title|body|label|caption).+polisher.+verbatim.+task must not.+(?:draft|rewrite|author).+copy/isu,
   );
+  assert.match(
+    scenario.prompt,
+    /task reconcile the slide order on slides-content[.]md.+(?:reorder|structural metadata).+must not rewrite.+polished text/isu,
+  );
+  assert.deepEqual(scenario.expectations.requiredNativeTaskAgents, ['task']);
+  assert.deepEqual(scenario.expectations.requiredToolCalls, [
+    { name: 'polisher', min: 2 },
+  ]);
+  assert.deepEqual(scenario.expectations.requiredToolCallBeforeFileWrite, [
+    { tool: 'polisher', file: 'slides-content.md' },
+  ]);
   assert.match(
     scenario.prompt,
     /task.+(?:initial.+render|render.+initial).+single read-only visual precheck.+before.+task final layout pass.+current revision.+read-only/isu,
@@ -1433,14 +1611,6 @@ test('Beamer precheck fixture stays Beamer-only while PPTX output remains an opt
   assert.match(scenario.prompt, /basic-layout confirmation.+before entering.+visual refinement/isu);
   assert.doesNotMatch(scenario.prompt, /exact user-supplied conversion command|no conversion command.+do not convert/isu);
   assert.deepEqual(scenario.expectations.requiredNativeTaskAssignmentTextBounds, [
-    {
-      agent: 'writer',
-      pattern: '(?:text-only|Markdown).+(?:title|body|label|caption|visual role)',
-      minCount: 1,
-      maxCount: 1,
-      beforeAssignmentAgent: 'task',
-      beforeAssignmentText: 'reconcile.+slide order',
-    },
     {
       agent: 'task',
       pattern: 'reconcile.+slide order.+(?:reorder|structural).+(?:must not|never).+(?:rewrite|alter|edit).+(?:text|copy)',
@@ -1467,7 +1637,6 @@ test('Beamer precheck fixture stays Beamer-only while PPTX output remains an opt
     },
   ]);
   assert.deepEqual(scenario.expectations.requiredNativeTaskAgentSequence, [
-    'writer',
     'task',
     'task',
     'task',
@@ -1548,44 +1717,52 @@ test('workflow evaluation requireLocalSearchBeforeProjectTools enforces ordering
   assert.equal(falseExpectationSkips.pass, true);
 });
 
-test('Beamer text ownership accepts writer proposals and rejects task-authored copy', () => {
+test('Beamer text ownership expects a Main polish pass and rejects task-authored copy', () => {
   const expectations = {
     requireFinal: false,
-    requiredNativeTaskAgentSequence: ['writer', 'task'],
-    requiredNativeTaskAssignmentTextBounds: [
-      {
-        agent: 'writer',
-        pattern: '(?:text-only|Markdown).+(?:title|body|label|caption)',
-        minCount: 1,
-        maxCount: 1,
-      },
-    ],
+    requiredToolCalls: [{ name: 'polisher', min: 1 }],
+    requiredNativeTaskAgents: ['task'],
     forbiddenNativeTaskAssignmentTextPatterns: [
       '\\b(?:draft|author|compose|rewrite|translate|polish|retype|write)\\b[^\\n]{0,160}(?:text|copy|title|body|caption|label|notes?)',
       '(?:text|copy|title|body|caption|label|notes?)[^\\n]{0,160}\\b(?:draft|author|compose|rewrite|translate|polish|retype|write)\\b',
     ],
   };
-  const trace = (taskText) => {
+  const trace = (taskText, { polish = true } = {}) => {
     const events = [];
-    appendBeamerTask(events, {
-      id: 'writer-stage',
-      agent: 'writer',
-      jobId: 'writer-stage',
-      task: 'Return the complete text-only Markdown proposal for every title, body, label, and caption.',
-      delivery: 'Complete writer proposal delivered verbatim.',
-    });
+    if (polish) {
+      events.push(
+        {
+          type: 'tool_execution_start',
+          toolCallId: 'polish-page-passages',
+          toolName: 'polisher',
+          args: {
+            text: 'Title: baseline results. Body: the failure rate falls from 37.5% to 12.5%.',
+            language: 'en',
+          },
+        },
+        {
+          type: 'tool_execution_end',
+          toolCallId: 'polish-page-passages',
+          toolName: 'polisher',
+          result: {
+            isError: false,
+            content: [{ type: 'text', text: 'Title: baseline results. Body: the failure rate falls from 37.5% to 12.5%.' }],
+          },
+        },
+      );
+    }
     appendBeamerTask(events, {
       id: 'task-stage',
       agent: 'task',
       jobId: 'task-stage',
       task: taskText,
-      delivery: 'Structural layout work completed without changing copy.',
+      delivery: 'Structural layout work completed without changing polished copy.',
     });
     return summarizeWorkflowEvents(events, { exitCode: 0 });
   };
 
   const valid = evaluateWorkflowSummary(
-    trace('Reorder page structure and adjust spacing only; preserve writer-proposed text and captions.'),
+    trace('Reorder page structure and adjust spacing only; preserve polished text and captions.'),
     expectations,
   );
   assert.equal(valid.pass, true, valid.failures.join('\n'));
@@ -1596,6 +1773,15 @@ test('Beamer text ownership accepts writer proposals and rejects task-authored c
   );
   assert.equal(invalid.pass, false);
   assert.match(invalid.failures.join('\n'), /forbidden native task assignment text pattern/iu);
+
+  const unpolished = evaluateWorkflowSummary(
+    trace('Reorder page structure and adjust spacing only; preserve polished text and captions.', {
+      polish: false,
+    }),
+    expectations,
+  );
+  assert.equal(unpolished.pass, false);
+  assert.match(unpolished.failures.join('\n'), /required tool call polisher.+below 1/u);
 });
 
 test('workflow evaluation requireWebSearchBeforeProjectTools enforces ordering', () => {
@@ -3778,8 +3964,16 @@ test('Subagent default matrix keeps native task and hub semantics with natural c
   assert.match(writing.prompt, /two English LaTeX paragraphs/iu);
   assert.match(writing.prompt, /claim-evidence relationship/iu);
   assert.deepEqual(writing.expectations.requiredSelectedWorkflowIds, ['writing']);
-  assert.deepEqual(writing.expectations.requiredNativeTaskAgents, ['writer', 'checker']);
-  assert.deepEqual(writing.expectations.requiredNativeTaskAgentSequence, ['writer', 'checker']);
+  assert.equal(writing.expectations.maxNativeTaskCalls, 0);
+  assert.deepEqual(writing.expectations.forbiddenToolCalls, ['task']);
+  assert.deepEqual(writing.expectations.requiredToolCalls, [
+    { name: 'polisher', min: 2 },
+    { name: 'polisher', min: 1, argumentsPattern: '37\\.5[\\s\\S]*12\\.5' },
+    { name: 'writing_quality_check', min: 1 },
+  ]);
+  assert.deepEqual(writing.expectations.requiredToolCallOrder, [
+    { before: 'polisher', after: 'writing_quality_check' },
+  ]);
   assert.deepEqual(writing.expectations.forbiddenSkills, [
     'format-markdown2latex',
     'format-latex2markdown',
@@ -3797,11 +3991,8 @@ test('Subagent default matrix keeps native task and hub semantics with natural c
     'zh-writing-state-machine',
   ]);
   assert.equal(writing.expectations.requireWorkflowPlanLoadCallsSameBatch, true);
-  assert.equal(writing.expectations.requireNativeTaskCompletion, true);
-  assert.equal(writing.expectations.requireNativeTaskSubmissionForEveryAssignment, true);
   assert.equal(writing.expectations.requireNativeTodoInit, true);
   assert.equal(writing.expectations.requireNativeTodoCompletion, true);
-  assert.equal(writing.expectations.maxProjectInspectionCallsBeforeNativeTask, 0);
   assert.doesNotMatch(writing.prompt, /\b(?:task|subagents?|sub-agents?|fork|delegate)\b/iu);
 
   const drawio = matrix.scenarios.find(({ id }) => id === 'diagram-drawio-subagent-default');
@@ -3838,7 +4029,7 @@ test('dependency-ordered workflow assignments require successful prior Agent del
   const assignment = (id, agent, jobId) => [
     toolCallEvent(id, 'task', {
       agent,
-      task: `[workflow=writing step=step-${agent} todo=revise skills=writing-review] ${agent} checkpoint.`,
+      task: `[workflow=code step=step-${agent} todo=revise skills=code-development] ${agent} checkpoint.`,
     }),
     toolResultEvent(id, 'task', {
       isError: false,
@@ -3855,42 +4046,42 @@ test('dependency-ordered workflow assignments require successful prior Agent del
   });
   const expectations = {
     requireFinal: false,
-    requiredNativeTaskAgentSequence: ['writer', 'checker'],
+    requiredNativeTaskAgentSequence: ['plan', 'reviewer'],
   };
 
   const ordered = summarizeWorkflowEvents([
-    ...assignment('writer-task', 'writer', 'WriterJob'),
-    delivery('WriterJob'),
-    ...assignment('checker-task', 'checker', 'CheckerJob'),
-    delivery('CheckerJob'),
+    ...assignment('plan-task', 'plan', 'PlanJob'),
+    delivery('PlanJob'),
+    ...assignment('reviewer-task', 'reviewer', 'ReviewerJob'),
+    delivery('ReviewerJob'),
   ]);
   assert.equal(evaluateWorkflowSummary(ordered, expectations).pass, true);
 
   const overlapped = summarizeWorkflowEvents([
-    ...assignment('writer-task', 'writer', 'WriterJob'),
-    ...assignment('checker-task', 'checker', 'CheckerJob'),
-    delivery('WriterJob'),
-    delivery('CheckerJob'),
+    ...assignment('plan-task', 'plan', 'PlanJob'),
+    ...assignment('reviewer-task', 'reviewer', 'ReviewerJob'),
+    delivery('PlanJob'),
+    delivery('ReviewerJob'),
   ]);
   const overlappedEvaluation = evaluateWorkflowSummary(overlapped, expectations);
   assert.equal(overlappedEvaluation.pass, false);
-  assert.match(overlappedEvaluation.failures.join('\n'), /checker.+before.+writer.+successful delivery/iu);
+  assert.match(overlappedEvaluation.failures.join('\n'), /reviewer.+before.+plan.+successful delivery/iu);
 
-  const failedWriter = summarizeWorkflowEvents([
-    ...assignment('writer-task', 'writer', 'WriterJob'),
-    delivery('WriterJob', 'failed'),
-    ...assignment('checker-task', 'checker', 'CheckerJob'),
-    delivery('CheckerJob'),
+  const failedPlan = summarizeWorkflowEvents([
+    ...assignment('plan-task', 'plan', 'PlanJob'),
+    delivery('PlanJob', 'failed'),
+    ...assignment('reviewer-task', 'reviewer', 'ReviewerJob'),
+    delivery('ReviewerJob'),
   ]);
-  const failedWriterEvaluation = evaluateWorkflowSummary(failedWriter, expectations);
-  assert.equal(failedWriterEvaluation.pass, false);
-  assert.match(failedWriterEvaluation.failures.join('\n'), /writer.+did not complete successfully/iu);
+  const failedPlanEvaluation = evaluateWorkflowSummary(failedPlan, expectations);
+  assert.equal(failedPlanEvaluation.pass, false);
+  assert.match(failedPlanEvaluation.failures.join('\n'), /plan.+did not complete successfully/iu);
 
   const completedWithoutDelivery = summarizeWorkflowEvents([
-    ...assignment('writer-task', 'writer', 'WriterJob'),
-    delivery('WriterJob', 'completed', ''),
-    ...assignment('checker-task', 'checker', 'CheckerJob'),
-    delivery('CheckerJob'),
+    ...assignment('plan-task', 'plan', 'PlanJob'),
+    delivery('PlanJob', 'completed', ''),
+    ...assignment('reviewer-task', 'reviewer', 'ReviewerJob'),
+    delivery('ReviewerJob'),
   ]);
   const completedWithoutDeliveryEvaluation = evaluateWorkflowSummary(
     completedWithoutDelivery,
@@ -3899,22 +4090,22 @@ test('dependency-ordered workflow assignments require successful prior Agent del
   assert.equal(completedWithoutDeliveryEvaluation.pass, false);
   assert.match(
     completedWithoutDeliveryEvaluation.failures.join('\n'),
-    /writer.+did not return a successful delivery/iu,
+    /plan.+did not return a successful delivery/iu,
   );
 
-  const prematureChecker = summarizeWorkflowEvents([
-    ...assignment('premature-checker-task', 'checker', 'PrematureCheckerJob'),
-    ...assignment('writer-task', 'writer', 'WriterJob'),
-    delivery('WriterJob'),
-    ...assignment('checker-task', 'checker', 'CheckerJob'),
-    delivery('PrematureCheckerJob'),
-    delivery('CheckerJob'),
+  const prematureReviewer = summarizeWorkflowEvents([
+    ...assignment('premature-reviewer-task', 'reviewer', 'PrematureReviewerJob'),
+    ...assignment('plan-task', 'plan', 'PlanJob'),
+    delivery('PlanJob'),
+    ...assignment('reviewer-task', 'reviewer', 'ReviewerJob'),
+    delivery('PrematureReviewerJob'),
+    delivery('ReviewerJob'),
   ]);
-  const prematureCheckerEvaluation = evaluateWorkflowSummary(prematureChecker, expectations);
-  assert.equal(prematureCheckerEvaluation.pass, false);
+  const prematureReviewerEvaluation = evaluateWorkflowSummary(prematureReviewer, expectations);
+  assert.equal(prematureReviewerEvaluation.pass, false);
   assert.match(
-    prematureCheckerEvaluation.failures.join('\n'),
-    /checker.+before.+writer.+successful delivery/iu,
+    prematureReviewerEvaluation.failures.join('\n'),
+    /reviewer.+before.+plan.+successful delivery/iu,
   );
 });
 
@@ -6132,149 +6323,52 @@ function pptxVisualTraceEvents({
   return events;
 }
 
-test('requireLongFormWritingPilot asserts the long-form writing pilot trace contract', () => {
-  const writerMeta = '[workflow=writing step=step-writer todo=draft-section skills=writing-review]';
-  const checkerMeta = '[workflow=writing step=step-checker todo=check-integrated skills=writing-review]';
-  const integrationTarget = 'article.md';
-  const pilotOptions = { integrationTarget };
-  const baseExpectations = { requireFinal: false, requireLongFormWritingPilot: pilotOptions };
-
-  function greenEvents() {
-    return [
-      {
-        type: 'tool_execution_start',
-        toolCallId: 'task-writers',
-        toolName: 'task',
-        args: {
-          context: 'Draft each section independently and return the full proposal.',
-          tasks: [
-            { name: 'writer-section-a', agent: 'writer', task: `${writerMeta}\nDraft section A.` },
-            { name: 'writer-section-b', agent: 'writer', task: `${writerMeta}\nDraft section B.` },
-          ],
-        },
-      },
-      {
-        type: 'tool_execution_end',
-        toolCallId: 'task-writers',
-        toolName: 'task',
-        result: {
-          isError: false,
-          details: { results: [{ id: 'W1', status: 'completed' }, { id: 'W2', status: 'completed' }] },
-        },
-      },
-      { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="W1" status="completed">W1 delivery</task-result>' } },
-      { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="W2" status="completed">W2 delivery</task-result>' } },
-      { type: 'tool_execution_start', toolCallId: 'write-integration', toolName: 'write', args: { path: integrationTarget, content: 'integrated article' } },
-      { type: 'tool_execution_end', toolCallId: 'write-integration', toolName: 'write', result: { isError: false, content: [{ type: 'text', text: 'wrote' }] } },
-      {
-        type: 'tool_execution_start',
-        toolCallId: 'task-checker',
-        toolName: 'task',
-        args: { context: 'Check the integrated draft.', agent: 'checker', task: `${checkerMeta}\nCheck the integrated article.` },
-      },
-      { type: 'tool_execution_end', toolCallId: 'task-checker', toolName: 'task', result: { isError: false, details: { async: { jobId: 'C1', state: 'completed' } } } },
-      { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="C1" status="completed">C1 delivery</task-result>' } },
-      { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] } },
-    ];
-  }
-
-  const greenSummary = summarizeWorkflowEvents(greenEvents(), { exitCode: 0 });
-  assert.equal(greenSummary.nativeTask.multiForkBatchCallCount, 1);
-  assert.equal(greenSummary.nativeTask.assignments.filter(({ agent }) => agent === 'writer').length, 2);
-  const greenEvaluation = evaluateWorkflowSummary(greenSummary, baseExpectations);
-  assert.equal(greenEvaluation.pass, true, greenEvaluation.failures.join('\n'));
-
-  // RED: only one writer (no per-section batch) fails the >=2 writer requirement.
-  const oneWriterEvents = greenEvents();
-  oneWriterEvents[0].args.tasks = [oneWriterEvents[0].args.tasks[0]];
-  oneWriterEvents[1].result.details.results = [oneWriterEvents[1].result.details.results[0]];
-  oneWriterEvents.splice(3, 1);
-  const oneWriterEvaluation = evaluateWorkflowSummary(
-    summarizeWorkflowEvents(oneWriterEvents, { exitCode: 0 }),
-    baseExpectations,
-  );
-  assert.equal(oneWriterEvaluation.pass, false);
-  assert.match(oneWriterEvaluation.failures.join('\n'), />=2 writer assignments, observed 1/);
-
-  // RED: checker precedes integration fails the exactly-one-checker-after-integration rule.
-  const checkerBeforeEvents = greenEvents();
-  const checkerBlock = checkerBeforeEvents.splice(6, 3);
-  checkerBeforeEvents.splice(4, 0, ...checkerBlock);
-  const checkerBeforeEvaluation = evaluateWorkflowSummary(
-    summarizeWorkflowEvents(checkerBeforeEvents, { exitCode: 0 }),
-    baseExpectations,
-  );
-  assert.equal(checkerBeforeEvaluation.pass, false);
-  assert.match(checkerBeforeEvaluation.failures.join('\n'), /exactly one checker assignment after integration, observed 0/);
-
-  // RED: a native reviewer agent is forbidden in the writing pilot flow.
-  const reviewerEvents = greenEvents();
-  reviewerEvents[0].args.tasks.push({
-    name: 'reviewer-audit',
-    agent: 'reviewer',
-    task: '[workflow=writing step=step-review todo=review skills=writing-review]\nReview.',
-  });
-  reviewerEvents[1].result.details.results.push({ id: 'R1', status: 'completed' });
-  reviewerEvents.splice(4, 0, {
-    type: 'message_end',
-    message: { role: 'custom', customType: 'async-result', content: '<task-result id="R1" status="completed">R1 delivery</task-result>' },
-  });
-  const reviewerEvaluation = evaluateWorkflowSummary(
-    summarizeWorkflowEvents(reviewerEvents, { exitCode: 0 }),
-    baseExpectations,
-  );
-  assert.equal(reviewerEvaluation.pass, false);
-  assert.match(reviewerEvaluation.failures.join('\n'), /forbidden native reviewer: reviewer/);
-
-  // GREEN: sequential fallback (batch unavailable) is not-evaluable for the batch
-  // assertion and must not fail the pilot when 2 writers integrate before one checker.
-  const sequentialEvents = [
-    { type: 'tool_execution_start', toolCallId: 'task-w1', toolName: 'task', args: { context: 'Draft.', agent: 'writer', task: `${writerMeta}\nA.` } },
-    { type: 'tool_execution_end', toolCallId: 'task-w1', toolName: 'task', result: { isError: false, details: { async: { jobId: 'W1', state: 'completed' } } } },
-    { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="W1" status="completed">W1 delivery</task-result>' } },
-    { type: 'tool_execution_start', toolCallId: 'task-w2', toolName: 'task', args: { context: 'Draft.', agent: 'writer', task: `${writerMeta}\nB.` } },
-    { type: 'tool_execution_end', toolCallId: 'task-w2', toolName: 'task', result: { isError: false, details: { async: { jobId: 'W2', state: 'completed' } } } },
-    { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="W2" status="completed">W2 delivery</task-result>' } },
-    { type: 'tool_execution_start', toolCallId: 'write-integration', toolName: 'write', args: { path: integrationTarget, content: 'integrated article' } },
-    { type: 'tool_execution_end', toolCallId: 'write-integration', toolName: 'write', result: { isError: false, content: [{ type: 'text', text: 'wrote' }] } },
-    { type: 'tool_execution_start', toolCallId: 'task-checker', toolName: 'task', args: { context: 'Check.', agent: 'checker', task: `${checkerMeta}\nCheck.` } },
-    { type: 'tool_execution_end', toolCallId: 'task-checker', toolName: 'task', result: { isError: false, details: { async: { jobId: 'C1', state: 'completed' } } } },
-    { type: 'message_end', message: { role: 'custom', customType: 'async-result', content: '<task-result id="C1" status="completed">C1 delivery</task-result>' } },
-    { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] } },
-  ];
-  const sequentialSummary = summarizeWorkflowEvents(sequentialEvents, { exitCode: 0 });
-  assert.equal(sequentialSummary.nativeTask.multiForkBatchCallCount, 0);
-  const sequentialEvaluation = evaluateWorkflowSummary(sequentialSummary, baseExpectations);
-  assert.equal(sequentialEvaluation.pass, true, sequentialEvaluation.failures.join('\n'));
-});
-
-
-test('long-form writing fixtures keep English authorship with writer before checker', async () => {
+test('long-form writing fixtures route Main-drafted prose through polisher', async () => {
   const matrix = JSON.parse(await readFile(
     new URL('./e2e/fixtures/long-form-writing.json', import.meta.url),
     'utf8',
   ));
-  for (const id of ['ordinary-writing', 'long-form-single-agent-baseline', 'long-form-pilot']) {
+  for (const id of ['ordinary-writing', 'long-form-single-agent-baseline', 'long-form-multi-section']) {
     const scenario = matrix.scenarios.find((candidate) => candidate.id === id);
     assert.ok(scenario, `${id} fixture scenario must exist`);
+    assert.match(scenario.prompt, /Main drafts/iu);
+    assert.match(scenario.prompt, /polisher/iu);
+    assert.match(scenario.prompt, /returned text (?:goes in|is inserted|verbatim)|use the returned text verbatim/iu);
     assert.match(
       scenario.prompt,
-      /(?:English[^.]{0,180}(?:author|writer)|(?:author|writer)[^.]{0,180}English)/iu,
+      /writer and checker agents have been removed|dispatch no agent/iu,
     );
-    assert.match(scenario.prompt, /(?:sole|only)[^.]{0,120}(?:author|authors?|writer)/iu);
-    assert.match(scenario.prompt, /Main[^.]{0,180}(?:verbatim|integrat)[^.]{0,120}(?:never|without)[^.]{0,100}(?:draft|rewrite)/isu);
-    assert.doesNotMatch(scenario.prompt, /Main[^.]{0,120}(?:directly|handle directly)[^.]{0,100}(?:draft|write|rewrite|polish)/isu);
-    if (id !== 'long-form-pilot') {
-      assert.deepEqual(scenario.expectations.requiredNativeTaskAgentSequence, ['writer', 'checker']);
-      assert.equal(scenario.expectations.requiredNativeTaskAssignmentTextBounds[0].agent, 'writer');
-      assert.equal(scenario.expectations.requiredNativeTaskAssignmentTextBounds[0].beforeAssignmentAgent, 'checker');
-    } else {
-      assert.equal(scenario.expectations.requiredNativeTaskAssignmentTextBounds[0].agent, 'writer');
-      assert.ok(scenario.expectations.requiredNativeTaskAssignmentTextBounds[0].minCount >= 3);
-      assert.match(scenario.prompt, /writers are proposal-only and the sole English text authors/iu);
-    }
+    assert.ok(scenario.tools.includes('polisher'), `${id} must expose the polisher tool`);
+    assert.equal(scenario.expectations.maxNativeTaskCalls, 0, id);
+    assert.deepEqual(scenario.expectations.forbiddenToolCalls, ['task'], id);
+    assert.ok(
+      scenario.expectations.requiredToolCalls.some(({ name }) => name === 'polisher'),
+      `${id} must require a polisher call`,
+    );
+    assert.equal(scenario.expectations.requiredNativeTaskAgents, undefined, id);
+    assert.equal(scenario.expectations.requiredNativeTaskAgentSequence, undefined, id);
   }
+
+  const multi = matrix.scenarios.find((candidate) => candidate.id === 'long-form-multi-section');
+  assert.ok(multi.expectations.requiredToolCalls.some(
+    ({ name, min }) => name === 'polisher' && min >= 3,
+  ));
+  assert.deepEqual(multi.expectations.requiredToolCallBeforeFileWrite, [
+    { tool: 'polisher', file: 'article.md' },
+  ]);
+  assert.match(multi.prompt, /exactly three independently specifiable sections/iu);
+  assert.match(multi.prompt, /Orchestration Plan 2026/u);
+  assert.match(multi.prompt, /\[INFERENCE\]/u);
+
+  const baseline = matrix.scenarios.find((candidate) => candidate.id === 'long-form-single-agent-baseline');
+  assert.deepEqual(baseline.fixtureExpectations.allowedChangedFiles, ['article.md']);
+  assert.deepEqual(baseline.expectations.requiredToolCallBeforeFileWrite, [
+    { tool: 'polisher', file: 'article.md' },
+  ]);
+  assert.match(baseline.prompt, /single pass/iu);
+  assert.match(baseline.prompt, /do not fan out/iu);
 });
+
 test('parseNdjson retains valid events and reports malformed lines', () => {
   const parsed = parseNdjson('{"type":"agent_start"}\nnot-json\n{"type":"agent_end"}\n');
   assert.deepEqual(parsed.events.map(({ type }) => type), ['agent_start', 'agent_end']);

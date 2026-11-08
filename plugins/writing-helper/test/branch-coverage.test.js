@@ -98,9 +98,9 @@ describe('coverage branch cases', () => {
     const api = makeExtensionApi();
     extension(api);
 
-    const logicTool = api.registerTool.mock.calls[0].arguments[0];
-    const qualityTool = api.registerTool.mock.calls[1].arguments[0];
-    const aiTool = api.registerTool.mock.calls[2].arguments[0];
+    const logicTool = api.registerTool.mock.calls[1].arguments[0];
+    const qualityTool = api.registerTool.mock.calls[2].arguments[0];
+    const aiTool = api.registerTool.mock.calls[3].arguments[0];
     const logicCommand = api.registerCommand.mock.calls[0].arguments[1];
     const qualityCommand = api.registerCommand.mock.calls[1].arguments[1];
     const aiCommand = api.registerCommand.mock.calls[2].arguments[1];

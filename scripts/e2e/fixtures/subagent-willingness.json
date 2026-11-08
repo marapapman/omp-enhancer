@@ -6,7 +6,13 @@
     "advisor": false,
     "executionMode": "rpc",
     "taskEager": "preferred",
-    "tools": ["task", "hub", "read", "grep", "glob"],
+    "tools": [
+      "task",
+      "hub",
+      "read",
+      "grep",
+      "glob"
+    ],
     "repeat": 3,
     "timeoutSeconds": 360,
     "expectations": {
@@ -42,7 +48,9 @@
         "requireWorkflowPlanSkillsUseDomainSkillUris": false,
         "requireWorkflowReadyLoadedSkillsUseBareIds": false,
         "requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills": false,
-        "forbiddenSkills": ["omp-enhancer-workflows"]
+        "forbiddenSkills": [
+          "omp-enhancer-workflows"
+        ]
       }
     },
     {
@@ -59,26 +67,55 @@
         "requireWorkflowPlanSkillsUseDomainSkillUris": false,
         "requireWorkflowReadyLoadedSkillsUseBareIds": false,
         "requireWorkflowReadyLoadedSkillsMatchSuccessfulDomainSkills": false,
-        "forbiddenSkills": ["omp-enhancer-workflows"]
+        "forbiddenSkills": [
+          "omp-enhancer-workflows"
+        ]
       }
     },
     {
       "id": "natural-writing-en-subagent-default",
       "category": "subagent-default/writing",
       "fixture": "substantive-writing-en-readonly",
-      "tools": ["todo", "task", "hub", "read", "grep", "glob"],
-      "prompt": "Read the two English LaTeX paragraphs in section.tex and propose a conservative revision that improves their claim-evidence relationship, resolves the ambiguous phrase 'This improvement', and makes the comparison between stopping rules easier to follow. Preserve every qualifier, modality, negation, number, citation, LaTeX command, experimental limitation, and the distinction between observed results and an equal-compute counterfactual. Independently check the complete proposed revision for semantic drift and explain the final wording. Do not modify files or use the network.",
+      "tools": [
+        "todo",
+        "read",
+        "grep",
+        "glob",
+        "polisher",
+        "writing_quality_check",
+        "writing_ai_scan"
+      ],
+      "prompt": "Read the two English LaTeX paragraphs in section.tex and propose a conservative revision that improves their claim-evidence relationship, resolves the ambiguous phrase 'This improvement', and makes the comparison between stopping rules easier to follow. Main drafts the revision itself: draft each bounded paragraph, call polisher on that passage, and use the returned text verbatim; the writer and checker agents have been removed, so dispatch no agent. Preserve every qualifier, modality, negation, number, citation, LaTeX command, experimental limitation, and the distinction between observed results and an equal-compute counterfactual. Then run writing_quality_check on the complete revision with the original paragraphs as originalText and the preservation check enabled, and explain the final wording from its advisory findings. Do not modify files or use the network.",
       "expectations": {
-        "minNativeTaskCalls": 2,
-        "maxNativeTaskCalls": 3,
-        "minNativeTaskAssignmentAttempts": 2,
-        "maxNativeTaskAssignmentAttempts": 3,
-        "requireNativeTaskCompletion": true,
-      "requireNativeTaskSubmissionForEveryAssignment": true,
-      "requireNonemptyNativeTaskContext": true,
-        "requiredNativeTaskAgents": ["writer", "checker"],
-        "requiredNativeTaskAgentSequence": ["writer", "checker"],
-        "requiredObservedSkills": ["omp-enhancer-workflows", "writing-review"],
+        "maxNativeTaskCalls": 0,
+        "forbiddenToolCalls": [
+          "task"
+        ],
+        "requiredToolCalls": [
+          {
+            "name": "polisher",
+            "min": 2
+          },
+          {
+            "name": "polisher",
+            "min": 1,
+            "argumentsPattern": "37\\.5[\\s\\S]*12\\.5"
+          },
+          {
+            "name": "writing_quality_check",
+            "min": 1
+          }
+        ],
+        "requiredToolCallOrder": [
+          {
+            "before": "polisher",
+            "after": "writing_quality_check"
+          }
+        ],
+        "requiredObservedSkills": [
+          "omp-enhancer-workflows",
+          "writing-review"
+        ],
         "forbiddenSkills": [
           "format-markdown2latex",
           "format-latex2markdown",
@@ -96,21 +133,21 @@
           "zh-writing-state-machine"
         ],
         "requiredWorkflowPrimary": "writing",
-        "requiredSelectedWorkflowIds": ["writing"],
+        "requiredSelectedWorkflowIds": [
+          "writing"
+        ],
         "requireWorkflowPlanBeforeResourceLoads": true,
-      "requireWorkflowPlanFirstVisibleContent": true,
-      "requireWorkflowPlanLoadCallsSameBatch": true,
+        "requireWorkflowPlanFirstVisibleContent": true,
+        "requireWorkflowPlanLoadCallsSameBatch": true,
         "forbidResourceProjectSameBatch": true,
-      "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
-      "requireWorkflowReadyFirstVisibleContent": true,
-      "requireWorkflowReadyTodoOnlyBatch": true,
+        "requireWorkflowReadyAfterLoadsBeforeProjectTools": true,
+        "requireWorkflowReadyFirstVisibleContent": true,
+        "requireWorkflowReadyTodoOnlyBatch": true,
         "requireExactSelectedWorkflowReferences": true,
         "requireNativeTodoInit": true,
         "minNativeTodoItems": 3,
         "requireNativeTodoCompletion": true,
-        "requireNativeTodoInitBeforeSubstantiveTool": true,
-        "maxProjectInspectionCallsBeforeNativeTask": 0,
-        "maxProjectInspectionCallsAfterNativeTask": 1
+        "requireNativeTodoInitBeforeSubstantiveTool": true
       }
     },
     {
@@ -118,7 +155,16 @@
       "category": "subagent-default/visual",
       "fixture": "visual-drawio-canvas",
       "timeoutSeconds": 480,
-      "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
+      "tools": [
+        "todo",
+        "task",
+        "hub",
+        "read",
+        "grep",
+        "glob",
+        "write",
+        "edit"
+      ],
       "prompt": "Create docs/deploy-flow.drawio as editable draw.io XML of a five-step deploy pipeline (plan, build, test, release, verify) with one dashed rollback edge from release to build (use dashed=1 in that edge's style). Have task perform the draw-once step with drawio-skill from the drawio@365-skills marketplace: author the complete draw.io XML in one pass with orthogonal edges, no overlapping boxes, and fontSize of at least 14. Plan the follow-up QA as exactly one read-only review by Main (or a task that did not draw the revision) over the exported draft PNG for edges pressed onto each other or crossing through boxes, plus at most one fix round; in this exercise write only docs/deploy-flow.drawio and skip the actual PNG export.",
       "expectations": {
         "minNativeTaskCalls": 1,
@@ -128,12 +174,21 @@
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requireNonemptyNativeTaskContext": true,
-        "requiredNativeTaskAgents": ["task"],
-        "requiredObservedSkills": ["omp-enhancer-workflows", "drawio-skill"],
+        "requiredNativeTaskAgents": [
+          "task"
+        ],
+        "requiredObservedSkills": [
+          "omp-enhancer-workflows",
+          "drawio-skill"
+        ],
         "maxObservedSkills": 2,
-        "forbiddenSkills": ["writing-markdown-helper"],
+        "forbiddenSkills": [
+          "writing-markdown-helper"
+        ],
         "requiredWorkflowPrimary": "visual",
-        "requiredSelectedWorkflowIds": ["visual"],
+        "requiredSelectedWorkflowIds": [
+          "visual"
+        ],
         "requireWorkflowPlanBeforeResourceLoads": true,
         "requireWorkflowPlanFirstVisibleContent": true,
         "requireWorkflowPlanLoadCallsSameBatch": true,
@@ -149,12 +204,25 @@
         "maxToolCalls": 60
       },
       "fixtureExpectations": {
-        "allowedChangedFiles": ["docs/deploy-flow.drawio"],
-        "requiredChangedFiles": ["docs/deploy-flow.drawio"],
+        "allowedChangedFiles": [
+          "docs/deploy-flow.drawio"
+        ],
+        "requiredChangedFiles": [
+          "docs/deploy-flow.drawio"
+        ],
         "requiredPatterns": {
-          "docs/deploy-flow.drawio": ["<mxfile", "mxCell", "rollback", "dashed=1"]
+          "docs/deploy-flow.drawio": [
+            "<mxfile",
+            "mxCell",
+            "rollback",
+            "dashed=1"
+          ]
         },
-        "forbiddenPatterns": { "docs/deploy-flow.drawio": ["foreignObject"] }
+        "forbiddenPatterns": {
+          "docs/deploy-flow.drawio": [
+            "foreignObject"
+          ]
+        }
       }
     },
     {
@@ -163,32 +231,62 @@
       "fixture": "visual-beamer-deck",
       "repeat": 1,
       "timeoutSeconds": 480,
-      "tools": ["todo", "task", "hub", "read", "grep", "glob", "write", "edit"],
-      "prompt": "Create the small Beamer deck in main.tex while preserving its template and frame story. First dispatch an independent writer for the English text-only, section-sized page draft in slides-content.md; the writer is the sole author of every title, body, label, caption, and visual-role sentence and returns a complete proposal. Main only persists that proposal verbatim and performs non-text integration; task must not draft, rewrite, translate, polish, or otherwise author copy. Treat the Markdown content plan as the source for this explicit initial generation only — that source mapping for the plan→Beamer step does not continue to govern ordinary Beamer-only, storyline-only, or PPTX-only edits later. Three independent editing modes — storyline-only (plan), Beamer-only (.tex/PDF), and PPTX-only (.pptx) — keep edits inside the chosen target; once this creation request finishes, the current revision of main.tex is the edit baseline for any later Beamer-only edit, counterparts are read-only context, divergence between main.tex and slides-content.md is expected and does not realign, and an isolated edit never propagates silently forward or backward. Discuss every page with the user, with one Markdown entry per page covering title, narrative job, body, evidence, and visual role. Treat the page-content confirmation as supplied for this fixture. Do not write Beamer frames or perform layout while content is unresolved. After that confirmation, have a separate task reconcile the slide order on slides-content.md: no content overlap between slides, semantically coherent content modules with one main job per slide, and a logical overall progression; the task may only reorder pages or structural metadata and must not rewrite any writer-proposed text; crossings that reordering or regrouping cannot fix are reported and return to the Markdown reconfirmation path. After that reconciliation, translate the reconciled Markdown plan into Beamer frames, add visuals page by page, establish the basic layout, and do not shorten the .tex content; keep complete sentences rather than phrases or keywords. If a content or layout finding appears in this generation pass, it is resolved in place at the stage where it is found; wording still comes from a complete writer proposal that Main applies verbatim, and nothing is written back to slides-content.md against the user's purpose of this creation request — that is not a rule for any later isolated edit of either file. Only then resume layout. Treat the basic-layout confirmation as supplied before entering the existing visual refinement stage. Have task compile and render the initial revision and bind the stable revision=rev-1 identifier to its PDF and page renders. Then perform exactly one single read-only visual precheck owned by task or Main (choose one owner only) before the task final layout pass. Have task integrate the final revision=rev-1, rerender it, and bind fresh current revision evidence. Main (or a task that did not draw the revision) reviews that current revision read-only and records advisory findings. PowerPoint output is not requested for this Beamer-only fixture; do not load beamer-to-powerpoint or convert, and this creation request deliberately does not preempt any later isolated PPTX edit done through officecli.",
+      "tools": [
+        "todo",
+        "task",
+        "hub",
+        "read",
+        "grep",
+        "glob",
+        "write",
+        "edit",
+        "polisher"
+      ],
+      "prompt": "Create the small Beamer deck in main.tex while preserving its template and frame story. Main drafts the English text-only, section-sized page draft in slides-content.md itself, page by page; Main is the sole author of every title, body, label, caption, and visual-role sentence, each bounded page passage goes through polisher before its text is written, and the returned text is inserted verbatim. task must not draft, rewrite, translate, polish, or otherwise author copy; the writer agent has been removed. Treat the Markdown content plan as the source for this explicit initial generation only — that source mapping for the plan→Beamer step does not continue to govern ordinary Beamer-only, storyline-only, or PPTX-only edits later. Three independent editing modes — storyline-only (plan), Beamer-only (.tex/PDF), and PPTX-only (.pptx) — keep edits inside the chosen target; once this creation request finishes, the current revision of main.tex is the edit baseline for any later Beamer-only edit, counterparts are read-only context, divergence between main.tex and slides-content.md is expected and does not realign, and an isolated edit never propagates silently forward or backward. Discuss every page with the user, with one Markdown entry per page covering title, narrative job, body, evidence, and visual role. Treat the page-content confirmation as supplied for this fixture. Do not write Beamer frames or perform layout while content is unresolved. After that confirmation, have a separate task reconcile the slide order on slides-content.md: no content overlap between slides, semantically coherent content modules with one main job per slide, and a logical overall progression; the task may only reorder pages or structural metadata and must not rewrite any polished text; crossings that reordering or regrouping cannot fix are reported and return to the Markdown reconfirmation path. After that reconciliation, translate the reconciled Markdown plan into Beamer frames, add visuals page by page, establish the basic layout, and do not shorten the .tex content; keep complete sentences rather than phrases or keywords. If a content or layout finding appears in this generation pass, it is resolved in place at the stage where it is found; wording still comes from a complete Main draft that passed through polisher and Main applies it verbatim, and nothing is written back to slides-content.md against the user's purpose of this creation request — that is not a rule for any later isolated edit of either file. Only then resume layout. Treat the basic-layout confirmation as supplied before entering the existing visual refinement stage. Have task compile and render the initial revision and bind the stable revision=rev-1 identifier to its PDF and page renders. Then perform exactly one single read-only visual precheck owned by task or Main (choose one owner only) before the task final layout pass. Have task integrate the final revision=rev-1, rerender it, and bind fresh current revision evidence. Main (or a task that did not draw the revision) reviews that current revision read-only and records advisory findings. PowerPoint output is not requested for this Beamer-only fixture; do not load beamer-to-powerpoint or convert, and this creation request deliberately does not preempt any later isolated PPTX edit done through officecli.",
       "expectations": {
-        "minNativeTaskCalls": 6,
+        "minNativeTaskCalls": 5,
         "maxNativeTaskCalls": 9,
-        "minNativeTaskAssignmentAttempts": 6,
+        "minNativeTaskAssignmentAttempts": 5,
         "maxNativeTaskAssignmentAttempts": 9,
         "requireNativeTaskCompletion": true,
         "requireNativeTaskSubmissionForEveryAssignment": true,
         "requireNonemptyNativeTaskContext": true,
-        "requiredNativeTaskAgents": ["writer", "task"],
-        "requiredNativeTaskAgentSequence": ["writer", "task", "task", "task", "task", "task"],
-        "requiredObservedSkills": ["omp-enhancer-workflows", "latex-beamer-slides"],
-        "maxObservedSkills": 3,
-        "forbiddenSkills": ["beamer-to-powerpoint", "drawio-skill"],
-        "requiredWorkflowPrimary": "writing",
-        "requiredSelectedWorkflowIds": ["writing"],
-        "requiredNativeTaskAssignmentTextBounds": [
+        "requiredNativeTaskAgents": [
+          "task"
+        ],
+        "requiredNativeTaskAgentSequence": [
+          "task",
+          "task",
+          "task",
+          "task",
+          "task"
+        ],
+        "requiredToolCalls": [
           {
-            "agent": "writer",
-            "pattern": "(?:text-only|Markdown).+(?:title|body|label|caption|visual role)",
-            "minCount": 1,
-            "maxCount": 1,
-            "beforeAssignmentAgent": "task",
-            "beforeAssignmentText": "reconcile.+slide order"
-          },
+            "name": "polisher",
+            "min": 2
+          }
+        ],
+        "requiredToolCallBeforeFileWrite": [
+          {
+            "tool": "polisher",
+            "file": "slides-content.md"
+          }
+        ],
+        "requiredObservedSkills": [
+          "omp-enhancer-workflows",
+          "latex-beamer-slides"
+        ],
+        "maxObservedSkills": 3,
+        "forbiddenSkills": [
+          "beamer-to-powerpoint",
+          "drawio-skill"
+        ],
+        "requiredWorkflowPrimary": "writing",
+        "requiredSelectedWorkflowIds": [
+          "writing"
+        ],
+        "requiredNativeTaskAssignmentTextBounds": [
           {
             "agent": "task",
             "pattern": "reconcile.+slide order.+(?:reorder|structural).+(?:must not|never).+(?:rewrite|alter|edit).+(?:text|copy)",
@@ -241,16 +339,36 @@
           "\\btask\\s+(?:text|copy|title|body|caption|label|notes?)[^\\n]{0,160}(?:draft|write|author|compose|rewrite|translate|polish|retype)\\b"
         ],
         "requiredFileWriteOrder": [
-          { "before": "slides-content.md", "after": "main.tex" }
+          {
+            "before": "slides-content.md",
+            "after": "main.tex"
+          }
         ],
         "maxToolCalls": 70
       },
       "fixtureExpectations": {
-        "allowedChangedFiles": ["main.tex", "slides-content.md"],
-        "requiredChangedFiles": ["main.tex", "slides-content.md"],
+        "allowedChangedFiles": [
+          "main.tex",
+          "slides-content.md"
+        ],
+        "requiredChangedFiles": [
+          "main.tex",
+          "slides-content.md"
+        ],
         "requiredPatterns": {
-          "main.tex": ["documentclass\\{beamer\\}", "\\\\begin\\{frame\\}", "Baseline"],
-          "slides-content.md": ["## Page", "Title", "Narrative job", "Body", "Evidence", "Visual role"]
+          "main.tex": [
+            "documentclass\\{beamer\\}",
+            "\\\\begin\\{frame\\}",
+            "Baseline"
+          ],
+          "slides-content.md": [
+            "## Page",
+            "Title",
+            "Narrative job",
+            "Body",
+            "Evidence",
+            "Visual role"
+          ]
         }
       }
     }

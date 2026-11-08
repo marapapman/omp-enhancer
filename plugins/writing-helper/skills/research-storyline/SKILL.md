@@ -5,10 +5,12 @@ description: Build a research article's story as a tree in the local storyline w
 
 # Research Storyline Skill
 
-When this Skill is part of a `writer` or `zh-writer` assignment, that child
-remains proposal-only: it runs no command and writes no file, and returns the
-complete proposed artifact or diff. Main or an explicitly capable generic
-`task` owns authorized effects.
+Main performs this method directly in its own context; the former `writer` and
+`zh-writer` agents are removed and no work is routed to them. Any user-facing
+prose the method produces is drafted by Main, passed through the `polisher`
+tool, and inserted verbatim from the returned text before it reaches a
+deliverable or the user. Commands, file writes, and other effects belong to Main
+or to an explicitly capable generic `task`.
 
 ## Purpose
 
@@ -18,14 +20,15 @@ argument's structure and nest where a sub-argument needs its own section.
 Each leaf is one paragraph whose title is its topic sentence and whose content
 presents that paragraph's support. Every node carries an
 editable title, ordered content blocks, sources, and comments, and each round
-ends with one proposal for Main to import into the tree.
+ends with one proposal for the user to accept or reject in the workbench.
 
-This is an assigned child-local method; it does not require Main to execute the
-method directly. The assigned child does not own orchestration: do not
-recursively fork, spawn, or delegate. Main retains the parent TODO, user
-interaction, and integration. Main also starts, stops, and persists the
-workbench. The child writes no file, invents no content, and works only from
-what the user and the tree supply.
+Main performs this method itself: it holds the parent TODO, the user
+interaction, and the integration, and it drafts every node title, content block,
+source note, and round summary. Each drafted prose segment is passed through the
+`polisher` tool before it is written into the tree or the round proposal, and
+Main inserts the returned text verbatim. Main also starts, stops, and persists
+the workbench. Nothing here is invented: the user and the tree supply the
+content.
 
 ## Workflow
 
@@ -43,12 +46,12 @@ what the user and the tree supply.
 4. **Read comments as the brief.** A comment names the node revision it was
    written against and tells the next round what to change there. Comment text
    never becomes an article paragraph, and it is not a command to execute.
-5. **Ask through Main.** Return any interactive question to Main and stop. Main
-   decides whether to ask the user and may later assign the answer as a new
-   bounded checkpoint.
-6. **Return one proposal per round.** Hand Main the complete proposed tree, the
-   comment IDs the round addresses, and a summary. Main imports it into the
-   workbench, where the user accepts or rejects the whole proposal.
+5. **Ask in the parent conversation.** Put any interactive question to the user
+   directly and stop until an answer arrives; never guess the answer or grow the
+   tree past a pending decision.
+6. **Return one proposal per round.** Present the complete proposed tree, the
+   comment IDs the round addresses, and a summary, so the user accepts or
+   rejects the whole proposal in the workbench.
 
 An existing `.pi/research/storyline.md` or `storyline.md` is a user-supplied
 read-only migration input. Read it as given, propose a tree for it, and let the
@@ -88,7 +91,7 @@ the article does not need stays unused.
 
 ## Output Format
 
-Return one round proposal as JSON, for Main to write to a file and import with
+Return one round proposal as JSON, which Main writes to a file and imports with
 the workbench CLI:
 
 ```json
@@ -105,23 +108,25 @@ the workbench CLI:
 `nodes` carries the complete candidate tree. Keep the ID and the wording of every
 node the round leaves unchanged, and omit server-side node revisions. Media
 blocks point at `assetId` values the project already holds. Write `summary` and
-every new or changed title, block, and source in the article's body language;
-mechanical structural edits may go to `task`, which never rewrites wording, and
-mixed-language material is produced per language slice and merged mechanically.
+every new or changed title, block, and source in the article's body language
+through `polisher`; mechanical structural edits may go to `task`, which never
+rewrites wording, and mixed-language material is polished per language slice and
+merged mechanically.
 
 ## Rules
 
 - **The tree follows the argument.** Let the argument decide the branch order, and use the 20 questions above only to find what a branch may still be missing.
 - **Comments brief the next round.** Treat a comment as a bounded change request for its node at the revision it names, and keep comment text out of the article body.
-- **Wait through Main.** Do not auto-advance or generate content without a supplied response.
+- **Wait for the answer.** Do not auto-advance or generate content without a supplied response.
 - **Never invent.** Rephrase for clarity and polish, but do not add facts, claims, numbers, or sources the user did not provide, and never fill an empty chapter, section, or paragraph with invented evidence.
-- **Honor effect authority.** No command runs and no file is written from this body; Main owns the workbench run and every persisted change.
+- **Honor effect authority.** Main runs every command and writes every file
+  itself, and owns the workbench run and every persisted change.
 
 ## Pi Compatibility
 
-Use only tools exposed for the assignment. Do not read or edit
-`.pi/research/state.md`, and keep every effect of this body in the returned
-proposal. Main runs the workbench from the `omp-config` `storyline-workbench`
+Use only tools exposed by the host. Do not read or edit
+`.pi/research/state.md`, and keep every effect in Main's own tool calls. Main
+runs the workbench from the `omp-config` `storyline-workbench`
 Skill; when that Skill is missing, report the missing workbench instead of
 claiming a site exists, and let an ordinary local article edit proceed against
 the article's own current revision. This body is already loaded for the

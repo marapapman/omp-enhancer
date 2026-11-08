@@ -20,8 +20,8 @@ const workflowIds = Object.freeze(workflowDefinitions.map(({ id }) => id));
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OMP_NATIVE_ROLE_IDS = new Set(['scout', 'task', 'sonic', 'reviewer', 'security-reviewer']);
-test('catalog v46 defines exactly the three advisory workflows (writing, research, visual)', () => {
-  assert.equal(WORKFLOW_CATALOG_VERSION, 46);
+test('catalog v47 defines exactly the three advisory workflows (writing, research, visual)', () => {
+  assert.equal(WORKFLOW_CATALOG_VERSION, 47);
   assert.equal(workflowDefinitions.length, 3);
   assert.deepEqual(workflowIds, ['writing', 'research', 'visual']);
   for (const definition of workflowDefinitions) {
@@ -66,49 +66,34 @@ test('writing card keeps the optional fixed beamer2pptx branch bounded', () => {
   assert.doesNotMatch(flow, /block:\s*true|continue:\s*true/i);
 });
 
-test('workflow cards and packaged references make language-routed writers the only text authors', async () => {
+test('workflow cards expose no removed text agents and route prose through Main and the polisher', async () => {
+  const REMOVED_TEXT_AGENT_ROLES = ['writer', 'zh-writer', 'checker', 'zh-checker'];
+  // `checker` alone stays allowed for the repo's layout-checker scripts.
+  const removedAgentReference = /\b(?:writer|zh-writer|zh-checker)\b|\b(?:the|a|an)\s+checker\b/iu;
+  const contractOf = (definition) => [
+    definition.chooseWhen,
+    ...definition.suggestedFlow,
+    ...definition.scopeNotes,
+  ].join(' ');
+
   for (const definition of workflowDefinitions) {
-    const contract = [
-      definition.chooseWhen,
-      ...definition.suggestedFlow,
-      ...definition.scopeNotes,
-    ].join(' ');
-    assert.ok(definition.roles.includes('writer'), `${definition.id} must expose writer`);
-    assert.ok(definition.roles.includes('zh-writer'), `${definition.id} must expose zh-writer`);
+    const contract = contractOf(definition);
+
+    for (const removed of REMOVED_TEXT_AGENT_ROLES) {
+      assert.equal(definition.roles.includes(removed), false, `${definition.id} must not expose ${removed}`);
+    }
+    assert.doesNotMatch(contract, removedAgentReference, `${definition.id} must not route text to a removed agent`);
+
+    assert.match(contract, /\bpolisher\b/iu, `${definition.id} must name the polisher tool`);
     assert.match(
       contract,
-      /English(?:\s+text|\s+prose|\s+body)?[^.]{0,140}\bwriter\b/iu,
-      `${definition.id} must route English text to writer`,
-    );
-    assert.match(
-      contract,
-      /Chinese(?:\s+text|\s+prose|\s+body)?[^.]{0,140}\bzh-writer\b/iu,
-      `${definition.id} must route Chinese text to zh-writer`,
+      /(?:Main[^.]{0,400}(?:draft|author|writ)|(?:draft|author|written|writes)[^.]{0,160}\bMain\b)/iu,
+      `${definition.id} must make Main the text author`,
     );
     assert.match(
       contract,
-      /mixed-language[^.]{0,140}(?:separate|independent)[^.]{0,100}(?:writer|agents?)/iu,
-      `${definition.id} must split mixed-language authoring`,
-    );
-    assert.match(
-      contract,
-      /(?:writer-only|(?:draft|rewrite|translation?|heading|title|body|caption|label|narrative|UI copy)[^.]{0,180}(?:writer|zh-writer)[^.]{0,100}(?:only|sole))/iu,
-      `${definition.id} must make text authoring writer-only`,
-    );
-    assert.match(
-      contract,
-      /Main[^.]{0,220}(?:dispatch|forward|persist|apply|integrat|verbatim)[^.]{0,180}(?:never|must not)[^.]{0,100}(?:draft|rewrite|translate|polish|author)/iu,
-      `${definition.id} must forbid Main prose authorship`,
-    );
-    assert.doesNotMatch(
-      contract,
-      /Main\s+(?:draft|rewrite|translate|polish|author)\b[^.]{0,120}(?:text|copy|wording)/iu,
-      `${definition.id} must not permit direct Main prose`,
-    );
-    assert.doesNotMatch(
-      contract,
-      /\btask\s+(?:draft|rewrite|translate|polish|author)\b[^.]{0,120}(?:text|copy|wording)/iu,
-      `${definition.id} must not make task a text author`,
+      /(?:draft|text|prose|copy|wording|polish)[^.]{0,400}\bpolisher\b|\bpolisher\b[^.]{0,300}(?:rewrit|polish|return|verbatim|draft|text|prose|copy)/iu,
+      `${definition.id} must require polishing before output`,
     );
   }
 
@@ -123,30 +108,40 @@ test('workflow cards and packaged references make language-routed writers the on
     const reference = referenceSection(packagedReferenceText, definition.id);
     const generatedReference = referenceSection(Object.values(generatedReferences).join('\n'), definition.id);
     const packaged = `${catalogSectionOf(catalog, definition.id)}\n${reference}\n${generatedReference}`;
-    assert.match(
+    assert.match(packaged, /\bpolisher\b/iu, `${definition.id} packaged card/reference must name the polisher`);
+    assert.doesNotMatch(
       packaged,
-      /English(?:\s+text|\s+prose|\s+body)?[^.]{0,140}\bwriter\b/iu,
-      `${definition.id} packaged card/reference must route English text`,
-    );
-    assert.match(
-      packaged,
-      /Chinese(?:\s+text|\s+prose|\s+body)?[^.]{0,140}\bzh-writer\b/iu,
-      `${definition.id} packaged card/reference must route Chinese text`,
-    );
-    assert.match(
-      packaged,
-      /mixed-language[^.]{0,140}(?:separate|independent)[^.]{0,100}(?:writer|agents?)/iu,
-      `${definition.id} packaged card/reference must split mixed-language authoring`,
-    );
-    assert.match(
-      packaged,
-      /Main[^.]{0,220}(?:dispatch|forward|persist|apply|integrat|verbatim)[^.]{0,180}(?:never|must not)[^.]{0,100}(?:draft|rewrite|translate|polish|author)/iu,
-      `${definition.id} packaged card/reference must forbid Main prose authorship`,
+      removedAgentReference,
+      `${definition.id} packaged card/reference must not route text to a removed agent`,
     );
   }
+
+  // The writing card must polish every drafted passage before output, and the
+  // research card must route user-facing synthesis through Main and the polisher.
+  const writing = contractOf(workflowCatalog['writing']);
+  assert.match(writing, /\bpolisher\b/iu);
+  assert.match(
+    writing,
+    /(?:before|prior to|then|after)[\s\S]{0,400}(?:writ|deliver|insert|output|publish|commit|ship)/iu,
+    'the writing card must polish before output',
+  );
+
+  const research = contractOf(workflowCatalog['research']);
+  assert.match(research, /\bpolisher\b/iu);
+  assert.match(research, /(?:user-facing|synthes|summar|verdict|recommend)/iu);
+  assert.match(
+    research,
+    /Main[\s\S]{0,600}\bpolisher\b|\bpolisher\b[\s\S]{0,600}\bMain\b/iu,
+    'the research card must route synthesis through Main and the polisher',
+  );
+  assert.match(
+    research,
+    /user-facing[\s\S]{0,600}\bpolisher\b|\bpolisher\b[\s\S]{0,600}user-facing/iu,
+    'the research card must polish user-facing synthesis',
+  );
 });
 
-test('packaged catalog, index, and all references expose catalog v46 advisory content', async () => {
+test('packaged catalog, index, and all references expose catalog v47 advisory content', async () => {
   const catalog = await readFile(new URL('../plugins/omp-config/assets/WORKFLOW_CATALOG.md', import.meta.url), 'utf8');
   const skillIndex = await readFile(new URL('../plugins/omp-config/skills/omp-enhancer-workflows/SKILL.md', import.meta.url), 'utf8');
   const referencesDir = new URL('../plugins/omp-config/skills/omp-enhancer-workflows/references/', import.meta.url);
@@ -154,7 +149,7 @@ test('packaged catalog, index, and all references expose catalog v46 advisory co
   const references = await Promise.all(referenceNames.map((name) => readFile(new URL(name, referencesDir), 'utf8')));
   const referenceText = references.join('\n');
 
-  assert.match(catalog, /# OMP Enhancer Workflow Catalog v46/);
+  assert.match(catalog, /# OMP Enhancer Workflow Catalog v47/);
   assert.match(skillIndex, /Phases: ANALYZE -> EXECUTE -> REVIEW/iu);
   assert.match(skillIndex, /Advisory reference only/i);
   assert.equal(referenceNames.length, 3);
@@ -196,7 +191,7 @@ test('shared catalog and Skill index expose the three workflows while references
       `${definition.id} is missing its literal reference URI`,
     );
     assert.ok(section.includes(`- When: ${definition.chooseWhen}`), `${definition.id} chooseWhen is hidden from Main`);
-    assert.ok(section.includes('- Agent candidates (host runtime adapter labels):'), `${definition.id} reference must render agent candidates`);
+    assert.ok(section.includes('- Agent candidates:'), `${definition.id} reference must render agent candidates`);
     assert.match(section, /^## Required step order$/mu, `${definition.id} reference must render required step order`);
     assert.match(section, /^1\. /mu, `${definition.id} reference must render a numbered first flow step`);
     if (definition.scopeNotes.length > 0) {
@@ -325,6 +320,10 @@ test('extension workflow roles have one owner while OMP native roles have no plu
 test('no retired or ECC agent roles remain in workflow cards', () => {
   const allRoles = new Set(Object.values(workflowCatalog).flatMap(({ roles }) => roles));
   for (const retired of [
+    'writer',
+    'zh-writer',
+    'checker',
+    'zh-checker',
     'explore',
     'implementation-task',
     'config-librarian',

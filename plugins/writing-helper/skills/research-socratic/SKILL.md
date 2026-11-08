@@ -5,30 +5,30 @@ description: Socratic discussion engine — 5-layer questioning (clarify→assum
 
 # Research Socratic Discussion
 
-When this Skill is part of a `writer` or `zh-writer` assignment, that child
-remains proposal-only: it runs no command and writes no file, and returns the
-complete proposed artifact or diff. Main or an explicitly capable generic
-`task` owns authorized effects.
+Main performs this method directly in its own context; the former `writer` and
+`zh-writer` agents are removed and no work is routed to them. Any user-facing
+prose the method produces is drafted by Main, passed through the `polisher`
+tool, and inserted verbatim from the returned text before it reaches a
+deliverable or the user. Commands, file writes, and other effects belong to Main
+or to an explicitly capable generic `task`.
 
 A structured questioning engine for stress-testing research claims through a
-systematic 5-layer Socratic method. This is an assigned child-local method; it
-does not require Main to execute the method directly. Do not recursively fork,
-spawn, or delegate. Main retains the parent TODO, user interaction, and
-integration.
+systematic 5-layer Socratic method. Main runs this method itself and keeps the
+parent TODO, the user interaction, and the integration. Questions and any prose
+Main drafts from the answers pass through the `polisher` tool before delivery.
 
 ## Usage
 
-After Main has loaded this Skill, it may assign a bounded claim checkpoint. The
-child uses this body without reading `research-socratic` again.
+After Main has loaded this Skill, it runs one bounded claim checkpoint at a
+time and proceeds from this body without reading `research-socratic` again.
 
 When the user makes a claim or asks to "probe this claim", "stress-test this", "play socratic", "challenge this", or similar.
 
 ## The 5 Layers
 
 Each layer formulates one or two targeted questions. Process them in order. Do
-not skip or reorder layers. Return any interactive question to Main and stop;
-Main decides whether to ask the user. A later bounded assignment can carry the
-answer and advance to the next layer.
+not skip or reorder layers. Ask the user the interactive question and stop; a
+later bounded checkpoint can carry the answer and advance to the next layer.
 
 ### Layer 1 — Clarification
 *"Define this term precisely. What are its boundaries?"*

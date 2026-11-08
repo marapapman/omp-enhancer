@@ -1,9 +1,9 @@
 {
   "name": "writing-helper",
-  "version": "0.4.11",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
-  "description": "Standalone OMP writing helper plugin with frugal-pi compatible writing skills, agents, logic, style, and citation checks",
+  "description": "Standalone OMP writing helper plugin with a model-backed polisher tool, writing skills, logic, style, and citation checks",
   "main": "index.js",
   "exports": {
     ".": "./index.js"
@@ -11,7 +11,7 @@
   "files": [
     "index.js",
     "src",
-    "agents",
+    "polisher",
     "skills",
     "calibration",
     "package.json",
@@ -36,9 +36,9 @@
     "omp",
     "omp-extension",
     "writing",
+    "polisher",
     "logic-check",
-    "skills",
-    "agents"
+    "skills"
   ],
   "license": "UNLICENSED"
 }
