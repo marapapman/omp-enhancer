@@ -235,7 +235,8 @@ test('packaged config template ships model role defaults and keeps safe defaults
   assert.match(template, /^modelRoles:\n  default: \S+/mu);
   assertConfigRoles(template);
   assert.match(template, /^retry:\n  fallbackChains:/mu);
-  assert.doesNotMatch(template, /classifier:|modelTags:/);
+  assert.doesNotMatch(template, /classifier:/);
+  assert.match(template, /^modelTags:\n  polisher:\n    name: Polisher\n    color: accent$/mu);
   assert.match(template, /webSearch:\s*codex/);
   assert.match(template, /backend:\s*mnemopi/);
   assert.match(template, /loopGuard:\s*\n\s+enabled:\s+false/);

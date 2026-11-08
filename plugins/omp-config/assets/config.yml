@@ -36,6 +36,10 @@ modelRoles:
   vision: charm-hyper/glm-5.3-flash:low
 disabledProviders: []
 enabledModels: []
+modelTags:
+  polisher:
+    name: Polisher
+    color: accent
 task:
   agentModelOverrides:
     fact-challenger: "@slow"

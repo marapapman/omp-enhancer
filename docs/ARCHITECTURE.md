@@ -45,7 +45,7 @@ marketplace extension tools 默认 opt-in；四个 `fact_check_*` 管线工具�
 
 ## 写作、PPT 与视觉
 
-Writing、research 和 visual 三域共享同一作者契约：分析、证据、结构、起草和全部工具调用都由 Main 完成。所有 prose/copy（包括起草、改写、翻译、标题、正文、caption、label、narrative 和 UI copy）由 Main 起草后，逐段送进 `writing-helper` 注册的 `polisher` 工具，返回文本原样插入交付物。`polisher` 是 stateless 文本工具：一次调用只接收一段 prose，返回润色、去 AI 味后的同一段文本；它不读文件、不调用工具、不做 agentic 工作，也不处理 code（fenced code 会被拒绝）。模型由 `modelRoles.polisher` 指定，未配置时依次回退 `@tiny`、`@smol`，再回退会话当前模型；该工具随插件默认 active。Main/task 保留代码、证据收集、结构、绘图、版式、格式转换、校验和文件机械操作等非文字职责。
+Writing、research 和 visual 三域共享同一作者契约：分析、证据、结构、起草和全部工具调用都由 Main 完成。所有 prose/copy（包括起草、改写、翻译、标题、正文、caption、label、narrative 和 UI copy）由 Main 起草后，逐段送进 `writing-helper` 注册的 `polisher` 工具，返回文本原样插入交付物。`polisher` 是 stateless 文本工具：一次调用只接收一段 prose，返回润色、去 AI 味后的同一段文本；它不读文件、不调用工具、不做 agentic 工作，也不处理 code（fenced code 会被拒绝）。模型由 `modelRoles.polisher` 指定，可在 `/model` 的 Roles 视图直接赋值，未配置时依次回退 `@tiny`、`@smol`，再回退会话当前模型；该工具随插件默认 active。Main/task 保留代码、证据收集、结构、绘图、版式、格式转换、校验和文件机械操作等非文字职责。
 文字变化的唯一通路是 `polisher`：任何后续措辞改动，包括孤行、裁切、溢出或间距导致的缩短，都先把该段送回 `polisher`，再把返回文本原样应用；Main 和 task 不在应用前后自行改写已润色文本。`polisher` 不写文件，持久化只由 Main 在获得授权后执行。
 `task`、research Agent 和 visual Agent 可以收集证据、重排结构、绘图、执行版式、格式转换和视觉检查，但不起草或改写文字；任何文字变化都先回到 Main 的 `polisher` 通路。PPT/Beamer/Word/PPTX 的布局、转换、OfficeCLI 应用和视觉检查仍可由 Main 或 task 负责，但只能机械集成已返回的文本，不能借这些步骤修改文案。
 
