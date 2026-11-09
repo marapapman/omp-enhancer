@@ -40,7 +40,7 @@
     {
       "name": "writing-helper",
       "description": "Standalone OMP writing helper plugin with a model-backed polisher tool, writing skills, logic, style, and citation checks",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "category": "writing",
       "homepage": "https://github.com/marapapman/omp-enhancer/tree/main/plugins/writing-helper",
       "repository": "https://github.com/marapapman/omp-enhancer",

@@ -94,15 +94,27 @@ async function resolveAuth(modelRegistry, model) {
 function reasoningLevel(model) {
   const efforts = model?.thinking?.efforts;
   if (!Array.isArray(efforts) || efforts.length === 0) return undefined;
+  if (efforts.includes('minimal')) return 'minimal';
   return efforts.includes('low') ? 'low' : efforts[0];
 }
 
+// Thinking models spend completion budget on the reasoning block before writing the passage,
+// so a 1024-token floor truncates ordinary paragraphs. Reserve headroom whenever the model
+// advertises thinking efforts; non-reasoning models keep the plain estimate.
+const REASONING_OUTPUT_HEADROOM = 4096;
+
+function reasoningHeadroom(model) {
+  const efforts = model?.thinking?.efforts;
+  return Array.isArray(efforts) && efforts.length > 0 ? REASONING_OUTPUT_HEADROOM : 0;
+}
+
 function maxOutputTokens(model, textLength) {
-  const estimated = Math.ceil(textLength * 1.6) + 512;
+  const headroom = reasoningHeadroom(model);
+  const estimated = Math.ceil(textLength * 1.6) + 512 + headroom;
   const modelCap = Number.isFinite(model?.maxTokens) && model.maxTokens > 0 ? model.maxTokens : 8192;
   const contextWindow = Number.isFinite(model?.contextWindow) && model.contextWindow > 0 ? model.contextWindow : null;
   const contextCap = contextWindow ? Math.max(256, contextWindow - estimated) : 32768;
-  return Math.min(Math.max(estimated, 1024), modelCap, contextCap, 32768);
+  return Math.min(Math.max(estimated, 1024 + headroom), modelCap, contextCap, 32768);
 }
 
 function extractPolishedText(message) {

@@ -385,7 +385,7 @@ describe('polisher runtime', () => {
     assert.match(thrown.report, /plain failure/u);
   });
 
-  it('uses the first offered effort, omits reasoning when none exists, and tolerates a bare model', async () => {
+  it('picks the cheapest offered effort, omits reasoning when none exists, and tolerates a bare model', async () => {
     const options = [];
     const run = async (usedModel) => runPolisher(
       { text: 'Hello.' },
@@ -403,11 +403,38 @@ describe('polisher runtime', () => {
     assert.equal(bare.details.provider, null);
     assert.equal(Object.hasOwn(options[0], 'reasoning'), false);
 
-    await run(model({ thinking: { efforts: ['minimal', 'high'], mode: 'effort' } }));
+    await run(model({ thinking: { efforts: ['minimal', 'low', 'high'], mode: 'effort' } }));
     assert.equal(options[1].reasoning, 'minimal');
 
+    await run(model({ thinking: { efforts: ['low', 'high'], mode: 'effort' } }));
+    assert.equal(options[2].reasoning, 'low');
+
+    await run(model({ thinking: { efforts: ['high'], mode: 'effort' } }));
+    assert.equal(options[3].reasoning, 'high');
+
     await run(model({ thinking: { efforts: [], mode: 'effort' } }));
-    assert.equal(Object.hasOwn(options[2], 'reasoning'), false);
+    assert.equal(Object.hasOwn(options[4], 'reasoning'), false);
+  });
+
+  it('reserves thinking headroom in the output budget so reasoning blocks cannot truncate the passage', async () => {
+    const budgets = [];
+    const run = async (usedModel, length) => runPolisher(
+      { text: '字'.repeat(length), language: 'zh' },
+      {
+        models: { resolve: () => usedModel },
+        completeSimple: async (_model, _context, settings) => {
+          budgets.push(settings.maxTokens);
+          return assistant('润色后。');
+        },
+      },
+    );
+
+    const thinking = model({ maxTokens: 131072, contextWindow: 262144, thinking: { efforts: ['minimal', 'low'], mode: 'effort' } });
+    await run(thinking, 45);
+    await run(thinking, 200);
+    await run(thinking, 1200);
+    await run(model({ maxTokens: 131072, contextWindow: 262144 }), 45);
+    assert.deepEqual(budgets, [5120, 5120, 6528, 1024]);
   });
 
   it('caps the output budget by the model context window', async () => {
