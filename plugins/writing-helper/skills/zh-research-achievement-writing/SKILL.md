@@ -18,6 +18,8 @@ description: "仅在用户明确要求把科研工作、研究方向或项目业
 
 本 Skill 不用于普通中文润色、去 AI 味、完整七维审查、语义逻辑审查、邮件、日常说明或一般论文段落。普通文本仍使用 `plain-chinese-writing`，真正的去 AI 味任务使用 `zh-format-humanizer`，保守润色使用 `zh-writing-polish`。
 
+本技能的中文措辞、句法和论述语气统一遵循张健等《程序分析研究进展》的风格，原文锚点与执行规则位于 skill://plain-chinese-writing/references/style-profiles.md，与本插件 polisher/prompt-zh.md 的“中文书写基线”节一致。起草前读取该参照，将其与当前块的事实材料分开携带。文体卡只补充内容组织、读者和格式要求，局部语言偏好不覆盖论文风格；用户在当前任务明确指定的其他风格优先，事实、语义锚点和硬性禁令保持不变。
+
 ---
 
 ## 1. 行文目标

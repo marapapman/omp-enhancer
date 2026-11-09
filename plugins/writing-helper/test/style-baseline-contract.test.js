@@ -9,63 +9,6 @@ const read = (path) => readFileSync(join(rootDir, path), 'utf8');
 const SCOPED_EXEMPTION = '豁免只在科研成果凝练与学术正文生效，且贡献收尾必须写明具体作用对象和范围、量化成效必须有实测和比较基准；其他文体的意义拔高照常报告';
 
 describe('Chinese writing baseline contract', () => {
-  it('keeps the two-layer baseline in the polisher prompt and the packaged profile', () => {
-    const prompt = read('polisher/prompt-zh.md');
-
-    assert.match(prompt, /## 中文书写基线/u);
-    assert.match(prompt, /G1 写规范、自然的书面表达/u);
-    assert.match(prompt, /G2 段首先写问题、对象或任务/u);
-    assert.match(prompt, /G3 动词具体并带方法层级/u);
-    assert.match(prompt, /G4 结果句带数字、量级与比较对象/u);
-    assert.match(prompt, /G5 主语按任务和材料指定/u);
-    assert.match(prompt, /G6 短文案按各自的格式压缩/u);
-    assert.doesNotMatch(prompt, /这条基线默认适用于全部中文写作/u);
-    for (let rule = 1; rule <= 6; rule += 1) {
-      assert.match(prompt, new RegExp(`^G${rule} `, 'mu'), `the polisher prompt must keep baseline rule G${rule}`);
-    }
-
-    const profiles = read('skills/plain-chinese-writing/references/style-profiles.md');
-    assert.match(profiles, /## 书写基线（通用基线 \+ 科研叙述体两层）/u);
-    assert.match(profiles, /\*\*通用书写基线（全部中文写作）\*\*/u);
-    assert.match(profiles, /\*\*科研叙述体（科研成果凝练与学术正文默认）\*\*/u);
-    assert.match(profiles, /下面 11 条只在科研成果凝练与学术正文两张卡里作为默认写法/u);
-    assert.match(profiles, /段首先立问题/u);
-    assert.match(profiles, /结果句带量化与基准/u);
-    assert.match(profiles, /段末收尾写贡献，有证据才写/u);
-    assert.match(profiles, /多项成果用分号或「以及」连成段落/u);
-    assert.match(profiles, /豁免只在科研成果凝练与学术正文生效，且贡献收尾必须写明具体作用对象和范围/u);
-  });
-
-  it('keeps six genre cards, including the slide-body card', () => {
-    const profiles = read('skills/plain-chinese-writing/references/style-profiles.md');
-    assert.match(profiles, /六张文体卡/u);
-    assert.match(profiles, /## 书写基线（通用基线 \+ 科研叙述体两层）/u);
-    assert.match(profiles, /\*\*通用书写基线（全部中文写作）\*\*/u);
-    assert.match(profiles, /\*\*科研叙述体（科研成果凝练与学术正文默认）\*\*/u);
-    assert.match(profiles, /## 幻灯片正文/u);
-    assert.match(profiles, /## 日常沟通/u);
-    assert.match(profiles, /下面 11 条只在科研成果凝练与学术正文两张卡里作为默认写法/u);
-    assert.match(profiles, /表格右侧逐字取自用户本人提供的科研材料，属于科研叙述体的对照/u);
-
-    const plain = read('skills/plain-chinese-writing/SKILL.md');
-    assert.match(plain, /六张文体卡|六种文体/u);
-  });
-
-  it('keeps the pre-existing phrasing bans alongside the scoped exemptions', () => {
-    const prompt = read('polisher/prompt-zh.md');
-
-    assert.match(prompt, /删否定式对偶/u);
-    assert.match(prompt, /删为凑数凑出的三连排比/u);
-    assert.match(prompt, /意义拔高/u);
-    assert.match(prompt, /删把标签或短判断用冒号拼到标题、要点、图注上的写法/u);
-
-    const profiles = read('skills/plain-chinese-writing/references/style-profiles.md');
-    assert.match(profiles, /既有禁令继续有效，否定式对偶、破折号、三连排比/u);
-
-    const humanizer = read('skills/zh-format-humanizer/SKILL.md');
-    assert.match(humanizer, /防副作用原则：去 AI 味不改变通用书写基线/u);
-    assert.match(humanizer, /基线不豁免否定式对偶、三连排比、元衔接和节奏对仗收尾/u);
-  });
 
   it('keeps the achievement skeleton ordered from problem to contribution', () => {
     const source = read('skills/zh-research-achievement-writing/SKILL.md');
@@ -86,7 +29,6 @@ describe('Chinese writing baseline contract', () => {
   it('scopes the exemptions with evidence in every reviewer surface', () => {
     const humanizer = read('skills/zh-format-humanizer/SKILL.md');
     assert.ok(humanizer.includes(SCOPED_EXEMPTION), 'humanizer must scope the exemption');
-    assert.match(humanizer, /防副作用原则：去 AI 味不改变通用书写基线/u);
     assert.match(humanizer, /基线不豁免否定式对偶、三连排比、元衔接和节奏对仗收尾/u);
 
     const checkers = read('skills/zh-writing-checkers/SKILL.md');
@@ -97,25 +39,6 @@ describe('Chinese writing baseline contract', () => {
     assert.match(review, /豁免只在科研成果凝练与学术正文生效/u);
   });
 
-  it('describes the two-layer baseline in the writing workflow card', async () => {
-    const { workflowDefinitions } = await import(join(rootDir, '..', '..', 'scripts', 'workflow-definitions.js'));
-    const writing = workflowDefinitions.find(({ id }) => id === 'writing');
-    const scope = writing.scopeNotes.join(' ');
-    const flow = writing.suggestedFlow.join(' ');
-
-    assert.match(scope, /two layers that apply to all Chinese prose and copy/iu);
-    assert.match(scope, /research-narrative register that is the default only inside the 科研成果凝练 and 学术正文 cards/iu);
-    assert.doesNotMatch(scope, /single research-narrative baseline applied to all Chinese prose and copy/iu);
-    assert.match(scope, /contribution closers with a named object and scope, quantified effect statements carrying a measured number and a baseline/iu);
-    assert.match(scope, /apply only inside the 科研成果凝练 and 学术正文 cards/iu);
-    assert.match(scope, /actor that the task or material names as the grammatical subject/iu);
-    assert.match(scope, /user-specified subject is never overridden/iu);
-    assert.match(scope, /not required to carry all three of problem, method, and result/iu);
-    assert.match(scope, /Chinese slide copy follows the 幻灯片正文 card/iu);
-    assert.match(scope, /research-narrative register does not apply to slide copy/iu);
-    assert.match(flow, /baseline itself is universal across Chinese writing while the research-narrative register activates only for the two research cards/iu);
-    assert.doesNotMatch(scope, /standard, natural written Chinese/iu);
-  });
 
   it('names the polisher handoff and the removed agents in the packaged summary', () => {
     const readme = read('README.md');
@@ -126,56 +49,7 @@ describe('Chinese writing baseline contract', () => {
     assert.doesNotMatch(readme, /agents\/(?:writer|zh-writer|checker|zh-checker)\.md/u);
   });
 
-  it('does not leave a competing global narrative default in the local zh methods', () => {
-    for (const path of [
-      'skills/zh-writing-mad-writer/SKILL.md',
-      'skills/zh-writing-state-machine/SKILL.md',
-      'skills/zh-writing-markdown-helper/SKILL.md',
-    ]) {
-      const source = read(path);
-      assert.match(source, /默认按通用书写基线/u, `${path} must default to the universal baseline`);
-      assert.match(source, /只在科研成果凝练与学术正文任务里才用科研叙述体/u, `${path} must scope the register`);
-      assert.match(source, /不把简洁当作独立目标/u, `${path} must not keep brevity as a default goal`);
-      assert.doesNotMatch(source, /默认按科研叙述体落笔/u, `${path} must not keep the global narrative default`);
-      assert.match(source, /（技术说明、教学讲解、学术正文、科研成果凝练、幻灯片正文、日常沟通）/u);
-    }
-    assert.doesNotMatch(
-      read('skills/zh-writing-markdown-helper/SKILL.md'),
-      /用平直、准确的中文。简洁。/u,
-    );
-  });
 
-  it('scopes the plain-Chinese baseline text and the short prompt', () => {
-    const profiles = read('skills/plain-chinese-writing/references/style-profiles.md');
-    assert.match(profiles, /豁免只在科研成果凝练与学术正文生效，且贡献收尾必须写明具体作用对象和范围/u);
-
-    const plain = read('skills/plain-chinese-writing/SKILL.md');
-    assert.match(plain, /7\. 除科研叙述体规定的问题、方法、结果、贡献推进顺序外，不使用其他模板化结构。/u);
-    assert.match(plain, /另有六张文体卡/u);
-    assert.match(plain, /通用基线是规范、自然的书面表达，科研材料按科研叙述体/u);
-    assert.match(plain, /先按任务文体选基线/u);
-    assert.doesNotMatch(plain, /请把下面文字改成平直自然的科研叙述体中文/u);
-  });
-
-  it('lets the request or material set the subject, keeping 本人 as a fallback', () => {
-    const prompt = read('polisher/prompt-zh.md');
-    assert.match(prompt, /G5 主语按任务和材料指定[\s\S]{0,160}本人/u);
-
-    const profiles = read('skills/plain-chinese-writing/references/style-profiles.md');
-    assert.match(profiles, /用户指定了主语时按用户的指定写/u);
-
-    const plain = read('skills/plain-chinese-writing/SKILL.md');
-    assert.match(plain, /主语按任务和材料指定|主语按任务指定/u);
-  });
-
-  it('keeps the achievement counterexample out of real bullet syntax', () => {
-    const source = read('skills/plain-chinese-writing/references/style-profiles.md');
-    const rule = source.match(/^9\. 多项成果[\s\S]*?(?=^10\. )/mu)?.[0] ?? '';
-
-    assert.ok(rule.length > 0, 'the multi-item rule must stay in the research register');
-    assert.doesNotMatch(rule, /^- 第.项/mu);
-    assert.match(rule, /多项成果用分号或「以及」连成段落/u);
-  });
 
   it('keeps the slide-body figure, table, code, and citation rules', () => {
     const profiles = read('skills/plain-chinese-writing/references/style-profiles.md');
@@ -190,5 +64,128 @@ describe('Chinese writing baseline contract', () => {
     assert.match(card, /没有非说不可的内容就不写注释/u);
     assert.match(card, /引用只在材料给出确切来源时使用/u);
     assert.match(card, /图、表或代码下补一行来源标注，材料里并没有给出这个出处/u);
+  });
+
+  it('pins the bundled paper anchor, its provenance, and every execution rule', () => {
+    const prompt = read('polisher/prompt-zh.md');
+    const profiles = read('skills/plain-chinese-writing/references/style-profiles.md');
+    const excerpts = [
+      '摘要(summary)是可复用的程序模块分析结果,能够简要地刻画模块的外部行为.创建摘要和利用摘要开展分析的过程称为摘要分析.',
+      '这个摘要本身只是省掉了语法分析的时间.',
+    ];
+
+    assert.equal(excerpts.reduce((total, text) => total + [...text].length, 0), 82);
+
+    for (const source of [prompt, profiles]) {
+      assert.match(source, /张健、张超、玄跻峰、熊英飞、王千祥、梁彬、李炼、窦文生、陈振邦、陈立前、蔡彦/u);
+      assert.match(source, /《程序分析研究进展》/u);
+      assert.match(source, /《软件学报》2019，30\(1\)，80–109/u);
+      assert.match(source, /DOI 10\.13328\/j\.cnki\.jos\.005651/u);
+      assert.match(source, /两处短引文共 82 字符/u);
+      assert.match(source, /第 85 页“基于摘要的过程间分析”/u);
+      assert.match(source, /第 86 页“自动生成摘要”/u);
+      for (const excerpt of excerpts) {
+        assert.ok(source.includes(excerpt), 'excerpt must stay verbatim: ' + excerpt);
+      }
+    }
+
+    for (const source of [prompt, profiles]) {
+      for (let rule = 1; rule <= 10; rule += 1) {
+        assert.match(source, new RegExp(`^G${rule} \\S`, 'mu'), `G${rule} must exist`);
+      }
+      assert.doesNotMatch(source, /^G11 /mu);
+    }
+
+    const rules = prompt.match(/^G\d+ .+$/gmu) ?? [];
+    assert.equal(rules.length, 10);
+    for (const rule of rules) assert.ok(profiles.includes(rule), 'Main and polisher must agree on: ' + rule);
+    assert.doesNotMatch(prompt, /63 字符|63-character/u);
+  });
+
+  it('separates compact contrast from extended examples and keeps the content guard', () => {
+    const prompt = read('polisher/prompt-zh.md');
+    const profiles = read('skills/plain-chinese-writing/references/style-profiles.md');
+
+    assert.match(prompt, /### 生成与润色对照/u);
+    assert.match(prompt, /以下对照由本插件自行编写，不是论文原文/u);
+    assert.match(prompt, /本工具仅带压缩对照，不要求每次输出复述例子/u);
+    assert.match(prompt, /^\*\*反例\*\*/mu);
+    assert.match(prompt, /^\*\*示范\*\*/mu);
+
+    assert.match(profiles, /## 原创风格对照样段/u);
+    assert.match(profiles, /本节是插件自行编写的风格练习/u);
+    assert.match(profiles, /不冒充论文事实/u);
+    for (const section of ['### 概念定义', '### 方法机制', '### 适用边界与比较']) {
+      assert.ok(profiles.includes(section), 'extended example must exist: ' + section);
+    }
+    assert.match(profiles, /\*\*事实设定\*\*/u);
+    assert.match(profiles, /\*\*示范样段\*\*/u);
+    assert.match(profiles, /\*\*不采用的写法\*\*/u);
+    assert.match(profiles, /\*\*参照要点\*\*/u);
+
+    assert.ok(!prompt.includes('结果缓存保存已完成的计算结果，供后续请求复用。'), 'extended examples must stay out of the per-call prompt');
+    assert.ok(!prompt.includes('分组过程通过比较记录的键'), 'extended examples must stay out of the per-call prompt');
+
+    for (const source of [prompt, profiles]) {
+      assert.match(source, /摘录仅示范定义、句法与说明次序|不冒充论文事实/u);
+      assert.match(source, /不将论文的研究对象、事实、人物、工具、数字、引文、编号或判断带入无关任务|不迁移论文中的事实/u);
+      assert.match(source, /用户在当前任务明确指定的其他风格优先/u);
+      assert.match(source, /局部 Skill 的语言偏好与本基线冲突时以本基线为准|局部文体卡的语言偏好与论文风格冲突时按论文风格执行/u);
+    }
+
+    assert.match(prompt, /G6 短文案按各自格式压缩/u);
+    assert.match(prompt, /通知保留称呼、时间和需对方做的动作/u);
+    assert.match(prompt, /风格锚点不豁免这些禁令，也不授权新增事实/u);
+  });
+
+  it('keeps six genre cards and scopes the exemption inside the profile', () => {
+    const profiles = read('skills/plain-chinese-writing/references/style-profiles.md');
+
+    assert.match(profiles, /六张文体卡/u);
+    for (const card of ['技术说明', '教学讲解', '学术正文', '科研成果凝练', '幻灯片正文', '日常沟通']) {
+      assert.match(profiles, new RegExp(`^## ${card}$`, 'mu'), `genre card must exist: ${card}`);
+    }
+    assert.ok(profiles.includes(SCOPED_EXEMPTION), 'profile must scope the exemption');
+    assert.match(profiles, /既有禁令继续有效，否定式对偶、破折号、三连排比、元衔接和节奏对仗/u);
+    assert.match(profiles, /标题、图注、标签、按钮和幻灯片保留其篇幅与格式/u);
+  });
+
+  it('makes every local Chinese method inherit the paper baseline', () => {
+    const methods = [
+      'skills/zh-writing-mad-writer/SKILL.md',
+      'skills/zh-writing-state-machine/SKILL.md',
+      'skills/zh-writing-markdown-helper/SKILL.md',
+    ];
+
+    for (const path of methods) {
+      const source = read(path);
+      assert.match(source, /统一遵循张健等《程序分析研究进展》的风格/u, `${path} must inherit the baseline`);
+      assert.match(source, /局部语言偏好不覆盖论文风格/u, `${path} must rank the baseline over the local list`);
+      assert.match(source, /用户在当前任务明确指定的其他风格优先/u, `${path} must keep user style first`);
+      assert.doesNotMatch(source, /默认按通用书写基线/u, `${path} must not keep the retired universal default`);
+      assert.doesNotMatch(source, /只在科研成果凝练与学术正文任务里才用科研叙述体/u);
+    }
+
+    const plain = read('skills/plain-chinese-writing/SKILL.md');
+    assert.match(plain, /本技能采用张健等《程序分析研究进展》的中文书面风格/u);
+    assert.match(plain, /六张文体卡中选择当前用途所需的一张/u);
+    assert.match(plain, /请按|按《程序分析研究进展》的中文书面风格处理文字/u);
+    assert.doesNotMatch(plain, /请把下面文字改成平直自然的科研叙述体中文/u);
+  });
+
+  it('keeps the paper baseline consistent across the packaged surfaces', () => {
+    const summary = read('README.md');
+    const generated = readFileSync(join(rootDir, '..', 'omp-config', 'skills', 'omp-enhancer-workflows', 'references', 'writing.md'), 'utf8');
+
+    for (const source of [summary, generated]) {
+      assert.match(source, /10\.13328\/j\.cnki\.jos\.005651/u, 'DOI must travel with the baseline');
+      assert.match(source, /张健等《程序分析研究进展》|Zhang et al\., Recent Progress in Program Analysis/u);
+      assert.match(source, /82/u, 'excerpt size must stay in sync');
+      assert.doesNotMatch(source, /63 字符|63-character/u);
+    }
+
+    assert.match(summary, /原创示范标明为插件自行编写，不冒充论文摘录/u);
+    assert.match(summary, /较长的原创样段放在 skills\/plain-chinese-writing\/references\/style-profiles\.md/u);
+    assert.match(summary, /不增加每次 polisher 调用的长样段输入/u);
   });
 });

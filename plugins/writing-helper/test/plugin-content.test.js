@@ -193,6 +193,7 @@ describe('bundled writing content under the polisher architecture', () => {
     assert.match(en, /Keep unique facts, numbers, qualifiers, scope, modality, negation, citations, safety instructions, and reproducibility steps when deleting redundancy\./u);
   });
 
+
   it('keeps the mandatory Chinese writing baseline and preservation rules in the polisher prompt', () => {
     const zh = read('polisher/prompt-zh.md');
 
@@ -200,10 +201,10 @@ describe('bundled writing content under the polisher architecture', () => {
     assert.match(zh, /## 中文书写基线/u);
     assert.match(zh, /## 信息增量/u);
     assert.match(zh, /## 去 AI 味/u);
-    for (const rule of ['G1', 'G2', 'G3', 'G4', 'G5', 'G6']) {
-      assert.match(zh, new RegExp(`^${rule} `, 'mu'), `the Chinese prompt must keep baseline rule ${rule}`);
+    for (let rule = 1; rule <= 10; rule += 1) {
+      assert.match(zh, new RegExp(`^G${rule} `, 'mu'), `the Chinese prompt must keep baseline rule G${rule}`);
     }
-    assert.match(zh, /G1 写规范、自然的书面表达/u);
+    assert.match(zh, /G1 采用规范自然的书面表达/u);
     assert.match(zh, /G4 结果句带数字、量级与比较对象/u);
     assert.match(zh, /不要新增事实、例子、数字、引用、名称、主张或结论/u);
     assert.match(zh, /不要削弱或加强论断/u);
